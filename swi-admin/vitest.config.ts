@@ -30,10 +30,7 @@ const rewriteStyledNativeRequires = {
   transform(code: string, id: string) {
     if (!id.includes('styled-components') || !id.includes('native')) return null
     let next = code
-    next = next.replace(
-      /require\(["']react-native["']\)/g,
-      `require("${HOST_REACT_NATIVE_WEB}")`,
-    )
+    next = next.replace(/require\(["']react-native["']\)/g, `require("${HOST_REACT_NATIVE_WEB}")`)
     next = next.replace(/require\(["']react["']\)/g, `require("${HOST_REACT}")`)
     if (next === code) return null
     return { code: next, map: null }
