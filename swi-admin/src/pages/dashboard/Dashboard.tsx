@@ -120,13 +120,8 @@ const WEATHER_CONDITION_MAP: Record<
   storm: 'rainy',
 }
 
-function formatHourLabel(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  const hh = String(d.getUTCHours()).padStart(2, '0')
-  const mm = String(d.getUTCMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-}
+const formatHourLabel = (iso: string): string =>
+  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false })
 
 function DashboardContent({ summary }: { summary: DashboardSummary }) {
   const theme = useTheme()
@@ -211,13 +206,14 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
       {/* Recent activities */}
       <Text>Atividades recentes</Text>
       <View style={{ gap: theme.gap.s }}>
-        {summary.recentActivities.map((activity, idx) => (
+        {summary.recentActivities.map((activity) => (
           <ActivitiesOverviewCard
             key={activity.id}
             title={activity.label}
             subtitle={formatHourLabel(activity.at)}
-            progress={(idx + 1) / summary.recentActivities.length}
+            progress={0}
             avatars={[]}
+            // TODO(DS): activities don't have progress/avatars semantically — request a leaner ActivityRow component in DS v0.1.x
             fullWidth
             testID={`activity-${activity.id}`}
           />

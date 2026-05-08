@@ -1,5 +1,5 @@
 // src/pages/dashboard/Dashboard.test.tsx
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
@@ -117,5 +117,33 @@ describe('Dashboard', () => {
     expect(screen.getAllByText(/24/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/22/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/19/).length).toBeGreaterThan(0)
+  })
+
+  it('renders error panel when summary returns an error', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-error')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('form-error')).toHaveTextContent(/boom/i)
+  })
+
+  it('refetches and recovers when retry pressed', async () => {
+    const spy = vi.spyOn(dashboardApi, 'summary')
+      .mockResolvedValueOnce({ data: null, error: { message: 'transient' } })
+      .mockResolvedValueOnce({ data: FAKE_SUMMARY, error: null })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-error')).toBeInTheDocument()
+    })
+    const retryButton = screen.getByRole('button', { name: /tentar novamente/i })
+    fireEvent.click(retryButton)
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+    })
+    expect(spy).toHaveBeenCalledTimes(2)
   })
 })
