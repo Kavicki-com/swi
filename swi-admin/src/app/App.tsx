@@ -10,6 +10,7 @@ import { Placeholder } from './Placeholder'
 import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { Login } from '@/pages/auth/Login'
 import { SignUp } from '@/pages/auth/SignUp'
+import { RecoveryEmail } from '@/pages/auth/RecoveryEmail'
 
 export function App() {
   return (
@@ -22,10 +23,7 @@ export function App() {
               {/* recovery routes wired in their own tasks. For now,
                   fall back to placeholder so deep-links don't 404. */}
               <Route path="/sign-up" element={<SignUp />} />
-              <Route
-                path="/recovery/email"
-                element={<Placeholder label="password-recovery-email" />}
-              />
+              <Route path="/recovery/email" element={<RecoveryEmail />} />
               <Route
                 path="/recovery/new-password"
                 element={<Placeholder label="password-recovery-newpassword" />}
