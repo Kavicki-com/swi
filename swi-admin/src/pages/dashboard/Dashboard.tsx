@@ -1,11 +1,12 @@
 // src/pages/dashboard/Dashboard.tsx
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
   ActivitiesOverviewCard,
   BigNumbersCard,
   Button,
+  ChipGroup,
   Icon,
   Text,
   Title,
@@ -14,6 +15,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { dashboardApi, type DashboardSummary } from '@/services/mockApi'
+import type { DashboardActivity, DashboardActivityStatus } from '@/services/mockApi/dashboard'
 import { FormError } from '@/components/FormError'
 
 // DS module is shimmed to `any`; mirror the WeatherTimelineEvent shape locally.
@@ -201,6 +203,64 @@ function UrgentAlertsKpi({ value }: { value: number }) {
   )
 }
 
+const ACTIVITY_CHIPS = ['Em Curso', 'Concluídas', 'A Fazer', 'Ver Todas'] as const
+type ActivityChip = (typeof ACTIVITY_CHIPS)[number]
+
+const CHIP_TO_STATUS: Record<Exclude<ActivityChip, 'Ver Todas'>, DashboardActivityStatus> = {
+  'Em Curso': 'em-curso',
+  Concluídas: 'concluida',
+  'A Fazer': 'a-fazer',
+}
+
+function ActivitiesSection({ activities }: { activities: DashboardActivity[] }) {
+  const theme = useTheme()
+  const [filter, setFilter] = useState<ActivityChip>('Em Curso')
+
+  const filtered = useMemo(() => {
+    if (filter === 'Ver Todas') return activities
+    const status = CHIP_TO_STATUS[filter]
+    return activities.filter((a) => a.status === status)
+  }, [activities, filter])
+
+  return (
+    <View testID="activities-section" style={{ gap: theme.gap.m }}>
+      <Title>Atividades em andamento</Title>
+      <View testID="activities-chips">
+        <ChipGroup
+          options={[...ACTIVITY_CHIPS]}
+          mode="single"
+          value={filter}
+          onChange={(value: string | string[]) => {
+            const next = Array.isArray(value) ? value[0] : value
+            if (next && (ACTIVITY_CHIPS as readonly string[]).includes(next)) {
+              setFilter(next as ActivityChip)
+            }
+          }}
+        />
+      </View>
+      <View testID="activities-list" style={{ gap: theme.gap.s }}>
+        {filtered.length === 0 ? (
+          <Text testID="activities-empty">Nenhuma atividade nesta categoria.</Text>
+        ) : (
+          filtered.map((activity) => (
+            <ActivitiesOverviewCard
+              key={activity.id}
+              title={activity.title}
+              subtitle={activity.sector}
+              progress={activity.progress}
+              avatars={activity.participants}
+              totalAvatarsCount={activity.participants.length}
+              locationIcon="location_on"
+              fullWidth
+              testID={`activity-${activity.id}`}
+            />
+          ))
+        )}
+      </View>
+    </View>
+  )
+}
+
 function DashboardContent({ summary }: { summary: DashboardSummary }) {
   const theme = useTheme()
 
@@ -244,21 +304,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         <UrgentAlertsKpi value={summary.kpis.urgentAlerts} />
       </View>
 
-      {/* Recent activities — Task 4 will replace with two-column section */}
-      <Text>Atividades recentes</Text>
-      <View style={{ gap: theme.gap.s }}>
-        {summary.recentActivities.map((activity) => (
-          <ActivitiesOverviewCard
-            key={activity.id}
-            title={activity.label}
-            subtitle={formatHourLabel(activity.at)}
-            progress={0}
-            avatars={[]}
-            fullWidth
-            testID={`activity-${activity.id}`}
-          />
-        ))}
-      </View>
+      <ActivitiesSection activities={summary.activities} />
 
       {/* Weather — Task 5 will expand to 5-6 entries with intensitySegments */}
       <Text>Previsão do tempo</Text>

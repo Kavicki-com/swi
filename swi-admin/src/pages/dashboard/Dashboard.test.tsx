@@ -14,12 +14,39 @@ const FAKE_SUMMARY: DashboardSummary = {
     bySeverity: { info: 0, warning: 1, critical: 1 },
   },
   kpis: { vitalSigns: 1205, wearRate: 512, urgentAlerts: 2, commonAlerts: 0 },
-  recentActivities: [
-    { id: 'a1', label: 'Activity 1', at: '2026-05-08T10:00:00.000Z' },
-    { id: 'a2', label: 'Activity 2', at: '2026-05-08T09:00:00.000Z' },
-    { id: 'a3', label: 'Activity 3', at: '2026-05-08T08:00:00.000Z' },
-    { id: 'a4', label: 'Activity 4', at: '2026-05-08T07:00:00.000Z' },
-    { id: 'a5', label: 'Activity 5', at: '2026-05-08T06:00:00.000Z' },
+  activities: [
+    {
+      id: 'a1',
+      title: 'Reparo',
+      sector: 'Setor Leste',
+      status: 'em-curso',
+      progress: 50,
+      participants: [{ uri: 'x', alt: 'A' }],
+    },
+    {
+      id: 'a2',
+      title: 'Reparo Norte',
+      sector: 'Setor Norte',
+      status: 'em-curso',
+      progress: 30,
+      participants: [],
+    },
+    {
+      id: 'a3',
+      title: 'Aluguel maquinário',
+      sector: 'Setor Leste',
+      status: 'a-fazer',
+      progress: 0,
+      participants: [],
+    },
+    {
+      id: 'a4',
+      title: 'Reparo Sul',
+      sector: 'Setor Sul',
+      status: 'concluida',
+      progress: 100,
+      participants: [],
+    },
   ],
   weather: [
     { at: '2026-05-08T10:00:00.000Z', condition: 'sun', tempC: 24 },
@@ -115,18 +142,43 @@ describe('Dashboard', () => {
     fireEvent.click(cta)
   })
 
-  it('renders 5 recent activities', async () => {
+  it('renders only "Em Curso" activities by default', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: FAKE_SUMMARY,
       error: null,
     })
     renderAt()
     await waitFor(() => {
-      expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+      expect(screen.getByTestId('activities-section')).toBeInTheDocument()
     })
-    for (const a of FAKE_SUMMARY.recentActivities) {
-      expect(screen.getByText(a.label)).toBeInTheDocument()
-    }
+    // The two em-curso activities render
+    expect(screen.getByTestId('activity-a1')).toBeInTheDocument()
+    expect(screen.getByTestId('activity-a2')).toBeInTheDocument()
+    // The a-fazer + concluida ones are filtered out
+    expect(screen.queryByTestId('activity-a3')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('activity-a4')).not.toBeInTheDocument()
+  })
+
+  it('switches the activity filter when a chip is pressed', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: FAKE_SUMMARY,
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('activities-section')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('A Fazer'))
+    await waitFor(() => {
+      expect(screen.getByTestId('activity-a3')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('activity-a1')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Ver Todas'))
+    await waitFor(() => {
+      expect(screen.getByTestId('activity-a4')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('activity-a1')).toBeInTheDocument()
   })
 
   it('renders 3 weather entries', async () => {

@@ -3,6 +3,18 @@ import { SEED_ALERTS, SEED_EMPLOYEES } from './seed'
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
 
+export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
+
+export type DashboardActivity = {
+  id: string
+  title: string
+  sector: string
+  status: DashboardActivityStatus
+  participants: Array<{ uri?: string; alt?: string }>
+  progress: number
+  locationLabel?: string
+}
+
 export type DashboardSummary = {
   employees: {
     total: number
@@ -19,7 +31,7 @@ export type DashboardSummary = {
     urgentAlerts: number
     commonAlerts: number
   }
-  recentActivities: Array<{ id: string; label: string; at: string }>
+  activities: DashboardActivity[]
   weather: Array<{ at: string; condition: 'sun' | 'rain' | 'storm'; tempC: number }>
 }
 
@@ -40,10 +52,73 @@ export const dashboardApi = {
       bySeverity[a.severity] += 1
     })
 
-    const recentActivities = [...alerts]
-      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
-      .slice(0, 5)
-      .map((a) => ({ id: a.id, label: a.message, at: a.created_at }))
+    // S1.7 activities fixture — Figma shows Reparo / Aluguel maquinário etc.
+    // Mix of statuses so the chip filter has visible effects on default load.
+    const activities: DashboardActivity[] = [
+      {
+        id: 'act_001',
+        title: 'Reparo',
+        sector: 'Setor Leste',
+        status: 'em-curso',
+        progress: 60,
+        locationLabel: 'Setor Leste',
+        participants: [
+          { uri: 'https://i.pravatar.cc/100?img=21', alt: 'Carlos' },
+          { uri: 'https://i.pravatar.cc/100?img=22', alt: 'Diego' },
+          { uri: 'https://i.pravatar.cc/100?img=23', alt: 'Eva' },
+          { uri: 'https://i.pravatar.cc/100?img=24', alt: 'Felipe' },
+        ],
+      },
+      {
+        id: 'act_002',
+        title: 'Reparo',
+        sector: 'Setor Leste',
+        status: 'em-curso',
+        progress: 35,
+        locationLabel: 'Setor Leste',
+        participants: [
+          { uri: 'https://i.pravatar.cc/100?img=25', alt: 'Gabriela' },
+          { uri: 'https://i.pravatar.cc/100?img=26', alt: 'Henrique' },
+          { uri: 'https://i.pravatar.cc/100?img=27', alt: 'Isabela' },
+        ],
+      },
+      {
+        id: 'act_003',
+        title: 'Aluguel maquinário',
+        sector: 'Setor Leste',
+        status: 'a-fazer',
+        progress: 0,
+        locationLabel: 'Setor Leste',
+        participants: [
+          { uri: 'https://i.pravatar.cc/100?img=28', alt: 'Joao' },
+          { uri: 'https://i.pravatar.cc/100?img=29', alt: 'Karen' },
+        ],
+      },
+      {
+        id: 'act_004',
+        title: 'Reparo',
+        sector: 'Setor Leste',
+        status: 'concluida',
+        progress: 100,
+        locationLabel: 'Setor Leste',
+        participants: [
+          { uri: 'https://i.pravatar.cc/100?img=30', alt: 'Lucas' },
+          { uri: 'https://i.pravatar.cc/100?img=31', alt: 'Mariana' },
+        ],
+      },
+      {
+        id: 'act_005',
+        title: 'Reparo',
+        sector: 'Setor Leste',
+        status: 'em-curso',
+        progress: 80,
+        locationLabel: 'Setor Leste',
+        participants: [
+          { uri: 'https://i.pravatar.cc/100?img=32', alt: 'Nicolas' },
+          { uri: 'https://i.pravatar.cc/100?img=33', alt: 'Olívia' },
+        ],
+      },
+    ]
 
     const now = Date.now()
     const weather: DashboardSummary['weather'] = [
@@ -63,7 +138,7 @@ export const dashboardApi = {
         employees: { total: employees.length, byStatus },
         alerts: { openOrAcknowledged: openOrAck.length, bySeverity },
         kpis: { vitalSigns, wearRate, urgentAlerts, commonAlerts },
-        recentActivities,
+        activities,
         weather,
       },
       error: null,
