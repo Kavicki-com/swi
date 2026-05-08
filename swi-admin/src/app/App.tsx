@@ -9,6 +9,7 @@ import { AppLayout } from './AppLayout'
 import { Placeholder } from './Placeholder'
 import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { Login } from '@/pages/auth/Login'
+import { SignUp } from '@/pages/auth/SignUp'
 
 export function App() {
   return (
@@ -18,9 +19,9 @@ export function App() {
           <Routes>
             <Route element={<GuestOnly />}>
               <Route path="/login" element={<Login />} />
-              {/* sign-up + recovery routes wired in their own tasks. For now,
+              {/* recovery routes wired in their own tasks. For now,
                   fall back to placeholder so deep-links don't 404. */}
-              <Route path="/sign-up" element={<Placeholder label="sign-up" />} />
+              <Route path="/sign-up" element={<SignUp />} />
               <Route
                 path="/recovery/email"
                 element={<Placeholder label="password-recovery-email" />}
