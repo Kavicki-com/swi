@@ -1,11 +1,12 @@
 // src/pages/auth/Login.tsx
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { View } from 'react-native'
-import { Button, Checkbox, Input, Logo, Text, Title, useTheme } from '@kavicki/swi-design-system'
+import { Button, Input, Logo, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { isEmail, requiredText } from '@/lib/validators'
 import { FormError } from '@/components/FormError'
+import { VisibilityToggle } from '@/components/VisibilityToggle'
 
 type LocationState = { from?: string } | null
 
@@ -16,7 +17,7 @@ export function Login() {
   const theme = useTheme()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -46,38 +47,80 @@ export function Login() {
     <View
       testID="login-page"
       style={{
+        flex: 1,
+        minHeight: '100vh' as unknown as number,
+        backgroundColor: theme.background,
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: theme.padding.xl,
-        gap: theme.gap.m,
+        paddingTop: 123,
       }}
     >
-      <Logo />
-      <Title>Entrar no SWI</Title>
-      <Input
-        label="E-mail"
-        accessibilityLabel="E-mail"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <Input
-        label="Senha"
-        accessibilityLabel="Senha"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-      <Checkbox checked={remember} onChange={setRemember} label="Lembrar de mim" />
-      <FormError message={error} />
-      <Button label="Entrar" onPress={onSubmit} disabled={loading} accessibilityLabel="Entrar" />
-      <Text>
-        <Link to="/recovery/email">Esqueci minha senha</Link>
-      </Text>
-      <Text>
-        Novo aqui? <Link to="/sign-up">Criar conta</Link>
-      </Text>
+      <Logo size="l" />
+      <View
+        style={{
+          width: 328,
+          marginTop: 56,
+          gap: theme.gap.l,
+        }}
+      >
+        <View style={{ gap: theme.gap.l }}>
+          <Input
+            label="Login"
+            accessibilityLabel="Login"
+            placeholder="seu@email.com"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <Input
+            label="Senha"
+            accessibilityLabel="Senha"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            iconRight={
+              <VisibilityToggle on={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+            }
+          />
+        </View>
+
+        <View style={{ alignSelf: 'flex-end' }}>
+          <Button
+            variant="ghost"
+            label="Recuperar senha"
+            accessibilityLabel="Recuperar senha"
+            onPress={() => navigate('/recovery/email')}
+          />
+        </View>
+
+        <FormError message={error} />
+
+        <View style={{ gap: theme.gap.sm }}>
+          <Button
+            label="Entrar"
+            variant="contained"
+            fullWidth
+            onPress={onSubmit}
+            disabled={loading}
+            accessibilityLabel="Entrar"
+          />
+          <Button
+            variant="outline"
+            label="Fazer Cadastro"
+            fullWidth
+            accessibilityLabel="Fazer Cadastro"
+            onPress={() => navigate('/sign-up')}
+          />
+        </View>
+
+        <Button
+          variant="ghost"
+          label="Suporte"
+          fullWidth
+          accessibilityLabel="Suporte"
+          onPress={() => navigate('/modals/support')}
+        />
+      </View>
     </View>
   )
 }
