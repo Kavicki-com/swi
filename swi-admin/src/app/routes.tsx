@@ -46,3 +46,10 @@ export const ADMIN_ROUTES = [
 ] as const
 
 export type AdminRoute = (typeof ADMIN_ROUTES)[number]
+
+export const PUBLIC_PATHS = new Set<string>([
+  '/login',
+  '/sign-up',
+  '/recovery/email',
+  '/recovery/new-password',
+])
