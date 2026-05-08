@@ -14,3 +14,21 @@ index 06c724b..1e6c308 100644
 +export const parse = peg$parse;
  //# sourceMappingURL=transform.js.map
 \ No newline at end of file
+diff --git a/node_modules/react-native-svg/lib/module/lib/extract/transformToRn.js b/node_modules/react-native-svg/lib/module/lib/extract/transformToRn.js
+index e2a7f4c..bee6de5 100644
+--- a/node_modules/react-native-svg/lib/module/lib/extract/transformToRn.js
++++ b/node_modules/react-native-svg/lib/module/lib/extract/transformToRn.js
+@@ -1148,9 +1148,7 @@ function peg$parse(input, options) {
+     throw peg$buildStructuredError(peg$maxFailExpected, peg$maxFailPos < input.length ? input.charAt(peg$maxFailPos) : null, peg$maxFailPos < input.length ? peg$computeLocation(peg$maxFailPos, peg$maxFailPos + 1) : peg$computeLocation(peg$maxFailPos, peg$maxFailPos));
+   }
+ }
+-module.exports = {
+-  StartRules: ['start'],
+-  SyntaxError: peg$SyntaxError,
+-  parse: peg$parse
+-};
++export const StartRules = ['start'];
++export const SyntaxError = peg$SyntaxError;
++export const parse = peg$parse;
+ //# sourceMappingURL=transformToRn.js.map
+\ No newline at end of file
