@@ -24,15 +24,15 @@ beforeEach(() => window.localStorage.clear())
 describe('Login', () => {
   it('shows email and password fields and a submit button', async () => {
     renderAt()
-    expect(screen.getByLabelText(/e-?mail/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/senha/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^login$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^senha$/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /entrar/i })).toBeInTheDocument()
   })
 
   it('shows validation error for invalid email', async () => {
     renderAt()
-    fireEvent.change(screen.getByLabelText(/e-?mail/i), { target: { value: 'not-an-email' } })
-    fireEvent.change(screen.getByLabelText(/senha/i), { target: { value: 'demo1234' } })
+    fireEvent.change(screen.getByLabelText(/^login$/i), { target: { value: 'not-an-email' } })
+    fireEvent.change(screen.getByLabelText(/^senha$/i), { target: { value: 'demo1234' } })
     fireEvent.click(screen.getByRole('button', { name: /entrar/i }))
     await waitFor(() => {
       expect(screen.getByTestId('form-error')).toHaveTextContent(/e-?mail/i)
@@ -41,8 +41,8 @@ describe('Login', () => {
 
   it('shows error from mockApi on invalid credentials', async () => {
     renderAt()
-    fireEvent.change(screen.getByLabelText(/e-?mail/i), { target: { value: 'admin@swi.test' } })
-    fireEvent.change(screen.getByLabelText(/senha/i), { target: { value: 'wrongpw1' } })
+    fireEvent.change(screen.getByLabelText(/^login$/i), { target: { value: 'admin@swi.test' } })
+    fireEvent.change(screen.getByLabelText(/^senha$/i), { target: { value: 'wrongpw1' } })
     fireEvent.click(screen.getByRole('button', { name: /entrar/i }))
     await waitFor(() => {
       expect(screen.getByTestId('form-error')).toHaveTextContent(/invalid/i)
@@ -51,8 +51,8 @@ describe('Login', () => {
 
   it('navigates to / on successful sign-in', async () => {
     renderAt()
-    fireEvent.change(screen.getByLabelText(/e-?mail/i), { target: { value: 'admin@swi.test' } })
-    fireEvent.change(screen.getByLabelText(/senha/i), { target: { value: 'demo1234' } })
+    fireEvent.change(screen.getByLabelText(/^login$/i), { target: { value: 'admin@swi.test' } })
+    fireEvent.change(screen.getByLabelText(/^senha$/i), { target: { value: 'demo1234' } })
     fireEvent.click(screen.getByRole('button', { name: /entrar/i }))
     await waitFor(() => {
       expect(screen.getByTestId('home')).toBeInTheDocument()
@@ -61,8 +61,8 @@ describe('Login', () => {
 
   it('navigates to state.from on successful sign-in if present', async () => {
     renderAt('/login', { from: '/employees' })
-    fireEvent.change(screen.getByLabelText(/e-?mail/i), { target: { value: 'admin@swi.test' } })
-    fireEvent.change(screen.getByLabelText(/senha/i), { target: { value: 'demo1234' } })
+    fireEvent.change(screen.getByLabelText(/^login$/i), { target: { value: 'admin@swi.test' } })
+    fireEvent.change(screen.getByLabelText(/^senha$/i), { target: { value: 'demo1234' } })
     fireEvent.click(screen.getByRole('button', { name: /entrar/i }))
     await waitFor(() => {
       expect(screen.getByTestId('employees')).toBeInTheDocument()
