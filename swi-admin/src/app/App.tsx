@@ -31,15 +31,11 @@ export function App() {
             <Route element={<RequireAuth />}>
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Dashboard />} />
-                {ADMIN_ROUTES.filter(
-                  (r) => !PUBLIC_PATHS.has(r.path) && r.path !== '/',
-                ).map((r) => (
-                  <Route
-                    key={r.path}
-                    path={r.path}
-                    element={<Placeholder label={r.label} />}
-                  />
-                ))}
+                {ADMIN_ROUTES.filter((r) => !PUBLIC_PATHS.has(r.path) && r.path !== '/').map(
+                  (r) => (
+                    <Route key={r.path} path={r.path} element={<Placeholder label={r.label} />} />
+                  ),
+                )}
               </Route>
             </Route>
           </Routes>

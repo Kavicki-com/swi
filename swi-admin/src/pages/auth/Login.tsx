@@ -71,12 +71,7 @@ export function Login() {
       />
       <Checkbox checked={remember} onChange={setRemember} label="Lembrar de mim" />
       <FormError message={error} />
-      <Button
-        label="Entrar"
-        onPress={onSubmit}
-        disabled={loading}
-        accessibilityLabel="Entrar"
-      />
+      <Button label="Entrar" onPress={onSubmit} disabled={loading} accessibilityLabel="Entrar" />
       <Text>
         <Link to="/recovery/email">Esqueci minha senha</Link>
       </Text>

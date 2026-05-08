@@ -52,9 +52,7 @@ export function RecoveryNewPassword() {
       >
         <Logo />
         <Title>Link inválido</Title>
-        <Text>
-          Este link expirou ou é inválido. Solicite um novo e-mail de recuperação.
-        </Text>
+        <Text>Este link expirou ou é inválido. Solicite um novo e-mail de recuperação.</Text>
         <Text>
           <Link to="/recovery/email">Solicitar novo link</Link>
         </Text>

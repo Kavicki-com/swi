@@ -46,8 +46,8 @@ export function RecoveryEmail() {
         <Logo />
         <Title>E-mail enviado</Title>
         <Text>
-          Se o e-mail existir, enviamos as instruções para redefinir sua senha. Verifique sua
-          caixa de entrada.
+          Se o e-mail existir, enviamos as instruções para redefinir sua senha. Verifique sua caixa
+          de entrada.
         </Text>
         <Text>
           <Link to="/login">Voltar para o login</Link>
@@ -68,9 +68,7 @@ export function RecoveryEmail() {
     >
       <Logo />
       <Title>Recuperar senha</Title>
-      <Text>
-        Informe o e-mail cadastrado e enviaremos as instruções para redefinir sua senha.
-      </Text>
+      <Text>Informe o e-mail cadastrado e enviaremos as instruções para redefinir sua senha.</Text>
       <Input
         label="E-mail"
         accessibilityLabel="E-mail"

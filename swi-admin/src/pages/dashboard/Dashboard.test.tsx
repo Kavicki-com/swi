@@ -132,7 +132,8 @@ describe('Dashboard', () => {
   })
 
   it('refetches and recovers when retry pressed', async () => {
-    const spy = vi.spyOn(dashboardApi, 'summary')
+    const spy = vi
+      .spyOn(dashboardApi, 'summary')
       .mockResolvedValueOnce({ data: null, error: { message: 'transient' } })
       .mockResolvedValueOnce({ data: FAKE_SUMMARY, error: null })
     renderAt()

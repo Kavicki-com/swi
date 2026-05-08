@@ -56,10 +56,7 @@ export function Dashboard() {
     <View testID="dashboard-page">
       {phase === 'loading' && <DashboardSkeleton />}
       {phase === 'error' && (
-        <DashboardError
-          message={error}
-          onRetry={() => setRefetchTrigger((n) => n + 1)}
-        />
+        <DashboardError message={error} onRetry={() => setRefetchTrigger((n) => n + 1)} />
       )}
       {phase === 'populated' && summary && <DashboardContent summary={summary} />}
     </View>
@@ -87,13 +84,7 @@ function DashboardSkeleton() {
   )
 }
 
-function DashboardError({
-  message,
-  onRetry,
-}: {
-  message: string | null
-  onRetry: () => void
-}) {
+function DashboardError({ message, onRetry }: { message: string | null; onRetry: () => void }) {
   const theme = useTheme()
   return (
     <View
@@ -181,21 +172,13 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
           gap: theme.gap.m,
         }}
       >
-        <BigNumbersCard
-          value={summary.employees.byStatus.good}
-          label="Bem"
-          testID="status-good"
-        />
+        <BigNumbersCard value={summary.employees.byStatus.good} label="Bem" testID="status-good" />
         <BigNumbersCard
           value={summary.employees.byStatus.alert}
           label="Em alerta"
           testID="status-alert"
         />
-        <BigNumbersCard
-          value={summary.employees.byStatus.low}
-          label="Baixo"
-          testID="status-low"
-        />
+        <BigNumbersCard value={summary.employees.byStatus.low} label="Baixo" testID="status-low" />
         <BigNumbersCard
           value={summary.employees.byStatus.offline}
           label="Offline"

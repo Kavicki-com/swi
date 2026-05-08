@@ -41,8 +41,7 @@ export const Loading: StoryObj<typeof Dashboard> = {
   parameters: {
     docs: {
       description: {
-        story:
-          'Initial render — skeleton placeholders before mockApi.summary resolves.',
+        story: 'Initial render — skeleton placeholders before mockApi.summary resolves.',
       },
     },
   },
@@ -52,8 +51,7 @@ export const Empty: StoryObj<typeof Dashboard> = {
   parameters: {
     docs: {
       description: {
-        story:
-          'Org with no employees/alerts (call summary with unknown orgId).',
+        story: 'Org with no employees/alerts (call summary with unknown orgId).',
       },
     },
   },
@@ -73,8 +71,7 @@ export const Populated: StoryObj<typeof Dashboard> = {
   parameters: {
     docs: {
       description: {
-        story:
-          'Default with seeded org_seed_1 — KPIs + recent activities + weather.',
+        story: 'Default with seeded org_seed_1 — KPIs + recent activities + weather.',
       },
     },
   },

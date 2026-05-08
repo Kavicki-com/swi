@@ -12,14 +12,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "storybook": "storybook dev -p 6007",
-    "storybook:build": "storybook build",
-    "postinstall": "patch-package"
+    "storybook:build": "storybook build"
   },
   "dependencies": {
-    "@kavicki/swi-design-system": "https://github.com/Kavicki-com/swi-design-system/archive/refs/tags/v0.1.0.tar.gz",
+    "@kavicki/swi-design-system": "git+https://github.com/Kavicki-com/swi-design-system.git#v0.1.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.1",
     "react-native-svg": "^15.0.0",
+    "react-native-svg-web": "^1.0.9",
     "react-native-web": "^0.19.0",
     "react-router-dom": "^6.26.0",
     "styled-components": "^6.1.0",
@@ -43,7 +43,6 @@
     "eslint-plugin-react": "^7.35.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "jsdom": "^25.0.0",
-    "patch-package": "^8.0.1",
     "prettier": "^3.3.0",
     "react-native": "npm:react-native-web@^0.19.0",
     "storybook": "^9.0.0",
