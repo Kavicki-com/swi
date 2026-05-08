@@ -226,8 +226,7 @@ function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
     const q = query.trim().toLowerCase()
     if (!q) return alerts
     return alerts.filter(
-      (a) =>
-        a.employeeName.toLowerCase().includes(q) || a.sector.toLowerCase().includes(q),
+      (a) => a.employeeName.toLowerCase().includes(q) || a.sector.toLowerCase().includes(q),
     )
   }, [alerts, query])
 
