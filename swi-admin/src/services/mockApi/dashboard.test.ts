@@ -38,6 +38,16 @@ describe('dashboardApi.summary', () => {
     expect(data?.weather).toHaveLength(3)
   })
 
+  it('returns S1.7 KPI aggregates (vitalSigns, wearRate, urgentAlerts, commonAlerts)', async () => {
+    const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    expect(data?.kpis).toBeDefined()
+    // urgentAlerts = critical + warning open/ack
+    expect(data!.kpis.urgentAlerts).toBe(2)
+    expect(data!.kpis.commonAlerts).toBe(0)
+    expect(typeof data!.kpis.vitalSigns).toBe('number')
+    expect(typeof data!.kpis.wearRate).toBe('number')
+  })
+
   it('returns zeros for an unknown org but still emits weather', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_does_not_exist' })
     expect(data?.employees.total).toBe(0)

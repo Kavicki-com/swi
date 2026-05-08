@@ -1,10 +1,12 @@
 // src/pages/dashboard/Dashboard.tsx
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
+import { useNavigate } from 'react-router-dom'
 import {
   ActivitiesOverviewCard,
   BigNumbersCard,
   Button,
+  Icon,
   Text,
   Title,
   WeatherTimeline,
@@ -114,6 +116,91 @@ const WEATHER_CONDITION_MAP: Record<
 const formatHourLabel = (iso: string): string =>
   new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false })
 
+function MapBanner() {
+  const theme = useTheme()
+  const navigate = useNavigate()
+  return (
+    <View
+      testID="dashboard-map-banner"
+      style={{
+        height: 180,
+        borderRadius: theme.border.radius.m,
+        backgroundColor: theme.surface.medium,
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative' as unknown as never,
+        overflow: 'hidden',
+      }}
+    >
+      <Icon name="location_on" size={48} color={theme.content.primary} />
+      <View
+        style={{
+          position: 'absolute' as unknown as never,
+          right: theme.padding.m,
+          bottom: theme.padding.m,
+        }}
+      >
+        <Button
+          label="Acessar mapa"
+          variant="contained"
+          onPress={() => navigate('/maps/general')}
+          testID="dashboard-map-cta"
+        />
+      </View>
+    </View>
+  )
+}
+
+function FuncionariosKpi({ summary }: { summary: DashboardSummary }) {
+  const theme = useTheme()
+  const goodCount = summary.employees.byStatus.good
+  const alertCount =
+    summary.employees.byStatus.alert +
+    summary.employees.byStatus.low +
+    summary.employees.byStatus.offline
+  return (
+    <View
+      testID="kpi-funcionarios"
+      style={{
+        flexDirection: 'row',
+        gap: theme.gap.s,
+        padding: theme.padding.s,
+        borderRadius: theme.border.radius.m,
+        backgroundColor: theme.surface.standard,
+      }}
+    >
+      <BigNumbersCard
+        value={goodCount}
+        label="Funcionários"
+        icon="person_apron"
+        testID="kpi-funcionarios-good"
+      />
+      <BigNumbersCard
+        value={alertCount}
+        label="Funcionários"
+        icon="mode_heat"
+        iconColor={theme.content.warning}
+        testID="kpi-funcionarios-alert"
+      />
+    </View>
+  )
+}
+
+function UrgentAlertsKpi({ value }: { value: number }) {
+  const theme = useTheme()
+  return (
+    <View testID="kpi-urgent-alerts" style={{ gap: theme.gap.xs }}>
+      <BigNumbersCard
+        value={value}
+        label="Alertas urgentes"
+        icon="vital_signs"
+        iconColor={theme.content.error}
+      />
+      <Text style={{ color: theme.content.error, fontSize: 12 }}>Necessita atenção</Text>
+    </View>
+  )
+}
+
 function DashboardContent({ summary }: { summary: DashboardSummary }) {
   const theme = useTheme()
 
@@ -128,65 +215,36 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
       <Title>Dashboard</Title>
 
-      {/* Top KPI row */}
+      <MapBanner />
+
+      {/* KPI row — Figma layout: Funcionários composite + Sinais vitais + Taxa de desgaste + Alertas urgentes */}
       <View
+        testID="kpi-row"
         style={{
           flexDirection: 'row',
           flexWrap: 'wrap',
           gap: theme.gap.m,
+          alignItems: 'flex-start',
         }}
       >
+        <FuncionariosKpi summary={summary} />
         <BigNumbersCard
-          value={summary.employees.total}
-          label="Total funcionários"
-          icon="person_apron"
-          testID="kpi-total"
-        />
-        <BigNumbersCard
-          value={summary.employees.byStatus.alert}
-          label="Em alerta"
-          icon="mode_heat"
-          testID="kpi-alert"
-        />
-        <BigNumbersCard
-          value={summary.alerts.openOrAcknowledged}
-          label="Alertas abertos"
+          value={summary.kpis.vitalSigns}
+          label="Sinais vitais"
           icon="vital_signs"
-          testID="kpi-open-alerts"
+          testID="kpi-vital-signs"
         />
         <BigNumbersCard
-          value={summary.alerts.bySeverity.critical}
-          label="Alertas críticos"
-          icon="monitor_heart"
-          testID="kpi-critical-alerts"
+          value={summary.kpis.wearRate}
+          label="Taxa de desgaste"
+          icon="health_activity"
+          iconColor={theme.content.success}
+          testID="kpi-wear-rate"
         />
+        <UrgentAlertsKpi value={summary.kpis.urgentAlerts} />
       </View>
 
-      {/* Workers status breakdown — fall back to BigNumbersCards because
-          DS WorkersInfoCard is for a single employee, not a status summary. */}
-      <Text>Funcionários por status</Text>
-      <View
-        style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: theme.gap.m,
-        }}
-      >
-        <BigNumbersCard value={summary.employees.byStatus.good} label="Bem" testID="status-good" />
-        <BigNumbersCard
-          value={summary.employees.byStatus.alert}
-          label="Em alerta"
-          testID="status-alert"
-        />
-        <BigNumbersCard value={summary.employees.byStatus.low} label="Baixo" testID="status-low" />
-        <BigNumbersCard
-          value={summary.employees.byStatus.offline}
-          label="Offline"
-          testID="status-offline"
-        />
-      </View>
-
-      {/* Recent activities */}
+      {/* Recent activities — Task 4 will replace with two-column section */}
       <Text>Atividades recentes</Text>
       <View style={{ gap: theme.gap.s }}>
         {summary.recentActivities.map((activity) => (
@@ -196,14 +254,13 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
             subtitle={formatHourLabel(activity.at)}
             progress={0}
             avatars={[]}
-            // TODO(DS): activities don't have progress/avatars semantically — request a leaner ActivityRow component in DS v0.1.x
             fullWidth
             testID={`activity-${activity.id}`}
           />
         ))}
       </View>
 
-      {/* Weather */}
+      {/* Weather — Task 5 will expand to 5-6 entries with intensitySegments */}
       <Text>Previsão do tempo</Text>
       <WeatherTimeline events={weatherEvents} testID="weather-timeline" />
     </View>
