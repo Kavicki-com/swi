@@ -21,16 +21,21 @@ describe('dashboardApi.summary', () => {
     expect(data?.alerts.bySeverity.info).toBe(0)
   })
 
-  it('returns the 5 most recent activities sorted desc', async () => {
+  it('returns Figma-aligned activities with status, sector and participants', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
-    expect(data?.recentActivities).toHaveLength(5)
-    expect(data!.recentActivities[0]).toMatchObject({
-      id: 'a_001',
-      label: 'Frequência cardíaca elevada',
+    expect(data?.activities).toBeDefined()
+    expect(data!.activities.length).toBeGreaterThanOrEqual(4)
+    const first = data!.activities[0]!
+    expect(first).toMatchObject({
+      title: expect.any(String),
+      sector: expect.any(String),
+      progress: expect.any(Number),
     })
-    expect(data!.recentActivities[0]?.at).toEqual(expect.any(String))
-    const timestamps = data!.recentActivities.map((a) => a.at)
-    expect(timestamps).toEqual([...timestamps].sort().reverse())
+    expect(['em-curso', 'concluida', 'a-fazer']).toContain(first.status)
+    expect(Array.isArray(first.participants)).toBe(true)
+    // Mix of statuses so the chip filter has visible effects
+    const statuses = new Set(data!.activities.map((a) => a.status))
+    expect(statuses.size).toBeGreaterThan(1)
   })
 
   it('returns weather timeline placeholder (3 entries)', async () => {
@@ -48,11 +53,12 @@ describe('dashboardApi.summary', () => {
     expect(typeof data!.kpis.wearRate).toBe('number')
   })
 
-  it('returns zeros for an unknown org but still emits weather', async () => {
+  it('returns zeros for an unknown org but still emits weather and activities fixture', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_does_not_exist' })
     expect(data?.employees.total).toBe(0)
     expect(data?.alerts.openOrAcknowledged).toBe(0)
-    expect(data?.recentActivities).toHaveLength(0)
+    // Activities are a static fixture in S1.7, not org-scoped — they always render.
+    expect(data!.activities.length).toBeGreaterThan(0)
     expect(data?.weather).toHaveLength(3)
   })
 })
