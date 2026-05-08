@@ -6,13 +6,13 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      // rn-svg's extractTransform imports `parse` from a PEG.js CJS module
-      // (`./transform`) via named ESM import. Vite dev's native ESM cannot
-      // interop that shape, so stub it (SVG transforms are unused by SWI DS).
-      // Anchored regex matches with or without the `.js` extension.
+      // rn-svg transform.js stub: provides ESM `parse` export so extractTransform.js can import it.
+      // The import inside extractTransform.js is relative (`./transform`), which Vite resolves to
+      // an absolute filesystem path before applying aliases. The regex must therefore match
+      // anywhere in the resolved id (no leading `^`), with or without the `.js` extension.
       {
-        find: /^react-native-svg\/lib\/module\/lib\/extract\/extractTransform$/,
-        replacement: path.resolve(__dirname, './src/stubs/empty-extract-transform.ts'),
+        find: /react-native-svg\/lib\/module\/lib\/extract\/transform(\.js)?$/,
+        replacement: path.resolve(__dirname, './src/stubs/empty-transform.ts'),
       },
       // rn-svg's entire Fabric directory: stub on web (depends on RN internals).
       {
