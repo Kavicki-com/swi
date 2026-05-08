@@ -14,6 +14,9 @@ export const SEED_ADMIN: User = {
   role: 'super_admin',
   consent_given_at: daysAgo(30),
   created_at: daysAgo(60),
+  bpm: 78,
+  pressure: '12/8',
+  avatarUri: 'https://i.pravatar.cc/200?img=12',
 }
 
 export const SEED_EMPLOYEES: Employee[] = [

@@ -15,6 +15,9 @@ beforeEach(() => {
       role: 'super_admin',
       consent_given_at: null,
       created_at: '',
+      bpm: 78,
+      pressure: '12/8',
+      avatarUri: 'https://i.pravatar.cc/200?img=12',
     }),
   )
 })
@@ -44,10 +47,12 @@ describe('AppLayout', () => {
     })
   })
 
-  it('shows the user full name in the header', async () => {
+  it('shows the user vitals in the DS Header', async () => {
     renderTree()
     await waitFor(() => {
-      expect(screen.getByText(/Admin Seed/)).toBeInTheDocument()
+      // Header renders bpm and pressure via DS HeaderUserInfo
+      expect(screen.getByText(/78/)).toBeInTheDocument()
+      expect(screen.getByText('12/8')).toBeInTheDocument()
     })
   })
 
@@ -72,15 +77,17 @@ describe('AppLayout', () => {
     }
   })
 
-  it('signs out and clears the user from the header', async () => {
+  it('signs out from the sidebar footer and navigates away', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()
     })
-    const signOutButton = screen.getByRole('button', { name: /sair/i })
+    const signOutButton = screen.getByTestId('sidebar-signout')
     fireEvent.click(signOutButton)
     await waitFor(() => {
-      expect(screen.queryByText(/Admin Seed/)).not.toBeInTheDocument()
+      // After sign-out, navigate('/login') is called. The test router has no
+      // /login route, so the protected /page content unmounts.
+      expect(screen.queryByTestId('page-content')).not.toBeInTheDocument()
     })
   })
 })

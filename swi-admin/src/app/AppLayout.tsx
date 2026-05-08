@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { View } from 'react-native'
-import { Button, Logo, SideMenu, Text, useTheme } from '@kavicki/swi-design-system'
+import { Button, Header, SideMenu, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 
 const NAV = [
@@ -31,35 +31,30 @@ export function AppLayout() {
       testID="app-layout"
       style={{ flexDirection: 'row', minHeight: '100vh' as unknown as number }}
     >
-      <SideMenu
-        items={[...NAV]}
-        value={location.pathname}
-        onChange={(value: string) => navigate(value)}
-      />
-      <View style={{ flex: 1 }}>
-        <View
-          testID="app-header"
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: theme.padding.m,
-            borderBottomWidth: theme.border.size.s,
-            borderBottomColor: theme.content.lightGrey,
-          }}
-        >
-          <Logo />
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: theme.gap.m,
-            }}
-          >
-            <Text>{user?.full_name ?? ''}</Text>
-            <Button label="Sair" variant="outline" onPress={handleSignOut} />
-          </View>
+      <View testID="app-sidebar" style={{ flexDirection: 'column' }}>
+        <View style={{ flex: 1 }}>
+          <SideMenu
+            items={[...NAV]}
+            value={location.pathname}
+            onChange={(value: string) => navigate(value)}
+          />
         </View>
+        <View style={{ padding: theme.padding.s }}>
+          <Button
+            label="Sair"
+            variant="ghost"
+            onPress={handleSignOut}
+            testID="sidebar-signout"
+            fullWidth
+          />
+        </View>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Header
+          bpm={user?.bpm ?? 78}
+          pressure={user?.pressure ?? '12/8'}
+          avatarUri={user?.avatarUri}
+        />
         <View style={{ flex: 1, padding: 24 }}>
           <Outlet />
         </View>
