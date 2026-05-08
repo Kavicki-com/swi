@@ -75,9 +75,23 @@ const FAKE_SUMMARY: DashboardSummary = {
     },
   ],
   weather: [
-    { at: '2026-05-08T10:00:00.000Z', condition: 'sun', tempC: 24 },
-    { at: '2026-05-08T12:00:00.000Z', condition: 'rain', tempC: 22 },
-    { at: '2026-05-08T15:00:00.000Z', condition: 'storm', tempC: 19 },
+    { at: '2026-05-08T08:00:00.000Z', condition: 'rain', tempC: 22, label: 'CHUVAS\nMODERADAS' },
+    { at: '2026-05-08T10:00:00.000Z', condition: 'sun', tempC: 26, label: 'SOL\nINTENSO' },
+    {
+      at: '2026-05-08T12:00:00.000Z',
+      condition: 'sun',
+      tempC: 25,
+      label: 'AGORA',
+      isNow: true,
+    },
+    { at: '2026-05-08T14:00:00.000Z', condition: 'rain', tempC: 23, label: 'CHUVAS\nMODERADAS' },
+    {
+      at: '2026-05-08T16:00:00.000Z',
+      condition: 'storm',
+      tempC: 21,
+      label: 'PARCIALMENTE\nNUBLADO',
+    },
+    { at: '2026-05-08T18:00:00.000Z', condition: 'sun', tempC: 24, label: 'SOL' },
   ],
 }
 
@@ -240,19 +254,20 @@ describe('Dashboard', () => {
     expect(screen.getByTestId('activity-a1')).toBeInTheDocument()
   })
 
-  it('renders 3 weather entries', async () => {
+  it('renders the expanded WeatherTimeline with the AGORA marker', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: FAKE_SUMMARY,
       error: null,
     })
     renderAt()
     await waitFor(() => {
-      expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+      expect(screen.getByTestId('weather-timeline')).toBeInTheDocument()
     })
-    // Each tempC should be rendered (24, 22, 19)
-    expect(screen.getAllByText(/24/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/22/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/19/).length).toBeGreaterThan(0)
+    // AGORA appears at least once — the event label and/or the now-marker overlay
+    expect(screen.getAllByText('AGORA').length).toBeGreaterThan(0)
+    // SOL INTENSO and PARCIALMENTE NUBLADO labels appear (newline-separated)
+    expect(screen.getAllByText(/SOL/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/PARCIALMENTE/)).toBeInTheDocument()
   })
 
   it('renders error panel when summary returns an error', async () => {

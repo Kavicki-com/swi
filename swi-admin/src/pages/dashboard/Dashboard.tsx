@@ -34,6 +34,8 @@ type WeatherTimelineEvent = {
   isNow?: boolean
 }
 
+const WEATHER_NOW_LABEL = 'AGORA'
+
 type Phase = 'loading' | 'error' | 'populated'
 
 export function Dashboard() {
@@ -322,7 +324,8 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     id: `weather-${idx}`,
     condition: WEATHER_CONDITION_MAP[w.condition],
     time: formatHourLabel(w.at),
-    label: `${w.tempC}°C`,
+    label: w.label ?? `${w.tempC}°C`,
+    isNow: w.isNow,
   }))
 
   return (
@@ -371,9 +374,13 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         </View>
       </View>
 
-      {/* Weather — Task 5 will expand to 5-6 entries with intensitySegments */}
       <Text>Previsão do tempo</Text>
-      <WeatherTimeline events={weatherEvents} testID="weather-timeline" />
+      <WeatherTimeline
+        events={weatherEvents}
+        nowLabel={WEATHER_NOW_LABEL}
+        fullWidth
+        testID="weather-timeline"
+      />
     </View>
   )
 }
