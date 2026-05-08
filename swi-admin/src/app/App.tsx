@@ -12,6 +12,7 @@ import { Login } from '@/pages/auth/Login'
 import { SignUp } from '@/pages/auth/SignUp'
 import { RecoveryEmail } from '@/pages/auth/RecoveryEmail'
 import { RecoveryNewPassword } from '@/pages/auth/RecoveryNewPassword'
+import { Dashboard } from '@/pages/dashboard/Dashboard'
 
 export function App() {
   return (
@@ -29,7 +30,10 @@ export function App() {
             </Route>
             <Route element={<RequireAuth />}>
               <Route element={<AppLayout />}>
-                {ADMIN_ROUTES.filter((r) => !PUBLIC_PATHS.has(r.path)).map((r) => (
+                <Route path="/" element={<Dashboard />} />
+                {ADMIN_ROUTES.filter(
+                  (r) => !PUBLIC_PATHS.has(r.path) && r.path !== '/',
+                ).map((r) => (
                   <Route
                     key={r.path}
                     path={r.path}
