@@ -43,7 +43,13 @@ export type DashboardSummary = {
   }
   activities: DashboardActivity[]
   wearAlerts: DashboardWearAlert[]
-  weather: Array<{ at: string; condition: 'sun' | 'rain' | 'storm'; tempC: number }>
+  weather: Array<{
+    at: string
+    condition: 'sun' | 'rain' | 'storm'
+    tempC: number
+    label?: string
+    isNow?: boolean
+  }>
 }
 
 export const dashboardApi = {
@@ -132,10 +138,47 @@ export const dashboardApi = {
     ]
 
     const now = Date.now()
+    // S1.7 weather expanded to 6 entries — Figma vocabulary in label.
+    // The AGORA marker is the third entry (isNow). WeatherTimeline auto-
+    // derives intensity segments from the condition sequence.
     const weather: DashboardSummary['weather'] = [
-      { at: new Date(now).toISOString(), condition: 'sun', tempC: 24 },
-      { at: new Date(now + 2 * 3600_000).toISOString(), condition: 'rain', tempC: 22 },
-      { at: new Date(now + 5 * 3600_000).toISOString(), condition: 'storm', tempC: 19 },
+      {
+        at: new Date(now - 4 * 3600_000).toISOString(),
+        condition: 'rain',
+        tempC: 22,
+        label: 'CHUVAS\nMODERADAS',
+      },
+      {
+        at: new Date(now - 2 * 3600_000).toISOString(),
+        condition: 'sun',
+        tempC: 26,
+        label: 'SOL\nINTENSO',
+      },
+      {
+        at: new Date(now).toISOString(),
+        condition: 'sun',
+        tempC: 25,
+        label: 'AGORA',
+        isNow: true,
+      },
+      {
+        at: new Date(now + 2 * 3600_000).toISOString(),
+        condition: 'rain',
+        tempC: 23,
+        label: 'CHUVAS\nMODERADAS',
+      },
+      {
+        at: new Date(now + 4 * 3600_000).toISOString(),
+        condition: 'storm',
+        tempC: 21,
+        label: 'PARCIALMENTE\nNUBLADO',
+      },
+      {
+        at: new Date(now + 6 * 3600_000).toISOString(),
+        condition: 'sun',
+        tempC: 24,
+        label: 'SOL',
+      },
     ]
 
     const urgentAlerts = bySeverity.critical + bySeverity.warning

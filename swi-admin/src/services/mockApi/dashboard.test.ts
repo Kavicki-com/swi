@@ -38,9 +38,12 @@ describe('dashboardApi.summary', () => {
     expect(statuses.size).toBeGreaterThan(1)
   })
 
-  it('returns weather timeline placeholder (3 entries)', async () => {
+  it('returns the expanded 6-entry weather timeline with one AGORA marker', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
-    expect(data?.weather).toHaveLength(3)
+    expect(data?.weather).toHaveLength(6)
+    const nowMarkers = data!.weather.filter((w) => w.isNow)
+    expect(nowMarkers).toHaveLength(1)
+    expect(data!.weather.every((w) => typeof w.label === 'string' && w.label.length > 0)).toBe(true)
   })
 
   it('returns wear alerts fixture with bpm, pressure and sector', async () => {
@@ -73,6 +76,6 @@ describe('dashboardApi.summary', () => {
     expect(data?.alerts.openOrAcknowledged).toBe(0)
     // Activities are a static fixture in S1.7, not org-scoped — they always render.
     expect(data!.activities.length).toBeGreaterThan(0)
-    expect(data?.weather).toHaveLength(3)
+    expect(data?.weather).toHaveLength(6)
   })
 })
