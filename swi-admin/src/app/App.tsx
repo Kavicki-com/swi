@@ -7,15 +7,8 @@ import { GuestOnly } from './GuestOnly'
 import { RequireAuth } from './RequireAuth'
 import { AppLayout } from './AppLayout'
 import { Placeholder } from './Placeholder'
-import { ADMIN_ROUTES } from './routes'
+import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { Login } from '@/pages/auth/Login'
-
-const PUBLIC_PATHS = new Set<string>([
-  '/login',
-  '/sign-up',
-  '/recovery/email',
-  '/recovery/new-password',
-])
 
 export function App() {
   return (
