@@ -5,7 +5,8 @@ Web admin para o SWI (monitoramento de funcionários em campo). Front-first MVP 
 ## Status
 
 - **S0 — scaffold:** completo (`v0.0.1-scaffold`)
-- **S1 — auth + dashboard:** code-complete (`v0.1.0-s1`) — runtime no browser bloqueado por incompat DS↔Vite (ver "Known issues" abaixo)
+- **S1 — auth + dashboard:** completo (`v0.1.0-s1`)
+- **DS bump v0.1.1:** bundled dist/ — resolveu o blocker DS↔Vite (S1.5)
 - **CI:** GitHub Actions em `.github/workflows/ci.yml` (typecheck, lint, test, build, storybook:build)
 - **Vercel preview:** _a configurar via `npx vercel link` em `swi-admin/`_
 
@@ -78,21 +79,6 @@ SWI/
 - **typecheck/lint/build/storybook:build:** todos verdes
 - **Decisões registradas:** sign-up aberto ligado a `org_seed_1`, consent gated com `consent_given_at`, `dashboard.summary` thin (não toca `employees.list`/`alerts.list` — esses são S2/S3)
 
-## Known issues
-
-### DS↔Vite runtime incompat (bloqueador de browser, S1)
-
-`@kavicki/swi-design-system@v0.1.0` distribui o `lib/module/` como source com sintaxe ESM **mas conteúdo CommonJS** (arquivos como `react-native-svg/lib/module/lib/extract/transform.js` usam `module.exports`). Isso quebra ambos os caminhos:
-
-- `npm run dev`: Vite serve via ESM nativo do browser → `Uncaught SyntaxError: ... does not provide an export named 'parse'` em `extractTransform.js` (e dezenas de outros arquivos transitivos como `warn-once/index.js`).
-- `npm run preview` (production build via `npm run build`): bundle preserva `require()` → `Uncaught ReferenceError: require is not defined` em runtime.
-
-Patches paliativos em `swi-admin/patches/react-native-svg+15.15.4.patch` (via `patch-package`, autoaplicado em `postinstall`) convertem 2 arquivos PEG.js de CJS para ESM mas é whack-a-mole — o grafo completo de deps é grande demais. Nenhum walking-skeleton no browser foi validado.
-
-**Não bloqueia** typecheck, lint, vitest+jsdom (DOM mock que não exercita SVG), nem o build de produção (que termina mas gera bundle quebrado). Bloqueia tudo no browser real.
-
-**Issue separada a abrir** em `Kavicki-com/swi-design-system`: configurar empacotamento ESM proper para web target — possíveis caminhos: build com `tsup`/`vite build --lib`, ou exportar `.web.tsx` específico, ou bundlar e shippar `dist/` com `module`/`exports` map correto, ou substituir `react-native-svg` por `react-native-svg-web` em web. Resolver desbloqueia S2 (que vai precisar do Vercel preview rodando).
-
 ## Workarounds aplicados (DS source-only)
 
 O DS publica TypeScript cru (`main: src/index.ts`, sem `dist/`). Para evitar refactor downstream:
@@ -111,6 +97,5 @@ Esses workarounds devem ser removidos quando o DS publicar `dist/` + types em re
 S2 = admins + funcionários CRUD. 6 telas: `admins`, `admin-details`, `admin-registration`, `employees`, `employee-details`, `employee-registration`. Plano detalhado em `docs/plans/2026-05-08-swi-admin-s2-*.md` quando o bloqueador DS↔Vite for resolvido.
 
 **Ordem recomendada:**
-1. Resolver o bloqueador DS↔Vite (issue em `Kavicki-com/swi-design-system`) — desbloqueia validação de runtime e Vercel preview
-2. Validar S1 no browser (walking-skeleton dos 7 passos descritos no plano S1)
-3. Iniciar S2
+1. Polimento de Figma fidelity nas 5 telas de S1 (sprint S1.6 ou inline em S2)
+2. Iniciar S2 (admins + employees CRUD)
