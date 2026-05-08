@@ -30,8 +30,10 @@ export default defineConfig({
     extensions: ['.web.tsx', '.web.ts', '.tsx', '.ts', '.js'],
   },
   optimizeDeps: {
-    include: ['react-native-web', 'styled-components'],
-    exclude: ['react-native-svg'],
+    // Pre-bundle rn-svg so esbuild handles CJS-ESM interop for its PEG.js-generated
+    // transform.js (CommonJS) being imported via named ESM import in extractTransform.js.
+    // Fabric paths are aliased to stubs above, so pre-bundling won't pull in RN internals.
+    include: ['react-native-web', 'styled-components', 'react-native-svg'],
   },
   define: {
     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
