@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { View } from 'react-native'
-import { Button, Input, Logo, Text, Title, useTheme } from '@kavicki/swi-design-system'
+import { Button, Input, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { authApi } from '@/services/mockApi'
 import { isEmail } from '@/lib/validators'
 import { FormError } from '@/components/FormError'
@@ -32,61 +32,63 @@ export function RecoveryEmail() {
     setPhase('sent')
   }
 
-  if (phase === 'sent') {
-    return (
-      <View
-        testID="recovery-email-sent"
-        style={{
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: theme.padding.xl,
-          gap: theme.gap.m,
-        }}
-      >
-        <Logo />
-        <Title>E-mail enviado</Title>
-        <Text>
-          Se o e-mail existir, enviamos as instruções para redefinir sua senha. Verifique sua caixa
-          de entrada.
-        </Text>
-        <Text>
-          <Link to="/login">Voltar para o login</Link>
-        </Text>
-      </View>
-    )
-  }
-
   return (
     <View
-      testID="recovery-email-page"
       style={{
+        flex: 1,
+        minHeight: '100vh' as unknown as number,
+        backgroundColor: theme.background,
         alignItems: 'center',
         justifyContent: 'center',
         padding: theme.padding.xl,
-        gap: theme.gap.m,
       }}
     >
-      <Logo />
-      <Title>Recuperar senha</Title>
-      <Text>Informe o e-mail cadastrado e enviaremos as instruções para redefinir sua senha.</Text>
-      <Input
-        label="E-mail"
-        accessibilityLabel="E-mail"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <FormError message={error} />
-      <Button
-        label="Enviar instruções"
-        onPress={onSubmit}
-        disabled={loading}
-        accessibilityLabel="Enviar instruções"
-      />
-      <Text>
-        <Link to="/login">Voltar para o login</Link>
-      </Text>
+      <View
+        testID={phase === 'form' ? 'recovery-email-page' : 'recovery-email-sent'}
+        style={{ width: 328, gap: theme.gap.l }}
+      >
+        {phase === 'form' ? (
+          <>
+            <Title variant="title.xs" color={theme.content.dark}>
+              Vamos recuperar a sua senha
+            </Title>
+            <Text variant="body.m" color={theme.content.dark}>
+              Insira seu endereço de email, vamos enviar um link de recuperação para você
+            </Text>
+            <Input
+              label="e-mail"
+              accessibilityLabel="e-mail"
+              placeholder="seu@email.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <FormError message={error} />
+            <Button
+              label="Enviar Link"
+              variant="contained"
+              fullWidth
+              onPress={onSubmit}
+              disabled={loading}
+              accessibilityLabel="Enviar Link"
+            />
+          </>
+        ) : (
+          <>
+            <Title variant="title.xs" color={theme.content.dark}>
+              E-mail enviado
+            </Title>
+            <Text variant="body.m" color={theme.content.dark}>
+              Se o e-mail existir, enviamos as instruções para redefinir sua senha. Verifique sua
+              caixa de entrada.
+            </Text>
+            <Text variant="body.m" color={theme.content.dark}>
+              <Link to="/login">Voltar para o login</Link>
+            </Text>
+          </>
+        )}
+      </View>
     </View>
   )
 }
