@@ -16,13 +16,13 @@ describe('RecoveryEmail', () => {
   it('renders email field and submit button', () => {
     renderAt()
     expect(screen.getByLabelText(/e-?mail/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /enviar instru/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /enviar link/i })).toBeInTheDocument()
   })
 
   it('shows error on invalid email', async () => {
     renderAt()
     fireEvent.change(screen.getByLabelText(/e-?mail/i), { target: { value: 'not-an-email' } })
-    fireEvent.click(screen.getByRole('button', { name: /enviar instru/i }))
+    fireEvent.click(screen.getByRole('button', { name: /enviar link/i }))
     await waitFor(() => {
       expect(screen.getByTestId('form-error')).toHaveTextContent(/e-?mail/i)
     })
@@ -31,7 +31,7 @@ describe('RecoveryEmail', () => {
   it('swaps to confirmation panel on valid email', async () => {
     renderAt()
     fireEvent.change(screen.getByLabelText(/e-?mail/i), { target: { value: 'whatever@swi.test' } })
-    fireEvent.click(screen.getByRole('button', { name: /enviar instru/i }))
+    fireEvent.click(screen.getByRole('button', { name: /enviar link/i }))
     await waitFor(() => {
       expect(screen.getByTestId('recovery-email-sent')).toBeInTheDocument()
     })
@@ -41,7 +41,7 @@ describe('RecoveryEmail', () => {
   it('confirmation panel has a link to /login', async () => {
     renderAt()
     fireEvent.change(screen.getByLabelText(/e-?mail/i), { target: { value: 'whatever@swi.test' } })
-    fireEvent.click(screen.getByRole('button', { name: /enviar instru/i }))
+    fireEvent.click(screen.getByRole('button', { name: /enviar link/i }))
     await waitFor(() => {
       expect(screen.getByTestId('recovery-email-sent')).toBeInTheDocument()
     })

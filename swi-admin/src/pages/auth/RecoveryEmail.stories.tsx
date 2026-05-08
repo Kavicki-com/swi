@@ -25,7 +25,7 @@ export const Loading: StoryObj<typeof RecoveryEmail> = {
     docs: {
       description: {
         story:
-          'Botão em loading; reproduzir clicando em "Enviar instruções" com mock lento após preencher o e-mail.',
+          'Botão em loading; reproduzir clicando em "Enviar Link" com mock lento após preencher o e-mail.',
       },
     },
   },
@@ -47,7 +47,7 @@ export const Sent: StoryObj<typeof RecoveryEmail> = {
     docs: {
       description: {
         story:
-          'Painel de confirmação após submit válido. Para visualizar, preencher um e-mail válido (ex.: "qualquer@swi.test") e clicar em "Enviar instruções"; o painel troca para o estado "sent" com a cópia em PT-BR e o link de voltar para login.',
+          'Painel de confirmação após submit válido. Para visualizar, preencher um e-mail válido (ex.: "qualquer@swi.test") e clicar em "Enviar Link"; o painel troca para o estado "sent" com a cópia em PT-BR e o link de voltar para login.',
       },
     },
   },
