@@ -1,19 +1,35 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 
+// rn-svg transform.js stub: provides ESM `parse` export so extractTransform.js
+// can `import { parse } from './transform'`. The original module is PEG.js-
+// generated CJS using `module.exports` without ES named exports, which Vite's
+// dev server (native browser ESM) cannot interop. We use a `load` hook because
+// Vite resolves the relative `./transform` import to an absolute filesystem
+// path before plugins run; on Windows that path uses backslashes, so we
+// normalize to forward slashes before matching. SWI Design System components
+// don't use SVG transforms, so a no-op `parse` is safe.
+const stubRnSvgTransform = (): Plugin => ({
+  name: 'stub-rn-svg-transform',
+  enforce: 'pre',
+  load(id: string) {
+    const normalized = id.replace(/\\/g, '/')
+    if (
+      normalized.endsWith(
+        '/react-native-svg/lib/module/lib/extract/transform.js',
+      )
+    ) {
+      return 'export const parse = () => null; export default { parse: () => null };'
+    }
+    return null
+  },
+})
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), stubRnSvgTransform()],
   resolve: {
     alias: [
-      // rn-svg transform.js stub: provides ESM `parse` export so extractTransform.js can import it.
-      // The import inside extractTransform.js is relative (`./transform`), which Vite resolves to
-      // an absolute filesystem path before applying aliases. The regex must therefore match
-      // anywhere in the resolved id (no leading `^`), with or without the `.js` extension.
-      {
-        find: /react-native-svg\/lib\/module\/lib\/extract\/transform(\.js)?$/,
-        replacement: path.resolve(__dirname, './src/stubs/empty-transform.ts'),
-      },
       // rn-svg's entire Fabric directory: stub on web (depends on RN internals).
       {
         find: /^react-native-svg\/lib\/module\/fabric\//,
