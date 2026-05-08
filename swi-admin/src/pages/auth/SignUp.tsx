@@ -91,11 +91,7 @@ export function SignUp() {
         onChangeText={setConfirmPassword}
         secureTextEntry
       />
-      <Checkbox
-        checked={consent}
-        onChange={setConsent}
-        label="Aceito a política de privacidade"
-      />
+      <Checkbox checked={consent} onChange={setConsent} label="Aceito a política de privacidade" />
       <Text>
         <Link to="/modals/privacy">Ler política de privacidade</Link>
       </Text>

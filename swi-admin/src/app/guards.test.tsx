@@ -40,7 +40,15 @@ describe('RequireAuth', () => {
   it('renders protected content when authenticated (session in localStorage)', async () => {
     window.localStorage.setItem(
       'swi.admin.session',
-      JSON.stringify({ id: 'u_seed_1', org_id: 'org_seed_1', email: 'a', full_name: 'a', role: 'admin', consent_given_at: null, created_at: '' }),
+      JSON.stringify({
+        id: 'u_seed_1',
+        org_id: 'org_seed_1',
+        email: 'a',
+        full_name: 'a',
+        role: 'admin',
+        consent_given_at: null,
+        created_at: '',
+      }),
     )
     renderTree(['/protected'])
     await waitFor(() => {
@@ -62,7 +70,15 @@ describe('GuestOnly', () => {
   it('redirects authenticated to /', async () => {
     window.localStorage.setItem(
       'swi.admin.session',
-      JSON.stringify({ id: 'u_seed_1', org_id: 'org_seed_1', email: 'a', full_name: 'a', role: 'admin', consent_given_at: null, created_at: '' }),
+      JSON.stringify({
+        id: 'u_seed_1',
+        org_id: 'org_seed_1',
+        email: 'a',
+        full_name: 'a',
+        role: 'admin',
+        consent_given_at: null,
+        created_at: '',
+      }),
     )
     renderTree(['/guest'])
     await waitFor(() => {
