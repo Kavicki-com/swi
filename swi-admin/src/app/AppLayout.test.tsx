@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -73,15 +73,14 @@ describe('AppLayout', () => {
   })
 
   it('signs out and clears the user from the header', async () => {
-    const { container } = renderTree()
+    renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()
     })
     const signOutButton = screen.getByRole('button', { name: /sair/i })
-    signOutButton.click()
+    fireEvent.click(signOutButton)
     await waitFor(() => {
       expect(screen.queryByText(/Admin Seed/)).not.toBeInTheDocument()
     })
-    expect(container).toBeTruthy()
   })
 })

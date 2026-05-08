@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { View } from 'react-native'
-import { Button, Logo, SideMenu, Text } from '@kavicki/swi-design-system'
+import { Button, Logo, SideMenu, Text, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 
 const NAV = [
@@ -19,6 +19,7 @@ export function AppLayout() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const theme = useTheme()
 
   const handleSignOut = async () => {
     await signOut()
@@ -42,12 +43,19 @@ export function AppLayout() {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: 16,
-            borderBottomWidth: 1,
+            padding: theme.padding.m,
+            borderBottomWidth: theme.border.size.s,
+            borderBottomColor: theme.content.lightGrey,
           }}
         >
           <Logo />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: theme.gap.m,
+            }}
+          >
             <Text>{user?.full_name ?? ''}</Text>
             <Button label="Sair" variant="outline" onPress={handleSignOut} />
           </View>
