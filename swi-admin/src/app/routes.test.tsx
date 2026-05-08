@@ -1,15 +1,8 @@
 // src/app/routes.test.tsx
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { ADMIN_ROUTES } from './routes'
+import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { App } from './App'
-
-const PUBLIC_PATHS = new Set<string>([
-  '/login',
-  '/sign-up',
-  '/recovery/email',
-  '/recovery/new-password',
-])
 
 const SEED_SESSION = JSON.stringify({
   id: 'u_seed_1',
