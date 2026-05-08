@@ -11,6 +11,7 @@ import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { Login } from '@/pages/auth/Login'
 import { SignUp } from '@/pages/auth/SignUp'
 import { RecoveryEmail } from '@/pages/auth/RecoveryEmail'
+import { RecoveryNewPassword } from '@/pages/auth/RecoveryNewPassword'
 
 export function App() {
   return (
@@ -24,10 +25,7 @@ export function App() {
                   fall back to placeholder so deep-links don't 404. */}
               <Route path="/sign-up" element={<SignUp />} />
               <Route path="/recovery/email" element={<RecoveryEmail />} />
-              <Route
-                path="/recovery/new-password"
-                element={<Placeholder label="password-recovery-newpassword" />}
-              />
+              <Route path="/recovery/new-password" element={<RecoveryNewPassword />} />
             </Route>
             <Route element={<RequireAuth />}>
               <Route element={<AppLayout />}>
