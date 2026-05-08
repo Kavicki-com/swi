@@ -21,14 +21,23 @@ const meta: Meta<typeof SignUp> = {
 }
 export default meta
 
-export const Default: StoryObj<typeof SignUp> = {}
+export const Default: StoryObj<typeof SignUp> = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Cadastro B2B (Figma 22:2178). Três seções (empresa, endereço, responsável) + radio de função + ações Voltar/Finalizar Cadastro.',
+      },
+    },
+  },
+}
 
 export const Loading: StoryObj<typeof SignUp> = {
   parameters: {
     docs: {
       description: {
         story:
-          'Botão em loading; reproduzir clicando em "Criar conta" com mock lento após preencher tudo.',
+          'Botão em loading; reproduzir clicando em "Finalizar Cadastro" após preencher todos os campos válidos com mock lento.',
       },
     },
   },
@@ -39,7 +48,7 @@ export const Error: StoryObj<typeof SignUp> = {
     docs: {
       description: {
         story:
-          'Erro do mockApi.signUp — usar e-mail já registrado (admin@swi.test) ou desmarcar consentimento.',
+          'Erro do mockApi.signUp — usar e-mail já registrado (admin@swi.test) no campo "Email" do responsável.',
       },
     },
   },
@@ -50,7 +59,7 @@ export const Filled: StoryObj<typeof SignUp> = {
     docs: {
       description: {
         story:
-          'Form preenchido com dados válidos (nome, e-mail novo, senha 8+, confirmação igual, consent marcado).',
+          'Form preenchido com todos os campos obrigatórios das 3 seções, função selecionada (ex: Dono/Fundador) e e-mail novo.',
       },
     },
   },
