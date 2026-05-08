@@ -12,6 +12,13 @@ export type DashboardSummary = {
     openOrAcknowledged: number
     bySeverity: Record<Alert['severity'], number>
   }
+  // S1.7 KPI row aggregates. Mocked counts; S2 sources from real biometrics + alert pipeline.
+  kpis: {
+    vitalSigns: number
+    wearRate: number
+    urgentAlerts: number
+    commonAlerts: number
+  }
   recentActivities: Array<{ id: string; label: string; at: string }>
   weather: Array<{ at: string; condition: 'sun' | 'rain' | 'storm'; tempC: number }>
 }
@@ -45,10 +52,17 @@ export const dashboardApi = {
       { at: new Date(now + 5 * 3600_000).toISOString(), condition: 'storm', tempC: 19 },
     ]
 
+    const urgentAlerts = bySeverity.critical + bySeverity.warning
+    const commonAlerts = bySeverity.info
+    // Mocked aggregates. S2 will replace with real device telemetry.
+    const vitalSigns = employees.length * 100 + 5
+    const wearRate = 512
+
     return {
       data: {
         employees: { total: employees.length, byStatus },
         alerts: { openOrAcknowledged: openOrAck.length, bySeverity },
+        kpis: { vitalSigns, wearRate, urgentAlerts, commonAlerts },
         recentActivities,
         weather,
       },

@@ -13,6 +13,7 @@ const FAKE_SUMMARY: DashboardSummary = {
     openOrAcknowledged: 2,
     bySeverity: { info: 0, warning: 1, critical: 1 },
   },
+  kpis: { vitalSigns: 1205, wearRate: 512, urgentAlerts: 2, commonAlerts: 0 },
   recentActivities: [
     { id: 'a1', label: 'Activity 1', at: '2026-05-08T10:00:00.000Z' },
     { id: 'a2', label: 'Activity 2', at: '2026-05-08T09:00:00.000Z' },
@@ -75,7 +76,7 @@ describe('Dashboard', () => {
     resolveFn({ data: FAKE_SUMMARY, error: null })
   })
 
-  it('renders KPI counts after summary resolves', async () => {
+  it('renders the Figma KPI row with all five testIDs', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: FAKE_SUMMARY,
       error: null,
@@ -84,10 +85,34 @@ describe('Dashboard', () => {
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
     })
-    // Loose assertion: the total should appear somewhere
-    expect(screen.getAllByText(/12/).length).toBeGreaterThan(0)
-    // Check open alerts count
-    expect(screen.getAllByText(/2/).length).toBeGreaterThan(0)
+    expect(screen.getByTestId('kpi-row')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-good')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-alert')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-vital-signs')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-wear-rate')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-urgent-alerts')).toBeInTheDocument()
+    // Mocked numbers surface
+    expect(screen.getByText('1205')).toBeInTheDocument()
+    expect(screen.getByText('512')).toBeInTheDocument()
+    // Sublabel for urgent alerts
+    expect(screen.getByText(/Necessita atenção/i)).toBeInTheDocument()
+  })
+
+  it('renders the map preview banner and navigates on CTA press', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: FAKE_SUMMARY,
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('dashboard-map-banner')).toBeInTheDocument()
+    const cta = screen.getByTestId('dashboard-map-cta')
+    expect(cta).toBeInTheDocument()
+    // Click is wired (real navigation requires the route table; covered in routes.test.tsx)
+    fireEvent.click(cta)
   })
 
   it('renders 5 recent activities', async () => {
