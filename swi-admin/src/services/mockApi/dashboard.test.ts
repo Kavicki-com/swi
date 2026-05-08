@@ -43,6 +43,20 @@ describe('dashboardApi.summary', () => {
     expect(data?.weather).toHaveLength(3)
   })
 
+  it('returns wear alerts fixture with bpm, pressure and sector', async () => {
+    const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    expect(data?.wearAlerts).toBeDefined()
+    expect(data!.wearAlerts.length).toBeGreaterThanOrEqual(4)
+    const first = data!.wearAlerts[0]!
+    expect(first).toMatchObject({
+      employeeName: expect.any(String),
+      sector: expect.any(String),
+      progress: expect.any(Number),
+      bpm: expect.any(Number),
+      pressure: expect.any(String),
+    })
+  })
+
   it('returns S1.7 KPI aggregates (vitalSigns, wearRate, urgentAlerts, commonAlerts)', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
     expect(data?.kpis).toBeDefined()

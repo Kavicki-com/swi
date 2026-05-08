@@ -15,6 +15,16 @@ export type DashboardActivity = {
   locationLabel?: string
 }
 
+export type DashboardWearAlert = {
+  id: string
+  employeeName: string
+  sector: string
+  progress: number
+  bpm: number
+  pressure: string
+  avatarUri?: string
+}
+
 export type DashboardSummary = {
   employees: {
     total: number
@@ -32,6 +42,7 @@ export type DashboardSummary = {
     commonAlerts: number
   }
   activities: DashboardActivity[]
+  wearAlerts: DashboardWearAlert[]
   weather: Array<{ at: string; condition: 'sun' | 'rain' | 'storm'; tempC: number }>
 }
 
@@ -133,12 +144,53 @@ export const dashboardApi = {
     const vitalSigns = employees.length * 100 + 5
     const wearRate = 512
 
+    // S1.7 wear alerts fixture — Figma shows Ezequiel Almeida etc on the right column.
+    const wearAlerts: DashboardWearAlert[] = [
+      {
+        id: 'wear_001',
+        employeeName: 'Ezequiel Almeida',
+        sector: 'Setor Leste',
+        progress: 78,
+        bpm: 112,
+        pressure: '14/9',
+        avatarUri: 'https://i.pravatar.cc/100?img=51',
+      },
+      {
+        id: 'wear_002',
+        employeeName: 'Mariana Costa',
+        sector: 'Setor Leste',
+        progress: 65,
+        bpm: 104,
+        pressure: '13/8',
+        avatarUri: 'https://i.pravatar.cc/100?img=52',
+      },
+      {
+        id: 'wear_003',
+        employeeName: 'Rafael Souza',
+        sector: 'Setor Norte',
+        progress: 82,
+        bpm: 118,
+        pressure: '15/9',
+        avatarUri: 'https://i.pravatar.cc/100?img=53',
+      },
+      {
+        id: 'wear_004',
+        employeeName: 'Tatiana Lima',
+        sector: 'Setor Sul',
+        progress: 71,
+        bpm: 108,
+        pressure: '13/8',
+        avatarUri: 'https://i.pravatar.cc/100?img=54',
+      },
+    ]
+
     return {
       data: {
         employees: { total: employees.length, byStatus },
         alerts: { openOrAcknowledged: openOrAck.length, bySeverity },
         kpis: { vitalSigns, wearRate, urgentAlerts, commonAlerts },
         activities,
+        wearAlerts,
         weather,
       },
       error: null,

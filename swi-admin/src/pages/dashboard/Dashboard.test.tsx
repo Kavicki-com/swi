@@ -48,6 +48,32 @@ const FAKE_SUMMARY: DashboardSummary = {
       participants: [],
     },
   ],
+  wearAlerts: [
+    {
+      id: 'w1',
+      employeeName: 'Ezequiel Almeida',
+      sector: 'Setor Leste',
+      progress: 70,
+      bpm: 110,
+      pressure: '14/9',
+    },
+    {
+      id: 'w2',
+      employeeName: 'Mariana Costa',
+      sector: 'Setor Leste',
+      progress: 65,
+      bpm: 104,
+      pressure: '13/8',
+    },
+    {
+      id: 'w3',
+      employeeName: 'Rafael Souza',
+      sector: 'Setor Norte',
+      progress: 80,
+      bpm: 118,
+      pressure: '15/9',
+    },
+  ],
   weather: [
     { at: '2026-05-08T10:00:00.000Z', condition: 'sun', tempC: 24 },
     { at: '2026-05-08T12:00:00.000Z', condition: 'rain', tempC: 22 },
@@ -157,6 +183,39 @@ describe('Dashboard', () => {
     // The a-fazer + concluida ones are filtered out
     expect(screen.queryByTestId('activity-a3')).not.toBeInTheDocument()
     expect(screen.queryByTestId('activity-a4')).not.toBeInTheDocument()
+  })
+
+  it('renders the wear alerts column with all employees and the two-column row', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: FAKE_SUMMARY,
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('wear-alerts-section')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('dashboard-two-col-row')).toBeInTheDocument()
+    expect(screen.getByTestId('wear-alert-w1')).toBeInTheDocument()
+    expect(screen.getByTestId('wear-alert-w2')).toBeInTheDocument()
+    expect(screen.getByTestId('wear-alert-w3')).toBeInTheDocument()
+  })
+
+  it('filters wear alerts via the SearchInput', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: FAKE_SUMMARY,
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('wear-alerts-section')).toBeInTheDocument()
+    })
+    const searchInput = screen.getByPlaceholderText(/Pesquisar Funcion/i)
+    fireEvent.change(searchInput, { target: { value: 'Mariana' } })
+    await waitFor(() => {
+      expect(screen.getByTestId('wear-alert-w2')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('wear-alert-w1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('wear-alert-w3')).not.toBeInTheDocument()
   })
 
   it('switches the activity filter when a chip is pressed', async () => {

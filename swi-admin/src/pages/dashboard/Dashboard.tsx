@@ -7,7 +7,9 @@ import {
   BigNumbersCard,
   Button,
   ChipGroup,
+  EmployeeOverviewCard,
   Icon,
+  SearchInput,
   Text,
   Title,
   WeatherTimeline,
@@ -15,7 +17,11 @@ import {
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { dashboardApi, type DashboardSummary } from '@/services/mockApi'
-import type { DashboardActivity, DashboardActivityStatus } from '@/services/mockApi/dashboard'
+import type {
+  DashboardActivity,
+  DashboardActivityStatus,
+  DashboardWearAlert,
+} from '@/services/mockApi/dashboard'
 import { FormError } from '@/components/FormError'
 
 // DS module is shimmed to `any`; mirror the WeatherTimelineEvent shape locally.
@@ -212,6 +218,55 @@ const CHIP_TO_STATUS: Record<Exclude<ActivityChip, 'Ver Todas'>, DashboardActivi
   'A Fazer': 'a-fazer',
 }
 
+function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
+  const theme = useTheme()
+  const [query, setQuery] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return alerts
+    return alerts.filter(
+      (a) =>
+        a.employeeName.toLowerCase().includes(q) || a.sector.toLowerCase().includes(q),
+    )
+  }, [alerts, query])
+
+  return (
+    <View testID="wear-alerts-section" style={{ gap: theme.gap.m }}>
+      <Title>Alertas de Desgaste</Title>
+      <View testID="wear-alerts-search">
+        <SearchInput
+          placeholder="Pesquisar Funcionário"
+          value={query}
+          onChangeText={setQuery}
+          onClear={() => setQuery('')}
+        />
+      </View>
+      <View testID="wear-alerts-list" style={{ gap: theme.gap.s }}>
+        {filtered.length === 0 ? (
+          <Text testID="wear-alerts-empty">Nenhum funcionário encontrado.</Text>
+        ) : (
+          filtered.map((alert) => (
+            <EmployeeOverviewCard
+              key={alert.id}
+              employee={{
+                name: alert.employeeName,
+                sector: alert.sector,
+                avatarUri: alert.avatarUri,
+              }}
+              progress={alert.progress}
+              bpm={alert.bpm}
+              pressure={alert.pressure}
+              fullWidth
+              testID={`wear-alert-${alert.id}`}
+            />
+          ))
+        )}
+      </View>
+    </View>
+  )
+}
+
 function ActivitiesSection({ activities }: { activities: DashboardActivity[] }) {
   const theme = useTheme()
   const [filter, setFilter] = useState<ActivityChip>('Em Curso')
@@ -304,7 +359,18 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         <UrgentAlertsKpi value={summary.kpis.urgentAlerts} />
       </View>
 
-      <ActivitiesSection activities={summary.activities} />
+      {/* Two-column row: Atividades em andamento (left) + Alertas de Desgaste (right) */}
+      <View
+        testID="dashboard-two-col-row"
+        style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'flex-start' }}
+      >
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <ActivitiesSection activities={summary.activities} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <WearAlertsSection alerts={summary.wearAlerts} />
+        </View>
+      </View>
 
       {/* Weather — Task 5 will expand to 5-6 entries with intensitySegments */}
       <Text>Previsão do tempo</Text>
