@@ -2,6 +2,16 @@ import type { Alert, Employee } from '../types'
 import { SEED_ALERTS, SEED_EMPLOYEES } from './seed'
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
+import workerA from '@/assets/avatars/worker-a.png'
+import workerB from '@/assets/avatars/worker-b.png'
+import workerC from '@/assets/avatars/worker-c.png'
+
+// Real worker photos exported from Figma frame 4:2 (S1.7 dashboard fidelity).
+// Cycled across activity participants and wear-alert rows since the frame
+// only exposes 3 unique avatar circles.
+const FIGMA_AVATARS: readonly string[] = [workerA, workerB, workerC]
+const cycleAvatar = (idx: number): string =>
+  FIGMA_AVATARS[idx % FIGMA_AVATARS.length] ?? workerA
 
 export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
 
@@ -36,6 +46,10 @@ export type DashboardSummary = {
   }
   // S1.7 KPI row aggregates. Mocked counts; S2 sources from real biometrics + alert pipeline.
   kpis: {
+    admins: number
+    totalEmployees: number
+    newReports: number
+    activeCameras: number
     vitalSigns: number
     wearRate: number
     urgentAlerts: number
@@ -80,10 +94,10 @@ export const dashboardApi = {
         progress: 60,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/300?img=21', alt: 'Carlos' },
-          { uri: 'https://i.pravatar.cc/300?img=22', alt: 'Diego' },
-          { uri: 'https://i.pravatar.cc/300?img=23', alt: 'Eva' },
-          { uri: 'https://i.pravatar.cc/300?img=24', alt: 'Felipe' },
+          { uri: cycleAvatar(0), alt: 'Carlos' },
+          { uri: cycleAvatar(1), alt: 'Diego' },
+          { uri: cycleAvatar(2), alt: 'Eva' },
+          { uri: cycleAvatar(3), alt: 'Felipe' },
         ],
       },
       {
@@ -94,9 +108,9 @@ export const dashboardApi = {
         progress: 35,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/300?img=25', alt: 'Gabriela' },
-          { uri: 'https://i.pravatar.cc/300?img=26', alt: 'Henrique' },
-          { uri: 'https://i.pravatar.cc/300?img=27', alt: 'Isabela' },
+          { uri: cycleAvatar(4), alt: 'Gabriela' },
+          { uri: cycleAvatar(5), alt: 'Henrique' },
+          { uri: cycleAvatar(6), alt: 'Isabela' },
         ],
       },
       {
@@ -107,8 +121,8 @@ export const dashboardApi = {
         progress: 0,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/300?img=28', alt: 'Joao' },
-          { uri: 'https://i.pravatar.cc/300?img=29', alt: 'Karen' },
+          { uri: cycleAvatar(7), alt: 'Joao' },
+          { uri: cycleAvatar(8), alt: 'Karen' },
         ],
       },
       {
@@ -119,8 +133,8 @@ export const dashboardApi = {
         progress: 100,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/300?img=30', alt: 'Lucas' },
-          { uri: 'https://i.pravatar.cc/300?img=31', alt: 'Mariana' },
+          { uri: cycleAvatar(9), alt: 'Lucas' },
+          { uri: cycleAvatar(10), alt: 'Mariana' },
         ],
       },
       {
@@ -131,8 +145,8 @@ export const dashboardApi = {
         progress: 80,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/300?img=32', alt: 'Nicolas' },
-          { uri: 'https://i.pravatar.cc/300?img=33', alt: 'Olívia' },
+          { uri: cycleAvatar(11), alt: 'Nicolas' },
+          { uri: cycleAvatar(12), alt: 'Olívia' },
         ],
       },
     ]
@@ -183,8 +197,13 @@ export const dashboardApi = {
 
     const urgentAlerts = bySeverity.critical + bySeverity.warning
     const commonAlerts = bySeverity.info
-    // Mocked aggregates. S2 will replace with real device telemetry.
-    const vitalSigns = employees.length * 100 + 5
+    // Mocked aggregates matching Figma frame 4:2 (S1.7 dashboard fidelity).
+    // S2 will replace with real device telemetry + reports/cameras inventory.
+    const admins = 3
+    const totalEmployees = 1205
+    const newReports = 4
+    const activeCameras = 564
+    const vitalSigns = 512
     const wearRate = 512
 
     // S1.7 wear alerts fixture — Figma shows Ezequiel Almeida etc on the right column.
@@ -196,7 +215,7 @@ export const dashboardApi = {
         progress: 78,
         bpm: 112,
         pressure: '14/9',
-        avatarUri: 'https://i.pravatar.cc/300?img=51',
+        avatarUri: cycleAvatar(0),
       },
       {
         id: 'wear_002',
@@ -205,7 +224,7 @@ export const dashboardApi = {
         progress: 65,
         bpm: 104,
         pressure: '13/8',
-        avatarUri: 'https://i.pravatar.cc/300?img=52',
+        avatarUri: cycleAvatar(1),
       },
       {
         id: 'wear_003',
@@ -214,7 +233,7 @@ export const dashboardApi = {
         progress: 82,
         bpm: 118,
         pressure: '15/9',
-        avatarUri: 'https://i.pravatar.cc/300?img=53',
+        avatarUri: cycleAvatar(2),
       },
       {
         id: 'wear_004',
@@ -223,7 +242,7 @@ export const dashboardApi = {
         progress: 71,
         bpm: 108,
         pressure: '13/8',
-        avatarUri: 'https://i.pravatar.cc/300?img=54',
+        avatarUri: cycleAvatar(3),
       },
     ]
 
@@ -231,7 +250,16 @@ export const dashboardApi = {
       data: {
         employees: { total: employees.length, byStatus },
         alerts: { openOrAcknowledged: openOrAck.length, bySeverity },
-        kpis: { vitalSigns, wearRate, urgentAlerts, commonAlerts },
+        kpis: {
+          admins,
+          totalEmployees,
+          newReports,
+          activeCameras,
+          vitalSigns,
+          wearRate,
+          urgentAlerts,
+          commonAlerts,
+        },
         activities,
         wearAlerts,
         weather,
