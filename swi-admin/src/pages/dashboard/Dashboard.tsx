@@ -7,9 +7,10 @@ import {
   BigNumbersCard,
   Button,
   ChipGroup,
+  DonutChart,
   EmployeeOverviewCard,
-  Icon,
   SearchInput,
+  StatusChart,
   Text,
   Title,
   WeatherTimeline,
@@ -23,6 +24,7 @@ import type {
   DashboardWearAlert,
 } from '@/services/mockApi/dashboard'
 import { FormError } from '@/components/FormError'
+import mapPreview from '@/assets/dashboard-map-preview.png'
 
 // DS module is shimmed to `any`; mirror the WeatherTimelineEvent shape locally.
 type WeatherTimelineCondition = 'sunny' | 'rainy' | 'partly-cloudy'
@@ -35,6 +37,7 @@ type WeatherTimelineEvent = {
 }
 
 const WEATHER_NOW_LABEL = 'AGORA'
+const WEAR_GRADIENT = ['#34d399', '#10b981'] as const
 
 type Phase = 'loading' | 'error' | 'populated'
 
@@ -133,16 +136,17 @@ function MapBanner() {
     <View
       testID="dashboard-map-banner"
       style={{
-        height: 180,
+        height: 240,
         borderRadius: theme.border.radius.m,
-        backgroundColor: theme.surface.medium,
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative' as unknown as never,
         overflow: 'hidden',
+        position: 'relative' as unknown as never,
       }}
     >
-      <Icon name="location_on" size={48} color={theme.content.primary} />
+      <img
+        src={mapPreview}
+        alt="Mapa de monitoramento"
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
       <View
         style={{
           position: 'absolute' as unknown as never,
@@ -168,6 +172,8 @@ function FuncionariosKpi({ summary }: { summary: DashboardSummary }) {
     summary.employees.byStatus.alert +
     summary.employees.byStatus.low +
     summary.employees.byStatus.offline
+  const total = goodCount + alertCount
+  const goodFraction = total === 0 ? 0 : goodCount / total
   return (
     <View
       testID="kpi-funcionarios"
@@ -177,6 +183,7 @@ function FuncionariosKpi({ summary }: { summary: DashboardSummary }) {
         padding: theme.padding.s,
         borderRadius: theme.border.radius.m,
         backgroundColor: theme.surface.standard,
+        alignItems: 'center',
       }}
     >
       <BigNumbersCard
@@ -191,6 +198,11 @@ function FuncionariosKpi({ summary }: { summary: DashboardSummary }) {
         icon="mode_heat"
         iconColor={theme.content.warning}
         testID="kpi-funcionarios-alert"
+      />
+      <StatusChart
+        condition="good"
+        progress={goodFraction}
+        testID="kpi-funcionarios-status"
       />
     </View>
   )
@@ -330,11 +342,9 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
 
   return (
     <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
-      <Title>Dashboard</Title>
-
       <MapBanner />
 
-      {/* KPI row — Figma layout: Funcionários composite + Sinais vitais + Taxa de desgaste + Alertas urgentes */}
+      {/* KPI row — Figma: Funcionários composite + Sinais vitais donut + Taxa desgaste donut + Alertas urgentes */}
       <View
         testID="kpi-row"
         style={{
@@ -345,17 +355,23 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         }}
       >
         <FuncionariosKpi summary={summary} />
-        <BigNumbersCard
+        <DonutChart
+          title="Sinais vitais"
           value={summary.kpis.vitalSigns}
-          label="Sinais vitais"
+          label="Funcionários"
+          caption="Excelentes"
+          progress={85}
           icon="vital_signs"
           testID="kpi-vital-signs"
         />
-        <BigNumbersCard
+        <DonutChart
+          title="Taxa de desgaste"
           value={summary.kpis.wearRate}
-          label="Taxa de desgaste"
+          label="Desgaste geral"
+          caption="Em monitoramento"
+          progress={70}
+          progressGradient={WEAR_GRADIENT}
           icon="health_activity"
-          iconColor={theme.content.success}
           testID="kpi-wear-rate"
         />
         <UrgentAlertsKpi value={summary.kpis.urgentAlerts} />
@@ -374,13 +390,15 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         </View>
       </View>
 
-      <Text>Previsão do tempo</Text>
-      <WeatherTimeline
-        events={weatherEvents}
-        nowLabel={WEATHER_NOW_LABEL}
-        fullWidth
-        testID="weather-timeline"
-      />
+      <View style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.s }}>
+        <Text>Previsão do tempo</Text>
+        <WeatherTimeline
+          events={weatherEvents}
+          nowLabel={WEATHER_NOW_LABEL}
+          fullWidth
+          testID="weather-timeline"
+        />
+      </View>
     </View>
   )
 }
