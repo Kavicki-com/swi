@@ -47,22 +47,29 @@ describe('AppLayout', () => {
     })
   })
 
-  it('shows the user vitals in the DS Header', async () => {
+  it('shows the user vitals in HeaderUserInfo', async () => {
     renderTree()
     await waitFor(() => {
-      // Header renders bpm and pressure via DS HeaderUserInfo
-      expect(screen.getByText(/78/)).toBeInTheDocument()
-      expect(screen.getByText('12/8')).toBeInTheDocument()
+      expect(screen.getByTestId('app-header-user-info')).toBeInTheDocument()
+    })
+    expect(screen.getByText(/78/)).toBeInTheDocument()
+    expect(screen.getByText('12/8')).toBeInTheDocument()
+  })
+
+  it('renders Logo at the top of the sidebar (not in the header)', async () => {
+    renderTree()
+    await waitFor(() => {
+      expect(screen.getByTestId('app-sidebar-logo')).toBeInTheDocument()
     })
   })
 
-  it('renders all 9 navigation entries', async () => {
+  it('renders all 9 navigation entries with compact variant', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()
     })
     const labels = [
-      'Dashboard',
+      'Home',
       'Mapas',
       'Alertas',
       'Funcionários',
@@ -75,6 +82,19 @@ describe('AppLayout', () => {
     for (const label of labels) {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
+    expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
+  })
+
+  it('renders the ChatSection with mocked contacts in the sidebar', async () => {
+    renderTree()
+    await waitFor(() => {
+      expect(screen.getByTestId('app-sidebar-chat')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Ezequiel Almeida')).toBeInTheDocument()
+    expect(screen.getByText('Romulo Cardoso')).toBeInTheDocument()
+    expect(screen.getByText('Júlio Lacerda')).toBeInTheDocument()
+    expect(screen.getByText('Jennifer Gomes')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Pesquisar Contatos')).toBeInTheDocument()
   })
 
   it('signs out from the sidebar footer and navigates away', async () => {
