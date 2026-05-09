@@ -9,8 +9,8 @@ import {
   ChipGroup,
   DonutChart,
   EmployeeOverviewCard,
+  Icon,
   SearchInput,
-  StatusChart,
   Text,
   Title,
   WeatherTimeline,
@@ -38,6 +38,8 @@ type WeatherTimelineEvent = {
 
 const WEATHER_NOW_LABEL = 'AGORA'
 const WEAR_GRADIENT = ['#34d399', '#10b981'] as const
+// surface/error-light -> surface/error from the Figma token map.
+const URGENT_GRADIENT = ['#fab3bd', '#f5667a'] as const
 
 type Phase = 'loading' | 'error' | 'populated'
 
@@ -136,7 +138,7 @@ function MapBanner() {
     <View
       testID="dashboard-map-banner"
       style={{
-        height: 240,
+        height: 200,
         borderRadius: theme.border.radius.m,
         overflow: 'hidden',
         position: 'relative' as unknown as never,
@@ -148,6 +150,17 @@ function MapBanner() {
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       />
       <View
+        testID="dashboard-map-pin"
+        style={{
+          position: 'absolute' as unknown as never,
+          top: '50%' as unknown as number,
+          left: '50%' as unknown as number,
+          transform: [{ translateX: -20 }, { translateY: -20 }],
+        }}
+      >
+        <Icon name="location_on" size={40} color={theme.content.primary} />
+      </View>
+      <View
         style={{
           position: 'absolute' as unknown as never,
           right: theme.padding.m,
@@ -155,8 +168,8 @@ function MapBanner() {
         }}
       >
         <Button
-          label="Acessar mapa"
-          variant="contained"
+          label="Ver mapa geral"
+          variant="ghost"
           onPress={() => navigate('/maps/general')}
           testID="dashboard-map-cta"
         />
@@ -167,58 +180,49 @@ function MapBanner() {
 
 function FuncionariosKpi({ summary }: { summary: DashboardSummary }) {
   const theme = useTheme()
-  const goodCount = summary.employees.byStatus.good
-  const alertCount =
-    summary.employees.byStatus.alert +
-    summary.employees.byStatus.low +
-    summary.employees.byStatus.offline
-  const total = goodCount + alertCount
-  const goodFraction = total === 0 ? 0 : goodCount / total
+  const { admins, totalEmployees, newReports, activeCameras } = summary.kpis
   return (
     <View
       testID="kpi-funcionarios"
       style={{
-        flexDirection: 'row',
         gap: theme.gap.s,
-        padding: theme.padding.s,
-        borderRadius: theme.border.radius.m,
+        padding: theme.padding.m,
+        borderRadius: theme.border.radius.l,
         backgroundColor: theme.surface.standard,
-        alignItems: 'center',
       }}
     >
-      <BigNumbersCard
-        value={goodCount}
-        label="Funcionários"
-        icon="person_apron"
-        testID="kpi-funcionarios-good"
-      />
-      <BigNumbersCard
-        value={alertCount}
-        label="Funcionários"
-        icon="mode_heat"
-        iconColor={theme.content.warning}
-        testID="kpi-funcionarios-alert"
-      />
-      <StatusChart
-        condition="good"
-        progress={goodFraction}
-        testID="kpi-funcionarios-status"
-      />
-    </View>
-  )
-}
-
-function UrgentAlertsKpi({ value }: { value: number }) {
-  const theme = useTheme()
-  return (
-    <View testID="kpi-urgent-alerts" style={{ gap: theme.gap.xs }}>
-      <BigNumbersCard
-        value={value}
-        label="Alertas urgentes"
-        icon="vital_signs"
-        iconColor={theme.content.error}
-      />
-      <Text style={{ color: theme.content.error, fontSize: 12 }}>Necessita atenção</Text>
+      <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
+        <BigNumbersCard
+          value={admins}
+          label="Administradores"
+          icon="manage_accounts"
+          iconColor={theme.content.primary}
+          testID="kpi-funcionarios-admins"
+        />
+        <BigNumbersCard
+          value={totalEmployees}
+          label="Funcionários"
+          icon="person_apron"
+          iconColor={theme.content.primary}
+          testID="kpi-funcionarios-employees"
+        />
+      </View>
+      <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
+        <BigNumbersCard
+          value={newReports}
+          label="Novos relatórios"
+          icon="monitoring"
+          iconColor={theme.content.primary}
+          testID="kpi-funcionarios-reports"
+        />
+        <BigNumbersCard
+          value={activeCameras}
+          label="Câmeras ativas"
+          icon="video_camera_back"
+          iconColor={theme.content.primary}
+          testID="kpi-funcionarios-cameras"
+        />
+      </View>
     </View>
   )
 }
@@ -246,7 +250,21 @@ function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
 
   return (
     <View testID="wear-alerts-section" style={{ gap: theme.gap.m }}>
-      <Title>Alertas de Desgaste</Title>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Title>Alertas de Desgaste</Title>
+        <Button
+          label="Ver Todas"
+          variant="ghost"
+          onPress={() => undefined}
+          testID="wear-alerts-see-all"
+        />
+      </View>
       <View testID="wear-alerts-search">
         <SearchInput
           placeholder="Pesquisar Funcionário"
@@ -374,7 +392,16 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
           icon="health_activity"
           testID="kpi-wear-rate"
         />
-        <UrgentAlertsKpi value={summary.kpis.urgentAlerts} />
+        <DonutChart
+          title="Alertas urgentes"
+          value={summary.kpis.urgentAlerts}
+          label="Alertas"
+          caption="Necessita atenção"
+          progress={60}
+          progressGradient={URGENT_GRADIENT}
+          icon="vital_signs"
+          testID="kpi-urgent-alerts"
+        />
       </View>
 
       {/* Two-column row: Atividades em andamento (left) + Alertas de Desgaste (right) */}
@@ -390,8 +417,8 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         </View>
       </View>
 
-      <View style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.s }}>
-        <Text>Previsão do tempo</Text>
+      <View style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.m }}>
+        <Title>Previsão do tempo</Title>
         <WeatherTimeline
           events={weatherEvents}
           nowLabel={WEATHER_NOW_LABEL}

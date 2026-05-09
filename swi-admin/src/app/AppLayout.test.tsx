@@ -63,26 +63,28 @@ describe('AppLayout', () => {
     })
   })
 
-  it('renders all 9 navigation entries with compact variant', async () => {
+  it('renders the 7 Figma navigation cards in order with icons', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()
     })
     const labels = [
       'Home',
-      'Mapas',
-      'Alertas',
+      'Administradores',
       'Funcionários',
-      'Admins',
       'Monitoramento',
       'Relatórios',
-      'Chat',
+      'Alertas',
       'Configurações',
     ]
     for (const label of labels) {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
     expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
+    // Each item is rendered as an individual nav card with its own testID.
+    expect(screen.getByTestId('nav-home')).toBeInTheDocument()
+    expect(screen.getByTestId('nav-admins')).toBeInTheDocument()
+    expect(screen.getByTestId('nav-employees')).toBeInTheDocument()
   })
 
   it('renders the ChatSection with mocked contacts in the sidebar', async () => {

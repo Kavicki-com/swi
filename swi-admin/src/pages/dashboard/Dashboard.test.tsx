@@ -1,5 +1,5 @@
 // src/pages/dashboard/Dashboard.test.tsx
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
@@ -13,7 +13,16 @@ const FAKE_SUMMARY: DashboardSummary = {
     openOrAcknowledged: 2,
     bySeverity: { info: 0, warning: 1, critical: 1 },
   },
-  kpis: { vitalSigns: 1205, wearRate: 512, urgentAlerts: 2, commonAlerts: 0 },
+  kpis: {
+    admins: 3,
+    totalEmployees: 1205,
+    newReports: 4,
+    activeCameras: 564,
+    vitalSigns: 512,
+    wearRate: 512,
+    urgentAlerts: 2,
+    commonAlerts: 0,
+  },
   activities: [
     {
       id: 'a1',
@@ -143,7 +152,7 @@ describe('Dashboard', () => {
     resolveFn({ data: FAKE_SUMMARY, error: null })
   })
 
-  it('renders the Figma KPI row with all five testIDs', async () => {
+  it('renders the Figma KPI row: 2x2 Funcionários grid + 3 donuts', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: FAKE_SUMMARY,
       error: null,
@@ -153,17 +162,22 @@ describe('Dashboard', () => {
       expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
     })
     expect(screen.getByTestId('kpi-row')).toBeInTheDocument()
+    // 2x2 grid in Funcionarios composite — 4 separate tiles
     expect(screen.getByTestId('kpi-funcionarios')).toBeInTheDocument()
-    expect(screen.getByTestId('kpi-funcionarios-good')).toBeInTheDocument()
-    expect(screen.getByTestId('kpi-funcionarios-alert')).toBeInTheDocument()
-    expect(screen.getByTestId('kpi-funcionarios-status')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-admins')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-employees')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-reports')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-cameras')).toBeInTheDocument()
+    // 3 DonutCharts on the right side of the row
     expect(screen.getByTestId('kpi-vital-signs')).toBeInTheDocument()
     expect(screen.getByTestId('kpi-wear-rate')).toBeInTheDocument()
     expect(screen.getByTestId('kpi-urgent-alerts')).toBeInTheDocument()
-    // Mocked numbers surface
+    // Mocked numbers surface in the rendered output.
     expect(screen.getByText('1205')).toBeInTheDocument()
-    expect(screen.getByText('512')).toBeInTheDocument()
-    // Sublabel for urgent alerts
+    expect(screen.getByText('564')).toBeInTheDocument()
+    // 512 is shared by Sinais vitais and Taxa de desgaste donuts.
+    expect(screen.getAllByText('512').length).toBeGreaterThanOrEqual(2)
+    // Caption from the Alertas urgentes donut.
     expect(screen.getByText(/Necessita atenção/i)).toBeInTheDocument()
   })
 
@@ -243,13 +257,14 @@ describe('Dashboard', () => {
     await waitFor(() => {
       expect(screen.getByTestId('activities-section')).toBeInTheDocument()
     })
-    fireEvent.click(screen.getByText('A Fazer'))
+    const chips = screen.getByTestId('activities-chips')
+    fireEvent.click(within(chips).getByText('A Fazer'))
     await waitFor(() => {
       expect(screen.getByTestId('activity-a3')).toBeInTheDocument()
     })
     expect(screen.queryByTestId('activity-a1')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Ver Todas'))
+    fireEvent.click(within(chips).getByText('Ver Todas'))
     await waitFor(() => {
       expect(screen.getByTestId('activity-a4')).toBeInTheDocument()
     })

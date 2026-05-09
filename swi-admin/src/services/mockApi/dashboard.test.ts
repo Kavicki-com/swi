@@ -60,14 +60,19 @@ describe('dashboardApi.summary', () => {
     })
   })
 
-  it('returns S1.7 KPI aggregates (vitalSigns, wearRate, urgentAlerts, commonAlerts)', async () => {
+  it('returns the full S1.7 KPI aggregates (Figma frame 4:2)', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
     expect(data?.kpis).toBeDefined()
     // urgentAlerts = critical + warning open/ack
     expect(data!.kpis.urgentAlerts).toBe(2)
     expect(data!.kpis.commonAlerts).toBe(0)
-    expect(typeof data!.kpis.vitalSigns).toBe('number')
-    expect(typeof data!.kpis.wearRate).toBe('number')
+    // Funcionarios 2x2 grid values match the Figma reference exactly.
+    expect(data!.kpis.admins).toBe(3)
+    expect(data!.kpis.totalEmployees).toBe(1205)
+    expect(data!.kpis.newReports).toBe(4)
+    expect(data!.kpis.activeCameras).toBe(564)
+    expect(data!.kpis.vitalSigns).toBe(512)
+    expect(data!.kpis.wearRate).toBe(512)
   })
 
   it('returns zeros for an unknown org but still emits weather and activities fixture', async () => {
