@@ -80,10 +80,10 @@ export const dashboardApi = {
         progress: 60,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/100?img=21', alt: 'Carlos' },
-          { uri: 'https://i.pravatar.cc/100?img=22', alt: 'Diego' },
-          { uri: 'https://i.pravatar.cc/100?img=23', alt: 'Eva' },
-          { uri: 'https://i.pravatar.cc/100?img=24', alt: 'Felipe' },
+          { uri: 'https://i.pravatar.cc/300?img=21', alt: 'Carlos' },
+          { uri: 'https://i.pravatar.cc/300?img=22', alt: 'Diego' },
+          { uri: 'https://i.pravatar.cc/300?img=23', alt: 'Eva' },
+          { uri: 'https://i.pravatar.cc/300?img=24', alt: 'Felipe' },
         ],
       },
       {
@@ -94,9 +94,9 @@ export const dashboardApi = {
         progress: 35,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/100?img=25', alt: 'Gabriela' },
-          { uri: 'https://i.pravatar.cc/100?img=26', alt: 'Henrique' },
-          { uri: 'https://i.pravatar.cc/100?img=27', alt: 'Isabela' },
+          { uri: 'https://i.pravatar.cc/300?img=25', alt: 'Gabriela' },
+          { uri: 'https://i.pravatar.cc/300?img=26', alt: 'Henrique' },
+          { uri: 'https://i.pravatar.cc/300?img=27', alt: 'Isabela' },
         ],
       },
       {
@@ -107,8 +107,8 @@ export const dashboardApi = {
         progress: 0,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/100?img=28', alt: 'Joao' },
-          { uri: 'https://i.pravatar.cc/100?img=29', alt: 'Karen' },
+          { uri: 'https://i.pravatar.cc/300?img=28', alt: 'Joao' },
+          { uri: 'https://i.pravatar.cc/300?img=29', alt: 'Karen' },
         ],
       },
       {
@@ -119,8 +119,8 @@ export const dashboardApi = {
         progress: 100,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/100?img=30', alt: 'Lucas' },
-          { uri: 'https://i.pravatar.cc/100?img=31', alt: 'Mariana' },
+          { uri: 'https://i.pravatar.cc/300?img=30', alt: 'Lucas' },
+          { uri: 'https://i.pravatar.cc/300?img=31', alt: 'Mariana' },
         ],
       },
       {
@@ -131,8 +131,8 @@ export const dashboardApi = {
         progress: 80,
         locationLabel: 'Setor Leste',
         participants: [
-          { uri: 'https://i.pravatar.cc/100?img=32', alt: 'Nicolas' },
-          { uri: 'https://i.pravatar.cc/100?img=33', alt: 'Olívia' },
+          { uri: 'https://i.pravatar.cc/300?img=32', alt: 'Nicolas' },
+          { uri: 'https://i.pravatar.cc/300?img=33', alt: 'Olívia' },
         ],
       },
     ]
@@ -196,7 +196,7 @@ export const dashboardApi = {
         progress: 78,
         bpm: 112,
         pressure: '14/9',
-        avatarUri: 'https://i.pravatar.cc/100?img=51',
+        avatarUri: 'https://i.pravatar.cc/300?img=51',
       },
       {
         id: 'wear_002',
@@ -205,7 +205,7 @@ export const dashboardApi = {
         progress: 65,
         bpm: 104,
         pressure: '13/8',
-        avatarUri: 'https://i.pravatar.cc/100?img=52',
+        avatarUri: 'https://i.pravatar.cc/300?img=52',
       },
       {
         id: 'wear_003',
@@ -214,7 +214,7 @@ export const dashboardApi = {
         progress: 82,
         bpm: 118,
         pressure: '15/9',
-        avatarUri: 'https://i.pravatar.cc/100?img=53',
+        avatarUri: 'https://i.pravatar.cc/300?img=53',
       },
       {
         id: 'wear_004',
@@ -223,7 +223,7 @@ export const dashboardApi = {
         progress: 71,
         bpm: 108,
         pressure: '13/8',
-        avatarUri: 'https://i.pravatar.cc/100?img=54',
+        avatarUri: 'https://i.pravatar.cc/300?img=54',
       },
     ]
 
