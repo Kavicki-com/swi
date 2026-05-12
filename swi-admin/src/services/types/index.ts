@@ -9,6 +9,10 @@ export type User = {
   role: 'admin' | 'super_admin'
   consent_given_at: ISODateString | null
   created_at: ISODateString
+  // Mock biometrics for dashboard Header. S2 will source from real device.
+  bpm?: number
+  pressure?: string
+  avatarUri?: string
 }
 
 export type Employee = {

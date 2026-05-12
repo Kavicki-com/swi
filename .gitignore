@@ -10,3 +10,6 @@ coverage/
 *.tsbuildinfo
 .tsbuild/
 swi-admin/.tsbuild/
+
+# Figma REST API dumps (contain internal node IDs / image refs)
+docs/audits/figma-export/*.json

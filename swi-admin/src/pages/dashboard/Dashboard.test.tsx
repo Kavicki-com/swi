@@ -1,5 +1,5 @@
 // src/pages/dashboard/Dashboard.test.tsx
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
@@ -13,17 +13,94 @@ const FAKE_SUMMARY: DashboardSummary = {
     openOrAcknowledged: 2,
     bySeverity: { info: 0, warning: 1, critical: 1 },
   },
-  recentActivities: [
-    { id: 'a1', label: 'Activity 1', at: '2026-05-08T10:00:00.000Z' },
-    { id: 'a2', label: 'Activity 2', at: '2026-05-08T09:00:00.000Z' },
-    { id: 'a3', label: 'Activity 3', at: '2026-05-08T08:00:00.000Z' },
-    { id: 'a4', label: 'Activity 4', at: '2026-05-08T07:00:00.000Z' },
-    { id: 'a5', label: 'Activity 5', at: '2026-05-08T06:00:00.000Z' },
+  kpis: {
+    admins: 3,
+    totalEmployees: 1205,
+    newReports: 4,
+    activeCameras: 564,
+    vitalSigns: 512,
+    wearRate: 512,
+    urgentAlerts: 2,
+    commonAlerts: 0,
+  },
+  activities: [
+    {
+      id: 'a1',
+      title: 'Reparo',
+      sector: 'Setor Leste',
+      status: 'em-curso',
+      progress: 50,
+      participants: [{ uri: 'x', alt: 'A' }],
+    },
+    {
+      id: 'a2',
+      title: 'Reparo Norte',
+      sector: 'Setor Norte',
+      status: 'em-curso',
+      progress: 30,
+      participants: [],
+    },
+    {
+      id: 'a3',
+      title: 'Aluguel maquinário',
+      sector: 'Setor Leste',
+      status: 'a-fazer',
+      progress: 0,
+      participants: [],
+    },
+    {
+      id: 'a4',
+      title: 'Reparo Sul',
+      sector: 'Setor Sul',
+      status: 'concluida',
+      progress: 100,
+      participants: [],
+    },
+  ],
+  wearAlerts: [
+    {
+      id: 'w1',
+      employeeName: 'Ezequiel Almeida',
+      sector: 'Setor Leste',
+      progress: 70,
+      bpm: 110,
+      pressure: '14/9',
+    },
+    {
+      id: 'w2',
+      employeeName: 'Mariana Costa',
+      sector: 'Setor Leste',
+      progress: 65,
+      bpm: 104,
+      pressure: '13/8',
+    },
+    {
+      id: 'w3',
+      employeeName: 'Rafael Souza',
+      sector: 'Setor Norte',
+      progress: 80,
+      bpm: 118,
+      pressure: '15/9',
+    },
   ],
   weather: [
-    { at: '2026-05-08T10:00:00.000Z', condition: 'sun', tempC: 24 },
-    { at: '2026-05-08T12:00:00.000Z', condition: 'rain', tempC: 22 },
-    { at: '2026-05-08T15:00:00.000Z', condition: 'storm', tempC: 19 },
+    { at: '2026-05-08T08:00:00.000Z', condition: 'rain', tempC: 22, label: 'CHUVAS\nMODERADAS' },
+    { at: '2026-05-08T10:00:00.000Z', condition: 'sun', tempC: 26, label: 'SOL\nINTENSO' },
+    {
+      at: '2026-05-08T12:00:00.000Z',
+      condition: 'sun',
+      tempC: 25,
+      label: 'AGORA',
+      isNow: true,
+    },
+    { at: '2026-05-08T14:00:00.000Z', condition: 'rain', tempC: 23, label: 'CHUVAS\nMODERADAS' },
+    {
+      at: '2026-05-08T16:00:00.000Z',
+      condition: 'storm',
+      tempC: 21,
+      label: 'PARCIALMENTE\nNUBLADO',
+    },
+    { at: '2026-05-08T18:00:00.000Z', condition: 'sun', tempC: 24, label: 'SOL' },
   ],
 }
 
@@ -75,7 +152,7 @@ describe('Dashboard', () => {
     resolveFn({ data: FAKE_SUMMARY, error: null })
   })
 
-  it('renders KPI counts after summary resolves', async () => {
+  it('renders the Figma KPI row: 2x2 Funcionários grid + 3 donuts', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: FAKE_SUMMARY,
       error: null,
@@ -84,13 +161,27 @@ describe('Dashboard', () => {
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
     })
-    // Loose assertion: the total should appear somewhere
-    expect(screen.getAllByText(/12/).length).toBeGreaterThan(0)
-    // Check open alerts count
-    expect(screen.getAllByText(/2/).length).toBeGreaterThan(0)
+    expect(screen.getByTestId('kpi-row')).toBeInTheDocument()
+    // 2x2 grid in Funcionarios composite — 4 separate tiles
+    expect(screen.getByTestId('kpi-funcionarios')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-admins')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-employees')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-reports')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-funcionarios-cameras')).toBeInTheDocument()
+    // 3 DonutCharts on the right side of the row
+    expect(screen.getByTestId('kpi-vital-signs')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-wear-rate')).toBeInTheDocument()
+    expect(screen.getByTestId('kpi-urgent-alerts')).toBeInTheDocument()
+    // Mocked numbers surface in the rendered output.
+    expect(screen.getByText('1205')).toBeInTheDocument()
+    expect(screen.getByText('564')).toBeInTheDocument()
+    // 512 is shared by Sinais vitais and Taxa de desgaste donuts.
+    expect(screen.getAllByText('512').length).toBeGreaterThanOrEqual(2)
+    // Caption from the Alertas urgentes donut.
+    expect(screen.getByText(/Necessita atenção/i)).toBeInTheDocument()
   })
 
-  it('renders 5 recent activities', async () => {
+  it('renders the map preview banner and navigates on CTA press', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: FAKE_SUMMARY,
       error: null,
@@ -99,24 +190,101 @@ describe('Dashboard', () => {
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
     })
-    for (const a of FAKE_SUMMARY.recentActivities) {
-      expect(screen.getByText(a.label)).toBeInTheDocument()
-    }
+    expect(screen.getByTestId('dashboard-map-banner')).toBeInTheDocument()
+    expect(screen.getByAltText('Mapa de monitoramento')).toBeInTheDocument()
+    const cta = screen.getByTestId('dashboard-map-cta')
+    expect(cta).toBeInTheDocument()
+    // Click is wired (real navigation requires the route table; covered in routes.test.tsx)
+    fireEvent.click(cta)
   })
 
-  it('renders 3 weather entries', async () => {
+  it('renders only "Em Curso" activities by default', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: FAKE_SUMMARY,
       error: null,
     })
     renderAt()
     await waitFor(() => {
-      expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+      expect(screen.getByTestId('activities-section')).toBeInTheDocument()
     })
-    // Each tempC should be rendered (24, 22, 19)
-    expect(screen.getAllByText(/24/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/22/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/19/).length).toBeGreaterThan(0)
+    // The two em-curso activities render
+    expect(screen.getByTestId('activity-a1')).toBeInTheDocument()
+    expect(screen.getByTestId('activity-a2')).toBeInTheDocument()
+    // The a-fazer + concluida ones are filtered out
+    expect(screen.queryByTestId('activity-a3')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('activity-a4')).not.toBeInTheDocument()
+  })
+
+  it('renders the wear alerts column with all employees and the two-column row', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: FAKE_SUMMARY,
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('wear-alerts-section')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('dashboard-two-col-row')).toBeInTheDocument()
+    expect(screen.getByTestId('wear-alert-w1')).toBeInTheDocument()
+    expect(screen.getByTestId('wear-alert-w2')).toBeInTheDocument()
+    expect(screen.getByTestId('wear-alert-w3')).toBeInTheDocument()
+  })
+
+  it('filters wear alerts via the SearchInput', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: FAKE_SUMMARY,
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('wear-alerts-section')).toBeInTheDocument()
+    })
+    const searchInput = screen.getByPlaceholderText(/Pesquisar Funcion/i)
+    fireEvent.change(searchInput, { target: { value: 'Mariana' } })
+    await waitFor(() => {
+      expect(screen.getByTestId('wear-alert-w2')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('wear-alert-w1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('wear-alert-w3')).not.toBeInTheDocument()
+  })
+
+  it('switches the activity filter when a chip is pressed', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: FAKE_SUMMARY,
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('activities-section')).toBeInTheDocument()
+    })
+    const chips = screen.getByTestId('activities-chips')
+    fireEvent.click(within(chips).getByText('A Fazer'))
+    await waitFor(() => {
+      expect(screen.getByTestId('activity-a3')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('activity-a1')).not.toBeInTheDocument()
+
+    fireEvent.click(within(chips).getByText('Ver Todas'))
+    await waitFor(() => {
+      expect(screen.getByTestId('activity-a4')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('activity-a1')).toBeInTheDocument()
+  })
+
+  it('renders the expanded WeatherTimeline with the AGORA marker', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: FAKE_SUMMARY,
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('weather-timeline')).toBeInTheDocument()
+    })
+    // AGORA appears at least once — the event label and/or the now-marker overlay
+    expect(screen.getAllByText('AGORA').length).toBeGreaterThan(0)
+    // SOL INTENSO and PARCIALMENTE NUBLADO labels appear (newline-separated)
+    expect(screen.getAllByText(/SOL/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/PARCIALMENTE/)).toBeInTheDocument()
   })
 
   it('renders error panel when summary returns an error', async () => {
