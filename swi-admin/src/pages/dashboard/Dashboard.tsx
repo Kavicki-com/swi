@@ -1,10 +1,16 @@
 // src/pages/dashboard/Dashboard.tsx
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
+import { useNavigate } from 'react-router-dom'
 import {
   ActivitiesOverviewCard,
   BigNumbersCard,
   Button,
+  ChipGroup,
+  DonutChart,
+  EmployeeOverviewCard,
+  Icon,
+  SearchInput,
   Text,
   Title,
   WeatherTimeline,
@@ -12,7 +18,13 @@ import {
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { dashboardApi, type DashboardSummary } from '@/services/mockApi'
+import type {
+  DashboardActivity,
+  DashboardActivityStatus,
+  DashboardWearAlert,
+} from '@/services/mockApi/dashboard'
 import { FormError } from '@/components/FormError'
+import mapPreview from '@/assets/dashboard-map-preview.png'
 
 // DS module is shimmed to `any`; mirror the WeatherTimelineEvent shape locally.
 type WeatherTimelineCondition = 'sunny' | 'rainy' | 'partly-cloudy'
@@ -23,6 +35,11 @@ type WeatherTimelineEvent = {
   label: string
   isNow?: boolean
 }
+
+const WEATHER_NOW_LABEL = 'AGORA'
+const WEAR_GRADIENT = ['#34d399', '#10b981'] as const
+// surface/error-light -> surface/error from the Figma token map.
+const URGENT_GRADIENT = ['#fab3bd', '#f5667a'] as const
 
 type Phase = 'loading' | 'error' | 'populated'
 
@@ -114,6 +131,222 @@ const WEATHER_CONDITION_MAP: Record<
 const formatHourLabel = (iso: string): string =>
   new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false })
 
+function MapBanner() {
+  const theme = useTheme()
+  const navigate = useNavigate()
+  return (
+    <View
+      testID="dashboard-map-banner"
+      style={{
+        height: 200,
+        borderRadius: theme.border.radius.m,
+        overflow: 'hidden',
+        position: 'relative' as unknown as never,
+      }}
+    >
+      <img
+        src={mapPreview}
+        alt="Mapa de monitoramento"
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
+      <View
+        testID="dashboard-map-pin"
+        style={{
+          position: 'absolute' as unknown as never,
+          top: '50%' as unknown as number,
+          left: '50%' as unknown as number,
+          transform: [{ translateX: -20 }, { translateY: -20 }],
+        }}
+      >
+        <Icon name="location_on" size={40} color={theme.content.primary} />
+      </View>
+      <View
+        style={{
+          position: 'absolute' as unknown as never,
+          right: theme.padding.m,
+          bottom: theme.padding.m,
+        }}
+      >
+        <Button
+          label="Ver mapa geral"
+          variant="ghost"
+          onPress={() => navigate('/maps/general')}
+          testID="dashboard-map-cta"
+        />
+      </View>
+    </View>
+  )
+}
+
+function FuncionariosKpi({ summary }: { summary: DashboardSummary }) {
+  const theme = useTheme()
+  const { admins, totalEmployees, newReports, activeCameras } = summary.kpis
+  return (
+    <View
+      testID="kpi-funcionarios"
+      style={{
+        gap: theme.gap.s,
+        padding: theme.padding.m,
+        borderRadius: theme.border.radius.l,
+        backgroundColor: theme.surface.standard,
+      }}
+    >
+      <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
+        <BigNumbersCard
+          value={admins}
+          label="Administradores"
+          icon="manage_accounts"
+          iconColor={theme.content.primary}
+          testID="kpi-funcionarios-admins"
+        />
+        <BigNumbersCard
+          value={totalEmployees}
+          label="Funcionários"
+          icon="person_apron"
+          iconColor={theme.content.primary}
+          testID="kpi-funcionarios-employees"
+        />
+      </View>
+      <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
+        <BigNumbersCard
+          value={newReports}
+          label="Novos relatórios"
+          icon="monitoring"
+          iconColor={theme.content.primary}
+          testID="kpi-funcionarios-reports"
+        />
+        <BigNumbersCard
+          value={activeCameras}
+          label="Câmeras ativas"
+          icon="video_camera_back"
+          iconColor={theme.content.primary}
+          testID="kpi-funcionarios-cameras"
+        />
+      </View>
+    </View>
+  )
+}
+
+const ACTIVITY_CHIPS = ['Em Curso', 'Concluídas', 'A Fazer', 'Ver Todas'] as const
+type ActivityChip = (typeof ACTIVITY_CHIPS)[number]
+
+const CHIP_TO_STATUS: Record<Exclude<ActivityChip, 'Ver Todas'>, DashboardActivityStatus> = {
+  'Em Curso': 'em-curso',
+  Concluídas: 'concluida',
+  'A Fazer': 'a-fazer',
+}
+
+function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
+  const theme = useTheme()
+  const [query, setQuery] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return alerts
+    return alerts.filter(
+      (a) => a.employeeName.toLowerCase().includes(q) || a.sector.toLowerCase().includes(q),
+    )
+  }, [alerts, query])
+
+  return (
+    <View testID="wear-alerts-section" style={{ gap: theme.gap.m }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Title>Alertas de Desgaste</Title>
+        <Button
+          label="Ver Todas"
+          variant="ghost"
+          onPress={() => undefined}
+          testID="wear-alerts-see-all"
+        />
+      </View>
+      <View testID="wear-alerts-search">
+        <SearchInput
+          placeholder="Pesquisar Funcionário"
+          value={query}
+          onChangeText={setQuery}
+          onClear={() => setQuery('')}
+        />
+      </View>
+      <View testID="wear-alerts-list" style={{ gap: theme.gap.s }}>
+        {filtered.length === 0 ? (
+          <Text testID="wear-alerts-empty">Nenhum funcionário encontrado.</Text>
+        ) : (
+          filtered.map((alert) => (
+            <EmployeeOverviewCard
+              key={alert.id}
+              employee={{
+                name: alert.employeeName,
+                sector: alert.sector,
+                avatarUri: alert.avatarUri,
+              }}
+              progress={alert.progress}
+              bpm={alert.bpm}
+              pressure={alert.pressure}
+              fullWidth
+              testID={`wear-alert-${alert.id}`}
+            />
+          ))
+        )}
+      </View>
+    </View>
+  )
+}
+
+function ActivitiesSection({ activities }: { activities: DashboardActivity[] }) {
+  const theme = useTheme()
+  const [filter, setFilter] = useState<ActivityChip>('Em Curso')
+
+  const filtered = useMemo(() => {
+    if (filter === 'Ver Todas') return activities
+    const status = CHIP_TO_STATUS[filter]
+    return activities.filter((a) => a.status === status)
+  }, [activities, filter])
+
+  return (
+    <View testID="activities-section" style={{ gap: theme.gap.m }}>
+      <Title>Atividades em andamento</Title>
+      <View testID="activities-chips">
+        <ChipGroup
+          options={[...ACTIVITY_CHIPS]}
+          mode="single"
+          value={filter}
+          onChange={(value: string | string[]) => {
+            const next = Array.isArray(value) ? value[0] : value
+            if (next && (ACTIVITY_CHIPS as readonly string[]).includes(next)) {
+              setFilter(next as ActivityChip)
+            }
+          }}
+        />
+      </View>
+      <View testID="activities-list" style={{ gap: theme.gap.s }}>
+        {filtered.length === 0 ? (
+          <Text testID="activities-empty">Nenhuma atividade nesta categoria.</Text>
+        ) : (
+          filtered.map((activity) => (
+            <ActivitiesOverviewCard
+              key={activity.id}
+              title={activity.title}
+              subtitle={activity.sector}
+              progress={activity.progress}
+              avatars={activity.participants}
+              totalAvatarsCount={activity.participants.length}
+              locationIcon="location_on"
+              fullWidth
+              testID={`activity-${activity.id}`}
+            />
+          ))
+        )}
+      </View>
+    </View>
+  )
+}
+
 function DashboardContent({ summary }: { summary: DashboardSummary }) {
   const theme = useTheme()
 
@@ -121,91 +354,78 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     id: `weather-${idx}`,
     condition: WEATHER_CONDITION_MAP[w.condition],
     time: formatHourLabel(w.at),
-    label: `${w.tempC}°C`,
+    label: w.label ?? `${w.tempC}°C`,
+    isNow: w.isNow,
   }))
 
   return (
     <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
-      <Title>Dashboard</Title>
+      <MapBanner />
 
-      {/* Top KPI row */}
+      {/* KPI row — Figma: Funcionários composite + Sinais vitais donut + Taxa desgaste donut + Alertas urgentes */}
       <View
+        testID="kpi-row"
         style={{
           flexDirection: 'row',
           flexWrap: 'wrap',
           gap: theme.gap.m,
+          alignItems: 'flex-start',
         }}
       >
-        <BigNumbersCard
-          value={summary.employees.total}
-          label="Total funcionários"
-          icon="person_apron"
-          testID="kpi-total"
-        />
-        <BigNumbersCard
-          value={summary.employees.byStatus.alert}
-          label="Em alerta"
-          icon="mode_heat"
-          testID="kpi-alert"
-        />
-        <BigNumbersCard
-          value={summary.alerts.openOrAcknowledged}
-          label="Alertas abertos"
+        <FuncionariosKpi summary={summary} />
+        <DonutChart
+          title="Sinais vitais"
+          value={summary.kpis.vitalSigns}
+          label="Funcionários"
+          caption="Excelentes"
+          progress={85}
           icon="vital_signs"
-          testID="kpi-open-alerts"
+          testID="kpi-vital-signs"
         />
-        <BigNumbersCard
-          value={summary.alerts.bySeverity.critical}
-          label="Alertas críticos"
-          icon="monitor_heart"
-          testID="kpi-critical-alerts"
+        <DonutChart
+          title="Taxa de desgaste"
+          value={summary.kpis.wearRate}
+          label="Desgaste geral"
+          caption="Em monitoramento"
+          progress={70}
+          progressGradient={WEAR_GRADIENT}
+          icon="health_activity"
+          testID="kpi-wear-rate"
+        />
+        <DonutChart
+          title="Alertas urgentes"
+          value={summary.kpis.urgentAlerts}
+          label="Alertas"
+          caption="Necessita atenção"
+          progress={60}
+          progressGradient={URGENT_GRADIENT}
+          icon="vital_signs"
+          testID="kpi-urgent-alerts"
         />
       </View>
 
-      {/* Workers status breakdown — fall back to BigNumbersCards because
-          DS WorkersInfoCard is for a single employee, not a status summary. */}
-      <Text>Funcionários por status</Text>
+      {/* Two-column row: Atividades em andamento (left) + Alertas de Desgaste (right) */}
       <View
-        style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: theme.gap.m,
-        }}
+        testID="dashboard-two-col-row"
+        style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'flex-start' }}
       >
-        <BigNumbersCard value={summary.employees.byStatus.good} label="Bem" testID="status-good" />
-        <BigNumbersCard
-          value={summary.employees.byStatus.alert}
-          label="Em alerta"
-          testID="status-alert"
-        />
-        <BigNumbersCard value={summary.employees.byStatus.low} label="Baixo" testID="status-low" />
-        <BigNumbersCard
-          value={summary.employees.byStatus.offline}
-          label="Offline"
-          testID="status-offline"
-        />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <ActivitiesSection activities={summary.activities} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <WearAlertsSection alerts={summary.wearAlerts} />
+        </View>
       </View>
 
-      {/* Recent activities */}
-      <Text>Atividades recentes</Text>
-      <View style={{ gap: theme.gap.s }}>
-        {summary.recentActivities.map((activity) => (
-          <ActivitiesOverviewCard
-            key={activity.id}
-            title={activity.label}
-            subtitle={formatHourLabel(activity.at)}
-            progress={0}
-            avatars={[]}
-            // TODO(DS): activities don't have progress/avatars semantically — request a leaner ActivityRow component in DS v0.1.x
-            fullWidth
-            testID={`activity-${activity.id}`}
-          />
-        ))}
+      <View style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.m }}>
+        <Title>Previsão do tempo</Title>
+        <WeatherTimeline
+          events={weatherEvents}
+          nowLabel={WEATHER_NOW_LABEL}
+          fullWidth
+          testID="weather-timeline"
+        />
       </View>
-
-      {/* Weather */}
-      <Text>Previsão do tempo</Text>
-      <WeatherTimeline events={weatherEvents} testID="weather-timeline" />
     </View>
   )
 }

@@ -21,28 +21,66 @@ describe('dashboardApi.summary', () => {
     expect(data?.alerts.bySeverity.info).toBe(0)
   })
 
-  it('returns the 5 most recent activities sorted desc', async () => {
+  it('returns Figma-aligned activities with status, sector and participants', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
-    expect(data?.recentActivities).toHaveLength(5)
-    expect(data!.recentActivities[0]).toMatchObject({
-      id: 'a_001',
-      label: 'Frequência cardíaca elevada',
+    expect(data?.activities).toBeDefined()
+    expect(data!.activities.length).toBeGreaterThanOrEqual(4)
+    const first = data!.activities[0]!
+    expect(first).toMatchObject({
+      title: expect.any(String),
+      sector: expect.any(String),
+      progress: expect.any(Number),
     })
-    expect(data!.recentActivities[0]?.at).toEqual(expect.any(String))
-    const timestamps = data!.recentActivities.map((a) => a.at)
-    expect(timestamps).toEqual([...timestamps].sort().reverse())
+    expect(['em-curso', 'concluida', 'a-fazer']).toContain(first.status)
+    expect(Array.isArray(first.participants)).toBe(true)
+    // Mix of statuses so the chip filter has visible effects
+    const statuses = new Set(data!.activities.map((a) => a.status))
+    expect(statuses.size).toBeGreaterThan(1)
   })
 
-  it('returns weather timeline placeholder (3 entries)', async () => {
+  it('returns the expanded 6-entry weather timeline with one AGORA marker', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
-    expect(data?.weather).toHaveLength(3)
+    expect(data?.weather).toHaveLength(6)
+    const nowMarkers = data!.weather.filter((w) => w.isNow)
+    expect(nowMarkers).toHaveLength(1)
+    expect(data!.weather.every((w) => typeof w.label === 'string' && w.label.length > 0)).toBe(true)
   })
 
-  it('returns zeros for an unknown org but still emits weather', async () => {
+  it('returns wear alerts fixture with bpm, pressure and sector', async () => {
+    const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    expect(data?.wearAlerts).toBeDefined()
+    expect(data!.wearAlerts.length).toBeGreaterThanOrEqual(4)
+    const first = data!.wearAlerts[0]!
+    expect(first).toMatchObject({
+      employeeName: expect.any(String),
+      sector: expect.any(String),
+      progress: expect.any(Number),
+      bpm: expect.any(Number),
+      pressure: expect.any(String),
+    })
+  })
+
+  it('returns the full S1.7 KPI aggregates (Figma frame 4:2)', async () => {
+    const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    expect(data?.kpis).toBeDefined()
+    // urgentAlerts = critical + warning open/ack
+    expect(data!.kpis.urgentAlerts).toBe(2)
+    expect(data!.kpis.commonAlerts).toBe(0)
+    // Funcionarios 2x2 grid values match the Figma reference exactly.
+    expect(data!.kpis.admins).toBe(3)
+    expect(data!.kpis.totalEmployees).toBe(1205)
+    expect(data!.kpis.newReports).toBe(4)
+    expect(data!.kpis.activeCameras).toBe(564)
+    expect(data!.kpis.vitalSigns).toBe(512)
+    expect(data!.kpis.wearRate).toBe(512)
+  })
+
+  it('returns zeros for an unknown org but still emits weather and activities fixture', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_does_not_exist' })
     expect(data?.employees.total).toBe(0)
     expect(data?.alerts.openOrAcknowledged).toBe(0)
-    expect(data?.recentActivities).toHaveLength(0)
-    expect(data?.weather).toHaveLength(3)
+    // Activities are a static fixture in S1.7, not org-scoped — they always render.
+    expect(data!.activities.length).toBeGreaterThan(0)
+    expect(data?.weather).toHaveLength(6)
   })
 })

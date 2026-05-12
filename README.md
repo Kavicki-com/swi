@@ -7,6 +7,11 @@ Web admin para o SWI (monitoramento de funcionários em campo). Front-first MVP 
 - **S0 — scaffold:** completo (`v0.0.1-scaffold`)
 - **S1 — auth + dashboard:** completo (`v0.1.0-s1`)
 - **DS bump v0.1.1:** bundled dist/ — resolveu o blocker DS↔Vite (S1.5)
+- **S1.6 — auth Figma fidelity:** completo (merged em `main`, DS bump v0.1.3)
+- **S1.7 — dashboard Figma fidelity:** completo (`v0.1.0-s1.7`) — DS Header,
+  map banner, KPI row, two-column row (Atividades + Alertas de Desgaste com
+  ChipGroup + SearchInput), WeatherTimeline com 6 entradas + AGORA marker.
+  Audit em `docs/audits/2026-05-08-s1.7-task0-divergence.md`.
 - **CI:** GitHub Actions em `.github/workflows/ci.yml` (typecheck, lint, test, build, storybook:build)
 - **Vercel preview:** _a configurar via `npx vercel link` em `swi-admin/`_
 
@@ -92,10 +97,30 @@ O DS publica TypeScript cru (`main: src/index.ts`, sem `dist/`). Para evitar ref
 
 Esses workarounds devem ser removidos quando o DS publicar `dist/` + types em release futura.
 
+## O que S1.7 entregou
+
+- **DS Header em AppLayout:** swap do header composto (Logo+Text+Button) pelo
+  DS `Header` (que já encapsula Logo + HeaderUserInfo). User type ganhou
+  `bpm`/`pressure`/`avatarUri` opcionais; seed admin com vitals mockados.
+  "Sair" movido para o rodapé da sidebar como ghost button.
+- **Map preview banner** com `Image`/Icon + `Button` overlay → `/maps/general`.
+- **KPI row Figma:** Funcionários composite + Sinais vitais + Taxa de
+  desgaste (verde) + Alertas urgentes com sublabel "Necessita atenção".
+- **Two-column row:** ActivitiesSection com `ChipGroup` filter (Em Curso /
+  Concluídas / A Fazer / Ver Todas) + WearAlertsSection com `SearchInput` e
+  `EmployeeOverviewCard`s.
+- **WeatherTimeline:** 6 entradas com vocabulário do Figma + AGORA marker.
+- **108 testes verdes** (vitest+jsdom): +5 testes novos (KPI row, map CTA,
+  chips filter, search filter, AGORA marker, wearAlerts smoke).
+- **3 lacunas DS deferidas** (sublabel/tone em `BigNumbersCard`,
+  `onMorePress` em `EmployeeOverviewCard`, `KpiCompositeCard`) — issue de
+  follow-up no DS quando S1.7 fechar; nenhuma exige DS v0.1.4 para fechar S1.7.
+
 ## Próximos passos (S2)
 
-S2 = admins + funcionários CRUD. 6 telas: `admins`, `admin-details`, `admin-registration`, `employees`, `employee-details`, `employee-registration`. Plano detalhado em `docs/plans/2026-05-08-swi-admin-s2-*.md` quando o bloqueador DS↔Vite for resolvido.
+S2 = admins + funcionários CRUD. 6 telas: `admins`, `admin-details`, `admin-registration`, `employees`, `employee-details`, `employee-registration`. Plano detalhado em `docs/plans/2026-05-08-swi-admin-s2-*.md`.
 
 **Ordem recomendada:**
-1. Polimento de Figma fidelity nas 5 telas de S1 (sprint S1.6 ou inline em S2)
-2. Iniciar S2 (admins + employees CRUD)
+1. ~~Polimento de Figma fidelity nas 5 telas de S1~~ → fechado em S1.6
+2. ~~Polimento de Figma fidelity no Dashboard~~ → fechado em S1.7
+3. Iniciar S2 (admins + employees CRUD)
