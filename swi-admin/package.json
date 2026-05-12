@@ -15,7 +15,7 @@
     "storybook:build": "storybook build"
   },
   "dependencies": {
-    "@kavicki/swi-design-system": "github:Kavicki-com/swi-design-system#v0.1.7",
+    "@kavicki/swi-design-system": "github:Kavicki-com/swi-design-system#v0.1.12",
     "maplibre-gl": "^5.24.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.1",
