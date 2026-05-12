@@ -23,6 +23,7 @@ const FAKE_SUMMARY: DashboardSummary = {
     urgentAlerts: 2,
     commonAlerts: 0,
   },
+  mapMarkers: [{ id: 'e1', name: 'A', lat: -23.55, lng: -46.63, status: 'good', avatarUri: 'x' }],
   activities: [
     {
       id: 'a1',
@@ -178,7 +179,7 @@ describe('Dashboard', () => {
     // 512 is shared by Sinais vitais and Taxa de desgaste donuts.
     expect(screen.getAllByText('512').length).toBeGreaterThanOrEqual(2)
     // Caption from the Alertas urgentes donut.
-    expect(screen.getByText(/Necessita atenção/i)).toBeInTheDocument()
+    expect(screen.getByText(/Necessária mobilização/i)).toBeInTheDocument()
   })
 
   it('renders the map preview banner and navigates on CTA press', async () => {
@@ -191,7 +192,7 @@ describe('Dashboard', () => {
       expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
     })
     expect(screen.getByTestId('dashboard-map-banner')).toBeInTheDocument()
-    expect(screen.getByAltText('Mapa de monitoramento')).toBeInTheDocument()
+    expect(screen.getByTestId('dashboard-map-canvas')).toBeInTheDocument()
     const cta = screen.getByTestId('dashboard-map-cta')
     expect(cta).toBeInTheDocument()
     // Click is wired (real navigation requires the route table; covered in routes.test.tsx)
@@ -257,14 +258,14 @@ describe('Dashboard', () => {
     await waitFor(() => {
       expect(screen.getByTestId('activities-section')).toBeInTheDocument()
     })
-    const chips = screen.getByTestId('activities-chips')
-    fireEvent.click(within(chips).getByText('A Fazer'))
+    const tabs = screen.getByTestId('activities-tabs')
+    fireEvent.click(within(tabs).getByText('A Fazer'))
     await waitFor(() => {
       expect(screen.getByTestId('activity-a3')).toBeInTheDocument()
     })
     expect(screen.queryByTestId('activity-a1')).not.toBeInTheDocument()
 
-    fireEvent.click(within(chips).getByText('Ver Todas'))
+    fireEvent.click(screen.getByTestId('activities-see-all'))
     await waitFor(() => {
       expect(screen.getByTestId('activity-a4')).toBeInTheDocument()
     })

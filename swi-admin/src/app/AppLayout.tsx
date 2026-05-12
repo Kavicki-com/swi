@@ -1,21 +1,14 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Pressable, View } from 'react-native'
-import {
-  Button,
-  ChatSection,
-  HeaderUserInfo,
-  Icon,
-  Logo,
-  Text,
-  useTheme,
-} from '@kavicki/swi-design-system'
+import { View } from 'react-native'
+import { ChatSection, HeaderUserInfo, Logo, SideMenu, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import workerA from '@/assets/avatars/worker-a.png'
-import workerB from '@/assets/avatars/worker-b.png'
-import workerC from '@/assets/avatars/worker-c.png'
+import chatEzequiel from '@/assets/avatars/chat-ezequiel.png'
+import chatRomulo from '@/assets/avatars/chat-romulo.png'
+import chatJulio from '@/assets/avatars/chat-julio.png'
+import chatJennifer from '@/assets/avatars/chat-jennifer.png'
 
 // DS module is shimmed to `any`; mirror the types we need locally.
-type IconName = string
 type ChatSectionUser = {
   id: string
   name: string
@@ -23,16 +16,16 @@ type ChatSectionUser = {
   avatarUri?: string
   unreadCount?: number
 }
-type NavItem = { value: string; label: string; icon: IconName }
+type NavItem = { value: string; label: string; icon: string }
 
 const NAV: ReadonlyArray<NavItem> = [
-  { value: '/', label: 'Home', icon: 'home' },
-  { value: '/admins', label: 'Administradores', icon: 'manage_accounts' },
-  { value: '/employees', label: 'Funcionários', icon: 'person_apron' },
-  { value: '/monitoring/alerts', label: 'Monitoramento', icon: 'monitor_heart' },
-  { value: '/reports', label: 'Relatórios', icon: 'monitoring' },
-  { value: '/alerts', label: 'Alertas', icon: 'notifications' },
-  { value: '/user/settings', label: 'Configurações', icon: 'settings' },
+  { value: '/', label: 'Home', icon: 'home_filled' },
+  { value: '/admins', label: 'Administradores', icon: 'admin_filled' },
+  { value: '/employees', label: 'Funcionários', icon: 'worker_filled' },
+  { value: '/monitoring/alerts', label: 'Monitoramento', icon: 'monitor_filled' },
+  { value: '/reports', label: 'Relatórios', icon: 'reports_filled' },
+  { value: '/alerts', label: 'Alertas', icon: 'bell_filled' },
+  { value: '/user/settings', label: 'Configurações', icon: 'settings_filled' },
 ]
 
 // Sidebar chat list — Figma frame 4:2 mocks 4 contacts. Real chat ships in S5.
@@ -42,87 +35,25 @@ const CHAT_USERS: ChatSectionUser[] = [
     id: 'chat_ezequiel',
     name: 'Ezequiel Almeida',
     subtitle: 'Setor Leste',
-    avatarUri: workerA,
+    avatarUri: chatEzequiel,
     unreadCount: 2,
   },
-  { id: 'chat_romulo', name: 'Romulo Cardoso', subtitle: 'Setor Norte', avatarUri: workerB },
+  { id: 'chat_romulo', name: 'Romulo Cardoso', subtitle: 'Setor Norte', avatarUri: chatRomulo },
   {
     id: 'chat_julio',
     name: 'Júlio Lacerda',
     subtitle: 'Setor Sul',
-    avatarUri: workerC,
+    avatarUri: chatJulio,
     unreadCount: 1,
   },
-  { id: 'chat_jennifer', name: 'Jennifer Gomes', subtitle: 'Setor Oeste', avatarUri: workerA },
+  { id: 'chat_jennifer', name: 'Jennifer Gomes', subtitle: 'Setor Oeste', avatarUri: chatJennifer },
 ]
 
-function NavCard({
-  item,
-  active,
-  onPress,
-}: {
-  item: NavItem
-  active: boolean
-  onPress: () => void
-}) {
-  const theme = useTheme()
-  const accent = active ? theme.content.primary : theme.content.dark
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="menuitem"
-      accessibilityState={{ selected: active }}
-      testID={`nav-${item.value === '/' ? 'home' : item.value.replace(/\//g, '-').replace(/^-/, '')}`}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.gap.sm,
-        paddingHorizontal: theme.padding.m,
-        paddingVertical: theme.padding.sm,
-        borderRadius: theme.border.radius.m,
-        backgroundColor: theme.surface.standard,
-        position: 'relative' as unknown as never,
-      }}
-    >
-      <Icon name={item.icon} size={24} color={accent} />
-      <Text
-        style={{
-          color: accent,
-          fontSize: 13,
-          fontWeight: '700' as const,
-          textTransform: 'uppercase' as unknown as never,
-          letterSpacing: 0.8,
-        }}
-      >
-        {item.label}
-      </Text>
-      {active && (
-        <View
-          style={{
-            position: 'absolute' as unknown as never,
-            right: 0,
-            top: theme.padding.s,
-            bottom: theme.padding.s,
-            width: 3,
-            backgroundColor: theme.content.primary,
-            borderRadius: theme.border.radius.s,
-          }}
-        />
-      )}
-    </Pressable>
-  )
-}
-
 export function AppLayout() {
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const theme = useTheme()
-
-  const handleSignOut = async () => {
-    await signOut()
-    navigate('/login', { replace: true })
-  }
 
   return (
     <View
@@ -130,17 +61,29 @@ export function AppLayout() {
       style={{
         flexDirection: 'row',
         minHeight: '100vh' as unknown as number,
+        // Figma frame 4:2 layout: 40px left margin + 228 sidebar + 16 gap +
+        // 1041 content + 41 right margin = 1366. Body gradient shows through
+        // the outer paddings.
+        paddingLeft: 40,
+        paddingRight: 41,
+        gap: 16,
       }}
     >
       <View
         testID="app-sidebar"
+        dataSet={{ fidelity: 'sidebar' }}
         style={{
-          width: 240,
+          width: 228,
           flexDirection: 'column',
           backgroundColor: theme.background,
           paddingHorizontal: theme.padding.s,
           paddingVertical: theme.padding.m,
-          gap: theme.gap.s,
+          // Figma sidebar itemSpacing = 16; theme.gap.m maps to that scale step.
+          gap: theme.gap.m,
+          // Sidebar sizes to its content height (Figma: 865px) so the page
+          // bg-overlay is visible below it instead of being masked by
+          // theme.background extending to the full viewport row height.
+          alignSelf: 'flex-start',
         }}
       >
         <View
@@ -152,21 +95,15 @@ export function AppLayout() {
         >
           <Logo type="complete" size="m" />
         </View>
-        <View
+        <SideMenu
           testID="app-sidebar-nav"
           accessibilityLabel="Navegação principal"
-          style={{ gap: theme.gap.s }}
-        >
-          {NAV.map((item) => (
-            <NavCard
-              key={item.value}
-              item={item}
-              active={location.pathname === item.value}
-              onPress={() => navigate(item.value)}
-            />
-          ))}
-        </View>
-        <View testID="app-sidebar-chat" style={{ flex: 1, marginTop: theme.gap.m }}>
+          items={NAV}
+          value={location.pathname}
+          onChange={(v: string) => navigate(v)}
+          fullWidth
+        />
+        <View testID="app-sidebar-chat">
           <ChatSection
             users={CHAT_USERS}
             searchPlaceholder="Pesquisar Contatos"
@@ -174,19 +111,11 @@ export function AppLayout() {
             fullWidth
           />
         </View>
-        <View>
-          <Button
-            label="Sair"
-            variant="ghost"
-            onPress={handleSignOut}
-            testID="sidebar-signout"
-            fullWidth
-          />
-        </View>
       </View>
       <View style={{ flex: 1 }}>
         <View
           testID="app-header"
+          dataSet={{ fidelity: 'header' }}
           style={{
             flexDirection: 'row',
             justifyContent: 'flex-end',
@@ -195,9 +124,13 @@ export function AppLayout() {
           }}
         >
           <HeaderUserInfo
-            bpm={user?.bpm ?? 78}
+            bpm={user?.bpm ?? 99}
             pressure={user?.pressure ?? '12/8'}
-            avatarUri={user?.avatarUri}
+            progress={50}
+            avatarUri={user?.avatarUri ?? workerA}
+            heartIconName="heart_filled"
+            pressureIconName="vitals_pulse"
+            borderColor={theme.background}
             testID="app-header-user-info"
           />
         </View>
