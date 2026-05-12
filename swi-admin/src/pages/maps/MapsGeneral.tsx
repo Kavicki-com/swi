@@ -336,6 +336,7 @@ export function MapsGeneral() {
           value={location.pathname}
           variant="minimal"
           iconSize={20}
+          badgePosition="outside-left"
           onChange={(v: string) => navigate(v)}
           fullWidth
           accessibilityLabel="Navegação principal"
