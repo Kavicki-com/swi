@@ -1,0 +1,74 @@
+<!--
+  Figma canvas Mobile metadata for SWI mobile app.
+  Source: get_metadata fileKey=bzDUuPdSiKgl5xucBH0IYE nodeId=138:5997
+  Pulled: 2026-05-10
+  Note: returned as XML by Figma MCP get_metadata tool. The original request in
+  the method doc said .json — corrected to .xml here since that's the actual format.
+-->
+<canvas id="138:5997" name="Mobile" x="0" y="0" width="0" height="0">
+  <frame id="215:13790" name="smartband-connection" x="-880" y="-2593" width="360" height="800" />
+  <frame id="215:17901" name="smartband-connection-start" x="-384" y="-2593" width="360" height="800" />
+  <frame id="245:18895" name="smartband-connection-complete" x="112" y="-2593" width="360" height="800" />
+  <frame id="245:23280" name="dashboard" x="575" y="-2593" width="360" height="800" />
+  <frame id="385:29138" name="dashboard-alert-active" x="2934" y="-2593" width="360" height="800" />
+  <frame id="385:29591" name="dashboard-alert-active" x="3758" y="-2593" width="360" height="800" />
+  <frame id="385:30193" name="evacuation-route" x="4210" y="-2593" width="360" height="800" />
+  <frame id="385:30336" name="evacuation-route-ongoing" x="4662" y="-2593" width="360" height="800" />
+  <frame id="364:16378" name="journey" x="575" y="-3549" width="360" height="800" />
+  <frame id="401:30469" name="notifications" x="1931" y="-2593" width="360" height="800" />
+  <frame id="364:18596" name="reports" x="575" y="-4662" width="360" height="800" />
+  <frame id="364:20304" name="report-details" x="1027" y="-5745" width="360" height="1883" />
+  <frame id="372:21297" name="new-report" x="1479" y="-5154" width="360" height="1292" />
+  <frame id="364:17609" name="journey-ongoing" x="1931" y="-3549" width="360" height="800" />
+  <frame id="364:17766" name="journey-pause" x="2383" y="-3549" width="360" height="800" />
+  <frame id="364:17126" name="task-details" x="1027" y="-3549" width="360" height="800" />
+  <frame id="364:17434" name="task-details" x="1479" y="-3719" width="360" height="970" />
+  <frame id="342:9419" name="my-stats" x="575" y="-644" width="360" height="1726" />
+  <frame id="348:10615" name="settings" x="575" y="1163" width="360" height="800" />
+  <frame id="353:11560" name="settings-personal-data" x="1027" y="1163" width="360" height="1120" />
+  <frame id="353:12057" name="settings-health-data" x="1479" y="1163" width="360" height="1197" />
+  <frame id="353:12228" name="settings-change-password" x="1931" y="1163" width="360" height="800" />
+  <frame id="357:12302" name="settings-preferences" x="2383" y="1163" width="360" height="800" />
+  <frame id="361:12425" name="FAQ" x="2835" y="1163" width="360" height="1075" />
+  <frame id="332:8580" name="chat" x="575" y="-1601" width="360" height="800" />
+  <frame id="336:8808" name="chat-inbox" x="1027" y="-1601" width="360" height="800" />
+  <frame id="336:8891" name="chat-user-info" x="1479" y="-1592" width="288" height="800" />
+  <frame id="138:7937" name="login" x="-4352" y="-2593" width="360" height="800" />
+  <frame id="138:7948" name="password-recovery-step=email" x="-4352" y="-1667" width="360" height="800" />
+  <frame id="138:7955" name="password-recovery-step-newpassword" x="-3360" y="-1667" width="360" height="800" />
+  <frame id="138:7963" name="sign-up" x="-3856" y="-2593" width="360" height="836" />
+  <frame id="211:12920" name="email-confirmation-message" x="-3360" y="-2593" width="360" height="800" />
+  <frame id="290:688" name="email-confirmation-message" x="-3856" y="-1667" width="360" height="800" />
+  <frame id="211:12994" name="account-creation-confirmation" x="-2864" y="-2593" width="360" height="800" />
+  <frame id="211:13009" name="complimentary-data-step-1" x="-2368" y="-2593" width="360" height="945" />
+  <frame id="213:13390" name="complimentary-data-step-2" x="-1872" y="-2593" width="360" height="800" />
+  <frame id="213:13464" name="complimentary-data-step-3" x="-1376" y="-2593" width="360" height="1028" />
+  <frame id="213:13742" name="support-form-modal" x="-4848" y="-2593" width="360" height="485" />
+  <frame id="213:13750" name="privacy-policy-modal" x="-3856" y="-3437" width="360" height="720" />
+  <frame id="348:10426" name="support-form-modal" x="3287" y="1163" width="360" height="477" />
+  <frame id="348:10434" name="privacy-policy-modal" x="3739" y="1163" width="360" height="720" />
+  <frame id="364:18017" name="responsables-modal" x="1931" y="-4493" width="360" height="631" />
+  <frame id="385:21840" name="map-metereologic-alerts" x="2393" y="-2593" width="360" height="800" />
+  <frame id="385:28757" name="map-view-general" x="1027" y="-2593" width="360" height="800" />
+  <frame id="385:29371" name="alert-modal" x="3386" y="-2593" width="280" height="304" />
+  <!-- Mobile-specific components (designer-drawn, not yet in DS): -->
+  <section id="443:3327" name="components-mobile" x="-3676" y="-5412" width="3156" height="1486">
+    <symbol id="304:2569" name="calories-icon" x="2567" y="866" width="24" height="24" />
+    <symbol id="211:12984" name="email-icon" x="2614" y="866" width="24" height="24" />
+    <frame id="213:13087" name="step" x="2258" y="905" width="82" height="116" />
+    <frame id="213:13215" name="step-bar" x="246" y="1082" width="368" height="189" />
+    <frame id="213:13640" name="gendere-selection-card" x="661" y="1084" width="243" height="117" />
+    <frame id="213:13709" name="gender-selector" x="951" y="1084" width="195" height="204" />
+    <frame id="245:18876" name="smartband-status" x="1256" y="1041" width="1404" height="271" />
+    <symbol id="245:27773" name="expand-icon" x="2614" y="990" width="24" height="24" />
+    <symbol id="262:28201" name="steps-icon" x="2567" y="990" width="24" height="24" />
+    <symbol id="295:1386" name="heart-status" x="2486" y="873" width="42" height="35" />
+    <frame id="295:764" name="heartrate-status" x="2407" y="959" width="120.75299835205078" height="61.79100036621094" />
+    <symbol id="304:2762" name="help-icon" x="2567" y="929" width="24" height="24" />
+    <frame id="304:2356" name="status-chart" x="356" y="283" width="1770" height="583" />
+    <symbol id="304:2757" name="work-icon" x="2614" y="929" width="24" height="24" />
+    <symbol id="364:17028" name="time-icon" x="2772" y="1237" width="24" height="24" />
+    <symbol id="385:29336" name="wind-speed-icon" x="2784" y="1166" width="24" height="24" />
+    <symbol id="385:29335" name="umidity-icon" x="2784" y="1111" width="24" height="24" />
+  </section>
+</canvas>
