@@ -1,4 +1,5 @@
 import type { User, Employee, Alert, ISODateString } from '../types'
+import adminAvatar from '@/assets/header/admin-avatar.png'
 
 const minutesAgo = (n: number): ISODateString => new Date(Date.now() - n * 60_000).toISOString()
 const hoursAgo = (n: number): ISODateString => minutesAgo(n * 60)
@@ -14,9 +15,9 @@ export const SEED_ADMIN: User = {
   role: 'super_admin',
   consent_given_at: daysAgo(30),
   created_at: daysAgo(60),
-  bpm: 78,
+  bpm: 99,
   pressure: '12/8',
-  avatarUri: 'https://i.pravatar.cc/200?img=12',
+  avatarUri: adminAvatar,
 }
 
 export const SEED_EMPLOYEES: Employee[] = [

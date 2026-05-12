@@ -24,23 +24,23 @@ describe('dashboardApi.summary', () => {
   it('returns Figma-aligned activities with status, sector and participants', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
     expect(data?.activities).toBeDefined()
-    expect(data!.activities.length).toBeGreaterThanOrEqual(4)
+    // Figma frame 4:2 mocks 5 cards on the dashboard, all under "Em Andamento".
+    expect(data!.activities.length).toBe(5)
     const first = data!.activities[0]!
     expect(first).toMatchObject({
       title: expect.any(String),
       sector: expect.any(String),
       progress: expect.any(Number),
     })
-    expect(['em-curso', 'concluida', 'a-fazer']).toContain(first.status)
     expect(Array.isArray(first.participants)).toBe(true)
-    // Mix of statuses so the chip filter has visible effects
-    const statuses = new Set(data!.activities.map((a) => a.status))
-    expect(statuses.size).toBeGreaterThan(1)
+    // All activities are em-curso to match Figma's initial render with 5 cards
+    // visible under the active "Em Andamento" tab.
+    expect(data!.activities.every((a) => a.status === 'em-curso')).toBe(true)
   })
 
-  it('returns the expanded 6-entry weather timeline with one AGORA marker', async () => {
+  it('returns the 4-entry weather timeline with one AGORA marker', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
-    expect(data?.weather).toHaveLength(6)
+    expect(data?.weather).toHaveLength(4)
     const nowMarkers = data!.weather.filter((w) => w.isNow)
     expect(nowMarkers).toHaveLength(1)
     expect(data!.weather.every((w) => typeof w.label === 'string' && w.label.length > 0)).toBe(true)
@@ -81,6 +81,6 @@ describe('dashboardApi.summary', () => {
     expect(data?.alerts.openOrAcknowledged).toBe(0)
     // Activities are a static fixture in S1.7, not org-scoped — they always render.
     expect(data!.activities.length).toBeGreaterThan(0)
-    expect(data?.weather).toHaveLength(6)
+    expect(data?.weather).toHaveLength(4)
   })
 })

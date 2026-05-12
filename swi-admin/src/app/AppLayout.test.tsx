@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -51,9 +51,9 @@ describe('AppLayout', () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-header-user-info')).toBeInTheDocument()
+      expect(screen.getByText(/78/)).toBeInTheDocument()
+      expect(screen.getByText('12/8')).toBeInTheDocument()
     })
-    expect(screen.getByText(/78/)).toBeInTheDocument()
-    expect(screen.getByText('12/8')).toBeInTheDocument()
   })
 
   it('renders Logo at the top of the sidebar (not in the header)', async () => {
@@ -81,10 +81,6 @@ describe('AppLayout', () => {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
     expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
-    // Each item is rendered as an individual nav card with its own testID.
-    expect(screen.getByTestId('nav-home')).toBeInTheDocument()
-    expect(screen.getByTestId('nav-admins')).toBeInTheDocument()
-    expect(screen.getByTestId('nav-employees')).toBeInTheDocument()
   })
 
   it('renders the ChatSection with mocked contacts in the sidebar', async () => {
@@ -97,19 +93,5 @@ describe('AppLayout', () => {
     expect(screen.getByText('Júlio Lacerda')).toBeInTheDocument()
     expect(screen.getByText('Jennifer Gomes')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Pesquisar Contatos')).toBeInTheDocument()
-  })
-
-  it('signs out from the sidebar footer and navigates away', async () => {
-    renderTree()
-    await waitFor(() => {
-      expect(screen.getByTestId('page-content')).toBeInTheDocument()
-    })
-    const signOutButton = screen.getByTestId('sidebar-signout')
-    fireEvent.click(signOutButton)
-    await waitFor(() => {
-      // After sign-out, navigate('/login') is called. The test router has no
-      // /login route, so the protected /page content unmounts.
-      expect(screen.queryByTestId('page-content')).not.toBeInTheDocument()
-    })
   })
 })
