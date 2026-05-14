@@ -1,16 +1,15 @@
 // src/services/mockApi/monitoring.ts
 // Mock data for /monitoring/* screens:
 //   - kpis(): the 7 big-number cards across the top of both screens.
-//   - alertUsers(): the 4 worker rows with optional expanded alert details
-//     (Figma 69:14731 /monitoring/alerts).
+//   - alertUsers(): worker rows with optional expanded alert details
+//     (Figma 69:14731 /monitoring/alerts). Derives from the canonical
+//     ROSTER so cross-page navigation lands on the same /employees/:id.
 //   - goodConditionsStats(): the second row of 4 stat cards exclusive to the
 //     /monitoring/good-conditions screen (Figma 77:16587).
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
 import type { IconName } from '@kavicki/swi-design-system'
-import workerA from '@/assets/avatars/worker-a.png'
-import workerB from '@/assets/avatars/worker-b.png'
-import workerC from '@/assets/avatars/worker-c.png'
+import { ROSTER } from './roster'
 
 // One KPI card — Figma 69:14747 row of 7 BigNumbersCards.
 export type MonitoringKpi = {
@@ -56,7 +55,7 @@ export type MonitoringUserAlert = {
 }
 
 const KPIS_SEED: ReadonlyArray<MonitoringKpi> = [
-  { id: 'admins', icon: 'account_circle_filled', value: '3', label: 'Administradores' },
+  { id: 'admins', icon: 'account_circle_filled', value: '8', label: 'Administradores' },
   { id: 'workers', icon: 'person_apron_filled', value: '1205', label: 'Funcionários' },
   { id: 'reports', icon: 'report_filled', value: '4', label: 'Novos relatórios' },
   { id: 'cameras', icon: 'video_camera_filled', value: '564', label: 'Câmeras ativas' },
@@ -65,71 +64,108 @@ const KPIS_SEED: ReadonlyArray<MonitoringKpi> = [
   { id: 'movements', icon: 'directions_walk', value: '22350', label: 'Movimentos realizados' },
 ]
 
-const ALERT_USERS_SEED: ReadonlyArray<MonitoringUserAlert> = [
+// Which roster members appear in the monitoring screen + their alert details.
+// Workers with vitalsStatus 'critical' get an expanded multi-alert row; the
+// 'warning' workers get a single-alert row; 'good' workers appear as
+// collapsed rows so the operator can still browse the full shift roster.
+const MONITORING_ROWS: ReadonlyArray<{
+  rosterId: string
+  alerts: ReadonlyArray<MonitoringAlertDetail>
+}> = [
   {
-    id: 'mon-01',
-    name: 'Eliseu Siqueira Jordão',
-    age: 32,
-    bloodType: 'O+',
-    role: 'Administradora de Sistema',
-    specialization: 'Engenheira Civil',
-    avatarUri: workerA,
-    active: true,
+    rosterId: 'emp-04', // Carlos Henrique Silva — critical
     alerts: [
       {
-        id: 'a-01',
+        id: 'a-04-01',
         icon: 'heart_filled',
         title: 'Taquicardia detectada',
-        description: 'Batimentos cardíacos 8% acima do recomendado',
+        description: 'Batimentos cardíacos 12% acima do recomendado',
+        tone: 'error',
       },
       {
-        id: 'a-02',
+        id: 'a-04-02',
         icon: 'av_timer',
-        title: 'Pressão sanguínea abaixo do normal',
-        description: 'Queda de pressão para 5% abaixo do normal para o funcionário',
+        title: 'Possível queda detectada',
+        description: 'Acelerômetro registrou impacto brusco há 5 min',
+        tone: 'error',
       },
       {
-        id: 'a-03',
+        id: 'a-04-03',
         icon: 'cognition',
-        title: 'Fadica excessiva',
+        title: 'Fadiga excessiva',
         description: 'Carga operacional acima do recomendado para o funcionário',
+        tone: 'warning',
       },
     ],
   },
   {
-    id: 'mon-02',
-    name: 'Maria Bethânia',
-    age: 67,
-    bloodType: 'AB+',
-    role: 'Operador de Equipamento',
-    specialization: 'Analista Ambiental',
-    avatarUri: workerB,
-    active: true,
-    alerts: [],
+    rosterId: 'emp-10', // Marcos Vinícius — critical
+    alerts: [
+      {
+        id: 'a-10-01',
+        icon: 'heart_filled',
+        title: 'Frequência cardíaca crítica',
+        description: '142 bpm em repouso — limite recomendado: 100 bpm',
+        tone: 'error',
+      },
+      {
+        id: 'a-10-02',
+        icon: 'cognition',
+        title: 'Fadiga acumulada',
+        description: '224 min até fadiga total — operação contínua há 6h',
+        tone: 'error',
+      },
+    ],
   },
   {
-    id: 'mon-03',
-    name: 'Roberto Cabrini',
-    age: 58,
-    bloodType: 'O+',
-    role: 'Técnico de Segurança',
-    specialization: 'Geólogo Sênior',
-    avatarUri: workerC,
-    active: true,
-    alerts: [],
+    rosterId: 'emp-02', // Ana Paula Gomes — warning
+    alerts: [
+      {
+        id: 'a-02-01',
+        icon: 'heart_filled',
+        title: 'Pressão arterial elevada',
+        description: 'Queda de pressão para 5% acima do normal para a funcionária',
+        tone: 'warning',
+      },
+    ],
   },
   {
-    id: 'mon-04',
-    name: 'Ricardo Silva',
-    age: 45,
-    bloodType: 'O-',
-    role: 'Coordenador de Mina',
-    specialization: 'Engenheiro de Explosivos',
-    avatarUri: workerA,
-    active: true,
-    alerts: [],
+    rosterId: 'emp-06', // Pedro Martins Lima — warning
+    alerts: [
+      {
+        id: 'a-06-01',
+        icon: 'av_timer',
+        title: 'Tensão arterial elevada',
+        description: 'Pressão 13/9 — sustentada nas últimas 2 horas',
+        tone: 'warning',
+      },
+    ],
   },
+  { rosterId: 'emp-01', alerts: [] }, // Larissa Sales — good
+  { rosterId: 'emp-03', alerts: [] }, // Lúcia Fernandes — good
+  { rosterId: 'emp-05', alerts: [] }, // Mariana de Souza — good
+  { rosterId: 'emp-07', alerts: [] }, // Amanda Costa Pereira — good
+  { rosterId: 'emp-08', alerts: [] }, // Rafael Oliveira — good
+  { rosterId: 'emp-12', alerts: [] }, // Karen Oliveira — good
 ]
+
+const ALERT_USERS_SEED: ReadonlyArray<MonitoringUserAlert> = MONITORING_ROWS.map((row) => {
+  const p = ROSTER.find((r) => r.id === row.rosterId)
+  if (!p) {
+    throw new Error(`MONITORING_ROWS references unknown roster id: ${row.rosterId}`)
+  }
+  return {
+    id: p.id,
+    name: p.name,
+    age: p.age,
+    bloodType: p.bloodType,
+    role: p.role,
+    specialization: p.specialization,
+    avatarUri: p.avatarUri,
+    active: p.isOnline,
+    alerts: row.alerts,
+  }
+})
 
 // Good-conditions row-2 seed — Figma 77:16587 values verbatim.
 const GOOD_CONDITIONS_STATS_SEED: MonitoringGoodConditionsStats = {

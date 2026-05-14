@@ -1,5 +1,6 @@
 import type { Alert, Employee } from '../types'
 import { SEED_ALERTS, SEED_EMPLOYEES } from './seed'
+import { ROSTER, type WorkerProfile } from './roster'
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
 import chatEzequiel from '@/assets/avatars/chat-ezequiel.png'
@@ -14,6 +15,16 @@ import chatJennifer from '@/assets/avatars/chat-jennifer.png'
 const FIGMA_AVATARS: readonly string[] = [chatEzequiel, chatRomulo, chatJulio, chatJennifer]
 const cycleAvatar = (idx: number): string =>
   FIGMA_AVATARS[idx % FIGMA_AVATARS.length] ?? chatEzequiel
+
+// Helpers — pick roster workers by sector / id so dashboard activities and
+// wear alerts reference the same people as /employees, /alerts and /monitoring.
+const rosterBySector = (sector: string): ReadonlyArray<WorkerProfile> =>
+  ROSTER.filter((p) => p.sector === sector)
+const findRoster = (id: string): WorkerProfile => {
+  const p = ROSTER.find((r) => r.id === id)
+  if (!p) throw new Error(`Dashboard fixture references unknown roster id: ${id}`)
+  return p
+}
 
 export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
 
@@ -125,10 +136,15 @@ export const dashboardApi = {
         avatarUri: cycleAvatar(idx),
       }))
 
-    // S1.7 activities fixture — Figma shows Reparo / Aluguel maquinário etc.
-    // Mix of statuses so the chip filter has visible effects on default load.
-    // S1.7 activities fixture — matches Figma frame 4:2 dashboard (5 cards, all
-    // em-curso, varied sectors and titles per Figma's mock).
+    // Activities fixture — 8 ongoing ops across sectors. Participants are
+    // pulled from the canonical ROSTER so the same Larissa/Ana Paula/Carlos
+    // Henrique that appear in /employees, /alerts and /monitoring also lead
+    // and join activities here. Avatars stay on the chat-* photos (no border
+    // ring) — see FIGMA_AVATARS rationale above.
+    const partsFor = (sector: string, take = 5): { uri?: string; alt?: string }[] =>
+      rosterBySector(sector)
+        .slice(0, take)
+        .map((p, idx) => ({ uri: cycleAvatar(idx), alt: p.name }))
     const activities: DashboardActivity[] = [
       {
         id: 'act_001',
@@ -138,13 +154,7 @@ export const dashboardApi = {
         progress: 84,
         locationLabel: 'Setor Leste',
         // Figma card 1: 5 avatars visible + "+13" overflow chip = 18 total.
-        participants: [
-          { uri: cycleAvatar(0), alt: 'Carlos' },
-          { uri: cycleAvatar(1), alt: 'Diego' },
-          { uri: cycleAvatar(2), alt: 'Eva' },
-          { uri: cycleAvatar(3), alt: 'Felipe' },
-          { uri: cycleAvatar(4), alt: 'Gabriela' },
-        ],
+        participants: partsFor('Setor Leste'),
         totalParticipants: 18,
       },
       {
@@ -152,13 +162,13 @@ export const dashboardApi = {
         title: 'Reparo',
         sector: 'Setor Oeste',
         status: 'em-curso',
+        risk: 'critical',
         progress: 2,
         locationLabel: 'Setor Oeste',
-        participants: [
-          { uri: cycleAvatar(5), alt: 'Henrique' },
-          { uri: cycleAvatar(6), alt: 'Isabela' },
-          { uri: cycleAvatar(7), alt: 'Joao' },
-        ],
+        // Sector includes Carlos Henrique (vitalsStatus critical) → card
+        // surfaces the risk so the operator sees the link between activity
+        // progress and worker condition.
+        participants: partsFor('Setor Oeste'),
       },
       {
         id: 'act_003',
@@ -166,43 +176,58 @@ export const dashboardApi = {
         sector: 'Setor Leste',
         status: 'em-curso',
         risk: 'warning',
-        progress: 84,
+        progress: 60,
         locationLabel: 'Setor Leste',
-        participants: [
-          { uri: cycleAvatar(8), alt: 'Karen' },
-          { uri: cycleAvatar(9), alt: 'Lucas' },
-          { uri: cycleAvatar(10), alt: 'Mariana' },
-        ],
+        participants: partsFor('Setor Leste'),
       },
       {
         id: 'act_004',
-        title: 'Reparo',
+        title: 'Inspeção',
         sector: 'Setor Sul',
         status: 'em-curso',
-        risk: 'critical',
-        progress: 84,
+        progress: 38,
         locationLabel: 'Setor Sul',
-        participants: [
-          { uri: cycleAvatar(11), alt: 'Nicolas' },
-          { uri: cycleAvatar(12), alt: 'Olívia' },
-          { uri: cycleAvatar(13), alt: 'Paulo' },
-        ],
+        participants: partsFor('Setor Sul'),
       },
       {
         id: 'act_005',
-        title: 'Reparo',
+        title: 'Manutenção preventiva',
+        sector: 'Setor Norte',
+        status: 'em-curso',
+        risk: 'critical',
+        progress: 22,
+        locationLabel: 'Setor Norte',
+        // Sector includes Marcos Vinícius (vitalsStatus critical).
+        participants: partsFor('Setor Norte'),
+        totalParticipants: 12,
+      },
+      {
+        id: 'act_006',
+        title: 'Sondagem geológica',
+        sector: 'Setor Oeste',
+        status: 'em-curso',
+        progress: 56,
+        locationLabel: 'Setor Oeste',
+        participants: partsFor('Setor Oeste'),
+      },
+      {
+        id: 'act_007',
+        title: 'Auditoria de segurança',
+        sector: 'Setor Sul',
+        status: 'em-curso',
+        risk: 'warning',
+        progress: 71,
+        locationLabel: 'Setor Sul',
+        participants: partsFor('Setor Sul'),
+      },
+      {
+        id: 'act_008',
+        title: 'Treinamento NR-22',
         sector: 'Setor Leste',
         status: 'em-curso',
-        progress: 84,
+        progress: 93,
         locationLabel: 'Setor Leste',
-        // Figma card 5: 5 avatars visible + "+13" overflow chip = 18 total.
-        participants: [
-          { uri: cycleAvatar(14), alt: 'Quésia' },
-          { uri: cycleAvatar(15), alt: 'Rafael' },
-          { uri: cycleAvatar(16), alt: 'Sofia' },
-          { uri: cycleAvatar(17), alt: 'Thiago' },
-          { uri: cycleAvatar(18), alt: 'Úrsula' },
-        ],
+        participants: partsFor('Setor Leste'),
         totalParticipants: 18,
       },
     ]
@@ -243,52 +268,45 @@ export const dashboardApi = {
     const commonAlerts = bySeverity.info
     // Mocked aggregates matching Figma frame 4:2 (S1.7 dashboard fidelity).
     // S2 will replace with real device telemetry + reports/cameras inventory.
-    const admins = 3
+    const admins = 8
     const totalEmployees = 1205
     const newReports = 4
     const activeCameras = 564
     const vitalSigns = 512
     const wearRate = 512
 
-    // S1.7 wear alerts fixture — Figma shows Ezequiel Almeida etc on the right column.
-    const wearAlerts: DashboardWearAlert[] = [
-      {
-        id: 'wear_001',
-        employeeName: 'Ezequiel Almeida',
-        sector: 'Setor Leste',
-        progress: 78,
-        bpm: 112,
-        pressure: '14/9',
-        avatarUri: cycleAvatar(0),
-      },
-      {
-        id: 'wear_002',
-        employeeName: 'Mariana Costa',
-        sector: 'Setor Leste',
-        progress: 65,
-        bpm: 104,
-        pressure: '13/8',
-        avatarUri: cycleAvatar(1),
-      },
-      {
-        id: 'wear_003',
-        employeeName: 'Rafael Souza',
-        sector: 'Setor Norte',
-        progress: 82,
-        bpm: 118,
-        pressure: '15/9',
-        avatarUri: cycleAvatar(2),
-      },
-      {
-        id: 'wear_004',
-        employeeName: 'Tatiana Lima',
-        sector: 'Setor Sul',
-        progress: 71,
-        bpm: 108,
-        pressure: '13/8',
-        avatarUri: cycleAvatar(3),
-      },
+    // Wear alerts — top 8 roster members ranked by displayed wear progress.
+    // Derived from ROSTER so the right-column list calls out the same people
+    // who appear as warning/critical pins on the map and in /monitoring/alerts.
+    // The progress / bpm / pressure shown here represent the wear-tracker
+    // aggregate, distinct from the worker's instantaneous vitals snapshot.
+    const wearMembers: Array<{
+      rosterId: string
+      progress: number
+      bpm: number
+      pressure: string
+    }> = [
+      { rosterId: 'emp-04', progress: 91, bpm: 138, pressure: '16/10' }, // Carlos Henrique — critical
+      { rosterId: 'emp-10', progress: 88, bpm: 142, pressure: '17/11' }, // Marcos Vinícius — critical
+      { rosterId: 'emp-02', progress: 74, bpm: 112, pressure: '14/9' }, // Ana Paula Gomes — warning
+      { rosterId: 'emp-06', progress: 68, bpm: 108, pressure: '13/9' }, // Pedro Martins Lima — warning
+      { rosterId: 'emp-08', progress: 62, bpm: 102, pressure: '13/8' }, // Rafael Oliveira — high effort
+      { rosterId: 'emp-01', progress: 58, bpm: 99, pressure: '12/8' }, // Larissa Sales — coordenadora
+      { rosterId: 'emp-09', progress: 55, bpm: 98, pressure: '12/8' }, // Juliana Costa
+      { rosterId: 'emp-12', progress: 52, bpm: 96, pressure: '12/8' }, // Karen Oliveira
     ]
+    const wearAlerts: DashboardWearAlert[] = wearMembers.map((w, idx) => {
+      const p = findRoster(w.rosterId)
+      return {
+        id: `wear_${String(idx + 1).padStart(3, '0')}`,
+        employeeName: p.name,
+        sector: p.sector,
+        progress: w.progress,
+        bpm: w.bpm,
+        pressure: w.pressure,
+        avatarUri: cycleAvatar(idx),
+      }
+    })
 
     return {
       data: {

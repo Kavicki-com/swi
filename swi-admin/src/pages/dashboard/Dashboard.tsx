@@ -176,7 +176,7 @@ const MARKER_BORDER_BY_STATUS: Record<DashboardMapMarker['status'], string> = {
   offline: '#6b7280',
 }
 
-function buildMarkerEl(marker: DashboardMapMarker): HTMLElement {
+function buildMarkerEl(marker: DashboardMapMarker, onClick: () => void): HTMLElement {
   const el = document.createElement('div')
   el.style.width = '40px'
   el.style.height = '40px'
@@ -189,6 +189,7 @@ function buildMarkerEl(marker: DashboardMapMarker): HTMLElement {
   el.style.cursor = 'pointer'
   el.title = marker.name
   el.setAttribute('aria-label', `${marker.name} — ${marker.status}`)
+  el.addEventListener('click', onClick)
   return el
 }
 
@@ -230,7 +231,11 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
     })
 
     const markerHandles = markers.map((m) =>
-      new lib.Marker({ element: buildMarkerEl(m) }).setLngLat([m.lng, m.lat]).addTo(map),
+      new lib.Marker({
+        element: buildMarkerEl(m, () => navigate(`/employees/${m.id}`)),
+      })
+        .setLngLat([m.lng, m.lat])
+        .addTo(map),
     )
 
     return () => {
@@ -238,7 +243,7 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
       map.remove()
       mapRef.current = null
     }
-  }, [markers, lib])
+  }, [markers, lib, navigate])
 
   return (
     <View
