@@ -21,6 +21,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { SupportModal } from '@/components/SupportModal'
 
 const BLOOD_OPTIONS = [
   { label: 'A+', value: 'A+' },
@@ -61,14 +62,6 @@ const FUNCAO_OPTIONS = [
 const GERENTE_OPTIONS = [
   { label: 'João Soares Ribeiro', value: 'joao' },
   { label: 'Mathias Campos', value: 'mathias' },
-]
-
-const SUPPORT_MOTIVO_OPTIONS = [
-  { label: 'Problema técnico', value: 'tech' },
-  { label: 'Dúvida sobre uso', value: 'usage' },
-  { label: 'Sugestão de melhoria', value: 'suggestion' },
-  { label: 'Reportar bug', value: 'bug' },
-  { label: 'Outros', value: 'other' },
 ]
 
 const PRIVACY_POLICY_TEXT = `Este contrato detalha os termos e condições que regem o uso do software de gestão de recursos humanos para o setor de mineração, integrando funcionalidades de smartband, desenvolvido pela renomada Mineração Excelsior. Ao acessar e utilizar este software, o usuário manifesta sua concordância integral e irrestrita com todos os termos e condições estipulados neste documento. Este acordo estabelece as bases para a utilização do software, delineando os direitos e responsabilidades tanto do usuário quanto da Mineração Excelsior. É imprescindível que o usuário leia atentamente e compreenda integralmente cada cláusula antes de prosseguir com a utilização do software. A Mineração Excelsior reserva-se o direito de modificar, complementar ou atualizar estes termos a qualquer momento, mediante notificação prévia aos usuários. O uso contínuo do software após a publicação de quaisquer alterações constituirá aceitação tácita das mesmas. O software de gestão de recursos humanos da Mineração Excelsior, em conjunto com a tecnologia smartband, oferece uma solução abrangente para o monitoramento e gestão eficiente dos funcionários no ambiente de mineração. As funcionalidades incluem, mas não se limitam a, rastreamento em tempo real da localização dos funcionários, monitoramento de sinais vitais, comunicação bidirecional, alertas de segurança e gestão de jornadas de trabalho. A Mineração Excelsior emprega medidas de segurança rigorosas para proteger os dados dos usuários e garantir a confidencialidade das informações. No entanto, o usuário reconhece que nenhum sistema de segurança é infalível e que a Mineração Excelsior não pode garantir a segurança absoluta dos dados. O usuário é responsável por manter a confidencialidade de suas credenciais de acesso e por notificar imediatamente a Mineração Excelsior em caso de qualquer uso não autorizado de sua conta. O software é fornecido 'no estado em que se encontra' e a Mineração Excelsior não oferece garantias de qualquer tipo, expressas ou implícitas, incluindo, mas não se limitando a, garantias de comercialização, adequação a um propósito específico e não violação. Em nenhuma circunstância a Mineração Excelsior será responsável por quaisquer danos diretos, indiretos, incidentais, especiais ou consequenciais decorrentes do uso ou da impossibilidade de uso do software, mesmo que tenha sido avisada da possibilidade de tais danos. Este contrato será regido e interpretado de acordo com as leis do Brasil, e qualquer disputa decorrente deste contrato será resolvida nos tribunais competentes da cidade de Belo Horizonte, Minas Gerais. Ao utilizar o software, o usuário concorda em cumprir todas as leis e regulamentos aplicáveis, incluindo, mas não se limitando a, leis de proteção de dados e privacidade. A Mineração Excelsior reserva-se o direito de suspender ou encerrar o acesso do usuário ao software em caso de violação destes termos e condições. Este contrato constitui o acordo integral entre o usuário e a Mineração Excelsior em relação ao uso do software e substitui todos os acordos anteriores ou contemporâneos, escritos ou orais. Caso alguma disposição deste contrato seja considerada inválida ou inexequível, as demais disposições permanecerão em pleno vigor e efeito. O usuário declara ter lido, compreendido e concordado com todos os termos e condições deste contrato antes de utilizar o software da Mineração Excelsior.`
@@ -140,92 +133,6 @@ function PrivacyPolicyModal({ onClose }: { onClose: () => void }) {
         <Title variant="title.xs" color={theme.content.dark}>
           Acordo de termos de uso e privacidade
         </Title>
-      </View>
-    </View>
-  )
-}
-
-// Support form modal — Figma 105:11612. Floats over the page content with
-// a dark scrim; trigger lives in UserSettings header "Solicitar suporte".
-function SupportModal({ onClose }: { onClose: () => void }) {
-  const theme = useTheme()
-  const [motivo, setMotivo] = useState('')
-  const [titulo, setTitulo] = useState('')
-  const [mensagem, setMensagem] = useState('')
-  return (
-    <View
-      // Full-screen scrim. Pressable so clicking outside the modal closes it.
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 100,
-      }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Fechar modal"
-        onPress={onClose}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      />
-      <View
-        style={{
-          width: 596,
-          backgroundColor: theme.background,
-          borderRadius: theme.border.radius.l,
-          padding: theme.padding.m,
-          gap: theme.gap.m,
-        }}
-      >
-        {/* Header — title + close X */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
-          <View style={{ flex: 1 }}>
-            <Title variant="title.xs" color={theme.content.primary}>
-              Solicitação de suporte
-            </Title>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Fechar"
-            onPress={onClose}
-            style={{ padding: 4 }}
-          >
-            <Icon name="close" size={20} color={theme.content.dark} />
-          </Pressable>
-        </View>
-        <Combobox
-          label="Motivo da solicitação"
-          placeholder="Selecione aqui"
-          options={SUPPORT_MOTIVO_OPTIONS}
-          value={motivo}
-          onChange={setMotivo}
-        />
-        <Input
-          label="Título da sua solicitação"
-          placeholder="Digite aqui"
-          value={titulo}
-          onChangeText={setTitulo}
-        />
-        <Input
-          label="Mensagem"
-          placeholder="Digite aqui a sua mensagem"
-          value={mensagem}
-          onChangeText={setMensagem}
-          multiline
-          numberOfLines={6}
-        />
-        <Button
-          label="Enviar solicitação"
-          variant="contained"
-          backgroundColor={theme.surface.secondary}
-          fullWidth
-          onPress={onClose}
-        />
       </View>
     </View>
   )

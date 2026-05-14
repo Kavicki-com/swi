@@ -197,10 +197,14 @@ function InlineStat({
   )
 }
 
-export function AdminDetails() {
+export function AdminDetails({ adminId }: { adminId?: string } = {}) {
   const theme = useTheme()
   const navigate = useNavigate()
-  const { id } = useParams<{ id: string }>()
+  const params = useParams<{ id: string }>()
+  // Override hook: UserProfile mounts <AdminDetails adminId={user.id} />
+  // to reuse this layout for the logged-in admin's own profile page
+  // (Figma 105:12516 user-profile).
+  const id = adminId ?? params.id
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [loading, setLoading] = useState(true)
 

@@ -11,7 +11,7 @@
 // place pins/route as overlays positioned in percentage coordinates.
 import { useState } from 'react'
 import { View } from 'react-native'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
   Button,
   Icon,
@@ -43,11 +43,14 @@ const LABEL_16KM = { left: '44%', top: '62%' } as const
 export function AlertsRescueRoute() {
   const theme = useTheme()
   const { rescuerId } = useParams<{ employeeId?: string; rescuerId?: string }>()
-  const [modalVisible, setModalVisible] = useState(true)
-  // Dispatched = user pressed "Continuar". Flips the route line to violet
-  // and swaps the rescuer pin for a "moving" marker, matching the post-
-  // confirmation state shown in Figma 101:7936 (continuation frame).
-  const dispatched = !modalVisible
+  // Dispatched state is persisted in the URL (`?dispatched=true`) so a
+  // refresh of /alerts/:employeeId/rescue/:rescuerId?dispatched=true
+  // returns the user to the post-Continuar view (Figma 101:8359
+  // alerts-rescue-ongoing). The modal opens on the pre-dispatch view
+  // only.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dispatched = searchParams.get('dispatched') === 'true'
+  const [modalVisible, setModalVisible] = useState(!dispatched)
   const routeStroke = dispatched ? '#8B5CF6' : '#2BA8C9'
 
   return (
@@ -211,7 +214,10 @@ export function AlertsRescueRoute() {
             <Button
               label="Continuar"
               backgroundColor={theme.surface.success}
-              onPress={() => setModalVisible(false)}
+              onPress={() => {
+                setModalVisible(false)
+                setSearchParams({ dispatched: 'true' }, { replace: true })
+              }}
             />
           </View>
         </View>

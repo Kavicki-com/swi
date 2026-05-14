@@ -19,8 +19,10 @@ const SEED_SESSION = JSON.stringify({
 const REAL_ROUTE_PATHS = new Set<string>([
   '/',
   '/admins',
+  '/admins/new',
   '/admins/:id',
   '/employees',
+  '/employees/new',
   '/employees/:id',
   '/maps/general',
   '/chat',
@@ -35,6 +37,7 @@ const REAL_ROUTE_PATHS = new Set<string>([
   '/alerts/:employeeId/rescue',
   '/alerts/:employeeId/rescue/:rescuerId',
   '/user/settings',
+  '/user/profile',
 ])
 
 describe('Admin router', () => {
@@ -49,18 +52,28 @@ describe('Admin router', () => {
     (r) => !PUBLIC_PATHS.has(r.path) && !REAL_ROUTE_PATHS.has(r.path),
   )
 
-  it.each(placeholderRoutes.map((r) => [r.path, r.label]))(
-    'renders placeholder for %s',
-    async (path, label) => {
-      const concretePath = path.replace(':id', 'seed_id')
-      render(
-        <MemoryRouter initialEntries={[concretePath]}>
-          <App />
-        </MemoryRouter>,
-      )
-      await waitFor(() => {
-        expect(screen.getByTestId(`placeholder-${label}`)).toBeInTheDocument()
-      })
-    },
-  )
+  if (placeholderRoutes.length === 0) {
+    // Desktop is complete — every protected route now mounts a real component.
+    // Keep this assertion so a regression that re-introduces a placeholder
+    // (without wiring it into REAL_ROUTE_PATHS) trips here instead of silently
+    // shipping a "Em construção" page to production.
+    it('has no remaining placeholder routes (desktop fully implemented)', () => {
+      expect(placeholderRoutes).toEqual([])
+    })
+  } else {
+    it.each(placeholderRoutes.map((r) => [r.path, r.label]))(
+      'renders placeholder for %s',
+      async (path, label) => {
+        const concretePath = path.replace(':id', 'seed_id')
+        render(
+          <MemoryRouter initialEntries={[concretePath]}>
+            <App />
+          </MemoryRouter>,
+        )
+        await waitFor(() => {
+          expect(screen.getByTestId(`placeholder-${label}`)).toBeInTheDocument()
+        })
+      },
+    )
+  }
 })

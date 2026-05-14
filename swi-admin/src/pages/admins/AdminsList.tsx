@@ -132,11 +132,15 @@ function ActionIcon({ icon, label }: { icon: IconName; label: string }) {
   )
 }
 
-export function AdminsList() {
+export function AdminsList({
+  initialTab = 'cadastrados',
+}: {
+  initialTab?: 'cadastrados' | 'cadastrar'
+} = {}) {
   const theme = useTheme()
   const navigate = useNavigate()
   const [admins, setAdmins] = useState<Admin[]>([])
-  const [tab, setTab] = useState('cadastrados')
+  const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
 
   useEffect(() => {
