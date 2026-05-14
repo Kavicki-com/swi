@@ -122,6 +122,11 @@ function MiniMap({ employee, onOpenFullMap }: { employee: Employee; onOpenFullMa
       map.remove()
       mapRef.current = null
     }
+    // Intentionally excludes `theme.surface.secondary`: the marker DOM uses
+    // theme tokens at construction but the maplibre instance shouldn't be
+    // rebuilt every render; SWI ships a single dark theme so the token is
+    // effectively static. See AdminDetails for the same trade-off.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee])
   return (
     <View

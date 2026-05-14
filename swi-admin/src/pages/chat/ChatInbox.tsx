@@ -288,6 +288,11 @@ function ContactMiniMap({
     return () => {
       map.remove()
     }
+    // Intentionally excludes `theme.surface.secondary`: the marker DOM uses
+    // theme tokens at construction; rebuilding maplibre on theme changes is
+    // disruptive for a token that never moves at runtime (single dark theme).
+    // Same trade-off as Admin/EmployeeDetails mini-maps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact])
   return (
     <View

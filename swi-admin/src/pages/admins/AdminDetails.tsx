@@ -120,6 +120,11 @@ function MiniMap({ admin, onOpenFullMap }: { admin: Admin; onOpenFullMap: () => 
       map.remove()
       mapRef.current = null
     }
+    // Intentionally excludes `theme.surface.secondary`: this effect mounts a
+    // maplibre map + a DOM marker. Re-running on every theme reference change
+    // would tear down and rebuild the map for an essentially-static colour
+    // that never changes at runtime (the SWI theme is fixed dark mode).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [admin])
   return (
     <View
