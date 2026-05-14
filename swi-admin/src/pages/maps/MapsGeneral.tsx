@@ -89,9 +89,15 @@ function buildHeatmapPoints(
 // because the detached React tree doesn't inherit the app-level theme context.
 type PinHandle = { marker: maplibregl.Marker; root: Root; el: HTMLDivElement }
 
-function buildPin(m: DashboardMapMarker, map: maplibregl.Map, lib: typeof maplibregl): PinHandle {
+function buildPin(
+  m: DashboardMapMarker,
+  map: maplibregl.Map,
+  lib: typeof maplibregl,
+  onClick: () => void,
+): PinHandle {
   const el = document.createElement('div')
   el.style.cursor = 'pointer'
+  el.addEventListener('click', onClick)
   const root = createRoot(el)
   root.render(
     <SwiThemeProvider>
@@ -290,7 +296,9 @@ export function MapsGeneral() {
     const map = mapRef.current
     if (!lib || !map || !mapReady || !summary || !showOperators) return
 
-    const handles = summary.mapMarkers.map((m) => buildPin(m, map, lib))
+    const handles = summary.mapMarkers.map((m) =>
+      buildPin(m, map, lib, () => navigate(`/employees/${m.id}`)),
+    )
 
     return () => {
       handles.forEach((h) => {
@@ -299,7 +307,7 @@ export function MapsGeneral() {
         h.el.remove()
       })
     }
-  }, [mapReady, summary, showOperators, lib])
+  }, [mapReady, summary, showOperators, lib, navigate])
 
   // Camera pins — rendered when the "Câmeras" MapControl is expanded.
   // Mirrors the operator-pin useEffect; uses the same PinHandle/cleanup
