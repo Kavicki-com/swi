@@ -20,13 +20,11 @@ export const ADMIN_ROUTES = [
   { path: '/maps/cameras', label: 'map-view-cameras' },
   { path: '/maps/heat', label: 'map-view-heat' },
   { path: '/maps/meteorologic', label: 'map-metereologic-alerts' },
-  // alerts
+  // alerts (heatmap and meteorologic are toggle states of /alerts, not routes)
   { path: '/alerts', label: 'alerts' },
-  { path: '/alerts/heatmap', label: 'alerts-heatmap' },
-  { path: '/alerts/meteorologic', label: 'alerts-metereologic-map' },
-  { path: '/alerts/:id/rescue-route', label: 'alerts-rescue-route' },
-  { path: '/alerts/:id/rescue-route/select', label: 'alerts-rescue-route-selection' },
-  { path: '/alerts/:id/rescue-ongoing', label: 'alerts-rescue-ongoing' },
+  { path: '/alerts/:employeeId', label: 'alerts-with-rescue-card' },
+  { path: '/alerts/:employeeId/rescue', label: 'alerts-rescue-route-selection' },
+  { path: '/alerts/:employeeId/rescue/:rescuerId', label: 'alerts-rescue-route' },
   // monitoring
   { path: '/monitoring/alerts', label: 'monitoring-alerts' },
   { path: '/monitoring/good-conditions', label: 'monitoring-good-conditions' },

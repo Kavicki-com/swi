@@ -14,18 +14,42 @@ const SEED_SESSION = JSON.stringify({
   created_at: '',
 })
 
+// Paths that App.tsx mounts as real components. Everything else in
+// ADMIN_ROUTES is still rendered through the catch-all <Placeholder />.
+const REAL_ROUTE_PATHS = new Set<string>([
+  '/',
+  '/admins',
+  '/admins/:id',
+  '/employees',
+  '/employees/:id',
+  '/maps/general',
+  '/chat',
+  '/monitoring/alerts',
+  '/monitoring/good-conditions',
+  '/reports',
+  '/reports/:id',
+  '/reports/new',
+  '/modals/responsables',
+  '/alerts',
+  '/alerts/:employeeId',
+  '/alerts/:employeeId/rescue',
+  '/alerts/:employeeId/rescue/:rescuerId',
+  '/user/settings',
+])
+
 describe('Admin router', () => {
   beforeEach(() => {
     window.localStorage.setItem('swi.admin.session', SEED_SESSION)
   })
   afterEach(() => window.localStorage.clear())
 
-  // Public auth routes redirect to "/" when authed; covered by GuestOnly tests.
-  // "/" is now the real Dashboard (not a Placeholder); covered by Dashboard tests.
-  // Iterate only over protected placeholder routes here.
-  const protectedRoutes = ADMIN_ROUTES.filter((r) => !PUBLIC_PATHS.has(r.path) && r.path !== '/')
+  // Iterate only over routes that are still rendered as <Placeholder />.
+  // Real components have their own dedicated tests (Dashboard, AdminsList, etc).
+  const placeholderRoutes = ADMIN_ROUTES.filter(
+    (r) => !PUBLIC_PATHS.has(r.path) && !REAL_ROUTE_PATHS.has(r.path),
+  )
 
-  it.each(protectedRoutes.map((r) => [r.path, r.label]))(
+  it.each(placeholderRoutes.map((r) => [r.path, r.label]))(
     'renders placeholder for %s',
     async (path, label) => {
       const concretePath = path.replace(':id', 'seed_id')
