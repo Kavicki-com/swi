@@ -20,3 +20,7 @@ docs/audits/figma-export/*.json
 /*.jpeg
 /.playwright-mcp/
 /finalizar-bg.txt
+
+# Local audit reports (kept on disk, not in git)
+docs/audits/*-audit-*.md
+docs/audits/health-check-*.md
