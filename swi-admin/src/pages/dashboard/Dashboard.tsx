@@ -20,6 +20,7 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useDemoToast } from '@/lib/demoToast'
 import {
   dashboardApi,
   type DashboardActivity,
@@ -374,6 +375,7 @@ type WearFilterTab = (typeof WEAR_FILTER_TABS)[number]
 
 function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
   const theme = useTheme()
+  const { show: showToast } = useDemoToast()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<WearFilterTab>('Excelentes')
 
@@ -415,7 +417,7 @@ function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
           label="Ver Todos"
           variant="contained"
           size="small"
-          onPress={() => undefined}
+          onPress={() => showToast('Lista completa de funcionários em desgaste')}
           testID="wear-alerts-see-all"
         />
       </View>
@@ -469,6 +471,7 @@ function progressColorForRisk(
 
 function ActivityCard({ activity }: { activity: DashboardActivity }) {
   const theme = useTheme()
+  const navigate = useNavigate()
   return (
     <View
       testID={`activity-${activity.id}`}
@@ -525,7 +528,8 @@ function ActivityCard({ activity }: { activity: DashboardActivity }) {
       />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Abrir localização"
+        accessibilityLabel={`Abrir localização da atividade ${activity.title}`}
+        onPress={() => navigate('/maps/general')}
         testID={`activity-${activity.id}-location`}
       >
         <Icon name="location_on_filled" size={24} color={theme.content.dark} />
