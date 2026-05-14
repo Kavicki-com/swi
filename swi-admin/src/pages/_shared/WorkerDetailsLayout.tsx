@@ -7,6 +7,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
+import { useDemoToast } from '@/lib/demoToast'
 import {
   Avatar,
   Button,
@@ -107,6 +108,7 @@ function MiniMap({
 }) {
   const theme = useTheme()
   const lib = useMapLibre()
+  const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   useEffect(() => {
@@ -184,9 +186,10 @@ function MiniMap({
       </View>
       {/* Camera affordance — Figma 105:12516 / 32:3363 ContainedButton
           (variant surface): surface.high bg, padding.sm, radius.m, elevation.sm. */}
-      <View
+      <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ver câmera da posição"
+        onPress={() => showToast('Câmera da posição', `Stream ao vivo de ${worker.name}`)}
         style={{
           position: 'absolute',
           right: 12,
@@ -201,7 +204,7 @@ function MiniMap({
         }}
       >
         <Icon name="video_camera_back" size={20} color={theme.content.dark} />
-      </View>
+      </Pressable>
     </View>
   )
 }
