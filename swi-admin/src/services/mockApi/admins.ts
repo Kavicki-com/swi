@@ -1,8 +1,8 @@
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
 import adminElisa from '@/assets/avatars/admin-elisa.png'
-import adminMathias from '@/assets/avatars/admin-mathias.png'
-import adminJoao from '@/assets/avatars/admin-joao.png'
+import adminMathias from '@/assets/avatars/admin-mathias.svg'
+import adminJoao from '@/assets/avatars/admin-joao.svg'
 
 export type ExamEntry = {
   id: string
@@ -120,6 +120,52 @@ const ADMINS_SEED: ReadonlyArray<Admin> = [
     specialization: 'Técnico',
     avatarUri: adminMathias,
     active: true,
+    gender: 'male',
+    bpm: 87,
+    pressure: '13/9',
+    fatigueRate: 0.418,
+    effort: 0.812,
+    status: 'accept',
+    statusLabel: 'Condições estáveis',
+    fatigueMinutes: 94,
+    allergies: ['Penicilina', 'Amoxicilina', 'Pó de quartzo'],
+    examHistory: [
+      {
+        id: 'exam-02-01',
+        year: '2026',
+        date: '11 Jan',
+        title: 'Curso NR-22 atualização anual',
+        subtitle: '',
+      },
+      {
+        id: 'exam-02-02',
+        year: '2028',
+        date: '07 Mai',
+        title: 'Exame de aptidão para altura',
+        subtitle: '',
+      },
+      {
+        id: 'exam-02-03',
+        year: '2030',
+        date: '23 Ago',
+        title: 'Avaliação ergonômica',
+        subtitle: '',
+      },
+      {
+        id: 'exam-02-04',
+        year: '2032',
+        date: '15 Dez',
+        title: 'Reciclagem em primeiros socorros',
+        subtitle: '',
+      },
+      {
+        id: 'exam-02-05',
+        year: '2034',
+        date: '02 Abr',
+        title: 'Auditoria interna de segurança',
+        subtitle: '',
+      },
+    ],
   },
   {
     id: 'admin-03',
@@ -130,6 +176,59 @@ const ADMINS_SEED: ReadonlyArray<Admin> = [
     specialization: 'Engenharia de Mineração',
     avatarUri: adminJoao,
     active: true,
+    gender: 'male',
+    bpm: 102,
+    pressure: '14/9',
+    fatigueRate: 0.781,
+    effort: 0.547,
+    status: 'pending',
+    statusLabel: 'Alerta de fadiga',
+    fatigueMinutes: 198,
+    allergies: ['Látex', 'Amendoim', 'Frutos do mar'],
+    examHistory: [
+      {
+        id: 'exam-03-01',
+        year: '2027',
+        date: '18 Fev',
+        title: 'Inspeção técnica de equipamentos',
+        subtitle: '',
+      },
+      {
+        id: 'exam-03-02',
+        year: '2029',
+        date: '04 Jul',
+        title: 'Avaliação psicossocial',
+        subtitle: '',
+      },
+      {
+        id: 'exam-03-03',
+        year: '2031',
+        date: '27 Set',
+        title: 'Exame de função pulmonar',
+        subtitle: '',
+      },
+      {
+        id: 'exam-03-04',
+        year: '2033',
+        date: '09 Mar',
+        title: 'Treinamento em desmonte de rochas',
+        subtitle: '',
+      },
+      {
+        id: 'exam-03-05',
+        year: '2035',
+        date: '14 Nov',
+        title: 'Certificação em gestão de riscos',
+        subtitle: '',
+      },
+      {
+        id: 'exam-03-06',
+        year: '2037',
+        date: '30 Jun',
+        title: 'Avaliação cardiológica anual',
+        subtitle: '',
+      },
+    ],
   },
 ]
 
