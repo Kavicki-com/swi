@@ -78,9 +78,7 @@ export function RecoveryNewPassword() {
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry={!showNew}
-              iconRight={
-                <VisibilityToggle on={showNew} onToggle={() => setShowNew((v) => !v)} />
-              }
+              iconRight={<VisibilityToggle on={showNew} onToggle={() => setShowNew((v) => !v)} />}
             />
             <View style={{ gap: theme.gap.xs }}>
               <Input
@@ -90,18 +88,11 @@ export function RecoveryNewPassword() {
                 onChangeText={setConfirmPassword}
                 secureTextEntry={!showConfirm}
                 iconRight={
-                  <VisibilityToggle
-                    on={showConfirm}
-                    onToggle={() => setShowConfirm((v) => !v)}
-                  />
+                  <VisibilityToggle on={showConfirm} onToggle={() => setShowConfirm((v) => !v)} />
                 }
               />
               {passwordsMatch && (
-                <Text
-                  variant="body.s"
-                  color={theme.content.success}
-                  testID="passwords-match"
-                >
+                <Text variant="body.s" color={theme.content.success} testID="passwords-match">
                   As senhas são iguais ✓
                 </Text>
               )}
