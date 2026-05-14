@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 import { View } from 'react-native'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
+import { DemoToastProvider } from '@/lib/demoToast'
 import { GuestOnly } from './GuestOnly'
 import { RequireAuth } from './RequireAuth'
 import { AppLayout } from './AppLayout'
@@ -37,7 +38,8 @@ export function App() {
   return (
     <SwiThemeProvider>
       <AuthProvider>
-        <View testID="app-root">
+        <DemoToastProvider>
+          <View testID="app-root">
           <Routes>
             <Route element={<GuestOnly />}>
               <Route path="/login" element={<Login />} />
@@ -111,7 +113,8 @@ export function App() {
               </Route>
             </Route>
           </Routes>
-        </View>
+          </View>
+        </DemoToastProvider>
       </AuthProvider>
     </SwiThemeProvider>
   )
