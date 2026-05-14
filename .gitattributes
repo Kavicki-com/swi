@@ -1,0 +1,24 @@
+# Normalise line endings to LF on commit. The Windows working tree can
+# still use CRLF locally — only the stored blob is LF. Eliminates the
+# `LF will be replaced by CRLF the next time Git touches it` warnings
+# that flood `git status` on Windows.
+* text=auto eol=lf
+
+# Treat known binary types as binary explicitly so git never touches them.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.svg   text
+*.pdf   binary
+*.zip   binary
+*.tar   binary
+*.gz    binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.ico   binary
+*.mp4   binary
+*.webm  binary
