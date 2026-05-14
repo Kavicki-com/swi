@@ -373,19 +373,27 @@ const CHIP_TO_STATUS: Record<ActivityFilterChip, DashboardActivityStatus> = {
 const WEAR_FILTER_TABS = ['Excelentes', 'Desgastados', 'Alertas de Fadiga'] as const
 type WearFilterTab = (typeof WEAR_FILTER_TABS)[number]
 
+const WEAR_TAB_TO_TIER: Record<WearFilterTab, DashboardWearAlert['tier']> = {
+  Excelentes: 'excelente',
+  Desgastados: 'desgastado',
+  'Alertas de Fadiga': 'alerta-fadiga',
+}
+
 function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
   const theme = useTheme()
   const { show: showToast } = useDemoToast()
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<WearFilterTab>('Excelentes')
+  const [filter, setFilter] = useState<WearFilterTab>('Alertas de Fadiga')
 
   const filtered = useMemo(() => {
+    const tier = WEAR_TAB_TO_TIER[filter]
+    const byTab = alerts.filter((a) => a.tier === tier)
     const q = query.trim().toLowerCase()
-    if (!q) return alerts
-    return alerts.filter(
+    if (!q) return byTab
+    return byTab.filter(
       (a) => a.employeeName.toLowerCase().includes(q) || a.sector.toLowerCase().includes(q),
     )
-  }, [alerts, query])
+  }, [alerts, filter, query])
 
   return (
     <View
