@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
-import maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import type maplibregl from 'maplibre-gl'
+import { useMapLibre } from '@/lib/useMapLibre'
 import {
   AvatarGroup,
   Button,
@@ -20,13 +20,14 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
-import { dashboardApi, type DashboardSummary } from '@/services/mockApi'
-import type {
-  DashboardActivity,
-  DashboardActivityRisk,
-  DashboardActivityStatus,
-  DashboardMapMarker,
-  DashboardWearAlert,
+import {
+  dashboardApi,
+  type DashboardActivity,
+  type DashboardActivityRisk,
+  type DashboardActivityStatus,
+  type DashboardMapMarker,
+  type DashboardSummary,
+  type DashboardWearAlert,
 } from '@/services/mockApi/dashboard'
 import { FormError } from '@/components/FormError'
 
@@ -194,11 +195,12 @@ function buildMarkerEl(marker: DashboardMapMarker): HTMLElement {
 function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
   const theme = useTheme()
   const navigate = useNavigate()
+  const lib = useMapLibre()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!lib || !containerRef.current) return
 
     // Center on the centroid of markers; fall back to São Paulo if no markers yet.
     const center: [number, number] =
@@ -209,7 +211,7 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
           ]
         : [-46.63, -23.55]
 
-    const map = new maplibregl.Map({
+    const map = new lib.Map({
       container: containerRef.current,
       style: ESRI_SATELLITE_STYLE,
       center,
@@ -221,14 +223,14 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
     map.on('load', () => {
       // Auto-fit to all markers if there are 2+, otherwise stick with the centroid + zoom 13.
       if (markers.length >= 2) {
-        const bounds = new maplibregl.LngLatBounds()
+        const bounds = new lib.LngLatBounds()
         markers.forEach((m) => bounds.extend([m.lng, m.lat]))
         map.fitBounds(bounds, { padding: 60, animate: false, maxZoom: 15 })
       }
     })
 
     const markerHandles = markers.map((m) =>
-      new maplibregl.Marker({ element: buildMarkerEl(m) }).setLngLat([m.lng, m.lat]).addTo(map),
+      new lib.Marker({ element: buildMarkerEl(m) }).setLngLat([m.lng, m.lat]).addTo(map),
     )
 
     return () => {
@@ -236,7 +238,7 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
       map.remove()
       mapRef.current = null
     }
-  }, [markers])
+  }, [markers, lib])
 
   return (
     <View
@@ -682,9 +684,9 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
           // Colors per Figma: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
           intensitySegments={[
             { id: 'seg-0', flex: 1, color: '#3899bf' },
-            { id: 'seg-1', flex: 1, color: '#ef8600' },
+            { id: 'seg-1', flex: 1, color: theme.surface.warning },
             { id: 'seg-2', flex: 1, color: '#3899bf' },
-            { id: 'seg-3', flex: 1.886, color: '#3eab2e' },
+            { id: 'seg-3', flex: 1.886, color: theme.surface.success },
           ]}
           // Figma frame 21:1501 — scrubber: 148px thumb on 1037px track ≈ 14%.
           scrollbar={{ thumbPercent: 14, thumbStartPercent: 0 }}

@@ -59,10 +59,7 @@ export function App() {
                 <Route path="/admins/new" element={<AdminsList initialTab="cadastrar" />} />
                 <Route path="/admins/:id" element={<AdminDetails />} />
                 <Route path="/employees" element={<EmployeesList />} />
-                <Route
-                  path="/employees/new"
-                  element={<EmployeesList initialTab="cadastrar" />}
-                />
+                <Route path="/employees/new" element={<EmployeesList initialTab="cadastrar" />} />
                 <Route path="/employees/:id" element={<EmployeeDetails />} />
                 {/* /monitoring/* is a nested layout: MonitoringLayout owns
                     KPIs/title/tabs/search/userlist; child views render the
