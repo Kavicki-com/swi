@@ -40,10 +40,7 @@ const BBOX = {
 // Percent-based positioning over the static basemap. The result feeds
 // straight into a `style` prop; the literal type matches `DimensionValue`
 // from @types/react-native so `left`/`top` typecheck without casts.
-function pctFor(
-  lat: number,
-  lng: number,
-): { left: `${number}%`; top: `${number}%` } {
+function pctFor(lat: number, lng: number): { left: `${number}%`; top: `${number}%` } {
   const x = ((lng - BBOX.minLng) / (BBOX.maxLng - BBOX.minLng)) * 100
   const y = ((BBOX.maxLat - lat) / (BBOX.maxLat - BBOX.minLat)) * 100
   return { left: `${x}%`, top: `${y}%` }
