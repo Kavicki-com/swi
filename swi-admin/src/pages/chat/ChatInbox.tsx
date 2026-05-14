@@ -13,8 +13,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
-import maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import { useMapLibre } from '@/lib/useMapLibre'
 import {
   Avatar,
   Button,
@@ -249,10 +248,11 @@ function ContactMiniMap({
   onOpenFullMap: () => void
 }) {
   const theme = useTheme()
+  const lib = useMapLibre()
   const containerRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    if (!containerRef.current) return
-    const map = new maplibregl.Map({
+    if (!lib || !containerRef.current) return
+    const map = new lib.Map({
       container: containerRef.current,
       style: ESRI_SATELLITE_STYLE,
       center: [-46.633, -23.55],
@@ -268,7 +268,7 @@ function ContactMiniMap({
     avatarEl.style.width = '40px'
     avatarEl.style.height = '40px'
     avatarEl.style.borderRadius = '999px'
-    avatarEl.style.background = '#222'
+    avatarEl.style.background = theme.surface.medium
     avatarEl.style.backgroundImage = `url("${contact.avatarUri}")`
     avatarEl.style.backgroundSize = '130%'
     avatarEl.style.backgroundPosition = 'center'
@@ -282,9 +282,7 @@ function ContactMiniMap({
     tail.style.marginTop = '-1px'
     wrapper.appendChild(avatarEl)
     wrapper.appendChild(tail)
-    new maplibregl.Marker({ element: wrapper, anchor: 'bottom' })
-      .setLngLat([-46.633, -23.55])
-      .addTo(map)
+    new lib.Marker({ element: wrapper, anchor: 'bottom' }).setLngLat([-46.633, -23.55]).addTo(map)
     return () => {
       map.remove()
     }
@@ -293,7 +291,7 @@ function ContactMiniMap({
     // disruptive for a token that never moves at runtime (single dark theme).
     // Same trade-off as Admin/EmployeeDetails mini-maps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contact])
+  }, [contact, lib])
   return (
     <View
       style={{

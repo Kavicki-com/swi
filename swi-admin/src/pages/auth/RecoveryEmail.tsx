@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { View } from 'react-native'
 import { Button, Input, Text, Title, useTheme } from '@kavicki/swi-design-system'
-import { authApi } from '@/services/mockApi'
+import { authApi } from '@/services/mockApi/auth'
 import { isEmail } from '@/lib/validators'
 import { FormError } from '@/components/FormError'
 

@@ -1,14 +1,8 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { View } from 'react-native'
-import {
-  ChatSection,
-  HeaderUserInfo,
-  Logo,
-  SideMenu,
-  useTheme,
-  type IconName,
-} from '@kavicki/swi-design-system'
+import { ChatSection, HeaderUserInfo, Logo, SideMenu, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { NAV_ITEMS } from '@/app/nav'
 import workerA from '@/assets/avatars/worker-a.png'
 import chatEzequiel from '@/assets/avatars/chat-ezequiel.png'
 import chatRomulo from '@/assets/avatars/chat-romulo.png'
@@ -23,17 +17,6 @@ type ChatSectionUser = {
   avatarUri?: string
   unreadCount?: number
 }
-type NavItem = { value: string; label: string; icon: IconName }
-
-const NAV: NavItem[] = [
-  { value: '/', label: 'Home', icon: 'home_filled' },
-  { value: '/admins', label: 'Administradores', icon: 'admin_filled' },
-  { value: '/employees', label: 'Funcionários', icon: 'worker_filled' },
-  { value: '/monitoring/alerts', label: 'Monitoramento', icon: 'monitor_filled' },
-  { value: '/reports', label: 'Relatórios', icon: 'reports_filled' },
-  { value: '/alerts', label: 'Alertas', icon: 'bell_filled' },
-  { value: '/user/settings', label: 'Configurações', icon: 'settings_filled' },
-]
 
 // Sidebar chat list — Figma frame 4:2 mocks 4 contacts. Real chat ships in S5.
 // Avatars are real worker photos exported from the same Figma frame.
@@ -76,7 +59,7 @@ function resolveActiveNavValue(pathname: string): string {
   if (pathname.startsWith('/monitoring/')) {
     return '/monitoring/alerts'
   }
-  for (const item of NAV) {
+  for (const item of NAV_ITEMS) {
     if (item.value === '/') {
       if (pathname === '/') return '/'
       continue
@@ -138,7 +121,7 @@ export function AppLayout() {
         <SideMenu
           testID="app-sidebar-nav"
           accessibilityLabel="Navegação principal"
-          items={NAV}
+          items={NAV_ITEMS}
           value={activeNavValue}
           onChange={(v: string) => navigate(v)}
           fullWidth

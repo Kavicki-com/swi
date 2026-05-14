@@ -158,7 +158,7 @@ export function AlertsRescueRoute() {
               justifyContent: 'center',
             }}
           >
-            <Icon name="directions_walk" size={20} color="#F5F5F5" />
+            <Icon name="directions_walk" size={20} color={theme.content.dark} />
           </View>
         ) : (
           <SwiThemeProvider>

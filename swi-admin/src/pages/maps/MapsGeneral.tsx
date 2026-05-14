@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 import { PanResponder, View } from 'react-native'
 import { createRoot, type Root } from 'react-dom/client'
 import { useNavigate, useLocation } from 'react-router-dom'
-import maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import type maplibregl from 'maplibre-gl'
+import { useMapLibre } from '@/lib/useMapLibre'
 import {
   Button,
   HeaderUserInfo,
@@ -18,9 +18,9 @@ import {
   SideMenu,
   SwiThemeProvider,
   useTheme,
-  type IconName,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { withBadges } from '@/app/nav'
 import {
   dashboardApi,
   type DashboardMapMarker,
@@ -30,22 +30,7 @@ import workerA from '@/assets/avatars/worker-a.png'
 
 // Compact navigation list — Figma 32:2488 map-side-menu shows 7 icon-only items.
 // Reports + Alerts carry "+9" unread badges per Figma node 165:21150 / 165:21152.
-type NavItem = {
-  value: string
-  label: string
-  icon: IconName
-  badge?: string
-}
-
-const NAV: NavItem[] = [
-  { value: '/', label: 'Home', icon: 'home_filled' },
-  { value: '/admins', label: 'Administradores', icon: 'admin_filled' },
-  { value: '/employees', label: 'Funcionários', icon: 'worker_filled' },
-  { value: '/monitoring/alerts', label: 'Monitoramento', icon: 'monitor_filled' },
-  { value: '/reports', label: 'Relatórios', icon: 'reports_filled', badge: '+9' },
-  { value: '/alerts', label: 'Alertas', icon: 'bell_filled', badge: '+9' },
-  { value: '/user/settings', label: 'Configurações', icon: 'settings_filled' },
-]
+const NAV = withBadges({ '/reports': '+9', '/alerts': '+9' })
 
 // ESRI World Imagery — same tile source the Dashboard MapBanner uses.
 const ESRI_SATELLITE_STYLE = {
@@ -104,7 +89,7 @@ function buildHeatmapPoints(
 // because the detached React tree doesn't inherit the app-level theme context.
 type PinHandle = { marker: maplibregl.Marker; root: Root; el: HTMLDivElement }
 
-function buildPin(m: DashboardMapMarker, map: maplibregl.Map): PinHandle {
+function buildPin(m: DashboardMapMarker, map: maplibregl.Map, lib: typeof maplibregl): PinHandle {
   const el = document.createElement('div')
   el.style.cursor = 'pointer'
   const root = createRoot(el)
@@ -113,7 +98,7 @@ function buildPin(m: DashboardMapMarker, map: maplibregl.Map): PinHandle {
       <LocationPin avatarUri={m.avatarUri} status={m.status} name={m.name} />
     </SwiThemeProvider>,
   )
-  const marker = new maplibregl.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map)
+  const marker = new lib.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map)
   return { marker, root, el }
 }
 
@@ -137,7 +122,7 @@ const CAMERA_LOCATIONS: ReadonlyArray<CameraLocation> = [
   { id: 'cam-12', lng: -46.63, lat: -23.564, name: 'Câmera Sul Periferia' },
 ]
 
-function buildCameraPin(c: CameraLocation, map: maplibregl.Map): PinHandle {
+function buildCameraPin(c: CameraLocation, map: maplibregl.Map, lib: typeof maplibregl): PinHandle {
   const el = document.createElement('div')
   el.style.cursor = 'pointer'
   const root = createRoot(el)
@@ -146,7 +131,7 @@ function buildCameraPin(c: CameraLocation, map: maplibregl.Map): PinHandle {
       <LocationPin variant="camera" name={c.name} />
     </SwiThemeProvider>,
   )
-  const marker = new maplibregl.Marker({ element: el }).setLngLat([c.lng, c.lat]).addTo(map)
+  const marker = new lib.Marker({ element: el }).setLngLat([c.lng, c.lat]).addTo(map)
   return { marker, root, el }
 }
 
@@ -155,6 +140,7 @@ export function MapsGeneral() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  const lib = useMapLibre()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
@@ -264,7 +250,7 @@ export function MapsGeneral() {
   }, [])
 
   useEffect(() => {
-    if (!containerRef.current || !summary) return
+    if (!lib || !containerRef.current || !summary) return
 
     const markers = summary.mapMarkers
     const center: [number, number] =
@@ -275,7 +261,7 @@ export function MapsGeneral() {
           ]
         : [-46.63, -23.55]
 
-    const map = new maplibregl.Map({
+    const map = new lib.Map({
       container: containerRef.current,
       style: ESRI_SATELLITE_STYLE,
       center,
@@ -286,7 +272,7 @@ export function MapsGeneral() {
 
     map.on('load', () => {
       if (markers.length >= 2) {
-        const bounds = new maplibregl.LngLatBounds()
+        const bounds = new lib.LngLatBounds()
         markers.forEach((m) => bounds.extend([m.lng, m.lat]))
         map.fitBounds(bounds, { padding: 80, animate: false, maxZoom: 16 })
       }
@@ -298,13 +284,13 @@ export function MapsGeneral() {
       mapRef.current = null
       setMapReady(false)
     }
-  }, [summary])
+  }, [summary, lib])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady || !summary || !showOperators) return
+    if (!lib || !map || !mapReady || !summary || !showOperators) return
 
-    const handles = summary.mapMarkers.map((m) => buildPin(m, map))
+    const handles = summary.mapMarkers.map((m) => buildPin(m, map, lib))
 
     return () => {
       handles.forEach((h) => {
@@ -313,7 +299,7 @@ export function MapsGeneral() {
         h.el.remove()
       })
     }
-  }, [mapReady, summary, showOperators])
+  }, [mapReady, summary, showOperators, lib])
 
   // Camera pins — rendered when the "Câmeras" MapControl is expanded.
   // Mirrors the operator-pin useEffect; uses the same PinHandle/cleanup
@@ -321,9 +307,9 @@ export function MapsGeneral() {
   // on summary), so the only triggers are mapReady + showCameras.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady || !showCameras) return
+    if (!lib || !map || !mapReady || !showCameras) return
 
-    const handles = CAMERA_LOCATIONS.map((c) => buildCameraPin(c, map))
+    const handles = CAMERA_LOCATIONS.map((c) => buildCameraPin(c, map, lib))
 
     return () => {
       handles.forEach((h) => {
@@ -332,7 +318,7 @@ export function MapsGeneral() {
         h.el.remove()
       })
     }
-  }, [mapReady, showCameras])
+  }, [mapReady, showCameras, lib])
 
   // Maplibre heatmap layer — replaces the previous CSS radial-gradient overlay.
   // Mock ~150 GeoJSON points clustered around the markers' centroid produce an
@@ -529,7 +515,7 @@ export function MapsGeneral() {
               fontSize: 12,
               fontFamily: 'Inter, system-ui, sans-serif',
               fontWeight: 600,
-              color: '#f5f5f5',
+              color: theme.content.dark,
               letterSpacing: 0.3,
               lineHeight: '14px',
               textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.6)',

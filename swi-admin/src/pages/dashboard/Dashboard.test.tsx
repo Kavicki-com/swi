@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
-import { dashboardApi, type DashboardSummary } from '@/services/mockApi'
+import { dashboardApi, type DashboardSummary } from '@/services/mockApi/dashboard'
 import { Dashboard } from './Dashboard'
 
 const FAKE_SUMMARY: DashboardSummary = {
