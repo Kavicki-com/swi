@@ -58,30 +58,37 @@ const FAKE_SUMMARY: DashboardSummary = {
       participants: [],
     },
   ],
+  // All on the same tier so the existing assertions (which render the
+  // default tab without interacting with the filter) still see all three.
+  // Tab-filtering behavior is covered separately by the inflated demo
+  // fixture in mockApi/dashboard.ts.
   wearAlerts: [
     {
       id: 'w1',
       employeeName: 'Ezequiel Almeida',
       sector: 'Setor Leste',
-      progress: 70,
-      bpm: 110,
-      pressure: '14/9',
+      progress: 88,
+      bpm: 138,
+      pressure: '16/10',
+      tier: 'alerta-fadiga',
     },
     {
       id: 'w2',
       employeeName: 'Mariana Costa',
       sector: 'Setor Leste',
-      progress: 65,
-      bpm: 104,
-      pressure: '13/8',
+      progress: 85,
+      bpm: 134,
+      pressure: '15/10',
+      tier: 'alerta-fadiga',
     },
     {
       id: 'w3',
       employeeName: 'Rafael Souza',
       sector: 'Setor Norte',
-      progress: 80,
-      bpm: 118,
-      pressure: '15/9',
+      progress: 91,
+      bpm: 142,
+      pressure: '17/11',
+      tier: 'alerta-fadiga',
     },
   ],
   weather: [

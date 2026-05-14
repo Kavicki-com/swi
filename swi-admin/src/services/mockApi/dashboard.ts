@@ -52,6 +52,12 @@ export type DashboardActivity = {
   locationLabel?: string
 }
 
+// Wear tier groups workers into the filter tabs the dashboard shows
+// (Excelentes / Desgastados / Alertas de Fadiga). Production would derive
+// this from a sliding-window aggregate of vitals + fatigue. Demo uses it
+// as a static field so each tier has predictable members.
+export type DashboardWearTier = 'excelente' | 'desgastado' | 'alerta-fadiga'
+
 export type DashboardWearAlert = {
   id: string
   employeeName: string
@@ -59,6 +65,7 @@ export type DashboardWearAlert = {
   progress: number
   bpm: number
   pressure: string
+  tier: DashboardWearTier
   avatarUri?: string
 }
 
@@ -146,6 +153,7 @@ export const dashboardApi = {
         .slice(0, take)
         .map((p, idx) => ({ uri: cycleAvatar(idx), alt: p.name }))
     const activities: DashboardActivity[] = [
+      // 4 em-curso — visible on the default "Em Andamento" tab.
       {
         id: 'act_001',
         title: 'Reparo',
@@ -182,15 +190,6 @@ export const dashboardApi = {
       },
       {
         id: 'act_004',
-        title: 'Inspeção',
-        sector: 'Setor Sul',
-        status: 'em-curso',
-        progress: 38,
-        locationLabel: 'Setor Sul',
-        participants: partsFor('Setor Sul'),
-      },
-      {
-        id: 'act_005',
         title: 'Manutenção preventiva',
         sector: 'Setor Norte',
         status: 'em-curso',
@@ -201,31 +200,41 @@ export const dashboardApi = {
         participants: partsFor('Setor Norte'),
         totalParticipants: 12,
       },
+      // 2 concluídas — populate the "Concluídas" filter tab.
       {
-        id: 'act_006',
-        title: 'Sondagem geológica',
-        sector: 'Setor Oeste',
-        status: 'em-curso',
-        progress: 56,
-        locationLabel: 'Setor Oeste',
-        participants: partsFor('Setor Oeste'),
-      },
-      {
-        id: 'act_007',
-        title: 'Auditoria de segurança',
+        id: 'act_005',
+        title: 'Inspeção semanal',
         sector: 'Setor Sul',
-        status: 'em-curso',
-        risk: 'warning',
-        progress: 71,
+        status: 'concluida',
+        progress: 100,
         locationLabel: 'Setor Sul',
         participants: partsFor('Setor Sul'),
+      },
+      {
+        id: 'act_006',
+        title: 'Auditoria de segurança',
+        sector: 'Setor Sul',
+        status: 'concluida',
+        progress: 100,
+        locationLabel: 'Setor Sul',
+        participants: partsFor('Setor Sul'),
+      },
+      // 2 a-fazer — populate the "A Fazer" filter tab.
+      {
+        id: 'act_007',
+        title: 'Sondagem geológica',
+        sector: 'Setor Oeste',
+        status: 'a-fazer',
+        progress: 0,
+        locationLabel: 'Setor Oeste',
+        participants: partsFor('Setor Oeste'),
       },
       {
         id: 'act_008',
         title: 'Treinamento NR-22',
         sector: 'Setor Leste',
-        status: 'em-curso',
-        progress: 93,
+        status: 'a-fazer',
+        progress: 0,
         locationLabel: 'Setor Leste',
         participants: partsFor('Setor Leste'),
         totalParticipants: 18,
@@ -275,25 +284,29 @@ export const dashboardApi = {
     const vitalSigns = 512
     const wearRate = 512
 
-    // Wear alerts — top 8 roster members ranked by displayed wear progress.
-    // Derived from ROSTER so the right-column list calls out the same people
-    // who appear as warning/critical pins on the map and in /monitoring/alerts.
-    // The progress / bpm / pressure shown here represent the wear-tracker
+    // Wear alerts — 8 roster members distributed across the 3 tier tabs the
+    // dashboard renders. The bpm/pressure shown represent the wear-tracker
     // aggregate, distinct from the worker's instantaneous vitals snapshot.
+    // Tier mapping is explicit (not derived from progress) so the demo
+    // remains deterministic even when the values are tuned later.
     const wearMembers: Array<{
       rosterId: string
       progress: number
       bpm: number
       pressure: string
+      tier: DashboardWearTier
     }> = [
-      { rosterId: 'emp-04', progress: 91, bpm: 138, pressure: '16/10' }, // Carlos Henrique — critical
-      { rosterId: 'emp-10', progress: 88, bpm: 142, pressure: '17/11' }, // Marcos Vinícius — critical
-      { rosterId: 'emp-02', progress: 74, bpm: 112, pressure: '14/9' }, // Ana Paula Gomes — warning
-      { rosterId: 'emp-06', progress: 68, bpm: 108, pressure: '13/9' }, // Pedro Martins Lima — warning
-      { rosterId: 'emp-08', progress: 62, bpm: 102, pressure: '13/8' }, // Rafael Oliveira — high effort
-      { rosterId: 'emp-01', progress: 58, bpm: 99, pressure: '12/8' }, // Larissa Sales — coordenadora
-      { rosterId: 'emp-09', progress: 55, bpm: 98, pressure: '12/8' }, // Juliana Costa
-      { rosterId: 'emp-12', progress: 52, bpm: 96, pressure: '12/8' }, // Karen Oliveira
+      // 2 alerta-fadiga — workers at risk (high progress, critical vitals)
+      { rosterId: 'emp-04', progress: 91, bpm: 138, pressure: '16/10', tier: 'alerta-fadiga' }, // Carlos Henrique — critical
+      { rosterId: 'emp-10', progress: 88, bpm: 142, pressure: '17/11', tier: 'alerta-fadiga' }, // Marcos Vinícius — critical
+      // 3 desgastado — under load but still operational (warning vitals)
+      { rosterId: 'emp-02', progress: 74, bpm: 112, pressure: '14/9', tier: 'desgastado' }, // Ana Paula Gomes — warning
+      { rosterId: 'emp-06', progress: 68, bpm: 108, pressure: '13/9', tier: 'desgastado' }, // Pedro Martins Lima — warning
+      { rosterId: 'emp-08', progress: 62, bpm: 102, pressure: '13/8', tier: 'desgastado' }, // Rafael Oliveira — high effort
+      // 3 excelente — low fatigue, baseline vitals (good workers)
+      { rosterId: 'emp-01', progress: 28, bpm: 92, pressure: '12/8', tier: 'excelente' }, // Larissa Sales
+      { rosterId: 'emp-09', progress: 22, bpm: 88, pressure: '12/8', tier: 'excelente' }, // Juliana Costa
+      { rosterId: 'emp-12', progress: 18, bpm: 86, pressure: '11/7', tier: 'excelente' }, // Karen Oliveira
     ]
     const wearAlerts: DashboardWearAlert[] = wearMembers.map((w, idx) => {
       const p = findRoster(w.rosterId)
@@ -304,6 +317,7 @@ export const dashboardApi = {
         progress: w.progress,
         bpm: w.bpm,
         pressure: w.pressure,
+        tier: w.tier,
         avatarUri: cycleAvatar(idx),
       }
     })

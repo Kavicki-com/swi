@@ -34,9 +34,12 @@ describe('dashboardApi.summary', () => {
       progress: expect.any(Number),
     })
     expect(Array.isArray(first.participants)).toBe(true)
-    // All activities are em-curso to match Figma's initial render with 5 cards
-    // visible under the active "Em Andamento" tab.
-    expect(data!.activities.every((a) => a.status === 'em-curso')).toBe(true)
+    // Demo expansion: activities now span all 3 status tabs so the filter
+    // chips populate (was: all 5 em-curso). At least one of each status.
+    const statuses = new Set(data!.activities.map((a) => a.status))
+    expect(statuses.has('em-curso')).toBe(true)
+    expect(statuses.has('concluida')).toBe(true)
+    expect(statuses.has('a-fazer')).toBe(true)
   })
 
   it('returns the 4-entry weather timeline with one AGORA marker', async () => {
