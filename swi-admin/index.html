@@ -40,6 +40,16 @@
         pointer-events: none;
         z-index: -1;
       }
+      /* Scroll functionality without visible scrollbar — used by lists
+       * that need overflow scrolling but should not show the native UI
+       * (e.g. exam history on /admins/:id). */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
     </style>
   </head>
   <body>
