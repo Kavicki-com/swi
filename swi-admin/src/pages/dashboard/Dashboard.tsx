@@ -17,10 +17,8 @@ import {
   Title,
   WeatherTimeline,
   useTheme,
+  type IconName,
 } from '@kavicki/swi-design-system'
-
-// DS module is shimmed to `any`; mirror IconName as a loose alias.
-type IconName = string
 import { useAuth } from '@/hooks/useAuth'
 import { dashboardApi, type DashboardSummary } from '@/services/mockApi'
 import type {
@@ -301,7 +299,7 @@ function KpiTile({
       }}
     >
       <Icon name={icon} size={24} color={theme.content.primary} />
-      <Title variant="l">{value}</Title>
+      <Title variant="title.l">{value}</Title>
       <Text numberOfLines={1} style={{ color: theme.content.dark, fontSize: 12 }}>
         {label}
       </Text>
