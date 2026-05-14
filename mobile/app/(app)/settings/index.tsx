@@ -162,10 +162,13 @@ export default function Settings() {
           borderWidth={10}
           elevation="lg"
           iconLeft={
+            /* Home icon artwork natural dims per Figma 348:10661 inner svg
+               (28.286×25.458). New home glyph has 29×26 viewBox — usar dims
+               proporcionais evita squish vertical do quadrado 30.857×30.857. */
             <Icon
               name="home"
-              width={30.857}
-              height={30.857}
+              width={28.286}
+              height={25.458}
               color={theme.surface.standard}
             />
           }
