@@ -1,6 +1,13 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { View } from 'react-native'
-import { ChatSection, HeaderUserInfo, Logo, SideMenu, useTheme, type IconName } from '@kavicki/swi-design-system'
+import {
+  ChatSection,
+  HeaderUserInfo,
+  Logo,
+  SideMenu,
+  useTheme,
+  type IconName,
+} from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import workerA from '@/assets/avatars/worker-a.png'
 import chatEzequiel from '@/assets/avatars/chat-ezequiel.png'
