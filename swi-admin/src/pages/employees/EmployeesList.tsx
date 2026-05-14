@@ -240,11 +240,15 @@ function ActionIcon({
   )
 }
 
-export function EmployeesList() {
+export function EmployeesList({
+  initialTab = 'cadastrados',
+}: {
+  initialTab?: 'cadastrados' | 'cadastrar'
+} = {}) {
   const theme = useTheme()
   const navigate = useNavigate()
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [tab, setTab] = useState('cadastrados')
+  const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 

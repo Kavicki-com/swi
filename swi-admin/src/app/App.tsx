@@ -30,6 +30,7 @@ import { AlertsRescueRoute } from '@/pages/alerts/AlertsRescueRoute'
 import { MonitoringAlerts } from '@/pages/monitoring/MonitoringAlerts'
 import { MonitoringGoodConditions } from '@/pages/monitoring/MonitoringGoodConditions'
 import { UserSettings } from '@/pages/user/UserSettings'
+import { UserProfile } from '@/pages/user/UserProfile'
 import { FidelityReview } from '@/dev/fidelity/FidelityReview'
 
 export function App() {
@@ -55,8 +56,13 @@ export function App() {
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/admins" element={<AdminsList />} />
+                <Route path="/admins/new" element={<AdminsList initialTab="cadastrar" />} />
                 <Route path="/admins/:id" element={<AdminDetails />} />
                 <Route path="/employees" element={<EmployeesList />} />
+                <Route
+                  path="/employees/new"
+                  element={<EmployeesList initialTab="cadastrar" />}
+                />
                 <Route path="/employees/:id" element={<EmployeeDetails />} />
                 {/* /monitoring/* is a nested layout: MonitoringLayout owns
                     KPIs/title/tabs/search/userlist; child views render the
@@ -77,15 +83,19 @@ export function App() {
                   element={<AlertsRescueRoute />}
                 />
                 <Route path="/user/settings" element={<UserSettings />} />
+                <Route path="/user/profile" element={<UserProfile />} />
                 {ADMIN_ROUTES.filter(
                   (r) =>
                     !PUBLIC_PATHS.has(r.path) &&
                     r.path !== '/' &&
                     r.path !== '/admins' &&
+                    r.path !== '/admins/new' &&
                     r.path !== '/admins/:id' &&
                     r.path !== '/maps/general' &&
                     r.path !== '/user/settings' &&
+                    r.path !== '/user/profile' &&
                     r.path !== '/employees' &&
+                    r.path !== '/employees/new' &&
                     r.path !== '/employees/:id' &&
                     r.path !== '/chat' &&
                     r.path !== '/monitoring/alerts' &&

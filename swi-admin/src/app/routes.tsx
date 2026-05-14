@@ -15,11 +15,10 @@ export const ADMIN_ROUTES = [
   { path: '/employees', label: 'employees' },
   { path: '/employees/new', label: 'employee-registration' },
   { path: '/employees/:id', label: 'employee-details' },
-  // maps
+  // maps — cameras/heat/meteorologic are toggle states inside /maps/general,
+  // not separate routes. Heatmap drives both the "Produtividade" thermal blob
+  // and the "Zonas de alerta" overlay (meteorologic alerts mode, Figma 165:22035).
   { path: '/maps/general', label: 'map-view-general' },
-  { path: '/maps/cameras', label: 'map-view-cameras' },
-  { path: '/maps/heat', label: 'map-view-heat' },
-  { path: '/maps/meteorologic', label: 'map-metereologic-alerts' },
   // alerts (heatmap and meteorologic are toggle states of /alerts, not routes)
   { path: '/alerts', label: 'alerts' },
   { path: '/alerts/:employeeId', label: 'alerts-with-rescue-card' },
@@ -37,9 +36,8 @@ export const ADMIN_ROUTES = [
   // user
   { path: '/user/settings', label: 'user-settings' },
   { path: '/user/profile', label: 'user-profile' },
-  // modals (rendered as routes for now; promoted to overlays in S5)
-  { path: '/modals/support', label: 'support-form-modal' },
-  { path: '/modals/privacy', label: 'privacy-policy-modal' },
+  // modals — support + privacy are overlays invoked from Login / UserSettings.
+  // Responsables stays as a route until S5 in-page overlay work.
   { path: '/modals/responsables', label: 'responsables-modal' },
 ] as const
 

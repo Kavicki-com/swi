@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { isEmail, requiredText } from '@/lib/validators'
 import { FormError } from '@/components/FormError'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
+import { SupportModal } from '@/components/SupportModal'
 
 type LocationState = { from?: string } | null
 
@@ -18,6 +19,7 @@ export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showSupport, setShowSupport] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -118,9 +120,10 @@ export function Login() {
           label="Suporte"
           fullWidth
           accessibilityLabel="Suporte"
-          onPress={() => navigate('/modals/support')}
+          onPress={() => setShowSupport(true)}
         />
       </View>
+      {showSupport ? <SupportModal onClose={() => setShowSupport(false)} /> : null}
     </View>
   )
 }
