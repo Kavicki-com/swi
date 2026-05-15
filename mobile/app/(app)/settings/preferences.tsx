@@ -1,11 +1,129 @@
-import { Surface, Title, Text } from '@kavicki/swi-design-system';
+import { useState } from 'react';
+import { Image as RNImage, ScrollView, Text as RNText, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  Button,
+  Icon,
+  Title,
+  Toggle,
+  TopBar,
+  useTheme,
+} from '@kavicki/swi-design-system';
 
+// Figma 357:12302 — settings sub-screen "Preferências". 4 toggle rows
+// (Notificações / Localização / Acessar pastas e arquivos / Ligações
+// telefônicas) sob section title "Permissões" + Home FAB. Demo phase:
+// useState efêmero, sem persistência.
 export default function SettingsPreferences() {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const [notifications, setNotifications] = useState(true);
+  const [location, setLocation] = useState(false);
+  const [filesAccess, setFilesAccess] = useState(true);
+  const [phoneCalls, setPhoneCalls] = useState(true);
+
   return (
-    <Surface variant="standard" padding="m" style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Title variant="title.m">settings-preferences</Title>
-      <Text variant="body.s">Figma 357:12302</Text>
-      <Text variant="caption.s">/settings/preferences</Text>
-    </Surface>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <View
+        pointerEvents="none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      >
+        <RNImage
+          source={require('../../../assets/settings-preferences-bg.png')}
+          resizeMode="cover"
+          accessible={false}
+          style={{ width: '100%', height: '100%' }}
+        />
+      </View>
+
+      <ScrollView
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+        contentContainerStyle={{
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom + 120,
+          alignItems: 'center',
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <TopBar title="Preferências" onBack={() => router.back()} />
+
+        <View
+          style={{
+            width: 328,
+            gap: theme.gap.m,
+            marginTop: theme.padding.xxl,
+            alignItems: 'stretch',
+          }}
+        >
+          <Title variant="title.xs" color={theme.content.primary}>
+            Permissões
+          </Title>
+
+          {/* Toggle + label composto (Figma 357:12357 etc): label
+              sempre content.dark Inter Regular 14, independente do
+              state. Toggle DS sem `rightLabel` pra evitar o coloring
+              active/medium que vincula label ao estado. */}
+          {(
+            [
+              { key: 'notifications', value: notifications, set: setNotifications, label: 'Notificações' },
+              { key: 'location', value: location, set: setLocation, label: 'Localização' },
+              { key: 'filesAccess', value: filesAccess, set: setFilesAccess, label: 'Acessar pastas e arquivos' },
+              { key: 'phoneCalls', value: phoneCalls, set: setPhoneCalls, label: 'Ligações telefônicas' },
+            ] as const
+          ).map(({ key, value, set, label }) => (
+            <View
+              key={key}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}
+            >
+              <Toggle value={value} onChange={set} accessibilityLabel={label} />
+              <RNText
+                style={{
+                  fontFamily: theme.fontFamily.body,
+                  fontWeight: theme.fontWeight.regular,
+                  fontSize: theme.fontSize.m,
+                  color: theme.content.dark,
+                }}
+              >
+                {label}
+              </RNText>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          bottom: insets.bottom + theme.gap.l,
+          left: 0,
+          right: 0,
+          alignItems: 'center',
+        }}
+      >
+        <Button
+          variant="contained"
+          shape="pill"
+          size="xlarge"
+          backgroundColor={theme.content.dark}
+          borderColor={theme.content.disable}
+          borderWidth={10}
+          elevation="lg"
+          iconLeft={
+            <Icon
+              name="home"
+              width={28.286}
+              height={25.458}
+              color={theme.surface.standard}
+            />
+          }
+          accessibilityLabel="Voltar para a dashboard"
+          onPress={() => router.push('/(app)/dashboard')}
+        />
+      </View>
+    </View>
   );
 }
