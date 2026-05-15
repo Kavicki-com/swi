@@ -25,6 +25,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { reportsApi, type Report, type ReportActivity } from '@/services/mockApi/reports'
+import { useDemoToast } from '@/lib/demoToast'
 import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'
 import workerC from '@/assets/avatars/worker-c.png'
@@ -129,7 +130,13 @@ function ActivityAvatars({
 // One activity row — Figma "Atividades" list. Layout per Figma reference:
 // wrench icon | vertical divider | title + sector + progress bar | avatar
 // group (overlapping) | location_on icon button (right).
-function ActivityRow({ activity }: { activity: ReportActivity }) {
+function ActivityRow({
+  activity,
+  onLocation,
+}: {
+  activity: ReportActivity
+  onLocation: () => void
+}) {
   const theme = useTheme()
   const barColor =
     activity.tone === 'success'
@@ -192,6 +199,7 @@ function ActivityRow({ activity }: { activity: ReportActivity }) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Localização: ${activity.title}`}
+        onPress={onLocation}
         style={{
           paddingHorizontal: theme.padding.s,
           paddingVertical: theme.padding.s,
@@ -206,6 +214,7 @@ function ActivityRow({ activity }: { activity: ReportActivity }) {
 export function ReportDetails() {
   const theme = useTheme()
   const navigate = useNavigate()
+  const { show: showToast } = useDemoToast()
   const { id } = useParams<{ id: string }>()
   const [report, setReport] = useState<Report | null>(null)
   const [search, setSearch] = useState('')
@@ -273,12 +282,14 @@ export function ReportDetails() {
           variant="outline"
           iconLeft={<Icon name="chat_bubble" size={20} color={theme.content.primaryLight} />}
           accessibilityLabel="Adicionar comentário"
+          onPress={() => showToast('Foque no campo Adicionar comentário abaixo')}
         />
         <Button
           label="Revisar relatório"
           variant="outline"
           iconLeft={<Icon name="edit" size={20} color={theme.content.primaryLight} />}
           accessibilityLabel="Revisar relatório"
+          onPress={() => showToast('Modo revisão iniciado', 'Relatório aberto para edição')}
         />
       </View>
 
@@ -430,7 +441,11 @@ export function ReportDetails() {
         </Text>
         <View style={{ gap: theme.gap.s }}>
           {(report.activities ?? []).map((a) => (
-            <ActivityRow key={a.id} activity={a} />
+            <ActivityRow
+              key={a.id}
+              activity={a}
+              onLocation={() => navigate('/maps/general')}
+            />
           ))}
         </View>
       </View>
