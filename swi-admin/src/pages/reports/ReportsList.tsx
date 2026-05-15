@@ -45,8 +45,10 @@ const PERIOD_OPTIONS = [
 const DEMO_TODAY = new Date(2026, 4, 1)
 
 // Parse BR-format dd/mm/yyyy creation dates from the report seed.
+// Defaults guard against malformed strings so the function stays
+// total under strict TS (noUncheckedIndexedAccess).
 function parseBRDate(value: string): Date {
-  const [day, month, year] = value.split('/').map(Number)
+  const [day = 1, month = 1, year = 1970] = value.split('/').map(Number)
   return new Date(year, month - 1, day)
 }
 

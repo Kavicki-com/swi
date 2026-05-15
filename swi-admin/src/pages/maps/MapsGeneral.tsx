@@ -326,7 +326,9 @@ export function MapsGeneral() {
     if (!lib || !map || !mapReady || !showCameras) return
 
     const handles = CAMERA_LOCATIONS.map((c) =>
-      buildCameraPin(c, map, lib, () => showToast('Câmera selecionada', `Stream ao vivo de ${c.name}`)),
+      buildCameraPin(c, map, lib, () =>
+        showToast('Câmera selecionada', `Stream ao vivo de ${c.name}`),
+      ),
     )
 
     return () => {
