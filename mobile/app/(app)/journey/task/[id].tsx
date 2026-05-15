@@ -57,8 +57,11 @@ export default function TaskDetails() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, state } = useLocalSearchParams<{ id: string; state?: 'ongoing' }>();
   const task = (id && TASKS[id]) || FALLBACK;
+  const isOngoing = state === 'ongoing';
+  // Figma: 1ª fase progress ~2% (idle); 2ª fase ~30% (em andamento).
+  const progress = isOngoing ? 0.3 : 0.02;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -166,7 +169,7 @@ export default function TaskDetails() {
           <Title variant="title.xs" color={theme.content.dark}>
             Progresso da tarefa
           </Title>
-          <ProgressBar value={0.02} color={theme.content.primary} />
+          <ProgressBar value={progress} color={theme.content.primary} />
         </View>
 
         {/* Objetivo principal */}
@@ -248,15 +251,50 @@ export default function TaskDetails() {
           </RNText>
         </View>
 
-        <Button
-          variant="contained"
-          backgroundColor={theme.surface.primary}
-          labelColor={theme.content.light}
-          label="Iniciar Jornada e começar tarefa"
-          elevation="lg"
-          accessibilityLabel="Iniciar Jornada e começar tarefa"
-          onPress={() => router.push('/(app)/journey/ongoing')}
-        />
+        {/* CTA group — varia por state (Figma 364:17126 idle vs 364:17434 ongoing) */}
+        {isOngoing ? (
+          <View style={{ gap: theme.gap.m }}>
+            <Button
+              variant="contained"
+              backgroundColor={theme.surface.primary}
+              labelColor={theme.content.light}
+              label="Finalizar tarefa"
+              elevation="lg"
+              accessibilityLabel="Finalizar tarefa"
+              onPress={() => router.push('/(app)/journey')}
+            />
+            <Button
+              variant="outline"
+              borderColor={theme.surface.accent}
+              labelColor={theme.surface.accent}
+              label="Fazer pausa"
+              accessibilityLabel="Fazer pausa"
+              onPress={() => router.push('/(app)/journey/pause')}
+            />
+            <Button
+              variant="ghost"
+              labelColor={theme.content.error}
+              label="Cancelar tarefa"
+              accessibilityLabel="Cancelar tarefa"
+              onPress={() => router.push('/(app)/journey')}
+            />
+          </View>
+        ) : (
+          <Button
+            variant="contained"
+            backgroundColor={theme.surface.primary}
+            labelColor={theme.content.light}
+            label="Iniciar Jornada e começar tarefa"
+            elevation="lg"
+            accessibilityLabel="Iniciar Jornada e começar tarefa"
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/journey/task/[id]',
+                params: { id: id ?? 'inspecao', state: 'ongoing' },
+              })
+            }
+          />
+        )}
       </ScrollView>
     </View>
   );
