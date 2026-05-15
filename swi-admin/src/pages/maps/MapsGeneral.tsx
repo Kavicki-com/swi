@@ -20,6 +20,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useDemoToast } from '@/lib/demoToast'
 import { withBadges } from '@/app/nav'
 import {
   dashboardApi,
@@ -128,9 +129,15 @@ const CAMERA_LOCATIONS: ReadonlyArray<CameraLocation> = [
   { id: 'cam-12', lng: -46.63, lat: -23.564, name: 'Câmera Sul Periferia' },
 ]
 
-function buildCameraPin(c: CameraLocation, map: maplibregl.Map, lib: typeof maplibregl): PinHandle {
+function buildCameraPin(
+  c: CameraLocation,
+  map: maplibregl.Map,
+  lib: typeof maplibregl,
+  onClick: () => void,
+): PinHandle {
   const el = document.createElement('div')
   el.style.cursor = 'pointer'
+  el.addEventListener('click', onClick)
   const root = createRoot(el)
   root.render(
     <SwiThemeProvider>
@@ -147,6 +154,7 @@ export function MapsGeneral() {
   const navigate = useNavigate()
   const location = useLocation()
   const lib = useMapLibre()
+  const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
@@ -317,7 +325,9 @@ export function MapsGeneral() {
     const map = mapRef.current
     if (!lib || !map || !mapReady || !showCameras) return
 
-    const handles = CAMERA_LOCATIONS.map((c) => buildCameraPin(c, map, lib))
+    const handles = CAMERA_LOCATIONS.map((c) =>
+      buildCameraPin(c, map, lib, () => showToast('Câmera selecionada', `Stream ao vivo de ${c.name}`)),
+    )
 
     return () => {
       handles.forEach((h) => {
@@ -326,7 +336,7 @@ export function MapsGeneral() {
         h.el.remove()
       })
     }
-  }, [mapReady, showCameras, lib])
+  }, [mapReady, showCameras, lib, showToast])
 
   // Maplibre heatmap layer — replaces the previous CSS radial-gradient overlay.
   // Mock ~150 GeoJSON points clustered around the markers' centroid produce an
