@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -32,6 +32,10 @@ const renderTree = () =>
           <Routes>
             <Route element={<AppLayout />}>
               <Route path="/page" element={<div data-testid="page-content">hello</div>} />
+              <Route
+                path="/user/profile"
+                element={<div data-testid="profile-content">profile</div>}
+              />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -81,6 +85,17 @@ describe('AppLayout', () => {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
     expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
+  })
+
+  it('navigates to /user/profile when the header user-info widget is pressed', async () => {
+    renderTree()
+    await waitFor(() => {
+      expect(screen.getByTestId('app-header-user-info-pressable')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByTestId('app-header-user-info-pressable'))
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-content')).toBeInTheDocument()
+    })
   })
 
   it('renders the ChatSection with mocked contacts in the sidebar', async () => {

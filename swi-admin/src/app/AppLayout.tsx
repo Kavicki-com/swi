@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { ChatSection, HeaderUserInfo, Logo, SideMenu, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV_ITEMS } from '@/app/nav'
@@ -148,16 +148,23 @@ export function AppLayout() {
             paddingVertical: theme.padding.m,
           }}
         >
-          <HeaderUserInfo
-            bpm={user?.bpm ?? 99}
-            pressure={user?.pressure ?? '12/8'}
-            progress={50}
-            avatarUri={user?.avatarUri ?? workerA}
-            heartIconName="heart_filled"
-            pressureIconName="vitals_pulse"
-            borderColor={theme.background}
-            testID="app-header-user-info"
-          />
+          <Pressable
+            onPress={() => navigate('/user/profile')}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir perfil do usuário"
+            testID="app-header-user-info-pressable"
+          >
+            <HeaderUserInfo
+              bpm={user?.bpm ?? 99}
+              pressure={user?.pressure ?? '12/8'}
+              progress={50}
+              avatarUri={user?.avatarUri ?? workerA}
+              heartIconName="heart_filled"
+              pressureIconName="vitals_pulse"
+              borderColor={theme.background}
+              testID="app-header-user-info"
+            />
+          </Pressable>
         </View>
         <View style={{ flex: 1, padding: 24 }}>
           <Outlet />
