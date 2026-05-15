@@ -20,6 +20,7 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import {
   dashboardApi,
@@ -602,9 +603,69 @@ function ActivitiesSection({ activities }: { activities: DashboardActivity[] }) 
   )
 }
 
+function HealthDonuts({
+  summary,
+  navigate,
+  theme,
+}: {
+  summary: DashboardSummary
+  navigate: ReturnType<typeof useNavigate>
+  theme: ReturnType<typeof useTheme>
+}) {
+  return (
+    <View
+      testID="kpi-row-health"
+      style={{
+        flex: 1,
+        flexDirection: 'row',
+        gap: theme.gap.m,
+        backgroundColor: theme.surface.standard,
+        padding: theme.padding.m,
+        borderRadius: theme.border.radius.l,
+        justifyContent: 'space-around',
+        minWidth: 0,
+      }}
+    >
+      <DonutChart
+        title="Sinais vitais"
+        value={summary.kpis.vitalSigns}
+        label="Funcionários"
+        caption="Excelentes"
+        progress={85}
+        icon="heartbeat_filled"
+        onLocationPress={() => navigate('/maps/general')}
+        testID="kpi-vital-signs"
+      />
+      <DonutChart
+        title="Taxa de desgaste"
+        value={summary.kpis.wearRate}
+        label="Funcionários"
+        caption="Desgaste baixo"
+        progress={70}
+        progressGradient={WEAR_GRADIENT}
+        icon="heartbeat_filled"
+        onLocationPress={() => navigate('/maps/general')}
+        testID="kpi-wear-rate"
+      />
+      <DonutChart
+        title="Alertas urgentes"
+        value={summary.kpis.urgentAlerts}
+        label="Funcionários"
+        caption="Necessária mobilização"
+        progress={60}
+        progressGradient={URGENT_GRADIENT}
+        icon="heartbeat_filled"
+        onLocationPress={() => navigate('/maps/general')}
+        testID="kpi-urgent-alerts"
+      />
+    </View>
+  )
+}
+
 function DashboardContent({ summary }: { summary: DashboardSummary }) {
   const theme = useTheme()
   const navigate = useNavigate()
+  const breakpoint = useBreakpoint()
 
   const weatherEvents: WeatherTimelineEvent[] = summary.weather.map((w, idx) => ({
     id: `weather-${idx}`,
@@ -614,6 +675,111 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     isNow: w.isNow,
   }))
 
+  const weatherStrip = (
+    <View
+      dataSet={{ fidelity: 'weather' }}
+      style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.m }}
+    >
+      <Title>Previsão do tempo</Title>
+      <WeatherTimeline
+        events={weatherEvents}
+        // Figma flex: 280, 280, 280, 528 → ratios 1, 1, 1, 1.886.
+        // Colors per Figma: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
+        intensitySegments={[
+          { id: 'seg-0', flex: 1, color: '#3899bf' },
+          { id: 'seg-1', flex: 1, color: theme.surface.warning },
+          { id: 'seg-2', flex: 1, color: '#3899bf' },
+          { id: 'seg-3', flex: 1.886, color: theme.surface.success },
+        ]}
+        // Figma frame 21:1501 — scrubber: 148px thumb on 1037px track ≈ 14%.
+        scrollbar={{ thumbPercent: 14, thumbStartPercent: 0 }}
+        nowLabel={WEATHER_NOW_LABEL}
+        fullWidth
+        testID="weather-timeline"
+      />
+    </View>
+  )
+
+  // Tablet (< 1024): everything stacks into one column. The KPI 2x2 and the
+  // donut row keep their internal layouts (already responsive); we just
+  // stack their containers on top of each other, and the two-col row
+  // becomes two stacked sections.
+  if (breakpoint === 'tablet') {
+    return (
+      <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
+        <MapBanner markers={summary.mapMarkers} />
+        <View
+          testID="dashboard-top-row-tablet"
+          dataSet={{ fidelity: 'top-row-tablet' }}
+          style={{ flexDirection: 'column', gap: theme.gap.m }}
+        >
+          <FuncionariosKpi summary={summary} />
+          <HealthDonuts summary={summary} navigate={navigate} theme={theme} />
+        </View>
+        <View
+          testID="dashboard-two-col-row"
+          dataSet={{ fidelity: 'two-col-tablet' }}
+          style={{ flexDirection: 'column', gap: theme.gap.l }}
+        >
+          <ActivitiesSection activities={summary.activities} />
+          <WearAlertsSection alerts={summary.wearAlerts} />
+        </View>
+        {weatherStrip}
+      </View>
+    )
+  }
+
+  // Wide (>= 1600): top row puts Map | Donuts | KPIs side-by-side in one
+  // horizontal flow per the Figma 1920 frame. Two-column row below.
+  if (breakpoint === 'wide') {
+    return (
+      <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
+        <View
+          testID="dashboard-top-row-wide"
+          dataSet={{ fidelity: 'top-row-wide' }}
+          style={{
+            flexDirection: 'row',
+            gap: theme.gap.m,
+            alignItems: 'stretch',
+            flexWrap: 'wrap',
+          }}
+        >
+          <View style={{ flexBasis: 360, flexGrow: 1.4, flexShrink: 1, minWidth: 320 }}>
+            <MapBanner markers={summary.mapMarkers} />
+          </View>
+          <View
+            style={{
+              flexBasis: 420,
+              flexGrow: 1.2,
+              flexShrink: 1,
+              minWidth: 360,
+              flexDirection: 'row',
+            }}
+          >
+            <HealthDonuts summary={summary} navigate={navigate} theme={theme} />
+          </View>
+          <View style={{ flexBasis: 320, flexGrow: 1, flexShrink: 1, minWidth: 280 }}>
+            <FuncionariosKpi summary={summary} />
+          </View>
+        </View>
+        <View
+          testID="dashboard-two-col-row"
+          dataSet={{ fidelity: 'two-col-wide' }}
+          style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'flex-start' }}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <ActivitiesSection activities={summary.activities} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <WearAlertsSection alerts={summary.wearAlerts} />
+          </View>
+        </View>
+        {weatherStrip}
+      </View>
+    )
+  }
+
+  // Desktop (1024-1599): existing layout, untouched.
   return (
     <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
       <MapBanner markers={summary.mapMarkers} />
@@ -630,51 +796,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         }}
       >
         <FuncionariosKpi summary={summary} />
-        <View
-          testID="kpi-row-health"
-          style={{
-            flex: 1,
-            flexDirection: 'row',
-            gap: theme.gap.m,
-            backgroundColor: theme.surface.standard,
-            padding: theme.padding.m,
-            borderRadius: theme.border.radius.l,
-            justifyContent: 'space-around',
-          }}
-        >
-          <DonutChart
-            title="Sinais vitais"
-            value={summary.kpis.vitalSigns}
-            label="Funcionários"
-            caption="Excelentes"
-            progress={85}
-            icon="heartbeat_filled"
-            onLocationPress={() => navigate('/maps/general')}
-            testID="kpi-vital-signs"
-          />
-          <DonutChart
-            title="Taxa de desgaste"
-            value={summary.kpis.wearRate}
-            label="Funcionários"
-            caption="Desgaste baixo"
-            progress={70}
-            progressGradient={WEAR_GRADIENT}
-            icon="heartbeat_filled"
-            onLocationPress={() => navigate('/maps/general')}
-            testID="kpi-wear-rate"
-          />
-          <DonutChart
-            title="Alertas urgentes"
-            value={summary.kpis.urgentAlerts}
-            label="Funcionários"
-            caption="Necessária mobilização"
-            progress={60}
-            progressGradient={URGENT_GRADIENT}
-            icon="heartbeat_filled"
-            onLocationPress={() => navigate('/maps/general')}
-            testID="kpi-urgent-alerts"
-          />
-        </View>
+        <HealthDonuts summary={summary} navigate={navigate} theme={theme} />
       </View>
 
       {/* Two-column row: Atividades em andamento (left) + Alertas de Desgaste (right) */}
@@ -690,28 +812,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         </View>
       </View>
 
-      <View
-        dataSet={{ fidelity: 'weather' }}
-        style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.m }}
-      >
-        <Title>Previsão do tempo</Title>
-        <WeatherTimeline
-          events={weatherEvents}
-          // Figma flex: 280, 280, 280, 528 → ratios 1, 1, 1, 1.886.
-          // Colors per Figma: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
-          intensitySegments={[
-            { id: 'seg-0', flex: 1, color: '#3899bf' },
-            { id: 'seg-1', flex: 1, color: theme.surface.warning },
-            { id: 'seg-2', flex: 1, color: '#3899bf' },
-            { id: 'seg-3', flex: 1.886, color: theme.surface.success },
-          ]}
-          // Figma frame 21:1501 — scrubber: 148px thumb on 1037px track ≈ 14%.
-          scrollbar={{ thumbPercent: 14, thumbStartPercent: 0 }}
-          nowLabel={WEATHER_NOW_LABEL}
-          fullWidth
-          testID="weather-timeline"
-        />
-      </View>
+      {weatherStrip}
     </View>
   )
 }
