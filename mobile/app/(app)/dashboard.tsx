@@ -358,7 +358,7 @@ export default function Dashboard() {
               />
             }
             accessibilityLabel="Ajuda urgente"
-            onPress={() => {}}
+            onPress={() => router.push('/(app)/alert-instructions')}
           />
         </View>
       </View>
