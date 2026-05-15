@@ -322,6 +322,7 @@ export default function Dashboard() {
               icon="reports_filled"
               badge="4"
               accessibilityLabel="Relatórios — 4 não lidos"
+              onPress={() => router.push('/(app)/reports')}
               theme={theme}
             />
             <BadgedButton
@@ -433,11 +434,13 @@ function BadgedButton({
   icon,
   badge,
   accessibilityLabel,
+  onPress,
   theme,
 }: {
   icon: IconName;
   badge?: string;
   accessibilityLabel: string;
+  onPress?: () => void;
   theme: ReturnType<typeof useTheme>;
 }) {
   // 56×56 wrapper per Figma 304:2683 / 304:2725. Badge sits at top-right of
@@ -453,7 +456,7 @@ function BadgedButton({
         borderWidth="s"
         iconLeft={<Icon name={icon} size={24} color={theme.content.dark} />}
         accessibilityLabel={accessibilityLabel}
-        onPress={() => {}}
+        onPress={onPress ?? (() => {})}
       />
       {badge ? (
         <View
