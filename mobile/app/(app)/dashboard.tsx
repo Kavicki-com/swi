@@ -329,6 +329,7 @@ export default function Dashboard() {
               icon="notifications"
               badge="4"
               accessibilityLabel="Notificações — 4 não lidas"
+              onPress={() => router.push('/(app)/notifications')}
               theme={theme}
             />
           </View>
