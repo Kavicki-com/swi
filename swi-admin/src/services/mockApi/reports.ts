@@ -84,7 +84,7 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     authorName: 'Ana Clara Mendonça',
     authorAvatarUri: workerC,
     creationDate: '02/04/2026',
-    sector: 'Setor Nordeste',
+    sector: 'Setor Sul',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
   },
   {
@@ -120,7 +120,7 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     authorName: 'Ana Clara Mendonça',
     authorAvatarUri: workerC,
     creationDate: '18/03/2026',
-    sector: 'Setor Nordeste',
+    sector: 'Setor Centro',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
   },
   {
@@ -180,7 +180,7 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     authorName: 'Ana Clara Mendonça',
     authorAvatarUri: workerB,
     creationDate: '15/02/2026',
-    sector: 'Setor Nordeste',
+    sector: 'Setor Sul',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
   },
   {

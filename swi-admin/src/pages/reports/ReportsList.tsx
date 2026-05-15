@@ -20,6 +20,7 @@ const STATUS_OPTIONS = [
 ]
 
 const SECTOR_OPTIONS = [
+  { label: 'Todos os setores', value: 'all' },
   { label: 'Setor Nordeste', value: 'nordeste' },
   { label: 'Setor Sul', value: 'sul' },
   { label: 'Setor Centro', value: 'centro' },
@@ -38,13 +39,36 @@ const PERIOD_OPTIONS = [
   { label: 'de 11/07/2025 até 25/04/2026', value: 'custom' },
 ]
 
+// Demo anchor: today is conceptually 2026-05-01 for the filter math, so the
+// 30/90-day windows actually contain rows from the seed (newest = 12/04/2026).
+// Production replaces this with new Date() against a live API.
+const DEMO_TODAY = new Date(2026, 4, 1)
+
+// Parse BR-format dd/mm/yyyy creation dates from the report seed.
+function parseBRDate(value: string): Date {
+  const [day, month, year] = value.split('/').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+const SECTOR_MATCHERS: Record<string, string> = {
+  nordeste: 'Nordeste',
+  sul: 'Sul',
+  centro: 'Centro',
+}
+
+const AUTHOR_MATCHERS: Record<string, string> = {
+  ana: 'Ana',
+  mariana: 'Mariana',
+  lucas: 'Lucas',
+}
+
 export function ReportsList() {
   const theme = useTheme()
   const navigate = useNavigate()
   const [reports, setReports] = useState<ReadonlyArray<Report>>([])
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
-  const [sector, setSector] = useState('nordeste')
+  const [sector, setSector] = useState('all')
   const [author, setAuthor] = useState('all')
   const [period, setPeriod] = useState('custom')
 
@@ -63,9 +87,22 @@ export function ReportsList() {
       reports.filter((r) => {
         if (search.trim() && !r.title.toLowerCase().includes(search.toLowerCase())) return false
         if (status !== 'all' && r.status !== status) return false
+        if (sector !== 'all') {
+          const needle = SECTOR_MATCHERS[sector]
+          if (needle && !r.sector.includes(needle)) return false
+        }
+        if (author !== 'all') {
+          const needle = AUTHOR_MATCHERS[author]
+          if (needle && !r.authorName.includes(needle)) return false
+        }
+        if (period !== 'custom') {
+          const days = period === '30d' ? 30 : 90
+          const cutoff = new Date(DEMO_TODAY.getTime() - days * 86_400_000)
+          if (parseBRDate(r.creationDate) < cutoff) return false
+        }
         return true
       }),
-    [reports, search, status],
+    [reports, search, status, sector, author, period],
   )
 
   return (
