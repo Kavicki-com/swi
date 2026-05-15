@@ -187,7 +187,7 @@ export default function Dashboard() {
               />
             }
             accessibilityLabel="Localização"
-            onPress={() => {}}
+            onPress={() => router.push('/(app)/map')}
           />
         </View>
 
