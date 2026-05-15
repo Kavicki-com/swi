@@ -37,8 +37,12 @@ export function AlertsRescueRouteSelection() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return q ? candidates.filter((c) => c.name.toLowerCase().includes(q)) : candidates
-  }, [candidates, search])
+    return candidates.filter((c) => {
+      if (q && !c.name.toLowerCase().includes(q)) return false
+      if (filter !== 'all' && c.healthStatus !== filter) return false
+      return true
+    })
+  }, [candidates, search, filter])
 
   return (
     <View testID="alerts-rescue-route-selection" style={{ gap: theme.gap.m, flex: 1 }}>
