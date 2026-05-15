@@ -28,15 +28,25 @@ import {
   type MonitoringAlertDetail,
   type MonitoringUserAlert,
 } from '@/services/mockApi/monitoring'
+import { useDemoToast } from '@/lib/demoToast'
 
 // --- Shared row helpers ---
 
-function ActionIcon({ icon, label }: { icon: IconName; label: string }) {
+function ActionIcon({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: IconName
+  label: string
+  onPress: () => void
+}) {
   const theme = useTheme()
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      onPress={onPress}
       style={{
         backgroundColor: theme.surface.high,
         borderRadius: theme.border.radius.m,
@@ -87,10 +97,22 @@ function AlertUserCard({
   user,
   expanded,
   onToggle,
+  onDelete,
+  onChat,
+  onLocation,
+  onViewExams,
+  onCall,
+  onPause,
 }: {
   user: MonitoringUserAlert
   expanded: boolean
   onToggle: () => void
+  onDelete: () => void
+  onChat: () => void
+  onLocation: () => void
+  onViewExams: () => void
+  onCall: () => void
+  onPause: () => void
 }) {
   const theme = useTheme()
   const hasAlerts = user.alerts.length > 0
@@ -144,9 +166,9 @@ function AlertUserCard({
         />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-        <ActionIcon icon="delete_icon" label={`Remover ${user.name}`} />
-        <ActionIcon icon="chat_bubble" label={`Chat com ${user.name}`} />
-        <ActionIcon icon="location_on" label={`Localização de ${user.name}`} />
+        <ActionIcon icon="delete_icon" label={`Remover ${user.name}`} onPress={onDelete} />
+        <ActionIcon icon="chat_bubble" label={`Chat com ${user.name}`} onPress={onChat} />
+        <ActionIcon icon="location_on" label={`Localização de ${user.name}`} onPress={onLocation} />
       </View>
       <Pressable
         accessibilityRole="button"
@@ -189,12 +211,14 @@ function AlertUserCard({
                 variant="outline"
                 fullWidth
                 accessibilityLabel="Ver histórico de exames clínicos"
+                onPress={onViewExams}
               />
               <Button
                 label="Ligar para o funcionário"
                 variant="outline"
                 fullWidth
                 accessibilityLabel="Ligar para o funcionário"
+                onPress={onCall}
               />
               <Button
                 label="Enviar alerta de pausa"
@@ -202,6 +226,7 @@ function AlertUserCard({
                 backgroundColor={theme.surface.accent}
                 fullWidth
                 accessibilityLabel="Enviar alerta de pausa"
+                onPress={onPause}
               />
             </View>
           </View>
@@ -236,11 +261,14 @@ export function MonitoringLayout() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  const { show: showToast } = useDemoToast()
   const [kpis, setKpis] = useState<ReadonlyArray<MonitoringKpi>>([])
   const [users, setUsers] = useState<ReadonlyArray<MonitoringUserAlert>>([])
   const [search, setSearch] = useState('')
   // Default expanded card only on /monitoring/alerts (Figma 69:14774).
-  const initialExpanded = location.pathname === '/monitoring/alerts' ? 'mon-01' : null
+  // emp-04 (Carlos Henrique Silva) is the first critical worker in the
+  // canonical roster so the demo lands with the full alert detail visible.
+  const initialExpanded = location.pathname === '/monitoring/alerts' ? 'emp-04' : null
   const [expandedId, setExpandedId] = useState<string | null>(initialExpanded)
 
   // Fetch once for the layout's lifetime. Tab switches don't re-fire these.
@@ -324,7 +352,12 @@ export function MonitoringLayout() {
               </Text>
             </View>
           </View>
-          <Button label="Ver Todos" variant="contained" accessibilityLabel="Ver todos os alertas" />
+          <Button
+            label="Ver Todos"
+            variant="contained"
+            accessibilityLabel="Ver todos os alertas"
+            onPress={() => showToast('Lista completa de alertas')}
+          />
         </View>
 
         <SearchInput
@@ -341,6 +374,16 @@ export function MonitoringLayout() {
               user={u}
               expanded={expandedId === u.id}
               onToggle={() => setExpandedId((prev) => (prev === u.id ? null : u.id))}
+              onDelete={() =>
+                showToast('Funcionário removido', `${u.name} foi removido do monitoramento`)
+              }
+              onChat={() => navigate('/chat')}
+              onLocation={() => navigate('/maps/general')}
+              onViewExams={() => navigate(`/employees/${u.id}`)}
+              onCall={() => showToast('Chamada iniciada', `Ligando para ${u.name}`)}
+              onPause={() =>
+                showToast('Alerta de pausa enviado', `${u.name} foi notificado para parar`)
+              }
             />
           ))}
         </View>
