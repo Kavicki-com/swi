@@ -9,6 +9,11 @@ import rescueAvatar2 from '@/assets/avatars/rescue/rescue-2.png'
 import rescueAvatar3 from '@/assets/avatars/rescue/rescue-3.png'
 import rescueAvatar4 from '@/assets/avatars/rescue/rescue-4.png'
 
+/** Health bucket used by the chip filter on /alerts/:id/rescue
+ * (Figma 101:7484 — "Sem incidentes" / "Risco de incidente" / "Urgência médica").
+ * Values mirror the chip values to keep filter mapping trivial. */
+export type RescueCandidateStatus = 'good' | 'alert' | 'low'
+
 export type RescueCandidate = {
   id: string
   name: string
@@ -19,6 +24,7 @@ export type RescueCandidate = {
   etaMinutes: number
   /** Highlight as "Melhor opção de ajuda" — only one candidate per list. */
   isBestOption: boolean
+  healthStatus: RescueCandidateStatus
 }
 
 // Fixture mirrors the rows in Figma 101:7484 exactly (name/age/blood/eta).
@@ -34,6 +40,7 @@ const RESCUE_FIXTURE: ReadonlyArray<RescueCandidate> = [
     distanceKm: 3,
     etaMinutes: 6,
     isBestOption: true,
+    healthStatus: 'good',
   },
   {
     id: 'rescue-2',
@@ -44,6 +51,7 @@ const RESCUE_FIXTURE: ReadonlyArray<RescueCandidate> = [
     distanceKm: 7,
     etaMinutes: 12,
     isBestOption: false,
+    healthStatus: 'good',
   },
   {
     id: 'rescue-3',
@@ -54,6 +62,7 @@ const RESCUE_FIXTURE: ReadonlyArray<RescueCandidate> = [
     distanceKm: 9,
     etaMinutes: 17,
     isBestOption: false,
+    healthStatus: 'alert',
   },
   {
     id: 'rescue-4',
@@ -64,6 +73,7 @@ const RESCUE_FIXTURE: ReadonlyArray<RescueCandidate> = [
     distanceKm: 19,
     etaMinutes: 32,
     isBestOption: false,
+    healthStatus: 'low',
   },
 ]
 
