@@ -28,6 +28,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useDemoToast } from '@/lib/demoToast'
 import { chatsApi, type ChatContact, type ChatMessage } from '@/services/mockApi/chats'
 import workerA from '@/assets/avatars/worker-a.png'
 
@@ -249,6 +250,7 @@ function ContactMiniMap({
 }) {
   const theme = useTheme()
   const lib = useMapLibre()
+  const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!lib || !containerRef.current) return
@@ -311,9 +313,10 @@ function ContactMiniMap({
           accessibilityLabel="Ver mapa completo"
         />
       </View>
-      <View
+      <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ver câmera da posição"
+        onPress={() => showToast('Câmera da posição', `Stream ao vivo de ${contact.name}`)}
         style={{
           position: 'absolute',
           right: 12,
@@ -328,7 +331,7 @@ function ContactMiniMap({
         }}
       >
         <Icon name="video_camera_back" size={20} color={theme.content.dark} />
-      </View>
+      </Pressable>
     </View>
   )
 }
@@ -476,6 +479,7 @@ export function ChatInbox() {
   const { user } = useAuth()
   const theme = useTheme()
   const navigate = useNavigate()
+  const { show: showToast } = useDemoToast()
   const [contacts, setContacts] = useState<ReadonlyArray<ChatContact>>([])
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState('')
@@ -501,6 +505,23 @@ export function ChatInbox() {
   )
   const selectedContact = contacts.find((c) => c.id === selectedContactId) ?? null
   const messages = selectedContact?.messages ?? []
+
+  const handleSend = () => {
+    const text = draft.trim()
+    if (!text || !selectedContact) return
+    const nextMessage: ChatMessage = {
+      id: `local-${Date.now()}`,
+      text,
+      sender: 'me',
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    }
+    setContacts((prev) =>
+      prev.map((c) =>
+        c.id === selectedContact.id ? { ...c, messages: [...(c.messages ?? []), nextMessage] } : c,
+      ),
+    )
+    setDraft('')
+  }
 
   return (
     <View
@@ -609,6 +630,9 @@ export function ChatInbox() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Novo chat"
+            onPress={() =>
+              showToast('Novo chat', 'Selecione um contato à esquerda para iniciar uma conversa')
+            }
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -641,6 +665,7 @@ export function ChatInbox() {
               variant="contained"
               iconLeft={<Icon name="search" size={24} color={theme.content.light} />}
               accessibilityLabel="Pesquisar mensagens"
+              onPress={() => showToast('Use o campo de pesquisa de contatos à esquerda')}
             />
           </View>
 
@@ -710,6 +735,7 @@ export function ChatInbox() {
                 variant="contained"
                 iconRight={<Icon name="send" size={24} color={theme.content.light} />}
                 accessibilityLabel="Enviar mensagem"
+                onPress={handleSend}
               />
             </View>
           </View>
