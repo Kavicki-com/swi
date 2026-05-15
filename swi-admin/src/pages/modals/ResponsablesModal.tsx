@@ -17,6 +17,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/mockApi/admins'
+import { useDemoToast } from '@/lib/demoToast'
 
 function VerticalDivider() {
   const theme = useTheme()
@@ -95,6 +96,7 @@ function AdminPickRow({
 export function ResponsablesModal() {
   const theme = useTheme()
   const navigate = useNavigate()
+  const { show: showToast } = useDemoToast()
   const [admins, setAdmins] = useState<ReadonlyArray<Admin>>([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
@@ -127,6 +129,19 @@ export function ResponsablesModal() {
   }
 
   const dismiss = () => navigate(-1)
+
+  const confirm = () => {
+    const count = selected.size
+    if (count === 0) {
+      showToast('Nenhum responsável selecionado', 'Selecione ao menos um para continuar')
+      return
+    }
+    showToast(
+      'Responsáveis atribuídos',
+      count === 1 ? '1 responsável adicionado ao relatório' : `${count} responsáveis adicionados ao relatório`,
+    )
+    navigate(-1)
+  }
 
   return (
     <View
@@ -195,7 +210,7 @@ export function ResponsablesModal() {
               label="Continuar"
               variant="contained"
               fullWidth
-              onPress={dismiss}
+              onPress={confirm}
               accessibilityLabel="Confirmar responsáveis"
             />
           </View>
