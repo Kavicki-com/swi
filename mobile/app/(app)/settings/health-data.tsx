@@ -28,11 +28,16 @@ export default function SettingsHealthData() {
   const [alergias, setAlergias] = useState('');
   const [doencas, setDoencas] = useState('');
 
-  const exams = [
+  const exams: Array<{
+    year: number;
+    date: string;
+    examName: string;
+    future?: boolean;
+  }> = [
     { year: 2027, date: '05 Mar', examName: 'Exame de reciclagem técnica' },
     { year: 2029, date: '19 Nov', examName: 'Avaliação de segurança' },
     { year: 2031, date: '14 Jul', examName: 'Certificação em normas ISO' },
-    { year: 2033, date: '28 Fev', examName: 'Exame de aptidão física e mental' },
+    { year: 2033, date: '28 Fev', examName: 'Exame de aptidão física e mental', future: true },
   ];
 
   return (
@@ -124,7 +129,9 @@ export default function SettingsHealthData() {
                 date={exam.date}
                 examName={exam.examName}
                 compact
+                mobile
                 fullWidth
+                future={exam.future}
                 onActionPress={() => {}}
               />
             ))}
