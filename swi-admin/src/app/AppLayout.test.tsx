@@ -109,4 +109,75 @@ describe('AppLayout', () => {
     expect(screen.getByText('Jennifer Gomes')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Pesquisar Contatos')).toBeInTheDocument()
   })
+
+  // Responsive system tests — one per breakpoint class.
+  //
+  // react-native-web's Dimensions polyfill reads
+  // `document.documentElement.clientWidth` (see
+  // node_modules/react-native-web/dist/cjs/exports/Dimensions/index.js).
+  // The global test-setup pins it to 1366 (desktop) so the legacy tests
+  // above render the sidebar. Here we override per-test by redefining the
+  // getter, then fire a window 'resize' event so RN-Web's Dimensions
+  // listener picks up the change before AppLayout mounts.
+  //
+  // Why not vi.mock('react-native', ...)? The DS internally consumes many
+  // react-native exports during render; replacing the whole module would
+  // break it. clientWidth is what RN-Web actually reads, so overriding the
+  // getter is the lighter, equivalent hook.
+  describe('breakpoints', () => {
+    const setViewportWidth = (w: number) => {
+      Object.defineProperty(document.documentElement, 'clientWidth', {
+        configurable: true,
+        get: () => w,
+      })
+      Object.defineProperty(document.documentElement, 'clientHeight', {
+        configurable: true,
+        get: () => 900,
+      })
+      window.dispatchEvent(new Event('resize'))
+    }
+
+    afterEach(() => {
+      // Restore the desktop default for the remaining test files.
+      setViewportWidth(1366)
+    })
+
+    it('renders the tablet top-bar (no sidebar) when width < 1024', async () => {
+      setViewportWidth(800)
+      renderTree()
+      await waitFor(() => {
+        expect(screen.getByTestId('app-layout-tablet')).toBeInTheDocument()
+      })
+      expect(screen.getByTestId('app-topbar')).toBeInTheDocument()
+      expect(screen.getByTestId('app-topbar-hamburger')).toBeInTheDocument()
+      expect(screen.queryByTestId('app-sidebar')).not.toBeInTheDocument()
+      // Drawer starts closed.
+      expect(screen.queryByTestId('app-drawer')).not.toBeInTheDocument()
+      // Hamburger opens it.
+      fireEvent.click(screen.getByTestId('app-topbar-hamburger'))
+      await waitFor(() => {
+        expect(screen.getByTestId('app-drawer')).toBeInTheDocument()
+      })
+    })
+
+    it('renders the desktop sidebar when 1024 ≤ width < 1600', async () => {
+      setViewportWidth(1366)
+      renderTree()
+      await waitFor(() => {
+        expect(screen.getByTestId('app-sidebar')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('app-topbar')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('app-layout-tablet')).not.toBeInTheDocument()
+    })
+
+    it('renders the desktop sidebar (no top-bar) when width >= 1600 (wide)', async () => {
+      setViewportWidth(1920)
+      renderTree()
+      await waitFor(() => {
+        expect(screen.getByTestId('app-sidebar')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('app-topbar')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('app-layout-tablet')).not.toBeInTheDocument()
+    })
+  })
 })

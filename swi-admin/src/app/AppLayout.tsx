@@ -1,7 +1,16 @@
+import { useEffect, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Pressable, View } from 'react-native'
-import { ChatSection, HeaderUserInfo, Logo, SideMenu, useTheme } from '@kavicki/swi-design-system'
+import {
+  Button,
+  ChatSection,
+  HeaderUserInfo,
+  Logo,
+  SideMenu,
+  useTheme,
+} from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { NAV_ITEMS } from '@/app/nav'
 import workerA from '@/assets/avatars/worker-a.png'
 import chatEzequiel from '@/assets/avatars/chat-ezequiel.png'
@@ -76,7 +85,144 @@ export function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const theme = useTheme()
+  const breakpoint = useBreakpoint()
   const activeNavValue = resolveActiveNavValue(location.pathname)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Close the drawer whenever the route changes — clicking a nav item should
+  // both navigate and dismiss the overlay without extra plumbing.
+  useEffect(() => {
+    setDrawerOpen(false)
+  }, [location.pathname])
+
+  const headerUserInfo = (
+    <Pressable
+      onPress={() => navigate('/user/profile')}
+      accessibilityRole="button"
+      accessibilityLabel="Abrir perfil do usuário"
+      testID="app-header-user-info-pressable"
+    >
+      <HeaderUserInfo
+        bpm={user?.bpm ?? 99}
+        pressure={user?.pressure ?? '12/8'}
+        progress={50}
+        avatarUri={user?.avatarUri ?? workerA}
+        heartIconName="heart_filled"
+        pressureIconName="vitals_pulse"
+        borderColor={theme.background}
+        testID="app-header-user-info"
+      />
+    </Pressable>
+  )
+
+  if (breakpoint === 'tablet') {
+    return (
+      <View
+        testID="app-layout-tablet"
+        style={{
+          flexDirection: 'column',
+          minHeight: '100vh' as unknown as number,
+        }}
+      >
+        <View
+          testID="app-topbar"
+          dataSet={{ fidelity: 'topbar' }}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: theme.padding.l,
+            paddingVertical: theme.padding.m,
+            backgroundColor: theme.background,
+            gap: theme.gap.m,
+          }}
+        >
+          <Logo type="complete" size="m" />
+          {/* DS Button supports label-only; the DS doesn't ship a hamburger
+              glyph today, so we use the Portuguese label "Menu" rather than
+              spinning up a custom icon (project rule: no local components,
+              no DS edits in Sprint 1). A future DS bump can swap to iconLeft
+              once a menu glyph lands. */}
+          <Button
+            label="Menu"
+            variant="outline"
+            size="small"
+            onPress={() => setDrawerOpen((v) => !v)}
+            accessibilityLabel="Abrir menu de navegação"
+            testID="app-topbar-hamburger"
+          />
+          {headerUserInfo}
+        </View>
+        <View style={{ flex: 1, paddingHorizontal: 24, paddingVertical: 24 }}>
+          <Outlet />
+        </View>
+        {drawerOpen && (
+          <View
+            testID="app-drawer"
+            dataSet={{ fidelity: 'drawer' }}
+            // Overlay panel: dim the page and dock the menu panel on the
+            // left. Width 280 keeps Figma proportions for tablet portrait.
+            style={{
+              position: 'absolute' as unknown as never,
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              flexDirection: 'row',
+            }}
+          >
+            <View
+              testID="app-drawer-panel"
+              style={{
+                width: 280,
+                backgroundColor: theme.background,
+                paddingHorizontal: theme.padding.s,
+                paddingVertical: theme.padding.m,
+                gap: theme.gap.m,
+              }}
+            >
+              <View
+                style={{
+                  paddingHorizontal: theme.padding.s,
+                  paddingVertical: theme.padding.m,
+                }}
+              >
+                <Logo type="complete" size="m" />
+              </View>
+              <SideMenu
+                testID="app-drawer-nav"
+                accessibilityLabel="Navegação principal"
+                items={NAV_ITEMS}
+                value={activeNavValue}
+                onChange={(v: string) => navigate(v)}
+                fullWidth
+              />
+              <View testID="app-drawer-chat">
+                <ChatSection
+                  users={CHAT_USERS}
+                  searchPlaceholder="Pesquisar Contatos"
+                  expandLabel="Esperando chat"
+                  onUserPress={(id: string) => navigate(`/chat/${id}`)}
+                  onExpand={() => navigate('/chat')}
+                  fullWidth
+                />
+              </View>
+            </View>
+            <Pressable
+              testID="app-drawer-scrim"
+              accessibilityRole="button"
+              accessibilityLabel="Fechar menu de navegação"
+              onPress={() => setDrawerOpen(false)}
+              style={{
+                flex: 1,
+                backgroundColor: 'rgba(0,0,0,0.45)',
+              }}
+            />
+          </View>
+        )}
+      </View>
+    )
+  }
 
   return (
     <View
@@ -148,23 +294,7 @@ export function AppLayout() {
             paddingVertical: theme.padding.m,
           }}
         >
-          <Pressable
-            onPress={() => navigate('/user/profile')}
-            accessibilityRole="button"
-            accessibilityLabel="Abrir perfil do usuário"
-            testID="app-header-user-info-pressable"
-          >
-            <HeaderUserInfo
-              bpm={user?.bpm ?? 99}
-              pressure={user?.pressure ?? '12/8'}
-              progress={50}
-              avatarUri={user?.avatarUri ?? workerA}
-              heartIconName="heart_filled"
-              pressureIconName="vitals_pulse"
-              borderColor={theme.background}
-              testID="app-header-user-info"
-            />
-          </Pressable>
+          {headerUserInfo}
         </View>
         <View style={{ flex: 1, padding: 24 }}>
           <Outlet />
