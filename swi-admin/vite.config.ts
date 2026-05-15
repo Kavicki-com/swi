@@ -117,7 +117,18 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['react-native-web', 'styled-components'],
+    include: ['react-native-web', 'styled-components', 'styled-components/native'],
+  },
+  build: {
+    // styled-components/native ships ESM files containing literal
+    // require("react-native") calls (mixed-module bug). Without this flag,
+    // Rollup leaves those requires in the output and the browser throws
+    // "require is not defined". Setting it true forces the commonjs plugin
+    // to also process require() inside ESM files so the alias above can
+    // rewrite "react-native" -> "react-native-web" in the bundle.
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
   },
   define: {
     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
