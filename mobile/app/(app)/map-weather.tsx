@@ -78,7 +78,7 @@ export default function MapWeather() {
             variant="badge"
             status={pin.status}
             size={40}
-            accessibilityLabel={`Alerta ${pin.status}`}
+            name={`Alerta ${pin.status}`}
           />
         </View>
       ))}
