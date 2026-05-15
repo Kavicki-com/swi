@@ -18,15 +18,26 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/mockApi/admins'
+import { useDemoToast } from '@/lib/demoToast'
 import { AdminsCreate } from './AdminsCreate'
 
 type AdminRowProps = {
   admin: Admin
   onToggle: (id: string, active: boolean) => void
   onOpen: (id: string) => void
+  onDelete: (admin: Admin) => void
+  onChat: (admin: Admin) => void
+  onLocation: (admin: Admin) => void
 }
 
-function AdminRow({ admin, onToggle, onOpen }: AdminRowProps) {
+function AdminRow({
+  admin,
+  onToggle,
+  onOpen,
+  onDelete,
+  onChat,
+  onLocation,
+}: AdminRowProps) {
   const theme = useTheme()
   return (
     <View
@@ -92,9 +103,21 @@ function AdminRow({ admin, onToggle, onOpen }: AdminRowProps) {
           followed by a chevron-down affordance (the whole row is clickable
           per Figma but the chevron makes the affordance discoverable). */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-        <ActionIcon icon="delete_icon" label={`Excluir ${admin.name}`} />
-        <ActionIcon icon="chat_bubble" label={`Conversar com ${admin.name}`} />
-        <ActionIcon icon="location_on" label={`Localização de ${admin.name}`} />
+        <ActionIcon
+          icon="delete_icon"
+          label={`Excluir ${admin.name}`}
+          onPress={() => onDelete(admin)}
+        />
+        <ActionIcon
+          icon="chat_bubble"
+          label={`Conversar com ${admin.name}`}
+          onPress={() => onChat(admin)}
+        />
+        <ActionIcon
+          icon="location_on"
+          label={`Localização de ${admin.name}`}
+          onPress={() => onLocation(admin)}
+        />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Abrir detalhes de ${admin.name}`}
@@ -113,12 +136,21 @@ function AdminRow({ admin, onToggle, onOpen }: AdminRowProps) {
   )
 }
 
-function ActionIcon({ icon, label }: { icon: IconName; label: string }) {
+function ActionIcon({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: IconName
+  label: string
+  onPress: () => void
+}) {
   const theme = useTheme()
   return (
-    <View
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      onPress={onPress}
       style={{
         backgroundColor: theme.surface.high,
         borderRadius: theme.border.radius.m,
@@ -128,7 +160,7 @@ function ActionIcon({ icon, label }: { icon: IconName; label: string }) {
       }}
     >
       <Icon name={icon} size={20} color={theme.content.dark} />
-    </View>
+    </Pressable>
   )
 }
 
@@ -139,6 +171,7 @@ export function AdminsList({
 } = {}) {
   const theme = useTheme()
   const navigate = useNavigate()
+  const { show: showToast } = useDemoToast()
   const [admins, setAdmins] = useState<Admin[]>([])
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
@@ -213,6 +246,11 @@ export function AdminsList({
               admin={admin}
               onToggle={handleToggle}
               onOpen={(adminId) => navigate(`/admins/${adminId}`)}
+              onDelete={(a) =>
+                showToast('Administrador removido', `${a.name} foi removido do sistema`)
+              }
+              onChat={() => navigate('/chat')}
+              onLocation={() => navigate('/maps/general')}
             />
           ))}
         </View>
