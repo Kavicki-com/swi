@@ -30,14 +30,7 @@ type AdminRowProps = {
   onLocation: (admin: Admin) => void
 }
 
-function AdminRow({
-  admin,
-  onToggle,
-  onOpen,
-  onDelete,
-  onChat,
-  onLocation,
-}: AdminRowProps) {
+function AdminRow({ admin, onToggle, onOpen, onDelete, onChat, onLocation }: AdminRowProps) {
   const theme = useTheme()
   return (
     <View
