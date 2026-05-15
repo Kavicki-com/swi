@@ -21,6 +21,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useDemoToast } from '@/lib/demoToast'
 import { SupportModal } from '@/components/SupportModal'
 
 const BLOOD_OPTIONS = [
@@ -142,6 +143,7 @@ export function UserSettings() {
   const theme = useTheme()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
+  const { show: showToast } = useDemoToast()
 
   const [name, setName] = useState(user?.full_name ?? 'Carlos Sampaio')
   const [dob, setDob] = useState('00/00/0000')
@@ -214,9 +216,10 @@ export function UserSettings() {
       >
         <View style={{ position: 'relative' }}>
           <Avatar uri={user?.avatarUri} size="l" bordered />
-          <View
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel="Editar foto"
+            onPress={() => showToast('Editar foto', 'Seletor de imagem em breve')}
             style={{
               position: 'absolute',
               right: -4,
@@ -229,7 +232,7 @@ export function UserSettings() {
             }}
           >
             <Icon name="edit" size={16} color={theme.content.light} />
-          </View>
+          </Pressable>
         </View>
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 61 }}>
           <Pressable
@@ -255,6 +258,7 @@ export function UserSettings() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Enviar exames clínicos"
+            onPress={() => showToast('Exames enviados', 'Upload simulado concluído')}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -457,6 +461,7 @@ export function UserSettings() {
                 variant="contained"
                 backgroundColor={theme.surface.secondary}
                 size="small"
+                onPress={() => showToast('Senha alterada', 'Atualização simulada com sucesso')}
               />
             </View>
 
@@ -500,7 +505,12 @@ export function UserSettings() {
           <Button label="Sair" variant="outline" onPress={() => signOut()} fullWidth />
         </View>
         <View style={{ flex: 1 }}>
-          <Button label="Salvar Alterações" variant="contained" fullWidth />
+          <Button
+            label="Salvar Alterações"
+            variant="contained"
+            fullWidth
+            onPress={() => showToast('Alterações salvas', 'Cadastro atualizado com sucesso')}
+          />
         </View>
       </View>
 
