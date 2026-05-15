@@ -104,7 +104,7 @@ export default function NewReport() {
           labelColor={theme.content.primary}
           label="Atribuir responsáveis"
           accessibilityLabel="Atribuir responsáveis"
-          onPress={() => {}}
+          onPress={() => router.push('/(app)/reports/responsibles')}
           iconRight={<Icon name="add" size={24} color={theme.content.primary} />}
         />
 
