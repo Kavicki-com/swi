@@ -135,7 +135,7 @@ export default function MapViewGeneral() {
           variant="avatar"
           avatarUri={avatarUri}
           size={40}
-          accessibilityLabel="Sua localização"
+          name="Sua localização"
         />
       </View>
 

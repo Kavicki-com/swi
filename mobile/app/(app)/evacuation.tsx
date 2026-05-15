@@ -54,7 +54,7 @@ export default function EvacuationRoute() {
           transform: [{ translateX: -20 }, { translateY: -20 }],
         }}
       >
-        <LocationPin variant="badge" status="good" size={40} accessibilityLabel="Início da rota" />
+        <LocationPin variant="badge" status="good" size={40} name="Início da rota" />
       </View>
 
       <View
@@ -65,7 +65,7 @@ export default function EvacuationRoute() {
           transform: [{ translateX: -20 }, { translateY: -20 }],
         }}
       >
-        <LocationPin variant="badge" status="alert" size={40} accessibilityLabel="Destino" />
+        <LocationPin variant="badge" status="alert" size={40} name="Destino" />
       </View>
 
       <View
