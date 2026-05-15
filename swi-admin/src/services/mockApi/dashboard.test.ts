@@ -24,23 +24,27 @@ describe('dashboardApi.summary', () => {
   it('returns Figma-aligned activities with status, sector and participants', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
     expect(data?.activities).toBeDefined()
-    expect(data!.activities.length).toBeGreaterThanOrEqual(4)
+    // Demo expansion (was 5 per Figma): now 8 activities across all 4 sectors
+    // so the dashboard reads as a fully-populated ops board for clients.
+    expect(data!.activities.length).toBe(8)
     const first = data!.activities[0]!
     expect(first).toMatchObject({
       title: expect.any(String),
       sector: expect.any(String),
       progress: expect.any(Number),
     })
-    expect(['em-curso', 'concluida', 'a-fazer']).toContain(first.status)
     expect(Array.isArray(first.participants)).toBe(true)
-    // Mix of statuses so the chip filter has visible effects
+    // Demo expansion: activities now span all 3 status tabs so the filter
+    // chips populate (was: all 5 em-curso). At least one of each status.
     const statuses = new Set(data!.activities.map((a) => a.status))
-    expect(statuses.size).toBeGreaterThan(1)
+    expect(statuses.has('em-curso')).toBe(true)
+    expect(statuses.has('concluida')).toBe(true)
+    expect(statuses.has('a-fazer')).toBe(true)
   })
 
-  it('returns the expanded 6-entry weather timeline with one AGORA marker', async () => {
+  it('returns the 4-entry weather timeline with one AGORA marker', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
-    expect(data?.weather).toHaveLength(6)
+    expect(data?.weather).toHaveLength(4)
     const nowMarkers = data!.weather.filter((w) => w.isNow)
     expect(nowMarkers).toHaveLength(1)
     expect(data!.weather.every((w) => typeof w.label === 'string' && w.label.length > 0)).toBe(true)
@@ -67,7 +71,8 @@ describe('dashboardApi.summary', () => {
     expect(data!.kpis.urgentAlerts).toBe(2)
     expect(data!.kpis.commonAlerts).toBe(0)
     // Funcionarios 2x2 grid values match the Figma reference exactly.
-    expect(data!.kpis.admins).toBe(3)
+    // 8 admins after demo expansion (roster: Elisa + Mathias + João + 5 added).
+    expect(data!.kpis.admins).toBe(8)
     expect(data!.kpis.totalEmployees).toBe(1205)
     expect(data!.kpis.newReports).toBe(4)
     expect(data!.kpis.activeCameras).toBe(564)
@@ -81,6 +86,6 @@ describe('dashboardApi.summary', () => {
     expect(data?.alerts.openOrAcknowledged).toBe(0)
     // Activities are a static fixture in S1.7, not org-scoped — they always render.
     expect(data!.activities.length).toBeGreaterThan(0)
-    expect(data?.weather).toHaveLength(6)
+    expect(data?.weather).toHaveLength(4)
   })
 })

@@ -1,0 +1,1 @@
+no numero de cameras,adms,funcionarios o alinhamento entre texto numero e icon ainda esta errado, no figma, eles estao alinhados ao meio. verifique e corrija.
