@@ -112,7 +112,23 @@ export default function SettingsChangePassword() {
               'Sua senha precisa ter 8 caracteres incluindo letras e números\n1 símbolo @#$%ˆ\n1 Letras maiúscula'
             }
           />
+        </View>
+      </ScrollView>
 
+      {/* Salvar — absolute acima do Home FAB (Figma 353:12292 top:628 numa
+          tela de 800; ~85px de gap antes do FAB no top:714). Fora do
+          ScrollView pra preservar o spacing constante mesmo com teclado. */}
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          bottom: insets.bottom + 120,
+          left: 0,
+          right: 0,
+          alignItems: 'center',
+        }}
+      >
+        <View style={{ width: 328 }}>
           <Button
             variant="contained"
             backgroundColor={theme.surface.primary}
@@ -123,7 +139,7 @@ export default function SettingsChangePassword() {
             onPress={() => router.back()}
           />
         </View>
-      </ScrollView>
+      </View>
 
       <View
         pointerEvents="box-none"
