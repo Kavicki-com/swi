@@ -59,8 +59,10 @@ export type WorkerDetailsLayoutProps = {
   topRightAction: ReactNode
 }
 
-// Mock caloric expenditure curve — Figma shows 9 timestamps from morning
-// shift (07:15) through end of workday (19:30), with kcal varying 19–62.
+// Mock caloric expenditure curves per period — the period combobox switches
+// between these. The "today" curve mirrors Figma 105:12586 (intra-day shift
+// timestamps); week/month aggregate to days/weeks so the X-axis labels make
+// sense for the chosen window.
 const CALORIES_DAY = [
   { time: '07:15', kcal: 41 },
   { time: '08:42', kcal: 57 },
@@ -71,6 +73,29 @@ const CALORIES_DAY = [
   { time: '19:00', kcal: 22 },
   { time: '19:30', kcal: 19 },
 ]
+
+const CALORIES_WEEK = [
+  { time: 'Seg', kcal: 312 },
+  { time: 'Ter', kcal: 285 },
+  { time: 'Qua', kcal: 340 },
+  { time: 'Qui', kcal: 298 },
+  { time: 'Sex', kcal: 365 },
+  { time: 'Sáb', kcal: 180 },
+  { time: 'Dom', kcal: 95 },
+]
+
+const CALORIES_MONTH = [
+  { time: 'Sem 1', kcal: 1820 },
+  { time: 'Sem 2', kcal: 2010 },
+  { time: 'Sem 3', kcal: 1950 },
+  { time: 'Sem 4', kcal: 2180 },
+]
+
+const CALORIES_BY_PERIOD = {
+  today: CALORIES_DAY,
+  week: CALORIES_WEEK,
+  month: CALORIES_MONTH,
+} as const
 
 // ESRI World Imagery — same satellite tile source the dashboard MapBanner
 // and /maps/general use. Reused here for the mini-map in the user profile.
@@ -571,7 +596,11 @@ export function WorkerDetailsLayout({
             />
           </View>
         </View>
-        <LineCaloriesChart points={CALORIES_DAY} unit="kcal" fullWidth />
+        <LineCaloriesChart
+          points={CALORIES_BY_PERIOD[caloriesPeriod as keyof typeof CALORIES_BY_PERIOD] ?? CALORIES_DAY}
+          unit="kcal"
+          fullWidth
+        />
       </View>
     </View>
   )
