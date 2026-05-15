@@ -124,6 +124,7 @@ export default function SettingsHealthData() {
                 date={exam.date}
                 examName={exam.examName}
                 compact
+                fullWidth
                 onActionPress={() => {}}
               />
             ))}
