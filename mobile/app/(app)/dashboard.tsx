@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Image as RNImage, View } from 'react-native';
+import { Image as RNImage, useWindowDimensions, View } from 'react-native';
 import { Asset } from 'expo-asset';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import {
@@ -47,31 +48,33 @@ const AVATAR_RIGHT = 24;
 export default function Dashboard() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  // Letterbox fit: scale uniforme que mantém o canvas 360×800 inteiro dentro
+  // da safe area. Pega o menor entre width-fit e height-fit pra nunca clipar
+  // nem horizontal nem vertical. Sobra (canvas menor que safe area) vira
+  // barras letterbox em theme.background. Phase 1 — fidelity-letterbox plan.
+  const safeHeight = viewportHeight - insets.top - insets.bottom;
+  const canvasScale = Math.min(viewportWidth / 360, safeHeight / 800);
   // Demo-only: camera starts on; tapping the camera button toggles the
   // green status dot. Production wiring would mirror live worker state.
   const [cameraActive, setCameraActive] = useState(true);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* A1 — Full-screen background pattern (Figma 245:23280 imgDashboard).
-          Asset is a light gradient/pattern; we apply low opacity + multiply
-          blend so it reads as a subtle texture over the dark theme bg. */}
-      <RNImage
-        source={require('../../assets/dashboard-bg.png')}
-        resizeMode="cover"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          opacity: 0.15,
-          // @ts-expect-error: mixBlendMode is web-only RN-web style.
-          mixBlendMode: 'multiply',
-        }}
-      />
-
-      {/* A2 — Bottom decoration (Figma 304:2430 background-element) */}
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: theme.background,
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {/* A2 — Bottom decoration (Figma 304:2430 background-element). Sibling
+          do canvas wrapper (não filho): estica full-viewport pra moldura verde
+          tocar a borda da tela em qualquer iPhone. preserveAspectRatio="none"
+          permite stretch horizontal não-uniforme. Ver Gap J Phase 2. */}
       <View
         pointerEvents="none"
         style={{
@@ -83,7 +86,12 @@ export default function Dashboard() {
           alignItems: 'center',
         }}
       >
-        <Svg width={BG_DECOR_W} height={BG_DECOR_H} viewBox={`0 0 ${BG_DECOR_W} ${BG_DECOR_H}`}>
+        <Svg
+          width="100%"
+          height={BG_DECOR_H}
+          viewBox={`0 0 ${BG_DECOR_W} ${BG_DECOR_H}`}
+          preserveAspectRatio="none"
+        >
           <Defs>
             <LinearGradient
               id="bg-decor-grad"
@@ -101,13 +109,46 @@ export default function Dashboard() {
         </Svg>
       </View>
 
+      {/* Canvas wrapper — 360-wide com transform: scale pra ocupar viewport
+          inteira mantendo proporções Figma 360x800. Em iPhone 390 scale ~1.083.
+          Gap I + Gap J. */}
+      <View
+        style={{
+          width: 360,
+          height: 800,
+          transform: [{ scale: canvasScale }],
+          transformOrigin: 'center center',
+        }}
+      >
+        {/* A1 — Canvas-bound background overlay (Figma 245:23280 imgDashboard).
+            Posicionado DENTRO do canvas wrapper (não no root) pra o padrão
+            de pontos parar nas bordas do canvas 360×800 — match com Figma
+            onde imgDashboard é filho do frame dashboard, não da viewport.
+            Resultado: contraste claro entre card do StatusChart (theme.background
+            sólido) e canvas (com pontos), revelando cantos arredondados. */}
+        <RNImage
+          source={require('../../assets/dashboard-bg.png')}
+          resizeMode="cover"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          }}
+        />
+
       {/* Top zone — StatusChart from DS (silhouette + arcs + heart-rate button) */}
       <View style={{ height: CHART_ZONE_HEIGHT }}>
-        <StatusChart condition="good" progress={1} />
+        <StatusChart
+          condition="good"
+          progress={1}
+          onPressHeartRate={() => router.push('/(app)/my-stats')}
+        />
 
         {/* Avatar — absolute top-right, overlays the chart */}
         <View
-          style={{ position: 'absolute', top: insets.top + AVATAR_TOP, right: AVATAR_RIGHT }}
+          style={{ position: 'absolute', top: AVATAR_TOP, right: AVATAR_RIGHT }}
         >
           <Avatar
             customSize={64}
@@ -180,7 +221,7 @@ export default function Dashboard() {
                   right: 0,
                   width: 20,
                   height: 20,
-                  borderRadius: 999,
+                  borderRadius: theme.border.radius.pill,
                   backgroundColor: theme.surface.success,
                   borderWidth: 2,
                   borderColor: theme.background,
@@ -203,7 +244,7 @@ export default function Dashboard() {
               />
             }
             accessibilityLabel="Trabalho"
-            onPress={() => {}}
+            onPress={() => router.push('/(app)/journey')}
           />
         </View>
 
@@ -248,32 +289,27 @@ export default function Dashboard() {
           />
         </View>
 
-        {/* 4. Fatigue progress — ProgressBar gradient (DS v0.1.21) wrapped in
-            22px-tall container with 1px content.medium border per Figma 304:2433 */}
+        {/* 4. Fatigue progress — Figma 304:2433. DS v0.1.32+ bordered prop
+            renders the 22px-tall pill frame natively; gradient direction
+            rtl + custom stops [43.75, 79.253, 100] match the Figma fill
+            (red on the left → green on the right). Fill value 74 mirrors
+            the Figma snapshot (pr-76 on a 328-wide track) — original 74.4
+            triggered Fabric HostFunction precision error in DS v0.1.34
+            ProgressBar (accessibilityValue.now expects int64; see Gap H). */}
         <View style={{ gap: theme.gap.s, width: '100%' }}>
-          <View
-            style={{
-              height: 22,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: theme.content.medium,
-              backgroundColor: theme.background,
-              paddingLeft: theme.padding.s,
-              paddingRight: 76,
-              justifyContent: 'center',
-            }}
-          >
-            <ProgressBar
-              value={100}
-              trackColor="transparent"
-              gradient={[
-                theme.surface.success,
-                theme.surface.warning,
-                theme.surface.error,
-              ]}
-              accessibilityLabel="Tempo até atingir fadiga total"
-            />
-          </View>
+          <ProgressBar
+            value={74}
+            bordered
+            trackHeight={22}
+            gradient={[
+              theme.surface.success,
+              theme.surface.warning,
+              theme.surface.error,
+            ]}
+            gradientStops={[43.75, 79.253, 100]}
+            gradientDirection="rtl"
+            accessibilityLabel="Tempo até atingir fadiga total"
+          />
           <Text variant="body.m" color={theme.content.dark}>
             Tempo até atingir fadiga total: 1h45m
           </Text>
@@ -303,7 +339,7 @@ export default function Dashboard() {
             backgroundColor={theme.surface.success}
             iconLeft={<Icon name="chat_bubble" size={26} color={theme.content.light} />}
             accessibilityLabel="Chat"
-            onPress={() => {}}
+            onPress={() => router.push('/(app)/chat/inbox')}
           />
           <Button
             variant="contained"
@@ -323,6 +359,7 @@ export default function Dashboard() {
             onPress={() => {}}
           />
         </View>
+      </View>
       </View>
     </View>
   );
@@ -426,7 +463,7 @@ function BadgedButton({
             right: 0,
             width: 24,
             height: 24,
-            borderRadius: 999,
+            borderRadius: theme.border.radius.pill,
             backgroundColor: theme.surface.error,
             alignItems: 'center',
             justifyContent: 'center',
