@@ -3,7 +3,7 @@
 // and EmployeeDetails (Figma 54:6561). Pure presentational: takes a `worker`
 // payload + a `topRightAction` slot for the page-specific CTA. The page owns
 // data fetching, loading/empty states, and back/CTA navigation.
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
@@ -260,6 +260,7 @@ export function WorkerDetailsLayout({
     )
   const fatiguePct = formatPct(worker.fatigueRate ?? 0)
   const effortPct = formatPct(worker.effort ?? 0)
+  const [caloriesPeriod, setCaloriesPeriod] = useState('today')
 
   return (
     <View testID={testID} style={{ gap: theme.gap.m }}>
@@ -564,7 +565,8 @@ export function WorkerDetailsLayout({
                 { label: 'Esta semana', value: 'week' },
                 { label: 'Este mês', value: 'month' },
               ]}
-              value="today"
+              value={caloriesPeriod}
+              onChange={setCaloriesPeriod}
               accessibilityLabel="Período do gasto calórico"
             />
           </View>
