@@ -107,33 +107,6 @@ function ContactRow({
   )
 }
 
-// Decorative scroll indicator — Figma 103:9951 OutlineButton/OutlineButton
-// nested. surface.medium track 8px wide, surface.high thumb 148px tall.
-// Purely visual; the actual scroll happens inside the contact list.
-function ScrollIndicator() {
-  const theme = useTheme()
-  return (
-    <View
-      style={{
-        width: 8,
-        height: '100%',
-        backgroundColor: theme.surface.medium,
-        borderRadius: theme.border.radius.l,
-        overflow: 'hidden',
-      }}
-    >
-      <View
-        style={{
-          width: 8,
-          height: 148,
-          backgroundColor: theme.surface.high,
-          borderRadius: theme.border.radius.l,
-        }}
-      />
-    </View>
-  )
-}
-
 // Single conversation bubble — Figma 147:5929 (sent / right) and
 // 103:10230 (received / left). Both share the same structure but mirror
 // avatar + border color + horizontal padding.
@@ -523,6 +496,16 @@ export function ChatInbox() {
     setDraft('')
   }
 
+  // Keep the chat thread anchored to the latest message: scroll to bottom
+  // whenever messages append OR the user switches contacts. Older messages
+  // remain reachable by scrolling up manually inside the box.
+  const chatBoxRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (chatBoxRef.current) {
+      chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight
+    }
+  }, [messages.length, selectedContactId])
+
   return (
     <View
       testID="chat-inbox"
@@ -557,7 +540,11 @@ export function ChatInbox() {
       <View
         style={{
           flexDirection: 'row',
-          gap: theme.padding.m,
+          // Spacing between the 3 columns uses explicit 16px spacer Views
+          // (see <View style={{ width: theme.padding.m }} /> between columns
+          // below) — RN-Web ignored both `gap` and `marginLeft/Right` on the
+          // flex children here, so a literal spacer is the only reliable
+          // fix matching Figma 102:8997 Sidebar gap-[16px].
           paddingHorizontal: theme.padding.xxl,
           height: 640,
           alignItems: 'stretch',
@@ -603,29 +590,27 @@ export function ChatInbox() {
             onClear={() => setSearch('')}
           />
 
-          <View style={{ flexDirection: 'row', gap: theme.gap.s, flex: 1, minHeight: 0 }}>
-            <div
-              className="no-scrollbar"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4,
-                flex: 1,
-                overflowY: 'auto',
-                overflowX: 'hidden',
-              }}
-            >
-              {filtered.map((c) => (
-                <ContactRow
-                  key={c.id}
-                  contact={c}
-                  selected={c.id === selectedContactId}
-                  onPress={() => navigate(`/chat/${c.id}`)}
-                />
-              ))}
-            </div>
-            <ScrollIndicator />
-          </View>
+          <div
+            className="no-scrollbar"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+            }}
+          >
+            {filtered.map((c) => (
+              <ContactRow
+                key={c.id}
+                contact={c}
+                selected={c.id === selectedContactId}
+                onPress={() => navigate(`/chat/${c.id}`)}
+              />
+            ))}
+          </div>
 
           <Pressable
             accessibilityRole="button"
@@ -649,6 +634,9 @@ export function ChatInbox() {
           </Pressable>
         </View>
 
+        {/* Spacer — 16px between LEFT and MIDDLE per Figma 102:8997 */}
+        <View style={{ width: theme.padding.m }} />
+
         {/* MIDDLE column */}
         <View
           style={{
@@ -669,15 +657,43 @@ export function ChatInbox() {
             />
           </View>
 
-          <View style={{ flex: 1, gap: theme.gap.s, alignItems: 'flex-end' }}>
+          {/* Chat Container — Figma 103:9689 specifies h-[564px] fixed height
+              with two children (chat-box flex:1 + chat-input shrink:0).
+              We use a plain <div> here instead of <View> so the flex chain
+              propagates min-height correctly to the inner scroll container;
+              RN-Web's <View> wrapper was preventing the chat-box from
+              shrinking below content height, breaking overflow:auto. */}
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: theme.gap.s,
+              alignItems: 'flex-end',
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          >
             {/* chat-box: empty placeholder when no selection, otherwise
                 scrollable bubble history with the date separator after
-                the first two received/sent pair (Figma 102:8997 placement). */}
+                the first two received/sent pair (Figma 102:8997 placement).
+                ref drives auto-scroll-to-bottom on send / contact switch. */}
             <div
-              className="no-scrollbar"
+              ref={chatBoxRef}
+              className="subtle-scrollbar"
               style={{
                 flex: 1,
+                // min-height: 0 unlocks overflow scroll on a flex column
+                // container — without it the browser refuses to shrink the
+                // box below its content height, so overflow:auto never fires.
+                minHeight: 0,
                 width: '100%',
+                // box-sizing: border-box keeps width:100% + padding within
+                // the parent's bounds (CSS default for <div> is content-box,
+                // which would add the 16+16 padding ON TOP of 100% and make
+                // this overflow leftward into the contact-list spacer).
+                boxSizing: 'border-box',
                 backgroundColor: theme.surface.standard,
                 display: 'flex',
                 flexDirection: 'column',
@@ -685,7 +701,13 @@ export function ChatInbox() {
                 padding: 16,
                 overflowY: 'auto',
                 overflowX: 'hidden',
-                justifyContent: selectedContact ? 'flex-end' : 'center',
+                // justifyContent flex-start (not flex-end) so overflow extends
+                // BELOW the container — that's what scrollHeight measures and
+                // what `overflow: auto` can scroll. With flex-end, overflow
+                // goes ABOVE the container and scrollHeight stays = clientHeight,
+                // making the box appear unscrollable. Latest message visibility
+                // is handled by the chatBoxRef auto-scroll useEffect above.
+                justifyContent: selectedContact ? 'flex-start' : 'center',
                 alignItems: 'center',
               }}
             >
@@ -738,8 +760,11 @@ export function ChatInbox() {
                 onPress={handleSend}
               />
             </View>
-          </View>
+          </div>
         </View>
+
+        {/* Spacer — 16px between MIDDLE and RIGHT per Figma 102:8997 */}
+        <View style={{ width: theme.padding.m }} />
 
         {/* RIGHT column */}
         <View
