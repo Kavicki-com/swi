@@ -23,6 +23,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { dashboardApi, type DashboardMapMarker } from '@/services/mockApi/dashboard'
+import { useDemoToast } from '@/lib/demoToast'
 import basemapSrc from '@/assets/maps/alerts-basemap.jpg'
 import heatmapSrc from '@/assets/maps/alerts-heatmap-basemap.png'
 import meteoSrc from '@/assets/maps/alerts-meteo-basemap.png'
@@ -64,6 +65,7 @@ function passesFilter(status: DashboardMapMarker['status'], filter: string): boo
 export function AlertsList() {
   const theme = useTheme()
   const navigate = useNavigate()
+  const { show: showToast } = useDemoToast()
   const { employeeId } = useParams<{ employeeId?: string }>()
   const [markers, setMarkers] = useState<DashboardMapMarker[]>([])
   const [search, setSearch] = useState('')
@@ -269,7 +271,13 @@ export function AlertsList() {
                 O colaborador José Santos Setor f32 - está em risco
               </Text>
             </View>
-            <Button label="Evacuar área" backgroundColor={theme.surface.error} />
+            <Button
+              label="Evacuar área"
+              backgroundColor={theme.surface.error}
+              onPress={() =>
+                showToast('Evacuação iniciada', 'Notificação enviada aos colaboradores da área')
+              }
+            />
           </View>
         ) : null}
       </View>
