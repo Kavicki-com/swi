@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { RequireAuth } from './RequireAuth'
 import { GuestOnly } from './GuestOnly'
@@ -11,20 +12,22 @@ const HomeStub = () => <div data-testid="home-stub" />
 
 const renderTree = (initialEntries: string[]) =>
   render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={initialEntries}>
-        <Routes>
-          <Route path="/login" element={<LoginStub />} />
-          <Route element={<RequireAuth />}>
-            <Route path="/" element={<HomeStub />} />
-            <Route path="/protected" element={<Protected />} />
-          </Route>
-          <Route element={<GuestOnly />}>
-            <Route path="/guest" element={<Guest />} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </AuthProvider>,
+    <SwiThemeProvider>
+      <AuthProvider>
+        <MemoryRouter initialEntries={initialEntries}>
+          <Routes>
+            <Route path="/login" element={<LoginStub />} />
+            <Route element={<RequireAuth />}>
+              <Route path="/" element={<HomeStub />} />
+              <Route path="/protected" element={<Protected />} />
+            </Route>
+            <Route element={<GuestOnly />}>
+              <Route path="/guest" element={<Guest />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    </SwiThemeProvider>,
   )
 
 describe('RequireAuth', () => {

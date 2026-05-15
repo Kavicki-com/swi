@@ -1,23 +1,33 @@
 // src/pages/auth/Login.tsx
-import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { View } from 'react-native'
 import { Button, Input, Logo, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { isEmail, requiredText } from '@/lib/validators'
 import { FormError } from '@/components/FormError'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
+import { SupportModal } from '@/components/SupportModal'
 
 type LocationState = { from?: string } | null
+
+// Demo credentials — seeded in mockApi/auth.ts. The "Entrar como demo" button
+// + the `?demo=true` query-param auto-trigger both sign in with these so the
+// client never has to type or memorise credentials when navigating the
+// demonstrative state.
+const DEMO_EMAIL = 'admin@swi.test'
+const DEMO_PASSWORD = 'demo1234'
 
 export function Login() {
   const { signIn } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const theme = useTheme()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showSupport, setShowSupport] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -42,6 +52,28 @@ export function Login() {
       setError(result.message ?? 'Falha ao entrar')
     }
   }
+
+  const onDemoLogin = async () => {
+    setError(null)
+    setLoading(true)
+    const result = await signIn(DEMO_EMAIL, DEMO_PASSWORD)
+    setLoading(false)
+    if (result.ok) {
+      navigate(from, { replace: true })
+    } else {
+      setError(result.message ?? 'Falha ao entrar como demo')
+    }
+  }
+
+  // Auto-login when arriving with `?demo=true` (e.g. shared client URL).
+  // Fires once on mount; if the demo credentials fail for any reason, falls
+  // through to the regular form with the error message visible.
+  useEffect(() => {
+    if (searchParams.get('demo') === 'true') {
+      void onDemoLogin()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <View
@@ -111,6 +143,14 @@ export function Login() {
             accessibilityLabel="Fazer Cadastro"
             onPress={() => navigate('/sign-up')}
           />
+          <Button
+            label="Entrar como demo"
+            variant="ghost"
+            fullWidth
+            onPress={onDemoLogin}
+            disabled={loading}
+            accessibilityLabel="Entrar como demo"
+          />
         </View>
 
         <Button
@@ -118,9 +158,10 @@ export function Login() {
           label="Suporte"
           fullWidth
           accessibilityLabel="Suporte"
-          onPress={() => navigate('/modals/support')}
+          onPress={() => setShowSupport(true)}
         />
       </View>
+      {showSupport ? <SupportModal onClose={() => setShowSupport(false)} /> : null}
     </View>
   )
 }

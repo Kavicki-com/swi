@@ -10,8 +10,70 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&family=Montserrat:wght@300;400;500;700&display=swap"
     />
+    <style>
+      /*
+       * Page background: faithful reproduction of Figma frame 4:2's two-layer fill.
+       *   Layer 1 (base): solid #171717 (theme.background variable).
+       *   Layer 2 (overlay): exported PNG (two soft-glow blobs) at 56% opacity,
+       *     stretched to 90% width with a 5% left offset (matching Figma's
+       *     scaleMode=STRETCH + imageTransform [[0.9, 0, 0.05], [0, 1, 0]]).
+       * The overlay lives on body::before so its opacity doesn't cascade to app
+       * content. position: fixed + z-index: -1 keeps it behind everything.
+       */
+      body {
+        margin: 0;
+        background-color: #171717;
+        min-height: 100vh;
+      }
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: url('/bg-overlay.png');
+        background-repeat: no-repeat;
+        background-size: 90% 100%;
+        background-position: 5% 0;
+        opacity: 0.56;
+        pointer-events: none;
+        z-index: -1;
+      }
+      /* Scroll functionality without visible scrollbar — used by lists
+       * that need overflow scrolling but should not show the native UI
+       * (e.g. exam history on /admins/:id). */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+    </style>
   </head>
-  <body style="margin:0;background:linear-gradient(180deg,#1c1c1c 0%,#171717 50%,#141414 100%);background-attachment:fixed;min-height:100vh;">
+  <body>
+    <script>
+      /*
+       * Pixel-perfect Figma fidelity on wide viewports.
+       * The app is designed at Figma frame 4:2 width (1366px). On viewports
+       * wider than that, set CSS `zoom` on <html> so the entire UI scales
+       * uniformly to fill the viewport while preserving exact Figma
+       * proportions, gaps, and text sizes. Below 1366 the layout flows at
+       * native size (no shrink). Runs synchronously before React mounts so
+       * there is no flash of unscaled content; re-applies on viewport resize.
+       */
+      (function () {
+        var REF_WIDTH = 1366;
+        function applyAppZoom() {
+          var w = window.innerWidth;
+          var z = w >= REF_WIDTH ? w / REF_WIDTH : 1;
+          document.documentElement.style.zoom = String(z);
+        }
+        applyAppZoom();
+        window.addEventListener('resize', applyAppZoom);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
