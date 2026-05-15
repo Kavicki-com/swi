@@ -22,6 +22,8 @@ import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 type EmployeeRowProps = {
   employee: Employee
   onOpen: (id: string) => void
+  onChat: (employee: Employee) => void
+  onLocation: (employee: Employee) => void
 }
 
 function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof useTheme>) {
@@ -30,7 +32,7 @@ function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof 
   return theme.surface.success
 }
 
-function EmployeeRow({ employee, onOpen }: EmployeeRowProps) {
+function EmployeeRow({ employee, onOpen, onChat, onLocation }: EmployeeRowProps) {
   const theme = useTheme()
   return (
     <View
@@ -99,8 +101,13 @@ function EmployeeRow({ employee, onOpen }: EmployeeRowProps) {
           icon="chat_bubble"
           label={`Conversar com ${employee.name}`}
           badge={employee.hasUnreadMessages}
+          onPress={() => onChat(employee)}
         />
-        <ActionIcon icon="location_on" label={`Localização de ${employee.name}`} />
+        <ActionIcon
+          icon="location_on"
+          label={`Localização de ${employee.name}`}
+          onPress={() => onLocation(employee)}
+        />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Abrir detalhes de ${employee.name}`}
@@ -200,17 +207,20 @@ function ActionIcon({
   icon,
   label,
   badge = false,
+  onPress,
 }: {
   icon: IconName
   label: string
   badge?: boolean
+  onPress: () => void
 }) {
   const theme = useTheme()
   return (
     <View style={{ position: 'relative' }}>
-      <View
+      <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
+        onPress={onPress}
         style={{
           backgroundColor: theme.surface.high,
           borderRadius: theme.border.radius.m,
@@ -220,7 +230,7 @@ function ActionIcon({
         }}
       >
         <Icon name={icon} size={20} color={theme.content.dark} />
-      </View>
+      </Pressable>
       {badge ? (
         <View
           style={{
@@ -318,6 +328,8 @@ export function EmployeesList({
                 key={employee.id}
                 employee={employee}
                 onOpen={(id) => navigate(`/employees/${id}`)}
+                onChat={() => navigate('/chat')}
+                onLocation={() => navigate('/maps/general')}
               />
             ))}
           </View>
