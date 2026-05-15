@@ -441,11 +441,7 @@ export function ReportDetails() {
         </Text>
         <View style={{ gap: theme.gap.s }}>
           {(report.activities ?? []).map((a) => (
-            <ActivityRow
-              key={a.id}
-              activity={a}
-              onLocation={() => navigate('/maps/general')}
-            />
+            <ActivityRow key={a.id} activity={a} onLocation={() => navigate('/maps/general')} />
           ))}
         </View>
       </View>
