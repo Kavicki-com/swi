@@ -597,7 +597,9 @@ export function WorkerDetailsLayout({
           </View>
         </View>
         <LineCaloriesChart
-          points={CALORIES_BY_PERIOD[caloriesPeriod as keyof typeof CALORIES_BY_PERIOD] ?? CALORIES_DAY}
+          points={
+            CALORIES_BY_PERIOD[caloriesPeriod as keyof typeof CALORIES_BY_PERIOD] ?? CALORIES_DAY
+          }
           unit="kcal"
           fullWidth
         />

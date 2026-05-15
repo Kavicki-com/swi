@@ -517,9 +517,7 @@ export function ChatInbox() {
     }
     setContacts((prev) =>
       prev.map((c) =>
-        c.id === selectedContact.id
-          ? { ...c, messages: [...(c.messages ?? []), nextMessage] }
-          : c,
+        c.id === selectedContact.id ? { ...c, messages: [...(c.messages ?? []), nextMessage] } : c,
       ),
     )
     setDraft('')

@@ -138,7 +138,9 @@ export function ResponsablesModal() {
     }
     showToast(
       'Responsáveis atribuídos',
-      count === 1 ? '1 responsável adicionado ao relatório' : `${count} responsáveis adicionados ao relatório`,
+      count === 1
+        ? '1 responsável adicionado ao relatório'
+        : `${count} responsáveis adicionados ao relatório`,
     )
     navigate(-1)
   }
