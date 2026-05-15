@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import { Button, Icon, ImageUploader, Input, Text, useTheme } from '@kavicki/swi-design-system'
+import { useDemoToast } from '@/lib/demoToast'
 
 // Empty image slot — Figma 105:12461 placeholder for an uploaded attachment.
 // Solid surface.high tile with a centered photo glyph.
@@ -33,6 +34,7 @@ function AttachmentSlot() {
 export function NewReport() {
   const theme = useTheme()
   const navigate = useNavigate()
+  const { show: showToast } = useDemoToast()
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
   const [details, setDetails] = useState('')
@@ -163,6 +165,10 @@ export function NewReport() {
             variant="contained"
             fullWidth
             accessibilityLabel="Salvar relatório"
+            onPress={() => {
+              showToast('Relatório salvo', title.trim() || 'Rascunho enviado para revisão')
+              navigate('/reports')
+            }}
           />
         </View>
       </View>
