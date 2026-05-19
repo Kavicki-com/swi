@@ -544,9 +544,6 @@ export function ChatInbox() {
         flex: 1,
         minHeight: 728,
         marginBottom: 52,
-        // @ts-expect-error display:'flex' is web-only — RN-Web maps View to
-        // flex by default but the type still expects RN values.
-        display: 'flex',
         flexDirection: 'column',
         backgroundColor: theme.background,
       }}

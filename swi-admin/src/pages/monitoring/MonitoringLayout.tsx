@@ -6,7 +6,7 @@
 //
 // The Outlet slot sits between the KPI row and the title so child routes
 // can inject a unique row (e.g. good-conditions adds 4 DonutCharts).
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -238,6 +238,104 @@ function AlertUserCard({
   )
 }
 
+// --- KPI two-row grid (wide breakpoint) ---
+
+// Per Figma 1263:7972: row 1 = 4 BigNumbersCard in a 4-col grid; row 2 = 3
+// transparent cells (no card BG) separated by 1px vertical dividers. Used at
+// wide on every /monitoring/* tab — half-width on good-conditions (paired
+// with the donut Outlet), full-width on alerts/desgastados. The grid-based
+// row 2 (`1fr 1px 1fr 1px 1fr`) makes the cells stretch to match row 1's
+// 4-col rhythm in both contexts so the alignment stays consistent.
+function KpiTwoRowGrid({ kpis }: { kpis: ReadonlyArray<MonitoringKpi> }) {
+  const theme = useTheme()
+  const row2 = kpis.slice(4)
+  return (
+    <View style={{ gap: theme.gap.m, width: '100%' }}>
+      {/* Row 1 — 4 BigNumbersCards. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: theme.gap.m,
+          width: '100%',
+        }}
+      >
+        {kpis.slice(0, 4).map((k) => (
+          <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
+        ))}
+      </div>
+      {/* Row 2 — 3 transparent cells with 1px×80 vertical dividers between.
+          Grid keeps cells equal-width and dividers exactly between, so the
+          pattern scales from half-width (good-conditions) to full-width
+          (alerts/desgastados) without code changes. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1px 1fr 1px 1fr',
+          alignItems: 'center',
+          width: '100%',
+        }}
+      >
+        {row2.map((k, i) => (
+          <Fragment key={k.id}>
+            <View
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: theme.gap.s,
+                padding: theme.padding.m,
+              }}
+            >
+              <View
+                style={{
+                  width: 24,
+                  height: 24,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name={k.icon} size={20} color={theme.content.primary} />
+              </View>
+              <Text
+                color={theme.content.dark}
+                style={{
+                  fontFamily: theme.fontFamily.title,
+                  fontWeight: '700',
+                  fontSize: theme.fontSize.xxl,
+                  textAlign: 'center',
+                }}
+              >
+                {String(k.value)}
+              </Text>
+              <Text
+                color={theme.content.dark}
+                style={{
+                  fontFamily: theme.fontFamily.body,
+                  fontWeight: '500',
+                  fontSize: theme.fontSize.sm,
+                  textAlign: 'center',
+                }}
+              >
+                {k.label}
+              </Text>
+            </View>
+            {i < row2.length - 1 ? (
+              <View
+                style={{
+                  width: 1,
+                  height: 80,
+                  backgroundColor: theme.content.lightGrey,
+                  alignSelf: 'center',
+                }}
+              />
+            ) : null}
+          </Fragment>
+        ))}
+      </div>
+    </View>
+  )
+}
+
 // --- Layout component ---
 
 const TAB_BY_PATH: Array<[match: string, tab: string]> = [
@@ -305,134 +403,40 @@ export function MonitoringLayout() {
       testID="monitoring-layout"
       style={{
         gap: theme.gap.xl,
-        // Cap content at Figma 1366 content-area (1041) and center in wide
-        // viewports — same pattern as WorkerDetailsLayout. Tablet keeps no
-        // cap so the stack uses the full viewport. Wide good-conditions
-        // also drops the cap so the new 2-col side-by-side layout can use
-        // the full content area for donuts + BigNumbers grid.
-        ...(isTablet || useWideSideBySide
+        // Cap content at Figma 1366 content-area (1041) only at the desktop
+        // breakpoint. Tablet and wide both drop the cap so the page uses the
+        // full viewport — at wide every /monitoring/* tab shares the stretched
+        // layout (KPI two-row grid + side-by-side donuts for good-conditions,
+        // full-width KPI grid + full-width tabs/list for the other tabs).
+        ...(isTablet || isWide
           ? null
           : ({ maxWidth: 1041, alignSelf: 'center', width: '100%' } as const)),
       }}
     >
       {useWideSideBySide ? (
         // Wide + good-conditions side-by-side per Figma 1263:7972:
-        //   LEFT  → BigNumbers 4-col × 2-row inside a styled panel
+        //   LEFT  → BigNumbers 2-row grid (4 cards + 3 transparent w/ dividers)
         //   RIGHT → Donuts (single horizontal row, rendered by the Outlet)
         <View style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'stretch' }}>
-          <View
-            style={{
-              flex: 1,
-              minWidth: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: theme.gap.m,
-            }}
-          >
-            {/* Row 1 — 4 BigNumbersCard with their own surface.standard BG.
-                No outer panel wrapper: cards float directly on the page bg
-                per Figma 1263:7972. */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: theme.gap.m,
-                width: '100%',
-              }}
-            >
-              {kpis.slice(0, 4).map((k) => (
-                <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
-              ))}
-            </div>
-            {/* Row 2 — 3 transparent cells (no card BG) centred horizontally,
-                separated by 1px vertical dividers. Per Figma 1263:7972 the
-                bottom row's cards do NOT have a card surface — only the
-                icon/number/label content with vertical strokes between. */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: theme.gap.m,
-                width: '100%',
-              }}
-            >
-              {kpis.slice(4).map((k, i, arr) => (
-                <View
-                  key={k.id}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: theme.gap.m,
-                  }}
-                >
-                  <View
-                    style={{
-                      // Approximately the width of a row-1 grid cell so
-                      // row 2 cells visually align with row 1 column widths.
-                      width: 200,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: theme.gap.s,
-                      padding: theme.padding.m,
-                    }}
-                  >
-                    {/* IconSlot — matches BigNumbersCard's 24x24 wrapper so the
-                        icon centers identically to row-1 cards. */}
-                    <View
-                      style={{
-                        width: 24,
-                        height: 24,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Icon name={k.icon} size={20} color={theme.content.primary} />
-                    </View>
-                    <Text
-                      color={theme.content.dark}
-                      style={{
-                        fontFamily: theme.fontFamily.title,
-                        fontWeight: '700',
-                        fontSize: theme.fontSize.xxl,
-                        textAlign: 'center',
-                      }}
-                    >
-                      {String(k.value)}
-                    </Text>
-                    <Text
-                      color={theme.content.dark}
-                      style={{
-                        fontFamily: theme.fontFamily.body,
-                        fontWeight: '500',
-                        fontSize: theme.fontSize.sm,
-                        textAlign: 'center',
-                      }}
-                    >
-                      {k.label}
-                    </Text>
-                  </View>
-                  {/* Vertical 1px divider between cells (skip after last). */}
-                  {i < arr.length - 1 ? (
-                    <View
-                      style={{
-                        width: 1,
-                        height: 80,
-                        backgroundColor: theme.content.lightGrey,
-                      }}
-                    />
-                  ) : null}
-                </View>
-              ))}
-            </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <KpiTwoRowGrid kpis={kpis} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Outlet />
           </View>
         </View>
+      ) : isWide ? (
+        // Wide + non-good-conditions tabs (desgastados, alerts): same two-row
+        // KPI grid as good-conditions but spanning the full content width so
+        // every wide /monitoring/* tab shares one visual rhythm. Outlet stays
+        // mounted (renders null for these tabs) so route lifecycles match.
+        <>
+          <KpiTwoRowGrid kpis={kpis} />
+          <Outlet />
+        </>
       ) : (
         <>
-          {/* KPI row — shared at tablet/desktop and wide-alerts. */}
+          {/* KPI row — shared at tablet/desktop. */}
           <View
             style={{
               flexDirection: 'row',
