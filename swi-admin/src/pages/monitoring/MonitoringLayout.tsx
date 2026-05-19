@@ -426,12 +426,24 @@ export function MonitoringLayout() {
           </View>
         </View>
       ) : isWide ? (
-        // Wide + non-good-conditions tabs (desgastados, alerts): same two-row
-        // KPI grid as good-conditions but spanning the full content width so
-        // every wide /monitoring/* tab shares one visual rhythm. Outlet stays
-        // mounted (renders null for these tabs) so route lifecycles match.
+        // Wide + non-good-conditions tabs (desgastados, alerts): all 7 KPIs
+        // share one row of BigNumbersCards across the full content width.
+        // The two-row transparent pattern is reserved for good-conditions
+        // (where it sits beside the donut Outlet). Outlet stays mounted
+        // (renders null for these tabs) so route lifecycles match.
         <>
-          <KpiTwoRowGrid kpis={kpis} />
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${kpis.length || 7}, 1fr)`,
+              gap: theme.gap.m,
+              width: '100%',
+            }}
+          >
+            {kpis.map((k) => (
+              <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
+            ))}
+          </div>
           <Outlet />
         </>
       ) : (
