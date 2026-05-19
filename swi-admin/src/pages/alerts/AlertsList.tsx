@@ -221,8 +221,18 @@ export function AlertsList() {
     return () => {
       handles.forEach((h) => {
         h.marker.remove()
-        h.root.unmount()
-        h.el.remove()
+      })
+      // Defer the React subtree unmount to a microtask — calling
+      // root.unmount() synchronously inside a useEffect cleanup that fires
+      // during a state-driven re-render logs the "Attempted to synchronously
+      // unmount a root while React was already rendering" warning and in
+      // rare cases leaves the route in a blank state. Microtask defers
+      // it past the current render cycle (same fix as AlertsRescueRoute).
+      queueMicrotask(() => {
+        handles.forEach((h) => {
+          h.root.unmount()
+          h.el.remove()
+        })
       })
     }
   }, [lib, mapReady, filteredMarkers])

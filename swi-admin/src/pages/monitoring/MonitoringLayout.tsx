@@ -68,15 +68,12 @@ function VerticalDivider() {
 
 function AlertRow({ alert }: { alert: MonitoringAlertDetail }) {
   const theme = useTheme()
-  const iconColor =
-    alert.tone === 'error'
-      ? theme.content.error
-      : alert.tone === 'warning'
-        ? theme.content.warning
-        : theme.content.dark
+  // Per Figma: all alert row icons render in content.dark (white) regardless
+  // of tone — tone-based colouring (error red / warning orange) didn't match
+  // the design.
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s, width: '100%' }}>
-      <Icon name={alert.icon} size={28} color={iconColor} />
+      <Icon name={alert.icon} size={28} color={theme.content.dark} />
       <View style={{ flex: 1, gap: 5 }}>
         <Text
           variant="body.m"
@@ -209,6 +206,8 @@ function AlertUserCard({
               <Button
                 label="Histórico de exames clínicos"
                 variant="outline"
+                labelColor={theme.content.primary}
+                borderColor={theme.content.primary}
                 fullWidth
                 accessibilityLabel="Ver histórico de exames clínicos"
                 onPress={onViewExams}
@@ -216,6 +215,8 @@ function AlertUserCard({
               <Button
                 label="Ligar para o funcionário"
                 variant="outline"
+                labelColor={theme.content.primary}
+                borderColor={theme.content.primary}
                 fullWidth
                 accessibilityLabel="Ligar para o funcionário"
                 onPress={onCall}

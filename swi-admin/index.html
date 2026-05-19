@@ -78,6 +78,12 @@
         animation-duration: 600ms;
         animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
       }
+      /* DS DonutChart's LocationButton inset shadow — escape hatch via
+       * data-attribute because RN-Web normalises inline boxShadow and chokes
+       * on the `inset` keyword in jsdom. Spec: Figma 43:2131. */
+      [data-donut-loc-btn='true'] {
+        box-shadow: inset 0px 4px 4px 0px rgba(29, 29, 29, 0.56);
+      }
     </style>
   </head>
   <body>

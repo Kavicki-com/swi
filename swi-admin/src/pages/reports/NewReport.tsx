@@ -8,7 +8,15 @@
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
-import { Button, Icon, ImageUploader, Input, Text, Title, useTheme } from '@kavicki/swi-design-system'
+import {
+  Button,
+  Icon,
+  ImageUploader,
+  Input,
+  Text,
+  Title,
+  useTheme,
+} from '@kavicki/swi-design-system'
 import { useDemoToast } from '@/lib/demoToast'
 
 // Empty image slot — Figma 105:12461 placeholder for an uploaded attachment.
@@ -81,7 +89,10 @@ export function NewReport() {
         <Button
           label="Atribuir responsáveis"
           variant="contained"
-          iconRight={<Icon name="add" size={24} color={theme.content.light} />}
+          iconRight={
+            // @ts-expect-error add_circle is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+            <Icon name="add_circle" size={24} color={theme.content.light} />
+          }
           onPress={() => navigate('/modals/responsables')}
           accessibilityLabel="Atribuir responsáveis ao relatório"
         />
@@ -101,16 +112,19 @@ export function NewReport() {
           onChangeText={setSummary}
           placeholder="Digite aqui um resumo do seu relatório"
         />
-        <View style={{ height: 365 }}>
-          <Input
-            label="Detalhes do relatório"
-            value={details}
-            onChangeText={setDetails}
-            placeholder="Digite aqui o seu relatório"
-            multiline
-            numberOfLines={12}
-          />
-        </View>
+        {/* No fixed-height wrapper: the DS Input doesn't propagate flex:1 to its
+            internal TextInput, so a 365px wrapper leaves ~115px of empty space
+            below the visible text-area before the next section. Let the Input
+            flow at its natural multiline size — spacing to "Anexos" then comes
+            cleanly from the parent section's gap.l (24px). */}
+        <Input
+          label="Detalhes do relatório"
+          value={details}
+          onChangeText={setDetails}
+          placeholder="Digite aqui o seu relatório"
+          multiline
+          numberOfLines={12}
+        />
       </View>
 
       {/* Section 4 — Anexos: 4 image slots + ImageUploader. */}
@@ -135,6 +149,7 @@ export function NewReport() {
               helperText="Selecione arquivos do tipo: JPG ou PNG"
               pickFileLabel="Enviar arquivo"
               accentColor={theme.content.primary}
+              showTakePhoto={false}
             />
           </View>
         </View>

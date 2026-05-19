@@ -91,7 +91,9 @@ const MONITORING_ROWS: ReadonlyArray<{
       },
       {
         id: 'a-04-03',
-        icon: 'cognition',
+        // cognition_filled was added in local DS source; cast to satisfy the
+        // pinned v0.1.35 IconName union until the DS bumps.
+        icon: 'cognition_filled' as IconName,
         title: 'Fadiga excessiva',
         description: 'Carga operacional acima do recomendado para o funcionário',
         tone: 'warning',
@@ -110,7 +112,9 @@ const MONITORING_ROWS: ReadonlyArray<{
       },
       {
         id: 'a-10-02',
-        icon: 'cognition',
+        // cognition_filled was added in local DS source; cast to satisfy the
+        // pinned v0.1.35 IconName union until the DS bumps.
+        icon: 'cognition_filled' as IconName,
         title: 'Fadiga acumulada',
         description: '224 min até fadiga total — operação contínua há 6h',
         tone: 'error',
