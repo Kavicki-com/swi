@@ -74,7 +74,11 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
             paddingVertical: theme.padding.s,
           }}
         >
-          <Text variant="body.m" color={theme.content.primary} style={{ fontWeight: '700' }}>
+          <Text
+            variant="body.m"
+            color={theme.content.primary}
+            style={{ fontFamily: theme.fontFamily.title, fontWeight: '700' }}
+          >
             Editar perfil
           </Text>
           <Icon name="edit" size={16} color={theme.content.primary} />

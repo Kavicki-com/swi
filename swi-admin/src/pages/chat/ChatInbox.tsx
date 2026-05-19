@@ -161,11 +161,7 @@ function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatC
         </Text>
         {isMe ? null : <Icon name="more_vert" size={16} color={theme.content.dark} />}
       </View>
-      <Text
-        variant="caption.xs"
-        color={theme.content.dark}
-        style={{ fontSize: 8, fontWeight: '700' }}
-      >
+      <Text variant="caption.xs" color={theme.content.dark}>
         {message.time}
       </Text>
     </div>
@@ -603,12 +599,21 @@ export function ChatInbox() {
             }}
           >
             {filtered.map((c) => (
-              <ContactRow
+              <div
                 key={c.id}
-                contact={c}
-                selected={c.id === selectedContactId}
-                onPress={() => navigate(`/chat/${c.id}`)}
-              />
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  width: '100%',
+                  viewTransitionName: `chat-card-${c.id}`,
+                }}
+              >
+                <ContactRow
+                  contact={c}
+                  selected={c.id === selectedContactId}
+                  onPress={() => navigate(`/chat/${c.id}`)}
+                />
+              </div>
             ))}
           </div>
 

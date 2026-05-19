@@ -5,9 +5,8 @@
 // independent of jsdom's default viewport.
 import { renderHook } from '@testing-library/react'
 
-const useWindowDimensionsMock = vi.fn<
-  () => { width: number; height: number; scale: number; fontScale: number }
->()
+const useWindowDimensionsMock =
+  vi.fn<() => { width: number; height: number; scale: number; fontScale: number }>()
 
 vi.mock('react-native', () => ({
   useWindowDimensions: () => useWindowDimensionsMock(),
@@ -30,14 +29,14 @@ describe('useBreakpoint', () => {
     expect(result.current).toBe('tablet')
   })
 
-  it('returns "desktop" for the canonical Figma viewport (1024 ≤ w < 1600)', () => {
+  it('returns "desktop" for the canonical Figma viewport (1024 ≤ w < 1500)', () => {
     useWindowDimensionsMock.mockReturnValue(dims(1366))
     const { result } = renderHook(() => useBreakpoint())
     expect(result.current).toBe('desktop')
   })
 
-  it('returns "wide" for >= 1600 viewports', () => {
-    useWindowDimensionsMock.mockReturnValue(dims(1920))
+  it('returns "wide" for >= 1500 viewports (covers 1920 monitor at 125 % DPI scale)', () => {
+    useWindowDimensionsMock.mockReturnValue(dims(1536))
     const { result } = renderHook(() => useBreakpoint())
     expect(result.current).toBe('wide')
   })

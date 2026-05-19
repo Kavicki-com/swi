@@ -499,7 +499,11 @@ export function AlertsList() {
           >
             <Icon name="rainy" size={24} color={theme.content.light} />
             <View style={{ flex: 1, gap: theme.gap.xs }}>
-              <Text variant="body.s" color={theme.content.light} style={{ fontWeight: '700' }}>
+              <Text
+                variant="body.s"
+                color={theme.content.light}
+                style={{ fontWeight: '700' as const }}
+              >
                 Alerta de Chuvas intensas
               </Text>
               <Text variant="body.s" color={theme.content.light}>

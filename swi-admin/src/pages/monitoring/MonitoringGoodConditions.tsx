@@ -25,11 +25,9 @@ export function MonitoringGoodConditions() {
   if (!stats) return null
 
   // Each card hosts one DS DonutChart at size="default" (182×182 outer /
-  // 160 arc / 138 inner well — matches Figma 77:16613). Cards share the
-  // same surface.standard card chrome and the bevel-appearance donut.
+  // 160 arc / 138 inner well — matches Figma 77:16613). Cards sit flat on
+  // the page background (no individual card surface).
   const cardStyle = {
-    backgroundColor: theme.surface.standard,
-    borderRadius: theme.border.radius.m,
     paddingHorizontal: theme.padding.m,
     paddingVertical: theme.padding.m,
     alignItems: 'center' as const,

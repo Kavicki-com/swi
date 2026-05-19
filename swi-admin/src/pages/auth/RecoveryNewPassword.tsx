@@ -1,4 +1,6 @@
 // src/pages/auth/RecoveryNewPassword.tsx
+//
+// Password recovery — step 2 (set new password) — Figma frame 105:12879.
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { View } from 'react-native'

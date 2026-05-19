@@ -329,7 +329,6 @@ export function MonitoringLayout() {
                 const next = PATH_BY_TAB[v]
                 if (next && next !== location.pathname) navigate(next)
               }}
-              variant="separated"
               fullWidth
               accessibilityLabel="Filtro de status"
             />

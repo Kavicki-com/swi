@@ -1,4 +1,6 @@
 // src/pages/auth/Login.tsx
+//
+// Login screen — Figma frame 22:1585.
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { View } from 'react-native'
@@ -120,6 +122,8 @@ export function Login() {
           <Button
             variant="ghost"
             label="Recuperar senha"
+            // @ts-expect-error labelFamily exists in local DS source; node_modules pin v0.1.35 hasn't received this prop yet.
+            labelFamily="title"
             accessibilityLabel="Recuperar senha"
             onPress={() => navigate('/recovery/email')}
           />
@@ -156,6 +160,8 @@ export function Login() {
         <Button
           variant="ghost"
           label="Suporte"
+          // @ts-expect-error labelFamily exists in local DS source; node_modules pin v0.1.35 hasn't received this prop yet.
+          labelFamily="title"
           fullWidth
           accessibilityLabel="Suporte"
           onPress={() => setShowSupport(true)}
