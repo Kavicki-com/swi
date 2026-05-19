@@ -87,8 +87,26 @@ if (useLocalDs) {
   console.log(`[vite] @kavicki/swi-design-system → local source (${dsLocalRoot})`)
 }
 
+// DEV ONLY: chokidar (Vite's file watcher) by default only watches files inside
+// the project root. The DS source lives outside (../../swi-design-system), so
+// edits there are loaded on demand by the alias above but don't trigger HMR
+// updates until the dev server restarts. This plugin explicitly registers the
+// DS src folder with the watcher on startup so styled-components changes etc.
+// propagate immediately.
+const dsLocalWatcherPlugin = (): PluginOption => ({
+  name: 'ds-local-watcher',
+  apply: 'serve',
+  configureServer(server) {
+    if (!useLocalDs) return
+    const dsSrc = path.join(dsLocalRoot, 'src')
+    server.watcher.add(dsSrc)
+    // eslint-disable-next-line no-console
+    console.log(`[vite] watching DS source for HMR: ${dsSrc}`)
+  },
+})
+
 export default defineConfig({
-  plugins: [react(), fidelityNotesPlugin()],
+  plugins: [react(), fidelityNotesPlugin(), dsLocalWatcherPlugin()],
   resolve: {
     alias: [
       ...dsLocalAlias,

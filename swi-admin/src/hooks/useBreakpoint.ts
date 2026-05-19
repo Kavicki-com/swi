@@ -10,8 +10,10 @@
 //   - 1024 px is the cut where the 228 px sidebar can no longer sit next to
 //     a usable content column, so below it we collapse the sidebar to a
 //     top-bar drawer.
-//   - 1600 px is the threshold where there's real room to add an extra
-//     content column on the Dashboard top row (Map | Charts | KPIs).
+//   - 1500 px is the wide threshold. CSS pixels, not monitor pixels: a 1920
+//     monitor running Windows DPI scaling at 125 % (the common default)
+//     reports 1536 CSS px to the browser, so 1500 picks up the typical
+//     1920 desktop while still requiring genuine horizontal headroom.
 import { useWindowDimensions } from 'react-native'
 
 export type Breakpoint = 'tablet' | 'desktop' | 'wide'
@@ -19,6 +21,6 @@ export type Breakpoint = 'tablet' | 'desktop' | 'wide'
 export function useBreakpoint(): Breakpoint {
   const { width } = useWindowDimensions()
   if (width < 1024) return 'tablet'
-  if (width < 1600) return 'desktop'
+  if (width < 1500) return 'desktop'
   return 'wide'
 }

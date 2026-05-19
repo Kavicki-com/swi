@@ -53,10 +53,17 @@ function AdminRow({ admin, onToggle, onOpen, onDelete, onChat, onLocation }: Adm
           <Avatar uri={admin.avatarUri} customSize={64} accessibilityLabel={admin.name} />
           <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 145 }}>
             {/* Name is Inter Bold 14 per Figma 48:4889 (not in the DS Text
-                variant table, so override fontWeight inline). */}
-            <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
-              {admin.name}
-            </Text>
+                variant table, so override fontWeight inline). Pressable so a
+                click on the name itself opens the admin detail page. */}
+            <Pressable
+              onPress={() => onOpen(admin.id)}
+              accessibilityRole="link"
+              accessibilityLabel={`Abrir perfil de ${admin.name}`}
+            >
+              <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+                {admin.name}
+              </Text>
+            </Pressable>
             <Text variant="body.m" color={theme.content.dark}>
               {admin.age} anos
             </Text>
@@ -64,7 +71,11 @@ function AdminRow({ admin, onToggle, onOpen, onDelete, onChat, onLocation }: Adm
               {/* Figma uses a humidity-drop glyph (humidity_mid) for the
                   blood-type indicator, tinted error/red. */}
               <Icon name="humidity_mid" size={20} color={theme.content.error} />
-              <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+              <Text
+                variant="body.m"
+                color={theme.content.dark}
+                style={{ fontWeight: '700', fontSize: 16 }}
+              >
                 {admin.bloodType}
               </Text>
             </View>

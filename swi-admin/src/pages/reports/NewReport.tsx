@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
-import { Button, Icon, ImageUploader, Input, Text, useTheme } from '@kavicki/swi-design-system'
+import { Button, Icon, ImageUploader, Input, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { useDemoToast } from '@/lib/demoToast'
 
 // Empty image slot — Figma 105:12461 placeholder for an uploaded attachment.
@@ -75,13 +75,9 @@ export function NewReport() {
           justifyContent: 'space-between',
         }}
       >
-        <Text
-          variant="body.m"
-          color={theme.content.primary}
-          style={{ fontFamily: theme.fontFamily.title, fontWeight: '700', fontSize: 20 }}
-        >
+        <Title variant="title.s" color={theme.content.primary}>
           Novo relatório
-        </Text>
+        </Title>
         <Button
           label="Atribuir responsáveis"
           variant="contained"
@@ -119,13 +115,9 @@ export function NewReport() {
 
       {/* Section 4 — Anexos: 4 image slots + ImageUploader. */}
       <View style={{ gap: theme.gap.m }}>
-        <Text
-          variant="body.m"
-          color={theme.content.primary}
-          style={{ fontFamily: theme.fontFamily.title, fontWeight: '700', fontSize: 16 }}
-        >
+        <Title variant="title.xs" color={theme.content.primary}>
           Anexos
-        </Text>
+        </Title>
         <View
           style={{
             flexDirection: 'row',

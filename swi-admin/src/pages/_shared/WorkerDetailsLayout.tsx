@@ -348,7 +348,7 @@ export function WorkerDetailsLayout({
               <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
                 {worker.name}
               </Text>
-              <Text variant="body.m" color={theme.content.dark}>
+              <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
                 {worker.role}
               </Text>
               <Text variant="body.m" color={theme.content.dark}>
@@ -400,8 +400,10 @@ export function WorkerDetailsLayout({
             justifyContent: 'flex-start',
           }}
         >
+          {/* Per product directive: silhouette is always the masculino variant
+             regardless of worker.gender — the female SVG was deprecated. */}
           <Silhouette
-            gender={worker.gender === 'male' ? 'male' : 'female'}
+            gender="male"
             height={420}
             showHeart
             heatGradient

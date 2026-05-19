@@ -69,15 +69,26 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation }: EmployeeRowProps)
             />
           </View>
           <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 165 }}>
-            <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
-              {employee.name}
-            </Text>
+            {/* Pressable so a click on the name itself opens the employee detail page. */}
+            <Pressable
+              onPress={() => onOpen(employee.id)}
+              accessibilityRole="link"
+              accessibilityLabel={`Abrir perfil de ${employee.name}`}
+            >
+              <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+                {employee.name}
+              </Text>
+            </Pressable>
             <Text variant="body.m" color={theme.content.dark}>
               {employee.age} anos
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Icon name="humidity_mid" size={20} color={theme.content.error} />
-              <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+              <Text
+                variant="body.m"
+                color={theme.content.dark}
+                style={{ fontWeight: '700', fontSize: 16 }}
+              >
                 {employee.bloodType}
               </Text>
             </View>

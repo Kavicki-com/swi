@@ -1,6 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Pressable, View } from 'react-native'
+import { flushSync } from 'react-dom'
+
+// Wrap a navigation in the View Transitions API so cards with matching
+// `viewTransitionName` morph across the route change. Falls back to a plain
+// navigate on browsers without `document.startViewTransition` (Firefox < 130,
+// older Safari).
+function navigateWithTransition(navigate: (to: string) => void, to: string) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown }
+  if (typeof doc.startViewTransition === 'function') {
+    doc.startViewTransition(() => {
+      flushSync(() => navigate(to))
+    })
+  } else {
+    navigate(to)
+  }
+}
 import {
   Button,
   ChatSection,
@@ -137,7 +153,13 @@ export function AppLayout() {
             gap: theme.gap.m,
           }}
         >
-          <Logo type="complete" size="m" />
+          <Pressable
+            onPress={() => navigate('/')}
+            accessibilityRole="link"
+            accessibilityLabel="Ir para dashboard"
+          >
+            <Logo type="complete" size="m" />
+          </Pressable>
           {/* DS Button supports label-only; the DS doesn't ship a hamburger
               glyph today, so we use the Portuguese label "Menu" rather than
               spinning up a custom icon (project rule: no local components,
@@ -187,7 +209,13 @@ export function AppLayout() {
                   paddingVertical: theme.padding.m,
                 }}
               >
-                <Logo type="complete" size="m" />
+                <Pressable
+                  onPress={() => navigate('/')}
+                  accessibilityRole="link"
+                  accessibilityLabel="Ir para dashboard"
+                >
+                  <Logo type="complete" size="m" />
+                </Pressable>
               </View>
               <SideMenu
                 testID="app-drawer-nav"
@@ -201,10 +229,23 @@ export function AppLayout() {
                 <ChatSection
                   users={CHAT_USERS}
                   searchPlaceholder="Pesquisar Contatos"
-                  expandLabel="Esperando chat"
-                  onUserPress={(id: string) => navigate(`/chat/${id}`)}
-                  onExpand={() => navigate('/chat')}
+                  expandLabel="Expandir chat"
+                  onUserPress={(id: string) => navigateWithTransition(navigate, `/chat/${id}`)}
+                  onExpand={() => navigateWithTransition(navigate, '/chat')}
                   fullWidth
+                  // @ts-expect-error renderCard is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+                  renderCard={(card: ReactNode, user: ChatSectionUser) => (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        width: '100%',
+                        viewTransitionName: `chat-card-${user.id}`,
+                      }}
+                    >
+                      {card}
+                    </div>
+                  )}
                 />
               </View>
             </View>
@@ -244,14 +285,7 @@ export function AppLayout() {
         style={{
           width: 228,
           flexDirection: 'column',
-          backgroundColor: theme.background,
-          paddingHorizontal: theme.padding.s,
-          paddingVertical: theme.padding.m,
-          // Figma sidebar itemSpacing = 16; theme.gap.m maps to that scale step.
-          gap: theme.gap.m,
-          // Sidebar sizes to its content height (Figma: 865px) so the page
-          // bg-overlay is visible below it instead of being masked by
-          // theme.background extending to the full viewport row height.
+          gap: theme.gap.s,
           alignSelf: 'flex-start',
         }}
       >
@@ -262,7 +296,13 @@ export function AppLayout() {
             paddingVertical: theme.padding.m,
           }}
         >
-          <Logo type="complete" size="m" />
+          <Pressable
+            onPress={() => navigate('/')}
+            accessibilityRole="link"
+            accessibilityLabel="Ir para dashboard"
+          >
+            <Logo type="complete" size="m" />
+          </Pressable>
         </View>
         <SideMenu
           testID="app-sidebar-nav"
@@ -272,14 +312,27 @@ export function AppLayout() {
           onChange={(v: string) => navigate(v)}
           fullWidth
         />
-        <View testID="app-sidebar-chat">
+        <View testID="app-sidebar-chat" style={{ marginTop: theme.gap.s }}>
           <ChatSection
             users={CHAT_USERS}
             searchPlaceholder="Pesquisar Contatos"
-            expandLabel="Esperando chat"
-            onUserPress={(id: string) => navigate(`/chat/${id}`)}
-            onExpand={() => navigate('/chat')}
+            expandLabel="Expandir chat"
+            onUserPress={(id: string) => navigateWithTransition(navigate, `/chat/${id}`)}
+            onExpand={() => navigateWithTransition(navigate, '/chat')}
             fullWidth
+            // @ts-expect-error renderCard is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+            renderCard={(card: ReactNode, user: ChatSectionUser) => (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  width: '100%',
+                  viewTransitionName: `chat-card-${user.id}`,
+                }}
+              >
+                {card}
+              </div>
+            )}
           />
         </View>
       </View>

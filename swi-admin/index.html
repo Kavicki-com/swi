@@ -70,6 +70,14 @@
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
       }
+      /* View Transitions API — controls the cross-route morph between sidebar
+       * ChatUserCards and ChatInbox ContactRow when "Expandir chat" is clicked.
+       * Each card is tagged with view-transition-name="chat-card-${id}" so the
+       * browser auto-pairs source/destination and morphs position+size. */
+      ::view-transition-group(*) {
+        animation-duration: 600ms;
+        animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      }
     </style>
   </head>
   <body>

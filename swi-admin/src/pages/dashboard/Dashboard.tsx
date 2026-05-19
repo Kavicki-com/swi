@@ -252,7 +252,7 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
       testID="dashboard-map-banner"
       dataSet={{ fidelity: 'map-banner' }}
       style={{
-        height: 200,
+        height: 172,
         borderRadius: theme.border.radius.m,
         overflow: 'hidden',
         position: 'relative' as unknown as never,
@@ -272,7 +272,10 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
       >
         <Button
           label="Ver mapa geral"
-          variant="ghost"
+          variant="contained"
+          size="small"
+          backgroundColor={theme.background}
+          labelColor={theme.content.dark}
           onPress={() => navigate('/maps/general')}
           testID="dashboard-map-cta"
         />
@@ -309,16 +312,64 @@ function KpiTile({
     >
       <Icon name={icon} size={24} color={theme.content.primary} />
       <Title variant="title.l">{value}</Title>
-      <Text numberOfLines={1} style={{ color: theme.content.dark, fontSize: 12 }}>
+      <Text variant="body.s" numberOfLines={1} color={theme.content.dark}>
         {label}
       </Text>
     </View>
   )
 }
 
-function FuncionariosKpi({ summary }: { summary: DashboardSummary }) {
+// Wide-class variant lays the 4 KPI tiles in a single horizontal strip
+// (Figma 1060:7080). Desktop and tablet keep the 2×2 grid that fits next
+// to HealthDonuts.
+function FuncionariosKpi({
+  summary,
+  layout = '2x2',
+}: {
+  summary: DashboardSummary
+  layout?: '2x2' | '1x4'
+}) {
   const theme = useTheme()
   const { admins, totalEmployees, newReports, activeCameras } = summary.kpis
+  if (layout === '1x4') {
+    // Wide variant: no surface wrapper around the strip — tiles sit
+    // directly on the page background to match Figma 1060:7080.
+    return (
+      <View
+        testID="kpi-funcionarios"
+        dataSet={{ fidelity: 'kpi-1x4' }}
+        style={{
+          flexDirection: 'row',
+          gap: theme.gap.s,
+        }}
+      >
+        <KpiTile
+          icon="account_circle_filled"
+          value={admins}
+          label="Administradores"
+          testID="kpi-funcionarios-admins"
+        />
+        <KpiTile
+          icon="employee_filled"
+          value={totalEmployees}
+          label="Funcionários"
+          testID="kpi-funcionarios-employees"
+        />
+        <KpiTile
+          icon="report_filled"
+          value={newReports}
+          label="Novos relatórios"
+          testID="kpi-funcionarios-reports"
+        />
+        <KpiTile
+          icon="video_camera_filled"
+          value={activeCameras}
+          label="Câmeras ativas"
+          testID="kpi-funcionarios-cameras"
+        />
+      </View>
+    )
+  }
   return (
     <View
       testID="kpi-funcionarios"
@@ -402,7 +453,7 @@ function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
       dataSet={{ fidelity: 'wear-alerts' }}
       style={{ gap: theme.gap.m }}
     >
-      <Title>Alertas de Desgaste</Title>
+      <Title variant="title.s">Alertas de Desgaste</Title>
       <View
         style={{
           flexDirection: 'row',
@@ -506,16 +557,12 @@ function ActivityCard({ activity }: { activity: DashboardActivity }) {
           }}
         />
         <View style={{ gap: theme.gap.xs }}>
-          <Text
-            style={{
-              color: theme.content.dark,
-              fontSize: 14,
-              fontWeight: '700' as const,
-            }}
-          >
+          <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' as const }}>
             {activity.title}
           </Text>
-          <Text style={{ color: theme.content.medium, fontSize: 12 }}>{activity.sector}</Text>
+          <Text variant="body.s" color={theme.content.medium}>
+            {activity.sector}
+          </Text>
           {/* Figma frame 4:2 ProgressBar is fixed 119px wide; DS ProgressBar
               stretches by default, so wrap to constrain. Color comes from the
               activity's risk level (normal/warning/critical), not its status. */}
@@ -563,7 +610,7 @@ function ActivitiesSection({ activities }: { activities: DashboardActivity[] }) 
       dataSet={{ fidelity: 'activities' }}
       style={{ gap: theme.gap.m }}
     >
-      <Title>Atividades em andamento</Title>
+      <Title variant="title.s">Atividades em andamento</Title>
       <View
         style={{
           flexDirection: 'row',
@@ -607,10 +654,15 @@ function HealthDonuts({
   summary,
   navigate,
   theme,
+  flat = false,
 }: {
   summary: DashboardSummary
   navigate: ReturnType<typeof useNavigate>
   theme: ReturnType<typeof useTheme>
+  // When true the wrapper drops its surface background / padding / radius
+  // so the donut cards sit directly on the page bg. Used in the wide
+  // dashboard variant where the section panel is intentionally absent.
+  flat?: boolean
 }) {
   return (
     <View
@@ -619,11 +671,15 @@ function HealthDonuts({
         flex: 1,
         flexDirection: 'row',
         gap: theme.gap.m,
-        backgroundColor: theme.surface.standard,
-        padding: theme.padding.m,
-        borderRadius: theme.border.radius.l,
         justifyContent: 'space-around',
         minWidth: 0,
+        ...(flat
+          ? null
+          : {
+              backgroundColor: theme.surface.standard,
+              padding: theme.padding.m,
+              borderRadius: theme.border.radius.l,
+            }),
       }}
     >
       <DonutChart
@@ -633,6 +689,7 @@ function HealthDonuts({
         caption="Excelentes"
         progress={85}
         icon="heartbeat_filled"
+        size="small"
         onLocationPress={() => navigate('/maps/general')}
         testID="kpi-vital-signs"
       />
@@ -644,6 +701,7 @@ function HealthDonuts({
         progress={70}
         progressGradient={WEAR_GRADIENT}
         icon="heartbeat_filled"
+        size="small"
         onLocationPress={() => navigate('/maps/general')}
         testID="kpi-wear-rate"
       />
@@ -655,6 +713,7 @@ function HealthDonuts({
         progress={60}
         progressGradient={URGENT_GRADIENT}
         icon="heartbeat_filled"
+        size="small"
         onLocationPress={() => navigate('/maps/general')}
         testID="kpi-urgent-alerts"
       />
@@ -732,34 +791,47 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
   // Wide (>= 1600): top row puts Map | Donuts | KPIs side-by-side in one
   // horizontal flow per the Figma 1920 frame. Two-column row below.
   if (breakpoint === 'wide') {
+    // Figma 1060:7080 wide dashboard layout:
+    //   Row 1 — Map full-width
+    //   Row 2 — HealthDonuts (3 charts) | FuncionariosKpi (1x4 horizontal strip)
+    //   Row 3 — Atividades em andamento | Alertas de Desgaste
     return (
       <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
+        {/* Row 1 — Map spans the full content width. */}
+        <View testID="dashboard-top-row-wide" dataSet={{ fidelity: 'top-row-wide' }}>
+          <MapBanner markers={summary.mapMarkers} />
+        </View>
+        {/* Row 2 — Donuts (left, ~60 %) and 4 KPIs (right, ~40 %). */}
         <View
-          testID="dashboard-top-row-wide"
-          dataSet={{ fidelity: 'top-row-wide' }}
+          testID="dashboard-kpi-row-wide"
+          dataSet={{ fidelity: 'kpi-row-wide' }}
           style={{
             flexDirection: 'row',
             gap: theme.gap.m,
             alignItems: 'stretch',
-            flexWrap: 'wrap',
           }}
         >
-          <View style={{ flexBasis: 360, flexGrow: 1.4, flexShrink: 1, minWidth: 320 }}>
-            <MapBanner markers={summary.mapMarkers} />
-          </View>
           <View
             style={{
-              flexBasis: 420,
-              flexGrow: 1.2,
+              flexBasis: 0,
+              flexGrow: 1.5,
               flexShrink: 1,
               minWidth: 360,
               flexDirection: 'row',
             }}
           >
-            <HealthDonuts summary={summary} navigate={navigate} theme={theme} />
+            <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
           </View>
-          <View style={{ flexBasis: 320, flexGrow: 1, flexShrink: 1, minWidth: 280 }}>
-            <FuncionariosKpi summary={summary} />
+          <View
+            style={{
+              flexBasis: 0,
+              flexGrow: 1,
+              flexShrink: 1,
+              minWidth: 320,
+              justifyContent: 'center',
+            }}
+          >
+            <FuncionariosKpi summary={summary} layout="1x4" />
           </View>
         </View>
         <View

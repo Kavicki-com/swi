@@ -160,7 +160,7 @@ describe('AppLayout', () => {
       })
     })
 
-    it('renders the desktop sidebar when 1024 ≤ width < 1600', async () => {
+    it('renders the desktop sidebar when 1024 ≤ width < 1500', async () => {
       setViewportWidth(1366)
       renderTree()
       await waitFor(() => {
@@ -170,7 +170,7 @@ describe('AppLayout', () => {
       expect(screen.queryByTestId('app-layout-tablet')).not.toBeInTheDocument()
     })
 
-    it('renders the desktop sidebar (no top-bar) when width >= 1600 (wide)', async () => {
+    it('renders the desktop sidebar (no top-bar) when width >= 1500 (wide)', async () => {
       setViewportWidth(1920)
       renderTree()
       await waitFor(() => {

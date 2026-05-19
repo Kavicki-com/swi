@@ -69,6 +69,10 @@ export function App() {
                   <Route path="/monitoring" element={<MonitoringLayout />}>
                     <Route path="alerts" element={<MonitoringAlerts />} />
                     <Route path="good-conditions" element={<MonitoringGoodConditions />} />
+                    {/* Desgastados tab keeps user inside MonitoringLayout —
+                       empty Outlet content; KPIs/title/tabs/userlist render
+                       normally and the layout filters its userlist by tab. */}
+                    <Route path="desgastados" element={<></>} />
                   </Route>
                   <Route path="/reports" element={<ReportsList />} />
                   <Route path="/reports/new" element={<NewReport />} />

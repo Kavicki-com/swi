@@ -306,7 +306,9 @@ export function SignUp() {
             </View>
 
             <View style={{ gap: theme.gap.sm, marginTop: theme.gap.s }}>
-              <Text variant="body.m">Qual a sua função na empresa?</Text>
+              <Text variant="body.m" style={{ fontWeight: '700' as const }}>
+                Qual a sua função na empresa?
+              </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.m }}>
                 {ROLE_OPTIONS.map((opt) => (
                   <Radio
