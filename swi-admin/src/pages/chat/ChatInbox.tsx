@@ -28,6 +28,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { chatsApi, type ChatContact, type ChatMessage } from '@/services/mockApi/chats'
 import workerA from '@/assets/avatars/worker-a.png'
@@ -172,7 +173,15 @@ function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatC
         flexDirection: 'row',
         alignItems: 'flex-end',
         gap: theme.gap.sm,
-        width: '100%',
+        // Bubble sizes to message content (with internal flex:1 + minWidth:0
+        // handling long-text wrapping). Cap the whole row at 70% of the
+        // chat-box width so wide viewports don't produce edge-to-edge bubbles
+        // — matches WhatsApp/Telegram convention. alignSelf places sent
+        // messages on the right side of the chat and received on the left,
+        // overriding the chat-box's alignItems:'center' (kept for the empty
+        // state) per child.
+        alignSelf: isMe ? 'flex-end' : 'flex-start',
+        maxWidth: '70%',
       }}
     >
       {isMe ? null : avatar}
@@ -317,10 +326,23 @@ function ContactInfoPanel({
 }) {
   const theme = useTheme()
   return (
-    <View style={{ flex: 1, gap: theme.gap.m }}>
+    // Three vertical anchors distributed via justifyContent:'space-between':
+    //   1) User card at the top (avatar + name + role + subtitle)
+    //   2) Mini-map floats in the middle of any extra height
+    //   3) right-collumn (fadigue bar + stats card) at the bottom
+    // This matches the user-requested layout where the map sits in the empty
+    // space between the identity block and the fatigue/stats group instead of
+    // hugging the user card.
+    <View style={{ flex: 1, gap: theme.gap.sm, justifyContent: 'space-between' }}>
       {/* User card — Figma 103:9835 — Avatar 56 + centered name + 2-line subtitle. */}
       <View style={{ alignItems: 'center', gap: theme.padding.m }}>
-        <Avatar uri={contact.avatarUri} customSize={56} accessibilityLabel={contact.name} />
+        <Avatar
+          uri={contact.avatarUri}
+          customSize={56}
+          bordered
+          borderColor={theme.surface.secondary}
+          accessibilityLabel={contact.name}
+        />
         <View style={{ width: '100%', alignItems: 'center', gap: 4 }}>
           <Title variant="title.xs" color={theme.content.dark}>
             {contact.name}
@@ -334,110 +356,115 @@ function ContactInfoPanel({
         </View>
       </View>
 
-      {/* Mini-map */}
+      {/* Mini-map — floats in the middle vertical slot via space-between. */}
       <ContactMiniMap contact={contact} onOpenFullMap={onOpenFullMap} />
 
-      {/* Fatigue total — Figma 103:9868. Label, reversed gradient bar
-          (success → warning → error), then remaining time below. */}
+      {/* right-collumn group — Figma 103:9867 — fadigue-bar + stats card. */}
       <View style={{ gap: theme.gap.m }}>
-        <Title variant="title.xs" color={theme.content.dark}>
-          Tempo até a fadiga total
-        </Title>
-        <div
-          style={{
-            height: 6,
-            width: '100%',
-            borderRadius: 999,
-            background: `linear-gradient(90deg, ${theme.surface.success} 0%, ${theme.surface.warning} 54.327%, ${theme.surface.error} 100%)`,
-          }}
-        />
-        <Title variant="title.xs" color={theme.content.dark}>
-          {contact.fatigueRemaining ?? '—'}
-        </Title>
-      </View>
-
-      {/* Stats card — Figma 103:9876. surface.standard, padding.l, radius.l,
-          three rows: Gênero/Idade, Tipo sanguíneo, Alergias. */}
-      <View
-        style={{
-          backgroundColor: theme.surface.standard,
-          borderRadius: theme.border.radius.l,
-          padding: theme.padding.l,
-          gap: theme.gap.s,
-        }}
-      >
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: theme.gap.s,
-          }}
-        >
-          <Text
-            variant="body.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700', fontSize: 16 }}
-          >
-            Gênero
-          </Text>
-          <Icon
-            name={contact.gender === 'male' ? 'male' : 'female'}
-            size={20}
-            color={theme.content.dark}
+        {/* Fatigue total — Figma 103:9868. Label, reversed gradient bar
+            (success → warning → error), then remaining time below. */}
+        <View style={{ gap: theme.gap.m }}>
+          <Title variant="title.xs" color={theme.content.dark}>
+            Tempo até a fadiga total
+          </Title>
+          <div
+            style={{
+              height: 6,
+              width: '100%',
+              borderRadius: 999,
+              background: `linear-gradient(90deg, ${theme.surface.success} 0%, ${theme.surface.warning} 54.327%, ${theme.surface.error} 100%)`,
+            }}
           />
-          <Text variant="body.m" color={theme.content.dark}>
-            {contact.gender === 'male' ? 'Masculino' : 'Feminino'}
-          </Text>
-          <Text
-            variant="body.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700', fontSize: 16 }}
-          >
-            Idade
-          </Text>
-          <Text variant="body.m" color={theme.content.dark}>
-            {contact.age != null ? `${contact.age} anos` : '—'}
-          </Text>
+          <Title variant="title.xs" color={theme.content.dark}>
+            {contact.fatigueRemaining ?? '—'}
+          </Title>
         </View>
+
+        {/* Stats card — Figma 103:9876. Bumped from surface.standard to
+          surface.medium because the outer RIGHT col now also uses
+          surface.standard (chat-section bg directive 2026-05-19); without this
+          bump the inner stats card would merge into the outer panel. */}
         <View
           style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            alignItems: 'center',
+            backgroundColor: theme.surface.medium,
+            borderRadius: theme.border.radius.l,
+            padding: theme.padding.l,
             gap: theme.gap.s,
           }}
         >
-          <Text
-            variant="body.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700', fontSize: 16 }}
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: theme.gap.s,
+            }}
           >
-            Tipo sanguíneo
-          </Text>
-          <Icon name="humidity_mid" size={20} color={theme.content.error} />
-          <Text variant="body.m" color={theme.content.dark}>
-            {contact.bloodType ?? '—'}
-          </Text>
-        </View>
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: theme.gap.s,
-          }}
-        >
-          <Text
-            variant="body.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700', fontSize: 16 }}
+            <Text
+              variant="body.m"
+              color={theme.content.dark}
+              style={{ fontWeight: '700', fontSize: 16 }}
+            >
+              Gênero
+            </Text>
+            <Icon
+              name={contact.gender === 'male' ? 'male' : 'female'}
+              size={20}
+              color={theme.content.dark}
+            />
+            <Text variant="body.m" color={theme.content.dark}>
+              {contact.gender === 'male' ? 'Masculino' : 'Feminino'}
+            </Text>
+            <Text
+              variant="body.m"
+              color={theme.content.dark}
+              style={{ fontWeight: '700', fontSize: 16 }}
+            >
+              Idade
+            </Text>
+            <Text variant="body.m" color={theme.content.dark}>
+              {contact.age != null ? `${contact.age} anos` : '—'}
+            </Text>
+          </View>
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: theme.gap.s,
+            }}
           >
-            Alergias
-          </Text>
-          <Text variant="body.m" color={theme.content.dark}>
-            {contact.allergies ?? 'Nenhuma'}
-          </Text>
+            <Text
+              variant="body.m"
+              color={theme.content.dark}
+              style={{ fontWeight: '700', fontSize: 16 }}
+            >
+              Tipo sanguíneo
+            </Text>
+            <Icon name="humidity_mid" size={20} color={theme.content.error} />
+            <Text variant="body.m" color={theme.content.dark}>
+              {contact.bloodType ?? '—'}
+            </Text>
+          </View>
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: theme.gap.s,
+            }}
+          >
+            <Text
+              variant="body.m"
+              color={theme.content.dark}
+              style={{ fontWeight: '700', fontSize: 16 }}
+            >
+              Alergias
+            </Text>
+            <Text variant="body.m" color={theme.content.dark}>
+              {contact.allergies ?? 'Nenhuma'}
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -448,6 +475,8 @@ export function ChatInbox() {
   const { user } = useAuth()
   const theme = useTheme()
   const navigate = useNavigate()
+  const breakpoint = useBreakpoint()
+  const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
   const [contacts, setContacts] = useState<ReadonlyArray<ChatContact>>([])
   const [search, setSearch] = useState('')
@@ -506,7 +535,19 @@ export function ChatInbox() {
     <View
       testID="chat-inbox"
       style={{
-        minHeight: '100vh' as unknown as number,
+        // Chat grows to fill the available space below the DemoBanner with
+        // a 52 px gutter at the bottom (user-approved spec). minHeight 728
+        // = Figma 88 header + 640 row floors the chat at tall content height
+        // when the viewport is short — the page scrolls in that case.
+        // At 1920x1080: viewport 1080 - banner 53 - margin 52 = 975 chat.
+        // At 1366x768: minHeight kicks in, chat = 728, page scrolls ~65px.
+        flex: 1,
+        minHeight: 728,
+        marginBottom: 52,
+        // @ts-expect-error display:'flex' is web-only — RN-Web maps View to
+        // flex by default but the type still expects RN values.
+        display: 'flex',
+        flexDirection: 'column',
         backgroundColor: theme.background,
       }}
     >
@@ -542,7 +583,12 @@ export function ChatInbox() {
           // flex children here, so a literal spacer is the only reliable
           // fix matching Figma 102:8997 Sidebar gap-[16px].
           paddingHorizontal: theme.padding.xxl,
-          height: 640,
+          // Figma 1366 spec: height 640. Switched to flex:1 + minHeight so
+          // taller viewports (1080+) let the chat thread breathe and shorter
+          // ones still respect 480 floor. At wide MIDDLE absorbs extra width
+          // naturally via flex:1.
+          minHeight: 480,
+          flex: 1,
           alignItems: 'stretch',
         }}
       >
@@ -550,7 +596,11 @@ export function ChatInbox() {
         <View
           style={{
             width: 358,
-            backgroundColor: theme.background,
+            // surface.standard (~#1f1f1f) instead of theme.background (~#171717)
+            // so the column reads as a card panel over the page bg instead of
+            // blending into it. Same treatment applied to MIDDLE and RIGHT cols
+            // for consistency (Figma 102:9672 / user feedback 2026-05-19).
+            backgroundColor: theme.surface.standard,
             borderRadius: theme.border.radius.m,
             padding: theme.padding.s,
             gap: theme.gap.sm,
@@ -646,7 +696,7 @@ export function ChatInbox() {
         <View
           style={{
             flex: 1,
-            backgroundColor: theme.background,
+            backgroundColor: theme.surface.standard,
             borderRadius: theme.border.radius.m,
             padding: theme.padding.s,
             gap: theme.gap.sm,
@@ -768,44 +818,54 @@ export function ChatInbox() {
           </div>
         </View>
 
-        {/* Spacer — 16px between MIDDLE and RIGHT per Figma 102:8997 */}
-        <View style={{ width: theme.padding.m }} />
+        {/* RIGHT column — hidden at tablet (<1024) so LEFT 358 + MIDDLE flex
+            fit the narrow viewport. Contact info is reachable via the LEFT
+            list or a future drawer; at desktop/wide the panel is back. */}
+        {!isTablet ? (
+          <>
+            {/* Spacer — 16px between MIDDLE and RIGHT per Figma 102:8997 */}
+            <View style={{ width: theme.padding.m }} />
 
-        {/* RIGHT column */}
-        <View
-          style={{
-            width: 268,
-            backgroundColor: theme.background,
-            borderRadius: theme.border.radius.m,
-            padding: theme.padding.m,
-          }}
-        >
-          {selectedContact ? (
-            <ContactInfoPanel
-              contact={selectedContact}
-              onOpenFullMap={() => navigate('/maps/general')}
-            />
-          ) : (
             <View
               style={{
-                flex: 1,
+                width: 268,
                 backgroundColor: theme.surface.standard,
-                borderWidth: 1,
-                borderStyle: 'dashed',
-                borderColor: theme.content.lightGrey,
                 borderRadius: theme.border.radius.m,
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingHorizontal: theme.padding.m,
-                paddingVertical: theme.padding.s,
+                padding: theme.padding.m,
               }}
             >
-              <Text variant="body.s" color={theme.content.medium} style={{ textAlign: 'center' }}>
-                Selecione uma conversa para visualizar as informações
-              </Text>
+              {selectedContact ? (
+                <ContactInfoPanel
+                  contact={selectedContact}
+                  onOpenFullMap={() => navigate('/maps/general')}
+                />
+              ) : (
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: theme.surface.standard,
+                    borderWidth: 1,
+                    borderStyle: 'dashed',
+                    borderColor: theme.content.lightGrey,
+                    borderRadius: theme.border.radius.m,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: theme.padding.m,
+                    paddingVertical: theme.padding.s,
+                  }}
+                >
+                  <Text
+                    variant="body.s"
+                    color={theme.content.medium}
+                    style={{ textAlign: 'center' }}
+                  >
+                    Selecione uma conversa para visualizar as informações
+                  </Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
+          </>
+        ) : null}
       </View>
     </View>
   )

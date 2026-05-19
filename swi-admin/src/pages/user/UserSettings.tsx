@@ -21,6 +21,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SupportModal } from '@/components/SupportModal'
 
@@ -193,6 +194,9 @@ function PasswordInput({
 export function UserSettings() {
   const theme = useTheme()
   const navigate = useNavigate()
+  const breakpoint = useBreakpoint()
+  const isTablet = breakpoint === 'tablet'
+  const isWide = breakpoint === 'wide'
   const { user, signOut } = useAuth()
   const { show: showToast } = useDemoToast()
 
@@ -285,7 +289,19 @@ export function UserSettings() {
             <Icon name="edit" size={16} color={theme.content.light} />
           </Pressable>
         </View>
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 61 }}>
+        <View
+          style={{
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            // Tablet: wrap the 3 action links so they drop to a new line if
+            // the avatar + label widths overflow. Reduce the fixed 61 px gap
+            // to a more flexible value at tablet for the same reason.
+            ...(isTablet
+              ? ({ flexWrap: 'wrap', gap: theme.gap.m } as const)
+              : ({ gap: 61 } as const)),
+          }}
+        >
           <Pressable
             accessibilityRole="link"
             accessibilityLabel="Abrir política de privacidade"
@@ -339,10 +355,29 @@ export function UserSettings() {
         </View>
       </View>
 
-      {/* Two-column body */}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.gap.l }}>
+      {/* Two-column body
+          - Tablet (<1024): stack to single column.
+          - Desktop (1024-1499): LEFT 502 + RIGHT flex:1 — Figma exact.
+          - Wide (>=1500): LEFT and RIGHT both flexBasis + flexGrow:1, so they
+            grow proportionally to fill the viewport (boss directive). */}
+      <View
+        style={{
+          flexDirection: isTablet ? 'column' : 'row',
+          alignItems: isTablet ? 'stretch' : 'flex-start',
+          gap: theme.gap.l,
+        }}
+      >
         {/* LEFT column — Dados da cadastro */}
-        <View style={{ width: 502, gap: theme.gap.m }}>
+        <View
+          style={{
+            ...(isTablet
+              ? null
+              : isWide
+                ? ({ flexBasis: 502, flexGrow: 1, flexShrink: 0 } as const)
+                : { width: 502 }),
+            gap: theme.gap.m,
+          }}
+        >
           <Title variant="title.xs" color={theme.content.primary}>
             Dados da cadastro
           </Title>
@@ -401,8 +436,20 @@ export function UserSettings() {
           />
         </View>
 
-        {/* RIGHT column — Saúde + Senha + Permissões */}
-        <View style={{ flex: 1, gap: theme.gap.l }}>
+        {/* RIGHT column — Saúde + Senha + Permissões.
+            Desktop: flex:1 absorbs slack after LEFT 502.
+            Wide: flexBasis 452 (≈ Figma 1366 RIGHT width) + flexGrow:1 so it
+            grows proportionally with LEFT instead of absorbing all extra. */}
+        <View
+          style={{
+            ...(isTablet
+              ? null
+              : isWide
+                ? ({ flexBasis: 452, flexGrow: 1, flexShrink: 0 } as const)
+                : { flex: 1 }),
+            gap: theme.gap.l,
+          }}
+        >
           {/* Health section */}
           <View style={{ gap: theme.gap.m }}>
             <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
@@ -443,8 +490,16 @@ export function UserSettings() {
             />
           </View>
 
-          {/* Password + Permissions row */}
-          <View style={{ flexDirection: 'row', gap: theme.gap.xxl, alignItems: 'flex-start' }}>
+          {/* Password + Permissions row — stacks vertically at tablet so the
+              Permissions toggles drop below the Password column instead of
+              fighting for narrow horizontal space. */}
+          <View
+            style={{
+              flexDirection: isTablet ? 'column' : 'row',
+              gap: theme.gap.xxl,
+              alignItems: isTablet ? 'stretch' : 'flex-start',
+            }}
+          >
             {/* Password column.
                 NOTE: DS Input's iconRight overflows the text-area horizontally
                 when the input is narrow (≤245px) — flex:1 on the inner
