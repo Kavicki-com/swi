@@ -87,27 +87,6 @@
     </style>
   </head>
   <body>
-    <script>
-      /*
-       * Pixel-perfect Figma fidelity on wide viewports.
-       * The app is designed at Figma frame 4:2 width (1366px). On viewports
-       * wider than that, set CSS `zoom` on <html> so the entire UI scales
-       * uniformly to fill the viewport while preserving exact Figma
-       * proportions, gaps, and text sizes. Below 1366 the layout flows at
-       * native size (no shrink). Runs synchronously before React mounts so
-       * there is no flash of unscaled content; re-applies on viewport resize.
-       */
-      (function () {
-        var REF_WIDTH = 1366;
-        function applyAppZoom() {
-          var w = window.innerWidth;
-          var z = w >= REF_WIDTH ? w / REF_WIDTH : 1;
-          document.documentElement.style.zoom = String(z);
-        }
-        applyAppZoom();
-        window.addEventListener('resize', applyAppZoom);
-      })();
-    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

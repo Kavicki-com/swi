@@ -28,6 +28,7 @@ import {
   type MonitoringAlertDetail,
   type MonitoringUserAlert,
 } from '@/services/mockApi/monitoring'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 
 // --- Shared row helpers ---
@@ -262,6 +263,8 @@ export function MonitoringLayout() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  const breakpoint = useBreakpoint()
+  const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
   const [kpis, setKpis] = useState<ReadonlyArray<MonitoringKpi>>([])
   const [users, setUsers] = useState<ReadonlyArray<MonitoringUserAlert>>([])
@@ -291,7 +294,16 @@ export function MonitoringLayout() {
   const tab = activeTabFromPath(location.pathname)
 
   return (
-    <View testID="monitoring-layout" style={{ gap: theme.gap.xl }}>
+    <View
+      testID="monitoring-layout"
+      style={{
+        gap: theme.gap.xl,
+        // Cap content at Figma 1366 content-area (1041) and center in wide
+        // viewports — same pattern as WorkerDetailsLayout. Tablet keeps no
+        // cap so the stack uses the full viewport.
+        ...(isTablet ? null : ({ maxWidth: 1041, alignSelf: 'center', width: '100%' } as const)),
+      }}
+    >
       {/* KPI row — shared. */}
       <View
         style={{
@@ -335,9 +347,13 @@ export function MonitoringLayout() {
             />
             <View
               accessibilityLabel="3 alertas novos"
+              // Anchored to the RIGHT edge of the Tabs container instead of a
+              // fixed left:478 keyed to the Tabs' 492 width. -14 = -badgeWidth/2
+              // so the pill sticks out half over the Tabs' right edge — and the
+              // anchor works at any Tabs width as the page becomes responsive.
               style={{
                 position: 'absolute',
-                left: 478,
+                right: -14,
                 top: -16,
                 width: 28,
                 height: 28,
