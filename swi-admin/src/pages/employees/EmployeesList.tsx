@@ -18,12 +18,14 @@ import {
 } from '@kavicki/swi-design-system'
 import { employeesApi, EMPLOYEES_TOTAL, type Employee } from '@/services/mockApi/employees'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 
 type EmployeeRowProps = {
   employee: Employee
   onOpen: (id: string) => void
   onChat: (employee: Employee) => void
   onLocation: (employee: Employee) => void
+  isTablet: boolean
 }
 
 function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof useTheme>) {
@@ -32,7 +34,7 @@ function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof 
   return theme.surface.success
 }
 
-function EmployeeRow({ employee, onOpen, onChat, onLocation }: EmployeeRowProps) {
+function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: EmployeeRowProps) {
   const theme = useTheme()
   return (
     <View
@@ -45,10 +47,13 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation }: EmployeeRowProps)
         borderRadius: theme.border.radius.m,
         paddingHorizontal: theme.padding.m,
         paddingVertical: theme.padding.s,
+        // Tablet: if the right cluster can't fit on the same line, allow it
+        // to wrap below. Desktop/wide keep the strict single-row Figma layout.
+        ...(isTablet ? ({ flexWrap: 'wrap', rowGap: theme.gap.s } as const) : null),
       }}
     >
       {/* Left cluster: avatar (with status dot) + name/age/blood + divider + role */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 32 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: isTablet ? 16 : 32 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
           {/* Avatar with vitals status dot overlay at top-right. */}
           <View style={{ position: 'relative' }}>
@@ -268,6 +273,8 @@ export function EmployeesList({
 } = {}) {
   const theme = useTheme()
   const navigate = useNavigate()
+  const breakpoint = useBreakpoint()
+  const isTablet = breakpoint === 'tablet'
   const [employees, setEmployees] = useState<Employee[]>([])
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
@@ -303,9 +310,18 @@ export function EmployeesList({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: theme.gap.m,
+          // Tablet: if Tabs + Search can't fit, let Search wrap onto its own
+          // row instead of being squeezed below its usable width.
+          ...(isTablet ? ({ flexWrap: 'wrap' } as const) : null),
         }}
       >
-        <View style={{ width: 429 }}>
+        <View
+          style={
+            isTablet
+              ? { flexBasis: 429, flexGrow: 1, flexShrink: 1, minWidth: 280 }
+              : { width: 429 }
+          }
+        >
           <Tabs
             tabs={[
               { value: 'cadastrados', label: 'Cadastrados' },
@@ -341,6 +357,7 @@ export function EmployeesList({
                 onOpen={(id) => navigate(`/employees/${id}`)}
                 onChat={() => navigate('/chat')}
                 onLocation={() => navigate('/maps/general')}
+                isTablet={isTablet}
               />
             ))}
           </View>

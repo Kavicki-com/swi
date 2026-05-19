@@ -265,6 +265,13 @@ export function MonitoringLayout() {
   const location = useLocation()
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
+  const isWide = breakpoint === 'wide'
+  // At wide on the good-conditions route the page reorganises into a
+  // side-by-side layout: 4 donuts (rendered by the Outlet child) on the LEFT,
+  // BigNumbers in a 2-col × 4-row grid on the RIGHT. Alerts route keeps the
+  // stacked layout because it has no donuts to pair with.
+  const isGoodConditions = location.pathname.startsWith('/monitoring/good-conditions')
+  const useWideSideBySide = isWide && isGoodConditions
   const { show: showToast } = useDemoToast()
   const [kpis, setKpis] = useState<ReadonlyArray<MonitoringKpi>>([])
   const [users, setUsers] = useState<ReadonlyArray<MonitoringUserAlert>>([])
@@ -300,26 +307,149 @@ export function MonitoringLayout() {
         gap: theme.gap.xl,
         // Cap content at Figma 1366 content-area (1041) and center in wide
         // viewports — same pattern as WorkerDetailsLayout. Tablet keeps no
-        // cap so the stack uses the full viewport.
-        ...(isTablet ? null : ({ maxWidth: 1041, alignSelf: 'center', width: '100%' } as const)),
+        // cap so the stack uses the full viewport. Wide good-conditions
+        // also drops the cap so the new 2-col side-by-side layout can use
+        // the full content area for donuts + BigNumbers grid.
+        ...(isTablet || useWideSideBySide
+          ? null
+          : ({ maxWidth: 1041, alignSelf: 'center', width: '100%' } as const)),
       }}
     >
-      {/* KPI row — shared. */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-        }}
-      >
-        {kpis.map((k) => (
-          <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
-        ))}
-      </View>
+      {useWideSideBySide ? (
+        // Wide + good-conditions side-by-side per Figma 1263:7972:
+        //   LEFT  → BigNumbers 4-col × 2-row inside a styled panel
+        //   RIGHT → Donuts (single horizontal row, rendered by the Outlet)
+        <View style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'stretch' }}>
+          <View
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: theme.gap.m,
+            }}
+          >
+            {/* Row 1 — 4 BigNumbersCard with their own surface.standard BG.
+                No outer panel wrapper: cards float directly on the page bg
+                per Figma 1263:7972. */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: theme.gap.m,
+                width: '100%',
+              }}
+            >
+              {kpis.slice(0, 4).map((k) => (
+                <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
+              ))}
+            </div>
+            {/* Row 2 — 3 transparent cells (no card BG) centred horizontally,
+                separated by 1px vertical dividers. Per Figma 1263:7972 the
+                bottom row's cards do NOT have a card surface — only the
+                icon/number/label content with vertical strokes between. */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: theme.gap.m,
+                width: '100%',
+              }}
+            >
+              {kpis.slice(4).map((k, i, arr) => (
+                <View
+                  key={k.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: theme.gap.m,
+                  }}
+                >
+                  <View
+                    style={{
+                      // Approximately the width of a row-1 grid cell so
+                      // row 2 cells visually align with row 1 column widths.
+                      width: 200,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: theme.gap.s,
+                      padding: theme.padding.m,
+                    }}
+                  >
+                    {/* IconSlot — matches BigNumbersCard's 24x24 wrapper so the
+                        icon centers identically to row-1 cards. */}
+                    <View
+                      style={{
+                        width: 24,
+                        height: 24,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Icon name={k.icon} size={20} color={theme.content.primary} />
+                    </View>
+                    <Text
+                      color={theme.content.dark}
+                      style={{
+                        fontFamily: theme.fontFamily.title,
+                        fontWeight: '700',
+                        fontSize: theme.fontSize.xxl,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {String(k.value)}
+                    </Text>
+                    <Text
+                      color={theme.content.dark}
+                      style={{
+                        fontFamily: theme.fontFamily.body,
+                        fontWeight: '500',
+                        fontSize: theme.fontSize.sm,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {k.label}
+                    </Text>
+                  </View>
+                  {/* Vertical 1px divider between cells (skip after last). */}
+                  {i < arr.length - 1 ? (
+                    <View
+                      style={{
+                        width: 1,
+                        height: 80,
+                        backgroundColor: theme.content.lightGrey,
+                      }}
+                    />
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Outlet />
+          </View>
+        </View>
+      ) : (
+        <>
+          {/* KPI row — shared at tablet/desktop and wide-alerts. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+            }}
+          >
+            {kpis.map((k) => (
+              <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
+            ))}
+          </View>
 
-      {/* Child-route unique content (e.g. good-conditions stats row). */}
-      <Outlet />
+          {/* Child-route unique content (e.g. good-conditions stats row). */}
+          <Outlet />
+        </>
+      )}
 
       {/* "Alertas de Desgaste" section — shared. */}
       <View style={{ gap: theme.gap.m }}>

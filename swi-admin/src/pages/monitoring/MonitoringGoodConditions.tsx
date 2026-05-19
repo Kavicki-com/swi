@@ -7,9 +7,15 @@ import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { DonutChart, useTheme } from '@kavicki/swi-design-system'
 import { monitoringApi, type MonitoringGoodConditionsStats } from '@/services/mockApi/monitoring'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 
 export function MonitoringGoodConditions() {
   const theme = useTheme()
+  const breakpoint = useBreakpoint()
+  // At wide the donuts share the RIGHT half of the side-by-side layout with
+  // the BigNumbers panel on the LEFT (Figma 1263:7972). The narrower cells
+  // need the small donut variant so titles don't overlap.
+  const donutSize = breakpoint === 'wide' ? 'small' : 'default'
   const [stats, setStats] = useState<MonitoringGoodConditionsStats | null>(null)
 
   useEffect(() => {
@@ -52,6 +58,7 @@ export function MonitoringGoodConditions() {
           label={stats.vitals.label}
           caption="Excelentes"
           progress={stats.vitals.progress}
+          size={donutSize}
           icon="heartbeat"
           progressGradient={[theme.surface.success, theme.surface.primary]}
         />
@@ -65,6 +72,7 @@ export function MonitoringGoodConditions() {
           label=""
           caption={stats.fatigueRate.label}
           progress={stats.fatigueRate.progress}
+          size={donutSize}
           icon="heartbeat"
           progressGradient={[theme.surface.success, theme.surface.primary]}
         />
@@ -78,6 +86,7 @@ export function MonitoringGoodConditions() {
           label={stats.heartrate.unit.toUpperCase()}
           caption="Média normal"
           progress={80}
+          size={donutSize}
           icon="heartbeat"
           progressGradient={[theme.surface.secondary, theme.surface.primary]}
         />
@@ -91,6 +100,7 @@ export function MonitoringGoodConditions() {
           label="Funcionários"
           caption="Necessária mobilização"
           progress={8}
+          size={donutSize}
           icon="heartbeat"
           progressGradient={[theme.surface.error, theme.surface.error]}
         />
