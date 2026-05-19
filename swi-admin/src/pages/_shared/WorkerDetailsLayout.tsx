@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import {
   Avatar,
@@ -194,6 +195,12 @@ function MiniMap({
     <View
       style={{
         height: 132,
+        // Cap the map at the Figma 1366 width (LEFT col = 380). When the LEFT
+        // column grows at wide (>=1500), the satellite tiles would stretch to
+        // ~5:1 aspect ratio — capping keeps the map at its Figma aspect (2.88:1)
+        // and the other LEFT-col content (profile, exam history) absorbs the
+        // extra width.
+        maxWidth: 380,
         borderRadius: theme.border.radius.m,
         overflow: 'hidden',
         position: 'relative',
@@ -276,6 +283,9 @@ export function WorkerDetailsLayout({
   topRightAction,
 }: WorkerDetailsLayoutProps) {
   const theme = useTheme()
+  const breakpoint = useBreakpoint()
+  const isTablet = breakpoint === 'tablet'
+  const isWide = breakpoint === 'wide'
   const genderLabel = worker.gender === 'male' ? 'Masculino' : 'Feminino'
   const genderIcon: IconName = worker.gender === 'male' ? 'admin_filled' : 'humidity_mid'
   // Percent with pt-BR locale (comma decimal): 62.5 → "62,5".
@@ -328,14 +338,39 @@ export function WorkerDetailsLayout({
         {topRightAction}
       </View>
 
-      {/* Three-column body */}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.gap.m }}>
+      {/* Three-column body — at tablet (<1024) stacks into a single column
+          (LEFT → CENTER → RIGHT) so the 380+silhouette+459 layout fits below
+          the collapsed sidebar. Desktop (1024-1499) and wide (>=1500) keep
+          the 380 / flex / 459 spec from Figma 53:6344 / 54:6561. */}
+      <View
+        style={{
+          flexDirection: isTablet ? 'column' : 'row',
+          alignItems: isTablet ? 'stretch' : 'flex-start',
+          gap: theme.gap.m,
+        }}
+      >
         {/* LEFT column — profile + mini map + exam history.
-            Width 380 leaves room for silhouette + right column 459 within
-            the visible content area at default viewport. Figma spec is 415
-            but we shave 35px so the silhouette doesn't overlap right col. */}
-        <View style={{ width: 380, gap: theme.gap.s }}>
-          {/* Profile (no card bg, larger avatar) */}
+            - Tablet (<1024): full-width (stacked).
+            - Desktop (1024-1499): hard width 380 to match Figma 53:6344 / 54:6561
+              exactly. CENTER absorbs the slack at this width.
+            - Wide (>=1500): flexBasis 380 + flexGrow 1 so the column grows to
+              fill the screen alongside RIGHT (boss directive). CENTER stays
+              fixed at 170 in the wide branch (below). */}
+        <View
+          style={{
+            ...(isTablet
+              ? null
+              : isWide
+                ? ({ flexBasis: 380, flexGrow: 1, flexShrink: 0 } as const)
+                : { width: 380 }),
+            gap: theme.gap.s,
+          }}
+        >
+          {/* Profile — Figma 53:6344 / 54:6561 shows avatar proportionally
+              larger than DS size="l" (64). customSize=80 matches the Figma
+              80px diameter circle. Vertical centering (alignItems: 'center')
+              keeps the 3-line text block visually balanced against the taller
+              avatar. */}
           <View
             style={{
               flexDirection: 'row',
@@ -343,7 +378,7 @@ export function WorkerDetailsLayout({
               gap: theme.gap.s,
             }}
           >
-            <Avatar uri={worker.avatarUri} size="l" accessibilityLabel={worker.name} />
+            <Avatar uri={worker.avatarUri} customSize={80} accessibilityLabel={worker.name} />
             <View style={{ flex: 1, gap: 2 }}>
               <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
                 {worker.name}
@@ -392,10 +427,21 @@ export function WorkerDetailsLayout({
           </View>
         </View>
 
-        {/* CENTER column — Silhouette heat avatar */}
+        {/* CENTER column — Silhouette heat avatar.
+            - Tablet: drops fixed width so Silhouette sizes intrinsically and
+              centres horizontally in the stacked layout.
+            - Desktop (1024-1499): flex:1 absorbs the slack between LEFT 380 and
+              RIGHT 459 — gives the silhouette the same ~107px wide column the
+              Figma 1366 frame produces, preserving fidelity.
+            - Wide (>=1500): fixed 170 px so the silhouette doesn't blow up;
+              LEFT and RIGHT absorb the extra wide-viewport space instead. */}
         <View
           style={{
-            flex: 1,
+            ...(isTablet
+              ? null
+              : isWide
+                ? ({ width: 170, flexGrow: 0, flexShrink: 0 } as const)
+                : { flex: 1 }),
             alignItems: 'center',
             justifyContent: 'flex-start',
           }}
@@ -412,9 +458,21 @@ export function WorkerDetailsLayout({
         </View>
 
         {/* RIGHT column — vitals card + fatigue + stats + allergies + donuts.
-            Width 459 matches Figma 159:14108 / 159:16078 spec so body stats
-            stay inline and "Condições excelentes" never wraps. */}
-        <View style={{ width: 459, gap: theme.gap.sm }}>
+            - Tablet: full-width (stacked).
+            - Desktop (1024-1499): hard width 459 (Figma 159:14108 / 159:16078)
+              so body stats stay inline and "Condições excelentes" never wraps.
+            - Wide (>=1500): flexBasis 459 + flexGrow 1 — grows together with
+              LEFT to fill the screen (boss directive). */}
+        <View
+          style={{
+            ...(isTablet
+              ? null
+              : isWide
+                ? ({ flexBasis: 459, flexGrow: 1, flexShrink: 0 } as const)
+                : { width: 459 }),
+            gap: theme.gap.sm,
+          }}
+        >
           {/* Combined vitals card — Figma 159:14109 / 159:16078. Linear gradient
               from surface.primary (green) to surface.secondary (blue). Web-only
               <div> wrapper because react-native-web View strips the
@@ -535,32 +593,35 @@ export function WorkerDetailsLayout({
 
           {/* Donut charts side-by-side — Figma 159:14140 / 159:14142 (admin) and
               159:16109 / 159:16110 (employee) use the flat appearance (no
-              bezel/well, thin arc). Gradients use surface tokens. */}
-          <View style={{ flexDirection: 'row', gap: theme.gap.m }}>
-            <View style={{ flex: 1 }}>
-              <DonutChart
-                title="Taxa de fadiga"
-                value={`${fatiguePct}%`}
-                label="Funcionários"
-                progress={(worker.fatigueRate ?? 0) * 100}
-                size="small"
-                appearance="bevel"
-                icon="heartbeat"
-                progressGradient={[theme.surface.success, theme.surface.primary]}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <DonutChart
-                title="Esforço realizado"
-                value={`${effortPct}%`}
-                label="Esforço feito"
-                progress={(worker.effort ?? 0) * 100}
-                size="small"
-                appearance="bevel"
-                icon="heartbeat"
-                progressGradient={[theme.surface.info, theme.surface.secondary]}
-              />
-            </View>
+              bezel/well, thin arc). Gradients use surface tokens.
+              Each chart sizes intrinsically via size="small"; the row aligns
+              them to the LEFT of the column so they line up with the vitals,
+              fatigue and allergies stack above (Figma column-edge alignment). */}
+          {/* Each donut sits at intrinsic size (size="small" → 156 wide).
+              The row is at the LEFT of the right column, so the first donut
+              card's left edge aligns with "Alergias"/"Tempo até atingir fadiga"
+              above. Title stays CENTERED above its own chart per DS default. */}
+          <View style={{ flexDirection: 'row', gap: theme.gap.m, alignItems: 'flex-start' }}>
+            <DonutChart
+              title="Taxa de fadiga"
+              value={`${fatiguePct}%`}
+              label="Funcionários"
+              progress={(worker.fatigueRate ?? 0) * 100}
+              size="small"
+              appearance="bevel"
+              icon="heartbeat"
+              progressGradient={[theme.surface.success, theme.surface.primary]}
+            />
+            <DonutChart
+              title="Esforço realizado"
+              value={`${effortPct}%`}
+              label="Esforço feito"
+              progress={(worker.effort ?? 0) * 100}
+              size="small"
+              appearance="bevel"
+              icon="heartbeat"
+              progressGradient={[theme.surface.info, theme.surface.secondary]}
+            />
           </View>
         </View>
       </View>

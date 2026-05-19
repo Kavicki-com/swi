@@ -198,7 +198,16 @@ function buildMarkerEl(marker: DashboardMapMarker, onClick: () => void): HTMLEle
   return el
 }
 
-function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
+function MapBanner({
+  markers,
+  height = 172,
+}: {
+  markers: DashboardMapMarker[]
+  // Figma frame 4:2 (1366) → 172. Figma frame 1060:7080 (1920 wide) → ~268.
+  // Pass explicitly from the wide branch so the map keeps a sensible aspect
+  // ratio when the content column grows past ~1041 CSS px.
+  height?: number
+}) {
   const theme = useTheme()
   const navigate = useNavigate()
   const lib = useMapLibre()
@@ -255,7 +264,7 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
       testID="dashboard-map-banner"
       dataSet={{ fidelity: 'map-banner' }}
       style={{
-        height: 172,
+        height,
         borderRadius: theme.border.radius.m,
         overflow: 'hidden',
         position: 'relative' as unknown as never,
@@ -378,9 +387,6 @@ function FuncionariosKpi({
       testID="kpi-funcionarios"
       style={{
         gap: theme.gap.s,
-        padding: theme.padding.m,
-        borderRadius: theme.border.radius.l,
-        backgroundColor: theme.surface.standard,
       }}
     >
       <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
@@ -786,7 +792,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
           style={{ flexDirection: 'column', gap: theme.gap.m }}
         >
           <FuncionariosKpi summary={summary} />
-          <HealthDonuts summary={summary} navigate={navigate} theme={theme} />
+          <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
         </View>
         <View
           testID="dashboard-two-col-row"
@@ -812,7 +818,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
       <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
         {/* Row 1 — Map spans the full content width. */}
         <View testID="dashboard-top-row-wide" dataSet={{ fidelity: 'top-row-wide' }}>
-          <MapBanner markers={summary.mapMarkers} />
+          <MapBanner markers={summary.mapMarkers} height={268} />
         </View>
         {/* Row 2 — Donuts (left, ~60 %) and 4 KPIs (right, ~40 %). */}
         <View
@@ -881,7 +887,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         }}
       >
         <FuncionariosKpi summary={summary} />
-        <HealthDonuts summary={summary} navigate={navigate} theme={theme} />
+        <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
       </View>
 
       {/* Two-column row: Atividades em andamento (left) + Alertas de Desgaste (right) */}
