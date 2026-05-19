@@ -180,33 +180,35 @@ export function ReportsList() {
         </View>
       </View>
 
-      {/* Grid 4 × N — width-pinned wrapper around each DS ReportCard so
-          flexWrap keeps cards uniform regardless of summary/author length. */}
-      <View
+      {/* Card grid — CSS grid with auto-fill so cards stretch to fill the
+          full row width (rightmost card's right edge aligns with the "Novo
+          relatório" button at the top). 224 minimum preserves card readability
+          for the title/summary/author at narrow widths; 1fr lets each card
+          grow to fill the remaining row. */}
+      <div
         style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          alignItems: 'flex-start',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(224px, 1fr))',
           gap: theme.gap.m,
+          width: '100%',
         }}
       >
         {filtered.map((r) => (
-          <View key={r.id} style={{ width: 224 }}>
-            <ReportCard
-              status={r.status}
-              statusLabel={r.statusLabel}
-              title={r.title}
-              summary={r.summary}
-              creationDate={r.creationDate}
-              author={{ name: r.authorName, avatarUri: r.authorAvatarUri }}
-              location={r.sector}
-              responsibles={r.responsibles}
-              onPress={() => navigate(`/reports/${r.id}`)}
-              fullWidth
-            />
-          </View>
+          <ReportCard
+            key={r.id}
+            status={r.status}
+            statusLabel={r.statusLabel}
+            title={r.title}
+            summary={r.summary}
+            creationDate={r.creationDate}
+            author={{ name: r.authorName, avatarUri: r.authorAvatarUri }}
+            location={r.sector}
+            responsibles={r.responsibles}
+            onPress={() => navigate(`/reports/${r.id}`)}
+            fullWidth
+          />
         ))}
-      </View>
+      </div>
     </View>
   )
 }
