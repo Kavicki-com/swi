@@ -209,7 +209,10 @@ export function AdminsCreate({
       </Section>
 
       <Section title="Dados de saúde">
-        <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
+        {/* position:relative + zIndex lifts the Combobox row above the YesNo
+            questions, ImageUploader and footer that follow. Without this, the
+            dropdown panels paint behind later DOM siblings. */}
+        <View style={{ flexDirection: 'row', gap: theme.gap.s, position: 'relative', zIndex: 10 }}>
           <View style={{ flex: 1 }}>
             <Combobox
               label="Tipo sanguíneo"

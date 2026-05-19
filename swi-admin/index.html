@@ -84,6 +84,18 @@
       [data-donut-loc-btn='true'] {
         box-shadow: inset 0px 4px 4px 0px rgba(29, 29, 29, 0.56);
       }
+      /* Cap the DS Combobox dropdown panel height + enable internal scroll.
+       * The Combobox renders a Trigger button with accessibilityState.expanded
+       * (→ aria-expanded="true") immediately followed by the Panel (role="menu").
+       * Adjacent selector targets ONLY that Panel and not the SideMenu
+       * Container which also uses role="menu" but isn't preceded by an
+       * aria-expanded sibling. 240 px fits ~6 options with DS padding;
+       * dropdowns scroll internally when option counts grow (e.g. "Gerente
+       * responsável" across a large org). */
+      [aria-expanded='true'] + [role='menu'] {
+        max-height: 240px;
+        overflow-y: auto;
+      }
     </style>
   </head>
   <body>

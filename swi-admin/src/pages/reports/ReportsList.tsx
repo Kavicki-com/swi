@@ -128,13 +128,18 @@ export function ReportsList() {
         />
       </View>
 
-      {/* Row 2 — 4 compact filters (Status / Setor / Autor / Período). */}
+      {/* Row 2 — 4 compact filters (Status / Setor / Autor / Período).
+          position:relative + zIndex lifts the filter row above the ReportCard
+          grid below so Combobox dropdown panels overlay the cards instead of
+          being painted under them. */}
       <View
         style={{
           flexDirection: 'row',
           alignItems: 'flex-end',
           gap: theme.gap.m,
           flexWrap: 'wrap',
+          position: 'relative',
+          zIndex: 10,
         }}
       >
         <View style={{ width: 160 }}>

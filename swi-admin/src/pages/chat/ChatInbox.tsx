@@ -561,7 +561,14 @@ export function ChatInbox() {
           paddingVertical: theme.padding.sm,
         }}
       >
-        <Logo type="complete" size="m" />
+        <Pressable
+          onPress={() => navigate('/')}
+          accessibilityRole="link"
+          accessibilityLabel="Ir para dashboard"
+          testID="chat-header-logo-pressable"
+        >
+          <Logo type="complete" size="m" />
+        </Pressable>
         <HeaderUserInfo
           bpm={user?.bpm ?? 99}
           pressure={user?.pressure ?? '12/8'}
