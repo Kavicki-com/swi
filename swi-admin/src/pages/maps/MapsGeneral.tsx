@@ -312,8 +312,14 @@ export function MapsGeneral() {
     return () => {
       handles.forEach((h) => {
         h.marker.remove()
-        h.root.unmount()
-        h.el.remove()
+      })
+      // Defer React subtree unmount to a microtask — sync unmount during
+      // render triggers a React 18 warning and can leave the route blank.
+      queueMicrotask(() => {
+        handles.forEach((h) => {
+          h.root.unmount()
+          h.el.remove()
+        })
       })
     }
   }, [mapReady, summary, showOperators, lib, navigate])
@@ -335,8 +341,12 @@ export function MapsGeneral() {
     return () => {
       handles.forEach((h) => {
         h.marker.remove()
-        h.root.unmount()
-        h.el.remove()
+      })
+      queueMicrotask(() => {
+        handles.forEach((h) => {
+          h.root.unmount()
+          h.el.remove()
+        })
       })
     }
   }, [mapReady, showCameras, lib, showToast])

@@ -44,9 +44,12 @@ type WeatherTimelineEvent = {
 }
 
 const WEATHER_NOW_LABEL = 'AGORA'
-const WEAR_GRADIENT = ['#34d399', '#10b981'] as const
-// surface/error-light -> surface/error from the Figma token map.
-const URGENT_GRADIENT = ['#fab3bd', '#f5667a'] as const
+// surface/success (lime/700) -> surface/success-light (lime/200) — Sinais vitais.
+const VITAL_GRADIENT = ['#3EAB2E', '#B7E9A4'] as const
+// surface/info (blue/600) -> surface/info-light (blue/200) — Taxa de desgaste (Figma).
+const WEAR_GRADIENT = ['#3899BF', '#8AD2E2'] as const
+// content/error (red/400) -> surface/error-light (red/200) — Alertas urgentes.
+const URGENT_GRADIENT = ['#F5667A', '#FAB3BD'] as const
 
 type Phase = 'loading' | 'error' | 'populated'
 
@@ -688,7 +691,11 @@ function HealthDonuts({
         label="Funcionários"
         caption="Excelentes"
         progress={85}
+        progressGradient={VITAL_GRADIENT}
         icon="heartbeat_filled"
+        iconColor={theme.surface.success}
+        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+        iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
         testID="kpi-vital-signs"
@@ -701,6 +708,9 @@ function HealthDonuts({
         progress={70}
         progressGradient={WEAR_GRADIENT}
         icon="heartbeat_filled"
+        iconColor={theme.surface.success}
+        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+        iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
         testID="kpi-wear-rate"
@@ -713,6 +723,9 @@ function HealthDonuts({
         progress={60}
         progressGradient={URGENT_GRADIENT}
         icon="heartbeat_filled"
+        iconColor={theme.surface.success}
+        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+        iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
         testID="kpi-urgent-alerts"
