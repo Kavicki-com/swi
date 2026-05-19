@@ -600,11 +600,11 @@ export function ChatInbox() {
         <View
           style={{
             width: 358,
-            // surface.standard (~#1f1f1f) instead of theme.background (~#171717)
-            // so the column reads as a card panel over the page bg instead of
-            // blending into it. Same treatment applied to MIDDLE and RIGHT cols
-            // for consistency (Figma 102:9672 / user feedback 2026-05-19).
-            backgroundColor: theme.surface.standard,
+            // Container BG = theme.background (page bg ~#171717) per Figma
+            // 102:9091. The contact chips inside use surface.standard (~#1f1f1f),
+            // so they pop visually as cards on the darker container — same
+            // pattern Figma applies to all 3 columns (LEFT/MIDDLE/RIGHT).
+            backgroundColor: theme.background,
             borderRadius: theme.border.radius.m,
             padding: theme.padding.s,
             gap: theme.gap.sm,
@@ -700,7 +700,10 @@ export function ChatInbox() {
         <View
           style={{
             flex: 1,
-            backgroundColor: theme.surface.standard,
+            // Container BG = theme.background per Figma 102:9619. Inner chat-box
+            // keeps surface.standard so it reads as a card on top of the
+            // darker page-bg container (same pattern as LEFT column chips).
+            backgroundColor: theme.background,
             borderRadius: theme.border.radius.m,
             padding: theme.padding.s,
             gap: theme.gap.sm,
@@ -814,7 +817,7 @@ export function ChatInbox() {
               <Button
                 label="Enviar"
                 variant="contained"
-                iconRight={<Icon name="send" size={24} color={theme.content.light} />}
+                iconRight={<Icon name="send" size={16} color={theme.content.light} />}
                 accessibilityLabel="Enviar mensagem"
                 onPress={handleSend}
               />
@@ -833,7 +836,11 @@ export function ChatInbox() {
             <View
               style={{
                 width: 268,
-                backgroundColor: theme.surface.standard,
+                // Container BG = theme.background per Figma 102:9672. Inner
+                // user-card / map / stats card keep their own surface tokens
+                // (stats card uses surface.medium) so they pop on the darker
+                // container — matches the 3-column visual pattern.
+                backgroundColor: theme.background,
                 borderRadius: theme.border.radius.m,
                 padding: theme.padding.m,
               }}
