@@ -1,18 +1,25 @@
-import { ESRI_SATELLITE_STYLE } from './mapStyles'
+import { SATELLITE_STYLE } from './mapStyles'
 
-describe('ESRI_SATELLITE_STYLE', () => {
-  it('uses ESRI World Imagery raster tiles', () => {
-    const src = ESRI_SATELLITE_STYLE.sources['esri-imagery']
+describe('SATELLITE_STYLE', () => {
+  it('uses Mapbox Satellite raster tiles', () => {
+    const src = SATELLITE_STYLE.sources.satellite
     expect(src.type).toBe('raster')
-    expect(src.tiles?.[0]).toContain('server.arcgisonline.com')
-    expect(src.tiles?.[0]).toContain('World_Imagery')
+    expect(src.tiles?.[0]).toContain('api.mapbox.com')
+    expect(src.tiles?.[0]).toContain('mapbox.satellite')
   })
 
-  it('caps maxzoom at 19', () => {
-    expect(ESRI_SATELLITE_STYLE.sources['esri-imagery'].maxzoom).toBe(19)
+  it('embeds the VITE_MAPBOX_TOKEN in the tile URL', () => {
+    const tileUrl = SATELLITE_STYLE.sources.satellite.tiles?.[0] ?? ''
+    expect(tileUrl).toContain('access_token=')
   })
 
-  it('declares mandatory ESRI attribution', () => {
-    expect(ESRI_SATELLITE_STYLE.sources['esri-imagery'].attribution).toMatch(/Esri/)
+  it('caps maxzoom at 22', () => {
+    expect(SATELLITE_STYLE.sources.satellite.maxzoom).toBe(22)
+  })
+
+  it('declares Mapbox and OpenStreetMap attribution', () => {
+    const attr = SATELLITE_STYLE.sources.satellite.attribution
+    expect(attr).toMatch(/Mapbox/)
+    expect(attr).toMatch(/OpenStreetMap/)
   })
 })
