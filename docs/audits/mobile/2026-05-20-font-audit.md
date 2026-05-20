@@ -1264,3 +1264,28 @@ Sem ação requerida no escopo de fontes — registrar pro time decidir se vira 
 - (c) Padronizar todos Bold (mais alinhado com label semantics em outros forms).
 
 
+## 9. Implementação
+
+**2026-05-20:** Passos 1+2 do §7 implementados.
+
+**DS (`swi-design-system` v0.1.80, commits `d2fd3c2` + `520d91d` + `a4d4440` em `main`):**
+- Helper `resolveFontFamily(family, weight)` em `src/tokens/typography.ts` resolve `(family, weight)` para uma chave de family registrada pelo host (`Inter-Medium`, `Inter-Bold`, `Montserrat-Regular`, `Montserrat-Medium`).
+- 12 variantes do `typography` reescritas para emitir family weight-aware.
+- 4 variantes novas adicionadas: `label.m` (Inter 700/14), `label.l` (Inter 700/16), `badge.s` (Inter 700/12), `link.m` (Montserrat 700/14).
+- Prop `italic?: boolean` no `<Text>` aplica `fontStyle: 'italic'` (cobertura nativa depende de o host registrar Italic faces).
+- `TypographyVariant` expandido com as 3 categorias novas; Text component aceita automaticamente via `variant.split('.')` mechanism.
+
+**Mobile (`feat/mobile-font-fix`, commit `c941ea2`):**
+- Pin `@kavicki/swi-design-system` atualizada de `v0.1.79.tgz` para `v0.1.80.tgz`.
+- `app/_layout.tsx` array `faces` ampliado de 6 → 10 entradas, adicionando family-aliases registrados na web (`Inter-Medium`/`Inter-Bold`/`Montserrat-Regular`/`Montserrat-Medium`).
+- Native `useFonts` já tinha os aliases registrados desde o setup original (`_layout.tsx` linhas 60-65) — não precisou mudar.
+
+**Resultado:**
+- Native iOS/Android: `subtitle.*`, `body.l`, `body.s`, `caption.s` agora renderizam em Inter Medium real (não mais fallback Regular). `caption.xs` renderiza em Inter Bold real.
+- Web: setup mantido funcional; FontFace API resolve tanto `Inter` + weight quanto `Inter-Medium` por family-name.
+- Resolve a observação do QA "fontes erradas em praticamente todas as telas" no native.
+
+**Phases NÃO executadas (escopo futuro):**
+- Phase 5 do plano (cleanup de overrides em componentes do DS — `Button`, `Input`, `TopBar`, `Pagination`, `ChatUserCard`, `BadgedButton`, `ImageUploader`): adiada. Não bloqueia o fix visual; é melhoria de consistência.
+- Passos 3-7 do §7 deste audit (cleanup de overrides nas telas mobile, padronização `body.s`/`caption.s`, casos avulsos, chat input `TextInput` nu, manual review): adiados.
+
