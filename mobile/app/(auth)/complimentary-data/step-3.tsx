@@ -15,6 +15,7 @@ import {
 } from '@kavicki/swi-design-system';
 import type { GenderValue } from '@kavicki/swi-design-system';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
+import { isFeatureEnabled } from '../../../lib/featureFlags';
 
 const HEIGHT_OPTIONS = Array.from({ length: 81 }, (_, i) => {
   const v = 140 + i; // 140cm..220cm
@@ -45,10 +46,31 @@ export default function ComplimentaryDataStep3() {
   const [conditions, setConditions] = useState('');
   const [disability, setDisability] = useState<'sim' | 'nao' | null>(null);
 
+  // Required: gênero, altura, peso, tipo sanguíneo, status de deficiência.
+  // Allergies + conditions ficam opcionais (não é incomum o usuário não ter).
+  // Match com R-10 em 2026-05-17-mobile-routes-audit.md.
+  const canSubmit =
+    gender !== null &&
+    height.length > 0 &&
+    weight.length > 0 &&
+    bloodType.length > 0 &&
+    disability !== null;
+
   const finish = () => {
+    if (!canSubmit) return;
     // Onboarding continues into the Smartband configuration flow before the
     // dashboard. Smartband-complete is what finally lands on /(app)/dashboard.
-    router.replace('/(onboarding)/smartband/connection');
+    //
+    // Demo phase: when the smartband gate is off (Expo Go / web preview), the
+    // entire smartband sub-tree renders ProdOnlyPlaceholder, dead-ending the
+    // signup flow. Skip directly to the dashboard so the demo's signup path
+    // actually reaches the authenticated app. signIn() was already called in
+    // account-confirmation so the (app)/_layout guard lets us through.
+    if (isFeatureEnabled('smartbandOnboarding')) {
+      router.replace('/(onboarding)/smartband/connection');
+    } else {
+      router.replace('/(app)/dashboard');
+    }
   };
 
   return (
@@ -62,7 +84,7 @@ export default function ComplimentaryDataStep3() {
         contentContainerStyle={{
           paddingTop: insets.top + 26,
           paddingBottom: insets.bottom + 32,
-          paddingHorizontal: 16,
+          paddingHorizontal: theme.padding.m,
           gap: theme.gap.xl,
         }}
         showsVerticalScrollIndicator={false}
@@ -148,7 +170,13 @@ export default function ComplimentaryDataStep3() {
         </View>
 
         <View style={{ gap: theme.gap.sm }}>
-          <Button variant="contained" label="Concluir" fullWidth onPress={finish} />
+          <Button
+            variant="contained"
+            label="Concluir"
+            fullWidth
+            disabled={!canSubmit}
+            onPress={finish}
+          />
           <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
         </View>
       </ScrollView>

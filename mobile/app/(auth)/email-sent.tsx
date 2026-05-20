@@ -18,13 +18,19 @@ export default function EmailSent() {
 
   useEffect(() => {
     const t = setTimeout(() => {
+      // Forward `email` to account-confirmation so it can complete the
+      // session (signIn) before redirecting into the wizard. The signup
+      // chain depends on this — see R-1 in 2026-05-17-mobile-routes-audit.md.
       router.replace({
         pathname: '/(auth)/account-confirmation',
-        params: { username: username ?? '' },
+        params: { username: username ?? '', email: email ?? '' },
       });
     }, ADVANCE_MS);
     return () => clearTimeout(t);
-  }, [router, username]);
+    // `router` from useRouter() is referentially stable across renders;
+    // including it in deps re-runs this fire-and-go timer for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username, email]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -45,6 +51,8 @@ export default function EmailSent() {
         <View style={{ width: 328, gap: theme.gap.l, alignItems: 'center' }}>
           <SuccessBadge
             iconName="mail"
+            iconSize={48}
+            iconColor={theme.content.light}
             accessibilityLabel="Email de confirmação enviado"
           />
           <Title variant="title.xs">Confirme sua conta pelo email</Title>

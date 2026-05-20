@@ -28,7 +28,12 @@ export default function Login() {
       <Image
         source={require('../../assets/login-bg.png')}
         resizeMode="cover"
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        // width/height 100% explícitos: react-native-web não aplica
+        // dimensões 100% automaticamente em <Image> com position:absolute +
+        // top/left/right/bottom 0 — sem isso, o div/img é renderizado nas
+        // dimensões NATURAIS do PNG (1920×1080) e só o canto superior-esquerdo
+        // 360×800 fica visível, deslocando o gradiente vs Figma. 2026-05-18.
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }}
       />
       <View style={{ flex: 1, paddingTop: insets.top + 123, alignItems: 'center' }}>
         <Logo size="l" />
