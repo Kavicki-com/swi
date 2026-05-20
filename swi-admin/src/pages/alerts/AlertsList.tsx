@@ -21,6 +21,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { createRoot, type Root } from 'react-dom/client'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
+import { ESRI_SATELLITE_STYLE } from '@/lib/mapStyles'
 import {
   Button,
   Chip,
@@ -48,31 +49,6 @@ function passesFilter(status: DashboardMapMarker['status'], filter: string): boo
   if (filter === 'alert') return status === 'alert'
   if (filter === 'low') return status === 'low' || status === 'offline'
   return true
-}
-
-// ESRI World Imagery satellite tiles — same source used by MapsGeneral,
-// Dashboard MapBanner, ChatInbox mini-map, etc. Free for demo use, no key.
-const ESRI_SATELLITE_STYLE = {
-  version: 8 as const,
-  sources: {
-    'esri-imagery': {
-      type: 'raster' as const,
-      tiles: [
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      ],
-      tileSize: 256,
-      attribution: '',
-      minzoom: 0,
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: 'esri-imagery',
-      type: 'raster' as const,
-      source: 'esri-imagery',
-    },
-  ],
 }
 
 // Box-Muller distributed mock points around `center` — produces the same
