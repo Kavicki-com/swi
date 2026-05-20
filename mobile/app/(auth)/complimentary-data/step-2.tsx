@@ -17,7 +17,17 @@ export default function ComplimentaryDataStep2() {
   const [neighborhood, setNeighborhood] = useState('');
   const [uf, setUf] = useState('');
 
+  // Todos os 5 campos de endereço são obrigatórios — match com R-10
+  // em 2026-05-17-mobile-routes-audit.md.
+  const canSubmit =
+    cep.trim().length > 0 &&
+    street.trim().length > 0 &&
+    number.trim().length > 0 &&
+    neighborhood.trim().length > 0 &&
+    uf.trim().length > 0;
+
   const goNext = () => {
+    if (!canSubmit) return;
     router.push({
       pathname: '/(auth)/complimentary-data/step-3',
       params: { username },
@@ -34,8 +44,9 @@ export default function ComplimentaryDataStep2() {
       <ScrollView
         contentContainerStyle={{
           paddingTop: insets.top + 26,
-          paddingBottom: insets.bottom + 32,
-          paddingHorizontal: 16,
+          // Reserva pro footer absoluto (Avançar/Voltar) — match com step-1.
+          paddingBottom: insets.bottom + 32 + 108 + 16,
+          paddingHorizontal: theme.padding.m,
           gap: theme.gap.xl,
         }}
         showsVerticalScrollIndicator={false}
@@ -86,12 +97,27 @@ export default function ComplimentaryDataStep2() {
             maxLength={2}
           />
         </View>
-
-        <View style={{ gap: theme.gap.sm }}>
-          <Button variant="contained" label="Avançar" fullWidth onPress={goNext} />
-          <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
-        </View>
       </ScrollView>
+
+      {/* Figma 213:13404: actions absolute-bottom, não rolam com conteúdo. */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: insets.bottom + 32,
+          left: theme.padding.m,
+          right: theme.padding.m,
+          gap: theme.gap.sm,
+        }}
+      >
+        <Button
+          variant="contained"
+          label="Avançar"
+          fullWidth
+          disabled={!canSubmit}
+          onPress={goNext}
+        />
+        <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
+      </View>
     </View>
   );
 }

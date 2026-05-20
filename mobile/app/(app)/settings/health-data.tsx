@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image as RNImage, ScrollView, Text as RNText, View } from 'react-native';
+import { Image as RNImage, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -9,6 +9,7 @@ import {
   Icon,
   ImageUploader,
   Input,
+  Text,
   Title,
   TopBar,
   useTheme,
@@ -111,16 +112,9 @@ export default function SettingsHealthData() {
           />
 
           <View style={{ gap: theme.gap.m }}>
-            <RNText
-              style={{
-                fontFamily: theme.fontFamily.body,
-                fontWeight: theme.fontWeight.bold,
-                fontSize: theme.fontSize.m,
-                color: theme.content.dark,
-              }}
-            >
+            <Text variant="body.m" weight="bold" color={theme.content.dark}>
               Histórico Médico
-            </RNText>
+            </Text>
 
             {exams.map((exam) => (
               <ExamInfoCard

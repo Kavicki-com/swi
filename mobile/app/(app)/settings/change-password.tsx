@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import { Image as RNImage, Pressable, ScrollView, View } from 'react-native';
+import { Image as RNImage, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   Icon,
-  Input,
   Title,
   Toast,
   TopBar,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { PasswordInput } from '../../../components/PasswordInput';
 
 // Figma 353:12228 — settings sub-screen "Alterar senha". Form com 3
 // password inputs + Toast informativo + Salvar + Home FAB. Demo
@@ -23,23 +23,6 @@ export default function SettingsChangePassword() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showRepeat, setShowRepeat] = useState(false);
-
-  const visibilityToggle = (visible: boolean, onToggle: () => void) => (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityLabel={visible ? 'Ocultar senha' : 'Mostrar senha'}
-    >
-      <Icon
-        name={visible ? 'visibility_off' : 'visibility'}
-        size={24}
-        color={theme.content.dark}
-      />
-    </Pressable>
-  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -78,32 +61,20 @@ export default function SettingsChangePassword() {
             Senha de acesso
           </Title>
 
-          <Input
+          <PasswordInput
             label="Senha atual"
             value={currentPassword}
             onChangeText={setCurrentPassword}
-            secureTextEntry={!showCurrent}
-            autoCapitalize="none"
-            autoCorrect={false}
-            iconRight={visibilityToggle(showCurrent, () => setShowCurrent((v) => !v))}
           />
-          <Input
+          <PasswordInput
             label="Nova senha"
             value={newPassword}
             onChangeText={setNewPassword}
-            secureTextEntry={!showNew}
-            autoCapitalize="none"
-            autoCorrect={false}
-            iconRight={visibilityToggle(showNew, () => setShowNew((v) => !v))}
           />
-          <Input
+          <PasswordInput
             label="Repetir nova senha"
             value={repeatPassword}
             onChangeText={setRepeatPassword}
-            secureTextEntry={!showRepeat}
-            autoCapitalize="none"
-            autoCorrect={false}
-            iconRight={visibilityToggle(showRepeat, () => setShowRepeat((v) => !v))}
           />
 
           <Toast

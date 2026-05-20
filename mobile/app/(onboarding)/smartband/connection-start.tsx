@@ -3,14 +3,26 @@ import { Image, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SmartbandStatus, Title, useTheme } from '@kavicki/swi-design-system';
-// 3D Smartwatch3D temporarily reverted to a static PNG while we sort out
-// three.js `import.meta` interop with Metro web. See components/Smartwatch3D.tsx
-// for the working component once expo-gl native build is wired.
+import { Smartwatch3D } from '../../../components/Smartwatch3D';
+import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
+import { isFeatureEnabled } from '../../../lib/featureFlags';
+
+// Figma 215:17901 — smartband-connection-start. Renamed from `pairing.tsx`
+// on 2026-05-17 to match the Figma frame name (audit reconciliation).
+// Content unchanged: animated 3D smartband + sync progress bar, auto-advances
+// to /smartband/complete when progress reaches 1.
 
 const SYNC_DURATION_MS = 3000;
 const TICK_MS = 100;
 
-export default function SmartbandPairing() {
+export default function SmartbandConnectionStart() {
+  if (!isFeatureEnabled('smartbandOnboarding')) {
+    return <ProdOnlyPlaceholder />;
+  }
+  return <SmartbandConnectionStartScreen />;
+}
+
+function SmartbandConnectionStartScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -48,7 +60,7 @@ export default function SmartbandPairing() {
           flex: 1,
           paddingTop: insets.top + 26,
           paddingBottom: insets.bottom + 32,
-          paddingHorizontal: 16,
+          paddingHorizontal: theme.padding.m,
         }}
       >
         <Title
@@ -60,11 +72,7 @@ export default function SmartbandPairing() {
         </Title>
 
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Image
-            source={require('../../../assets/smartwatch.png')}
-            resizeMode="contain"
-            style={{ width: 320, height: 347 }}
-          />
+          <Smartwatch3D width={320} height={347} autoRotate interactive scale={1.2} />
         </View>
 
         <SmartbandStatus

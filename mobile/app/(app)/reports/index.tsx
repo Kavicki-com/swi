@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { Image as RNImage, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   Icon,
+  JourneyTheme,
+  Pagination,
   ReportCard,
   SearchInput,
   type StatusTagStatus,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { NavFABs } from '../../../components/NavFABs';
 
 // Figma 364:18596 — reports list. SearchInput + Novo relatório CTA +
 // scrollable ReportCard list + Pagination + 2 FABs (chat + home).
@@ -126,27 +129,21 @@ export default function Reports() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View
-        pointerEvents="none"
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      >
-        <RNImage
-          source={require('../../../assets/reports-bg.png')}
-          resizeMode="cover"
-          accessible={false}
-          style={{ width: '100%', height: '100%' }}
-        />
-      </View>
+      <JourneyTheme
+        gradient={require('../../../assets/reports-bg.png')}
+        pattern={require('../../../assets/smartband-bg-pattern.png')}
+      />
 
-      <ScrollView
-        style={{ flex: 1, backgroundColor: 'transparent' }}
-        contentContainerStyle={{
-          paddingTop: insets.top,
-          paddingBottom: insets.bottom + 160,
+      {/* Fixed header: SearchInput + Novo relatório CTA stay pinned at top.
+          Figma 364:18596 mostra apenas 1 e meio card na área scrollável.
+          `paddingTop` mínimo de 40 garante o respiro visto no Figma mesmo
+          no web (onde `insets.top` = 0). */}
+      <View
+        style={{
+          paddingTop: Math.max(insets.top, 40),
           paddingHorizontal: theme.padding.m,
           gap: theme.gap.m,
         }}
-        showsVerticalScrollIndicator={false}
       >
         <SearchInput
           value={search}
@@ -160,12 +157,26 @@ export default function Reports() {
           labelColor={theme.content.light}
           label="Novo relatório"
           elevation="lg"
-          iconLeft={<Icon name="add" size={24} color={theme.content.light} />}
+          iconLeft={<Icon name="add_circle" size={20} color={theme.content.light} />}
           accessibilityLabel="Novo relatório"
           onPress={() => router.push('/(app)/reports/new')}
         />
+      </View>
 
-        {/* Reports list */}
+      {/* Scrollable cards area — altura calibrada para o card 2 terminar
+          logo acima do chat FAB (top 669) e não ser invadido por ele.
+          Header sai em y≈156, +gap 16 = cards start y≈172. maxHeight 468
+          → bottom y≈640. Mostra 1 card cheio + ~card 2 com title/resumo
+          visível, fiel ao Figma 364:18596. */}
+      <ScrollView
+        style={{ maxHeight: 468, marginTop: theme.gap.m }}
+        contentContainerStyle={{
+          paddingHorizontal: theme.padding.m,
+          gap: theme.gap.m,
+          paddingBottom: theme.padding.l,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
         {REPORTS.map((report) => (
           <ReportCard
             key={report.id}
@@ -187,111 +198,14 @@ export default function Reports() {
           />
         ))}
 
-        {/* Pagination — Figma 461:10196 (mesmo pattern do faq) */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-          }}
-        >
-          {[1, 2, 3, 4].map((n) => (
-            <View key={n} style={{ flex: 1 }}>
-              <Button
-                variant="ghost"
-                label={String(n)}
-                accessibilityLabel={`Página ${n}`}
-                onPress={() => setCurrentPage(n)}
-              />
-            </View>
-          ))}
-          <View style={{ flex: 1 }}>
-            <Button
-              variant="ghost"
-              label="..."
-              accessibilityLabel="Mais páginas"
-              onPress={() => {}}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Button
-              variant="contained"
-              backgroundColor={theme.surface.primary}
-              accessibilityLabel="Próxima página"
-              onPress={() => setCurrentPage((p) => p + 1)}
-              iconLeft={
-                <Icon
-                  name="keyboard_arrow_right"
-                  width={7.4}
-                  height={12}
-                  color={theme.content.light}
-                />
-              }
-            />
-          </View>
-        </View>
+        {/* Pagination — Figma 461:10196 (shared with settings/faq.tsx) */}
+        <Pagination
+          currentPage={currentPage}
+          onPageChange={setCurrentPage}
+        />
       </ScrollView>
 
-      {/* Chat FAB */}
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: 'absolute',
-          bottom: insets.bottom + theme.gap.l,
-          right: theme.padding.m,
-        }}
-      >
-        <Button
-          variant="contained"
-          shape="pill"
-          size="xlarge"
-          backgroundColor={theme.surface.success}
-          elevation="lg"
-          iconLeft={
-            <Icon
-              name="chat_bubble"
-              width={25.714}
-              height={25.714}
-              color={theme.content.light}
-            />
-          }
-          accessibilityLabel="Abrir chat"
-          onPress={() => router.push('/(app)/chat/inbox')}
-        />
-      </View>
-
-      {/* Home FAB */}
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: 'absolute',
-          bottom: insets.bottom + theme.gap.l,
-          left: 0,
-          right: 0,
-          alignItems: 'center',
-        }}
-      >
-        <Button
-          variant="contained"
-          shape="pill"
-          size="xlarge"
-          backgroundColor={theme.content.dark}
-          borderColor={theme.content.disable}
-          borderWidth={10}
-          elevation="lg"
-          iconLeft={
-            <Icon
-              name="home"
-              width={28.286}
-              height={25.458}
-              color={theme.surface.standard}
-            />
-          }
-          accessibilityLabel="Voltar para a dashboard"
-          onPress={() => router.push('/(app)/dashboard')}
-        />
-      </View>
+      <NavFABs />
     </View>
   );
 }

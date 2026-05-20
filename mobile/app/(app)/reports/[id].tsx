@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image as RNImage, ScrollView, Text as RNText, View } from 'react-native';
+import { Image as RNImage, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,10 +8,12 @@ import {
   Button,
   Icon,
   Input,
+  JourneyTheme,
   ProgressBar,
   ReportCard,
   SearchInput,
   type StatusTagStatus,
+  Text,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
@@ -96,17 +98,10 @@ export default function ReportDetails() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View
-        pointerEvents="none"
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      >
-        <RNImage
-          source={require('../../../assets/reports-bg.png')}
-          resizeMode="cover"
-          accessible={false}
-          style={{ width: '100%', height: '100%' }}
-        />
-      </View>
+      <JourneyTheme
+        gradient={require('../../../assets/reports-bg.png')}
+        pattern={require('../../../assets/smartband-bg-pattern.png')}
+      />
 
       <ScrollView
         style={{ flex: 1, backgroundColor: 'transparent' }}
@@ -118,22 +113,26 @@ export default function ReportDetails() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Voltar — ghost button com chevron-left */}
-        <Button
-          variant="ghost"
-          label="Voltar"
-          labelColor={theme.content.primaryLight}
-          accessibilityLabel="Voltar"
-          onPress={() => router.back()}
-          iconLeft={
-            <Icon
-              name="keyboard_arrow_left"
-              width={24}
-              height={24}
-              color={theme.content.primaryLight}
-            />
-          }
-        />
+        {/* Voltar — ghost button com chevron-left.
+            Figma 364:20304 mostra "< Voltar" left-aligned no topo com
+            largura natural (não full-width). */}
+        <View style={{ alignSelf: 'flex-start' }}>
+          <Button
+            variant="ghost"
+            label="Voltar"
+            labelColor={theme.content.primaryLight}
+            accessibilityLabel="Voltar"
+            onPress={() => router.back()}
+            iconLeft={
+              <Icon
+                name="keyboard_arrow_left"
+                width={24}
+                height={24}
+                color={theme.content.primaryLight}
+              />
+            }
+          />
+        </View>
 
         {/* Actions row: SearchInput + Fazer comentário + Revisar */}
         <View style={{ gap: theme.gap.m }}>
@@ -146,26 +145,28 @@ export default function ReportDetails() {
             <View style={{ flex: 1 }}>
               <Button
                 variant="outline"
+                size="small"
                 borderColor={theme.content.primary}
                 labelColor={theme.content.primary}
                 label="Fazer comentário"
                 accessibilityLabel="Fazer comentário"
                 onPress={() => {}}
                 iconLeft={
-                  <Icon name="chat_bubble" size={20} color={theme.content.primary} />
+                  <Icon name="chat_bubble_outline" size={18} color={theme.content.primary} />
                 }
               />
             </View>
             <View style={{ flex: 1 }}>
               <Button
                 variant="outline"
+                size="small"
                 borderColor={theme.content.primary}
                 labelColor={theme.content.primary}
                 label="Revisar relatório"
                 accessibilityLabel="Revisar relatório"
                 onPress={() => {}}
                 iconLeft={
-                  <Icon name="border_color" size={20} color={theme.content.primary} />
+                  <Icon name="border_color" size={18} color={theme.content.primary} />
                 }
               />
             </View>
@@ -189,19 +190,17 @@ export default function ReportDetails() {
         <Title variant="title.xs" color={theme.content.dark}>
           Detalhes do relatório:
         </Title>
-        <RNText
-          style={{
-            fontFamily: theme.fontFamily.body,
-            fontWeight: theme.fontWeight.regular,
-            fontSize: theme.fontSize.m,
-            lineHeight: theme.fontSize.m * 1.4,
-            color: theme.content.dark,
-          }}
+        <Text
+          variant="body.m"
+          color={theme.content.dark}
+          style={{ lineHeight: theme.fontSize.m * 1.4 }}
         >
           {DETAIL_TEXT}
-        </RNText>
+        </Text>
 
-        {/* Imagens — horizontal scroll de 3 placeholders 196×196 */}
+        {/* Imagens — horizontal scroll com fotos reais (Figma 364:20304
+            mostra imagens de campo / equipamento). Demo phase: 2 imagens
+            estáticas; loop pra ocupar a faixa scrollable. */}
         <Title variant="title.xs" color={theme.content.dark}>
           Imagens
         </Title>
@@ -210,13 +209,19 @@ export default function ReportDetails() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: theme.gap.sm }}
         >
-          {[1, 2, 3].map((i) => (
-            <View
+          {[
+            require('../../../assets/report-image-1.png'),
+            require('../../../assets/report-image-2.png'),
+            require('../../../assets/report-image-1.png'),
+          ].map((src, i) => (
+            <RNImage
               key={i}
+              source={src}
+              resizeMode="cover"
+              accessible={false}
               style={{
                 width: 196,
                 height: 196,
-                backgroundColor: theme.surface.medium,
                 borderRadius: theme.border.radius.m,
               }}
             />
@@ -249,35 +254,25 @@ export default function ReportDetails() {
                   gap: theme.gap.l,
                 }}
               >
-                <View style={{ gap: theme.gap.xs, flexShrink: 1 }}>
-                  <RNText
-                    style={{
-                      fontFamily: theme.fontFamily.body,
-                      fontWeight: theme.fontWeight.regular,
-                      fontSize: theme.fontSize.m,
-                      color: theme.content.dark,
-                    }}
-                  >
+                {/* Coluna esquerda — width capada pra forçar wrap nos
+                    títulos como Figma (cada palavra grande em sua linha). */}
+                <View style={{ gap: theme.gap.xs, width: 140 }}>
+                  <Text variant="body.m" color={theme.content.dark}>
                     {activity.title}
-                  </RNText>
-                  <RNText
-                    style={{
-                      fontFamily: theme.fontFamily.body,
-                      fontWeight: theme.fontWeight.regular,
-                      fontSize: theme.fontSize.m,
-                      color: theme.content.dark,
-                    }}
-                  >
+                  </Text>
+                  <Text variant="body.m" color={theme.content.dark}>
                     {activity.sector}
-                  </RNText>
+                  </Text>
                   <View style={{ width: 119 }}>
-                    <ProgressBar value={activity.progress} color={barColor} />
+                    {/* DS ProgressBar usa clamp(value, 0, 100); passar
+                        percentual (84) e não fração (0.84). */}
+                    <ProgressBar value={activity.progress * 100} color={barColor} />
                   </View>
                 </View>
                 <AvatarGroup
                   avatars={activity.avatars}
                   totalCount={activity.totalCount}
-                  maxVisible={2}
+                  maxVisible={3}
                   size="m"
                 />
               </View>
@@ -285,14 +280,15 @@ export default function ReportDetails() {
           })}
         </View>
 
-        {/* Add comment — multiline input + Fazer comentário CTA */}
+        {/* Add comment — multiline input + Fazer comentário CTA.
+            Figma 364:20304 mostra textarea ~120h, ~6 linhas de altura. */}
         <Input
           label="Adicionar comentário"
           placeholder="Digite aqui o seu comentário"
           value={comment}
           onChangeText={setComment}
           multiline
-          numberOfLines={4}
+          numberOfLines={6}
         />
 
         <Button

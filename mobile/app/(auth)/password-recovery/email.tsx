@@ -14,11 +14,12 @@ export default function PasswordRecoveryEmail() {
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    // Demo flow: skip the intermediate "email-sent" notice (already covered
-    // by the sign-up flow). In production this triggers a magic-link email
-    // and the deep-link routes the user into new-password.
+    // Figma 290:688 — show the recovery-specific "Acesse o link de
+    // recuperação" confirmation screen (distinct from the signup variant
+    // 211:12920). The email-sent screen auto-advances to new-password after
+    // 4s, simulating the user clicking the magic-link in their inbox.
     router.push({
-      pathname: '/(auth)/password-recovery/new-password',
+      pathname: '/(auth)/password-recovery/email-sent',
       params: { email },
     });
   };
