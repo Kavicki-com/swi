@@ -2,13 +2,16 @@
 // Maps · General view — full-bleed satellite map with floating overlays:
 // compact left side-menu, three right-side MapControls (operators/heatmap/cameras),
 // and a "Voltar ao dashboard" CTA. Layout matches Figma frame 32:2488.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder, Pressable, View } from 'react-native'
-import { createRoot, type Root } from 'react-dom/client'
 import { useNavigate, useLocation } from 'react-router-dom'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
-import { ESRI_SATELLITE_STYLE } from '@/lib/mapStyles'
+import { SATELLITE_STYLE } from '@/lib/mapStyles'
+import { buildHeatmapPoints, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
+import { createPinElement, type PinElement } from '@/lib/pinFactory'
+import { MapAttribution } from '@/components/MapAttribution'
+import { getRainViewerLatestRadar } from '@/lib/rainViewer'
 import {
   Button,
   HeaderUserInfo,
@@ -17,7 +20,6 @@ import {
   Logo,
   MapControl,
   SideMenu,
-  SwiThemeProvider,
   elevation,
   useTheme,
 } from '@kavicki/swi-design-system'
@@ -35,37 +37,7 @@ import workerA from '@/assets/avatars/worker-a.png'
 // Reports + Alerts carry "+9" unread badges per Figma node 165:21150 / 165:21152.
 const NAV = withBadges({ '/reports': '+9', '/alerts': '+9' })
 
-// Heatmap "Produtividade" mock points — Gaussian-ish cluster around `center`.
-// Used to feed the maplibre `heatmap-points` source; replaces the earlier CSS
-// radial-gradient overlay (which produced an unnaturally smooth ellipse).
-// In production this is replaced by real aggregated event coordinates from
-// the worker telemetry API.
-function buildHeatmapPoints(
-  center: [number, number],
-  count: number,
-  spread: number,
-): Array<{ lng: number; lat: number; weight: number }> {
-  const pts: Array<{ lng: number; lat: number; weight: number }> = []
-  for (let i = 0; i < count; i++) {
-    // Box-Muller transform for normally-distributed offsets — produces an
-    // organic cluster denser near `center`, fading out at the edges.
-    const u = 1 - Math.random()
-    const v = Math.random()
-    const r = Math.sqrt(-2 * Math.log(u)) * spread
-    const theta = 2 * Math.PI * v
-    const dx = r * Math.cos(theta)
-    const dy = r * Math.sin(theta)
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    const weight = Math.max(0.2, 1 - distance / (spread * 2.4))
-    pts.push({ lng: center[0] + dx, lat: center[1] + dy, weight })
-  }
-  return pts
-}
-
-// Bridge: render <LocationPin/> into a detached div so it can be passed to
-// maplibregl.Marker (only accepts HTMLElement). SwiThemeProvider is needed
-// because the detached React tree doesn't inherit the app-level theme context.
-type PinHandle = { marker: maplibregl.Marker; root: Root; el: HTMLDivElement }
+type PinHandle = PinElement & { marker: maplibregl.Marker }
 
 function buildPin(
   m: DashboardMapMarker,
@@ -73,18 +45,26 @@ function buildPin(
   lib: typeof maplibregl,
   onClick: () => void,
 ): PinHandle {
-  const el = document.createElement('div')
-  el.style.cursor = 'pointer'
-  el.addEventListener('click', onClick)
-  const root = createRoot(el)
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin avatarUri={m.avatarUri} status={m.status} name={m.name} />
-    </SwiThemeProvider>,
-  )
+  const { el, root } = createPinElement({
+    onClick,
+    content: <LocationPin avatarUri={m.avatarUri} status={m.status} name={m.name} />,
+  })
   const marker = new lib.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map)
   return { marker, root, el }
 }
+
+// Anchor that every mock coordinate (workers + cameras + heatmap) is defined
+// around. When the user hits "Minha localização", we re-anchor the whole
+// dataset by adding (geoloc - MOCK_ORIGIN) to every coordinate, so the demo
+// surrounds them wherever they are instead of staying in São Paulo.
+const MOCK_ORIGIN: [number, number] = [-46.63, -23.55]
+
+// The Bela Vista mock spans ~2km of São Paulo, which is realistic for a
+// neighborhood but reads as scattered at the building-level zoom we land on
+// after geolocation. We compress relative offsets by this factor so the whole
+// dataset fits inside ~400m around the user's pin — the scale of a real
+// mining/industrial site. Drag the pin to test: workers/cameras stay clustered.
+const SHIFT_SCALE = 0.2
 
 // Mock camera fleet — coords scattered around the São Paulo Bela Vista region
 // where the operator mock data lives. Used to render camera pins on the map
@@ -112,15 +92,10 @@ function buildCameraPin(
   lib: typeof maplibregl,
   onClick: () => void,
 ): PinHandle {
-  const el = document.createElement('div')
-  el.style.cursor = 'pointer'
-  el.addEventListener('click', onClick)
-  const root = createRoot(el)
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin variant="camera" name={c.name} />
-    </SwiThemeProvider>,
-  )
+  const { el, root } = createPinElement({
+    onClick,
+    content: <LocationPin variant="camera" name={c.name} />,
+  })
   const marker = new lib.Marker({ element: el }).setLngLat([c.lng, c.lat]).addTo(map)
   return { marker, root, el }
 }
@@ -172,6 +147,42 @@ export function MapsGeneral() {
     startBottom: number
     moved: boolean
   } | null>(null)
+
+  // User's real geolocation when they've hit the "Minha localização" button.
+  // Drives both the flyTo and the dataset re-anchoring below.
+  const [geolocOrigin, setGeolocOrigin] = useState<[number, number] | null>(null)
+  // Throttle the geolocation button: at most one request per 5s window.
+  // navigator.geolocation.getCurrentPosition can take seconds + dispatch
+  // multiple permission prompts if mashed; we want the visual feedback +
+  // request rate-limited regardless of what the browser does under the hood.
+  const [isLocating, setIsLocating] = useState(false)
+  const locateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () => () => {
+      if (locateTimeoutRef.current !== null) clearTimeout(locateTimeoutRef.current)
+    },
+    [],
+  )
+
+  const shiftedMarkers = useMemo<DashboardMapMarker[]>(() => {
+    const markers = summary?.mapMarkers ?? []
+    if (!geolocOrigin) return [...markers]
+    return markers.map((m) => ({
+      ...m,
+      lng: geolocOrigin[0] + (m.lng - MOCK_ORIGIN[0]) * SHIFT_SCALE,
+      lat: geolocOrigin[1] + (m.lat - MOCK_ORIGIN[1]) * SHIFT_SCALE,
+    }))
+  }, [summary, geolocOrigin])
+
+  const shiftedCameras = useMemo<ReadonlyArray<CameraLocation>>(() => {
+    if (!geolocOrigin) return CAMERA_LOCATIONS
+    return CAMERA_LOCATIONS.map((c) => ({
+      ...c,
+      lng: geolocOrigin[0] + (c.lng - MOCK_ORIGIN[0]) * SHIFT_SCALE,
+      lat: geolocOrigin[1] + (c.lat - MOCK_ORIGIN[1]) * SHIFT_SCALE,
+    }))
+  }, [geolocOrigin])
 
   // Conservative over-estimate of button bbox (measured ~285×71 at 1920w, ~204×52 at 1366w).
   // Used only for clamping during drag; CSS handles initial anchored layout.
@@ -254,7 +265,7 @@ export function MapsGeneral() {
 
     const map = new lib.Map({
       container: containerRef.current,
-      style: ESRI_SATELLITE_STYLE,
+      style: SATELLITE_STYLE,
       center,
       zoom: 14,
       attributionControl: false,
@@ -279,9 +290,9 @@ export function MapsGeneral() {
 
   useEffect(() => {
     const map = mapRef.current
-    if (!lib || !map || !mapReady || !summary || !showOperators) return
+    if (!lib || !map || !mapReady || !showOperators || shiftedMarkers.length === 0) return
 
-    const handles = summary.mapMarkers.map((m) =>
+    const handles = shiftedMarkers.map((m) =>
       buildPin(m, map, lib, () => navigate(`/employees/${m.id}`)),
     )
 
@@ -298,7 +309,7 @@ export function MapsGeneral() {
         })
       })
     }
-  }, [mapReady, summary, showOperators, lib, navigate])
+  }, [mapReady, shiftedMarkers, showOperators, lib, navigate])
 
   // Camera pins — rendered when the "Câmeras" MapControl is expanded.
   // Mirrors the operator-pin useEffect; uses the same PinHandle/cleanup
@@ -308,7 +319,7 @@ export function MapsGeneral() {
     const map = mapRef.current
     if (!lib || !map || !mapReady || !showCameras) return
 
-    const handles = CAMERA_LOCATIONS.map((c) =>
+    const handles = shiftedCameras.map((c) =>
       buildCameraPin(c, map, lib, () =>
         showToast('Câmera selecionada', `Stream ao vivo de ${c.name}`),
       ),
@@ -325,7 +336,7 @@ export function MapsGeneral() {
         })
       })
     }
-  }, [mapReady, showCameras, lib, showToast])
+  }, [mapReady, showCameras, shiftedCameras, lib, showToast])
 
   // Maplibre heatmap layer — replaces the previous CSS radial-gradient overlay.
   // Mock ~150 GeoJSON points clustered around the markers' centroid produce an
@@ -333,16 +344,15 @@ export function MapsGeneral() {
   // red center), matching Figma 33:3924 visualization shape.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady || !summary || !showHeatmap || !heatmapOptions.produtividade) return
+    if (!map || !mapReady || !showHeatmap || !heatmapOptions.produtividade) return
 
-    const markers = summary.mapMarkers
     const center: [number, number] =
-      markers.length > 0
+      shiftedMarkers.length > 0
         ? [
-            markers.reduce((s, m) => s + m.lng, 0) / markers.length,
-            markers.reduce((s, m) => s + m.lat, 0) / markers.length,
+            shiftedMarkers.reduce((s, m) => s + m.lng, 0) / shiftedMarkers.length,
+            shiftedMarkers.reduce((s, m) => s + m.lat, 0) / shiftedMarkers.length,
           ]
-        : [-46.63, -23.55]
+        : (geolocOrigin ?? MOCK_ORIGIN)
 
     // Figma 33:3924 shows ONE dense organic blob spanning ~half the visible map,
     // with a hot magenta/red core fading to orange/yellow/green/cyan at edges.
@@ -350,17 +360,12 @@ export function MapsGeneral() {
     // their kernels fuse rather than producing many small blobs, (b) enough
     // points + intensity to push the density curve past the red threshold, and
     // (c) a secondary hot core to drive the magenta peak in the center.
-    const corePoints = buildHeatmapPoints(center, 220, 0.006)
-    const haloPoints = buildHeatmapPoints(center, 280, 0.018)
-    const points = [...corePoints, ...haloPoints]
-    const geojson: GeoJSON.FeatureCollection<GeoJSON.Point> = {
-      type: 'FeatureCollection',
-      features: points.map((p) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: { weight: p.weight },
-      })),
-    }
+    // The spread also scales with SHIFT_SCALE when geolocated so the blob
+    // matches the tightened worker cluster.
+    const spreadFactor = geolocOrigin ? SHIFT_SCALE : 1
+    const corePoints = buildHeatmapPoints(center, 220, 0.006 * spreadFactor)
+    const haloPoints = buildHeatmapPoints(center, 280, 0.018 * spreadFactor)
+    const geojson = buildHeatmapGeoJSON([...corePoints, ...haloPoints])
 
     // Defensive: clear any stale layer/source from a prior strict-mode mount.
     if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
@@ -376,25 +381,7 @@ export function MapsGeneral() {
         'heatmap-intensity': 2.0,
         'heatmap-radius': 70,
         'heatmap-opacity': 0.82,
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0,
-          'rgba(34,211,238,0)',
-          0.08,
-          'rgb(34,211,238)',
-          0.24,
-          'rgb(34,197,94)',
-          0.44,
-          'rgb(250,204,21)',
-          0.64,
-          'rgb(249,115,22)',
-          0.84,
-          'rgb(220,38,38)',
-          1.0,
-          'rgb(159,18,57)',
-        ],
+        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...HEATMAP_COLOR_RAMP],
       },
     })
 
@@ -402,7 +389,39 @@ export function MapsGeneral() {
       if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
       if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
     }
-  }, [mapReady, summary, showHeatmap, heatmapOptions.produtividade])
+  }, [mapReady, shiftedMarkers, geolocOrigin, showHeatmap, heatmapOptions.produtividade])
+
+  // "Você está aqui" dot — drawn at the coordinates returned by the browser's
+  // geolocation API (initial guess), then user-draggable to correct the API's
+  // imprecision (desktop browsers without GPS typically resolve to IP-based
+  // coords that can be km off). On dragend we update geolocOrigin, which
+  // cascades through coordShift → shiftedMarkers/shiftedCameras → heatmap,
+  // re-anchoring the whole mock dataset around the corrected position.
+  // Colors hard-coded for contrast over the always-dark satellite tiles.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!lib || !map || !mapReady || !geolocOrigin) return
+
+    const el = document.createElement('div')
+    el.style.cssText =
+      'width:16px;height:16px;border-radius:999px;background-color:#3b82f6;' +
+      'border:3px solid #ffffff;box-shadow:0 0 8px rgba(0,0,0,0.55);' +
+      'cursor:grab;'
+    const marker = new lib.Marker({ element: el, draggable: true })
+      .setLngLat(geolocOrigin)
+      .addTo(map)
+    marker.on('dragstart', () => {
+      el.style.cursor = 'grabbing'
+    })
+    marker.on('dragend', () => {
+      el.style.cursor = 'grab'
+      const { lng, lat } = marker.getLngLat()
+      setGeolocOrigin([lng, lat])
+    })
+    return () => {
+      marker.remove()
+    }
+  }, [lib, mapReady, geolocOrigin])
 
   // Meteorologic overlay (Zonas de alerta) — RainViewer real-time radar
   // raster, same approach used on /alerts meteo mode. Replaces the previous
@@ -416,33 +435,24 @@ export function MapsGeneral() {
     const map = mapRef.current
     if (!map || !mapReady || !showHeatmap || !heatmapOptions.zonasAlerta) return
     let cancelled = false
-    fetch('https://api.rainviewer.com/public/weather-maps.json')
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return
-        const host = data?.host as string | undefined
-        const past = data?.radar?.past
-        if (!host || !Array.isArray(past) || past.length === 0) return
-        const path = past[past.length - 1].path as string
-        if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
-        if (map.getSource('meteo')) map.removeSource('meteo')
-        map.addSource('meteo', {
-          type: 'raster',
-          tiles: [`${host}${path}/256/{z}/{x}/{y}/2/1_1.png`],
-          tileSize: 256,
-          maxzoom: 7,
-        })
-        map.addLayer({
-          id: 'meteo-layer',
-          type: 'raster',
-          source: 'meteo',
-          paint: { 'raster-opacity': 0.75 },
-        })
+    getRainViewerLatestRadar().then((result) => {
+      if (cancelled || !result) return
+      const { host, path } = result
+      if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
+      if (map.getSource('meteo')) map.removeSource('meteo')
+      map.addSource('meteo', {
+        type: 'raster',
+        tiles: [`${host}${path}/256/{z}/{x}/{y}/2/1_1.png`],
+        tileSize: 256,
+        maxzoom: 7,
       })
-      .catch(() => {
-        // Silent: if RainViewer is unreachable (offline demo), the map just
-        // stays without the meteo overlay. No user-facing error needed.
+      map.addLayer({
+        id: 'meteo-layer',
+        type: 'raster',
+        source: 'meteo',
+        paint: { 'raster-opacity': 0.75 },
       })
+    })
     return () => {
       cancelled = true
       if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
@@ -480,6 +490,9 @@ export function MapsGeneral() {
           bottom: 0,
         }}
       />
+
+      {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
+      <MapAttribution />
 
       {/* Top scrim — reproduces the dark fade baked into Figma's mockup
           satellite image (imgMapViewGeneral, node 32:2488). Real ESRI tiles
@@ -668,24 +681,40 @@ export function MapsGeneral() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Centralizar na minha localização"
+        disabled={isLocating}
         onPress={() => {
+          if (isLocating) return
           if (!navigator.geolocation) {
             showToast('Geolocalização indisponível', 'Browser não suporta navigator.geolocation')
             return
           }
+          setIsLocating(true)
           navigator.geolocation.getCurrentPosition(
             (pos) => {
               const map = mapRef.current
-              if (!map) return
-              map.flyTo({
-                center: [pos.coords.longitude, pos.coords.latitude],
-                zoom: 15,
-                duration: 1500,
-              })
-              showToast('Localização encontrada', 'Mapa centralizado na sua posição atual')
+              if (map) {
+                const next: [number, number] = [pos.coords.longitude, pos.coords.latitude]
+                setGeolocOrigin(next)
+                // zoom 16 ≈ ~500m viewport — buildings visible, mock cluster fits,
+                // and ESRI World Imagery has z16 tiles globally (z17+ is patchy).
+                map.flyTo({
+                  center: next,
+                  zoom: 16,
+                  duration: 1500,
+                })
+                showToast(
+                  'Localização encontrada',
+                  'Arraste o pin azul se a posição estiver imprecisa — dados de demo seguem.',
+                )
+              }
+              locateTimeoutRef.current = setTimeout(() => {
+                setIsLocating(false)
+                locateTimeoutRef.current = null
+              }, 5000)
             },
             (err) => {
               showToast('Não foi possível localizar', err.message || 'Permissão negada')
+              setIsLocating(false)
             },
             { enableHighAccuracy: true, timeout: 10000 },
           )
@@ -707,6 +736,7 @@ export function MapsGeneral() {
           // center puts the bulb above the visual midline; nudging content down
           // ~3px brings the bulb to the optical center of the round button.
           paddingTop: 6,
+          opacity: isLocating ? 0.6 : 1,
           zIndex: 2,
           ...elevation.sm,
         }}
