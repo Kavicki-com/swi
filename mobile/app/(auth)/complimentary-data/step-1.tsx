@@ -18,13 +18,27 @@ export default function ComplimentaryDataStep1() {
   const insets = useSafeAreaInsets();
   const { username } = useLocalSearchParams<{ username?: string }>();
 
-  const [fullName, setFullName] = useState('');
+  // Figma 211:13009 mostra Nome completo "já preenchido" — esse é o estado
+  // intencional: o usuário acabou de digitar fullName na step de signup e
+  // esse valor flui via `username` param. Pré-popular evita re-typing.
+  const [fullName, setFullName] = useState(username ?? '');
   const [phone, setPhone] = useState('');
   const [cpf, setCpf] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
 
+  // Required fields per Figma: nome, telefone, CPF, data nascimento. Foto fica
+  // opcional (avatar default cobre quem não envia). Match com o padrão
+  // canSubmit/disabled que já existe em sign-up.tsx/login.tsx — ver R-10 em
+  // 2026-05-17-mobile-routes-audit.md.
+  const canSubmit =
+    fullName.trim().length > 0 &&
+    phone.trim().length > 0 &&
+    cpf.trim().length > 0 &&
+    birthDate.trim().length > 0;
+
   const goNext = () => {
+    if (!canSubmit) return;
     router.push({
       pathname: '/(auth)/complimentary-data/step-2',
       params: { username },
@@ -41,8 +55,11 @@ export default function ComplimentaryDataStep1() {
       <ScrollView
         contentContainerStyle={{
           paddingTop: insets.top + 26,
-          paddingBottom: insets.bottom + 32,
-          paddingHorizontal: 16,
+          // Reserva espaço pro footer absoluto (Avançar/Voltar) — sem isso,
+          // o último conteúdo do scroll fica oculto atrás dos botões. 32 (bottom
+          // gap Figma) + ~108 (altura dos 2 botões empilhados + gap) + safe-area.
+          paddingBottom: insets.bottom + 32 + 108 + 16,
+          paddingHorizontal: theme.padding.m,
           gap: theme.gap.xl,
         }}
         showsVerticalScrollIndicator={false}
@@ -58,6 +75,7 @@ export default function ComplimentaryDataStep1() {
         <View style={{ gap: theme.gap.m }}>
           <Input
             label="Nome completo"
+            labelWeight="regular"
             placeholder="Seu nome completo"
             value={fullName}
             onChangeText={setFullName}
@@ -66,6 +84,7 @@ export default function ComplimentaryDataStep1() {
           />
           <Input
             label="Telefone"
+            labelWeight="regular"
             placeholder="(00) 00000-0000"
             value={phone}
             onChangeText={setPhone}
@@ -74,6 +93,7 @@ export default function ComplimentaryDataStep1() {
           />
           <Input
             label="CPF"
+            labelWeight="regular"
             placeholder="000.000.000-00"
             value={cpf}
             onChangeText={setCpf}
@@ -81,6 +101,7 @@ export default function ComplimentaryDataStep1() {
           />
           <Input
             label="Data de nascimento"
+            labelWeight="regular"
             placeholder="dd/mm/aaaa"
             value={birthDate}
             onChangeText={setBirthDate}
@@ -101,12 +122,27 @@ export default function ComplimentaryDataStep1() {
           takePhotoLabel="Tirar Foto"
           pickFileLabel="Enviar arquivo"
         />
-
-        <View style={{ gap: theme.gap.sm }}>
-          <Button variant="contained" label="Avançar" fullWidth onPress={goNext} />
-          <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
-        </View>
       </ScrollView>
+
+      {/* Figma 213:13380: actions ficam absolute-bottom, não rolam com o conteúdo. */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: insets.bottom + 32,
+          left: theme.padding.m,
+          right: theme.padding.m,
+          gap: theme.gap.sm,
+        }}
+      >
+        <Button
+          variant="contained"
+          label="Avançar"
+          fullWidth
+          disabled={!canSubmit}
+          onPress={goNext}
+        />
+        <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
+      </View>
     </View>
   );
 }

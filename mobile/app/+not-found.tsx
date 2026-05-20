@@ -1,7 +1,8 @@
 import { Link, Stack } from 'expo-router';
-import { Surface, Title, Text } from '@kavicki/swi-design-system';
+import { Surface, Title, Text, useTheme } from '@kavicki/swi-design-system';
 
 export default function NotFound() {
+  const theme = useTheme();
   return (
     <>
       <Stack.Screen options={{ title: 'Oops!' }} />
@@ -9,7 +10,7 @@ export default function NotFound() {
         <Title variant="title.m">404</Title>
         <Text variant="body.m">Tela nao encontrada.</Text>
         <Link href="/">
-          <Text variant="body.s" color="#62bb81">Voltar</Text>
+          <Text variant="body.s" color={theme.content.primary}>Voltar</Text>
         </Link>
       </Surface>
     </>

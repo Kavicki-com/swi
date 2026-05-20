@@ -1,30 +1,18 @@
-import { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { useState } from 'react';
+import { Image, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   Checkbox,
-  Icon,
   Input,
   Text,
   Toast,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
-
-// Password rules per Figma toast (211:12899):
-// - 8 characters, letters and numbers
-// - 1 symbol @#$%ˆ
-// - 1 uppercase letter
-function validatePassword(pw: string) {
-  return {
-    length: pw.length >= 8,
-    lettersAndNumbers: /[A-Za-z]/.test(pw) && /[0-9]/.test(pw),
-    symbol: /[@#$%^]/.test(pw),
-    uppercase: /[A-Z]/.test(pw),
-  };
-}
+import { PasswordInput } from '../../components/PasswordInput';
+import { isPasswordValid } from '../../lib/validatePassword';
 
 export default function SignUp() {
   const router = useRouter();
@@ -35,15 +23,11 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
-  const pwChecks = useMemo(() => validatePassword(password), [password]);
   const pwMatches = confirmPassword.length > 0 && password === confirmPassword;
-  const pwIsValid = Object.values(pwChecks).every(Boolean);
   const canSubmit =
-    fullName.length > 0 && email.length > 0 && pwIsValid && pwMatches && agreed;
+    fullName.length > 0 && email.length > 0 && isPasswordValid(password) && pwMatches && agreed;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -80,6 +64,7 @@ export default function SignUp() {
           <View style={{ gap: theme.gap.m }}>
             <Input
               label="Nome completo"
+              labelWeight="regular"
               placeholder="Seu nome completo"
               value={fullName}
               onChangeText={setFullName}
@@ -89,6 +74,7 @@ export default function SignUp() {
 
             <Input
               label="Email"
+              labelWeight="regular"
               placeholder="seu@email.com"
               value={email}
               onChangeText={setEmail}
@@ -97,50 +83,22 @@ export default function SignUp() {
               autoCapitalize="none"
             />
 
-            <Input
+            <PasswordInput
               label="Crie uma senha"
+              labelWeight="regular"
               placeholder="*********"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              iconRight={
-                <Pressable
-                  onPress={() => setShowPassword((s) => !s)}
-                  accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  hitSlop={8}
-                >
-                  <Icon
-                    name={showPassword ? 'visibility_off' : 'visibility'}
-                    size={22}
-                    color={theme.content.dark}
-                  />
-                </Pressable>
-              }
             />
 
-            <Input
+            <PasswordInput
               label="Confirme sua senha"
+              labelWeight="regular"
               placeholder="*********"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
               description={pwMatches ? 'As senhas são iguais ✓' : undefined}
               descriptionVariant="success"
-              iconRight={
-                <Pressable
-                  onPress={() => setShowConfirmPassword((s) => !s)}
-                  accessibilityLabel={
-                    showConfirmPassword ? 'Ocultar senha' : 'Mostrar senha'
-                  }
-                  hitSlop={8}
-                >
-                  <Icon
-                    name={showConfirmPassword ? 'visibility_off' : 'visibility'}
-                    size={22}
-                    color={theme.content.dark}
-                  />
-                </Pressable>
-              }
             />
           </View>
 
@@ -161,6 +119,8 @@ export default function SignUp() {
             variant="ghost"
             label="Política de privacidade & Termos de uso"
             underline
+            labelFamily="body"
+            labelWeight="regular"
             fullWidth
             onPress={() => router.push('/modals/privacy-policy')}
           />
