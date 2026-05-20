@@ -5,22 +5,14 @@
 // canonical at swi-admin/src/pages/maps/MapsGeneral.tsx, trimmed to
 // mobile scope:
 //   - no admin SideMenu/Header/back-button (mobile relies on NavFABs)
-//   - no useDemoToast (mobile has no toast system yet — failures are
-//     silent console.log so the demo never blocks on a missing alert UI)
-//   - uses the Wave 1 MapView wrapper instead of instantiating maplibre
-//     directly; markers/layers are attached via the onReady callback
-//     ref pattern so cleanup runs deterministically per overlay toggle.
-import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, View } from 'react-native';
-// react-dom/client has no bundled .d.ts and @types/react-dom is not
-// installed in the mobile workspace. We only consume the narrow
-// `createRoot` API for the maplibre marker bridge, so we declare the
-// minimal shape we need inline rather than pulling in a new devDep.
-// (Same approach as the sibling map-weather.tsx in this folder.)
-// @ts-expect-error — local ambient declaration; the package ships JS only.
-import { createRoot } from 'react-dom/client';
-type Root = { render: (node: React.ReactNode) => void; unmount: () => void };
-import type maplibregl from 'maplibre-gl';
+//   - no useDemoToast (failures are silent console.log)
+//
+// Sprint 6 Wave 3: migrated off the legacy maplibre-gl imperative wrapper
+// (createRoot + addSource/addLayer) onto the declarative MapView API.
+// Works on both web (via MapView.web.tsx + maplibre-gl) and native
+// iOS/Android (via MapView.native.tsx + @maplibre/maplibre-react-native).
+import { useMemo, useState } from 'react';
+import { Pressable, View } from 'react-native';
 import {
   Icon,
   LocationPin,
@@ -29,18 +21,18 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system';
-import { MapView } from '../../components/MapView';
-import { NavFABs } from '../../components/NavFABs';
-import { ProdOnlyPlaceholder } from '../../components/ProdOnlyPlaceholder';
-import { isFeatureEnabled } from '../../lib/featureFlags';
+import { MapView } from '@/components/MapView';
+import { MapMarker } from '@/components/MapMarker';
+import { MapHeatmapSource } from '@/components/MapHeatmapSource';
+import { NavFABs } from '@/components/NavFABs';
+import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import {
   CAMERA_LOCATIONS,
   USER_AVATAR,
   USER_LOCATION,
   WORKER_LOCATIONS,
-  type CameraMarker,
-  type WorkerMarker,
-} from '../../lib/mapMockData';
+} from '@/lib/mapMockData';
 
 // ---------------------------------------------------------------------------
 // Heatmap data generation — Box-Muller transform produces normally-distributed
@@ -67,91 +59,21 @@ function buildHeatmapPoints(
   return pts;
 }
 
-// ---------------------------------------------------------------------------
-// Pin bridge — maplibre Marker requires an HTMLElement, so we render the DS
-// LocationPin into a detached <div> via React 19's createRoot. The detached
-// subtree doesn't inherit the app SwiThemeProvider, so we wrap it inline
-// (verbatim port of admin lines 89-111 / 133-150).
-// ---------------------------------------------------------------------------
-type PinHandle = {
-  marker: maplibregl.Marker;
-  root: Root;
-  el: HTMLDivElement;
-};
-
-function buildWorkerPin(
-  m: WorkerMarker,
-  map: maplibregl.Map,
-  lib: typeof maplibregl,
-): PinHandle {
-  const el = document.createElement('div');
-  el.style.cursor = 'pointer';
-  const root = createRoot(el);
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin
-        variant="avatar"
-        avatarUri={m.avatarUri}
-        status={m.status}
-        name={m.name}
-      />
-    </SwiThemeProvider>,
-  );
-  const marker = new lib.Marker({ element: el })
-    .setLngLat([m.lng, m.lat])
-    .addTo(map);
-  return { marker, root, el };
-}
-
-function buildCameraPin(
-  c: CameraMarker,
-  map: maplibregl.Map,
-  lib: typeof maplibregl,
-): PinHandle {
-  const el = document.createElement('div');
-  el.style.cursor = 'pointer';
-  const root = createRoot(el);
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin variant="camera" name={c.name} />
-    </SwiThemeProvider>,
-  );
-  const marker = new lib.Marker({ element: el })
-    .setLngLat([c.lng, c.lat])
-    .addTo(map);
-  return { marker, root, el };
-}
-
-// User avatar pin permanente em USER_LOCATION (Figma 385:29023). Sempre
-// renderizado, sem toggle — é a "minha posição" visível pra o usuário.
-function buildUserPin(
-  map: maplibregl.Map,
-  lib: typeof maplibregl,
-): PinHandle {
-  const el = document.createElement('div');
-  const root = createRoot(el);
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin
-        variant="avatar"
-        avatarUri={USER_AVATAR}
-        status="good"
-        name="Você"
-      />
-    </SwiThemeProvider>,
-  );
-  const marker = new lib.Marker({ element: el }).setLngLat(USER_LOCATION).addTo(map);
-  return { marker, root, el };
-}
+// Productivity color ramp (cyan → green → yellow → orange → red → magenta) —
+// verbatim port from swi-admin spec. Used by the heatmap layer when the
+// heatmap toggle is on.
+const PRODUCTIVITY_COLOR_STOPS: Array<[number, string]> = [
+  [0, 'rgba(34,211,238,0)'],
+  [0.08, 'rgb(34,211,238)'],
+  [0.24, 'rgb(34,197,94)'],
+  [0.44, 'rgb(250,204,21)'],
+  [0.64, 'rgb(249,115,22)'],
+  [0.84, 'rgb(220,38,38)'],
+  [1.0, 'rgb(159,18,57)'],
+];
 
 export default function MapViewGeneral() {
-  // Band-aid pra R-9 (2026-05-17): este screen ainda usa o caminho imperativo
-  // legacy (createRoot + addSource/addLayer + <div>/linear-gradient inline)
-  // que só compila/roda em web. Até a migração pro contrato declarativo
-  // <MapView>+<MapMarker>+<MapLineSource>, restringimos a renderização real
-  // a web. Em native prod build (onde featureFlags.maps = true) o usuário vê
-  // ProdOnlyPlaceholder em vez de crash de react-dom inexistente.
-  if (Platform.OS !== 'web' || !isFeatureEnabled('maps')) {
+  if (!isFeatureEnabled('maps')) {
     return <ProdOnlyPlaceholder />;
   }
   return <MapViewGeneralScreen />;
@@ -159,13 +81,6 @@ export default function MapViewGeneral() {
 
 function MapViewGeneralScreen() {
   const theme = useTheme();
-
-  // Refs captured by MapView's onReady so overlay useEffects can attach
-  // markers/layers post-load. Mirrors the admin mapRef/lib pattern but
-  // we also keep the library handle (foundation MapView passes both).
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const libRef = useRef<typeof maplibregl | null>(null);
-  const [mapReady, setMapReady] = useState(false);
 
   // Overlay toggles — 3 botões icon-only independentes (Figma 385:28853).
   // Cada botão é um simple toggle: tap liga, tap de novo desliga.
@@ -175,81 +90,18 @@ function MapViewGeneralScreen() {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showCameras, setShowCameras] = useState(false);
 
-  // User pin (Figma 385:29023) — sempre visível em USER_LOCATION.
-  useEffect(() => {
-    const map = mapRef.current;
-    const lib = libRef.current;
-    if (!map || !lib || !mapReady) return;
-    const handle = buildUserPin(map, lib);
-    return () => {
-      handle.marker.remove();
-      handle.root.unmount();
-      handle.el.remove();
-    };
-  }, [mapReady]);
-
-  // -------------------------------------------------------------------------
-  // Operator pins overlay — renders 7 WORKER_LOCATIONS as avatar pins when
-  // the operators MapControl is expanded. Cleanup unmounts each detached
-  // React root + removes the marker; running these in order prevents
-  // "marker.remove on a removed node" warnings under React StrictMode.
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const map = mapRef.current;
-    const lib = libRef.current;
-    if (!map || !lib || !mapReady || !showOperators) return;
-
-    const handles = WORKER_LOCATIONS.map((m) => buildWorkerPin(m, map, lib));
-
-    return () => {
-      handles.forEach((h) => {
-        h.marker.remove();
-        h.root.unmount();
-        h.el.remove();
-      });
-    };
-  }, [mapReady, showOperators]);
-
-  // -------------------------------------------------------------------------
-  // Camera pins overlay — same pattern as operators, drives the green
-  // LocationPin variant='camera' over CAMERA_LOCATIONS (12 entries).
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const map = mapRef.current;
-    const lib = libRef.current;
-    if (!map || !lib || !mapReady || !showCameras) return;
-
-    const handles = CAMERA_LOCATIONS.map((c) => buildCameraPin(c, map, lib));
-
-    return () => {
-      handles.forEach((h) => {
-        h.marker.remove();
-        h.root.unmount();
-        h.el.remove();
-      });
-    };
-  }, [mapReady, showCameras]);
-
-  // -------------------------------------------------------------------------
-  // Productivity heatmap layer — ~500 GeoJSON points clustered around
-  // USER_LOCATION drive maplibre's native heatmap interpolation. Color
-  // ramp is the admin spec verbatim (cyan → green → yellow → orange →
-  // red → magenta) so the legend gradient on the right matches the map
-  // density curve exactly.
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !showHeatmap) {
-      return;
-    }
-
-    // Two clusters fused: dense core (220 points / spread 0.006°) drives
-    // the hot magenta peak, halo (280 points / spread 0.018°) widens the
-    // organic blob so it spans roughly half the visible viewport at z=14.
+  // Two clusters fused: dense core (220 points / spread 0.006°) drives the
+  // hot magenta peak; halo (280 points / spread 0.018°) widens the organic
+  // blob so it spans roughly half the visible viewport at z=14. Computed
+  // once on first mount — re-running on every render would shuffle the
+  // distribution and make the heatmap "blink" when the user toggles other
+  // overlays. Toggle off → memoized data is dropped from the shape passed
+  // to <MapHeatmapSource> via the conditional render.
+  const heatmapShape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => {
     const corePoints = buildHeatmapPoints(USER_LOCATION, 220, 0.006);
     const haloPoints = buildHeatmapPoints(USER_LOCATION, 280, 0.018);
     const points = [...corePoints, ...haloPoints];
-    const geojson: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+    return {
       type: 'FeatureCollection',
       features: points.map((p) => ({
         type: 'Feature',
@@ -257,60 +109,72 @@ function MapViewGeneralScreen() {
         properties: { weight: p.weight },
       })),
     };
-
-    // Defensive: clear any stale layer/source from a prior strict-mode mount.
-    if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer');
-    if (map.getSource('heatmap-points')) map.removeSource('heatmap-points');
-
-    map.addSource('heatmap-points', { type: 'geojson', data: geojson });
-    map.addLayer({
-      id: 'heatmap-layer',
-      type: 'heatmap',
-      source: 'heatmap-points',
-      paint: {
-        'heatmap-weight': ['get', 'weight'],
-        'heatmap-intensity': 2.0,
-        'heatmap-radius': 70,
-        'heatmap-opacity': 0.82,
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0,
-          'rgba(34,211,238,0)',
-          0.08,
-          'rgb(34,211,238)',
-          0.24,
-          'rgb(34,197,94)',
-          0.44,
-          'rgb(250,204,21)',
-          0.64,
-          'rgb(249,115,22)',
-          0.84,
-          'rgb(220,38,38)',
-          1.0,
-          'rgb(159,18,57)',
-        ],
-      },
-    });
-
-    return () => {
-      if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer');
-      if (map.getSource('heatmap-points')) map.removeSource('heatmap-points');
-    };
-  }, [mapReady, showHeatmap]);
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView
-        center={USER_LOCATION}
-        zoom={14}
-        onReady={(map: maplibregl.Map, lib: typeof maplibregl) => {
-          mapRef.current = map;
-          libRef.current = lib;
-          setMapReady(true);
-        }}
-      >
+      <MapView center={USER_LOCATION} zoom={14}>
+        {/* Productivity heatmap layer — driven by `showHeatmap` toggle.
+            Color ramp matches admin spec verbatim (Figma 385:28757). */}
+        {showHeatmap && (
+          <MapHeatmapSource
+            id="productivity-heatmap"
+            shape={heatmapShape}
+            paint={{
+              colorStops: PRODUCTIVITY_COLOR_STOPS,
+              intensity: 2.0,
+              radius: 70,
+              opacity: 0.82,
+              weightProperty: 'weight',
+            }}
+          />
+        )}
+
+        {/* User pin (Figma 385:29023) — sempre visível em USER_LOCATION. */}
+        <MapMarker coordinate={USER_LOCATION} id="user-pin">
+          <SwiThemeProvider>
+            <LocationPin
+              variant="avatar"
+              avatarUri={USER_AVATAR}
+              status="good"
+              name="Você"
+            />
+          </SwiThemeProvider>
+        </MapMarker>
+
+        {/* Operator pins overlay — 7 WORKER_LOCATIONS quando toggle ligado. */}
+        {showOperators &&
+          WORKER_LOCATIONS.map((m) => (
+            <MapMarker
+              key={m.id}
+              id={`worker-${m.id}`}
+              coordinate={[m.lng, m.lat]}
+            >
+              <SwiThemeProvider>
+                <LocationPin
+                  variant="avatar"
+                  avatarUri={m.avatarUri}
+                  status={m.status}
+                  name={m.name}
+                />
+              </SwiThemeProvider>
+            </MapMarker>
+          ))}
+
+        {/* Camera pins overlay — 12 CAMERA_LOCATIONS quando toggle ligado. */}
+        {showCameras &&
+          CAMERA_LOCATIONS.map((c) => (
+            <MapMarker
+              key={c.id}
+              id={`camera-${c.id}`}
+              coordinate={[c.lng, c.lat]}
+            >
+              <SwiThemeProvider>
+                <LocationPin variant="camera" name={c.name} />
+              </SwiThemeProvider>
+            </MapMarker>
+          ))}
+
         {/* Anéis de raio 5KM e 10KM (Figma 385:29130) — overlays estáticos
             em viewport space, centrados na tela. Cada anel tem um pill
             label verde (surface.primary) posicionado próximo da margem
@@ -402,7 +266,6 @@ function MapViewGeneralScreen() {
             theme={theme}
           />
         </View>
-
       </MapView>
 
       {/* Chat (right) + Home (center) FABs — shared component. Default

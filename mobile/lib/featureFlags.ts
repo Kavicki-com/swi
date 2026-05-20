@@ -10,9 +10,10 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-// TEMP 2026-05-18 — habilitado pra revisar pixel fidelity das telas smartband
-// e maps na web. Reverter pra `null` antes de commit/PR.
-const MANUAL_OVERRIDE: boolean | null = true;
+// Autodetect: Expo Go → false (gates off, mostra placeholder). EAS dev
+// client / standalone / bare → true (gates ligados). Pra forçar manualmente
+// em web ou debug, troca pra `true`/`false` temporariamente.
+const MANUAL_OVERRIDE: boolean | null = null;
 
 function detectProdBuild(): boolean {
   if (Platform.OS === 'web') return false;
