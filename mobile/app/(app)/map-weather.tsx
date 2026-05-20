@@ -1,9 +1,10 @@
 // mobile/app/(app)/map-weather.tsx
-// Figma 385:21840 — map-metereologic-alerts. Sprint 6 Wave 2 / item B.2:
-// migrates the screen from a static basemap.png + weather-radar.png overlay
-// + hand-positioned LocationPins to a real MapLibre canvas with a
-// heatmap layer ("tempestades") + an optional secondary heatmap
-// ("inundacoes") + 11 geo-positioned alert pins + DS MapControls.
+// Figma 385:21840 — map-metereologic-alerts. Sprint 6 Wave 2 / item B.2.
+//
+// Sprint 6 Wave 3: migrated off the legacy maplibre-gl imperative wrapper
+// (createRoot + addSource/addLayer) onto the declarative MapView API.
+// Works on both web (via MapView.web.tsx + maplibre-gl) and native
+// iOS/Android (via MapView.native.tsx + @maplibre/maplibre-react-native).
 //
 // Heatmap pattern is a verbatim port of swi-admin/src/pages/maps/
 // MapsGeneral.tsx:67-87 (Box-Muller point generation) and lines 393-411
@@ -11,24 +12,9 @@
 // The admin curve produces exactly the red/orange weather radar blob
 // shown in Figma 385:21840 — keeping it identical here makes the mobile
 // screen visually consistent with the admin Dashboard MapBanner.
-//
-// LocationPin bridging mirrors admin's `buildPin`: createRoot mounts the
-// DS component into a detached div wrapped with SwiThemeProvider, then
-// the div is passed to maplibregl.Marker. SwiThemeProvider is required
-// because the detached React tree doesn't inherit the app theme context.
-import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, View } from 'react-native';
-// react-dom/client has no bundled .d.ts and @types/react-dom is not
-// installed in the mobile workspace. We only consume the narrow
-// `createRoot` API for the maplibre marker bridge, so we declare the
-// minimal shape we need inline rather than pulling in a new devDep.
-// eslint-disable-next-line @typescript-eslint/triple-slash-reference
-/// <reference types="react" />
-// @ts-expect-error — local ambient declaration; the package ships JS only.
-import { createRoot } from 'react-dom/client';
-type Root = { render: (node: React.ReactNode) => void; unmount: () => void };
+import { useMemo, useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import type maplibregl from 'maplibre-gl';
 import {
   Icon,
   LocationPin,
@@ -37,18 +23,17 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system';
 import { MapView } from '@/components/MapView';
+import { MapMarker } from '@/components/MapMarker';
+import { MapHeatmapSource } from '@/components/MapHeatmapSource';
+import { NavFABs } from '@/components/NavFABs';
+import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import {
   CAMERA_LOCATIONS,
   USER_LOCATION,
   WEATHER_ALERT_PINS,
   WORKER_LOCATIONS,
-  type CameraMarker,
-  type WeatherAlertPin,
-  type WorkerMarker,
 } from '@/lib/mapMockData';
-import { NavFABs } from '@/components/NavFABs';
-import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
-import { isFeatureEnabled } from '@/lib/featureFlags';
 
 // Box-Muller transform for normally-distributed offsets — produces an
 // organic cluster denser near `center`, fading at the edges. Verbatim port
@@ -73,77 +58,31 @@ function buildHeatmapPoints(
   return pts;
 }
 
-// Pin bridge handle — keeps marker / React root / element together so we
-// can dispose them cleanly when the useEffect re-runs.
-type PinHandle = { marker: maplibregl.Marker; root: Root; el: HTMLDivElement };
+// Storm intensity color ramp — cyan → green → yellow → orange → red →
+// magenta (verbatim port of admin MapsGeneral.tsx:393-411). Magenta core
+// when the density curve peaks.
+const STORM_COLOR_STOPS: Array<[number, string]> = [
+  [0, 'rgba(34,211,238,0)'],
+  [0.08, 'rgb(34,211,238)'],
+  [0.24, 'rgb(34,197,94)'],
+  [0.44, 'rgb(250,204,21)'],
+  [0.64, 'rgb(249,115,22)'],
+  [0.84, 'rgb(220,38,38)'],
+  [1.0, 'rgb(159,18,57)'],
+];
 
-function buildAlertPin(
-  p: WeatherAlertPin,
-  map: maplibregl.Map,
-  lib: typeof maplibregl,
-  onClick: () => void,
-): PinHandle {
-  const el = document.createElement('div');
-  el.style.cursor = 'pointer';
-  el.addEventListener('click', onClick);
-  const root = createRoot(el);
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin
-        variant="badge"
-        status={p.status}
-        size={40}
-        name={`Alerta ${p.status}`}
-      />
-    </SwiThemeProvider>,
-  );
-  const marker = new lib.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(map);
-  return { marker, root, el };
-}
-
-function buildCameraPin(
-  c: CameraMarker,
-  map: maplibregl.Map,
-  lib: typeof maplibregl,
-): PinHandle {
-  const el = document.createElement('div');
-  el.style.cursor = 'pointer';
-  const root = createRoot(el);
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin variant="camera" name={c.name} />
-    </SwiThemeProvider>,
-  );
-  const marker = new lib.Marker({ element: el }).setLngLat([c.lng, c.lat]).addTo(map);
-  return { marker, root, el };
-}
-
-function buildWorkerPin(
-  m: WorkerMarker,
-  map: maplibregl.Map,
-  lib: typeof maplibregl,
-): PinHandle {
-  const el = document.createElement('div');
-  el.style.cursor = 'pointer';
-  const root = createRoot(el);
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin
-        variant="avatar"
-        avatarUri={m.avatarUri}
-        status={m.status}
-        name={m.name}
-      />
-    </SwiThemeProvider>,
-  );
-  const marker = new lib.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map);
-  return { marker, root, el };
-}
+// Flood color ramp — narrower spectrum (orange → red → magenta). Reads as
+// a more localized hot zone vs the broader storm cloud.
+const FLOOD_COLOR_STOPS: Array<[number, string]> = [
+  [0, 'rgba(249,115,22,0)'],
+  [0.2, 'rgb(249,115,22)'],
+  [0.55, 'rgb(234,88,12)'],
+  [0.85, 'rgb(220,38,38)'],
+  [1.0, 'rgb(159,18,57)'],
+];
 
 export default function MapWeather() {
-  // Band-aid pra R-9 (2026-05-17): mesmo motivo de map.tsx — caminho legacy
-  // imperativo só compila/roda em web. Web-only até a migração declarativa.
-  if (Platform.OS !== 'web' || !isFeatureEnabled('maps')) {
+  if (!isFeatureEnabled('maps')) {
     return <ProdOnlyPlaceholder />;
   }
   return <MapWeatherScreen />;
@@ -152,10 +91,6 @@ export default function MapWeather() {
 function MapWeatherScreen() {
   const theme = useTheme();
   const router = useRouter();
-
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const libRef = useRef<typeof maplibregl | null>(null);
-  const [mapReady, setMapReady] = useState(false);
 
   // 3 icon-only toggle buttons (Figma 385:21840 → 165:21860). Cada botão
   // é simple toggle; tap liga, tap de novo desliga. `showHeatmap=true` por
@@ -166,19 +101,14 @@ function MapWeatherScreen() {
   const [showCameras, setShowCameras] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
 
-  // Heatmap (tempestades) — same color curve as swi-admin produtividade.
-  // Storm intensity reads as a red/orange blob with a magenta core, exactly
-  // matching the weather-radar artwork that previously lived in
-  // weather-radar.png. Box-Muller cluster: 220 core points (spread 0.006)
-  // + 280 halo points (spread 0.018) centered on USER_LOCATION.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !showHeatmap) return;
-
+  // Storm (tempestades) heatmap data — 220 core + 280 halo centered on
+  // USER_LOCATION. Computed once on mount; toggling the heatmap off just
+  // unmounts <MapHeatmapSource> without re-shuffling the distribution.
+  const stormShape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => {
     const corePoints = buildHeatmapPoints(USER_LOCATION, 220, 0.006);
     const haloPoints = buildHeatmapPoints(USER_LOCATION, 280, 0.018);
     const points = [...corePoints, ...haloPoints];
-    const geojson: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+    return {
       type: 'FeatureCollection',
       features: points.map((p) => ({
         type: 'Feature',
@@ -186,66 +116,21 @@ function MapWeatherScreen() {
         properties: { weight: p.weight },
       })),
     };
+  }, []);
 
-    // Defensive: clear any stale layer/source from a prior strict-mode mount.
-    if (map.getLayer('storm-heatmap-layer')) map.removeLayer('storm-heatmap-layer');
-    if (map.getSource('storm-heatmap-points')) map.removeSource('storm-heatmap-points');
-
-    map.addSource('storm-heatmap-points', { type: 'geojson', data: geojson });
-    map.addLayer({
-      id: 'storm-heatmap-layer',
-      type: 'heatmap',
-      source: 'storm-heatmap-points',
-      paint: {
-        'heatmap-weight': ['get', 'weight'],
-        'heatmap-intensity': 2.0,
-        'heatmap-radius': 70,
-        'heatmap-opacity': 0.82,
-        // Verbatim port of swi-admin MapsGeneral.tsx:393-411.
-        // Cyan → green → yellow → orange → red → magenta. Storm intensity
-        // reads with a hot magenta core when the density curve peaks.
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0,
-          'rgba(34,211,238,0)',
-          0.08,
-          'rgb(34,211,238)',
-          0.24,
-          'rgb(34,197,94)',
-          0.44,
-          'rgb(250,204,21)',
-          0.64,
-          'rgb(249,115,22)',
-          0.84,
-          'rgb(220,38,38)',
-          1.0,
-          'rgb(159,18,57)',
-        ],
-      },
-    });
-
-    return () => {
-      if (map.getLayer('storm-heatmap-layer')) map.removeLayer('storm-heatmap-layer');
-      if (map.getSource('storm-heatmap-points')) map.removeSource('storm-heatmap-points');
-    };
-  }, [mapReady, showHeatmap]);
-
-  // Heatmap (inundacoes) — secondary layer, narrower spread + orange→red
-  // only curve so it reads as a more localized hot zone (flood risk vs
-  // storm cloud). Off by default; toggled via MapControl checkbox. Offset
-  // slightly south of USER_LOCATION so it doesn't perfectly overlap the
-  // tempestades blob when both are on.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !showHeatmap) return;
-
-    const floodCenter: [number, number] = [USER_LOCATION[0] + 0.004, USER_LOCATION[1] - 0.008];
+  // Flood (inundações) heatmap data — secondary cluster offset slightly
+  // south of USER_LOCATION so it doesn't perfectly overlap the storm blob
+  // when both layers are on. Narrower spread (0.004 / 0.01) produces a
+  // tighter hot zone.
+  const floodShape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => {
+    const floodCenter: [number, number] = [
+      USER_LOCATION[0] + 0.004,
+      USER_LOCATION[1] - 0.008,
+    ];
     const corePoints = buildHeatmapPoints(floodCenter, 140, 0.004);
     const haloPoints = buildHeatmapPoints(floodCenter, 160, 0.01);
     const points = [...corePoints, ...haloPoints];
-    const geojson: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+    return {
       type: 'FeatureCollection',
       features: points.map((p) => ({
         type: 'Feature',
@@ -253,114 +138,102 @@ function MapWeatherScreen() {
         properties: { weight: p.weight },
       })),
     };
+  }, []);
 
-    if (map.getLayer('flood-heatmap-layer')) map.removeLayer('flood-heatmap-layer');
-    if (map.getSource('flood-heatmap-points')) map.removeSource('flood-heatmap-points');
-
-    map.addSource('flood-heatmap-points', { type: 'geojson', data: geojson });
-    map.addLayer({
-      id: 'flood-heatmap-layer',
-      type: 'heatmap',
-      source: 'flood-heatmap-points',
-      paint: {
-        'heatmap-weight': ['get', 'weight'],
-        'heatmap-intensity': 1.6,
-        'heatmap-radius': 55,
-        'heatmap-opacity': 0.78,
-        // Orange → red only — narrower spectrum reads as flood risk.
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0,
-          'rgba(249,115,22,0)',
-          0.2,
-          'rgb(249,115,22)',
-          0.55,
-          'rgb(234,88,12)',
-          0.85,
-          'rgb(220,38,38)',
-          1.0,
-          'rgb(159,18,57)',
-        ],
-      },
-    });
-
-    return () => {
-      if (map.getLayer('flood-heatmap-layer')) map.removeLayer('flood-heatmap-layer');
-      if (map.getSource('flood-heatmap-points')) map.removeSource('flood-heatmap-points');
-    };
-  }, [mapReady, showHeatmap]);
-
-  // 11 geo-positioned alert pins — bridged via createRoot + SwiThemeProvider.
-  // All pins open the existing /modals/weather-alert route on tap (no
-  // status filter: Figma shows the modal opening from any alert pin).
-  useEffect(() => {
-    const map = mapRef.current;
-    const lib = libRef.current;
-    if (!map || !lib || !mapReady) return;
-
-    const handles = WEATHER_ALERT_PINS.map((p) =>
-      buildAlertPin(p, map, lib, () => router.push('/modals/weather-alert')),
-    );
-
-    return () => {
-      handles.forEach((h) => {
-        h.marker.remove();
-        h.root.unmount();
-        h.el.remove();
-      });
-    };
-  }, [mapReady, router]);
-
-  // Cameras overlay — same bridge pattern. Mounted only when the user
-  // expands the "cameras" MapControl.
-  useEffect(() => {
-    const map = mapRef.current;
-    const lib = libRef.current;
-    if (!map || !lib || !mapReady || !showCameras) return;
-
-    const handles = CAMERA_LOCATIONS.map((c) => buildCameraPin(c, map, lib));
-
-    return () => {
-      handles.forEach((h) => {
-        h.marker.remove();
-        h.root.unmount();
-        h.el.remove();
-      });
-    };
-  }, [mapReady, showCameras]);
-
-  // Operators overlay — mesmo bridge pattern, mostra WORKER_LOCATIONS como
-  // avatar pins quando o controle operators está expandido. Paridade com
-  // o map-view-general / admin MapsGeneral.
-  useEffect(() => {
-    const map = mapRef.current;
-    const lib = libRef.current;
-    if (!map || !lib || !mapReady || !showOperators) return;
-
-    const handles = WORKER_LOCATIONS.map((m) => buildWorkerPin(m, map, lib));
-
-    return () => {
-      handles.forEach((h) => {
-        h.marker.remove();
-        h.root.unmount();
-        h.el.remove();
-      });
-    };
-  }, [mapReady, showOperators]);
+  const openAlertModal = () => router.push('/modals/weather-alert');
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView
-        center={USER_LOCATION}
-        zoom={13}
-        onReady={(map: maplibregl.Map, lib: typeof maplibregl) => {
-          mapRef.current = map;
-          libRef.current = lib;
-          setMapReady(true);
-        }}
-      >
+      <MapView center={USER_LOCATION} zoom={13}>
+        {/* Storm heatmap (tempestades) — driven by `showHeatmap` toggle. */}
+        {showHeatmap && (
+          <MapHeatmapSource
+            id="storm-heatmap"
+            shape={stormShape}
+            paint={{
+              colorStops: STORM_COLOR_STOPS,
+              intensity: 2.0,
+              radius: 70,
+              opacity: 0.82,
+              weightProperty: 'weight',
+            }}
+          />
+        )}
+
+        {/* Flood heatmap (inundações) — same toggle as storm; both layers
+            light up together per mobile spec (sem expand panel). */}
+        {showHeatmap && (
+          <MapHeatmapSource
+            id="flood-heatmap"
+            shape={floodShape}
+            paint={{
+              colorStops: FLOOD_COLOR_STOPS,
+              intensity: 1.6,
+              radius: 55,
+              opacity: 0.78,
+              weightProperty: 'weight',
+            }}
+          />
+        )}
+
+        {/* 11 geo-positioned alert pins (always visible, no toggle).
+            Pressable wrap dispara o /modals/weather-alert em qualquer tap. */}
+        {WEATHER_ALERT_PINS.map((p) => (
+          <MapMarker
+            key={p.id}
+            id={`alert-${p.id}`}
+            coordinate={[p.lng, p.lat]}
+          >
+            <SwiThemeProvider>
+              <Pressable
+                onPress={openAlertModal}
+                accessibilityRole="button"
+                accessibilityLabel={`Alerta ${p.status}`}
+              >
+                <LocationPin
+                  variant="badge"
+                  status={p.status}
+                  size={40}
+                  name={`Alerta ${p.status}`}
+                />
+              </Pressable>
+            </SwiThemeProvider>
+          </MapMarker>
+        ))}
+
+        {/* Operators overlay — 7 WORKER_LOCATIONS quando toggle ligado. */}
+        {showOperators &&
+          WORKER_LOCATIONS.map((m) => (
+            <MapMarker
+              key={m.id}
+              id={`worker-${m.id}`}
+              coordinate={[m.lng, m.lat]}
+            >
+              <SwiThemeProvider>
+                <LocationPin
+                  variant="avatar"
+                  avatarUri={m.avatarUri}
+                  status={m.status}
+                  name={m.name}
+                />
+              </SwiThemeProvider>
+            </MapMarker>
+          ))}
+
+        {/* Camera pins overlay — 12 CAMERA_LOCATIONS quando toggle ligado. */}
+        {showCameras &&
+          CAMERA_LOCATIONS.map((c) => (
+            <MapMarker
+              key={c.id}
+              id={`camera-${c.id}`}
+              coordinate={[c.lng, c.lat]}
+            >
+              <SwiThemeProvider>
+                <LocationPin variant="camera" name={c.name} />
+              </SwiThemeProvider>
+            </MapMarker>
+          ))}
+
         {/* Map controls — right:20, vertically centered ~296px acima do
             centro (Figma 385:28587). Stack top-down: operators → heatmap
             → cameras. Cada controle alterna seu próprio overlay. */}
