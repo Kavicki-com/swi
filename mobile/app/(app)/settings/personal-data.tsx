@@ -71,7 +71,7 @@ export default function SettingsPersonalData() {
         >
           {/* Section title — content.primary green Montserrat Bold 16 */}
           <Title variant="title.xs" color={theme.content.primary}>
-            Dados da cadastro
+            Dados do cadastro
           </Title>
 
           <Input

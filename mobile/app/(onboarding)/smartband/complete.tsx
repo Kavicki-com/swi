@@ -2,9 +2,18 @@ import { Image, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, SmartbandStatus, Title, useTheme } from '@kavicki/swi-design-system';
-// 3D Smartwatch3D temporarily reverted to a static PNG (see pairing.tsx note).
+import { Smartwatch3D } from '../../../components/Smartwatch3D';
+import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
+import { isFeatureEnabled } from '../../../lib/featureFlags';
 
 export default function SmartbandComplete() {
+  if (!isFeatureEnabled('smartbandOnboarding')) {
+    return <ProdOnlyPlaceholder />;
+  }
+  return <SmartbandCompleteScreen />;
+}
+
+function SmartbandCompleteScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -21,7 +30,7 @@ export default function SmartbandComplete() {
           flex: 1,
           paddingTop: insets.top + 26,
           paddingBottom: insets.bottom + 32,
-          paddingHorizontal: 16,
+          paddingHorizontal: theme.padding.m,
         }}
       >
         <Title
@@ -33,11 +42,7 @@ export default function SmartbandComplete() {
         </Title>
 
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Image
-            source={require('../../../assets/smartwatch.png')}
-            resizeMode="contain"
-            style={{ width: 320, height: 347 }}
-          />
+          <Smartwatch3D width={320} height={347} autoRotate interactive scale={1.2} />
         </View>
 
         <View style={{ gap: theme.gap.m }}>

@@ -1,21 +1,10 @@
-import { useMemo, useState } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { useState } from 'react';
+import { Image, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Icon, Input, Text, Title, Toast, useTheme } from '@kavicki/swi-design-system';
-
-// Password rules per Figma toast (138:7959), identical to sign-up:
-// - 8 characters, letters and numbers
-// - 1 symbol @#$%ˆ
-// - 1 uppercase letter
-function validatePassword(pw: string) {
-  return {
-    length: pw.length >= 8,
-    lettersAndNumbers: /[A-Za-z]/.test(pw) && /[0-9]/.test(pw),
-    symbol: /[@#$%^]/.test(pw),
-    uppercase: /[A-Z]/.test(pw),
-  };
-}
+import { Button, Text, Title, Toast, useTheme } from '@kavicki/swi-design-system';
+import { PasswordInput } from '../../../components/PasswordInput';
+import { isPasswordValid } from '../../../lib/validatePassword';
 
 export default function PasswordRecoveryNewPassword() {
   const router = useRouter();
@@ -24,13 +13,9 @@ export default function PasswordRecoveryNewPassword() {
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const pwChecks = useMemo(() => validatePassword(password), [password]);
-  const pwIsValid = Object.values(pwChecks).every(Boolean);
   const pwMatches = confirmPassword.length > 0 && password === confirmPassword;
-  const canSubmit = pwIsValid && pwMatches;
+  const canSubmit = isPasswordValid(password) && pwMatches;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -67,50 +52,20 @@ export default function PasswordRecoveryNewPassword() {
             message={'1 símbolo @#$%ˆ\n1 Letras maiúscula'}
           />
 
-          <Input
+          <PasswordInput
             label="Nova Senha"
             placeholder="*********"
             value={password}
             onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            iconRight={
-              <Pressable
-                onPress={() => setShowPassword((s) => !s)}
-                accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                hitSlop={8}
-              >
-                <Icon
-                  name={showPassword ? 'visibility_off' : 'visibility'}
-                  size={22}
-                  color={theme.content.dark}
-                />
-              </Pressable>
-            }
           />
 
-          <Input
+          <PasswordInput
             label="Confirmar nova senha"
             placeholder="*********"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
-            secureTextEntry={!showConfirmPassword}
             description={pwMatches ? 'As senhas são iguais ✓' : undefined}
             descriptionVariant="success"
-            iconRight={
-              <Pressable
-                onPress={() => setShowConfirmPassword((s) => !s)}
-                accessibilityLabel={
-                  showConfirmPassword ? 'Ocultar senha' : 'Mostrar senha'
-                }
-                hitSlop={8}
-              >
-                <Icon
-                  name={showConfirmPassword ? 'visibility_off' : 'visibility'}
-                  size={22}
-                  color={theme.content.dark}
-                />
-              </Pressable>
-            }
           />
 
           <Button

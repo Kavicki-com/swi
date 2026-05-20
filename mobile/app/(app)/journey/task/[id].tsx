@@ -1,81 +1,63 @@
-import { Image as RNImage, Pressable, ScrollView, Text as RNText, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Asset } from 'expo-asset';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AvatarGroup,
   Button,
   Icon,
+  JourneyTheme,
   ProgressBar,
+  Text,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
 
-// Figma 364:17126 — task details. Breadcrumb (Jornada > <task>) +
-// task summary card + ProgressBar + Objetivo + Fotos + Tempo estimado
-// + Interessados + CTA "Iniciar Jornada e começar tarefa".
-// Demo phase: tasks são mock keyed by [id] route param.
+import { FALLBACK_TASK, findTaskById } from '../../../../lib/journeyMockData';
 
-type TaskData = {
-  title: string;
-  description: string;
-};
+// Figma 364:17126 (idle) / 364:17434 (in-progress). Breadcrumb
+// (Jornada > <task>) + task summary card + ProgressBar + Objetivo +
+// Fotos + Tempo estimado + Interessados + CTA. Aceita tanto
+// `?state=ongoing` (uso interno via router.push) quanto
+// `?state=in-progress` (deep-link externo / spec do Figma) para
+// flip pra variante phase-2.
+// Demo phase: tasks são mock compartilhados via lib/journeyMockData
+// e resolvidos por findTaskById(id) com FALLBACK_TASK pra ids inválidos.
 
-const TASKS: Record<string, TaskData> = {
-  inspecao: {
-    title: 'Inspeção de Equipamentos',
-    description:
-      'Realizar verificações periódicas para identificar desgastes ou falhas em máquinas industriais.',
-  },
-  manutencao: {
-    title: 'Manutenção Preventiva',
-    description:
-      'Executar tarefas programadas para evitar paradas não planejadas e aumentar a vida útil dos equipamentos.',
-  },
-  diagnostico: {
-    title: 'Diagnóstico de Falhas',
-    description:
-      'Analisar problemas técnicos e determinar as causas de mau funcionamento nas máquinas.',
-  },
-  reparo: {
-    title: 'Reparo de Componentes',
-    description:
-      'Substituir ou consertar peças defeituosas para restaurar o funcionamento adequado dos equipamentos.',
-  },
-};
-
-const FALLBACK: TaskData = TASKS.inspecao;
-
+// 5 distinct demo avatars from /assets/avatars/worker-{1..5}.png.
+// Asset.fromModule resolves each require() to a Metro-served URI string
+// so DS Avatar (which only accepts `uri: string`) can render them. Matches
+// Figma's varied photo thumbnails for the Interested cluster.
 const INTERESTED_AVATARS = [
-  { uri: undefined, alt: 'Avatar 1' },
-  { uri: undefined, alt: 'Avatar 2' },
-  { uri: undefined, alt: 'Avatar 3' },
-  { uri: undefined, alt: 'Avatar 4' },
-  { uri: undefined, alt: 'Avatar 5' },
+  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-1.png')).uri, alt: 'Avatar 1' },
+  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-2.png')).uri, alt: 'Avatar 2' },
+  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-3.png')).uri, alt: 'Avatar 3' },
+  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-4.png')).uri, alt: 'Avatar 4' },
+  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-5.png')).uri, alt: 'Avatar 5' },
 ];
 
 export default function TaskDetails() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id, state } = useLocalSearchParams<{ id: string; state?: 'ongoing' }>();
-  const task = (id && TASKS[id]) || FALLBACK;
-  const isOngoing = state === 'ongoing';
-  // Figma: 1ª fase progress ~2% (idle); 2ª fase ~30% (em andamento).
-  const progress = isOngoing ? 0.3 : 0.02;
+  const { id, state } = useLocalSearchParams<{
+    id: string;
+    state?: 'ongoing' | 'in-progress';
+  }>();
+  const task = findTaskById(id) ?? FALLBACK_TASK;
+  // Aceita ambos: 'ongoing' (interno) e 'in-progress' (spec Figma / deep-link).
+  const isOngoing = state === 'ongoing' || state === 'in-progress';
+  // Figma 364:17426 — ProgressBar value usa escala 0-100. Idle ~2% (w=2px
+  // visível num track ~320px), ongoing ~30%. Antes estávamos passando 0.02 /
+  // 0.3 (escala 0-1) que clampava pra 0.02% / 0.3%, fill invisível.
+  const progress = isOngoing ? 30 : 2;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View
-        pointerEvents="none"
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      >
-        <RNImage
-          source={require('../../../../assets/journey-bg.png')}
-          resizeMode="cover"
-          accessible={false}
-          style={{ width: '100%', height: '100%' }}
-        />
-      </View>
+      <JourneyTheme
+        gradient={require('../../../../assets/journey-bg.png')}
+        pattern={require('../../../../assets/smartband-bg-pattern.png')}
+      />
 
       <ScrollView
         style={{ flex: 1, backgroundColor: 'transparent' }}
@@ -95,17 +77,10 @@ export default function TaskDetails() {
             accessibilityLabel="Voltar para Jornada"
             style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xs, paddingVertical: theme.padding.s }}
           >
-            <RNText
-              style={{
-                fontFamily: theme.fontFamily.body,
-                fontWeight: theme.fontWeight.bold,
-                fontSize: theme.fontSize.m,
-                color: theme.content.primary,
-              }}
-            >
+            <Text variant="body.m" weight="bold" color={theme.content.primary}>
               Jornada
-            </RNText>
-            <Icon name="keyboard_arrow_right" size={24} color={theme.content.primary} />
+            </Text>
+            <Icon name="keyboard_arrow_right" size={16} color={theme.content.primary} />
           </Pressable>
           <View
             style={{
@@ -116,17 +91,17 @@ export default function TaskDetails() {
               flexShrink: 1,
             }}
           >
-            <RNText
-              style={{
-                fontFamily: theme.fontFamily.body,
-                fontWeight: theme.fontWeight.bold,
-                fontSize: theme.fontSize.m,
-                color: theme.content.primary,
-                flexShrink: 1,
-              }}
+            <Text
+              variant="body.m"
+              weight="bold"
+              color={theme.content.primary}
+              style={{ flexShrink: 1 }}
             >
               {task.title}
-            </RNText>
+            </Text>
+            {/* Figma 364:17194 — chevron also after o segundo item (não só após
+                "Jornada"). Visual parity com a SectionTitle do design. */}
+            <Icon name="keyboard_arrow_right" size={16} color={theme.content.primary} />
           </View>
         </View>
 
@@ -140,27 +115,16 @@ export default function TaskDetails() {
           }}
         >
           <View style={{ flex: 1, gap: theme.gap.s }}>
-            <RNText
-              style={{
-                fontFamily: theme.fontFamily.title,
-                fontWeight: theme.fontWeight.bold,
-                fontSize: theme.fontSize.ms,
-                color: theme.content.dark,
-              }}
+            <Title
+              variant="title.xs"
+              color={theme.content.dark}
               numberOfLines={1}
             >
               {task.title}
-            </RNText>
-            <RNText
-              style={{
-                fontFamily: theme.fontFamily.body,
-                fontWeight: theme.fontWeight.medium,
-                fontSize: theme.fontSize.sm,
-                color: theme.content.dark,
-              }}
-            >
+            </Title>
+            <Text variant="body.s" color={theme.content.dark}>
               {task.description}
-            </RNText>
+            </Text>
           </View>
         </View>
 
@@ -169,7 +133,14 @@ export default function TaskDetails() {
           <Title variant="title.xs" color={theme.content.dark}>
             Progresso da tarefa
           </Title>
-          <ProgressBar value={progress} color={theme.content.primary} />
+          {/* Figma 364:17426 — bordered track (pill, border #303030 = content.medium-ish,
+              padding-y 4) com fill 6px green. trackHeight 16 = padding 4*2 + fill 6 + border 1*2. */}
+          <ProgressBar
+            value={progress}
+            color={theme.content.primary}
+            bordered
+            trackHeight={16}
+          />
         </View>
 
         {/* Objetivo principal */}
@@ -177,20 +148,15 @@ export default function TaskDetails() {
           <Title variant="title.xs" color={theme.content.dark}>
             Objetivo principal
           </Title>
-          <RNText
-            style={{
-              fontFamily: theme.fontFamily.body,
-              fontWeight: theme.fontWeight.regular,
-              fontSize: theme.fontSize.m,
-              color: theme.content.dark,
-            }}
-          >
+          <Text variant="body.m" color={theme.content.dark}>
             Garantir a segurança operacional e prolongar a vida útil dos equipamentos,
             minimizando paradas não planejadas e otimizando a eficiência da produção.
-          </RNText>
+          </Text>
         </View>
 
-        {/* Fotos da solicitação — 5 placeholders 56×56 */}
+        {/* Fotos da solicitação — 5 placeholders 56×56 com add_a_photo
+            glifo centrado (Figma 364:17126 mostra ícone de câmera/foto
+            em cada placeholder cinza). */}
         <View style={{ gap: theme.gap.m }}>
           <Title variant="title.xs" color={theme.content.dark}>
             Fotos da solicitação
@@ -204,8 +170,12 @@ export default function TaskDetails() {
                   height: 56,
                   backgroundColor: theme.surface.medium,
                   borderRadius: theme.border.radius.s,
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
-              />
+              >
+                <Icon name="add_a_photo" size={24} color={theme.content.medium} />
+              </View>
             ))}
           </View>
         </View>
@@ -215,16 +185,9 @@ export default function TaskDetails() {
           <Title variant="title.xs" color={theme.content.dark}>
             Tempo estimado
           </Title>
-          <RNText
-            style={{
-              fontFamily: theme.fontFamily.body,
-              fontWeight: theme.fontWeight.regular,
-              fontSize: theme.fontSize.m,
-              color: theme.content.dark,
-            }}
-          >
+          <Text variant="body.m" color={theme.content.dark}>
             3h até a conclusão
-          </RNText>
+          </Text>
         </View>
 
         {/* Interessados */}
@@ -239,16 +202,9 @@ export default function TaskDetails() {
             size="m"
             bordered
           />
-          <RNText
-            style={{
-              fontFamily: theme.fontFamily.body,
-              fontWeight: theme.fontWeight.regular,
-              fontSize: theme.fontSize.m,
-              color: theme.content.dark,
-            }}
-          >
+          <Text variant="body.m" color={theme.content.dark}>
             Joacir Alves e mais 17 pessoas estão acompanhando essa tarefa
-          </RNText>
+          </Text>
         </View>
 
         {/* CTA group — varia por state (Figma 364:17126 idle vs 364:17434 ongoing) */}
@@ -261,7 +217,7 @@ export default function TaskDetails() {
               label="Finalizar tarefa"
               elevation="lg"
               accessibilityLabel="Finalizar tarefa"
-              onPress={() => router.push('/(app)/journey')}
+              onPress={() => router.push('/(app)/journey/ongoing')}
             />
             <Button
               variant="outline"
@@ -276,7 +232,7 @@ export default function TaskDetails() {
               labelColor={theme.content.error}
               label="Cancelar tarefa"
               accessibilityLabel="Cancelar tarefa"
-              onPress={() => router.push('/(app)/journey')}
+              onPress={() => router.push('/(app)/journey/ongoing')}
             />
           </View>
         ) : (

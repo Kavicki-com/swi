@@ -1,11 +1,36 @@
-import { Surface, Title, Text } from '@kavicki/swi-design-system';
+import { Pressable, View } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { useTheme } from '@kavicki/swi-design-system';
+import { PrivacyPolicyModal } from '../../components/modals/PrivacyPolicyModal';
 
-export default function PrivacyPolicyModal() {
+// Figma 213:13750 / 348:10434 — bottom-sheet "Política de privacidade".
+// Pre-auth route (acessível da tela de sign-up). Body real vive em
+// `components/modals/PrivacyPolicyModal.tsx`. O wrapper aplica
+// transparentModal + backdrop pressable, sobreescrevendo o
+// `presentation: 'modal'` registrado no root `_layout.tsx`.
+export default function PrivacyPolicyModalRoute() {
+  const router = useRouter();
+  const theme = useTheme();
+  const close = () => router.back();
+
   return (
-    <Surface variant="standard" padding="m" style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Title variant="title.m">privacy-policy-modal</Title>
-      <Text variant="body.s">Figma 213:13750 / 348:10434</Text>
-      <Text variant="caption.s">/modals/privacy-policy</Text>
-    </Surface>
+    <>
+      <Stack.Screen
+        options={{
+          presentation: 'transparentModal',
+          animation: 'slide_from_bottom',
+        }}
+      />
+
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.overlay }}>
+        <Pressable
+          onPress={close}
+          accessibilityLabel="Fechar"
+          accessibilityRole="button"
+          style={{ flex: 1 }}
+        />
+        <PrivacyPolicyModal onClose={close} />
+      </View>
+    </>
   );
 }

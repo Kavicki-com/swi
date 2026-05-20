@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Image as RNImage, ScrollView, Text as RNText, View } from 'react-native';
+import { Image as RNImage, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   Icon,
+  Text,
   Title,
   Toggle,
   TopBar,
@@ -79,16 +80,9 @@ export default function SettingsPreferences() {
               style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}
             >
               <Toggle value={value} onChange={set} accessibilityLabel={label} />
-              <RNText
-                style={{
-                  fontFamily: theme.fontFamily.body,
-                  fontWeight: theme.fontWeight.regular,
-                  fontSize: theme.fontSize.m,
-                  color: theme.content.dark,
-                }}
-              >
+              <Text variant="body.m" color={theme.content.dark}>
                 {label}
-              </RNText>
+              </Text>
             </View>
           ))}
         </View>

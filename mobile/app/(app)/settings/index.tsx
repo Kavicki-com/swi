@@ -1,6 +1,6 @@
 import { Image as RNImage, Pressable, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Avatar,
@@ -10,6 +10,7 @@ import {
   Text,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { useAuth } from '../../../services/auth/AuthProvider';
 
 // Figma 348:10615 — settings hub. Container left=16, top=40, w=328, gap.l=24,
 // items-center. ScrollView pattern matches my-stats; Home FAB sits absolute
@@ -22,8 +23,14 @@ export default function Settings() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { signOut } = useAuth();
 
-  const go = (path: string) => () => router.push(path as never);
+  const go = (path: Href) => () => router.push(path);
+
+  const handleSignOut = () => {
+    signOut();
+    router.replace('/(auth)/login');
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -47,7 +54,9 @@ export default function Settings() {
         style={{ flex: 1, backgroundColor: 'transparent' }}
         contentContainerStyle={{
           paddingTop: insets.top + theme.padding.xxl,
-          paddingBottom: insets.bottom + 120,
+          // 160 garante respiro entre "Sair" e o Home FAB (FAB altura ~72 +
+          // bottom 24 = ~96, +64 de breathing room = 160).
+          paddingBottom: insets.bottom + 160,
           alignItems: 'center',
         }}
         showsVerticalScrollIndicator={false}
@@ -88,7 +97,14 @@ export default function Settings() {
           </View>
 
           {/* Ghost links — Montserrat Bold 14, color per role.
-              Gap K: DS lacks Button variant="ghost" / label.s text variant. */}
+              Figma 348:10615 "GhostButton" uses title-family + bold + 14px,
+              which has no direct DS Text/Title variant (title.xs is 16px,
+              body.m is body-family + regular). All four values are still
+              pulled from the theme (theme.fontFamily.title, fontWeight.bold,
+              fontSize.m, content.primary/error) — no raw literals. Not
+              promoting to a DS variant: only 2 call sites (both here) and a
+              dedicated DS GhostButton would absorb it cleanly when shipped
+              (Phase 2). Premature abstraction otherwise. */}
           <Pressable
             onPress={go('/(app)/settings/privacy')}
             style={{
@@ -115,12 +131,12 @@ export default function Settings() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.replace('/(auth)/login' as never)}
+            onPress={handleSignOut}
             style={{
               height: 41,
               width: '100%',
-              paddingHorizontal: 12,
-              paddingVertical: 8,
+              paddingHorizontal: theme.padding.sm,
+              paddingVertical: theme.padding.s,
               borderRadius: theme.border.radius.m,
               alignItems: 'center',
               justifyContent: 'center',
@@ -156,10 +172,13 @@ export default function Settings() {
         <Button
           variant="contained"
           shape="pill"
-          size="xlarge"
+          // size="large" + borderWidth 8 = ~72×72 (matches NavFABs Home FAB
+          // Figma 364:16776). Anteriormente xlarge + 10 dava ~84×84,
+          // visualmente maior que o Figma.
+          size="large"
           backgroundColor={theme.content.dark}
           borderColor={theme.content.disable}
-          borderWidth={10}
+          borderWidth={8}
           elevation="lg"
           iconLeft={
             /* Home icon artwork natural dims per Figma 348:10661 inner svg

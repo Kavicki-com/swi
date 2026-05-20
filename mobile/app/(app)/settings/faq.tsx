@@ -6,6 +6,7 @@ import {
   Accordion,
   Button,
   Icon,
+  Pagination,
   SearchInput,
   Title,
   TopBar,
@@ -15,19 +16,57 @@ import {
 // Figma 361:12425 — settings sub-screen FAQ. Hero title + SearchInput +
 // 12 Accordions (todas collapsed por default) + Pagination + Home FAB.
 // Demo phase: search e pagination não filtram nada.
-const FAQS = [
-  'Como faço para criar uma conta?',
-  'Esqueci minha senha, o que fazer?',
-  'Posso usar o aplicativo offline?',
-  'Como atualizar meu perfil?',
-  'O aplicativo é gratuito?',
-  'Como faço para cancelar minha assinatura?',
-  'O que fazer se o aplicativo travar?',
-  'Como ativar notificações?',
-  'Posso sincronizar meus dados entre dispositivos?',
-  'Como envio feedback ou reporto um problema?',
-  'O aplicativo suporta múltiplos idiomas?',
-  'Como proteger minha conta?',
+// Figma só define as perguntas; respostas autoradas pra fase de demo
+// para que o estado "expandido" do Accordion mostre conteúdo coerente.
+const FAQS: { q: string; a: string }[] = [
+  {
+    q: 'Como faço para criar uma conta?',
+    a: 'Na tela de login, toque em "Criar conta" e preencha seus dados pessoais. Após confirmar seu e-mail, complete os dados complementares e pareie sua smartband para concluir o cadastro.',
+  },
+  {
+    q: 'Esqueci minha senha, o que fazer?',
+    a: 'Na tela de login, toque em "Esqueci minha senha", informe seu e-mail cadastrado e siga o link enviado para definir uma nova senha.',
+  },
+  {
+    q: 'Posso usar o aplicativo offline?',
+    a: 'O aplicativo precisa de conexão para sincronizar dados de segurança, alertas e mapas em tempo real. Algumas telas ficam disponíveis em modo limitado quando o sinal cai.',
+  },
+  {
+    q: 'Como atualizar meu perfil?',
+    a: 'Acesse Configurações > Dados pessoais para editar seu nome, telefone e demais informações. Algumas alterações exigem reconfirmação por e-mail.',
+  },
+  {
+    q: 'O aplicativo é gratuito?',
+    a: 'O SWI é fornecido pela sua empresa como ferramenta de segurança operacional. Não há cobrança individual para o colaborador.',
+  },
+  {
+    q: 'Como faço para cancelar minha assinatura?',
+    a: 'A conta está vinculada ao contrato da sua empresa. Para encerrar o acesso, fale com o administrador responsável pela operação SWI.',
+  },
+  {
+    q: 'O que fazer se o aplicativo travar?',
+    a: 'Force o fechamento, abra novamente e verifique sua conexão. Se o problema persistir, envie um relato pela tela "Fale conosco" em Configurações.',
+  },
+  {
+    q: 'Como ativar notificações?',
+    a: 'Acesse Configurações > Preferências e mantenha as notificações habilitadas. Confirme também a permissão de notificações nas configurações do sistema do seu celular.',
+  },
+  {
+    q: 'Posso sincronizar meus dados entre dispositivos?',
+    a: 'Sim. Faça login com a mesma conta corporativa em outro dispositivo e seus dados de perfil e histórico ficam disponíveis automaticamente.',
+  },
+  {
+    q: 'Como envio feedback ou reporto um problema?',
+    a: 'Em Configurações > Fale conosco, escolha o tipo de mensagem (sugestão, dúvida, problema técnico) e descreva o ocorrido. Nosso time responde por e-mail.',
+  },
+  {
+    q: 'O aplicativo suporta múltiplos idiomas?',
+    a: 'No momento o SWI está disponível em Português (Brasil). Outros idiomas serão liberados conforme a operação da sua empresa.',
+  },
+  {
+    q: 'Como proteger minha conta?',
+    a: 'Use uma senha forte e exclusiva, não compartilhe seu login com colegas e mantenha o aplicativo sempre atualizado. Em caso de suspeita de acesso indevido, troque a senha imediatamente.',
+  },
 ];
 
 export default function SettingsFAQ() {
@@ -82,61 +121,22 @@ export default function SettingsFAQ() {
           />
 
           <View style={{ gap: theme.gap.sm }}>
-            {FAQS.map((q) => (
+            {FAQS.map(({ q, a }) => (
               <Accordion
                 key={q}
                 title={q}
                 fullWidth
                 showIconLeft={false}
-              />
+              >
+                {a}
+              </Accordion>
             ))}
 
-            {/* Pagination — Figma 361:12705. 4 outline (1-4) + ghost (…) +
-                contained chevron-right. Demo phase: estado controla qual
-                página está "ativa" só visualmente. */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 10,
-              }}
-            >
-              {[1, 2, 3, 4].map((n) => (
-                <View key={n} style={{ flex: 1 }}>
-                  <Button
-                    variant="ghost"
-                    label={String(n)}
-                    accessibilityLabel={`Página ${n}`}
-                    onPress={() => setCurrentPage(n)}
-                  />
-                </View>
-              ))}
-              <View style={{ flex: 1 }}>
-                <Button
-                  variant="ghost"
-                  label="..."
-                  accessibilityLabel="Mais páginas"
-                  onPress={() => {}}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  variant="contained"
-                  backgroundColor={theme.surface.primary}
-                  accessibilityLabel="Próxima página"
-                  onPress={() => setCurrentPage((p) => p + 1)}
-                  iconLeft={
-                    <Icon
-                      name="keyboard_arrow_right"
-                      width={7.4}
-                      height={12}
-                      color={theme.content.light}
-                    />
-                  }
-                />
-              </View>
-            </View>
+            {/* Pagination — Figma 361:12705 (shared with reports/index.tsx) */}
+            <Pagination
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+            />
           </View>
         </View>
       </ScrollView>
