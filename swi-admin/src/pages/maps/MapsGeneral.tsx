@@ -8,6 +8,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { useNavigate, useLocation } from 'react-router-dom'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
+import { ESRI_SATELLITE_STYLE } from '@/lib/mapStyles'
 import {
   Button,
   HeaderUserInfo,
@@ -33,31 +34,6 @@ import workerA from '@/assets/avatars/worker-a.png'
 // Compact navigation list — Figma 32:2488 map-side-menu shows 7 icon-only items.
 // Reports + Alerts carry "+9" unread badges per Figma node 165:21150 / 165:21152.
 const NAV = withBadges({ '/reports': '+9', '/alerts': '+9' })
-
-// ESRI World Imagery — same tile source the Dashboard MapBanner uses.
-const ESRI_SATELLITE_STYLE = {
-  version: 8 as const,
-  sources: {
-    'esri-imagery': {
-      type: 'raster' as const,
-      tiles: [
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      ],
-      tileSize: 256,
-      attribution:
-        'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-      minzoom: 0,
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: 'esri-imagery',
-      type: 'raster' as const,
-      source: 'esri-imagery',
-    },
-  ],
-}
 
 // Heatmap "Produtividade" mock points — Gaussian-ish cluster around `center`.
 // Used to feed the maplibre `heatmap-points` source; replaces the earlier CSS
