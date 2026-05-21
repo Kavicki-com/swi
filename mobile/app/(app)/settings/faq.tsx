@@ -95,7 +95,7 @@ export default function SettingsFAQ() {
         contentContainerStyle={{
           paddingTop: insets.top,
           paddingBottom: insets.bottom + 120,
-          alignItems: 'center',
+          paddingHorizontal: theme.padding.m,
         }}
         showsVerticalScrollIndicator={false}
       >
@@ -103,9 +103,7 @@ export default function SettingsFAQ() {
 
         <View
           style={{
-            width: 328,
             marginTop: theme.padding.sm,
-            alignItems: 'stretch',
             gap: 38,
           }}
         >

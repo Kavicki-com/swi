@@ -53,11 +53,12 @@ export default function AccountConfirmation() {
           flex: 1,
           paddingTop: insets.top,
           paddingBottom: insets.bottom,
+          paddingHorizontal: theme.padding.m,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <View style={{ width: 328, gap: theme.gap.l, alignItems: 'center' }}>
+        <View style={{ width: '100%', gap: theme.gap.l, alignItems: 'center' }}>
           <SuccessBadge
             iconName="check_circle"
             iconColor={theme.content.light}

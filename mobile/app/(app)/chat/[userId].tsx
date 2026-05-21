@@ -122,19 +122,25 @@ export default function ChatThread() {
           paddingHorizontal: theme.padding.m,
         }}
       >
-        <Button
-          variant="ghost"
-          label="Voltar"
-          iconLeft={
-            <Icon
-              name="keyboard_arrow_left"
-              size={24}
-              color={theme.content.primaryLight}
-            />
-          }
-          accessibilityLabel="Voltar"
-          onPress={() => router.back()}
-        />
+        {/* marginLeft:-18 compensa: (a) padding-left do ghost Button
+            (theme.padding.sm = 12pt) + (b) inset visual do glyph
+            keyboard_arrow_left dentro do bounding box 24x24 (~6pt) = 18pt.
+            Alinha a ponta do "<" com o edge do content area. */}
+        <View style={{ marginLeft: -18 }}>
+          <Button
+            variant="ghost"
+            label="Voltar"
+            iconLeft={
+              <Icon
+                name="keyboard_arrow_left"
+                size={24}
+                color={theme.content.primaryLight}
+              />
+            }
+            accessibilityLabel="Voltar"
+            onPress={() => router.back()}
+          />
+        </View>
         <Pressable
           onPress={() => router.push('/(app)/chat/user-info')}
           accessibilityRole="button"
@@ -150,9 +156,11 @@ export default function ChatThread() {
         </Pressable>
       </View>
 
-      {/* Chat section — Figma 336:9026 (gap.sm 12, w 328) */}
-      <View style={{ flex: 1, alignItems: 'center', paddingTop: 16 }}>
-        <View style={{ width: 328, flex: 1 }}>
+      {/* Chat section — Figma 336:9026 (gap.sm 12). Width era 328 fixo;
+          mudado pra esticar via paddingHorizontal:theme.padding.m (match
+          Journey pattern). */}
+      <View style={{ flex: 1, paddingTop: 16, paddingHorizontal: theme.padding.m }}>
+        <View style={{ flex: 1 }}>
           {/* Chat box — Figma 336:9029 (overflow-y-auto, gap.xl 28) */}
           <ScrollView
             ref={scrollRef}

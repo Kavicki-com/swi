@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Image, ScrollView, View } from 'react-native';
+import { Image, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -46,6 +47,15 @@ export default function ComplimentaryDataStep3() {
   const [conditions, setConditions] = useState('');
   const [disability, setDisability] = useState<'sim' | 'nao' | null>(null);
 
+  // Coordinator: only one Combobox panel can be open at a time. Without this,
+  // both Altura and Peso panels could float simultaneously (overlapping each
+  // other and the fields below), which was the observed bug.
+  type ComboboxKey = 'altura' | 'peso' | 'sangue';
+  const [openCombobox, setOpenCombobox] = useState<ComboboxKey | null>(null);
+  const handleOpenChange = (key: ComboboxKey) => (next: boolean) => {
+    setOpenCombobox(next ? key : null);
+  };
+
   // Required: gênero, altura, peso, tipo sanguíneo, status de deficiência.
   // Allergies + conditions ficam opcionais (não é incomum o usuário não ter).
   // Match com R-10 em 2026-05-17-mobile-routes-audit.md.
@@ -80,7 +90,7 @@ export default function ComplimentaryDataStep3() {
         resizeMode="cover"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{
           paddingTop: insets.top + 26,
           paddingBottom: insets.bottom + 32,
@@ -88,6 +98,9 @@ export default function ComplimentaryDataStep3() {
           gap: theme.gap.xl,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        extraScrollHeight={60}
+        enableOnAndroid
       >
         <OnboardingHeader username={username} />
 
@@ -104,54 +117,78 @@ export default function ComplimentaryDataStep3() {
           <GenderSelector value={gender} onChange={setGender} />
         </View>
 
-        <View style={{ flexDirection: 'row', gap: theme.gap.sm }}>
-          <View style={{ flex: 1 }}>
+        {/* Z-index ladder: each Combobox section gets a higher zIndex than
+            the sections below it, so its open Panel (position:absolute,
+            z-index:50 inside the DS Container) renders ABOVE following
+            form fields instead of being covered by them. RN siblings without
+            explicit zIndex render in document order (later on top) — without
+            this, the Combobox panel would be obscured by Tipo sanguíneo /
+            inputs / Concluir CTA below. */}
+        <View style={{ flexDirection: 'row', gap: theme.gap.sm, zIndex: 30 }}>
+          <View style={{ flex: 1, zIndex: 2 }}>
             <Combobox
               label="Altura"
               placeholder="cm"
               options={HEIGHT_OPTIONS}
               value={height}
               onChange={setHeight}
+              open={openCombobox === 'altura'}
+              onOpenChange={handleOpenChange('altura')}
+              // Lista de 81 opções (140-220cm) cap em 3 visíveis + scroll
+              // pra não vazar viewport.
+              maxVisibleRows={3}
             />
           </View>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, zIndex: 1 }}>
             <Combobox
               label="Peso"
               placeholder="Kg"
               options={WEIGHT_OPTIONS}
               value={weight}
               onChange={setWeight}
+              open={openCombobox === 'peso'}
+              onOpenChange={handleOpenChange('peso')}
+              // Lista de 121 opções (40-160kg) cap em 3 visíveis + scroll.
+              maxVisibleRows={3}
             />
           </View>
         </View>
 
-        <Combobox
-          label="Tipo sanguíneo"
-          placeholder="Selecione aqui"
-          options={BLOOD_OPTIONS}
-          value={bloodType}
-          onChange={setBloodType}
-        />
+        <View style={{ zIndex: 20 }}>
+          <Combobox
+            label="Tipo sanguíneo"
+            placeholder="Selecione aqui"
+            options={BLOOD_OPTIONS}
+            value={bloodType}
+            onChange={setBloodType}
+            open={openCombobox === 'sangue'}
+            onOpenChange={handleOpenChange('sangue')}
+          />
+        </View>
 
-        <Input
-          label="Possui alergias?"
-          placeholder="(descreva aqui)"
-          value={allergies}
-          onChangeText={setAllergies}
-          multiline
-          numberOfLines={4}
-        />
+        <View style={{ zIndex: 10 }}>
+          <Input
+            label="Possui alergias?"
+            placeholder="(descreva aqui)"
+            value={allergies}
+            onChangeText={setAllergies}
+            multiline
+            numberOfLines={4}
+          />
+        </View>
 
-        <Input
-          label="Possui doenças crônicas?"
-          placeholder="(descreva aqui)"
-          value={conditions}
-          onChangeText={setConditions}
-          multiline
-          numberOfLines={4}
-        />
+        <View style={{ zIndex: 9 }}>
+          <Input
+            label="Possui doenças crônicas?"
+            placeholder="(descreva aqui)"
+            value={conditions}
+            onChangeText={setConditions}
+            multiline
+            numberOfLines={4}
+          />
+        </View>
 
-        <View style={{ gap: theme.gap.s }}>
+        <View style={{ gap: theme.gap.s, zIndex: 8 }}>
           <Text variant="body.m" style={{ fontWeight: theme.fontWeight.bold }}>
             Pessoa com deficiência?
           </Text>
@@ -169,7 +206,7 @@ export default function ComplimentaryDataStep3() {
           </View>
         </View>
 
-        <View style={{ gap: theme.gap.sm }}>
+        <View style={{ gap: theme.gap.sm, zIndex: 7 }}>
           <Button
             variant="contained"
             label="Concluir"
@@ -179,7 +216,7 @@ export default function ComplimentaryDataStep3() {
           />
           <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

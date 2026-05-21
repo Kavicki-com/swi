@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Image as RNImage, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Image as RNImage, Pressable, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,27 +67,19 @@ const BG_DECOR_H = 347.935;
 const avatarUri =
   Asset.fromModule(require('../../assets/avatar-construction.png')).uri;
 
-// FASE 1 — Layout esqueleto. Placeholders coloridos no lugar dos componentes
-// complexos. Próximas fases preenchem: StatusChart (2), main actions (3),
-// stats (4), fatigue (5), bottom actions (6), polish (7).
+// Layout reference (Figma 245:23280, viewport 360×≈800):
+//   - Chart zone: 0,0 → 360×374. Now rendered as edge-to-edge banner with
+//     aspectRatio 360/374; children positioned via percentage of that zone.
+//   - Bottom container: was left=48 / top=271 / w=266 inside the canvas;
+//     now flex column with paddingHorizontal=theme.padding.m and a fixed
+//     overlap (marginTop) into the chart zone.
 //
-// Coordenadas-chave do Figma 245:23280 (viewport 360x≈800):
-//   - StatusChart: 0,0 → 360x374 (zona top)
-//   - Avatar: right 24, top 34, size 64
-//   - Container: left 48, top 271, w 266, gap.xl 28, items-end
-//     │ overlap com chart de 103px (374 - 271)
-const CHART_ZONE_HEIGHT = 374;
-const CONTAINER_TOP = 271;
-const CONTAINER_LEFT = 48;
-const CONTAINER_WIDTH = 266;
 // Figma spec is gap.xl=28, but the DS Button DS renders shape="pill" buttons
 // ~4px taller than the Figma 56 spec (60h measured) — accumulating ~11px of
 // extra height across the 5 container items. Reducing the gap to 24 absorbs
 // that overflow so the bottom action row sits within the frame curve as the
 // Figma layout shows (was: bell button touching the BG_DECOR bottom edge).
 const CONTAINER_GAP_XL = 24;
-const AVATAR_TOP = 34;
-const AVATAR_RIGHT = 24;
 
 export default function Dashboard() {
   const theme = useTheme();
@@ -103,13 +95,6 @@ export default function Dashboard() {
   const elipse34Xml = useUniqueSvg(ELIPSE34_RING_SVG);
   const gaugeXml = useUniqueSvg(GAUGE_ICON_SVG);
   const bgDecorGradId = useUniqueId('bg-decor-grad');
-  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
-  // Letterbox fit: scale uniforme que mantém o canvas 360×800 inteiro dentro
-  // da safe area. Pega o menor entre width-fit e height-fit pra nunca clipar
-  // nem horizontal nem vertical. Sobra (canvas menor que safe area) vira
-  // barras letterbox em theme.background. Phase 1 — fidelity-letterbox plan.
-  const safeHeight = viewportHeight - insets.top - insets.bottom;
-  const canvasScale = Math.min(viewportWidth / 360, safeHeight / 800);
   // Demo-only: camera starts on; tapping the camera button toggles the
   // green status dot. Production wiring would mirror live worker state.
   const [cameraActive, setCameraActive] = useState(true);
@@ -141,20 +126,11 @@ export default function Dashboard() {
   }
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: theme.background,
-        paddingTop: insets.top,
-        paddingBottom: insets.bottom,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* A2 — Bottom decoration (Figma 304:2430 background-element). Sibling
-          do canvas wrapper (não filho): estica full-viewport pra moldura verde
-          tocar a borda da tela em qualquer iPhone. preserveAspectRatio="none"
-          permite stretch horizontal não-uniforme. Ver Gap J Phase 2. */}
+          do content stack: estica full-viewport pra moldura verde tocar a
+          borda da tela em qualquer iPhone. preserveAspectRatio="none" permite
+          stretch horizontal não-uniforme. */}
       <View
         pointerEvents="none"
         style={{
@@ -189,30 +165,32 @@ export default function Dashboard() {
         </Svg>
       </View>
 
-      {/* Canvas wrapper — 360-wide com transform: scale pra ocupar viewport
-          inteira mantendo proporções Figma 360x800. Em iPhone 390 scale ~1.083.
-          Gap I + Gap J. */}
+      {/* Background: gradient + dot-grid. Same JourneyTheme as journey/notifications. */}
+      <JourneyTheme gradient={require('../../assets/journey-bg.png')} />
+
+      {/* Content stack — journey pattern: outer flex:1 with safe-area padding.
+          Chart zone is edge-to-edge (no horizontal padding); the bottom
+          container gets paddingHorizontal:theme.padding.m on its own. */}
       <View
         style={{
-          width: 360,
-          height: 800,
-          transform: [{ scale: canvasScale }],
-          transformOrigin: 'center center',
+          flex: 1,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
         }}
       >
-        {/* Canvas BG: gradient compartilhado com BGJourney (asset
-            byte-identical) + dot-grid (Figma 1069:11271, layer 3 do
-            JourneyTheme). Sem `pattern` — dashboard não usa a malha
-            tracejada do smartband. */}
-        <JourneyTheme gradient={require('../../assets/journey-bg.png')} />
-
-      {/* Top zone — Knob ("grupo taigo novo" 1069:11605) as background, then
-          silhouette (I304:2357;295:1931), heart status (I304:2357;295:2180),
-          heart-rate button → my-stats (I304:2357;304:2585), settings gear
-          sub-badge (I304:2357;304:2598), and avatar overlaid in the corner.
-          Coordinates are absolute from the Figma frame (360×374 chart zone),
-          mirroring the StatusChart layout that we replaced. */}
-      <View style={{ height: CHART_ZONE_HEIGHT }}>
+        {/* Top zone — Knob + silhouette + heart status + heart-rate button +
+            avatar + location pin. aspectRatio 360:374 preserves Figma proportions
+            on any viewport; maxWidth:360 + alignSelf:center caps the chart on
+            phones wider than the Figma reference so the silhouette doesn't grow
+            disproportionally (BG_DECOR remains edge-to-edge as a sibling). */}
+        <View
+          style={{
+            width: '100%',
+            maxWidth: 360,
+            aspectRatio: 360 / 374,
+            alignSelf: 'center',
+          }}
+        >
         {/* 1. Knob bezel — decorative, behind everything */}
         <View
           pointerEvents="none"
@@ -227,7 +205,7 @@ export default function Dashboard() {
           <RNImage
             source={require('../../assets/grupo-taigo.png')}
             resizeMode="contain"
-            style={{ width: 298, height: 298 }}
+            style={{ width: '82.78%', aspectRatio: 1 }}
             accessible={false}
           />
         </View>
@@ -240,10 +218,10 @@ export default function Dashboard() {
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: 87.47,
-            left: 141.906,
-            width: 76.967,
-            height: 262.318,
+            top: '23.39%',
+            left: '39.42%',
+            width: '21.38%',
+            height: '70.14%',
           }}
         >
           <SvgXml xml={silhouetteXml} width="100%" height="100%" />
@@ -252,10 +230,10 @@ export default function Dashboard() {
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: 87.47,
-            left: 141.906,
-            width: 76.967,
-            height: 262.318,
+            top: '23.39%',
+            left: '39.42%',
+            width: '21.38%',
+            height: '70.14%',
             // @ts-expect-error: mixBlendMode is web-only style (RN-web).
             // Falls back to single-layer silhouette on native — slightly
             // less saturated but still readable.
@@ -272,10 +250,10 @@ export default function Dashboard() {
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: 139.327,
-            left: 169.2,
-            width: 31.311,
-            height: 26.093,
+            top: '37.25%',
+            left: '47.0%',
+            width: '8.7%',
+            height: '6.98%',
           }}
         >
           <SvgXml xml={HEART_STATUS_SVG} width="100%" height="100%" />
@@ -290,15 +268,13 @@ export default function Dashboard() {
           accessibilityLabel="Abrir minhas estatísticas"
           style={{
             position: 'absolute',
-            // Figma 1069:11336 spec top is 187.04, but in app the silhouette
-            // renders taller proportionally; lifted to 157 to keep the button
-            // visually at chest-level of the silhouette (matches Figma look
-            // even though absolute coords differ).
-            top: 157,
-            right: 22.45,
-            width: 90.03,
-            height: 90.03,
-            borderRadius: 45.015,
+            // 157/374 chest-level (Figma 1069:11336 spec was 187.04, lifted
+            // to 157 to match the proportionally-taller silhouette render).
+            top: '41.98%',
+            right: '6.24%',
+            width: '25%',
+            aspectRatio: 1,
+            borderRadius: 9999,
             backgroundColor: theme.surface.high,
             alignItems: 'center',
             justifyContent: 'center',
@@ -316,10 +292,10 @@ export default function Dashboard() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: (90.03 - 77.687) / 2,
-              left: (90.03 - 77.687) / 2,
-              width: 77.687,
-              height: 77.687,
+              top: '6.85%',
+              left: '6.85%',
+              width: '86.3%',
+              aspectRatio: 1,
             }}
           >
             <SvgXml xml={elipse34Xml} width="100%" height="100%" />
@@ -331,10 +307,10 @@ export default function Dashboard() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: (90.03 - 32.855) / 2,
-              left: (90.03 - 36.027) / 2,
-              width: 36.027,
-              height: 32.855,
+              top: '31.76%',
+              left: '30.0%',
+              width: '40.02%',
+              height: '36.49%',
             }}
           >
             <SvgXml xml={ECG_ICON_SVG} width="100%" height="100%" />
@@ -354,9 +330,9 @@ export default function Dashboard() {
             style={{
               position: 'absolute',
               top: 0,
-              right: -0.22,
+              right: 0,
               padding: 3.924,
-              borderRadius: 980,
+              borderRadius: 9999,
               backgroundColor: theme.surface.medium,
               shadowColor: '#000000',
               shadowOpacity: 0.1608,
@@ -385,7 +361,7 @@ export default function Dashboard() {
           accessibilityRole="button"
           accessibilityLabel="Abrir configurações"
           hitSlop={8}
-          style={{ position: 'absolute', top: AVATAR_TOP, right: AVATAR_RIGHT }}
+          style={{ position: 'absolute', top: '9.09%', right: '6.67%' }}
         >
           <Avatar
             customSize={64}
@@ -396,23 +372,11 @@ export default function Dashboard() {
             fallbackBackgroundColor={theme.surface.medium}
           />
         </Pressable>
-      </View>
 
-      {/* Container — Figma left=48 top=271 w=266 items-end. Overlap 103px into chart. */}
-      <View
-        style={{
-          marginTop: CONTAINER_TOP - CHART_ZONE_HEIGHT,
-          paddingLeft: CONTAINER_LEFT,
-          width: CONTAINER_LEFT + CONTAINER_WIDTH,
-          gap: CONTAINER_GAP_XL,
-          alignItems: 'flex-end',
-        }}
-      >
-        {/* 1. Location button — pill icon-only, contained primary, right-aligned.
-            marginTop -30 lifts it visually closer to the heart-rate button
-            above (to match the Figma proportions which show both buttons
-            tighter together near the silhouette's chest-hip area). */}
-        <View style={{ alignSelf: 'flex-end', marginTop: -30 }}>
+        {/* 6. Location pin button — Figma places this directly below the
+             heart-rate button (right edge aligned), inside the chart zone.
+             Top:69% sits just under the 41.98%→66% heart-rate band. */}
+        <View style={{ position: 'absolute', top: '69%', right: '6.24%' }}>
           <Button
             variant="contained"
             size="large"
@@ -432,8 +396,25 @@ export default function Dashboard() {
             onPress={() => router.push('/(app)/map')}
           />
         </View>
+      </View>
 
-        {/* 2. Main actions row: Camera (outline content.dark 1px) + Work (outline content.primary 2px) */}
+      {/* Bottom container — journey pattern + Figma 304:2683 inner padding.
+          paddingHorizontal:theme.padding.l (~24-32pt) reproduz a margem
+          maior que o Figma tem entre a parede da BG_DECOR e os items
+          (bells/stats/help). Antes era padding.m (16) — items ficavam
+          colados demais nas paredes. */}
+      <View
+        style={{
+          width: '100%',
+          maxWidth: 360,
+          alignSelf: 'center',
+          marginTop: -16,
+          paddingHorizontal: theme.padding.l,
+          gap: CONTAINER_GAP_XL,
+          alignItems: 'flex-end',
+        }}
+      >
+        {/* 1. Main actions row: Camera (outline content.dark 1px) + Work (outline content.primary 2px) */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
           {/* Camera with live-status dot — Figma 304:2683 + ellipse 304:2682 */}
           <View>
@@ -444,12 +425,18 @@ export default function Dashboard() {
               borderColor={theme.content.dark}
               borderWidth="s"
               iconLeft={
-                <Icon
-                  name="video_camera_back"
-                  width={20}
-                  height={16}
-                  color={theme.content.dark}
-                />
+                // Square 24×24 wrapper keeps the icon-only pill perfectly
+                // circular — without it the DS Button sizes itself to the
+                // raw 20×16 icon bounds and renders an oval. (Same fix as
+                // the Work button below.)
+                <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon
+                    name="video_camera_back"
+                    width={20}
+                    height={16}
+                    color={theme.content.dark}
+                  />
+                </View>
               }
               accessibilityLabel={`Câmera ${cameraActive ? 'ativa' : 'inativa'}`}
               onPress={() => setCameraActive((on) => !on)}
@@ -570,8 +557,19 @@ export default function Dashboard() {
           </Text>
         </View>
 
-        {/* 5. Bottom actions row: reports + notif (with badge "4") + chat + help */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 41, width: '100%' }}>
+        {/* 5. Bottom actions row: reports + notif (with badge "4") + chat + help.
+            justifyContent:'space-between' distribui bells flush-left, help
+            flush-right, chat balanceado no meio (matches Figma 304:2683
+            distribution). Gap fixo (41) deixava os 3 packados à esquerda
+            com espaço sobrando do lado do help. */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+          }}
+        >
           <View style={{ gap: theme.gap.s }}>
             <BadgedButton
               icon="reports_filled"
@@ -719,7 +717,18 @@ function FatigueBar({
         overflow: 'hidden',
       }}
     >
-      <View style={{ width: `${pct}%`, height: FILL_HEIGHT, overflow: 'hidden' }}>
+      {/* borderRadius:pill + overflow:hidden clipa o SVG retangular interno
+          num formato cilíndrico (Figma 304:2683). Sem isso o fill ficava
+          com cantos retos, conflitando visualmente com o track externo
+          que é pill. */}
+      <View
+        style={{
+          width: `${pct}%`,
+          height: FILL_HEIGHT,
+          borderRadius: barTheme.border.radius.pill,
+          overflow: 'hidden',
+        }}
+      >
         <Svg
           width="100%"
           height="100%"
