@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useJourney } from '../../../../services/journey/JourneyProvider';
 import {
   AvatarGroup,
   Button,
@@ -36,21 +38,61 @@ const INTERESTED_AVATARS = [
   { uri: Asset.fromModule(require('../../../../assets/avatars/worker-5.png')).uri, alt: 'Avatar 5' },
 ];
 
+// Crawl rate: progresso aumenta 1pt por segundo enquanto a task está ongoing.
+// Demo phase: simulação visual; produção tracking real seria via backend timer
+// (estimated 3h = 10800s = ~0.009pt/s pra completar em 3h reais — mas pro
+// demo queremos progress visível na ordem de minutos, então 1pt/s).
+const PROGRESS_CRAWL_INTERVAL_MS = 1000;
+const PROGRESS_CRAWL_STEP = 1;
+
 export default function TaskDetails() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id, state } = useLocalSearchParams<{
-    id: string;
-    state?: 'ongoing' | 'in-progress';
-  }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const task = findTaskById(id) ?? FALLBACK_TASK;
-  // Aceita ambos: 'ongoing' (interno) e 'in-progress' (spec Figma / deep-link).
-  const isOngoing = state === 'ongoing' || state === 'in-progress';
+
+  // Source of truth: JourneyProvider (shared state cross-screen). Esta task
+  // só está "ativa" se ela é a activeTaskId do journey; senão renderiza idle
+  // mesmo que outra task esteja ongoing em paralelo.
+  const {
+    state: journeyState,
+    activeTaskId,
+    startTask,
+    pauseJourney,
+    resumeJourney,
+    endJourney,
+  } = useJourney();
+  const isActiveTask = activeTaskId === id;
+  const taskState = isActiveTask ? journeyState : 'idle';
+
   // Figma 364:17426 — ProgressBar value usa escala 0-100. Idle ~2% (w=2px
-  // visível num track ~320px), ongoing ~30%. Antes estávamos passando 0.02 /
-  // 0.3 (escala 0-1) que clampava pra 0.02% / 0.3%, fill invisível.
-  const progress = isOngoing ? 30 : 2;
+  // visível num track ~320px), ongoing inicia em 30% (snapshot Figma) e
+  // sobe linearmente via setInterval enquanto state === 'ongoing'.
+  const [progress, setProgress] = useState(taskState === 'idle' ? 2 : 30);
+
+  // Sync inicial: se voltarmos pra essa task e ela já estava ativa em outro
+  // state (ex: paused), o progress deve refletir isso ao montar. Idle volta
+  // pra 2.
+  useEffect(() => {
+    if (taskState === 'idle') setProgress(2);
+  }, [taskState]);
+
+  useEffect(() => {
+    if (taskState !== 'ongoing') return;
+    const interval = setInterval(() => {
+      setProgress((p) => Math.min(100, p + PROGRESS_CRAWL_STEP));
+    }, PROGRESS_CRAWL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [taskState]);
+
+  const isPaused = taskState === 'paused';
+  const isActive = taskState !== 'idle';
+
+  const finishOrCancel = () => {
+    endJourney();
+    router.push('/(app)/journey');
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -206,8 +248,10 @@ export default function TaskDetails() {
           </Text>
         </View>
 
-        {/* CTA group — varia por state (Figma 364:17126 idle vs 364:17434 ongoing) */}
-        {isOngoing ? (
+        {/* CTA group — Figma 364:17126 idle / 364:17434 ongoing / 364:17766 pause.
+            State machine local: idle → ongoing ↔ paused.
+            Finalizar/Cancelar saem da tela (voltam pra /journey). */}
+        {isActive ? (
           <View style={{ gap: theme.gap.m }}>
             <Button
               variant="contained"
@@ -215,23 +259,32 @@ export default function TaskDetails() {
               labelColor={theme.content.light}
               label="Finalizar tarefa"
               elevation="lg"
-              accessibilityLabel="Finalizar tarefa"
-              onPress={() => router.push('/(app)/journey/ongoing')}
+              // Desabilitado em paused — não pode finalizar enquanto a
+              // tarefa está em pausa (user precisa retomar primeiro).
+              disabled={isPaused}
+              accessibilityLabel={
+                isPaused
+                  ? 'Finalizar tarefa (indisponível enquanto pausado)'
+                  : 'Finalizar tarefa'
+              }
+              onPress={finishOrCancel}
             />
             <Button
               variant="outline"
               borderColor={theme.surface.accent}
               labelColor={theme.surface.accent}
-              label="Fazer pausa"
-              accessibilityLabel="Fazer pausa"
-              onPress={() => router.push('/(app)/journey/pause')}
+              // "Fazer pausa" no ongoing; "Retomar" no paused — mesma posição,
+              // mesmo Button, label/handler trocam por state.
+              label={isPaused ? 'Retomar' : 'Fazer pausa'}
+              accessibilityLabel={isPaused ? 'Retomar tarefa' : 'Fazer pausa'}
+              onPress={() => (isPaused ? resumeJourney() : pauseJourney())}
             />
             <Button
               variant="ghost"
               labelColor={theme.content.error}
               label="Cancelar tarefa"
               accessibilityLabel="Cancelar tarefa"
-              onPress={() => router.push('/(app)/journey/ongoing')}
+              onPress={finishOrCancel}
             />
           </View>
         ) : (
@@ -242,12 +295,10 @@ export default function TaskDetails() {
             label="Iniciar Jornada e começar tarefa"
             elevation="lg"
             accessibilityLabel="Iniciar Jornada e começar tarefa"
-            onPress={() =>
-              router.push({
-                pathname: '/(app)/journey/task/[id]',
-                params: { id: id ?? 'inspecao', state: 'ongoing' },
-              })
-            }
+            // startTask escreve no JourneyProvider: state='ongoing',
+            // activeTaskId=id. Sem navegação. Quando user volta pra
+            // /journey, lê o context e renderiza o layout ongoing.
+            onPress={() => startTask(id ?? task.id)}
           />
         )}
       </ScrollView>

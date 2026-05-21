@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Image as RNImage, ScrollView, View } from 'react-native';
+import { Image as RNImage, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -55,23 +56,24 @@ export default function SettingsHealthData() {
         />
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         style={{ flex: 1, backgroundColor: 'transparent' }}
         contentContainerStyle={{
           paddingTop: insets.top,
           paddingBottom: insets.bottom + 120,
-          alignItems: 'center',
+          paddingHorizontal: theme.padding.m,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        extraScrollHeight={60}
+        enableOnAndroid
       >
         <TopBar title="Dados de saúde" onBack={() => router.back()} />
 
         <View
           style={{
-            width: 328,
             gap: theme.gap.xl,
             marginTop: theme.padding.xxl,
-            alignItems: 'stretch',
           }}
         >
           <Title variant="title.xs" color={theme.content.primary}>
@@ -149,7 +151,7 @@ export default function SettingsHealthData() {
             onPress={() => router.back()}
           />
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <View
         pointerEvents="box-none"

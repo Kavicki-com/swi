@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -63,7 +64,7 @@ export default function NewReport() {
         pattern={require('../../../assets/smartband-bg-pattern.png')}
       />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         style={{ flex: 1, backgroundColor: 'transparent' }}
         contentContainerStyle={{
           paddingTop: insets.top,
@@ -72,10 +73,18 @@ export default function NewReport() {
           gap: theme.gap.m,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        extraScrollHeight={60}
+        enableOnAndroid
       >
         {/* Voltar — left-aligned, largura natural (match /reports/[id] e
-            Figma 372:21297). */}
-        <View style={{ alignSelf: 'flex-start' }}>
+            Figma 372:21297). marginLeft:-18 compensa: (a) padding-left do
+            ghost Button (theme.padding.sm = 12pt) + (b) inset visual do
+            glyph keyboard_arrow_left dentro do bounding box 24x24 do Icon
+            (~6pt) = total 18pt. Alinha a ponta do "<" com o edge do
+            content area (settings TopBar precisa só de -6 porque seu BackSlot
+            tem padding-left:0). */}
+        <View style={{ alignSelf: 'flex-start', marginLeft: -18 }}>
           <Button
             variant="ghost"
             label="Voltar"
@@ -139,25 +148,58 @@ export default function NewReport() {
           Anexos
         </Title>
 
-        {/* 4 image placeholders em 2×2 grid — 156×156 quadrados com
-            add_a_photo glifo centrado (Figma 372:21297 mostra ícone de
-            câmera/foto em cada placeholder cinza, quadrado 156). */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.sm }}>
-          {[1, 2, 3, 4].map((i) => (
+        {/* 4 image placeholders em 2×2 grid. Figma 372:21297 mostra cards
+            quadrados ocupando full-width do content area (com gap entre eles).
+            Antes era width:156 fixo + flexWrap, o que packava à esquerda e
+            deixava espaço sobrando à direita em viewports >320pt.
+            Row-grouping com flex:1 + aspectRatio:1 garante 2 colunas, cada
+            uma metade da largura, quadradas. */}
+        <View style={{ gap: theme.gap.sm }}>
+          {[[1, 2], [3, 4]].map((row, rowIdx) => (
             <View
-              key={i}
-              style={{
-                width: 156,
-                height: 156,
-                backgroundColor: theme.surface.medium,
-                borderRadius: theme.border.radius.m,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+              key={rowIdx}
+              style={{ flexDirection: 'row', gap: theme.gap.sm }}
             >
-              <Icon name="add_a_photo" size={32} color={theme.content.medium} />
+              {row.map((i) => (
+                <View
+                  key={i}
+                  style={{
+                    flex: 1,
+                    aspectRatio: 1,
+                    backgroundColor: theme.surface.medium,
+                    borderRadius: theme.border.radius.m,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="add_a_photo" size={32} color={theme.content.medium} />
+                </View>
+              ))}
             </View>
           ))}
+        </View>
+
+        {/* Upload progress bar — Figma 372:21297 mostra um bar fino branco
+            acima da dashed area que enche conforme arquivos são adicionados.
+            Demo phase: hardcoded em 60% (sem upload real). Fix LOCAL nesta
+            tela — não foi adicionado ao DS ImageUploader pra não afetar
+            outras telas (instrução explícita do designer). */}
+        <View
+          style={{
+            height: 3,
+            width: '100%',
+            backgroundColor: theme.surface.standard,
+            borderRadius: theme.border.radius.pill,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={{
+              width: '60%',
+              height: '100%',
+              backgroundColor: theme.content.light,
+            }}
+          />
         </View>
 
         {/* ImageUploader (Enviar arquivo) */}
@@ -186,7 +228,7 @@ export default function NewReport() {
           accessibilityLabel="Cancelar"
           onPress={cancel}
         />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

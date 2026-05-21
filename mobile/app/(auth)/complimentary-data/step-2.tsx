@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Image, ScrollView, View } from 'react-native';
+import { Image, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, StepBar, Title, useTheme } from '@kavicki/swi-design-system';
@@ -41,15 +42,17 @@ export default function ComplimentaryDataStep2() {
         resizeMode="cover"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{
           paddingTop: insets.top + 26,
-          // Reserva pro footer absoluto (Avançar/Voltar) — match com step-1.
-          paddingBottom: insets.bottom + 32 + 108 + 16,
+          paddingBottom: insets.bottom + 32,
           paddingHorizontal: theme.padding.m,
           gap: theme.gap.xl,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        extraScrollHeight={60}
+        enableOnAndroid
       >
         <OnboardingHeader username={username} />
 
@@ -97,27 +100,21 @@ export default function ComplimentaryDataStep2() {
             maxLength={2}
           />
         </View>
-      </ScrollView>
 
-      {/* Figma 213:13404: actions absolute-bottom, não rolam com conteúdo. */}
-      <View
-        style={{
-          position: 'absolute',
-          bottom: insets.bottom + 32,
-          left: theme.padding.m,
-          right: theme.padding.m,
-          gap: theme.gap.sm,
-        }}
-      >
-        <Button
-          variant="contained"
-          label="Avançar"
-          fullWidth
-          disabled={!canSubmit}
-          onPress={goNext}
-        />
-        <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
-      </View>
+        {/* Actions inside the scroll (mesmo padrão do step-3): elimina
+            possibilidade de overlap; user scrolla naturalmente até os
+            botões no fim do form. */}
+        <View style={{ gap: theme.gap.sm }}>
+          <Button
+            variant="contained"
+            label="Avançar"
+            fullWidth
+            disabled={!canSubmit}
+            onPress={goNext}
+          />
+          <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
+        </View>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

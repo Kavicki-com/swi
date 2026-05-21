@@ -1,12 +1,10 @@
-// Demo task data shared across all 4 journey screens (index, ongoing,
-// pause, task/[id]). Each was previously redeclaring the same 4 tasks
-// (inspecao, manutencao, diagnostico, reparo) verbatim. Extracted per
-// the "duplicação massiva" cleanup item in 2026-05-17-mobile-routes-audit.md.
+// Demo task data shared across journey screens. Originalmente 4 screens
+// (index, ongoing, pause, task/[id]) — após Escopo B (2026-05-21) que
+// eliminou ongoing/pause como rotas, sobrou apenas index + task/[id].
 //
 // Usage:
-//   - journey/index            → TASKS (full list)
-//   - journey/ongoing & pause  → ACTIVE_TASK + UPCOMING_TASKS
-//   - journey/task/[id]        → findTaskById(id) ?? FALLBACK_TASK
+//   - journey/index      → TASKS (full list)
+//   - journey/task/[id]  → findTaskById(id) ?? FALLBACK_TASK
 
 export interface JourneyTask {
   id: string;
@@ -40,9 +38,6 @@ export const TASKS: ReadonlyArray<JourneyTask> = [
       'Substituir ou consertar peças defeituosas para restaurar o funcionamento adequado dos equipamentos.',
   },
 ];
-
-export const ACTIVE_TASK: JourneyTask = TASKS[0];
-export const UPCOMING_TASKS: ReadonlyArray<JourneyTask> = TASKS.slice(1);
 
 export const FALLBACK_TASK: JourneyTask = TASKS[0];
 

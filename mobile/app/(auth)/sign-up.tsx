@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Image, ScrollView, View } from 'react-native';
+import { Image, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -50,11 +51,14 @@ export default function SignUp() {
         resizeMode="cover"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 32, paddingBottom: 48, alignItems: 'center' }}
+      <KeyboardAwareScrollView
+        contentContainerStyle={{ paddingTop: insets.top + 32, paddingBottom: 48, paddingHorizontal: theme.padding.m }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        extraScrollHeight={60}
+        enableOnAndroid
       >
-        <View style={{ width: 328, gap: theme.gap.xl }}>
+        <View style={{ gap: theme.gap.xl }}>
           <Title variant="title.xs">Crie a sua conta</Title>
 
           <Text variant="body.m">
@@ -141,7 +145,7 @@ export default function SignUp() {
             />
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

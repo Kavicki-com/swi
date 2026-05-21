@@ -72,7 +72,7 @@ function SmartbandConnectionStartScreen() {
         </Title>
 
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Smartwatch3D width={320} height={347} autoRotate interactive scale={1.2} />
+          <Smartwatch3D width={320} height={347} autoRotate interactive scale={2.0} />
         </View>
 
         <SmartbandStatus
