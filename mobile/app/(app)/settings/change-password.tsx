@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Image as RNImage, ScrollView, View } from 'react-native';
+import { Image as RNImage, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -38,23 +39,24 @@ export default function SettingsChangePassword() {
         />
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         style={{ flex: 1, backgroundColor: 'transparent' }}
         contentContainerStyle={{
           paddingTop: insets.top,
           paddingBottom: insets.bottom + 120,
-          alignItems: 'center',
+          paddingHorizontal: theme.padding.m,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        extraScrollHeight={60}
+        enableOnAndroid
       >
         <TopBar title="Alterar senha" onBack={() => router.back()} />
 
         <View
           style={{
-            width: 328,
             gap: theme.gap.m,
             marginTop: theme.padding.xxl,
-            alignItems: 'stretch',
           }}
         >
           <Title variant="title.xs" color={theme.content.primary}>
@@ -84,7 +86,7 @@ export default function SettingsChangePassword() {
             }
           />
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Salvar — absolute acima do Home FAB (Figma 353:12292 top:628 numa
           tela de 800; ~85px de gap antes do FAB no top:714). Fora do
@@ -96,10 +98,10 @@ export default function SettingsChangePassword() {
           bottom: insets.bottom + 120,
           left: 0,
           right: 0,
-          alignItems: 'center',
+          paddingHorizontal: theme.padding.m,
         }}
       >
-        <View style={{ width: 328 }}>
+        <View>
           <Button
             variant="contained"
             backgroundColor={theme.surface.primary}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Image as RNImage, ScrollView, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Asset } from 'expo-asset';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -103,7 +104,14 @@ export default function ReportDetails() {
         pattern={require('../../../assets/smartband-bg-pattern.png')}
       />
 
-      <ScrollView
+      {/* KeyboardAwareScrollView gerencia keyboard avoidance + auto-scroll
+          até o input focado, e diferente do ScrollView nativo com
+          automaticallyAdjustKeyboardInsets, respeita o `extraScrollHeight`
+          como gap explícito entre o input e o topo do teclado (KAV+
+          contentInset eram sobrescritos pelo iOS quando o teclado abria).
+          Substitui a combinação anterior de KeyboardAvoidingView +
+          ScrollView + automaticallyAdjustKeyboardInsets + contentInset. */}
+      <KeyboardAwareScrollView
         style={{ flex: 1, backgroundColor: 'transparent' }}
         contentContainerStyle={{
           paddingTop: insets.top,
@@ -112,11 +120,19 @@ export default function ReportDetails() {
           gap: theme.gap.m,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        // Gap entre input focado e topo do teclado (incluindo QuickType bar).
+        extraScrollHeight={60}
+        enableOnAndroid
       >
         {/* Voltar — ghost button com chevron-left.
             Figma 364:20304 mostra "< Voltar" left-aligned no topo com
-            largura natural (não full-width). */}
-        <View style={{ alignSelf: 'flex-start' }}>
+            largura natural (não full-width). marginLeft:-18 compensa:
+            (a) padding-left do ghost Button (theme.padding.sm = 12pt) +
+            (b) inset visual do glyph keyboard_arrow_left dentro do bounding
+            box 24x24 (~6pt). Settings TopBar precisa só -6 porque seu
+            BackSlot tem padding-left:0. */}
+        <View style={{ alignSelf: 'flex-start', marginLeft: -18 }}>
           <Button
             variant="ghost"
             label="Voltar"
@@ -300,7 +316,7 @@ export default function ReportDetails() {
           accessibilityLabel="Fazer comentário"
           onPress={() => setComment('')}
         />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

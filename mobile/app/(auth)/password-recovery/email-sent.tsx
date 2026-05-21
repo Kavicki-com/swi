@@ -44,11 +44,12 @@ export default function PasswordRecoveryEmailSent() {
           flex: 1,
           paddingTop: insets.top,
           paddingBottom: insets.bottom,
+          paddingHorizontal: theme.padding.m,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <View style={{ width: 328, gap: theme.gap.l, alignItems: 'center' }}>
+        <View style={{ width: '100%', gap: theme.gap.l, alignItems: 'center' }}>
           <SuccessBadge
             iconName="mail"
             accessibilityLabel="Email de recuperação de senha enviado"

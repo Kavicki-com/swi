@@ -1,66 +1,67 @@
-import { Suspense, useRef, useState } from 'react';
-import { Image, View } from 'react-native';
+// Interactive 3D smartwatch viewer (native).
+//
+// Why this is hand-rolled instead of `useGLTF` from drei:
+// drei's `useGLTF` → `useLoader(GLTFLoader)` → `GLTFLoader.load(uri)` which
+// internally `fetch(file://...)` on RN. On iOS + Hermes that round-trip
+// returns a body the GLTFLoader can't parse and you get a useless
+// "Cannot read property 'type' of undefined" error inside R3F's onError.
+// Loading the binary ourselves via expo-file-system's File.arrayBuffer()
+// and calling `GLTFLoader.parse(buffer)` directly bypasses the broken
+// fetch path entirely.
+//
+// Stack:
+//   - @react-three/fiber/native — Expo-GL backed renderer.
+//   - expo-asset — resolves require('.../smartwatch.glb') to a localUri.
+//   - expo-file-system v19 File API — reads the .glb as ArrayBuffer.
+//   - three-stdlib's GLTFLoader — same instance drei uses, so the
+//     resulting scene is recognized by R3F's reconciler (avoids the
+//     "Multiple instances of Three.js" class-identity trap).
+//   - PanResponder — drag-to-rotate around Y. Lighter than OrbitControls
+//     and doesn't depend on gesture-handler wiring inside the GL canvas.
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, PanResponder, View } from 'react-native';
 import { Canvas, useFrame } from '@react-three/fiber/native';
-import { useGLTF } from '@react-three/drei/native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import { Asset } from 'expo-asset';
+import { File } from 'expo-file-system';
+import { GLTFLoader } from 'three-stdlib';
 import type { Group } from 'three';
 import type { Smartwatch3DProps } from './Smartwatch3D.types';
-import { isFeatureEnabled } from '../lib/featureFlags';
-
-// drei's useGLTF accepts a Metro require() handle (resolved by the
-// asset extension registered in metro.config.js -> glb).
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const SMARTWATCH_MODEL = require('../assets/smartwatch.glb');
 
 interface ModelProps {
+  scene: Group;
   scale: number;
   autoRotate: boolean;
-  dragYRef: React.MutableRefObject<number>;
+  rotationXRef: React.MutableRefObject<number>;
+  rotationYRef: React.MutableRefObject<number>;
+  isDraggingRef: React.MutableRefObject<boolean>;
 }
 
-function Model({ scale, autoRotate, dragYRef }: ModelProps) {
+function Model({
+  scene,
+  scale,
+  autoRotate,
+  rotationXRef,
+  rotationYRef,
+  isDraggingRef,
+}: ModelProps) {
   const ref = useRef<Group>(null);
-  const { scene } = useGLTF(SMARTWATCH_MODEL) as unknown as { scene: Group };
 
-  useFrame((_, dt) => {
+  useFrame((_, delta) => {
     if (!ref.current) return;
-    // Auto-rotate accumulates into the same ref so it survives drag handoff.
-    if (autoRotate) {
-      dragYRef.current += dt * 0.4; // ~23deg/sec
+    // Auto-rotation only on Y (the "up" axis) — spinning on X looks like a
+    // glitch. User drag controls both axes; while dragging, autoRotate
+    // pauses so the user's frame of reference doesn't drift.
+    if (autoRotate && !isDraggingRef.current) {
+      rotationYRef.current += delta * 0.4;
     }
-    // User drag is authoritative for absolute Y rotation each frame.
-    ref.current.rotation.y = dragYRef.current;
+    ref.current.rotation.x = rotationXRef.current;
+    ref.current.rotation.y = rotationYRef.current;
   });
 
   return <primitive ref={ref} object={scene} scale={scale} />;
 }
 
-const IDLE_RESUME_MS = 2000;
-
-// Wrapper that decides which variant to render. Keeps the gate check
-// outside the canvas component so its hooks are unconditional. Before
-// R-2 (2026-05-17), the gate was inside the canvas component and called
-// `return` before the hooks below, violating Rules of Hooks.
-export function Smartwatch3D(props: Smartwatch3DProps) {
-  if (!isFeatureEnabled('smartwatch3d')) {
-    return <Smartwatch3DFallback {...props} />;
-  }
-  return <Smartwatch3DCanvas {...props} />;
-}
-
-function Smartwatch3DFallback({ width, height, testID }: Smartwatch3DProps) {
-  return (
-    <Image
-      source={require('../assets/smartwatch.png')}
-      resizeMode="contain"
-      style={{ width, height }}
-      testID={testID}
-    />
-  );
-}
-
-function Smartwatch3DCanvas({
+export function Smartwatch3D({
   width,
   height,
   autoRotate = true,
@@ -68,63 +69,104 @@ function Smartwatch3DCanvas({
   scale = 1,
   testID,
 }: Smartwatch3DProps) {
-  const dragYRef = useRef(0);
-  const [userInteracting, setUserInteracting] = useState(false);
-  const idleResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [scene, setScene] = useState<Group | null>(null);
+  const rotationXRef = useRef(0);
+  const rotationYRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartYRef = useRef(0);
 
-  const beginInteraction = () => {
-    if (idleResumeTimer.current) {
-      clearTimeout(idleResumeTimer.current);
-      idleResumeTimer.current = null;
-    }
-    setUserInteracting(true);
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const assetModule = require('../assets/smartwatch.glb');
+        const asset = Asset.fromModule(assetModule);
+        await asset.downloadAsync();
+        const localUri = asset.localUri ?? asset.uri;
+        if (!localUri) {
+          console.warn('[Smartwatch3D] no localUri after downloadAsync');
+          return;
+        }
 
-  const scheduleResume = () => {
-    if (idleResumeTimer.current) clearTimeout(idleResumeTimer.current);
-    idleResumeTimer.current = setTimeout(() => {
-      setUserInteracting(false);
-      idleResumeTimer.current = null;
-    }, IDLE_RESUME_MS);
-  };
+        const file = new File(localUri);
+        const buffer = await file.arrayBuffer();
 
-  const pan = Gesture.Pan()
-    .enabled(interactive)
-    .onBegin(() => {
-      'worklet';
-      runOnJS(beginInteraction)();
-    })
-    .onChange((e) => {
-      'worklet';
-      // changeX is the per-event horizontal delta (points). Sensitivity is
-      // tuned so a full-screen swipe spans roughly half a turn.
-      dragYRef.current += e.changeX * 0.01;
-    })
-    .onEnd(() => {
-      'worklet';
-      runOnJS(scheduleResume)();
-    });
+        const loader = new GLTFLoader();
+        loader.parse(
+          buffer,
+          '',
+          (gltf) => {
+            if (!cancelled) {
+              setScene(gltf.scene as unknown as Group);
+            }
+          },
+          (err) => {
+            console.warn('[Smartwatch3D] GLTF parse error:', err);
+          },
+        );
+      } catch (err) {
+        console.warn('[Smartwatch3D] load pipeline threw:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const shouldAutoRotate = autoRotate && !userInteracting;
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => interactive,
+        onMoveShouldSetPanResponder: () => interactive,
+        onPanResponderGrant: () => {
+          isDraggingRef.current = true;
+          dragStartXRef.current = rotationXRef.current;
+          dragStartYRef.current = rotationYRef.current;
+        },
+        onPanResponderMove: (_, gesture) => {
+          // Convert drag deltas (px) into radians. ~200px per full turn feels
+          // natural for a 320-wide viewport (one swipe ≈ one rotation).
+          // dx → Y rotation (horizontal spin), dy → X rotation (tilt up/down).
+          rotationYRef.current = dragStartYRef.current + (gesture.dx / 200) * Math.PI;
+          rotationXRef.current = dragStartXRef.current + (gesture.dy / 200) * Math.PI;
+        },
+        onPanResponderRelease: () => {
+          isDraggingRef.current = false;
+        },
+        onPanResponderTerminate: () => {
+          isDraggingRef.current = false;
+        },
+      }),
+    [interactive],
+  );
+
+  if (!scene) {
+    return (
+      <View
+        style={{ width, height, alignItems: 'center', justifyContent: 'center' }}
+        testID={testID}
+      >
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
-    <GestureDetector gesture={pan}>
-      <View style={{ width, height }} testID={testID}>
-        <Canvas camera={{ position: [0, 0, 5], fov: 45 }} gl={{ antialias: true }}>
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[5, 5, 5]} intensity={1.2} />
-          <Suspense fallback={null}>
-            <Model scale={scale} autoRotate={shouldAutoRotate} dragYRef={dragYRef} />
-          </Suspense>
-        </Canvas>
-      </View>
-    </GestureDetector>
+    <View style={{ width, height }} testID={testID} {...panResponder.panHandlers}>
+      <Canvas camera={{ position: [0, 0, 4], fov: 45 }} gl={{ antialias: true }}>
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[5, 5, 5]} intensity={1.2} />
+        <directionalLight position={[-5, -3, -5]} intensity={0.4} />
+        <Model
+          scene={scene}
+          scale={scale}
+          autoRotate={autoRotate}
+          rotationXRef={rotationXRef}
+          rotationYRef={rotationYRef}
+          isDraggingRef={isDraggingRef}
+        />
+      </Canvas>
+    </View>
   );
-}
-
-// Preload the GLB so the first mount doesn't show a blank canvas while
-// Metro decodes the binary buffer. Gated to prod builds — Expo Go iOS
-// crashes when expo-gl tries to decode this asset at startup.
-if (isFeatureEnabled('smartwatch3d')) {
-  useGLTF.preload(SMARTWATCH_MODEL);
 }

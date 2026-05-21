@@ -94,32 +94,40 @@ function EvacuationRouteScreen() {
       <MapView center={EVACUATION_ORIGIN} zoom={15}>
         {/* On-map declarative children (partitioned into the native <Map>
             by MapView.native, attached imperatively by MapView.web). */}
+        {/* `key` em cada child do <Map> é OBRIGATÓRIO mesmo quando não está
+            num map(). Sem keys, React reconcilia por POSIÇÃO no array — quando
+            `lineShape` muda null→object, lineSource aparece em slot 0 e shifta
+            os Markers; o Marker que estava em slot 1 (destination) recebe os
+            props de origin sem remount → maplibre useFrozenId throws "id
+            cannot be changed". Keys explícitos fixam reconciliação por
+            identidade. */}
         {lineShape && (
           <MapLineSource
+            key="evacuation-route"
             id="evacuation-route"
             shape={lineShape}
             paint={{ color: '#8AD2E2', width: 4, opacity: 0.95 }}
           />
         )}
-        <MapMarker coordinate={EVACUATION_ORIGIN} id="evacuation-origin">
+        <MapMarker key="evacuation-origin" coordinate={EVACUATION_ORIGIN} id="evacuation-origin">
           <SwiThemeProvider>
             <LocationPin variant="badge" status="good" size={40} name="Início da rota" />
           </SwiThemeProvider>
         </MapMarker>
-        <MapMarker coordinate={EVACUATION_DESTINATION} id="evacuation-destination">
+        <MapMarker key="evacuation-destination" coordinate={EVACUATION_DESTINATION} id="evacuation-destination">
           <SwiThemeProvider>
             <LocationPin variant="badge" status="alert" size={40} name="Destino" />
           </SwiThemeProvider>
         </MapMarker>
         {chipAnchors && (
-          <MapMarker coordinate={chipAnchors.a} id="evacuation-chip-1">
+          <MapMarker key="evacuation-chip-1" coordinate={chipAnchors.a} id="evacuation-chip-1">
             <SwiThemeProvider>
               <MapChipBody text="6 minutos" />
             </SwiThemeProvider>
           </MapMarker>
         )}
         {chipAnchors && (
-          <MapMarker coordinate={chipAnchors.b} id="evacuation-chip-2">
+          <MapMarker key="evacuation-chip-2" coordinate={chipAnchors.b} id="evacuation-chip-2">
             <SwiThemeProvider>
               <MapChipBody text="17 minutos" />
             </SwiThemeProvider>

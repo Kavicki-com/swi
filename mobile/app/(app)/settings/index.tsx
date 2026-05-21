@@ -57,13 +57,18 @@ export default function Settings() {
           // 160 garante respiro entre "Sair" e o Home FAB (FAB altura ~72 +
           // bottom 24 = ~96, +64 de breathing room = 160).
           paddingBottom: insets.bottom + 160,
-          alignItems: 'center',
+          paddingHorizontal: theme.padding.m,
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ width: 328, gap: theme.gap.l, alignItems: 'center' }}>
-          {/* Avatar + Edit float — Figma 348:10371 wrapper 106×91 */}
-          <View style={{ width: 106, height: 91, justifyContent: 'flex-end' }}>
+        <View style={{ gap: theme.gap.l, alignItems: 'center' }}>
+          {/* Avatar + Edit float — Figma 348:10371 wrapper 106×91.
+              alignItems:'center' centraliza o Avatar (80pt) dentro do wrapper
+              (106pt). Sem isso, o Avatar ficava no left-start do wrapper,
+              causando off-set visual ~13pt à esquerda. O Edit icon (right:0,
+              top:0 absolute) continua no canto top-right do wrapper,
+              overlapando o avatar no canto sup-dir (Figma intent). */}
+          <View style={{ width: 106, height: 91, justifyContent: 'flex-end', alignItems: 'center' }}>
             <Avatar customSize={80} uri={avatarUri} bordered borderWidth={3} />
             <View style={{ position: 'absolute', right: 0, top: 0 }}>
               <Button
@@ -107,6 +112,7 @@ export default function Settings() {
               borderRadius: theme.border.radius.m,
               alignItems: 'center',
               justifyContent: 'center',
+              alignSelf: 'center',
             }}
             accessibilityRole="link"
             accessibilityLabel="Política de privacidade e termos de uso"
@@ -126,6 +132,7 @@ export default function Settings() {
               borderRadius: theme.border.radius.m,
               alignItems: 'center',
               justifyContent: 'center',
+              alignSelf: 'center',
             }}
             accessibilityRole="button"
             accessibilityLabel="Sair"
@@ -137,7 +144,9 @@ export default function Settings() {
         </View>
       </ScrollView>
 
-      {/* Home FAB — same pattern as my-stats home FAB */}
+      {/* Home FAB — same pattern as my-stats home FAB.
+          Wrapper position:absolute + left:0/right:0 + alignItems:'center'
+          centraliza o Button child horizontalmente no eixo cross. */}
       <View
         pointerEvents="box-none"
         style={{

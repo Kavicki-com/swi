@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Image, ScrollView, View } from 'react-native';
+import { Image, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -52,17 +53,17 @@ export default function ComplimentaryDataStep1() {
         resizeMode="cover"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{
           paddingTop: insets.top + 26,
-          // Reserva espaço pro footer absoluto (Avançar/Voltar) — sem isso,
-          // o último conteúdo do scroll fica oculto atrás dos botões. 32 (bottom
-          // gap Figma) + ~108 (altura dos 2 botões empilhados + gap) + safe-area.
-          paddingBottom: insets.bottom + 32 + 108 + 16,
+          paddingBottom: insets.bottom + 32,
           paddingHorizontal: theme.padding.m,
           gap: theme.gap.xl,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        extraScrollHeight={60}
+        enableOnAndroid
       >
         <OnboardingHeader username={username} />
 
@@ -122,27 +123,21 @@ export default function ComplimentaryDataStep1() {
           takePhotoLabel="Tirar Foto"
           pickFileLabel="Enviar arquivo"
         />
-      </ScrollView>
 
-      {/* Figma 213:13380: actions ficam absolute-bottom, não rolam com o conteúdo. */}
-      <View
-        style={{
-          position: 'absolute',
-          bottom: insets.bottom + 32,
-          left: theme.padding.m,
-          right: theme.padding.m,
-          gap: theme.gap.sm,
-        }}
-      >
-        <Button
-          variant="contained"
-          label="Avançar"
-          fullWidth
-          disabled={!canSubmit}
-          onPress={goNext}
-        />
-        <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
-      </View>
+        {/* Actions inside the scroll (mesmo padrão do step-3): elimina o
+            problema de overlap quando o ImageUploader expande, já que os
+            botões fluem naturalmente abaixo do conteúdo. */}
+        <View style={{ gap: theme.gap.sm }}>
+          <Button
+            variant="contained"
+            label="Avançar"
+            fullWidth
+            disabled={!canSubmit}
+            onPress={goNext}
+          />
+          <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
+        </View>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

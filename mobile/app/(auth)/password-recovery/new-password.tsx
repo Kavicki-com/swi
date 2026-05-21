@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Image, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text, Title, Toast, useTheme } from '@kavicki/swi-design-system';
@@ -31,16 +32,22 @@ export default function PasswordRecoveryNewPassword() {
         resizeMode="cover"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <View
-        style={{
-          flex: 1,
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
           paddingTop: insets.top,
           paddingBottom: insets.bottom,
+          paddingHorizontal: theme.padding.m,
           alignItems: 'center',
           justifyContent: 'center',
         }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        extraScrollHeight={60}
+        enableOnAndroid
       >
-        <View style={{ width: 328, gap: theme.gap.l }}>
+        <View style={{ width: '100%', gap: theme.gap.l }}>
           <Title variant="title.xs">Crie a sua nova senha</Title>
           <Text variant="body.m">
             Escolha uma senha segura para o seu acesso, ela deve seguir os padrões abaixo:
@@ -76,7 +83,7 @@ export default function PasswordRecoveryNewPassword() {
             onPress={handleSubmit}
           />
         </View>
-      </View>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

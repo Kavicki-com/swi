@@ -44,16 +44,38 @@ const DIVIDER_GRAD_END = '#171717';
 const DIVIDER_GRAD_MID = '#62BB81';
 
 // Overlay slot for the custom donut-center icons (rendered via SvgXml on top
-// of the built-in DonutChart icon, which is hidden via iconColor=transparent).
-// For DonutChart size="small" (outer 156), the icon row sits at top ≈ 43 —
-// computed from Center column height (icon 28 + gap 4 + value 20 + gap 4 +
-// label ~14 = 70), centered in 156 → (156-70)/2 = 43.
-const DONUT_ICON_OVERLAY = {
+// Bottom-anchored icon slot that mirrors the DS DonutChart's internal icon
+// row position, regardless of TitleText height variations.
+//
+// Why bottom-anchor and not top:43?
+//   The DS Container is a flex column with [TitleText, gap.s, DonutWrapper].
+//   With title="" the TitleText still renders a Text node with non-zero
+//   line-height (~24pt for fontSize 16). Adding gap.s, the DonutWrapper is
+//   pushed down — so an overlay at `top: 43` lands ABOVE the actual icon
+//   row, leaving a visible gap between the icon and value/label below.
+//
+// Since DonutWrapper is the LAST child of Container (no Caption passed),
+// the outer wrapper's bottom edge aligns with DonutWrapper's bottom edge.
+// Using `bottom` is immune to anything stacked above.
+//
+// DonutChart size="small" geometry (DonutChart.styles.ts DIMS.small):
+//   - DonutWrapper: 156 tall
+//   - Center column: icon 28 + gap 4 + value 20 + gap 4 + label 14 ≈ 70
+//   - Center is vertically centered → starts at y=(156-70)/2 = 43
+//   - Icon row: y=43 to y=71 of DonutWrapper
+//   - Distance from wrapper bottom to icon row bottom: 156-71 = 85
+//
+// The slot is a 28-tall box positioned `bottom: 85` from wrapper bottom,
+// with justifyContent:center so any-sized SVG (28, 22, 19 tall) sits
+// vertically centered on the same y as the DS icon row's center.
+const DONUT_ICON_SLOT = {
   position: 'absolute' as const,
-  top: 43,
+  bottom: 85,
   left: 0,
   right: 0,
+  height: 28,
   alignItems: 'center' as const,
+  justifyContent: 'center' as const,
 };
 function Divider() {
   const gradId = useUniqueId('my-stats-divider-grad');
@@ -144,7 +166,7 @@ export default function MyStats() {
       contentContainerStyle={{
         paddingTop: insets.top,
         paddingBottom: insets.bottom + 100,
-        alignItems: 'center',
+        paddingHorizontal: theme.padding.m,
       }}
       showsVerticalScrollIndicator={false}
     >
@@ -152,7 +174,21 @@ export default function MyStats() {
           status, replacing the compact StatusChart. No heart-rate / settings
           sub-badge here — my-stats is already the detail screen (showActionButton
           was false on the old StatusChart). Avatar overlays in the corner. */}
-      <View style={{ width: 360, height: 374, position: 'relative' }}>
+      {/* Chart zone — same responsive pattern as dashboard.tsx:
+          width:100% + maxWidth:360 + aspectRatio:360/374 + alignSelf:center.
+          Caps at 360×374 on phones wider than the Figma reference (avoiding
+          the silhouette growing disproportionally) while staying edge-to-edge
+          on devices ≤360pt wide. Inner absolute children use percentages so
+          they scale with the chart zone. */}
+      <View
+        style={{
+          width: '100%',
+          maxWidth: 360,
+          aspectRatio: 360 / 374,
+          alignSelf: 'center',
+          position: 'relative',
+        }}
+      >
         <View
           pointerEvents="none"
           style={{
@@ -166,7 +202,7 @@ export default function MyStats() {
           <RNImage
             source={require('../../assets/grupo-taigo.png')}
             resizeMode="contain"
-            style={{ width: 298, height: 298 }}
+            style={{ width: '82.78%', aspectRatio: 1 }}
             accessible={false}
           />
         </View>
@@ -175,10 +211,10 @@ export default function MyStats() {
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: 87.47,
-            left: 141.906,
-            width: 76.967,
-            height: 262.318,
+            top: '23.39%',
+            left: '39.42%',
+            width: '21.38%',
+            height: '70.14%',
           }}
         >
           <SvgXml xml={silhouetteXml} width="100%" height="100%" />
@@ -191,10 +227,10 @@ export default function MyStats() {
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: 87.47,
-            left: 141.906,
-            width: 76.967,
-            height: 262.318,
+            top: '23.39%',
+            left: '39.42%',
+            width: '21.38%',
+            height: '70.14%',
             // @ts-expect-error: mixBlendMode is web-only style (RN-web).
             mixBlendMode: 'multiply',
           }}
@@ -208,10 +244,10 @@ export default function MyStats() {
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: 139.327,
-            left: 169.2,
-            width: 31.311,
-            height: 26.093,
+            top: '37.25%',
+            left: '47.0%',
+            width: '8.7%',
+            height: '6.98%',
           }}
         >
           <SvgXml xml={HEART_STATUS_SVG} width="100%" height="100%" />
@@ -233,8 +269,9 @@ export default function MyStats() {
         <Avatar customSize={64} uri={avatarUri} bordered borderWidth={4} />
       </View>
 
-      {/* User Data column — Figma 342:9966 (w 328, gap.l 24) */}
-      <View style={{ width: 328, gap: theme.gap.l, marginTop: theme.gap.l }}>
+      {/* User Data column — Figma 342:9966 (gap.l 24). Width was 328 fixo,
+          mudado pra full-width (esticando via paddingHorizontal do ScrollView). */}
+      <View style={{ gap: theme.gap.l, marginTop: theme.gap.l }}>
         {/* Vital signs row — Figma 342:9431. 3 columns + dividers (1×106
             content/medium). Each column: icon 24 / value (title.l) / unit
             (caption.s). */}
@@ -394,7 +431,7 @@ export default function MyStats() {
               progress={62.5}
               progressGradient={[theme.surface.success, theme.surface.successLight]}
             />
-            <View pointerEvents="none" style={DONUT_ICON_OVERLAY}>
+            <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={heartbeatGreenXml} width={35} height={28} />
             </View>
           </View>
@@ -411,7 +448,7 @@ export default function MyStats() {
               progress={92.2}
               progressGradient={[theme.surface.info, theme.surface.infoLight]}
             />
-            <View pointerEvents="none" style={DONUT_ICON_OVERLAY}>
+            <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={heartbeatBlueXml} width={35} height={28} />
             </View>
           </View>
@@ -428,7 +465,7 @@ export default function MyStats() {
               progress={45}
               progressGradient={[theme.surface.warning, theme.surface.warningLight]}
             />
-            <View pointerEvents="none" style={DONUT_ICON_OVERLAY}>
+            <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={footprintXml} width={20} height={22} />
             </View>
           </View>
@@ -449,21 +486,27 @@ export default function MyStats() {
                 theme.surface.success,
               ]}
             />
-            <View pointerEvents="none" style={DONUT_ICON_OVERLAY}>
+            <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={flameDonutXml} width={17} height={19} />
             </View>
           </View>
 
           {/* Home FAB — Figma 348:10334 (absolute, center of donut grid).
               Two-tone: bg=content.dark (#f5f5f5 light) + 10px content.disable
-              dark border + pill + xlarge padding. Routes to /dashboard. */}
+              dark border + pill + xlarge padding. Routes to /dashboard.
+              marginTop = -46 (half of 92pt button, centers FAB vertically)
+                          + 16 (compensates for TitleText line-height ~24 +
+                                gap.s ~8 stacked above each DonutWrapper;
+                                the visual donut centers sit 16pt below the
+                                grid's geometric 50% line).
+              = -30. */}
           <View
             pointerEvents="box-none"
             style={{
               position: 'absolute',
               top: '50%',
               left: '50%',
-              marginTop: -46,
+              marginTop: -30,
               marginLeft: -46,
             }}
           >
@@ -511,13 +554,17 @@ export default function MyStats() {
               accessibilityLabel="Filtrar período"
             />
           </View>
-          {/* LineCaloriesChart — Figma 342:10223. fullWidth comprime os 8
-              pontos no container 328-wide; bg surface.medium (#222) per Figma. */}
+          {/* LineCaloriesChart — Figma 342:10223. fullWidth + bg
+              surface.medium per spec. paddingHorizontal:28 dá respiro pros
+              CaloriesTag das pontas: pill min-width 55 → metade ~28pt
+              overflow pra cada lado do data point. overflow:visible
+              (default) é obrigatório aqui — callouts renderem em `top:
+              negativo` (acima do data point). */}
           <View
             style={{
               backgroundColor: theme.surface.medium,
               borderRadius: theme.border.radius.m,
-              overflow: 'hidden',
+              paddingHorizontal: 28,
             }}
           >
             <LineCaloriesChart points={CALORIES_POINTS} fullWidth />
