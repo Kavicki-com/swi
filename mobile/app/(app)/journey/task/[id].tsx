@@ -77,7 +77,7 @@ export default function TaskDetails() {
             accessibilityLabel="Voltar para Jornada"
             style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xs, paddingVertical: theme.padding.s }}
           >
-            <Text variant="body.m" weight="bold" color={theme.content.primary}>
+            <Text variant="label.m" color={theme.content.primary}>
               Jornada
             </Text>
             <Icon name="keyboard_arrow_right" size={16} color={theme.content.primary} />
@@ -92,8 +92,7 @@ export default function TaskDetails() {
             }}
           >
             <Text
-              variant="body.m"
-              weight="bold"
+              variant="label.m"
               color={theme.content.primary}
               style={{ flexShrink: 1 }}
             >
