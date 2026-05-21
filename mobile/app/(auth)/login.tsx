@@ -47,19 +47,28 @@ export default function Login() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        {/* paddingTop:insets.top só pro safe area do status bar; o resto
+            do espaço vertical é distribuído por flex justifyContent:'center'.
+            Quando teclado abre via KAV padding, o View encolhe e o
+            conteúdo (Logo + Form) RECENTRALIZA no espaço disponível,
+            empurrando tudo pra cima sem corte. Antes usava paddingTop:
+            insets.top + 123 + marginTop:88 rígidos — ao encolher, o
+            paddingTop continuava 123, sobrando pouco espaço pra forma,
+            cortando os botões abaixo. */}
         <View
           style={{
             flex: 1,
-            paddingTop: insets.top + 123,
+            paddingTop: insets.top,
             paddingHorizontal: theme.padding.m,
+            justifyContent: 'center',
+            gap: theme.gap.xxl,
           }}
         >
         <View style={{ alignSelf: 'center' }}>
           <Logo size="l" />
         </View>
 
-        {/* Form top deve ficar em 275px (Figma) — 123 paddingTop + 64 Logo height + 88 marginTop = 275. */}
-        <View style={{ marginTop: 88, gap: theme.gap.l }}>
+        <View style={{ gap: theme.gap.l }}>
           <View style={{ gap: theme.gap.l }}>
             <Input
               label="Login"
