@@ -45,7 +45,7 @@ export default function SettingsPreferences() {
         contentContainerStyle={{
           paddingTop: insets.top,
           paddingBottom: insets.bottom + 120,
-          alignItems: 'center',
+          paddingHorizontal: theme.padding.m,
         }}
         showsVerticalScrollIndicator={false}
       >
@@ -53,10 +53,8 @@ export default function SettingsPreferences() {
 
         <View
           style={{
-            width: 328,
             gap: theme.gap.m,
             marginTop: theme.padding.xxl,
-            alignItems: 'stretch',
           }}
         >
           <Title variant="title.xs" color={theme.content.primary}>

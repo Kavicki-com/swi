@@ -116,8 +116,13 @@ function MapViewGeneralScreen() {
       <MapView center={USER_LOCATION} zoom={14}>
         {/* Productivity heatmap layer — driven by `showHeatmap` toggle.
             Color ramp matches admin spec verbatim (Figma 385:28757). */}
+        {/* Keys explícitos pra reconciliação estável: showHeatmap toggle
+            muda composição do array de children, shifta as posições e sem
+            keys o maplibre useFrozenId throws "id cannot be changed".
+            Ver detalhes no comentário equivalente em evacuation.tsx. */}
         {showHeatmap && (
           <MapHeatmapSource
+            key="productivity-heatmap"
             id="productivity-heatmap"
             shape={heatmapShape}
             paint={{
@@ -131,7 +136,7 @@ function MapViewGeneralScreen() {
         )}
 
         {/* User pin (Figma 385:29023) — sempre visível em USER_LOCATION. */}
-        <MapMarker coordinate={USER_LOCATION} id="user-pin">
+        <MapMarker key="user-pin" coordinate={USER_LOCATION} id="user-pin">
           <SwiThemeProvider>
             <LocationPin
               variant="avatar"

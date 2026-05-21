@@ -145,9 +145,14 @@ function MapWeatherScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <MapView center={USER_LOCATION} zoom={13}>
+        {/* Keys explícitos: toggles condicionais (showHeatmap, showOperators,
+            showCameras) shiftam posições no array de children. Sem keys o
+            maplibre useFrozenId throws "id cannot be changed". Ver evacuation.tsx. */}
+
         {/* Storm heatmap (tempestades) — driven by `showHeatmap` toggle. */}
         {showHeatmap && (
           <MapHeatmapSource
+            key="storm-heatmap"
             id="storm-heatmap"
             shape={stormShape}
             paint={{
@@ -164,6 +169,7 @@ function MapWeatherScreen() {
             light up together per mobile spec (sem expand panel). */}
         {showHeatmap && (
           <MapHeatmapSource
+            key="flood-heatmap"
             id="flood-heatmap"
             shape={floodShape}
             paint={{

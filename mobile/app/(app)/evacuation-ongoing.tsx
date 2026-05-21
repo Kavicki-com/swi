@@ -143,34 +143,40 @@ function EvacuationOngoingScreen() {
         center={midpoint(EVACUATION_ORIGIN, EVACUATION_DESTINATION)}
         zoom={15}
       >
+        {/* Keys explícitos: children condicionais (lineShape, navArrow,
+            chipAnchors) mudam composição do array. Sem keys, React
+            reconcilia por posição e maplibre useFrozenId throws quando o
+            id "muda" (mas na real é uma instância sendo reusada com novo
+            prop). Ver comentário equivalente em evacuation.tsx. */}
         {lineShape && (
           <MapLineSource
+            key="evacuation-ongoing-route"
             id="evacuation-ongoing-route"
             shape={lineShape}
             paint={{ color: '#BC88FF', width: 4, opacity: 0.95 }}
           />
         )}
-        <MapMarker coordinate={EVACUATION_DESTINATION} id="evacuation-destination">
+        <MapMarker key="evacuation-destination" coordinate={EVACUATION_DESTINATION} id="evacuation-destination">
           <SwiThemeProvider>
             <LocationPin variant="badge" status="alert" size={40} name="Destino" />
           </SwiThemeProvider>
         </MapMarker>
         {navArrow && (
-          <MapMarker coordinate={navArrow.at} id="evacuation-nav-arrow">
+          <MapMarker key="evacuation-nav-arrow" coordinate={navArrow.at} id="evacuation-nav-arrow">
             <SwiThemeProvider>
               <NavArrowBody rotationDeg={navArrow.rotation} />
             </SwiThemeProvider>
           </MapMarker>
         )}
         {chipAnchors && (
-          <MapMarker coordinate={chipAnchors.a} id="evacuation-ongoing-chip-1">
+          <MapMarker key="evacuation-ongoing-chip-1" coordinate={chipAnchors.a} id="evacuation-ongoing-chip-1">
             <SwiThemeProvider>
               <MapChipBody text="6 minutos" />
             </SwiThemeProvider>
           </MapMarker>
         )}
         {chipAnchors && (
-          <MapMarker coordinate={chipAnchors.b} id="evacuation-ongoing-chip-2">
+          <MapMarker key="evacuation-ongoing-chip-2" coordinate={chipAnchors.b} id="evacuation-ongoing-chip-2">
             <SwiThemeProvider>
               <MapChipBody text="17 minutos" />
             </SwiThemeProvider>

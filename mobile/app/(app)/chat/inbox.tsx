@@ -84,26 +84,34 @@ export default function ChatInbox() {
           paddingHorizontal: theme.padding.m,
         }}
       >
-        <Button
-          variant="ghost"
-          label="Voltar"
-          iconLeft={
-            <Icon
-              name="keyboard_arrow_left"
-              size={24}
-              color={theme.content.primaryLight}
-            />
-          }
-          accessibilityLabel="Voltar"
-          onPress={() => router.back()}
-        />
+        {/* marginLeft:-18 compensa: (a) padding-left do ghost Button
+            (theme.padding.sm = 12pt) + (b) inset visual do glyph
+            keyboard_arrow_left dentro do bounding box 24x24 (~6pt) = 18pt.
+            Alinha a ponta do "<" com o edge do content area. */}
+        <View style={{ marginLeft: -18 }}>
+          <Button
+            variant="ghost"
+            label="Voltar"
+            iconLeft={
+              <Icon
+                name="keyboard_arrow_left"
+                size={24}
+                color={theme.content.primaryLight}
+              />
+            }
+            accessibilityLabel="Voltar"
+            onPress={() => router.back()}
+          />
+        </View>
       </View>
 
       {/* Chat list — Figma 332:8740. Manual layout (vs DS ChatSection wrapper)
           so the "Novo Chat" button can stick to the viewport bottom. Uses DS
-          primitives (SearchInput, ChatUserCard, Button) — still DS-only. */}
-      <View style={{ flex: 1, alignItems: 'center', paddingTop: 16 }}>
-        <View style={{ width: 328, flex: 1 }}>
+          primitives (SearchInput, ChatUserCard, Button) — still DS-only.
+          paddingHorizontal:theme.padding.m faz o conteúdo chegar próximo às
+          margens (match Journey pattern) ao invés de capado em 328 centrado. */}
+      <View style={{ flex: 1, paddingTop: 16, paddingHorizontal: theme.padding.m }}>
+        <View style={{ flex: 1 }}>
           <SearchInput
             ref={searchRef}
             value={search}
