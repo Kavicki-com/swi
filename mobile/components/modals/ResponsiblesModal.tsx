@@ -146,11 +146,7 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
                       vermelho à esquerda (theme.surface.error). */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xs }}>
                     <Icon name="water_drop" size={20} color={theme.surface.error} />
-                    <Text
-                      variant="body.m"
-                      weight="bold"
-                      color={theme.content.dark}
-                    >
+                    <Text variant="label.l" color={theme.content.dark}>
                       {admin.blood}
                     </Text>
                   </View>
