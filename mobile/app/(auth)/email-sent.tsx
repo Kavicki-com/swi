@@ -60,8 +60,8 @@ export default function EmailSent() {
             Enviamos um email para{' '}
             <Text
               variant="body.s"
+              italic
               style={{
-                fontStyle: 'italic',
                 color: theme.content.secondaryLight,
               }}
             >
