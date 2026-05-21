@@ -10,3 +10,17 @@ coverage/
 *.tsbuildinfo
 .tsbuild/
 swi-admin/.tsbuild/
+
+# Figma REST API dumps (contain internal node IDs / image refs)
+docs/audits/figma-export/*.json
+
+# Local debug artifacts at repo root (screenshots, scratch files, tooling output)
+/*.png
+/*.jpg
+/*.jpeg
+/.playwright-mcp/
+/finalizar-bg.txt
+
+# Local audit reports (kept on disk, not in git)
+docs/audits/*-audit-*.md
+docs/audits/health-check-*.md

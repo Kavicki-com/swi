@@ -53,11 +53,7 @@ function SmartbandConnectionScreen() {
           </Title>
           <Text variant="body.m" color={theme.content.dark}>
             1 - Ative o bluetooth no seu dispositivo e garanta que esteja próximo da sua{' '}
-            <Text
-              variant="body.m"
-              color={theme.content.dark}
-              style={{ fontWeight: theme.fontWeight.bold }}
-            >
+            <Text variant="label.m" color={theme.content.dark}>
               Smartband
             </Text>
           </Text>

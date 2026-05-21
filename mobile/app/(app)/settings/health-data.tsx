@@ -114,7 +114,7 @@ export default function SettingsHealthData() {
           />
 
           <View style={{ gap: theme.gap.m }}>
-            <Text variant="body.m" weight="bold" color={theme.content.dark}>
+            <Text variant="label.m" color={theme.content.dark}>
               Histórico Médico
             </Text>
 

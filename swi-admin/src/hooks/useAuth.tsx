@@ -1,6 +1,6 @@
 // src/hooks/useAuth.tsx
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { authApi } from '@/services/mockApi'
+import { authApi } from '@/services/mockApi/auth'
 import type { User } from '@/services/types'
 
 type SignUpInput = {

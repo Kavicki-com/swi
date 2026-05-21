@@ -79,6 +79,12 @@ export default function RootLayout() {
       { family: 'Montserrat', weight: '400', url: Montserrat_400Regular },
       { family: 'Montserrat', weight: '500', url: Montserrat_500Medium },
       { family: 'Montserrat', weight: '700', url: Montserrat_700Bold },
+      // Family-resolved aliases para que CSS pedindo 'Inter-Medium' ache o face.
+      // O peso fica 'normal' porque a family já carrega o peso correto.
+      { family: 'Inter-Medium', weight: 'normal', url: Inter_500Medium },
+      { family: 'Inter-Bold', weight: 'normal', url: Inter_700Bold },
+      { family: 'Montserrat-Regular', weight: 'normal', url: Montserrat_400Regular },
+      { family: 'Montserrat-Medium', weight: 'normal', url: Montserrat_500Medium },
     ];
     Promise.allSettled(
       faces.map(async ({ family, weight, url }) => {

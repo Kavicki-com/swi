@@ -111,9 +111,7 @@ export default function ComplimentaryDataStep3() {
         </Title>
 
         <View style={{ gap: theme.gap.xs }}>
-          <Text variant="body.m" style={{ fontWeight: theme.fontWeight.bold }}>
-            Seu gênero
-          </Text>
+          <Text variant="label.m">Seu gênero</Text>
           <GenderSelector value={gender} onChange={setGender} />
         </View>
 
@@ -188,10 +186,8 @@ export default function ComplimentaryDataStep3() {
           />
         </View>
 
-        <View style={{ gap: theme.gap.s, zIndex: 8 }}>
-          <Text variant="body.m" style={{ fontWeight: theme.fontWeight.bold }}>
-            Pessoa com deficiência?
-          </Text>
+        <View style={{ gap: theme.gap.s }}>
+          <Text variant="label.m">Pessoa com deficiência?</Text>
           <View style={{ flexDirection: 'row', gap: theme.gap.m }}>
             <Radio
               label="Sim"

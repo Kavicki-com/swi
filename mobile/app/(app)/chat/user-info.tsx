@@ -195,18 +195,10 @@ export default function ChatUserInfo() {
       >
         {/* Row 1 — Gênero ♂ */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Text
-            variant="subtitle.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700' }}
-          >
+          <Text variant="label.l" color={theme.content.dark}>
             Gênero
           </Text>
-          <Text
-            variant="subtitle.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700' }}
-          >
+          <Text variant="label.l" color={theme.content.dark}>
             ♂
           </Text>
         </View>
@@ -216,11 +208,7 @@ export default function ChatUserInfo() {
         </Text>
         {/* Row 3 — Idade 26 anos */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Text
-            variant="subtitle.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700' }}
-          >
+          <Text variant="label.l" color={theme.content.dark}>
             Idade
           </Text>
           <Text variant="body.m" color={theme.content.dark}>
@@ -229,11 +217,7 @@ export default function ChatUserInfo() {
         </View>
         {/* Row 4 — Tipo sanguíneo 🩸 O+ */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Text
-            variant="subtitle.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700' }}
-          >
+          <Text variant="label.l" color={theme.content.dark}>
             Tipo sanguíneo
           </Text>
           <Icon name="humidity_mid" size={16} color={theme.surface.error} />
@@ -243,11 +227,7 @@ export default function ChatUserInfo() {
         </View>
         {/* Row 5 — Alergias Nenhuma */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Text
-            variant="subtitle.m"
-            color={theme.content.dark}
-            style={{ fontWeight: '700' }}
-          >
+          <Text variant="label.l" color={theme.content.dark}>
             Alergias
           </Text>
           <Text variant="body.m" color={theme.content.dark}>
