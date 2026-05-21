@@ -1264,3 +1264,85 @@ Sem ação requerida no escopo de fontes — registrar pro time decidir se vira 
 - (c) Padronizar todos Bold (mais alinhado com label semantics em outros forms).
 
 
+
+## 10. Progress check — 2026-05-20 pós v0.1.80 merge
+
+**Estado:** PRs #10 (DS Phase 1+2 + bump v0.1.80) e #11 (mobile font fix + pin v0.1.80) mergeados em `main` (swi em `1d1d686`). `typography.ts` agora emite family weight-aware via `resolveFontFamily()` (Inter-Medium / Inter-Bold / Montserrat-Regular / Montserrat-Medium em vez de `'Inter'` + `fontWeight` cosmético). 4 variantes novas existem: `label.m` (Inter 700/14), `label.l` (Inter 700/16), `badge.s` (Inter 700/12), `link.m` (Montserrat 700/14). Prop `italic` no `<Text>` adicionada. `FontFace` web ampliado pra 10 entries com family-aliases. Verificação visual usuário em web: telas renderizam OK.
+
+### 10.1. Findings RESOLVIDOS estruturalmente pelo bump
+
+Os 5 gaps de §6 viraram variantes/props no DS. Native loading (§2.F opção (b)) está implementado. O passo §7.1 + §7.2 está concluído — **~80% do impacto previsto materializado**.
+
+| Categoria | Mecanismo de resolução | Impacto |
+|---|---|---|
+| Native render Inter Medium (variantes Inter 500: `subtitle.l/m/s`, `body.l`, `body.s`) | `resolveFontFamily('Inter', '500')` → `'Inter-Medium'` no `fontFamily` do token; `_layout.tsx` mobile registra o alias | iOS/Android renderiza peso 500 correto em **todas as variantes** que pedem Inter Medium — sem editar 1 tela |
+| Native render Inter Bold (variantes Inter 700: `caption.xs`, `label.m`, `label.l`, `badge.s`) | `resolveFontFamily('Inter', '700')` → `'Inter-Bold'` | idem para peso 700 |
+| Native render Montserrat Regular/Medium (variantes inéditas no DS atual, mas registradas) | `resolveFontFamily('Montserrat', '400'/'500')` → `'Montserrat-Regular'`/`'Montserrat-Medium'` | preparado pra qualquer variante futura Montserrat ≠ 700 |
+| Gap (a) §6 — Inter 700/14 (~20+ telas) | variante `label.m` existe | estrutural — falta consumir |
+| Gap (b) §6 — Montserrat 700/14 (~15+ telas) | variante `link.m` existe | estrutural — falta consumir |
+| Gap (c) §6 — Inter 700/12 (~10 telas) | variante `badge.s` existe | estrutural — falta consumir |
+| Gap (d) §6 — Inter 700/16 (6 ocorrências) | variante `label.l` existe | estrutural — falta consumir |
+| Gap (e) §6 — Inter Medium italic 12 (2 ocorrências) | prop `italic` no `<Text>` existe | estrutural — falta consumir |
+
+**Tradução pra contagem de findings em §4:** os 5 gaps são reconhecidos como **RESOLVED-STRUCTURAL** (DS oferece a variante/prop). O **consumo** (Button/Input/TopBar/ChatUserCard/ReportCard internos + ~24 overrides em telas) é o trabalho remanescente — categorizado abaixo como PENDING-CODE.
+
+### 10.2. Classificação dos 29 findings tipo (a)-(f) catalogados em §4
+
+| Origem | Count | Status pós v0.1.80 | Ação |
+|---|---|---|---|
+| (a) `TextInput` RN nu no chat (§4.30) | 1 | **PENDING-EXTERNAL** | Bump do `Input` DS pra suportar layout custom (`iconLeft` + `actionRight`) — §7 Passo 6 |
+| (c) variante errada em telas (§4.14 badge "4", §4.21–§4.23 ×6 dates+names, §4.24 ×2 breadcrumbs, §4.26 activity title, §4.28 ×2, §4.31 ×5, §4.34) | ~17 | **PENDING-CODE (telas)** | Trocar `variant + weight override` por nova variante. §7 Passo 3 |
+| (d) override inline `fontWeight=bold` ou `weight="bold"` (§4.3, §4.6, §4.10 ×2, §4.12, §4.21–§4.23 ×6, §4.24 ×2, §4.28 ×2, §4.31 ×5, §4.32 ×2, §4.34) | ~24 | **PENDING-CODE (telas)** | Trocar por `<Text variant="label.m"/"label.l"/"badge.s"/"link.m"/body.s italic>`. §7 Passo 3. **Reduz indiretamente quando componentes DS forem atualizados na Phase 5** (cobertura de ~12 dos 24 vem via DS interno) |
+| (d) override `lineHeight` (§4.26, §4.38/§4.41) | 3 | **PENDING-DESIGN** | Aceitar override ou criar `body.m.reading`. §7 Passo 7 / §8 (decisão custo/benefício) |
+| (e) gap triplet inexistente | n/a (transformado em estrutural) | **RESOLVED-STRUCTURAL** | Variantes existem; cobre-se via PENDING-CODE acima |
+| Ambiguidade `body.s` ↔ `caption.s` ↔ `subtitle.s` (§5.6, 6 ocorrências) | 6 | **PENDING-DESIGN** | Ata de design review + doc semântica. §7 Passo 4 / §8.2 |
+| Anomalias Figma (typo "da cadastro", "HIstórico Médico", token `ms` com fallback 20px) | 3 | **PENDING-DESIGN** | Designer corrige no Figma. §8.5 |
+| Decisão sign-up label "Nome completo" Regular vs Bold (§4.2) | 1 | **PENDING-DESIGN** | Designer decide. §8.8 |
+| Default `labelWeight` do `Input` DS (§4.9) | 1 | **PENDING-CODE (DS)** | Inspecionar default + alinhar com Figma. Phase 5 |
+
+**Totais:**
+- RESOLVED-STRUCTURAL (variante/prop existe no DS): **5 gaps cobertos** (a/b/c/d/e de §6) + camada native loading (§2.F).
+- PENDING-CODE: **~42 ocorrências** (~17 type (c) + ~24 type (d) + 1 type (a)).
+- PENDING-DESIGN: **~13 itens** (3 lineHeight + 6 ambiguidade + 3 anomalia Figma + 1 sign-up).
+
+### 10.3. Phase 5 — componentes DS a atualizar (cleanup interno)
+
+Componentes DS que **hoje emitem triplets hardcoded** correspondentes às novas variantes. Cada bullet aponta o snippet exato (cross-checked no DS atual em `swi-design-system` main).
+
+| # | Componente DS | Triplet emitido hoje | Path do emit | Nova variante alvo | Telas afetadas | Prioridade |
+|---|---|---|---|---|---|---|
+| 1 | **Button** (label) | `fontFamily.body` + `fontWeight.bold` + `fontSize.m` = Inter 700/14 (default labelFamily=body) | `Button.styles.ts:166-168` (Label component) | `label.m` quando `labelFamily="body"`, `link.m` quando `labelFamily="title"` | ~20 telas (todos os CTAs, ghost, outline) — §4.1, §4.15, §4.18, §4.21–§4.24, §4.26–§4.28, §4.31, §4.33, §4.35, §4.39, §4.42 | **alta** (cobre mais telas) |
+| 2 | **TopBar** (back button + title) | inline `fontFamily.title + fontWeight.bold + fontSize.m` = Montserrat 700/14 | `TopBar.tsx:39-41` (back), `TopBar.tsx:52-54` (title) | `link.m` em ambos | ~8 telas — §4.15, §4.26, §4.27, §4.33–§4.39 | **alta** |
+| 3 | **Input** (label) | `fontFamily.body` + `fontWeight.bold` (default) + `fontSize.m` = Inter 700/14 | `Input.styles.ts:50-52` (LabelText) | `label.m` no path default; mantém `subtitle.m` (Inter 500/14) quando `labelWeight="regular"` | ~10 telas com formulário — §4.10, §4.26, §4.27, §4.33, §4.34, §4.35, §4.39 | **alta** |
+| 4 | **ChatUserCard** (nome + badge unread) | name: `fontFamily.body` + `fontSize.sm` + `fontWeight.bold` = Inter 700/12; badge: idem | `ChatUserCard.styles.ts:29-31` (name), `52-54` (badge) | `badge.s` em ambos (ou semantic split: `label.m`? ver nota) | chat/inbox (§4.29) | **média** (1 tela, mas 2 emits internos) |
+| 5 | **ReportCard** (date label + sector label + responsibles label) | `fontFamily.body` + `fontWeight.bold` + `fontSize.sm` = Inter 700/12 (3 emits para labels secundárias) | `ReportCard.styles.ts:30-32` + `67-69` + `74-76` | `badge.s` (Inter 700/12 — bate exato) | reports/index (§4.25), reports/[id] (§4.26 — variante destacada usa Inter 700/14 = `label.m`, diff de variante interna) | **média** |
+| 6 | **Pagination** (transitive via Button) | herda de Button — `variant="ghost"` e `variant="contained"` ambos labelFamily=body por default | `Pagination.tsx:37/47/56` (consome Button) | **Resolvido pela atualização #1 (Button)**: ghost ficaria `link.m`, contained `label.m`. **Atenção:** Figma pede Montserrat 700/14 (link.m) em **ambos** os states — pode precisar passar `labelFamily="title"` explicit no contained dentro de Pagination | reports/index (§4.25), settings/faq (§4.37) | **baixa** (uma vez Button atualizado, resta só audit do Pagination consumer) |
+| 7 | **ImageUploader** (action buttons via Button) | herda de Button — botões "Enviar arquivo"/"Enviar novo exame" via `variant="outline"` | `ImageUploader.tsx` consome Button | **Resolvido pela atualização #1 (Button)** | complimentary-data/step-1 (§4.8), my-stats (§4.18), reports/new (§4.27) | **baixa** (cleanup colateral pelo Button) |
+
+**Notas Phase 5:**
+- **Itens #1 (Button) + #2 (TopBar) + #3 (Input)** são as 3 atualizações que eliminam **~30 das ~42 ocorrências PENDING-CODE** indiretamente (são os componentes mais reutilizados). Prioridade alta.
+- **Itens #4 e #5** afetam menos telas mas têm emits hardcoded duplos/triplos internos — vale por consistência e pra remover triplets gap-(c) restantes.
+- **Itens #6 e #7** são *gratuitos* — caem quando #1 é feito; só precisa rodar Storybook pra validar visual.
+- `BadgedButton` listado no escopo original do prompt **não existe no DS** — é componente local em `mobile/app/(app)/dashboard.tsx`. Vai pro cleanup de tela (§7 Passo 3 / §4.14 ajuste manual).
+- Ambiguidade semântica em #4 (ChatUserCard name): Figma pede `Inter 700/12` (`badge.s`). Mas semanticamente "nome" sob avatar não é "badge". Recomendação prática: usar `badge.s` (triplet bate) e considerar rename futuro pra `label.s` se a tabela DS evoluir. Não bloqueia.
+
+### 10.4. Próxima ordem sugerida
+
+1. **Phase 5 (esta sessão, se possível)** — atualizar Button + TopBar + Input pra consumir as novas variantes. Storybook verifica zero regressão visual. Elimina ~30 ocorrências PENDING-CODE sem tocar 1 arquivo do mobile. **Bump DS v0.1.81+** (mantém pipeline coordenada).
+2. **Phase 5 — sub-step:** atualizar ChatUserCard + ReportCard (emits internos). Total Phase 5: ~5 componentes DS, ~100 LOC.
+3. **§7 Passo 3 (mobile cleanup)** — após Phase 5, pin nova versão DS no mobile e trocar `weight="bold"`/`fontWeight: '700'`/style inline composto → `<Text variant="label.m">`/`label.l`/`badge.s`/`link.m`/`<Text italic>`. ~24 mudanças mecânicas em ~12 arquivos.
+4. **§7 Passo 4 (harmonização body.s vs caption.s)** — pode rodar em paralelo com Passo 3; ~5 LOC + 1 doc.
+5. **§7 Passo 5 (avulsos)** — restos após Passos 3+4; muito pequeno.
+6. **§7 Passo 6 (Input bump pra chat)** — independente, qualquer ordem.
+7. **§7 Passo 7 (manual review)** — ata de design + correções no Figma + decisões pendentes (sign-up label, lineHeight, ambiguidade body.s).
+
+### 10.5. Surpresas / desvios do prompt
+
+- **`BadgedButton` não existe no DS** — é componente local no `dashboard.tsx`. O cleanup do badge "4" (§4.14) cai no Passo 3 (cleanup de tela), não na Phase 5 do DS.
+- **Pagination** não emite triplet diretamente — herda 100% do Button. Atualização do Button é suficiente, mas vale **audit do consumer**: Figma pede Montserrat 700/14 em *ambos* os states (ghost active + contained current page) — código atual precisa passar `labelFamily="title"` no `variant="contained"` (linha 56). Conferir no momento da execução da Phase 5.
+- **Default `labelWeight` do Input** (§8.3) é uma pergunta aberta — o `Input.styles.ts:43-46` mostra que ausência de prop cai no `else` que retorna `fontWeight.bold`. Confirma o default Bold; resolve §4.9 (complimentary-data/step-2 OK). Item §8.3 pode ser fechado.
+- **Triplet `Inter 700/16` em §4.28 (blood type)** tem bug adicional: code usa `body.m` (size 14) + bold em vez de `subtitle.m` (size 16) + bold — então renderiza **2px menor** que o Figma. Trocar pra `label.l` no Passo 3 corrige size + weight de uma vez (bug duplo resolvido em 1 mudança).
+- **Não há gap (e) "descoberto" sem variante correspondente** — os 5 gaps de §6 estão todos cobertos pelas variantes/prop v0.1.80. Cobertura estrutural está completa.
+- Findings de **lineHeight** (§5.8, 3 ocorrências) e **ambiguidade body.s/caption.s** (§5.6, 6 ocorrências) ficam fora do escopo de "fontes" propriamente dito — vão pra Passo 4/7.
+
+
