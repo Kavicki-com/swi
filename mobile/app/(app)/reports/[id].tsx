@@ -257,7 +257,7 @@ export default function ReportDetails() {
                 {/* Coluna esquerda — width capada pra forçar wrap nos
                     títulos como Figma (cada palavra grande em sua linha). */}
                 <View style={{ gap: theme.gap.xs, width: 140 }}>
-                  <Text variant="body.m" color={theme.content.dark}>
+                  <Text variant="label.m" color={theme.content.dark}>
                     {activity.title}
                   </Text>
                   <Text variant="body.m" color={theme.content.dark}>
