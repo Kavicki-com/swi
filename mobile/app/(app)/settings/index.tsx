@@ -96,15 +96,8 @@ export default function Settings() {
             <HorizontalCard label="FAQ"             onPress={go('/(app)/settings/faq')} />
           </View>
 
-          {/* Ghost links — Montserrat Bold 14, color per role.
-              Figma 348:10615 "GhostButton" uses title-family + bold + 14px,
-              which has no direct DS Text/Title variant (title.xs is 16px,
-              body.m is body-family + regular). All four values are still
-              pulled from the theme (theme.fontFamily.title, fontWeight.bold,
-              fontSize.m, content.primary/error) — no raw literals. Not
-              promoting to a DS variant: only 2 call sites (both here) and a
-              dedicated DS GhostButton would absorb it cleanly when shipped
-              (Phase 2). Premature abstraction otherwise. */}
+          {/* Ghost links — Montserrat Bold 14, color per role. Materialized
+              as `link.m` variant (DS v0.1.80, Figma 348:10615 "GhostButton"). */}
           <Pressable
             onPress={go('/(app)/settings/privacy')}
             style={{
@@ -118,14 +111,7 @@ export default function Settings() {
             accessibilityRole="link"
             accessibilityLabel="Política de privacidade e termos de uso"
           >
-            <Text
-              style={{
-                fontFamily: theme.fontFamily.title,
-                fontWeight: theme.fontWeight.bold,
-                fontSize: theme.fontSize.m,
-                color: theme.content.primary,
-              }}
-            >
+            <Text variant="link.m" color={theme.content.primary}>
               Política de privacidade e termos de uso
             </Text>
           </Pressable>
@@ -144,14 +130,7 @@ export default function Settings() {
             accessibilityRole="button"
             accessibilityLabel="Sair"
           >
-            <Text
-              style={{
-                fontFamily: theme.fontFamily.title,
-                fontWeight: theme.fontWeight.bold,
-                fontSize: theme.fontSize.m,
-                color: theme.content.error,
-              }}
-            >
+            <Text variant="link.m" color={theme.content.error}>
               Sair
             </Text>
           </Pressable>
