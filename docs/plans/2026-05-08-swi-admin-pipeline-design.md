@@ -175,7 +175,7 @@ Quando uma tela do swi-admin precisar de componente que não existe em `@kavicki
 
 ## 9. Handoff para fase 2 (HANDOFF.md ao fim do MVP)
 
-Ao final do MVP, gerar `HANDOFF.md` no repo do swi-admin contendo:
+Ao final do MVP, gerar `HANDOFF.md` no repo `swi` contendo:
 
 - Mapa do schema Postgres derivado dos types em `services/types/` (orgs, users, admins, employees, employee_locations, alerts, alert_states, journeys, reports, chat_messages)
 - RLS policies sugeridas por tabela
@@ -190,7 +190,7 @@ Ao final do MVP, gerar `HANDOFF.md` no repo do swi-admin contendo:
 - Walking skeleton: navegação ponta-a-ponta funciona com mocks
 - Realtime simulado disparando eventos de alerta a cada N segundos
 - HANDOFF.md publicado
-- Tag `v0.1.0-front` no repo `swi-admin`
+- Tag `v0.1.0-front` no repo `swi`
 - Preview Vercel estável e compartilhável
 
 ## 11. Fora do escopo deste plano (fase 2)

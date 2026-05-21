@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { View } from 'react-native'
 import { Button, Input, Text, Title, Toast, useTheme } from '@kavicki/swi-design-system'
-import { authApi } from '@/services/mockApi'
+import { authApi } from '@/services/mockApi/auth'
 import { matches, minLength } from '@/lib/validators'
 import { FormError } from '@/components/FormError'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
@@ -78,9 +78,7 @@ export function RecoveryNewPassword() {
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry={!showNew}
-              iconRight={
-                <VisibilityToggle on={showNew} onToggle={() => setShowNew((v) => !v)} />
-              }
+              iconRight={<VisibilityToggle on={showNew} onToggle={() => setShowNew((v) => !v)} />}
             />
             <View style={{ gap: theme.gap.xs }}>
               <Input
@@ -90,18 +88,11 @@ export function RecoveryNewPassword() {
                 onChangeText={setConfirmPassword}
                 secureTextEntry={!showConfirm}
                 iconRight={
-                  <VisibilityToggle
-                    on={showConfirm}
-                    onToggle={() => setShowConfirm((v) => !v)}
-                  />
+                  <VisibilityToggle on={showConfirm} onToggle={() => setShowConfirm((v) => !v)} />
                 }
               />
               {passwordsMatch && (
-                <Text
-                  variant="body.s"
-                  color={theme.content.success}
-                  testID="passwords-match"
-                >
+                <Text variant="body.s" color={theme.content.success} testID="passwords-match">
                   As senhas são iguais ✓
                 </Text>
               )}

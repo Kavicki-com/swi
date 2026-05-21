@@ -59,8 +59,8 @@ export default function PasswordRecoveryEmailSent() {
             Enviamos um email para{' '}
             <Text
               variant="body.s"
+              italic
               style={{
-                fontStyle: 'italic',
                 color: theme.content.secondaryLight,
               }}
             >

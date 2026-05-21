@@ -63,6 +63,12 @@ export default mergeConfig(
       globals: true,
       setupFiles: ['./src/test-setup.ts'],
       css: false,
+      // Single-fork execution. Each test file imports the DS bundle and a
+      // jsdom instance; with 30+ test files the default worker pool exhausts
+      // Node's heap on Windows (memory allocation failures + worker exits).
+      // Sequential single-fork is ~3× slower but stable.
+      pool: 'forks',
+      poolOptions: { forks: { singleFork: true } },
       server: {
         deps: {
           // Force packages that depend on react-native/styled-components/native through

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -15,6 +15,9 @@ beforeEach(() => {
       role: 'super_admin',
       consent_given_at: null,
       created_at: '',
+      bpm: 78,
+      pressure: '12/8',
+      avatarUri: 'https://i.pravatar.cc/200?img=12',
     }),
   )
 })
@@ -44,43 +47,51 @@ describe('AppLayout', () => {
     })
   })
 
-  it('shows the user full name in the header', async () => {
+  it('shows the user vitals in HeaderUserInfo', async () => {
     renderTree()
     await waitFor(() => {
-      expect(screen.getByText(/Admin Seed/)).toBeInTheDocument()
+      expect(screen.getByTestId('app-header-user-info')).toBeInTheDocument()
+      expect(screen.getByText(/78/)).toBeInTheDocument()
+      expect(screen.getByText('12/8')).toBeInTheDocument()
     })
   })
 
-  it('renders all 9 navigation entries', async () => {
+  it('renders Logo at the top of the sidebar (not in the header)', async () => {
+    renderTree()
+    await waitFor(() => {
+      expect(screen.getByTestId('app-sidebar-logo')).toBeInTheDocument()
+    })
+  })
+
+  it('renders the 7 Figma navigation cards in order with icons', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()
     })
     const labels = [
-      'Dashboard',
-      'Mapas',
-      'Alertas',
+      'Home',
+      'Administradores',
       'Funcionários',
-      'Admins',
       'Monitoramento',
       'Relatórios',
-      'Chat',
+      'Alertas',
       'Configurações',
     ]
     for (const label of labels) {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
+    expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
   })
 
-  it('signs out and clears the user from the header', async () => {
+  it('renders the ChatSection with mocked contacts in the sidebar', async () => {
     renderTree()
     await waitFor(() => {
-      expect(screen.getByTestId('page-content')).toBeInTheDocument()
+      expect(screen.getByTestId('app-sidebar-chat')).toBeInTheDocument()
     })
-    const signOutButton = screen.getByRole('button', { name: /sair/i })
-    fireEvent.click(signOutButton)
-    await waitFor(() => {
-      expect(screen.queryByText(/Admin Seed/)).not.toBeInTheDocument()
-    })
+    expect(screen.getByText('Ezequiel Almeida')).toBeInTheDocument()
+    expect(screen.getByText('Romulo Cardoso')).toBeInTheDocument()
+    expect(screen.getByText('Júlio Lacerda')).toBeInTheDocument()
+    expect(screen.getByText('Jennifer Gomes')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Pesquisar Contatos')).toBeInTheDocument()
   })
 })
