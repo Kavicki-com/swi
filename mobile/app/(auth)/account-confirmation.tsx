@@ -3,6 +3,7 @@ import { Image, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
+import { useAuth } from '../../services/auth/AuthProvider';
 
 // Auto-redirect timer per Figma description "Você será redirecionado para a
 // tela inicial". 2.5s gives the user time to register the success state and
@@ -13,9 +14,19 @@ export default function AccountConfirmation() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { username } = useLocalSearchParams<{ username?: string }>();
+  const { username, email } = useLocalSearchParams<{ username?: string; email?: string }>();
+  const { signIn } = useAuth();
 
   useEffect(() => {
+    // Confirmation is the moment the user is considered "signed in" in the
+    // demo flow — sign-up doesn't authenticate, so without this call the
+    // post-onboarding redirect to /(app)/dashboard would bounce back to login.
+    // Production: a real backend would mint a session at the confirmation
+    // link click and the client would receive a token here.
+    if (email && email.length > 0) {
+      signIn(email);
+    }
+
     const t = setTimeout(() => {
       // Account just confirmed → onboarding (complimentary-data). Dashboard
       // is the final destination after the 3-step flow completes (in step-3).
@@ -25,7 +36,10 @@ export default function AccountConfirmation() {
       });
     }, REDIRECT_MS);
     return () => clearTimeout(t);
-  }, [router, username]);
+    // `router` from useRouter() is referentially stable across renders;
+    // including it in deps re-runs this fire-and-go timer for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username, email, signIn]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -45,7 +59,8 @@ export default function AccountConfirmation() {
       >
         <View style={{ width: 328, gap: theme.gap.l, alignItems: 'center' }}>
           <SuccessBadge
-            iconName="check"
+            iconName="check_circle"
+            iconColor={theme.content.light}
             accessibilityLabel="Conta criada com sucesso"
           />
           <Title variant="title.xs">Conta criada com sucesso!</Title>

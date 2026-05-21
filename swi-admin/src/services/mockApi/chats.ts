@@ -45,10 +45,47 @@ export type ChatContact = {
   messages?: ReadonlyArray<ChatMessage>
 }
 
-// Conversation extracted verbatim from Figma 102:8997 — five bubbles split by
-// "Hoje - 21/03/2026" date separator. Reused for every contact in the demo
-// so any selection renders a populated chat history.
+// Conversation extracted from Figma 102:8997 — five bubbles split by the
+// "Hoje - 21/03/2026" date separator. Padded with extra back-and-forth so
+// the demo chat overflows the visible chat-box and the user can actually
+// scroll up to "older" messages. Reused for every contact in the demo.
 const DEMO_MESSAGES: ReadonlyArray<ChatMessage> = [
+  {
+    id: 'm-00a',
+    text: 'Bom dia, Romulo. Verifiquei a planilha de checagem da área 6 — tudo dentro do esperado.',
+    sender: 'them',
+    time: '08:14',
+  },
+  {
+    id: 'm-00b',
+    text: 'Recebido. Vou repassar pro turno da tarde antes do briefing.',
+    sender: 'me',
+    time: '08:21',
+  },
+  {
+    id: 'm-00c',
+    text: 'Lembrete: relatório de exposição química do trimestre vence sexta. Já submetemos a análise da Mina Norte.',
+    sender: 'them',
+    time: '09:02',
+  },
+  {
+    id: 'm-00d',
+    text: 'Perfeito. Anexa por favor a versão revisada quando subir, quero conferir antes de assinar.',
+    sender: 'me',
+    time: '09:05',
+  },
+  {
+    id: 'm-00e',
+    text: 'O João comentou que o sensor de pressão da escavadeira K35 zerou duas vezes ontem. Vou agendar manutenção preventiva.',
+    sender: 'them',
+    time: '10:11',
+  },
+  {
+    id: 'm-00f',
+    text: 'Ok, prioriza. Se precisar parar a operação por algumas horas tudo bem, melhor que esperar quebrar em campo.',
+    sender: 'me',
+    time: '10:14',
+  },
   {
     id: 'm-01',
     text: 'Ainda não recebemos atualizações recentes do setor de segurança.',
@@ -84,6 +121,30 @@ const DEMO_MESSAGES: ReadonlyArray<ChatMessage> = [
     text: 'É recomendado manter a área isolada até segunda ordem das autoridades competentes.',
     sender: 'them',
     time: '14:25',
+  },
+  {
+    id: 'm-07',
+    text: 'Confirmo. Estou enviando a equipe de demolição controlada às 16h pra avaliar.',
+    sender: 'me',
+    time: '14:30',
+  },
+  {
+    id: 'm-08',
+    text: 'A Defesa Civil pediu pra evacuarmos os contêineres de combustível por precaução.',
+    sender: 'them',
+    time: '14:42',
+  },
+  {
+    id: 'm-09',
+    text: 'Já estamos movendo. Previsão de finalizar em 40 minutos. Te aviso quando estiver liberado.',
+    sender: 'me',
+    time: '14:48',
+  },
+  {
+    id: 'm-10',
+    text: 'Beleza, fico no aguardo. Avisa também o pessoal do refeitório que ficaram em dúvida sobre o horário do almoço.',
+    sender: 'them',
+    time: '14:50',
   },
 ]
 

@@ -3,7 +3,7 @@
 // compact left side-menu, three right-side MapControls (operators/heatmap/cameras),
 // and a "Voltar ao dashboard" CTA. Layout matches Figma frame 32:2488.
 import { useEffect, useRef, useState } from 'react'
-import { PanResponder, View } from 'react-native'
+import { PanResponder, Pressable, View } from 'react-native'
 import { createRoot, type Root } from 'react-dom/client'
 import { useNavigate, useLocation } from 'react-router-dom'
 import type maplibregl from 'maplibre-gl'
@@ -17,6 +17,7 @@ import {
   MapControl,
   SideMenu,
   SwiThemeProvider,
+  elevation,
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
@@ -417,6 +418,52 @@ export function MapsGeneral() {
     }
   }, [mapReady, summary, showHeatmap, heatmapOptions.produtividade])
 
+  // Meteorologic overlay (Zonas de alerta) — RainViewer real-time radar
+  // raster, same approach used on /alerts meteo mode. Replaces the previous
+  // mock green ellipses placeholder. Free, no API key.
+  // - Use the manifest's `path` hash (not `time` number) — timestamp URLs
+  //   expire ~24h.
+  // - Cap source maxzoom at 7 — RainViewer docs claim z=12 but real tiles
+  //   stop at z=7; beyond that the server returns a "Zoom Level Not
+  //   Supported" placeholder PNG.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady || !showHeatmap || !heatmapOptions.zonasAlerta) return
+    let cancelled = false
+    fetch('https://api.rainviewer.com/public/weather-maps.json')
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        const host = data?.host as string | undefined
+        const past = data?.radar?.past
+        if (!host || !Array.isArray(past) || past.length === 0) return
+        const path = past[past.length - 1].path as string
+        if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
+        if (map.getSource('meteo')) map.removeSource('meteo')
+        map.addSource('meteo', {
+          type: 'raster',
+          tiles: [`${host}${path}/256/{z}/{x}/{y}/2/1_1.png`],
+          tileSize: 256,
+          maxzoom: 7,
+        })
+        map.addLayer({
+          id: 'meteo-layer',
+          type: 'raster',
+          source: 'meteo',
+          paint: { 'raster-opacity': 0.75 },
+        })
+      })
+      .catch(() => {
+        // Silent: if RainViewer is unreachable (offline demo), the map just
+        // stays without the meteo overlay. No user-facing error needed.
+      })
+    return () => {
+      cancelled = true
+      if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
+      if (map.getSource('meteo')) map.removeSource('meteo')
+    }
+  }, [mapReady, showHeatmap, heatmapOptions.zonasAlerta])
+
   return (
     <View
       testID="maps-general"
@@ -447,43 +494,6 @@ export function MapsGeneral() {
           bottom: 0,
         }}
       />
-
-      {/* Zonas de alerta — elliptical zone outlines stroked in surface/primary
-          green (matches Figma 33:3924 "Zonas de alerta" state per Screenshot_43).
-          Page-level mock; in production these would come from a maplibre vector
-          source (zones drawn as Polygons fed by alert-zone geometry data). */}
-      {showHeatmap && heatmapOptions.zonasAlerta ? (
-        <>
-          <div
-            style={{
-              position: 'absolute',
-              left: '14%',
-              top: '52%',
-              width: '14%',
-              height: '24%',
-              borderRadius: '50%',
-              border: '3px solid #62bb81',
-              boxShadow: '0 0 12px rgba(98, 187, 129, 0.35)',
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              left: '46%',
-              top: '32%',
-              width: '20%',
-              height: '14%',
-              borderRadius: '50%',
-              border: '3px solid #62bb81',
-              boxShadow: '0 0 12px rgba(98, 187, 129, 0.35)',
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          />
-        </>
-      ) : null}
 
       {/* Top scrim — reproduces the dark fade baked into Figma's mockup
           satellite image (imgMapViewGeneral, node 32:2488). Real ESRI tiles
@@ -664,6 +674,59 @@ export function MapsGeneral() {
         />
         <MapControl variant="cameras" expanded={showCameras} onExpandedChange={setShowCameras} />
       </View>
+
+      {/* Minha localização — bottom-left round button. Asks the browser for
+          the user's actual coordinates (HTML5 navigator.geolocation) and
+          flies the map to them. On denial/error, shows a demo toast.
+          Position: bottom-left to balance the bottom-right Voltar button. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Centralizar na minha localização"
+        onPress={() => {
+          if (!navigator.geolocation) {
+            showToast('Geolocalização indisponível', 'Browser não suporta navigator.geolocation')
+            return
+          }
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const map = mapRef.current
+              if (!map) return
+              map.flyTo({
+                center: [pos.coords.longitude, pos.coords.latitude],
+                zoom: 15,
+                duration: 1500,
+              })
+              showToast('Localização encontrada', 'Mapa centralizado na sua posição atual')
+            },
+            (err) => {
+              showToast('Não foi possível localizar', err.message || 'Permissão negada')
+            },
+            { enableHighAccuracy: true, timeout: 10000 },
+          )
+        }}
+        style={{
+          position: 'absolute',
+          // Aligned with the SideMenu column above: SideMenu has left: 38
+          // and width: 60 (center X = 68). Centering this 48px button on
+          // X=68 gives left = 68 - 24 = 44.
+          left: 44,
+          bottom: 30,
+          width: 48,
+          height: 48,
+          borderRadius: 999,
+          backgroundColor: theme.surface.standard,
+          alignItems: 'center',
+          justifyContent: 'center',
+          // location_on is a pin shape (bulb on top + tail at bottom). Geometric
+          // center puts the bulb above the visual midline; nudging content down
+          // ~3px brings the bulb to the optical center of the round button.
+          paddingTop: 6,
+          zIndex: 2,
+          ...elevation.sm,
+        }}
+      >
+        <Icon name="location_on" size={24} color={theme.content.dark} />
+      </Pressable>
 
       {/* Voltar ao dashboard — draggable DS Button (surface variant) with close icon.
           Initial position per Figma 32:2502; can be dragged anywhere in the viewport.

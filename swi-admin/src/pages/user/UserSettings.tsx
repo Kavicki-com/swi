@@ -139,6 +139,57 @@ function PrivacyPolicyModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// Password field with absolutely-positioned visibility toggle.
+// Workaround for a DS Input bug where iconRight overflows the text-area
+// horizontally when the input is narrow. We render the DS Input on its own
+// (no iconRight) and overlay a Pressable with the eye icon, anchored to the
+// right edge of the input box. Stays inside the column at any width.
+function PasswordInput({
+  label,
+  value,
+  onChangeText,
+  visible,
+  onToggleVisible,
+}: {
+  label: string
+  value: string
+  onChangeText: (next: string) => void
+  visible: boolean
+  onToggleVisible: () => void
+}) {
+  const theme = useTheme()
+  return (
+    <View style={{ position: 'relative' }}>
+      <Input label={label} value={value} onChangeText={onChangeText} secureTextEntry={!visible} />
+      {/* Anchored to the right edge of the visible text-area. Wrapper's
+          bottom matches the text-area bottom (DS Input renders label above
+          + text-area below, no description). The text-area is 41px tall and
+          the eye is 24px tall, so to vertically center the eye inside the
+          text-area we offset (41-24)/2 ≈ 8px from the wrapper bottom. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={visible ? 'Ocultar senha' : 'Mostrar senha'}
+        onPress={onToggleVisible}
+        style={{
+          position: 'absolute',
+          right: theme.padding.sm,
+          bottom: theme.padding.s,
+          width: 24,
+          height: 24,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Icon
+          name={visible ? 'visibility_off' : 'visibility'}
+          size={20}
+          color={theme.content.dark}
+        />
+      </Pressable>
+    </View>
+  )
+}
+
 export function UserSettings() {
   const theme = useTheme()
   const navigate = useNavigate()
@@ -393,68 +444,39 @@ export function UserSettings() {
           </View>
 
           {/* Password + Permissions row */}
-          <View style={{ flexDirection: 'row', gap: theme.gap.m, alignItems: 'flex-start' }}>
-            {/* Password column */}
+          <View style={{ flexDirection: 'row', gap: theme.gap.xxl, alignItems: 'flex-start' }}>
+            {/* Password column.
+                NOTE: DS Input's iconRight overflows the text-area horizontally
+                when the input is narrow (≤245px) — flex:1 on the inner
+                TextInput pushes the iconRight out by ~32px.  Workaround:
+                pass `secureTextEntry` to the Input *without* iconRight, then
+                overlay the visibility Pressable absolutely so it stays inside
+                the input box no matter how narrow the column is. Bump DS
+                later to clip iconRight properly. */}
             <View style={{ flex: 1, gap: theme.gap.s }}>
               <Title variant="title.xs" color={theme.content.primary}>
                 Senha de acesso
               </Title>
-              <Input
+              <PasswordInput
                 label="Senha atual"
                 value={currentPw}
                 onChangeText={setCurrentPw}
-                secureTextEntry={!showCurrent}
-                iconRight={
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={showCurrent ? 'Ocultar senha' : 'Mostrar senha'}
-                    onPress={() => setShowCurrent((v) => !v)}
-                  >
-                    <Icon
-                      name={showCurrent ? 'visibility_off' : 'visibility'}
-                      size={20}
-                      color={theme.content.dark}
-                    />
-                  </Pressable>
-                }
+                visible={showCurrent}
+                onToggleVisible={() => setShowCurrent((v) => !v)}
               />
-              <Input
+              <PasswordInput
                 label="Nova senha"
                 value={newPw}
                 onChangeText={setNewPw}
-                secureTextEntry={!showNew}
-                iconRight={
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={showNew ? 'Ocultar senha' : 'Mostrar senha'}
-                    onPress={() => setShowNew((v) => !v)}
-                  >
-                    <Icon
-                      name={showNew ? 'visibility_off' : 'visibility'}
-                      size={20}
-                      color={theme.content.dark}
-                    />
-                  </Pressable>
-                }
+                visible={showNew}
+                onToggleVisible={() => setShowNew((v) => !v)}
               />
-              <Input
+              <PasswordInput
                 label="Repetir nova senha"
                 value={confirmPw}
                 onChangeText={setConfirmPw}
-                secureTextEntry={!showConfirm}
-                iconRight={
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={showConfirm ? 'Ocultar senha' : 'Mostrar senha'}
-                    onPress={() => setShowConfirm((v) => !v)}
-                  >
-                    <Icon
-                      name={showConfirm ? 'visibility_off' : 'visibility'}
-                      size={20}
-                      color={theme.content.dark}
-                    />
-                  </Pressable>
-                }
+                visible={showConfirm}
+                onToggleVisible={() => setShowConfirm((v) => !v)}
               />
               <Button
                 label="Alterar senha"

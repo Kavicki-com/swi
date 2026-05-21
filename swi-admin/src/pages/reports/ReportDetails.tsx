@@ -302,19 +302,21 @@ export function ReportDetails() {
           gap: theme.gap.m,
         }}
       >
-        {/* Top row — current status + avatar group + Concluído chip right. */}
+        {/* Top row — current status + avatar group. The Figma reference
+            (98:4877) shows a duplicate "Concluído" chip on the right because
+            the demo frame illustrates an accepted report. In our demo the
+            same view renders reports across all four statuses (Em Andamento,
+            Em Revisão, Concluído, Cancelado), so a hardcoded right pill
+            contradicts the actual report.status — removed. */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            gap: theme.gap.m,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
-            <StatusTag status={report.status} label={report.statusLabel} />
-            <AvatarGroup />
-          </View>
-          <StatusTag status="accept" label="Concluído" />
+          <StatusTag status={report.status} label={report.statusLabel} />
+          <AvatarGroup />
         </View>
 
         {/* Title in content.primary green — matches DS Title styled. */}

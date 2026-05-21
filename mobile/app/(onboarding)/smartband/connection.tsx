@@ -2,8 +2,17 @@ import { Image, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system';
+import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
+import { isFeatureEnabled } from '../../../lib/featureFlags';
 
 export default function SmartbandConnection() {
+  if (!isFeatureEnabled('smartbandOnboarding')) {
+    return <ProdOnlyPlaceholder />;
+  }
+  return <SmartbandConnectionScreen />;
+}
+
+function SmartbandConnectionScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -20,7 +29,7 @@ export default function SmartbandConnection() {
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingTop: insets.top + 26,
-          paddingHorizontal: 16,
+          paddingHorizontal: theme.padding.m,
           paddingBottom: theme.gap.l,
           gap: theme.gap.xl,
         }}
@@ -71,7 +80,7 @@ export default function SmartbandConnection() {
 
       <View
         style={{
-          paddingHorizontal: 16,
+          paddingHorizontal: theme.padding.m,
           paddingBottom: insets.bottom + 16,
           paddingTop: theme.gap.s,
         }}
@@ -80,7 +89,7 @@ export default function SmartbandConnection() {
           variant="contained"
           label="Continuar"
           fullWidth
-          onPress={() => router.push('/(onboarding)/smartband/pairing')}
+          onPress={() => router.push('/(onboarding)/smartband/connection-start')}
         />
       </View>
     </View>
