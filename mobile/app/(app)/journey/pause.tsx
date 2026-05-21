@@ -54,7 +54,7 @@ export default function JourneyPause() {
               <Title variant="title.l" color={theme.content.dark}>
                 Hoje
               </Title>
-              <Text variant="body.s" weight="bold" color={theme.content.dark}>
+              <Text variant="badge.s" color={theme.content.dark}>
                 27/04/2026
               </Text>
             </View>
@@ -62,7 +62,7 @@ export default function JourneyPause() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
               <Avatar uri={avatarUri} size="l" bordered borderWidth={4} />
               <View style={{ flex: 1 }}>
-                <Text variant="body.m" weight="bold" color={theme.content.dark}>
+                <Text variant="label.m" color={theme.content.dark}>
                   Romulo Cardoso
                 </Text>
                 <Text variant="body.m" color={theme.content.dark}>
