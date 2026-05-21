@@ -12,7 +12,7 @@
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/montserrat": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
-    "@kavicki/swi-design-system": "file:../../swi-design-system/kavicki-swi-design-system-0.1.80.tgz",
+    "@kavicki/swi-design-system": "file:../../swi-design-system/kavicki-swi-design-system-0.1.81.tgz",
     "@maplibre/maplibre-react-native": "^11.2.1",
     "@react-navigation/native": "^7.1.8",
     "@react-three/drei": "^9.114.0",
