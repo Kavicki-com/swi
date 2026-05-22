@@ -38,9 +38,16 @@ export type Report = {
   authorAvatarUri: string
   creationDate: string
   sector: string
-  // Comma-separated list of responsibles — rendered in the
-  // "Responsáveis" section at the bottom of the card (Figma Report Card).
+  // Comma-separated list of responsibles — rendered in the "Responsáveis"
+  // section of ReportDetails (legacy DS ReportCard footer).
   responsibles: string
+  // Overlapping avatar group shown on the redesigned ReportsList card
+  // ("Responsável:" section, QA cliente §4 mockup). First N avatars render
+  // as overlapping circles; remaining go into a "+N" badge.
+  responsibleAvatars: ReadonlyArray<string>
+  // Optional override when the demo wants the "+N" badge to indicate more
+  // people than exist in the visible avatars array.
+  responsibleTotalCount?: number
   // Details body shown on /reports/:id (Figma 98:4877 "Detalhes do relatório").
   details?: string
   // Image thumbnails for the "Imagens" section. Reuse mock photos until
@@ -62,6 +69,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '12/04/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-02',
@@ -74,6 +83,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '08/04/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-03',
@@ -86,6 +97,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '02/04/2026',
     sector: 'Setor Sul',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-04',
@@ -98,6 +111,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '28/03/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-05',
@@ -110,6 +125,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '25/03/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-06',
@@ -122,6 +139,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '18/03/2026',
     sector: 'Setor Centro',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-07',
@@ -134,6 +153,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '12/03/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-08',
@@ -146,6 +167,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '04/03/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-09',
@@ -158,6 +181,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '25/02/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-10',
@@ -170,6 +195,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '20/02/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-11',
@@ -182,6 +209,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '15/02/2026',
     sector: 'Setor Sul',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
   {
     id: 'r-12',
@@ -194,6 +223,8 @@ const REPORTS_SEED: ReadonlyArray<Report> = [
     creationDate: '10/02/2026',
     sector: 'Setor Nordeste',
     responsibles: 'Ana Clara Mendonça, Antonio Hayde',
+    responsibleAvatars: [workerA, workerB, workerC, workerA, workerB],
+    responsibleTotalCount: 9,
   },
 ]
 

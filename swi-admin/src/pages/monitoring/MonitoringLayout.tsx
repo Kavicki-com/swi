@@ -73,7 +73,7 @@ function AlertRow({ alert }: { alert: MonitoringAlertDetail }) {
   // of tone — tone-based colouring (error red / warning orange) didn't match
   // the design.
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s, width: '100%' }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m, width: '100%' }}>
       <Icon name={alert.icon} size={28} color={theme.content.dark} />
       <View style={{ flex: 1, gap: 5 }}>
         <Text
@@ -197,8 +197,19 @@ function AlertUserCard({
       {expanded && hasAlerts ? (
         <>
           <View style={{ height: 2, backgroundColor: theme.content.lightGrey, width: '100%' }} />
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 51 }}>
-            <View style={{ flex: 1, gap: theme.gap.sm }}>
+          {/* Expanded details row — padding bumped to 12 (theme.padding.sm)
+              and vertical gap between alerts raised to 18 per QA cliente §3.2
+              (client tested 12px / 18px and approved). 51 px column gap stays
+              as is (matches Figma horizontal rhythm between alerts and CTAs). */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              gap: 51,
+              padding: theme.padding.sm,
+            }}
+          >
+            <View style={{ flex: 1, gap: 18 }}>
               {user.alerts.map((a) => (
                 <AlertRow key={a.id} alert={a} />
               ))}
@@ -529,7 +540,9 @@ export function MonitoringLayout() {
           onClear={() => setSearch('')}
         />
 
-        <View style={{ gap: theme.gap.s }}>
+        {/* Gap bumped from gap.s (8) to gap.m (16) per QA cliente §3.1 —
+            cards de alerta com mais respiro entre si. */}
+        <View style={{ gap: theme.gap.m }}>
           {filteredUsers.map((u) => (
             <AlertUserCard
               key={u.id}

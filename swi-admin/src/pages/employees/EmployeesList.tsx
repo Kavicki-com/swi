@@ -46,7 +46,9 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
         backgroundColor: theme.surface.standard,
         borderRadius: theme.border.radius.m,
         paddingHorizontal: theme.padding.m,
-        paddingVertical: theme.padding.s,
+        // QA cliente §2: padding vertical um pouco maior (8→12) pra cada card
+        // ter melhor área de respiro (mesmo princípio aplicado a Admins).
+        paddingVertical: theme.padding.sm,
         // Tablet: if the right cluster can't fit on the same line, allow it
         // to wrap below. Desktop/wide keep the strict single-row Figma layout.
         ...(isTablet ? ({ flexWrap: 'wrap', rowGap: theme.gap.s } as const) : null),
@@ -349,7 +351,8 @@ export function EmployeesList({
         <AdminsCreate subject="funcionário" onBack={() => setTab('cadastrados')} />
       ) : (
         <>
-          <View style={{ gap: theme.gap.s }}>
+          {/* QA cliente §2: gap entre cards de 8→16 (theme.gap.m). */}
+          <View style={{ gap: theme.gap.m }}>
             {filtered.map((employee) => (
               <EmployeeRow
                 key={employee.id}

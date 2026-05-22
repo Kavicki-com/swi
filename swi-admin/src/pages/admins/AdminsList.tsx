@@ -52,7 +52,9 @@ function AdminRow({
         backgroundColor: theme.surface.standard,
         borderRadius: theme.border.radius.m,
         paddingHorizontal: theme.padding.m,
-        paddingVertical: theme.padding.s,
+        // QA cliente §2: padding vertical um pouco maior (8→12) pra cada card
+        // ter melhor área de respiro.
+        paddingVertical: theme.padding.sm,
         // At tablet the row's left cluster (avatar + name + role + toggle)
         // and right cluster (3 action icons + chevron) can exceed the
         // sidebar-collapsed content width. Allow them to wrap onto two
@@ -290,7 +292,9 @@ export function AdminsList({
       {isCreating ? (
         <AdminsCreate onBack={() => setTab('cadastrados')} />
       ) : (
-        <View style={{ gap: theme.gap.s }}>
+        // QA cliente §2: gap entre cards de 8→16 (theme.gap.m) — cards muito
+        // próximos uns dos outros no baseline.
+        <View style={{ gap: theme.gap.m }}>
           {filtered.map((admin) => (
             <AdminRow
               key={admin.id}

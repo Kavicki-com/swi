@@ -270,7 +270,7 @@ export function UserSettings() {
         }}
       >
         <View style={{ position: 'relative' }}>
-          <Avatar uri={user?.avatarUri} size="l" bordered />
+          <Avatar uri={user?.avatarUri} customSize={108} bordered borderWidth={4} />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Editar foto"
@@ -281,12 +281,12 @@ export function UserSettings() {
               top: -4,
               backgroundColor: theme.content.dark,
               borderRadius: 999,
-              padding: theme.padding.xs,
+              padding: theme.padding.s,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Icon name="edit" size={16} color={theme.content.light} />
+            <Icon name="edit" size={20} color={theme.content.light} />
           </Pressable>
         </View>
         <View
