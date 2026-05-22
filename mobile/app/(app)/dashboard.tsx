@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Image as RNImage, Pressable, ScrollView, View } from 'react-native';
+import { Image as RNImage, Modal, Pressable, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,27 +7,24 @@ import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg'
 import {
   Avatar,
   Button,
+  HeartStatus,
   Icon,
   JourneyTheme,
+  StatusChart,
   Text,
   Title,
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
+import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
-import {
-  ECG_ICON_SVG,
-  ELIPSE34_RING_SVG,
-  HEART_STATUS_SVG,
-  SETTINGS_ICON_SVG,
-  SILHOUETTE_BODY_SVG,
-} from '../../lib/dashboardKnobSvgs';
 import {
   FIRE_ICON_SVG,
   GAUGE_ICON_SVG,
   HEART_ICON_SVG,
 } from '../../lib/dashboardStatIcons';
+import { SILHOUETTE_BODY_SVG } from '../../lib/dashboardKnobSvgs';
 import {
   ARROW_DOWN_TRIANGLE_SVG,
   ARROW_UP_TRIANGLE_SVG,
@@ -87,13 +84,13 @@ export default function Dashboard() {
   const router = useRouter();
   // SVGs com <defs> precisam de IDs únicos por instância — caso contrário
   // colidem com cópias renderizadas em outras telas montadas em background.
-  const silhouetteXml = useUniqueSvg(SILHOUETTE_BODY_SVG);
-  // Second silhouette instance with its own gradient namespace — rendered on
-  // top with mix-blend-mode: multiply to match Figma's Caminho 4123 overlay
-  // (deeper/richer green than the single-layer gradient).
-  const silhouetteMultiplyXml = useUniqueSvg(SILHOUETTE_BODY_SVG);
-  const elipse34Xml = useUniqueSvg(ELIPSE34_RING_SVG);
   const gaugeXml = useUniqueSvg(GAUGE_ICON_SVG);
+  // Silhouette multiply overlay (Figma Caminho 4123) — stacked on top of the
+  // DS StatusChart silhouette with mix-blend-mode:multiply pra match my-stats:
+  // dois layers iguais multiplicam o gradient produzindo um verde mais rico/
+  // saturado. Sem esse overlay, a silhueta do dashboard parecia mais clara
+  // que a de my-stats apesar das stops idênticas (#3EAB2E → #B7E9A4).
+  const silhouetteMultiplyXml = useUniqueSvg(SILHOUETTE_BODY_SVG);
   const bgDecorGradId = useUniqueId('bg-decor-grad');
   // Demo-only: camera starts on; tapping the camera button toggles the
   // green status dot. Production wiring would mirror live worker state.
@@ -120,6 +117,15 @@ export default function Dashboard() {
     const t = setTimeout(() => setModalVisible(true), 800);
     return () => clearTimeout(t);
   }, [isAlertModal]);
+
+  // State-driven alert modals — usados quando o botão "Ajuda urgente" do
+  // dashboard é tapped. Trocamos `router.replace('?alert=modal')` (que muda
+  // rota e re-renderiza o dashboard inteiro em vermelho) por estados locais
+  // que abrem o modal como overlay sem mudar de tela. O fluxo route-based
+  // (`?alert=modal` / `?alert=active`) segue intacto pra deep links externos
+  // (push notifications, etc.).
+  const [weatherModalOpen, setWeatherModalOpen] = useState(false);
+  const [activeModalOpen, setActiveModalOpen] = useState(false);
 
   if (alert === 'active') {
     return <AlertActiveView />;
@@ -168,6 +174,11 @@ export default function Dashboard() {
       {/* Background: gradient + dot-grid. Same JourneyTheme as journey/notifications. */}
       <JourneyTheme gradient={require('../../assets/journey-bg.png')} />
 
+      {/* Caminho 4122 agora é renderizado DENTRO do StatusChart DS (v0.1.86+)
+          via prop extrapolate={true}. O outer layer aqui foi removido — o DS
+          é a source of truth pra todos os elipses + inner shadows + disc
+          extrapolation. */}
+
       {/* Content stack — journey pattern: outer flex:1 with safe-area padding.
           Chart zone is edge-to-edge (no horizontal padding); the bottom
           container gets paddingHorizontal:theme.padding.m on its own. */}
@@ -178,54 +189,57 @@ export default function Dashboard() {
           paddingBottom: insets.bottom,
         }}
       >
-        {/* Top zone — Knob + silhouette + heart status + heart-rate button +
-            avatar + location pin. aspectRatio 360:374 preserves Figma proportions
-            on any viewport; maxWidth:360 + alignSelf:center caps the chart on
-            phones wider than the Figma reference so the silhouette doesn't grow
-            disproportionally (BG_DECOR remains edge-to-edge as a sibling). */}
+        {/* Top zone — Caminho 4122 (outer ring) + Knob + silhouette + heart
+            status + heart-rate button + avatar + location pin + camera/briefcase.
+            Wrapper aspectRatio 360:431 acomoda o Caminho 4122 que sangra 57px
+            abaixo do knob original. Inner sub-zone preserva 360:374 pra todas
+            as % existentes dos elementos internos ficarem inalteradas.
+            BG_DECOR continua edge-to-edge como sibling. */}
         <View
           style={{
             width: '100%',
             maxWidth: 360,
-            aspectRatio: 360 / 374,
+            aspectRatio: 360 / 431,
             alignSelf: 'center',
+            overflow: 'visible',
           }}
         >
-        {/* 1. Knob bezel — decorative, behind everything */}
+        {/* Inner sub-zone — todas as % existentes dos elementos abaixo
+             presumem container 360×374. Mantida igual ao layout original. */}
         <View
-          pointerEvents="none"
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            alignItems: 'center',
+            aspectRatio: 360 / 374,
           }}
         >
-          <RNImage
-            source={require('../../assets/grupo-taigo.png')}
-            resizeMode="contain"
-            style={{ width: '82.78%', aspectRatio: 1 }}
-            accessible={false}
-          />
-        </View>
+        {/* StatusChart (DS v0.1.86+) — substitui knob bezel + dot-grid +
+             silhueta + heart status + heart-rate button + Elipse 34 + ECG +
+             settings gear + Caminho 4122 disc. Canvas 360×374. extrapolate=true
+             remove o overflow:hidden e backgroundColor pra permitir o disc
+             (background-circle 456.714 dia) sangrar 25.7 acima, 57 abaixo
+             e 48 nas laterais do canvas (conforme Figma data). Inner shadows
+             nos 4 elipses concêntricos (Figma spec Y=2.08, blur=4.16, #000
+             98.82%) também vêm do DS bump 0.1.86. */}
+        <StatusChart
+          condition="good"
+          progress={1}
+          showActionButton={true}
+          renderHeartStatus={false}
+          extrapolate
+          discDiameter={550}
+          onPressHeartRate={() => router.push('/(app)/my-stats')}
+          onPressSettings={() => router.push('/(app)/settings')}
+          accessibilityLabel="Status de saúde — condição boa"
+        />
 
-        {/* 2. Silhouette body — Figma left calc(50%+0.39) means center+0.39px;
-             positioned absolute with the same width and the explicit left so
-             RN-web doesn't need transform math. Two stacked layers: base
-             gradient + multiply overlay (matches Figma Caminho 4081 + 4123). */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: '23.39%',
-            left: '39.42%',
-            width: '21.38%',
-            height: '70.14%',
-          }}
-        >
-          <SvgXml xml={silhouetteXml} width="100%" height="100%" />
-        </View>
+        {/* Silhouette multiply overlay (Figma Caminho 4123) — stacked on top
+            do StatusChart silhouette com mix-blend-mode:multiply pra match
+            visual com my-stats.tsx (mesmo padrão lá). Geometria casa com
+            SILHOUETTE_X=141.9, SILHOUETTE_Y=87.47, w=76.967, h=262.318 do
+            DS canvas 360×374 → percentuais 39.42% / 23.39% / 21.38% / 70.14%. */}
         <View
           pointerEvents="none"
           style={{
@@ -235,122 +249,30 @@ export default function Dashboard() {
             width: '21.38%',
             height: '70.14%',
             // @ts-expect-error: mixBlendMode is web-only style (RN-web).
-            // Falls back to single-layer silhouette on native — slightly
-            // less saturated but still readable.
             mixBlendMode: 'multiply',
           }}
         >
           <SvgXml xml={silhouetteMultiplyXml} width="100%" height="100%" />
         </View>
 
-        {/* 3. Heart status badge (chest area). Figma Heart Status group
-             (I304:2357;295:2180) is 31.311×26.093 — white heart bottom-left
-             + green check-circle top-right. SVG composite now includes both. */}
+        {/* Heart-status badge — extraído do StatusChart (DS v0.1.105+) via
+            renderHeartStatus={false} pra ser renderizado MANUALMENTE aqui,
+            APÓS o multiply overlay acima. Sem isso, o multiply colorizaria
+            o badge (heart + check icon ficavam verdes em vez de manter o
+            contraste branco/verde original do design). Coords convertidas
+            do HEART_STATUS_OFFSET (canvas 360×374) pra percentuais:
+            left 169.2/360 = 47%, top 139.327/374 = 37.25%, size 26.093/374
+            ≈ 6.978% (badge é quadrado, então width=height nas %). */}
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
+            left: '47%',
             top: '37.25%',
-            left: '47.0%',
-            width: '8.7%',
-            height: '6.98%',
           }}
         >
-          <SvgXml xml={HEART_STATUS_SVG} width="100%" height="100%" />
+          <HeartStatus condition="check" size={26.093} />
         </View>
-
-        {/* 4. Heart-rate button → /my-stats. Smart-animate expand transition
-             (320ms ease-in-out) is the target — for now it's a plain push,
-             shared transitions are a follow-up. */}
-        <Pressable
-          onPress={() => router.push('/(app)/my-stats')}
-          accessibilityRole="button"
-          accessibilityLabel="Abrir minhas estatísticas"
-          style={{
-            position: 'absolute',
-            // 157/374 chest-level (Figma 1069:11336 spec was 187.04, lifted
-            // to 157 to match the proportionally-taller silhouette render).
-            top: '41.98%',
-            right: '6.24%',
-            width: '25%',
-            aspectRatio: 1,
-            borderRadius: 9999,
-            backgroundColor: theme.surface.high,
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: '#000000',
-            shadowOpacity: 0.1608,
-            shadowOffset: { width: 0, height: 2.18 },
-            shadowRadius: 4.36,
-            elevation: 4,
-          }}
-        >
-          {/* Inner well Figma 1069:11337 "Elipse 34" — círculo r=34.49 com
-              filtros SVG (drop + inner shadow próprios). Cria o anel
-              concêntrico recessed onde o ECG senta. */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: '6.85%',
-              left: '6.85%',
-              width: '86.3%',
-              aspectRatio: 1,
-            }}
-          >
-            <SvgXml xml={elipse34Xml} width="100%" height="100%" />
-          </View>
-          {/* ECG wrappeado em View absolute pra entrar no mesmo paint pass
-              da Elipse 34 — caso contrário CSS pinta absolutos depois de
-              estáticos e a Elipse34 cobre o ECG. */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: '31.76%',
-              left: '30.0%',
-              width: '40.02%',
-              height: '36.49%',
-            }}
-          >
-            <SvgXml xml={ECG_ICON_SVG} width="100%" height="100%" />
-          </View>
-
-          {/* Settings gear sub-badge — Figma 304:2598. Top-right corner of
-              the heart-rate button. Padding 3.924, content 23.544 → total ~31.
-              Stops propagation so the parent ECG tap doesn't fire. */}
-          <Pressable
-            onPress={(e) => {
-              e.stopPropagation?.();
-              router.push('/(app)/settings');
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Abrir configurações"
-            hitSlop={6}
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              padding: 3.924,
-              borderRadius: 9999,
-              backgroundColor: theme.surface.medium,
-              shadowColor: '#000000',
-              shadowOpacity: 0.1608,
-              shadowOffset: { width: 0, height: 2.18 },
-              shadowRadius: 4.36,
-              elevation: 2,
-              // @ts-expect-error: inset boxShadow is web-only (RN-web)
-              boxShadow:
-                'inset 0px 2.18px 4.36px 0px rgba(0,0,0,0.5882), 0px 2.18px 4.36px 0px rgba(0,0,0,0.1608)',
-            }}
-          >
-            <SvgXml
-              xml={SETTINGS_ICON_SVG}
-              width={23.544}
-              height={23.544}
-            />
-          </Pressable>
-        </Pressable>
 
         {/* 5. Avatar — absolute top-right, overlays the chart.
             Pressable wraps the avatar so tapping it opens /(app)/settings.
@@ -364,11 +286,8 @@ export default function Dashboard() {
           style={{ position: 'absolute', top: '9.09%', right: '6.67%' }}
         >
           <Avatar
-            customSize={64}
+            customSize={72}
             uri={avatarUri}
-            bordered
-            borderWidth={4}
-            borderColor={theme.content.dark}
             fallbackBackgroundColor={theme.surface.medium}
           />
         </Pressable>
@@ -376,18 +295,18 @@ export default function Dashboard() {
         {/* 6. Location pin button — Figma places this directly below the
              heart-rate button (right edge aligned), inside the chart zone.
              Top:69% sits just under the 41.98%→66% heart-rate band. */}
-        <View style={{ position: 'absolute', top: '69%', right: '6.24%' }}>
+        <View style={{ position: 'absolute', top: '72.5%', right: '13.33%' }}>
           <Button
             variant="contained"
-            size="large"
+            size="xlarge"
             shape="pill"
             elevation="lg"
             iconLeft={
               <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
                 <Icon
                   name="location_pin"
-                  width={16}
-                  height={20}
+                  width={20}
+                  height={25}
                   color={theme.content.light}
                 />
               </View>
@@ -396,68 +315,56 @@ export default function Dashboard() {
             onPress={() => router.push('/(app)/map')}
           />
         </View>
-      </View>
+        </View>
 
-      {/* Bottom container — journey pattern + Figma 304:2683 inner padding.
-          paddingHorizontal:theme.padding.l (~24-32pt) reproduz a margem
-          maior que o Figma tem entre a parede da BG_DECOR e os items
-          (bells/stats/help). Antes era padding.m (16) — items ficavam
-          colados demais nas paredes. */}
-      <View
-        style={{
-          width: '100%',
-          maxWidth: 360,
-          alignSelf: 'center',
-          marginTop: -16,
-          paddingHorizontal: theme.padding.l,
-          gap: CONTAINER_GAP_XL,
-          alignItems: 'flex-end',
-        }}
-      >
-        {/* 1. Main actions row: Camera (outline content.dark 1px) + Work (outline content.primary 2px) */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-          {/* Camera with live-status dot — Figma 304:2683 + ellipse 304:2682 */}
-          <View>
-            <Button
-              variant="outline"
-              size="large"
-              shape="pill"
-              borderColor={theme.content.dark}
-              borderWidth="s"
-              iconLeft={
-                // Square 24×24 wrapper keeps the icon-only pill perfectly
-                // circular — without it the DS Button sizes itself to the
-                // raw 20×16 icon bounds and renders an oval. (Same fix as
-                // the Work button below.)
-                <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon
-                    name="video_camera_back"
-                    width={20}
-                    height={16}
-                    color={theme.content.dark}
-                  />
-                </View>
-              }
-              accessibilityLabel={`Câmera ${cameraActive ? 'ativa' : 'inativa'}`}
-              onPress={() => setCameraActive((on) => !on)}
+        {/* 7. Camera button — Figma 245:23280 main-actions row.
+             No Figma o button center está em dashboard y=383 (button bottom
+             y=411), e a curva inferior do disco no button x está em y=405.93,
+             deixando 5px do button bottom EXPOSTO abaixo da curva (espaço
+             visível sem disco). bottom:20 = 431-411, posicionando button
+             bottom exatamente em chart-zone y=411 conforme Figma. */}
+        <View style={{ position: 'absolute', bottom: 20, left: 48 }}>
+          <Button
+            variant="outline"
+            size="large"
+            shape="pill"
+            borderColor={theme.content.dark}
+            borderWidth="s"
+            iconLeft={
+              <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon
+                  name="video_camera_back"
+                  width={20}
+                  height={16}
+                  color={theme.content.dark}
+                />
+              </View>
+            }
+            accessibilityLabel={`Câmera ${cameraActive ? 'ativa' : 'inativa'}`}
+            onPress={() => setCameraActive((on) => !on)}
+          />
+          {cameraActive ? (
+            <View
+              accessibilityLabel="Câmera ativa"
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                width: 20,
+                height: 20,
+                borderRadius: theme.border.radius.pill,
+                backgroundColor: theme.surface.success,
+                borderWidth: 2,
+                borderColor: theme.background,
+              }}
             />
-            {cameraActive ? (
-              <View
-                accessibilityLabel="Câmera ativa"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  right: 0,
-                  width: 20,
-                  height: 20,
-                  borderRadius: theme.border.radius.pill,
-                  backgroundColor: theme.surface.success,
-                  borderWidth: 2,
-                  borderColor: theme.background,
-                }}
-              />
-            ) : null}
-          </View>
+          ) : null}
+        </View>
+
+        {/* 8. Briefcase button — Mesma posição vertical do camera button
+             (Figma 245:23280 main-actions row), espelhada horizontalmente.
+             5px do button bottom exposto abaixo da curva inferior do disco. */}
+        <View style={{ position: 'absolute', bottom: 20, right: 48 }}>
           <Button
             variant="outline"
             size="large"
@@ -478,8 +385,24 @@ export default function Dashboard() {
             onPress={() => router.push('/(app)/journey')}
           />
         </View>
+      </View>
 
-        {/* 3. User stats: 3 cols + dividers (Figma 304:2458) */}
+      {/* Bottom container — journey pattern + Figma 304:2683 inner padding.
+          paddingHorizontal:theme.padding.l (~24-32pt) reproduz a margem
+          maior que o Figma tem entre a parede da BG_DECOR e os items
+          (bells/stats/help). Antes era padding.m (16) — items ficavam
+          colados demais nas paredes. */}
+      <View
+        style={{
+          width: '100%',
+          maxWidth: 360,
+          alignSelf: 'center',
+          paddingHorizontal: theme.padding.l,
+          gap: CONTAINER_GAP_XL,
+          alignItems: 'flex-end',
+        }}
+      >
+        {/* User stats: 3 cols + dividers (Figma 304:2458) */}
         <View
           style={{
             flexDirection: 'row',
@@ -611,7 +534,7 @@ export default function Dashboard() {
               />
             }
             accessibilityLabel="Ajuda urgente"
-            onPress={() => router.replace('/(app)/dashboard?alert=modal')}
+            onPress={() => setWeatherModalOpen(true)}
           />
         </View>
       </View>
@@ -645,6 +568,46 @@ export default function Dashboard() {
           />
         </View>
       ) : null}
+
+      {/* State-driven weather alert modal — opens when "Ajuda urgente" button
+          is tapped. Backdrop com tint vermelho leve (mesmo padrão da
+          notifications.tsx); dashboard underneath não muda de cor. CTA
+          "Instruções de segurança" → fecha esse e abre o ActiveAlertModal. */}
+      <Modal
+        visible={weatherModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setWeatherModalOpen(false)}
+      >
+        <Pressable
+          onPress={() => setWeatherModalOpen(false)}
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: theme.padding.m,
+            backgroundColor: 'rgba(245, 102, 122, 0.18)',
+          }}
+        >
+          <Pressable onPress={() => {}}>
+            <WeatherAlertModal
+              onClose={() => setWeatherModalOpen(false)}
+              onPrimaryAction={() => {
+                setWeatherModalOpen(false);
+                setActiveModalOpen(true);
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* State-driven active alert modal — abre a partir do CTA do weather
+          modal. Conteúdo gerenciado pelo próprio componente (RN Modal interno
+          + backdrop vermelho + tap-outside-to-close). */}
+      <ActiveAlertModal
+        visible={activeModalOpen}
+        onClose={() => setActiveModalOpen(false)}
+      />
     </View>
   );
 }
@@ -994,8 +957,8 @@ function AlertActiveView() {
                 iconRight={
                   <Icon
                     name="location_pin"
-                    width={16}
-                    height={20}
+                    width={20}
+                    height={25}
                     color={theme.content.light}
                   />
                 }

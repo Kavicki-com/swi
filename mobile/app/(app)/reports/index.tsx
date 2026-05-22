@@ -163,13 +163,12 @@ export default function Reports() {
         />
       </View>
 
-      {/* Scrollable cards area — altura calibrada para o card 2 terminar
-          logo acima do chat FAB (top 669) e não ser invadido por ele.
-          Header sai em y≈156, +gap 16 = cards start y≈172. maxHeight 468
-          → bottom y≈640. Mostra 1 card cheio + ~card 2 com title/resumo
-          visível, fiel ao Figma 364:18596. */}
+      {/* Scrollable cards area — altura calibrada para mostrar 1 card cheio
+          + 2º card cortado logo após o Resumo completo (request do cliente
+          2026-05-22: "deixe apenas até o resumo completo e corte"). maxHeight
+          540 expõe status, título e resumo do card 2 sem mostrar data/autor. */}
       <ScrollView
-        style={{ maxHeight: 468, marginTop: theme.gap.m }}
+        style={{ maxHeight: 540, marginTop: theme.gap.m }}
         contentContainerStyle={{
           paddingHorizontal: theme.padding.m,
           gap: theme.gap.m,

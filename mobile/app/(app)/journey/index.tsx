@@ -100,7 +100,7 @@ export default function Journey() {
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-              <Avatar uri={avatarUri} size="l" bordered borderWidth={4} />
+              <Avatar uri={avatarUri} size="l" />
               <View style={{ flex: 1 }}>
                 <Text variant="label.m" color={theme.content.dark}>
                   Romulo Cardoso
