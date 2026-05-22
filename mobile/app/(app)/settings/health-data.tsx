@@ -7,7 +7,6 @@ import {
   Button,
   Combobox,
   ExamInfoCard,
-  Icon,
   ImageUploader,
   Input,
   Text,
@@ -15,6 +14,7 @@ import {
   TopBar,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { HomeFAB } from '../../../components/HomeFAB';
 
 // Figma 353:12057 — settings sub-screen "Dados de saúde". Form-based.
 // TopBar + section title + 2 comboboxes + 2 multiline inputs +
@@ -163,25 +163,8 @@ export default function SettingsHealthData() {
           alignItems: 'center',
         }}
       >
-        <Button
-          variant="contained"
-          shape="pill"
-          size="xlarge"
-          backgroundColor={theme.content.dark}
-          borderColor={theme.content.disable}
-          borderWidth={10}
-          elevation="lg"
-          iconLeft={
-            <Icon
-              name="home"
-              width={28.286}
-              height={25.458}
-              color={theme.surface.standard}
-            />
-          }
-          accessibilityLabel="Voltar para a dashboard"
-          onPress={() => router.push('/(app)/dashboard')}
-        />
+        {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
+        <HomeFAB onPress={() => router.push('/(app)/dashboard')} />
       </View>
     </View>
   );

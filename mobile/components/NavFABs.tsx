@@ -2,6 +2,7 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Icon, useTheme } from '@kavicki/swi-design-system';
+import { HomeFAB } from './HomeFAB';
 
 // Bottom-edge dual FAB cluster used on ~9 (app) screens (map, evacuation,
 // evacuation-ongoing, dashboard alert-active, notifications, journey/*,
@@ -87,30 +88,12 @@ export function NavFABs({
             alignItems: 'center',
           }}
         >
-          <Button
-            variant="contained"
-            shape="pill"
-            // Figma (385:30042): padding 20.286 + border 10.286 + icon ~30.857
-            // → ~92×92 total. Borda grossa #303030 (content.disable) é a
-            // assinatura visual do FAB home — sem ela vira só um círculo
-            // branco indistinguível.
-            size="large"
-            backgroundColor={theme.content.dark}
-            borderColor={theme.content.disable}
-            borderWidth={10}
-            elevation="lg"
-            iconLeft={
-              <Icon
-                name="home"
-                // Figma 364:16378 journey-context: 28.286×25.458.
-                width={28.286}
-                height={25.458}
-                color={theme.surface.standard}
-              />
-            }
-            accessibilityLabel="Voltar para a dashboard"
-            onPress={handleHome}
-          />
+          {/* HomeFAB renderiza o SVG fiel ao Figma 348:10334 (círculo
+              71.43×71.43 com anel interno 10.286pt). Antes usávamos
+              <Button variant="contained" shape="pill" border 10pt> do DS,
+              que gerava ~92×92 com borda EXTERNA — usuário reportou
+              divergência visual ("feio, não segue o Figma"). */}
+          <HomeFAB onPress={handleHome} />
         </View>
       ) : null}
     </>

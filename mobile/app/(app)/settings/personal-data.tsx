@@ -6,12 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   Combobox,
-  Icon,
   Input,
   Title,
   TopBar,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { HomeFAB } from '../../../components/HomeFAB';
 
 // Figma 353:11560 — settings sub-screen "Dados pessoais". Form-based.
 // TopBar (DS v0.1.38) + section title + 11 fields + Salvar button +
@@ -162,7 +162,7 @@ export default function SettingsPersonalData() {
         </View>
       </KeyboardAwareScrollView>
 
-      {/* Home FAB — mesmo pattern de Settings hub */}
+      {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
       <View
         pointerEvents="box-none"
         style={{
@@ -173,25 +173,7 @@ export default function SettingsPersonalData() {
           alignItems: 'center',
         }}
       >
-        <Button
-          variant="contained"
-          shape="pill"
-          size="xlarge"
-          backgroundColor={theme.content.dark}
-          borderColor={theme.content.disable}
-          borderWidth={10}
-          elevation="lg"
-          iconLeft={
-            <Icon
-              name="home"
-              width={28.286}
-              height={25.458}
-              color={theme.surface.standard}
-            />
-          }
-          accessibilityLabel="Voltar para a dashboard"
-          onPress={() => router.push('/(app)/dashboard')}
-        />
+        <HomeFAB onPress={() => router.push('/(app)/dashboard')} />
       </View>
     </View>
   );
