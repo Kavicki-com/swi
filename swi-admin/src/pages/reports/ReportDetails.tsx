@@ -22,6 +22,7 @@ import {
   SearchInput,
   StatusTag,
   Text,
+  Title,
   useTheme,
 } from '@kavicki/swi-design-system'
 import { reportsApi, type Report, type ReportActivity } from '@/services/mockApi/reports'
@@ -320,13 +321,9 @@ export function ReportDetails() {
         </View>
 
         {/* Title in content.primary green — matches DS Title styled. */}
-        <Text
-          variant="body.m"
-          color={theme.content.primary}
-          style={{ fontFamily: theme.fontFamily.title, fontWeight: '700', fontSize: 20 }}
-        >
+        <Title variant="title.s" color={theme.content.primary}>
           {report.title}
-        </Text>
+        </Title>
 
         {/* Resumo. */}
         <View style={{ gap: theme.gap.xs }}>
@@ -387,29 +384,23 @@ export function ReportDetails() {
         </View>
       </View>
 
-      {/* Section 3 — Detalhes do relatório. */}
+      {/* Section 3 — Detalhes do relatório. QA cliente §4.1: bump lineHeight
+          from the DS default to 26 px so the long paragraph breathes between
+          lines and is easier to read. */}
       <View style={{ gap: theme.gap.s }}>
-        <Text
-          variant="body.m"
-          color={theme.content.primary}
-          style={{ fontFamily: theme.fontFamily.title, fontWeight: '700', fontSize: 20 }}
-        >
+        <Title variant="title.s" color={theme.content.primary}>
           Detalhes do relatório:
-        </Text>
-        <Text variant="body.m" color={theme.content.dark}>
+        </Title>
+        <Text variant="body.m" color={theme.content.dark} style={{ lineHeight: 26 }}>
           {report.details ?? ''}
         </Text>
       </View>
 
       {/* Section 4 — Imagens (3 thumbnails). */}
       <View style={{ gap: theme.gap.s }}>
-        <Text
-          variant="body.m"
-          color={theme.content.primary}
-          style={{ fontFamily: theme.fontFamily.title, fontWeight: '700', fontSize: 20 }}
-        >
+        <Title variant="title.s" color={theme.content.primary}>
           Imagens
-        </Text>
+        </Title>
         <View style={{ flexDirection: 'row', gap: theme.gap.m }}>
           {(report.images ?? []).map((uri, i) => (
             <View

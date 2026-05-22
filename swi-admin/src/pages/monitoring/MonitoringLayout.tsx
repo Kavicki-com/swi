@@ -6,7 +6,7 @@
 //
 // The Outlet slot sits between the KPI row and the title so child routes
 // can inject a unique row (e.g. good-conditions adds 4 DonutCharts).
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -28,6 +28,7 @@ import {
   type MonitoringAlertDetail,
   type MonitoringUserAlert,
 } from '@/services/mockApi/monitoring'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 
 // --- Shared row helpers ---
@@ -68,15 +69,12 @@ function VerticalDivider() {
 
 function AlertRow({ alert }: { alert: MonitoringAlertDetail }) {
   const theme = useTheme()
-  const iconColor =
-    alert.tone === 'error'
-      ? theme.content.error
-      : alert.tone === 'warning'
-        ? theme.content.warning
-        : theme.content.dark
+  // Per Figma: all alert row icons render in content.dark (white) regardless
+  // of tone — tone-based colouring (error red / warning orange) didn't match
+  // the design.
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s, width: '100%' }}>
-      <Icon name={alert.icon} size={28} color={iconColor} />
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m, width: '100%' }}>
+      <Icon name={alert.icon} size={28} color={theme.content.dark} />
       <View style={{ flex: 1, gap: 5 }}>
         <Text
           variant="body.m"
@@ -199,8 +197,19 @@ function AlertUserCard({
       {expanded && hasAlerts ? (
         <>
           <View style={{ height: 2, backgroundColor: theme.content.lightGrey, width: '100%' }} />
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 51 }}>
-            <View style={{ flex: 1, gap: theme.gap.sm }}>
+          {/* Expanded details row — padding bumped to 12 (theme.padding.sm)
+              and vertical gap between alerts raised to 18 per QA cliente §3.2
+              (client tested 12px / 18px and approved). 51 px column gap stays
+              as is (matches Figma horizontal rhythm between alerts and CTAs). */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              gap: 51,
+              padding: theme.padding.sm,
+            }}
+          >
+            <View style={{ flex: 1, gap: 18 }}>
               {user.alerts.map((a) => (
                 <AlertRow key={a.id} alert={a} />
               ))}
@@ -209,6 +218,8 @@ function AlertUserCard({
               <Button
                 label="Histórico de exames clínicos"
                 variant="outline"
+                labelColor={theme.content.primary}
+                borderColor={theme.content.primary}
                 fullWidth
                 accessibilityLabel="Ver histórico de exames clínicos"
                 onPress={onViewExams}
@@ -216,6 +227,8 @@ function AlertUserCard({
               <Button
                 label="Ligar para o funcionário"
                 variant="outline"
+                labelColor={theme.content.primary}
+                borderColor={theme.content.primary}
                 fullWidth
                 accessibilityLabel="Ligar para o funcionário"
                 onPress={onCall}
@@ -232,6 +245,104 @@ function AlertUserCard({
           </View>
         </>
       ) : null}
+    </View>
+  )
+}
+
+// --- KPI two-row grid (wide breakpoint) ---
+
+// Per Figma 1263:7972: row 1 = 4 BigNumbersCard in a 4-col grid; row 2 = 3
+// transparent cells (no card BG) separated by 1px vertical dividers. Used at
+// wide on every /monitoring/* tab — half-width on good-conditions (paired
+// with the donut Outlet), full-width on alerts/desgastados. The grid-based
+// row 2 (`1fr 1px 1fr 1px 1fr`) makes the cells stretch to match row 1's
+// 4-col rhythm in both contexts so the alignment stays consistent.
+function KpiTwoRowGrid({ kpis }: { kpis: ReadonlyArray<MonitoringKpi> }) {
+  const theme = useTheme()
+  const row2 = kpis.slice(4)
+  return (
+    <View style={{ gap: theme.gap.m, width: '100%' }}>
+      {/* Row 1 — 4 BigNumbersCards. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: theme.gap.m,
+          width: '100%',
+        }}
+      >
+        {kpis.slice(0, 4).map((k) => (
+          <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
+        ))}
+      </div>
+      {/* Row 2 — 3 transparent cells with 1px×80 vertical dividers between.
+          Grid keeps cells equal-width and dividers exactly between, so the
+          pattern scales from half-width (good-conditions) to full-width
+          (alerts/desgastados) without code changes. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1px 1fr 1px 1fr',
+          alignItems: 'center',
+          width: '100%',
+        }}
+      >
+        {row2.map((k, i) => (
+          <Fragment key={k.id}>
+            <View
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: theme.gap.s,
+                padding: theme.padding.m,
+              }}
+            >
+              <View
+                style={{
+                  width: 24,
+                  height: 24,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name={k.icon} size={20} color={theme.content.primary} />
+              </View>
+              <Text
+                color={theme.content.dark}
+                style={{
+                  fontFamily: theme.fontFamily.title,
+                  fontWeight: '700',
+                  fontSize: theme.fontSize.xxl,
+                  textAlign: 'center',
+                }}
+              >
+                {String(k.value)}
+              </Text>
+              <Text
+                color={theme.content.dark}
+                style={{
+                  fontFamily: theme.fontFamily.body,
+                  fontWeight: '500',
+                  fontSize: theme.fontSize.sm,
+                  textAlign: 'center',
+                }}
+              >
+                {k.label}
+              </Text>
+            </View>
+            {i < row2.length - 1 ? (
+              <View
+                style={{
+                  width: 1,
+                  height: 80,
+                  backgroundColor: theme.content.lightGrey,
+                  alignSelf: 'center',
+                }}
+              />
+            ) : null}
+          </Fragment>
+        ))}
+      </div>
     </View>
   )
 }
@@ -261,6 +372,15 @@ export function MonitoringLayout() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  const breakpoint = useBreakpoint()
+  const isTablet = breakpoint === 'tablet'
+  const isWide = breakpoint === 'wide'
+  // At wide on the good-conditions route the page reorganises into a
+  // side-by-side layout: 4 donuts (rendered by the Outlet child) on the LEFT,
+  // BigNumbers in a 2-col × 4-row grid on the RIGHT. Alerts route keeps the
+  // stacked layout because it has no donuts to pair with.
+  const isGoodConditions = location.pathname.startsWith('/monitoring/good-conditions')
+  const useWideSideBySide = isWide && isGoodConditions
   const { show: showToast } = useDemoToast()
   const [kpis, setKpis] = useState<ReadonlyArray<MonitoringKpi>>([])
   const [users, setUsers] = useState<ReadonlyArray<MonitoringUserAlert>>([])
@@ -290,23 +410,73 @@ export function MonitoringLayout() {
   const tab = activeTabFromPath(location.pathname)
 
   return (
-    <View testID="monitoring-layout" style={{ gap: theme.gap.xl }}>
-      {/* KPI row — shared. */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-        }}
-      >
-        {kpis.map((k) => (
-          <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
-        ))}
-      </View>
+    <View
+      testID="monitoring-layout"
+      style={{
+        gap: theme.gap.xl,
+        // Cap content at Figma 1366 content-area (1041) only at the desktop
+        // breakpoint. Tablet and wide both drop the cap so the page uses the
+        // full viewport — at wide every /monitoring/* tab shares the stretched
+        // layout (KPI two-row grid + side-by-side donuts for good-conditions,
+        // full-width KPI grid + full-width tabs/list for the other tabs).
+        ...(isTablet || isWide
+          ? null
+          : ({ maxWidth: 1041, alignSelf: 'center', width: '100%' } as const)),
+      }}
+    >
+      {useWideSideBySide ? (
+        // Wide + good-conditions side-by-side per Figma 1263:7972:
+        //   LEFT  → BigNumbers 2-row grid (4 cards + 3 transparent w/ dividers)
+        //   RIGHT → Donuts (single horizontal row, rendered by the Outlet)
+        <View style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'stretch' }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <KpiTwoRowGrid kpis={kpis} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Outlet />
+          </View>
+        </View>
+      ) : isWide ? (
+        // Wide + non-good-conditions tabs (desgastados, alerts): all 7 KPIs
+        // share one row of BigNumbersCards across the full content width.
+        // The two-row transparent pattern is reserved for good-conditions
+        // (where it sits beside the donut Outlet). Outlet stays mounted
+        // (renders null for these tabs) so route lifecycles match.
+        <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${kpis.length || 7}, 1fr)`,
+              gap: theme.gap.m,
+              width: '100%',
+            }}
+          >
+            {kpis.map((k) => (
+              <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
+            ))}
+          </div>
+          <Outlet />
+        </>
+      ) : (
+        <>
+          {/* KPI row — shared at tablet/desktop. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+            }}
+          >
+            {kpis.map((k) => (
+              <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
+            ))}
+          </View>
 
-      {/* Child-route unique content (e.g. good-conditions stats row). */}
-      <Outlet />
+          {/* Child-route unique content (e.g. good-conditions stats row). */}
+          <Outlet />
+        </>
+      )}
 
       {/* "Alertas de Desgaste" section — shared. */}
       <View style={{ gap: theme.gap.m }}>
@@ -329,15 +499,18 @@ export function MonitoringLayout() {
                 const next = PATH_BY_TAB[v]
                 if (next && next !== location.pathname) navigate(next)
               }}
-              variant="separated"
               fullWidth
               accessibilityLabel="Filtro de status"
             />
             <View
               accessibilityLabel="3 alertas novos"
+              // Anchored to the RIGHT edge of the Tabs container instead of a
+              // fixed left:478 keyed to the Tabs' 492 width. -14 = -badgeWidth/2
+              // so the pill sticks out half over the Tabs' right edge — and the
+              // anchor works at any Tabs width as the page becomes responsive.
               style={{
                 position: 'absolute',
-                left: 478,
+                right: -14,
                 top: -16,
                 width: 28,
                 height: 28,
@@ -367,7 +540,9 @@ export function MonitoringLayout() {
           onClear={() => setSearch('')}
         />
 
-        <View style={{ gap: theme.gap.s }}>
+        {/* Gap bumped from gap.s (8) to gap.m (16) per QA cliente §3.1 —
+            cards de alerta com mais respiro entre si. */}
+        <View style={{ gap: theme.gap.m }}>
           {filteredUsers.map((u) => (
             <AlertUserCard
               key={u.id}

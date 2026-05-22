@@ -84,7 +84,7 @@ export function AlertsRescueRouteSelection() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
                 <Avatar uri={c.avatarUri} customSize={64} accessibilityLabel={c.name} />
                 <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 145 }}>
-                  <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+                  <Text variant="body.m" color={theme.content.dark}>
                     {c.name}
                   </Text>
                   <Text variant="body.m" color={theme.content.dark}>
@@ -92,7 +92,11 @@ export function AlertsRescueRouteSelection() {
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Icon name="humidity_mid" size={20} color={theme.content.error} />
-                    <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+                    <Text
+                      variant="body.m"
+                      color={theme.content.dark}
+                      style={{ fontWeight: '500', fontSize: 16 }}
+                    >
                       {c.bloodType}
                     </Text>
                   </View>
