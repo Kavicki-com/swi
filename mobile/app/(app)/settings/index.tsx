@@ -11,6 +11,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { useAuth } from '../../../services/auth/AuthProvider';
+import { HomeFAB } from '../../../components/HomeFAB';
 
 // Figma 348:10615 — settings hub. Container left=16, top=40, w=328, gap.l=24,
 // items-center. ScrollView pattern matches my-stats; Home FAB sits absolute
@@ -69,7 +70,7 @@ export default function Settings() {
               top:0 absolute) continua no canto top-right do wrapper,
               overlapando o avatar no canto sup-dir (Figma intent). */}
           <View style={{ width: 106, height: 91, justifyContent: 'flex-end', alignItems: 'center' }}>
-            <Avatar customSize={80} uri={avatarUri} bordered borderWidth={3} />
+            <Avatar customSize={80} uri={avatarUri} />
             <View style={{ position: 'absolute', right: 0, top: 0 }}>
               <Button
                 variant="contained"
@@ -144,9 +145,9 @@ export default function Settings() {
         </View>
       </ScrollView>
 
-      {/* Home FAB — same pattern as my-stats home FAB.
-          Wrapper position:absolute + left:0/right:0 + alignItems:'center'
-          centraliza o Button child horizontalmente no eixo cross. */}
+      {/* Home FAB — fiel ao Figma 348:10334 via HomeFAB component
+          (substituiu o DS Button que renderizava ~84×84 com borda externa;
+          o Figma é 71.43×71.43 com anel interno 10.286pt). */}
       <View
         pointerEvents="box-none"
         style={{
@@ -157,31 +158,7 @@ export default function Settings() {
           alignItems: 'center',
         }}
       >
-        <Button
-          variant="contained"
-          shape="pill"
-          // size="large" + borderWidth 8 = ~72×72 (matches NavFABs Home FAB
-          // Figma 364:16776). Anteriormente xlarge + 10 dava ~84×84,
-          // visualmente maior que o Figma.
-          size="large"
-          backgroundColor={theme.content.dark}
-          borderColor={theme.content.disable}
-          borderWidth={8}
-          elevation="lg"
-          iconLeft={
-            /* Home icon artwork natural dims per Figma 348:10661 inner svg
-               (28.286×25.458). New home glyph has 29×26 viewBox — usar dims
-               proporcionais evita squish vertical do quadrado 30.857×30.857. */
-            <Icon
-              name="home"
-              width={28.286}
-              height={25.458}
-              color={theme.surface.standard}
-            />
-          }
-          accessibilityLabel="Voltar para a dashboard"
-          onPress={go('/(app)/dashboard')}
-        />
+        <HomeFAB onPress={go('/(app)/dashboard')} />
       </View>
     </View>
   );

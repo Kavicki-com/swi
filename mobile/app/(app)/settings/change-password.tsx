@@ -5,13 +5,13 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
-  Icon,
   Title,
   Toast,
   TopBar,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { PasswordInput } from '../../../components/PasswordInput';
+import { HomeFAB } from '../../../components/HomeFAB';
 
 // Figma 353:12228 — settings sub-screen "Alterar senha". Form com 3
 // password inputs + Toast informativo + Salvar + Home FAB. Demo
@@ -124,25 +124,8 @@ export default function SettingsChangePassword() {
           alignItems: 'center',
         }}
       >
-        <Button
-          variant="contained"
-          shape="pill"
-          size="xlarge"
-          backgroundColor={theme.content.dark}
-          borderColor={theme.content.disable}
-          borderWidth={10}
-          elevation="lg"
-          iconLeft={
-            <Icon
-              name="home"
-              width={28.286}
-              height={25.458}
-              color={theme.surface.standard}
-            />
-          }
-          accessibilityLabel="Voltar para a dashboard"
-          onPress={() => router.push('/(app)/dashboard')}
-        />
+        {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
+        <HomeFAB onPress={() => router.push('/(app)/dashboard')} />
       </View>
     </View>
   );

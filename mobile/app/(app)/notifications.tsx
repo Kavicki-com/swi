@@ -1,9 +1,12 @@
-import { Pressable, ScrollView, View } from 'react-native';
+import { useState } from 'react';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Icon, JourneyTheme, Text, Title, useTheme } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
 import { ProdOnlyPlaceholder } from '../../components/ProdOnlyPlaceholder';
+import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
+import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
 import { isFeatureEnabled } from '../../lib/featureFlags';
 
 // Figma 401:30469 — notifications list. Title + 12 notification cards
@@ -121,6 +124,23 @@ function NotificationsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  // Weather alert is shown as an in-place modal instead of navigating away.
+  // Backdrop tint usa surface.error (#f5667a) a ~18% — vermelho perceptível
+  // mas suave (user spec: "deixe a tela atras levemente vermelha").
+  const [weatherAlertVisible, setWeatherAlertVisible] = useState(false);
+  // Active alert (procedimento de evacuação) — também aparece como modal
+  // sobreposto à lista de notificações em vez de trocar de tela. User spec:
+  // "no alerta atual ainda esta trocando de tela, quero ele exatamente como
+  // o meteorológico". Disparado pelo CTA do WeatherAlertModal.
+  const [activeAlertVisible, setActiveAlertVisible] = useState(false);
+
+  const handleNotificationPress = (notif: (typeof NOTIFICATIONS)[number]) => {
+    if (notif.id === 'alerta-meteorologico') {
+      setWeatherAlertVisible(true);
+      return;
+    }
+    router.push(notif.href);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -147,7 +167,7 @@ function NotificationsScreen() {
           {NOTIFICATIONS.map((notif) => (
             <Pressable
               key={notif.id}
-              onPress={() => router.push(notif.href)}
+              onPress={() => handleNotificationPress(notif)}
               accessibilityRole="button"
               accessibilityLabel={notif.title}
               style={{
@@ -180,7 +200,7 @@ function NotificationsScreen() {
                 // Phase 2: notification context menu (arquivar / marcar como lida
                 // / remover). Figma 401:30469 mostra o ícone sem definir o menu;
                 // sem spec a ação correta é repetir o destino do card.
-                onPress={() => router.push(notif.href)}
+                onPress={() => handleNotificationPress(notif)}
                 accessibilityRole="button"
                 accessibilityLabel={`Opções para ${notif.title}`}
                 hitSlop={8}
@@ -193,6 +213,58 @@ function NotificationsScreen() {
       </ScrollView>
 
       <NavFABs />
+
+      {/* Weather alert modal (Figma 385:29371) — opens in-place sobre a
+          lista de notificações com backdrop levemente vermelho. CTA
+          "Instruções de segurança" navega pro fluxo de evacuação ativa
+          (`?alert=active`), mantendo o destino canônico do alert flow. */}
+      <Modal
+        visible={weatherAlertVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setWeatherAlertVisible(false)}
+      >
+        <Pressable
+          onPress={() => setWeatherAlertVisible(false)}
+          accessibilityLabel="Fechar alerta meteorológico"
+          style={{
+            flex: 1,
+            // Backdrop "levemente vermelho" — surface.error (#f5667a) ~18%
+            // opacity. Sutil, mas dá sinal visual de emergência mesmo sem
+            // mudar a tela de fundo.
+            backgroundColor: 'rgba(245, 102, 122, 0.18)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: theme.padding.m,
+          }}
+        >
+          {/* Inner Pressable absorve o toque pra não fechar quando o user
+              clica DENTRO do modal. */}
+          <Pressable onPress={() => {}} style={{ width: '100%', alignItems: 'center' }}>
+            <WeatherAlertModal
+              onClose={() => setWeatherAlertVisible(false)}
+              onPrimaryAction={() => {
+                // Fecha o weather modal e abre o active alert modal in-place
+                // (mesmo backdrop vermelho). NÃO navega pro dashboard — esse
+                // era o "trocando de tela" que o user reportou. A rota
+                // canônica `?alert=active` segue válida pra outros entry
+                // points (ex.: deep link), só não passamos por ela aqui.
+                setWeatherAlertVisible(false);
+                setActiveAlertVisible(true);
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Active alert modal (Figma 385:29591) — procedimento de evacuação
+          como overlay sobre a lista de notificações. Mesmo padrão visual do
+          WeatherAlertModal: backdrop vermelho ~18%, card branco, tap fora
+          fecha. */}
+      <ActiveAlertModal
+        visible={activeAlertVisible}
+        onClose={() => setActiveAlertVisible(false)}
+      />
     </View>
   );
 }
