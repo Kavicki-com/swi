@@ -181,13 +181,14 @@ export function ReportsList() {
         </View>
       </View>
 
-      {/* Card grid — auto-fill cells. 220 minimum keeps the 4-column density
-          the QA mockup (§4) shows at the admin viewport; theme.gap.l between
-          cells provides the breathing space the client asked for. */}
+      {/* Card grid — auto-fill cells. 280 minimum reduz a densidade um
+          slot em cada breakpoint (QA cliente — pedido pós §4):
+          wide 1920 → 5 (era 6), desktop 1366 → 3 (era 4), tablet 768 → 2.
+          theme.gap.l mantém o respiro entre cells. */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
           gap: theme.gap.l,
           width: '100%',
         }}

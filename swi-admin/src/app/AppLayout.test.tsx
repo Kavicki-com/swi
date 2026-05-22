@@ -87,14 +87,17 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
   })
 
-  it('navigates to /user/profile when the header user-info widget is pressed', async () => {
+  it('opens the user-details menu when the header user-info widget is pressed (QA cliente §1.1)', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-header-user-info-pressable')).toBeInTheDocument()
     })
+    // Initially the menu is closed → no dialog in the tree.
+    expect(screen.queryByLabelText('Detalhes do usuário')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('app-header-user-info-pressable'))
+    // Click opens the fullscreen menu.
     await waitFor(() => {
-      expect(screen.getByTestId('profile-content')).toBeInTheDocument()
+      expect(screen.getByLabelText('Detalhes do usuário')).toBeInTheDocument()
     })
   })
 

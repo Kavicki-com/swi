@@ -33,6 +33,7 @@ import chatEzequiel from '@/assets/avatars/chat-ezequiel.png'
 import chatRomulo from '@/assets/avatars/chat-romulo.png'
 import chatJulio from '@/assets/avatars/chat-julio.png'
 import chatJennifer from '@/assets/avatars/chat-jennifer.png'
+import { UserDetailsMenu } from '@/components/UserDetailsMenu'
 
 // DS module is shimmed to `any`; mirror the types we need locally.
 type ChatSectionUser = {
@@ -104,6 +105,10 @@ export function AppLayout() {
   const breakpoint = useBreakpoint()
   const activeNavValue = resolveActiveNavValue(location.pathname)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // QA cliente §1.1: avatar do topbar agora abre um menu fullscreen com
+  // detalhes do usuário (vitals, batimentos, persona). A navegação antiga
+  // pra /user/settings ficou no avatar grande dentro do menu.
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
 
   // Close the drawer whenever the route changes — clicking a nav item should
   // both navigate and dismiss the overlay without extra plumbing.
@@ -113,9 +118,9 @@ export function AppLayout() {
 
   const headerUserInfo = (
     <Pressable
-      onPress={() => navigate('/user/profile')}
+      onPress={() => setUserMenuOpen(true)}
       accessibilityRole="button"
-      accessibilityLabel="Abrir perfil do usuário"
+      accessibilityLabel="Abrir detalhes do usuário"
       testID="app-header-user-info-pressable"
     >
       <HeaderUserInfo
@@ -353,6 +358,7 @@ export function AppLayout() {
           <Outlet />
         </View>
       </View>
+      <UserDetailsMenu open={userMenuOpen} onClose={() => setUserMenuOpen(false)} />
     </View>
   )
 }
