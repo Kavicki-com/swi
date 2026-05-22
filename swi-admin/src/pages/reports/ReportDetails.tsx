@@ -384,12 +384,14 @@ export function ReportDetails() {
         </View>
       </View>
 
-      {/* Section 3 — Detalhes do relatório. */}
+      {/* Section 3 — Detalhes do relatório. QA cliente §4.1: bump lineHeight
+          from the DS default to 26 px so the long paragraph breathes between
+          lines and is easier to read. */}
       <View style={{ gap: theme.gap.s }}>
         <Title variant="title.s" color={theme.content.primary}>
           Detalhes do relatório:
         </Title>
-        <Text variant="body.m" color={theme.content.dark}>
+        <Text variant="body.m" color={theme.content.dark} style={{ lineHeight: 26 }}>
           {report.details ?? ''}
         </Text>
       </View>

@@ -8,8 +8,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
-import { Button, Combobox, ReportCard, SearchInput, useTheme } from '@kavicki/swi-design-system'
+import { Button, Combobox, SearchInput, useTheme } from '@kavicki/swi-design-system'
 import { reportsApi, type Report } from '@/services/mockApi/reports'
+import { ReportCardV2 } from '@/components/ReportCardV2'
 
 const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
@@ -180,32 +181,31 @@ export function ReportsList() {
         </View>
       </View>
 
-      {/* Card grid — CSS grid with auto-fill so cards stretch to fill the
-          full row width (rightmost card's right edge aligns with the "Novo
-          relatório" button at the top). 224 minimum preserves card readability
-          for the title/summary/author at narrow widths; 1fr lets each card
-          grow to fill the remaining row. */}
+      {/* Card grid — auto-fill cells. 220 minimum keeps the 4-column density
+          the QA mockup (§4) shows at the admin viewport; theme.gap.l between
+          cells provides the breathing space the client asked for. */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(224px, 1fr))',
-          gap: theme.gap.m,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: theme.gap.l,
           width: '100%',
         }}
       >
         {filtered.map((r) => (
-          <ReportCard
+          <ReportCardV2
             key={r.id}
             status={r.status}
             statusLabel={r.statusLabel}
             title={r.title}
             summary={r.summary}
             creationDate={r.creationDate}
-            author={{ name: r.authorName, avatarUri: r.authorAvatarUri }}
-            location={r.sector}
-            responsibles={r.responsibles}
+            authorName={r.authorName}
+            authorAvatarUri={r.authorAvatarUri}
+            sector={r.sector}
+            responsibleAvatars={r.responsibleAvatars}
+            responsibleTotalCount={r.responsibleTotalCount}
             onPress={() => navigate(`/reports/${r.id}`)}
-            fullWidth
           />
         ))}
       </div>
