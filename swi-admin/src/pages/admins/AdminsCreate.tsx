@@ -208,71 +208,82 @@ export function AdminsCreate({
         </View>
       </Section>
 
-      <Section title="Dados de saúde">
-        <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
-          <View style={{ flex: 1 }}>
-            <Combobox
-              label="Tipo sanguíneo"
-              placeholder="Selecione aqui"
-              options={TIPO_SANGUINEO_OPTIONS}
-              value={form.tipoSanguineo}
-              onChange={(v) => update('tipoSanguineo', v)}
-            />
+      {/* Wrapper lifts the entire "Dados de saúde" Section above subsequent
+          sibling sections ("Exames clínicos" + footer) so Combobox dropdown
+          panels (Tipo sanguíneo / Gênero) opened from inside this section can
+          overlay them. The inner combobox row's own zIndex positions it
+          relative to the YesNo questions WITHIN this section. */}
+      <View style={{ position: 'relative', zIndex: 10 }}>
+        <Section title="Dados de saúde">
+          {/* position:relative + zIndex lifts the Combobox row above the YesNo
+            questions inside this Section. */}
+          <View
+            style={{ flexDirection: 'row', gap: theme.gap.s, position: 'relative', zIndex: 10 }}
+          >
+            <View style={{ flex: 1 }}>
+              <Combobox
+                label="Tipo sanguíneo"
+                placeholder="Selecione aqui"
+                options={TIPO_SANGUINEO_OPTIONS}
+                value={form.tipoSanguineo}
+                onChange={(v) => update('tipoSanguineo', v)}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Combobox
+                label="Gênero"
+                placeholder="Selecione aqui"
+                options={GENERO_OPTIONS}
+                value={form.genero}
+                onChange={(v) => update('genero', v)}
+              />
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Combobox
-              label="Gênero"
-              placeholder="Selecione aqui"
-              options={GENERO_OPTIONS}
-              value={form.genero}
-              onChange={(v) => update('genero', v)}
-            />
-          </View>
-        </View>
 
-        {/* Two yes/no questions stacked vertically. The describe Input next
+          {/* Two yes/no questions stacked vertically. The describe Input next
             to each is disabled until the user picks "Sim" — matches Figma
             48:5151 / 53:5816 where the "Quais?" field is shown in the DS
             disabled state (outlined, faded placeholder) when answer is "Não". */}
-        <View style={{ gap: theme.gap.s }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.gap.m }}>
-            <View style={{ width: 240 }}>
-              <YesNoField
-                label="Possui alergias?"
-                value={form.alergico}
-                onChange={(v) => update('alergico', v)}
-              />
+          <View style={{ gap: theme.gap.s }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.gap.m }}>
+              <View style={{ width: 240 }}>
+                <YesNoField
+                  label="Possui alergias?"
+                  value={form.alergico}
+                  onChange={(v) => update('alergico', v)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="Quais?"
+                  placeholder="Descrever aqui"
+                  value={form.alergicoDesc}
+                  onChangeText={(v) => update('alergicoDesc', v)}
+                  disabled={form.alergico !== 'sim'}
+                />
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Input
-                label="Quais?"
-                placeholder="Descrever aqui"
-                value={form.alergicoDesc}
-                onChangeText={(v) => update('alergicoDesc', v)}
-                disabled={form.alergico !== 'sim'}
-              />
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.gap.m }}>
+              <View style={{ width: 240 }}>
+                <YesNoField
+                  label="Doenças crônicas?"
+                  value={form.doencasCronicas}
+                  onChange={(v) => update('doencasCronicas', v)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="Quais?"
+                  placeholder="Descrever aqui"
+                  value={form.doencasCronicasDesc}
+                  onChangeText={(v) => update('doencasCronicasDesc', v)}
+                  disabled={form.doencasCronicas !== 'sim'}
+                />
+              </View>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.gap.m }}>
-            <View style={{ width: 240 }}>
-              <YesNoField
-                label="Doenças crônicas?"
-                value={form.doencasCronicas}
-                onChange={(v) => update('doencasCronicas', v)}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Input
-                label="Quais?"
-                placeholder="Descrever aqui"
-                value={form.doencasCronicasDesc}
-                onChangeText={(v) => update('doencasCronicasDesc', v)}
-                disabled={form.doencasCronicas !== 'sim'}
-              />
-            </View>
-          </View>
-        </View>
-      </Section>
+        </Section>
+      </View>
 
       <Section title="Exames clínicos">
         {/* Use DS defaults for helperText / pickFileLabel — the DS ships the

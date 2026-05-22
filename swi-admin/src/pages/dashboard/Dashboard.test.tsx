@@ -323,4 +323,63 @@ describe('Dashboard', () => {
     })
     expect(spy).toHaveBeenCalledTimes(2)
   })
+
+  // Responsive system tests — one per breakpoint class.
+  //
+  // See AppLayout.test.tsx for the rationale: react-native-web's Dimensions
+  // reads documentElement.clientWidth, so we override the getter per-test.
+  describe('breakpoints', () => {
+    const setViewportWidth = (w: number) => {
+      Object.defineProperty(document.documentElement, 'clientWidth', {
+        configurable: true,
+        get: () => w,
+      })
+      Object.defineProperty(document.documentElement, 'clientHeight', {
+        configurable: true,
+        get: () => 900,
+      })
+      window.dispatchEvent(new Event('resize'))
+    }
+
+    afterEach(() => {
+      // Restore the desktop default for subsequent tests.
+      setViewportWidth(1366)
+    })
+
+    it('renders the tablet single-column top row when width < 1024', async () => {
+      setViewportWidth(800)
+      vi.spyOn(dashboardApi, 'summary').mockResolvedValue({ data: FAKE_SUMMARY, error: null })
+      renderAt()
+      await waitFor(() => {
+        expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+      })
+      expect(screen.getByTestId('dashboard-top-row-tablet')).toBeInTheDocument()
+      expect(screen.queryByTestId('kpi-row')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('dashboard-top-row-wide')).not.toBeInTheDocument()
+    })
+
+    it('renders the existing desktop kpi-row when 1024 ≤ width < 1600', async () => {
+      setViewportWidth(1366)
+      vi.spyOn(dashboardApi, 'summary').mockResolvedValue({ data: FAKE_SUMMARY, error: null })
+      renderAt()
+      await waitFor(() => {
+        expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+      })
+      expect(screen.getByTestId('kpi-row')).toBeInTheDocument()
+      expect(screen.queryByTestId('dashboard-top-row-tablet')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('dashboard-top-row-wide')).not.toBeInTheDocument()
+    })
+
+    it('renders the wide top-row (Map | Charts | KPIs) when width >= 1600', async () => {
+      setViewportWidth(1920)
+      vi.spyOn(dashboardApi, 'summary').mockResolvedValue({ data: FAKE_SUMMARY, error: null })
+      renderAt()
+      await waitFor(() => {
+        expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+      })
+      expect(screen.getByTestId('dashboard-top-row-wide')).toBeInTheDocument()
+      expect(screen.queryByTestId('kpi-row')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('dashboard-top-row-tablet')).not.toBeInTheDocument()
+    })
+  })
 })

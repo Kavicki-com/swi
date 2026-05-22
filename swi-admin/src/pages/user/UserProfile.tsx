@@ -1,13 +1,17 @@
 // src/pages/user/UserProfile.tsx
 // /user/profile — Figma 105:12516. The logged-in admin's own profile, rendered
 // with the same three-column layout as /admins/:id (Figma 53:6344). Reuses
-// AdminDetails directly by passing the auth user's id as an override; the
-// layout/data plumbing lives in one place so a future polish on either page
-// flows to both.
-import { useAuth } from '@/hooks/useAuth'
+// AdminDetails directly so a future polish on either page flows to both.
+//
+// Demo wire-up: the seed auth user (`u_seed_1` / "Admin Seed") has no entry in
+// the admins mock list, which uses `admin-01`…`admin-NN`. For the demo the
+// logged-in admin's profile is hardcoded to `admin-01` (Elisa Siqueira Jordão,
+// the featured admin in the Figma frame). When the real backend lands, replace
+// the constant with the actual mapping from auth user → admin record.
 import { AdminDetails } from '@/pages/admins/AdminDetails'
 
+const DEMO_SELF_ADMIN_ID = 'admin-01'
+
 export function UserProfile() {
-  const { user } = useAuth()
-  return <AdminDetails adminId={user?.id} />
+  return <AdminDetails adminId={DEMO_SELF_ADMIN_ID} />
 }

@@ -8,8 +8,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
-import { Button, Combobox, ReportCard, SearchInput, useTheme } from '@kavicki/swi-design-system'
+import { Button, Combobox, SearchInput, useTheme } from '@kavicki/swi-design-system'
 import { reportsApi, type Report } from '@/services/mockApi/reports'
+import { ReportCardV2 } from '@/components/ReportCardV2'
 
 const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
@@ -128,13 +129,18 @@ export function ReportsList() {
         />
       </View>
 
-      {/* Row 2 — 4 compact filters (Status / Setor / Autor / Período). */}
+      {/* Row 2 — 4 compact filters (Status / Setor / Autor / Período).
+          position:relative + zIndex lifts the filter row above the ReportCard
+          grid below so Combobox dropdown panels overlay the cards instead of
+          being painted under them. */}
       <View
         style={{
           flexDirection: 'row',
           alignItems: 'flex-end',
           gap: theme.gap.m,
           flexWrap: 'wrap',
+          position: 'relative',
+          zIndex: 10,
         }}
       >
         <View style={{ width: 160 }}>
@@ -175,33 +181,34 @@ export function ReportsList() {
         </View>
       </View>
 
-      {/* Grid 4 × N — width-pinned wrapper around each DS ReportCard so
-          flexWrap keeps cards uniform regardless of summary/author length. */}
-      <View
+      {/* Card grid — auto-fill cells. 220 minimum keeps the 4-column density
+          the QA mockup (§4) shows at the admin viewport; theme.gap.l between
+          cells provides the breathing space the client asked for. */}
+      <div
         style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          alignItems: 'flex-start',
-          gap: theme.gap.m,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: theme.gap.l,
+          width: '100%',
         }}
       >
         {filtered.map((r) => (
-          <View key={r.id} style={{ width: 224 }}>
-            <ReportCard
-              status={r.status}
-              statusLabel={r.statusLabel}
-              title={r.title}
-              summary={r.summary}
-              creationDate={r.creationDate}
-              author={{ name: r.authorName, avatarUri: r.authorAvatarUri }}
-              location={r.sector}
-              responsibles={r.responsibles}
-              onPress={() => navigate(`/reports/${r.id}`)}
-              fullWidth
-            />
-          </View>
+          <ReportCardV2
+            key={r.id}
+            status={r.status}
+            statusLabel={r.statusLabel}
+            title={r.title}
+            summary={r.summary}
+            creationDate={r.creationDate}
+            authorName={r.authorName}
+            authorAvatarUri={r.authorAvatarUri}
+            sector={r.sector}
+            responsibleAvatars={r.responsibleAvatars}
+            responsibleTotalCount={r.responsibleTotalCount}
+            onPress={() => navigate(`/reports/${r.id}`)}
+          />
         ))}
-      </View>
+      </div>
     </View>
   )
 }
