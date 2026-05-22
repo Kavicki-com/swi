@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Image as RNImage, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
 import {
@@ -20,6 +19,7 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { NavFABs } from '../../components/NavFABs';
 import {
   HEART_STATUS_SVG,
   SILHOUETTE_BODY_SVG,
@@ -135,7 +135,6 @@ const EXAMS: Array<{
 export default function MyStats() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   // SILHOUETTE_BODY_SVG tem <defs> com gradient ID — namespace por instância
   // evita colidir com a cópia que a dashboard mantém montada em background.
   const silhouetteXml = useUniqueSvg(SILHOUETTE_BODY_SVG);
@@ -266,7 +265,7 @@ export default function MyStats() {
           top: 34,
         }}
       >
-        <Avatar customSize={64} uri={avatarUri} bordered borderWidth={4} />
+        <Avatar customSize={64} uri={avatarUri} />
       </View>
 
       {/* User Data column — Figma 342:9966 (gap.l 24). Width was 328 fixo,
@@ -404,16 +403,20 @@ export default function MyStats() {
         </View>
 
         {/* Donut grid 2×2 — Figma 342:9831 (gap.m 16, w 328 = 156+16+156).
-            Donut size="small" = 156. Single-tone gradients per arc. The
-            Home FAB (Figma 348:10334) sits absolute at the geometric center
-            of the grid (overlapping the 16px gap between donuts). */}
+            Donut size="small" = 156. Single-tone gradients per arc.
+
+            ANTES: o Home FAB (Figma 348:10334) era renderizado absolute
+            no centro geométrico deste grid (overlap nos 16px de gap). Isso
+            colocava o botão DENTRO do ScrollView → rolava com o conteúdo
+            (bug reportado pelo usuário). O Home FAB agora é fixo via
+            <NavFABs /> renderizado fora do ScrollView (mesmo pattern das
+            outras telas do app/(app)). */}
         <View
           style={{
             flexDirection: 'row',
             flexWrap: 'wrap',
             gap: theme.gap.m,
             justifyContent: 'center',
-            position: 'relative',
           }}
         >
           {/* Donut 1 — Esforço feito 62,5%. Built-in icon hidden via
@@ -491,45 +494,6 @@ export default function MyStats() {
             </View>
           </View>
 
-          {/* Home FAB — Figma 348:10334 (absolute, center of donut grid).
-              Two-tone: bg=content.dark (#f5f5f5 light) + 10px content.disable
-              dark border + pill + xlarge padding. Routes to /dashboard.
-              marginTop = -46 (half of 92pt button, centers FAB vertically)
-                          + 16 (compensates for TitleText line-height ~24 +
-                                gap.s ~8 stacked above each DonutWrapper;
-                                the visual donut centers sit 16pt below the
-                                grid's geometric 50% line).
-              = -30. */}
-          <View
-            pointerEvents="box-none"
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              marginTop: -30,
-              marginLeft: -46,
-            }}
-          >
-            <Button
-              variant="contained"
-              shape="pill"
-              size="xlarge"
-              backgroundColor={theme.content.dark}
-              borderColor={theme.content.disable}
-              borderWidth={10}
-              elevation="lg"
-              iconLeft={
-                <Icon
-                  name="home"
-                  width={30.857}
-                  height={30.857}
-                  color={theme.surface.standard}
-                />
-              }
-              accessibilityLabel="Voltar para a dashboard"
-              onPress={() => router.push('/(app)/dashboard')}
-            />
-          </View>
         </View>
 
         {/* Divider — Figma 342:9905 */}
@@ -658,6 +622,12 @@ export default function MyStats() {
         </View>
       </View>
     </ScrollView>
+
+    {/* Home FAB — fixo no rodapé (FORA do ScrollView), igual ao resto do
+        app/(app). Antes ficava absolute no centro do donut grid DENTRO do
+        ScrollView e rolava junto com o conteúdo. showChat=false porque a
+        tela my-stats no Figma 342:9419 só tem o Home FAB. */}
+    <NavFABs showChat={false} />
     </View>
   );
 }

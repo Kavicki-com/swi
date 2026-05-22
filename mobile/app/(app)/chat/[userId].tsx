@@ -203,6 +203,7 @@ export default function ChatThread() {
                     position={isMe ? 'left' : 'right'}
                     avatarUri={isMe ? MY_AVATAR : THEIR_AVATAR}
                     onMenuPress={() => {}}
+                    fullWidth
                   />
                 </View>
               );

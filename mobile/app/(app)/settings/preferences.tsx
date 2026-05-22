@@ -3,14 +3,13 @@ import { Image as RNImage, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Button,
-  Icon,
   Text,
   Title,
   Toggle,
   TopBar,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { HomeFAB } from '../../../components/HomeFAB';
 
 // Figma 357:12302 — settings sub-screen "Preferências". 4 toggle rows
 // (Notificações / Localização / Acessar pastas e arquivos / Ligações
@@ -96,25 +95,8 @@ export default function SettingsPreferences() {
           alignItems: 'center',
         }}
       >
-        <Button
-          variant="contained"
-          shape="pill"
-          size="xlarge"
-          backgroundColor={theme.content.dark}
-          borderColor={theme.content.disable}
-          borderWidth={10}
-          elevation="lg"
-          iconLeft={
-            <Icon
-              name="home"
-              width={28.286}
-              height={25.458}
-              color={theme.surface.standard}
-            />
-          }
-          accessibilityLabel="Voltar para a dashboard"
-          onPress={() => router.push('/(app)/dashboard')}
-        />
+        {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
+        <HomeFAB onPress={() => router.push('/(app)/dashboard')} />
       </View>
     </View>
   );
