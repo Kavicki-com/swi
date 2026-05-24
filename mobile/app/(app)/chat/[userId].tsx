@@ -1,6 +1,7 @@
-import { useRef } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { memo, useRef, useState } from 'react';
+import { Alert, Image, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Asset } from 'expo-asset';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -98,6 +99,56 @@ const MESSAGES: ChatMessage[] = [
   },
 ];
 
+// T4.2: noop estável pra onMenuPress — antes era `() => {}` inline, criando
+// nova função por bubble por render. ChatBubble memoizado consegue skipar
+// re-render só com handler estável.
+const noop = () => {};
+
+// MessageItem encapsula 1 mensagem (com date-separator inserido após idx=1).
+// memo + props primitivas → 8 ChatBubble não re-renderizam quando o
+// ChatThread re-renderiza por mudança de keyboard insets.
+type MessageItemProps = {
+  msg: ChatMessage;
+  idx: number;
+  myAvatar: string | undefined;
+  theirAvatar: string | undefined;
+  theme: ReturnType<typeof useTheme>;
+};
+const MessageItem = memo(function MessageItem({
+  msg,
+  idx,
+  myAvatar,
+  theirAvatar,
+  theme,
+}: MessageItemProps) {
+  const isMe = msg.from === 'me';
+  return (
+    <View>
+      {idx === 1 ? (
+        <Text
+          variant="body.s"
+          color={theme.content.medium}
+          style={{
+            textAlign: 'center',
+            width: '100%',
+            marginBottom: theme.gap.xl,
+          }}
+        >
+          Hoje - 21/03/2026
+        </Text>
+      ) : null}
+      <ChatBubble
+        message={msg.message}
+        time={msg.time}
+        position={isMe ? 'left' : 'right'}
+        avatarUri={isMe ? myAvatar : theirAvatar}
+        onMenuPress={noop}
+        fullWidth
+      />
+    </View>
+  );
+});
+
 export default function ChatThread() {
   const router = useRouter();
   const theme = useTheme();
@@ -105,10 +156,57 @@ export default function ChatThread() {
   const { userId: _userId } = useLocalSearchParams<{ userId: string }>();
   const scrollRef = useRef<ScrollView>(null);
 
+  // Anexo selecionado via attach_file no input. Demo phase — não envia
+  // mensagem, só mostra preview pequeno acima do input e confirma via Alert.
+  const [pendingAttachment, setPendingAttachment] = useState<string | null>(null);
+
+  const pickAttachmentFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPendingAttachment(result.assets[0].uri);
+    }
+  };
+
+  const takeAttachmentPhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão negada', 'Precisamos de acesso à câmera.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPendingAttachment(result.assets[0].uri);
+    }
+  };
+
+  const showAttachmentPicker = () => {
+    Alert.alert(
+      'Anexar arquivo',
+      undefined,
+      [
+        { text: 'Tirar foto', onPress: takeAttachmentPhoto },
+        { text: 'Escolher da galeria', onPress: pickAttachmentFromGallery },
+        { text: 'Cancelar', style: 'cancel' },
+      ],
+    );
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <JourneyTheme
-        gradient={require('../../../assets/reports-bg.png')}
+        gradient={require('../../../assets/login-bg.png')}
         showDotGrid={false}
       />
 
@@ -180,35 +278,48 @@ export default function ChatThread() {
               scrollRef.current?.scrollToEnd({ animated: false })
             }
           >
-            {MESSAGES.map((msg, idx) => {
-              const isMe = msg.from === 'me';
-              return (
-                <View key={msg.id}>
-                  {idx === 1 ? (
-                    <Text
-                      variant="body.s"
-                      color={theme.content.medium}
-                      style={{
-                        textAlign: 'center',
-                        width: '100%',
-                        marginBottom: theme.gap.xl,
-                      }}
-                    >
-                      Hoje - 21/03/2026
-                    </Text>
-                  ) : null}
-                  <ChatBubble
-                    message={msg.message}
-                    time={msg.time}
-                    position={isMe ? 'left' : 'right'}
-                    avatarUri={isMe ? MY_AVATAR : THEIR_AVATAR}
-                    onMenuPress={() => {}}
-                    fullWidth
-                  />
-                </View>
-              );
-            })}
+            {MESSAGES.map((msg, idx) => (
+              <MessageItem
+                key={msg.id}
+                msg={msg}
+                idx={idx}
+                myAvatar={MY_AVATAR}
+                theirAvatar={THEIR_AVATAR}
+                theme={theme}
+              />
+            ))}
           </ScrollView>
+
+          {/* Pending attachment preview — surge acima do input quando user
+              anexa foto via attach_file. Tap para remover. Demo phase: não
+              envia automaticamente; em produção integraria com sendMessage. */}
+          {pendingAttachment ? (
+            <Pressable
+              onPress={() =>
+                Alert.alert('Remover anexo?', undefined, [
+                  { text: 'Remover', style: 'destructive', onPress: () => setPendingAttachment(null) },
+                  { text: 'Manter', style: 'cancel' },
+                ])
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Remover anexo"
+              style={{
+                marginTop: theme.gap.sm,
+                alignSelf: 'flex-start',
+                width: 80,
+                height: 80,
+                borderRadius: theme.border.radius.s,
+                overflow: 'hidden',
+                backgroundColor: theme.surface.standard,
+              }}
+            >
+              <Image
+                source={{ uri: pendingAttachment }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+              />
+            </Pressable>
+          ) : null}
 
           {/* Chat input — Figma 336:9037 */}
           <View
@@ -242,12 +353,19 @@ export default function ChatThread() {
                 placeholder="Digite aqui sua mensagem"
                 placeholderTextColor={theme.content.dark}
               />
-              <Icon
-                name="attach_file"
-                width={13}
-                height={20}
-                color={theme.content.dark}
-              />
+              <Pressable
+                onPress={showAttachmentPicker}
+                accessibilityRole="button"
+                accessibilityLabel="Anexar arquivo"
+                hitSlop={8}
+              >
+                <Icon
+                  name="attach_file"
+                  width={13}
+                  height={20}
+                  color={theme.content.dark}
+                />
+              </Pressable>
             </View>
             <Button
               variant="contained"

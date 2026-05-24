@@ -32,7 +32,7 @@ export default function SettingsPreferences() {
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       >
         <RNImage
-          source={require('../../../assets/settings-preferences-bg.png')}
+          source={require('../../../assets/login-bg.png')}
           resizeMode="cover"
           accessible={false}
           style={{ width: '100%', height: '100%' }}

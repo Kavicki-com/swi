@@ -4,7 +4,6 @@ import Svg, { Path } from 'react-native-svg';
 import type { Feature, LineString } from 'geojson';
 import {
   LocationPin,
-  SwiThemeProvider,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { MapView } from '@/components/MapView';
@@ -157,29 +156,21 @@ function EvacuationOngoingScreen() {
           />
         )}
         <MapMarker key="evacuation-destination" coordinate={EVACUATION_DESTINATION} id="evacuation-destination">
-          <SwiThemeProvider>
             <LocationPin variant="badge" status="alert" size={40} name="Destino" />
-          </SwiThemeProvider>
         </MapMarker>
         {navArrow && (
           <MapMarker key="evacuation-nav-arrow" coordinate={navArrow.at} id="evacuation-nav-arrow">
-            <SwiThemeProvider>
               <NavArrowBody rotationDeg={navArrow.rotation} />
-            </SwiThemeProvider>
           </MapMarker>
         )}
         {chipAnchors && (
           <MapMarker key="evacuation-ongoing-chip-1" coordinate={chipAnchors.a} id="evacuation-ongoing-chip-1">
-            <SwiThemeProvider>
               <MapChipBody text="6 minutos" />
-            </SwiThemeProvider>
           </MapMarker>
         )}
         {chipAnchors && (
           <MapMarker key="evacuation-ongoing-chip-2" coordinate={chipAnchors.b} id="evacuation-ongoing-chip-2">
-            <SwiThemeProvider>
               <MapChipBody text="17 minutos" />
-            </SwiThemeProvider>
           </MapMarker>
         )}
 

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
-import { View } from 'react-native';
+import { Alert, Image, Pressable, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -33,6 +34,60 @@ export default function NewReport() {
     responsiblesSelection.get(),
   );
 
+  // Anexos — 4 placeholders + 1 "Enviar arquivo" via ImageUploader.
+  // Demo phase: useState efêmero, sem persistência.
+  const [attachments, setAttachments] = useState<(string | undefined)[]>(
+    [undefined, undefined, undefined, undefined],
+  );
+  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
+
+  const setAttachmentAt = (index: number, uri: string) => {
+    setAttachments((prev) => {
+      const next = [...prev];
+      next[index] = uri;
+      return next;
+    });
+  };
+
+  const pickFromGallery = async (onPick: (uri: string) => void) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) onPick(result.assets[0].uri);
+  };
+
+  const takePhoto = async (onPick: (uri: string) => void) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão negada', 'Precisamos de acesso à câmera.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) onPick(result.assets[0].uri);
+  };
+
+  const showPicker = (onPick: (uri: string) => void) => {
+    Alert.alert(
+      'Adicionar anexo',
+      undefined,
+      [
+        { text: 'Tirar foto', onPress: () => takePhoto(onPick) },
+        { text: 'Escolher da galeria', onPress: () => pickFromGallery(onPick) },
+        { text: 'Cancelar', style: 'cancel' },
+      ],
+    );
+  };
+
   // Rehidrata seleção ao reentrar (modal de responsáveis fecha via router.back).
   useFocusEffect(
     useCallback(() => {
@@ -60,7 +115,7 @@ export default function NewReport() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <JourneyTheme
-        gradient={require('../../../assets/reports-bg.png')}
+        gradient={require('../../../assets/login-bg.png')}
         pattern={require('../../../assets/smartband-bg-pattern.png')}
       />
 
@@ -155,26 +210,45 @@ export default function NewReport() {
             Row-grouping com flex:1 + aspectRatio:1 garante 2 colunas, cada
             uma metade da largura, quadradas. */}
         <View style={{ gap: theme.gap.sm }}>
-          {[[1, 2], [3, 4]].map((row, rowIdx) => (
+          {[[0, 1], [2, 3]].map((row, rowIdx) => (
             <View
               key={rowIdx}
               style={{ flexDirection: 'row', gap: theme.gap.sm }}
             >
-              {row.map((i) => (
-                <View
-                  key={i}
-                  style={{
-                    flex: 1,
-                    aspectRatio: 1,
-                    backgroundColor: theme.surface.medium,
-                    borderRadius: theme.border.radius.m,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Icon name="add_a_photo" size={32} color={theme.content.medium} />
-                </View>
-              ))}
+              {row.map((i) => {
+                const uri = attachments[i];
+                return (
+                  <Pressable
+                    key={i}
+                    onPress={() => showPicker((u) => setAttachmentAt(i, u))}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      uri
+                        ? `Anexo ${i + 1} (toque para substituir)`
+                        : `Adicionar anexo ${i + 1}`
+                    }
+                    style={{
+                      flex: 1,
+                      aspectRatio: 1,
+                      backgroundColor: theme.surface.medium,
+                      borderRadius: theme.border.radius.m,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {uri ? (
+                      <Image
+                        source={{ uri }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Icon name="add_a_photo" size={32} color={theme.content.medium} />
+                    )}
+                  </Pressable>
+                );
+              })}
             </View>
           ))}
         </View>
@@ -202,13 +276,17 @@ export default function NewReport() {
           />
         </View>
 
-        {/* ImageUploader (Enviar arquivo) */}
+        {/* ImageUploader (Enviar arquivo) — wired ao expo-image-picker.
+            showTakePhoto=false na spec original, então onPickFile dispara
+            só galeria. `value` mostra a preview quando user já selecionou. */}
         <ImageUploader
           helperText="Selecione arquivos do tipo: JPG ou PNG"
           pickFileLabel="Enviar arquivo"
           showTakePhoto={false}
           accentColor={theme.content.primary}
-          onPickFile={() => {}}
+          value={uploadedFile ? { uri: uploadedFile } : null}
+          onPickFile={() => pickFromGallery(setUploadedFile)}
+          onRemove={() => setUploadedFile(null)}
         />
 
         {/* CTAs */}

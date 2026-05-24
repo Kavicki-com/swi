@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -113,6 +113,64 @@ const NOTIFICATIONS: {
   },
 ];
 
+// T4.4: NotificationCard memoizado pra impedir que os 12 cards re-renderizem
+// quando weatherAlertVisible/activeAlertVisible togglam. Props estáveis:
+// `notif` (constante do array) + `onPress` (useCallback no parent).
+type NotificationItem = (typeof NOTIFICATIONS)[number];
+type NotificationCardProps = {
+  notif: NotificationItem;
+  onPress: (id: string) => void;
+  theme: ReturnType<typeof useTheme>;
+};
+const NotificationCard = memo(function NotificationCard({
+  notif,
+  onPress,
+  theme,
+}: NotificationCardProps) {
+  const handlePress = useCallback(() => onPress(notif.id), [notif.id, onPress]);
+  return (
+    <Pressable
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={notif.title}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.gap.sm,
+        backgroundColor: theme.surface.standard,
+        borderRadius: theme.border.radius.m,
+        padding: theme.padding.sm,
+        shadowColor: theme.shadow.color,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 2,
+      }}
+    >
+      <View style={{ flex: 1, gap: theme.gap.s }}>
+        <Title
+          variant="title.xs"
+          color={theme.content.dark}
+          numberOfLines={1}
+        >
+          {notif.title}
+        </Title>
+        <Text variant="body.s" color={theme.content.dark}>
+          {notif.body}
+        </Text>
+      </View>
+      <Pressable
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel={`Opções para ${notif.title}`}
+        hitSlop={8}
+      >
+        <Icon name="more_vert" size={24} color={theme.content.dark} />
+      </Pressable>
+    </Pressable>
+  );
+});
+
 export default function Notifications() {
   if (!isFeatureEnabled('notifications')) {
     return <ProdOnlyPlaceholder />;
@@ -134,18 +192,25 @@ function NotificationsScreen() {
   // o meteorológico". Disparado pelo CTA do WeatherAlertModal.
   const [activeAlertVisible, setActiveAlertVisible] = useState(false);
 
-  const handleNotificationPress = (notif: (typeof NOTIFICATIONS)[number]) => {
-    if (notif.id === 'alerta-meteorologico') {
-      setWeatherAlertVisible(true);
-      return;
-    }
-    router.push(notif.href);
-  };
+  // T4.4: useCallback estabiliza a referência do handler — NotificationCard
+  // memoizado consegue skipar re-render quando só o modal state muda.
+  const handleNotificationPress = useCallback(
+    (id: string) => {
+      const notif = NOTIFICATIONS.find((n) => n.id === id);
+      if (!notif) return;
+      if (notif.id === 'alerta-meteorologico') {
+        setWeatherAlertVisible(true);
+        return;
+      }
+      router.push(notif.href);
+    },
+    [router],
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <JourneyTheme
-        gradient={require('../../assets/reports-bg.png')}
+        gradient={require('../../assets/login-bg.png')}
         pattern={require('../../assets/smartband-bg-pattern.png')}
       />
 
@@ -165,49 +230,12 @@ function NotificationsScreen() {
 
         <View style={{ gap: theme.gap.s }}>
           {NOTIFICATIONS.map((notif) => (
-            <Pressable
+            <NotificationCard
               key={notif.id}
-              onPress={() => handleNotificationPress(notif)}
-              accessibilityRole="button"
-              accessibilityLabel={notif.title}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: theme.gap.sm,
-                backgroundColor: theme.surface.standard,
-                borderRadius: theme.border.radius.m,
-                padding: theme.padding.sm,
-                shadowColor: theme.shadow.color,
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.08,
-                shadowRadius: 8,
-                elevation: 2,
-              }}
-            >
-              <View style={{ flex: 1, gap: theme.gap.s }}>
-                <Title
-                  variant="title.xs"
-                  color={theme.content.dark}
-                  numberOfLines={1}
-                >
-                  {notif.title}
-                </Title>
-                <Text variant="body.s" color={theme.content.dark}>
-                  {notif.body}
-                </Text>
-              </View>
-              <Pressable
-                // Phase 2: notification context menu (arquivar / marcar como lida
-                // / remover). Figma 401:30469 mostra o ícone sem definir o menu;
-                // sem spec a ação correta é repetir o destino do card.
-                onPress={() => handleNotificationPress(notif)}
-                accessibilityRole="button"
-                accessibilityLabel={`Opções para ${notif.title}`}
-                hitSlop={8}
-              >
-                <Icon name="more_vert" size={24} color={theme.content.dark} />
-              </Pressable>
-            </Pressable>
+              notif={notif}
+              onPress={handleNotificationPress}
+              theme={theme}
+            />
           ))}
         </View>
       </ScrollView>

@@ -18,7 +18,6 @@ import { useRouter } from 'expo-router';
 import {
   Icon,
   LocationPin,
-  SwiThemeProvider,
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system';
@@ -190,7 +189,6 @@ function MapWeatherScreen() {
             id={`alert-${p.id}`}
             coordinate={[p.lng, p.lat]}
           >
-            <SwiThemeProvider>
               <Pressable
                 onPress={openAlertModal}
                 accessibilityRole="button"
@@ -203,7 +201,6 @@ function MapWeatherScreen() {
                   name={`Alerta ${p.status}`}
                 />
               </Pressable>
-            </SwiThemeProvider>
           </MapMarker>
         ))}
 
@@ -215,14 +212,12 @@ function MapWeatherScreen() {
               id={`worker-${m.id}`}
               coordinate={[m.lng, m.lat]}
             >
-              <SwiThemeProvider>
                 <LocationPin
                   variant="avatar"
                   avatarUri={m.avatarUri}
                   status={m.status}
                   name={m.name}
                 />
-              </SwiThemeProvider>
             </MapMarker>
           ))}
 
@@ -234,9 +229,7 @@ function MapWeatherScreen() {
               id={`camera-${c.id}`}
               coordinate={[c.lng, c.lat]}
             >
-              <SwiThemeProvider>
                 <LocationPin variant="camera" name={c.name} />
-              </SwiThemeProvider>
             </MapMarker>
           ))}
 

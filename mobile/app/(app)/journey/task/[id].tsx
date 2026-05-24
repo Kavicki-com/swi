@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { memo, useEffect, useState } from 'react';
+import { Alert, Image, Pressable, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useJourney } from '../../../../services/journey/JourneyProvider';
@@ -45,6 +46,45 @@ const INTERESTED_AVATARS = [
 const PROGRESS_CRAWL_INTERVAL_MS = 1000;
 const PROGRESS_CRAWL_STEP = 1;
 
+// T4.1: Sub-componente memoizado que owns o `progress` state + interval.
+// Antes, o setInterval rodava no TaskDetails e re-renderizava a tela inteira
+// (8 sub-sections, ScrollView, Texts/Titles) por segundo. Agora só este
+// componente re-renderiza 1×/s.
+type TaskState = 'idle' | 'ongoing' | 'paused';
+type TaskProgressProps = {
+  taskState: TaskState;
+  theme: ReturnType<typeof useTheme>;
+};
+const TaskProgress = memo(function TaskProgress({ taskState, theme }: TaskProgressProps) {
+  const [progress, setProgress] = useState(taskState === 'idle' ? 2 : 30);
+
+  useEffect(() => {
+    if (taskState === 'idle') setProgress(2);
+  }, [taskState]);
+
+  useEffect(() => {
+    if (taskState !== 'ongoing') return;
+    const interval = setInterval(() => {
+      setProgress((p) => Math.min(100, p + PROGRESS_CRAWL_STEP));
+    }, PROGRESS_CRAWL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [taskState]);
+
+  return (
+    <View style={{ gap: theme.gap.m }}>
+      <Title variant="title.xs" color={theme.content.dark}>
+        Progresso da tarefa
+      </Title>
+      <ProgressBar
+        value={progress}
+        color={theme.content.primary}
+        bordered
+        trackHeight={16}
+      />
+    </View>
+  );
+});
+
 export default function TaskDetails() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -64,27 +104,7 @@ export default function TaskDetails() {
     endJourney,
   } = useJourney();
   const isActiveTask = activeTaskId === id;
-  const taskState = isActiveTask ? journeyState : 'idle';
-
-  // Figma 364:17426 — ProgressBar value usa escala 0-100. Idle ~2% (w=2px
-  // visível num track ~320px), ongoing inicia em 30% (snapshot Figma) e
-  // sobe linearmente via setInterval enquanto state === 'ongoing'.
-  const [progress, setProgress] = useState(taskState === 'idle' ? 2 : 30);
-
-  // Sync inicial: se voltarmos pra essa task e ela já estava ativa em outro
-  // state (ex: paused), o progress deve refletir isso ao montar. Idle volta
-  // pra 2.
-  useEffect(() => {
-    if (taskState === 'idle') setProgress(2);
-  }, [taskState]);
-
-  useEffect(() => {
-    if (taskState !== 'ongoing') return;
-    const interval = setInterval(() => {
-      setProgress((p) => Math.min(100, p + PROGRESS_CRAWL_STEP));
-    }, PROGRESS_CRAWL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [taskState]);
+  const taskState: TaskState = isActiveTask ? journeyState : 'idle';
 
   const isPaused = taskState === 'paused';
   const isActive = taskState !== 'idle';
@@ -94,10 +114,67 @@ export default function TaskDetails() {
     router.push('/(app)/journey');
   };
 
+  // Fotos da solicitação — local state (demo phase, sem persistência).
+  // photos[i] = uri | undefined. Placeholder vazio se undefined.
+  const [photos, setPhotos] = useState<(string | undefined)[]>(
+    [undefined, undefined, undefined, undefined, undefined],
+  );
+
+  const setPhotoAt = (index: number, uri: string) => {
+    setPhotos((prev) => {
+      const next = [...prev];
+      next[index] = uri;
+      return next;
+    });
+  };
+
+  const pickFromGallery = async (index: number) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPhotoAt(index, result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async (index: number) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão negada', 'Precisamos de acesso à câmera.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPhotoAt(index, result.assets[0].uri);
+    }
+  };
+
+  const showPicker = (index: number) => {
+    Alert.alert(
+      'Adicionar foto',
+      undefined,
+      [
+        { text: 'Tirar foto', onPress: () => takePhoto(index) },
+        { text: 'Escolher da galeria', onPress: () => pickFromGallery(index) },
+        { text: 'Cancelar', style: 'cancel' },
+      ],
+    );
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <JourneyTheme
-        gradient={require('../../../../assets/journey-bg.png')}
+        gradient={require('../../../../assets/login-bg.png')}
         pattern={require('../../../../assets/smartband-bg-pattern.png')}
       />
 
@@ -169,20 +246,10 @@ export default function TaskDetails() {
           </View>
         </View>
 
-        {/* Progresso da tarefa */}
-        <View style={{ gap: theme.gap.m }}>
-          <Title variant="title.xs" color={theme.content.dark}>
-            Progresso da tarefa
-          </Title>
-          {/* Figma 364:17426 — bordered track (pill, border #303030 = content.medium-ish,
-              padding-y 4) com fill 6px green. trackHeight 16 = padding 4*2 + fill 6 + border 1*2. */}
-          <ProgressBar
-            value={progress}
-            color={theme.content.primary}
-            bordered
-            trackHeight={16}
-          />
-        </View>
+        {/* Progresso da tarefa — encapsulado em TaskProgress memoizado.
+            Figma 364:17426 — bordered track (pill, border #303030 = content.medium-ish,
+            padding-y 4) com fill 6px green. trackHeight 16 = padding 4*2 + fill 6 + border 1*2. */}
+        <TaskProgress taskState={taskState} theme={theme} />
 
         {/* Objetivo principal */}
         <View style={{ gap: theme.gap.m }}>
@@ -203,21 +270,40 @@ export default function TaskDetails() {
             Fotos da solicitação
           </Title>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <View
-                key={i}
-                style={{
-                  width: 56,
-                  height: 56,
-                  backgroundColor: theme.surface.medium,
-                  borderRadius: theme.border.radius.s,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Icon name="add_a_photo" size={24} color={theme.content.medium} />
-              </View>
-            ))}
+            {[0, 1, 2, 3, 4].map((i) => {
+              const uri = photos[i];
+              return (
+                <Pressable
+                  key={i}
+                  onPress={() => showPicker(i)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    uri
+                      ? `Foto ${i + 1} (toque para substituir)`
+                      : `Adicionar foto ${i + 1}`
+                  }
+                  style={{
+                    width: 56,
+                    height: 56,
+                    backgroundColor: theme.surface.medium,
+                    borderRadius: theme.border.radius.s,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {uri ? (
+                    <Image
+                      source={{ uri }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Icon name="add_a_photo" size={24} color={theme.content.medium} />
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 

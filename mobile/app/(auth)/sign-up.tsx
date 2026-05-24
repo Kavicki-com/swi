@@ -8,12 +8,10 @@ import {
   Checkbox,
   Input,
   Text,
-  Toast,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { PasswordInput } from '../../components/PasswordInput';
-import { isPasswordValid } from '../../lib/validatePassword';
 
 export default function SignUp() {
   const router = useRouter();
@@ -27,8 +25,11 @@ export default function SignUp() {
   const [agreed, setAgreed] = useState(false);
 
   const pwMatches = confirmPassword.length > 0 && password === confirmPassword;
+  // Demo phase: regras estritas de senha (8 chars + maiúscula + número + símbolo)
+  // removidas pra agilizar testes. Confirmação `pwMatches` mantida como UX
+  // (evita digitação descuidada).
   const canSubmit =
-    fullName.length > 0 && email.length > 0 && isPasswordValid(password) && pwMatches && agreed;
+    fullName.length > 0 && email.length > 0 && password.length > 0 && pwMatches && agreed;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -105,12 +106,6 @@ export default function SignUp() {
               descriptionVariant="success"
             />
           </View>
-
-          <Toast
-            variant="info"
-            title="Sua senha precisa ter 8 caracteres incluindo letras e números"
-            message={'1 símbolo @#$%ˆ\n1 Letras maiúscula'}
-          />
 
           <Checkbox
             checked={agreed}

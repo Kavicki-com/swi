@@ -3,20 +3,21 @@ import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { Stack } from 'expo-router';
+import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
-import {
-  Montserrat_400Regular,
-  Montserrat_500Medium,
-  Montserrat_700Bold,
-} from '@expo-google-fonts/montserrat';
+// Path-direct imports: o barrel `@expo-google-fonts/{inter,montserrat}`
+// força require() estático de TODOS os 18 weights (incl. Italic/Thin/Black).
+// Metro não tree-shake `require()` → ~30 .ttf desnecessários no bundle (~1.5MB).
+// Importando por subpath, só os 6 pesos usados entram no bundle.
+import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
+import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
+import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+import { Montserrat_400Regular } from '@expo-google-fonts/montserrat/400Regular';
+import { Montserrat_500Medium } from '@expo-google-fonts/montserrat/500Medium';
+import { Montserrat_700Bold } from '@expo-google-fonts/montserrat/700Bold';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { AuthProvider } from '../services/auth/AuthProvider';
 
@@ -38,11 +39,11 @@ const mobileFrameStyle = IS_WEB
 
 // If Google Fonts CDN is unreachable (offline / blocked), useFonts will never
 // flip `fontsLoaded` to true and the splash stays forever. Bound the wait to
-// 5s and continue with system fonts — RN gracefully falls back when a
-// requested fontFamily is missing, so the app renders (with degraded typo
-// fidelity) instead of hanging on the splash. The same fallback covers a
-// real load error (useFonts returns an Error in slot [1] which we surface).
-const FONT_LOAD_TIMEOUT_MS = 5000;
+// 2s e continue com fontes do sistema — RN cai gracefully quando uma
+// fontFamily pedida falta, então o app renderiza (com tipo degradado)
+// em vez de pendurar no splash. T5.4 reduziu de 5s → 2s pra acelerar
+// first-paint em conexões lentas / cache invalidado.
+const FONT_LOAD_TIMEOUT_MS = 2000;
 
 export default function RootLayout() {
   // DS theme.fontFamily.body = 'Inter', theme.fontFamily.title = 'Montserrat'.
@@ -108,6 +109,19 @@ export default function RootLayout() {
     return () => clearTimeout(t);
   }, []);
 
+  // Preload do background único (login-bg.png) + smartwatch.glb (~4.2MB, usado
+  // em 2 telas de onboarding). Best-effort: roda em paralelo com fonts e não
+  // gateia o render. Warming do cache do Metro/Expo Asset → primeira navegação
+  // ao smartband já tem o GLB local, sobrando apenas o parse (~2-3s) em vez de
+  // download (~3-5s) + parse. Falha silenciosa: require() em runtime ainda
+  // resolve no use-time se o preload falhar.
+  useEffect(() => {
+    Asset.loadAsync([
+      require('../assets/login-bg.png'),
+      require('../assets/smartwatch.glb'),
+    ]).catch(() => {});
+  }, []);
+
   // Ready to render once fonts arrived, errored, or the timeout fired.
   const ready = fontsLoaded || !!fontError || fontTimeout;
 
@@ -127,7 +141,18 @@ export default function RootLayout() {
         <SwiThemeProvider>
           <AuthProvider>
             <View style={mobileFrameStyle}>
-              <Stack screenOptions={{ headerShown: false }}>
+              {/* freezeOnBlur: pausa renderização de telas cached no Stack
+                  (useFrame do Smartwatch3D + setInterval do journey/task param
+                  ao navegar adiante). animation:'fade' + duration:200 corta
+                  ~150ms por navegação vs default ~300ms slide. */}
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  freezeOnBlur: true,
+                  animation: 'fade',
+                  animationDuration: 200,
+                }}
+              >
                 <Stack.Screen name="(auth)" />
                 <Stack.Screen name="(onboarding)" />
                 <Stack.Screen name="(app)" />

@@ -1,8 +1,7 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   ScrollView,
   type TextInput,
   View,
@@ -59,18 +58,27 @@ export default function ChatInbox() {
   const searchRef = useRef<TextInput>(null);
 
   // Custom scrollbar geometry — Figma 332:8765 / 332:8766
-  // Track: surface.medium bg, width 8, full height of scroll container
-  // Thumb: surface.high bg, height = (visible/content) * track, position = scroll/maxScroll * (track - thumb)
+  // Track: surface.medium bg, width 8, full height of scroll container.
+  // Thumb: surface.high bg, height proporcional ao viewport/content ratio;
+  // posição via translateY interpolado de Animated.Value (em vez de
+  // useState(scrollY) que re-renderizava os 15 ChatUserCard a 60fps).
   const [layoutH, setLayoutH] = useState(0);
   const [contentH, setContentH] = useState(0);
-  const [scrollY, setScrollY] = useState(0);
+  const scrollY = useRef(new Animated.Value(0)).current;
   const hasScroll = contentH > layoutH;
   const thumbH = hasScroll ? Math.max(24, (layoutH / contentH) * layoutH) : 0;
   const maxScroll = Math.max(1, contentH - layoutH);
-  const thumbTop = hasScroll ? (scrollY / maxScroll) * (layoutH - thumbH) : 0;
+  const thumbTranslate = scrollY.interpolate({
+    inputRange: [0, maxScroll],
+    outputRange: [0, hasScroll ? layoutH - thumbH : 0],
+    extrapolate: 'clamp',
+  });
 
-  const filtered = USERS.filter((u) =>
-    u.name.toLowerCase().includes(search.toLowerCase()),
+  // Filter recomputa só quando `search` muda; antes recomputava a cada
+  // re-render (mesmo quando só o scroll mudava).
+  const filtered = useMemo(
+    () => USERS.filter((u) => u.name.toLowerCase().includes(search.toLowerCase())),
+    [search],
   );
 
   return (
@@ -129,9 +137,10 @@ export default function ChatInbox() {
                 setLayoutH(e.nativeEvent.layout.height)
               }
               onContentSizeChange={(_, h) => setContentH(h)}
-              onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) =>
-                setScrollY(e.nativeEvent.contentOffset.y)
-              }
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                { useNativeDriver: false },
+              )}
               scrollEventThrottle={16}
             >
               {filtered.map((u) => (
@@ -161,15 +170,16 @@ export default function ChatInbox() {
                   overflow: 'hidden',
                 }}
               >
-                <View
+                <Animated.View
                   style={{
                     position: 'absolute',
                     left: 0,
                     right: 0,
-                    top: thumbTop,
+                    top: 0,
                     height: thumbH,
                     borderRadius: theme.border.radius.l,
                     backgroundColor: theme.content.medium,
+                    transform: [{ translateY: thumbTranslate }],
                   }}
                 />
               </View>

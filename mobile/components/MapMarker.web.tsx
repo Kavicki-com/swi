@@ -14,6 +14,7 @@ import { useContext, useEffect, useRef } from 'react';
 // @ts-expect-error — react-dom/client has no bundled .d.ts; we only consume
 // the narrow createRoot API.
 import { createRoot } from 'react-dom/client';
+import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { MapInstanceContext } from './MapView.web';
 import type { MapMarkerProps } from './MapMarker.types';
 
@@ -52,8 +53,11 @@ export function MapMarker({ coordinate, children }: MapMarkerProps): null {
   // Effect 2: re-render children into the existing root whenever they
   // change. createRoot's render() reconciles like normal React — no thrash
   // because the marker / DOM element are stable across child updates.
+  // T4.5: wrap children em SwiThemeProvider AQUI (uma vez por marker no web)
+  // em vez de obrigar cada consumer a colocar manualmente. Centraliza a
+  // necessidade de re-prover o theme dentro do root detached do maplibre-gl.
   useEffect(() => {
-    rootRef.current?.render(children);
+    rootRef.current?.render(<SwiThemeProvider>{children}</SwiThemeProvider>);
   }, [children]);
 
   return null;
