@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Image as RNImage, ScrollView, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Alert, Image as RNImage, Platform, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
 import {
@@ -37,10 +38,11 @@ import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 const avatarUri =
   Asset.fromModule(require('../../assets/avatar-construction.png')).uri;
 
-// Divider — vertical SVG with linear gradient (Figma `imgDivider`):
-// fades #171717 → #62BB81 (midpoint) → #171717 over 106px tall, 1px wide.
-// Same pattern as dashboard.tsx so vital row dividers match between screens.
-const DIVIDER_GRAD_END = '#171717';
+// Divider — vertical SVG com gradient banda verde + bordas cinzas perceptíveis.
+// Padronizado com a versão do dashboard.tsx: 2px largura + stops 0/0.2/0.8/1
+// (banda verde sólida no miolo 60%, em vez de pico único). END=#3A3A3A
+// contrasta com o background sem sumir.
+const DIVIDER_GRAD_END = '#3A3A3A';
 const DIVIDER_GRAD_MID = '#62BB81';
 
 // Overlay slot for the custom donut-center icons (rendered via SvgXml on top
@@ -80,7 +82,7 @@ const DONUT_ICON_SLOT = {
 function Divider() {
   const gradId = useUniqueId('my-stats-divider-grad');
   return (
-    <Svg width={1} height={106} viewBox="0 0 1 106">
+    <Svg width={2} height={106} viewBox="0 0 2 106">
       <Defs>
         <LinearGradient
           id={gradId}
@@ -91,11 +93,12 @@ function Divider() {
           gradientUnits="userSpaceOnUse"
         >
           <Stop offset="0" stopColor={DIVIDER_GRAD_END} />
-          <Stop offset="0.506" stopColor={DIVIDER_GRAD_MID} />
+          <Stop offset="0.2" stopColor={DIVIDER_GRAD_MID} />
+          <Stop offset="0.8" stopColor={DIVIDER_GRAD_MID} />
           <Stop offset="1" stopColor={DIVIDER_GRAD_END} />
         </LinearGradient>
       </Defs>
-      <Path d="M1 106H0V0H1V106Z" fill={`url(#${gradId})`} />
+      <Path d="M2 106H0V0H2V106Z" fill={`url(#${gradId})`} />
     </Svg>
   );
 }
@@ -146,6 +149,46 @@ export default function MyStats() {
   const footprintXml = useUniqueSvg(FOOTPRINT_SVG);
   const flameDonutXml = useUniqueSvg(FLAME_DONUT_SVG);
   const [period, setPeriod] = useState('today');
+  // Histórico Médico — exame anexado via ImageUploader. Demo phase, useState
+  // efêmero. Wired pra expo-image-picker (galeria only — showTakePhoto=false
+  // na spec original do Figma 342:9907).
+  const [examFile, setExamFile] = useState<string | null>(null);
+
+  const pickExamFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setExamFile(result.assets[0].uri);
+    }
+  };
+
+  // T5.3: gradient arrays memoizados — antes alocavam array nova por render
+  // (mudança de period quebrava memoização dos 4 DonutCharts). Theme é
+  // estável, então useMemo retorna mesma ref enquanto theme não muda.
+  const gradientGreen = useMemo<[string, string]>(
+    () => [theme.surface.success, theme.surface.successLight],
+    [theme.surface.success, theme.surface.successLight],
+  );
+  const gradientBlue = useMemo<[string, string]>(
+    () => [theme.surface.info, theme.surface.infoLight],
+    [theme.surface.info, theme.surface.infoLight],
+  );
+  const gradientOrange = useMemo<[string, string]>(
+    () => [theme.surface.warning, theme.surface.warningLight],
+    [theme.surface.warning, theme.surface.warningLight],
+  );
+  const gradientFlame = useMemo<[string, string, string]>(
+    () => [theme.surface.error, theme.surface.warning, theme.surface.success],
+    [theme.surface.error, theme.surface.warning, theme.surface.success],
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -159,7 +202,7 @@ export default function MyStats() {
     {/* BG: gradient (my-stats-bg.png) + dot-grid (BackgroundDotsGrid layer
         in JourneyTheme, showDotGrid default true). Same pattern as dashboard
         so the dot-grid is consistent across both screens. */}
-    <JourneyTheme gradient={require('../../assets/my-stats-bg.png')} />
+    <JourneyTheme gradient={require('../../assets/login-bg.png')} />
     <ScrollView
       style={{ flex: 1, backgroundColor: 'transparent' }}
       contentContainerStyle={{
@@ -220,22 +263,25 @@ export default function MyStats() {
         </View>
 
         {/* Silhouette multiply overlay — Figma Caminho 4123. Stacked on top
-            with mix-blend-mode: multiply for deeper/richer green. Same pos
-            and size as base layer. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: '23.39%',
-            left: '39.42%',
-            width: '21.38%',
-            height: '70.14%',
-            // @ts-expect-error: mixBlendMode is web-only style (RN-web).
-            mixBlendMode: 'multiply',
-          }}
-        >
-          <SvgXml xml={silhouetteMultiplyXml} width="100%" height="100%" />
-        </View>
+            with mix-blend-mode: multiply for deeper/richer green. Web-only —
+            em iOS/Android o overlay vira cópia opaca (wasted layer) sem
+            produzir o efeito de multiply. */}
+        {Platform.OS === 'web' ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: '23.39%',
+              left: '39.42%',
+              width: '21.38%',
+              height: '70.14%',
+              // @ts-expect-error: mixBlendMode is web-only style (RN-web).
+              mixBlendMode: 'multiply',
+            }}
+          >
+            <SvgXml xml={silhouetteMultiplyXml} width="100%" height="100%" />
+          </View>
+        ) : null}
 
         {/* Heart status — composite SVG (heart + check badge). See dashboard
             wrapper notes for the 31.311×26.093 group geometry. */}
@@ -273,12 +319,15 @@ export default function MyStats() {
       <View style={{ gap: theme.gap.l, marginTop: theme.gap.l }}>
         {/* Vital signs row — Figma 342:9431. 3 columns + dividers (1×106
             content/medium). Each column: icon 24 / value (title.l) / unit
-            (caption.s). */}
+            (caption.s).
+            space-evenly: respiro igual nas paredes e entre cols (Figma);
+            antes era space-between, que colava BPM/Kcal nas paredes e
+            comprimia os dividers entre BPM e 12/8 no Android. */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'space-evenly',
             width: '100%',
           }}
         >
@@ -314,12 +363,14 @@ export default function MyStats() {
 
           <Divider />
 
-          {/* Col 2 — Blood pressure 12/8 Boa (Figma 342:9437) */}
+          {/* Col 2 — Blood pressure 12/8 Boa (Figma 342:9437).
+              width:80 (não 65 do Figma) — Android renderiza Montserrat-Bold
+              com advance widths maiores; "12/8" estoura 65px e quebra linha. */}
           <View
             style={{
               alignItems: 'center',
               gap: theme.gap.sm,
-              width: 65,
+              width: 80,
             }}
           >
             <Icon
@@ -345,12 +396,14 @@ export default function MyStats() {
 
           <Divider />
 
-          {/* Col 3 — Flame 145 Kcal/hora (Figma 342:9442) */}
+          {/* Col 3 — Flame 145 Kcal/hora (Figma 342:9442).
+              width:70 (não 55 do Figma) — "Kcal/hora" quebrava em "Kcal/" +
+              "hora" no Android com 55px; mesmo padrão do dashboard.tsx. */}
           <View
             style={{
               alignItems: 'center',
               gap: theme.gap.sm,
-              width: 55,
+              width: 70,
             }}
           >
             <SvgXml
@@ -432,7 +485,7 @@ export default function MyStats() {
               value="62,5%"
               label="Esforço feito"
               progress={62.5}
-              progressGradient={[theme.surface.success, theme.surface.successLight]}
+              progressGradient={gradientGreen}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={heartbeatGreenXml} width={35} height={28} />
@@ -449,7 +502,7 @@ export default function MyStats() {
               value="92,2%"
               label="Oxigenação"
               progress={92.2}
-              progressGradient={[theme.surface.info, theme.surface.infoLight]}
+              progressGradient={gradientBlue}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={heartbeatBlueXml} width={35} height={28} />
@@ -466,7 +519,7 @@ export default function MyStats() {
               value="8975"
               label="4,32km"
               progress={45}
-              progressGradient={[theme.surface.warning, theme.surface.warningLight]}
+              progressGradient={gradientOrange}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={footprintXml} width={20} height={22} />
@@ -483,11 +536,7 @@ export default function MyStats() {
               value="125 kcal"
               label="por hora"
               progress={70}
-              progressGradient={[
-                theme.surface.error,
-                theme.surface.warning,
-                theme.surface.success,
-              ]}
+              progressGradient={gradientFlame}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={flameDonutXml} width={17} height={19} />
@@ -615,9 +664,9 @@ export default function MyStats() {
             pickFileLabel="Enviar novo exame"
             showTakePhoto={false}
             accentColor={theme.content.primary}
-            onPickFile={() => {
-              /* TODO: open file picker */
-            }}
+            value={examFile ? { uri: examFile } : null}
+            onPickFile={pickExamFromGallery}
+            onRemove={() => setExamFile(null)}
           />
         </View>
       </View>

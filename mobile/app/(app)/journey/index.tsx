@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { useRouter } from 'expo-router';
@@ -49,14 +50,18 @@ export default function Journey() {
 
   const isActive = journeyState !== 'idle';
   const isPaused = journeyState === 'paused';
-  const activeTask = activeTaskId
-    ? TASKS.find((t) => t.id === activeTaskId)
-    : undefined;
+  // T4.3: useMemo evita refazer find/filter a cada re-render. Recomputa
+  // só quando activeTaskId muda (raro — só ao iniciar/terminar task).
+  const activeTask = useMemo(
+    () => (activeTaskId ? TASKS.find((t) => t.id === activeTaskId) : undefined),
+    [activeTaskId],
+  );
   // Próximas tarefas exclui a ativa (idle: lista completa; ongoing/paused:
   // lista menos a ativa).
-  const upcomingTasks = isActive
-    ? TASKS.filter((t) => t.id !== activeTaskId)
-    : TASKS;
+  const upcomingTasks = useMemo(
+    () => (isActive ? TASKS.filter((t) => t.id !== activeTaskId) : TASKS),
+    [isActive, activeTaskId],
+  );
 
   // DonutChart center text: idle conta horas não iniciadas, ongoing/paused
   // mostra tempo da jornada (hardcoded pro demo — produção viria de timer
@@ -71,7 +76,7 @@ export default function Journey() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <JourneyTheme
-        gradient={require('../../../assets/journey-bg.png')}
+        gradient={require('../../../assets/login-bg.png')}
         pattern={require('../../../assets/smartband-bg-pattern.png')}
       />
 

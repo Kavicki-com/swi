@@ -100,7 +100,7 @@ export default function ReportDetails() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <JourneyTheme
-        gradient={require('../../../assets/reports-bg.png')}
+        gradient={require('../../../assets/login-bg.png')}
         pattern={require('../../../assets/smartband-bg-pattern.png')}
       />
 

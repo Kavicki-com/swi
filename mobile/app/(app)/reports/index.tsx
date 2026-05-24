@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { useRouter } from 'expo-router';
@@ -120,6 +120,30 @@ const RESPONSIBLES = 'Ana Clara Mendonça, Antonio Cláudio Silva, Rita Sampaio,
 const LOCATION = 'Setor Noroeste';
 const CREATION_DATE = 'dd/mm/aaaa';
 
+// T5.2: ReportRow memoizado pra impedir que os 10 cards re-renderizem quando
+// search/currentPage mudam. onPress(id) é estável via useCallback no parent.
+type ReportRowProps = {
+  report: ReportItem;
+  onPress: (id: string) => void;
+};
+const ReportRow = memo(function ReportRow({ report, onPress }: ReportRowProps) {
+  const handlePress = useCallback(() => onPress(report.id), [report.id, onPress]);
+  return (
+    <ReportCard
+      status={report.status}
+      statusLabel={report.statusLabel}
+      title={report.title}
+      summary={report.summary}
+      creationDate={CREATION_DATE}
+      author={{ name: report.authorName, avatarUri }}
+      location={LOCATION}
+      responsibles={RESPONSIBLES}
+      fullWidth
+      onPress={handlePress}
+    />
+  );
+});
+
 export default function Reports() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -127,10 +151,17 @@ export default function Reports() {
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
+  // T5.2: useCallback estabiliza ref → ReportRow memo consegue skipar
+  // re-render quando search/currentPage mudam.
+  const handleReportPress = useCallback(
+    (id: string) => router.push({ pathname: '/(app)/reports/[id]', params: { id } }),
+    [router],
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <JourneyTheme
-        gradient={require('../../../assets/reports-bg.png')}
+        gradient={require('../../../assets/login-bg.png')}
         pattern={require('../../../assets/smartband-bg-pattern.png')}
       />
 
@@ -177,23 +208,10 @@ export default function Reports() {
         showsVerticalScrollIndicator={false}
       >
         {REPORTS.map((report) => (
-          <ReportCard
+          <ReportRow
             key={report.id}
-            status={report.status}
-            statusLabel={report.statusLabel}
-            title={report.title}
-            summary={report.summary}
-            creationDate={CREATION_DATE}
-            author={{ name: report.authorName, avatarUri }}
-            location={LOCATION}
-            responsibles={RESPONSIBLES}
-            fullWidth
-            onPress={() =>
-              router.push({
-                pathname: '/(app)/reports/[id]',
-                params: { id: report.id },
-              })
-            }
+            report={report}
+            onPress={handleReportPress}
           />
         ))}
 

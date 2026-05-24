@@ -7,7 +7,6 @@ import {
   Button,
   Icon,
   LocationPin,
-  SwiThemeProvider,
   Text,
   Title,
   useTheme,
@@ -110,27 +109,19 @@ function EvacuationRouteScreen() {
           />
         )}
         <MapMarker key="evacuation-origin" coordinate={EVACUATION_ORIGIN} id="evacuation-origin">
-          <SwiThemeProvider>
             <LocationPin variant="badge" status="good" size={40} name="Início da rota" />
-          </SwiThemeProvider>
         </MapMarker>
         <MapMarker key="evacuation-destination" coordinate={EVACUATION_DESTINATION} id="evacuation-destination">
-          <SwiThemeProvider>
             <LocationPin variant="badge" status="alert" size={40} name="Destino" />
-          </SwiThemeProvider>
         </MapMarker>
         {chipAnchors && (
           <MapMarker key="evacuation-chip-1" coordinate={chipAnchors.a} id="evacuation-chip-1">
-            <SwiThemeProvider>
               <MapChipBody text="6 minutos" />
-            </SwiThemeProvider>
           </MapMarker>
         )}
         {chipAnchors && (
           <MapMarker key="evacuation-chip-2" coordinate={chipAnchors.b} id="evacuation-chip-2">
-            <SwiThemeProvider>
               <MapChipBody text="17 minutos" />
-            </SwiThemeProvider>
           </MapMarker>
         )}
 

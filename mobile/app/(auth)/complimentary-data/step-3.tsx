@@ -161,6 +161,9 @@ export default function ComplimentaryDataStep3() {
             onChange={setBloodType}
             open={openCombobox === 'sangue'}
             onOpenChange={handleOpenChange('sangue')}
+            // Lista de 8 tipos (A+, A-, B+, B-, AB+, AB-, O+, O-) cap em 3
+            // visíveis + scroll, mesmo padrão de Altura/Peso.
+            maxVisibleRows={3}
           />
         </View>
 

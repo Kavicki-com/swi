@@ -16,7 +16,6 @@ import { Pressable, View } from 'react-native';
 import {
   Icon,
   LocationPin,
-  SwiThemeProvider,
   Text,
   useTheme,
   type IconName,
@@ -137,14 +136,12 @@ function MapViewGeneralScreen() {
 
         {/* User pin (Figma 385:29023) — sempre visível em USER_LOCATION. */}
         <MapMarker key="user-pin" coordinate={USER_LOCATION} id="user-pin">
-          <SwiThemeProvider>
             <LocationPin
               variant="avatar"
               avatarUri={USER_AVATAR}
               status="good"
               name="Você"
             />
-          </SwiThemeProvider>
         </MapMarker>
 
         {/* Operator pins overlay — 7 WORKER_LOCATIONS quando toggle ligado. */}
@@ -155,14 +152,12 @@ function MapViewGeneralScreen() {
               id={`worker-${m.id}`}
               coordinate={[m.lng, m.lat]}
             >
-              <SwiThemeProvider>
                 <LocationPin
                   variant="avatar"
                   avatarUri={m.avatarUri}
                   status={m.status}
                   name={m.name}
                 />
-              </SwiThemeProvider>
             </MapMarker>
           ))}
 
@@ -174,9 +169,7 @@ function MapViewGeneralScreen() {
               id={`camera-${c.id}`}
               coordinate={[c.lng, c.lat]}
             >
-              <SwiThemeProvider>
                 <LocationPin variant="camera" name={c.name} />
-              </SwiThemeProvider>
             </MapMarker>
           ))}
 

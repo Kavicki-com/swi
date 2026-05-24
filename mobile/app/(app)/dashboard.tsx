@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Image as RNImage, Modal, Pressable, ScrollView, View } from 'react-native';
+import { memo, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Image as RNImage, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
+import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
@@ -10,12 +11,19 @@ import {
   HeartStatus,
   Icon,
   JourneyTheme,
-  StatusChart,
+  StatusChart as DSStatusChart,
   Text,
   Title,
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system';
+
+// T4.6: memo wrap do StatusChart no nível de módulo. O componente é o mais
+// pesado da tree (3 feGaussianBlur filter chains + silhueta + ECG + dots).
+// Quando o Dashboard re-renderiza por modal state ou cameraActive, o
+// StatusChart skipa re-render desde que suas props sejam estáveis (handlers
+// useCallback'd, primitivas literais).
+const StatusChart = memo(DSStatusChart);
 import { NavFABs } from '../../components/NavFABs';
 import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
@@ -50,7 +58,9 @@ const BG_DECOR_GRAD_BOTTOM_ALERT = '#5E1818';
 // from dark (#171717, matching theme.background) to brand green
 // (#62BB81, close to theme.content.primary) and back. Kept as literals
 // because the gradient midpoint requires the exact Figma stops.
-const DIVIDER_GRAD_END = '#171717';
+// DIVIDER_GRAD_END subido pra #3A3A3A (contraste real contra bg #171717).
+// Tentei #2A2A2A antes mas ainda sumia no Android em gaps estreitos.
+const DIVIDER_GRAD_END = '#3A3A3A';
 const DIVIDER_GRAD_MID = '#62BB81';
 
 const BG_DECOR_PATH =
@@ -95,6 +105,17 @@ export default function Dashboard() {
   // Demo-only: camera starts on; tapping the camera button toggles the
   // green status dot. Production wiring would mirror live worker state.
   const [cameraActive, setCameraActive] = useState(true);
+
+  // T4.6: handlers estáveis pra StatusChart memoizado (acima). Sem useCallback,
+  // cada re-render do Dashboard criaria nova função e invalidaria o memo.
+  const handlePressHeartRate = useCallback(
+    () => router.push('/(app)/my-stats'),
+    [router],
+  );
+  const handlePressSettings = useCallback(
+    () => router.push('/(app)/settings'),
+    [router],
+  );
 
   // Dashboard tem 3 estados:
   // - sem param: normal (silhouette verde + stats).
@@ -171,8 +192,21 @@ export default function Dashboard() {
         </Svg>
       </View>
 
-      {/* Background: gradient + dot-grid. Same JourneyTheme as journey/notifications. */}
-      <JourneyTheme gradient={require('../../assets/journey-bg.png')} />
+      {/* Background gradient PNG renderizado via expo-image (decoder ARGB_8888 no
+          Android — RN Image decodifica em RGB_565 e perde a alpha sutil dos blobs
+          de glow, virando preto chapado). JourneyTheme sem `gradient` prop pra
+          manter só o dot-grid layer. */}
+      <View
+        pointerEvents="none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      >
+        <ExpoImage
+          source={require('../../assets/login-bg.png')}
+          contentFit="cover"
+          style={{ flex: 1 }}
+        />
+      </View>
+      <JourneyTheme />
 
       {/* Caminho 4122 agora é renderizado DENTRO do StatusChart DS (v0.1.86+)
           via prop extrapolate={true}. O outer layer aqui foi removido — o DS
@@ -230,8 +264,8 @@ export default function Dashboard() {
           renderHeartStatus={false}
           extrapolate
           discDiameter={550}
-          onPressHeartRate={() => router.push('/(app)/my-stats')}
-          onPressSettings={() => router.push('/(app)/settings')}
+          onPressHeartRate={handlePressHeartRate}
+          onPressSettings={handlePressSettings}
           accessibilityLabel="Status de saúde — condição boa"
         />
 
@@ -240,20 +274,26 @@ export default function Dashboard() {
             visual com my-stats.tsx (mesmo padrão lá). Geometria casa com
             SILHOUETTE_X=141.9, SILHOUETTE_Y=87.47, w=76.967, h=262.318 do
             DS canvas 360×374 → percentuais 39.42% / 23.39% / 21.38% / 70.14%. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: '23.39%',
-            left: '39.42%',
-            width: '21.38%',
-            height: '70.14%',
-            // @ts-expect-error: mixBlendMode is web-only style (RN-web).
-            mixBlendMode: 'multiply',
-          }}
-        >
-          <SvgXml xml={silhouetteMultiplyXml} width="100%" height="100%" />
-        </View>
+        {Platform.OS === 'web' ? (
+          // mixBlendMode é web-only; em iOS/Android o overlay vira só uma
+          // cópia opaca da silhueta (layer desperdiçada) sem produzir o
+          // efeito de multiply. Gate evita parse de SVG + render extra
+          // em native.
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: '23.39%',
+              left: '39.42%',
+              width: '21.38%',
+              height: '70.14%',
+              // @ts-expect-error: mixBlendMode is web-only style (RN-web).
+              mixBlendMode: 'multiply',
+            }}
+          >
+            <SvgXml xml={silhouetteMultiplyXml} width="100%" height="100%" />
+          </View>
+        ) : null}
 
         {/* Heart-status badge — extraído do StatusChart (DS v0.1.105+) via
             renderHeartStatus={false} pra ser renderizado MANUALMENTE aqui,
@@ -387,22 +427,24 @@ export default function Dashboard() {
         </View>
       </View>
 
-      {/* Bottom container — journey pattern + Figma 304:2683 inner padding.
-          paddingHorizontal:theme.padding.l (~24-32pt) reproduz a margem
-          maior que o Figma tem entre a parede da BG_DECOR e os items
-          (bells/stats/help). Antes era padding.m (16) — items ficavam
-          colados demais nas paredes. */}
+      {/* Bottom container — Figma 304:2858 ancora em left:48 do viewport 360
+          (container w:266 + right:46). paddingHorizontal:48 alinha com a
+          parede interna do BG_DECOR; theme.padding.l (24) deixava badges
+          colados na parede esquerda no Android. */}
       <View
         style={{
           width: '100%',
           maxWidth: 360,
           alignSelf: 'center',
-          paddingHorizontal: theme.padding.l,
+          paddingHorizontal: 48,
           gap: CONTAINER_GAP_XL,
           alignItems: 'flex-end',
         }}
       >
-        {/* User stats: 3 cols + dividers (Figma 304:2458) */}
+        {/* User stats: 3 cols + dividers (Figma 304:2456 → justify-between).
+            cols 41/65/55, dividers 1×106.146. Wrap do "12/8" no Android é
+            resolvido via numberOfLines=1 no Title (StatCol abaixo), não
+            aumentando width — preserva fidelidade Figma. */}
         <View
           style={{
             flexDirection: 'row',
@@ -437,7 +479,7 @@ export default function Dashboard() {
             }
             value="12/8"
             label="Boa"
-            width={65}
+            width={80}
             theme={theme}
           />
           <Divider theme={theme} />
@@ -452,7 +494,7 @@ export default function Dashboard() {
             }
             value="145"
             label="Kcal/hora"
-            width={55}
+            width={70}
             theme={theme}
           />
         </View>
@@ -614,7 +656,7 @@ export default function Dashboard() {
 
 // --- Placeholders locais (compõem DS primitives, não substituem nada do DS) ---
 
-function StatCol({
+const StatCol = memo(function StatCol({
   iconNode,
   label,
   value,
@@ -640,13 +682,13 @@ function StatCol({
       </Text>
     </View>
   );
-}
+});
 
 // FatigueBar — local replacement for DS ProgressBar. The DS component has
 // `id="pb-gradient"` hardcoded in its <Defs>, which collides across multiple
 // dashboard instances (Stack keeps screens mounted) and breaks the visible
 // fill. Mirrors the bordered + gradient layout but with useUniqueId.
-function FatigueBar({
+const FatigueBar = memo(function FatigueBar({
   value,
   gradient,
   gradientStops,
@@ -720,14 +762,14 @@ function FatigueBar({
       </View>
     </View>
   );
-}
+});
 
 // Divider — vertical SVG with linear gradient (Figma 295:1585 / 304:2455):
 // fades #171717 → #62BB81 (midpoint) → #171717 over 106px tall, 1px wide.
-function Divider({ theme: _theme }: { theme: ReturnType<typeof useTheme> }) {
+const Divider = memo(function Divider({ theme: _theme }: { theme: ReturnType<typeof useTheme> }) {
   const gradId = useUniqueId('divider-grad');
   return (
-    <Svg width={1} height={106} viewBox="0 0 1 106">
+    <Svg width={2} height={106} viewBox="0 0 2 106">
       <Defs>
         <LinearGradient
           id={gradId}
@@ -738,16 +780,17 @@ function Divider({ theme: _theme }: { theme: ReturnType<typeof useTheme> }) {
           gradientUnits="userSpaceOnUse"
         >
           <Stop offset="0" stopColor={DIVIDER_GRAD_END} />
-          <Stop offset="0.506" stopColor={DIVIDER_GRAD_MID} />
+          <Stop offset="0.2" stopColor={DIVIDER_GRAD_MID} />
+          <Stop offset="0.8" stopColor={DIVIDER_GRAD_MID} />
           <Stop offset="1" stopColor={DIVIDER_GRAD_END} />
         </LinearGradient>
       </Defs>
-      <Path d="M1 106H0V0H1V106Z" fill={`url(#${gradId})`} />
+      <Path d="M2 106H0V0H2V106Z" fill={`url(#${gradId})`} />
     </Svg>
   );
-}
+});
 
-function BadgedButton({
+const BadgedButton = memo(function BadgedButton({
   icon,
   badge,
   accessibilityLabel,
@@ -796,7 +839,7 @@ function BadgedButton({
       ) : null}
     </View>
   );
-}
+});
 
 // --- Alert-active view (Figma 385:29591 dashboard-alert-active) ---
 // Anteriormente vivia em `app/(app)/alert-instructions.tsx`. Por decisão
