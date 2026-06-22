@@ -20,6 +20,7 @@ import { Montserrat_500Medium } from '@expo-google-fonts/montserrat/500Medium';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat/700Bold';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { AuthProvider } from '../services/auth/AuthProvider';
+import { ProfileProvider } from '../services/profile/ProfileProvider';
 import { configureAmplify } from '../services/amplify/configure';
 
 SplashScreen.preventAutoHideAsync();
@@ -142,6 +143,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <SwiThemeProvider>
           <AuthProvider>
+            <ProfileProvider>
             <View style={mobileFrameStyle}>
               {/* freezeOnBlur: pausa renderização de telas cached no Stack
                   (useFrame do Smartwatch3D + setInterval do journey/task param
@@ -164,6 +166,7 @@ export default function RootLayout() {
                 <Stack.Screen name="modals/weather-alert" options={{ presentation: 'transparentModal' }} />
               </Stack>
             </View>
+            </ProfileProvider>
           </AuthProvider>
         </SwiThemeProvider>
       </SafeAreaProvider>
