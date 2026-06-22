@@ -43,6 +43,42 @@ const schema = a.schema({
       allow.group('admin'),
       allow.ownerDefinedIn('workerId').to(['read']),
     ]),
+
+  VitalsSample: a
+    .model({
+      workerId: a.string().required(),
+      recordedAt: a.datetime().required(),
+      heartRate: a.integer(),
+      bloodPressureSys: a.integer(),
+      bloodPressureDia: a.integer(),
+      oxygenation: a.float(),
+      caloriesPerHour: a.integer(),
+      steps: a.integer(),
+      distanceKm: a.float(),
+      effortPct: a.float(),
+      fatiguePct: a.float(),
+      fatigueEtaMin: a.integer(),
+      status: a.enum(['good', 'alert', 'low']),
+      expiresAt: a.integer(), // epoch seconds — DynamoDB TTL (raw-data cost cap)
+    })
+    .authorization((allow) => [
+      allow.owner().to(['create', 'read']),
+      allow.group('admin').to(['read']),
+    ]),
+
+  LocationSample: a
+    .model({
+      workerId: a.string().required(),
+      recordedAt: a.datetime().required(),
+      lat: a.float().required(),
+      lng: a.float().required(),
+      accuracy: a.float(),
+      expiresAt: a.integer(),
+    })
+    .authorization((allow) => [
+      allow.owner().to(['create', 'read']),
+      allow.group('admin').to(['read']),
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
