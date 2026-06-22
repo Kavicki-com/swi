@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-22
 **Branch alvo:** `feat/backend-vitals-gps` (sai do estado atual de `feat/mobile-login`)
-**Status:** design aprovado (segue pra plano de implementação)
+**Status:** implementado (caminho mock) em 2026-06-22 — vitais simulados + GPS real (expo-location) atrás da flag `AUTH_BACKEND` (default `mock`); backend-as-code (VitalsSample/LocationSample + TTL) deploy-ready. Estados loading/empty/stale/error wired (status neutro do heart-badge via FALLBACK hide-badge — bump do DS adiado, ver abaixo). Verificação headless verde: `swi-backend` tsc limpo, `mobile` tsc sem erros novos (8 pré-existentes), jest 32/32, `expo export --platform web` OK. **Pendente:** smoke visual dos 5 cenários `VITALS_SCENARIO` (eyeball), deploy real (Fatia 1 Fase 6), e o **bump do DS** (condição neutra no HeartrateStatus/HeartStatus/StatusChart — repo disponível em `C:/Users/Gabriel/Documents/swi-design-system`).
 
 ## Contexto
 
