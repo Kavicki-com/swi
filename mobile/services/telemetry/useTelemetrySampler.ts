@@ -8,6 +8,9 @@ import type { LocationTelemetry, VitalsTelemetry } from './types';
 // 7-day retention. expiresAt is epoch SECONDS (DynamoDB TTL contract), never ms.
 const TTL_SEC = 7 * 24 * 3600;
 const DEFAULT_INTERVAL_MS = 60_000;
+// Flush thresholds (shouldFlush trips on whichever comes first). At the default
+// 60s interval the AGE trigger dominates (~5 min / ~10 samples); MAX_BATCH is
+// the safety cap that dominates at faster intervals.
 const MAX_BATCH = 20;
 const MAX_AGE_MS = 5 * 60_000;
 
@@ -95,6 +98,8 @@ export function useTelemetrySampler(
     };
 
     const id = setInterval(tick, intervalMs);
+    // Teardown stops new ticks but intentionally does NOT await/cancel an
+    // in-flight flush() — telemetry upload is fire-and-forget.
     return () => clearInterval(id);
   }, [intervalMs]);
 }
