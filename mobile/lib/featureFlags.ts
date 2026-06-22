@@ -40,3 +40,10 @@ export const FEATURE_GATES: Record<FeatureGate, boolean> = {
 export function isFeatureEnabled(gate: FeatureGate): boolean {
   return FEATURE_GATES[gate];
 }
+
+// Selects the auth/profile data source. 'mock' = today's in-memory demo
+// behavior (default; no AWS needed). 'amplify' = real Cognito/AppSync via
+// aws-amplify — flip to this after `ampx sandbox` generates amplify_outputs
+// (see docs/plans/2026-06-22-swi-backend-auth-profile-design.md, Seção 6).
+export type AuthBackendKind = 'mock' | 'amplify';
+export const AUTH_BACKEND: AuthBackendKind = 'mock';
