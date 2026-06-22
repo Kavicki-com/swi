@@ -1,25 +1,35 @@
-import { useState } from 'react';
 import { Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text, Title, Toast, useTheme } from '@kavicki/swi-design-system';
 import { PasswordInput } from '../../../components/PasswordInput';
-import { isPasswordValid } from '../../../lib/validatePassword';
+import { useField } from '../../../lib/forms/useField';
+import {
+  validatePasswordField,
+  validatePasswordMatch,
+} from '../../../lib/validation/validators';
 
 export default function PasswordRecoveryNewPassword() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const password = useField({ validator: validatePasswordField });
+  const confirmPassword = useField({
+    validator: (v) => validatePasswordMatch(password.value, v),
+  });
 
-  const pwMatches = confirmPassword.length > 0 && password === confirmPassword;
-  const canSubmit = isPasswordValid(password) && pwMatches;
+  const pwMatches =
+    password.value.length > 0 && password.value === confirmPassword.value;
+  const canSubmit = password.isValid && confirmPassword.isValid;
 
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      password.setTouched(true);
+      confirmPassword.setTouched(true);
+      return;
+    }
     // Demo: recovery complete → back to login. Production would also surface
     // a "senha alterada" toast/screen before login.
     router.replace('/(auth)/login');
@@ -62,17 +72,25 @@ export default function PasswordRecoveryNewPassword() {
           <PasswordInput
             label="Nova Senha"
             placeholder="*********"
-            value={password}
-            onChangeText={setPassword}
+            value={password.value}
+            onChangeText={password.onChangeText}
+            onBlur={password.onBlur}
+            description={password.error}
+            descriptionVariant={password.error ? 'error' : 'default'}
           />
 
           <PasswordInput
             label="Confirmar nova senha"
             placeholder="*********"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            description={pwMatches ? 'As senhas são iguais ✓' : undefined}
-            descriptionVariant="success"
+            value={confirmPassword.value}
+            onChangeText={confirmPassword.onChangeText}
+            onBlur={confirmPassword.onBlur}
+            description={
+              confirmPassword.error ?? (pwMatches ? 'As senhas são iguais ✓' : undefined)
+            }
+            descriptionVariant={
+              confirmPassword.error ? 'error' : pwMatches ? 'success' : 'default'
+            }
           />
 
           <Button

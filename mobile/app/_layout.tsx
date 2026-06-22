@@ -143,14 +143,15 @@ export default function RootLayout() {
             <View style={mobileFrameStyle}>
               {/* freezeOnBlur: pausa renderização de telas cached no Stack
                   (useFrame do Smartwatch3D + setInterval do journey/task param
-                  ao navegar adiante). animation:'fade' + duration:200 corta
-                  ~150ms por navegação vs default ~300ms slide. */}
+                  ao navegar adiante). animation:'slide_from_right' é o padrão
+                  nativo iOS/Android — UX familiar pro usuário. duration 250
+                  fica entre o default 300 (mais lento) e o legado fade 200. */}
               <Stack
                 screenOptions={{
                   headerShown: false,
                   freezeOnBlur: true,
-                  animation: 'fade',
-                  animationDuration: 200,
+                  animation: 'slide_from_right',
+                  animationDuration: 250,
                 }}
               >
                 <Stack.Screen name="(auth)" />

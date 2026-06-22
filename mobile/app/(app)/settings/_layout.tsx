@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 
 export default function SettingsLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       {/* Sub-routes (index, faq, change-password, health-data, personal-data,
           preferences, privacy) usam defaults do Stack — full-screen push. */}
       {/* `support` é uma bottom-sheet sobre as settings, não uma sub-tela.

@@ -96,9 +96,12 @@ function MapViewGeneralScreen() {
   // distribution and make the heatmap "blink" when the user toggles other
   // overlays. Toggle off → memoized data is dropped from the shape passed
   // to <MapHeatmapSource> via the conditional render.
+  // Counts reduzidos pela metade (Fix 9 do cliente — preventivo, alinhado
+  // com map-weather): 220+280=500 features × intensity 2.0 × radius 70 era
+  // pesado pra GPUs mid-range Android. 110+140=250 mantém densidade visual.
   const heatmapShape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => {
-    const corePoints = buildHeatmapPoints(USER_LOCATION, 220, 0.006);
-    const haloPoints = buildHeatmapPoints(USER_LOCATION, 280, 0.018);
+    const corePoints = buildHeatmapPoints(USER_LOCATION, 110, 0.006);
+    const haloPoints = buildHeatmapPoints(USER_LOCATION, 140, 0.018);
     const points = [...corePoints, ...haloPoints];
     return {
       type: 'FeatureCollection',

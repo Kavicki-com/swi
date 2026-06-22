@@ -1,7 +1,6 @@
 import { memo, useEffect, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
-import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useJourney } from '../../../../services/journey/JourneyProvider';
@@ -17,6 +16,7 @@ import {
 } from '@kavicki/swi-design-system';
 
 import { FALLBACK_TASK, findTaskById } from '../../../../lib/journeyMockData';
+import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
 
 // Figma 364:17126 (idle) / 364:17434 (in-progress). Breadcrumb
 // (Jornada > <task>) + task summary card + ProgressBar + Objetivo +
@@ -128,47 +128,10 @@ export default function TaskDetails() {
     });
   };
 
-  const pickFromGallery = async (index: number) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoAt(index, result.assets[0].uri);
-    }
-  };
-
-  const takePhoto = async (index: number) => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão negada', 'Precisamos de acesso à câmera.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoAt(index, result.assets[0].uri);
-    }
-  };
-
-  const showPicker = (index: number) => {
-    Alert.alert(
-      'Adicionar foto',
-      undefined,
-      [
-        { text: 'Tirar foto', onPress: () => takePhoto(index) },
-        { text: 'Escolher da galeria', onPress: () => pickFromGallery(index) },
-        { text: 'Cancelar', style: 'cancel' },
-      ],
-    );
+  const media = useMediaPicker();
+  const showPicker = async (index: number) => {
+    const uri = await media.showPicker();
+    if (uri) setPhotoAt(index, uri);
   };
 
   return (

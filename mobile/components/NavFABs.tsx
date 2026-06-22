@@ -36,7 +36,13 @@ export function NavFABs({
   const insets = useSafeAreaInsets();
 
   const handleChat = onChatPress ?? (() => router.push('/(app)/chat/inbox'));
-  const handleHome = onHomePress ?? (() => router.push('/(app)/dashboard'));
+  // navigate() é "smart": se /(app)/dashboard já está no stack (caso normal —
+  // dashboard é a root do (app)), faz pop até ela em vez de mount uma nova
+  // instância. Resolve o delay percebido ao tocar HomeFAB de outras telas
+  // (bug Fix 5): com push, o Dashboard pesado (StatusChart + multiple SVGs +
+  // expo-image bg) re-montava toda vez (~600-800ms). Com navigate, é
+  // instantâneo no caso comum.
+  const handleHome = onHomePress ?? (() => router.navigate('/(app)/dashboard'));
 
   return (
     <>

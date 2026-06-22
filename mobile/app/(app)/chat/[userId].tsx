@@ -1,7 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Asset } from 'expo-asset';
-import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -13,6 +12,7 @@ import {
   Text,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { useMediaPicker } from '../../../lib/media/useMediaPicker';
 
 // Reuse avatars from chat inbox (mobile/assets/avatars/worker-1..8.png).
 const avatarSrc = [
@@ -160,47 +160,10 @@ export default function ChatThread() {
   // mensagem, só mostra preview pequeno acima do input e confirma via Alert.
   const [pendingAttachment, setPendingAttachment] = useState<string | null>(null);
 
-  const pickAttachmentFromGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPendingAttachment(result.assets[0].uri);
-    }
-  };
-
-  const takeAttachmentPhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão negada', 'Precisamos de acesso à câmera.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPendingAttachment(result.assets[0].uri);
-    }
-  };
-
-  const showAttachmentPicker = () => {
-    Alert.alert(
-      'Anexar arquivo',
-      undefined,
-      [
-        { text: 'Tirar foto', onPress: takeAttachmentPhoto },
-        { text: 'Escolher da galeria', onPress: pickAttachmentFromGallery },
-        { text: 'Cancelar', style: 'cancel' },
-      ],
-    );
+  const media = useMediaPicker();
+  const showAttachmentPicker = async () => {
+    const uri = await media.showPicker();
+    if (uri) setPendingAttachment(uri);
   };
 
   return (

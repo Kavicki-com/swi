@@ -87,6 +87,14 @@ export function MapView(props: MapViewProps): ReactElement {
         style={StyleSheet.absoluteFillObject}
         attribution={false}
         logo={false}
+        // androidView="texture" troca SurfaceView (default) por TextureView.
+        // SurfaceView crashava em POCO/rodin (Android 16) no GL render thread
+        // — stack trace cliente mostra `MapLibreGLSurfaceView$GLThread.
+        // guardedRun` chamando `mbgl::android::MapRenderer::render` que
+        // crasha no libmaplibre.so. TextureView é mais estável em devices
+        // com drivers GL problemáticos; trade-off é ~10% perf hit no
+        // Android. iOS ignora essa prop.
+        androidView="texture"
       >
         <Camera center={center} zoom={zoom} />
         {mapChildren}
