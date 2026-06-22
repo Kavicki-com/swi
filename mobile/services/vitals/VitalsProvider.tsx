@@ -3,14 +3,20 @@ import {
   type PropsWithChildren,
 } from 'react';
 import type { Vitals, VitalsPhase, WorkerStatus } from './types';
+import { VITALS_SCENARIO } from '../../lib/featureFlags';
 import { getVitalsBackend } from './getVitalsBackend';
 import { computePhase } from './phase';
 import { deriveStatus } from './deriveStatus';
 
 // How often we poll the backend for a fresh sample.
 const DISPLAY_MS = 4000;
-// A sample older than this (no newer one arrived) is shown as 'stale'.
+// Production: a sample older than this (no newer one arrived) shows as 'stale'
+// — ~2× the telemetry cadence (minutes). The 'stale' DEV scenario uses a short
+// window so the stale UI is demoable in seconds (dev-only; the real path runs
+// VITALS_SCENARIO='streaming').
 const STALE_MS = 120000;
+const DEMO_STALE_MS = 8000;
+const STALE_WINDOW_MS = VITALS_SCENARIO === 'stale' ? DEMO_STALE_MS : STALE_MS;
 // Freshness re-check cadence — independent of the fetch so 'stale' is reachable
 // even when the backend stops producing values (e.g. the 'loading' scenario
 // whose promise never resolves).
@@ -82,7 +88,7 @@ export function VitalsProvider({ children }: PropsWithChildren) {
     };
   }, [backend]);
 
-  const phase = computePhase({ lastValue, lastUpdated, now, errored, staleMs: STALE_MS });
+  const phase = computePhase({ lastValue, lastUpdated, now, errored, staleMs: STALE_WINDOW_MS });
   const vitals = lastValue ?? null;
   // SAFETY: only ready/stale surface real vitals to the status logic; empty,
   // error and loading collapse to 'unknown' (never a fake 'good').
