@@ -1,49 +1,51 @@
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
+  createContext, useCallback, useContext, useMemo, useState,
   type PropsWithChildren,
 } from 'react';
 import type { User } from '../types';
+import type {
+  SignUpParams, SignInParams, ConfirmSignUpParams,
+  ResetPasswordParams, ConfirmResetParams, SignUpResult,
+} from './types';
+import { getAuthBackend } from './getAuthBackend';
 
 interface AuthState {
   user: User | null;
-  signIn: (email: string) => void;
-  signOut: () => void;
+  signIn: (p: SignInParams) => Promise<User>;
+  signUp: (p: SignUpParams) => Promise<SignUpResult>;
+  confirmSignUp: (p: ConfirmSignUpParams) => Promise<void>;
+  resetPassword: (p: ResetPasswordParams) => Promise<void>;
+  confirmReset: (p: ConfirmResetParams) => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<User | null>(null);
+  const backend = useMemo(() => getAuthBackend(), []);
 
-  // Stable identity: consumers that include `signIn` in their useEffect deps
-  // (e.g. account-confirmation) would otherwise re-fire on every provider
-  // render and trigger an infinite setState loop.
-  const signIn = useCallback((email: string) => {
-    setUser((prev) =>
-      prev && prev.email === email
-        ? prev
-        : { id: '1', email, name: email.split('@')[0] ?? 'Usuário' },
-    );
-  }, []);
+  const signIn = useCallback(async (p: SignInParams) => {
+    const u = await backend.signIn(p);
+    setUser((prev) => (prev && prev.email === u.email ? prev : u));
+    return u;
+  }, [backend]);
 
-  const signOut = useCallback(() => setUser(null), []);
+  const signUp = useCallback((p: SignUpParams) => backend.signUp(p), [backend]);
+  const confirmSignUp = useCallback((p: ConfirmSignUpParams) => backend.confirmSignUp(p), [backend]);
+  const resetPassword = useCallback((p: ResetPasswordParams) => backend.resetPassword(p), [backend]);
+  const confirmReset = useCallback((p: ConfirmResetParams) => backend.confirmReset(p), [backend]);
+  const signOut = useCallback(async () => { await backend.signOut(); setUser(null); }, [backend]);
 
   const value = useMemo<AuthState>(
-    () => ({ user, signIn, signOut }),
-    [user, signIn, signOut],
+    () => ({ user, signIn, signUp, confirmSignUp, resetPassword, confirmReset, signOut }),
+    [user, signIn, signUp, confirmSignUp, resetPassword, confirmReset, signOut],
   );
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used inside AuthProvider');
-  }
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
   return ctx;
 }
