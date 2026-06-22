@@ -34,3 +34,9 @@ docs/audits/health-check-*.md
 
 # Local Windows build/sync helpers (machine-specific paths: WSL distro, $HOME, Desktop)
 *.bat
+
+# Amplify Gen 2 generated / per-environment (swi-backend)
+swi-backend/.amplify/
+swi-backend/amplify_outputs*.json
+swi-backend/node_modules/
+mobile/amplify_outputs*.json
