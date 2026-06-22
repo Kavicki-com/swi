@@ -1,53 +1,53 @@
-import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
+import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 
-/*== STEP 1 ===============================================================
-The section below creates a Todo database table with a "content" field. Try
-adding a new "isDone" field as a boolean. The authorization rule below
-specifies that any unauthenticated user can "create", "read", "update", 
-and "delete" any "Todo" records.
-=========================================================================*/
+/**
+ * Profile  — personal + address data the worker edits about themselves
+ *            (complementary-data step-1 + step-2). owner = the worker.
+ * HealthData — clinical data (step-3 / settings health-data). Decision 5:
+ *            edited by admin/occupational-health, READ-ONLY for the worker.
+ *            `workerId` carries the worker's Cognito sub so the worker can
+ *            read their own record even though an admin created it.
+ *            NOTE: HealthData is defined now so the schema is correct, but
+ *            it is NOT wired to the app in this slice (admin tooling first).
+ */
 const schema = a.schema({
-  Todo: a
+  Profile: a
     .model({
-      content: a.string(),
+      fullName: a.string(),
+      phone: a.string(),
+      cpf: a.string(),
+      birthDate: a.date(),
+      cep: a.string(),
+      street: a.string(),
+      number: a.string(),
+      complement: a.string(),
+      neighborhood: a.string(),
+      city: a.string(),
+      uf: a.string(),
     })
-    .authorization((allow) => [allow.guest()]),
+    .authorization((allow) => [
+      allow.owner().to(['read', 'create', 'update']),
+      allow.group('admin'),
+    ]),
+
+  HealthData: a
+    .model({
+      workerId: a.string().required(),
+      gender: a.string(),
+      height: a.float(),
+      weight: a.float(),
+      bloodType: a.string(),
+      disability: a.string(),
+    })
+    .authorization((allow) => [
+      allow.group('admin'),
+      allow.ownerDefinedIn('workerId').to(['read']),
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
 
 export const data = defineData({
   schema,
-  authorizationModes: {
-    defaultAuthorizationMode: 'identityPool',
-  },
+  authorizationModes: { defaultAuthorizationMode: 'userPool' },
 });
-
-/*== STEP 2 ===============================================================
-Go to your frontend source code. From your client-side code, generate a
-Data client to make CRUDL requests to your table. (THIS SNIPPET WILL ONLY
-WORK IN THE FRONTEND CODE FILE.)
-
-Using JavaScript or Next.js React Server Components, Middleware, Server 
-Actions or Pages Router? Review how to generate Data clients for those use
-cases: https://docs.amplify.aws/gen2/build-a-backend/data/connect-to-API/
-=========================================================================*/
-
-/*
-"use client"
-import { generateClient } from "aws-amplify/data";
-import type { Schema } from "@/amplify/data/resource";
-
-const client = generateClient<Schema>() // use this Data client for CRUDL requests
-*/
-
-/*== STEP 3 ===============================================================
-Fetch records from the database and use them in your frontend component.
-(THIS SNIPPET WILL ONLY WORK IN THE FRONTEND CODE FILE.)
-=========================================================================*/
-
-/* For example, in a React component, you can use this snippet in your
-  function's RETURN statement */
-// const { data: todos } = await client.models.Todo.list()
-
-// return <ul>{todos.map(todo => <li key={todo.id}>{todo.content}</li>)}</ul>
