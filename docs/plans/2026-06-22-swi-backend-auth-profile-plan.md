@@ -845,6 +845,13 @@ When an AWS account + credentials exist:
 
 Cost: sandbox + DynamoDB on-demand + Cognito free tier ≈ **US$0 idle** (scale-to-zero). Production pipeline deploy (`ampx pipeline-deploy`) is a later slice.
 
+### Amplify-flow prerequisites (surfaced by the Phase 4a code review — resolve BEFORE flipping the flag)
+These are coherence gaps in the deploy-gated amplify navigation that can only be validated against a live Cognito pool. The mock demo is unaffected.
+1. **Signup → onboarding entry.** `app/(auth)/email-sent.tsx` (amplify) routes to `/login` after `confirmSignUp`, which SKIPS `account-confirmation` and the `complimentary-data` onboarding wizard the mock flow enters. Decide: auto-sign-in + route to `account-confirmation` (parity with mock, so the worker fills their profile), or trigger onboarding on first authenticated launch. (TODO at the call-site.)
+2. **Recovery is code-based, not link-based.** `app/(auth)/password-recovery/email-sent.tsx` auto-advances magic-link-style; Cognito `resetPassword` emails a CODE entered on `new-password`. Gate this screen for amplify (skip the timer / bypass it) so the code flow is coherent. (TODO at the call-site.)
+3. **`birthDate` format.** The mobile form masks `DD/MM/YYYY`; the backend `Profile.birthDate` is `AWSDate` (`YYYY-MM-DD`). Convert before `saveProfile` in the amplify path. (TODO in step-1 wiring.)
+4. **Profile single-row invariant.** `amplifyProfileBackend.save` does get-then-create (not atomic); confirm only one `Profile` row per worker exists after the smoke.
+
 ---
 
 ## Notes for the executor

@@ -43,9 +43,13 @@ export default function EmailSent() {
   const handleConfirm = async () => {
     try {
       await confirmSignUp({ email: email ?? '', code });
-      // Phase 6: post-confirm routing needs validation against a real Cognito
-      // pool. A live pool may auto-sign-in and route to onboarding
-      // (complimentary-data) instead of bouncing back to login.
+      // Phase 6 PREREQUISITE: this amplify branch routes to /login, which means
+      // it SKIPS account-confirmation AND the complimentary-data onboarding
+      // wizard that the mock flow enters (signup→email-sent→account-confirmation
+      // →step-1). A live Cognito pool decision is needed: either auto-sign-in
+      // here and route to '/(auth)/account-confirmation' (parity with mock so the
+      // worker fills their profile), or keep /login and trigger onboarding on
+      // first authenticated launch. Do NOT ship amplify until this is resolved.
       router.replace('/(auth)/login');
     } catch {
       Alert.alert('Erro', 'Código inválido ou expirado.');
