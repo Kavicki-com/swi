@@ -62,7 +62,7 @@ const schema = a.schema({
       expiresAt: a.integer(), // epoch seconds — DynamoDB TTL (raw-data cost cap)
     })
     .authorization((allow) => [
-      allow.owner().to(['create', 'read']),
+      allow.ownerDefinedIn('workerId').to(['create', 'read']),
       allow.group('admin').to(['read']),
     ]),
 
@@ -76,7 +76,7 @@ const schema = a.schema({
       expiresAt: a.integer(),
     })
     .authorization((allow) => [
-      allow.owner().to(['create', 'read']),
+      allow.ownerDefinedIn('workerId').to(['create', 'read']),
       allow.group('admin').to(['read']),
     ]),
 });

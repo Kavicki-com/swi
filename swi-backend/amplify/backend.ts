@@ -12,5 +12,8 @@ const backend = defineBackend({ auth, data });
 const tables = backend.data.resources.cfnResources.amplifyDynamoDbTables;
 for (const name of ['VitalsSample', 'LocationSample']) {
   const t = tables[name];
-  if (t) t.timeToLiveAttribute = { attributeName: 'expiresAt', enabled: true };
+  // Fail loud: TTL is the raw-data cost control — a missing table (e.g. after a
+  // model rename) must break the build, not silently skip expiry.
+  if (!t) throw new Error(`TTL target table ${name} not found`);
+  t.timeToLiveAttribute = { attributeName: 'expiresAt', enabled: true };
 }
