@@ -50,6 +50,12 @@
           "photosPermission": "Permite selecionar fotos da galeria para anexar a tarefas e relatórios.",
           "cameraPermission": "Permite tirar fotos para anexar a tarefas e relatórios."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O SWI usa sua localização para monitorar sua segurança em campo."
+        }
       ]
     ],
     "experiments": {
