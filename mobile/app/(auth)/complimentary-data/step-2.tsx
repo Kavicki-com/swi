@@ -33,6 +33,9 @@ export default function ComplimentaryDataStep2() {
   });
   const uf = useField({ validator: validateUF, mask: maskUF });
   const [cepNotFound, setCepNotFound] = useState(false);
+  // City has no visible Input on this screen (matches Figma), but the CEP
+  // lookup resolves it — capture it here so it persists to Profile.city.
+  const [city, setCity] = useState('');
   const { saveProfile } = useProfile();
 
   const { loading: cepLoading, lookup } = useCepLookup({
@@ -41,6 +44,7 @@ export default function ComplimentaryDataStep2() {
       if (addr.street) street.setValue(addr.street);
       if (addr.neighborhood) neighborhood.setValue(addr.neighborhood);
       if (addr.state) uf.setValue(addr.state);
+      if (addr.city) setCity(addr.city);
     },
     onError: () => setCepNotFound(true),
   });
@@ -76,6 +80,7 @@ export default function ComplimentaryDataStep2() {
         street: street.value,
         number: number.value,
         neighborhood: neighborhood.value,
+        city: city || undefined,
         uf: uf.value,
       });
     } catch {
