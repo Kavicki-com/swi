@@ -19,7 +19,11 @@ import {
   Text,
   useTheme,
   type IconName,
+  type LocationPinStatus,
 } from '@kavicki/swi-design-system';
+import { useLocation } from '@/services/location/LocationProvider';
+import { useVitals } from '@/services/vitals/VitalsProvider';
+import type { WorkerStatus } from '@/services/vitals/types';
 import { MapView } from '@/components/MapView';
 import { MapMarker } from '@/components/MapMarker';
 import { MapHeatmapSource } from '@/components/MapHeatmapSource';
@@ -71,6 +75,12 @@ const PRODUCTIVITY_COLOR_STOPS: Array<[number, string]> = [
   [1.0, 'rgb(159,18,57)'],
 ];
 
+// Map the domain WorkerStatus to the DS LocationPin status. good/alert/low pass
+// through; 'unknown' (empty/stale/error/loading) → 'offline' (DS-supported).
+function toPinStatus(status: WorkerStatus): LocationPinStatus {
+  return status === 'unknown' ? 'offline' : status;
+}
+
 export default function MapViewGeneral() {
   if (!isFeatureEnabled('maps')) {
     return <ProdOnlyPlaceholder />;
@@ -80,6 +90,10 @@ export default function MapViewGeneral() {
 
 function MapViewGeneralScreen() {
   const theme = useTheme();
+  // Real GPS coords (falls back to mock when permission denied / no fix yet)
+  // + live worker status drive the user's own pin. Other pins stay mock.
+  const { coords } = useLocation();
+  const { status } = useVitals();
 
   // Overlay toggles — 3 botões icon-only independentes (Figma 385:28853).
   // Cada botão é um simple toggle: tap liga, tap de novo desliga.
@@ -115,7 +129,7 @@ function MapViewGeneralScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView center={USER_LOCATION} zoom={14}>
+      <MapView center={coords} zoom={14}>
         {/* Productivity heatmap layer — driven by `showHeatmap` toggle.
             Color ramp matches admin spec verbatim (Figma 385:28757). */}
         {/* Keys explícitos pra reconciliação estável: showHeatmap toggle
@@ -137,12 +151,13 @@ function MapViewGeneralScreen() {
           />
         )}
 
-        {/* User pin (Figma 385:29023) — sempre visível em USER_LOCATION. */}
-        <MapMarker key="user-pin" coordinate={USER_LOCATION} id="user-pin">
+        {/* User pin (Figma 385:29023) — real GPS coords + live worker status
+            (unknown → 'offline'). Other pins stay mock. */}
+        <MapMarker key="user-pin" coordinate={coords} id="user-pin">
             <LocationPin
               variant="avatar"
               avatarUri={USER_AVATAR}
-              status="good"
+              status={toPinStatus(status)}
               name="Você"
             />
         </MapMarker>
