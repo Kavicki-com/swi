@@ -19,6 +19,7 @@ Branches are namespaced by the app they touch so the branch list and PR list sta
 
 - `feat/admin-*`, `fix/admin-*`, `chore/admin-*` — work that touches `swi-admin/`
 - `feat/mobile-*`, `fix/mobile-*`, `chore/mobile-*` — work that touches `mobile/`
+- `feat/backend-*`, `fix/backend-*`, `chore/backend-*` — work that touches `swi-backend/` (may also touch `mobile/` when wiring the app to the backend)
 - `feat/repo-*`, `chore/repo-*` — root-level changes (CLAUDE.md, docs/, .gitignore)
 
 Pre-existing branches (`feat/s1.x-*`) are admin work — kept as-is for history; new branches follow the prefix rule.
