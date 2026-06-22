@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, View } from 'react-native';
+import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { PasswordInput } from '../../components/PasswordInput';
+import { useAuth } from '../../services/auth/AuthProvider';
 import { useField } from '../../lib/forms/useField';
 import {
   validateEmail,
@@ -24,6 +25,7 @@ export default function SignUp() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { signUp } = useAuth();
 
   const fullName = useField({ validator: validateFullName });
   const email = useField({ validator: validateEmail });
@@ -42,7 +44,7 @@ export default function SignUp() {
     confirmPassword.isValid &&
     agreed;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) {
       fullName.setTouched(true);
       email.setTouched(true);
@@ -54,10 +56,12 @@ export default function SignUp() {
     // (success). In production the email link deep-links to confirmation; in the
     // demo, email-sent has a manual "Já confirmei" affordance to advance.
     const username = fullName.value.trim().split(/\s+/)[0] ?? '';
-    router.push({
-      pathname: '/(auth)/email-sent',
-      params: { email: email.value, username },
-    });
+    try {
+      await signUp({ email: email.value, password: password.value, name: fullName.value.trim() });
+      router.push({ pathname: '/(auth)/email-sent', params: { email: email.value, username } });
+    } catch {
+      Alert.alert('Erro', 'Não foi possível criar a conta.');
+    }
   };
 
   return (
