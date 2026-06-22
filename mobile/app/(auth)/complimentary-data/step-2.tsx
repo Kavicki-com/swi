@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Image, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import {
 } from '../../../lib/validation/validators';
 import { maskCEP, maskUF } from '../../../lib/validation/masks';
 import { useCepLookup } from '../../../lib/cep/useCepLookup';
+import { useProfile } from '../../../services/profile/ProfileProvider';
 
 export default function ComplimentaryDataStep2() {
   const router = useRouter();
@@ -32,6 +33,7 @@ export default function ComplimentaryDataStep2() {
   });
   const uf = useField({ validator: validateUF, mask: maskUF });
   const [cepNotFound, setCepNotFound] = useState(false);
+  const { saveProfile } = useProfile();
 
   const { loading: cepLoading, lookup } = useCepLookup({
     onSuccess: (addr) => {
@@ -59,13 +61,25 @@ export default function ComplimentaryDataStep2() {
     uf.isValid &&
     !cepNotFound;
 
-  const goNext = () => {
+  const goNext = async () => {
     if (!canSubmit) {
       cep.setTouched(true);
       street.setTouched(true);
       number.setTouched(true);
       neighborhood.setTouched(true);
       uf.setTouched(true);
+      return;
+    }
+    try {
+      await saveProfile({
+        cep: cep.value,
+        street: street.value,
+        number: number.value,
+        neighborhood: neighborhood.value,
+        uf: uf.value,
+      });
+    } catch {
+      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
       return;
     }
     router.push({
