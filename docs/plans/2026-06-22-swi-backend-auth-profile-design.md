@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-22
 **Branch alvo:** `feat/backend-auth-profile` (novo prefixo `feat/backend-*` — ver Seção 1)
-**Status:** design aprovado (segue pra plano de implementação)
+**Status:** implementado (caminho mock) em 2026-06-22 — backend-as-code + wiring atrás da flag `AUTH_BACKEND` (default `mock`). Deploy real pendente (precisa de conta AWS — ver Plano, Fase 6 + os "Amplify-flow prerequisites"). Verificação: `swi-backend` tsc limpo; `mobile` tsc sem erros novos (8 pré-existentes não relacionados); jest 6/6; `expo export --platform web` OK (todas as rotas bundlam).
 
 ## Contexto
 
