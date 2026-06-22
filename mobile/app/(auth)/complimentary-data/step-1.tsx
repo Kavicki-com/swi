@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, View } from 'react-native';
+import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +25,7 @@ import {
   maskPhone,
 } from '../../../lib/validation/masks';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
+import { useProfile } from '../../../services/profile/ProfileProvider';
 
 export default function ComplimentaryDataStep1() {
   const router = useRouter();
@@ -47,18 +48,33 @@ export default function ComplimentaryDataStep1() {
   });
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
   const media = useMediaPicker();
+  const { saveProfile } = useProfile();
 
   // Required: nome, telefone, CPF, data nascimento. Foto fica opcional (avatar
   // default cobre quem não envia).
   const canSubmit =
     fullName.isValid && phone.isValid && cpf.isValid && birthDate.isValid;
 
-  const goNext = () => {
+  const goNext = async () => {
     if (!canSubmit) {
       fullName.setTouched(true);
       phone.setTouched(true);
       cpf.setTouched(true);
       birthDate.setTouched(true);
+      return;
+    }
+    try {
+      // Phase 6: birthDate is masked DD/MM/YYYY but Profile.birthDate is
+      // AWSDate YYYY-MM-DD — convert (DD/MM/YYYY → YYYY-MM-DD) before the
+      // amplify path is exercised. Mock stores the raw string fine.
+      await saveProfile({
+        fullName: fullName.value,
+        phone: phone.value,
+        cpf: cpf.value,
+        birthDate: birthDate.value,
+      });
+    } catch {
+      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
       return;
     }
     router.push({
