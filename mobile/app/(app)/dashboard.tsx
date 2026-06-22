@@ -50,6 +50,11 @@ import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
 // ('good' | 'alert' | 'low'). StatusChart has no neutral condition, so the
 // 'unknown' status (empty/stale/error) falls back to 'good' for the ring while
 // the chest heart badge is hidden entirely (see HeartStatus block below).
+// SAFETY: this 'good' ring fallback is reachable ONLY because the
+// loading/empty/error phases return early ABOVE the StatusChart render, so
+// `status` here is always good|alert|low, never 'unknown'. Do NOT render
+// StatusChart above the phase gate or 'unknown' would paint the silhouette
+// green (a fake-good). Drop the fallback once the DS gains a neutral condition.
 function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' {
   return status === 'alert' || status === 'low' ? status : 'good';
 }
