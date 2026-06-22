@@ -40,6 +40,30 @@ import {
   WIND_SPEED_SVG,
 } from '../../lib/alertWeatherSvgs';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
+import { useVitals } from '../../services/vitals/VitalsProvider';
+import type { WorkerStatus } from '../../services/vitals/types';
+import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
+import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
+import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
+
+// Map the domain WorkerStatus to the DS StatusChart condition union
+// ('good' | 'alert' | 'low'). StatusChart has no neutral condition, so the
+// 'unknown' status (empty/stale/error) falls back to 'good' for the ring while
+// the chest heart badge is hidden entirely (see HeartStatus block below).
+function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' {
+  return status === 'alert' || status === 'low' ? status : 'good';
+}
+
+// Map WorkerStatus to the DS HeartStatus condition ('check' | 'alert' | 'low').
+// Returns null for 'unknown' — the caller HIDES the badge in that case.
+// DS bump TODO (deferred): neutral heart-status condition; using hide-badge
+// fallback for the unknown status.
+function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | null {
+  if (status === 'good') return 'check';
+  if (status === 'alert') return 'alert';
+  if (status === 'low') return 'low';
+  return null;
+}
 
 // Decorative bottom SVG (Figma 304:2430 'background-element') — vertical
 // linear gradient from #3BC958 (top) to #1E652C (bottom), 46% opacity.
@@ -89,6 +113,7 @@ const avatarUri =
 const CONTAINER_GAP_XL = 24;
 
 export default function Dashboard() {
+  const { phase, vitals, status } = useVitals();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -151,6 +176,17 @@ export default function Dashboard() {
   if (alert === 'active') {
     return <AlertActiveView />;
   }
+
+  // Vitals state takeovers (after all hooks; the route-driven alert-active
+  // emergency view above always wins). Full-screen views keep it DS + simple,
+  // consistent with my-stats. provider self-polls; retry is a hint.
+  if (phase === 'loading') return <VitalsLoadingState />;
+  if (phase === 'empty') return <VitalsEmptyState />;
+  if (phase === 'error') return <VitalsErrorState onRetry={() => {}} />;
+
+  // ready | stale — vitals is non-null here (computePhase guarantees it).
+  const v = vitals!;
+  const heartCondition = toHeartCondition(status);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -258,7 +294,7 @@ export default function Dashboard() {
              nos 4 elipses concêntricos (Figma spec Y=2.08, blur=4.16, #000
              98.82%) também vêm do DS bump 0.1.86. */}
         <StatusChart
-          condition="good"
+          condition={toChartCondition(status)}
           progress={1}
           showActionButton={true}
           renderHeartStatus={false}
@@ -266,7 +302,7 @@ export default function Dashboard() {
           discDiameter={550}
           onPressHeartRate={handlePressHeartRate}
           onPressSettings={handlePressSettings}
-          accessibilityLabel="Status de saúde — condição boa"
+          accessibilityLabel="Status de saúde"
         />
 
         {/* Silhouette multiply overlay (Figma Caminho 4123) — stacked on top
@@ -302,17 +338,23 @@ export default function Dashboard() {
             contraste branco/verde original do design). Coords convertidas
             do HEART_STATUS_OFFSET (canvas 360×374) pra percentuais:
             left 169.2/360 = 47%, top 139.327/374 = 37.25%, size 26.093/374
-            ≈ 6.978% (badge é quadrado, então width=height nas %). */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: '47%',
-            top: '37.25%',
-          }}
-        >
-          <HeartStatus condition="check" size={26.093} />
-        </View>
+            ≈ 6.978% (badge é quadrado, então width=height nas %).
+            DS bump TODO (deferred): neutral heart-status condition; using
+            hide-badge fallback — heartCondition is null for the 'unknown' status
+            (here only reachable via 'stale', since loading/empty/error take over
+            above), so we hide the badge instead of faking a 'check'. */}
+        {heartCondition ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: '47%',
+              top: '37.25%',
+            }}
+          >
+            <HeartStatus condition={heartCondition} size={26.093} />
+          </View>
+        ) : null}
 
         {/* 5. Avatar — absolute top-right, overlays the chart.
             Pressable wraps the avatar so tapping it opens /(app)/settings.
@@ -462,7 +504,7 @@ export default function Dashboard() {
                 color={theme.content.primary}
               />
             }
-            value="67"
+            value={String(v.heartRate)}
             label="BPM"
             width={41}
             theme={theme}
@@ -508,7 +550,7 @@ export default function Dashboard() {
             ProgressBar (accessibilityValue.now expects int64; see Gap H). */}
         <View style={{ gap: theme.gap.s, width: '100%' }}>
           <FatigueBar
-            value={74}
+            value={Math.round(v.fatiguePct)}
             gradient={[
               theme.surface.success,
               theme.surface.warning,
