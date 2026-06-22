@@ -27,6 +27,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signIn = useCallback(async (p: SignInParams) => {
     const u = await backend.signIn(p);
+    // Stable identity: consumers that include the auth callbacks in their
+    // useEffect deps (e.g. account-confirmation) would otherwise re-fire on
+    // every provider render and trigger an infinite setState loop. Keep the
+    // same `user` reference when the email is unchanged — do NOT simplify to
+    // `setUser(u)`.
     setUser((prev) => (prev && prev.email === u.email ? prev : u));
     return u;
   }, [backend]);
