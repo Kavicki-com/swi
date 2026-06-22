@@ -21,6 +21,9 @@ import { Montserrat_700Bold } from '@expo-google-fonts/montserrat/700Bold';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { AuthProvider } from '../services/auth/AuthProvider';
 import { ProfileProvider } from '../services/profile/ProfileProvider';
+import { VitalsProvider, useVitals } from '../services/vitals/VitalsProvider';
+import { LocationProvider, useLocation } from '../services/location/LocationProvider';
+import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
 import { configureAmplify } from '../services/amplify/configure';
 
 SplashScreen.preventAutoHideAsync();
@@ -47,6 +50,17 @@ const mobileFrameStyle = IS_WEB
 // em vez de pendurar no splash. T5.4 reduziu de 5s → 2s pra acelerar
 // first-paint em conexões lentas / cache invalidado.
 const FONT_LOAD_TIMEOUT_MS = 2000;
+
+// Bridges the Vitals + Location providers into the telemetry sampler. Rendered
+// inside both providers (alongside the Stack) so it can read the live vitals /
+// coords getters; renders nothing. The sampler self-batches + uploads on its
+// own cadence.
+function TelemetryRoot() {
+  const { vitals } = useVitals();
+  const { coords } = useLocation();
+  useTelemetrySampler(() => vitals, () => coords);
+  return null;
+}
 
 export default function RootLayout() {
   // DS theme.fontFamily.body = 'Inter', theme.fontFamily.title = 'Montserrat'.
@@ -144,6 +158,11 @@ export default function RootLayout() {
         <SwiThemeProvider>
           <AuthProvider>
             <ProfileProvider>
+            <VitalsProvider>
+            <LocationProvider>
+            {/* Feeds live vitals + coords into the telemetry sampler. Renders
+                null; sits alongside the Stack inside both providers. */}
+            <TelemetryRoot />
             <View style={mobileFrameStyle}>
               {/* freezeOnBlur: pausa renderização de telas cached no Stack
                   (useFrame do Smartwatch3D + setInterval do journey/task param
@@ -166,6 +185,8 @@ export default function RootLayout() {
                 <Stack.Screen name="modals/weather-alert" options={{ presentation: 'transparentModal' }} />
               </Stack>
             </View>
+            </LocationProvider>
+            </VitalsProvider>
             </ProfileProvider>
           </AuthProvider>
         </SwiThemeProvider>
