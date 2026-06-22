@@ -359,6 +359,15 @@ cd mobile && npx expo export --platform web      # bundles OK
 ## Phase 8 — Deploy (folds into Fatia 1 Phase 6 runbook)
 When the AWS account exists and the flag flips to `amplify`: the telemetry sink starts writing real `VitalsSample`/`LocationSample`; confirm the DynamoDB TTL is active on both tables; verify owner-scoped reads. Add to the Fatia 1 Phase 6 prerequisites: confirm TTL override deployed; validate the sampler cadence vs cost on a real device.
 
+### Follow-ups surfaced by the final review (capture as tickets; none block the mock merge)
+- **amplify `getCurrent` recency (deploy-blocker for the amplify path):** `amplifyVitalsBackend.getCurrent` uses `models.VitalsSample.list({ limit: 1 })`, which returns by primary key, NOT by recency — the deployed "current vitals" could be an arbitrary/old sample. Replace with a recency query (sort on `recordedAt` / a GSI) before flipping the flag.
+- **DS neutral heart-status bump (deferred):** currently the hide-badge fallback (stale/unknown). Add a neutral condition to `HeartrateStatus`/`HeartStatus`/`StatusChart` in `swi-design-system` (repo at `C:/Users/Gabriel/Documents/swi-design-system`), then replace the fallback. This also removes the `StatusChart` ring's `unknown→good` decorative fallback.
+- **Android background location:** `app.json` only has the iOS `whenInUse` string; if field-safety needs background GPS, add Android `ACCESS_FINE_LOCATION`/foreground-service config + the bg-location plugin option.
+- **`lib/telemetry/batch.ts` `aggregate()` is dead code:** wire it into the flush (aggregate per window) or drop it until the rollup story lands.
+- **`downsample` keeps earliest-per-window:** fine at 1 sample/window today; if the sampler ever ticks faster than its interval, "latest wins" is usually preferable for telemetry — revisit then.
+- **`VitalsErrorState` retry is a no-op** (provider self-polls): wire a real retry or remove the button before production so it doesn't read as broken.
+- **Stale "atualizado há…" label is frozen** (provider memo stops propagating once stale): acceptable, but a live counter needs a local 1s tick in my-stats if desired.
+
 ---
 
 ## Notes for the executor

@@ -148,8 +148,11 @@ function formatEta(minutes: number): string {
   return `${h}h${String(m).padStart(2, '0')}m`;
 }
 
-// Relative "atualizado há…" label from a lastUpdated epoch (ms). Re-renders on
-// the VitalsProvider's 1s freshness tick, so the elapsed value stays current.
+// Relative "atualizado há…" label from a lastUpdated epoch (ms). NOTE: once the
+// provider reaches 'stale' its context value memo is frozen, so this shows the
+// elapsed time at the moment 'stale' was entered and does NOT count up. That's
+// acceptable — staleness is already signalled by the dimming + this label; a
+// live counter would need a local 1s tick in this screen.
 function formatAgo(lastUpdated: number | null, now: number): string {
   if (lastUpdated == null) return 'atualizado agora';
   const secs = Math.max(0, Math.floor((now - lastUpdated) / 1000));
