@@ -1,23 +1,30 @@
-import { Image, View } from 'react-native';
+import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, Text, Title, useTheme } from '@kavicki/swi-design-system';
+import { useAuth } from '../../../services/auth/AuthProvider';
 import { useField } from '../../../lib/forms/useField';
 import { validateEmail } from '../../../lib/validation/validators';
+import { AUTH_BACKEND } from '../../../lib/featureFlags';
 
 export default function PasswordRecoveryEmail() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { resetPassword } = useAuth();
   const email = useField({ validator: validateEmail });
 
   const canSubmit = email.isValid;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) {
       email.setTouched(true);
       return;
+    }
+    if (AUTH_BACKEND === 'amplify') {
+      try { await resetPassword({ email: email.value }); }
+      catch { Alert.alert('Erro', 'Não foi possível enviar o código.'); return; }
     }
     // Figma 290:688 — show the recovery-specific "Acesse o link de
     // recuperação" confirmation screen (distinct from the signup variant

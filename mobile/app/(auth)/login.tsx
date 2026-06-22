@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Icon, Input, Logo, useTheme } from '@kavicki/swi-design-system';
@@ -22,14 +22,19 @@ export default function Login() {
 
   const canSubmit = email.isValid && password.isValid;
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!canSubmit) {
       email.setTouched(true);
       password.setTouched(true);
       return;
     }
-    signIn(email.value);
-    router.replace('/(app)/dashboard');
+    try {
+      await signIn({ email: email.value, password: password.value });
+      router.replace('/(app)/dashboard');
+    } catch {
+      // mock never throws; amplify (Phase 6) surfaces auth failures here.
+      Alert.alert('Erro', 'Email ou senha inválidos.');
+    }
   };
 
   return (
