@@ -20,8 +20,10 @@ import { Montserrat_500Medium } from '@expo-google-fonts/montserrat/500Medium';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat/700Bold';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { AuthProvider } from '../services/auth/AuthProvider';
+import { configureAmplify } from '../services/amplify/configure';
 
 SplashScreen.preventAutoHideAsync();
+configureAmplify();
 
 // Mobile-frame constraint na web: força o app a 360px de largura (a mesma
 // largura do design Figma) centralizado horizontalmente. Em native (iOS /
