@@ -47,3 +47,8 @@ export function isFeatureEnabled(gate: FeatureGate): boolean {
 // (see docs/plans/2026-06-22-swi-backend-auth-profile-design.md, Seção 6).
 export type AuthBackendKind = 'mock' | 'amplify';
 export const AUTH_BACKEND: AuthBackendKind = 'mock';
+
+// Dev-only: lets the mock vitals backend exercise the empty/loading/stale/error
+// UIs that production will hit. 'streaming' = normal simulated data.
+export type VitalsScenario = 'streaming' | 'empty' | 'loading' | 'stale' | 'error';
+export const VITALS_SCENARIO: VitalsScenario = 'streaming';
