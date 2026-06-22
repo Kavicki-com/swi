@@ -64,8 +64,12 @@ mobile (em andamento em `feat/mobile-login`), a branch de backend parte desse es
 - **Login:** e-mail + senha (`loginWith: { email: true }`).
 - **Self sign-up + confirmação por e-mail:** padrão do Cognito (código por e-mail). E-mail
   nativo do Cognito basta no piloto; **SES é fast-follow** quando o volume crescer.
-- **Grupos:** `worker` (default no sign-up) e `admin` (atribuído manualmente no console
-  por enquanto). Os grupos destravam a regra "health-data só admin edita" (Seção 3).
+- **Grupos:** `admin` e `worker`. **Atenção:** o Cognito **não** atribui grupo
+  automaticamente no sign-up — colocar o auto-cadastrado no grupo `worker` exige um trigger
+  `post-confirmation`, **adiado** pra fatia de admin (ver Plano, prereqs da Fase 6). Por ora
+  o usuário fica sem grupo (ok: `Profile` usa owner-auth, não group-auth); `admin` é
+  atribuído manualmente no console. Os grupos destravam a regra "health-data só admin edita"
+  (Seção 3) quando o `HealthData` for ligado.
 - **Aprovação do admin:** adiada (trigger `post-confirmation` jogando o user num grupo
   `pending`) — fora desta fatia.
 
