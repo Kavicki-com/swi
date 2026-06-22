@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
-import { Alert, Image, Pressable, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -14,6 +13,9 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { responsiblesSelection } from '../../../components/modals/ResponsiblesModal';
+import { useField } from '../../../lib/forms/useField';
+import { validateRequired } from '../../../lib/validation/validators';
+import { useMediaPicker } from '../../../lib/media/useMediaPicker';
 
 // Figma 372:21297 — new-report form. Voltar + "Novo relatório" title +
 // 3 inputs (Título / Resumo / Detalhes multiline) + Atribuir
@@ -27,9 +29,9 @@ export default function NewReport() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const [titulo, setTitulo] = useState('');
-  const [resumo, setResumo] = useState('');
-  const [detalhes, setDetalhes] = useState('');
+  const titulo = useField({ validator: (v) => validateRequired(v, 'Título') });
+  const resumo = useField({ validator: (v) => validateRequired(v, 'Resumo') });
+  const detalhes = useField({ validator: (v) => validateRequired(v, 'Detalhes') });
   const [responsibleIds, setResponsibleIds] = useState<string[]>(() =>
     responsiblesSelection.get(),
   );
@@ -49,43 +51,14 @@ export default function NewReport() {
     });
   };
 
-  const pickFromGallery = async (onPick: (uri: string) => void) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) onPick(result.assets[0].uri);
+  const media = useMediaPicker();
+  const showPicker = async (onPick: (uri: string) => void) => {
+    const uri = await media.showPicker();
+    if (uri) onPick(uri);
   };
-
-  const takePhoto = async (onPick: (uri: string) => void) => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão negada', 'Precisamos de acesso à câmera.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) onPick(result.assets[0].uri);
-  };
-
-  const showPicker = (onPick: (uri: string) => void) => {
-    Alert.alert(
-      'Adicionar anexo',
-      undefined,
-      [
-        { text: 'Tirar foto', onPress: () => takePhoto(onPick) },
-        { text: 'Escolher da galeria', onPress: () => pickFromGallery(onPick) },
-        { text: 'Cancelar', style: 'cancel' },
-      ],
-    );
+  const pickFileForUploader = async () => {
+    const uri = await media.pickFromGallery();
+    if (uri) setUploadedFile(uri);
   };
 
   // Rehidrata seleção ao reentrar (modal de responsáveis fecha via router.back).
@@ -102,11 +75,19 @@ export default function NewReport() {
         ? `1 responsável atribuído`
         : `${responsibleIds.length} responsáveis atribuídos`;
 
+  const canSubmit = titulo.isValid && resumo.isValid && detalhes.isValid;
+
   const cancel = () => {
     responsiblesSelection.clear();
     router.back();
   };
   const save = () => {
+    if (!canSubmit) {
+      titulo.setTouched(true);
+      resumo.setTouched(true);
+      detalhes.setTouched(true);
+      return;
+    }
     responsiblesSelection.clear();
     router.back();
   };
@@ -164,24 +145,21 @@ export default function NewReport() {
 
         {/* Inputs */}
         <Input
+          {...titulo.bind()}
           label="Título do relatório"
           placeholder="Digite aqui o título do relatório"
-          value={titulo}
-          onChangeText={setTitulo}
         />
         <Input
+          {...resumo.bind()}
           label="Resumo do relatório"
           placeholder="Digite aqui um resumo do seu relatório"
-          value={resumo}
-          onChangeText={setResumo}
         />
         {/* Detalhes textarea — Figma 372:21297 mostra textarea alta
             (~250-300h) ocupando espaço significativo do form. */}
         <Input
+          {...detalhes.bind()}
           label="Detalhes do relatório"
           placeholder="Digite aqui o seu relatório"
-          value={detalhes}
-          onChangeText={setDetalhes}
           multiline
           numberOfLines={16}
         />
@@ -285,7 +263,7 @@ export default function NewReport() {
           showTakePhoto={false}
           accentColor={theme.content.primary}
           value={uploadedFile ? { uri: uploadedFile } : null}
-          onPickFile={() => pickFromGallery(setUploadedFile)}
+          onPickFile={pickFileForUploader}
           onRemove={() => setUploadedFile(null)}
         />
 
@@ -297,6 +275,7 @@ export default function NewReport() {
           label="Salvar relatório"
           elevation="lg"
           accessibilityLabel="Salvar relatório"
+          disabled={!canSubmit}
           onPress={save}
         />
         <Button

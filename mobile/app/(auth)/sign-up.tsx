@@ -12,36 +12,51 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { PasswordInput } from '../../components/PasswordInput';
+import { useField } from '../../lib/forms/useField';
+import {
+  validateEmail,
+  validateFullName,
+  validatePasswordField,
+  validatePasswordMatch,
+} from '../../lib/validation/validators';
 
 export default function SignUp() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const fullName = useField({ validator: validateFullName });
+  const email = useField({ validator: validateEmail });
+  const password = useField({ validator: validatePasswordField });
+  const confirmPassword = useField({
+    validator: (v) => validatePasswordMatch(password.value, v),
+  });
   const [agreed, setAgreed] = useState(false);
 
-  const pwMatches = confirmPassword.length > 0 && password === confirmPassword;
-  // Demo phase: regras estritas de senha (8 chars + maiúscula + número + símbolo)
-  // removidas pra agilizar testes. Confirmação `pwMatches` mantida como UX
-  // (evita digitação descuidada).
+  const pwMatches =
+    password.value.length > 0 && password.value === confirmPassword.value;
   const canSubmit =
-    fullName.length > 0 && email.length > 0 && password.length > 0 && pwMatches && agreed;
+    fullName.isValid &&
+    email.isValid &&
+    password.isValid &&
+    confirmPassword.isValid &&
+    agreed;
 
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      fullName.setTouched(true);
+      email.setTouched(true);
+      password.setTouched(true);
+      confirmPassword.setTouched(true);
+      return;
+    }
     // Demo flow: sign-up → email-sent (wait for click) → account-confirmation
     // (success). In production the email link deep-links to confirmation; in the
     // demo, email-sent has a manual "Já confirmei" affordance to advance.
-    // Pass `username` forward so account-confirmation can hand it to the
-    // complimentary-data flow ("Boas vindas {username}!").
-    const username = fullName.trim().split(/\s+/)[0] ?? '';
+    const username = fullName.value.trim().split(/\s+/)[0] ?? '';
     router.push({
       pathname: '/(auth)/email-sent',
-      params: { email, username },
+      params: { email: email.value, username },
     });
   };
 
@@ -68,21 +83,19 @@ export default function SignUp() {
 
           <View style={{ gap: theme.gap.m }}>
             <Input
+              {...fullName.bind()}
               label="Nome completo"
               labelWeight="regular"
               placeholder="Seu nome completo"
-              value={fullName}
-              onChangeText={setFullName}
               autoComplete="name"
               autoCapitalize="words"
             />
 
             <Input
+              {...email.bind()}
               label="Email"
               labelWeight="regular"
               placeholder="seu@email.com"
-              value={email}
-              onChangeText={setEmail}
               keyboardType="email-address"
               autoComplete="email"
               autoCapitalize="none"
@@ -92,18 +105,26 @@ export default function SignUp() {
               label="Crie uma senha"
               labelWeight="regular"
               placeholder="*********"
-              value={password}
-              onChangeText={setPassword}
+              value={password.value}
+              onChangeText={password.onChangeText}
+              onBlur={password.onBlur}
+              description={password.error}
+              descriptionVariant={password.error ? 'error' : 'default'}
             />
 
             <PasswordInput
               label="Confirme sua senha"
               labelWeight="regular"
               placeholder="*********"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              description={pwMatches ? 'As senhas são iguais ✓' : undefined}
-              descriptionVariant="success"
+              value={confirmPassword.value}
+              onChangeText={confirmPassword.onChangeText}
+              onBlur={confirmPassword.onBlur}
+              description={
+                confirmPassword.error ?? (pwMatches ? 'As senhas são iguais ✓' : undefined)
+              }
+              descriptionVariant={
+                confirmPassword.error ? 'error' : pwMatches ? 'success' : 'default'
+              }
             />
           </View>
 

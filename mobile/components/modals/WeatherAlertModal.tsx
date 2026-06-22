@@ -120,8 +120,13 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
       </View>
 
       {/* Description + CTA grouped (Figma 385:29384) — gap.s entre si,
-          separado do row de cima pelo gap.m do modal-level container. */}
-      <View style={{ width: '100%', gap: theme.gap.s, alignItems: 'center' }}>
+          separado do row de cima pelo gap.m do modal-level container.
+          Sem alignItems:center no pai: o Button `fullWidth` precisa do
+          default alignItems:stretch pra o pill renderizar full-width.
+          Com alignItems:center, o pill ficava content-width e o usuario
+          via desalinhamento mesmo com o texto interno centralizado. O
+          Text mantem centro visual via textAlign:center. */}
+      <View style={{ width: '100%', gap: theme.gap.s }}>
         <Text
           variant="body.m"
           color={theme.content.dark}

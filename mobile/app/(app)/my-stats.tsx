@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, Image as RNImage, Platform, ScrollView, View } from 'react-native';
+import { Image as RNImage, Platform, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
-import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
 import {
@@ -34,6 +33,7 @@ import {
   KCAL_FLAME_SVG,
 } from '../../lib/myStatsIcons';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
+import { useMediaPicker } from '../../lib/media/useMediaPicker';
 
 const avatarUri =
   Asset.fromModule(require('../../assets/avatar-construction.png')).uri;
@@ -153,21 +153,11 @@ export default function MyStats() {
   // efêmero. Wired pra expo-image-picker (galeria only — showTakePhoto=false
   // na spec original do Figma 342:9907).
   const [examFile, setExamFile] = useState<string | null>(null);
+  const media = useMediaPicker();
 
   const pickExamFromGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão negada', 'Precisamos de acesso à galeria.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setExamFile(result.assets[0].uri);
-    }
+    const uri = await media.pickFromGallery();
+    if (uri) setExamFile(uri);
   };
 
   // T5.3: gradient arrays memoizados — antes alocavam array nova por render

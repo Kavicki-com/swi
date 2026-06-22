@@ -23,6 +23,7 @@ export interface PasswordInputProps {
   placeholder?: string;
   value: string;
   onChangeText: (text: string) => void;
+  onBlur?: () => void;
   description?: string;
   descriptionVariant?: 'default' | 'success' | 'error' | 'warning';
 }
@@ -33,6 +34,7 @@ export function PasswordInput({
   placeholder,
   value,
   onChangeText,
+  onBlur,
   description,
   descriptionVariant,
 }: PasswordInputProps) {
@@ -46,6 +48,7 @@ export function PasswordInput({
       placeholder={placeholder}
       value={value}
       onChangeText={onChangeText}
+      onBlur={onBlur}
       secureTextEntry={!visible}
       autoCapitalize="none"
       autoCorrect={false}

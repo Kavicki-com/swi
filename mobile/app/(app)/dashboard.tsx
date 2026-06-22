@@ -523,15 +523,16 @@ export default function Dashboard() {
         </View>
 
         {/* 5. Bottom actions row: reports + notif (with badge "4") + chat + help.
-            justifyContent:'space-between' distribui bells flush-left, help
-            flush-right, chat balanceado no meio (matches Figma 304:2683
-            distribution). Gap fixo (41) deixava os 3 packados à esquerda
-            com espaço sobrando do lado do help. */}
+            justifyContent:'space-evenly' distribui os 4 gaps (edges + entre
+            elementos) com tamanho igual — mais respiração visual nas pontas
+            do que 'space-between' (que cola stack-left na parede esquerda e
+            SOS na parede direita). Auto-adapta a viewports variados sem
+            depender de gap fixo. */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'space-evenly',
             width: '100%',
           }}
         >
@@ -561,23 +562,30 @@ export default function Dashboard() {
             accessibilityLabel="Chat"
             onPress={() => router.push('/(app)/chat/inbox')}
           />
-          <Button
-            variant="contained"
-            size="large"
-            shape="pill"
-            elevation="lg"
-            backgroundColor={theme.surface.danger}
-            iconLeft={
-              <Icon
-                name="hand"
-                width={18}
-                height={22}
-                color={theme.content.dark}
-              />
-            }
-            accessibilityLabel="Ajuda urgente"
-            onPress={() => setWeatherModalOpen(true)}
-          />
+          {/* Wrap 56×56 força dimensões iguais → shape="pill" vira circular.
+              Sem o wrap, DS Button size="large" + ícone 18×22 (narrow/tall)
+              calculava paddings horizontal/vertical diferentes e o pill
+              ficava OVAL (bug Fix 6 reportado pelo cliente). Mesmo pattern
+              do BadgedButton (linha ~810) que já estava enforcando 56×56. */}
+          <View style={{ width: 56, height: 56 }}>
+            <Button
+              variant="contained"
+              size="large"
+              shape="pill"
+              elevation="lg"
+              backgroundColor={theme.surface.danger}
+              iconLeft={
+                <Icon
+                  name="hand"
+                  width={18}
+                  height={22}
+                  color={theme.content.dark}
+                />
+              }
+              accessibilityLabel="Ajuda urgente"
+              onPress={() => setWeatherModalOpen(true)}
+            />
+          </View>
         </View>
       </View>
       </View>
@@ -631,7 +639,16 @@ export default function Dashboard() {
             backgroundColor: 'rgba(245, 102, 122, 0.18)',
           }}
         >
-          <Pressable onPress={() => {}}>
+          {/* Pressable interno = stop-propagation do tap no conteudo.
+              Precisa carregar os mesmos constraints de largura que o
+              WeatherAlertModal espera (width:100%, maxWidth:320). Sem
+              isso, o wrapper colapsa pra content-width, o width:100% do
+              modal interno fica sem referencia e o pill do Button colapsa
+              pra content-width tambem (desalinhamento visivel). */}
+          <Pressable
+            onPress={() => {}}
+            style={{ width: '100%', maxWidth: 320 }}
+          >
             <WeatherAlertModal
               onClose={() => setWeatherModalOpen(false)}
               onPrimaryAction={() => {
