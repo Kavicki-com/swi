@@ -49,8 +49,17 @@ futura. Então:
   `subscribe()`. IMPLEMENTADA em `feat/backend-chat` (jest 74/74, tsc 0 novos,
   backend tsc `-p amplify` exit 0, expo export web OK; two-gate por unidade +
   review holística: 3 achados [conversa lazy sumindo do inbox, 1ª msg não anexada,
-  thread sem estado de erro] corrigidos, ready). Merge pra `feat/mobile-login`
-  aguardando OK do usuário.
+  thread sem estado de erro] corrigidos, ready). **Mergeada** em `feat/mobile-login`
+  (FF, `95c601c..0f4a2f4`).
+- **Notificações** — `Notification` + `services/notifications`
+  (`notificationReducers.ts` puro + mock event-bus/amplify stub +
+  `NotificationProvider`) + wiring (`notifications.tsx` + `NotificationState`) —
+  mock-path, **feed ao vivo** via seam `subscribe()` + push **SNS** como seam
+  deploy-gated (`registerPushToken`). IMPLEMENTADA em `feat/backend-notifications`
+  (jest 87/87, tsc 0 novos, backend tsc `-p amplify` exit 0, expo export web OK;
+  two-gate por unidade + review holística: 1 achado [borderRadius hardcoded no dot
+  de não-lida] corrigido, ready). **Mergeada** em `feat/mobile-login`
+  (FF, `0f4a2f4..45fb4ae`).
 
 ## Mapa dos domínios não-saúde (estado hoje)
 
@@ -90,7 +99,15 @@ Observações:
    novos, backend tsc -p amplify exit 0, expo export web OK; two-gate + holística =
    ready. Merge pra `feat/mobile-login` aguardando OK. →
    `*-chat-design.md` / `*-chat-plan.md`.
-4. **Notificações** — `Notification` + push **SNS**; `services/notifications` + wiring.
+4. ✅ **Notificações** (IMPLEMENTADA mock-path, mergeada `0f4a2f4..45fb4ae`) —
+   `Notification` (destinatário-scoped `ownerDefinedIn('workerId')`) + push **SNS**
+   como seam deploy-gated (`registerPushToken`) + **feed ao vivo** via `subscribe()`
+   (event-bus no mock); `notificationReducers.ts` puro + `services/notifications`
+   (mock/amplify) + `NotificationProvider` + wiring (`notifications.tsx` +
+   `NotificationState`); read/unread por-destinatário + "marcar todas" + estados
+   loading/empty/error. Figma 401:30469 sem estado de não-lida → dot + "marcar
+   todas" são adições além do Figma (pendente sign-off visual). →
+   `*-notificacoes-design.md` / `*-notificacoes-plan.md`.
 5. **Clima** — **Lambda** → API externa (OpenWeather/Tomorrow.io) → dados de
    heatmap/alerta; `services/weather` + map-weather.
 6. **Evacuação** — **Lambda** server-side de rota; `services/evacuation` + wiring.
