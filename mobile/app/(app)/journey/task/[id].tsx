@@ -148,7 +148,11 @@ export default function TaskDetails() {
   const media = useMediaPicker();
   // O backend faz append em task.images; o slot tocado é informativo (a11y),
   // não posiciona a foto — por isso showPicker não precisa do índice.
+  // Com os 5 slots cheios, um append viraria images[5] que nunca renderiza
+  // (só images[0..4] aparecem); então quando cheio o picker não dispara.
+  const photosFull = (task?.images?.length ?? 0) >= 5;
   const showPicker = async () => {
+    if (photosFull) return;
     const uri = await media.showPicker();
     if (uri && id) {
       const updated = await addTaskPhoto(id, uri);
@@ -282,10 +286,13 @@ export default function TaskDetails() {
                 <Pressable
                   key={i}
                   onPress={() => showPicker()}
+                  // Slot cheio não adiciona mais nada (o append iria pra um
+                  // 6º que não renderiza) — desabilita o toque nesse caso.
+                  disabled={!!uri && photosFull}
                   accessibilityRole="button"
                   accessibilityLabel={
                     uri
-                      ? `Foto ${i + 1} (toque para substituir)`
+                      ? `Foto ${i + 1}`
                       : `Adicionar foto ${i + 1}`
                   }
                   style={{
