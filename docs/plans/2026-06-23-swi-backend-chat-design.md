@@ -217,8 +217,52 @@ auth+profile+reports+journey). Generalizar o nome → switch único no hardening
   vivo via flag mock — eyeball pendente até rodar `expo start` (igual
   Relatórios/Jornada/Fatia 3).
 
+## Ajustes na implementação (2026-06-23)
+
+Decisões refinadas durante a execução subagent-driven (registradas pra o doc não
+divergir do código):
+
+- **`startConversation` saiu; `conversationId` é determinístico** (`[myId,
+  contactId].sort().join('#')`). A thread conhece o id sem a conversa existir, e
+  `sendMessage` **cria-ou-anexa** (lazy no 1º envio). Realização mais limpa da
+  mesma decisão "conversa criada no 1º envio".
+- **`unreadByJson` → `unreadBy: Record<string,number>` no tipo de domínio**; o
+  cliente faz `unreadBy[myId]`. `imageKey`/`avatarKey` viram uris resolvidas no
+  tipo (`imageUri`/`participantAvatars`), igual `images` da Jornada.
+- **Conversa lazy aparecendo ao vivo (2 fixes na review):** (1) o listener global
+  do provider, ao receber msg de uma conversa **ainda não no state**, re-busca
+  `listConversations()` (sem flash de loading) em vez de `applyMessage` no-op —
+  senão a conversa nova sumia do inbox; (2) sem early-return, pra a **1ª mensagem**
+  também ser anexada ao `messagesByConv` da thread aberta (senão não aparecia até
+  reabrir).
+- **Thread tem estado de erro real (fix na review):** `status`
+  `loading|ready|error` (não um booleano `ready`) — `openConversation` rejeitando
+  cai em `error` + retry, não em "conversa vazia"; e o envio é guardado até
+  `ready` (não dropa msg na janela de load).
+- **`user-info` ficou mock** (Task 13 adiada): a rota navega sem id de contato, e
+  a tela é perfil/saúde/mapa = mock-até-smartband. Mostra "Romulo Cardoso" fixo
+  pra qualquer contato — **esperado no smoke**, não é bug.
+- **Seed do mock:** diretório de 15 contatos (migrado do array `USERS` do inbox) +
+  8 conversas (contatos 1..8); Romulo ('1') carrega o histórico migrado de
+  `[userId].tsx`; `unreadBy.me` bate com os badges (10/2/2). `myId='me'` (mock); as
+  telas usam `useChat().myId`, sem hardcode.
+
+### Pendências de deploy NOVAS (além das já no plano)
+- **Contrato do `conversationId`** (`[a,b].sort().join('#')` + `split('#')` no
+  `createLazy`): subs Cognito são UUID (sem `#`), seguro hoje, mas o filtro do
+  `subscribe` real e o `createLazy` dependem do mesmo esquema — garantir paridade
+  client↔AppSync ao ligar amplify.
+- **Resolve de keys→uris no amplify path:** o mock guarda uris resolvidas; o
+  `amplifyChatBackend` precisa mapear `avatarKey`/`imageKey` → `getUrl` pra
+  `participantAvatars`/`imageUri` (junto do `uploadData`).
+
 ## Próximo passo
 
 `writing-plans` → `2026-06-23-swi-backend-chat-plan.md` (fases + verificação),
 depois implementação subagent-driven com two-gate review (igual Fatias 1/3/
 Relatórios/Jornada). Merge só com OK explícito do usuário.
+
+**STATUS (2026-06-23):** IMPLEMENTADA mock-path em `feat/backend-chat` (jest 74/74,
+mobile tsc 0 novos, backend tsc -p amplify exit 0, expo export web exit 0; two-gate
+por unidade + review holística = ready to merge). Merge pra `feat/mobile-login`
+aguardando OK do usuário.
