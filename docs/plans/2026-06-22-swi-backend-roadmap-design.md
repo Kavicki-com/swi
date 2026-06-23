@@ -36,9 +36,13 @@ futura. Então:
 - **Fatia 1** — Auth + Perfil (Cognito + `Profile`/`HealthData`) — mock-path, mergeada.
 - **Fatia 3** — Vitais + GPS — mock-path, mergeada (e **fica mock** pelo pivô).
 - **Relatórios** — `Report` + S3 + `services/reports` + wiring — mock-path,
-  IMPLEMENTADA em `feat/backend-reports` (jest 37/37, tsc 0 novos, backend tsc
-  `-p amplify` exit 0, expo export web OK; review holística: pronta). Merge pra
-  `feat/mobile-login` aguardando OK do usuário.
+  **mergeada** em `feat/mobile-login` (FF, `a6b62e9..f3b46f9`).
+- **Jornada/Tarefas** — `Journey` + `Task` + S3 (`swiMedia`) + `services/journey`
+  (`progress.ts` puro + mock/amplify + provider) + wiring — mock-path,
+  IMPLEMENTADA em `feat/backend-jornada` (jest 56/56, tsc 0 novos, backend tsc
+  `-p amplify` exit 0, expo export web OK; two-gate por unidade + review holística:
+  C1 [barra de progresso lia snapshot stale na tela de detalhe] achada e corrigida,
+  pronta). Merge pra `feat/mobile-login` aguardando OK do usuário.
 
 ## Mapa dos domínios não-saúde (estado hoje)
 
@@ -64,8 +68,11 @@ Observações:
 1. ✅ **Relatórios** (IMPLEMENTADA mock-path, `feat/backend-reports`) — `Report` +
    mídia **S3** + responsibles; `services/reports` + wiring (index/new/[id]);
    estados loading/empty/error. → `*-reports-design.md` / `*-reports-plan.md`.
-2. **Jornada/Tarefas** — `Task` + atribuição + estado/progresso + fotos S3;
-   expande `JourneyProvider` + wiring.
+2. ✅ **Jornada/Tarefas** (IMPLEMENTADA mock-path, `feat/backend-jornada`) —
+   `Journey` (turno) + `Task` (atribuída ao worker) + estado/progresso **reais**
+   (âncoras de tempo + tick no cliente) + fotos **S3**; `progress.ts` puro +
+   `services/journey` (mock/amplify) + provider refatorado + wiring (index/[id]);
+   estados loading/empty/error. → `*-jornada-design.md` / `*-jornada-plan.md`.
 3. **Chat** — `Conversation`/`Message` + **subscriptions real-time**;
    `services/chat` + wiring (inbox/[userId]).
 4. **Notificações** — `Notification` + push **SNS**; `services/notifications` + wiring.
