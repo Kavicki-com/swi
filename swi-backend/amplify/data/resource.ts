@@ -136,6 +136,48 @@ const schema = a.schema({
       allow.ownerDefinedIn('assignedTo').to(['read', 'update']),
       allow.group('admin'),
     ]),
+
+  Conversation: a
+    .model({
+      participants: a.string().array().required(),   // [meSub, themSub] (Cognito subs)
+      participantNames: a.string().array(),          // snapshot denorm paralelo (sem join)
+      participantSubtitles: a.string().array(),      // "Setor Leste"
+      participantAvatarKeys: a.string().array(),     // avatar keys (uris no mock)
+      lastMessageBody: a.string(),                   // preview do inbox (compartilhado)
+      lastMessageAt: a.datetime(),                   // ordenação do inbox
+      unreadByJson: a.json(),                         // { [sub]: count } — unread POR-viewer
+    })
+    .authorization((allow) => [
+      allow.ownersDefinedIn('participants'),
+      allow.group('admin'),
+    ]),
+
+  Message: a
+    .model({
+      conversationId: a.string().required(),         // FK lógico (lista por conversationId; sem hasMany)
+      participants: a.string().array().required(),   // denormaliza p/ ownersDefinedIn
+      senderId: a.string().required(),               // autor (define me/them na bubble)
+      body: a.string(),                              // texto (pode ser vazio se só imagem)
+      imageKey: a.string(),                          // anexo S3 opcional (uri no mock)
+      sentAt: a.datetime().required(),               // ordenação + "time" da bubble
+    })
+    .authorization((allow) => [
+      allow.ownersDefinedIn('participants'),
+      allow.group('admin'),
+    ]),
+
+  Contact: a
+    .model({
+      workerId: a.string().required(),               // Cognito sub
+      name: a.string().required(),
+      sector: a.string(),                            // → subtitle do card
+      role: a.string(),                              // "Operador de escavadeira" (header user-info)
+      avatarKey: a.string(),
+    })
+    .authorization((allow) => [
+      allow.authenticated().to(['read']),            // roster público não-sensível
+      allow.group('admin'),
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
