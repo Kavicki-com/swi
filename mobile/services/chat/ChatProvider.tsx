@@ -30,6 +30,10 @@ export function ChatProvider({ children }: PropsWithChildren) {
   const [directory, setDirectory] = useState<Contact[]>([]);
   const [messagesByConv, setMessagesByConv] = useState<Record<string, Message[]>>({});
   const openConvRef = useRef<string | null>(null);
+  // Espelho síncrono de `conversations` para o listener decidir, sem closure
+  // velha, se a mensagem que chegou pertence a uma conversa já conhecida.
+  const conversationsRef = useRef<Conversation[]>([]);
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
 
   const load = useCallback(async () => {
     setLoadStatus('loading');
@@ -45,6 +49,15 @@ export function ChatProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const unsub = backend.subscribe(null, (msg) => {
+      // Conversa criada de forma lazy pelo sendMessage (1ª mensagem a um contato
+      // novo) ainda não está no state — applyMessage não acharia a linha e seria
+      // no-op, sumindo com a conversa do inbox. Aí buscamos a lista do backend
+      // (sem mexer no loadStatus → sem flash de loading) para trazê-la.
+      const known = conversationsRef.current.some((c) => c.id === msg.conversationId);
+      if (!known) {
+        backend.listConversations().then(setConversations).catch(() => {});
+        return;
+      }
       setConversations((prev) => applyMessage(prev, msg));
       setMessagesByConv((prev) =>
         prev[msg.conversationId]
