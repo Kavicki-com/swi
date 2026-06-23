@@ -53,9 +53,13 @@ export default function Reports() {
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Só carrega quando ainda não há nada carregado (status 'idle'). load() seta
+  // 'loading' primeiro, então re-disparar em todo mount apagaria a lista já
+  // populada pra um spinner ao voltar pra tela. O provider mantém `reports` na
+  // sessão e create() o mantém fresco, então visitas seguintes não dão flash.
   useEffect(() => {
-    load();
-  }, [load]);
+    if (status === 'idle') load();
+  }, [status, load]);
 
   // T5.2: useCallback estabiliza ref → ReportRow memo consegue skipar
   // re-render quando search/currentPage mudam.
