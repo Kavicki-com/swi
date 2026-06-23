@@ -18,9 +18,9 @@ import {
 // services/reports/mockReportsBackend.ts: um store mutável module-level semeado
 // no load, servido com um tiny async hop (`tick`) pra os callers se comportarem
 // como rede real. Seed migrado de lib/journeyMockData.ts (4 tasks, títulos +
-// descrições), agora enriquecido com `objective`, `estimatedMinutes` e
-// `interested*`. lib/journeyMockData.ts NÃO é deletado aqui — uma unidade
-// posterior remove depois que as telas pararem de importá-lo.
+// descrições) pra cá, agora enriquecido com `objective`, `estimatedMinutes` e
+// `interested*`. O antigo lib/journeyMockData.ts foi removido nesta slice (as
+// telas agora consomem só este backend via JourneyProvider).
 //
 // As transições usam os reducers puros de progress.ts; convertemos entre o
 // domínio (`startedAt` ISO string + status/state) e `Anchors` (epoch ms +
@@ -170,6 +170,8 @@ export const mockJourneyBackend: JourneyBackend = {
     if (!task) throw new Error(`mockJourneyBackend.startTask: task ${taskId} não encontrada`);
     const now = Date.now();
 
+    // Modelo single-active-task: uma task previamente ativa NÃO é auto-pausada
+    // aqui (caveat aceito no design — só uma task ativa por vez na prática).
     const ta = startAnchors(taskAnchors(task), now);
     task.status = 'in_progress';
     task.startedAt = isoOrNull(ta.startedAt);
