@@ -91,6 +91,7 @@ export default function TaskDetails() {
   // carregada por getTask(id) em local state; as CTAs leem state/activeTaskId.
   const {
     getTask,
+    tasks,
     startTask,
     pauseJourney,
     resumeJourney,
@@ -146,19 +147,6 @@ export default function TaskDetails() {
   };
 
   const media = useMediaPicker();
-  // O backend faz append em task.images; o slot tocado é informativo (a11y),
-  // não posiciona a foto — por isso showPicker não precisa do índice.
-  // Com os 5 slots cheios, um append viraria images[5] que nunca renderiza
-  // (só images[0..4] aparecem); então quando cheio o picker não dispara.
-  const photosFull = (task?.images?.length ?? 0) >= 5;
-  const showPicker = async () => {
-    if (photosFull) return;
-    const uri = await media.showPicker();
-    if (uri && id) {
-      const updated = await addTaskPhoto(id, uri);
-      setTask(updated);
-    }
-  };
 
   if (status !== 'ready' || !task) {
     return (
@@ -175,9 +163,29 @@ export default function TaskDetails() {
     );
   }
 
+  // task (local) drives the load/empty/error machine; once ready, render from
+  // the provider's live copy so status/anchors/progress reflect start/pause/
+  // finish done on THIS screen (the local snapshot is load-once). Falls back to
+  // the local task if the provider list hasn't got it (shouldn't happen).
+  const liveTask = (id ? tasks.find((t) => t.id === id) : undefined) ?? task;
+
+  // O backend faz append em task.images; o slot tocado é informativo (a11y),
+  // não posiciona a foto — por isso showPicker não precisa do índice.
+  // Com os 5 slots cheios, um append viraria images[5] que nunca renderiza
+  // (só images[0..4] aparecem); então quando cheio o picker não dispara.
+  // Lê de liveTask pra o full-guard acompanhar a contagem real (provider).
+  const photosFull = liveTask.images.length >= 5;
+  const showPicker = async () => {
+    if (photosFull) return;
+    const uri = await media.showPicker();
+    // addTaskPhoto atualiza o provider → liveTask reflete a nova foto; sem
+    // setTask local (o snapshot load-once não precisa mais ser tocado).
+    if (uri && id) await addTaskPhoto(id, uri);
+  };
+
   // Interessados — avatares reais da task (uris). O caption deriva do
   // interestedCount ("… e mais N-1 pessoas estão acompanhando essa tarefa").
-  const interestedAvatars = task.interestedAvatars.map((uri, i) => ({
+  const interestedAvatars = liveTask.interestedAvatars.map((uri, i) => ({
     uri,
     alt: `Avatar ${i + 1}`,
   }));
@@ -226,7 +234,7 @@ export default function TaskDetails() {
               color={theme.content.primary}
               style={{ flexShrink: 1 }}
             >
-              {task.title}
+              {liveTask.title}
             </Text>
             {/* Figma 364:17194 — chevron also after o segundo item (não só após
                 "Jornada"). Visual parity com a SectionTitle do design. */}
@@ -249,10 +257,10 @@ export default function TaskDetails() {
               color={theme.content.dark}
               numberOfLines={1}
             >
-              {task.title}
+              {liveTask.title}
             </Title>
             <Text variant="body.s" color={theme.content.dark}>
-              {task.description}
+              {liveTask.description}
             </Text>
           </View>
         </View>
@@ -260,7 +268,7 @@ export default function TaskDetails() {
         {/* Progresso da tarefa — encapsulado em TaskProgress memoizado.
             Figma 364:17426 — bordered track (pill, border #303030 = content.medium-ish,
             padding-y 4) com fill 6px green. trackHeight 16 = padding 4*2 + fill 6 + border 1*2. */}
-        <TaskProgress task={task} theme={theme} />
+        <TaskProgress task={liveTask} theme={theme} />
 
         {/* Objetivo principal */}
         <View style={{ gap: theme.gap.m }}>
@@ -268,7 +276,7 @@ export default function TaskDetails() {
             Objetivo principal
           </Title>
           <Text variant="body.m" color={theme.content.dark}>
-            {task.objective}
+            {liveTask.objective}
           </Text>
         </View>
 
@@ -281,7 +289,7 @@ export default function TaskDetails() {
           </Title>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             {[0, 1, 2, 3, 4].map((i) => {
-              const uri = task.images[i];
+              const uri = liveTask.images[i];
               return (
                 <Pressable
                   key={i}
@@ -326,7 +334,7 @@ export default function TaskDetails() {
             Tempo estimado
           </Title>
           <Text variant="body.m" color={theme.content.dark}>
-            {`${Math.round(task.estimatedMinutes / 60)}h até a conclusão`}
+            {`${Math.round(liveTask.estimatedMinutes / 60)}h até a conclusão`}
           </Text>
         </View>
 
@@ -337,13 +345,13 @@ export default function TaskDetails() {
           </Title>
           <AvatarGroup
             avatars={interestedAvatars}
-            totalCount={task.interestedCount}
+            totalCount={liveTask.interestedCount}
             maxVisible={5}
             size="m"
             bordered
           />
           <Text variant="body.m" color={theme.content.dark}>
-            {`Joacir Alves e mais ${task.interestedCount - 1} pessoas estão acompanhando essa tarefa`}
+            {`Joacir Alves e mais ${liveTask.interestedCount - 1} pessoas estão acompanhando essa tarefa`}
           </Text>
         </View>
 
