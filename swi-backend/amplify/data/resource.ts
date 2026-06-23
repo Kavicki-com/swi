@@ -79,6 +79,28 @@ const schema = a.schema({
       allow.ownerDefinedIn('workerId').to(['create', 'read']),
       allow.group('admin').to(['read']),
     ]),
+
+  Report: a
+    .model({
+      title: a.string().required(),
+      summary: a.string(),
+      status: a.enum(['accept', 'pending', 'canceled', 'info']),
+      statusLabel: a.string(),
+      authorName: a.string(),
+      authorAvatarKey: a.string(),
+      creationDate: a.datetime(),
+      sector: a.string(),
+      responsibles: a.string().array(),
+      details: a.string(),
+      imageKeys: a.string().array(),
+      // [{ id,title,sector,progress(0-100),tone:'success'|'warning'|'error',avatars:string[],overflowCount? }]
+      activities: a.json(),
+    })
+    .authorization((allow) => [
+      allow.authenticated().to(['read']),
+      allow.owner().to(['create', 'read']),
+      allow.group('admin'),
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
