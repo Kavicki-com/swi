@@ -178,6 +178,22 @@ const schema = a.schema({
       allow.authenticated().to(['read']),            // roster público não-sensível
       allow.group('admin'),
     ]),
+
+  Notification: a
+    .model({
+      workerId: a.string().required(),               // Cognito sub do destinatário
+      title: a.string().required(),
+      body: a.string(),
+      domain: a.enum(['weather', 'chat', 'reports', 'journey', 'faq']), // → rota no cliente
+      targetId: a.string(),                          // id de recurso específico (deep-link futuro)
+      read: a.boolean(),                             // por-destinatário (1 destinatário → boolean)
+      // ordenação por recência usa o timestamp de sistema `createdAt` do Amplify;
+      // o mirror do mobile carrega um createdAt ISO próprio (sem campo redundante).
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('workerId').to(['read', 'update']), // worker lê + marca lida
+      allow.group('admin'),                                    // backend/admin cria
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
