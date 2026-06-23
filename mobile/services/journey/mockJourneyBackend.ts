@@ -241,12 +241,15 @@ export const mockJourneyBackend: JourneyBackend = {
       active.startedAt = isoOrNull(ta.startedAt);
       active.accumulatedSeconds = ta.accumulatedSeconds;
     }
-    const ja = endAnchors(journeyAnchors(journey), now);
+    // Turno encerrado zera o relógio: o próximo turno (idle→ongoing via
+    // startTask) preserva o accumulatedSeconds da jornada, então qualquer
+    // tempo banked aqui vazaria pro donut do turno seguinte. O banking de
+    // tarefa é separado (cada task é seu próprio objeto) e não é afetado.
     journey = {
       state: 'idle',
       activeTaskId: null,
-      startedAt: isoOrNull(ja.startedAt),
-      accumulatedSeconds: ja.accumulatedSeconds,
+      startedAt: null,
+      accumulatedSeconds: 0,
     };
     return { ...journey };
   },

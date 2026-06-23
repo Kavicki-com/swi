@@ -38,6 +38,13 @@ describe('mockJourneyBackend', () => {
     expect(ended.state).toBe('idle');
     expect(ended.activeTaskId).toBeNull();
   });
+  it('endJourney zera o relógio do turno (não vaza pro próximo)', async () => {
+    const [first] = await mockJourneyBackend.listTasks();
+    await mockJourneyBackend.startTask(first.id);
+    const ended = await mockJourneyBackend.endJourney();
+    expect(ended.state).toBe('idle');
+    expect(ended.accumulatedSeconds).toBe(0); // turno seguinte começa do zero
+  });
   it('addTaskPhoto anexa a uri à task', async () => {
     const [first] = await mockJourneyBackend.listTasks();
     const updated = await mockJourneyBackend.addTaskPhoto(first.id, 'file:///foto.jpg');
