@@ -367,3 +367,19 @@ export function useReports(): ReportsState {
 - `ampx generate graphql-client-code` → substituir o mirror `types.ts` pelo Schema gerado.
 - Confirmar `access`/`entity('identity')` do Storage contra a versão instalada.
 - Validar a regra `authenticated read` + `owner create` no console.
+
+## Follow-ups dos reviews (não-bloqueantes, registrados 2026-06-23)
+- **Auth — sem edit/delete pelo autor:** worker só `create`+`read` dos próprios; só
+  admin edita. Se algum dia precisar "editar rascunho", mudar a regra `owner`.
+- **`owner().to(['read'])` é redundante** com `authenticated().to(['read'])` (todo
+  owner já é authenticated). Inofensivo; pode virar `['create']` no deploy pra clareza.
+- **`authorName`/`authorAvatarKey` são display não-confiável** (o cliente seta). A
+  identidade confiável é o campo `owner` implícito do Amplify — nenhuma lógica de
+  authz deve usar `authorName`.
+- **Naming `overflowCount` → `totalCount`:** o DS `AvatarGroup` trata `totalCount`
+  como headcount total e rende `total - visíveis`. Hoje (seed 18, 2 visíveis) mostra
+  `+16` — **idêntico ao demo anterior, sem regressão**, mas o nome do campo do mirror
+  engana; renomear quando mexer no shape.
+- **Gaps conhecidos do demo (não-bugs, pré-existentes):** `SearchInput` não filtra a
+  lista, `Pagination` é estática, e os CTAs de comentário do `[id]` são no-op. Entram
+  com a fatia de colaboração/Chat, não nesta.
