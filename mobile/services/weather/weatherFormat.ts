@@ -21,3 +21,29 @@ export function activeAlert(s: WeatherSnapshot, now: Date = new Date()): Weather
   const t = now.getTime();
   return s.alerts.find((a) => new Date(a.endsAt).getTime() >= t) ?? null;
 }
+
+// Strings de exibição do clima pras telas (dashboard alert-active + os 2 modais),
+// com fallback pro texto estático de hoje quando não há snapshot/alerta — assim
+// a tela de segurança nunca quebra E as 3 superfícies não divergem na cópia.
+export interface WeatherDisplay {
+  tempStr: string; condStr: string; humStr: string; windStr: string;
+  maxStr: string; minStr: string; descStr: string;
+}
+const FALLBACK_ALERT_DESC =
+  'Risco de desabamentos nas primeiras horas do dia, procure a rota de siga as instruções para a evacuação.';
+export function weatherDisplay(
+  s: WeatherSnapshot | null,
+  alert: WeatherAlert | null,
+): WeatherDisplay {
+  const cur = s?.current;
+  const day = s?.daily;
+  return {
+    tempStr: cur ? formatTempC(cur.tempC) : '17ºC',
+    condStr: cur ? conditionLabel(cur.condition) : 'Chuva Intensa',
+    humStr: cur ? formatHumidity(cur.humidityPct) : '65%',
+    windStr: cur ? formatWind(cur.windKmh) : '65km/h',
+    maxStr: day ? formatTempC(day.maxC) : '32ºC',
+    minStr: day ? formatTempC(day.minC) : '19ºC',
+    descStr: alert?.description ?? FALLBACK_ALERT_DESC,
+  };
+}

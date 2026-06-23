@@ -14,6 +14,8 @@ import {
   WATER_DROP_SVG,
   WIND_SPEED_SVG,
 } from '../../lib/alertWeatherSvgs';
+import { useWeather } from '../../services/weather/WeatherProvider';
+import { weatherDisplay } from '../../services/weather/weatherFormat';
 
 // Figma 385:29591 dashboard-alert-active — agora apresentado como MODAL
 // sobreposto à tela de notificações (mesmo padrão visual do WeatherAlertModal
@@ -43,6 +45,11 @@ export interface ActiveAlertModalProps {
 export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
   const theme = useTheme();
   const router = useRouter();
+
+  // Clima real (Unit 2) com fallback pro texto estático de hoje em
+  // loading/error/sem-alerta — esta é tela de segurança e nunca pode quebrar.
+  const { snapshot, activeAlert } = useWeather();
+  const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
 
   // Bolinhas da timeline (Figma 385:29807) usam `surface/secondary` #50B3D2
   // (teal escuro). A linha vertical entre bolinhas usa cyan mais claro
@@ -169,19 +176,19 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
                   />
                 </View>
                 <Title variant="title.l" color={theme.content.dark}>
-                  17ºC
+                  {tempStr}
                 </Title>
                 <Text variant="body.m" color={theme.content.dark}>
-                  Chuva Intensa
+                  {condStr}
                 </Text>
               </View>
 
               {/* Data column (Figma 385:30123) — width fixa 83px. */}
               <View style={{ width: 83, gap: theme.gap.s }}>
-                <WeatherDataRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value="65%" theme={theme} />
-                <WeatherDataRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value="65km/h" theme={theme} />
-                <WeatherDataRow svg={ARROW_UP_TRIANGLE_SVG} svgW={22} svgH={19} value="32ºC" theme={theme} />
-                <WeatherDataRow svg={ARROW_DOWN_TRIANGLE_SVG} svgW={22} svgH={19} value="19ºC" theme={theme} />
+                <WeatherDataRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value={humStr} theme={theme} />
+                <WeatherDataRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value={windStr} theme={theme} />
+                <WeatherDataRow svg={ARROW_UP_TRIANGLE_SVG} svgW={22} svgH={19} value={maxStr} theme={theme} />
+                <WeatherDataRow svg={ARROW_DOWN_TRIANGLE_SVG} svgW={22} svgH={19} value={minStr} theme={theme} />
               </View>
             </View>
 
@@ -191,8 +198,7 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
             >
-              Risco de desabamentos nas primeiras horas do dia, procure a rota de
-              siga as instruções para a evacuação.
+              {descStr}
             </Text>
 
             {/* Instructions list */}
