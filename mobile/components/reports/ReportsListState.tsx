@@ -21,11 +21,20 @@ interface CenteredStateProps {
   message: string;
   /** When set, renders a DS "Tentar novamente" Button wired to it. */
   onRetry?: () => void;
+  /** Per-screen a11y label for the retry button (list vs single-report copy).
+   *  Visible label stays "Tentar novamente"; this is the screen-reader wording. */
+  retryAccessibilityLabel?: string;
   /** Loading shows the spinner instead of a title. */
   loading?: boolean;
 }
 
-function CenteredState({ title, message, onRetry, loading }: CenteredStateProps) {
+function CenteredState({
+  title,
+  message,
+  onRetry,
+  retryAccessibilityLabel,
+  loading,
+}: CenteredStateProps) {
   const theme = useTheme();
   return (
     <View
@@ -59,7 +68,7 @@ function CenteredState({ title, message, onRetry, loading }: CenteredStateProps)
           variant="contained"
           label="Tentar novamente"
           elevation="lg"
-          accessibilityLabel="Tentar carregar os relatórios de novo"
+          accessibilityLabel={retryAccessibilityLabel}
           onPress={onRetry}
         />
       )}
@@ -91,6 +100,7 @@ export function ReportsListState({ kind, onRetry }: ReportsListStateProps) {
       title="Não foi possível carregar"
       message="Houve um problema ao buscar os relatórios. Tente novamente."
       onRetry={onRetry}
+      retryAccessibilityLabel="Tentar carregar os relatórios de novo"
     />
   );
 }
@@ -121,6 +131,7 @@ export function ReportDetailState({ kind, onRetry }: ReportDetailStateProps) {
       title="Não foi possível carregar"
       message="Houve um problema ao buscar este relatório. Tente novamente."
       onRetry={onRetry}
+      retryAccessibilityLabel="Tentar carregar o relatório de novo"
     />
   );
 }

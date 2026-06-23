@@ -45,6 +45,15 @@ export default function ReportDetails() {
 
   useEffect(() => {
     let active = true;
+    // useLocalSearchParams pode devolver id undefined em runtime (rota sem
+    // param). Sem id não há o que buscar — marca 'empty' direto ("Relatório
+    // não encontrado") em vez de chamar loadOne(undefined) no backend.
+    if (!id) {
+      setStatus('empty');
+      return () => {
+        active = false;
+      };
+    }
     setStatus('loading');
     loadOne(id)
       .then((r) => {
@@ -196,81 +205,92 @@ export default function ReportDetails() {
 
         {/* Imagens — horizontal scroll com fotos reais (Figma 364:20304
             mostra imagens de campo / equipamento). Backend slice: URIs vêm
-            de report.images (seed espelha as 2 imagens estáticas). */}
-        <Title variant="title.xs" color={theme.content.dark}>
-          Imagens
-        </Title>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: theme.gap.sm }}
-        >
-          {report.images.map((uri, i) => (
-            <RNImage
-              key={i}
-              source={{ uri }}
-              resizeMode="cover"
-              accessible={false}
-              style={{
-                width: 196,
-                height: 196,
-                borderRadius: theme.border.radius.m,
-              }}
-            />
-          ))}
-        </ScrollView>
-
-        {/* Atividades */}
-        <Title variant="title.xs" color={theme.content.dark}>
-          Atividades
-        </Title>
-        <View style={{ gap: theme.gap.s }}>
-          {report.activities.map((activity) => {
-            const barColor =
-              activity.tone === 'success'
-                ? theme.content.primary
-                : activity.tone === 'warning'
-                ? theme.surface.warning
-                : theme.surface.error;
-            return (
-              <View
-                key={activity.id}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: theme.surface.standard,
-                  borderRadius: theme.border.radius.m,
-                  paddingHorizontal: theme.padding.m,
-                  paddingVertical: theme.padding.s,
-                  gap: theme.gap.l,
-                }}
-              >
-                {/* Coluna esquerda — width capada pra forçar wrap nos
-                    títulos como Figma (cada palavra grande em sua linha). */}
-                <View style={{ gap: theme.gap.xs, width: 140 }}>
-                  <Text variant="label.m" color={theme.content.dark}>
-                    {activity.title}
-                  </Text>
-                  <Text variant="body.m" color={theme.content.dark}>
-                    {activity.sector}
-                  </Text>
-                  <View style={{ width: 119 }}>
-                    {/* DS ProgressBar usa clamp(value, 0, 100); progress já é
-                        percentual (0-100) no Report model — não multiplicar. */}
-                    <ProgressBar value={activity.progress} color={barColor} />
-                  </View>
-                </View>
-                <AvatarGroup
-                  avatars={activity.avatars.map((uri) => ({ uri }))}
-                  totalCount={activity.overflowCount}
-                  maxVisible={3}
-                  size="m"
+            de report.images (seed espelha as 2 imagens estáticas). Relatório
+            recém-criado pode vir sem imagens — esconde a seção inteira pra não
+            renderizar um título solto sem conteúdo. */}
+        {report.images.length > 0 && (
+          <>
+            <Title variant="title.xs" color={theme.content.dark}>
+              Imagens
+            </Title>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: theme.gap.sm }}
+            >
+              {report.images.map((uri, i) => (
+                <RNImage
+                  key={i}
+                  source={{ uri }}
+                  resizeMode="cover"
+                  accessible={false}
+                  style={{
+                    width: 196,
+                    height: 196,
+                    borderRadius: theme.border.radius.m,
+                  }}
                 />
-              </View>
-            );
-          })}
-        </View>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {/* Atividades — relatório recém-criado tem activities:[]; esconde a
+            seção inteira nesse caso (mesmo motivo das Imagens). */}
+        {report.activities.length > 0 && (
+          <>
+            <Title variant="title.xs" color={theme.content.dark}>
+              Atividades
+            </Title>
+            <View style={{ gap: theme.gap.s }}>
+              {report.activities.map((activity) => {
+                const barColor =
+                  activity.tone === 'success'
+                    ? theme.content.primary
+                    : activity.tone === 'warning'
+                    ? theme.surface.warning
+                    : theme.surface.error;
+                return (
+                  <View
+                    key={activity.id}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: theme.surface.standard,
+                      borderRadius: theme.border.radius.m,
+                      paddingHorizontal: theme.padding.m,
+                      paddingVertical: theme.padding.s,
+                      gap: theme.gap.l,
+                    }}
+                  >
+                    {/* Coluna esquerda — width capada pra forçar wrap nos
+                        títulos como Figma (cada palavra grande em sua linha). */}
+                    <View style={{ gap: theme.gap.xs, width: 140 }}>
+                      <Text variant="label.m" color={theme.content.dark}>
+                        {activity.title}
+                      </Text>
+                      <Text variant="body.m" color={theme.content.dark}>
+                        {activity.sector}
+                      </Text>
+                      <View style={{ width: 119 }}>
+                        {/* DS ProgressBar usa clamp(value, 0, 100); progress já é
+                            percentual (0-100) no Report model — não multiplicar. */}
+                        <ProgressBar value={activity.progress} color={barColor} />
+                      </View>
+                    </View>
+                    <AvatarGroup
+                      avatars={activity.avatars.map((uri) => ({ uri }))}
+                      totalCount={activity.overflowCount}
+                      maxVisible={3}
+                      size="m"
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         {/* Add comment — multiline input + Fazer comentário CTA.
             Figma 364:20304 mostra textarea ~120h, ~6 linhas de altura. */}
