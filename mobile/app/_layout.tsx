@@ -24,6 +24,7 @@ import { ProfileProvider } from '../services/profile/ProfileProvider';
 import { ReportsProvider } from '../services/reports/ReportsProvider';
 import { VitalsProvider, useVitals } from '../services/vitals/VitalsProvider';
 import { LocationProvider, useLocation } from '../services/location/LocationProvider';
+import { WeatherProvider } from '../services/weather/WeatherProvider';
 import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
 import { configureAmplify } from '../services/amplify/configure';
 
@@ -165,6 +166,7 @@ export default function RootLayout() {
             {/* Feeds live vitals + coords into the telemetry sampler. Renders
                 null; sits alongside the Stack inside both providers. */}
             <TelemetryRoot />
+            <WeatherProvider>
             <View style={mobileFrameStyle}>
               {/* freezeOnBlur: pausa renderização de telas cached no Stack
                   (useFrame do Smartwatch3D + setInterval do journey/task param
@@ -187,6 +189,7 @@ export default function RootLayout() {
                 <Stack.Screen name="modals/weather-alert" options={{ presentation: 'transparentModal' }} />
               </Stack>
             </View>
+            </WeatherProvider>
             </LocationProvider>
             </VitalsProvider>
             </ReportsProvider>

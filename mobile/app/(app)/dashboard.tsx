@@ -41,6 +41,8 @@ import {
 } from '../../lib/alertWeatherSvgs';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 import { useVitals } from '../../services/vitals/VitalsProvider';
+import { useWeather } from '../../services/weather/WeatherProvider';
+import { formatTempC, formatHumidity, formatWind, conditionLabel } from '../../services/weather/weatherFormat';
 import type { WorkerStatus } from '../../services/vitals/types';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
@@ -914,6 +916,20 @@ function AlertActiveView() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  // Clima real (Unit 2) com fallback pro texto estático de hoje em
+  // loading/error/sem-alerta — esta é tela de segurança e nunca pode quebrar.
+  const { snapshot, activeAlert } = useWeather();
+  const cur = snapshot?.current;
+  const day = snapshot?.daily;
+  const tempStr = cur ? formatTempC(cur.tempC) : '17ºC';
+  const condStr = cur ? conditionLabel(cur.condition) : 'Chuva Intensa';
+  const humStr = cur ? formatHumidity(cur.humidityPct) : '65%';
+  const windStr = cur ? formatWind(cur.windKmh) : '65km/h';
+  const maxStr = day ? formatTempC(day.maxC) : '32ºC';
+  const minStr = day ? formatTempC(day.minC) : '19ºC';
+  const alertDesc = activeAlert?.description
+    ?? 'Risco de desabamentos nas primeiras horas do dia, procure a rota de siga as instruções para a evacuação.';
+
   // Bolinhas da timeline (Figma 385:29807 etc.) usam `surface/secondary`
   // #50B3D2 (teal escuro). A linha vertical entre bolinhas usa um cyan
   // mais claro `content/secondary` #8AD2E2 — cores DIFERENTES por design.
@@ -1017,10 +1033,10 @@ function AlertActiveView() {
               />
             </View>
             <Title variant="title.l" color={theme.content.dark}>
-              17ºC
+              {tempStr}
             </Title>
             <Text variant="body.m" color={theme.content.dark}>
-              Chuva Intensa
+              {condStr}
             </Text>
           </View>
 
@@ -1028,10 +1044,10 @@ function AlertActiveView() {
               4 ícones vêm dos SVGs do Figma (alertWeatherSvgs) porque
               os equivalentes do DS têm shapes diferentes. */}
           <View style={{ width: 83, gap: theme.gap.s }}>
-            <WeatherDataRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value="65%" theme={theme} />
-            <WeatherDataRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value="65km/h" theme={theme} />
-            <WeatherDataRow svg={ARROW_UP_TRIANGLE_SVG} svgW={22} svgH={19} value="32ºC" theme={theme} />
-            <WeatherDataRow svg={ARROW_DOWN_TRIANGLE_SVG} svgW={22} svgH={19} value="19ºC" theme={theme} />
+            <WeatherDataRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value={humStr} theme={theme} />
+            <WeatherDataRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value={windStr} theme={theme} />
+            <WeatherDataRow svg={ARROW_UP_TRIANGLE_SVG} svgW={22} svgH={19} value={maxStr} theme={theme} />
+            <WeatherDataRow svg={ARROW_DOWN_TRIANGLE_SVG} svgW={22} svgH={19} value={minStr} theme={theme} />
           </View>
         </View>
 
@@ -1041,8 +1057,7 @@ function AlertActiveView() {
           color={theme.content.dark}
           style={{ textAlign: 'center' }}
         >
-          Risco de desabamentos nas primeiras horas do dia, procure a rota de
-          siga as instruções para a evacuação.
+          {alertDesc}
         </Text>
 
         {/* Instructions list */}
