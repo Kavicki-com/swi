@@ -50,15 +50,18 @@ export function ChatProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     const unsub = backend.subscribe(null, (msg) => {
       // Conversa criada de forma lazy pelo sendMessage (1ª mensagem a um contato
-      // novo) ainda não está no state — applyMessage não acharia a linha e seria
-      // no-op, sumindo com a conversa do inbox. Aí buscamos a lista do backend
-      // (sem mexer no loadStatus → sem flash de loading) para trazê-la.
+      // novo) ainda não está no state — applyMessage seria no-op e a conversa
+      // sumiria do inbox. Nesse caso buscamos a lista do backend (sem mexer no
+      // loadStatus → sem flash de loading); senão aplicamos o reducer.
       const known = conversationsRef.current.some((c) => c.id === msg.conversationId);
-      if (!known) {
+      if (known) {
+        setConversations((prev) => applyMessage(prev, msg));
+      } else {
         backend.listConversations().then(setConversations).catch(() => {});
-        return;
       }
-      setConversations((prev) => applyMessage(prev, msg));
+      // Append ao histórico da thread aberta/carregada — inclui a 1ª mensagem de
+      // uma conversa nova (messagesByConv[convId] já foi inicializado no
+      // openConversation, então o append roda mesmo no caso !known).
       setMessagesByConv((prev) =>
         prev[msg.conversationId]
           ? { ...prev, [msg.conversationId]: [...prev[msg.conversationId], msg] }
