@@ -82,14 +82,14 @@ export function JourneyProvider({ children }: PropsWithChildren) {
     [backend],
   );
 
-  const pauseJourney = useCallback(
-    async () => setSession(await backend.pauseJourney()),
-    [backend],
-  );
-  const resumeJourney = useCallback(
-    async () => setSession(await backend.resumeJourney()),
-    [backend],
-  );
+  const pauseJourney = useCallback(async () => {
+    setSession(await backend.pauseJourney());
+    setTasks(await backend.listTasks()); // a task ativa virou 'paused' (snapshot) — barra congela
+  }, [backend]);
+  const resumeJourney = useCallback(async () => {
+    setSession(await backend.resumeJourney());
+    setTasks(await backend.listTasks()); // a task ativa voltou a 'in_progress' — barra retoma
+  }, [backend]);
   const endJourney = useCallback(async () => {
     setSession(await backend.endJourney());
     setTasks(await backend.listTasks()); // a ativa virou 'done'
