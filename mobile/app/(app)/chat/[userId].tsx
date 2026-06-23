@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -70,13 +70,22 @@ export default function ChatThread() {
     useChat();
   const convId = keyFor(userId);
 
-  // Carrega o histórico da conversa ao abrir; `ready` distingue "ainda
-  // carregando" de "carregou e está vazia" (messagesFor não consegue distinguir).
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    setReady(false);
-    openConversation(convId).finally(() => setReady(true));
+  // Carrega o histórico da conversa ao abrir. `status` tem três valores para
+  // distinguir "ainda carregando" de "carregou e está vazia" (messagesFor não
+  // distingue) E de "falhou" — uma rejeição precisa cair em 'error' (com retry),
+  // não em 'ready' (que renderizaria como conversa vazia e mascararia a falha).
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  // `load` é reusado pelo botão "Tentar novamente" do estado de erro.
+  // .then(onOk, onErr) — NÃO .finally — para que a rejeição termine em 'error'
+  // e o ChatThreadState kind="error" + onRetry fiquem alcançáveis (com .finally
+  // toda falha caía em 'ready' e renderizava como conversa vazia).
+  const load = useCallback(() => {
+    setStatus('loading');
+    openConversation(convId).then(() => setStatus('ready'), () => setStatus('error'));
   }, [convId, openConversation]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Cabeçalho do contato: conversa existente → resolveContact; conversa nova
   // (ainda sem registro) → cai no diretório pelo workerId. Avatar "me" vem do
@@ -107,6 +116,10 @@ export default function ChatThread() {
   };
 
   const onSend = () => {
+    // Não envia enquanto a conversa não terminou de abrir: o provider só faz
+    // live-append depois do openConversation, então um tap durante o loading
+    // (ou após falha) descartaria a mensagem silenciosamente.
+    if (status !== 'ready') return;
     const body = text.trim();
     if (!body && !pendingAttachment) return;
     send(convId, body, pendingAttachment ?? undefined);
@@ -171,10 +184,12 @@ export default function ChatThread() {
           Journey pattern). */}
       <View style={{ flex: 1, paddingTop: 16, paddingHorizontal: theme.padding.m }}>
         <View style={{ flex: 1 }}>
-          {/* Estado de carregamento / conversa nova vazia. Mantém o chrome
-              (background + topbar acima) e troca só o miolo. */}
-          {!ready ? (
+          {/* Estado de carregamento / erro / conversa nova vazia. Mantém o
+              chrome (background + topbar acima) e troca só o miolo. */}
+          {status === 'loading' ? (
             <ChatThreadState kind="loading" />
+          ) : status === 'error' ? (
+            <ChatThreadState kind="error" onRetry={load} />
           ) : messages.length === 0 ? (
             <ChatThreadState kind="empty" />
           ) : (
