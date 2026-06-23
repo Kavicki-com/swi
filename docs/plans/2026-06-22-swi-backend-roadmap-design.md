@@ -60,6 +60,16 @@ futura. Então:
   two-gate por unidade + review holística: 1 achado [borderRadius hardcoded no dot
   de não-lida] corrigido, ready). **Mergeada** em `feat/mobile-login`
   (FF, `0f4a2f4..45fb4ae`).
+- **Clima** — **1ª Lambda do projeto** (`functions/weather` → OpenWeather One Call
+  3.0, chave via `secret`) exposta como **custom query** `getWeather` (sem model) +
+  `services/weather` (`weatherFormat.ts` puro + mock/amplify stub + `WeatherProvider`
+  no root layout) + wiring do **weather row do dashboard alert-active** + os 2 modais
+  de alerta (`WeatherAlertModal`/`ActiveAlertModal`) lendo `useWeather()` com fallback
+  estático; **mapa decorativo** (heatmap/radar fora de escopo). IMPLEMENTADA em
+  `feat/backend-clima` (jest 96/96, tsc 0 novos, backend tsc `-p amplify` exit 0, expo
+  export web OK; two-gate por unidade + review holística: 1 achado [4º painel
+  `ActiveAlertModal` hardcoded → helper `weatherDisplay` nas 3 superfícies] corrigido,
+  ready). **Mergeada** em `feat/mobile-login` (FF, `63ce40c..bfe12c9`).
 
 ## Mapa dos domínios não-saúde (estado hoje)
 
@@ -108,8 +118,15 @@ Observações:
    loading/empty/error. Figma 401:30469 sem estado de não-lida → dot + "marcar
    todas" são adições além do Figma (pendente sign-off visual). →
    `*-notificacoes-design.md` / `*-notificacoes-plan.md`.
-5. **Clima** — **Lambda** → API externa (OpenWeather/Tomorrow.io) → dados de
-   heatmap/alerta; `services/weather` + map-weather.
+5. ✅ **Clima** (IMPLEMENTADA mock-path, mergeada `63ce40c..bfe12c9`) — **1ª Lambda**
+   (`functions/weather` → OpenWeather One Call 3.0, chave via `secret`) exposta como
+   **custom query** `getWeather` (sem model DynamoDB); `weatherFormat.ts` puro +
+   `services/weather` (mock/amplify) + `WeatherProvider` (root layout) + wiring do
+   weather row do dashboard alert-active + os 2 modais (`WeatherAlertModal`/
+   `ActiveAlertModal`) via helper `weatherDisplay` com fallback estático; **mapa
+   decorativo** (radar/tiles fora de escopo). Localização = `SITE_LOCATION` fixo.
+   Pendências de deploy: secret real, cache na Lambda, ícones por condição, re-nest
+   no boundary amplify. → `*-clima-design.md` / `*-clima-plan.md`.
 6. **Evacuação** — **Lambda** server-side de rota; `services/evacuation` + wiring.
 7. **Hardening + integração admin** — trocar `mockApi` do swi-admin → cliente
    Amplify (branches `feat/admin-*` por domínio), SES, aprovação-do-admin,
