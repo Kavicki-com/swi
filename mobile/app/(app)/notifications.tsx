@@ -8,117 +8,44 @@ import { ProdOnlyPlaceholder } from '../../components/ProdOnlyPlaceholder';
 import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
 import { isFeatureEnabled } from '../../lib/featureFlags';
+import { NotificationProvider, useNotifications } from '../../services/notifications/NotificationProvider';
+import type { AppNotification, NotificationDomain } from '../../services/notifications/types';
+import { NotificationState } from '../../components/notifications/NotificationState';
 
-// Figma 401:30469 — notifications list. Title + 12 notification cards
-// compose-local (DS HorizontalCard sem description) + Chat FAB + Home
-// FAB. Demo phase: cards estáticos, more_vert icon sem menu real.
+// Figma 401:30469 — notifications list. Title + notification cards compose-local
+// (DS HorizontalCard sem description) + Chat FAB + Home FAB. Unit 3 (backend):
+// a lista agora vem ao vivo do NotificationProvider (Unit 2) em vez do array
+// estático; more_vert icon segue decorativo (sem menu real).
 //
-// Routing table (Sprint 1.2): cada card abre uma rota canônica para o
-// domínio da notificação. Todas as rotas existem; nenhuma cria 404.
-// - Alerta meteorológico  → mapa meteorológico (visualização do fenômeno;
-//   o estado de "alerta ativo" do dashboard segue acessível pelo botão SOS
-//   no próprio dashboard). Ver R-5 em 2026-05-17-mobile-routes-audit.md.
-// - Atividade/feedback/comentário → chat inbox (mensagens da equipe)
-// - Novo relatório / qualidade  → lista de relatórios
-// - Treinamento / tarefa / inspeção / cronograma → jornada
-// - Atualização de procedimento → FAQ
+// Routing table: cada card abre uma rota canônica para o domínio da
+// notificação. Todas as rotas existem; nenhuma cria 404.
+// - weather  → WeatherAlertModal in-place (visualização do fenômeno; o estado
+//   de "alerta ativo" do dashboard segue acessível pelo botão SOS no próprio
+//   dashboard). Caso especial: NÃO navega, abre modal. Ver R-5 em
+//   2026-05-17-mobile-routes-audit.md.
+// - chat     → chat inbox (mensagens da equipe)
+// - reports  → lista de relatórios
+// - journey  → jornada (treinamento / tarefa / inspeção / cronograma)
+// - faq      → FAQ (atualização de procedimento)
 
 type Href =
-  | '/(app)/dashboard?alert=modal'
   | '/(app)/chat/inbox'
   | '/(app)/reports'
   | '/(app)/journey'
   | '/(app)/settings/faq';
 
-const NOTIFICATIONS: {
-  id: string;
-  title: string;
-  body: string;
-  href: Href;
-}[] = [
-  {
-    id: 'alerta-meteorologico',
-    title: 'Alerta Meteorológico',
-    body: 'Aviso de tempestades fortes previstas para as próximas 24 horas, tome precauções necessárias.',
-    // Dispara o fluxo do alert modal: dashboard com gradient vermelho +
-    // modal "Local em Alerta!" aparece após 800ms (dissolve 240ms). User
-    // clica "Instruções de segurança" → vai pro timeline `?alert=active`.
-    href: '/(app)/dashboard?alert=modal',
-  },
-  {
-    id: 'atividade-colaborador',
-    title: 'Atividade de Colaborador',
-    body: 'Ana atualizou o status da manutenção preventiva no setor de produção.',
-    href: '/(app)/chat/inbox',
-  },
-  {
-    id: 'feedback-recebido',
-    title: 'Feedback Recebido',
-    body: 'Equipe reportou melhorias significativas após implementação das novas diretrizes.',
-    href: '/(app)/chat/inbox',
-  },
-  {
-    id: 'novo-relatorio',
-    title: 'Novo Relatório Atribuído',
-    body: 'Relatório de segurança do setor 5 foi designado para sua análise.',
-    href: '/(app)/reports',
-  },
-  {
-    id: 'relatorio-qualidade',
-    title: 'Relatório de Qualidade',
-    body: 'Análise dos indicadores de qualidade do último trimestre disponível para revisão.',
-    href: '/(app)/reports',
-  },
-  {
-    id: 'treinamento',
-    title: 'Notificação de Treinamento',
-    body: 'Curso sobre normas ambientais será oferecido na próxima quarta-feira.',
-    href: '/(app)/journey',
-  },
-  {
-    id: 'nova-tarefa',
-    title: 'Nova Tarefa Atribuída',
-    body: 'Realizar auditoria dos processos de armazenamento até o final da semana.',
-    href: '/(app)/journey',
-  },
-  {
-    id: 'nova-inspecao',
-    title: 'Nova Inspeção Programada',
-    body: 'Agendada inspeção de segurança elétrica para a próxima segunda-feira.',
-    href: '/(app)/journey',
-  },
-  {
-    id: 'cronograma',
-    title: 'Mudança no Cronograma',
-    body: 'Prazo para envio de relatórios técnicos foi estendido em duas semanas.',
-    href: '/(app)/journey',
-  },
-  {
-    id: 'comentario-relatorio',
-    title: 'Comentário em Relatório',
-    body: `Carlos comentou: 'Verificar a conformidade dos equipamentos com a norma ISO 9001.'`,
-    href: '/(app)/chat/inbox',
-  },
-  {
-    id: 'atualizacao-procedimento',
-    title: 'Atualização de Procedimento',
-    body: 'Procedimento de emergência revisado e disponível para consulta.',
-    href: '/(app)/settings/faq',
-  },
-  {
-    id: 'novo-comentario',
-    title: 'Novo Comentário',
-    body: `João observou: 'Necessário reforçar monitoramento durante turnos noturnos.'`,
-    href: '/(app)/chat/inbox',
-  },
-];
+const DOMAIN_ROUTE: Record<Exclude<NotificationDomain, 'weather'>, Href> = {
+  chat: '/(app)/chat/inbox',
+  reports: '/(app)/reports',
+  journey: '/(app)/journey',
+  faq: '/(app)/settings/faq',
+};
 
-// T4.4: NotificationCard memoizado pra impedir que os 12 cards re-renderizem
+// T4.4: NotificationCard memoizado pra impedir que os cards re-renderizem
 // quando weatherAlertVisible/activeAlertVisible togglam. Props estáveis:
-// `notif` (constante do array) + `onPress` (useCallback no parent).
-type NotificationItem = (typeof NOTIFICATIONS)[number];
+// `notif` (item da lista do provider) + `onPress` (useCallback no parent).
 type NotificationCardProps = {
-  notif: NotificationItem;
+  notif: AppNotification;
   onPress: (id: string) => void;
   theme: ReturnType<typeof useTheme>;
 };
@@ -132,7 +59,7 @@ const NotificationCard = memo(function NotificationCard({
     <Pressable
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={notif.title}
+      accessibilityLabel={notif.read ? notif.title : `${notif.title} (não lida)`}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -148,13 +75,30 @@ const NotificationCard = memo(function NotificationCard({
       }}
     >
       <View style={{ flex: 1, gap: theme.gap.s }}>
-        <Title
-          variant="title.xs"
-          color={theme.content.dark}
-          numberOfLines={1}
-        >
-          {notif.title}
-        </Title>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xs }}>
+          {/* Indicador de não-lida: dot azul (surface.secondary = accent
+              cross-section, pois notificações são cross-domain). Cards lidos
+              não renderizam o dot → byte-idênticos ao layout estático de hoje. */}
+          {!notif.read && (
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                // theme.border.radius não expõe um token `full`/circular (keys:
+                // xs/s/m/l/pill); per instrução, fallback numérico 4 p/ o dot.
+                borderRadius: 4,
+                backgroundColor: theme.surface.secondary,
+              }}
+            />
+          )}
+          <Title
+            variant="title.xs"
+            color={theme.content.dark}
+            numberOfLines={1}
+          >
+            {notif.title}
+          </Title>
+        </View>
         <Text variant="body.s" color={theme.content.dark}>
           {notif.body}
         </Text>
@@ -175,13 +119,18 @@ export default function Notifications() {
   if (!isFeatureEnabled('notifications')) {
     return <ProdOnlyPlaceholder />;
   }
-  return <NotificationsScreen />;
+  return (
+    <NotificationProvider>
+      <NotificationsScreen />
+    </NotificationProvider>
+  );
 }
 
 function NotificationsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { notifications, loadStatus, unreadCount, load, markRead, markAllRead } = useNotifications();
   // Weather alert is shown as an in-place modal instead of navigating away.
   // Backdrop tint usa surface.error (#f5667a) a ~18% — vermelho perceptível
   // mas suave (user spec: "deixe a tela atras levemente vermelha").
@@ -196,16 +145,20 @@ function NotificationsScreen() {
   // memoizado consegue skipar re-render quando só o modal state muda.
   const handleNotificationPress = useCallback(
     (id: string) => {
-      const notif = NOTIFICATIONS.find((n) => n.id === id);
-      if (!notif) return;
-      if (notif.id === 'alerta-meteorologico') {
+      const n = notifications.find((x) => x.id === id);
+      if (!n) return;
+      markRead(id); // otimista; navega/abre em seguida
+      if (n.domain === 'weather') {
         setWeatherAlertVisible(true);
         return;
       }
-      router.push(notif.href);
+      router.push(DOMAIN_ROUTE[n.domain]);
     },
-    [router],
+    [notifications, markRead, router],
   );
+
+  const isStateView =
+    loadStatus === 'loading' || loadStatus === 'empty' || loadStatus === 'error';
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -214,31 +167,53 @@ function NotificationsScreen() {
         pattern={require('../../assets/smartband-bg-pattern.png')}
       />
 
-      <ScrollView
-        style={{ flex: 1, backgroundColor: 'transparent' }}
-        contentContainerStyle={{
-          paddingTop: insets.top + theme.padding.l,
-          paddingBottom: insets.bottom + 160,
-          paddingHorizontal: theme.padding.m,
-          gap: theme.gap.m,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        <Title variant="title.xs" color={theme.content.dark}>
-          Notificações
-        </Title>
+      {isStateView ? (
+        // loading/empty/error dentro do container do gradiente; onRetry só
+        // importa pro 'error' (passar sempre é inofensivo).
+        <NotificationState kind={loadStatus} onRetry={load} />
+      ) : (
+        <ScrollView
+          style={{ flex: 1, backgroundColor: 'transparent' }}
+          contentContainerStyle={{
+            paddingTop: insets.top + theme.padding.l,
+            paddingBottom: insets.bottom + 160,
+            paddingHorizontal: theme.padding.m,
+            gap: theme.gap.m,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <Title variant="title.xs" color={theme.content.dark}>
+              Notificações
+            </Title>
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                label="Marcar todas como lidas"
+                accessibilityLabel="Marcar todas as notificações como lidas"
+                onPress={markAllRead}
+              />
+            )}
+          </View>
 
-        <View style={{ gap: theme.gap.s }}>
-          {NOTIFICATIONS.map((notif) => (
-            <NotificationCard
-              key={notif.id}
-              notif={notif}
-              onPress={handleNotificationPress}
-              theme={theme}
-            />
-          ))}
-        </View>
-      </ScrollView>
+          <View style={{ gap: theme.gap.s }}>
+            {notifications.map((n) => (
+              <NotificationCard
+                key={n.id}
+                notif={n}
+                onPress={handleNotificationPress}
+                theme={theme}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      )}
 
       <NavFABs />
 
