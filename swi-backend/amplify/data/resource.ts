@@ -1,4 +1,5 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
+import { weather } from '../functions/weather/resource';
 
 /**
  * Profile  — personal + address data the worker edits about themselves
@@ -194,6 +195,33 @@ const schema = a.schema({
       allow.ownerDefinedIn('workerId').to(['read', 'update']), // worker lê + marca lida
       allow.group('admin'),                                    // backend/admin cria
     ]),
+
+  // ---- Clima (fatia 5): passagem pra OpenWeather via Lambda, sem model ----
+  WeatherAlertType: a.customType({
+    id: a.string(),
+    event: a.string(),
+    description: a.string(),
+    startsAt: a.datetime(),
+    endsAt: a.datetime(),
+  }),
+
+  WeatherSnapshot: a.customType({
+    tempC: a.float(),
+    condition: a.string(),       // enum WeatherCondition no app
+    humidityPct: a.integer(),
+    windKmh: a.float(),
+    minC: a.float(),
+    maxC: a.float(),
+    alerts: a.ref('WeatherAlertType').array(),
+    fetchedAt: a.datetime(),
+  }),
+
+  getWeather: a
+    .query()
+    .arguments({ lat: a.float().required(), lng: a.float().required() })
+    .returns(a.ref('WeatherSnapshot'))
+    .handler(a.handler.function(weather))
+    .authorization((allow) => [allow.authenticated()]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

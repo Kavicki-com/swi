@@ -2,11 +2,12 @@ import { defineBackend } from '@aws-amplify/backend';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
+import { weather } from './functions/weather/resource';
 
 /**
  * @see https://docs.amplify.aws/react/build-a-backend/ to add storage, functions, and more
  */
-const backend = defineBackend({ auth, data, storage });
+const backend = defineBackend({ auth, data, storage, weather });
 
 // DynamoDB TTL on raw telemetry (cost mitigation). Amplify Gen 2 has no
 // schema-level TTL, so set it on the underlying CFN table.
