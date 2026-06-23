@@ -9,4 +9,5 @@ export const weather = defineFunction({
     OPENWEATHER_API_KEY: secret('OPENWEATHER_API_KEY'),
   },
   timeoutSeconds: 15,
+  runtime: 20,
 });
