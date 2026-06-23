@@ -13,7 +13,7 @@ import {
   WIND_SPEED_SVG,
 } from '../../lib/alertWeatherSvgs';
 import { useWeather } from '../../services/weather/WeatherProvider';
-import { formatTempC, formatHumidity, formatWind, conditionLabel } from '../../services/weather/weatherFormat';
+import { weatherDisplay } from '../../services/weather/weatherFormat';
 
 // Figma 385:29371 — alert-modal (weather alert). Modal estreito centrado:
 // title + row (weather-condition card + weather-data metrics) + body text +
@@ -42,16 +42,7 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
   // Clima real (Unit 2) com fallback pro texto estático de hoje em
   // loading/error/sem-alerta — esta é tela de segurança e nunca pode quebrar.
   const { snapshot, activeAlert } = useWeather();
-  const cur = snapshot?.current;
-  const day = snapshot?.daily;
-  const tempStr = cur ? formatTempC(cur.tempC) : '17ºC';
-  const condStr = cur ? conditionLabel(cur.condition) : 'Chuva Intensa';
-  const humStr = cur ? formatHumidity(cur.humidityPct) : '65%';
-  const windStr = cur ? formatWind(cur.windKmh) : '65km/h';
-  const maxStr = day ? formatTempC(day.maxC) : '32ºC';
-  const minStr = day ? formatTempC(day.minC) : '19ºC';
-  const descStr = activeAlert?.description
-    ?? 'Risco de desabamentos nas primeiras horas do dia, procure a rota de siga as instruções para a evacuação.';
+  const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
 
   return (
     <View

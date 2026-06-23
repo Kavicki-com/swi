@@ -42,7 +42,7 @@ import {
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 import { useVitals } from '../../services/vitals/VitalsProvider';
 import { useWeather } from '../../services/weather/WeatherProvider';
-import { formatTempC, formatHumidity, formatWind, conditionLabel } from '../../services/weather/weatherFormat';
+import { weatherDisplay } from '../../services/weather/weatherFormat';
 import type { WorkerStatus } from '../../services/vitals/types';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
@@ -919,16 +919,7 @@ function AlertActiveView() {
   // Clima real (Unit 2) com fallback pro texto estático de hoje em
   // loading/error/sem-alerta — esta é tela de segurança e nunca pode quebrar.
   const { snapshot, activeAlert } = useWeather();
-  const cur = snapshot?.current;
-  const day = snapshot?.daily;
-  const tempStr = cur ? formatTempC(cur.tempC) : '17ºC';
-  const condStr = cur ? conditionLabel(cur.condition) : 'Chuva Intensa';
-  const humStr = cur ? formatHumidity(cur.humidityPct) : '65%';
-  const windStr = cur ? formatWind(cur.windKmh) : '65km/h';
-  const maxStr = day ? formatTempC(day.maxC) : '32ºC';
-  const minStr = day ? formatTempC(day.minC) : '19ºC';
-  const alertDesc = activeAlert?.description
-    ?? 'Risco de desabamentos nas primeiras horas do dia, procure a rota de siga as instruções para a evacuação.';
+  const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
 
   // Bolinhas da timeline (Figma 385:29807 etc.) usam `surface/secondary`
   // #50B3D2 (teal escuro). A linha vertical entre bolinhas usa um cyan
@@ -1057,7 +1048,7 @@ function AlertActiveView() {
           color={theme.content.dark}
           style={{ textAlign: 'center' }}
         >
-          {alertDesc}
+          {descStr}
         </Text>
 
         {/* Instructions list */}

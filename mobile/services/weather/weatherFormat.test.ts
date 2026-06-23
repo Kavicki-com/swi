@@ -1,4 +1,5 @@
 import { formatTempC, formatHumidity, formatWind, conditionLabel, activeAlert } from './weatherFormat';
+import { weatherDisplay } from './weatherFormat';
 import type { WeatherSnapshot, WeatherAlert } from './types';
 
 const snap = (over: Partial<WeatherSnapshot> = {}): WeatherSnapshot => ({
@@ -36,5 +37,25 @@ describe('weatherFormat — activeAlert', () => {
   });
   it('ignora alerta expirado (endsAt < now)', () => {
     expect(activeAlert(snap({ alerts: [alert({ endsAt: '2026-06-23T11:00:00.000Z' })] }), now)).toBeNull();
+  });
+});
+
+describe('weatherFormat — weatherDisplay', () => {
+  it('formata a partir do snapshot + alerta quando presentes', () => {
+    const d = weatherDisplay(snap({ alerts: [alert()] }), alert());
+    expect(d).toEqual({
+      tempStr: '17ºC', condStr: 'Chuva Intensa', humStr: '65%',
+      windStr: '65km/h', maxStr: '32ºC', minStr: '19ºC', descStr: 'desc',
+    });
+  });
+  it('cai pro fallback estático quando snapshot/alerta são null', () => {
+    const d = weatherDisplay(null, null);
+    expect(d.tempStr).toBe('17ºC');
+    expect(d.condStr).toBe('Chuva Intensa');
+    expect(d.humStr).toBe('65%');
+    expect(d.windStr).toBe('65km/h');
+    expect(d.maxStr).toBe('32ºC');
+    expect(d.minStr).toBe('19ºC');
+    expect(d.descStr).toContain('desabamentos');
   });
 });
