@@ -6,7 +6,6 @@ import {
   type TextInput,
   View,
 } from 'react-native';
-import { Asset } from 'expo-asset';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -15,53 +14,27 @@ import {
   Icon,
   SearchInput,
   useTheme,
-  type ChatSectionUser,
 } from '@kavicki/swi-design-system';
-
-// Local avatars copied from Figma source (mobile/assets/avatars/worker-1..8.png).
-// Each user gets an avatarUri resolved via expo-asset (Metro-served path).
-const avatarSrc = [
-  require('../../../assets/avatars/worker-1.png'),
-  require('../../../assets/avatars/worker-2.png'),
-  require('../../../assets/avatars/worker-3.png'),
-  require('../../../assets/avatars/worker-4.png'),
-  require('../../../assets/avatars/worker-5.png'),
-  require('../../../assets/avatars/worker-6.png'),
-  require('../../../assets/avatars/worker-7.png'),
-  require('../../../assets/avatars/worker-8.png'),
-];
-const avatarUri = avatarSrc.map((m) => Asset.fromModule(m).uri);
-
-const USERS: ChatSectionUser[] = [
-  { id: '1', name: 'Romulo Cardoso', subtitle: 'Setor Leste', avatarUri: avatarUri[0], unreadCount: 10 },
-  { id: '2', name: 'Ezequiel Almeida', subtitle: 'Setor Leste', avatarUri: avatarUri[1], unreadCount: 2 },
-  { id: '3', name: 'Josué Oliveira', subtitle: 'Setor Leste', avatarUri: avatarUri[2], unreadCount: 2 },
-  { id: '4', name: 'Carlos Santos', subtitle: 'Setor Leste', avatarUri: avatarUri[3] },
-  { id: '5', name: 'Antonio Carlos Figueira', subtitle: 'Setor Leste', avatarUri: avatarUri[4] },
-  { id: '6', name: 'Jennifer Gomes', subtitle: 'Setor Leste', avatarUri: avatarUri[6] },
-  { id: '7', name: 'Adriana Santos Almeida', subtitle: 'Setor Leste', avatarUri: avatarUri[7] },
-  { id: '8', name: 'Carlos Santos', subtitle: 'Setor Leste', avatarUri: avatarUri[5] },
-  { id: '9', name: 'Antonio Carlos Figueira', subtitle: 'Setor Leste', avatarUri: avatarUri[4] },
-  { id: '10', name: 'Lucas Pereira', subtitle: 'Setor Oeste', avatarUri: avatarUri[0] },
-  { id: '11', name: 'Bruno Silva', subtitle: 'Setor Norte', avatarUri: avatarUri[1] },
-  { id: '12', name: 'Maria Rodrigues', subtitle: 'Setor Sul', avatarUri: avatarUri[6] },
-  { id: '13', name: 'Felipe Costa', subtitle: 'Setor Leste', avatarUri: avatarUri[2] },
-  { id: '14', name: 'Rafaela Lima', subtitle: 'Setor Oeste', avatarUri: avatarUri[7] },
-  { id: '15', name: 'Diogo Ramos', subtitle: 'Setor Norte', avatarUri: avatarUri[3] },
-];
+import { useChat } from '../../../services/chat/ChatProvider';
+import { resolveContact, unreadFor } from '../../../services/chat/chatReducers';
+import { ChatInboxState } from '../../../components/chat/ChatState';
 
 export default function ChatInbox() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { loadStatus, conversations, directory, myId, load } = useChat();
   const [search, setSearch] = useState('');
   const searchRef = useRef<TextInput>(null);
+  // 'inbox' = conversas existentes (default); 'directory' = "Novo Chat" → escolhe
+  // um contato do roster pra abrir/iniciar uma conversa.
+  const [mode, setMode] = useState<'inbox' | 'directory'>('inbox');
 
   // Custom scrollbar geometry — Figma 332:8765 / 332:8766
   // Track: surface.medium bg, width 8, full height of scroll container.
   // Thumb: surface.high bg, height proporcional ao viewport/content ratio;
   // posição via translateY interpolado de Animated.Value (em vez de
-  // useState(scrollY) que re-renderizava os 15 ChatUserCard a 60fps).
+  // useState(scrollY) que re-renderizava os ChatUserCard a 60fps).
   const [layoutH, setLayoutH] = useState(0);
   const [contentH, setContentH] = useState(0);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -74,44 +47,89 @@ export default function ChatInbox() {
     extrapolate: 'clamp',
   });
 
-  // Filter recomputa só quando `search` muda; antes recomputava a cada
-  // re-render (mesmo quando só o scroll mudava).
-  const filtered = useMemo(
-    () => USERS.filter((u) => u.name.toLowerCase().includes(search.toLowerCase())),
-    [search],
+  // Resolve cada conversa pro contato (nome/subtitle/avatar do outro participante)
+  // uma vez por mudança de `conversations`/`myId`; o filtro de busca roda depois.
+  const resolvedConversations = useMemo(
+    () => conversations.map((c) => ({ conversation: c, contact: resolveContact(c, myId) })),
+    [conversations, myId],
   );
+
+  // Filtro recomputa quando muda o termo, o modo, ou a fonte ativa. Inbox filtra
+  // pelo nome do contato resolvido; directory filtra o roster por nome.
+  const inboxFiltered = useMemo(
+    () =>
+      resolvedConversations.filter((r) =>
+        r.contact.name.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [resolvedConversations, search],
+  );
+  const directoryFiltered = useMemo(
+    () => directory.filter((d) => d.name.toLowerCase().includes(search.toLowerCase())),
+    [directory, search],
+  );
+
+  // Topbar — Figma 337:9173. Fatorada num elemento local pra reusar idêntica nos
+  // state-views (loading/empty/error) e no conteúdo, mantendo o chrome consistente.
+  const topbar = (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingTop: insets.top + theme.padding.s,
+        paddingHorizontal: theme.padding.m,
+      }}
+    >
+      {/* marginLeft:-18 compensa: (a) padding-left do ghost Button
+          (theme.padding.sm = 12pt) + (b) inset visual do glyph
+          keyboard_arrow_left dentro do bounding box 24x24 (~6pt) = 18pt.
+          Alinha a ponta do "<" com o edge do content area. */}
+      <View style={{ marginLeft: -18 }}>
+        <Button
+          variant="ghost"
+          label="Voltar"
+          iconLeft={
+            <Icon
+              name="keyboard_arrow_left"
+              size={24}
+              color={theme.content.primaryLight}
+            />
+          }
+          accessibilityLabel="Voltar"
+          onPress={() => router.back()}
+        />
+      </View>
+    </View>
+  );
+
+  // State-views: mantêm o background + topbar pra o chrome ficar consistente.
+  if (loadStatus === 'loading') {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        {topbar}
+        <ChatInboxState kind="loading" />
+      </View>
+    );
+  }
+  if (loadStatus === 'empty') {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        {topbar}
+        <ChatInboxState kind="empty" />
+      </View>
+    );
+  }
+  if (loadStatus === 'error') {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        {topbar}
+        <ChatInboxState kind="error" onRetry={load} />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Topbar — Figma 337:9173 */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingTop: insets.top + theme.padding.s,
-          paddingHorizontal: theme.padding.m,
-        }}
-      >
-        {/* marginLeft:-18 compensa: (a) padding-left do ghost Button
-            (theme.padding.sm = 12pt) + (b) inset visual do glyph
-            keyboard_arrow_left dentro do bounding box 24x24 (~6pt) = 18pt.
-            Alinha a ponta do "<" com o edge do content area. */}
-        <View style={{ marginLeft: -18 }}>
-          <Button
-            variant="ghost"
-            label="Voltar"
-            iconLeft={
-              <Icon
-                name="keyboard_arrow_left"
-                size={24}
-                color={theme.content.primaryLight}
-              />
-            }
-            accessibilityLabel="Voltar"
-            onPress={() => router.back()}
-          />
-        </View>
-      </View>
+      {topbar}
 
       {/* Chat list — Figma 332:8740. Manual layout (vs DS ChatSection wrapper)
           so the "Novo Chat" button can stick to the viewport bottom. Uses DS
@@ -143,17 +161,31 @@ export default function ChatInbox() {
               )}
               scrollEventThrottle={16}
             >
-              {filtered.map((u) => (
-                <ChatUserCard
-                  key={u.id}
-                  name={u.name}
-                  subtitle={u.subtitle}
-                  avatarUri={u.avatarUri}
-                  unreadCount={u.unreadCount}
-                  onPress={() => router.push(`/(app)/chat/${u.id}`)}
-                  fullWidth
-                />
-              ))}
+              {mode === 'inbox'
+                ? inboxFiltered.map(({ conversation: c, contact }) => (
+                    <ChatUserCard
+                      key={c.id}
+                      name={contact.name}
+                      subtitle={contact.subtitle}
+                      avatarUri={contact.avatarUri}
+                      unreadCount={unreadFor(c, myId)}
+                      onPress={() => router.push(`/(app)/chat/${contact.workerId}`)}
+                      fullWidth
+                    />
+                  ))
+                : directoryFiltered.map((d) => (
+                    <ChatUserCard
+                      key={d.workerId}
+                      name={d.name}
+                      subtitle={d.sector}
+                      avatarUri={d.avatarUri}
+                      onPress={() => {
+                        setMode('inbox');
+                        router.push(`/(app)/chat/${d.workerId}`);
+                      }}
+                      fullWidth
+                    />
+                  ))}
             </ScrollView>
             {/* Custom scrollbar — Figma 332:8765 (track) + 332:8766 (thumb) */}
             {hasScroll ? (
@@ -191,19 +223,32 @@ export default function ChatInbox() {
               paddingBottom: insets.bottom + 16,
             }}
           >
-            <Button
-              variant="outline"
-              label="Novo Chat"
-              fullWidth
-              accessibilityLabel="Novo Chat — buscar contato"
-              onPress={() => {
-                // Demo phase: "Novo Chat" abre o campo de busca para o
-                // usuário escolher um contato existente. Phase 2: tela
-                // dedicada de seleção/criação de conversa.
-                setSearch('');
-                searchRef.current?.focus();
-              }}
-            />
+            {mode === 'inbox' ? (
+              <Button
+                variant="outline"
+                label="Novo Chat"
+                fullWidth
+                accessibilityLabel="Novo Chat — buscar contato"
+                onPress={() => {
+                  // Entra no modo diretório: lista o roster pra escolher um
+                  // contato (existente ou novo) e abre/cria a conversa.
+                  setMode('directory');
+                  setSearch('');
+                  searchRef.current?.focus();
+                }}
+              />
+            ) : (
+              <Button
+                variant="outline"
+                label="Voltar às conversas"
+                fullWidth
+                accessibilityLabel="Voltar às conversas"
+                onPress={() => {
+                  setMode('inbox');
+                  setSearch('');
+                }}
+              />
+            )}
           </View>
         </View>
       </View>
