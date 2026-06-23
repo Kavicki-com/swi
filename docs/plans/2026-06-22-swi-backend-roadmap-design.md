@@ -35,6 +35,10 @@ futura. Então:
 
 - **Fatia 1** — Auth + Perfil (Cognito + `Profile`/`HealthData`) — mock-path, mergeada.
 - **Fatia 3** — Vitais + GPS — mock-path, mergeada (e **fica mock** pelo pivô).
+- **Relatórios** — `Report` + S3 + `services/reports` + wiring — mock-path,
+  IMPLEMENTADA em `feat/backend-reports` (jest 37/37, tsc 0 novos, backend tsc
+  `-p amplify` exit 0, expo export web OK; review holística: pronta). Merge pra
+  `feat/mobile-login` aguardando OK do usuário.
 
 ## Mapa dos domínios não-saúde (estado hoje)
 
@@ -57,8 +61,9 @@ Observações:
 
 ## Sequência (incremental, uma fatia pequena por domínio)
 
-1. **Relatórios** — `Report` + mídia **S3** + responsibles; `services/reports` +
-   wiring (index/new/[id]); estados loading/empty/error. → `*-reports-design.md`.
+1. ✅ **Relatórios** (IMPLEMENTADA mock-path, `feat/backend-reports`) — `Report` +
+   mídia **S3** + responsibles; `services/reports` + wiring (index/new/[id]);
+   estados loading/empty/error. → `*-reports-design.md` / `*-reports-plan.md`.
 2. **Jornada/Tarefas** — `Task` + atribuição + estado/progresso + fotos S3;
    expande `JourneyProvider` + wiring.
 3. **Chat** — `Conversation`/`Message` + **subscriptions real-time**;
