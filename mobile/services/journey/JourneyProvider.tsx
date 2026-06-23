@@ -2,69 +2,136 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type PropsWithChildren,
 } from 'react';
+import type { JourneyState, JourneySession, Task } from './types';
+import { getJourneyBackend } from './getJourneyBackend';
 
-// Shared journey state. Consumido por:
-//   - journey/index.tsx → idle vs ongoing/paused layout switch
-//   - journey/task/[id].tsx → state machine das CTAs + progress crawl
+// Shared journey state, agora backed pelo backend (services/journey). Consumido
+// por:
+//   - journey/index.tsx → idle vs ongoing/paused layout switch + donut real
+//   - journey/task/[id].tsx → state machine das CTAs + progress real
 //
-// Demo phase: state em memória (sem AsyncStorage). Um cold start zera a
-// jornada — aceitável pra demo. Produção: persistir activeTaskId/state em
-// AsyncStorage + sincronizar com backend (timer real, posição na fila).
+// O provider fica montado em app/(app)/_layout.tsx — a sessão vive durante o
+// login e remonta no logout. `load()` busca journey + tasks no mount; as
+// mutações (start/pause/resume/end/addTaskPhoto) são async + persistidas no
+// backend, e atualizam o estado local com o resultado.
+//
+// `startedAt`/`accumulatedSeconds` da sessão ficam expostos pro donut do index
+// derivar o tempo decorrido real via progress.ts (âncoras epoch ms).
 
-export type JourneyState = 'idle' | 'ongoing' | 'paused';
+type LoadStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
 interface JourneyContextValue {
+  loadStatus: LoadStatus;
+  tasks: Task[];
   state: JourneyState;
-  /** ID da task atualmente ativa, ou null se state === 'idle'. */
   activeTaskId: string | null;
-  /** Inicia uma task. Sobrescreve qualquer task ativa anterior. */
-  startTask: (taskId: string) => void;
-  /** Pausa a jornada atual. No-op se não há jornada ativa. */
-  pauseJourney: () => void;
-  /** Retoma a jornada pausada. No-op se não está pausada. */
-  resumeJourney: () => void;
-  /** Encerra a jornada (finalizar OU cancelar). Volta pro estado idle. */
-  endJourney: () => void;
+  /** Âncoras da sessão (ISO string + segundos bancados) pro donut do index. */
+  startedAt: string | null;
+  accumulatedSeconds: number;
+  load: () => Promise<void>;
+  getTask: (id: string) => Promise<Task | null>;
+  startTask: (taskId: string) => Promise<void>;
+  pauseJourney: () => Promise<void>;
+  resumeJourney: () => Promise<void>;
+  endJourney: () => Promise<void>;
+  addTaskPhoto: (taskId: string, uri: string) => Promise<Task>;
 }
 
 const JourneyContext = createContext<JourneyContextValue | null>(null);
 
 export function JourneyProvider({ children }: PropsWithChildren) {
-  const [state, setState] = useState<JourneyState>('idle');
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const backend = useMemo(() => getJourneyBackend(), []);
+  const [loadStatus, setLoadStatus] = useState<LoadStatus>('idle');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [session, setSession] = useState<JourneySession>({
+    state: 'idle',
+    activeTaskId: null,
+    startedAt: null,
+    accumulatedSeconds: 0,
+  });
 
-  const startTask = useCallback((taskId: string) => {
-    setActiveTaskId(taskId);
-    setState('ongoing');
-  }, []);
+  const load = useCallback(async () => {
+    setLoadStatus('loading');
+    try {
+      const [j, t] = await Promise.all([backend.getJourney(), backend.listTasks()]);
+      setSession(j);
+      setTasks(t);
+      setLoadStatus(t.length ? 'ready' : 'empty');
+    } catch {
+      setLoadStatus('error');
+    }
+  }, [backend]);
 
-  const pauseJourney = useCallback(() => {
-    setState((prev) => (prev === 'ongoing' ? 'paused' : prev));
-  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const resumeJourney = useCallback(() => {
-    setState((prev) => (prev === 'paused' ? 'ongoing' : prev));
-  }, []);
+  const getTask = useCallback((id: string) => backend.getTask(id), [backend]);
 
-  const endJourney = useCallback(() => {
-    setState('idle');
-    setActiveTaskId(null);
-  }, []);
+  const startTask = useCallback(
+    async (taskId: string) => {
+      const { journey, task } = await backend.startTask(taskId);
+      setSession(journey);
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+    },
+    [backend],
+  );
+
+  const pauseJourney = useCallback(
+    async () => setSession(await backend.pauseJourney()),
+    [backend],
+  );
+  const resumeJourney = useCallback(
+    async () => setSession(await backend.resumeJourney()),
+    [backend],
+  );
+  const endJourney = useCallback(async () => {
+    setSession(await backend.endJourney());
+    setTasks(await backend.listTasks()); // a ativa virou 'done'
+  }, [backend]);
+
+  const addTaskPhoto = useCallback(
+    async (taskId: string, uri: string) => {
+      const updated = await backend.addTaskPhoto(taskId, uri);
+      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      return updated;
+    },
+    [backend],
+  );
 
   const value = useMemo<JourneyContextValue>(
     () => ({
-      state,
-      activeTaskId,
+      loadStatus,
+      tasks,
+      state: session.state,
+      activeTaskId: session.activeTaskId,
+      startedAt: session.startedAt,
+      accumulatedSeconds: session.accumulatedSeconds,
+      load,
+      getTask,
       startTask,
       pauseJourney,
       resumeJourney,
       endJourney,
+      addTaskPhoto,
     }),
-    [state, activeTaskId, startTask, pauseJourney, resumeJourney, endJourney],
+    [
+      loadStatus,
+      tasks,
+      session,
+      load,
+      getTask,
+      startTask,
+      pauseJourney,
+      resumeJourney,
+      endJourney,
+      addTaskPhoto,
+    ],
   );
 
   return <JourneyContext.Provider value={value}>{children}</JourneyContext.Provider>;
@@ -72,8 +139,6 @@ export function JourneyProvider({ children }: PropsWithChildren) {
 
 export function useJourney(): JourneyContextValue {
   const ctx = useContext(JourneyContext);
-  if (!ctx) {
-    throw new Error('useJourney must be used inside JourneyProvider');
-  }
+  if (!ctx) throw new Error('useJourney must be used inside JourneyProvider');
   return ctx;
 }
