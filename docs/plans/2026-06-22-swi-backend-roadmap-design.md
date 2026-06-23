@@ -43,6 +43,14 @@ futura. Então:
   `-p amplify` exit 0, expo export web OK; two-gate por unidade + review holística:
   C1 [barra de progresso lia snapshot stale na tela de detalhe] achada e corrigida,
   pronta). Merge pra `feat/mobile-login` aguardando OK do usuário.
+- **Chat** — `Conversation` + `Message` + `Contact` + S3 (`swiMedia`, prefixo
+  `chat/`) + `services/chat` (`chatReducers.ts` puro + mock event-bus/amplify stub
+  + `ChatProvider`) + wiring (inbox/[userId]) — mock-path, **real-time** via seam
+  `subscribe()`. IMPLEMENTADA em `feat/backend-chat` (jest 74/74, tsc 0 novos,
+  backend tsc `-p amplify` exit 0, expo export web OK; two-gate por unidade +
+  review holística: 3 achados [conversa lazy sumindo do inbox, 1ª msg não anexada,
+  thread sem estado de erro] corrigidos, ready). Merge pra `feat/mobile-login`
+  aguardando OK do usuário.
 
 ## Mapa dos domínios não-saúde (estado hoje)
 
@@ -73,8 +81,15 @@ Observações:
    (âncoras de tempo + tick no cliente) + fotos **S3**; `progress.ts` puro +
    `services/journey` (mock/amplify) + provider refatorado + wiring (index/[id]);
    estados loading/empty/error. → `*-jornada-design.md` / `*-jornada-plan.md`.
-3. **Chat** — `Conversation`/`Message` + **subscriptions real-time**;
-   `services/chat` + wiring (inbox/[userId]).
+3. ✅ **Chat** (IMPLEMENTADA mock-path, `feat/backend-chat`) — `Conversation` +
+   `Message` + `Contact` (diretório) + **real-time** via seam `subscribe()` +
+   event-bus no mock (amplify stub deploy-gated); `chatReducers.ts` puro +
+   `services/chat` (mock/amplify) + `ChatProvider` + wiring (inbox/[userId]) +
+   anexo S3 (prefixo `chat/`) + criação lazy + estados loading/empty/error.
+   Auth participant-scoped (`ownersDefinedIn('participants')`). jest 74/74, tsc 0
+   novos, backend tsc -p amplify exit 0, expo export web OK; two-gate + holística =
+   ready. Merge pra `feat/mobile-login` aguardando OK. →
+   `*-chat-design.md` / `*-chat-plan.md`.
 4. **Notificações** — `Notification` + push **SNS**; `services/notifications` + wiring.
 5. **Clima** — **Lambda** → API externa (OpenWeather/Tomorrow.io) → dados de
    heatmap/alerta; `services/weather` + map-weather.
