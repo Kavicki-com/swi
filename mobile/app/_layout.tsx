@@ -21,6 +21,7 @@ import { Montserrat_700Bold } from '@expo-google-fonts/montserrat/700Bold';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { AuthProvider } from '../services/auth/AuthProvider';
 import { ProfileProvider } from '../services/profile/ProfileProvider';
+import { ReportsProvider } from '../services/reports/ReportsProvider';
 import { VitalsProvider, useVitals } from '../services/vitals/VitalsProvider';
 import { LocationProvider, useLocation } from '../services/location/LocationProvider';
 import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
@@ -158,6 +159,7 @@ export default function RootLayout() {
         <SwiThemeProvider>
           <AuthProvider>
             <ProfileProvider>
+            <ReportsProvider>
             <VitalsProvider>
             <LocationProvider>
             {/* Feeds live vitals + coords into the telemetry sampler. Renders
@@ -187,6 +189,7 @@ export default function RootLayout() {
             </View>
             </LocationProvider>
             </VitalsProvider>
+            </ReportsProvider>
             </ProfileProvider>
           </AuthProvider>
         </SwiThemeProvider>
