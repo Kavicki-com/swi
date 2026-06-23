@@ -13,9 +13,11 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { responsiblesSelection } from '../../../components/modals/ResponsiblesModal';
+import { ADMINS } from '../../../lib/admins';
 import { useField } from '../../../lib/forms/useField';
 import { validateRequired } from '../../../lib/validation/validators';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
+import { useReports } from '../../../services/reports/ReportsProvider';
 
 // Figma 372:21297 — new-report form. Voltar + "Novo relatório" title +
 // 3 inputs (Título / Resumo / Detalhes multiline) + Atribuir
@@ -28,6 +30,8 @@ export default function NewReport() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { create } = useReports();
+  const [saving, setSaving] = useState(false);
 
   const titulo = useField({ validator: (v) => validateRequired(v, 'Título') });
   const resumo = useField({ validator: (v) => validateRequired(v, 'Resumo') });
@@ -81,15 +85,35 @@ export default function NewReport() {
     responsiblesSelection.clear();
     router.back();
   };
-  const save = () => {
+  const save = async () => {
     if (!canSubmit) {
       titulo.setTouched(true);
       resumo.setTouched(true);
       detalhes.setTouched(true);
       return;
     }
-    responsiblesSelection.clear();
-    router.back();
+    // O singleton guarda ids; o card precisa exibir os NOMES reais. ADMINS
+    // (lib/admins.ts) é a mesma fonte que o ResponsiblesModal renderiza, então
+    // o id→nome resolve por aí. Ids desconhecidos caem fora (Boolean filter).
+    const responsibles = responsibleIds
+      .map((id) => ADMINS.find((a) => a.id === id)?.name)
+      .filter(Boolean) as string[];
+    setSaving(true);
+    try {
+      await create({
+        title: titulo.value,
+        summary: resumo.value,
+        details: detalhes.value,
+        responsibles,
+        imageUris: [...attachments.filter(Boolean), uploadedFile].filter(
+          Boolean,
+        ) as string[],
+      });
+      responsiblesSelection.clear();
+      router.back();
+    } finally {
+      setSaving(false);
+    }
   };
 
 
@@ -275,7 +299,7 @@ export default function NewReport() {
           label="Salvar relatório"
           elevation="lg"
           accessibilityLabel="Salvar relatório"
-          disabled={!canSubmit}
+          disabled={!canSubmit || saving}
           onPress={save}
         />
         <Button
