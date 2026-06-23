@@ -101,6 +101,41 @@ const schema = a.schema({
       allow.owner().to(['create', 'read']),
       allow.group('admin'),
     ]),
+
+  Journey: a
+    .model({
+      workerId: a.string().required(),     // Cognito sub
+      date: a.date(),                       // o dia ("Hoje")
+      state: a.enum(['idle', 'ongoing', 'paused']),
+      activeTaskId: a.string(),
+      startedAt: a.datetime(),              // 1ª task iniciada
+      accumulatedSeconds: a.integer(),      // tempo do turno antes da pausa atual
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('workerId').to(['read', 'create', 'update']),
+      allow.group('admin'),
+    ]),
+
+  Task: a
+    .model({
+      assignedTo: a.string().required(),    // Cognito sub do worker
+      title: a.string().required(),
+      description: a.string(),
+      objective: a.string(),
+      estimatedMinutes: a.integer(),
+      status: a.enum(['pending', 'in_progress', 'paused', 'done']),
+      startedAt: a.datetime(),              // âncora p/ progresso real
+      accumulatedSeconds: a.integer(),      // tempo trabalhado antes da pausa
+      progressPct: a.float(),               // snapshot gravado nas transições
+      scheduledDate: a.date(),              // "Hoje" — escopo da lista
+      imageKeys: a.string().array(),        // S3 keys (uris no mock)
+      interestedCount: a.integer(),
+      interestedAvatarKeys: a.string().array(),
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('assignedTo').to(['read', 'update']),
+      allow.group('admin'),
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
