@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Image as RNImage, ScrollView, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { Asset } from 'expo-asset';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -13,89 +12,70 @@ import {
   ProgressBar,
   ReportCard,
   SearchInput,
-  type StatusTagStatus,
   Text,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { ReportDetailState } from '../../../components/reports/ReportsListState';
+import { useReports } from '../../../services/reports/ReportsProvider';
+import type { Report } from '../../../services/reports/types';
 
 // Figma 364:20304 — report-details. Voltar + actions row (search +
 // Fazer comentário + Revisar) + ReportCard + Detalhes + Imagens
 // horizontal scroll + Atividades cards + Add comment input + CTA.
-// Demo phase: mock report data keyed by [id]; sem persistência.
+// Backend slice: report data via useReports().loadOne(id) (Unit A/B); sem
+// persistência de comentário (out of scope).
 
-const avatarUri = Asset.fromModule(
-  require('../../../assets/avatar-construction.png'),
-).uri;
-
-type ReportData = {
-  status: StatusTagStatus;
-  statusLabel: string;
-  title: string;
-  summary: string;
-  authorName: string;
-};
-
-const REPORTS: Record<string, ReportData> = {
-  'inspecao-tecnica': {
-    status: 'accept',
-    statusLabel: 'Concluído',
-    title: 'Inspeção Técnica das Máquinas Pesadas',
-    summary: 'Checklist de manutenção preventiva e reparos necessários',
-    authorName: 'Alberto Alves Soares',
-  },
-  'eficiencia-energetica': {
-    status: 'accept',
-    statusLabel: 'Em Revisão',
-    title: 'Relatório de Eficiência Energética da Mina Oeste',
-    summary: 'Avaliação dos consumos e propostas de otimização',
-    authorName: 'Rafael Gomes Pereira',
-  },
-};
-
-const FALLBACK = REPORTS['inspecao-tecnica'];
-
-const DETAIL_TEXT = `Este relatório abrange uma análise detalhada da inspeção técnica realizada nas máquinas pesadas da Mina Córrego Seco, com foco especial no equipamento Komatsu 930E. Inclui um checklist abrangente da manutenção preventiva, abordando desde a verificação dos níveis de óleo e filtros até a inspeção de mangueiras e conexões. Além disso, o relatório detalha os reparos necessários identificados durante a inspeção, como a substituição de componentes desgastados, ajustes de sistemas hidráulicos e elétricos, e a correção de soldas defeituosas. O objetivo principal deste relatório é garantir a segurança e a eficiência operacional das máquinas pesadas, minimizando o tempo de inatividade não planejado e prolongando a vida útil dos equipamentos, seguindo as normas de segurança da Vale e as melhores práticas da indústria de mineração.`;
-
-const ACTIVITIES = [
-  {
-    id: 'oleo-filtros',
-    title: 'Verificação de níveis de óleo e filtros',
-    sector: 'Setor Noroeste',
-    progress: 0.84,
-    color: 'primary' as const,
-    avatars: [{ uri: avatarUri }, { uri: avatarUri }],
-    totalCount: 18,
-  },
-  {
-    id: 'motores',
-    title: 'Manutenção de motores',
-    sector: 'Setor Noroeste',
-    progress: 0.84,
-    color: 'warning' as const,
-    avatars: [{ uri: avatarUri }, { uri: avatarUri }, { uri: avatarUri }],
-    totalCount: 3,
-  },
-  {
-    id: 'eletricos',
-    title: 'Ajustes de sistemas elétricos',
-    sector: 'Setor Central',
-    progress: 0.84,
-    color: 'error' as const,
-    avatars: [{ uri: avatarUri }, { uri: avatarUri }, { uri: avatarUri }],
-    totalCount: 3,
-  },
-];
+type DetailStatus = 'loading' | 'ready' | 'empty' | 'error';
 
 export default function ReportDetails() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const report = (id && REPORTS[id]) || FALLBACK;
+  const { loadOne } = useReports();
+
+  const [report, setReport] = useState<Report | null>(null);
+  const [status, setStatus] = useState<DetailStatus>('loading');
+  // Bump pra re-disparar o load no retry (o effect só depende de id/loadOne).
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [search, setSearch] = useState('');
   const [comment, setComment] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setStatus('loading');
+    loadOne(id)
+      .then((r) => {
+        if (!active) return;
+        setReport(r);
+        setStatus(r ? 'ready' : 'empty');
+      })
+      .catch(() => {
+        if (active) setStatus('error');
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, loadOne, reloadKey]);
+
+  const retry = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  if (status !== 'ready' || !report) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <JourneyTheme
+          gradient={require('../../../assets/login-bg.png')}
+          pattern={require('../../../assets/smartband-bg-pattern.png')}
+        />
+        <ReportDetailState
+          kind={status === 'ready' ? 'empty' : status}
+          onRetry={status === 'error' ? retry : undefined}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -195,10 +175,10 @@ export default function ReportDetails() {
           statusLabel={report.statusLabel}
           title={report.title}
           summary={report.summary}
-          creationDate="dd/mm/aaaa"
-          author={{ name: report.authorName, avatarUri }}
-          location="Setor Noroeste"
-          responsibles="Ana Clara Mendonça, Antonio Cláudio Silva, Rita Sampaio,"
+          creationDate={report.creationDate}
+          author={{ name: report.authorName, avatarUri: report.authorAvatarUri }}
+          location={report.sector}
+          responsibles={report.responsibles.join(', ')}
           fullWidth
         />
 
@@ -211,12 +191,12 @@ export default function ReportDetails() {
           color={theme.content.dark}
           style={{ lineHeight: theme.fontSize.m * 1.4 }}
         >
-          {DETAIL_TEXT}
+          {report.details}
         </Text>
 
         {/* Imagens — horizontal scroll com fotos reais (Figma 364:20304
-            mostra imagens de campo / equipamento). Demo phase: 2 imagens
-            estáticas; loop pra ocupar a faixa scrollable. */}
+            mostra imagens de campo / equipamento). Backend slice: URIs vêm
+            de report.images (seed espelha as 2 imagens estáticas). */}
         <Title variant="title.xs" color={theme.content.dark}>
           Imagens
         </Title>
@@ -225,14 +205,10 @@ export default function ReportDetails() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: theme.gap.sm }}
         >
-          {[
-            require('../../../assets/report-image-1.png'),
-            require('../../../assets/report-image-2.png'),
-            require('../../../assets/report-image-1.png'),
-          ].map((src, i) => (
+          {report.images.map((uri, i) => (
             <RNImage
               key={i}
-              source={src}
+              source={{ uri }}
               resizeMode="cover"
               accessible={false}
               style={{
@@ -249,11 +225,11 @@ export default function ReportDetails() {
           Atividades
         </Title>
         <View style={{ gap: theme.gap.s }}>
-          {ACTIVITIES.map((activity) => {
+          {report.activities.map((activity) => {
             const barColor =
-              activity.color === 'primary'
+              activity.tone === 'success'
                 ? theme.content.primary
-                : activity.color === 'warning'
+                : activity.tone === 'warning'
                 ? theme.surface.warning
                 : theme.surface.error;
             return (
@@ -280,14 +256,14 @@ export default function ReportDetails() {
                     {activity.sector}
                   </Text>
                   <View style={{ width: 119 }}>
-                    {/* DS ProgressBar usa clamp(value, 0, 100); passar
-                        percentual (84) e não fração (0.84). */}
-                    <ProgressBar value={activity.progress * 100} color={barColor} />
+                    {/* DS ProgressBar usa clamp(value, 0, 100); progress já é
+                        percentual (0-100) no Report model — não multiplicar. */}
+                    <ProgressBar value={activity.progress} color={barColor} />
                   </View>
                 </View>
                 <AvatarGroup
-                  avatars={activity.avatars}
-                  totalCount={activity.totalCount}
+                  avatars={activity.avatars.map((uri) => ({ uri }))}
+                  totalCount={activity.overflowCount}
                   maxVisible={3}
                   size="m"
                 />
