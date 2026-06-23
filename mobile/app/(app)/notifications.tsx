@@ -84,9 +84,8 @@ const NotificationCard = memo(function NotificationCard({
               style={{
                 width: 8,
                 height: 8,
-                // theme.border.radius não expõe um token `full`/circular (keys:
-                // xs/s/m/l/pill); per instrução, fallback numérico 4 p/ o dot.
-                borderRadius: 4,
+                // dot de não-lida — pill arredonda o quadrado 8x8 num círculo
+                borderRadius: theme.border.radius.pill,
                 backgroundColor: theme.surface.secondary,
               }}
             />
