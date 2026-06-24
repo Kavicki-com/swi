@@ -70,6 +70,18 @@ futura. Então:
   export web OK; two-gate por unidade + review holística: 1 achado [4º painel
   `ActiveAlertModal` hardcoded → helper `weatherDisplay` nas 3 superfícies] corrigido,
   ready). **Mergeada** em `feat/mobile-login` (FF, `63ce40c..bfe12c9`).
+- **Evacuação** — **2ª Lambda** (`functions/route` → Mapbox Directions walking, token
+  via `secret`) exposta como **custom query** `getEvacuationRoute` (sem model) +
+  `services/evacuation` (`routeFormat.ts` puro + mock canned/amplify stub +
+  `EvacuationProvider` **lazy** em `(app)/_layout` — fetch só quando a tela monta) +
+  repointar as 2 telas (`evacuation`/`evacuation-ongoing`) pra `useEvacuation()` com
+  fallback reto (`straightLine`) no erro; **deletado o OSRM client-side**
+  (`lib/api/osrm.ts` + `evacuationRouteCache.ts`, −178 linhas líquidas). Time chips
+  ficam **estáticas** (copy do Figma; `durationSec`/`distanceM` carregados mas não
+  exibidos). IMPLEMENTADA em `feat/backend-evacuacao` (jest 107/107, tsc 0 novos,
+  backend tsc -p amplify exit 0, expo export web OK; two-gate por unidade + holística =
+  READY TO MERGE, 0 bloqueantes, 2 Minor polidos [guard NaN no `straightLine`, doc no
+  `reload()`]). **Mergeada** em `feat/mobile-login` (FF, `6310cb9..8fb662c`).
 
 ## Mapa dos domínios não-saúde (estado hoje)
 
@@ -127,7 +139,17 @@ Observações:
    decorativo** (radar/tiles fora de escopo). Localização = `SITE_LOCATION` fixo.
    Pendências de deploy: secret real, cache na Lambda, ícones por condição, re-nest
    no boundary amplify. → `*-clima-design.md` / `*-clima-plan.md`.
-6. **Evacuação** — **Lambda** server-side de rota; `services/evacuation` + wiring.
+6. ✅ **Evacuação** (IMPLEMENTADA mock-path, mergeada `6310cb9..8fb662c`) — **2ª Lambda**
+   (`functions/route` → Mapbox Directions walking, token via `secret`) exposta como
+   **custom query** `getEvacuationRoute` (sem model DynamoDB); `routeFormat.ts` puro +
+   `services/evacuation` (mock canned/amplify stub) + `EvacuationProvider` **lazy** em
+   `(app)/_layout` (fetch só quando a tela monta) + repointar `evacuation`/
+   `evacuation-ongoing` pra `useEvacuation()` com estados loading/erro (fallback reto);
+   **deletado o OSRM client-side** (`lib/api/osrm.ts` + `evacuationRouteCache.ts`). Time
+   chips estáticas (decorativas). Localização = `SITE_ROUTE` fixo. Pendências de deploy:
+   token Mapbox como secret, cache da rota, coerção do boundary `waypoints` json→
+   `[lng,lat][]`, ponto de encontro real do site. → `*-evacuacao-design.md` /
+   `*-evacuacao-plan.md`.
 7. **Hardening + integração admin** — trocar `mockApi` do swi-admin → cliente
    Amplify (branches `feat/admin-*` por domínio), SES, aprovação-do-admin,
    deploy de produção, generalizar a flag `AUTH_BACKEND` → switch global.
