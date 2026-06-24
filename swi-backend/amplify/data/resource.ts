@@ -1,5 +1,6 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { weather } from '../functions/weather/resource';
+import { route } from '../functions/route/resource';
 
 /**
  * Profile  — personal + address data the worker edits about themselves
@@ -221,6 +222,26 @@ const schema = a.schema({
     .arguments({ lat: a.float().required(), lng: a.float().required() })
     .returns(a.ref('WeatherSnapshot'))
     .handler(a.handler.function(weather))
+    .authorization((allow) => [allow.authenticated()]),
+
+  // ---- Evacuação (fatia 6): passagem pro Mapbox Directions via Lambda, sem model ----
+  RouteSnapshot: a.customType({
+    waypoints: a.json(),         // [[lng,lat], …] — array de tuplas; json p/ aninhamento
+    durationSec: a.float(),
+    distanceM: a.float(),
+    fetchedAt: a.datetime(),
+  }),
+
+  getEvacuationRoute: a
+    .query()
+    .arguments({
+      originLng: a.float().required(),
+      originLat: a.float().required(),
+      destLng: a.float().required(),
+      destLat: a.float().required(),
+    })
+    .returns(a.ref('RouteSnapshot'))
+    .handler(a.handler.function(route))
     .authorization((allow) => [allow.authenticated()]),
 });
 
