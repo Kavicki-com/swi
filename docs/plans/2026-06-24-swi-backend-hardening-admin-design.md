@@ -47,8 +47,10 @@ Decisões do usuário nesta sessão (2026-06-24): **escopo = basket completo (A+
 
 - **D — deploy de produção:** hard-blocked até existir conta AWS. **Não
   implementável agora**; registrado como pendência de deploy.
-- **Esta sessão implementa só a B.** A e C ganham seu próprio `*-design.md` /
-  `*-plan.md` quando chegarmos neles (igual ao padrão das fatias anteriores).
+- **Branch B: ✅ MERGEADA** — `494edcf`, FF em `feat/mobile-login` (2026-06-24).
+  Rename puro, jest 108/108, tsc 0 novos, `git grep AUTH_BACKEND -- mobile/` vazio,
+  two-gate spec+quality ✅. A e C ganham seu próprio `*-design.md` / `*-plan.md`
+  quando chegarmos neles (igual ao padrão das fatias anteriores). **Próxima: branch A.**
 
 ---
 
