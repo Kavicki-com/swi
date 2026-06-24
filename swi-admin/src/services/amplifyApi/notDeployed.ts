@@ -6,8 +6,8 @@ export function notDeployedApi<T extends object>(): T {
       return () => {
         throw new Error(
           `amplify backend não deployado (chamou .${String(prop)}) — pendência de deploy da Fatia 7`,
-        );
-      };
+        )
+      }
     },
-  });
+  })
 }
