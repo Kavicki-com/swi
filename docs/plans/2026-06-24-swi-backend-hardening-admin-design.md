@@ -50,7 +50,15 @@ Decisões do usuário nesta sessão (2026-06-24): **escopo = basket completo (A+
 - **Branch B: ✅ MERGEADA** — `494edcf`, FF em `feat/mobile-login` (2026-06-24).
   Rename puro, jest 108/108, tsc 0 novos, `git grep AUTH_BACKEND -- mobile/` vazio,
   two-gate spec+quality ✅. A e C ganham seu próprio `*-design.md` / `*-plan.md`
-  quando chegarmos neles (igual ao padrão das fatias anteriores). **Próxima: branch A.**
+  quando chegarmos neles (igual ao padrão das fatias anteriores).
+- **Branch A: ✅ MERGEADA** — `4e1b92e..e28a25e`, FF em `feat/mobile-login` (2026-06-24).
+  Seam mock|amplify do swi-admin (8 selectors + 8 stubs throwing, repoint de 18
+  consumidores), seam-only deploy-gated, puro refactor; typecheck 0, vitest 103/103,
+  grep `@/services/mockApi/` vazio, two-gate spec+quality ✅. Design/plan próprios
+  (`2026-06-24-swi-admin-backend-seam-{design,plan}.md`). ⚠️ Achado: `vite build` do
+  swi-admin já falha no baseline (DS `StatusChart`→`react-native-svg-web` sem `Filter`)
+  — **pré-existente, não da branch A**; pendência à parte (provável bump do DS).
+  **Próxima: branch C** (SES + aprovação-admin, net-new).
 
 ---
 
