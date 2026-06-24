@@ -4,7 +4,7 @@
 // real module drags in the native-only @aws-amplify/react-native peer that is
 // absent in the jest-expo env. The mock-flag path never touches the amplify
 // backend at runtime.
-jest.mock('../../lib/featureFlags', () => ({ AUTH_BACKEND: 'mock' }));
+jest.mock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
 jest.mock('aws-amplify/data', () => ({ generateClient: () => ({}) }));
 
 import { getProfileBackend } from './getProfileBackend';

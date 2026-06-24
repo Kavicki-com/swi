@@ -6,7 +6,7 @@ import { Button, Input, Text, Title, useTheme } from '@kavicki/swi-design-system
 import { useAuth } from '../../../services/auth/AuthProvider';
 import { useField } from '../../../lib/forms/useField';
 import { validateEmail } from '../../../lib/validation/validators';
-import { AUTH_BACKEND } from '../../../lib/featureFlags';
+import { DATA_BACKEND } from '../../../lib/featureFlags';
 
 export default function PasswordRecoveryEmail() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function PasswordRecoveryEmail() {
       email.setTouched(true);
       return;
     }
-    if (AUTH_BACKEND === 'amplify') {
+    if (DATA_BACKEND === 'amplify') {
       try { await resetPassword({ email: email.value }); }
       catch { Alert.alert('Erro', 'Não foi possível enviar o código.'); return; }
     }

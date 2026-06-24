@@ -11,7 +11,7 @@ import {
   validatePasswordField,
   validatePasswordMatch,
 } from '../../../lib/validation/validators';
-import { AUTH_BACKEND } from '../../../lib/featureFlags';
+import { DATA_BACKEND } from '../../../lib/featureFlags';
 
 export default function PasswordRecoveryNewPassword() {
   const router = useRouter();
@@ -36,7 +36,7 @@ export default function PasswordRecoveryNewPassword() {
       confirmPassword.setTouched(true);
       return;
     }
-    if (AUTH_BACKEND === 'amplify') {
+    if (DATA_BACKEND === 'amplify') {
       try { await confirmReset({ email: String(email ?? ''), code, newPassword: password.value }); }
       catch { Alert.alert('Erro', 'Código inválido ou expirado.'); return; }
     }
@@ -79,7 +79,7 @@ export default function PasswordRecoveryNewPassword() {
             message={'1 símbolo @#$%ˆ\n1 Letras maiúscula'}
           />
 
-          {AUTH_BACKEND === 'amplify' && (
+          {DATA_BACKEND === 'amplify' && (
             <Input
               label="Código de recuperação"
               placeholder="000000"

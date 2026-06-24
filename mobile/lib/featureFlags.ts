@@ -41,12 +41,13 @@ export function isFeatureEnabled(gate: FeatureGate): boolean {
   return FEATURE_GATES[gate];
 }
 
-// Selects the auth/profile data source. 'mock' = today's in-memory demo
-// behavior (default; no AWS needed). 'amplify' = real Cognito/AppSync via
-// aws-amplify — flip to this after `ampx sandbox` generates amplify_outputs
-// (see docs/plans/2026-06-22-swi-backend-auth-profile-design.md, Seção 6).
-export type AuthBackendKind = 'mock' | 'amplify';
-export const AUTH_BACKEND: AuthBackendKind = 'mock';
+// Seleciona a fonte de dados de TODOS os domínios (auth, profile, vitals,
+// reports, journey, chat, notifications, weather, evacuation, telemetry).
+// 'mock' = comportamento de demo in-memory (default; sem AWS). 'amplify' = real
+// Cognito/AppSync via aws-amplify — flip pra isto depois que `ampx sandbox`
+// gerar amplify_outputs (ver docs/plans/2026-06-22-swi-backend-auth-profile-design.md, Seção 6).
+export type DataBackendKind = 'mock' | 'amplify';
+export const DATA_BACKEND: DataBackendKind = 'mock';
 
 // Dev-only: lets the mock vitals backend exercise the empty/loading/stale/error
 // UIs that production will hit. 'streaming' = normal simulated data.
