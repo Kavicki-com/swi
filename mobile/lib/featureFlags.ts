@@ -57,3 +57,8 @@ export const VITALS_SCENARIO: VitalsScenario = 'streaming';
 // um alerta vigente; 'normal' sem alerta; 'loading' nunca resolve; 'error' rejeita.
 export type WeatherScenario = 'alert' | 'normal' | 'loading' | 'error';
 export const WEATHER_SCENARIO: WeatherScenario = 'alert';
+
+// Dev-only: exercita os estados da fatia Evacuação no mock. 'normal' (default)
+// traz a rota canned; 'loading' nunca resolve; 'error' rejeita.
+export type EvacuationScenario = 'normal' | 'loading' | 'error';
+export const EVACUATION_SCENARIO: EvacuationScenario = 'normal';
