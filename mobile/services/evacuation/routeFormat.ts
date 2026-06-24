@@ -48,7 +48,7 @@ export function bearingDeg(a: Pt, b: Pt): number {
 export function straightLine(origin: Pt, destination: Pt, n = 5): Pt[] {
   const pts: Pt[] = [];
   for (let i = 0; i < n; i++) {
-    const t = i / (n - 1);
+    const t = n === 1 ? 0 : i / (n - 1); // guarda n=1 (evita 0/0 = NaN)
     pts.push([origin[0] + (destination[0] - origin[0]) * t, origin[1] + (destination[1] - origin[1]) * t]);
   }
   return pts;

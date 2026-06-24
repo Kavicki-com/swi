@@ -23,6 +23,9 @@ export function EvacuationProvider({ children }: PropsWithChildren) {
   const started = useRef(false);
   const inFlight = useRef<Promise<void> | null>(null);
 
+  // reload() FORÇA um refetch e deliberadamente NÃO de-dupa contra um load()
+  // em voo (semântica "força"). Não tem caller hoje (sem UI de retry; o erro cai
+  // no fallback reto da tela), mas fica disponível.
   const reload = useCallback(() => {
     started.current = true;
     setLoadStatus('loading');
