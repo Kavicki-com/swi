@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
-import type { Feature, LineString } from 'geojson';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -16,11 +15,9 @@ import { MapMarker } from '@/components/MapMarker';
 import { MapLineSource } from '@/components/MapLineSource';
 import { MapChipBody } from '@/components/MapChipBody';
 import { NavFABs } from '@/components/NavFABs';
-import {
-  EVACUATION_DESTINATION,
-  EVACUATION_ORIGIN,
-} from '@/lib/mapMockData';
-import { getEvacuationRoute } from '@/lib/evacuationRouteCache';
+import { SITE_ROUTE } from '@/services/evacuation/types';
+import { useEvacuation } from '@/services/evacuation/EvacuationProvider';
+import { chipAnchors, lineFeature, straightLine } from '@/services/evacuation/routeFormat';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 
@@ -37,9 +34,6 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 //   - 2 time chips ("6 minutos" / "17 minutos") anchored at 35% / 70% of
 //     the waypoints array so they visually align with the curving polyline
 //   - cyan #8AD2E2 polyline rendered via <MapLineSource>
-//
-// OSRM resilience: getEvacuationRoute() falls back to a 5-point linear
-// interpolation when OSRM is unreachable — the screen still renders.
 
 // Theme-aware chip body extracted to components/MapChipBody.tsx (audit
 // cleanup 2026-05-17) — shared with evacuation-ongoing.tsx. Note: must
@@ -58,39 +52,24 @@ function EvacuationRouteScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const [waypoints, setWaypoints] = useState<[number, number][] | null>(null);
+  const { route, loadStatus, load } = useEvacuation();
 
-  useEffect(() => {
-    let cancelled = false;
-    getEvacuationRoute().then((route) => {
-      if (!cancelled) setWaypoints(route.waypoints);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const lineShape = useMemo<Feature<LineString> | null>(() => {
-    if (!waypoints || waypoints.length === 0) return null;
-    return {
-      type: 'Feature',
-      properties: {},
-      geometry: { type: 'LineString', coordinates: waypoints },
-    };
-  }, [waypoints]);
+  // ready → rota real; error → fallback reto (mapa nunca renderiza vazio);
+  // loading/idle → null (só pinos, sem linha desenhada ainda).
+  const waypoints = useMemo<[number, number][] | null>(() => {
+    if (route) return route.waypoints;
+    if (loadStatus === 'error') return straightLine(SITE_ROUTE.origin, SITE_ROUTE.destination);
+    return null;
+  }, [route, loadStatus]);
 
-  // Sample at 35% / 70% so the time chips align with the curving polyline
-  // rather than its straight-line midpoint. Figma copy is preserved verbatim.
-  const chipAnchors = useMemo<{ a: [number, number]; b: [number, number] } | null>(() => {
-    if (!waypoints || waypoints.length === 0) return null;
-    const i1 = Math.min(Math.max(Math.floor(waypoints.length * 0.35), 0), waypoints.length - 1);
-    const i2 = Math.min(Math.max(Math.floor(waypoints.length * 0.7), 0), waypoints.length - 1);
-    return { a: waypoints[i1], b: waypoints[i2] };
-  }, [waypoints]);
+  const lineShape = useMemo(() => lineFeature(waypoints ?? []), [waypoints]);
+  const anchors = useMemo(() => chipAnchors(waypoints ?? []), [waypoints]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView center={EVACUATION_ORIGIN} zoom={15}>
+      <MapView center={SITE_ROUTE.origin} zoom={15}>
         {/* On-map declarative children (partitioned into the native <Map>
             by MapView.native, attached imperatively by MapView.web). */}
         {/* `key` em cada child do <Map> é OBRIGATÓRIO mesmo quando não está
@@ -108,19 +87,19 @@ function EvacuationRouteScreen() {
             paint={{ color: '#8AD2E2', width: 4, opacity: 0.95 }}
           />
         )}
-        <MapMarker key="evacuation-origin" coordinate={EVACUATION_ORIGIN} id="evacuation-origin">
+        <MapMarker key="evacuation-origin" coordinate={SITE_ROUTE.origin} id="evacuation-origin">
             <LocationPin variant="badge" status="good" size={40} name="Início da rota" />
         </MapMarker>
-        <MapMarker key="evacuation-destination" coordinate={EVACUATION_DESTINATION} id="evacuation-destination">
+        <MapMarker key="evacuation-destination" coordinate={SITE_ROUTE.destination} id="evacuation-destination">
             <LocationPin variant="badge" status="alert" size={40} name="Destino" />
         </MapMarker>
-        {chipAnchors && (
-          <MapMarker key="evacuation-chip-1" coordinate={chipAnchors.a} id="evacuation-chip-1">
+        {anchors && (
+          <MapMarker key="evacuation-chip-1" coordinate={anchors.a} id="evacuation-chip-1">
               <MapChipBody text="6 minutos" />
           </MapMarker>
         )}
-        {chipAnchors && (
-          <MapMarker key="evacuation-chip-2" coordinate={chipAnchors.b} id="evacuation-chip-2">
+        {anchors && (
+          <MapMarker key="evacuation-chip-2" coordinate={anchors.b} id="evacuation-chip-2">
               <MapChipBody text="17 minutos" />
           </MapMarker>
         )}

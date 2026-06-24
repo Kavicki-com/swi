@@ -159,15 +159,3 @@ export const WEATHER_ALERT_PINS: ReadonlyArray<WeatherAlertPin> = [
   { id: 'wx-10', lng: -46.624, lat: -23.564, status: 'low' },
   { id: 'wx-11', lng: -46.612, lat: -23.561, status: 'low' },
 ];
-
-// ----------------------------------------------------------------------
-// Evacuation route — origin near USER_LOCATION, destination ~1.5km away.
-// 1.5km ≈ 0.0135° at this latitude. Path runs roughly north-east so the
-// route bends visibly over the urban grid when OSRM is available.
-// ----------------------------------------------------------------------
-export const EVACUATION_ORIGIN: [number, number] = [-46.632, -23.552];
-export const EVACUATION_DESTINATION: [number, number] = [-46.62, -23.544];
-
-// `fetchEvacuationRoute` was moved to `lib/api/osrm.ts` (audit cleanup
-// 2026-05-17) — it makes a real HTTP call so it didn't belong in a
-// "mockData" file. Import it directly from `./api/osrm` instead.

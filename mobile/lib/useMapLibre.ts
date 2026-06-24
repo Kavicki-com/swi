@@ -37,7 +37,7 @@ function load(): Promise<MapLibreModule> {
   // resolved Promise was retained for the lifetime of the page session
   // (callers early-return via the `cached` check before reading inFlight,
   // so the leak was functionally harmless but still a footgun). Pattern
-  // now mirrors evacuationRouteCache.ts.
+  // now mirrors the dedupe pattern in EvacuationProvider.
   inFlight = Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')]).then(
     ([mod]) => {
       cached = mod.default;
