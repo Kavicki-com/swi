@@ -29,7 +29,7 @@ import {
   type DashboardMapMarker,
   type DashboardSummary,
   type DashboardWearAlert,
-} from '@/services/mockApi/dashboard'
+} from '@/services/dashboard'
 import { FormError } from '@/components/FormError'
 
 // DS module is shimmed to `any`; mirror the WeatherTimelineEvent shape locally.

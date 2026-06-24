@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Avatar, Button, Chip, Icon, SearchInput, Text, useTheme } from '@kavicki/swi-design-system'
-import { rescueApi, type RescueCandidate } from '@/services/mockApi/rescue'
+import { rescueApi, type RescueCandidate } from '@/services/rescue'
 
 const FILTER_CHIPS = [
   { value: 'all', label: 'Todos' },
