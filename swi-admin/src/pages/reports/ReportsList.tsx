@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import { Button, Combobox, ReportCard, SearchInput, useTheme } from '@kavicki/swi-design-system'
-import { reportsApi, type Report } from '@/services/mockApi/reports'
+import { reportsApi, type Report } from '@/services/reports'
 
 const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },

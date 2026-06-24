@@ -17,7 +17,7 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system'
-import { adminsApi, type Admin } from '@/services/mockApi/admins'
+import { adminsApi, type Admin } from '@/services/admins'
 import { useDemoToast } from '@/lib/demoToast'
 import { AdminsCreate } from './AdminsCreate'
 

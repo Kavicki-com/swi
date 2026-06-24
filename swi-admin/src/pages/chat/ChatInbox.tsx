@@ -29,7 +29,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
-import { chatsApi, type ChatContact, type ChatMessage } from '@/services/mockApi/chats'
+import { chatsApi, type ChatContact, type ChatMessage } from '@/services/chats'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Single contact row in the left list — Figma 103:9931 / 102:9571

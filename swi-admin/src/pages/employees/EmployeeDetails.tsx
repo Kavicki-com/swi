@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system'
-import { employeesApi, type Employee } from '@/services/mockApi/employees'
+import { employeesApi, type Employee } from '@/services/employees'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { useDemoToast } from '@/lib/demoToast'
 

@@ -16,7 +16,7 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system'
-import { employeesApi, EMPLOYEES_TOTAL, type Employee } from '@/services/mockApi/employees'
+import { employeesApi, EMPLOYEES_TOTAL, type Employee } from '@/services/employees'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 
 type EmployeeRowProps = {

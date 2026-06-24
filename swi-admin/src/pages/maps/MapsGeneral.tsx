@@ -27,7 +27,7 @@ import {
   dashboardApi,
   type DashboardMapMarker,
   type DashboardSummary,
-} from '@/services/mockApi/dashboard'
+} from '@/services/dashboard'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Compact navigation list — Figma 32:2488 map-side-menu shows 7 icon-only items.

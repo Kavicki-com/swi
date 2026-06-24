@@ -16,7 +16,7 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
-import { adminsApi, type Admin } from '@/services/mockApi/admins'
+import { adminsApi, type Admin } from '@/services/admins'
 import { useDemoToast } from '@/lib/demoToast'
 
 function VerticalDivider() {
