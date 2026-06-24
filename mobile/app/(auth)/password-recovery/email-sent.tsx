@@ -22,7 +22,7 @@ export default function PasswordRecoveryEmailSent() {
   // Phase 6 PREREQUISITE (amplify): this magic-link-style auto-advance is
   // INCOHERENT with Cognito's code-based reset — resetPassword() emails a CODE
   // that the user types on new-password, there is no link to click here. When
-  // AUTH_BACKEND === 'amplify', this screen should be gated to skip the timer
+  // DATA_BACKEND === 'amplify', this screen should be gated to skip the timer
   // (or be bypassed) and go straight to new-password for code entry. Left
   // un-gated for now because the mock demo relies on the auto-advance and the
   // amplify path is deploy-gated (untestable without a live pool).

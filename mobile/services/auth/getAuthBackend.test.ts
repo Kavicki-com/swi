@@ -1,4 +1,4 @@
-jest.mock('../../lib/featureFlags', () => ({ AUTH_BACKEND: 'mock' }));
+jest.mock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
 // Stub aws-amplify/auth: getAuthBackend statically imports amplifyAuthBackend
 // (needed so a runtime flag flip works), which would otherwise pull in
 // @aws-amplify/core's .native build → requires @aws-amplify/react-native, a

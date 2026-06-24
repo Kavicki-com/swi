@@ -2,7 +2,7 @@
 // module load), which drags in the native-only aws-amplify peer absent in
 // jest-expo. Flag forced to 'mock', amplify/data stubbed — mirrors the sink
 // selector test. The mock path is the only one exercised here.
-jest.mock('../../lib/featureFlags', () => ({ AUTH_BACKEND: 'mock' }));
+jest.mock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
 jest.mock('aws-amplify/data', () => ({ generateClient: () => ({}) }));
 
 import { createElement, type ComponentType } from 'react';
