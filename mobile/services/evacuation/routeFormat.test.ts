@@ -50,4 +50,7 @@ describe('routeFormat — straightLine (fallback)', () => {
     const pts = straightLine([0, 0], [4, 0], 5);
     expect(pts).toEqual([[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]);
   });
+  it('n=1 não vira NaN (guard 0/0)', () => {
+    expect(straightLine([2, 3], [9, 9], 1)).toEqual([[2, 3]]);
+  });
 });
