@@ -1,6 +1,7 @@
 import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '../../services/auth/AuthProvider';
 import { JourneyProvider } from '../../services/journey/JourneyProvider';
+import { EvacuationProvider } from '../../services/evacuation/EvacuationProvider';
 
 // Auth gate: rotas em `(app)/*` exigem usuário autenticado.
 // Demo phase: estado em memória (sem AsyncStorage), então um cold
@@ -17,7 +18,9 @@ export default function AppLayout() {
 
   return (
     <JourneyProvider>
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
+      <EvacuationProvider>
+        <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
+      </EvacuationProvider>
     </JourneyProvider>
   );
 }
