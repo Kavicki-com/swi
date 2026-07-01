@@ -87,3 +87,26 @@ describe('AuthService.login (2 portas)', () => {
     expect(r).toEqual({ accessToken: 'jwt-token', user: { id: 'u1', email: 'j@ex.com', name: 'J' } })
   })
 })
+
+describe('AuthService reset de senha', () => {
+  it('forgot é sempre silencioso (não vaza e-mail inexistente)', async () => {
+    const { svc, users, mail } = deps(); users.findByEmail.mockResolvedValue(null)
+    await expect(svc.forgotPassword({ email: 'nao@existe.com' })).resolves.toBeUndefined()
+    expect(mail.sendResetCode).not.toHaveBeenCalled()
+  })
+  it('forgot com usuário real gera código + e-mail', async () => {
+    const { svc, users, prisma, mail } = deps()
+    users.findByEmail.mockResolvedValue({ id: 'u1', email: 'j@ex.com' }); prisma.user.update.mockResolvedValue({})
+    await svc.forgotPassword({ email: 'j@ex.com' })
+    expect(mail.sendResetCode).toHaveBeenCalledWith('j@ex.com', expect.any(String))
+  })
+  it('reset valida código e troca a senha', async () => {
+    const { svc, users, prisma } = deps(); const { hash } = jest.requireActual('./codes')
+    users.findByEmail.mockResolvedValue({ id: 'u1', resetCodeHash: await hash('123456'), resetExpires: new Date(Date.now() + 60_000) })
+    prisma.user.update.mockResolvedValue({})
+    await svc.resetPassword({ email: 'j@ex.com', code: '123456', newPassword: 'nova123' })
+    const data = prisma.user.update.mock.calls[0][0].data
+    expect(data.passwordHash).toBeDefined()
+    expect(data.resetCodeHash).toBeNull()
+  })
+})
