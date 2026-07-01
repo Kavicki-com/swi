@@ -61,3 +61,29 @@ describe('AuthService.confirm', () => {
     await expect(svc.confirm({ email: 'j@ex.com', code: '999999' })).rejects.toThrow()
   })
 })
+
+describe('AuthService.login (2 portas)', () => {
+  const { hash } = jest.requireActual('./codes')
+  async function userWith(over: any) {
+    return { id: 'u1', email: 'j@ex.com', name: 'J', role: 'WORKER',
+      passwordHash: await hash('senha123'), emailVerified: true, approvalStatus: 'APPROVED', ...over }
+  }
+  it('barra e-mail não verificado (403 reason confirme)', async () => {
+    const { svc, users } = deps(); users.findByEmail.mockResolvedValue(await userWith({ emailVerified: false }))
+    await expect(svc.login({ email: 'j@ex.com', password: 'senha123' })).rejects.toMatchObject({ response: { reason: 'EMAIL_NOT_VERIFIED' } })
+  })
+  it('barra não aprovado (403 reason aprovação)', async () => {
+    const { svc, users } = deps(); users.findByEmail.mockResolvedValue(await userWith({ approvalStatus: 'PENDING' }))
+    await expect(svc.login({ email: 'j@ex.com', password: 'senha123' })).rejects.toMatchObject({ response: { reason: 'NOT_APPROVED' } })
+  })
+  it('senha errada = 401', async () => {
+    const { svc, users } = deps(); users.findByEmail.mockResolvedValue(await userWith({}))
+    await expect(svc.login({ email: 'j@ex.com', password: 'errada' })).rejects.toThrow()
+  })
+  it('as 2 portas ok -> emite JWT + user', async () => {
+    const { svc, users, jwt } = deps(); users.findByEmail.mockResolvedValue(await userWith({}))
+    const r = await svc.login({ email: 'j@ex.com', password: 'senha123' })
+    expect(jwt.sign).toHaveBeenCalledWith({ sub: 'u1', role: 'WORKER' })
+    expect(r).toEqual({ accessToken: 'jwt-token', user: { id: 'u1', email: 'j@ex.com', name: 'J' } })
+  })
+})

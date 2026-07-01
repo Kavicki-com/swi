@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../prisma/prisma.service'
 import { UsersService } from '../users/users.service'
@@ -44,5 +44,13 @@ export class AuthService {
       where: { id: u.id },
       data: { emailVerified: true, confirmationCodeHash: null, confirmationExpires: null },
     })
+  }
+
+  async login(p: { email: string; password: string }): Promise<{ accessToken: string; user: { id: string; email: string; name: string } }> {
+    const u = await this.users.findByEmail(p.email)
+    if (!u || !(await verifyHash(p.password, u.passwordHash))) throw new UnauthorizedException('Credenciais inválidas')
+    if (!u.emailVerified) throw new ForbiddenException({ reason: 'EMAIL_NOT_VERIFIED', message: 'Confirme seu e-mail antes de entrar' })
+    if (u.approvalStatus !== 'APPROVED') throw new ForbiddenException({ reason: 'NOT_APPROVED', message: 'Sua conta está aguardando aprovação do administrador' })
+    return { accessToken: this.jwt.sign({ sub: u.id, role: u.role }), user: { id: u.id, email: u.email, name: u.name } }
   }
 }
