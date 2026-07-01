@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  WORKER
+  ADMIN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  passwordHash   String
+  name           String
+  role           Role           @default(WORKER)
+  emailVerified  Boolean        @default(false)
+  approvalStatus ApprovalStatus @default(PENDING)
+
+  confirmationCodeHash String?
+  confirmationExpires  DateTime?
+  resetCodeHash        String?
+  resetExpires         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
