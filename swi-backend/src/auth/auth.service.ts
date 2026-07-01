@@ -53,4 +53,26 @@ export class AuthService {
     if (u.approvalStatus !== 'APPROVED') throw new ForbiddenException({ reason: 'NOT_APPROVED', message: 'Sua conta está aguardando aprovação do administrador' })
     return { accessToken: this.jwt.sign({ sub: u.id, role: u.role }), user: { id: u.id, email: u.email, name: u.name } }
   }
+
+  async forgotPassword(p: { email: string }): Promise<void> {
+    const u = await this.users.findByEmail(p.email)
+    if (!u) return                                     // silencioso de propósito
+    const code = generateCode()
+    await this.prisma.user.update({
+      where: { id: u.id },
+      data: { resetCodeHash: await hash(code), resetExpires: new Date(Date.now() + CODE_TTL_MIN * 60_000) },
+    })
+    await this.mail.sendResetCode(p.email, code)
+  }
+
+  async resetPassword(p: { email: string; code: string; newPassword: string }): Promise<void> {
+    const u = await this.users.findByEmail(p.email)
+    if (!u || !u.resetCodeHash || !u.resetExpires) throw new BadRequestException('Código inválido')
+    if (u.resetExpires < new Date()) throw new BadRequestException('Código expirado')
+    if (!(await verifyHash(p.code, u.resetCodeHash))) throw new BadRequestException('Código inválido')
+    await this.prisma.user.update({
+      where: { id: u.id },
+      data: { passwordHash: await hash(p.newPassword), resetCodeHash: null, resetExpires: null },
+    })
+  }
 }
