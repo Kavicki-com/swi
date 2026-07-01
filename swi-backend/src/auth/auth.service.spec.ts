@@ -33,3 +33,31 @@ describe('AuthService.signup', () => {
       .rejects.toBeInstanceOf(ConflictException)
   })
 })
+
+describe('AuthService.confirm', () => {
+  it('valida o código, marca emailVerified e limpa o código', async () => {
+    const { svc, users, prisma } = deps()
+    const { hash } = await import('./codes')
+    users.findByEmail.mockResolvedValue({
+      id: 'u1', email: 'j@ex.com', emailVerified: false,
+      confirmationCodeHash: await hash('123456'),
+      confirmationExpires: new Date(Date.now() + 60_000),
+    })
+    prisma.user.update.mockResolvedValue({})
+    await svc.confirm({ email: 'j@ex.com', code: '123456' })
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { emailVerified: true, confirmationCodeHash: null, confirmationExpires: null },
+    })
+  })
+
+  it('rejeita código errado', async () => {
+    const { svc, users } = deps()
+    const { hash } = await import('./codes')
+    users.findByEmail.mockResolvedValue({
+      id: 'u1', confirmationCodeHash: await hash('111111'),
+      confirmationExpires: new Date(Date.now() + 60_000),
+    })
+    await expect(svc.confirm({ email: 'j@ex.com', code: '999999' })).rejects.toThrow()
+  })
+})
