@@ -56,7 +56,8 @@
         {
           "locationWhenInUsePermission": "O SWI usa sua localização para monitorar sua segurança em campo."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
