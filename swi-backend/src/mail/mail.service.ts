@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Optional } from '@nestjs/common'
 import * as nodemailer from 'nodemailer'
 
 @Injectable()
@@ -6,7 +6,9 @@ export class MailService {
   private readonly from = process.env.MAIL_FROM ?? 'no-reply@swi.local'
   // transporter injetável p/ teste; default = SMTP do MailHog
   constructor(
-    private readonly transporter: nodemailer.Transporter = nodemailer.createTransport({
+    // @Optional(): o Nest não injeta um Transporter (não é provider) — passa undefined,
+    // e o default do JS cria o transporter real do MailHog. O teste passa um mock explícito.
+    @Optional() private readonly transporter: nodemailer.Transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST ?? 'localhost',
       port: Number(process.env.SMTP_PORT ?? 1025),
       secure: false,

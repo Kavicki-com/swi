@@ -1,1 +1,1 @@
-{ "extends": "./tsconfig.json", "exclude": ["node_modules", "dist", "amplify", "test", "**/*spec.ts"] }
+{ "extends": "./tsconfig.json", "exclude": ["node_modules", "dist", "amplify", "test", "prisma", "**/*spec.ts"] }
