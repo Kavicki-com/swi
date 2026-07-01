@@ -1,10 +1,9 @@
 jest.mock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
-// Stub aws-amplify/auth: getAuthBackend statically imports amplifyAuthBackend
-// (needed so a runtime flag flip works), which would otherwise pull in
-// @aws-amplify/core's .native build → requires @aws-amplify/react-native, a
-// native-only peer absent in this typecheck/test env. The selector never
-// touches the amplify path, so an empty stub is faithful.
-jest.mock('aws-amplify/auth', () => ({}));
+// Stub expo-secure-store: getAuthBackend statically imports apiAuthBackend
+// (needed so a runtime flag flip works), which pulls in expo-secure-store, a
+// native module. The selector never touches the api path when the flag is
+// 'mock', so an empty stub is faithful.
+jest.mock('expo-secure-store', () => ({}));
 import { getAuthBackend } from './getAuthBackend';
 import { mockAuthBackend } from './mockAuthBackend';
 
