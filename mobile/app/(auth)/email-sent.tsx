@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
 import { useAuth } from '../../services/auth/AuthProvider';
-import { DATA_BACKEND } from '../../lib/featureFlags';
+import { AUTH_BACKEND } from '../../lib/featureFlags';
 
 // Auto-advance to account-confirmation simulating the user clicking the
 // confirmation link in the email. 4s gives enough time to read the message;
@@ -22,9 +22,9 @@ export default function EmailSent() {
 
   useEffect(() => {
     // Mock-only auto-advance: simulates the user clicking the confirmation
-    // link in their inbox. In amplify mode the user types the emailed code
+    // link in their inbox. In api mode the user types the emailed code
     // into the field below and presses "Confirmar conta".
-    if (DATA_BACKEND !== 'mock') return;
+    if (AUTH_BACKEND !== 'mock') return;
     const t = setTimeout(() => {
       // Forward `email` to account-confirmation so it can complete the
       // session (signIn) before redirecting into the wizard. The signup
@@ -43,13 +43,11 @@ export default function EmailSent() {
   const handleConfirm = async () => {
     try {
       await confirmSignUp({ email: email ?? '', code });
-      // Phase 6 PREREQUISITE: this amplify branch routes to /login, which means
-      // it SKIPS account-confirmation AND the complimentary-data onboarding
-      // wizard that the mock flow enters (signup→email-sent→account-confirmation
-      // →step-1). A live Cognito pool decision is needed: either auto-sign-in
-      // here and route to '/(auth)/account-confirmation' (parity with mock so the
-      // worker fills their profile), or keep /login and trigger onboarding on
-      // first authenticated launch. Do NOT ship amplify until this is resolved.
+      // In api mode the REST confirm succeeds here and we route to /login so
+      // the worker signs in with their new credentials. This intentionally
+      // SKIPS the complimentary-data onboarding wizard that the mock flow
+      // enters (signup→email-sent→account-confirmation→step-1) — that wizard
+      // remains mock-only for now.
       router.replace('/(auth)/login');
     } catch {
       Alert.alert('Erro', 'Código inválido ou expirado.');
@@ -95,7 +93,7 @@ export default function EmailSent() {
             acesse sua caixa de entrada e clique no link para confirmar a sua conta.
           </Text>
 
-          {DATA_BACKEND === 'amplify' && (
+          {AUTH_BACKEND === 'api' && (
             <View style={{ width: '100%', gap: theme.gap.l }}>
               <Input
                 label="Código de confirmação"

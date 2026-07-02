@@ -19,13 +19,12 @@ export default function PasswordRecoveryEmailSent() {
   const { email } = useLocalSearchParams<{ email?: string }>();
   const displayEmail = email && email.length > 0 ? email : 'nomedousuario@email.com';
 
-  // Phase 6 PREREQUISITE (amplify): this magic-link-style auto-advance is
-  // INCOHERENT with Cognito's code-based reset — resetPassword() emails a CODE
-  // that the user types on new-password, there is no link to click here. When
-  // DATA_BACKEND === 'amplify', this screen should be gated to skip the timer
-  // (or be bypassed) and go straight to new-password for code entry. Left
-  // un-gated for now because the mock demo relies on the auto-advance and the
-  // amplify path is deploy-gated (untestable without a live pool).
+  // NOTE (api): this magic-link-style auto-advance is INCOHERENT with the REST
+  // code-based reset — resetPassword() emails a CODE that the user types on
+  // new-password, there is no link to click here. When AUTH_BACKEND === 'api',
+  // this screen should be gated to skip the timer (or be bypassed) and go
+  // straight to new-password for code entry. Left un-gated for now because the
+  // mock demo relies on the auto-advance.
   useEffect(() => {
     const t = setTimeout(() => {
       router.replace({
