@@ -18,9 +18,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
-import { createRoot, type Root } from 'react-dom/client'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
+import { SATELLITE_STYLE } from '@/lib/mapStyles'
+import { buildHeatmapPoints, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
+import { createPinElement, type PinElement } from '@/lib/pinFactory'
+import { MapAttribution } from '@/components/MapAttribution'
+import { getRainViewerLatestRadar } from '@/lib/rainViewer'
 import {
   Button,
   Chip,
@@ -28,7 +32,6 @@ import {
   Icon,
   LocationPin,
   SearchInput,
-  SwiThemeProvider,
   Text,
   useTheme,
 } from '@kavicki/swi-design-system'
@@ -50,59 +53,7 @@ function passesFilter(status: DashboardMapMarker['status'], filter: string): boo
   return true
 }
 
-// ESRI World Imagery satellite tiles — same source used by MapsGeneral,
-// Dashboard MapBanner, ChatInbox mini-map, etc. Free for demo use, no key.
-const ESRI_SATELLITE_STYLE = {
-  version: 8 as const,
-  sources: {
-    'esri-imagery': {
-      type: 'raster' as const,
-      tiles: [
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      ],
-      tileSize: 256,
-      attribution: '',
-      minzoom: 0,
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: 'esri-imagery',
-      type: 'raster' as const,
-      source: 'esri-imagery',
-    },
-  ],
-}
-
-// Box-Muller distributed mock points around `center` — produces the same
-// organic "thermal blob" the MapsGeneral heatmap shows. In production
-// replace with real aggregated event coordinates from the worker telemetry
-// API.
-function buildHeatmapPoints(
-  center: [number, number],
-  count: number,
-  spread: number,
-): Array<{ lng: number; lat: number; weight: number }> {
-  const pts: Array<{ lng: number; lat: number; weight: number }> = []
-  for (let i = 0; i < count; i++) {
-    const u = 1 - Math.random()
-    const v = Math.random()
-    const r = Math.sqrt(-2 * Math.log(u)) * spread
-    const theta = 2 * Math.PI * v
-    const dx = r * Math.cos(theta)
-    const dy = r * Math.sin(theta)
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    const weight = Math.max(0.2, 1 - distance / (spread * 2.4))
-    pts.push({ lng: center[0] + dx, lat: center[1] + dy, weight })
-  }
-  return pts
-}
-
-// Bridge: render <LocationPin/> into a detached div so it can be passed
-// to maplibregl.Marker (which only accepts HTMLElement). SwiThemeProvider
-// is needed because the detached React tree doesn't inherit the app theme.
-type PinHandle = { marker: maplibregl.Marker; root: Root; el: HTMLDivElement }
+type PinHandle = PinElement & { marker: maplibregl.Marker }
 
 function buildMarker(
   m: DashboardMapMarker,
@@ -110,15 +61,10 @@ function buildMarker(
   lib: typeof maplibregl,
   onClick: () => void,
 ): PinHandle {
-  const el = document.createElement('div')
-  el.style.cursor = 'pointer'
-  el.addEventListener('click', onClick)
-  const root = createRoot(el)
-  root.render(
-    <SwiThemeProvider>
-      <LocationPin variant="badge" status={m.status} name={m.name} />
-    </SwiThemeProvider>,
-  )
+  const { el, root } = createPinElement({
+    onClick,
+    content: <LocationPin variant="badge" status={m.status} name={m.name} />,
+  })
   const marker = new lib.Marker({ element: el, anchor: 'bottom' })
     .setLngLat([m.lng, m.lat])
     .addTo(map)
@@ -186,7 +132,7 @@ export function AlertsList() {
     ]
     const map = new lib.Map({
       container: containerRef.current,
-      style: ESRI_SATELLITE_STYLE,
+      style: SATELLITE_STYLE,
       center,
       zoom: 14,
       attributionControl: false,
@@ -221,8 +167,18 @@ export function AlertsList() {
     return () => {
       handles.forEach((h) => {
         h.marker.remove()
-        h.root.unmount()
-        h.el.remove()
+      })
+      // Defer the React subtree unmount to a microtask — calling
+      // root.unmount() synchronously inside a useEffect cleanup that fires
+      // during a state-driven re-render logs the "Attempted to synchronously
+      // unmount a root while React was already rendering" warning and in
+      // rare cases leaves the route in a blank state. Microtask defers
+      // it past the current render cycle (same fix as AlertsRescueRoute).
+      queueMicrotask(() => {
+        handles.forEach((h) => {
+          h.root.unmount()
+          h.el.remove()
+        })
       })
     }
   }, [lib, mapReady, filteredMarkers])
@@ -238,15 +194,7 @@ export function AlertsList() {
     ]
     const corePoints = buildHeatmapPoints(center, 220, 0.006)
     const haloPoints = buildHeatmapPoints(center, 280, 0.018)
-    const points = [...corePoints, ...haloPoints]
-    const geojson: GeoJSON.FeatureCollection<GeoJSON.Point> = {
-      type: 'FeatureCollection',
-      features: points.map((p) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: { weight: p.weight },
-      })),
-    }
+    const geojson = buildHeatmapGeoJSON([...corePoints, ...haloPoints])
     if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
     if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
     map.addSource('heatmap-points', { type: 'geojson', data: geojson })
@@ -259,25 +207,7 @@ export function AlertsList() {
         'heatmap-intensity': 2.0,
         'heatmap-radius': 70,
         'heatmap-opacity': 0.82,
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0,
-          'rgba(34,211,238,0)',
-          0.08,
-          'rgb(34,211,238)',
-          0.24,
-          'rgb(34,197,94)',
-          0.44,
-          'rgb(250,204,21)',
-          0.64,
-          'rgb(249,115,22)',
-          0.84,
-          'rgb(220,38,38)',
-          1.0,
-          'rgb(159,18,57)',
-        ],
+        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...HEATMAP_COLOR_RAMP],
       },
     })
     return () => {
@@ -293,43 +223,28 @@ export function AlertsList() {
     const map = mapRef.current
     if (!map || !mapReady || mapMode !== 'meteo') return
     let cancelled = false
-    fetch('https://api.rainviewer.com/public/weather-maps.json')
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return
-        const host = data?.host as string | undefined
-        const past = data?.radar?.past
-        if (!host || !Array.isArray(past) || past.length === 0) return
-        // Use the `path` hash (e.g. `/v2/radar/a91282243cdc`) instead of the
-        // `time` number — RainViewer expires the timestamp-based URL within
-        // ~24h (returns HTTP 410), while the path hash format is what their
-        // current docs recommend.
-        const path = past[past.length - 1].path as string
-        if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
-        if (map.getSource('meteo')) map.removeSource('meteo')
-        map.addSource('meteo', {
-          type: 'raster',
-          tiles: [`${host}${path}/256/{z}/{x}/{y}/2/1_1.png`],
-          tileSize: 256,
-          // RainViewer's actual max zoom is 7 (despite docs claiming 12).
-          // From z=8+ the server returns a 1.4KB "Zoom Level Not Supported"
-          // PNG instead of real radar data. Capping maxzoom here makes
-          // maplibre overzoom (stretch) the z=7 tiles for higher map zooms
-          // — visually fuzzier but at least shows actual precipitation data
-          // instead of the error placeholder.
-          maxzoom: 7,
-        })
-        map.addLayer({
-          id: 'meteo-layer',
-          type: 'raster',
-          source: 'meteo',
-          paint: { 'raster-opacity': 0.75 },
-        })
+    getRainViewerLatestRadar().then((result) => {
+      if (cancelled || !result) return
+      const { host, path } = result
+      if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
+      if (map.getSource('meteo')) map.removeSource('meteo')
+      map.addSource('meteo', {
+        type: 'raster',
+        tiles: [`${host}${path}/256/{z}/{x}/{y}/2/1_1.png`],
+        tileSize: 256,
+        // RainViewer's actual max zoom is 7 (despite docs claiming 12). From z=8+
+        // the server returns a 1.4KB "Zoom Level Not Supported" PNG instead of
+        // real radar data, so cap here and let maplibre overzoom (stretch) the
+        // z=7 tiles for higher map zooms.
+        maxzoom: 7,
       })
-      .catch(() => {
-        // Silent: if RainViewer is unreachable (offline demo), the map just
-        // stays in pins-only mode. No user-facing error needed.
+      map.addLayer({
+        id: 'meteo-layer',
+        type: 'raster',
+        source: 'meteo',
+        paint: { 'raster-opacity': 0.75 },
       })
+    })
     return () => {
       cancelled = true
       if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
@@ -390,6 +305,9 @@ export function AlertsList() {
       >
         {/* Maplibre map container — fills the parent View. */}
         <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+
+        {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
+        <MapAttribution />
 
         {/* Floating mode toggles (Figma 100:5611, top-left over map). */}
         <View
@@ -499,7 +417,11 @@ export function AlertsList() {
           >
             <Icon name="rainy" size={24} color={theme.content.light} />
             <View style={{ flex: 1, gap: theme.gap.xs }}>
-              <Text variant="body.s" color={theme.content.light} style={{ fontWeight: '700' }}>
+              <Text
+                variant="body.s"
+                color={theme.content.light}
+                style={{ fontWeight: '700' as const }}
+              >
                 Alerta de Chuvas intensas
               </Text>
               <Text variant="body.s" color={theme.content.light}>

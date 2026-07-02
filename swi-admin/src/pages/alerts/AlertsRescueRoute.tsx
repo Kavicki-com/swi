@@ -7,12 +7,18 @@
 // Dispatched state (URL `?dispatched=true`):
 //   - Pre-dispatch: cyan route, green rescuer pin, modal visible.
 //   - Dispatched: violet route, small violet "moving" rescuer marker, no modal.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { createRoot, type Root } from 'react-dom/client'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
+import { SATELLITE_STYLE } from '@/lib/mapStyles'
+import { MapAttribution } from '@/components/MapAttribution'
+import { useRescueRoute } from '@/hooks/useRescueRoute'
+import { lngLatAlongLineString, totalLineLength } from '@/lib/lineString'
+import { formatDuration, formatDistance } from '@/lib/formatRoute'
+import { useDemoToast } from '@/lib/demoToast'
 import {
   Button,
   Icon,
@@ -28,62 +34,6 @@ import {
 // feels like one mine site.
 const INJURED_LNGLAT: [number, number] = [-46.62, -23.545]
 const RESCUER_LNGLAT: [number, number] = [-46.64, -23.555]
-
-// Route waypoints — a slight curve through a midpoint offset south so the
-// path mimics a road following terrain instead of a straight line. The
-// extra waypoints also give us anchor lat/lngs for the inline distance
-// labels (computed via fractional interpolation below).
-const ROUTE_MID: [number, number] = [
-  (INJURED_LNGLAT[0] + RESCUER_LNGLAT[0]) / 2,
-  (INJURED_LNGLAT[1] + RESCUER_LNGLAT[1]) / 2 - 0.003,
-]
-const ROUTE_COORDS: Array<[number, number]> = [RESCUER_LNGLAT, ROUTE_MID, INJURED_LNGLAT]
-
-// Pick a lat/lng at a fractional position (0 = rescuer end, 1 = injured end)
-// along the simple 3-point path, used to anchor text labels to map space.
-function lngLatAt(t: number): [number, number] {
-  if (t <= 0.5) {
-    const u = t / 0.5
-    return [
-      RESCUER_LNGLAT[0] + (ROUTE_MID[0] - RESCUER_LNGLAT[0]) * u,
-      RESCUER_LNGLAT[1] + (ROUTE_MID[1] - RESCUER_LNGLAT[1]) * u,
-    ]
-  }
-  const u = (t - 0.5) / 0.5
-  return [
-    ROUTE_MID[0] + (INJURED_LNGLAT[0] - ROUTE_MID[0]) * u,
-    ROUTE_MID[1] + (INJURED_LNGLAT[1] - ROUTE_MID[1]) * u,
-  ]
-}
-
-const LABELS: Array<{ t: number; text: string }> = [
-  { t: 0.25, text: '6 minutos' },
-  { t: 0.55, text: '16 Km' },
-  { t: 0.78, text: '17 minutos' },
-]
-
-const ESRI_SATELLITE_STYLE = {
-  version: 8 as const,
-  sources: {
-    'esri-imagery': {
-      type: 'raster' as const,
-      tiles: [
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      ],
-      tileSize: 256,
-      attribution: '',
-      minzoom: 0,
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: 'esri-imagery',
-      type: 'raster' as const,
-      source: 'esri-imagery',
-    },
-  ],
-}
 
 type PinHandle = { marker: maplibregl.Marker; root: Root; el: HTMLDivElement }
 
@@ -145,14 +95,72 @@ export function AlertsRescueRoute() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
-  const [labelPos, setLabelPos] = useState<Record<string, { left: number; top: number }>>({})
+  // Keyed by `t` (the fractional position along the route) — always unique
+  // among the 3 labels even when their displayed text collides (e.g. "…"
+  // during loading or "—" during error fallback).
+  const [labelPos, setLabelPos] = useState<Record<number, { left: number; top: number }>>({})
+
+  // Mapbox Directions API: rescuer -> injured. Replaces the previous
+  // hardcoded 3-point LineString with a real road-following polyline +
+  // real ETA/distance values. Loading + error states are handled below.
+  const { route, loading, error } = useRescueRoute(RESCUER_LNGLAT, INJURED_LNGLAT)
+  const { show: showToast } = useDemoToast()
+
+  // Surface the error to the user once per occurrence (no re-toast on
+  // re-renders). The fallback geometry + euclidean-distance labels
+  // already keep the UI usable; this is just disclosure.
+  useEffect(() => {
+    if (error) {
+      showToast('Rota indisponível', 'Exibindo linha direta entre os dois pontos.')
+    }
+  }, [error, showToast])
+
+  // GeoJSON coords driving both the line layer and the label positions.
+  // Falls back to a straight 2-point LineString while route is loading
+  // or failed — keeps the UI usable, swaps in the real polyline once
+  // the API resolves.
+  const coords = useMemo<Array<[number, number]>>(() => {
+    if (!route) return [RESCUER_LNGLAT, INJURED_LNGLAT]
+    return route.geometry.coordinates.map((c) => [c[0]!, c[1]!] as [number, number])
+  }, [route])
+
+  // 3 floating labels anchored at fractional positions along the route.
+  // While the Mapbox response is in-flight, show "..." placeholders so the
+  // UI always communicates that there ARE labels there. Once resolved,
+  // values come straight from duration (seconds) + distance (metres).
+  // Error case (route===null after loading=false) is handled in C2.
+  const labels = useMemo(() => {
+    if (loading) {
+      return [
+        { t: 0.25, text: '…' },
+        { t: 0.55, text: '…' },
+        { t: 0.78, text: '…' },
+      ]
+    }
+    if (route) {
+      return [
+        { t: 0.25, text: formatDuration(route.duration * 0.4) },
+        { t: 0.55, text: formatDistance(route.distance) },
+        { t: 0.78, text: formatDuration(route.duration) },
+      ]
+    }
+    // Error fallback: no ETA available, but estimate distance from the
+    // straight-line geometry. 1° lat ≈ 111 km globally; lng° varies with
+    // latitude but at -23.5° the error is < 10%, fine for the demo label.
+    const distMeters = totalLineLength([RESCUER_LNGLAT, INJURED_LNGLAT]) * 111000
+    return [
+      { t: 0.25, text: '—' },
+      { t: 0.55, text: formatDistance(distMeters) },
+      { t: 0.78, text: '—' },
+    ]
+  }, [route, loading])
 
   // Init the map once — frame both pins inside view via fitBounds.
   useEffect(() => {
     if (!lib || !containerRef.current) return
     const map = new lib.Map({
       container: containerRef.current,
-      style: ESRI_SATELLITE_STYLE,
+      style: SATELLITE_STYLE,
       center: [
         (INJURED_LNGLAT[0] + RESCUER_LNGLAT[0]) / 2,
         (INJURED_LNGLAT[1] + RESCUER_LNGLAT[1]) / 2,
@@ -204,13 +212,14 @@ export function AlertsRescueRoute() {
   }, [lib, mapReady, dispatched])
 
   // Add the route as a GeoJSON LineString layer. Stroke color reflects the
-  // dispatched state (cyan → violet).
+  // dispatched state (cyan → violet). Coordinates come from the Mapbox
+  // Directions response (or fallback to a straight line while loading).
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: ROUTE_COORDS },
+      geometry: { type: 'LineString', coordinates: coords },
       properties: {},
     }
     if (map.getLayer('rescue-route-layer')) map.removeLayer('rescue-route-layer')
@@ -224,24 +233,38 @@ export function AlertsRescueRoute() {
       paint: {
         'line-color': routeStroke,
         'line-width': 4,
+        // Fade the provisional straight-line fallback while the real route
+        // is loading — communicates "this is temporary" without dropping
+        // the line entirely (jarring).
+        'line-opacity': loading ? 0.4 : 1.0,
       },
     })
     return () => {
-      if (map.getLayer('rescue-route-layer')) map.removeLayer('rescue-route-layer')
-      if (map.getSource('rescue-route')) map.removeSource('rescue-route')
+      // During unmount the parent init-effect cleanup may have already
+      // called map.remove(), nulling its internal style. Guarding with
+      // try/catch lets us idempotently remove on coord/route changes
+      // (alive map) without crashing on full teardown (dead map).
+      try {
+        if (map.getLayer('rescue-route-layer')) map.removeLayer('rescue-route-layer')
+        if (map.getSource('rescue-route')) map.removeSource('rescue-route')
+      } catch {
+        /* map already destroyed */
+      }
     }
-  }, [mapReady, routeStroke])
+  }, [mapReady, routeStroke, coords, loading])
 
   // Track label screen positions — recompute on every map move/zoom so the
-  // distance/time labels stay glued to their waypoints on the route.
+  // distance/time labels stay glued to their fractional points along the
+  // (possibly multi-segment) route geometry.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     const update = () => {
-      const next: Record<string, { left: number; top: number }> = {}
-      LABELS.forEach((l) => {
-        const p = map.project(lngLatAt(l.t))
-        next[l.text] = { left: p.x, top: p.y }
+      const next: Record<number, { left: number; top: number }> = {}
+      labels.forEach((l) => {
+        const [lng, lat] = lngLatAlongLineString(coords, l.t)
+        const p = map.project([lng, lat])
+        next[l.t] = { left: p.x, top: p.y }
       })
       setLabelPos(next)
     }
@@ -249,10 +272,16 @@ export function AlertsRescueRoute() {
     map.on('move', update)
     map.on('zoom', update)
     return () => {
-      map.off('move', update)
-      map.off('zoom', update)
+      // Same teardown race as the route-layer effect: parent unmount may
+      // have already called map.remove() by the time this fires.
+      try {
+        map.off('move', update)
+        map.off('zoom', update)
+      } catch {
+        /* map already destroyed */
+      }
     }
-  }, [mapReady])
+  }, [mapReady, labels, coords])
 
   return (
     <View
@@ -269,13 +298,16 @@ export function AlertsRescueRoute() {
       {/* Maplibre map container — fills the parent View. */}
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
+      {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
+      <MapAttribution />
+
       {/* Inline distance/time labels — one per waypoint, tracked via map.project */}
-      {LABELS.map((l) => {
-        const pos = labelPos[l.text]
+      {labels.map((l) => {
+        const pos = labelPos[l.t]
         if (!pos) return null
         return (
           <View
-            key={l.text}
+            key={l.t}
             style={{
               position: 'absolute',
               left: pos.left,
@@ -286,10 +318,9 @@ export function AlertsRescueRoute() {
             }}
           >
             <Text
-              variant="body.m"
+              variant="body.s"
               color={theme.content.dark}
               style={{
-                fontWeight: '700',
                 textShadowColor: 'rgba(0,0,0,0.6)',
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 2,
@@ -336,6 +367,8 @@ export function AlertsRescueRoute() {
           <View style={{ width: '100%' }}>
             <Button
               label="Continuar"
+              // @ts-expect-error labelFamily exists in local DS source; node_modules pin v0.1.35 hasn't received this prop yet.
+              labelFamily="title"
               backgroundColor={theme.surface.success}
               onPress={() => {
                 setModalVisible(false)

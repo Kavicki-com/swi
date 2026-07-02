@@ -20,6 +20,7 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import {
   dashboardApi,
@@ -43,9 +44,12 @@ type WeatherTimelineEvent = {
 }
 
 const WEATHER_NOW_LABEL = 'AGORA'
-const WEAR_GRADIENT = ['#34d399', '#10b981'] as const
-// surface/error-light -> surface/error from the Figma token map.
-const URGENT_GRADIENT = ['#fab3bd', '#f5667a'] as const
+// surface/success (lime/700) -> surface/success-light (lime/200) — Sinais vitais.
+const VITAL_GRADIENT = ['#3EAB2E', '#B7E9A4'] as const
+// surface/info (blue/600) -> surface/info-light (blue/200) — Taxa de desgaste (Figma).
+const WEAR_GRADIENT = ['#3899BF', '#8AD2E2'] as const
+// content/error (red/400) -> surface/error-light (red/200) — Alertas urgentes.
+const URGENT_GRADIENT = ['#F5667A', '#FAB3BD'] as const
 
 type Phase = 'loading' | 'error' | 'populated'
 
@@ -194,7 +198,16 @@ function buildMarkerEl(marker: DashboardMapMarker, onClick: () => void): HTMLEle
   return el
 }
 
-function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
+function MapBanner({
+  markers,
+  height = 172,
+}: {
+  markers: DashboardMapMarker[]
+  // Figma frame 4:2 (1366) → 172. Figma frame 1060:7080 (1920 wide) → ~268.
+  // Pass explicitly from the wide branch so the map keeps a sensible aspect
+  // ratio when the content column grows past ~1041 CSS px.
+  height?: number
+}) {
   const theme = useTheme()
   const navigate = useNavigate()
   const lib = useMapLibre()
@@ -251,7 +264,7 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
       testID="dashboard-map-banner"
       dataSet={{ fidelity: 'map-banner' }}
       style={{
-        height: 200,
+        height,
         borderRadius: theme.border.radius.m,
         overflow: 'hidden',
         position: 'relative' as unknown as never,
@@ -271,7 +284,10 @@ function MapBanner({ markers }: { markers: DashboardMapMarker[] }) {
       >
         <Button
           label="Ver mapa geral"
-          variant="ghost"
+          variant="contained"
+          size="small"
+          backgroundColor={theme.background}
+          labelColor={theme.content.dark}
           onPress={() => navigate('/maps/general')}
           testID="dashboard-map-cta"
         />
@@ -308,24 +324,69 @@ function KpiTile({
     >
       <Icon name={icon} size={24} color={theme.content.primary} />
       <Title variant="title.l">{value}</Title>
-      <Text numberOfLines={1} style={{ color: theme.content.dark, fontSize: 12 }}>
+      <Text variant="body.s" numberOfLines={1} color={theme.content.dark}>
         {label}
       </Text>
     </View>
   )
 }
 
-function FuncionariosKpi({ summary }: { summary: DashboardSummary }) {
+// Wide-class variant lays the 4 KPI tiles in a single horizontal strip
+// (Figma 1060:7080). Desktop and tablet keep the 2×2 grid that fits next
+// to HealthDonuts.
+function FuncionariosKpi({
+  summary,
+  layout = '2x2',
+}: {
+  summary: DashboardSummary
+  layout?: '2x2' | '1x4'
+}) {
   const theme = useTheme()
   const { admins, totalEmployees, newReports, activeCameras } = summary.kpis
+  if (layout === '1x4') {
+    // Wide variant: no surface wrapper around the strip — tiles sit
+    // directly on the page background to match Figma 1060:7080.
+    return (
+      <View
+        testID="kpi-funcionarios"
+        dataSet={{ fidelity: 'kpi-1x4' }}
+        style={{
+          flexDirection: 'row',
+          gap: theme.gap.s,
+        }}
+      >
+        <KpiTile
+          icon="account_circle_filled"
+          value={admins}
+          label="Administradores"
+          testID="kpi-funcionarios-admins"
+        />
+        <KpiTile
+          icon="employee_filled"
+          value={totalEmployees}
+          label="Funcionários"
+          testID="kpi-funcionarios-employees"
+        />
+        <KpiTile
+          icon="report_filled"
+          value={newReports}
+          label="Novos relatórios"
+          testID="kpi-funcionarios-reports"
+        />
+        <KpiTile
+          icon="video_camera_filled"
+          value={activeCameras}
+          label="Câmeras ativas"
+          testID="kpi-funcionarios-cameras"
+        />
+      </View>
+    )
+  }
   return (
     <View
       testID="kpi-funcionarios"
       style={{
         gap: theme.gap.s,
-        padding: theme.padding.m,
-        borderRadius: theme.border.radius.l,
-        backgroundColor: theme.surface.standard,
       }}
     >
       <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
@@ -401,7 +462,7 @@ function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
       dataSet={{ fidelity: 'wear-alerts' }}
       style={{ gap: theme.gap.m }}
     >
-      <Title>Alertas de Desgaste</Title>
+      <Title variant="title.s">Alertas de Desgaste</Title>
       <View
         style={{
           flexDirection: 'row',
@@ -505,16 +566,12 @@ function ActivityCard({ activity }: { activity: DashboardActivity }) {
           }}
         />
         <View style={{ gap: theme.gap.xs }}>
-          <Text
-            style={{
-              color: theme.content.dark,
-              fontSize: 14,
-              fontWeight: '700' as const,
-            }}
-          >
+          <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' as const }}>
             {activity.title}
           </Text>
-          <Text style={{ color: theme.content.medium, fontSize: 12 }}>{activity.sector}</Text>
+          <Text variant="body.s" color={theme.content.medium}>
+            {activity.sector}
+          </Text>
           {/* Figma frame 4:2 ProgressBar is fixed 119px wide; DS ProgressBar
               stretches by default, so wrap to constrain. Color comes from the
               activity's risk level (normal/warning/critical), not its status. */}
@@ -562,7 +619,7 @@ function ActivitiesSection({ activities }: { activities: DashboardActivity[] }) 
       dataSet={{ fidelity: 'activities' }}
       style={{ gap: theme.gap.m }}
     >
-      <Title>Atividades em andamento</Title>
+      <Title variant="title.s">Atividades em andamento</Title>
       <View
         style={{
           flexDirection: 'row',
@@ -602,9 +659,91 @@ function ActivitiesSection({ activities }: { activities: DashboardActivity[] }) 
   )
 }
 
+function HealthDonuts({
+  summary,
+  navigate,
+  theme,
+  flat = false,
+}: {
+  summary: DashboardSummary
+  navigate: ReturnType<typeof useNavigate>
+  theme: ReturnType<typeof useTheme>
+  // When true the wrapper drops its surface background / padding / radius
+  // so the donut cards sit directly on the page bg. Used in the wide
+  // dashboard variant where the section panel is intentionally absent.
+  flat?: boolean
+}) {
+  return (
+    <View
+      testID="kpi-row-health"
+      style={{
+        flex: 1,
+        flexDirection: 'row',
+        gap: theme.gap.m,
+        justifyContent: 'space-around',
+        minWidth: 0,
+        ...(flat
+          ? null
+          : {
+              backgroundColor: theme.surface.standard,
+              padding: theme.padding.m,
+              borderRadius: theme.border.radius.l,
+            }),
+      }}
+    >
+      <DonutChart
+        title="Sinais vitais"
+        value={summary.kpis.vitalSigns}
+        label="Funcionários"
+        caption="Excelentes"
+        progress={85}
+        progressGradient={VITAL_GRADIENT}
+        icon="heartbeat_filled"
+        iconColor={theme.surface.success}
+        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+        iconGradient={VITAL_GRADIENT}
+        size="small"
+        onLocationPress={() => navigate('/maps/general')}
+        testID="kpi-vital-signs"
+      />
+      <DonutChart
+        title="Taxa de desgaste"
+        value={summary.kpis.wearRate}
+        label="Funcionários"
+        caption="Desgaste baixo"
+        progress={70}
+        progressGradient={WEAR_GRADIENT}
+        icon="heartbeat_filled"
+        iconColor={theme.surface.success}
+        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+        iconGradient={VITAL_GRADIENT}
+        size="small"
+        onLocationPress={() => navigate('/maps/general')}
+        testID="kpi-wear-rate"
+      />
+      <DonutChart
+        title="Alertas urgentes"
+        value={summary.kpis.urgentAlerts}
+        label="Funcionários"
+        caption="Necessária mobilização"
+        progress={60}
+        progressGradient={URGENT_GRADIENT}
+        icon="heartbeat_filled"
+        iconColor={theme.surface.success}
+        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
+        iconGradient={VITAL_GRADIENT}
+        size="small"
+        onLocationPress={() => navigate('/maps/general')}
+        testID="kpi-urgent-alerts"
+      />
+    </View>
+  )
+}
+
 function DashboardContent({ summary }: { summary: DashboardSummary }) {
   const theme = useTheme()
   const navigate = useNavigate()
+  const breakpoint = useBreakpoint()
 
   const weatherEvents: WeatherTimelineEvent[] = summary.weather.map((w, idx) => ({
     id: `weather-${idx}`,
@@ -614,6 +753,124 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     isNow: w.isNow,
   }))
 
+  const weatherStrip = (
+    <View
+      dataSet={{ fidelity: 'weather' }}
+      style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.m }}
+    >
+      <Title>Previsão do tempo</Title>
+      <WeatherTimeline
+        events={weatherEvents}
+        // Figma flex: 280, 280, 280, 528 → ratios 1, 1, 1, 1.886.
+        // Colors per Figma: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
+        intensitySegments={[
+          { id: 'seg-0', flex: 1, color: '#3899bf' },
+          { id: 'seg-1', flex: 1, color: theme.surface.warning },
+          { id: 'seg-2', flex: 1, color: '#3899bf' },
+          { id: 'seg-3', flex: 1.886, color: theme.surface.success },
+        ]}
+        // Figma frame 21:1501 — scrubber: 148px thumb on 1037px track ≈ 14%.
+        scrollbar={{ thumbPercent: 14, thumbStartPercent: 0 }}
+        nowLabel={WEATHER_NOW_LABEL}
+        fullWidth
+        testID="weather-timeline"
+      />
+    </View>
+  )
+
+  // Tablet (< 1024): everything stacks into one column. The KPI 2x2 and the
+  // donut row keep their internal layouts (already responsive); we just
+  // stack their containers on top of each other, and the two-col row
+  // becomes two stacked sections.
+  if (breakpoint === 'tablet') {
+    return (
+      <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
+        <MapBanner markers={summary.mapMarkers} />
+        <View
+          testID="dashboard-top-row-tablet"
+          dataSet={{ fidelity: 'top-row-tablet' }}
+          style={{ flexDirection: 'column', gap: theme.gap.m }}
+        >
+          <FuncionariosKpi summary={summary} />
+          <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
+        </View>
+        <View
+          testID="dashboard-two-col-row"
+          dataSet={{ fidelity: 'two-col-tablet' }}
+          style={{ flexDirection: 'column', gap: theme.gap.l }}
+        >
+          <ActivitiesSection activities={summary.activities} />
+          <WearAlertsSection alerts={summary.wearAlerts} />
+        </View>
+        {weatherStrip}
+      </View>
+    )
+  }
+
+  // Wide (>= 1600): top row puts Map | Donuts | KPIs side-by-side in one
+  // horizontal flow per the Figma 1920 frame. Two-column row below.
+  if (breakpoint === 'wide') {
+    // Figma 1060:7080 wide dashboard layout:
+    //   Row 1 — Map full-width
+    //   Row 2 — HealthDonuts (3 charts) | FuncionariosKpi (1x4 horizontal strip)
+    //   Row 3 — Atividades em andamento | Alertas de Desgaste
+    return (
+      <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
+        {/* Row 1 — Map spans the full content width. */}
+        <View testID="dashboard-top-row-wide" dataSet={{ fidelity: 'top-row-wide' }}>
+          <MapBanner markers={summary.mapMarkers} height={268} />
+        </View>
+        {/* Row 2 — Donuts (left, ~60 %) and 4 KPIs (right, ~40 %). */}
+        <View
+          testID="dashboard-kpi-row-wide"
+          dataSet={{ fidelity: 'kpi-row-wide' }}
+          style={{
+            flexDirection: 'row',
+            gap: theme.gap.m,
+            alignItems: 'stretch',
+          }}
+        >
+          <View
+            style={{
+              flexBasis: 0,
+              flexGrow: 1.5,
+              flexShrink: 1,
+              minWidth: 360,
+              flexDirection: 'row',
+            }}
+          >
+            <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
+          </View>
+          <View
+            style={{
+              flexBasis: 0,
+              flexGrow: 1,
+              flexShrink: 1,
+              minWidth: 320,
+              justifyContent: 'center',
+            }}
+          >
+            <FuncionariosKpi summary={summary} layout="1x4" />
+          </View>
+        </View>
+        <View
+          testID="dashboard-two-col-row"
+          dataSet={{ fidelity: 'two-col-wide' }}
+          style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'flex-start' }}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <ActivitiesSection activities={summary.activities} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <WearAlertsSection alerts={summary.wearAlerts} />
+          </View>
+        </View>
+        {weatherStrip}
+      </View>
+    )
+  }
+
+  // Desktop (1024-1599): existing layout, untouched.
   return (
     <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
       <MapBanner markers={summary.mapMarkers} />
@@ -630,51 +887,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         }}
       >
         <FuncionariosKpi summary={summary} />
-        <View
-          testID="kpi-row-health"
-          style={{
-            flex: 1,
-            flexDirection: 'row',
-            gap: theme.gap.m,
-            backgroundColor: theme.surface.standard,
-            padding: theme.padding.m,
-            borderRadius: theme.border.radius.l,
-            justifyContent: 'space-around',
-          }}
-        >
-          <DonutChart
-            title="Sinais vitais"
-            value={summary.kpis.vitalSigns}
-            label="Funcionários"
-            caption="Excelentes"
-            progress={85}
-            icon="heartbeat_filled"
-            onLocationPress={() => navigate('/maps/general')}
-            testID="kpi-vital-signs"
-          />
-          <DonutChart
-            title="Taxa de desgaste"
-            value={summary.kpis.wearRate}
-            label="Funcionários"
-            caption="Desgaste baixo"
-            progress={70}
-            progressGradient={WEAR_GRADIENT}
-            icon="heartbeat_filled"
-            onLocationPress={() => navigate('/maps/general')}
-            testID="kpi-wear-rate"
-          />
-          <DonutChart
-            title="Alertas urgentes"
-            value={summary.kpis.urgentAlerts}
-            label="Funcionários"
-            caption="Necessária mobilização"
-            progress={60}
-            progressGradient={URGENT_GRADIENT}
-            icon="heartbeat_filled"
-            onLocationPress={() => navigate('/maps/general')}
-            testID="kpi-urgent-alerts"
-          />
-        </View>
+        <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
       </View>
 
       {/* Two-column row: Atividades em andamento (left) + Alertas de Desgaste (right) */}
@@ -690,28 +903,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         </View>
       </View>
 
-      <View
-        dataSet={{ fidelity: 'weather' }}
-        style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.m }}
-      >
-        <Title>Previsão do tempo</Title>
-        <WeatherTimeline
-          events={weatherEvents}
-          // Figma flex: 280, 280, 280, 528 → ratios 1, 1, 1, 1.886.
-          // Colors per Figma: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
-          intensitySegments={[
-            { id: 'seg-0', flex: 1, color: '#3899bf' },
-            { id: 'seg-1', flex: 1, color: theme.surface.warning },
-            { id: 'seg-2', flex: 1, color: '#3899bf' },
-            { id: 'seg-3', flex: 1.886, color: theme.surface.success },
-          ]}
-          // Figma frame 21:1501 — scrubber: 148px thumb on 1037px track ≈ 14%.
-          scrollbar={{ thumbPercent: 14, thumbStartPercent: 0 }}
-          nowLabel={WEATHER_NOW_LABEL}
-          fullWidth
-          testID="weather-timeline"
-        />
-      </View>
+      {weatherStrip}
     </View>
   )
 }
