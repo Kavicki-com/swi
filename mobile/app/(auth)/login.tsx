@@ -31,9 +31,14 @@ export default function Login() {
     try {
       await signIn({ email: email.value, password: password.value });
       router.replace('/(app)/dashboard');
-    } catch {
-      // mock never throws; amplify (Phase 6) surfaces auth failures here.
-      Alert.alert('Erro', 'Email ou senha inválidos.');
+    } catch (e) {
+      // Backend real (AUTH_BACKEND='api') lança com mensagem pronta do servidor
+      // — ex.: gate de aprovação ("aguardando aprovação do administrador") ou
+      // e-mail não verificado. Mostra essa mensagem quando houver (é o sinal que
+      // o QA precisa distinguir); no mock nunca cai aqui. Fallback genérico só
+      // pra erro sem message.
+      const msg = e instanceof Error && e.message ? e.message : 'Email ou senha inválidos.';
+      Alert.alert('Erro', msg);
     }
   };
 

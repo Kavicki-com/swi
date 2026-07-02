@@ -14,4 +14,18 @@ export class UsersService {
     if (!u) throw new NotFoundException('Usuário não encontrado')
     return this.prisma.user.update({ where: { id }, data: { approvalStatus: 'APPROVED' } })
   }
+
+  listPending() {
+    return this.prisma.user.findMany({
+      where: { approvalStatus: 'PENDING' },
+      select: { id: true, email: true, name: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    })
+  }
+
+  async reject(id: string): Promise<User> {
+    const u = await this.prisma.user.findUnique({ where: { id } })
+    if (!u) throw new NotFoundException('Usuário não encontrado')
+    return this.prisma.user.update({ where: { id }, data: { approvalStatus: 'REJECTED' } })
+  }
 }

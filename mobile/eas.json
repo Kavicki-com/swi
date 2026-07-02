@@ -30,6 +30,15 @@
         "simulator": true
       }
     },
+    "qa": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": false },
+      "env": {
+        "EXPO_PUBLIC_AUTH_BACKEND": "api",
+        "EXPO_PUBLIC_API_URL": "https://driller-affidavit-trolling.ngrok-free.dev"
+      }
+    },
     "production": {
       "autoIncrement": true
     }

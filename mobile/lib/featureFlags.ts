@@ -49,6 +49,14 @@ export function isFeatureEnabled(gate: FeatureGate): boolean {
 export type DataBackendKind = 'mock' | 'amplify';
 export const DATA_BACKEND: DataBackendKind = 'mock';
 
+// Chave PRÓPRIA do auth, independente de DATA_BACKEND: permite o auth ir no
+// backend real (container) enquanto os outros 9 domínios seguem em mock.
+// 'api' seleciona apiAuthBackend; default 'mock'. Setada no build via
+// EXPO_PUBLIC_AUTH_BACKEND (ver eas.json perfil `qa`).
+export type AuthBackendKind = 'mock' | 'api';
+export const AUTH_BACKEND: AuthBackendKind =
+  (process.env.EXPO_PUBLIC_AUTH_BACKEND as AuthBackendKind) ?? 'mock';
+
 // Dev-only: lets the mock vitals backend exercise the empty/loading/stale/error
 // UIs that production will hit. 'streaming' = normal simulated data.
 export type VitalsScenario = 'streaming' | 'empty' | 'loading' | 'stale' | 'error';
