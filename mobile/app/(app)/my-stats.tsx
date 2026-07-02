@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Image as RNImage, ScrollView, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Image as RNImage, Platform, ScrollView, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
@@ -16,10 +16,15 @@ import {
   LineCaloriesChart,
   ProgressBar,
   Text,
+  TimeStamp,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
+import { useVitals } from '../../services/vitals/VitalsProvider';
+import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
+import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
+import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
 import {
   HEART_STATUS_SVG,
   SILHOUETTE_BODY_SVG,
@@ -33,14 +38,16 @@ import {
   KCAL_FLAME_SVG,
 } from '../../lib/myStatsIcons';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
+import { useMediaPicker } from '../../lib/media/useMediaPicker';
 
 const avatarUri =
   Asset.fromModule(require('../../assets/avatar-construction.png')).uri;
 
-// Divider — vertical SVG with linear gradient (Figma `imgDivider`):
-// fades #171717 → #62BB81 (midpoint) → #171717 over 106px tall, 1px wide.
-// Same pattern as dashboard.tsx so vital row dividers match between screens.
-const DIVIDER_GRAD_END = '#171717';
+// Divider — vertical SVG com gradient banda verde + bordas cinzas perceptíveis.
+// Padronizado com a versão do dashboard.tsx: 2px largura + stops 0/0.2/0.8/1
+// (banda verde sólida no miolo 60%, em vez de pico único). END=#3A3A3A
+// contrasta com o background sem sumir.
+const DIVIDER_GRAD_END = '#3A3A3A';
 const DIVIDER_GRAD_MID = '#62BB81';
 
 // Overlay slot for the custom donut-center icons (rendered via SvgXml on top
@@ -80,7 +87,7 @@ const DONUT_ICON_SLOT = {
 function Divider() {
   const gradId = useUniqueId('my-stats-divider-grad');
   return (
-    <Svg width={1} height={106} viewBox="0 0 1 106">
+    <Svg width={2} height={106} viewBox="0 0 2 106">
       <Defs>
         <LinearGradient
           id={gradId}
@@ -91,25 +98,21 @@ function Divider() {
           gradientUnits="userSpaceOnUse"
         >
           <Stop offset="0" stopColor={DIVIDER_GRAD_END} />
-          <Stop offset="0.506" stopColor={DIVIDER_GRAD_MID} />
+          <Stop offset="0.2" stopColor={DIVIDER_GRAD_MID} />
+          <Stop offset="0.8" stopColor={DIVIDER_GRAD_MID} />
           <Stop offset="1" stopColor={DIVIDER_GRAD_END} />
         </LinearGradient>
       </Defs>
-      <Path d="M1 106H0V0H1V106Z" fill={`url(#${gradId})`} />
+      <Path d="M2 106H0V0H2V106Z" fill={`url(#${gradId})`} />
     </Svg>
   );
 }
 
 // FASE 1+2 — StatusChart + Avatar + Vital signs + ProgressBar fatigue.
 // Figma 342:9419 (my-stats). Section width 328, gap.m 16.
-// Calories points — Figma 342:10223. 3 sampled points (matches Figma layout
-// which shows ~3 well-spaced markers per period filter — earlier 8-point
-// list rendered cramped labels in a 328-wide container).
-const CALORIES_POINTS = [
-  { time: '07:15', kcal: 41 },
-  { time: '08:42', kcal: 57 },
-  { time: '10:51', kcal: 62 },
-];
+// Calories chart points are now derived from the live vitals `history` (last 3
+// caloriesPerHour samples) inside the component — Figma 342:10223 shows ~3
+// well-spaced markers per period, which the 3-sample window mirrors.
 
 const PERIOD_OPTIONS = [
   { label: 'Hoje', value: 'today' },
@@ -132,7 +135,36 @@ const EXAMS: Array<{
   { year: '2033', date: '28 Fev', examName: 'Exame de aptidão física e mental', future: true },
 ];
 
+// Comma-decimal percent string (pt-BR): 62.5 → "62,5%".
+function pct(value: number): string {
+  return `${value.toFixed(1).replace('.', ',')}%`;
+}
+
+// fatigueEtaMin → "Xh Ym" compact (105 → "1h45m", 5 → "0h05m").
+function formatEta(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${h}h${String(m).padStart(2, '0')}m`;
+}
+
+// Relative "atualizado há…" label from a lastUpdated epoch (ms). NOTE: once the
+// provider reaches 'stale' its context value memo is frozen, so this shows the
+// elapsed time at the moment 'stale' was entered and does NOT count up. That's
+// acceptable — staleness is already signalled by the dimming + this label; a
+// live counter would need a local 1s tick in this screen.
+function formatAgo(lastUpdated: number | null, now: number): string {
+  if (lastUpdated == null) return 'atualizado agora';
+  const secs = Math.max(0, Math.floor((now - lastUpdated) / 1000));
+  if (secs < 60) return `atualizado há ${secs}s`;
+  const mins = Math.floor(secs / 60);
+  return `atualizado há ${mins}min`;
+}
+
 export default function MyStats() {
+  // status is not consumed here — the my-stats heart badge is a static SVG
+  // (not condition-driven), so only phase + vitals + lastUpdated + history.
+  const { phase, vitals, lastUpdated, history } = useVitals();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   // SILHOUETTE_BODY_SVG tem <defs> com gradient ID — namespace por instância
@@ -146,6 +178,55 @@ export default function MyStats() {
   const footprintXml = useUniqueSvg(FOOTPRINT_SVG);
   const flameDonutXml = useUniqueSvg(FLAME_DONUT_SVG);
   const [period, setPeriod] = useState('today');
+  // Histórico Médico — exame anexado via ImageUploader. Demo phase, useState
+  // efêmero. Wired pra expo-image-picker (galeria only — showTakePhoto=false
+  // na spec original do Figma 342:9907).
+  const [examFile, setExamFile] = useState<string | null>(null);
+  const media = useMediaPicker();
+
+  const pickExamFromGallery = async () => {
+    const uri = await media.pickFromGallery();
+    if (uri) setExamFile(uri);
+  };
+
+  // T5.3: gradient arrays memoizados — antes alocavam array nova por render
+  // (mudança de period quebrava memoização dos 4 DonutCharts). Theme é
+  // estável, então useMemo retorna mesma ref enquanto theme não muda.
+  const gradientGreen = useMemo<[string, string]>(
+    () => [theme.surface.success, theme.surface.successLight],
+    [theme.surface.success, theme.surface.successLight],
+  );
+  const gradientBlue = useMemo<[string, string]>(
+    () => [theme.surface.info, theme.surface.infoLight],
+    [theme.surface.info, theme.surface.infoLight],
+  );
+  const gradientOrange = useMemo<[string, string]>(
+    () => [theme.surface.warning, theme.surface.warningLight],
+    [theme.surface.warning, theme.surface.warningLight],
+  );
+  const gradientFlame = useMemo<[string, string, string]>(
+    () => [theme.surface.error, theme.surface.warning, theme.surface.success],
+    [theme.surface.error, theme.surface.warning, theme.surface.success],
+  );
+
+  // State-driven takeovers (placed AFTER all hooks to respect Rules of Hooks).
+  // provider self-polls; retry is a hint — see VitalsErrorState note.
+  if (phase === 'loading') return <VitalsLoadingState />;
+  if (phase === 'empty') return <VitalsEmptyState />;
+  if (phase === 'error') return <VitalsErrorState onRetry={() => {}} />;
+
+  // ready | stale — vitals is non-null here (computePhase guarantees it).
+  const v = vitals!;
+  const isStale = phase === 'stale';
+  // Calories chart points derived from the last 3 history samples (caloriesPerHour
+  // over time). No per-sample timestamp is stored, so the X label is a simple
+  // relative index (kept simple per spec). Falls back to the current value when
+  // history is still warming up (<1 entry) so the chart never renders empty.
+  const recent = history.slice(-3);
+  const caloriesPoints =
+    recent.length > 0
+      ? recent.map((h, i) => ({ time: `-${recent.length - 1 - i}`, kcal: h.caloriesPerHour }))
+      : [{ time: '0', kcal: v.caloriesPerHour }];
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -159,7 +240,7 @@ export default function MyStats() {
     {/* BG: gradient (my-stats-bg.png) + dot-grid (BackgroundDotsGrid layer
         in JourneyTheme, showDotGrid default true). Same pattern as dashboard
         so the dot-grid is consistent across both screens. */}
-    <JourneyTheme gradient={require('../../assets/my-stats-bg.png')} />
+    <JourneyTheme gradient={require('../../assets/login-bg.png')} />
     <ScrollView
       style={{ flex: 1, backgroundColor: 'transparent' }}
       contentContainerStyle={{
@@ -220,37 +301,45 @@ export default function MyStats() {
         </View>
 
         {/* Silhouette multiply overlay — Figma Caminho 4123. Stacked on top
-            with mix-blend-mode: multiply for deeper/richer green. Same pos
-            and size as base layer. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: '23.39%',
-            left: '39.42%',
-            width: '21.38%',
-            height: '70.14%',
-            // @ts-expect-error: mixBlendMode is web-only style (RN-web).
-            mixBlendMode: 'multiply',
-          }}
-        >
-          <SvgXml xml={silhouetteMultiplyXml} width="100%" height="100%" />
-        </View>
+            with mix-blend-mode: multiply for deeper/richer green. Web-only —
+            em iOS/Android o overlay vira cópia opaca (wasted layer) sem
+            produzir o efeito de multiply. */}
+        {Platform.OS === 'web' ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: '23.39%',
+              left: '39.42%',
+              width: '21.38%',
+              height: '70.14%',
+              // @ts-expect-error: mixBlendMode is web-only style (RN-web).
+              mixBlendMode: 'multiply',
+            }}
+          >
+            <SvgXml xml={silhouetteMultiplyXml} width="100%" height="100%" />
+          </View>
+        ) : null}
 
         {/* Heart status — composite SVG (heart + check badge). See dashboard
-            wrapper notes for the 31.311×26.093 group geometry. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: '37.25%',
-            left: '47.0%',
-            width: '8.7%',
-            height: '6.98%',
-          }}
-        >
-          <SvgXml xml={HEART_STATUS_SVG} width="100%" height="100%" />
-        </View>
+            wrapper notes for the 31.311×26.093 group geometry.
+            DS bump TODO (deferred): neutral heart-status condition; using
+            hide-badge fallback — when the sample is stale we hide the chest
+            badge entirely rather than show a misleading 'good' check. */}
+        {isStale ? null : (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: '37.25%',
+              left: '47.0%',
+              width: '8.7%',
+              height: '6.98%',
+            }}
+          >
+            <SvgXml xml={HEART_STATUS_SVG} width="100%" height="100%" />
+          </View>
+        )}
       </View>
 
       {/* Avatar — absolute top-right, overlays the chart (Figma 342:9422).
@@ -271,15 +360,29 @@ export default function MyStats() {
       {/* User Data column — Figma 342:9966 (gap.l 24). Width was 328 fixo,
           mudado pra full-width (esticando via paddingHorizontal do ScrollView). */}
       <View style={{ gap: theme.gap.l, marginTop: theme.gap.l }}>
+        {/* Stale freshness chip — only when the latest sample aged past the
+            stale window. DS TimeStamp ("atualizado há…"). */}
+        {isStale ? (
+          <View style={{ alignItems: 'flex-start' }}>
+            <TimeStamp time={formatAgo(lastUpdated, Date.now())} />
+          </View>
+        ) : null}
+
         {/* Vital signs row — Figma 342:9431. 3 columns + dividers (1×106
             content/medium). Each column: icon 24 / value (title.l) / unit
-            (caption.s). */}
+            (caption.s).
+            space-evenly: respiro igual nas paredes e entre cols (Figma);
+            antes era space-between, que colava BPM/Kcal nas paredes e
+            comprimia os dividers entre BPM e 12/8 no Android.
+            opacity 0.5 when stale: dims the live-vitals block (see TimeStamp
+            above) without altering layout. */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'space-evenly',
             width: '100%',
+            opacity: isStale ? 0.5 : 1,
           }}
         >
           {/* Col 1 — Heart 67 BPM (Figma 342:9432) */}
@@ -301,7 +404,7 @@ export default function MyStats() {
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
             >
-              67
+              {v.heartRate}
             </Title>
             <Text
               variant="caption.s"
@@ -314,12 +417,14 @@ export default function MyStats() {
 
           <Divider />
 
-          {/* Col 2 — Blood pressure 12/8 Boa (Figma 342:9437) */}
+          {/* Col 2 — Blood pressure 12/8 Boa (Figma 342:9437).
+              width:80 (não 65 do Figma) — Android renderiza Montserrat-Bold
+              com advance widths maiores; "12/8" estoura 65px e quebra linha. */}
           <View
             style={{
               alignItems: 'center',
               gap: theme.gap.sm,
-              width: 65,
+              width: 80,
             }}
           >
             <Icon
@@ -332,7 +437,7 @@ export default function MyStats() {
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
             >
-              12/8
+              {`${v.bloodPressureSys}/${v.bloodPressureDia}`}
             </Title>
             <Text
               variant="caption.s"
@@ -345,12 +450,14 @@ export default function MyStats() {
 
           <Divider />
 
-          {/* Col 3 — Flame 145 Kcal/hora (Figma 342:9442) */}
+          {/* Col 3 — Flame 145 Kcal/hora (Figma 342:9442).
+              width:70 (não 55 do Figma) — "Kcal/hora" quebrava em "Kcal/" +
+              "hora" no Android com 55px; mesmo padrão do dashboard.tsx. */}
           <View
             style={{
               alignItems: 'center',
               gap: theme.gap.sm,
-              width: 55,
+              width: 70,
             }}
           >
             <SvgXml
@@ -364,7 +471,7 @@ export default function MyStats() {
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
             >
-              145
+              {v.caloriesPerHour}
             </Title>
             <Text
               variant="caption.s"
@@ -380,12 +487,12 @@ export default function MyStats() {
             Bordered track 22px (content.medium border + theme.background),
             gradient RTL: success → warning → error with stops 43.75/79.253/100.
             Figma snapshot shows fill at ~74.4% (pr-76 on 328 container). */}
-        <View style={{ gap: theme.gap.s, width: '100%' }}>
-          {/* value=74 (int) not 74.4 (float) — DS ProgressBar accessibilityValue.now
+        <View style={{ gap: theme.gap.s, width: '100%', opacity: isStale ? 0.5 : 1 }}>
+          {/* value is rounded to int — DS ProgressBar accessibilityValue.now
               é int64; floats triggam Fabric HostFunction precision error e a barra
               não renderiza. Mesmo padrão do dashboard.tsx:331. */}
           <ProgressBar
-            value={74}
+            value={Math.round(v.fatiguePct)}
             bordered
             trackHeight={22}
             gradient={[
@@ -398,7 +505,7 @@ export default function MyStats() {
             accessibilityLabel="Tempo até fadiga total"
           />
           <Text variant="body.m" color={theme.content.dark}>
-            Tempo até atingir fadiga total: 1h45m
+            {`Tempo até atingir fadiga total: ${formatEta(v.fatigueEtaMin)}`}
           </Text>
         </View>
 
@@ -417,9 +524,10 @@ export default function MyStats() {
             flexWrap: 'wrap',
             gap: theme.gap.m,
             justifyContent: 'center',
+            opacity: isStale ? 0.5 : 1,
           }}
         >
-          {/* Donut 1 — Esforço feito 62,5%. Built-in icon hidden via
+          {/* Donut 1 — Esforço feito (vitals.effortPct). Built-in icon hidden via
               iconColor="transparent"; Figma asset (green gradient heartbeat)
               overlay-ed at the same center slot. Same pattern in donuts 2-4. */}
           <View style={{ position: 'relative' }}>
@@ -429,16 +537,16 @@ export default function MyStats() {
               title=""
               icon="heartbeat"
               iconColor="transparent"
-              value="62,5%"
+              value={pct(v.effortPct)}
               label="Esforço feito"
-              progress={62.5}
-              progressGradient={[theme.surface.success, theme.surface.successLight]}
+              progress={v.effortPct}
+              progressGradient={gradientGreen}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={heartbeatGreenXml} width={35} height={28} />
             </View>
           </View>
-          {/* Donut 2 — Oxigenação 92,2%. Blue gradient heartbeat asset. */}
+          {/* Donut 2 — Oxigenação (vitals.oxygenation). Blue gradient heartbeat asset. */}
           <View style={{ position: 'relative' }}>
             <DonutChart
               size="small"
@@ -446,16 +554,17 @@ export default function MyStats() {
               title=""
               icon="heartbeat"
               iconColor="transparent"
-              value="92,2%"
+              value={pct(v.oxygenation)}
               label="Oxigenação"
-              progress={92.2}
-              progressGradient={[theme.surface.info, theme.surface.infoLight]}
+              progress={v.oxygenation}
+              progressGradient={gradientBlue}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={heartbeatBlueXml} width={35} height={28} />
             </View>
           </View>
-          {/* Donut 3 — Steps 8975 4,32km. Orange gradient footprint asset. */}
+          {/* Donut 3 — Steps (vitals.steps) + distance label. Orange gradient
+              footprint asset. progress kept static (no steps-goal % in Vitals). */}
           <View style={{ position: 'relative' }}>
             <DonutChart
               size="small"
@@ -463,16 +572,17 @@ export default function MyStats() {
               title=""
               icon="footprint"
               iconColor="transparent"
-              value="8975"
-              label="4,32km"
+              value={String(v.steps)}
+              label={`${v.distanceKm.toFixed(2).replace('.', ',')}km`}
               progress={45}
-              progressGradient={[theme.surface.warning, theme.surface.warningLight]}
+              progressGradient={gradientOrange}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={footprintXml} width={20} height={22} />
             </View>
           </View>
-          {/* Donut 4 — Kcal 125. Multi-stop flame asset (red→orange→green). */}
+          {/* Donut 4 — Kcal (vitals.caloriesPerHour). Multi-stop flame asset
+              (red→orange→green). progress kept static (no kcal-goal % in Vitals). */}
           <View style={{ position: 'relative' }}>
             <DonutChart
               size="small"
@@ -480,14 +590,10 @@ export default function MyStats() {
               title=""
               icon="local_fire_department"
               iconColor="transparent"
-              value="125 kcal"
+              value={`${v.caloriesPerHour} kcal`}
               label="por hora"
               progress={70}
-              progressGradient={[
-                theme.surface.error,
-                theme.surface.warning,
-                theme.surface.success,
-              ]}
+              progressGradient={gradientFlame}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={flameDonutXml} width={17} height={19} />
@@ -505,7 +611,7 @@ export default function MyStats() {
             sibling chart container (z:0, later in DOM). Without this, the
             "Esta semana / Este mês / Este ano" options get covered by the
             chart line and labels. */}
-        <View style={{ width: '100%', gap: theme.gap.m }}>
+        <View style={{ width: '100%', gap: theme.gap.m, opacity: isStale ? 0.5 : 1 }}>
           <View style={{ gap: 10, zIndex: 1 }}>
             <Title variant="title.xs" color={theme.content.dark}>
               Gasto calórico
@@ -531,7 +637,7 @@ export default function MyStats() {
               paddingHorizontal: 28,
             }}
           >
-            <LineCaloriesChart points={CALORIES_POINTS} fullWidth />
+            <LineCaloriesChart points={caloriesPoints} fullWidth />
           </View>
         </View>
 
@@ -615,9 +721,9 @@ export default function MyStats() {
             pickFileLabel="Enviar novo exame"
             showTakePhoto={false}
             accentColor={theme.content.primary}
-            onPickFile={() => {
-              /* TODO: open file picker */
-            }}
+            value={examFile ? { uri: examFile } : null}
+            onPickFile={pickExamFromGallery}
+            onRemove={() => setExamFile(null)}
           />
         </View>
       </View>

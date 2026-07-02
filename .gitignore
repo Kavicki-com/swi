@@ -24,3 +24,19 @@ docs/audits/figma-export/*.json
 # Local audit reports (kept on disk, not in git)
 docs/audits/*-audit-*.md
 docs/audits/health-check-*.md
+
+# Build outputs (Android bundles/apks — built locally, never versioned)
+*.aab
+*.apk
+
+# Orphan root lockfile (siblings each have their own; repo has no root package.json)
+/package-lock.json
+
+# Local Windows build/sync helpers (machine-specific paths: WSL distro, $HOME, Desktop)
+*.bat
+
+# Amplify Gen 2 generated / per-environment (swi-backend)
+swi-backend/.amplify/
+swi-backend/amplify_outputs*.json
+swi-backend/node_modules/
+mobile/amplify_outputs*.json

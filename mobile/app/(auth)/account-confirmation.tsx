@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
 import { useAuth } from '../../services/auth/AuthProvider';
+import { AUTH_BACKEND } from '../../lib/featureFlags';
 
 // Auto-redirect timer per Figma description "Você será redirecionado para a
 // tela inicial". 2.5s gives the user time to register the success state and
@@ -23,8 +24,10 @@ export default function AccountConfirmation() {
     // post-onboarding redirect to /(app)/dashboard would bounce back to login.
     // Production: a real backend would mint a session at the confirmation
     // link click and the client would receive a token here.
-    if (email && email.length > 0) {
-      signIn(email);
+    // Mock-only: the demo treats confirmation as the sign-in moment. In api
+    // mode the user signs in on the login screen after confirming.
+    if (AUTH_BACKEND === 'mock' && email && email.length > 0) {
+      void signIn({ email, password: '' });
     }
 
     const t = setTimeout(() => {

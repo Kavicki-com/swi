@@ -12,13 +12,12 @@
 // The admin curve produces exactly the red/orange weather radar blob
 // shown in Figma 385:21840 — keeping it identical here makes the mobile
 // screen visually consistent with the admin Dashboard MapBanner.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Icon,
   LocationPin,
-  SwiThemeProvider,
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system';
@@ -94,19 +93,29 @@ function MapWeatherScreen() {
 
   // 3 icon-only toggle buttons (Figma 385:21840 → 165:21860). Cada botão
   // é simple toggle; tap liga, tap de novo desliga. `showHeatmap=true` por
-  // default — screen carrega com storm radar visível (Figma default).
-  // O heatmap button controla AMBAS sub-layers (tempestades + inundações)
-  // simultaneamente; sem expand panel admin-style no mobile.
+  // default (Figma) — mas iniciamos em false e ligamos APÓS 300ms via
+  // useEffect (defer pattern). Sem o defer, 2 heatmap layers (storm + flood)
+  // tentavam mountar no mesmo frame do MapView GL init e crashavam o
+  // libmaplibre.so em GPUs Android mid-range (POCO/rodin observado em
+  // produção). Fix 9 do cliente.
   const [showOperators, setShowOperators] = useState(false);
   const [showCameras, setShowCameras] = useState(false);
-  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showHeatmap, setShowHeatmap] = useState(false);
 
-  // Storm (tempestades) heatmap data — 220 core + 280 halo centered on
+  useEffect(() => {
+    const t = setTimeout(() => setShowHeatmap(true), 300);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Storm (tempestades) heatmap data — 110 core + 140 halo centered on
   // USER_LOCATION. Computed once on mount; toggling the heatmap off just
   // unmounts <MapHeatmapSource> without re-shuffling the distribution.
+  // Counts reduzidos pela metade (Fix 9 do cliente): combinação 500+300
+  // features × intensity 2.0 × radius 70 estourava texture allocation em
+  // GPUs mid-range. Densidade visual praticamente inalterada.
   const stormShape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => {
-    const corePoints = buildHeatmapPoints(USER_LOCATION, 220, 0.006);
-    const haloPoints = buildHeatmapPoints(USER_LOCATION, 280, 0.018);
+    const corePoints = buildHeatmapPoints(USER_LOCATION, 110, 0.006);
+    const haloPoints = buildHeatmapPoints(USER_LOCATION, 140, 0.018);
     const points = [...corePoints, ...haloPoints];
     return {
       type: 'FeatureCollection',
@@ -127,8 +136,8 @@ function MapWeatherScreen() {
       USER_LOCATION[0] + 0.004,
       USER_LOCATION[1] - 0.008,
     ];
-    const corePoints = buildHeatmapPoints(floodCenter, 140, 0.004);
-    const haloPoints = buildHeatmapPoints(floodCenter, 160, 0.01);
+    const corePoints = buildHeatmapPoints(floodCenter, 70, 0.004);
+    const haloPoints = buildHeatmapPoints(floodCenter, 80, 0.01);
     const points = [...corePoints, ...haloPoints];
     return {
       type: 'FeatureCollection',
@@ -190,7 +199,6 @@ function MapWeatherScreen() {
             id={`alert-${p.id}`}
             coordinate={[p.lng, p.lat]}
           >
-            <SwiThemeProvider>
               <Pressable
                 onPress={openAlertModal}
                 accessibilityRole="button"
@@ -203,7 +211,6 @@ function MapWeatherScreen() {
                   name={`Alerta ${p.status}`}
                 />
               </Pressable>
-            </SwiThemeProvider>
           </MapMarker>
         ))}
 
@@ -215,14 +222,12 @@ function MapWeatherScreen() {
               id={`worker-${m.id}`}
               coordinate={[m.lng, m.lat]}
             >
-              <SwiThemeProvider>
                 <LocationPin
                   variant="avatar"
                   avatarUri={m.avatarUri}
                   status={m.status}
                   name={m.name}
                 />
-              </SwiThemeProvider>
             </MapMarker>
           ))}
 
@@ -234,9 +239,7 @@ function MapWeatherScreen() {
               id={`camera-${c.id}`}
               coordinate={[c.lng, c.lat]}
             >
-              <SwiThemeProvider>
                 <LocationPin variant="camera" name={c.name} />
-              </SwiThemeProvider>
             </MapMarker>
           ))}
 

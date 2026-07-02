@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import type { Feature, LineString } from 'geojson';
 import {
   LocationPin,
-  SwiThemeProvider,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { MapView } from '@/components/MapView';
@@ -12,11 +10,9 @@ import { MapMarker } from '@/components/MapMarker';
 import { MapLineSource } from '@/components/MapLineSource';
 import { MapChipBody } from '@/components/MapChipBody';
 import { NavFABs } from '@/components/NavFABs';
-import {
-  EVACUATION_DESTINATION,
-  EVACUATION_ORIGIN,
-} from '@/lib/mapMockData';
-import { getEvacuationRoute } from '@/lib/evacuationRouteCache';
+import { SITE_ROUTE } from '@/services/evacuation/types';
+import { useEvacuation } from '@/services/evacuation/EvacuationProvider';
+import { chipAnchors, lineFeature, navArrow, straightLine } from '@/services/evacuation/routeFormat';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 
@@ -66,18 +62,6 @@ function NavArrowBody({ rotationDeg }: { rotationDeg: number }) {
   );
 }
 
-// Compass bearing in degrees from `a` to `b`. Flat-earth approximation
-// (negligible error at urban demo scale ~1.5km). SVG arrow points UP at
-// rotation 0 (north); atan2 returns east-from-x in radians.
-function bearingDeg(a: [number, number], b: [number, number]): number {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const angleEastFromX = (Math.atan2(dy, dx) * 180) / Math.PI;
-  let deg = 90 - angleEastFromX;
-  deg = ((deg % 360) + 360) % 360;
-  return deg;
-}
-
 function midpoint(
   a: [number, number],
   b: [number, number],
@@ -95,52 +79,24 @@ export default function EvacuationOngoing() {
 function EvacuationOngoingScreen() {
   const theme = useTheme();
 
-  const [waypoints, setWaypoints] = useState<[number, number][] | null>(null);
+  const { route, loadStatus, load } = useEvacuation();
 
-  useEffect(() => {
-    let cancelled = false;
-    getEvacuationRoute().then((route) => {
-      if (!cancelled) setWaypoints(route.waypoints);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const lineShape = useMemo<Feature<LineString> | null>(() => {
-    if (!waypoints || waypoints.length === 0) return null;
-    return {
-      type: 'Feature',
-      properties: {},
-      geometry: { type: 'LineString', coordinates: waypoints },
-    };
-  }, [waypoints]);
+  const waypoints = useMemo<[number, number][] | null>(() => {
+    if (route) return route.waypoints;
+    if (loadStatus === 'error') return straightLine(SITE_ROUTE.origin, SITE_ROUTE.destination);
+    return null;
+  }, [route, loadStatus]);
 
-  // Nav arrow at ~30% along the route, oriented toward the next waypoint.
-  // Clamp lookahead index so we always have a valid "next" point for bearing.
-  const navArrow = useMemo<{ at: [number, number]; rotation: number } | null>(() => {
-    if (!waypoints || waypoints.length < 2) return null;
-    const idx = Math.min(
-      Math.max(Math.floor(waypoints.length * 0.3), 0),
-      waypoints.length - 2,
-    );
-    const at = waypoints[idx];
-    const next = waypoints[idx + 1] ?? waypoints[idx];
-    return { at, rotation: bearingDeg(at, next) };
-  }, [waypoints]);
-
-  // Time chips at 35% / 70% — same anchors as evacuation.tsx idle state.
-  const chipAnchors = useMemo<{ a: [number, number]; b: [number, number] } | null>(() => {
-    if (!waypoints || waypoints.length === 0) return null;
-    const i1 = Math.min(Math.max(Math.floor(waypoints.length * 0.35), 0), waypoints.length - 1);
-    const i2 = Math.min(Math.max(Math.floor(waypoints.length * 0.7), 0), waypoints.length - 1);
-    return { a: waypoints[i1], b: waypoints[i2] };
-  }, [waypoints]);
+  const lineShape = useMemo(() => lineFeature(waypoints ?? []), [waypoints]);
+  const arrow = useMemo(() => navArrow(waypoints ?? []), [waypoints]);
+  const anchors = useMemo(() => chipAnchors(waypoints ?? []), [waypoints]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <MapView
-        center={midpoint(EVACUATION_ORIGIN, EVACUATION_DESTINATION)}
+        center={midpoint(SITE_ROUTE.origin, SITE_ROUTE.destination)}
         zoom={15}
       >
         {/* Keys explícitos: children condicionais (lineShape, navArrow,
@@ -156,30 +112,22 @@ function EvacuationOngoingScreen() {
             paint={{ color: '#BC88FF', width: 4, opacity: 0.95 }}
           />
         )}
-        <MapMarker key="evacuation-destination" coordinate={EVACUATION_DESTINATION} id="evacuation-destination">
-          <SwiThemeProvider>
+        <MapMarker key="evacuation-destination" coordinate={SITE_ROUTE.destination} id="evacuation-destination">
             <LocationPin variant="badge" status="alert" size={40} name="Destino" />
-          </SwiThemeProvider>
         </MapMarker>
-        {navArrow && (
-          <MapMarker key="evacuation-nav-arrow" coordinate={navArrow.at} id="evacuation-nav-arrow">
-            <SwiThemeProvider>
-              <NavArrowBody rotationDeg={navArrow.rotation} />
-            </SwiThemeProvider>
+        {arrow && (
+          <MapMarker key="evacuation-nav-arrow" coordinate={arrow.at} id="evacuation-nav-arrow">
+              <NavArrowBody rotationDeg={arrow.rotation} />
           </MapMarker>
         )}
-        {chipAnchors && (
-          <MapMarker key="evacuation-ongoing-chip-1" coordinate={chipAnchors.a} id="evacuation-ongoing-chip-1">
-            <SwiThemeProvider>
+        {anchors && (
+          <MapMarker key="evacuation-ongoing-chip-1" coordinate={anchors.a} id="evacuation-ongoing-chip-1">
               <MapChipBody text="6 minutos" />
-            </SwiThemeProvider>
           </MapMarker>
         )}
-        {chipAnchors && (
-          <MapMarker key="evacuation-ongoing-chip-2" coordinate={chipAnchors.b} id="evacuation-ongoing-chip-2">
-            <SwiThemeProvider>
+        {anchors && (
+          <MapMarker key="evacuation-ongoing-chip-2" coordinate={anchors.b} id="evacuation-ongoing-chip-2">
               <MapChipBody text="17 minutos" />
-            </SwiThemeProvider>
           </MapMarker>
         )}
 

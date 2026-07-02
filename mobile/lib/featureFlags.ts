@@ -40,3 +40,34 @@ export const FEATURE_GATES: Record<FeatureGate, boolean> = {
 export function isFeatureEnabled(gate: FeatureGate): boolean {
   return FEATURE_GATES[gate];
 }
+
+// Seleciona a fonte de dados de TODOS os domínios (auth, profile, vitals,
+// reports, journey, chat, notifications, weather, evacuation, telemetry).
+// 'mock' = comportamento de demo in-memory (default; sem AWS). 'amplify' = real
+// Cognito/AppSync via aws-amplify — flip pra isto depois que `ampx sandbox`
+// gerar amplify_outputs (ver docs/plans/2026-06-22-swi-backend-auth-profile-design.md, Seção 6).
+export type DataBackendKind = 'mock' | 'amplify';
+export const DATA_BACKEND: DataBackendKind = 'mock';
+
+// Chave PRÓPRIA do auth, independente de DATA_BACKEND: permite o auth ir no
+// backend real (container) enquanto os outros 9 domínios seguem em mock.
+// 'api' seleciona apiAuthBackend; default 'mock'. Setada no build via
+// EXPO_PUBLIC_AUTH_BACKEND (ver eas.json perfil `qa`).
+export type AuthBackendKind = 'mock' | 'api';
+export const AUTH_BACKEND: AuthBackendKind =
+  (process.env.EXPO_PUBLIC_AUTH_BACKEND as AuthBackendKind) ?? 'mock';
+
+// Dev-only: lets the mock vitals backend exercise the empty/loading/stale/error
+// UIs that production will hit. 'streaming' = normal simulated data.
+export type VitalsScenario = 'streaming' | 'empty' | 'loading' | 'stale' | 'error';
+export const VITALS_SCENARIO: VitalsScenario = 'streaming';
+
+// Dev-only: exercita os estados da fatia Clima no mock. 'alert' (default) traz
+// um alerta vigente; 'normal' sem alerta; 'loading' nunca resolve; 'error' rejeita.
+export type WeatherScenario = 'alert' | 'normal' | 'loading' | 'error';
+export const WEATHER_SCENARIO: WeatherScenario = 'alert';
+
+// Dev-only: exercita os estados da fatia Evacuação no mock. 'normal' (default)
+// traz a rota canned; 'loading' nunca resolve; 'error' rejeita.
+export type EvacuationScenario = 'normal' | 'loading' | 'error';
+export const EVACUATION_SCENARIO: EvacuationScenario = 'normal';

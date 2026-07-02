@@ -1,25 +1,45 @@
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Icon, Input, Logo, useTheme } from '@kavicki/swi-design-system';
 import { useAuth } from '../../services/auth/AuthProvider';
+import { useField } from '../../lib/forms/useField';
+import { validateEmail, validateRequired } from '../../lib/validation/validators';
 
 export default function Login() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { signIn } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const email = useField({ validator: validateEmail });
+  // Senha só precisa ser não-vazia (login usa credencial existente; regras de
+  // formato só se aplicam ao cadastrar/trocar).
+  const password = useField({
+    validator: (v) => validateRequired(v, 'Senha'),
+  });
   const [showPassword, setShowPassword] = useState(false);
 
-  const canSubmit = email.length > 0 && password.length > 0;
+  const canSubmit = email.isValid && password.isValid;
 
-  const handleLogin = () => {
-    if (!canSubmit) return;
-    signIn(email);
-    router.replace('/(app)/dashboard');
+  const handleLogin = async () => {
+    if (!canSubmit) {
+      email.setTouched(true);
+      password.setTouched(true);
+      return;
+    }
+    try {
+      await signIn({ email: email.value, password: password.value });
+      router.replace('/(app)/dashboard');
+    } catch (e) {
+      // Backend real (AUTH_BACKEND='api') lança com mensagem pronta do servidor
+      // — ex.: gate de aprovação ("aguardando aprovação do administrador") ou
+      // e-mail não verificado. Mostra essa mensagem quando houver (é o sinal que
+      // o QA precisa distinguir); no mock nunca cai aqui. Fallback genérico só
+      // pra erro sem message.
+      const msg = e instanceof Error && e.message ? e.message : 'Email ou senha inválidos.';
+      Alert.alert('Erro', msg);
+    }
   };
 
   return (
@@ -71,20 +91,18 @@ export default function Login() {
         <View style={{ gap: theme.gap.l }}>
           <View style={{ gap: theme.gap.l }}>
             <Input
+              {...email.bind()}
               label="Login"
               placeholder="seu@email.com"
-              value={email}
-              onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
             />
 
             <Input
+              {...password.bind()}
               label="Senha"
               placeholder="*********"
-              value={password}
-              onChangeText={setPassword}
               secureTextEntry={!showPassword}
               iconRight={
                 <Pressable

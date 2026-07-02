@@ -3,14 +3,15 @@
 //   (Smartwatch3D.native.tsx) — glTF binary (glb), glTF JSON (gltf),
 //   external binary buffers (bin), and HDR environment maps (hdr).
 //   Web bundles a static PNG fallback and does not need these.
-// - Symlink resolution enabled so `file:` deps (currently `@kavicki/swi-design-system`
-//   pointing to `../../swi-design-system`) work. npm uses symlinks for file:
-//   deps on Windows by default; Metro ignores them without this flag.
-//   2026-05-18 — added when bumping DS to add labelWeight / labelFamily props.
+//
+// REMOVIDO 2026-05-25: `resolver.unstable_enableSymlinks = true` era vestígio
+// de quando o DS apontava pra `file:../../swi-design-system` (symlink dev).
+// Agora apontamos pra `.tgz` no vendor/, então flag é desnecessária — e o
+// `expo-doctor` (pré-flight do EAS build) aborta o build em produção
+// reclamando do override. Sem o flag, doctor passa e build completa.
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 config.resolver.assetExts.push('glb', 'gltf', 'bin', 'hdr');
-config.resolver.unstable_enableSymlinks = true;
 
 module.exports = config;

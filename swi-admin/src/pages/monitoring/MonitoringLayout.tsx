@@ -27,7 +27,7 @@ import {
   type MonitoringKpi,
   type MonitoringAlertDetail,
   type MonitoringUserAlert,
-} from '@/services/mockApi/monitoring'
+} from '@/services/monitoring'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 

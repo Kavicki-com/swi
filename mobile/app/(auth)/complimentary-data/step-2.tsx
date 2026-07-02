@@ -1,10 +1,19 @@
 import { useState } from 'react';
-import { Image, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, StepBar, Title, useTheme } from '@kavicki/swi-design-system';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
+import { useField } from '../../../lib/forms/useField';
+import {
+  validateCEP,
+  validateRequired,
+  validateUF,
+} from '../../../lib/validation/validators';
+import { maskCEP, maskUF } from '../../../lib/validation/masks';
+import { useCepLookup } from '../../../lib/cep/useCepLookup';
+import { useProfile } from '../../../services/profile/ProfileProvider';
 
 export default function ComplimentaryDataStep2() {
   const router = useRouter();
@@ -12,23 +21,72 @@ export default function ComplimentaryDataStep2() {
   const insets = useSafeAreaInsets();
   const { username } = useLocalSearchParams<{ username?: string }>();
 
-  const [cep, setCep] = useState('');
-  const [street, setStreet] = useState('');
-  const [number, setNumber] = useState('');
-  const [neighborhood, setNeighborhood] = useState('');
-  const [uf, setUf] = useState('');
+  const cep = useField({ validator: validateCEP, mask: maskCEP });
+  const street = useField({
+    validator: (v) => validateRequired(v, 'Logradouro'),
+  });
+  const number = useField({
+    validator: (v) => validateRequired(v, 'Número'),
+  });
+  const neighborhood = useField({
+    validator: (v) => validateRequired(v, 'Bairro'),
+  });
+  const uf = useField({ validator: validateUF, mask: maskUF });
+  const [cepNotFound, setCepNotFound] = useState(false);
+  // City has no visible Input on this screen (matches Figma), but the CEP
+  // lookup resolves it — capture it here so it persists to Profile.city.
+  const [city, setCity] = useState('');
+  const { saveProfile } = useProfile();
 
-  // Todos os 5 campos de endereço são obrigatórios — match com R-10
-  // em 2026-05-17-mobile-routes-audit.md.
+  const { loading: cepLoading, lookup } = useCepLookup({
+    onSuccess: (addr) => {
+      setCepNotFound(false);
+      if (addr.street) street.setValue(addr.street);
+      if (addr.neighborhood) neighborhood.setValue(addr.neighborhood);
+      if (addr.state) uf.setValue(addr.state);
+      if (addr.city) setCity(addr.city);
+    },
+    onError: () => setCepNotFound(true),
+  });
+
+  const handleCepBlur = () => {
+    cep.onBlur();
+    setCepNotFound(false);
+    if (cep.isValid) void lookup(cep.value);
+  };
+
+  const cepError = cep.error ?? (cepNotFound ? 'CEP não encontrado' : undefined);
+
   const canSubmit =
-    cep.trim().length > 0 &&
-    street.trim().length > 0 &&
-    number.trim().length > 0 &&
-    neighborhood.trim().length > 0 &&
-    uf.trim().length > 0;
+    cep.isValid &&
+    street.isValid &&
+    number.isValid &&
+    neighborhood.isValid &&
+    uf.isValid &&
+    !cepNotFound;
 
-  const goNext = () => {
-    if (!canSubmit) return;
+  const goNext = async () => {
+    if (!canSubmit) {
+      cep.setTouched(true);
+      street.setTouched(true);
+      number.setTouched(true);
+      neighborhood.setTouched(true);
+      uf.setTouched(true);
+      return;
+    }
+    try {
+      await saveProfile({
+        cep: cep.value,
+        street: street.value,
+        number: number.value,
+        neighborhood: neighborhood.value,
+        city: city || undefined,
+        uf: uf.value,
+      });
+    } catch {
+      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+      return;
+    }
     router.push({
       pathname: '/(auth)/complimentary-data/step-3',
       params: { username },
@@ -64,38 +122,39 @@ export default function ComplimentaryDataStep2() {
 
         <View style={{ gap: theme.gap.m }}>
           <Input
+            value={cep.value}
+            onChangeText={cep.onChangeText}
+            onBlur={handleCepBlur}
+            description={cepError}
+            descriptionVariant={cepError ? 'error' : 'default'}
             label="CEP"
             placeholder="00000-000"
-            value={cep}
-            onChangeText={setCep}
             keyboardType="number-pad"
             autoComplete="postal-code"
+            maxLength={9}
+            iconRight={cepLoading ? <ActivityIndicator size="small" /> : undefined}
           />
           <Input
+            {...street.bind()}
             label="Logradouro"
             placeholder="Avenida Quatro de Julho"
-            value={street}
-            onChangeText={setStreet}
             autoComplete="street-address"
           />
           <Input
+            {...number.bind()}
             label="Número"
             placeholder="00"
-            value={number}
-            onChangeText={setNumber}
             keyboardType="number-pad"
           />
           <Input
+            {...neighborhood.bind()}
             label="Bairro"
             placeholder="Pampulha"
-            value={neighborhood}
-            onChangeText={setNeighborhood}
           />
           <Input
+            {...uf.bind()}
             label="UF"
             placeholder="MG"
-            value={uf}
-            onChangeText={setUf}
             autoCapitalize="characters"
             maxLength={2}
           />

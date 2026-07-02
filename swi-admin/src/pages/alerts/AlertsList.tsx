@@ -35,7 +35,7 @@ import {
   Text,
   useTheme,
 } from '@kavicki/swi-design-system'
-import { dashboardApi, type DashboardMapMarker } from '@/services/mockApi/dashboard'
+import { dashboardApi, type DashboardMapMarker } from '@/services/dashboard'
 import { useDemoToast } from '@/lib/demoToast'
 
 const FILTER_CHIPS = [

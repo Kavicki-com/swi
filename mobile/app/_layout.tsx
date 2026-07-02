@@ -3,24 +3,33 @@ import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { Stack } from 'expo-router';
+import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
-import {
-  Montserrat_400Regular,
-  Montserrat_500Medium,
-  Montserrat_700Bold,
-} from '@expo-google-fonts/montserrat';
+// Path-direct imports: o barrel `@expo-google-fonts/{inter,montserrat}`
+// força require() estático de TODOS os 18 weights (incl. Italic/Thin/Black).
+// Metro não tree-shake `require()` → ~30 .ttf desnecessários no bundle (~1.5MB).
+// Importando por subpath, só os 6 pesos usados entram no bundle.
+import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
+import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
+import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+import { Montserrat_400Regular } from '@expo-google-fonts/montserrat/400Regular';
+import { Montserrat_500Medium } from '@expo-google-fonts/montserrat/500Medium';
+import { Montserrat_700Bold } from '@expo-google-fonts/montserrat/700Bold';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { AuthProvider } from '../services/auth/AuthProvider';
+import { ProfileProvider } from '../services/profile/ProfileProvider';
+import { ReportsProvider } from '../services/reports/ReportsProvider';
+import { VitalsProvider, useVitals } from '../services/vitals/VitalsProvider';
+import { LocationProvider, useLocation } from '../services/location/LocationProvider';
+import { WeatherProvider } from '../services/weather/WeatherProvider';
+import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
+import { configureAmplify } from '../services/amplify/configure';
 
 SplashScreen.preventAutoHideAsync();
+configureAmplify();
 
 // Mobile-frame constraint na web: força o app a 360px de largura (a mesma
 // largura do design Figma) centralizado horizontalmente. Em native (iOS /
@@ -38,11 +47,22 @@ const mobileFrameStyle = IS_WEB
 
 // If Google Fonts CDN is unreachable (offline / blocked), useFonts will never
 // flip `fontsLoaded` to true and the splash stays forever. Bound the wait to
-// 5s and continue with system fonts — RN gracefully falls back when a
-// requested fontFamily is missing, so the app renders (with degraded typo
-// fidelity) instead of hanging on the splash. The same fallback covers a
-// real load error (useFonts returns an Error in slot [1] which we surface).
-const FONT_LOAD_TIMEOUT_MS = 5000;
+// 2s e continue com fontes do sistema — RN cai gracefully quando uma
+// fontFamily pedida falta, então o app renderiza (com tipo degradado)
+// em vez de pendurar no splash. T5.4 reduziu de 5s → 2s pra acelerar
+// first-paint em conexões lentas / cache invalidado.
+const FONT_LOAD_TIMEOUT_MS = 2000;
+
+// Bridges the Vitals + Location providers into the telemetry sampler. Rendered
+// inside both providers (alongside the Stack) so it can read the live vitals /
+// coords getters; renders nothing. The sampler self-batches + uploads on its
+// own cadence.
+function TelemetryRoot() {
+  const { vitals } = useVitals();
+  const { coords } = useLocation();
+  useTelemetrySampler(() => vitals, () => coords);
+  return null;
+}
 
 export default function RootLayout() {
   // DS theme.fontFamily.body = 'Inter', theme.fontFamily.title = 'Montserrat'.
@@ -108,6 +128,19 @@ export default function RootLayout() {
     return () => clearTimeout(t);
   }, []);
 
+  // Preload do background único (login-bg.png) + smartwatch.glb (~4.2MB, usado
+  // em 2 telas de onboarding). Best-effort: roda em paralelo com fonts e não
+  // gateia o render. Warming do cache do Metro/Expo Asset → primeira navegação
+  // ao smartband já tem o GLB local, sobrando apenas o parse (~2-3s) em vez de
+  // download (~3-5s) + parse. Falha silenciosa: require() em runtime ainda
+  // resolve no use-time se o preload falhar.
+  useEffect(() => {
+    Asset.loadAsync([
+      require('../assets/login-bg.png'),
+      require('../assets/smartwatch.glb'),
+    ]).catch(() => {});
+  }, []);
+
   // Ready to render once fonts arrived, errored, or the timeout fired.
   const ready = fontsLoaded || !!fontError || fontTimeout;
 
@@ -126,8 +159,28 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <SwiThemeProvider>
           <AuthProvider>
+            <ProfileProvider>
+            <ReportsProvider>
+            <VitalsProvider>
+            <LocationProvider>
+            {/* Feeds live vitals + coords into the telemetry sampler. Renders
+                null; sits alongside the Stack inside both providers. */}
+            <TelemetryRoot />
+            <WeatherProvider>
             <View style={mobileFrameStyle}>
-              <Stack screenOptions={{ headerShown: false }}>
+              {/* freezeOnBlur: pausa renderização de telas cached no Stack
+                  (useFrame do Smartwatch3D + setInterval do journey/task param
+                  ao navegar adiante). animation:'slide_from_right' é o padrão
+                  nativo iOS/Android — UX familiar pro usuário. duration 250
+                  fica entre o default 300 (mais lento) e o legado fade 200. */}
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  freezeOnBlur: true,
+                  animation: 'slide_from_right',
+                  animationDuration: 250,
+                }}
+              >
                 <Stack.Screen name="(auth)" />
                 <Stack.Screen name="(onboarding)" />
                 <Stack.Screen name="(app)" />
@@ -136,6 +189,11 @@ export default function RootLayout() {
                 <Stack.Screen name="modals/weather-alert" options={{ presentation: 'transparentModal' }} />
               </Stack>
             </View>
+            </WeatherProvider>
+            </LocationProvider>
+            </VitalsProvider>
+            </ReportsProvider>
+            </ProfileProvider>
           </AuthProvider>
         </SwiThemeProvider>
       </SafeAreaProvider>

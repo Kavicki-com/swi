@@ -1,25 +1,45 @@
 import { useState } from 'react';
-import { Image, View } from 'react-native';
+import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Text, Title, Toast, useTheme } from '@kavicki/swi-design-system';
+import { Button, Input, Text, Title, Toast, useTheme } from '@kavicki/swi-design-system';
 import { PasswordInput } from '../../../components/PasswordInput';
-import { isPasswordValid } from '../../../lib/validatePassword';
+import { useAuth } from '../../../services/auth/AuthProvider';
+import { useField } from '../../../lib/forms/useField';
+import {
+  validatePasswordField,
+  validatePasswordMatch,
+} from '../../../lib/validation/validators';
+import { AUTH_BACKEND } from '../../../lib/featureFlags';
 
 export default function PasswordRecoveryNewPassword() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { confirmReset } = useAuth();
+  const { email } = useLocalSearchParams<{ email?: string }>();
 
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const password = useField({ validator: validatePasswordField });
+  const confirmPassword = useField({
+    validator: (v) => validatePasswordMatch(password.value, v),
+  });
+  const [code, setCode] = useState('');
 
-  const pwMatches = confirmPassword.length > 0 && password === confirmPassword;
-  const canSubmit = isPasswordValid(password) && pwMatches;
+  const pwMatches =
+    password.value.length > 0 && password.value === confirmPassword.value;
+  const canSubmit = password.isValid && confirmPassword.isValid;
 
-  const handleSubmit = () => {
-    if (!canSubmit) return;
+  const handleSubmit = async () => {
+    if (!canSubmit) {
+      password.setTouched(true);
+      confirmPassword.setTouched(true);
+      return;
+    }
+    if (AUTH_BACKEND === 'api') {
+      try { await confirmReset({ email: String(email ?? ''), code, newPassword: password.value }); }
+      catch { Alert.alert('Erro', 'Código inválido ou expirado.'); return; }
+    }
     // Demo: recovery complete → back to login. Production would also surface
     // a "senha alterada" toast/screen before login.
     router.replace('/(auth)/login');
@@ -59,20 +79,38 @@ export default function PasswordRecoveryNewPassword() {
             message={'1 símbolo @#$%ˆ\n1 Letras maiúscula'}
           />
 
+          {AUTH_BACKEND === 'api' && (
+            <Input
+              label="Código de recuperação"
+              placeholder="000000"
+              keyboardType="numeric"
+              value={code}
+              onChangeText={setCode}
+            />
+          )}
+
           <PasswordInput
             label="Nova Senha"
             placeholder="*********"
-            value={password}
-            onChangeText={setPassword}
+            value={password.value}
+            onChangeText={password.onChangeText}
+            onBlur={password.onBlur}
+            description={password.error}
+            descriptionVariant={password.error ? 'error' : 'default'}
           />
 
           <PasswordInput
             label="Confirmar nova senha"
             placeholder="*********"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            description={pwMatches ? 'As senhas são iguais ✓' : undefined}
-            descriptionVariant="success"
+            value={confirmPassword.value}
+            onChangeText={confirmPassword.onChangeText}
+            onBlur={confirmPassword.onBlur}
+            description={
+              confirmPassword.error ?? (pwMatches ? 'As senhas são iguais ✓' : undefined)
+            }
+            descriptionVariant={
+              confirmPassword.error ? 'error' : pwMatches ? 'success' : 'default'
+            }
           />
 
           <Button

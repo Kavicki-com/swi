@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { Asset } from 'expo-asset';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useJourney } from '../../../../services/journey/JourneyProvider';
@@ -15,77 +14,130 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 
-import { FALLBACK_TASK, findTaskById } from '../../../../lib/journeyMockData';
+import type { Task } from '../../../../services/journey/types';
+import { elapsedSeconds, progressPct } from '../../../../services/journey/progress';
+import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
+import { TaskDetailState } from '../../../../components/journey/JourneyState';
 
 // Figma 364:17126 (idle) / 364:17434 (in-progress). Breadcrumb
 // (Jornada > <task>) + task summary card + ProgressBar + Objetivo +
-// Fotos + Tempo estimado + Interessados + CTA. Aceita tanto
-// `?state=ongoing` (uso interno via router.push) quanto
-// `?state=in-progress` (deep-link externo / spec do Figma) para
-// flip pra variante phase-2.
-// Demo phase: tasks são mock compartilhados via lib/journeyMockData
-// e resolvidos por findTaskById(id) com FALLBACK_TASK pra ids inválidos.
+// Fotos + Tempo estimado + Interessados + CTA.
+//
+// Task data vem do JourneyProvider (services/journey, backed pelo backend),
+// carregada por getTask(id) em local state. A "ativa" é só a activeTaskId do
+// journey; senão renderiza idle mesmo que outra task esteja ongoing em paralelo.
+// O progresso deriva das âncoras reais da task via progress.ts.
 
-// 5 distinct demo avatars from /assets/avatars/worker-{1..5}.png.
-// Asset.fromModule resolves each require() to a Metro-served URI string
-// so DS Avatar (which only accepts `uri: string`) can render them. Matches
-// Figma's varied photo thumbnails for the Interested cluster.
-const INTERESTED_AVATARS = [
-  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-1.png')).uri, alt: 'Avatar 1' },
-  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-2.png')).uri, alt: 'Avatar 2' },
-  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-3.png')).uri, alt: 'Avatar 3' },
-  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-4.png')).uri, alt: 'Avatar 4' },
-  { uri: Asset.fromModule(require('../../../../assets/avatars/worker-5.png')).uri, alt: 'Avatar 5' },
-];
+type DetailStatus = 'loading' | 'ready' | 'empty' | 'error';
 
-// Crawl rate: progresso aumenta 1pt por segundo enquanto a task está ongoing.
-// Demo phase: simulação visual; produção tracking real seria via backend timer
-// (estimated 3h = 10800s = ~0.009pt/s pra completar em 3h reais — mas pro
-// demo queremos progress visível na ordem de minutos, então 1pt/s).
-const PROGRESS_CRAWL_INTERVAL_MS = 1000;
-const PROGRESS_CRAWL_STEP = 1;
+// T4.1: Sub-componente memoizado que owns o tick do `now` + o cálculo de
+// progresso. Antes, o setInterval rodava no TaskDetails e re-renderizava a tela
+// inteira (8 sub-sections, ScrollView, Texts/Titles) por segundo. Agora só este
+// componente re-renderiza 1×/s — e só quando a task está in_progress.
+//
+// Progresso real: in_progress tick-a o `now` 1×/s e deriva
+// progressPct(elapsedSeconds(anchors, now), estMin); status não-running mostra
+// o snapshot persistido (task.progressPct) estático. Valor arredondado pra int
+// (a DS ProgressBar espera inteiro; progressPct retorna float).
+type TaskProgressProps = {
+  task: Task;
+  theme: ReturnType<typeof useTheme>;
+};
+const TaskProgress = memo(function TaskProgress({ task, theme }: TaskProgressProps) {
+  const running = task.status === 'in_progress';
+
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [running]);
+
+  const anchors = useMemo(
+    () => ({
+      startedAt: task.startedAt ? new Date(task.startedAt).getTime() : null,
+      accumulatedSeconds: task.accumulatedSeconds,
+      running,
+    }),
+    [task.startedAt, task.accumulatedSeconds, running],
+  );
+
+  const value = running
+    ? Math.round(progressPct(elapsedSeconds(anchors, now), task.estimatedMinutes))
+    : Math.round(task.progressPct);
+
+  return (
+    <View style={{ gap: theme.gap.m }}>
+      <Title variant="title.xs" color={theme.content.dark}>
+        Progresso da tarefa
+      </Title>
+      <ProgressBar
+        value={value}
+        color={theme.content.primary}
+        bordered
+        trackHeight={16}
+      />
+    </View>
+  );
+});
 
 export default function TaskDetails() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const task = findTaskById(id) ?? FALLBACK_TASK;
 
-  // Source of truth: JourneyProvider (shared state cross-screen). Esta task
-  // só está "ativa" se ela é a activeTaskId do journey; senão renderiza idle
-  // mesmo que outra task esteja ongoing em paralelo.
+  // Source of truth: JourneyProvider (shared state cross-screen). A task é
+  // carregada por getTask(id) em local state; as CTAs leem state/activeTaskId.
   const {
-    state: journeyState,
-    activeTaskId,
+    getTask,
+    tasks,
     startTask,
     pauseJourney,
     resumeJourney,
     endJourney,
+    addTaskPhoto,
+    state: journeyState,
+    activeTaskId,
   } = useJourney();
+
+  const [task, setTask] = useState<Task | null>(null);
+  const [status, setStatus] = useState<DetailStatus>('loading');
+  // Bump pra re-disparar o load no retry (o effect só depende de id/getTask).
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    // useLocalSearchParams pode devolver id undefined em runtime (rota sem
+    // param). Sem id não há o que buscar — marca 'empty' direto ("Tarefa não
+    // encontrada") em vez de chamar getTask(undefined).
+    if (!id) {
+      setStatus('empty');
+      return () => {
+        active = false;
+      };
+    }
+    setStatus('loading');
+    getTask(id)
+      .then((t) => {
+        if (!active) return;
+        setTask(t);
+        setStatus(t ? 'ready' : 'empty');
+      })
+      .catch(() => {
+        if (active) setStatus('error');
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, getTask, reloadKey]);
+
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // CTA state machine: esta task só está "ativa" se ela é a activeTaskId do
+  // journey. Senão renderiza idle mesmo que outra task esteja ongoing.
   const isActiveTask = activeTaskId === id;
   const taskState = isActiveTask ? journeyState : 'idle';
-
-  // Figma 364:17426 — ProgressBar value usa escala 0-100. Idle ~2% (w=2px
-  // visível num track ~320px), ongoing inicia em 30% (snapshot Figma) e
-  // sobe linearmente via setInterval enquanto state === 'ongoing'.
-  const [progress, setProgress] = useState(taskState === 'idle' ? 2 : 30);
-
-  // Sync inicial: se voltarmos pra essa task e ela já estava ativa em outro
-  // state (ex: paused), o progress deve refletir isso ao montar. Idle volta
-  // pra 2.
-  useEffect(() => {
-    if (taskState === 'idle') setProgress(2);
-  }, [taskState]);
-
-  useEffect(() => {
-    if (taskState !== 'ongoing') return;
-    const interval = setInterval(() => {
-      setProgress((p) => Math.min(100, p + PROGRESS_CRAWL_STEP));
-    }, PROGRESS_CRAWL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [taskState]);
-
   const isPaused = taskState === 'paused';
   const isActive = taskState !== 'idle';
 
@@ -94,10 +146,54 @@ export default function TaskDetails() {
     router.push('/(app)/journey');
   };
 
+  const media = useMediaPicker();
+
+  if (status !== 'ready' || !task) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <JourneyTheme
+          gradient={require('../../../../assets/login-bg.png')}
+          pattern={require('../../../../assets/smartband-bg-pattern.png')}
+        />
+        <TaskDetailState
+          kind={status === 'ready' ? 'empty' : status}
+          onRetry={status === 'error' ? reload : undefined}
+        />
+      </View>
+    );
+  }
+
+  // task (local) drives the load/empty/error machine; once ready, render from
+  // the provider's live copy so status/anchors/progress reflect start/pause/
+  // finish done on THIS screen (the local snapshot is load-once). Falls back to
+  // the local task if the provider list hasn't got it (shouldn't happen).
+  const liveTask = (id ? tasks.find((t) => t.id === id) : undefined) ?? task;
+
+  // O backend faz append em task.images; o slot tocado é informativo (a11y),
+  // não posiciona a foto — por isso showPicker não precisa do índice.
+  // Com os 5 slots cheios, um append viraria images[5] que nunca renderiza
+  // (só images[0..4] aparecem); então quando cheio o picker não dispara.
+  // Lê de liveTask pra o full-guard acompanhar a contagem real (provider).
+  const photosFull = liveTask.images.length >= 5;
+  const showPicker = async () => {
+    if (photosFull) return;
+    const uri = await media.showPicker();
+    // addTaskPhoto atualiza o provider → liveTask reflete a nova foto; sem
+    // setTask local (o snapshot load-once não precisa mais ser tocado).
+    if (uri && id) await addTaskPhoto(id, uri);
+  };
+
+  // Interessados — avatares reais da task (uris). O caption deriva do
+  // interestedCount ("… e mais N-1 pessoas estão acompanhando essa tarefa").
+  const interestedAvatars = liveTask.interestedAvatars.map((uri, i) => ({
+    uri,
+    alt: `Avatar ${i + 1}`,
+  }));
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <JourneyTheme
-        gradient={require('../../../../assets/journey-bg.png')}
+        gradient={require('../../../../assets/login-bg.png')}
         pattern={require('../../../../assets/smartband-bg-pattern.png')}
       />
 
@@ -138,7 +234,7 @@ export default function TaskDetails() {
               color={theme.content.primary}
               style={{ flexShrink: 1 }}
             >
-              {task.title}
+              {liveTask.title}
             </Text>
             {/* Figma 364:17194 — chevron also after o segundo item (não só após
                 "Jornada"). Visual parity com a SectionTitle do design. */}
@@ -161,28 +257,18 @@ export default function TaskDetails() {
               color={theme.content.dark}
               numberOfLines={1}
             >
-              {task.title}
+              {liveTask.title}
             </Title>
             <Text variant="body.s" color={theme.content.dark}>
-              {task.description}
+              {liveTask.description}
             </Text>
           </View>
         </View>
 
-        {/* Progresso da tarefa */}
-        <View style={{ gap: theme.gap.m }}>
-          <Title variant="title.xs" color={theme.content.dark}>
-            Progresso da tarefa
-          </Title>
-          {/* Figma 364:17426 — bordered track (pill, border #303030 = content.medium-ish,
-              padding-y 4) com fill 6px green. trackHeight 16 = padding 4*2 + fill 6 + border 1*2. */}
-          <ProgressBar
-            value={progress}
-            color={theme.content.primary}
-            bordered
-            trackHeight={16}
-          />
-        </View>
+        {/* Progresso da tarefa — encapsulado em TaskProgress memoizado.
+            Figma 364:17426 — bordered track (pill, border #303030 = content.medium-ish,
+            padding-y 4) com fill 6px green. trackHeight 16 = padding 4*2 + fill 6 + border 1*2. */}
+        <TaskProgress task={liveTask} theme={theme} />
 
         {/* Objetivo principal */}
         <View style={{ gap: theme.gap.m }}>
@@ -190,34 +276,55 @@ export default function TaskDetails() {
             Objetivo principal
           </Title>
           <Text variant="body.m" color={theme.content.dark}>
-            Garantir a segurança operacional e prolongar a vida útil dos equipamentos,
-            minimizando paradas não planejadas e otimizando a eficiência da produção.
+            {liveTask.objective}
           </Text>
         </View>
 
         {/* Fotos da solicitação — 5 placeholders 56×56 com add_a_photo
             glifo centrado (Figma 364:17126 mostra ícone de câmera/foto
-            em cada placeholder cinza). */}
+            em cada placeholder cinza). Slots inicializados de task.images. */}
         <View style={{ gap: theme.gap.m }}>
           <Title variant="title.xs" color={theme.content.dark}>
             Fotos da solicitação
           </Title>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <View
-                key={i}
-                style={{
-                  width: 56,
-                  height: 56,
-                  backgroundColor: theme.surface.medium,
-                  borderRadius: theme.border.radius.s,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Icon name="add_a_photo" size={24} color={theme.content.medium} />
-              </View>
-            ))}
+            {[0, 1, 2, 3, 4].map((i) => {
+              const uri = liveTask.images[i];
+              return (
+                <Pressable
+                  key={i}
+                  onPress={() => showPicker()}
+                  // Slot cheio não adiciona mais nada (o append iria pra um
+                  // 6º que não renderiza) — desabilita o toque nesse caso.
+                  disabled={!!uri && photosFull}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    uri
+                      ? `Foto ${i + 1}`
+                      : `Adicionar foto ${i + 1}`
+                  }
+                  style={{
+                    width: 56,
+                    height: 56,
+                    backgroundColor: theme.surface.medium,
+                    borderRadius: theme.border.radius.s,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {uri ? (
+                    <Image
+                      source={{ uri }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Icon name="add_a_photo" size={24} color={theme.content.medium} />
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
@@ -227,7 +334,7 @@ export default function TaskDetails() {
             Tempo estimado
           </Title>
           <Text variant="body.m" color={theme.content.dark}>
-            3h até a conclusão
+            {`${Math.round(liveTask.estimatedMinutes / 60)}h até a conclusão`}
           </Text>
         </View>
 
@@ -237,14 +344,14 @@ export default function TaskDetails() {
             Interessados
           </Title>
           <AvatarGroup
-            avatars={INTERESTED_AVATARS}
-            totalCount={18}
+            avatars={interestedAvatars}
+            totalCount={liveTask.interestedCount}
             maxVisible={5}
             size="m"
             bordered
           />
           <Text variant="body.m" color={theme.content.dark}>
-            Joacir Alves e mais 17 pessoas estão acompanhando essa tarefa
+            {`Joacir Alves e mais ${liveTask.interestedCount - 1} pessoas estão acompanhando essa tarefa`}
           </Text>
         </View>
 

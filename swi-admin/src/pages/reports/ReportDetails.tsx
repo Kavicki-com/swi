@@ -25,7 +25,7 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
-import { reportsApi, type Report, type ReportActivity } from '@/services/mockApi/reports'
+import { reportsApi, type Report, type ReportActivity } from '@/services/reports'
 import { useDemoToast } from '@/lib/demoToast'
 import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'

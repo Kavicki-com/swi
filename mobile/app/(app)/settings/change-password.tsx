@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Image as RNImage, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
@@ -12,6 +11,12 @@ import {
 } from '@kavicki/swi-design-system';
 import { PasswordInput } from '../../../components/PasswordInput';
 import { HomeFAB } from '../../../components/HomeFAB';
+import { useField } from '../../../lib/forms/useField';
+import {
+  validatePasswordField,
+  validatePasswordMatch,
+  validateRequired,
+} from '../../../lib/validation/validators';
 
 // Figma 353:12228 — settings sub-screen "Alterar senha". Form com 3
 // password inputs + Toast informativo + Salvar + Home FAB. Demo
@@ -21,9 +26,28 @@ export default function SettingsChangePassword() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [repeatPassword, setRepeatPassword] = useState('');
+  const currentPassword = useField({
+    validator: (v) => validateRequired(v, 'Senha atual'),
+  });
+  const newPassword = useField({ validator: validatePasswordField });
+  const repeatPassword = useField({
+    validator: (v) => validatePasswordMatch(newPassword.value, v),
+  });
+
+  const pwMatches =
+    newPassword.value.length > 0 && newPassword.value === repeatPassword.value;
+  const canSubmit =
+    currentPassword.isValid && newPassword.isValid && repeatPassword.isValid;
+
+  const handleSave = () => {
+    if (!canSubmit) {
+      currentPassword.setTouched(true);
+      newPassword.setTouched(true);
+      repeatPassword.setTouched(true);
+      return;
+    }
+    router.back();
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -32,7 +56,7 @@ export default function SettingsChangePassword() {
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       >
         <RNImage
-          source={require('../../../assets/settings-change-password-bg.png')}
+          source={require('../../../assets/login-bg.png')}
           resizeMode="cover"
           accessible={false}
           style={{ width: '100%', height: '100%' }}
@@ -65,18 +89,31 @@ export default function SettingsChangePassword() {
 
           <PasswordInput
             label="Senha atual"
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
+            value={currentPassword.value}
+            onChangeText={currentPassword.onChangeText}
+            onBlur={currentPassword.onBlur}
+            description={currentPassword.error}
+            descriptionVariant={currentPassword.error ? 'error' : 'default'}
           />
           <PasswordInput
             label="Nova senha"
-            value={newPassword}
-            onChangeText={setNewPassword}
+            value={newPassword.value}
+            onChangeText={newPassword.onChangeText}
+            onBlur={newPassword.onBlur}
+            description={newPassword.error}
+            descriptionVariant={newPassword.error ? 'error' : 'default'}
           />
           <PasswordInput
             label="Repetir nova senha"
-            value={repeatPassword}
-            onChangeText={setRepeatPassword}
+            value={repeatPassword.value}
+            onChangeText={repeatPassword.onChangeText}
+            onBlur={repeatPassword.onBlur}
+            description={
+              repeatPassword.error ?? (pwMatches ? 'As senhas são iguais ✓' : undefined)
+            }
+            descriptionVariant={
+              repeatPassword.error ? 'error' : pwMatches ? 'success' : 'default'
+            }
           />
 
           <Toast
@@ -109,7 +146,8 @@ export default function SettingsChangePassword() {
             label="Salvar nova senha"
             elevation="lg"
             accessibilityLabel="Salvar nova senha"
-            onPress={() => router.back()}
+            disabled={!canSubmit}
+            onPress={handleSave}
           />
         </View>
       </View>

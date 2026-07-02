@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { DonutChart, useTheme } from '@kavicki/swi-design-system'
-import { monitoringApi, type MonitoringGoodConditionsStats } from '@/services/mockApi/monitoring'
+import { monitoringApi, type MonitoringGoodConditionsStats } from '@/services/monitoring'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 
 export function MonitoringGoodConditions() {

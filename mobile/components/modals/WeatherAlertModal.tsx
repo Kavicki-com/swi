@@ -12,6 +12,8 @@ import {
   WATER_DROP_SVG,
   WIND_SPEED_SVG,
 } from '../../lib/alertWeatherSvgs';
+import { useWeather } from '../../services/weather/WeatherProvider';
+import { weatherDisplay } from '../../services/weather/weatherFormat';
 
 // Figma 385:29371 — alert-modal (weather alert). Modal estreito centrado:
 // title + row (weather-condition card + weather-data metrics) + body text +
@@ -36,6 +38,11 @@ export interface WeatherAlertModalProps {
 
 export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
   const theme = useTheme();
+
+  // Clima real (Unit 2) com fallback pro texto estático de hoje em
+  // loading/error/sem-alerta — esta é tela de segurança e nunca pode quebrar.
+  const { snapshot, activeAlert } = useWeather();
+  const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
 
   return (
     <View
@@ -99,35 +106,40 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
             />
           </View>
           <Title variant="title.l" color={theme.content.dark}>
-            17ºC
+            {tempStr}
           </Title>
           <Text
             variant="body.m"
             color={theme.content.dark}
             style={{ textAlign: 'center' }}
           >
-            Chuva Intensa
+            {condStr}
           </Text>
         </View>
 
         {/* Weather data column (Figma 385:29364) — width fixa 83px, gap 8. */}
         <View style={{ width: 83, gap: theme.gap.s }}>
-          <MetricRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value="65%" theme={theme} />
-          <MetricRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value="65km/h" theme={theme} />
-          <MetricRow svg={ARROW_UP_TRIANGLE_SVG} svgW={22} svgH={19} value="32ºC" theme={theme} />
-          <MetricRow svg={ARROW_DOWN_TRIANGLE_SVG} svgW={22} svgH={19} value="19ºC" theme={theme} />
+          <MetricRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value={humStr} theme={theme} />
+          <MetricRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value={windStr} theme={theme} />
+          <MetricRow svg={ARROW_UP_TRIANGLE_SVG} svgW={22} svgH={19} value={maxStr} theme={theme} />
+          <MetricRow svg={ARROW_DOWN_TRIANGLE_SVG} svgW={22} svgH={19} value={minStr} theme={theme} />
         </View>
       </View>
 
       {/* Description + CTA grouped (Figma 385:29384) — gap.s entre si,
-          separado do row de cima pelo gap.m do modal-level container. */}
-      <View style={{ width: '100%', gap: theme.gap.s, alignItems: 'center' }}>
+          separado do row de cima pelo gap.m do modal-level container.
+          Sem alignItems:center no pai: o Button `fullWidth` precisa do
+          default alignItems:stretch pra o pill renderizar full-width.
+          Com alignItems:center, o pill ficava content-width e o usuario
+          via desalinhamento mesmo com o texto interno centralizado. O
+          Text mantem centro visual via textAlign:center. */}
+      <View style={{ width: '100%', gap: theme.gap.s }}>
         <Text
           variant="body.m"
           color={theme.content.dark}
           style={{ textAlign: 'center' }}
         >
-          Risco de desabamentos nas primeiras horas do dia, procure a rota de siga as instruções para a evacuação.
+          {descStr}
         </Text>
 
         <Button

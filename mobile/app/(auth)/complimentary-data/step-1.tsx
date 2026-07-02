@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, View } from 'react-native';
+import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,20 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
+import { useField } from '../../../lib/forms/useField';
+import {
+  validateBirthDate,
+  validateCPF,
+  validateFullName,
+  validatePhone,
+} from '../../../lib/validation/validators';
+import {
+  maskBirthDate,
+  maskCPF,
+  maskPhone,
+} from '../../../lib/validation/masks';
+import { useMediaPicker } from '../../../lib/media/useMediaPicker';
+import { useProfile } from '../../../services/profile/ProfileProvider';
 
 export default function ComplimentaryDataStep1() {
   const router = useRouter();
@@ -22,28 +36,60 @@ export default function ComplimentaryDataStep1() {
   // Figma 211:13009 mostra Nome completo "já preenchido" — esse é o estado
   // intencional: o usuário acabou de digitar fullName na step de signup e
   // esse valor flui via `username` param. Pré-popular evita re-typing.
-  const [fullName, setFullName] = useState(username ?? '');
-  const [phone, setPhone] = useState('');
-  const [cpf, setCpf] = useState('');
-  const [birthDate, setBirthDate] = useState('');
+  const fullName = useField({
+    initial: username ?? '',
+    validator: validateFullName,
+  });
+  const phone = useField({ validator: validatePhone, mask: maskPhone });
+  const cpf = useField({ validator: validateCPF, mask: maskCPF });
+  const birthDate = useField({
+    validator: validateBirthDate,
+    mask: maskBirthDate,
+  });
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
+  const media = useMediaPicker();
+  const { saveProfile } = useProfile();
 
-  // Required fields per Figma: nome, telefone, CPF, data nascimento. Foto fica
-  // opcional (avatar default cobre quem não envia). Match com o padrão
-  // canSubmit/disabled que já existe em sign-up.tsx/login.tsx — ver R-10 em
-  // 2026-05-17-mobile-routes-audit.md.
+  // Required: nome, telefone, CPF, data nascimento. Foto fica opcional (avatar
+  // default cobre quem não envia).
   const canSubmit =
-    fullName.trim().length > 0 &&
-    phone.trim().length > 0 &&
-    cpf.trim().length > 0 &&
-    birthDate.trim().length > 0;
+    fullName.isValid && phone.isValid && cpf.isValid && birthDate.isValid;
 
-  const goNext = () => {
-    if (!canSubmit) return;
+  const goNext = async () => {
+    if (!canSubmit) {
+      fullName.setTouched(true);
+      phone.setTouched(true);
+      cpf.setTouched(true);
+      birthDate.setTouched(true);
+      return;
+    }
+    try {
+      // Phase 6: birthDate is masked DD/MM/YYYY but Profile.birthDate is
+      // AWSDate YYYY-MM-DD — convert (DD/MM/YYYY → YYYY-MM-DD) before the
+      // amplify path is exercised. Mock stores the raw string fine.
+      await saveProfile({
+        fullName: fullName.value,
+        phone: phone.value,
+        cpf: cpf.value,
+        birthDate: birthDate.value,
+      });
+    } catch {
+      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+      return;
+    }
     router.push({
       pathname: '/(auth)/complimentary-data/step-2',
       params: { username },
     });
+  };
+
+  const handleTakePhoto = async () => {
+    const uri = await media.takePhoto();
+    if (uri) setPhoto({ uri });
+  };
+  const handlePickFile = async () => {
+    const uri = await media.pickFromGallery();
+    if (uri) setPhoto({ uri });
   };
 
   return (
@@ -75,38 +121,37 @@ export default function ComplimentaryDataStep1() {
 
         <View style={{ gap: theme.gap.m }}>
           <Input
+            {...fullName.bind()}
             label="Nome completo"
             labelWeight="regular"
             placeholder="Seu nome completo"
-            value={fullName}
-            onChangeText={setFullName}
             autoComplete="name"
             autoCapitalize="words"
           />
           <Input
+            {...phone.bind()}
             label="Telefone"
             labelWeight="regular"
             placeholder="(00) 00000-0000"
-            value={phone}
-            onChangeText={setPhone}
             keyboardType="phone-pad"
             autoComplete="tel"
+            maxLength={15}
           />
           <Input
+            {...cpf.bind()}
             label="CPF"
             labelWeight="regular"
             placeholder="000.000.000-00"
-            value={cpf}
-            onChangeText={setCpf}
             keyboardType="number-pad"
+            maxLength={14}
           />
           <Input
+            {...birthDate.bind()}
             label="Data de nascimento"
             labelWeight="regular"
             placeholder="dd/mm/aaaa"
-            value={birthDate}
-            onChangeText={setBirthDate}
             keyboardType="number-pad"
+            maxLength={10}
           />
         </View>
 
@@ -116,8 +161,8 @@ export default function ComplimentaryDataStep1() {
 
         <ImageUploader
           value={photo}
-          onTakePhoto={() => setPhoto({ uri: 'demo://placeholder' })}
-          onPickFile={() => setPhoto({ uri: 'demo://placeholder' })}
+          onTakePhoto={handleTakePhoto}
+          onPickFile={handlePickFile}
           onRemove={() => setPhoto(null)}
           helperText="Selecione arquivos do tipo: JPG ou PNG"
           takePhotoLabel="Tirar Foto"
