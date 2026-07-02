@@ -1,15 +1,20 @@
-// Mirrors services/auth/getAuthBackend.test.ts. The flag is forced to 'mock';
-// aws-amplify/data is stubbed because getProfileBackend statically imports
-// amplifyProfileBackend (which calls generateClient() at module load), and the
-// real module drags in the native-only @aws-amplify/react-native peer that is
-// absent in the jest-expo env. The mock-flag path never touches the amplify
-// backend at runtime.
-jest.mock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
-jest.mock('aws-amplify/data', () => ({ generateClient: () => ({}) }));
+// A fatia Perfil ainda não migrou: getProfileBackend fica pinado em mock
+// e ignora DATA_BACKEND até o apiProfileBackend existir. O loadWith cobre os
+// dois valores da flag pra provar o pinning (mesmo shape do getAuthBackend.test).
+function loadWith(dataBackend: 'mock' | 'api') {
+  jest.resetModules();
+  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend }));
+  const { getProfileBackend } = require('./getProfileBackend');
+  const { mockProfileBackend } = require('./mockProfileBackend');
+  return { getProfileBackend, mockProfileBackend };
+}
 
-import { getProfileBackend } from './getProfileBackend';
-import { mockProfileBackend } from './mockProfileBackend';
+it('retorna mock com a flag em mock', () => {
+  const { getProfileBackend, mockProfileBackend } = loadWith('mock');
+  expect(getProfileBackend()).toBe(mockProfileBackend);
+});
 
-it('returns the mock backend when the flag is mock', () => {
+it('segue pinado em mock mesmo com a flag em api (fatia ainda não migrou)', () => {
+  const { getProfileBackend, mockProfileBackend } = loadWith('api');
   expect(getProfileBackend()).toBe(mockProfileBackend);
 });
