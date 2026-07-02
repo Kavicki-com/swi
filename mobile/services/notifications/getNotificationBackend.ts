@@ -1,8 +1,8 @@
-import { DATA_BACKEND } from '../../lib/featureFlags';
 import type { NotificationBackend } from './types';
 import { mockNotificationBackend } from './mockNotificationBackend';
-import { amplifyNotificationBackend } from './amplifyNotificationBackend';
 
+// Pinado em mock até a fatia Notificações ligar o apiNotificationBackend
+// (rodada: docs/plans/2026-07-02-swi-backend-dominios-nao-saude-design.md).
 export function getNotificationBackend(): NotificationBackend {
-  return DATA_BACKEND === 'amplify' ? amplifyNotificationBackend : mockNotificationBackend;
+  return mockNotificationBackend;
 }

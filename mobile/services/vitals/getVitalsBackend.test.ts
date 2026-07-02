@@ -1,15 +1,22 @@
-// Mirrors services/profile/getProfileBackend.test.ts. The flag is forced to
-// 'mock'; aws-amplify/data is stubbed because getVitalsBackend statically
-// imports amplifyVitalsBackend (which calls generateClient() at module load),
-// and the real module drags in the native-only @aws-amplify/react-native peer
-// that is absent in the jest-expo env. The mock-flag path never touches the
-// amplify backend at runtime.
-jest.mock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
-jest.mock('aws-amplify/data', () => ({ generateClient: () => ({}) }));
+// SAÚDE: getVitalsBackend fica pinado em mock ATÉ A SMARTBAND EXISTIR e ignora
+// DATA_BACKEND de propósito (carve-out da rodada não-saúde). O loadWith cobre
+// os dois valores da flag pra provar o pinning (mesmo shape do
+// getAuthBackend.test). VITALS_SCENARIO entra no factory porque
+// mockVitalsBackend lê essa flag.
+function loadWith(dataBackend: 'mock' | 'api') {
+  jest.resetModules();
+  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend, VITALS_SCENARIO: 'streaming' }));
+  const { getVitalsBackend } = require('./getVitalsBackend');
+  const { mockVitalsBackend } = require('./mockVitalsBackend');
+  return { getVitalsBackend, mockVitalsBackend };
+}
 
-import { getVitalsBackend } from './getVitalsBackend';
-import { mockVitalsBackend } from './mockVitalsBackend';
+it('retorna mock com a flag em mock', () => {
+  const { getVitalsBackend, mockVitalsBackend } = loadWith('mock');
+  expect(getVitalsBackend()).toBe(mockVitalsBackend);
+});
 
-it('returns the mock backend when the flag is mock', () => {
+it('ignora a flag pra sempre (carve-out smartband)', () => {
+  const { getVitalsBackend, mockVitalsBackend } = loadWith('api');
   expect(getVitalsBackend()).toBe(mockVitalsBackend);
 });
