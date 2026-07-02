@@ -9,10 +9,15 @@ async function main() {
     create: { email: 'admin@swi.local', name: 'Admin', passwordHash: await hash('admin123'),
       role: 'ADMIN', emailVerified: true, approvalStatus: 'APPROVED' },
   })
-  await prisma.user.upsert({
+  const worker = await prisma.user.upsert({
     where: { email: 'worker@swi.local' }, update: {},
     create: { email: 'worker@swi.local', name: 'Worker Demo', passwordHash: await hash('worker123'),
       role: 'WORKER', emailVerified: true, approvalStatus: 'APPROVED' },   // demo entra direto
+  })
+  await prisma.profile.upsert({
+    where: { userId: worker.id }, update: {},
+    create: { userId: worker.id, fullName: 'Worker Demo', phone: '(11) 90000-0000',
+      city: 'São Paulo', uf: 'SP', sector: 'Operações', jobTitle: 'Operador de escavadeira' },
   })
 }
 main().then(() => prisma.$disconnect()).catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1) })
