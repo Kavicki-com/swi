@@ -1,12 +1,20 @@
-jest.mock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
-// Stub expo-secure-store: getAuthBackend statically imports apiAuthBackend
-// (needed so a runtime flag flip works), which pulls in expo-secure-store, a
-// native module. The selector never touches the api path when the flag is
-// 'mock', so an empty stub is faithful.
 jest.mock('expo-secure-store', () => ({}));
-import { getAuthBackend } from './getAuthBackend';
-import { mockAuthBackend } from './mockAuthBackend';
 
-it('returns the mock backend when the flag is mock', () => {
+function loadWith(authBackend: 'mock' | 'api') {
+  jest.resetModules();
+  jest.doMock('../../lib/featureFlags', () => ({ AUTH_BACKEND: authBackend, DATA_BACKEND: 'mock' }));
+  const { getAuthBackend } = require('./getAuthBackend');
+  const { mockAuthBackend } = require('./mockAuthBackend');
+  const { apiAuthBackend } = require('./apiAuthBackend');
+  return { getAuthBackend, mockAuthBackend, apiAuthBackend };
+}
+
+it('returns the mock backend when AUTH_BACKEND is mock', () => {
+  const { getAuthBackend, mockAuthBackend } = loadWith('mock');
   expect(getAuthBackend()).toBe(mockAuthBackend);
+});
+
+it('returns the api backend when AUTH_BACKEND is api', () => {
+  const { getAuthBackend, apiAuthBackend } = loadWith('api');
+  expect(getAuthBackend()).toBe(apiAuthBackend);
 });
