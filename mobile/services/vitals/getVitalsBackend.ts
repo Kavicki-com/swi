@@ -1,8 +1,8 @@
-import { DATA_BACKEND } from '../../lib/featureFlags';
 import type { VitalsBackend } from './types';
 import { mockVitalsBackend } from './mockVitalsBackend';
-import { amplifyVitalsBackend } from './amplifyVitalsBackend';
 
+// SAÚDE: pinado em mock ATÉ A SMARTBAND EXISTIR (decisão 2026-06-22/2026-07-02);
+// ignora DATA_BACKEND de propósito — não ligar na rodada não-saúde.
 export function getVitalsBackend(): VitalsBackend {
-  return DATA_BACKEND === 'amplify' ? amplifyVitalsBackend : mockVitalsBackend;
+  return mockVitalsBackend;
 }

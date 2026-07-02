@@ -41,13 +41,15 @@ export function isFeatureEnabled(gate: FeatureGate): boolean {
   return FEATURE_GATES[gate];
 }
 
-// Seleciona a fonte de dados de TODOS os domínios (auth, profile, vitals,
-// reports, journey, chat, notifications, weather, evacuation, telemetry).
-// 'mock' = comportamento de demo in-memory (default; sem AWS). 'amplify' = real
-// Cognito/AppSync via aws-amplify — flip pra isto depois que `ampx sandbox`
-// gerar amplify_outputs (ver docs/plans/2026-06-22-swi-backend-auth-profile-design.md, Seção 6).
-export type DataBackendKind = 'mock' | 'amplify';
-export const DATA_BACKEND: DataBackendKind = 'mock';
+// Seleciona a fonte de dados dos domínios NÃO-SAÚDE (profile, reports, journey,
+// chat, notifications, weather, evacuation). 'mock' = demo in-memory (default).
+// 'api' = backend real conteinerizado (NestJS) — cada selector só honra 'api'
+// quando a fatia do seu domínio migra (até lá fica pinado em mock). Saúde
+// (vitals/telemetry) IGNORA esta flag até a smartband existir.
+// Setada no build/dev via EXPO_PUBLIC_DATA_BACKEND.
+export type DataBackendKind = 'mock' | 'api';
+export const DATA_BACKEND: DataBackendKind =
+  (process.env.EXPO_PUBLIC_DATA_BACKEND as DataBackendKind) ?? 'mock';
 
 // Chave PRÓPRIA do auth, independente de DATA_BACKEND: permite o auth ir no
 // backend real (container) enquanto os outros 9 domínios seguem em mock.

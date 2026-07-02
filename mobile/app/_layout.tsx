@@ -26,10 +26,8 @@ import { VitalsProvider, useVitals } from '../services/vitals/VitalsProvider';
 import { LocationProvider, useLocation } from '../services/location/LocationProvider';
 import { WeatherProvider } from '../services/weather/WeatherProvider';
 import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
-import { configureAmplify } from '../services/amplify/configure';
 
 SplashScreen.preventAutoHideAsync();
-configureAmplify();
 
 // Mobile-frame constraint na web: força o app a 360px de largura (a mesma
 // largura do design Figma) centralizado horizontalmente. Em native (iOS /

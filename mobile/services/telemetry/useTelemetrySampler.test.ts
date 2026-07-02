@@ -1,10 +1,5 @@
-// The selector statically imports amplifyTelemetrySink (generateClient() at
-// module load), which drags in the native-only aws-amplify peer absent in
-// jest-expo. Flag forced to 'mock', amplify/data stubbed — mirrors the sink
-// selector test. The mock path is the only one exercised here.
-jest.mock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
-jest.mock('aws-amplify/data', () => ({ generateClient: () => ({}) }));
-
+// getTelemetrySink está pinado em mock (carve-out saúde), então o hook só
+// exercita o mockTelemetrySink aqui — sem stubs de featureFlags/aws.
 import { createElement, type ComponentType } from 'react';
 // react-test-renderer ships no type declarations and @types/react-test-renderer
 // is not a project dep — type the two helpers we use locally to keep tsc clean

@@ -1,8 +1,8 @@
-import { DATA_BACKEND } from '../../lib/featureFlags';
 import type { EvacuationBackend } from './types';
 import { mockEvacuationBackend } from './mockEvacuationBackend';
-import { amplifyEvacuationBackend } from './amplifyEvacuationBackend';
 
+// Pinado em mock até a fatia Evacuação ligar o apiEvacuationBackend
+// (rodada: docs/plans/2026-07-02-swi-backend-dominios-nao-saude-design.md).
 export function getEvacuationBackend(): EvacuationBackend {
-  return DATA_BACKEND === 'amplify' ? amplifyEvacuationBackend : mockEvacuationBackend;
+  return mockEvacuationBackend;
 }
