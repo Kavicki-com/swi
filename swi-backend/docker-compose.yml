@@ -24,7 +24,7 @@ services:
       mailhog: { condition: service_started }
     environment:
       DATABASE_URL: postgresql://swi:swi@db:5432/swi
-      JWT_SECRET: dev-secret-change-in-prod
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
       SMTP_HOST: mailhog
       SMTP_PORT: 1025
       MAIL_FROM: no-reply@swi.local
