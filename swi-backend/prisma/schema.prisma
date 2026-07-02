@@ -34,4 +34,175 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  profile       Profile?
+  reports       Report[]
+  journeys      Journey[]
+  tasks         Task[]
+  messages      Message[]
+  notifications Notification[]
+}
+
+// ---------------------------------------------------------------------------
+// Domínios não-saúde (fundação) — shape-fonte: amplify/data/resource.ts,
+// adaptado a SQL relacional (FKs para User no lugar de Cognito subs).
+// O model Contact do Amplify morre: o diretório de contatos vira query sobre
+// Users, com os campos de exibição (sector/jobTitle/avatarKey) no Profile.
+// ---------------------------------------------------------------------------
+
+// Enums em lowercase de propósito: paridade de wire com os types do seam
+// mobile (sem @map).
+enum ReportStatus {
+  accept
+  pending
+  canceled
+  info
+}
+
+enum JourneyState {
+  idle
+  ongoing
+  paused
+}
+
+enum TaskStatus {
+  pending
+  in_progress
+  paused
+  done
+}
+
+enum NotificationDomain {
+  weather
+  chat
+  reports
+  journey
+  faq
+}
+
+model Profile {
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id])
+  fullName     String?
+  phone        String?
+  cpf          String?
+  birthDate    DateTime? @db.Date
+  cep          String?
+  street       String?
+  number       String?
+  complement   String?
+  neighborhood String?
+  city         String?
+  uf           String?
+  // Campos de exibição herdados do Contact morto — fonte canônica dos
+  // snapshots denorm de Report/Conversation e do diretório de contatos do chat.
+  sector       String?
+  jobTitle     String? // cargo de exibição ("Operador de escavadeira") — distinto do enum Role
+  avatarKey    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Report {
+  id              String       @id @default(uuid())
+  authorId        String
+  author          User         @relation(fields: [authorId], references: [id])
+  title           String
+  summary         String?
+  status          ReportStatus @default(pending)
+  statusLabel     String?
+  authorName      String? // snapshot denorm — card do inbox sem join (paridade com o mock)
+  authorAvatarKey String?
+  creationDate    DateTime     @default(now()) // paridade Amplify — campo de display, distinto do createdAt de sistema
+  sector          String?
+  responsibles    String[]
+  details         String?
+  imageKeys       String[]
+  activities      Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Journey {
+  id                 String       @id @default(uuid())
+  workerId           String
+  worker             User         @relation(fields: [workerId], references: [id])
+  date               DateTime     @db.Date
+  state              JourneyState @default(idle)
+  activeTaskId       String? // ponteiro soft de propósito (paridade Amplify; sem FK — a fatia Jornada gerencia a consistência)
+  startedAt          DateTime?
+  accumulatedSeconds Int          @default(0)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([workerId, date]) // turno por worker/dia
+}
+
+model Task {
+  id                   String     @id @default(uuid())
+  assignedTo           String
+  assignee             User       @relation(fields: [assignedTo], references: [id])
+  title                String
+  description          String?
+  objective            String?
+  estimatedMinutes     Int?
+  status               TaskStatus @default(pending)
+  startedAt            DateTime?
+  accumulatedSeconds   Int        @default(0)
+  progressPct          Float?
+  scheduledDate        DateTime?  @db.Date
+  imageKeys            String[]
+  interestedCount      Int?
+  interestedAvatarKeys String[]
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  @@index([assignedTo, scheduledDate]) // tela "Hoje" da fatia Jornada — tasks do worker por dia
+}
+
+model Conversation {
+  id                    String    @id // determinístico: [a,b].sort().join('#') — contrato do client (fatia Chat)
+  participants          String[] // 2 user ids
+  participantNames      String[] // snapshots denorm paralelos (paridade com o mock; fatia Chat pode simplificar)
+  participantSubtitles  String[]
+  participantAvatarKeys String[]
+  lastMessageBody       String?
+  lastMessageAt         DateTime?
+  unreadByJson          Json? // { [userId]: count } — unread por-viewer
+  messages              Message[]
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Message.participants do Amplify morre — num DB relacional o servidor checa
+// membership via conversation.participants (era denorm exigida pelo
+// ownersDefinedIn do AppSync).
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id])
+  body           String?
+  imageKey       String?
+  sentAt         DateTime
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, sentAt])
+}
+
+model Notification {
+  id        String             @id @default(uuid())
+  workerId  String
+  worker    User               @relation(fields: [workerId], references: [id])
+  title     String
+  body      String?
+  domain    NotificationDomain
+  targetId  String?
+  read      Boolean            @default(false)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([workerId, createdAt])
 }
