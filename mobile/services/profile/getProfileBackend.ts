@@ -1,8 +1,8 @@
+import { DATA_BACKEND } from '../../lib/featureFlags';
 import type { ProfileBackend } from './types';
 import { mockProfileBackend } from './mockProfileBackend';
+import { apiProfileBackend } from './apiProfileBackend';
 
-// Pinado em mock até a fatia Perfil ligar o apiProfileBackend
-// (rodada: docs/plans/2026-07-02-swi-backend-dominios-nao-saude-design.md).
 export function getProfileBackend(): ProfileBackend {
-  return mockProfileBackend;
+  return DATA_BACKEND === 'api' ? apiProfileBackend : mockProfileBackend;
 }
