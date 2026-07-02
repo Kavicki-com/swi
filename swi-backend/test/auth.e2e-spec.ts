@@ -19,12 +19,12 @@ describe('Auth e2e', () => {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
     await app.init()
     prisma = app.get(PrismaService)
-    await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com'] } } })
+    await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com','reject-e2e@ex.com'] } } })
     const bcrypt = await import('bcrypt')
     await prisma.user.create({ data: { email: 'admin-e2e@ex.com', name: 'A', passwordHash: await bcrypt.hash('admin123', 10),
         role: 'ADMIN', emailVerified: true, approvalStatus: 'APPROVED' } })
   })
-  afterAll(async () => { await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com'] } } }); await app.close() })
+  afterAll(async () => { await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com','reject-e2e@ex.com'] } } }); await app.close() })
 
   it('fluxo completo até /me', async () => {
     const http = app.getHttpServer()
@@ -40,5 +40,20 @@ describe('Auth e2e', () => {
     expect(login.body.accessToken).toBeDefined()
     const me = await request(http).get('/auth/me').set('Authorization', `Bearer ${login.body.accessToken}`).expect(200)
     expect(me.body.email).toBe('e2e@ex.com')
+  })
+
+  it('admin lista pendentes e rejeita', async () => {
+    const http = app.getHttpServer()
+    const admin = await request(http).post('/auth/login').send({ email: 'admin-e2e@ex.com', password: 'admin123' }).expect(200)
+    const token = admin.body.accessToken
+
+    await request(http).post('/auth/signup').send({ email: 'reject-e2e@ex.com', password: 'senha123', name: 'RejectMe' }).expect(201)
+
+    const pending = await request(http).get('/users/pending').set('Authorization', `Bearer ${token}`).expect(200)
+    const target = pending.body.find((u: any) => u.email === 'reject-e2e@ex.com')
+    expect(target).toBeTruthy()
+
+    const r = await request(http).post(`/users/${target.id}/reject`).set('Authorization', `Bearer ${token}`).expect(200)
+    expect(r.body.approvalStatus).toBe('REJECTED')
   })
 })
