@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt'
 import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common'
 import { AuthService } from './auth.service'
+import { DUMMY_HASH } from './codes'
 
 function deps() {
   const users = { findByEmail: jest.fn(), findById: jest.fn(), approve: jest.fn() }
@@ -129,7 +130,8 @@ describe('AuthService.login timing-guard', () => {
     users.findByEmail.mockResolvedValue(null)
     const spy = jest.spyOn(bcrypt, 'compare')
     await expect(svc.login({ email: 'nao@existe.com', password: 'x' })).rejects.toBeInstanceOf(UnauthorizedException)
-    expect(spy).toHaveBeenCalled()   // comparou contra o DUMMY_HASH
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0][1]).toBe(DUMMY_HASH)   // comparou contra o dummy, não um hash real
     spy.mockRestore()
   })
 })

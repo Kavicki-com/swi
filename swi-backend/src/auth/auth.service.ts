@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../prisma/prisma.service'
 import { UsersService } from '../users/users.service'
@@ -9,6 +9,8 @@ const CODE_TTL_MIN = 30
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
@@ -34,7 +36,11 @@ export class AuthService {
     try {
       await this.mail.sendConfirmationCode(p.email, code)
     } catch (err) {
-      await this.prisma.user.delete({ where: { id: user.id } })   // sem órfão
+      try {
+        await this.prisma.user.delete({ where: { id: user.id } })   // sem órfão
+      } catch (delErr) {
+        this.logger.error(`falha ao reverter usuário órfão ${user.id}: ${delErr}`)
+      }
       throw err
     }
     return { nextStep: 'CONFIRM' }
