@@ -95,7 +95,7 @@ gatilho real vem na F6) e `faq` (seed-only).
 
 | Arquivo | Papel |
 | --- | --- |
-| `notification.service.ts` (+spec) | `list(workerId)` (`createdAt desc`, `toDto`) · `markRead(workerId,id)` (ownership → **404** `NotFoundException`) · `markAllRead(workerId)` (`updateMany read=true`) · **`createFor(workerId, payload)`** (cria + `realtime.emitToUsers([workerId],'notification',dto)`) · **`createForMany(workerIds, payload)`** (`createMany` + emit a cada). Os dois últimos = superfície injetável cross-domain. |
+| `notification.service.ts` (+spec) | `list(workerId)` (`createdAt desc`, `toDto`) · `markRead(workerId,id)` (ownership → **404** `NotFoundException`) · `markAllRead(workerId)` (`updateMany read=true`) · **`createFor(workerId, payload)`** (cria + `realtime.emitToUsers([workerId],'notification',dto)`) · **`createForMany(workerIds, payload)`** (loop `createFor` sob `Promise.allSettled` — o `createMany` do Prisma não devolve as rows pra montar o dto do emit, e um destinatário ruim não derruba o resto). Os dois últimos = superfície injetável cross-domain. |
 | `notification.controller.ts` (JWT) | `GET /notifications` · `POST /notifications/:id/read` · `POST /notifications/read-all`. `workerId` sempre do JWT (nunca do body/param). |
 | `notification.module.ts` | importa `RealtimeModule`, **exporta `NotificationService`** (Chat/Reports importam). |
 
@@ -206,6 +206,11 @@ rastros de IA).
 - **task → notif runtime**: ligado na rodada admin (quando o endpoint de atribuição
   nascer com contrato/Figma).
 - **Consolidar sockets** chat+notif num só (opcional; hoje 2 conexões, funcional).
+- **Fan-out cross-domain é síncrono no write path**: `ReportsService.create` faz o
+  broadcast (N inserts + N emits) **antes** de retornar o 201 — ok pra piloto, mas em
+  org grande deve virar fire-and-forget / fila (SNS/SQS, ou `setImmediate`); o emit já
+  é self-contained best-effort. Deferimento **deliberado** (Decisão 6: dependência
+  direta síncrona sobre event-emitter), não implícito.
 - **Contrato `domain` ↔ mapa de rotas** do cliente em sincronia (mesmo risco do
   `conversationId` do Chat).
 
