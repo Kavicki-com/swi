@@ -22,6 +22,9 @@ describe('Reports e2e', () => {
     return { Authorization: `Bearer ${body.accessToken}` }
   }
   const cleanup = async () => {
+    const reports = await prisma.report.findMany({ where: { author: { email } }, select: { id: true } })
+    const rids = reports.map((r) => r.id)
+    if (rids.length) await prisma.notification.deleteMany({ where: { targetId: { in: rids } } })
     await prisma.report.deleteMany({ where: { author: { email } } })
     await prisma.user.deleteMany({ where: { email } })
   }
