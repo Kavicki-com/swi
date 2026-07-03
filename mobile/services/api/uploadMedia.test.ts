@@ -21,12 +21,21 @@ describe('uploadMedia', () => {
       .mockResolvedValueOnce({ blob: async () => blob }) // fetch(file://)
       .mockResolvedValueOnce({ ok: true, status: 200 }); // PUT presigned
     const key = await uploadImage('file:///a/b.jpg');
-    expect(apiRequest).toHaveBeenCalledWith('/media/presign', { method: 'POST', body: { contentType: 'image/jpeg' }, auth: true });
+    expect(apiRequest).toHaveBeenCalledWith('/media/presign', { method: 'POST', body: { contentType: 'image/jpeg', prefix: 'reports' }, auth: true });
     const putCall = (global as any).fetch.mock.calls[1];
     expect(putCall[0]).toBe('https://minio/put?sig=1');
     expect(putCall[1].method).toBe('PUT');
     expect(putCall[1].body).toBe(blob);
     expect(key).toBe('reports/k.jpg');
+  });
+
+  it('uploadImage repassa o prefixo pro presign', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ url: 'u', key: 'task/k.jpg' });
+    (global as any).fetch
+      .mockResolvedValueOnce({ blob: async () => ({}) })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    await uploadImage('file:///a/b.jpg', 'task');
+    expect(apiRequest).toHaveBeenCalledWith('/media/presign', { method: 'POST', body: { contentType: 'image/jpeg', prefix: 'task' }, auth: true });
   });
 
   it('uploadImage propaga falha de PUT', async () => {

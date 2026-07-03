@@ -1,8 +1,9 @@
+import { DATA_BACKEND } from '../../lib/featureFlags';
 import type { JourneyBackend } from './types';
 import { mockJourneyBackend } from './mockJourneyBackend';
+import { apiJourneyBackend } from './apiJourneyBackend';
 
-// Pinado em mock até a fatia Jornada ligar o apiJourneyBackend
-// (rodada: docs/plans/2026-07-02-swi-backend-dominios-nao-saude-design.md).
+// Fatia Jornada migrada: honra a flag DATA_BACKEND (igual getReportsBackend).
 export function getJourneyBackend(): JourneyBackend {
-  return mockJourneyBackend;
+  return DATA_BACKEND === 'api' ? apiJourneyBackend : mockJourneyBackend;
 }

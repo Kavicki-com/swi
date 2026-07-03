@@ -6,11 +6,12 @@ export function contentTypeFor(uri: string): string {
 }
 
 // Sobe um arquivo local (file://) numa URL presigned via PUT. Retorna a key
-// que o backend guarda. Fundação de mídia — o Chat (Fatia 4) reusa.
-export async function uploadImage(uri: string): Promise<string> {
+// que o backend guarda. Fundação de mídia — Relatórios (reports/) e Jornada
+// (task/) passam o prefixo; o Chat (Fatia 4) reusa com o seu.
+export async function uploadImage(uri: string, prefix = 'reports'): Promise<string> {
   const contentType = contentTypeFor(uri);
   const { url, key } = await apiRequest<{ url: string; key: string }>('/media/presign', {
-    method: 'POST', body: { contentType }, auth: true,
+    method: 'POST', body: { contentType, prefix }, auth: true,
   });
   const blob = await (await fetch(uri)).blob();
   const put = await fetch(url, { method: 'PUT', headers: { 'Content-Type': contentType }, body: blob as any });
