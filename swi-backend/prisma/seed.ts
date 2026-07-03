@@ -1,13 +1,12 @@
 import { PrismaClient, type NotificationDomain } from '@prisma/client'
-import * as bcrypt from 'bcrypt'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { DEMO_STORM_ALERT_ID } from '../src/weather/weather.types'
+import { hash } from '../src/auth/codes'
 const prisma = new PrismaClient()
 
 async function main() {
-  const hash = (p: string) => bcrypt.hash(p, 10)
   await prisma.user.upsert({
     where: { email: 'admin@swi.local' }, update: {},
     create: { email: 'admin@swi.local', name: 'Admin', passwordHash: await hash('admin123'),

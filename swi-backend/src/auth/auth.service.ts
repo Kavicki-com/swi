@@ -1,14 +1,16 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../prisma/prisma.service'
 import { UsersService } from '../users/users.service'
 import { MailService } from '../mail/mail.service'
-import { generateCode, hash, verifyHash } from './codes'
+import { generateCode, hash, verifyHash, DUMMY_HASH } from './codes'
 
 const CODE_TTL_MIN = 30
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
@@ -19,7 +21,7 @@ export class AuthService {
   async signup(p: { email: string; password: string; name: string }): Promise<{ nextStep: 'CONFIRM' }> {
     if (await this.users.findByEmail(p.email)) throw new ConflictException('E-mail já cadastrado')
     const code = generateCode()
-    await this.prisma.user.create({
+    const user = await this.prisma.user.create({
       data: {
         email: p.email,
         name: p.name,
@@ -31,7 +33,16 @@ export class AuthService {
         confirmationExpires: new Date(Date.now() + CODE_TTL_MIN * 60_000),
       },
     })
-    await this.mail.sendConfirmationCode(p.email, code)
+    try {
+      await this.mail.sendConfirmationCode(p.email, code)
+    } catch (err) {
+      try {
+        await this.prisma.user.delete({ where: { id: user.id } })   // sem órfão
+      } catch (delErr) {
+        this.logger.error(`falha ao reverter usuário órfão ${user.id}: ${delErr}`)
+      }
+      throw err
+    }
     return { nextStep: 'CONFIRM' }
   }
 
@@ -48,7 +59,8 @@ export class AuthService {
 
   async login(p: { email: string; password: string }): Promise<{ accessToken: string; user: { id: string; email: string; name: string } }> {
     const u = await this.users.findByEmail(p.email)
-    if (!u || !(await verifyHash(p.password, u.passwordHash))) throw new UnauthorizedException('Credenciais inválidas')
+    const ok = await verifyHash(p.password, u?.passwordHash ?? DUMMY_HASH)
+    if (!u || !ok) throw new UnauthorizedException('Credenciais inválidas')
     if (!u.emailVerified) throw new ForbiddenException({ reason: 'EMAIL_NOT_VERIFIED', message: 'Confirme seu e-mail antes de entrar' })
     if (u.approvalStatus !== 'APPROVED') throw new ForbiddenException({ reason: 'NOT_APPROVED', message: 'Sua conta está aguardando aprovação do administrador' })
     return { accessToken: this.jwt.sign({ sub: u.id, role: u.role }), user: { id: u.id, email: u.email, name: u.name } }

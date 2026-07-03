@@ -1,9 +1,11 @@
-import { ConflictException } from '@nestjs/common'
+import bcrypt from 'bcrypt'
+import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common'
 import { AuthService } from './auth.service'
+import { DUMMY_HASH } from './codes'
 
 function deps() {
   const users = { findByEmail: jest.fn(), findById: jest.fn(), approve: jest.fn() }
-  const prisma = { user: { create: jest.fn(), update: jest.fn() } }
+  const prisma = { user: { create: jest.fn(), update: jest.fn(), delete: jest.fn() } }
   const mail = { sendConfirmationCode: jest.fn().mockResolvedValue(undefined), sendResetCode: jest.fn().mockResolvedValue(undefined) }
   const jwt = { sign: jest.fn().mockReturnValue('jwt-token') }
   const svc = new AuthService(prisma as any, users as any, mail as any, jwt as any)
@@ -108,5 +110,47 @@ describe('AuthService reset de senha', () => {
     const data = prisma.user.update.mock.calls[0][0].data
     expect(data.passwordHash).toBeDefined()
     expect(data.resetCodeHash).toBeNull()
+  })
+})
+
+describe('AuthService.signup rollback', () => {
+  it('e-mail falha → deleta o User recém-criado e re-lança', async () => {
+    const { svc, users, prisma, mail } = deps()
+    users.findByEmail.mockResolvedValue(null)
+    prisma.user.create.mockResolvedValue({ id: 'u9' })
+    ;(mail.sendConfirmationCode as jest.Mock).mockRejectedValue(new Error('smtp down'))
+    await expect(svc.signup({ email: 'j@ex.com', password: 'p', name: 'J' })).rejects.toThrow('smtp down')
+    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'u9' } })
+  })
+})
+
+describe('AuthService.login timing-guard', () => {
+  it('e-mail inexistente AINDA roda bcrypt.compare (anti-enumeração) e dá 401', async () => {
+    const { svc, users } = deps()
+    users.findByEmail.mockResolvedValue(null)
+    const spy = jest.spyOn(bcrypt, 'compare')
+    await expect(svc.login({ email: 'nao@existe.com', password: 'x' })).rejects.toBeInstanceOf(UnauthorizedException)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0][1]).toBe(DUMMY_HASH)   // comparou contra o dummy, não um hash real
+    spy.mockRestore()
+  })
+})
+
+describe('AuthService expiração', () => {
+  const { hash } = jest.requireActual('./codes')
+  it('confirm com código expirado → BadRequest', async () => {
+    const { svc, users } = deps()
+    users.findByEmail.mockResolvedValue({ id: 'u1', confirmationCodeHash: await hash('123456'), confirmationExpires: new Date(Date.now() - 1000) })
+    await expect(svc.confirm({ email: 'j@ex.com', code: '123456' })).rejects.toBeInstanceOf(BadRequestException)
+  })
+  it('reset com código expirado → BadRequest', async () => {
+    const { svc, users } = deps()
+    users.findByEmail.mockResolvedValue({ id: 'u1', resetCodeHash: await hash('123456'), resetExpires: new Date(Date.now() - 1000) })
+    await expect(svc.resetPassword({ email: 'j@ex.com', code: '123456', newPassword: 'nova123' })).rejects.toBeInstanceOf(BadRequestException)
+  })
+  it('reset com código errado → throw', async () => {
+    const { svc, users } = deps()
+    users.findByEmail.mockResolvedValue({ id: 'u1', resetCodeHash: await hash('111111'), resetExpires: new Date(Date.now() + 60_000) })
+    await expect(svc.resetPassword({ email: 'j@ex.com', code: '999999', newPassword: 'nova123' })).rejects.toThrow()
   })
 })
