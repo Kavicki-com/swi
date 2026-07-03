@@ -1,0 +1,37 @@
+import { WeatherService } from './weather.service'
+import type { OpenMeteoProvider } from './weather.provider'
+import { CANNED_CURRENT } from './weather.types'
+
+const provider = (fetch: OpenMeteoProvider['fetch']) => ({ fetch } as OpenMeteoProvider)
+
+describe('WeatherService.getSnapshot', () => {
+  const orig = process.env.WEATHER_SCENARIO
+  afterEach(() => { if (orig === undefined) delete process.env.WEATHER_SCENARIO; else process.env.WEATHER_SCENARIO = orig })
+
+  it('provider ok → usa dado real', async () => {
+    const svc = new WeatherService(provider(async () => ({ current: { tempC: 22, condition: 'clear', humidityPct: 50, windKmh: 10 }, daily: { minC: 15, maxC: 25 } })))
+    expect((await svc.getSnapshot()).current.tempC).toBe(22)
+  })
+  it('provider falha → fallback canned (nunca quebra)', async () => {
+    const svc = new WeatherService(provider(async () => { throw new Error('down') }))
+    expect((await svc.getSnapshot()).current).toEqual(CANNED_CURRENT)
+  })
+  it('WEATHER_SCENARIO=alert → 1 alerta vigente (endsAt no futuro)', async () => {
+    process.env.WEATHER_SCENARIO = 'alert'
+    const s = await new WeatherService(provider(async () => { throw new Error('x') })).getSnapshot()
+    expect(s.alerts).toHaveLength(1)
+    expect(s.alerts[0].id).toBe('wx-0')
+    expect(new Date(s.alerts[0].endsAt).getTime()).toBeGreaterThan(Date.now())
+  })
+  it('WEATHER_SCENARIO=normal → sem alerta (prod não fabrica)', async () => {
+    process.env.WEATHER_SCENARIO = 'normal'
+    expect((await new WeatherService(provider(async () => { throw new Error('x') })).getSnapshot()).alerts).toHaveLength(0)
+  })
+  it('provider ok + WEATHER_SCENARIO=alert → dado real E alerta vigente (ortogonais)', async () => {
+    process.env.WEATHER_SCENARIO = 'alert'
+    const s = await new WeatherService(provider(async () => ({ current: { tempC: 22, condition: 'clear', humidityPct: 50, windKmh: 10 }, daily: { minC: 15, maxC: 25 } }))).getSnapshot()
+    expect(s.current.tempC).toBe(22)
+    expect(s.alerts).toHaveLength(1)
+    expect(s.alerts[0].id).toBe('wx-0')
+  })
+})
