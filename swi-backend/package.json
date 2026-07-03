@@ -71,6 +71,7 @@
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "maxWorkers": "50%"
   }
 }
