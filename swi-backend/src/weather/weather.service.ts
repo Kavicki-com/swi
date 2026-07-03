@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenMeteoProvider } from './weather.provider'
-import { CANNED_CURRENT, CANNED_DAILY } from './weather.types'
+import { CANNED_CURRENT, CANNED_DAILY, DEMO_STORM_ALERT_ID } from './weather.types'
 import type { WeatherAlert, WeatherSnapshot } from './weather.types'
 
 const STORM_DESC =
@@ -10,7 +10,7 @@ const STORM_DESC =
 // pro dedup do cron; startsAt/endsAt na hora → alerta SEMPRE vigente.
 function stormAlert(now: Date): WeatherAlert {
   return {
-    id: 'wx-0',
+    id: DEMO_STORM_ALERT_ID,
     event: 'Tempestade severa',
     description: STORM_DESC,
     startsAt: now.toISOString(),

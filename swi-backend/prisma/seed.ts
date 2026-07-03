@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { DEMO_STORM_ALERT_ID } from '../src/weather/weather.types'
 const prisma = new PrismaClient()
 
 async function main() {
@@ -252,6 +253,6 @@ async function main() {
   // Pré-marca o alerta de demo (wx-0) como já notificado → o cron NÃO duplica a
   // notificação 'weather' que este seed já cria. O smoke prova o gatilho ao vivo
   // com um id fresco / truncando WeatherAlertSeen.
-  await prisma.weatherAlertSeen.upsert({ where: { alertId: 'wx-0' }, update: {}, create: { alertId: 'wx-0' } })
+  await prisma.weatherAlertSeen.upsert({ where: { alertId: DEMO_STORM_ALERT_ID }, update: {}, create: { alertId: DEMO_STORM_ALERT_ID } })
 }
 main().then(() => prisma.$disconnect()).catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1) })

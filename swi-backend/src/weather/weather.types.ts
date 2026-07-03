@@ -11,3 +11,6 @@ export const SITE_LOCATION = { lat: -23.55, lng: -46.63 }
 // Números canned de fallback (paridade EXATA com o mockWeatherBackend do mobile).
 export const CANNED_CURRENT: WeatherCurrent = { tempC: 17, condition: 'rain', humidityPct: 65, windKmh: 65 }
 export const CANNED_DAILY: WeatherDaily = { minC: 19, maxC: 32 }
+
+// id estável do alerta de demo — dedup do cron + pré-seed dependem dele.
+export const DEMO_STORM_ALERT_ID = 'wx-0'
