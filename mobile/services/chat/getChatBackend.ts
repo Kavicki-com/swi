@@ -1,8 +1,9 @@
+import { DATA_BACKEND } from '../../lib/featureFlags';
 import type { ChatBackend } from './types';
 import { mockChatBackend } from './mockChatBackend';
+import { apiChatBackend } from './apiChatBackend';
 
-// Pinado em mock até a fatia Chat ligar o apiChatBackend
-// (rodada: docs/plans/2026-07-02-swi-backend-dominios-nao-saude-design.md).
+// Fatia Chat migrada: honra a flag DATA_BACKEND (igual getJourneyBackend).
 export function getChatBackend(): ChatBackend {
-  return mockChatBackend;
+  return DATA_BACKEND === 'api' ? apiChatBackend : mockChatBackend;
 }

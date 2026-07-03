@@ -1,12 +1,13 @@
-// A fatia Chat ainda não migrou: getChatBackend fica pinado em mock
-// e ignora DATA_BACKEND até o apiChatBackend existir. O loadWith cobre os
-// dois valores da flag pra provar o pinning (mesmo shape do getAuthBackend.test).
+// getChatBackend honra a flag DATA_BACKEND (mock|api), igual getJourneyBackend.
+jest.mock('socket.io-client', () => ({ io: jest.fn() }));
+
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
   jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend }));
   const { getChatBackend } = require('./getChatBackend');
   const { mockChatBackend } = require('./mockChatBackend');
-  return { getChatBackend, mockChatBackend };
+  const { apiChatBackend } = require('./apiChatBackend');
+  return { getChatBackend, mockChatBackend, apiChatBackend };
 }
 
 describe('getChatBackend', () => {
@@ -15,8 +16,8 @@ describe('getChatBackend', () => {
     expect(getChatBackend()).toBe(mockChatBackend);
   });
 
-  it('segue pinado em mock mesmo com a flag em api (fatia ainda não migrou)', () => {
-    const { getChatBackend, mockChatBackend } = loadWith('api');
-    expect(getChatBackend()).toBe(mockChatBackend);
+  it('retorna apiChatBackend com a flag em api', () => {
+    const { getChatBackend, apiChatBackend } = loadWith('api');
+    expect(getChatBackend()).toBe(apiChatBackend);
   });
 });
