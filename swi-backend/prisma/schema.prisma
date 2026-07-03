@@ -206,3 +206,11 @@ model Notification {
 
   @@index([workerId, createdAt])
 }
+
+// Dedup do gatilho clima→notif: registra os alertas já notificados (o cron
+// veria o mesmo alerta a cada tick → sem isto = spam). Único estado da fatia
+// Clima (o clima em si é passthrough, sem persistência).
+model WeatherAlertSeen {
+  alertId    String   @id
+  notifiedAt DateTime @default(now())
+}
