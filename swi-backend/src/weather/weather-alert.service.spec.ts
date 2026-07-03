@@ -1,6 +1,6 @@
 import { WeatherAlertService } from './weather-alert.service'
 
-const snap = { alerts: [{ id: 'wx-9', event: 'Tempestade severa', description: 'x', startsAt: '', endsAt: '' }] }
+const snap = { alerts: [{ id: 'wx-9', event: 'Tempestade severa', description: 'Aviso de tempestades fortes previstas para as próximas 24 horas, tome precauções necessárias.', startsAt: '', endsAt: '' }] }
 
 function mk(seen: boolean, createRejects = false) {
   const createForMany = jest.fn().mockResolvedValue([])
@@ -21,7 +21,7 @@ describe('WeatherAlertService.pollAndNotify', () => {
     const { svc, createForMany, prisma } = mk(false)
     await svc.pollAndNotify()
     expect(prisma.user.findMany).toHaveBeenCalledWith({ where: { role: 'WORKER', approvalStatus: 'APPROVED' }, select: { id: true } })
-    expect(createForMany).toHaveBeenCalledWith(['u1', 'u2'], expect.objectContaining({ domain: 'weather', title: 'Alerta meteorológico', body: 'Tempestade severa', targetId: 'wx-9' }))
+    expect(createForMany).toHaveBeenCalledWith(['u1', 'u2'], expect.objectContaining({ domain: 'weather', title: 'Alerta Meteorológico', body: 'Aviso de tempestades fortes previstas para as próximas 24 horas, tome precauções necessárias.', targetId: 'wx-9' }))
     expect(prisma.weatherAlertSeen.create).toHaveBeenCalledWith({ data: { alertId: 'wx-9' } })
   })
   it('alerta já visto → dedup (não notifica, não grava)', async () => {

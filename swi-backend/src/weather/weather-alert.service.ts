@@ -31,8 +31,8 @@ export class WeatherAlertService {
         })
         await this.notifications.createForMany(workers.map((w) => w.id), {
           domain: 'weather',
-          title: 'Alerta meteorológico',
-          body: alert.event,
+          title: 'Alerta Meteorológico',
+          body: alert.description,
           targetId: alert.id,
         })
         await this.prisma.weatherAlertSeen.create({ data: { alertId: alert.id } })
