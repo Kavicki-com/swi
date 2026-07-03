@@ -11,12 +11,13 @@ import { JourneyModule } from './journey/journey.module'
 import { ChatModule } from './chat/chat.module'
 import { RealtimeModule } from './realtime/realtime.module'
 import { NotificationModule } from './notifications/notification.module'
+import { WeatherModule } from './weather/weather.module'
 import { HealthController } from './health.controller'
 
 @Module({
   imports: [
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
-    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, ChatModule, RealtimeModule, NotificationModule,
+    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, ChatModule, RealtimeModule, NotificationModule, WeatherModule,
   ],
   controllers: [HealthController],
   providers: [
