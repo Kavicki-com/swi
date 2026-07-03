@@ -17,11 +17,33 @@ services:
     image: mailhog/mailhog
     ports: ["1025:1025", "8025:8025"]   # 1025 SMTP · 8025 UI web
 
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports: ["9000:9000", "9001:9001"]   # 9000 S3 API · 9001 console
+    volumes: ["swi_minio:/data"]
+
+  # Cria o bucket uma vez (em AWS = IaC). Mantém o Nest sem rede pro MinIO no boot.
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio: { condition: service_started }
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do echo waiting-minio; sleep 1; done;
+      mc mb --ignore-existing local/swi-media;
+      echo bucket-ready; exit 0;
+      "
+
   api:
     build: .
     depends_on:
       db: { condition: service_healthy }
       mailhog: { condition: service_started }
+      minio-init: { condition: service_completed_successfully }   # bucket pronto antes do 1º upload
     environment:
       DATABASE_URL: postgresql://swi:swi@db:5432/swi
       JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
@@ -29,8 +51,17 @@ services:
       SMTP_PORT: 1025
       MAIL_FROM: no-reply@swi.local
       PORT: 3000
+      # Mídia (Fatia 2). MINIO_PUBLIC_URL = host que as URLs presigned usam (a
+      # assinatura é atada ao host). Android emu → http://10.0.2.2:9000; device
+      # sobre ngrok → domínio do túnel; AWS → unset (SDK usa o S3 real).
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-swi-media}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
     ports: ["3000:3000"]
     command: sh -c "npx prisma migrate deploy && node dist/main"
 
 volumes:
   swi_pgdata:
+  swi_minio:

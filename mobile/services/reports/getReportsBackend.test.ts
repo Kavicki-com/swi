@@ -1,12 +1,12 @@
-// A fatia Relatórios ainda não migrou: getReportsBackend fica pinado em mock
-// e ignora DATA_BACKEND até o apiReportsBackend existir. O loadWith cobre os
-// dois valores da flag pra provar o pinning (mesmo shape do getAuthBackend.test).
+// Fatia Relatórios migrada: getReportsBackend honra DATA_BACKEND. O loadWith
+// cobre os dois valores da flag (mesmo shape do getProfileBackend.test).
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
   jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend }));
   const { getReportsBackend } = require('./getReportsBackend');
   const { mockReportsBackend } = require('./mockReportsBackend');
-  return { getReportsBackend, mockReportsBackend };
+  const { apiReportsBackend } = require('./apiReportsBackend');
+  return { getReportsBackend, mockReportsBackend, apiReportsBackend };
 }
 
 describe('getReportsBackend', () => {
@@ -15,8 +15,8 @@ describe('getReportsBackend', () => {
     expect(getReportsBackend()).toBe(mockReportsBackend);
   });
 
-  it('segue pinado em mock mesmo com a flag em api (fatia ainda não migrou)', () => {
-    const { getReportsBackend, mockReportsBackend } = loadWith('api');
-    expect(getReportsBackend()).toBe(mockReportsBackend);
+  it('retorna apiReportsBackend com a flag em api', () => {
+    const { getReportsBackend, apiReportsBackend } = loadWith('api');
+    expect(getReportsBackend()).toBe(apiReportsBackend);
   });
 });
