@@ -1,13 +1,12 @@
-// A fatia Evacuação ainda não migrou: getEvacuationBackend fica pinado em mock
-// e ignora DATA_BACKEND até o apiEvacuationBackend existir. O loadWith cobre os
-// dois valores da flag pra provar o pinning (mesmo shape do getAuthBackend.test).
+// Fatia Evacuação migrou: o seletor honra DATA_BACKEND (troca o antigo "pinned em mock").
 // EVACUATION_SCENARIO entra no factory porque mockEvacuationBackend lê essa flag.
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
   jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend, EVACUATION_SCENARIO: 'normal' }));
   const { getEvacuationBackend } = require('./getEvacuationBackend');
+  const { apiEvacuationBackend } = require('./apiEvacuationBackend');
   const { mockEvacuationBackend } = require('./mockEvacuationBackend');
-  return { getEvacuationBackend, mockEvacuationBackend };
+  return { getEvacuationBackend, apiEvacuationBackend, mockEvacuationBackend };
 }
 
 describe('getEvacuationBackend', () => {
@@ -15,9 +14,8 @@ describe('getEvacuationBackend', () => {
     const { getEvacuationBackend, mockEvacuationBackend } = loadWith('mock');
     expect(getEvacuationBackend()).toBe(mockEvacuationBackend);
   });
-
-  it('segue pinado em mock mesmo com a flag em api (fatia ainda não migrou)', () => {
-    const { getEvacuationBackend, mockEvacuationBackend } = loadWith('api');
-    expect(getEvacuationBackend()).toBe(mockEvacuationBackend);
+  it('retorna api com a flag em api', () => {
+    const { getEvacuationBackend, apiEvacuationBackend } = loadWith('api');
+    expect(getEvacuationBackend()).toBe(apiEvacuationBackend);
   });
 });
