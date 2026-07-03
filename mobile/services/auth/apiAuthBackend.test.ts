@@ -1,4 +1,5 @@
 import { apiAuthBackend } from './apiAuthBackend'
+import { getUserId, clearUserId } from '../api/session'
 
 jest.mock('expo-secure-store', () => {
   let v: string | null = null
@@ -10,6 +11,7 @@ const errJson = (status: number, body: any) => ({ ok: false, status, json: async
 
 describe('apiAuthBackend', () => {
   beforeEach(() => { (global as any).fetch = jest.fn() })
+  afterEach(() => clearUserId())
 
   it('signIn guarda o token e devolve o user', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(okJson({ accessToken: 't1', user: { id: 'u1', email: 'j@ex.com', name: 'J' } }))
@@ -17,12 +19,21 @@ describe('apiAuthBackend', () => {
     expect(u).toEqual({ id: 'u1', email: 'j@ex.com', name: 'J' })
     const store = require('expo-secure-store')
     expect(store.setItemAsync).toHaveBeenCalledWith(expect.any(String), 't1')
+    expect(getUserId()).toBe('u1')
   })
 
   it('signIn relança a mensagem de "aguardando aprovação" no 403 NOT_APPROVED', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(errJson(403, { reason: 'NOT_APPROVED', message: 'Sua conta está aguardando aprovação do administrador' }))
     await expect(apiAuthBackend.signIn({ email: 'j@ex.com', password: 'senha123' }))
       .rejects.toThrow(/aguardando aprovação/)
+  })
+
+  it('signOut limpa o userId da sessão', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({ accessToken: 't1', user: { id: 'u1', email: 'j@ex.com', name: 'J' } }))
+    await apiAuthBackend.signIn({ email: 'j@ex.com', password: 'senha123' })
+    expect(getUserId()).toBe('u1')
+    await apiAuthBackend.signOut()
+    expect(getUserId()).toBe('')
   })
 
   it('getCurrentUser sem token = null', async () => {

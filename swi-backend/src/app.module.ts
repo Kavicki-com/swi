@@ -8,12 +8,14 @@ import { ProfileModule } from './profile/profile.module'
 import { MediaModule } from './media/media.module'
 import { ReportsModule } from './reports/reports.module'
 import { JourneyModule } from './journey/journey.module'
+import { ChatModule } from './chat/chat.module'
+import { RealtimeModule } from './realtime/realtime.module'
 import { HealthController } from './health.controller'
 
 @Module({
   imports: [
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
-    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule,
+    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, ChatModule, RealtimeModule,
   ],
   controllers: [HealthController],
   providers: [
