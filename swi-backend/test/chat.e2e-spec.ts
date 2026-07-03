@@ -26,6 +26,7 @@ describe('Chat e2e', () => {
     const users = await prisma.user.findMany({ where: { email: { in: [eA, eB] } } })
     const ids = users.map((u) => u.id)
     if (ids.length) {
+      await prisma.notification.deleteMany({ where: { workerId: { in: ids } } }) // chat→notif cria linhas p/ o destinatário
       const convs = await prisma.conversation.findMany({ where: { participants: { hasSome: ids } } })
       const convIds = convs.map((c) => c.id)
       if (convIds.length) await prisma.message.deleteMany({ where: { conversationId: { in: convIds } } })

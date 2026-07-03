@@ -5,11 +5,12 @@ const media = () => ({
   presignGet: jest.fn(async (k: string) => `signed:${k}`),
 }) as any
 const realtime = () => ({ emitToUsers: jest.fn() }) as any
+const notifications = () => ({ createFor: jest.fn(), createForMany: jest.fn() }) as any
 
 const prisma = () => ({
   conversation: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
   message: { findMany: jest.fn(), create: jest.fn() },
-  user: { findMany: jest.fn() },
+  user: { findMany: jest.fn(), findUnique: jest.fn() },
 }) as any
 
 const A = 'aaaa', B = 'bbbb'
@@ -32,7 +33,7 @@ const msgRow = (over: any = {}) => ({
 describe('ChatService', () => {
   it('listDirectory traz workers aprovados exceto eu, presignando avatar', async () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
-    const out = await new ChatService(db, media(), realtime()).listDirectory(A)
+    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
     const where = db.user.findMany.mock.calls[0][0].where
     expect(where).toMatchObject({ approvalStatus: 'APPROVED', role: 'WORKER', id: { not: A } })
     expect(out[0]).toEqual({ workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador', avatarUri: 'signed:chat/avatars/bbbb.png' })
@@ -40,7 +41,7 @@ describe('ChatService', () => {
 
   it('listConversations escopa em participants ∋ eu e ordena por recência', async () => {
     const db = prisma(); db.conversation.findMany.mockResolvedValue([convRow()])
-    const out = await new ChatService(db, media(), realtime()).listConversations(A)
+    const out = await new ChatService(db, media(), realtime(), notifications()).listConversations(A)
     expect(db.conversation.findMany.mock.calls[0][0].where).toEqual({ participants: { has: A } })
     expect(out[0].participantAvatars).toEqual(['signed:chat/avatars/aaaa.png', 'signed:chat/avatars/bbbb.png'])
     expect(out[0].unreadBy).toEqual({ aaaa: 2 })
@@ -49,14 +50,14 @@ describe('ChatService', () => {
 
   it('listMessages de não-membro → 404', async () => {
     const db = prisma(); db.conversation.findUnique.mockResolvedValue(convRow({ participants: ['x', 'y'] }))
-    await expect(new ChatService(db, media(), realtime()).listMessages(A, CONV)).rejects.toThrow(NotFoundException)
+    await expect(new ChatService(db, media(), realtime(), notifications()).listMessages(A, CONV)).rejects.toThrow(NotFoundException)
   })
 
   it('listMessages devolve as mensagens (asc) presignando imageKey', async () => {
     const db = prisma()
     db.conversation.findUnique.mockResolvedValue(convRow())
     db.message.findMany.mockResolvedValue([msgRow(), msgRow({ id: 'm2', imageKey: 'chat/x.jpg', body: null })])
-    const out = await new ChatService(db, media(), realtime()).listMessages(A, CONV)
+    const out = await new ChatService(db, media(), realtime(), notifications()).listMessages(A, CONV)
     expect(db.message.findMany.mock.calls[0][0].orderBy).toEqual({ sentAt: 'asc' })
     expect(out[0].imageUri).toBeNull()
     expect(out[1].imageUri).toBe('signed:chat/x.jpg')
@@ -71,7 +72,7 @@ describe('ChatService', () => {
     db.message.create.mockResolvedValue(msgRow({ senderId: A, body: 'novo' }))
     db.conversation.update.mockResolvedValue(convRow())
     const rt = realtime()
-    const out = await new ChatService(db, media(), rt).sendMessage(A, CONV, { body: 'novo' })
+    const out = await new ChatService(db, media(), rt, notifications()).sendMessage(A, CONV, { body: 'novo' })
     expect(db.conversation.create).toHaveBeenCalledTimes(1)
     const created = db.conversation.create.mock.calls[0][0].data
     expect(created.id).toBe(CONV)
@@ -85,7 +86,7 @@ describe('ChatService', () => {
     db.conversation.findUnique.mockResolvedValue(convRow({ unreadByJson: { bbbb: 1 } }))
     db.message.create.mockResolvedValue(msgRow({ senderId: A, body: 'e aí' }))
     db.conversation.update.mockResolvedValue(convRow())
-    await new ChatService(db, media(), realtime()).sendMessage(A, CONV, { body: 'e aí' })
+    await new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'e aí' })
     const upd = db.conversation.update.mock.calls[0][0].data
     expect(upd.unreadByJson).toEqual({ bbbb: 2 })
     expect(upd.lastMessageBody).toBe('e aí')
@@ -93,13 +94,13 @@ describe('ChatService', () => {
 
   it('sendMessage num conv que não me contém → 404', async () => {
     const db = prisma()
-    await expect(new ChatService(db, media(), realtime()).sendMessage('zzzz', CONV, { body: 'x' })).rejects.toThrow(NotFoundException)
+    await expect(new ChatService(db, media(), realtime(), notifications()).sendMessage('zzzz', CONV, { body: 'x' })).rejects.toThrow(NotFoundException)
   })
 
   it('sendMessage com id não-canônico (invertido) → 404 sem tocar no banco', async () => {
     const db = prisma()
     const reversed = [B, A].join('#') // 'bbbb#aaaa' — não é a forma sort()
-    await expect(new ChatService(db, media(), realtime()).sendMessage(A, reversed, { body: 'x' })).rejects.toThrow(NotFoundException)
+    await expect(new ChatService(db, media(), realtime(), notifications()).sendMessage(A, reversed, { body: 'x' })).rejects.toThrow(NotFoundException)
     expect(db.conversation.findUnique).not.toHaveBeenCalled()
     expect(db.conversation.create).not.toHaveBeenCalled()
   })
@@ -108,7 +109,7 @@ describe('ChatService', () => {
     const db = prisma()
     db.conversation.findUnique.mockResolvedValue(null)
     db.user.findMany.mockResolvedValue([userRow(A)]) // só 1 dos 2 ids existe
-    await expect(new ChatService(db, media(), realtime()).sendMessage(A, CONV, { body: 'x' })).rejects.toThrow(NotFoundException)
+    await expect(new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'x' })).rejects.toThrow(NotFoundException)
     expect(db.conversation.create).not.toHaveBeenCalled()
   })
 
@@ -116,7 +117,32 @@ describe('ChatService', () => {
     const db = prisma()
     db.conversation.findUnique.mockResolvedValue(convRow({ unreadByJson: { aaaa: 5, bbbb: 1 } }))
     db.conversation.update.mockResolvedValue(convRow())
-    await new ChatService(db, media(), realtime()).markRead(A, CONV)
+    await new ChatService(db, media(), realtime(), notifications()).markRead(A, CONV)
     expect(db.conversation.update.mock.calls[0][0].data.unreadByJson).toEqual({ aaaa: 0, bbbb: 1 })
+  })
+
+  it('sendMessage dispara notificação cross-domain best-effort pro destinatário', async () => {
+    const db = prisma()
+    db.conversation.findUnique.mockResolvedValue(convRow({ unreadByJson: {} }))
+    db.message.create.mockResolvedValue(msgRow({ senderId: A, body: 'e aí' }))
+    db.conversation.update.mockResolvedValue(convRow())
+    db.user.findUnique.mockResolvedValue(userRow(A))
+    const notif = notifications()
+    await new ChatService(db, media(), realtime(), notif).sendMessage(A, CONV, { body: 'e aí' })
+    expect(notif.createForMany).toHaveBeenCalledWith([B], expect.objectContaining({ domain: 'chat', title: 'full-aaaa', body: 'e aí', targetId: CONV }))
+  })
+
+  it('sendMessage não quebra se a notificação falhar (best-effort)', async () => {
+    const db = prisma()
+    db.conversation.findUnique.mockResolvedValue(convRow({ unreadByJson: {} }))
+    db.message.create.mockResolvedValue(msgRow({ senderId: A, body: 'e aí' }))
+    db.conversation.update.mockResolvedValue(convRow())
+    db.user.findUnique.mockResolvedValue(userRow(A))
+    const notif = notifications()
+    notif.createForMany.mockRejectedValue(new Error('boom'))
+    const rt = realtime()
+    const out = await new ChatService(db, media(), rt, notif).sendMessage(A, CONV, { body: 'e aí' })
+    expect(out.body).toBe('e aí')
+    expect(rt.emitToUsers).toHaveBeenCalledWith([A, B], 'message', expect.objectContaining({ id: 'm1' }))
   })
 })

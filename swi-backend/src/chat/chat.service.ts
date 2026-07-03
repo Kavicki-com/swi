@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
+import { NotificationService } from '../notifications/notification.service'
 import type { Conversation, Message, User, Profile } from '@prisma/client'
 
 type UserWithProfile = User & { profile: Profile | null }
@@ -12,6 +13,7 @@ export class ChatService {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly realtime: RealtimeGateway,
+    private readonly notifications: NotificationService,
   ) {}
 
   async listDirectory(userId: string) {
@@ -67,6 +69,21 @@ export class ChatService {
 
     const out = await this.toMsgDto(msg)
     this.realtime.emitToUsers(conv.participants, 'message', out)
+    // Cross-domain best-effort: notifica o(s) destinatário(s). Falha aqui NUNCA
+    // quebra o envio da mensagem — a notificação é derivada do write-fonte.
+    const recipients = conv.participants.filter((p) => p !== userId)
+    if (recipients.length) {
+      try {
+        const sender = await this.prisma.user.findUnique({ where: { id: userId }, include: { profile: true } })
+        const senderName = sender?.profile?.fullName || sender?.name || 'Nova mensagem'
+        await this.notifications.createForMany(recipients, {
+          domain: 'chat',
+          title: senderName,
+          body: dto.body || 'Enviou um anexo',
+          targetId: convId,
+        })
+      } catch { /* best-effort */ }
+    }
     return out
   }
 

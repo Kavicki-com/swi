@@ -6,10 +6,12 @@ const media = () =>
     presignGetMany: jest.fn(async (ks: string[]) => ks.map((k) => `signed:${k}`)),
   }) as any
 
+const notifications = () => ({ createForMany: jest.fn() }) as any
+
 const prisma = () =>
   ({
     report: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
-    user: { findUnique: jest.fn() },
+    user: { findUnique: jest.fn(), findMany: jest.fn() },
   }) as any
 
 const row = (over = {}) => ({
@@ -34,7 +36,7 @@ describe('ReportsService', () => {
   it('list ordena por createdAt desc e mapeia keys→urls presigned', async () => {
     const db = prisma()
     db.report.findMany.mockResolvedValue([row()])
-    const out = await new ReportsService(db, media()).list()
+    const out = await new ReportsService(db, media(), notifications()).list()
     expect(db.report.findMany).toHaveBeenCalledWith({ orderBy: { createdAt: 'desc' } })
     expect(out[0].images).toEqual(['signed:reports/x.jpg'])
     expect(out[0].authorAvatarUri).toBe('signed:reports/av.jpg')
@@ -45,7 +47,7 @@ describe('ReportsService', () => {
   it('get inexistente → null', async () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue(null)
-    expect(await new ReportsService(db, media()).get('nope')).toBeNull()
+    expect(await new ReportsService(db, media(), notifications()).get('nope')).toBeNull()
   })
 
   it('create seta authorId do JWT, denorm do profile e defaults', async () => {
@@ -55,7 +57,8 @@ describe('ReportsService', () => {
       profile: { fullName: 'Ana Perfil', avatarKey: 'reports/av.jpg', sector: 'Noroeste' },
     })
     db.report.create.mockResolvedValue(row({ authorName: 'Ana Perfil' }))
-    await new ReportsService(db, media()).create('u1', {
+    db.user.findMany.mockResolvedValue([])
+    await new ReportsService(db, media(), notifications()).create('u1', {
       title: 'T',
       responsibles: [],
       imageKeys: ['reports/x.jpg'],
@@ -73,7 +76,30 @@ describe('ReportsService', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ name: 'Fallback', profile: null })
     db.report.create.mockResolvedValue(row())
-    await new ReportsService(db, media()).create('u1', { title: 'T' } as any)
+    db.user.findMany.mockResolvedValue([])
+    await new ReportsService(db, media(), notifications()).create('u1', { title: 'T' } as any)
     expect(db.report.create.mock.calls[0][0].data.authorName).toBe('Fallback')
+  })
+
+  it('create faz broadcast pros outros workers aprovados (best-effort)', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ name: 'A', profile: null })
+    db.report.create.mockResolvedValue(row({ id: 'r9', title: 'R9' }))
+    db.user.findMany.mockResolvedValue([{ id: 'w2' }, { id: 'w3' }])
+    const notif = notifications()
+    await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' } as any)
+    expect(db.user.findMany).toHaveBeenCalledWith({ where: { role: 'WORKER', approvalStatus: 'APPROVED', id: { not: 'author-1' } }, select: { id: true } })
+    expect(notif.createForMany).toHaveBeenCalledWith(['w2', 'w3'], expect.objectContaining({ domain: 'reports', title: 'Novo relatório', body: 'R9', targetId: 'r9' }))
+  })
+
+  it('create não quebra se o broadcast falhar (best-effort)', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ name: 'A', profile: null })
+    db.report.create.mockResolvedValue(row({ id: 'r9', title: 'R9' }))
+    db.user.findMany.mockResolvedValue([{ id: 'w2' }])
+    const notif = notifications()
+    notif.createForMany.mockRejectedValue(new Error('boom'))
+    const out = await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' } as any)
+    expect(out.id).toBe('r9')
   })
 })

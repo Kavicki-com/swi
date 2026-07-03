@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, type NotificationDomain } from '@prisma/client'
 import * as bcrypt from 'bcrypt'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { readFileSync } from 'fs'
@@ -219,6 +219,33 @@ async function main() {
         },
       })
     }
+  }
+
+  // ===== Fatia 5 (Notificações): feed demo do worker (Opção A, fidelidade) =====
+  // Migrado do array estático de mockNotificationBackend.ts (12 itens). createdAt
+  // decrescente (1º = mais recente); mix read/unread. targetId null (deep-link a
+  // recurso específico = pendência; a tela roteia por domain).
+  const NOTIF_BASE = new Date('2026-06-23T15:00:00.000Z')
+  const notifAt = (min: number) => new Date(NOTIF_BASE.getTime() - min * 60_000)
+  const SEED_NOTIFS: { title: string; body: string; domain: NotificationDomain; read: boolean; min: number }[] = [
+    { title: 'Alerta Meteorológico', body: 'Aviso de tempestades fortes previstas para as próximas 24 horas, tome precauções necessárias.', domain: 'weather', read: false, min: 5 },
+    { title: 'Atividade de Colaborador', body: 'Ana atualizou o status da manutenção preventiva no setor de produção.', domain: 'chat', read: false, min: 30 },
+    { title: 'Feedback Recebido', body: 'Equipe reportou melhorias significativas após implementação das novas diretrizes.', domain: 'chat', read: false, min: 90 },
+    { title: 'Novo Relatório Atribuído', body: 'Relatório de segurança do setor 5 foi designado para sua análise.', domain: 'reports', read: true, min: 180 },
+    { title: 'Relatório de Qualidade', body: 'Análise dos indicadores de qualidade do último trimestre disponível para revisão.', domain: 'reports', read: true, min: 240 },
+    { title: 'Notificação de Treinamento', body: 'Curso sobre normas ambientais será oferecido na próxima quarta-feira.', domain: 'journey', read: true, min: 300 },
+    { title: 'Nova Tarefa Atribuída', body: 'Realizar auditoria dos processos de armazenamento até o final da semana.', domain: 'journey', read: true, min: 360 },
+    { title: 'Nova Inspeção Programada', body: 'Agendada inspeção de segurança elétrica para a próxima segunda-feira.', domain: 'journey', read: true, min: 420 },
+    { title: 'Mudança no Cronograma', body: 'Prazo para envio de relatórios técnicos foi estendido em duas semanas.', domain: 'journey', read: true, min: 480 },
+    { title: 'Comentário em Relatório', body: `Carlos comentou: 'Verificar a conformidade dos equipamentos com a norma ISO 9001.'`, domain: 'chat', read: true, min: 540 },
+    { title: 'Atualização de Procedimento', body: 'Procedimento de emergência revisado e disponível para consulta.', domain: 'faq', read: true, min: 600 },
+    { title: 'Novo Comentário', body: `João observou: 'Necessário reforçar monitoramento durante turnos noturnos.'`, domain: 'chat', read: true, min: 660 },
+  ]
+  await prisma.notification.deleteMany({ where: { workerId: worker.id } }) // idempotente
+  for (const n of SEED_NOTIFS) {
+    await prisma.notification.create({
+      data: { workerId: worker.id, title: n.title, body: n.body, domain: n.domain, read: n.read, createdAt: notifAt(n.min) },
+    })
   }
 }
 main().then(() => prisma.$disconnect()).catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1) })

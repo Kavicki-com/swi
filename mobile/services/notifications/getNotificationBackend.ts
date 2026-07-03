@@ -1,8 +1,9 @@
+import { DATA_BACKEND } from '../../lib/featureFlags';
 import type { NotificationBackend } from './types';
 import { mockNotificationBackend } from './mockNotificationBackend';
+import { apiNotificationBackend } from './apiNotificationBackend';
 
-// Pinado em mock até a fatia Notificações ligar o apiNotificationBackend
-// (rodada: docs/plans/2026-07-02-swi-backend-dominios-nao-saude-design.md).
+// Fatia Notificações migrada: honra a flag DATA_BACKEND (igual getChatBackend).
 export function getNotificationBackend(): NotificationBackend {
-  return mockNotificationBackend;
+  return DATA_BACKEND === 'api' ? apiNotificationBackend : mockNotificationBackend;
 }

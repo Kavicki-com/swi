@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
+import { NotificationService } from '../notifications/notification.service'
 import type { Report } from '@prisma/client'
 import type { CreateReportDto } from './dto'
 
@@ -9,6 +10,7 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async list() {
@@ -39,6 +41,20 @@ export class ReportsService {
         activities: [],
       },
     })
+    // Cross-domain best-effort: relatório novo notifica os OUTROS workers aprovados
+    // (inbox de relatórios é org-wide). Falha aqui não quebra a criação.
+    try {
+      const others = await this.prisma.user.findMany({
+        where: { role: 'WORKER', approvalStatus: 'APPROVED', id: { not: authorId } },
+        select: { id: true },
+      })
+      await this.notifications.createForMany(others.map((u) => u.id), {
+        domain: 'reports',
+        title: 'Novo relatório',
+        body: dto.title,
+        targetId: r.id,
+      })
+    } catch { /* best-effort */ }
     return this.toDto(r)
   }
 
