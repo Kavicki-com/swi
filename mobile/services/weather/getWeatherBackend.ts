@@ -1,8 +1,9 @@
 import type { WeatherBackend } from './types';
+import { DATA_BACKEND } from '../../lib/featureFlags';
+import { apiWeatherBackend } from './apiWeatherBackend';
 import { mockWeatherBackend } from './mockWeatherBackend';
 
-// Pinado em mock até a fatia Clima ligar o apiWeatherBackend
-// (rodada: docs/plans/2026-07-02-swi-backend-dominios-nao-saude-design.md).
+// Fatia Clima ligada: honra DATA_BACKEND (mock permanece p/ design review pixel-exato).
 export function getWeatherBackend(): WeatherBackend {
-  return mockWeatherBackend;
+  return DATA_BACKEND === 'api' ? apiWeatherBackend : mockWeatherBackend;
 }

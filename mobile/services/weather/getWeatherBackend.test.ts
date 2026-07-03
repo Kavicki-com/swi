@@ -1,13 +1,11 @@
-// A fatia Clima ainda não migrou: getWeatherBackend fica pinado em mock
-// e ignora DATA_BACKEND até o apiWeatherBackend existir. O loadWith cobre os
-// dois valores da flag pra provar o pinning (mesmo shape do getAuthBackend.test).
-// WEATHER_SCENARIO entra no factory porque mockWeatherBackend lê essa flag.
+// Fatia Clima migrou: o seletor honra DATA_BACKEND (troca o antigo "pinned em mock").
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
   jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend, WEATHER_SCENARIO: 'alert' }));
   const { getWeatherBackend } = require('./getWeatherBackend');
+  const { apiWeatherBackend } = require('./apiWeatherBackend');
   const { mockWeatherBackend } = require('./mockWeatherBackend');
-  return { getWeatherBackend, mockWeatherBackend };
+  return { getWeatherBackend, apiWeatherBackend, mockWeatherBackend };
 }
 
 describe('getWeatherBackend', () => {
@@ -15,9 +13,8 @@ describe('getWeatherBackend', () => {
     const { getWeatherBackend, mockWeatherBackend } = loadWith('mock');
     expect(getWeatherBackend()).toBe(mockWeatherBackend);
   });
-
-  it('segue pinado em mock mesmo com a flag em api (fatia ainda não migrou)', () => {
-    const { getWeatherBackend, mockWeatherBackend } = loadWith('api');
-    expect(getWeatherBackend()).toBe(mockWeatherBackend);
+  it('retorna api com a flag em api', () => {
+    const { getWeatherBackend, apiWeatherBackend } = loadWith('api');
+    expect(getWeatherBackend()).toBe(apiWeatherBackend);
   });
 });
