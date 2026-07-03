@@ -59,6 +59,8 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-swi-media}
       MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      WEATHER_SCENARIO: ${WEATHER_SCENARIO:-alert}   # dev = tempestade (Figma); prod unset
+      WEATHER_CRON: ${WEATHER_CRON:-}                # vazio → default 30min no código
     ports: ["3000:3000"]
     command: sh -c "npx prisma migrate deploy && node dist/main"
 
