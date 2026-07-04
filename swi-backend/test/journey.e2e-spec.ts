@@ -74,6 +74,20 @@ describe('Journey e2e', () => {
     expect(done.status).toBe('done')
   })
 
+  it('duplo-start é idempotente: não re-ancora startedAt e mantém task+journey consistentes', async () => {
+    const auth = await login()
+    const { body: s1 } = await request(app.getHttpServer()).post(`/journey/tasks/${taskId}/start`).set(auth).expect(201)
+    const { body: s2 } = await request(app.getHttpServer()).post(`/journey/tasks/${taskId}/start`).set(auth).expect(201)
+    // Idempotência: o 2º start (já rodando) NÃO move o startedAt → sem perda de tempo corrido.
+    expect(s2.task.startedAt).toBe(s1.task.startedAt)
+    expect(s2.journey.startedAt).toBe(s1.journey.startedAt)
+    // Atomicidade: os dois lados batem (task in_progress ⇔ journey ongoing no mesmo task).
+    expect(s2.task.status).toBe('in_progress')
+    expect(s2.journey.state).toBe('ongoing')
+    expect(s2.journey.activeTaskId).toBe(taskId)
+    await request(app.getHttpServer()).post('/journey/end').set(auth).expect(201) // limpa o estado
+  })
+
   it('photo rejeita imageKey de outro prefixo → 400', async () => {
     const auth = await login()
     await request(app.getHttpServer()).post(`/journey/tasks/${taskId}/photo`).set(auth).send({ imageKey: 'reports/x.jpg' }).expect(400)

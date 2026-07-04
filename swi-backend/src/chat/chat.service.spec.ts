@@ -1,5 +1,6 @@
 import { ChatService } from './chat.service'
 import { NotFoundException } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 
 const media = () => ({
   presignGet: jest.fn(async (k: string) => `signed:${k}`),
@@ -144,5 +145,22 @@ describe('ChatService', () => {
     const out = await new ChatService(db, media(), rt, notif).sendMessage(A, CONV, { body: 'e aí' })
     expect(out.body).toBe('e aí')
     expect(rt.emitToUsers).toHaveBeenCalledWith([A, B], 'message', expect.objectContaining({ id: 'm1' }))
+  })
+
+  it('sendMessage: create concorrente que colide (P2002) re-busca a conv, não 500', async () => {
+    const db = prisma()
+    // 1ª findUnique (início) → null; 2ª (após P2002) → conv já criada pelo request rival
+    db.conversation.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(convRow({ unreadByJson: {} }))
+    db.user.findMany.mockResolvedValue([userRow(A), userRow(B)])
+    db.conversation.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: '5.22.0' }),
+    )
+    db.message.create.mockResolvedValue(msgRow({ senderId: A, body: 'novo' }))
+    db.conversation.update.mockResolvedValue(convRow())
+    const out = await new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'novo' })
+    expect(out.body).toBe('novo')
+    expect(db.conversation.findUnique).toHaveBeenCalledTimes(2) // re-buscou após a colisão
   })
 })

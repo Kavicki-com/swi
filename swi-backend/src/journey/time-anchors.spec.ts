@@ -24,4 +24,20 @@ describe('time-anchors (porta pura do progress.ts mobile)', () => {
     expect(progressPct(999999, 60)).toBe(100)
     expect(progressPct(10, 0)).toBe(0)
   })
+  it('startAnchors já-rodando é no-op (não re-ancora, não perde o segmento)', () => {
+    const running = { startedAt: T0, accumulatedSeconds: 10, running: true }
+    const again = startAnchors(running, T0 + 300_000) // 5min depois, duplo-tap
+    expect(again).toEqual(running)                     // âncora intacta → startedAt segue em T0
+    expect(elapsedSeconds(again, T0 + 300_000)).toBe(310) // 10 banked + 300s corridos preservados
+  })
+
+  it('resumeAnchors já-rodando é no-op (idempotente)', () => {
+    const running = { startedAt: T0, accumulatedSeconds: 40, running: true }
+    expect(resumeAnchors(running, T0 + 120_000)).toEqual(running)
+  })
+
+  it('startAnchors parado→rodando ainda ancora (transição legítima)', () => {
+    const stopped = { startedAt: null, accumulatedSeconds: 40, running: false }
+    expect(startAnchors(stopped, T0)).toEqual({ startedAt: T0, accumulatedSeconds: 40, running: true })
+  })
 })

@@ -4,10 +4,14 @@ const media = () => ({
   presignGetMany: jest.fn(async (ks: string[]) => ks.map((k) => `signed:${k}`)),
 }) as any
 
-const prisma = () => ({
-  journey: { findUnique: jest.fn(), upsert: jest.fn(), update: jest.fn() },
-  task: { findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
-}) as any
+const prisma = () => {
+  const db: any = {
+    journey: { findUnique: jest.fn(), upsert: jest.fn(), update: jest.fn() },
+    task: { findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+  }
+  db.$transaction = jest.fn(async (cb: any) => cb(db))
+  return db
+}
 
 const taskRow = (over = {}) => ({
   id: 't1', assignedTo: 'u1', title: 'Inspeção', description: 'd', objective: 'o',
@@ -63,6 +67,52 @@ describe('JourneyService', () => {
     await expect(new JourneyService(db, media()).startTask('u1', 'nope')).rejects.toThrow(/não encontrada/i)
   })
 
+  it('startTask roda os 2 writes dentro de uma única transação', async () => {
+    const db = prisma()
+    db.task.findFirst.mockResolvedValue(taskRow())
+    db.task.update.mockImplementation(({ data }: any) => ({ ...taskRow(), ...data }))
+    db.journey.upsert.mockResolvedValue(journeyRow())
+    db.journey.update.mockImplementation(({ data }: any) => ({ ...journeyRow(), ...data }))
+    await new JourneyService(db, media()).startTask('u1', 't1')
+    expect(db.$transaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('startTask: falha no 2º write (journey.update) propaga — não engole', async () => {
+    const db = prisma()
+    db.task.findFirst.mockResolvedValue(taskRow())
+    db.task.update.mockImplementation(({ data }: any) => ({ ...taskRow(), ...data }))
+    db.journey.upsert.mockResolvedValue(journeyRow())
+    db.journey.update.mockRejectedValue(new Error('db down no 2º write'))
+    await expect(new JourneyService(db, media()).startTask('u1', 't1')).rejects.toThrow(/db down/)
+  })
+
+  it('startTask: todos os reads/writes passam pelo tx — nada escapa pro client externo', async () => {
+    const db = prisma()
+    // tx distinto do db: se um read/write escapar pro this.prisma, ele cai no `db` (externo) e a asserção pega.
+    const tx: any = {
+      journey: {
+        upsert: jest.fn().mockResolvedValue(journeyRow()),
+        update: jest.fn().mockImplementation(({ data }: any) => ({ ...journeyRow(), ...data })),
+      },
+      task: {
+        findFirst: jest.fn().mockResolvedValue(taskRow()),
+        update: jest.fn().mockImplementation(({ data }: any) => ({ ...taskRow(), ...data })),
+      },
+    }
+    db.$transaction = jest.fn(async (cb: any) => cb(tx))
+    await new JourneyService(db, media()).startTask('u1', 't1')
+    // tudo pelo tx:
+    expect(tx.task.findFirst).toHaveBeenCalledTimes(1)
+    expect(tx.task.update).toHaveBeenCalledTimes(1)
+    expect(tx.journey.upsert).toHaveBeenCalledTimes(1)
+    expect(tx.journey.update).toHaveBeenCalledTimes(1)
+    // nada no client externo:
+    expect(db.task.findFirst).not.toHaveBeenCalled()
+    expect(db.task.update).not.toHaveBeenCalled()
+    expect(db.journey.upsert).not.toHaveBeenCalled()
+    expect(db.journey.update).not.toHaveBeenCalled()
+  })
+
   it('endJourney zera o turno (idle, 0s) e marca a task done', async () => {
     const db = prisma()
     db.journey.upsert.mockResolvedValue(journeyRow({ state: 'ongoing', activeTaskId: 't1', startedAt: new Date(), accumulatedSeconds: 100 }))
@@ -71,6 +121,7 @@ describe('JourneyService', () => {
     db.journey.update.mockImplementation(({ data }: any) => ({ ...journeyRow(), ...data }))
     const out = await new JourneyService(db, media()).endJourney('u1')
     expect(out.state).toBe('idle')
+    expect(db.$transaction).toHaveBeenCalledTimes(1)
     expect(out.activeTaskId).toBeNull()
     expect(out.accumulatedSeconds).toBe(0)
     expect(db.task.update.mock.calls[0][0].data.status).toBe('done')
@@ -84,6 +135,7 @@ describe('JourneyService', () => {
     db.journey.update.mockImplementation(({ data }: any) => ({ ...journeyRow(), ...data }))
     const out = await new JourneyService(db, media()).pauseJourney('u1')
     expect(out.state).toBe('paused')
+    expect(db.$transaction).toHaveBeenCalledTimes(1)
     expect(db.task.update.mock.calls[0][0].data.status).toBe('paused')
     expect(db.task.update.mock.calls[0][0].data.progressPct).toBeGreaterThanOrEqual(0)
   })
@@ -96,6 +148,7 @@ describe('JourneyService', () => {
     db.journey.update.mockImplementation(({ data }: any) => ({ ...journeyRow(), ...data }))
     const out = await new JourneyService(db, media()).resumeJourney('u1')
     expect(out.state).toBe('ongoing')
+    expect(db.$transaction).toHaveBeenCalledTimes(1)
     expect(db.task.update.mock.calls[0][0].data.status).toBe('in_progress')
   })
 
@@ -105,6 +158,7 @@ describe('JourneyService', () => {
     db.journey.update.mockImplementation(({ data }: any) => ({ ...journeyRow(), ...data }))
     const out = await new JourneyService(db, media()).pauseJourney('u1')
     expect(out.state).toBe('paused')
+    expect(db.$transaction).toHaveBeenCalledTimes(1)
     expect(db.task.update).not.toHaveBeenCalled()
   })
 

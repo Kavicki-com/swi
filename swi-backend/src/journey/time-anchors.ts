@@ -18,12 +18,14 @@ export function progressPct(elapsedSec: number, estimatedMinutes: number): numbe
 }
 
 export function startAnchors(a: Anchors, nowMs: number): Anchors {
+  if (a.running && a.startedAt != null) return a
   return { startedAt: nowMs, accumulatedSeconds: a.accumulatedSeconds, running: true }
 }
 export function pauseAnchors(a: Anchors, nowMs: number): Anchors {
   return { startedAt: null, accumulatedSeconds: elapsedSeconds(a, nowMs), running: false }
 }
 export function resumeAnchors(a: Anchors, nowMs: number): Anchors {
+  if (a.running && a.startedAt != null) return a
   return { startedAt: nowMs, accumulatedSeconds: a.accumulatedSeconds, running: true }
 }
 export function endAnchors(a: Anchors, nowMs: number): Anchors {

@@ -73,6 +73,23 @@ describe('Chat e2e', () => {
     expect(convsB2.find((c: any) => c.id === convId).unreadBy[idB]).toBe(0)
   })
 
+  it('2 primeiras mensagens concorrentes não dão 500 e convergem em 1 conversa', async () => {
+    // Zera a conversa pra forçar o caminho de criação lazy sob corrida.
+    await prisma.message.deleteMany({ where: { conversationId: convId } })
+    await prisma.notification.deleteMany({ where: { workerId: { in: [idA, idB] } } })
+    await prisma.conversation.deleteMany({ where: { id: convId } })
+    const tA = await login(eA), tB = await login(eB)
+    const send = (t: string, body: string) =>
+      request(app.getHttpServer()).post(`${cpath(convId)}/messages`).set({ Authorization: `Bearer ${t}` }).send({ body })
+    const [rA, rB] = await Promise.all([send(tA, 'corrida A'), send(tB, 'corrida B')])
+    // Invariante: nenhum 500 (aceita 201 nos dois — o perdedor da corrida re-busca e anexa).
+    expect([rA.status, rB.status]).toEqual([201, 201])
+    const convs = await prisma.conversation.findMany({ where: { id: convId } })
+    expect(convs).toHaveLength(1) // exatamente 1 conversa, sem duplicata
+    const { body: msgs } = await request(app.getHttpServer()).get(`${cpath(convId)}/messages`).set({ Authorization: `Bearer ${tA}` }).expect(200)
+    expect(msgs.map((m: any) => m.body).sort()).toEqual(['corrida A', 'corrida B']) // ambas persistiram
+  })
+
   it('não-membro → 404', async () => {
     const tA = await login(eA)
     const alheia = key('outro-x', 'outro-y')
