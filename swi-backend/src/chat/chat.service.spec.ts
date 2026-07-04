@@ -12,6 +12,7 @@ const prisma = () => ({
   conversation: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
   message: { findMany: jest.fn(), create: jest.fn() },
   user: { findMany: jest.fn(), findUnique: jest.fn() },
+  $executeRaw: jest.fn().mockResolvedValue(1),
 }) as any
 
 const A = 'aaaa', B = 'bbbb'
@@ -82,15 +83,17 @@ describe('ChatService', () => {
     expect(rt.emitToUsers).toHaveBeenCalledWith([A, B], 'message', expect.objectContaining({ id: 'm1' }))
   })
 
-  it('sendMessage anexa e incrementa unread do destinatário', async () => {
+  it('sendMessage emite UPDATE atômico do unread pro destinatário (não conversation.update)', async () => {
     const db = prisma()
     db.conversation.findUnique.mockResolvedValue(convRow({ unreadByJson: { bbbb: 1 } }))
     db.message.create.mockResolvedValue(msgRow({ senderId: A, body: 'e aí' }))
-    db.conversation.update.mockResolvedValue(convRow())
     await new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'e aí' })
-    const upd = db.conversation.update.mock.calls[0][0].data
-    expect(upd.unreadByJson).toEqual({ bbbb: 2 })
-    expect(upd.lastMessageBody).toBe('e aí')
+    expect(db.$executeRaw).toHaveBeenCalledTimes(1)
+    const params = db.$executeRaw.mock.calls[0]        // [templateStrings, ...values]
+    expect(params).toContain(B)                        // destinatário (não-remetente)
+    expect(params).toContain(CONV)                     // a conversa certa
+    expect(params).toContain('e aí')                   // lastMessageBody dobrado no mesmo UPDATE
+    expect(db.conversation.update).not.toHaveBeenCalled() // RMW eliminado
   })
 
   it('sendMessage num conv que não me contém → 404', async () => {
@@ -114,12 +117,13 @@ describe('ChatService', () => {
     expect(db.conversation.create).not.toHaveBeenCalled()
   })
 
-  it('markRead zera meu unread (membership ok)', async () => {
+  it('markRead zera meu unread via UPDATE atômico (membership ok)', async () => {
     const db = prisma()
     db.conversation.findUnique.mockResolvedValue(convRow({ unreadByJson: { aaaa: 5, bbbb: 1 } }))
-    db.conversation.update.mockResolvedValue(convRow())
     await new ChatService(db, media(), realtime(), notifications()).markRead(A, CONV)
-    expect(db.conversation.update.mock.calls[0][0].data.unreadByJson).toEqual({ aaaa: 0, bbbb: 1 })
+    expect(db.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(db.$executeRaw.mock.calls[0]).toContain(A)   // zera o MEU contador
+    expect(db.conversation.update).not.toHaveBeenCalled()
   })
 
   it('sendMessage dispara notificação cross-domain best-effort pro destinatário', async () => {
