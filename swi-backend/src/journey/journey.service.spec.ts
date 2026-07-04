@@ -162,12 +162,13 @@ describe('JourneyService', () => {
     expect(db.task.update).not.toHaveBeenCalled()
   })
 
-  it('addTaskPhoto faz append da key e presigna na volta', async () => {
+  it('addTaskPhoto usa push atômico (array_append) e presigna na volta', async () => {
     const db = prisma()
     db.task.findFirst.mockResolvedValue(taskRow({ imageKeys: ['task/a.jpg'] }))
-    db.task.update.mockImplementation(({ data }: any) => ({ ...taskRow(), ...data }))
+    // o mock resolve o push pra o array final (o DB faz o append real)
+    db.task.update.mockImplementation(({ data }: any) => ({ ...taskRow(), imageKeys: ['task/a.jpg', data.imageKeys.push] }))
     const out = await new JourneyService(db, media()).addTaskPhoto('u1', 't1', 'task/b.jpg')
-    expect(db.task.update.mock.calls[0][0].data.imageKeys).toEqual(['task/a.jpg', 'task/b.jpg'])
+    expect(db.task.update.mock.calls[0][0].data.imageKeys).toEqual({ push: 'task/b.jpg' }) // atômico, não spread
     expect(out.images).toEqual(['signed:task/a.jpg', 'signed:task/b.jpg'])
   })
 })
