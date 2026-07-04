@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
+import { Prisma } from '@prisma/client'
 import type { Conversation, Message, User, Profile } from '@prisma/client'
 
 type UserWithProfile = User & { profile: Profile | null }
@@ -53,7 +54,19 @@ export class ChatService {
     }
 
     let conv = await this.prisma.conversation.findUnique({ where: { id: convId } })
-    if (!conv) conv = await this.createConversation(convId, participants)
+    if (!conv) {
+      try {
+        conv = await this.createConversation(convId, participants)
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          // Outro request criou a conversa entre o findUnique e o create → re-busca.
+          conv = await this.prisma.conversation.findUnique({ where: { id: convId } })
+          if (!conv) throw e // P2002 sem linha visível: não engolir silenciosamente.
+        } else {
+          throw e // NotFoundException (user inexistente) e afins seguem propagando.
+        }
+      }
+    }
 
     const now = new Date()
     const msg = await this.prisma.message.create({
