@@ -1,8 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
+import { Prisma } from '@prisma/client'
 import type { Journey, Task } from '@prisma/client'
 import { startAnchors, pauseAnchors, resumeAnchors, endAnchors, progressPct, type Anchors } from './time-anchors'
+
+type Db = PrismaService | Prisma.TransactionClient
 
 @Injectable()
 export class JourneyService {
@@ -14,17 +17,17 @@ export class JourneyService {
     return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()))
   }
 
-  private async getOrCreateToday(workerId: string): Promise<Journey> {
+  private async getOrCreateToday(workerId: string, db: Db = this.prisma): Promise<Journey> {
     const date = this.today()
-    return this.prisma.journey.upsert({
+    return db.journey.upsert({
       where: { workerId_date: { workerId, date } },
       update: {},
       create: { workerId, date, state: 'idle', accumulatedSeconds: 0 },
     })
   }
 
-  private async findMyTask(workerId: string, id: string): Promise<Task | null> {
-    return this.prisma.task.findFirst({ where: { id, assignedTo: workerId } })
+  private async findMyTask(workerId: string, id: string, db: Db = this.prisma): Promise<Task | null> {
+    return db.task.findFirst({ where: { id, assignedTo: workerId } })
   }
 
   async getJourney(workerId: string) {
@@ -45,92 +48,99 @@ export class JourneyService {
   }
 
   async startTask(workerId: string, taskId: string) {
-    const task = await this.findMyTask(workerId, taskId)
-    if (!task) throw new NotFoundException('Tarefa não encontrada')
     const now = Date.now()
-
-    const ta = startAnchors(this.taskAnchors(task), now)
-    const savedTask = await this.prisma.task.update({
-      where: { id: task.id },
-      data: { status: 'in_progress', startedAt: this.iso(ta.startedAt), accumulatedSeconds: ta.accumulatedSeconds },
-    })
-
-    const journey = await this.getOrCreateToday(workerId)
-    const ja = startAnchors(this.journeyAnchors(journey), now)
-    const savedJourney = await this.prisma.journey.update({
-      where: { id: journey.id },
-      data: { state: 'ongoing', activeTaskId: taskId, startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+    const { savedTask, savedJourney } = await this.prisma.$transaction(async (tx) => {
+      const task = await this.findMyTask(workerId, taskId, tx)
+      if (!task) throw new NotFoundException('Tarefa não encontrada')
+      const ta = startAnchors(this.taskAnchors(task), now)
+      const savedTask = await tx.task.update({
+        where: { id: task.id },
+        data: { status: 'in_progress', startedAt: this.iso(ta.startedAt), accumulatedSeconds: ta.accumulatedSeconds },
+      })
+      const journey = await this.getOrCreateToday(workerId, tx)
+      const ja = startAnchors(this.journeyAnchors(journey), now)
+      const savedJourney = await tx.journey.update({
+        where: { id: journey.id },
+        data: { state: 'ongoing', activeTaskId: taskId, startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+      })
+      return { savedTask, savedJourney }
     })
     return { journey: this.journeyToDto(savedJourney), task: await this.taskToDto(savedTask) }
   }
 
   async pauseJourney(workerId: string) {
-    const journey = await this.getOrCreateToday(workerId)
     const now = Date.now()
-    if (journey.activeTaskId) {
-      const active = await this.findMyTask(workerId, journey.activeTaskId)
-      if (active) {
-        const ta = pauseAnchors(this.taskAnchors(active), now)
-        await this.prisma.task.update({
-          where: { id: active.id },
-          data: {
-            status: 'paused', startedAt: this.iso(ta.startedAt), accumulatedSeconds: ta.accumulatedSeconds,
-            // ta.accumulatedSeconds já é o elapsed bancado em `now` (idem endJourney).
-            progressPct: progressPct(ta.accumulatedSeconds, active.estimatedMinutes ?? 0),
-          },
-        })
+    const saved = await this.prisma.$transaction(async (tx) => {
+      const journey = await this.getOrCreateToday(workerId, tx)
+      if (journey.activeTaskId) {
+        const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
+        if (active) {
+          const ta = pauseAnchors(this.taskAnchors(active), now)
+          await tx.task.update({
+            where: { id: active.id },
+            data: {
+              status: 'paused', startedAt: this.iso(ta.startedAt), accumulatedSeconds: ta.accumulatedSeconds,
+              // ta.accumulatedSeconds já é o elapsed bancado em `now` (idem endJourney).
+              progressPct: progressPct(ta.accumulatedSeconds, active.estimatedMinutes ?? 0),
+            },
+          })
+        }
       }
-    }
-    const ja = pauseAnchors(this.journeyAnchors(journey), now)
-    const saved = await this.prisma.journey.update({
-      where: { id: journey.id },
-      data: { state: 'paused', startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+      const ja = pauseAnchors(this.journeyAnchors(journey), now)
+      return tx.journey.update({
+        where: { id: journey.id },
+        data: { state: 'paused', startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+      })
     })
     return this.journeyToDto(saved)
   }
 
   async resumeJourney(workerId: string) {
-    const journey = await this.getOrCreateToday(workerId)
     const now = Date.now()
-    if (journey.activeTaskId) {
-      const active = await this.findMyTask(workerId, journey.activeTaskId)
-      if (active) {
-        const ta = resumeAnchors(this.taskAnchors(active), now)
-        await this.prisma.task.update({
-          where: { id: active.id },
-          data: { status: 'in_progress', startedAt: this.iso(ta.startedAt), accumulatedSeconds: ta.accumulatedSeconds },
-        })
+    const saved = await this.prisma.$transaction(async (tx) => {
+      const journey = await this.getOrCreateToday(workerId, tx)
+      if (journey.activeTaskId) {
+        const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
+        if (active) {
+          const ta = resumeAnchors(this.taskAnchors(active), now)
+          await tx.task.update({
+            where: { id: active.id },
+            data: { status: 'in_progress', startedAt: this.iso(ta.startedAt), accumulatedSeconds: ta.accumulatedSeconds },
+          })
+        }
       }
-    }
-    const ja = resumeAnchors(this.journeyAnchors(journey), now)
-    const saved = await this.prisma.journey.update({
-      where: { id: journey.id },
-      data: { state: 'ongoing', startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+      const ja = resumeAnchors(this.journeyAnchors(journey), now)
+      return tx.journey.update({
+        where: { id: journey.id },
+        data: { state: 'ongoing', startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+      })
     })
     return this.journeyToDto(saved)
   }
 
   async endJourney(workerId: string) {
-    const journey = await this.getOrCreateToday(workerId)
     const now = Date.now()
-    if (journey.activeTaskId) {
-      const active = await this.findMyTask(workerId, journey.activeTaskId)
-      if (active) {
-        const ta = endAnchors(this.taskAnchors(active), now)
-        await this.prisma.task.update({
-          where: { id: active.id },
-          data: {
-            status: 'done', startedAt: this.iso(ta.startedAt), accumulatedSeconds: ta.accumulatedSeconds,
-            progressPct: progressPct(ta.accumulatedSeconds, active.estimatedMinutes ?? 0),
-          },
-        })
+    const saved = await this.prisma.$transaction(async (tx) => {
+      const journey = await this.getOrCreateToday(workerId, tx)
+      if (journey.activeTaskId) {
+        const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
+        if (active) {
+          const ta = endAnchors(this.taskAnchors(active), now)
+          await tx.task.update({
+            where: { id: active.id },
+            data: {
+              status: 'done', startedAt: this.iso(ta.startedAt), accumulatedSeconds: ta.accumulatedSeconds,
+              progressPct: progressPct(ta.accumulatedSeconds, active.estimatedMinutes ?? 0),
+            },
+          })
+        }
       }
-    }
-    // Turno encerrado zera o relógio (refino 2026-06-23: banked vazaria pro
-    // próximo turno). Banking por-task é preservado (cada task é seu objeto).
-    const saved = await this.prisma.journey.update({
-      where: { id: journey.id },
-      data: { state: 'idle', activeTaskId: null, startedAt: null, accumulatedSeconds: 0 },
+      // Turno encerrado zera o relógio (refino 2026-06-23: banked vazaria pro
+      // próximo turno). Banking por-task é preservado (cada task é seu objeto).
+      return tx.journey.update({
+        where: { id: journey.id },
+        data: { state: 'idle', activeTaskId: null, startedAt: null, accumulatedSeconds: 0 },
+      })
     })
     return this.journeyToDto(saved)
   }
