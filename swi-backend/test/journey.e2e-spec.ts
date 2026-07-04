@@ -88,6 +88,19 @@ describe('Journey e2e', () => {
     await request(app.getHttpServer()).post('/journey/end').set(auth).expect(201) // limpa o estado
   })
 
+  it('N addTaskPhoto concorrentes acumulam todas as keys sem lost-update', async () => {
+    const auth = await login()
+    const { body: before } = await request(app.getHttpServer()).get(`/journey/tasks/${taskId}`).set(auth).expect(200)
+    const base = before.images.length
+    const N = 6
+    const key = (i: number) => `task/${String(i).padStart(8, '0')}-0000-0000-0000-000000000000.jpg`
+    await Promise.all(Array.from({ length: N }, (_, i) =>
+      request(app.getHttpServer()).post(`/journey/tasks/${taskId}/photo`).set(auth).send({ imageKey: key(i) }).expect(201),
+    ))
+    const { body: after } = await request(app.getHttpServer()).get(`/journey/tasks/${taskId}`).set(auth).expect(200)
+    expect(after.images.length).toBe(base + N) // todas as N — hoje seria < base+N por lost-update
+  })
+
   it('photo rejeita imageKey de outro prefixo → 400', async () => {
     const auth = await login()
     await request(app.getHttpServer()).post(`/journey/tasks/${taskId}/photo`).set(auth).send({ imageKey: 'reports/x.jpg' }).expect(400)
