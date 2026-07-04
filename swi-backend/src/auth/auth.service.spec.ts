@@ -154,3 +154,30 @@ describe('AuthService expiração', () => {
     await expect(svc.resetPassword({ email: 'j@ex.com', code: '999999', newPassword: 'nova123' })).rejects.toThrow()
   })
 })
+
+describe('AuthService enumeration-timing (H3a)', () => {
+  it('confirm com e-mail inexistente AINDA roda bcrypt.compare (contra DUMMY_HASH) e dá BadRequest', async () => {
+    const { svc, users } = deps(); users.findByEmail.mockResolvedValue(null)
+    const spy = jest.spyOn(bcrypt, 'compare')
+    await expect(svc.confirm({ email: 'nao@existe.com', code: '123456' })).rejects.toBeInstanceOf(BadRequestException)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0][1]).toBe(DUMMY_HASH)
+    spy.mockRestore()
+  })
+  it('reset com e-mail inexistente AINDA roda bcrypt.compare (contra DUMMY_HASH) e dá BadRequest', async () => {
+    const { svc, users } = deps(); users.findByEmail.mockResolvedValue(null)
+    const spy = jest.spyOn(bcrypt, 'compare')
+    await expect(svc.resetPassword({ email: 'nao@existe.com', code: '123456', newPassword: 'nova123' })).rejects.toBeInstanceOf(BadRequestException)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0][1]).toBe(DUMMY_HASH)
+    spy.mockRestore()
+  })
+  it('forgot com e-mail inexistente AINDA roda bcrypt.hash (trabalho dummy) e fica silencioso', async () => {
+    const { svc, users, mail } = deps(); users.findByEmail.mockResolvedValue(null)
+    const spy = jest.spyOn(bcrypt, 'hash')
+    await expect(svc.forgotPassword({ email: 'nao@existe.com' })).resolves.toBeUndefined()
+    expect(spy).toHaveBeenCalledTimes(1)     // custo constante equivalente ao caminho real
+    expect(mail.sendResetCode).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+})
