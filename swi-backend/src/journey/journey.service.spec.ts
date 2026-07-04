@@ -86,6 +86,33 @@ describe('JourneyService', () => {
     await expect(new JourneyService(db, media()).startTask('u1', 't1')).rejects.toThrow(/db down/)
   })
 
+  it('startTask: todos os reads/writes passam pelo tx — nada escapa pro client externo', async () => {
+    const db = prisma()
+    // tx distinto do db: se um read/write escapar pro this.prisma, ele cai no `db` (externo) e a asserção pega.
+    const tx: any = {
+      journey: {
+        upsert: jest.fn().mockResolvedValue(journeyRow()),
+        update: jest.fn().mockImplementation(({ data }: any) => ({ ...journeyRow(), ...data })),
+      },
+      task: {
+        findFirst: jest.fn().mockResolvedValue(taskRow()),
+        update: jest.fn().mockImplementation(({ data }: any) => ({ ...taskRow(), ...data })),
+      },
+    }
+    db.$transaction = jest.fn(async (cb: any) => cb(tx))
+    await new JourneyService(db, media()).startTask('u1', 't1')
+    // tudo pelo tx:
+    expect(tx.task.findFirst).toHaveBeenCalledTimes(1)
+    expect(tx.task.update).toHaveBeenCalledTimes(1)
+    expect(tx.journey.upsert).toHaveBeenCalledTimes(1)
+    expect(tx.journey.update).toHaveBeenCalledTimes(1)
+    // nada no client externo:
+    expect(db.task.findFirst).not.toHaveBeenCalled()
+    expect(db.task.update).not.toHaveBeenCalled()
+    expect(db.journey.upsert).not.toHaveBeenCalled()
+    expect(db.journey.update).not.toHaveBeenCalled()
+  })
+
   it('endJourney zera o turno (idle, 0s) e marca a task done', async () => {
     const db = prisma()
     db.journey.upsert.mockResolvedValue(journeyRow({ state: 'ongoing', activeTaskId: 't1', startedAt: new Date(), accumulatedSeconds: 100 }))
