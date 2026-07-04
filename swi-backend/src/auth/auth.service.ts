@@ -48,9 +48,9 @@ export class AuthService {
 
   async confirm(p: { email: string; code: string }): Promise<void> {
     const u = await this.users.findByEmail(p.email)
-    if (!u || !u.confirmationCodeHash || !u.confirmationExpires) throw new BadRequestException('Código inválido')
+    const ok = await verifyHash(p.code, u?.confirmationCodeHash ?? DUMMY_HASH)  // sempre 1 compare
+    if (!u || !u.confirmationCodeHash || !u.confirmationExpires || !ok) throw new BadRequestException('Código inválido')
     if (u.confirmationExpires < new Date()) throw new BadRequestException('Código expirado')
-    if (!(await verifyHash(p.code, u.confirmationCodeHash))) throw new BadRequestException('Código inválido')
     await this.prisma.user.update({
       where: { id: u.id },
       data: { emailVerified: true, confirmationCodeHash: null, confirmationExpires: null },
@@ -68,8 +68,11 @@ export class AuthService {
 
   async forgotPassword(p: { email: string }): Promise<void> {
     const u = await this.users.findByEmail(p.email)
-    if (!u) return                                     // silencioso de propósito
     const code = generateCode()
+    if (!u) {
+      await hash(code)   // trabalho dummy equivalente ao caminho real (1 bcrypt), descartado → sem oráculo de timing
+      return             // silencioso de propósito
+    }
     await this.prisma.user.update({
       where: { id: u.id },
       data: { resetCodeHash: await hash(code), resetExpires: new Date(Date.now() + CODE_TTL_MIN * 60_000) },
@@ -79,9 +82,9 @@ export class AuthService {
 
   async resetPassword(p: { email: string; code: string; newPassword: string }): Promise<void> {
     const u = await this.users.findByEmail(p.email)
-    if (!u || !u.resetCodeHash || !u.resetExpires) throw new BadRequestException('Código inválido')
+    const ok = await verifyHash(p.code, u?.resetCodeHash ?? DUMMY_HASH)          // sempre 1 compare
+    if (!u || !u.resetCodeHash || !u.resetExpires || !ok) throw new BadRequestException('Código inválido')
     if (u.resetExpires < new Date()) throw new BadRequestException('Código expirado')
-    if (!(await verifyHash(p.code, u.resetCodeHash))) throw new BadRequestException('Código inválido')
     await this.prisma.user.update({
       where: { id: u.id },
       data: { passwordHash: await hash(p.newPassword), resetCodeHash: null, resetExpires: null },

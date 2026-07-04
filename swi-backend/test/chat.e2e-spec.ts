@@ -90,6 +90,25 @@ describe('Chat e2e', () => {
     expect(msgs.map((m: any) => m.body).sort()).toEqual(['corrida A', 'corrida B']) // ambas persistiram
   })
 
+  it('N sends concorrentes acumulam o unread do destinatário sem lost-update', async () => {
+    const N = 6
+    const tA = await login(eA)
+    // Só 1 login: o suite tem teto de 10 logins/min/IP (@Throttle no /auth/login) e as
+    // demais specs já consomem 9 — um 2º login aqui estouraria (429) o teste de socket.
+    // unreadBy é do documento da conversa, visível a QUALQUER participante (toConvDto),
+    // então lemos o contador do B fetchando como A. Prova por delta (como o teste da journey):
+    // seed fixa a base, N envios concorrentes A→B rodam o jsonb_set atômico → base + N exato.
+    await request(app.getHttpServer()).post(`${cpath(convId)}/messages`).set({ Authorization: `Bearer ${tA}` }).send({ body: 'seed' }).expect(201)
+    const { body: c0 } = await request(app.getHttpServer()).get('/chat/conversations').set({ Authorization: `Bearer ${tA}` }).expect(200)
+    const base = c0.find((c: any) => c.id === convId).unreadBy[idB]
+    // N envios concorrentes A→B
+    await Promise.all(Array.from({ length: N }, (_, i) =>
+      request(app.getHttpServer()).post(`${cpath(convId)}/messages`).set({ Authorization: `Bearer ${tA}` }).send({ body: `c${i}` }).expect(201),
+    ))
+    const { body: c1 } = await request(app.getHttpServer()).get('/chat/conversations').set({ Authorization: `Bearer ${tA}` }).expect(200)
+    expect(c1.find((c: any) => c.id === convId).unreadBy[idB]).toBe(base + N) // exato +N — hoje seria < por lost-update
+  })
+
   it('não-membro → 404', async () => {
     const tA = await login(eA)
     const alheia = key('outro-x', 'outro-y')

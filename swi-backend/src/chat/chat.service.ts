@@ -52,6 +52,8 @@ export class ChatService {
     ) {
       throw new NotFoundException('Conversa não encontrada')
     }
+    const recipientId = participants.find((p) => p !== userId)
+    if (!recipientId) throw new NotFoundException('Conversa não encontrada') // self-conv a#a: sem destinatário
 
     let conv = await this.prisma.conversation.findUnique({ where: { id: convId } })
     if (!conv) {
@@ -73,12 +75,19 @@ export class ChatService {
       data: { conversationId: convId, senderId: userId, body: dto.body ?? null, imageKey: dto.imageKey ?? null, sentAt: now },
     })
 
-    const unread = this.unreadOf(conv)
-    for (const p of conv.participants) if (p !== userId) unread[p] = (unread[p] ?? 0) + 1
-    await this.prisma.conversation.update({
-      where: { id: convId },
-      data: { lastMessageBody: dto.body || (dto.imageKey ? '📷 Imagem' : ''), lastMessageAt: now, unreadByJson: unread },
-    })
+    // Destinatário já resolvido (guarded) a partir do id validado — 2-party.
+    const lastBody = dto.body || (dto.imageKey ? '📷 Imagem' : '')
+    // UPDATE atômico: incrementa o contador do destinatário sem read-modify-write (fecha o lost-update).
+    await this.prisma.$executeRaw`
+      UPDATE "Conversation"
+      SET "lastMessageBody" = ${lastBody},
+          "lastMessageAt"   = ${now},
+          "unreadByJson"    = jsonb_set(
+            COALESCE("unreadByJson", '{}'::jsonb),
+            ARRAY[${recipientId}],
+            to_jsonb(COALESCE(("unreadByJson"->>${recipientId})::int, 0) + 1),
+            true)
+      WHERE id = ${convId}`
 
     const out = await this.toMsgDto(msg)
     this.realtime.emitToUsers(conv.participants, 'message', out)
@@ -101,16 +110,11 @@ export class ChatService {
   }
 
   async markRead(userId: string, convId: string) {
-    const conv = await this.assertMember(userId, convId)
-    const unread = this.unreadOf(conv)
-    unread[userId] = 0
-    await this.prisma.conversation.update({ where: { id: convId }, data: { unreadByJson: unread } })
-  }
-
-  // Clona o mapa unread (coluna Json?) num Record numérico — este serviço é o
-  // único escritor e sempre grava mapas de número.
-  private unreadOf(conv: Conversation): Record<string, number> {
-    return { ...((conv.unreadByJson as Record<string, number>) ?? {}) }
+    await this.assertMember(userId, convId)   // membership → 404 se não-membro
+    await this.prisma.$executeRaw`
+      UPDATE "Conversation"
+      SET "unreadByJson" = jsonb_set(COALESCE("unreadByJson", '{}'::jsonb), ARRAY[${userId}], '0'::jsonb, true)
+      WHERE id = ${convId}`
   }
 
   private async assertMember(userId: string, convId: string): Promise<Conversation> {

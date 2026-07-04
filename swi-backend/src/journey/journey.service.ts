@@ -150,7 +150,7 @@ export class JourneyService {
     if (!task) throw new NotFoundException('Tarefa não encontrada')
     const saved = await this.prisma.task.update({
       where: { id: task.id },
-      data: { imageKeys: [...task.imageKeys, imageKey] },
+      data: { imageKeys: { push: imageKey } },   // array_append atômico (era [...task.imageKeys, imageKey])
     })
     return this.taskToDto(saved)
   }
