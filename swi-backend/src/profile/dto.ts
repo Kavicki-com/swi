@@ -1,9 +1,10 @@
-import { IsOptional, IsString, Matches, Length } from 'class-validator'
+import { IsOptional, IsString, Length } from 'class-validator'
+import { IsCalendarDate } from './is-calendar-date'
 export class UpdateProfileDto {
   @IsOptional() @IsString() fullName?: string
   @IsOptional() @IsString() phone?: string
   @IsOptional() @IsString() cpf?: string
-  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) birthDate?: string
+  @IsOptional() @IsCalendarDate() birthDate?: string
   @IsOptional() @IsString() cep?: string
   @IsOptional() @IsString() street?: string
   @IsOptional() @IsString() number?: string
