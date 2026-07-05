@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:22-alpine
 # Prisma no Alpine (musl) precisa do OpenSSL/libssl — sem isso o schema engine
 # não carrega ("Could not parse schema engine response").
 RUN apk add --no-cache openssl
