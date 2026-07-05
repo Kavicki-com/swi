@@ -1,6 +1,7 @@
 // S3Client é construído na instanciação do MediaService (no app.init); presign
-// é puro (não faz rede). Setar MINIO_* dummy ANTES de montar o app deixa o
-// getSignedUrl determinístico e sem depender de MinIO up.
+// é puro (não faz rede): POST via createPresignedPost, GET via getSignedUrl.
+// Setar MINIO_* dummy ANTES de montar o app deixa a assinatura determinística
+// e sem depender de MinIO up.
 process.env.MINIO_PUBLIC_URL ??= 'http://localhost:9000'
 process.env.MINIO_ACCESS_KEY ??= 'minioadmin'
 process.env.MINIO_SECRET_KEY ??= 'minioadmin'
@@ -47,10 +48,11 @@ describe('Reports e2e', () => {
 
   it('reports sem token → 401', () => request(app.getHttpServer()).get('/reports').expect(401))
 
-  it('media presign devolve url + key namespaced', async () => {
+  it('media presign devolve url + fields + key namespaced', async () => {
     const auth = await login()
     const { body } = await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType: 'image/jpeg' }).expect(201)
     expect(typeof body.url).toBe('string')
+    expect(body.fields).toBeDefined()
     expect(body.key).toMatch(/^reports\/[0-9a-f-]{36}\.jpg$/)
   })
 
