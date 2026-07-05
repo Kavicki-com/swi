@@ -4,7 +4,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post'
 import { randomUUID } from 'crypto'
 
-const PUT_TTL = 300 // 5 min pra subir
+const UPLOAD_TTL = 300 // 5 min pra subir
 const GET_TTL = 3600 // 1 h pra ler
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024 // 15 MB — limite real de upload, imposto na policy S3
 
@@ -41,7 +41,7 @@ export class MediaService {
     const { url, fields } = await createPresignedPost(this.s3, {
       Bucket: this.bucket,
       Key: key,
-      Expires: PUT_TTL,
+      Expires: UPLOAD_TTL,
       // content-type travado 2x de propósito: a condition explícita + a derivada do Fields (defense-in-depth).
       Conditions: [
         ['content-length-range', 1, MAX_UPLOAD_BYTES],
