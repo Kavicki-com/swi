@@ -103,7 +103,7 @@ export class ChatService {
       try {
         const sender = await this.prisma.user.findUnique({ where: { id: userId }, include: { profile: true } })
         const senderName = sender?.profile?.fullName || sender?.name || 'Nova mensagem'
-        await this.notifications.createForMany(recipients, {
+        await this.notifications.enqueueForMany(recipients, {
           domain: 'chat',
           title: senderName,
           body: dto.body || 'Enviou um anexo',

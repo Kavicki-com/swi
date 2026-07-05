@@ -6,7 +6,7 @@ const media = () => ({
   presignGet: jest.fn(async (k: string) => `signed:${k}`),
 }) as any
 const realtime = () => ({ emitToUsers: jest.fn() }) as any
-const notifications = () => ({ createFor: jest.fn(), createForMany: jest.fn() }) as any
+const notifications = () => ({ createFor: jest.fn(), enqueueForMany: jest.fn() }) as any
 
 const prisma = () => ({
   conversation: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
@@ -137,7 +137,7 @@ describe('ChatService', () => {
     db.user.findUnique.mockResolvedValue(userRow(A))
     const notif = notifications()
     await new ChatService(db, media(), realtime(), notif).sendMessage(A, CONV, { body: 'e aí' })
-    expect(notif.createForMany).toHaveBeenCalledWith([B], expect.objectContaining({ domain: 'chat', title: 'full-aaaa', body: 'e aí', targetId: CONV }))
+    expect(notif.enqueueForMany).toHaveBeenCalledWith([B], expect.objectContaining({ domain: 'chat', title: 'full-aaaa', body: 'e aí', targetId: CONV }))
   })
 
   it('sendMessage não quebra se a notificação falhar (best-effort)', async () => {
@@ -147,7 +147,7 @@ describe('ChatService', () => {
     db.conversation.update.mockResolvedValue(convRow())
     db.user.findUnique.mockResolvedValue(userRow(A))
     const notif = notifications()
-    notif.createForMany.mockRejectedValue(new Error('boom'))
+    notif.enqueueForMany.mockRejectedValue(new Error('boom'))
     const rt = realtime()
     const out = await new ChatService(db, media(), rt, notif).sendMessage(A, CONV, { body: 'e aí' })
     expect(out.body).toBe('e aí')

@@ -6,7 +6,7 @@ const media = () =>
     presignGetMany: jest.fn(async (ks: string[]) => ks.map((k) => `signed:${k}`)),
   }) as any
 
-const notifications = () => ({ createForMany: jest.fn() }) as any
+const notifications = () => ({ enqueueForMany: jest.fn() }) as any
 
 const prisma = () =>
   ({
@@ -89,7 +89,7 @@ describe('ReportsService', () => {
     const notif = notifications()
     await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' } as any)
     expect(db.user.findMany).toHaveBeenCalledWith({ where: { role: 'WORKER', approvalStatus: 'APPROVED', id: { not: 'author-1' } }, select: { id: true } })
-    expect(notif.createForMany).toHaveBeenCalledWith(['w2', 'w3'], expect.objectContaining({ domain: 'reports', title: 'Novo relatório', body: 'R9', targetId: 'r9' }))
+    expect(notif.enqueueForMany).toHaveBeenCalledWith(['w2', 'w3'], expect.objectContaining({ domain: 'reports', title: 'Novo relatório', body: 'R9', targetId: 'r9' }))
   })
 
   it('create não quebra se o broadcast falhar (best-effort)', async () => {
@@ -98,7 +98,7 @@ describe('ReportsService', () => {
     db.report.create.mockResolvedValue(row({ id: 'r9', title: 'R9' }))
     db.user.findMany.mockResolvedValue([{ id: 'w2' }])
     const notif = notifications()
-    notif.createForMany.mockRejectedValue(new Error('boom'))
+    notif.enqueueForMany.mockRejectedValue(new Error('boom'))
     const out = await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' } as any)
     expect(out.id).toBe('r9')
   })

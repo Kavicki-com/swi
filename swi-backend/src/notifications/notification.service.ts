@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
+import { QueueService } from '../queue/queue.service'
 import type { Notification, NotificationDomain } from '@prisma/client'
 
 export interface NotificationPayload {
@@ -11,13 +12,28 @@ export interface NotificationPayload {
 }
 
 const LIST_CAP = 200
+const FANOUT_JOB = 'notifications.fanout'
+
+// Contrato do job de fan-out: produtor (enqueue) e consumidor (handler) compartilham
+// este tipo pra não driftar através do seam `any` do QueueService.
+interface FanoutJobData {
+  workerIds: string[]
+  payload: NotificationPayload
+}
 
 @Injectable()
-export class NotificationService {
+export class NotificationService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly queue: QueueService,
   ) {}
+
+  async onModuleInit() {
+    await this.queue.registerWorker(FANOUT_JOB, async (data: FanoutJobData) => {
+      await this.createForMany(data.workerIds, data.payload)
+    })
+  }
 
   async list(workerId: string) {
     const rows = await this.prisma.notification.findMany({ where: { workerId }, orderBy: { createdAt: 'desc' }, take: LIST_CAP })
@@ -57,6 +73,13 @@ export class NotificationService {
     // derruba o broadcast dos demais. Devolve só os dtos criados com sucesso.
     const results = await Promise.allSettled(workerIds.map((id) => this.createFor(id, payload)))
     return results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+  }
+
+  // Enfileira o fan-out (job notifications.fanout) — o worker reusa createForMany.
+  async enqueueForMany(workerIds: string[], payload: NotificationPayload): Promise<void> {
+    if (workerIds.length === 0) return // evita job durável no-op + ciclo de poll no container
+    const data: FanoutJobData = { workerIds, payload }
+    await this.queue.enqueue(FANOUT_JOB, data)
   }
 
   private toDto(n: Notification) {
