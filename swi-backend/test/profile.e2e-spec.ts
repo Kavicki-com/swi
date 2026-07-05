@@ -47,5 +47,11 @@ describe('Profile e2e', () => {
     expect(g.body.sector ?? null).toBeNull()
   })
 
+  it('perfil: birthDate inválido → 400 (não 500)', async () => {
+    const { body } = await request(app.getHttpServer()).post('/auth/login').send({ email, password: 'test1234' }).expect(200)
+    const auth = { Authorization: `Bearer ${body.accessToken}` }
+    await request(app.getHttpServer()).put('/profile/me').set(auth).send({ birthDate: '2000-13-45' }).expect(400)
+  })
+
   it('perfil sem token → 401', () => request(app.getHttpServer()).get('/profile/me').expect(401))
 })

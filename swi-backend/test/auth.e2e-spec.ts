@@ -42,6 +42,16 @@ describe('Auth e2e', () => {
     expect(me.body.email).toBe('e2e@ex.com')
   })
 
+  it('throttle desligado em test-env: 12× /auth/login errado → sempre 401, nunca 429', async () => {
+    const http = app.getHttpServer()
+    // /auth/login tem @Throttle 10/min: sem o skipIf de test-env, os pedidos #11 e #12 seriam 429.
+    // Credencial inexistente → 401 por design (sem usuário semeado), então 401 em TODAS prova o bypass.
+    for (let i = 0; i < 12; i++) {
+      const r = await request(http).post('/auth/login').send({ email: 'nobody@swi.local', password: 'wrong' })
+      expect(r.status).toBe(401)
+    }
+  })
+
   it('admin lista pendentes e rejeita', async () => {
     const http = app.getHttpServer()
     const admin = await request(http).post('/auth/login').send({ email: 'admin-e2e@ex.com', password: 'admin123' }).expect(200)

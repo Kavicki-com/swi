@@ -19,7 +19,10 @@ import { HealthController } from './health.controller'
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60000, limit: 100 }],
+      skipIf: () => process.env.NODE_ENV === 'test',
+    }),
     PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, ChatModule, RealtimeModule, NotificationModule, WeatherModule, EvacuationModule,
   ],
   controllers: [HealthController],
