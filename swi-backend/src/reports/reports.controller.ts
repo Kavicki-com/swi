@@ -1,7 +1,8 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
 import { ReportsService } from './reports.service'
 import { CreateReportDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { CurrentUserId } from '../auth/current-user.decorator'
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
@@ -21,7 +22,7 @@ export class ReportsController {
   }
 
   @Post()
-  create(@Req() req: any, @Body() dto: CreateReportDto) {
-    return this.reports.create(req.user.userId, dto)
+  create(@CurrentUserId() userId: string, @Body() dto: CreateReportDto) {
+    return this.reports.create(userId, dto)
   }
 }

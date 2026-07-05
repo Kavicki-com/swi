@@ -1,8 +1,9 @@
-import { Body, Controller, Get, HttpCode, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import { AuthService } from './auth.service'
 import { UsersService } from '../users/users.service'
 import { JwtAuthGuard } from './jwt-auth.guard'
+import { CurrentUserId } from './current-user.decorator'
 import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto } from './dto'
 
 @Controller('auth')
@@ -16,8 +17,8 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/reset') @HttpCode(200) reset(@Body() b: ResetDto) { return this.auth.resetPassword(b) }
 
   @UseGuards(JwtAuthGuard) @Get('me')
-  async me(@Req() req: any) {
-    const u = await this.users.findById(req.user.userId)
+  async me(@CurrentUserId() userId: string) {
+    const u = await this.users.findById(userId)
     return u ? { id: u.id, email: u.email, name: u.name } : null
   }
 }
