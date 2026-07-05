@@ -38,6 +38,7 @@ describe('ChatService', () => {
     const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
     const where = db.user.findMany.mock.calls[0][0].where
     expect(where).toMatchObject({ approvalStatus: 'APPROVED', role: 'WORKER', id: { not: A } })
+    expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
     expect(out[0]).toEqual({ workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador', avatarUri: 'signed:chat/avatars/bbbb.png' })
   })
 

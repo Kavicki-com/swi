@@ -24,6 +24,7 @@ export class ChatService {
       where: { approvalStatus: 'APPROVED', role: 'WORKER', id: { not: userId } },
       include: { profile: true },
       orderBy: { name: 'asc' },
+      take: LIST_CAP,
     })
     return Promise.all(users.map((u) => this.toContact(u)))
   }
