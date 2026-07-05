@@ -10,6 +10,8 @@ export interface NotificationPayload {
   targetId?: string | null
 }
 
+const LIST_CAP = 200
+
 @Injectable()
 export class NotificationService {
   constructor(
@@ -18,7 +20,7 @@ export class NotificationService {
   ) {}
 
   async list(workerId: string) {
-    const rows = await this.prisma.notification.findMany({ where: { workerId }, orderBy: { createdAt: 'desc' } })
+    const rows = await this.prisma.notification.findMany({ where: { workerId }, orderBy: { createdAt: 'desc' }, take: LIST_CAP })
     return rows.map((n) => this.toDto(n))
   }
 
