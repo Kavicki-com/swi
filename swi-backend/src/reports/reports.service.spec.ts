@@ -37,7 +37,7 @@ describe('ReportsService', () => {
     const db = prisma()
     db.report.findMany.mockResolvedValue([row()])
     const out = await new ReportsService(db, media(), notifications()).list()
-    expect(db.report.findMany).toHaveBeenCalledWith({ orderBy: { createdAt: 'desc' } })
+    expect(db.report.findMany).toHaveBeenCalledWith({ orderBy: { createdAt: 'desc' }, take: 200 })
     expect(out[0].images).toEqual(['signed:reports/x.jpg'])
     expect(out[0].authorAvatarUri).toBe('signed:reports/av.jpg')
     expect(out[0].creationDate).toBe('01/01/2026') // BRT (UTC-3) rola pro dia anterior

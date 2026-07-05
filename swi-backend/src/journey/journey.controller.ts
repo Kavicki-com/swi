@@ -1,7 +1,8 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
 import { JourneyService } from './journey.service'
 import { AddTaskPhotoDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { CurrentUserId } from '../auth/current-user.decorator'
 
 @Controller('journey')
 @UseGuards(JwtAuthGuard)
@@ -9,44 +10,44 @@ export class JourneyController {
   constructor(private readonly journey: JourneyService) {}
 
   @Get()
-  getJourney(@Req() req: any) {
-    return this.journey.getJourney(req.user.userId)
+  getJourney(@CurrentUserId() userId: string) {
+    return this.journey.getJourney(userId)
   }
 
   @Get('tasks')
-  listTasks(@Req() req: any) {
-    return this.journey.listTasks(req.user.userId)
+  listTasks(@CurrentUserId() userId: string) {
+    return this.journey.listTasks(userId)
   }
 
   @Get('tasks/:id')
-  async getTask(@Req() req: any, @Param('id') id: string) {
-    const t = await this.journey.getTask(req.user.userId, id)
+  async getTask(@CurrentUserId() userId: string, @Param('id') id: string) {
+    const t = await this.journey.getTask(userId, id)
     if (!t) throw new NotFoundException('Tarefa não encontrada')
     return t
   }
 
   @Post('tasks/:id/start')
-  startTask(@Req() req: any, @Param('id') id: string) {
-    return this.journey.startTask(req.user.userId, id)
+  startTask(@CurrentUserId() userId: string, @Param('id') id: string) {
+    return this.journey.startTask(userId, id)
   }
 
   @Post('pause')
-  pause(@Req() req: any) {
-    return this.journey.pauseJourney(req.user.userId)
+  pause(@CurrentUserId() userId: string) {
+    return this.journey.pauseJourney(userId)
   }
 
   @Post('resume')
-  resume(@Req() req: any) {
-    return this.journey.resumeJourney(req.user.userId)
+  resume(@CurrentUserId() userId: string) {
+    return this.journey.resumeJourney(userId)
   }
 
   @Post('end')
-  end(@Req() req: any) {
-    return this.journey.endJourney(req.user.userId)
+  end(@CurrentUserId() userId: string) {
+    return this.journey.endJourney(userId)
   }
 
   @Post('tasks/:id/photo')
-  addPhoto(@Req() req: any, @Param('id') id: string, @Body() dto: AddTaskPhotoDto) {
-    return this.journey.addTaskPhoto(req.user.userId, id, dto.imageKey)
+  addPhoto(@CurrentUserId() userId: string, @Param('id') id: string, @Body() dto: AddTaskPhotoDto) {
+    return this.journey.addTaskPhoto(userId, id, dto.imageKey)
   }
 }

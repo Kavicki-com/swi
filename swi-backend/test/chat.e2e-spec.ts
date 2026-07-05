@@ -93,8 +93,7 @@ describe('Chat e2e', () => {
   it('N sends concorrentes acumulam o unread do destinatário sem lost-update', async () => {
     const N = 6
     const tA = await login(eA)
-    // Só 1 login: o suite tem teto de 10 logins/min/IP (@Throttle no /auth/login) e as
-    // demais specs já consomem 9 — um 2º login aqui estouraria (429) o teste de socket.
+    // 1 login basta aqui (throttle desligado em test-env via skipIf no ThrottlerModule).
     // unreadBy é do documento da conversa, visível a QUALQUER participante (toConvDto),
     // então lemos o contador do B fetchando como A. Prova por delta (como o teste da journey):
     // seed fixa a base, N envios concorrentes A→B rodam o jsonb_set atômico → base + N exato.
@@ -118,6 +117,11 @@ describe('Chat e2e', () => {
   it('mensagem vazia → 400', async () => {
     const tA = await login(eA)
     await request(app.getHttpServer()).post(`${cpath(convId)}/messages`).set({ Authorization: `Bearer ${tA}` }).send({}).expect(400)
+  })
+
+  it('body acima de 4000 chars → 400 (@MaxLength)', async () => {
+    const tA = await login(eA)
+    await request(app.getHttpServer()).post(`${cpath(convId)}/messages`).set({ Authorization: `Bearer ${tA}` }).send({ body: 'a'.repeat(4001) }).expect(400)
   })
 
   it('real-time: B recebe pelo socket a mensagem que A envia', async () => {

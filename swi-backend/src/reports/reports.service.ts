@@ -5,6 +5,8 @@ import { NotificationService } from '../notifications/notification.service'
 import type { Report } from '@prisma/client'
 import type { CreateReportDto } from './dto'
 
+const LIST_CAP = 200
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -14,7 +16,7 @@ export class ReportsService {
   ) {}
 
   async list() {
-    const rows = await this.prisma.report.findMany({ orderBy: { createdAt: 'desc' } })
+    const rows = await this.prisma.report.findMany({ orderBy: { createdAt: 'desc' }, take: LIST_CAP })
     return Promise.all(rows.map((r) => this.toDto(r)))
   }
 

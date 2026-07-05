@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
 import { ChatService } from './chat.service'
 import { SendMessageDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { CurrentUserId } from '../auth/current-user.decorator'
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
@@ -9,21 +10,21 @@ export class ChatController {
   constructor(private readonly chat: ChatService) {}
 
   @Get('conversations')
-  listConversations(@Req() req: any) { return this.chat.listConversations(req.user.userId) }
+  listConversations(@CurrentUserId() userId: string) { return this.chat.listConversations(userId) }
 
   @Get('directory')
-  listDirectory(@Req() req: any) { return this.chat.listDirectory(req.user.userId) }
+  listDirectory(@CurrentUserId() userId: string) { return this.chat.listDirectory(userId) }
 
   @Get('conversations/:id/messages')
-  listMessages(@Req() req: any, @Param('id') id: string) { return this.chat.listMessages(req.user.userId, id) }
+  listMessages(@CurrentUserId() userId: string, @Param('id') id: string) { return this.chat.listMessages(userId, id) }
 
   @Post('conversations/:id/messages')
-  send(@Req() req: any, @Param('id') id: string, @Body() dto: SendMessageDto) {
+  send(@CurrentUserId() userId: string, @Param('id') id: string, @Body() dto: SendMessageDto) {
     if (!dto.body?.trim() && !dto.imageKey) throw new BadRequestException('Mensagem vazia')
-    return this.chat.sendMessage(req.user.userId, id, dto)
+    return this.chat.sendMessage(userId, id, dto)
   }
 
   @Post('conversations/:id/read')
   @HttpCode(204)
-  markRead(@Req() req: any, @Param('id') id: string) { return this.chat.markRead(req.user.userId, id) }
+  markRead(@CurrentUserId() userId: string, @Param('id') id: string) { return this.chat.markRead(userId, id) }
 }

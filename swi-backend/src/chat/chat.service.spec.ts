@@ -38,6 +38,7 @@ describe('ChatService', () => {
     const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
     const where = db.user.findMany.mock.calls[0][0].where
     expect(where).toMatchObject({ approvalStatus: 'APPROVED', role: 'WORKER', id: { not: A } })
+    expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
     expect(out[0]).toEqual({ workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador', avatarUri: 'signed:chat/avatars/bbbb.png' })
   })
 
@@ -45,6 +46,7 @@ describe('ChatService', () => {
     const db = prisma(); db.conversation.findMany.mockResolvedValue([convRow()])
     const out = await new ChatService(db, media(), realtime(), notifications()).listConversations(A)
     expect(db.conversation.findMany.mock.calls[0][0].where).toEqual({ participants: { has: A } })
+    expect(db.conversation.findMany.mock.calls[0][0].take).toBe(200)
     expect(out[0].participantAvatars).toEqual(['signed:chat/avatars/aaaa.png', 'signed:chat/avatars/bbbb.png'])
     expect(out[0].unreadBy).toEqual({ aaaa: 2 })
     expect(out[0].lastMessageAt).toBe('2026-06-23T13:00:00.000Z')
@@ -61,6 +63,7 @@ describe('ChatService', () => {
     db.message.findMany.mockResolvedValue([msgRow(), msgRow({ id: 'm2', imageKey: 'chat/x.jpg', body: null })])
     const out = await new ChatService(db, media(), realtime(), notifications()).listMessages(A, CONV)
     expect(db.message.findMany.mock.calls[0][0].orderBy).toEqual({ sentAt: 'asc' })
+    expect(db.message.findMany.mock.calls[0][0].take).toBe(-200)
     expect(out[0].imageUri).toBeNull()
     expect(out[1].imageUri).toBe('signed:chat/x.jpg')
     expect(out[0].senderId).toBe(B)

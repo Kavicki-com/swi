@@ -19,7 +19,7 @@ describe('NotificationService', () => {
   it('list escopa no worker, ordena createdAt desc e mapeia dto', async () => {
     const db = prisma(); db.notification.findMany.mockResolvedValue([row()])
     const out = await new NotificationService(db, realtime()).list(W)
-    expect(db.notification.findMany).toHaveBeenCalledWith({ where: { workerId: W }, orderBy: { createdAt: 'desc' } })
+    expect(db.notification.findMany).toHaveBeenCalledWith({ where: { workerId: W }, orderBy: { createdAt: 'desc' }, take: 200 })
     expect(out[0]).toEqual({ id: 'n1', title: 'T', body: 'B', domain: 'chat', targetId: null, read: false, createdAt: '2026-06-23T15:00:00.000Z' })
   })
 

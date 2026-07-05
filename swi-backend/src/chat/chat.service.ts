@@ -8,6 +8,8 @@ import type { Conversation, Message, User, Profile } from '@prisma/client'
 
 type UserWithProfile = User & { profile: Profile | null }
 
+const LIST_CAP = 200
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -22,6 +24,7 @@ export class ChatService {
       where: { approvalStatus: 'APPROVED', role: 'WORKER', id: { not: userId } },
       include: { profile: true },
       orderBy: { name: 'asc' },
+      take: LIST_CAP,
     })
     return Promise.all(users.map((u) => this.toContact(u)))
   }
@@ -30,13 +33,15 @@ export class ChatService {
     const rows = await this.prisma.conversation.findMany({
       where: { participants: { has: userId } },
       orderBy: { lastMessageAt: { sort: 'desc', nulls: 'last' } },
+      take: LIST_CAP,
     })
     return Promise.all(rows.map((c) => this.toConvDto(c)))
   }
 
   async listMessages(userId: string, convId: string) {
     await this.assertMember(userId, convId)
-    const rows = await this.prisma.message.findMany({ where: { conversationId: convId }, orderBy: { sentAt: 'asc' } })
+    // take negativo = as 200 mensagens MAIS RECENTES, mantendo a ordem asc (Prisma pega os últimos N).
+    const rows = await this.prisma.message.findMany({ where: { conversationId: convId }, orderBy: { sentAt: 'asc' }, take: -LIST_CAP })
     return Promise.all(rows.map((m) => this.toMsgDto(m)))
   }
 
