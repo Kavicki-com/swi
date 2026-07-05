@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common'
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createPresignedPost } from '@aws-sdk/s3-presigned-post'
 import { randomUUID } from 'crypto'
 
-const PUT_TTL = 300 // 5 min pra subir
+const UPLOAD_TTL = 300 // 5 min pra subir
 const GET_TTL = 3600 // 1 h pra ler
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024 // 15 MB — limite real de upload, imposto na policy S3
 
 @Injectable()
 export class MediaService {
@@ -31,12 +33,23 @@ export class MediaService {
     return contentType === 'image/png' ? 'png' : 'jpg'
   }
 
-  // Assina só Bucket+Key (não constrange content-type) → o cliente PUTa o blob
-  // sem risco de signature-mismatch de header.
-  async presignPut(contentType: string, prefix = 'reports'): Promise<{ url: string; key: string }> {
+  // Presigned POST: a policy S3 impõe tamanho (content-length-range) e trava o
+  // Content-Type no upload — o cliente não consegue subir blob maior que 15 MB
+  // nem com content-type divergente do assinado.
+  async presignPost(contentType: string, prefix = 'reports'): Promise<{ url: string; fields: Record<string, string>; key: string }> {
     const key = `${prefix}/${randomUUID()}.${this.ext(contentType)}`
-    const url = await getSignedUrl(this.s3, new PutObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: PUT_TTL })
-    return { url, key }
+    const { url, fields } = await createPresignedPost(this.s3, {
+      Bucket: this.bucket,
+      Key: key,
+      Expires: UPLOAD_TTL,
+      // content-type travado 2x de propósito: a condition explícita + a derivada do Fields (defense-in-depth).
+      Conditions: [
+        ['content-length-range', 1, MAX_UPLOAD_BYTES],
+        ['eq', '$Content-Type', contentType],
+      ],
+      Fields: { 'Content-Type': contentType },
+    })
+    return { url, fields, key }
   }
 
   presignGet(key: string): Promise<string> {

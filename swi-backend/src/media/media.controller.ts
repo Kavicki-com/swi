@@ -10,6 +10,6 @@ export class MediaController {
 
   @Post('presign')
   presign(@Body() dto: PresignDto) {
-    return this.media.presignPut(dto.contentType, dto.prefix ?? 'reports')
+    return this.media.presignPost(dto.contentType, dto.prefix ?? 'reports')
   }
 }

@@ -6,43 +6,45 @@ describe('uploadMedia', () => {
   beforeEach(() => {
     (apiRequest as jest.Mock).mockReset();
     (global as any).fetch = jest.fn();
+    (global as any).FormData = class {
+      parts: [string, any][] = [];
+      append(k: string, v: any) { this.parts.push([k, v]); }
+    };
   });
 
   it('contentTypeFor infere png/jpeg pela extensão', () => {
     expect(contentTypeFor('file:///a/b.png')).toBe('image/png');
     expect(contentTypeFor('file:///a/b.jpg')).toBe('image/jpeg');
-    expect(contentTypeFor('file:///a/b')).toBe('image/jpeg'); // default
+    expect(contentTypeFor('file:///a/b')).toBe('image/jpeg');
   });
 
-  it('uploadImage: presign → PUT do blob → devolve key', async () => {
-    (apiRequest as jest.Mock).mockResolvedValue({ url: 'https://minio/put?sig=1', key: 'reports/k.jpg' });
-    const blob = { size: 3 };
-    (global as any).fetch
-      .mockResolvedValueOnce({ blob: async () => blob }) // fetch(file://)
-      .mockResolvedValueOnce({ ok: true, status: 200 }); // PUT presigned
+  it('uploadImage: presign → POST multipart (fields + file last) → devolve key', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ url: 'https://minio/bucket', fields: { key: 'reports/k.jpg', Policy: 'p', 'Content-Type': 'image/jpeg' }, key: 'reports/k.jpg' });
+    (global as any).fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     const key = await uploadImage('file:///a/b.jpg');
     expect(apiRequest).toHaveBeenCalledWith('/media/presign', { method: 'POST', body: { contentType: 'image/jpeg', prefix: 'reports' }, auth: true });
-    const putCall = (global as any).fetch.mock.calls[1];
-    expect(putCall[0]).toBe('https://minio/put?sig=1');
-    expect(putCall[1].method).toBe('PUT');
-    expect(putCall[1].body).toBe(blob);
+    const call = (global as any).fetch.mock.calls[0];
+    expect(call[0]).toBe('https://minio/bucket');
+    expect(call[1].method).toBe('POST');
+    const form = call[1].body;
+    expect(form.parts.map((p: any) => p[0])).toEqual(['key', 'Policy', 'Content-Type', 'file']);
+    expect(form.parts[form.parts.length - 1][0]).toBe('file');
+    expect(form.parts[form.parts.length - 1][1]).toEqual({ uri: 'file:///a/b.jpg', name: 'k.jpg', type: 'image/jpeg' });
+    expect(call[1].headers?.['Content-Type']).toBeUndefined();
+    expect(call[1].headers).toBeUndefined();
     expect(key).toBe('reports/k.jpg');
   });
 
-  it('uploadImage repassa o prefixo pro presign', async () => {
-    (apiRequest as jest.Mock).mockResolvedValue({ url: 'u', key: 'task/k.jpg' });
-    (global as any).fetch
-      .mockResolvedValueOnce({ blob: async () => ({}) })
-      .mockResolvedValueOnce({ ok: true, status: 200 });
+  it('uploadImage repassa o prefixo', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ url: 'u', fields: {}, key: 'task/k.jpg' });
+    (global as any).fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     await uploadImage('file:///a/b.jpg', 'task');
     expect(apiRequest).toHaveBeenCalledWith('/media/presign', { method: 'POST', body: { contentType: 'image/jpeg', prefix: 'task' }, auth: true });
   });
 
-  it('uploadImage propaga falha de PUT', async () => {
-    (apiRequest as jest.Mock).mockResolvedValue({ url: 'u', key: 'k' });
-    (global as any).fetch
-      .mockResolvedValueOnce({ blob: async () => ({}) })
-      .mockResolvedValueOnce({ ok: false, status: 500 });
-    await expect(uploadImage('file:///a/b.jpg')).rejects.toThrow(/500/);
+  it('uploadImage propaga falha do POST (policy violation)', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ url: 'u', fields: {}, key: 'k' });
+    (global as any).fetch.mockResolvedValueOnce({ ok: false, status: 400, text: async () => 'EntityTooLarge' });
+    await expect(uploadImage('file:///a/b.jpg')).rejects.toThrow(/400.*EntityTooLarge/);
   });
 });
