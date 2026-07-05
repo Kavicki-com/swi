@@ -29,7 +29,7 @@ export class WeatherAlertService {
           where: { role: 'WORKER', approvalStatus: 'APPROVED' },
           select: { id: true },
         })
-        await this.notifications.createForMany(workers.map((w) => w.id), {
+        await this.notifications.enqueueForMany(workers.map((w) => w.id), {
           domain: 'weather',
           title: 'Alerta Meteorológico',
           body: alert.description,

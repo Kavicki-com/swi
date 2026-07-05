@@ -50,7 +50,7 @@ export class ReportsService {
         where: { role: 'WORKER', approvalStatus: 'APPROVED', id: { not: authorId } },
         select: { id: true },
       })
-      await this.notifications.createForMany(others.map((u) => u.id), {
+      await this.notifications.enqueueForMany(others.map((u) => u.id), {
         domain: 'reports',
         title: 'Novo relatório',
         body: dto.title,
