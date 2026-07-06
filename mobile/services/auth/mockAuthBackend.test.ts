@@ -14,4 +14,7 @@ describe('mockAuthBackend', () => {
     await expect(mockAuthBackend.resetPassword({ email: 'a@b.com' })).resolves.toBeUndefined();
     await expect(mockAuthBackend.confirmReset({ email: 'a@b.com', code: '1', newPassword: 'x' })).resolves.toBeUndefined();
   });
+  it('resendConfirmation resolves without throwing (no-op)', async () => {
+    await expect(mockAuthBackend.resendConfirmation({ email: 'a@b.com' })).resolves.toBeUndefined();
+  });
 });

@@ -40,4 +40,13 @@ describe('apiAuthBackend', () => {
     const store = require('expo-secure-store'); await store.deleteItemAsync('x')
     expect(await apiAuthBackend.getCurrentUser()).toBeNull()
   })
+
+  it('resendConfirmation faz POST em /auth/confirm/resend com o e-mail', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({}))
+    await apiAuthBackend.resendConfirmation({ email: 'j@ex.com' })
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0]
+    expect(url).toContain('/auth/confirm/resend')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({ email: 'j@ex.com' })
+  })
 })

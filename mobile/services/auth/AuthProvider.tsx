@@ -4,7 +4,7 @@ import {
 } from 'react';
 import type { User } from '../types';
 import type {
-  SignUpParams, SignInParams, ConfirmSignUpParams,
+  SignUpParams, SignInParams, ConfirmSignUpParams, ResendConfirmationParams,
   ResetPasswordParams, ConfirmResetParams, SignUpResult,
 } from './types';
 import { getAuthBackend } from './getAuthBackend';
@@ -14,6 +14,7 @@ interface AuthState {
   signIn: (p: SignInParams) => Promise<User>;
   signUp: (p: SignUpParams) => Promise<SignUpResult>;
   confirmSignUp: (p: ConfirmSignUpParams) => Promise<void>;
+  resendConfirmation: (p: ResendConfirmationParams) => Promise<void>;
   resetPassword: (p: ResetPasswordParams) => Promise<void>;
   confirmReset: (p: ConfirmResetParams) => Promise<void>;
   signOut: () => Promise<void>;
@@ -38,13 +39,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signUp = useCallback((p: SignUpParams) => backend.signUp(p), [backend]);
   const confirmSignUp = useCallback((p: ConfirmSignUpParams) => backend.confirmSignUp(p), [backend]);
+  const resendConfirmation = useCallback((p: ResendConfirmationParams) => backend.resendConfirmation(p), [backend]);
   const resetPassword = useCallback((p: ResetPasswordParams) => backend.resetPassword(p), [backend]);
   const confirmReset = useCallback((p: ConfirmResetParams) => backend.confirmReset(p), [backend]);
   const signOut = useCallback(async () => { await backend.signOut(); setUser(null); }, [backend]);
 
   const value = useMemo<AuthState>(
-    () => ({ user, signIn, signUp, confirmSignUp, resetPassword, confirmReset, signOut }),
-    [user, signIn, signUp, confirmSignUp, resetPassword, confirmReset, signOut],
+    () => ({ user, signIn, signUp, confirmSignUp, resendConfirmation, resetPassword, confirmReset, signOut }),
+    [user, signIn, signUp, confirmSignUp, resendConfirmation, resetPassword, confirmReset, signOut],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -57,6 +57,20 @@ export class AuthService {
     })
   }
 
+  async resendConfirmationCode(p: { email: string }): Promise<void> {
+    const u = await this.users.findByEmail(p.email)
+    const code = generateCode()
+    if (!u || u.emailVerified) {
+      await hash(code)   // trabalho dummy equivalente ao caminho real (1 bcrypt) → sem oráculo de enumeração/estado
+      return             // silencioso: e-mail inexistente OU já confirmado (não reenvia código a quem não precisa)
+    }
+    await this.prisma.user.update({
+      where: { id: u.id },
+      data: { confirmationCodeHash: await hash(code), confirmationExpires: new Date(Date.now() + CODE_TTL_MIN * 60_000) },
+    })
+    await this.mail.sendConfirmationCode(p.email, code)
+  }
+
   async login(p: { email: string; password: string }): Promise<{ accessToken: string; user: { id: string; email: string; name: string } }> {
     const u = await this.users.findByEmail(p.email)
     const ok = await verifyHash(p.password, u?.passwordHash ?? DUMMY_HASH)

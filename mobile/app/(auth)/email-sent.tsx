@@ -17,8 +17,9 @@ export default function EmailSent() {
   const insets = useSafeAreaInsets();
   const { email, username } = useLocalSearchParams<{ email?: string; username?: string }>();
   const displayEmail = email && email.length > 0 ? email : 'nomedousuario@email.com';
-  const { confirmSignUp } = useAuth();
+  const { confirmSignUp, resendConfirmation } = useAuth();
   const [code, setCode] = useState('');
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     // Mock-only auto-advance: simulates the user clicking the confirmation
@@ -39,6 +40,21 @@ export default function EmailSent() {
     // including it in deps re-runs this fire-and-go timer for no reason.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, email]);
+
+  const handleResend = async () => {
+    // Recuperação do usuário órfão: se o e-mail de confirmação não chegou (ou
+    // o código expirou), reenvia. O backend é silencioso por anti-enumeração —
+    // sempre confirmamos "reenviado" na UI, independentemente do e-mail existir.
+    setResending(true);
+    try {
+      await resendConfirmation({ email: email ?? '' });
+      Alert.alert('Código reenviado', 'Enviamos um novo código para o seu e-mail.');
+    } catch {
+      Alert.alert('Erro', 'Não foi possível reenviar o código. Tente novamente.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleConfirm = async () => {
     try {
@@ -107,6 +123,13 @@ export default function EmailSent() {
                 label="Confirmar conta"
                 fullWidth
                 onPress={handleConfirm}
+              />
+              <Button
+                variant="ghost"
+                label="Reenviar código"
+                fullWidth
+                disabled={resending}
+                onPress={handleResend}
               />
             </View>
           )}
