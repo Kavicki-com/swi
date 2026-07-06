@@ -1,21 +1,24 @@
-# Runbook — Build de QA do Auth (Docker + túnel + EAS build)
+# Runbook — Build de QA ponta a ponta (Docker + túnel + EAS build)
 
 ## 1. Contexto
 
 Este runbook descreve como gerar e validar uma **build de QA (APK Android)** do app mobile
-apontando para o **backend conteinerizado** (NestJS + Postgres + MailHog via Docker Compose),
-exposto à internet por um **túnel** (ngrok). O objetivo é validar o **vertical de autenticação
-ponta a ponta** — signup, confirmação de e-mail, gate de aprovação, login, `/me` e reset de senha —
-rodando contra o backend real, **sem depender de AWS**.
+apontando para o **backend conteinerizado** (NestJS + Postgres + MinIO + MailHog + fila pg-boss
+via Docker Compose), exposto à internet por um **túnel** (ngrok). O objetivo é validar o app
+**ponta a ponta contra o backend real** — o vertical de autenticação **e** todos os domínios
+não-saúde —, **sem depender de AWS**.
 
-**O que este build valida:** apenas o vertical de **auth** (cadastro, verificação de e-mail,
-aprovação/rejeição por admin, login com gate de aprovação, perfil autenticado e reset de senha).
+**O que este build valida:** o app inteiro **exceto saúde**. Auth (cadastro, verificação de e-mail
+**com reenvio de código**, aprovação/rejeição por admin, login com gate de aprovação, perfil
+autenticado e reset de senha) **mais** os 7 domínios não-saúde (perfil, relatórios, jornada, chat,
+notificações, clima, evacuação) ligados ao backend real. Duas flags fazem isso:
+`EXPO_PUBLIC_AUTH_BACKEND=api` (auth) e `EXPO_PUBLIC_DATA_BACKEND=api` (os 7 domínios).
 
-**O que este build NÃO cobre:** os outros 9 domínios do app (saúde, GPS, jornada, chat, clima,
-notificações, evacuação, relatórios etc.) **continuam em mock** — a flag `EXPO_PUBLIC_AUTH_BACKEND=api`
-manda somente o vertical de auth para o backend real; o resto segue no caminho mock.
+**O que este build NÃO cobre:** **saúde** — vitais/telemetria/smartband **continuam em mock**
+(decisão de produto: dados de saúde só existem quando a smartband for adquirida). Essas telas
+IGNORAM as flags de backend por design.
 
-_Data: 2026-07-01 · Branch: `feat/backend-qa-auth-build`_
+_Atualizado: 2026-07-05 — cobertura ampliada de auth-only → app inteiro (não-saúde). Branch original: `feat/backend-qa-auth-build`_
 
 ---
 
@@ -49,11 +52,13 @@ cd swi-backend && docker compose up -d --build
 
 Serviços que sobem:
 
-| Serviço   | Imagem/origem              | Porta(s)                 | Observação                                              |
-|-----------|----------------------------|--------------------------|---------------------------------------------------------|
-| `db`      | postgres:16                | `5432`                   | user `swi` / pass `swi` / db `swi`                      |
-| `mailhog` | mailhog                    | `1025` (SMTP) / `8025` (web) | UI web em `http://localhost:8025`                    |
-| `api`     | build do `swi-backend/Dockerfile` | `3000`            | no boot roda `npx prisma migrate deploy && node dist/main` |
+| Serviço      | Imagem/origem              | Porta(s)                           | Observação                                              |
+|--------------|----------------------------|------------------------------------|---------------------------------------------------------|
+| `db`         | postgres:16                | `5432`                             | user `swi` / pass `swi` / db `swi`                      |
+| `mailhog`    | mailhog                    | `1025` (SMTP) / `8025` (web)        | UI web em `http://localhost:8025`                       |
+| `minio`      | minio/minio                | `9000` (S3 API) / `9001` (console)  | mídia (fotos de relatórios e chat)                      |
+| `minio-init` | minio/mc                   | —                                  | sidecar: cria o bucket `swi-media` uma vez e sai        |
+| `api`        | build do `swi-backend/Dockerfile` | `3000`                      | no boot roda `npx prisma migrate deploy && node dist/main`; a **fila pg-boss** (fan-out de notificações) roda dentro do `api`, no mesmo Postgres |
 
 As **migrations aplicam automaticamente** no boot do `api`. O **seed NÃO roda automaticamente**
 (ver 3.2).
@@ -86,23 +91,40 @@ ngrok http 3000 --domain=<SEU-DOMINIO-ESTATICO>.ngrok-free.app
 
 Isso publica a API (`localhost:3000`) numa **URL estável** — anote-a; ela vai no `eas.json` (passo 3.5).
 
-### 3.4 Subir o túnel do MailHog (para o QA ler os códigos)
+### 3.4 Subir os túneis de MailHog e MinIO
+
+**MailHog** (para o QA ler os códigos de e-mail):
 
 ```bash
 ngrok http 8025
 ```
 
 Gera uma **URL efêmera** do MailHog. **Passe essa URL ao QA** para que ele leia os códigos de
-e-mail (confirmação e reset). O cloudflared é uma alternativa válida.
+e-mail (confirmação, **reenvio** e reset). O cloudflared é uma alternativa válida.
 
-### 3.5 Gravar a URL da API no `eas.json`
+**MinIO** (mídia — necessário porque `DATA_BACKEND=api` liga o upload de fotos em relatórios e chat):
+
+```bash
+ngrok http 9000
+```
+
+As URLs presigned de upload/download são **atadas ao host** que as assina — por isso o `api`
+precisa saber a URL pública do MinIO. Grave a URL desse túnel no `swi-backend/.env` como
+`MINIO_PUBLIC_URL` (ex.: `MINIO_PUBLIC_URL=https://<sub>.ngrok-free.app`) e **suba a stack de
+novo** (`docker compose up -d`) para o `api` reassinar contra ela. Sem isso, o app abre a tela
+mas **falha ao subir foto** (a URL presigned aponta para `localhost:9000`, inacessível do
+aparelho). Em produção AWS o `MINIO_PUBLIC_URL` fica **unset** (o SDK usa o S3 real).
+
+### 3.5 Gravar as URLs e flags no `eas.json`
 
 No `mobile/eas.json` existe o perfil **`qa`** com `env`:
 
-- `EXPO_PUBLIC_AUTH_BACKEND=api`
+- `EXPO_PUBLIC_AUTH_BACKEND=api` — manda o **auth** para o backend real.
+- `EXPO_PUBLIC_DATA_BACKEND=api` — manda os **7 domínios não-saúde** para o backend real.
 - `EXPO_PUBLIC_API_URL` — hoje um **placeholder**: `https://REPLACE-WITH-STATIC-TUNNEL.ngrok-free.app`
 
-**Substitua o placeholder** pela URL estável do ngrok da API (a de 3.3).
+**Substitua o placeholder** pela URL estável do ngrok da API (a de 3.3). As duas flags de backend
+já vêm setadas no perfil; a de saúde continua mock por design (não há flag para ligá-la).
 
 ### 3.6 Gerar o APK
 
@@ -110,8 +132,8 @@ No `mobile/eas.json` existe o perfil **`qa`** com `env`:
 cd mobile && eas build --profile qa --platform android
 ```
 
-O app lê `EXPO_PUBLIC_API_URL` em `mobile/services/auth/apiConfig.ts` e `EXPO_PUBLIC_AUTH_BACKEND`
-em `mobile/lib/featureFlags.ts`.
+O app lê `EXPO_PUBLIC_API_URL` em `mobile/services/auth/apiConfig.ts` e as flags
+`EXPO_PUBLIC_AUTH_BACKEND` / `EXPO_PUBLIC_DATA_BACKEND` em `mobile/lib/featureFlags.ts`.
 
 ### 3.7 Distribuir
 
@@ -141,6 +163,11 @@ credenciais seedadas (3.2).
    Cria um usuário **PENDING**, e-mail **não verificado**, e dispara um **código por e-mail**.
 2. **Ler o código no MailHog** (`http://localhost:8025` ou o túnel) e **confirmar**
    (`POST /auth/confirm` `{email, code}` → 200).
+
+   > Se o e-mail não chegar (ou o código expirar — TTL 30 min), toque **"Reenviar código"** na
+   > tela de confirmação do app; um novo código é enviado (`POST /auth/confirm/resend`). Por
+   > anti-enumeração o endpoint é silencioso (sempre 200), mesmo para e-mail inexistente ou já
+   > confirmado.
 3. **Tentar login** (`POST /auth/login` `{email, password}`). Como o usuário **ainda não foi aprovado**,
    o login retorna **403** (gate de aprovação). Isso é o comportamento esperado.
 4. **Admin aprova via API/curl** (sem tela no app) — ver exemplos em 4.3.
@@ -191,6 +218,7 @@ Depois de aprovado, o usuário consegue logar (200) e o token pode ser validado 
 |--------|--------------------------|--------------------------------|--------------------------------------------|
 | POST   | `/auth/signup`           | `{email, password, name}`      | 201 (cria PENDING, envia código)           |
 | POST   | `/auth/confirm`          | `{email, code}`                | 200                                        |
+| POST   | `/auth/confirm/resend`   | `{email}`                      | 200 (reenvia código; silencioso se e-mail não existe ou já confirmado) |
 | POST   | `/auth/login`            | `{email, password}`            | 200 `{accessToken, user}`; **403** se não APPROVED |
 | POST   | `/auth/password/forgot`  | `{email}`                      | 200 (envia código de reset)                |
 | POST   | `/auth/password/reset`   | `{email, code, newPassword}`   | 200                                        |

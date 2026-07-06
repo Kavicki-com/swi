@@ -19,12 +19,12 @@ describe('Auth e2e', () => {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
     await app.init()
     prisma = app.get(PrismaService)
-    await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com','reject-e2e@ex.com'] } } })
+    await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com','reject-e2e@ex.com','resend-e2e@ex.com'] } } })
     const bcrypt = await import('bcrypt')
     await prisma.user.create({ data: { email: 'admin-e2e@ex.com', name: 'A', passwordHash: await bcrypt.hash('admin123', 10),
         role: 'ADMIN', emailVerified: true, approvalStatus: 'APPROVED' } })
   })
-  afterAll(async () => { await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com','reject-e2e@ex.com'] } } }); await app.close() })
+  afterAll(async () => { await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com','reject-e2e@ex.com','resend-e2e@ex.com'] } } }); await app.close() })
 
   it('fluxo completo até /me', async () => {
     const http = app.getHttpServer()
@@ -65,5 +65,21 @@ describe('Auth e2e', () => {
 
     const r = await request(http).post(`/users/${target.id}/reject`).set('Authorization', `Bearer ${token}`).expect(200)
     expect(r.body.approvalStatus).toBe('REJECTED')
+  })
+
+  it('reenvia o código de confirmação; o novo código confirma a conta', async () => {
+    const http = app.getHttpServer()
+    await request(http).post('/auth/signup').send({ email: 'resend-e2e@ex.com', password: 'senha123', name: 'Resend' }).expect(201)
+    await request(http).post('/auth/confirm/resend').send({ email: 'resend-e2e@ex.com' }).expect(200)
+    const resent = codes['resend-e2e@ex.com']
+    expect(resent).toBeDefined()
+    await request(http).post('/auth/confirm').send({ email: 'resend-e2e@ex.com', code: resent }).expect(200)
+    const u = await prisma.user.findUnique({ where: { email: 'resend-e2e@ex.com' } })
+    expect(u!.emailVerified).toBe(true)
+  })
+
+  it('resend com e-mail inexistente é silencioso (200, anti-enumeração)', async () => {
+    const http = app.getHttpServer()
+    await request(http).post('/auth/confirm/resend').send({ email: 'ghost-resend@ex.com' }).expect(200)
   })
 })

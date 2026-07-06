@@ -8,6 +8,7 @@ export const mockAuthBackend: AuthBackend = {
   async signIn({ email }) { return userFromEmail(email); },
   async signUp() { return { nextStep: 'CONFIRM' }; },
   async confirmSignUp() {},
+  async resendConfirmation() {},
   async signOut() {},
   async resetPassword() {},
   async confirmReset() {},

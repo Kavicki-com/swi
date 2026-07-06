@@ -181,3 +181,34 @@ describe('AuthService enumeration-timing (H3a)', () => {
     spy.mockRestore()
   })
 })
+
+describe('AuthService.resendConfirmationCode', () => {
+  it('usuário não-verificado → gera novo código, atualiza hash/expiração e reenvia o e-mail', async () => {
+    const { svc, users, prisma, mail } = deps()
+    users.findByEmail.mockResolvedValue({ id: 'u1', email: 'j@ex.com', emailVerified: false })
+    prisma.user.update.mockResolvedValue({})
+    await svc.resendConfirmationCode({ email: 'j@ex.com' })
+    const data = prisma.user.update.mock.calls[0][0].data
+    expect(data.confirmationCodeHash).toBeDefined()
+    expect(data.confirmationExpires).toBeInstanceOf(Date)
+    expect(mail.sendConfirmationCode).toHaveBeenCalledWith('j@ex.com', expect.any(String))
+  })
+
+  it('e-mail inexistente → silencioso, sem e-mail (não vaza) e AINDA roda bcrypt.hash dummy (anti-enumeração)', async () => {
+    const { svc, users, prisma, mail } = deps(); users.findByEmail.mockResolvedValue(null)
+    const spy = jest.spyOn(bcrypt, 'hash')
+    await expect(svc.resendConfirmationCode({ email: 'nao@existe.com' })).resolves.toBeUndefined()
+    expect(spy).toHaveBeenCalledTimes(1)     // custo constante equivalente ao caminho real
+    expect(mail.sendConfirmationCode).not.toHaveBeenCalled()
+    expect(prisma.user.update).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('usuário já verificado → silencioso, sem e-mail (não reenvia código a quem já confirmou)', async () => {
+    const { svc, users, prisma, mail } = deps()
+    users.findByEmail.mockResolvedValue({ id: 'u1', email: 'j@ex.com', emailVerified: true })
+    await expect(svc.resendConfirmationCode({ email: 'j@ex.com' })).resolves.toBeUndefined()
+    expect(mail.sendConfirmationCode).not.toHaveBeenCalled()
+    expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+})

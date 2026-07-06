@@ -4,7 +4,7 @@ import { AuthService } from './auth.service'
 import { UsersService } from '../users/users.service'
 import { JwtAuthGuard } from './jwt-auth.guard'
 import { CurrentUserId } from './current-user.decorator'
-import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto } from './dto'
+import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto, ResendDto } from './dto'
 
 @Controller('auth')
 export class AuthController {
@@ -12,6 +12,7 @@ export class AuthController {
 
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('signup') signup(@Body() b: SignupDto) { return this.auth.signup(b) }
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('confirm') @HttpCode(200) confirm(@Body() b: ConfirmDto) { return this.auth.confirm(b) }
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('confirm/resend') @HttpCode(200) resend(@Body() b: ResendDto) { return this.auth.resendConfirmationCode(b) }
   @Throttle({ default: { limit: 10, ttl: 60000 } }) @Post('login') @HttpCode(200) login(@Body() b: LoginDto) { return this.auth.login(b) }
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/forgot') @HttpCode(200) forgot(@Body() b: ForgotDto) { return this.auth.forgotPassword(b) }
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/reset') @HttpCode(200) reset(@Body() b: ResetDto) { return this.auth.resetPassword(b) }
