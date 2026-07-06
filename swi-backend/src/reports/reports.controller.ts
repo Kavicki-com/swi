@@ -1,6 +1,6 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { ReportsService } from './reports.service'
-import { CreateReportDto } from './dto'
+import { CreateReportDto, ListReportsQueryDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUserId } from '../auth/current-user.decorator'
 
@@ -10,8 +10,8 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Get()
-  list() {
-    return this.reports.list()
+  list(@Query() q: ListReportsQueryDto) {
+    return this.reports.list(q.page, q.limit)
   }
 
   @Get(':id')

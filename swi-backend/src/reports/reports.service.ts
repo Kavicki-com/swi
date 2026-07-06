@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
+import { Prisma } from '@prisma/client'
 import type { Report } from '@prisma/client'
 import type { CreateReportDto } from './dto'
 
-const LIST_CAP = 200
+const DEFAULT_LIMIT = 4
+const MAX_LIMIT = 50
 
 @Injectable()
 export class ReportsService {
@@ -15,9 +17,23 @@ export class ReportsService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async list() {
-    const rows = await this.prisma.report.findMany({ orderBy: { createdAt: 'desc' }, take: LIST_CAP })
-    return Promise.all(rows.map((r) => this.toDto(r)))
+  async list(page = 1, limit = DEFAULT_LIMIT) {
+    const take = Math.min(Math.max(Math.trunc(limit) || DEFAULT_LIMIT, 1), MAX_LIMIT)
+    const currentPage = Math.max(Math.trunc(page) || 1, 1)
+    const skip = (currentPage - 1) * take
+    // RepeatableRead: items + count read from the SAME snapshot (avoids "total 9 but page
+    // empty" under concurrent create). Read-only tx → no serialization/write-skew risk.
+    // Stable order needs a deterministic tiebreaker: createdAt is ms-precision, so ties at a
+    // page boundary could duplicate/skip a row without id as secondary key.
+    const [rows, total] = await this.prisma.$transaction(
+      [
+        this.prisma.report.findMany({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take }),
+        this.prisma.report.count(),
+      ],
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    )
+    const items = await Promise.all(rows.map((r) => this.toDto(r)))
+    return { items, total }
   }
 
   async get(id: string) {

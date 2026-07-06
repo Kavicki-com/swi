@@ -10,8 +10,10 @@ const notifications = () => ({ enqueueForMany: jest.fn() }) as any
 
 const prisma = () =>
   ({
-    report: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
+    report: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), count: jest.fn() },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
+    // $transaction([p1,p2]) resolves the array of PrismaPromises (form used in list()).
+    $transaction: jest.fn((ops: Promise<any>[]) => Promise.all(ops)),
   }) as any
 
 const row = (over = {}) => ({
@@ -33,15 +35,44 @@ const row = (over = {}) => ({
 })
 
 describe('ReportsService', () => {
-  it('list ordena por createdAt desc e mapeia keys→urls presigned', async () => {
+  it('list pagina (skip/take), total = count, envelope {items,total} + mapeia dto', async () => {
     const db = prisma()
     db.report.findMany.mockResolvedValue([row()])
+    db.report.count.mockResolvedValue(10)
+    const out = await new ReportsService(db, media(), notifications()).list(2, 4)
+    expect(db.report.findMany).toHaveBeenCalledWith({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: 4, take: 4 })
+    expect(out.total).toBe(10)
+    expect(out.items[0].images).toEqual(['signed:reports/x.jpg'])
+    expect(out.items[0].creationDate).toBe('01/01/2026') // BRT (UTC-3)
+    expect(out.items[0].summary).toBe('') // null → ''
+  })
+
+  it('list clampa limit a MAX_LIMIT e page<1 → página 1', async () => {
+    const db = prisma()
+    db.report.findMany.mockResolvedValue([])
+    db.report.count.mockResolvedValue(0)
+    await new ReportsService(db, media(), notifications()).list(0, 9999)
+    expect(db.report.findMany).toHaveBeenCalledWith({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: 0, take: 50 })
+  })
+
+  it('list sem args → page 1, limit 4, envelope vazio', async () => {
+    const db = prisma()
+    db.report.findMany.mockResolvedValue([])
+    db.report.count.mockResolvedValue(0)
     const out = await new ReportsService(db, media(), notifications()).list()
-    expect(db.report.findMany).toHaveBeenCalledWith({ orderBy: { createdAt: 'desc' }, take: 200 })
-    expect(out[0].images).toEqual(['signed:reports/x.jpg'])
-    expect(out[0].authorAvatarUri).toBe('signed:reports/av.jpg')
-    expect(out[0].creationDate).toBe('01/01/2026') // BRT (UTC-3) rola pro dia anterior
-    expect(out[0].summary).toBe('') // null → '' (telas exigem string)
+    expect(db.report.findMany).toHaveBeenCalledWith({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: 0, take: 4 })
+    expect(out).toEqual({ items: [], total: 0 })
+  })
+
+  it('list clampa limit negativo → 1 e NaN → default 4', async () => {
+    const db = prisma()
+    db.report.findMany.mockResolvedValue([])
+    db.report.count.mockResolvedValue(0)
+    const svc = new ReportsService(db, media(), notifications())
+    await svc.list(1, -5)
+    expect(db.report.findMany).toHaveBeenLastCalledWith({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: 0, take: 1 })
+    await svc.list(1, NaN as any)
+    expect(db.report.findMany).toHaveBeenLastCalledWith({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: 0, take: 4 })
   })
 
   it('get inexistente → null', async () => {
