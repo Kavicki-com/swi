@@ -89,9 +89,11 @@ let store: Report[] = SEED_BASE.map(enrich);
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 export const mockReportsBackend: ReportsBackend = {
-  async list() {
+  async list(page, limit) {
     await tick();
-    return store.map((r) => ({ ...r }));
+    const start = Math.max(page - 1, 0) * limit;
+    const items = store.slice(start, start + limit).map((r) => ({ ...r }));
+    return { items, total: store.length };
   },
   async get(id) {
     await tick();

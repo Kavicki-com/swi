@@ -1,12 +1,12 @@
-import type { Report, ReportInput, ReportsBackend } from './types';
+import type { Report, ReportInput, ReportsBackend, ReportsPage } from './types';
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 
 // O backend já devolve o shape mobile `Report` pronto (imagens como URLs
 // presigned, creationDate dd/mm/yyyy, null→'' coalescido), então não há fromApi.
 export const apiReportsBackend: ReportsBackend = {
-  list() {
-    return apiRequest<Report[]>('/reports', { auth: true });
+  list(page, limit) {
+    return apiRequest<ReportsPage>(`/reports?page=${page}&limit=${limit}`, { auth: true });
   },
   async get(id) {
     try {

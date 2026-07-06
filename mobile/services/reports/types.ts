@@ -39,8 +39,13 @@ export interface ReportInput {
   imageUris: string[];
 }
 
+export interface ReportsPage {
+  items: Report[];
+  total: number;
+}
+
 export interface ReportsBackend {
-  list(): Promise<Report[]>;
+  list(page: number, limit: number): Promise<ReportsPage>;
   get(id: string): Promise<Report | null>;
   create(input: ReportInput): Promise<Report>;
 }

@@ -10,11 +10,12 @@ describe('apiReportsBackend', () => {
     (uploadImage as jest.Mock).mockReset();
   });
 
-  it('list → GET /reports (o server já devolve o shape pronto)', async () => {
-    (apiRequest as jest.Mock).mockResolvedValue([{ id: 'r1', title: 'T' }]);
-    const out = await apiReportsBackend.list();
-    expect(apiRequest).toHaveBeenCalledWith('/reports', { auth: true });
-    expect(out[0].id).toBe('r1');
+  it('list → GET /reports?page&limit (envelope {items,total})', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ items: [{ id: 'r1', title: 'T' }], total: 9 });
+    const out = await apiReportsBackend.list(2, 4);
+    expect(apiRequest).toHaveBeenCalledWith('/reports?page=2&limit=4', { auth: true });
+    expect(out.total).toBe(9);
+    expect(out.items[0].id).toBe('r1');
   });
 
   it('get inexistente (404) → null', async () => {
