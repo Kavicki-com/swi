@@ -21,8 +21,8 @@ import type { Report } from '../../../services/reports/types';
 // Backend slice: 10 mock reports via useReports() (Unit A/B), todos navegam
 // pra /reports/[id]. Mesmos dados que antes (seed migrado das telas).
 
-// T5.2: ReportRow memoizado pra impedir que os 10 cards re-renderizem quando
-// search/currentPage mudam. onPress(id) é estável via useCallback no parent.
+// T5.2: ReportRow memoizado pra impedir que os cards re-renderizem quando
+// search/page mudam. onPress(id) é estável via useCallback no parent.
 type ReportRowProps = {
   report: Report;
   onPress: (id: string) => void;
@@ -49,20 +49,19 @@ export default function Reports() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { reports, status, load } = useReports();
+  const { reports, status, load, page, pageCount } = useReports();
   const [search, setSearch] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
 
   // Só carrega quando ainda não há nada carregado (status 'idle'). load() seta
   // 'loading' primeiro, então re-disparar em todo mount apagaria a lista já
   // populada pra um spinner ao voltar pra tela. O provider mantém `reports` na
   // sessão e create() o mantém fresco, então visitas seguintes não dão flash.
   useEffect(() => {
-    if (status === 'idle') load();
+    if (status === 'idle') load(1);
   }, [status, load]);
 
   // T5.2: useCallback estabiliza ref → ReportRow memo consegue skipar
-  // re-render quando search/currentPage mudam.
+  // re-render quando search/page mudam.
   const handleReportPress = useCallback(
     (id: string) => router.push({ pathname: '/(app)/reports/[id]', params: { id } }),
     [router],
@@ -80,7 +79,7 @@ export default function Reports() {
       ) : status === 'empty' ? (
         <ReportsListState kind="empty" />
       ) : status === 'error' ? (
-        <ReportsListState kind="error" onRetry={load} />
+        <ReportsListState kind="error" onRetry={() => load(page)} />
       ) : (
         <>
           {/* Fixed header: SearchInput + Novo relatório CTA stay pinned at top.
@@ -133,11 +132,17 @@ export default function Reports() {
               />
             ))}
 
-            {/* Pagination — Figma 461:10196 (shared with settings/faq.tsx) */}
-            <Pagination
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-            />
+            {/* Pager numerado — Figma 461:10196. currentPage/pageCount reais do provider;
+                onPageChange recarrega a página. Escondido quando só há 1 página (um pager
+                de 1 página é ruído). Clamp Math.min(...,pageCount) neutraliza o overflow do
+                chevron "→" na última página. */}
+            {pageCount > 1 && (
+              <Pagination
+                currentPage={page}
+                pageCount={pageCount}
+                onPageChange={(p) => load(Math.min(Math.max(p, 1), pageCount))}
+              />
+            )}
           </ScrollView>
         </>
       )}
