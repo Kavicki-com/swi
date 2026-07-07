@@ -15,6 +15,14 @@ export interface ReportActivity {
   overflowCount?: number;
 }
 
+export interface ReportComment {
+  id: string;
+  authorName: string;
+  authorAvatarUri: string;
+  text: string;
+  date: string; // dd/mm/aaaa (paridade com creationDate)
+}
+
 export interface Report {
   id: string;
   title: string;
@@ -29,6 +37,8 @@ export interface Report {
   details: string;
   images: string[];
   activities: ReportActivity[];
+  // Populado só no get (detail); list devolve [] (inbox não usa).
+  comments: ReportComment[];
 }
 
 export interface ReportInput {
@@ -39,8 +49,19 @@ export interface ReportInput {
   imageUris: string[];
 }
 
+// PATCH parcial — só os campos presentes são aplicados. Imagens ficam FORA
+// da edição: as existentes chegam como URLs presigned (sem key recuperável
+// no client), então re-enviá-las é impossível e enviar só as novas
+// substituiria as antigas no server. O PATCH omite imagens e o backend as
+// preserva intactas.
+export type ReportUpdateInput = Partial<Omit<ReportInput, 'imageUris'>>;
+
 export interface ReportsBackend {
   list(): Promise<Report[]>;
   get(id: string): Promise<Report | null>;
   create(input: ReportInput): Promise<Report>;
+  /** null = relatório inexistente (404 no modo api). */
+  update(id: string, input: ReportUpdateInput): Promise<Report | null>;
+  /** null = relatório inexistente (404 no modo api). */
+  addComment(id: string, text: string): Promise<ReportComment | null>;
 }

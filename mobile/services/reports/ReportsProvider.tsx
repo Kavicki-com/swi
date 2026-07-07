@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from 'react';
-import type { Report, ReportInput } from './types';
+import type { Report, ReportComment, ReportInput, ReportUpdateInput } from './types';
 import { getReportsBackend } from './getReportsBackend';
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -9,6 +9,8 @@ interface ReportsState {
   load: () => Promise<void>;
   loadOne: (id: string) => Promise<Report | null>;
   create: (input: ReportInput) => Promise<Report>;
+  update: (id: string, input: ReportUpdateInput) => Promise<Report | null>;
+  addComment: (id: string, text: string) => Promise<ReportComment | null>;
 }
 const ReportsContext = createContext<ReportsState | null>(null);
 
@@ -33,8 +35,18 @@ export function ReportsProvider({ children }: PropsWithChildren) {
     setReports((prev) => [created, ...prev]);
     return created;
   }, [backend]);
+  // Espelha o update na lista em cache (inbox) pra edição refletir sem reload.
+  const update = useCallback(async (id: string, input: ReportUpdateInput) => {
+    const updated = await backend.update(id, input);
+    if (updated) setReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    return updated;
+  }, [backend]);
+  const addComment = useCallback((id: string, text: string) => backend.addComment(id, text), [backend]);
 
-  const value = useMemo<ReportsState>(() => ({ reports, status, load, loadOne, create }), [reports, status, load, loadOne, create]);
+  const value = useMemo<ReportsState>(
+    () => ({ reports, status, load, loadOne, create, update, addComment }),
+    [reports, status, load, loadOne, create, update, addComment],
+  );
   return <ReportsContext.Provider value={value}>{children}</ReportsContext.Provider>;
 }
 

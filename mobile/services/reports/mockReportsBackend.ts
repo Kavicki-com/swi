@@ -1,5 +1,5 @@
 import { Asset } from 'expo-asset';
-import type { Report, ReportActivity, ReportsBackend, ReportStatus } from './types';
+import type { Report, ReportActivity, ReportComment, ReportsBackend, ReportStatus } from './types';
 
 // In-memory demo backend for the Relatórios slice. Mirrors
 // services/profile/mockProfileBackend.ts: a module-level mutable store seeded at
@@ -72,6 +72,7 @@ function enrich(base: SeedBase): Report {
     sector: SECTOR,
     responsibles: RESPONSIBLES,
     ...SHARED_DETAIL,
+    comments: [],
   };
 }
 
@@ -114,8 +115,43 @@ export const mockReportsBackend: ReportsBackend = {
       details: input.details,
       images: input.imageUris,
       activities: [],
+      comments: [],
     };
     store = [report, ...store];
     return { ...report };
+  },
+  // PATCH parcial in-memory: só os campos presentes sobrescrevem (paridade
+  // com o UpdateReportDto do backend). Imagens ficam fora da edição (ver
+  // nota no ReportUpdateInput) — preservadas intactas.
+  async update(id, input) {
+    await tick();
+    const idx = store.findIndex((r) => r.id === id);
+    if (idx < 0) return null;
+    const prev = store[idx];
+    const next: Report = {
+      ...prev,
+      ...(input.title !== undefined ? { title: input.title } : null),
+      ...(input.summary !== undefined ? { summary: input.summary } : null),
+      ...(input.details !== undefined ? { details: input.details } : null),
+      ...(input.responsibles !== undefined ? { responsibles: input.responsibles } : null),
+    };
+    store = store.map((r, i) => (i === idx ? next : r));
+    return { ...next };
+  },
+  async addComment(id, text) {
+    await tick();
+    const idx = store.findIndex((r) => r.id === id);
+    if (idx < 0) return null;
+    const comment: ReportComment = {
+      id: `comment-${Date.now()}`,
+      authorName: 'Você',
+      authorAvatarUri: avatarUri,
+      text,
+      date: formatDate(new Date()),
+    };
+    store = store.map((r, i) =>
+      i === idx ? { ...r, comments: [...r.comments, comment] } : r,
+    );
+    return { ...comment };
   },
 };

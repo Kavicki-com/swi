@@ -4,7 +4,7 @@ import { API_URL } from '../auth/apiConfig';
 const TOKEN_KEY = 'swi.auth.token';
 
 export interface ApiRequestOptions {
-  method?: 'GET' | 'POST' | 'PUT';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH';
   body?: unknown;
   auth?: boolean;
 }

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Image as RNImage, ScrollView, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Image as RNImage, ScrollView, View, type TextInput as RNTextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Avatar,
   AvatarGroup,
   Button,
   Icon,
@@ -23,8 +24,12 @@ import type { Report } from '../../../services/reports/types';
 // Figma 364:20304 — report-details. Voltar + actions row (search +
 // Fazer comentário + Revisar) + ReportCard + Detalhes + Imagens
 // horizontal scroll + Atividades cards + Add comment input + CTA.
-// Backend slice: report data via useReports().loadOne(id) (Unit A/B); sem
-// persistência de comentário (out of scope).
+// Backend slice: report data via useReports().loadOne(id).
+// Ações (2026-07-07): "Revisar relatório" abre o form new.tsx em modo
+// edição (?edit=<id>); "Fazer comentário" (topo) foca o input de baixo;
+// o CTA de baixo persiste via useReports().addComment() e o comentário
+// aparece na seção "Comentários" (composição DS — o Figma não desenha a
+// lista; decisão de design com o usuário).
 
 type DetailStatus = 'loading' | 'ready' | 'empty' | 'error';
 
@@ -33,7 +38,7 @@ export default function ReportDetails() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { loadOne } = useReports();
+  const { loadOne, addComment } = useReports();
 
   const [report, setReport] = useState<Report | null>(null);
   const [status, setStatus] = useState<DetailStatus>('loading');
@@ -42,34 +47,64 @@ export default function ReportDetails() {
 
   const [search, setSearch] = useState('');
   const [comment, setComment] = useState('');
+  const [sendingComment, setSendingComment] = useState(false);
+  // Ref do input de baixo — o botão "Fazer comentário" do topo foca aqui
+  // (DS Input encaminha o ref pro TextInput interno; o KASV auto-rola até
+  // o input focado).
+  const commentInputRef = useRef<RNTextInput>(null);
 
-  useEffect(() => {
-    let active = true;
-    // useLocalSearchParams pode devolver id undefined em runtime (rota sem
-    // param). Sem id não há o que buscar — marca 'empty' direto ("Relatório
-    // não encontrado") em vez de chamar loadOne(undefined) no backend.
-    if (!id) {
-      setStatus('empty');
+  // useFocusEffect (não useEffect): voltar da edição (new?edit=<id>) refaz o
+  // fetch e a tela reflete o PATCH. Refetch com dados já na tela é SILENCIOSO
+  // (mantém 'ready' — sem flash de loading); o full loading só no 1º load.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      // useLocalSearchParams pode devolver id undefined em runtime (rota sem
+      // param). Sem id não há o que buscar — marca 'empty' direto ("Relatório
+      // não encontrado") em vez de chamar loadOne(undefined) no backend.
+      if (!id) {
+        setStatus('empty');
+        return () => {
+          active = false;
+        };
+      }
+      setStatus((prev) => (prev === 'ready' ? prev : 'loading'));
+      loadOne(id)
+        .then((r) => {
+          if (!active) return;
+          setReport(r);
+          setStatus(r ? 'ready' : 'empty');
+        })
+        .catch(() => {
+          if (active) setStatus('error');
+        });
       return () => {
         active = false;
       };
-    }
-    setStatus('loading');
-    loadOne(id)
-      .then((r) => {
-        if (!active) return;
-        setReport(r);
-        setStatus(r ? 'ready' : 'empty');
-      })
-      .catch(() => {
-        if (active) setStatus('error');
-      });
-    return () => {
-      active = false;
-    };
-  }, [id, loadOne, reloadKey]);
+    }, [id, loadOne, reloadKey]),
+  );
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Persiste e anexa localmente (o get do focus seguinte traz do server).
+  // addComment → null = relatório sumiu no server; o próximo focus resolve
+  // pro estado 'empty', então só ignora aqui.
+  const submitComment = useCallback(async () => {
+    const text = comment.trim();
+    if (!text || sendingComment || !report) return;
+    setSendingComment(true);
+    try {
+      const created = await addComment(report.id, text);
+      if (created) {
+        setReport((prev) =>
+          prev ? { ...prev, comments: [...prev.comments, created] } : prev,
+        );
+        setComment('');
+      }
+    } finally {
+      setSendingComment(false);
+    }
+  }, [comment, sendingComment, report, addComment]);
 
   if (status !== 'ready' || !report) {
     return (
@@ -155,7 +190,9 @@ export default function ReportDetails() {
                 labelColor={theme.content.primary}
                 label="Fazer comentário"
                 accessibilityLabel="Fazer comentário"
-                onPress={() => {}}
+                // Mesma ação do fluxo de baixo: foca o input "Adicionar
+                // comentário" (KASV rola até ele com o teclado aberto).
+                onPress={() => commentInputRef.current?.focus()}
                 iconLeft={
                   <Icon name="chat_bubble_outline" size={18} color={theme.content.primary} />
                 }
@@ -169,7 +206,14 @@ export default function ReportDetails() {
                 labelColor={theme.content.primary}
                 label="Revisar relatório"
                 accessibilityLabel="Revisar relatório"
-                onPress={() => {}}
+                // Abre o form de relatório em modo edição, pré-preenchido.
+                // Ao voltar, o useFocusEffect acima refaz o fetch.
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/reports/new',
+                    params: { edit: report.id },
+                  })
+                }
                 iconLeft={
                   <Icon name="border_color" size={18} color={theme.content.primary} />
                 }
@@ -292,9 +336,61 @@ export default function ReportDetails() {
           </>
         )}
 
+        {/* Comentários — o Figma 364:20304 não desenha a lista (só o input);
+            seção composta com DS primitives (Title/Avatar/Text), seguindo o
+            idioma dos cards de Atividades (surface.standard + radius.m).
+            Oculta quando vazia (mesmo padrão de Imagens/Atividades). */}
+        {report.comments.length > 0 && (
+          <>
+            <Title variant="title.xs" color={theme.content.dark}>
+              Comentários
+            </Title>
+            <View style={{ gap: theme.gap.s }}>
+              {report.comments.map((c) => (
+                <View
+                  key={c.id}
+                  style={{
+                    backgroundColor: theme.surface.standard,
+                    borderRadius: theme.border.radius.m,
+                    paddingHorizontal: theme.padding.m,
+                    paddingVertical: theme.padding.s,
+                    gap: theme.gap.s,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: theme.gap.s,
+                    }}
+                  >
+                    <Avatar uri={c.authorAvatarUri || undefined} size="s" />
+                    <View style={{ flex: 1 }}>
+                      <Text variant="label.m" color={theme.content.dark}>
+                        {c.authorName}
+                      </Text>
+                    </View>
+                    <Text variant="body.s" color={theme.content.dark}>
+                      {c.date}
+                    </Text>
+                  </View>
+                  <Text
+                    variant="body.m"
+                    color={theme.content.dark}
+                    style={{ lineHeight: theme.fontSize.m * 1.4 }}
+                  >
+                    {c.text}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
         {/* Add comment — multiline input + Fazer comentário CTA.
             Figma 364:20304 mostra textarea ~120h, ~6 linhas de altura. */}
         <Input
+          ref={commentInputRef}
           label="Adicionar comentário"
           placeholder="Digite aqui o seu comentário"
           value={comment}
@@ -310,7 +406,8 @@ export default function ReportDetails() {
           label="Fazer comentário"
           elevation="lg"
           accessibilityLabel="Fazer comentário"
-          onPress={() => setComment('')}
+          disabled={!comment.trim() || sendingComment}
+          onPress={submitComment}
         />
       </KeyboardAwareScrollView>
     </View>
