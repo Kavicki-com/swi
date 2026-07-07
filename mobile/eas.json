@@ -40,6 +40,12 @@
         "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-STATIC-TUNNEL.ngrok-free.app"
       }
     },
+    "qa-testflight": {
+      "extends": "qa",
+      "distribution": "store",
+      "ios": { "simulator": false },
+      "autoIncrement": true
+    },
     "production": {
       "autoIncrement": true
     }

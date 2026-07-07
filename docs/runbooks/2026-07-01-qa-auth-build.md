@@ -83,37 +83,49 @@ Usa o `DATABASE_URL` do `swi-backend/.env`. Cria **dois usuários APROVADOS e co
 | `admin@swi.local`  | `admin123`  | ADMIN  | aprovado, e-mail verificado    |
 | `worker@swi.local` | `worker123` | WORKER | aprovado, entra direto         |
 
-### 3.3 Subir o túnel da API (URL estável)
+### 3.3 Subir o túnel da API (URL estável — ngrok)
 
-```bash
-ngrok http 3000 --domain=<SEU-DOMINIO-ESTATICO>.ngrok-free.app
+```powershell
+ngrok start --all --config C:\Users\Gabriel\ngrok-swi-qa.yml
 ```
 
-Isso publica a API (`localhost:3000`) numa **URL estável** — anote-a; ela vai no `eas.json` (passo 3.5).
+O config define **só o túnel da API** (`localhost:3000` → domínio estático). Publica a API numa
+**URL estável** — é ela que vai no `eas.json` (passo 3.5).
 
-### 3.4 Subir os túneis de MailHog e MinIO
+Dois gotchas descobertos em 2026-07-06 (por isso o comando é esse e não `ngrok http ...`):
+
+- **O ngrok instalado via Microsoft Store (MSIX) ignora o config default**
+  (`%LOCALAPPDATA%\ngrok\ngrok.yml` é virtualizado — edições ali não têm efeito). Sempre passar
+  `--config C:\Users\Gabriel\ngrok-swi-qa.yml` explicitamente.
+- **NÃO subir MailHog/MinIO pelo ngrok**: no plano free (1 domínio estático), túneis extras
+  fazem *pooling* na MESMA URL do domínio — os três serviços dividiriam a URL da API com
+  load-balancing entre eles, quebrando o roteamento. MailHog/MinIO vão por cloudflared (3.4).
+
+### 3.4 Subir os túneis de MailHog e MinIO (cloudflared quick tunnels)
 
 **MailHog** (para o QA ler os códigos de e-mail):
 
-```bash
-ngrok http 8025
+```powershell
+& "$env:LOCALAPPDATA\cloudflared\cloudflared.exe" tunnel --url http://localhost:8025
 ```
 
-Gera uma **URL efêmera** do MailHog. **Passe essa URL ao QA** para que ele leia os códigos de
-e-mail (confirmação, **reenvio** e reset). O cloudflared é uma alternativa válida.
+Gera uma **URL efêmera** (`https://<aleatório>.trycloudflare.com`). **Passe essa URL ao QA**
+para que ele leia os códigos de e-mail (confirmação, **reenvio** e reset).
 
 **MinIO** (mídia — necessário porque `DATA_BACKEND=api` liga o upload de fotos em relatórios e chat):
 
-```bash
-ngrok http 9000
+```powershell
+& "$env:LOCALAPPDATA\cloudflared\cloudflared.exe" tunnel --url http://localhost:9000
 ```
 
 As URLs presigned de upload/download são **atadas ao host** que as assina — por isso o `api`
 precisa saber a URL pública do MinIO. Grave a URL desse túnel no `swi-backend/.env` como
-`MINIO_PUBLIC_URL` (ex.: `MINIO_PUBLIC_URL=https://<sub>.ngrok-free.app`) e **suba a stack de
-novo** (`docker compose up -d`) para o `api` reassinar contra ela. Sem isso, o app abre a tela
-mas **falha ao subir foto** (a URL presigned aponta para `localhost:9000`, inacessível do
-aparelho). Em produção AWS o `MINIO_PUBLIC_URL` fica **unset** (o SDK usa o S3 real).
+`MINIO_PUBLIC_URL` (ex.: `MINIO_PUBLIC_URL=https://<aleatório>.trycloudflare.com`) e **suba a
+stack de novo** (`docker compose up -d`) para o `api` reassinar contra ela. Sem isso, o app abre
+a tela mas **falha ao subir foto** (a URL presigned aponta para `localhost:9000`, inacessível do
+aparelho). Como a URL do quick tunnel **muda a cada restart do cloudflared**, repita este passo
+(URL nova → `.env` → `docker compose up -d`) sempre que ele reiniciar. Em produção AWS o
+`MINIO_PUBLIC_URL` fica **unset** (o SDK usa o S3 real).
 
 ### 3.5 Gravar as URLs e flags no `eas.json`
 
