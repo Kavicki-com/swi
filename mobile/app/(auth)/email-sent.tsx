@@ -59,12 +59,15 @@ export default function EmailSent() {
   const handleConfirm = async () => {
     try {
       await confirmSignUp({ email: email ?? '', code });
-      // In api mode the REST confirm succeeds here and we route to /login so
-      // the worker signs in with their new credentials. This intentionally
-      // SKIPS the complimentary-data onboarding wizard that the mock flow
-      // enters (signup→email-sent→account-confirmation→step-1) — that wizard
-      // remains mock-only for now.
-      router.replace('/(auth)/login');
+      // Same route the mock auto-advance takes: success screen → onboarding
+      // wizard, keeping the full Figma signup flow in api mode too. The wizard
+      // data stays mock-only (nothing persists); at the end, step-3 lands on
+      // the dashboard and the (app) guard bounces to /login because confirm
+      // doesn't mint a session — the worker then signs in for real.
+      router.replace({
+        pathname: '/(auth)/account-confirmation',
+        params: { username: username ?? '', email: email ?? '' },
+      });
     } catch {
       Alert.alert('Erro', 'Código inválido ou expirado.');
     }

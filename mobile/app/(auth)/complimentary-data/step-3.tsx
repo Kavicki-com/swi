@@ -74,8 +74,10 @@ export default function ComplimentaryDataStep3() {
     // Demo phase: when the smartband gate is off (Expo Go / web preview), the
     // entire smartband sub-tree renders ProdOnlyPlaceholder, dead-ending the
     // signup flow. Skip directly to the dashboard so the demo's signup path
-    // actually reaches the authenticated app. signIn() was already called in
-    // account-confirmation so the (app)/_layout guard lets us through.
+    // actually reaches the authenticated app. In mock mode signIn() was
+    // already called in account-confirmation so the (app)/_layout guard lets
+    // us through; in api mode there is no session yet (confirm doesn't mint a
+    // token), so the guard redirects to /login and the worker signs in there.
     if (isFeatureEnabled('smartbandOnboarding')) {
       router.replace('/(onboarding)/smartband/connection');
     } else {
