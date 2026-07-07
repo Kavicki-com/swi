@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
-import type { Report } from '@prisma/client'
-import type { CreateReportDto } from './dto'
+import type { Report, ReportComment } from '@prisma/client'
+import type { CreateReportDto, UpdateReportDto } from './dto'
 
 const LIST_CAP = 200
 
@@ -21,8 +21,48 @@ export class ReportsService {
   }
 
   async get(id: string) {
-    const r = await this.prisma.report.findUnique({ where: { id } })
-    return r ? this.toDto(r) : null
+    const r = await this.prisma.report.findUnique({
+      where: { id },
+      include: { comments: { orderBy: { createdAt: 'asc' } } },
+    })
+    return r ? this.toDto(r, r.comments) : null
+  }
+
+  // PATCH parcial: só os campos presentes no dto entram no update (undefined
+  // não sobrescreve). Inexistente → null (controller vira 404); P2025 é o
+  // "record not found" do Prisma no update sem pre-check.
+  async update(id: string, dto: UpdateReportDto) {
+    const data: Record<string, unknown> = {}
+    if (dto.title !== undefined) data.title = dto.title
+    if (dto.summary !== undefined) data.summary = dto.summary
+    if (dto.details !== undefined) data.details = dto.details
+    if (dto.responsibles !== undefined) data.responsibles = dto.responsibles
+    if (dto.imageKeys !== undefined) data.imageKeys = dto.imageKeys
+    try {
+      await this.prisma.report.update({ where: { id }, data })
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') return null
+      throw e
+    }
+    return this.get(id)
+  }
+
+  // Snapshot denorm do autor no momento do comentário (paridade com o
+  // create do Report). Relatório inexistente → null (controller vira 404).
+  async addComment(reportId: string, authorId: string, text: string) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } })
+    if (!report) return null
+    const author = await this.prisma.user.findUnique({ where: { id: authorId }, include: { profile: true } })
+    const c = await this.prisma.reportComment.create({
+      data: {
+        reportId,
+        authorId,
+        authorName: author?.profile?.fullName ?? author?.name ?? null,
+        authorAvatarKey: author?.profile?.avatarKey ?? null,
+        text,
+      },
+    })
+    return this.commentToDto(c)
   }
 
   async create(authorId: string, dto: CreateReportDto) {
@@ -61,8 +101,9 @@ export class ReportsService {
   }
 
   // Devolve exatamente o shape mobile `Report` (keys→urls presigned, date
-  // dd/mm/yyyy, null→'' nos campos string que as telas exigem).
-  private async toDto(r: Report) {
+  // dd/mm/yyyy, null→'' nos campos string que as telas exigem). `comments`
+  // só vem populado no get (detail); o list não faz o join (inbox não usa).
+  private async toDto(r: Report, comments: ReportComment[] = []) {
     return {
       id: r.id,
       title: r.title,
@@ -77,6 +118,17 @@ export class ReportsService {
       details: r.details ?? '',
       images: await this.media.presignGetMany(r.imageKeys),
       activities: (r.activities as unknown) ?? [],
+      comments: await Promise.all(comments.map((c) => this.commentToDto(c))),
+    }
+  }
+
+  private async commentToDto(c: ReportComment) {
+    return {
+      id: c.id,
+      authorName: c.authorName ?? '',
+      authorAvatarUri: c.authorAvatarKey ? await this.media.presignGet(c.authorAvatarKey) : '',
+      text: c.text,
+      date: this.formatDate(c.createdAt),
     }
   }
 

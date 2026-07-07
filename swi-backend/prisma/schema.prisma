@@ -35,12 +35,13 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile       Profile?
-  reports       Report[]
-  journeys      Journey[]
-  tasks         Task[]
-  messages      Message[]
-  notifications Notification[]
+  profile        Profile?
+  reports        Report[]
+  reportComments ReportComment[]
+  journeys       Journey[]
+  tasks          Task[]
+  messages       Message[]
+  notifications  Notification[]
 }
 
 // ---------------------------------------------------------------------------
@@ -120,8 +121,24 @@ model Report {
   details         String?
   imageKeys       String[]
   activities      Json?
+  comments        ReportComment[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+}
+
+model ReportComment {
+  id       String @id @default(uuid())
+  reportId String
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  // snapshots denorm — lista de comentários sem join (paridade com Report.authorName)
+  authorName      String?
+  authorAvatarKey String?
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([reportId, createdAt])
 }
 
 model Journey {

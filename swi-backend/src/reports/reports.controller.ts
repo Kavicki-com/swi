@@ -1,6 +1,6 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common'
 import { ReportsService } from './reports.service'
-import { CreateReportDto } from './dto'
+import { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUserId } from '../auth/current-user.decorator'
 
@@ -24,5 +24,23 @@ export class ReportsController {
   @Post()
   create(@CurrentUserId() userId: string, @Body() dto: CreateReportDto) {
     return this.reports.create(userId, dto)
+  }
+
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() dto: UpdateReportDto) {
+    const r = await this.reports.update(id, dto)
+    if (!r) throw new NotFoundException('Relatório não encontrado')
+    return r
+  }
+
+  @Post(':id/comments')
+  async addComment(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Body() dto: CreateCommentDto,
+  ) {
+    const c = await this.reports.addComment(id, userId, dto.text)
+    if (!c) throw new NotFoundException('Relatório não encontrado')
+    return c
   }
 }
