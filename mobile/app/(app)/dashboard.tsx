@@ -22,7 +22,9 @@ import {
 // pesado da tree (3 feGaussianBlur filter chains + silhueta + ECG + dots).
 // Quando o Dashboard re-renderiza por modal state ou cameraActive, o
 // StatusChart skipa re-render desde que suas props sejam estáveis (handlers
-// useCallback'd, primitivas literais).
+// useCallback'd, primitivas). `condition`/`progress` agora seguem a fadiga
+// (fatigueChart.ts) e mudam quando o ETA move ≥1% do anel (~2.4min) — o
+// arredondamento de 1% no fatigueChartProgress absorve o jitter menor.
 const StatusChart = memo(DSStatusChart);
 import { NavFABs } from '../../components/NavFABs';
 import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
@@ -43,34 +45,33 @@ import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 import { useVitals } from '../../services/vitals/VitalsProvider';
 import { useWeather } from '../../services/weather/WeatherProvider';
 import { weatherDisplay } from '../../services/weather/weatherFormat';
-import type { WorkerStatus } from '../../services/vitals/types';
+import {
+  fatigueChartCondition,
+  fatigueChartProgress,
+  type FatigueChartCondition,
+} from '../../services/vitals/fatigueChart';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
 import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
 
-// Map the domain WorkerStatus to the DS StatusChart condition union
-// ('good' | 'alert' | 'low'). StatusChart has no neutral condition, so the
-// 'unknown' status (empty/stale/error) falls back to 'good' for the ring while
-// the chest heart badge is hidden entirely (see HeartStatus block below).
-// SAFETY: this 'good' ring fallback is reachable ONLY because the
-// loading/empty/error phases return early ABOVE the StatusChart render, so
-// `status` here is always good|alert|low, never 'unknown'. Do NOT render
-// StatusChart above the phase gate or 'unknown' would paint the silhouette
-// green (a fake-good). Drop the fallback once the DS gains a neutral condition.
-function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' {
-  return status === 'alert' || status === 'low' ? status : 'good';
-}
-
-// Map WorkerStatus to the DS HeartStatus condition ('check' | 'alert' | 'low').
-// Returns null for 'unknown' — the caller HIDES the badge in that case.
-// DS bump TODO (deferred): neutral heart-status condition; using hide-badge
-// fallback for the unknown status.
-function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | null {
-  if (status === 'good') return 'check';
-  if (status === 'alert') return 'alert';
-  if (status === 'low') return 'low';
-  return null;
-}
+// StatusChart condition (cor) + arco são dirigidos pelo TEMPO DE FADIGA
+// (v.fatigueEtaMin — o mesmo dado do "Fadiga em:" logo abaixo), NÃO pelo
+// deriveStatus composto: ver services/vitals/fatigueChart.ts (cortes 60/20min,
+// anel cheio = 4h, decisão 2026-07-07). O composto continua sendo a fonte do
+// pin do trabalhador no mapa (conceito de segurança) — as duas telas podem
+// discordar de propósito.
+// SAFETY: derive só APÓS o phase gate (loading/empty/error retornam antes) —
+// renderizar acima do gate pintaria um estado de fadiga sobre dados ausentes.
+//
+// O badge do coração no peito segue a MESMA condição do chart — o DS trata
+// silhueta + badge como conjunto (StatusChart.theme mapeia good→check,
+// alert→alert, low→low); fontes distintas produziriam silhueta verde com
+// coração de alerta. No 'alert' o glifo vira o estetoscópio vermelho
+// (ALERT_SYMBOL, extraído do Figma condition=alert.svg).
+const HEART_BY_CHART_CONDITION: Record<
+  FatigueChartCondition,
+  'check' | 'alert' | 'low'
+> = { good: 'check', alert: 'alert', low: 'low' };
 
 // Decorative bottom SVG (Figma 304:2430 'background-element') — vertical
 // linear gradient from #3BC958 (top) to #1E652C (bottom), 46% opacity.
@@ -120,7 +121,9 @@ const avatarUri =
 const CONTAINER_GAP_XL = 24;
 
 export default function Dashboard() {
-  const { phase, vitals, status } = useVitals();
+  // `status` (composto) não é consumido aqui — o chart segue a fadiga
+  // (fatigueChartCondition abaixo); o composto fica pro pin do mapa.
+  const { phase, vitals } = useVitals();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -193,7 +196,8 @@ export default function Dashboard() {
 
   // ready | stale — vitals is non-null here (computePhase guarantees it).
   const v = vitals!;
-  const heartCondition = toHeartCondition(status);
+  const chartCondition = fatigueChartCondition(v.fatigueEtaMin);
+  const heartCondition = HEART_BY_CHART_CONDITION[chartCondition];
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -301,8 +305,8 @@ export default function Dashboard() {
              nos 4 elipses concêntricos (Figma spec Y=2.08, blur=4.16, #000
              98.82%) também vêm do DS bump 0.1.86. */}
         <StatusChart
-          condition={toChartCondition(status)}
-          progress={1}
+          condition={chartCondition}
+          progress={fatigueChartProgress(v.fatigueEtaMin)}
           showActionButton={true}
           renderHeartStatus={false}
           extrapolate
@@ -316,8 +320,11 @@ export default function Dashboard() {
             do StatusChart silhouette com mix-blend-mode:multiply pra match
             visual com my-stats.tsx (mesmo padrão lá). Geometria casa com
             SILHOUETTE_X=141.9, SILHOUETTE_Y=87.47, w=76.967, h=262.318 do
-            DS canvas 360×374 → percentuais 39.42% / 23.39% / 21.38% / 70.14%. */}
-        {Platform.OS === 'web' ? (
+            DS canvas 360×374 → percentuais 39.42% / 23.39% / 21.38% / 70.14%.
+            Gate em chartCondition==='good': o overlay é o gradient VERDE
+            (#3EAB2E→#B7E9A4) — multiplicado sobre a silhueta vermelha (alert)
+            ou azul (low) produziria cor lamacenta fora do Figma. */}
+        {Platform.OS === 'web' && chartCondition === 'good' ? (
           // mixBlendMode é web-only; em iOS/Android o overlay vira só uma
           // cópia opaca da silhueta (layer desperdiçada) sem produzir o
           // efeito de multiply. Gate evita parse de SVG + render extra
@@ -346,22 +353,19 @@ export default function Dashboard() {
             do HEART_STATUS_OFFSET (canvas 360×374) pra percentuais:
             left 169.2/360 = 47%, top 139.327/374 = 37.25%, size 26.093/374
             ≈ 6.978% (badge é quadrado, então width=height nas %).
-            DS bump TODO (deferred): neutral heart-status condition; using
-            hide-badge fallback — heartCondition is null for the 'unknown' status
-            (here only reachable via 'stale', since loading/empty/error take over
-            above), so we hide the badge instead of faking a 'check'. */}
-        {heartCondition ? (
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: '47%',
-              top: '37.25%',
-            }}
-          >
-            <HeartStatus condition={heartCondition} size={26.093} />
-          </View>
-        ) : null}
+            Condição vem do HEART_BY_CHART_CONDITION (mesma fonte do chart:
+            tempo de fadiga) — sempre definida após o phase gate, então o
+            badge é incondicional aqui. */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: '47%',
+            top: '37.25%',
+          }}
+        >
+          <HeartStatus condition={heartCondition} size={26.093} />
+        </View>
 
         {/* 5. Avatar — absolute top-right, overlays the chart.
             Pressable wraps the avatar so tapping it opens /(app)/settings.
@@ -491,9 +495,10 @@ export default function Dashboard() {
         }}
       >
         {/* User stats: 3 cols + dividers (Figma 304:2456 → justify-between).
-            cols 41/65/55, dividers 1×106.146. Wrap do "12/8" no Android é
-            resolvido via numberOfLines=1 no Title (StatCol abaixo), não
-            aumentando width — preserva fidelidade Figma. */}
+            cols 41/80/70 como minWidth (Figma: 41/65/55 em hug; 2/3 alargadas
+            pro Android), dividers 1×106.146. minWidth + numberOfLines=1 no
+            Title (StatCol): valor dinâmico mais largo que a coluna (BPM vai
+            de 40 a 140) expande na horizontal em vez de quebrar em 2 linhas. */}
         <View
           style={{
             flexDirection: 'row',
@@ -513,7 +518,7 @@ export default function Dashboard() {
             }
             value={String(v.heartRate)}
             label="BPM"
-            width={41}
+            minWidth={41}
             theme={theme}
           />
           <Divider theme={theme} />
@@ -528,7 +533,7 @@ export default function Dashboard() {
             }
             value="12/8"
             label="Boa"
-            width={80}
+            minWidth={80}
             theme={theme}
           />
           <Divider theme={theme} />
@@ -543,7 +548,7 @@ export default function Dashboard() {
             }
             value="145"
             label="Kcal/hora"
-            width={70}
+            minWidth={70}
             theme={theme}
           />
         </View>
@@ -726,21 +731,21 @@ const StatCol = memo(function StatCol({
   iconNode,
   label,
   value,
-  width,
+  minWidth,
   theme,
 }: {
   iconNode: ReactNode;
   label: string;
   value: string;
-  width: number;
+  minWidth: number;
   theme: ReturnType<typeof useTheme>;
 }) {
   return (
-    <View style={{ alignItems: 'center', gap: theme.gap.sm, width }}>
+    <View style={{ alignItems: 'center', gap: theme.gap.sm, minWidth }}>
       <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
         {iconNode}
       </View>
-      <Title variant="title.l" color={theme.content.dark}>
+      <Title variant="title.l" color={theme.content.dark} numberOfLines={1}>
         {value}
       </Title>
       <Text variant="body.s" color={theme.content.dark}>

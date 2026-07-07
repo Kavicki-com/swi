@@ -385,12 +385,15 @@ export default function MyStats() {
             opacity: isStale ? 0.5 : 1,
           }}
         >
-          {/* Col 1 — Heart 67 BPM (Figma 342:9432) */}
+          {/* Col 1 — Heart 67 BPM (Figma 342:9432). minWidth (não width):
+              heartRate varia de 40 a 140; valor mais largo que 41px expande
+              a coluna na horizontal em vez de quebrar os dígitos em 2 linhas
+              (numberOfLines=1 idem nas 3 cols). */}
           <View
             style={{
               alignItems: 'center',
               gap: theme.gap.sm,
-              width: 41,
+              minWidth: 41,
             }}
           >
             <SvgXml
@@ -403,6 +406,7 @@ export default function MyStats() {
               variant="title.l"
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
+              numberOfLines={1}
             >
               {v.heartRate}
             </Title>
@@ -418,13 +422,14 @@ export default function MyStats() {
           <Divider />
 
           {/* Col 2 — Blood pressure 12/8 Boa (Figma 342:9437).
-              width:80 (não 65 do Figma) — Android renderiza Montserrat-Bold
-              com advance widths maiores; "12/8" estoura 65px e quebra linha. */}
+              minWidth:80 (não 65 do Figma) — Android renderiza Montserrat-Bold
+              com advance widths maiores; "12/8" estoura 65px e quebra linha.
+              minWidth cobre o pior caso do simulador ("16/11" > 80px). */}
           <View
             style={{
               alignItems: 'center',
               gap: theme.gap.sm,
-              width: 80,
+              minWidth: 80,
             }}
           >
             <Icon
@@ -436,6 +441,7 @@ export default function MyStats() {
               variant="title.l"
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
+              numberOfLines={1}
             >
               {`${v.bloodPressureSys}/${v.bloodPressureDia}`}
             </Title>
@@ -451,13 +457,13 @@ export default function MyStats() {
           <Divider />
 
           {/* Col 3 — Flame 145 Kcal/hora (Figma 342:9442).
-              width:70 (não 55 do Figma) — "Kcal/hora" quebrava em "Kcal/" +
+              minWidth:70 (não 55 do Figma) — "Kcal/hora" quebrava em "Kcal/" +
               "hora" no Android com 55px; mesmo padrão do dashboard.tsx. */}
           <View
             style={{
               alignItems: 'center',
               gap: theme.gap.sm,
-              width: 70,
+              minWidth: 70,
             }}
           >
             <SvgXml
@@ -470,6 +476,7 @@ export default function MyStats() {
               variant="title.l"
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
+              numberOfLines={1}
             >
               {v.caloriesPerHour}
             </Title>
