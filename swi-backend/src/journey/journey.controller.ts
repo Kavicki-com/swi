@@ -31,6 +31,16 @@ export class JourneyController {
     return this.journey.startTask(userId, id)
   }
 
+  @Post('tasks/:id/complete')
+  completeTask(@CurrentUserId() userId: string, @Param('id') id: string) {
+    return this.journey.completeTask(userId, id)
+  }
+
+  @Post('tasks/:id/cancel')
+  cancelTask(@CurrentUserId() userId: string, @Param('id') id: string) {
+    return this.journey.cancelTask(userId, id)
+  }
+
   @Post('pause')
   pause(@CurrentUserId() userId: string) {
     return this.journey.pauseJourney(userId)
