@@ -34,6 +34,11 @@ describe('MediaService', () => {
     expect(key).toMatch(/^reports\/[0-9a-f-]{36}\.jpg$/)
   })
 
+  it('presignPost: prefixo order (anexos do WorkOrder) → key sob order/', async () => {
+    const { key } = await new MediaService().presignPost('image/jpeg', 'order')
+    expect(key).toMatch(/^order\/[0-9a-f-]{36}\.jpg$/)
+  })
+
   it('presignGetMany assina cada key', async () => {
     const urls = await new MediaService().presignGetMany(['reports/a.jpg', 'reports/b.jpg'])
     expect(urls).toEqual(['https://signed.example/obj?sig=1', 'https://signed.example/obj?sig=1'])
