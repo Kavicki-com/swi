@@ -4,26 +4,29 @@
 // Mirrors services/reports/types.ts.
 //
 // `startedAt` é ISO string no tipo de domínio; progress.ts trabalha em epoch ms
-// (converte na fronteira). `images`/`interestedAvatars` são uris resolvidas (de
+// (converte na fronteira). `images`/`responsibleAvatars` são uris resolvidas (de
 // keys do S3 no amplify).
+//
+// Tasks agora vivem sob uma WorkOrder pai: `objective` = summary da ordem;
+// `images` = imageKeys da ordem (presigned); `responsible*` = responsáveis da
+// ordem. Espelha `taskToDto` de swi-backend/src/journey/journey.service.ts.
 export type TaskStatus = 'pending' | 'in_progress' | 'paused' | 'done';
 export type JourneyState = 'idle' | 'ongoing' | 'paused';
 
 export interface Task {
   id: string;
-  assignedTo: string;
   title: string;
   description: string;
-  objective: string;
+  objective: string;              // = summary da WorkOrder pai
   estimatedMinutes: number;
   status: TaskStatus;
   startedAt: string | null;       // ISO datetime
   accumulatedSeconds: number;
   progressPct: number;            // último snapshot persistido
-  scheduledDate: string;          // ISO date
-  images: string[];               // uris (resolvidas de keys no amplify)
-  interestedCount: number;
-  interestedAvatars: string[];    // uris
+  images: string[];               // uris da ORDEM pai (resolvidas de keys no amplify)
+  responsibleCount: number;
+  responsibleNames: string[];
+  responsibleAvatars: string[];   // uris (presigned)
 }
 
 export interface JourneySession {
@@ -38,6 +41,8 @@ export interface JourneyBackend {
   listTasks(): Promise<Task[]>;
   getTask(id: string): Promise<Task | null>;
   startTask(taskId: string): Promise<{ journey: JourneySession; task: Task }>;
+  completeTask(taskId: string): Promise<{ journey: JourneySession; task: Task }>;
+  cancelTask(taskId: string): Promise<{ journey: JourneySession; task: Task }>;
   pauseJourney(): Promise<JourneySession>;
   resumeJourney(): Promise<JourneySession>;
   endJourney(): Promise<JourneySession>;

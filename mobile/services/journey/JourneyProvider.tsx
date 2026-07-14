@@ -36,6 +36,8 @@ interface JourneyContextValue {
   load: () => Promise<void>;
   getTask: (id: string) => Promise<Task | null>;
   startTask: (taskId: string) => Promise<void>;
+  completeTask: (taskId: string) => Promise<void>;
+  cancelTask: (taskId: string) => Promise<void>;
   pauseJourney: () => Promise<void>;
   resumeJourney: () => Promise<void>;
   endJourney: () => Promise<void>;
@@ -82,6 +84,24 @@ export function JourneyProvider({ children }: PropsWithChildren) {
     [backend],
   );
 
+  const completeTask = useCallback(
+    async (taskId: string) => {
+      const { journey, task } = await backend.completeTask(taskId);
+      setSession(journey);
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+    },
+    [backend],
+  );
+
+  const cancelTask = useCallback(
+    async (taskId: string) => {
+      const { journey, task } = await backend.cancelTask(taskId);
+      setSession(journey);
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+    },
+    [backend],
+  );
+
   const pauseJourney = useCallback(async () => {
     setSession(await backend.pauseJourney());
     setTasks(await backend.listTasks()); // a task ativa virou 'paused' (snapshot) — barra congela
@@ -92,7 +112,7 @@ export function JourneyProvider({ children }: PropsWithChildren) {
   }, [backend]);
   const endJourney = useCallback(async () => {
     setSession(await backend.endJourney());
-    setTasks(await backend.listTasks()); // a ativa virou 'done'
+    setTasks(await backend.listTasks()); // Decisão E: a ativa virou 'paused' (não 'done')
   }, [backend]);
 
   const addTaskPhoto = useCallback(
@@ -115,6 +135,8 @@ export function JourneyProvider({ children }: PropsWithChildren) {
       load,
       getTask,
       startTask,
+      completeTask,
+      cancelTask,
       pauseJourney,
       resumeJourney,
       endJourney,
@@ -127,6 +149,8 @@ export function JourneyProvider({ children }: PropsWithChildren) {
       load,
       getTask,
       startTask,
+      completeTask,
+      cancelTask,
       pauseJourney,
       resumeJourney,
       endJourney,

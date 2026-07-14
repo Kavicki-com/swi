@@ -50,4 +50,62 @@ describe('mockJourneyBackend', () => {
     const updated = await mockJourneyBackend.addTaskPhoto(first.id, 'file:///foto.jpg');
     expect(updated.images).toContain('file:///foto.jpg');
   });
+  it('seed carrega objective da ordem + responsáveis (novo contrato WorkOrder)', async () => {
+    const [first] = await mockJourneyBackend.listTasks();
+    expect(first.objective.length).toBeGreaterThan(0);
+    expect(first.responsibleCount).toBeGreaterThan(0);
+    expect(first.responsibleNames.length).toBeGreaterThan(0);
+    expect(first.responsibleAvatars.length).toBeGreaterThan(0);
+  });
+  it('TODAS as tasks do checklist compartilham objective/responsáveis da MESMA ordem (não só a 1ª)', async () => {
+    // As N tasks são o checklist de UMA WorkOrder → objective/responsible* idênticos.
+    // Um seed que dessincronizasse um item passaria batido se só checasse tasks[0].
+    const tasks = await mockJourneyBackend.listTasks();
+    expect(tasks.length).toBeGreaterThan(1);
+    const [first] = tasks;
+    for (const t of tasks) {
+      expect(t.objective).toBe(first.objective);
+      expect(t.responsibleCount).toBe(first.responsibleCount);
+      expect(t.responsibleNames).toEqual(first.responsibleNames);
+      expect(t.responsibleAvatars).toEqual(first.responsibleAvatars);
+      // Invariante index-parallel (espelha o backend após o fix #5).
+      expect(t.responsibleAvatars.length).toBe(t.responsibleNames.length);
+    }
+  });
+  it('completeTask conclui o item (done, 100%), libera a ativa e mantém o turno', async () => {
+    const tasks = await mockJourneyBackend.listTasks();
+    const target = tasks[1];
+    await mockJourneyBackend.startTask(target.id);
+    const { journey, task } = await mockJourneyBackend.completeTask(target.id);
+    expect(task.status).toBe('done');
+    expect(task.progressPct).toBe(100);
+    expect(journey.activeTaskId).toBeNull();
+    expect(journey.state).toBe('ongoing'); // turno segue rodando
+  });
+  it('cancelTask volta o item pra pending preservando os segundos bancados e mantém o turno', async () => {
+    const tasks = await mockJourneyBackend.listTasks();
+    const target = tasks[2];
+    const nowSpy = jest.spyOn(Date, 'now');
+    try {
+      nowSpy.mockReturnValue(2_000_000);
+      await mockJourneyBackend.startTask(target.id);
+      nowSpy.mockReturnValue(2_000_000 + 45_000); // +45s rodando
+      const { journey, task } = await mockJourneyBackend.cancelTask(target.id);
+      expect(task.status).toBe('pending');
+      expect(task.accumulatedSeconds).toBe(45); // banked, não zerado
+      expect(journey.activeTaskId).toBeNull();
+      expect(journey.state).toBe('ongoing');
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+  it('endJourney deixa a task ativa pausada (não done) e zera o turno', async () => {
+    const tasks = await mockJourneyBackend.listTasks();
+    const target = tasks[3];
+    await mockJourneyBackend.startTask(target.id);
+    const ended = await mockJourneyBackend.endJourney();
+    expect(ended.state).toBe('idle');
+    const after = await mockJourneyBackend.getTask(target.id);
+    expect(after?.status).toBe('paused'); // Decision E: pausa, não conclui
+  });
 });

@@ -93,9 +93,10 @@ export default function TaskDetails() {
     getTask,
     tasks,
     startTask,
+    completeTask,
+    cancelTask,
     pauseJourney,
     resumeJourney,
-    endJourney,
     addTaskPhoto,
     state: journeyState,
     activeTaskId,
@@ -105,6 +106,11 @@ export default function TaskDetails() {
   const [status, setStatus] = useState<DetailStatus>('loading');
   // Bump pra re-disparar o load no retry (o effect só depende de id/getTask).
   const [reloadKey, setReloadKey] = useState(0);
+  // CTA de mutação (finalizar/cancelar): trava re-toques e segura a navegação até
+  // o backend confirmar. Sem isto, uma falha de rede/token era engolida e o worker
+  // voltava pra /journey achando que concluiu (a ação real não aconteceu).
+  const [submitting, setSubmitting] = useState(false);
+  const [ctaError, setCtaError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -140,11 +146,6 @@ export default function TaskDetails() {
   const taskState = isActiveTask ? journeyState : 'idle';
   const isPaused = taskState === 'paused';
   const isActive = taskState !== 'idle';
-
-  const finishOrCancel = () => {
-    endJourney();
-    router.push('/(app)/journey');
-  };
 
   const media = useMediaPicker();
 
@@ -183,12 +184,34 @@ export default function TaskDetails() {
     if (uri && id) await addTaskPhoto(id, uri);
   };
 
-  // Interessados — avatares reais da task (uris). O caption deriva do
-  // interestedCount ("… e mais N-1 pessoas estão acompanhando essa tarefa").
-  const interestedAvatars = liveTask.interestedAvatars.map((uri, i) => ({
+  // Interessados (label é a copy do Figma) — avatares reais dos responsáveis da
+  // ordem (uris). O caption deriva do responsibleCount ("<1º nome> e mais N-1
+  // pessoas estão acompanhando essa tarefa").
+  const responsibleAvatars = liveTask.responsibleAvatars.map((uri, i) => ({
     uri,
-    alt: `Avatar ${i + 1}`,
+    alt: liveTask.responsibleNames[i],
   }));
+
+  // Finalizar/Cancelar operam SÓ neste item — o turno segue rodando (o backend
+  // não encerra o turno). Concluir marca done; cancelar devolve pra pending.
+  // A mutação é AGUARDADA: só navega pra /journey se o backend confirmar; se
+  // falhar (rede/token), fica na tela e mostra o erro (a ação é auditada — não
+  // pode falhar em silêncio). `submitting` trava re-toque durante o voo.
+  const runCta = async (mutate: () => Promise<void>, failMsg: string) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setCtaError(null);
+    try {
+      await mutate();
+      router.push('/(app)/journey');
+    } catch {
+      setCtaError(failMsg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const finishTask = () => runCta(() => completeTask(liveTask.id), 'Não foi possível finalizar a tarefa. Tente novamente.');
+  const cancelCurrentTask = () => runCta(() => cancelTask(liveTask.id), 'Não foi possível cancelar a tarefa. Tente novamente.');
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -344,20 +367,22 @@ export default function TaskDetails() {
             Interessados
           </Title>
           <AvatarGroup
-            avatars={interestedAvatars}
-            totalCount={liveTask.interestedCount}
+            avatars={responsibleAvatars}
+            totalCount={liveTask.responsibleCount}
             maxVisible={5}
             size="m"
             bordered
           />
           <Text variant="body.m" color={theme.content.dark}>
-            {`Joacir Alves e mais ${liveTask.interestedCount - 1} pessoas estão acompanhando essa tarefa`}
+            {`${liveTask.responsibleNames[0] ?? 'Joacir Alves'} e mais ${liveTask.responsibleCount - 1} pessoas estão acompanhando essa tarefa`}
           </Text>
         </View>
 
         {/* CTA group — Figma 364:17126 idle / 364:17434 ongoing / 364:17766 pause.
             State machine local: idle → ongoing ↔ paused.
-            Finalizar/Cancelar saem da tela (voltam pra /journey). */}
+            Finalizar conclui ESTE item (completeTask); Cancelar devolve pra
+            pending (cancelTask). Ambos mantêm o turno rodando e voltam pra
+            /journey. */}
         {isActive ? (
           <View style={{ gap: theme.gap.m }}>
             <Button
@@ -367,14 +392,15 @@ export default function TaskDetails() {
               label="Finalizar tarefa"
               elevation="lg"
               // Desabilitado em paused — não pode finalizar enquanto a
-              // tarefa está em pausa (user precisa retomar primeiro).
-              disabled={isPaused}
+              // tarefa está em pausa (user precisa retomar primeiro) — ou
+              // enquanto uma mutação anterior ainda está em voo (submitting).
+              disabled={isPaused || submitting}
               accessibilityLabel={
                 isPaused
                   ? 'Finalizar tarefa (indisponível enquanto pausado)'
                   : 'Finalizar tarefa'
               }
-              onPress={finishOrCancel}
+              onPress={finishTask}
             />
             <Button
               variant="outline"
@@ -391,8 +417,14 @@ export default function TaskDetails() {
               labelColor={theme.content.error}
               label="Cancelar tarefa"
               accessibilityLabel="Cancelar tarefa"
-              onPress={finishOrCancel}
+              disabled={submitting}
+              onPress={cancelCurrentTask}
             />
+            {ctaError ? (
+              <Text variant="body.s" color={theme.content.error}>
+                {ctaError}
+              </Text>
+            ) : null}
           </View>
         ) : (
           <Button

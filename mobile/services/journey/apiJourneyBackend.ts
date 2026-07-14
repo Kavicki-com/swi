@@ -22,6 +22,12 @@ export const apiJourneyBackend: JourneyBackend = {
   startTask(taskId) {
     return apiRequest<{ journey: JourneySession; task: Task }>(`/journey/tasks/${taskId}/start`, { method: 'POST', auth: true });
   },
+  completeTask(taskId) {
+    return apiRequest<{ journey: JourneySession; task: Task }>(`/journey/tasks/${taskId}/complete`, { method: 'POST', auth: true });
+  },
+  cancelTask(taskId) {
+    return apiRequest<{ journey: JourneySession; task: Task }>(`/journey/tasks/${taskId}/cancel`, { method: 'POST', auth: true });
+  },
   pauseJourney() {
     return apiRequest<JourneySession>('/journey/pause', { method: 'POST', auth: true });
   },

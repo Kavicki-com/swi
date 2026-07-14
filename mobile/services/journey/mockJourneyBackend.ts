@@ -18,44 +18,47 @@ import {
 // services/reports/mockReportsBackend.ts: um store mutável module-level semeado
 // no load, servido com um tiny async hop (`tick`) pra os callers se comportarem
 // como rede real. Seed migrado de lib/journeyMockData.ts (4 tasks, títulos +
-// descrições) pra cá, agora enriquecido com `objective`, `estimatedMinutes` e
-// `interested*`. O antigo lib/journeyMockData.ts foi removido nesta slice (as
-// telas agora consomem só este backend via JourneyProvider).
+// descrições) pra cá, agora enriquecido com `estimatedMinutes` e os campos da
+// WorkOrder pai (`objective`, `responsible*`). O antigo lib/journeyMockData.ts
+// foi removido nesta slice (as telas agora consomem só este backend via
+// JourneyProvider).
+//
+// Modelo WorkOrder: as 4 tasks são o checklist de UMA ordem, então compartilham
+// o mesmo `objective` (summary da ordem), `images` e `responsible*`. Espelha
+// `taskToDto` de swi-backend/src/journey/journey.service.ts.
 //
 // As transições usam os reducers puros de progress.ts; convertemos entre o
 // domínio (`startedAt` ISO string + status/state) e `Anchors` (epoch ms +
 // `running` derivado) na fronteira. `Date.now()` é a fonte de `nowMs` em runtime.
 
-// 5 avatares demo distintos de /assets/avatars/worker-{1..5}.png.
-// Asset.fromModule resolve cada require() pra uma uri servida pelo Metro
-// (DS Avatar/AvatarGroup só aceita `uri: string`). Espelha os thumbnails
-// variados do cluster "Interessados" no Figma.
-const INTERESTED_AVATARS: string[] = [
+// Campos herdados da WorkOrder pai — compartilhados pelas 4 tasks do checklist.
+// `objective` = summary da ordem; `responsibleNames`/`responsibleCount` = os
+// responsáveis da ordem (primeiro nome dirige o caption "N e mais X pessoas...").
+const ORDER_OBJECTIVE =
+  'Checklist de manutenção preventiva e reparos necessários no maquinário B2.';
+const RESPONSIBLE_NAMES = ['Joacir Alves', 'Romulo Cardoso', 'Marina Souza'];
+const RESPONSIBLE_COUNT = RESPONSIBLE_NAMES.length;
+
+// 3 avatares demo distintos de /assets/avatars/worker-{1..3}.png — um por
+// responsável. Asset.fromModule resolve cada require() pra uma uri servida pelo
+// Metro (DS Avatar/AvatarGroup só aceita `uri: string`). Invariante do backend
+// real: responsibleAvatars.length === responsibleNames.length === responsibleCount.
+const RESPONSIBLE_AVATARS: string[] = [
   Asset.fromModule(require('../../assets/avatars/worker-1.png')).uri,
   Asset.fromModule(require('../../assets/avatars/worker-2.png')).uri,
   Asset.fromModule(require('../../assets/avatars/worker-3.png')).uri,
-  Asset.fromModule(require('../../assets/avatars/worker-4.png')).uri,
-  Asset.fromModule(require('../../assets/avatars/worker-5.png')).uri,
 ];
-
-// Worker demo único pra todas as tasks nesta fase.
-const DEMO_WORKER = 'worker-demo';
-
-// scheduledDate = hoje (ISO date, sem horário).
-const TODAY = new Date().toISOString().slice(0, 10);
 
 // estimatedMinutes 120 por task × 4 = 480min = 8h → bate com o "8h" idle do
 // donut da jornada.
 const ESTIMATED_MINUTES = 120;
-const INTERESTED_COUNT = 18;
 
-// Seed base migrado de lib/journeyMockData.ts (TASKS), com `objective`
-// adicionado (uma frase sobre a meta de cada tarefa).
+// Seed base migrado de lib/journeyMockData.ts (TASKS): só id/título/descrição
+// por item; `objective` e `responsible*` vêm da ordem pai (constantes acima).
 type SeedBase = {
   id: string;
   title: string;
   description: string;
-  objective: string;
 };
 
 const SEED_BASE: SeedBase[] = [
@@ -64,48 +67,40 @@ const SEED_BASE: SeedBase[] = [
     title: 'Inspeção de Equipamentos',
     description:
       'Realizar verificações periódicas para identificar desgastes ou falhas em máquinas industriais.',
-    objective:
-      'Garantir que cada equipamento esteja em condições seguras de operação, identificando desgastes antes que virem falhas.',
   },
   {
     id: 'manutencao',
     title: 'Manutenção Preventiva',
     description:
       'Executar tarefas programadas para evitar paradas não planejadas e aumentar a vida útil dos equipamentos.',
-    objective:
-      'Prolongar a vida útil dos equipamentos e minimizar paradas não planejadas executando a manutenção dentro do cronograma.',
   },
   {
     id: 'diagnostico',
     title: 'Diagnóstico de Falhas',
     description:
       'Analisar problemas técnicos e determinar as causas de mau funcionamento nas máquinas.',
-    objective:
-      'Determinar com precisão a causa-raiz de cada mau funcionamento para direcionar o reparo correto.',
   },
   {
     id: 'reparo',
     title: 'Reparo de Componentes',
     description:
       'Substituir ou consertar peças defeituosas para restaurar o funcionamento adequado dos equipamentos.',
-    objective:
-      'Restaurar o funcionamento pleno dos equipamentos substituindo ou consertando as peças defeituosas identificadas.',
   },
 ];
 
 function seedTask(base: SeedBase): Task {
   return {
     ...base,
-    assignedTo: DEMO_WORKER,
+    objective: ORDER_OBJECTIVE,
     estimatedMinutes: ESTIMATED_MINUTES,
     status: 'pending',
     startedAt: null,
     accumulatedSeconds: 0,
     progressPct: 0,
-    scheduledDate: TODAY,
     images: [],
-    interestedCount: INTERESTED_COUNT,
-    interestedAvatars: INTERESTED_AVATARS,
+    responsibleCount: RESPONSIBLE_COUNT,
+    responsibleNames: RESPONSIBLE_NAMES,
+    responsibleAvatars: RESPONSIBLE_AVATARS,
   };
 }
 
@@ -188,6 +183,47 @@ export const mockJourneyBackend: JourneyBackend = {
     return { journey: { ...journey }, task: { ...task } };
   },
 
+  async completeTask(taskId) {
+    await tick();
+    const task = findTask(taskId);
+    if (!task) throw new Error(`mockJourneyBackend.completeTask: task ${taskId} não encontrada`);
+    const now = Date.now();
+
+    // Conclui o item: banca o tempo corrido e crava 100% (concluído = pleno,
+    // independente do estimado). O turno segue rodando — só o slot ativo libera.
+    const ta = endAnchors(taskAnchors(task), now);
+    task.status = 'done';
+    task.startedAt = isoOrNull(ta.startedAt);
+    task.accumulatedSeconds = ta.accumulatedSeconds;
+    task.progressPct = 100;
+
+    if (journey.activeTaskId === taskId) {
+      journey = { ...journey, activeTaskId: null };
+    }
+
+    return { journey: { ...journey }, task: { ...task } };
+  },
+
+  async cancelTask(taskId) {
+    await tick();
+    const task = findTask(taskId);
+    if (!task) throw new Error(`mockJourneyBackend.cancelTask: task ${taskId} não encontrada`);
+    const now = Date.now();
+
+    // Devolve o item pro pool de pendentes preservando os segundos bancados
+    // (pauseAnchors banca o segmento corrente). O turno segue rodando.
+    const ta = pauseAnchors(taskAnchors(task), now);
+    task.status = 'pending';
+    task.startedAt = isoOrNull(ta.startedAt);
+    task.accumulatedSeconds = ta.accumulatedSeconds;
+
+    if (journey.activeTaskId === taskId) {
+      journey = { ...journey, activeTaskId: null };
+    }
+
+    return { journey: { ...journey }, task: { ...task } };
+  },
+
   async pauseJourney() {
     await tick();
     const now = Date.now();
@@ -237,9 +273,11 @@ export const mockJourneyBackend: JourneyBackend = {
     const now = Date.now();
     const active = journey.activeTaskId ? findTask(journey.activeTaskId) : undefined;
     if (active) {
+      // Decision E (espelha o backend): encerrar o turno PAUSA o item ativo —
+      // não o conclui. Concluir é ação explícita via completeTask.
       const ta = endAnchors(taskAnchors(active), now);
       active.progressPct = progressPct(ta.accumulatedSeconds, active.estimatedMinutes);
-      active.status = 'done';
+      active.status = 'paused';
       active.startedAt = isoOrNull(ta.startedAt);
       active.accumulatedSeconds = ta.accumulatedSeconds;
     }
