@@ -4,7 +4,9 @@ import { Reflector } from '@nestjs/core'
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
   canActivate(ctx: ExecutionContext): boolean {
-    const roles = this.reflector.get<string[]>('roles', ctx.getHandler())
+    // Handler tem precedência sobre a classe: honra tanto @Roles por-rota
+    // (users.controller) quanto @Roles na classe inteira (work-orders.controller).
+    const roles = this.reflector.getAllAndOverride<string[]>('roles', [ctx.getHandler(), ctx.getClass()])
     if (!roles?.length) return true
     const { user } = ctx.switchToHttp().getRequest()
     return roles.includes(user?.role)

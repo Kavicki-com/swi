@@ -38,9 +38,11 @@ model User {
   profile       Profile?
   reports       Report[]
   journeys      Journey[]
-  tasks         Task[]
   messages      Message[]
   notifications Notification[]
+
+  authoredWorkOrders WorkOrder[] @relation("authoredWorkOrders")
+  responsibleFor     WorkOrder[] @relation("workOrderResponsibles")
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +71,12 @@ enum TaskStatus {
   pending
   in_progress
   paused
+  done
+}
+
+enum WorkOrderStatus {
+  pending
+  in_progress
   done
 }
 
@@ -139,26 +147,49 @@ model Journey {
   @@unique([workerId, date]) // turno por worker/dia
 }
 
-model Task {
-  id                   String     @id @default(uuid())
-  assignedTo           String
-  assignee             User       @relation(fields: [assignedTo], references: [id])
-  title                String
-  description          String?
-  objective            String?
-  estimatedMinutes     Int?
-  status               TaskStatus @default(pending)
-  startedAt            DateTime?
-  accumulatedSeconds   Int        @default(0)
-  progressPct          Float?
-  scheduledDate        DateTime?  @db.Date
-  imageKeys            String[]
-  interestedCount      Int?
-  interestedAvatarKeys String[]
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+// Pai criado pelo admin: dona da atribuição (N responsáveis), dos anexos e do
+// status derivado dos itens (3 tabs do admin). Os itens do checklist SÃO as
+// Tasks que o worker já vê na jornada.
+model WorkOrder {
+  id               String          @id @default(uuid())
+  authorId         String
+  author           User            @relation("authoredWorkOrders", fields: [authorId], references: [id])
+  title            String
+  summary          String?
+  details          String?
+  sector           String?
+  estimatedMinutes Int?
+  startDate        DateTime?       @db.Date
+  dueDate          DateTime?       @db.Date
+  status           WorkOrderStatus @default(pending)
+  imageKeys        String[]
+  responsibles     User[]          @relation("workOrderResponsibles")
+  items            Task[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  @@index([assignedTo, scheduledDate]) // tela "Hoje" da fatia Jornada — tasks do worker por dia
+  @@index([status])
+}
+
+// Item de checklist / card da jornada. Mantém a máquina de estado por tempo
+// (status inclui `paused` — 3 layouts da jornada mobile dependem dele). A
+// atribuição subiu pro WorkOrder pai (perdeu assignedTo/objective/etc.).
+model Task {
+  id                 String     @id @default(uuid())
+  orderId            String
+  order              WorkOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  position           Int        @default(0)
+  title              String
+  description        String?
+  estimatedMinutes   Int?
+  status             TaskStatus @default(pending)
+  startedAt          DateTime?
+  accumulatedSeconds Int        @default(0)
+  progressPct        Float?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@index([orderId, position])
 }
 
 model Conversation {

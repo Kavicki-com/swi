@@ -4,10 +4,11 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { DEMO_STORM_ALERT_ID } from '../src/weather/weather.types'
 import { hash } from '../src/auth/codes'
+import { distributeMinutes } from '../src/work-orders/order-status'
 const prisma = new PrismaClient()
 
 async function main() {
-  await prisma.user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email: 'admin@swi.local' }, update: {},
     create: { email: 'admin@swi.local', name: 'Admin', passwordHash: await hash('admin123'),
       role: 'ADMIN', emailVerified: true, approvalStatus: 'APPROVED' },
@@ -26,62 +27,7 @@ async function main() {
   // UTC-midnight de hoje (paridade com o mock e o JourneyService.today()).
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-
-  // Sobe os 5 avatares demo "interested" pro MinIO; guard: se o bucket não
-  // estiver acessível, loga e segue com keys vazias (asset decorativo).
-  let interestedKeys: string[] = []
-  try {
-    const s3 = new S3Client({
-      endpoint: process.env.MINIO_PUBLIC_URL || 'http://localhost:9000',
-      forcePathStyle: true,
-      region: process.env.MINIO_REGION ?? 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.MINIO_ACCESS_KEY ?? 'minioadmin',
-        secretAccessKey: process.env.MINIO_SECRET_KEY ?? 'minioadmin',
-      },
-    })
-    const bucket = process.env.MINIO_BUCKET ?? 'swi-media'
-    interestedKeys = await Promise.all(
-      [1, 2, 3, 4, 5].map(async (n) => {
-        const key = `interested/worker-${n}.png`
-        await s3.send(new PutObjectCommand({
-          Bucket: bucket, Key: key,
-          Body: readFileSync(join(__dirname, 'fixtures', 'interested', `worker-${n}.png`)),
-          ContentType: 'image/png',
-        }))
-        return key
-      }),
-    )
-  } catch (e) {
-    console.warn('[seed] upload dos avatares interested falhou (bucket up?); tasks entram sem avatares:', (e as Error).message)
-  }
-
-  const SEED_TASKS = [
-    { title: 'Inspeção de Equipamentos',
-      description: 'Realizar verificações periódicas para identificar desgastes ou falhas em máquinas industriais.',
-      objective: 'Garantir que cada equipamento esteja em condições seguras de operação, identificando desgastes antes que virem falhas.' },
-    { title: 'Manutenção Preventiva',
-      description: 'Executar tarefas programadas para evitar paradas não planejadas e aumentar a vida útil dos equipamentos.',
-      objective: 'Prolongar a vida útil dos equipamentos e minimizar paradas não planejadas executando a manutenção dentro do cronograma.' },
-    { title: 'Diagnóstico de Falhas',
-      description: 'Analisar problemas técnicos e determinar as causas de mau funcionamento nas máquinas.',
-      objective: 'Determinar com precisão a causa-raiz de cada mau funcionamento para direcionar o reparo correto.' },
-    { title: 'Reparo de Componentes',
-      description: 'Substituir ou consertar peças defeituosas para restaurar o funcionamento adequado dos equipamentos.',
-      objective: 'Restaurar o funcionamento pleno dos equipamentos substituindo ou consertando as peças defeituosas identificadas.' },
-  ]
-
-  // Re-seed limpo: apaga as tasks de hoje do worker e recria (idempotente).
-  await prisma.task.deleteMany({ where: { assignedTo: worker.id, scheduledDate: today } })
-  for (const t of SEED_TASKS) {
-    await prisma.task.create({
-      data: {
-        assignedTo: worker.id, title: t.title, description: t.description, objective: t.objective,
-        estimatedMinutes: 120, status: 'pending', accumulatedSeconds: 0, progressPct: 0,
-        scheduledDate: today, imageKeys: [], interestedCount: 18, interestedAvatarKeys: interestedKeys,
-      },
-    })
-  }
+  const dueIn = (days: number) => new Date(today.getTime() + days * 86_400_000)
 
   // ===== Fatia 4 (Chat): diretório + conversas/mensagens demo (Opção A) =====
   // conversationKey: paridade EXATA com mobile/services/chat/chatReducers.ts
@@ -220,6 +166,152 @@ async function main() {
       })
     }
   }
+
+  // ===== Fatia 7 (Tarefas/WorkOrder): ordens de serviço demo =====
+  // Re-seed limpo: apaga TODAS as ordens (o cascade da FK Task.orderId remove os
+  // itens junto) e recria. Idempotente.
+  await prisma.workOrder.deleteMany({})
+
+  // 4 cards canônicos do checklist — cópia EXATA (title+description) do mock
+  // mobile SEED_BASE (mobile/services/journey/mockJourneyBackend.ts). O antigo
+  // `objective` por-item sobe pro pai (WorkOrder.summary), não fica no item.
+  const FLAGSHIP_ITEMS = [
+    { title: 'Inspeção de Equipamentos',
+      description: 'Realizar verificações periódicas para identificar desgastes ou falhas em máquinas industriais.' },
+    { title: 'Manutenção Preventiva',
+      description: 'Executar tarefas programadas para evitar paradas não planejadas e aumentar a vida útil dos equipamentos.' },
+    { title: 'Diagnóstico de Falhas',
+      description: 'Analisar problemas técnicos e determinar as causas de mau funcionamento nas máquinas.' },
+    { title: 'Reparo de Componentes',
+      description: 'Substituir ou consertar peças defeituosas para restaurar o funcionamento adequado dos equipamentos.' },
+  ]
+  const flagshipMinutes = distributeMinutes(480, FLAGSHIP_ITEMS.length) // [120,120,120,120] → 8h
+
+  // Ordem carro-chefe: checklist de 4 itens, worker demo + 2 colegas responsáveis.
+  await prisma.workOrder.create({
+    data: {
+      authorId: admin.id,
+      title: 'Inspeção Técnica das Máquinas Pesadas',
+      summary: 'Checklist de manutenção preventiva e reparos necessários',
+      details: 'Percorrer o checklist de inspeção das máquinas pesadas do pátio, registrando desgastes e executando os reparos necessários no turno.',
+      sector: 'Manutenção Industrial',
+      estimatedMinutes: 480,
+      startDate: today,
+      dueDate: dueIn(30),
+      status: 'pending',
+      imageKeys: [],
+      responsibles: { connect: [{ id: worker.id }, { id: contactIds.get(1)! }, { id: contactIds.get(2)! }] },
+      items: {
+        create: FLAGSHIP_ITEMS.map((it, i) => ({
+          position: i,
+          title: it.title,
+          description: it.description,
+          estimatedMinutes: flagshipMinutes[i] ?? null,
+          status: 'pending',
+          accumulatedSeconds: 0,
+          progressPct: 0,
+        })),
+      },
+    },
+  })
+
+  // Ordem SEM checklist (Decisão B): item único auto-gerado = título + summary da
+  // ordem. Também atribuída ao worker demo (aparece na jornada dele).
+  await prisma.workOrder.create({
+    data: {
+      authorId: admin.id,
+      title: 'Trocar extintores do galpão 3',
+      summary: 'Substituição dos extintores vencidos conforme a norma NR-23.',
+      details: 'Substituição dos extintores vencidos conforme a norma NR-23.',
+      sector: 'Segurança do Trabalho',
+      estimatedMinutes: 60,
+      startDate: today,
+      dueDate: dueIn(7),
+      status: 'pending',
+      imageKeys: [],
+      responsibles: { connect: [{ id: worker.id }] },
+      items: {
+        create: [{
+          position: 0,
+          title: 'Trocar extintores do galpão 3',
+          description: 'Substituição dos extintores vencidos conforme a norma NR-23.',
+          estimatedMinutes: 60,
+          status: 'pending',
+          accumulatedSeconds: 0,
+          progressPct: 0,
+        }],
+      },
+    },
+  })
+
+  // Ordens variadas atribuídas aos OUTROS workers — populam as 3 tabs do admin
+  // (pending / in_progress / done). Os status dos itens justificam o status do
+  // pai (um recompute manteria o mesmo valor).
+  await prisma.workOrder.create({
+    data: {
+      authorId: admin.id,
+      title: 'Reparo hidráulico da retroescavadeira',
+      summary: 'Corrigir vazamento no circuito hidráulico e testar a pressão.',
+      details: 'Troca de mangueiras e vedações do circuito hidráulico, seguida de teste de pressão em bancada.',
+      sector: 'Manutenção Industrial',
+      estimatedMinutes: 240,
+      startDate: today,
+      dueDate: dueIn(5),
+      status: 'in_progress',
+      imageKeys: [],
+      responsibles: { connect: [{ id: contactIds.get(3)! }] },
+      items: {
+        create: [
+          { position: 0, title: 'Substituir mangueiras', description: 'Trocar as mangueiras ressecadas do circuito.', estimatedMinutes: 120, status: 'paused', accumulatedSeconds: 1800, progressPct: 40 },
+          { position: 1, title: 'Teste de pressão', description: 'Validar a pressão do circuito após o reparo.', estimatedMinutes: 120, status: 'pending', accumulatedSeconds: 0, progressPct: 0 },
+        ],
+      },
+    },
+  })
+
+  await prisma.workOrder.create({
+    data: {
+      authorId: admin.id,
+      title: 'Alocação de maquinário — Frente 12',
+      summary: 'Deslocamento e posicionamento das máquinas para a nova frente de lavra.',
+      details: 'Coordenar o transporte e o posicionamento das máquinas pesadas na frente de lavra 12.',
+      sector: 'Operações',
+      estimatedMinutes: 180,
+      startDate: dueIn(-3),
+      dueDate: dueIn(-1),
+      status: 'done',
+      imageKeys: [],
+      responsibles: { connect: [{ id: contactIds.get(4)! }, { id: contactIds.get(5)! }] },
+      items: {
+        create: [
+          { position: 0, title: 'Transporte das máquinas', description: 'Deslocar as máquinas até a frente 12.', estimatedMinutes: 90, status: 'done', accumulatedSeconds: 5400, progressPct: 100 },
+          { position: 1, title: 'Posicionamento e nivelamento', description: 'Posicionar e nivelar as máquinas no ponto de operação.', estimatedMinutes: 90, status: 'done', accumulatedSeconds: 5400, progressPct: 100 },
+        ],
+      },
+    },
+  })
+
+  await prisma.workOrder.create({
+    data: {
+      authorId: admin.id,
+      title: 'Vistoria de EPIs do turno noturno',
+      summary: 'Conferência dos equipamentos de proteção individual antes do turno.',
+      details: 'Vistoriar e registrar a conformidade dos EPIs distribuídos ao turno noturno.',
+      sector: 'Segurança do Trabalho',
+      estimatedMinutes: 90,
+      startDate: dueIn(1),
+      dueDate: dueIn(10),
+      status: 'pending',
+      imageKeys: [],
+      responsibles: { connect: [{ id: contactIds.get(6)! }] },
+      items: {
+        create: [
+          { position: 0, title: 'Conferir capacetes e óculos', description: 'Checar integridade e validade dos capacetes e óculos.', estimatedMinutes: 45, status: 'pending', accumulatedSeconds: 0, progressPct: 0 },
+          { position: 1, title: 'Conferir protetores auriculares', description: 'Checar o estoque e a condição dos protetores auriculares.', estimatedMinutes: 45, status: 'pending', accumulatedSeconds: 0, progressPct: 0 },
+        ],
+      },
+    },
+  })
 
   // ===== Fatia 5 (Notificações): feed demo do worker (Opção A, fidelidade) =====
   // Migrado do array estático de mockNotificationBackend.ts (12 itens). createdAt

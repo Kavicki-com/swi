@@ -34,6 +34,18 @@ describe('apiJourneyBackend', () => {
     expect(apiRequest).toHaveBeenCalledWith('/journey/tasks/t1/start', { method: 'POST', auth: true });
   });
 
+  it('completeTask → POST /journey/tasks/:id/complete', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ journey: { state: 'ongoing' }, task: { id: 't1' } });
+    await apiJourneyBackend.completeTask('t1');
+    expect(apiRequest).toHaveBeenCalledWith('/journey/tasks/t1/complete', { method: 'POST', auth: true });
+  });
+
+  it('cancelTask → POST /journey/tasks/:id/cancel', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ journey: { state: 'ongoing' }, task: { id: 't1' } });
+    await apiJourneyBackend.cancelTask('t1');
+    expect(apiRequest).toHaveBeenCalledWith('/journey/tasks/t1/cancel', { method: 'POST', auth: true });
+  });
+
   it('pause/resume/end → POST sem corpo', async () => {
     (apiRequest as jest.Mock).mockResolvedValue({ state: 'paused' });
     await apiJourneyBackend.pauseJourney();
