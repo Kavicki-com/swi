@@ -122,7 +122,6 @@ export function Login() {
           <Button
             variant="ghost"
             label="Recuperar senha"
-            // @ts-expect-error labelFamily exists in local DS source; node_modules pin v0.1.35 hasn't received this prop yet.
             labelFamily="title"
             accessibilityLabel="Recuperar senha"
             onPress={() => navigate('/recovery/email')}
@@ -160,7 +159,6 @@ export function Login() {
         <Button
           variant="ghost"
           label="Suporte"
-          // @ts-expect-error labelFamily exists in local DS source; node_modules pin v0.1.35 hasn't received this prop yet.
           labelFamily="title"
           fullWidth
           accessibilityLabel="Suporte"
