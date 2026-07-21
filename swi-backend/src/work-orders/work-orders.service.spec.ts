@@ -34,6 +34,7 @@ const prisma = () => {
 const detailRow = (over: any = {}) => ({
   id: 'o1', title: 'Ordem', summary: 'Resumo', details: 'Detalhes', sector: 'Norte',
   estimatedMinutes: 120, startDate: null, dueDate: null, status: 'pending', imageKeys: ['order/a.jpg'],
+  createdAt: new Date('2026-03-10T12:00:00.000Z'),
   author: { name: 'Admin', profile: { fullName: 'Admin Full', avatarKey: 'chat/av-admin.png' } },
   responsibles: [
     { id: 'u1', name: 'W1', profile: { fullName: 'Worker Um', jobTitle: 'Op', sector: 'Norte', birthDate: new Date('1990-05-04'), avatarKey: 'chat/av1.png' } },
@@ -187,6 +188,13 @@ describe('WorkOrdersService', () => {
     expect(out.images).toEqual(['signed:order/a.jpg'])
     expect(out.items).toEqual([{ id: 't1', title: 'Item 1', description: 'd1', status: 'pending' }])
     expect(out.progressPct).toBe(0)
+  })
+
+  it('get expõe createdAt em ISO (tela de detalhe mostra "Data de criação")', async () => {
+    const db = prisma()
+    db.workOrder.findUnique.mockResolvedValue(detailRow())
+    const out = await new WorkOrdersService(db, media(), notifications()).get('o1')
+    expect(out.createdAt).toBe('2026-03-10T12:00:00.000Z')
   })
 
   // ---------------- update ----------------
