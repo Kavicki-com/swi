@@ -253,6 +253,7 @@ export class WorkOrdersService {
       estimatedMinutes: order.estimatedMinutes,
       startDate: order.startDate ? order.startDate.toISOString() : null,
       dueDate: order.dueDate ? order.dueDate.toISOString() : null,
+      createdAt: order.createdAt.toISOString(),
       status: order.status,
       progressPct: orderProgressPct(order.items.map((i) => i.status)),
       author: { name: order.author.profile?.fullName ?? order.author.name, avatar: authorAvatar },

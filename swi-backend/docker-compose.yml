@@ -51,6 +51,8 @@ services:
       SMTP_PORT: 1025
       MAIL_FROM: no-reply@swi.local
       PORT: 3000
+      # Origins do painel swi-admin no CORS HTTP (CSV). Default = dev server do Vite.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       # Mídia (Fatia 2). MINIO_PUBLIC_URL = host que as URLs presigned usam (a
       # assinatura é atada ao host). Android emu → http://10.0.2.2:9000; device
       # sobre ngrok → domínio do túnel; AWS → unset (SDK usa o S3 real).
