@@ -1,7 +1,7 @@
 // describe/it/expect/afterEach vêm dos globals do Vitest (globals: true no config);
 // importar hooks de 'vitest' aqui duplica a instância (deps.inline) e quebra o runner.
 import { vi } from 'vitest'
-import { ApiError, apiFetch, TOKEN_STORAGE_KEY } from './http'
+import { ApiError, apiFetch, SESSION_CLEARED_EVENT, TOKEN_STORAGE_KEY } from './http'
 
 const mockFetch = (body: unknown, status = 200) =>
   vi.fn().mockResolvedValue({
@@ -129,6 +129,37 @@ describe('apiFetch', () => {
 
     await expect(apiFetch('/work-orders')).rejects.toBeInstanceOf(ApiError)
     expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+  })
+
+  it('401 numa chamada autenticada avisa o app com o evento de sessão derrubada', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-velho')
+    vi.stubGlobal('fetch', mockFetch({ message: 'Unauthorized' }, 401))
+    const heard = vi.fn()
+    window.addEventListener(SESSION_CLEARED_EVENT, heard)
+
+    await expect(apiFetch('/work-orders')).rejects.toBeInstanceOf(ApiError)
+
+    expect(heard).toHaveBeenCalledTimes(1)
+    window.removeEventListener(SESSION_CLEARED_EVENT, heard)
+  })
+
+  // O JwtAuthGuard do backend usa a exception default do Passport ('Unauthorized',
+  // em inglês). O resto do app é pt-BR — o painel não repassa esse texto cru.
+  it('401 de sessão expirada troca a mensagem crua do Passport por uma em pt', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-velho')
+    vi.stubGlobal('fetch', mockFetch({ message: 'Unauthorized' }, 401))
+
+    await expect(apiFetch('/work-orders')).rejects.toThrow('Sua sessão expirou. Entre novamente.')
+  })
+
+  // 401 SEM token é o login recusando credencial, não sessão expirada: aí a
+  // mensagem do backend já vem em pt e é a única que explica o que aconteceu.
+  it('401 sem token preserva a mensagem do backend (login recusado)', async () => {
+    vi.stubGlobal('fetch', mockFetch({ message: 'Credenciais inválidas' }, 401))
+
+    await expect(apiFetch('/auth/login', { method: 'POST' })).rejects.toThrow(
+      'Credenciais inválidas',
+    )
   })
 
   it('erro que não é 401 preserva a sessão', async () => {

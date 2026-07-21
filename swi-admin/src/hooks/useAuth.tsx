@@ -1,6 +1,7 @@
 // src/hooks/useAuth.tsx
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { authApi } from '@/services/auth'
+import { SESSION_CLEARED_EVENT, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import type { User } from '@/services/types'
 
 type SignUpInput = {
@@ -35,6 +36,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // A sessão pode morrer com a tela já montada — o 401 do apiFetch apaga o
+  // localStorage, mas isso sozinho não avisa o React. Sem estes dois listeners
+  // o `user` fica stale e truthy: o RequireAuth não redireciona, o GuestOnly
+  // rebate quem tenta ir pro /login, e não sobra caminho in-app pra sair.
+  useEffect(() => {
+    const drop = () => setUser(null)
+    // Evento nativo `storage` só dispara nas OUTRAS abas — cobre "deslogou numa
+    // aba, as irmãs acompanham". A própria aba fica com o evento custom, que o
+    // clearSession dispara. `key === null` é o localStorage.clear() inteiro.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== TOKEN_STORAGE_KEY) return
+      // Só derruba se o token realmente sumiu: um `storage` de login numa aba
+      // irmã não pode expulsar quem está logado aqui.
+      if (!window.localStorage.getItem(TOKEN_STORAGE_KEY)) drop()
+    }
+    window.addEventListener(SESSION_CLEARED_EVENT, drop)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(SESSION_CLEARED_EVENT, drop)
+      window.removeEventListener('storage', onStorage)
     }
   }, [])
 

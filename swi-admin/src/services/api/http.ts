@@ -24,11 +24,19 @@ export class ApiError extends Error {
   }
 }
 
+// Apagar o localStorage NÃO avisa o React: o `user` do AuthContext continuaria
+// truthy e a tela ficaria viva com credencial morta (RequireAuth não redireciona,
+// GuestOnly não deixa ir pro /login — sem saída a não ser F5). Este evento é o
+// canal explícito pra derrubar o contexto na PRÓPRIA aba; o evento nativo
+// `storage` só dispara nas OUTRAS, e o AuthProvider assina os dois.
+export const SESSION_CLEARED_EVENT = 'swi:session-cleared'
+
 export const readToken = (): string | null => window.localStorage.getItem(TOKEN_STORAGE_KEY)
 
 export const clearSession = (): void => {
   window.localStorage.removeItem(TOKEN_STORAGE_KEY)
   window.localStorage.removeItem(SESSION_STORAGE_KEY)
+  window.dispatchEvent(new Event(SESSION_CLEARED_EVENT))
 }
 
 // Aceita as 3 formas de HeadersInit (Record, Headers, pares [string, string][])
@@ -80,9 +88,18 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
 
   if (!res.ok) {
-    // Token expirado/inválido: derruba a sessão local. O RequireAuth redireciona
-    // pro login no próximo render — evita loop de request com credencial morta.
-    if (res.status === 401) clearSession()
+    // 401 COM token = a credencial que mandamos morreu. Derruba a sessão local
+    // (o evento do clearSession zera o AuthContext, que faz o RequireAuth
+    // redirecionar) e troca a mensagem: o JwtAuthGuard usa a exception default
+    // do Passport, que responde 'Unauthorized' cru em inglês.
+    //
+    // 401 SEM token é outra coisa: é o /auth/login recusando a credencial. Aí a
+    // mensagem do backend já vem em pt e é a única que explica o que houve —
+    // substituir por "sua sessão expirou" mentiria pra quem só errou a senha.
+    if (res.status === 401 && token) {
+      clearSession()
+      throw new ApiError('Sua sessão expirou. Entre novamente.', 401)
+    }
     const message =
       (body as { message?: string | string[] } | null)?.message ?? `Erro ${res.status}`
     throw new ApiError(Array.isArray(message) ? message.join(', ') : message, res.status)

@@ -1,7 +1,7 @@
 // describe/it/expect/beforeEach/afterEach vêm dos globals do Vitest.
 import { vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
+import { ApiError, apiFetch, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { AuthProvider, useAuth } from './useAuth'
 
 // signIn agora é real (backend Nest) — o fetch é stubado pra não depender de
@@ -126,6 +126,72 @@ describe('useAuth (hydration)', () => {
       })
     })
     expect(result.current.user?.email).toBe('novo@swi.test')
+  })
+
+  // O 401 do apiFetch apaga o localStorage, mas isso sozinho não avisa o React:
+  // sem o listener o `user` continuaria truthy e a tela ficaria viva com
+  // credencial morta — RequireAuth não redirecionaria e GuestOnly não deixaria
+  // ir pro /login, prendendo o usuário sem saída a não ser F5.
+  it('drops the user when a 401 clears the session mid-flight', async () => {
+    stubAdminLogin()
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.signIn('admin@swi.local', 'admin123')
+    })
+    expect(result.current.user?.email).toBe('admin@swi.local')
+
+    // Uma chamada qualquer do app tomando 401 com o token já gravado.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({ message: 'Unauthorized' }),
+      } as Response),
+    )
+    await act(async () => {
+      await expect(apiFetch('/work-orders')).rejects.toBeInstanceOf(ApiError)
+    })
+
+    expect(result.current.user).toBeNull()
+  })
+
+  // O evento `storage` do browser só dispara nas OUTRAS abas: é o que cobre
+  // "deslogou numa aba, a outra tem que acompanhar".
+  it('drops the user when another tab clears the token (storage event)', async () => {
+    stubAdminLogin()
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.signIn('admin@swi.local', 'admin123')
+    })
+    expect(result.current.user?.email).toBe('admin@swi.local')
+
+    // A aba irmã apagou o token; o jsdom não propaga `storage` sozinho.
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY)
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', { key: TOKEN_STORAGE_KEY }))
+    })
+
+    expect(result.current.user).toBeNull()
+  })
+
+  // Sem esta guarda, QUALQUER escrita no localStorage (outro domínio de estado
+  // da app numa aba irmã) derrubaria a sessão de quem está logado.
+  it('keeps the user when a storage event does not touch the token', async () => {
+    stubAdminLogin()
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.signIn('admin@swi.local', 'admin123')
+    })
+
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'algum.outro.estado' }))
+    })
+
+    expect(result.current.user?.email).toBe('admin@swi.local')
   })
 
   it('signOut clears the user', async () => {
