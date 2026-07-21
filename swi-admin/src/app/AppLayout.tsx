@@ -77,7 +77,7 @@ const CHAT_USERS: ChatSectionUser[] = [
  * Falls back to the raw pathname when nothing matches, so the SideMenu
  * simply renders nothing as active.
  */
-function resolveActiveNavValue(pathname: string): string {
+export function resolveActiveNavValue(pathname: string): string {
   // Any /monitoring/* sub-route keeps the "Monitoramento" sidebar item active.
   // Sidebar entry points to /monitoring/alerts (default); tabs inside the
   // monitoring screens switch between alerts/good-conditions/etc.

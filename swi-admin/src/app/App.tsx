@@ -30,6 +30,9 @@ import { AlertsRescueRouteSelection } from '@/pages/alerts/AlertsRescueRouteSele
 import { AlertsRescueRoute } from '@/pages/alerts/AlertsRescueRoute'
 import { MonitoringAlerts } from '@/pages/monitoring/MonitoringAlerts'
 import { MonitoringGoodConditions } from '@/pages/monitoring/MonitoringGoodConditions'
+import { TasksList } from '@/pages/tasks/TasksList'
+import { TaskForm } from '@/pages/tasks/TaskForm'
+import { TaskDetails } from '@/pages/tasks/TaskDetails'
 import { UserSettings } from '@/pages/user/UserSettings'
 import { UserProfile } from '@/pages/user/UserProfile'
 import { FidelityReview } from '@/dev/fidelity/FidelityReview'
@@ -88,6 +91,13 @@ export function App() {
                     path="/alerts/:employeeId/rescue/:rescuerId"
                     element={<AlertsRescueRoute />}
                   />
+                  {/* Tarefas — /tasks/new vem antes de /tasks/:id por clareza de
+                    leitura; o ranking do React Router já prioriza o segmento
+                    estático sobre o dinâmico (coberto por tasksRoutes.test.tsx). */}
+                  <Route path="/tasks" element={<TasksList />} />
+                  <Route path="/tasks/new" element={<TaskForm />} />
+                  <Route path="/tasks/:id" element={<TaskDetails />} />
+                  <Route path="/tasks/:id/edit" element={<TaskForm />} />
                   <Route path="/user/settings" element={<UserSettings />} />
                   <Route path="/user/profile" element={<UserProfile />} />
                   {ADMIN_ROUTES.filter(
