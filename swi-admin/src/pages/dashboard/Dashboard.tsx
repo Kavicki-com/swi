@@ -700,7 +700,6 @@ function HealthDonuts({
         progressGradient={VITAL_GRADIENT}
         icon="heartbeat_filled"
         iconColor={theme.surface.success}
-        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
         iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
@@ -715,7 +714,6 @@ function HealthDonuts({
         progressGradient={WEAR_GRADIENT}
         icon="heartbeat_filled"
         iconColor={theme.surface.success}
-        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
         iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
@@ -730,7 +728,6 @@ function HealthDonuts({
         progressGradient={URGENT_GRADIENT}
         icon="heartbeat_filled"
         iconColor={theme.surface.success}
-        // @ts-expect-error iconGradient is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
         iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}

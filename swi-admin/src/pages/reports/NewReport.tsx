@@ -89,10 +89,7 @@ export function NewReport() {
         <Button
           label="Atribuir responsáveis"
           variant="contained"
-          iconRight={
-            // @ts-expect-error add_circle is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
-            <Icon name="add_circle" size={24} color={theme.content.light} />
-          }
+          iconRight={<Icon name="add_circle" size={24} color={theme.content.light} />}
           onPress={() => navigate('/modals/responsables')}
           accessibilityLabel="Atribuir responsáveis ao relatório"
         />

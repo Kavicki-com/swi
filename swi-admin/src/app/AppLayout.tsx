@@ -233,7 +233,6 @@ export function AppLayout() {
                   onUserPress={(id: string) => navigateWithTransition(navigate, `/chat/${id}`)}
                   onExpand={() => navigateWithTransition(navigate, '/chat')}
                   fullWidth
-                  // @ts-expect-error renderCard is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
                   renderCard={(card: ReactNode, user: ChatSectionUser) => (
                     <div
                       style={{
@@ -320,7 +319,6 @@ export function AppLayout() {
             onUserPress={(id: string) => navigateWithTransition(navigate, `/chat/${id}`)}
             onExpand={() => navigateWithTransition(navigate, '/chat')}
             fullWidth
-            // @ts-expect-error renderCard is in local DS source; node_modules pin v0.1.35 doesn't have it yet.
             renderCard={(card: ReactNode, user: ChatSectionUser) => (
               <div
                 style={{

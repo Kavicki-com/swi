@@ -367,7 +367,6 @@ export function AlertsRescueRoute() {
           <View style={{ width: '100%' }}>
             <Button
               label="Continuar"
-              // @ts-expect-error labelFamily exists in local DS source; node_modules pin v0.1.35 hasn't received this prop yet.
               labelFamily="title"
               backgroundColor={theme.surface.success}
               onPress={() => {
