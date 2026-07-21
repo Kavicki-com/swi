@@ -37,7 +37,7 @@ de Tarefas consomem a API real, e o login do admin passa a ser real.
 | 5 | Tipo sanguíneo | **Decorativo** (Decisão 2 da fatia backend — saúde fica mock até a smartband). Mesmo padrão do `ResponsablesModal` atual (ícone `humidity_mid` como gota). |
 | 6 | Modal de responsáveis | **Overlay local do form**, não rota. O `/modals/responsables` existente seleciona **admins** pro fluxo de Relatórios e **não devolve a seleção** (é demo) — aqui a seleção precisa voltar pro form. O modal-rota de Relatórios fica **intocado**. |
 | 7 | Tela de edição | O Figma não desenhou uma. **Reuso do form** pré-preenchido em `/tasks/:id/edit` → `PATCH`. Gap de design assumido e registrado. |
-| 8 | Pino da lista | Navega pro mapa **por setor** (Decisão 3 da fatia backend — não há localização por tarefa). |
+| 8 | Pino da lista | Navega pro **mapa geral** (`/maps/general`), mesmo destino de todos os outros pinos do admin. Não existe rota por setor, e a Decisão 3 da fatia backend já descartou localização por tarefa. |
 | 9 | Busca | **Filtro client-side** por título/setor sobre a página corrente (o backend não tem busca; cap de 200 herdado do H3b). |
 
 ## Pré-requisito — mini-branch backend
