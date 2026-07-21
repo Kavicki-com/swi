@@ -2,11 +2,14 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
+import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { AppLayout } from './AppLayout'
 
 beforeEach(() => {
+  // getSession real exige token + sessão.
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
   window.localStorage.setItem(
-    'swi.admin.session',
+    SESSION_STORAGE_KEY,
     JSON.stringify({
       id: 'u_seed_1',
       org_id: 'org_seed_1',

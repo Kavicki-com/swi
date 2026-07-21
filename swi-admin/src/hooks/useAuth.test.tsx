@@ -1,9 +1,34 @@
+// describe/it/expect/beforeEach/afterEach vêm dos globals do Vitest.
+import { vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
+import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { AuthProvider, useAuth } from './useAuth'
+
+// signIn agora é real (backend Nest) — o fetch é stubado pra não depender de
+// rede. getSession/signOut só tocam localStorage e rodam de verdade.
+const jwt = (payload: object) =>
+  `x.${btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')}.y`
+
+const stubAdminLogin = () =>
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        accessToken: jwt({ sub: 'u1', role: 'ADMIN' }),
+        user: { id: 'u1', email: 'admin@swi.local', name: 'Admin Demo' },
+      }),
+    } as Response),
+  )
 
 describe('useAuth', () => {
   beforeEach(() => {
     window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('starts with user=null', async () => {
@@ -12,13 +37,33 @@ describe('useAuth', () => {
     expect(result.current.user).toBeNull()
   })
 
-  it('signs in with seed credentials', async () => {
+  it('signs in against the backend (fetch stubado)', async () => {
+    stubAdminLogin()
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
     await waitFor(() => expect(result.current.loading).toBe(false))
     await act(async () => {
-      await result.current.signIn('admin@swi.test', 'demo1234')
+      await result.current.signIn('admin@swi.local', 'admin123')
     })
-    expect(result.current.user?.email).toBe('admin@swi.test')
+    expect(result.current.user?.email).toBe('admin@swi.local')
+  })
+
+  it('surfaces the backend error message on failed sign-in', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({ message: 'Credenciais inválidas' }),
+      } as Response),
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    let outcome: { ok: boolean; message?: string } | undefined
+    await act(async () => {
+      outcome = await result.current.signIn('a@b.c', 'x')
+    })
+    expect(outcome).toEqual({ ok: false, message: 'Credenciais inválidas' })
+    expect(result.current.user).toBeNull()
   })
 })
 
@@ -27,9 +72,15 @@ describe('useAuth (hydration)', () => {
     window.localStorage.clear()
   })
 
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('hydrates user from localStorage on mount', async () => {
+    // getSession real exige token + sessão.
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
     window.localStorage.setItem(
-      'swi.admin.session',
+      SESSION_STORAGE_KEY,
       JSON.stringify({
         id: 'u_seed_1',
         org_id: 'org_seed_1',
@@ -44,6 +95,16 @@ describe('useAuth (hydration)', () => {
     await waitFor(() => {
       expect(result.current.user?.email).toBe('admin@swi.test')
     })
+  })
+
+  it('does not hydrate from an orphan session (sem token)', async () => {
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({ id: 'u_seed_1', email: 'admin@swi.test', full_name: 'Admin Seed' }),
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.user).toBeNull()
   })
 
   it('exposes a hydration flag (loading=true initially, false after hydrate)', async () => {
@@ -68,14 +129,17 @@ describe('useAuth (hydration)', () => {
   })
 
   it('signOut clears the user', async () => {
+    stubAdminLogin()
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
     await waitFor(() => expect(result.current.loading).toBe(false))
     await act(async () => {
-      await result.current.signIn('admin@swi.test', 'demo1234')
+      await result.current.signIn('admin@swi.local', 'admin123')
     })
     await act(async () => {
       await result.current.signOut()
     })
     expect(result.current.user).toBeNull()
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull()
   })
 })

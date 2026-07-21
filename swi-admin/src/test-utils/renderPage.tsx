@@ -9,6 +9,7 @@ import { render, type RenderResult } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
+import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 
 const SEED_SESSION = JSON.stringify({
   id: 'u_seed_1',
@@ -23,7 +24,9 @@ const SEED_SESSION = JSON.stringify({
 })
 
 export function seedSession() {
-  window.localStorage.setItem('swi.admin.session', SEED_SESSION)
+  // getSession real exige token + sessão; sessão sem token é tratada como órfã.
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
+  window.localStorage.setItem(SESSION_STORAGE_KEY, SEED_SESSION)
 }
 
 export function clearSession() {

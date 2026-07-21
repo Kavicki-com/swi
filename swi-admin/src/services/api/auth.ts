@@ -1,0 +1,86 @@
+// Auth real contra o backend Nest (POST /auth/login). Mantém o envelope
+// MockResponse pra que useAuth e as telas não precisem mudar na migração.
+import type { User } from '@/services/types'
+import type { MockResponse } from '@/services/mockApi/types'
+import { SEED_ORG_ID } from '@/services/mockApi/seed'
+import { apiFetch, clearSession, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from './http'
+
+type LoginResponse = { accessToken: string; user: { id: string; email: string; name: string } }
+
+// Lê a role do payload do JWT. NÃO é validação de segurança (quem valida é o
+// backend em toda rota) — serve pra barrar cedo um worker que tentou o painel,
+// com mensagem clara em vez de 403 em cada tela.
+const roleOf = (token: string): string => {
+  try {
+    // JWT usa base64url; atob só entende base64 clássico.
+    const payload = (token.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(payload)).role ?? ''
+  } catch {
+    return ''
+  }
+}
+
+// O backend devolve { id, email, name }; o painel consome o shape User dos
+// mocks. org_id é ponte de transição: os domínios ainda mock (Dashboard,
+// Employees, Alerts, …) filtram por org_id === SEED_ORG_ID — vazio deixaria o
+// painel inteiro zerado sem erro. Remover quando o último domínio migrar pro
+// backend real. created_at é sintético (timestamp do login, não da criação da
+// conta) — não usar pra exibir "membro desde".
+const toAdminUser = (u: LoginResponse['user']): User => ({
+  id: u.id,
+  org_id: SEED_ORG_ID,
+  email: u.email,
+  full_name: u.name,
+  role: 'admin',
+  consent_given_at: null,
+  created_at: new Date().toISOString(),
+})
+
+export const authApi = {
+  signIn: async ({
+    email,
+    password,
+  }: {
+    email: string
+    password: string
+  }): Promise<MockResponse<User>> => {
+    try {
+      const res = await apiFetch<LoginResponse>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+      // 200 sem corpo/sem token = infra quebrada; sem o guard, o TypeError
+      // (em inglês) vazaria pro FormError.
+      if (!res?.accessToken) {
+        return { data: null, error: { message: 'Resposta inesperada do servidor.' } }
+      }
+      if (roleOf(res.accessToken) !== 'ADMIN') {
+        return { data: null, error: { message: 'Acesso restrito a administradores.' } }
+      }
+      const user = toAdminUser(res.user)
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, res.accessToken)
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user))
+      return { data: user, error: null }
+    } catch (e) {
+      return { data: null, error: { message: e instanceof Error ? e.message : 'Falha no login' } }
+    }
+  },
+
+  signOut: async (): Promise<MockResponse<null>> => {
+    clearSession()
+    return { data: null, error: null }
+  },
+
+  getSession: async (): Promise<MockResponse<User | null>> => {
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+    // Sessão sem token é órfã (ex.: 401 do apiFetch derruba as duas chaves,
+    // mas estado antigo pode ter só a sessão) — trata como deslogado pra não
+    // renderizar o painel com credencial morta.
+    if (!raw || !window.localStorage.getItem(TOKEN_STORAGE_KEY)) return { data: null, error: null }
+    try {
+      return { data: JSON.parse(raw) as User, error: null }
+    } catch {
+      return { data: null, error: null }
+    }
+  },
+}

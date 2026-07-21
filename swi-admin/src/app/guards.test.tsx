@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
+import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { RequireAuth } from './RequireAuth'
 import { GuestOnly } from './GuestOnly'
 
@@ -41,8 +42,10 @@ describe('RequireAuth', () => {
   })
 
   it('renders protected content when authenticated (session in localStorage)', async () => {
+    // getSession real exige token + sessão.
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
     window.localStorage.setItem(
-      'swi.admin.session',
+      SESSION_STORAGE_KEY,
       JSON.stringify({
         id: 'u_seed_1',
         org_id: 'org_seed_1',
@@ -71,8 +74,10 @@ describe('GuestOnly', () => {
   })
 
   it('redirects authenticated to /', async () => {
+    // getSession real exige token + sessão.
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
     window.localStorage.setItem(
-      'swi.admin.session',
+      SESSION_STORAGE_KEY,
       JSON.stringify({
         id: 'u_seed_1',
         org_id: 'org_seed_1',

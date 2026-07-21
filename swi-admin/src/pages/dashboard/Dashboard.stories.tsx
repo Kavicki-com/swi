@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
+import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { Dashboard } from './Dashboard'
 
 const meta: Meta<typeof Dashboard> = {
@@ -10,9 +11,10 @@ const meta: Meta<typeof Dashboard> = {
   component: Dashboard,
   decorators: [
     (Story) => {
-      // Seed session so Dashboard fetches
+      // Seed session so Dashboard fetches (getSession real exige token + sessão)
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
       window.localStorage.setItem(
-        'swi.admin.session',
+        SESSION_STORAGE_KEY,
         JSON.stringify({
           id: 'u_seed_1',
           org_id: 'org_seed_1',
