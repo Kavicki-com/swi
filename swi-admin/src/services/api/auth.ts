@@ -83,4 +83,82 @@ export const authApi = {
       return { data: null, error: null }
     }
   },
+
+  // Onboarding de empresa (POST /auth/signup-company). NÃO cria sessão: o admin
+  // nasce APPROVED porém não-verificado — só entra depois de definir a senha
+  // pelo link. A tela mostra "confirme seu e-mail", não navega pro painel.
+  signUpCompany: async (input: {
+    company: {
+      name: string
+      cnpj: string
+      site?: string
+      cep: string
+      street: string
+      number: string
+      neighborhood: string
+      uf: string
+    }
+    responsible: { name: string; phone: string; email: string; role: string }
+  }): Promise<MockResponse<{ nextStep: 'CHECK_EMAIL' }>> => {
+    try {
+      await apiFetch<unknown>('/auth/signup-company', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return { data: { nextStep: 'CHECK_EMAIL' }, error: null }
+    } catch (e) {
+      return {
+        data: null,
+        error: { message: e instanceof Error ? e.message : 'Falha ao cadastrar' },
+      }
+    }
+  },
+
+  // Recuperação do admin (POST /auth/password/forgot-admin) — endpoint que manda
+  // LINK, distinto do /auth/password/forgot code-based do mobile. Silencioso por
+  // design: 200 sempre (não vaza se o e-mail existe).
+  requestPasswordReset: async ({
+    email,
+  }: {
+    email: string
+  }): Promise<MockResponse<{ sent: true }>> => {
+    try {
+      await apiFetch<unknown>('/auth/password/forgot-admin', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      })
+      return { data: { sent: true }, error: null }
+    } catch (e) {
+      return {
+        data: null,
+        error: { message: e instanceof Error ? e.message : 'Falha ao enviar instruções' },
+      }
+    }
+  },
+
+  // Define/redefine a senha (POST /auth/password/reset) com o código embutido no
+  // link (email + code vêm da URL). O mesmo endpoint do mobile; aqui também
+  // destrava o admin recém-criado (o backend marca emailVerified=true).
+  resetPassword: async ({
+    email,
+    code,
+    newPassword,
+  }: {
+    email: string
+    code: string
+    newPassword: string
+  }): Promise<MockResponse<{ reset: true }>> => {
+    try {
+      await apiFetch<unknown>('/auth/password/reset', {
+        method: 'POST',
+        body: JSON.stringify({ email, code, newPassword }),
+      })
+      return { data: { reset: true }, error: null }
+    } catch (e) {
+      return {
+        data: null,
+        error: { message: e instanceof Error ? e.message : 'Falha ao redefinir senha' },
+      }
+    }
+  },
 }

@@ -188,3 +188,133 @@ describe('authApi.signOut (real)', () => {
     expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull()
   })
 })
+
+const companyPayload = () => ({
+  company: {
+    name: 'Acme S.A.',
+    cnpj: '12.345.678/0001-90',
+    site: 'www.acme.com.br',
+    cep: '30140-000',
+    street: 'Avenida Quatro de Julho',
+    number: '123',
+    neighborhood: 'Pampulha',
+    uf: 'MG',
+  },
+  responsible: {
+    name: 'Maria',
+    phone: '(31) 99999-0000',
+    email: 'maria@acme.com',
+    role: 'owner' as const,
+  },
+})
+
+describe('authApi.signUpCompany (real)', () => {
+  it('POST /auth/signup-company com o payload aninhado; sucesso não loga (só CHECK_EMAIL)', async () => {
+    const f = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ nextStep: 'CHECK_EMAIL' }),
+    } as Response)
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await authApi.signUpCompany(companyPayload())
+
+    expect(error).toBeNull()
+    expect(data?.nextStep).toBe('CHECK_EMAIL')
+    // não cria sessão: o admin nasce não-verificado, entra só depois do link
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull()
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/auth/signup-company')
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string)
+    expect(body.company.cnpj).toBe('12.345.678/0001-90')
+    expect(body.responsible.email).toBe('maria@acme.com')
+    expect(body.responsible.role).toBe('owner')
+  })
+
+  it('e-mail já cadastrado (409) devolve erro sem logar', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ message: 'E-mail já cadastrado' }),
+      } as Response),
+    )
+
+    const { data, error } = await authApi.signUpCompany(companyPayload())
+
+    expect(data).toBeNull()
+    expect(error?.message).toMatch(/cadastrad/i)
+  })
+})
+
+describe('authApi.requestPasswordReset (real, link do admin)', () => {
+  it('POST /auth/password/forgot-admin; 200 vazio = { sent: true }', async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => null } as Response)
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await authApi.requestPasswordReset({ email: 'a@swi.com' })
+
+    expect(error).toBeNull()
+    expect(data?.sent).toBe(true)
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/auth/password/forgot-admin')
+    expect(init.method).toBe('POST')
+  })
+
+  it('falha de rede vira erro amigável', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    const { data, error } = await authApi.requestPasswordReset({ email: 'a@swi.com' })
+
+    expect(data).toBeNull()
+    expect(error?.message).toBe('Não foi possível conectar ao servidor')
+  })
+})
+
+describe('authApi.resetPassword (real, email + code)', () => {
+  it('POST /auth/password/reset com email+code+newPassword; 200 = { reset: true }', async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => null } as Response)
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await authApi.resetPassword({
+      email: 'a@swi.com',
+      code: '123456',
+      newPassword: 'nova1234',
+    })
+
+    expect(error).toBeNull()
+    expect(data?.reset).toBe(true)
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/auth/password/reset')
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string)
+    expect(body).toEqual({ email: 'a@swi.com', code: '123456', newPassword: 'nova1234' })
+  })
+
+  it('código inválido (400) devolve erro', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ message: 'Código inválido' }),
+      } as Response),
+    )
+
+    const { data, error } = await authApi.resetPassword({
+      email: 'a@swi.com',
+      code: '000000',
+      newPassword: 'nova1234',
+    })
+
+    expect(data).toBeNull()
+    expect(error?.message).toMatch(/inválido/i)
+  })
+})

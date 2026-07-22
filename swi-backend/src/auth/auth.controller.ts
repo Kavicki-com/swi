@@ -4,7 +4,7 @@ import { AuthService } from './auth.service'
 import { UsersService } from '../users/users.service'
 import { JwtAuthGuard } from './jwt-auth.guard'
 import { CurrentUserId } from './current-user.decorator'
-import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto, ResendDto } from './dto'
+import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto, ResendDto, SignupCompanyDto } from './dto'
 
 @Controller('auth')
 export class AuthController {
@@ -16,6 +16,11 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60000 } }) @Post('login') @HttpCode(200) login(@Body() b: LoginDto) { return this.auth.login(b) }
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/forgot') @HttpCode(200) forgot(@Body() b: ForgotDto) { return this.auth.forgotPassword(b) }
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/reset') @HttpCode(200) reset(@Body() b: ResetDto) { return this.auth.resetPassword(b) }
+
+  // Onboarding do painel: cria empresa + admin responsável e manda link de senha.
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('signup-company') @HttpCode(200) signupCompany(@Body() b: SignupCompanyDto) { return this.auth.signupCompany(b) }
+  // Recuperação do admin: mesmo /forgot, mas manda LINK (o /password/forgot segue code-based pro mobile).
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/forgot-admin') @HttpCode(200) forgotAdmin(@Body() b: ForgotDto) { return this.auth.forgotPasswordAdmin(b) }
 
   @UseGuards(JwtAuthGuard) @Get('me')
   async me(@CurrentUserId() userId: string) {

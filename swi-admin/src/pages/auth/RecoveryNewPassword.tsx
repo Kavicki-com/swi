@@ -15,7 +15,10 @@ type Phase = 'form' | 'sent'
 export function RecoveryNewPassword() {
   const theme = useTheme()
   const [searchParams] = useSearchParams()
-  const token = searchParams.get('token') ?? ''
+  // O link do e-mail carrega email + código (o backend é code-based; a URL só
+  // embute o código pra virar um link clicável). Sem token — ver services/api/auth.
+  const email = searchParams.get('email') ?? ''
+  const code = searchParams.get('code') ?? ''
   const [phase, setPhase] = useState<Phase>('form')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -36,8 +39,14 @@ export function RecoveryNewPassword() {
       setError('As senhas não coincidem')
       return
     }
+    // Sem email/código o link é inválido/adulterado — o backend rejeitaria com
+    // 400, mas barrar aqui dá mensagem clara em vez de "Código inválido".
+    if (!email || !code) {
+      setError('Link inválido ou expirado. Solicite a recuperação novamente.')
+      return
+    }
     setLoading(true)
-    const result = await authApi.resetPassword({ token, newPassword })
+    const result = await authApi.resetPassword({ email, code, newPassword })
     setLoading(false)
     if (result.error) {
       setError(result.error.message ?? 'Falha ao redefinir senha')
