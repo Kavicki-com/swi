@@ -18,6 +18,9 @@ export type UserSummaryDto = {
   email: string
   role: 'WORKER' | 'ADMIN'
   approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED'
+  // Flag de ativação real (independente do approvalStatus): o admin liga/desliga
+  // o acesso pelo toggle sem mexer no fluxo de aprovação.
+  active: boolean
   jobTitle: string
   sector: string
   birthDate: string | null // ISO
@@ -72,7 +75,8 @@ function toEmployee(u: UserSummaryDto): Employee {
   }
 }
 
-// DTO → Admin (UI). active/status derivam do approvalStatus real.
+// DTO → Admin (UI). `active` vem do campo real de ativação (toggle liga/desliga
+// o acesso); `status` continua derivando do approvalStatus (fluxo de aprovação).
 function toAdmin(u: UserSummaryDto): Admin {
   return {
     id: u.id,
@@ -82,7 +86,7 @@ function toAdmin(u: UserSummaryDto): Admin {
     role: u.jobTitle,
     specialization: u.sector,
     avatarUri: u.avatar,
-    active: u.approvalStatus === 'APPROVED',
+    active: u.active,
     status: APPROVAL_TO_STATUS[u.approvalStatus],
   }
 }
@@ -148,10 +152,42 @@ export const employeesApi = {
   create: (input: CreateUserInput) => createUser('WORKER', input),
 }
 
+// Ativar/desativar um admin (PATCH /users/:id {active}) — o backend responde só
+// o novo estado ({id, active}); a tela usa o envelope de erro pra reverter o
+// toggle otimista se falhar.
+const setAdminActive = async (
+  id: string,
+  active: boolean,
+): Promise<MockResponse<{ id: string; active: boolean }>> => {
+  try {
+    const r = await apiFetch<{ id: string; active: boolean }>(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ active }),
+    })
+    return { data: r, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha na ação') } }
+  }
+}
+
+// Excluir um admin (DELETE /users/:id) — 204 sem corpo (apiFetch resolve null).
+// O backend recusa com 409 quando o usuário tem registros vinculados ("desative-o
+// em vez de excluir"); a mensagem vaza pro toast via envelope de erro.
+const removeAdmin = async (id: string): Promise<MockResponse<null>> => {
+  try {
+    await apiFetch<null>(`/users/${id}`, { method: 'DELETE' })
+    return { data: null, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha na ação') } }
+  }
+}
+
 export const adminsApi = {
   list: () => listMapped('ADMIN', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
   create: (input: CreateUserInput) => createUser('ADMIN', input),
+  setActive: setAdminActive,
+  remove: removeAdmin,
 }
 
 // Fila de aprovação: WORKERs pendentes. createdAt (quando o cadastro entrou) vira
