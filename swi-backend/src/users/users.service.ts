@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { hash } from '../auth/codes'
-import { Role } from '@prisma/client'
+import { Prisma, Role } from '@prisma/client'
 import type { ApprovalStatus, Company, Profile, User } from '@prisma/client'
 
 type UserWithProfile = User & { profile: Profile | null }
@@ -29,28 +29,37 @@ export class UsersService {
   ) {
     const exists = await this.findByEmail(dto.email)
     if (exists) throw new ConflictException('E-mail já cadastrado')
-    const admin = await this.findById(adminId)
-    const user = await this.prisma.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email,
-        passwordHash: await hash(dto.password),
-        role: dto.role,
-        approvalStatus: 'APPROVED',
-        emailVerified: true,
-        companyId: admin?.companyId ?? null,
-        profile: {
-          create: {
-            fullName: dto.name,
-            ...(dto.phone ? { phone: dto.phone } : {}),
-            ...(dto.cpf ? { cpf: dto.cpf } : {}),
-            ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}),
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId }, select: { companyId: true } })
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          name: dto.name,
+          email: dto.email,
+          passwordHash: await hash(dto.password),
+          role: dto.role,
+          approvalStatus: 'APPROVED',
+          emailVerified: true,
+          companyId: admin?.companyId ?? null,
+          profile: {
+            create: {
+              fullName: dto.name,
+              ...(dto.phone ? { phone: dto.phone } : {}),
+              ...(dto.cpf ? { cpf: dto.cpf } : {}),
+              ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}),
+            },
           },
         },
-      },
-      include: { profile: true },
-    })
-    return this.toSummaryDto(user)
+        include: { profile: true },
+      })
+      return this.toSummaryDto(user)
+    } catch (e) {
+      // Rede de segurança pra corrida: se dois creates concorrentes passarem o
+      // pré-check, o segundo bate no unique de email (P2002) → traduz pra 409.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('E-mail já cadastrado')
+      }
+      throw e
+    }
   }
 
   async approve(id: string): Promise<User> {
