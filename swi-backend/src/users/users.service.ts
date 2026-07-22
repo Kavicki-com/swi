@@ -99,6 +99,32 @@ export class UsersService {
     return Promise.all(users.map((u) => this.toSummaryDto(u)))
   }
 
+  // Ativar/desativar: usuário inativo não loga (guarda no AuthService.login).
+  // Aditivo e reversível — não apaga nada.
+  async setActive(id: string, active: boolean) {
+    const u = await this.prisma.user.update({ where: { id }, data: { active } })
+    return { id: u.id, active: u.active }
+  }
+
+  // Exclusão dura: apaga o Profile (1:1) e o User na mesma transação. Guardas:
+  // não deixa o admin excluir a si mesmo; se o User tiver registros vinculados
+  // por FK (P2003, ex.: reports/journeys) orienta a desativar em vez de excluir.
+  async remove(id: string, requesterId: string) {
+    if (id === requesterId) throw new BadRequestException('Não é possível excluir a si mesmo')
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.profile.deleteMany({ where: { userId: id } })
+        await tx.user.delete({ where: { id } })
+      })
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === 'P2025') throw new NotFoundException('Usuário não encontrado')
+        if (e.code === 'P2003') throw new ConflictException('Usuário possui registros vinculados; desative-o em vez de excluir')
+      }
+      throw e
+    }
+  }
+
   async getOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },

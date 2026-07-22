@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { Prisma } from '@prisma/client'
 import { UsersService } from './users.service'
 
-const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn() } }) as any
+const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn() } }) as any
 // Espelha a convenção do work-orders.service.spec: presignGet devolve 'signed:<key>'.
 const media = () => ({ presignGet: jest.fn((k: string) => Promise.resolve('signed:' + k)) }) as any
 
@@ -227,5 +227,36 @@ describe('UsersService.create', () => {
     db.user.create.mockResolvedValue({ id: 'n', name: 'Z', email: 'z@x.com', role: 'WORKER', approvalStatus: 'APPROVED', companyRole: null, createdAt: new Date(0), profile: null })
     await new UsersService(db, media()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })
     expect(db.user.create.mock.calls[0][0].data.companyId).toBeNull()
+  })
+})
+
+describe('UsersService.setActive', () => {
+  it('atualiza active', async () => {
+    const db = prisma(); db.user.update.mockResolvedValue({ id: 'u1', active: false })
+    const r = await new UsersService(db, media()).setActive('u1', false)
+    expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { active: false } })
+    expect(r).toEqual({ id: 'u1', active: false })
+  })
+})
+
+describe('UsersService.remove', () => {
+  it('excluir a si mesmo → BadRequest', async () => {
+    await expect(new UsersService(prisma(), media()).remove('me', 'me')).rejects.toBeInstanceOf(BadRequestException)
+  })
+  it('happy: apaga profile + user', async () => {
+    const db = prisma()
+    db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
+    db.$transaction = jest.fn(async (fn: any) => fn(db))
+    db.user.delete = jest.fn().mockResolvedValue({ id: 'u1' })
+    await new UsersService(db, media()).remove('u1', 'admin')
+    expect(db.profile.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } })
+    expect(db.user.delete).toHaveBeenCalledWith({ where: { id: 'u1' } })
+  })
+  it('FK vinculada (P2003) → Conflict', async () => {
+    const db = prisma()
+    db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
+    db.$transaction = jest.fn(async (fn: any) => fn(db))
+    db.user.delete = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'x' }))
+    await expect(new UsersService(db, media()).remove('u1', 'admin')).rejects.toBeInstanceOf(ConflictException)
   })
 })
