@@ -68,6 +68,23 @@ describe('ConfirmDialog', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
+  it('clicar dentro do card NÃO chama onCancel', () => {
+    const onCancel = vi.fn()
+    renderPage(
+      <ConfirmDialog
+        title="Excluir administrador?"
+        message="Fulano será removido do sistema."
+        confirmLabel="Excluir"
+        onConfirm={() => {}}
+        onCancel={onCancel}
+      />,
+    )
+    // Clique no conteúdo do card (título) não fecha: o card intercepta o press
+    // e não propaga pro scrim (que chamaria onCancel).
+    fireEvent.click(screen.getByText('Excluir administrador?'))
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+
   it('Escape chama onCancel', () => {
     const onCancel = vi.fn()
     renderPage(

@@ -27,9 +27,10 @@ import { AdminsCreate } from './AdminsCreate'
 type AdminRowProps = {
   admin: Admin
   isTablet: boolean
-  // O admin logado não pode excluir a si mesmo (backend responde 400); a linha
-  // dele esconde o lixo em vez de oferecer uma ação que falharia.
-  canDelete: boolean
+  // A linha do admin logado: ele não pode excluir a si mesmo (backend responde
+  // 400) nem se auto-desativar. A lixeira some e o Toggle vem desabilitado — em
+  // vez de oferecer ações que só fariam round-trip e reverteriam feio.
+  isSelf: boolean
   onToggle: (id: string, active: boolean) => void
   onOpen: (id: string) => void
   onDelete: (admin: Admin) => void
@@ -40,7 +41,7 @@ type AdminRowProps = {
 function AdminRow({
   admin,
   isTablet,
-  canDelete,
+  isSelf,
   onToggle,
   onOpen,
   onDelete,
@@ -131,6 +132,7 @@ function AdminRow({
         <Toggle
           value={admin.active}
           onChange={(v) => onToggle(admin.id, v)}
+          disabled={isSelf}
           accessibilityLabel={`Ativar ${admin.name}`}
         />
       </View>
@@ -139,7 +141,7 @@ function AdminRow({
           followed by a chevron-down affordance (the whole row is clickable
           per Figma but the chevron makes the affordance discoverable). */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-        {canDelete ? (
+        {!isSelf ? (
           <ActionIcon
             icon="delete_icon"
             label={`Excluir ${admin.name}`}
@@ -347,7 +349,7 @@ export function AdminsList({
               key={admin.id}
               admin={admin}
               isTablet={isTablet}
-              canDelete={admin.id !== currentUserId}
+              isSelf={admin.id === currentUserId}
               onToggle={handleToggle}
               onOpen={(adminId) => navigate(`/admins/${adminId}`)}
               onDelete={(a) => setRemoving(a)}
