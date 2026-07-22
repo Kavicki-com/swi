@@ -240,9 +240,24 @@ describe('UsersService.create', () => {
 describe('UsersService.setActive', () => {
   it('atualiza active', async () => {
     const db = prisma(); db.user.update.mockResolvedValue({ id: 'u1', active: false })
-    const r = await new UsersService(db, media()).setActive('u1', false)
+    const r = await new UsersService(db, media()).setActive('u1', false, 'admin')
     expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { active: false } })
     expect(r).toEqual({ id: 'u1', active: false })
+  })
+  it('desativar a si mesmo → BadRequest (sem tocar no banco)', async () => {
+    const db = prisma()
+    await expect(new UsersService(db, media()).setActive('me', false, 'me')).rejects.toBeInstanceOf(BadRequestException)
+    expect(db.user.update).not.toHaveBeenCalled()
+  })
+  it('reativar a si mesmo é permitido', async () => {
+    const db = prisma(); db.user.update.mockResolvedValue({ id: 'me', active: true })
+    const r = await new UsersService(db, media()).setActive('me', true, 'me')
+    expect(r).toEqual({ id: 'me', active: true })
+  })
+  it('id inexistente (P2025) → NotFound', async () => {
+    const db = prisma()
+    db.user.update.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('nf', { code: 'P2025', clientVersion: 'x' }))
+    await expect(new UsersService(db, media()).setActive('ghost', false, 'admin')).rejects.toBeInstanceOf(NotFoundException)
   })
 })
 
@@ -265,5 +280,12 @@ describe('UsersService.remove', () => {
     db.$transaction = jest.fn(async (fn: any) => fn(db))
     db.user.delete = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'x' }))
     await expect(new UsersService(db, media()).remove('u1', 'admin')).rejects.toBeInstanceOf(ConflictException)
+  })
+  it('id inexistente (P2025) → NotFound', async () => {
+    const db = prisma()
+    db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
+    db.$transaction = jest.fn(async (fn: any) => fn(db))
+    db.user.delete = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('nf', { code: 'P2025', clientVersion: 'x' }))
+    await expect(new UsersService(db, media()).remove('ghost', 'admin')).rejects.toBeInstanceOf(NotFoundException)
   })
 })

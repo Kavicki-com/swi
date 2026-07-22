@@ -99,11 +99,20 @@ export class UsersService {
     return Promise.all(users.map((u) => this.toSummaryDto(u)))
   }
 
-  // Ativar/desativar: usuário inativo não loga (guarda no AuthService.login).
-  // Aditivo e reversível — não apaga nada.
-  async setActive(id: string, active: boolean) {
-    const u = await this.prisma.user.update({ where: { id }, data: { active } })
-    return { id: u.id, active: u.active }
+  // Ativar/desativar: usuário inativo não loga (guarda no AuthService.login) e
+  // tem a sessão revogada na hora (JwtStrategy reconsulta o banco). Aditivo e
+  // reversível — não apaga nada. Guarda de auto-desativação: como o self-delete
+  // do remove, o admin não pode se auto-trancar (reativar a si mesmo é ok).
+  async setActive(id: string, active: boolean, requesterId: string) {
+    if (id === requesterId && active === false) throw new BadRequestException('Não é possível desativar a si mesmo')
+    try {
+      const u = await this.prisma.user.update({ where: { id }, data: { active } })
+      return { id: u.id, active: u.active }
+    } catch (e) {
+      // sem exception filter global: sem isto, P2025 (id inexistente) vira 500.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') throw new NotFoundException('Usuário não encontrado')
+      throw e
+    }
   }
 
   // Exclusão dura: apaga o Profile (1:1) e o User na mesma transação. Guardas:
