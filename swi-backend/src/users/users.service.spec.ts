@@ -1,7 +1,7 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common'
 import { UsersService } from './users.service'
 
-const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() } }) as any
+const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn() } }) as any
 // Espelha a convenção do work-orders.service.spec: presignGet devolve 'signed:<key>'.
 const media = () => ({ presignGet: jest.fn((k: string) => Promise.resolve('signed:' + k)) }) as any
 
@@ -191,5 +191,32 @@ describe('UsersService', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
     await expect(new UsersService(db, media()).getOne('nope')).rejects.toBeInstanceOf(NotFoundException)
+  })
+})
+
+describe('UsersService.create', () => {
+  it('cria User+Profile APPROVED/verificado com role e companyId do admin', async () => {
+    const db = prisma()
+    db.user.findUnique
+      .mockResolvedValueOnce(null)                          // findByEmail: não existe
+      .mockResolvedValueOnce({ id: 'adm', companyId: 'c1' }) // findById(admin)
+    db.user.create.mockResolvedValue({ id: 'new', name: 'Zé', email: 'ze@x.com', role: 'WORKER', approvalStatus: 'APPROVED', companyRole: null, createdAt: new Date(0), profile: null })
+    const svc = new UsersService(db, media())
+    await svc.create('adm', { name: 'Zé', email: 'ze@x.com', password: 'senha123', role: 'WORKER', phone: '11' })
+    const arg = db.user.create.mock.calls[0][0]
+    expect(arg.data).toMatchObject({ name: 'Zé', email: 'ze@x.com', role: 'WORKER', approvalStatus: 'APPROVED', emailVerified: true, companyId: 'c1' })
+    expect(arg.data.passwordHash).toBeTruthy()
+    expect(arg.data.profile.create).toMatchObject({ fullName: 'Zé', phone: '11' })
+  })
+  it('email já cadastrado → ConflictException', async () => {
+    const db = prisma(); db.user.findUnique.mockResolvedValueOnce({ id: 'x' })
+    await expect(new UsersService(db, media()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })).rejects.toBeInstanceOf(ConflictException)
+  })
+  it('admin sem empresa → companyId null', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'adm', companyId: null })
+    db.user.create.mockResolvedValue({ id: 'n', name: 'Z', email: 'z@x.com', role: 'WORKER', approvalStatus: 'APPROVED', companyRole: null, createdAt: new Date(0), profile: null })
+    await new UsersService(db, media()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })
+    expect(db.user.create.mock.calls[0][0].data.companyId).toBeNull()
   })
 })
