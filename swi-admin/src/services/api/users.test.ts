@@ -145,3 +145,28 @@ describe('usersApi.listPendingWorkers (real)', () => {
     expect(url).toContain('/users?role=WORKER&approvalStatus=PENDING')
   })
 })
+
+describe('usersApi.approve/reject (real)', () => {
+  it('approve() faz POST /users/:id/approve', async () => {
+    const f = okJson({ id: 'u1', approvalStatus: 'APPROVED' })
+    vi.stubGlobal('fetch', f)
+    const { data, error } = await usersApi.approve('u1')
+    expect(error).toBeNull()
+    expect(data).toEqual({ id: 'u1', approvalStatus: 'APPROVED' })
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/u1/approve'); expect(init.method).toBe('POST')
+  })
+  it('reject() faz POST /users/:id/reject', async () => {
+    const f = okJson({ id: 'u1', approvalStatus: 'REJECTED' })
+    vi.stubGlobal('fetch', f)
+    const { data } = await usersApi.reject('u1')
+    expect(data?.approvalStatus).toBe('REJECTED')
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/u1/reject'); expect(init.method).toBe('POST')
+  })
+  it('erro no approve → { data:null, error }', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const { data, error } = await usersApi.approve('u1')
+    expect(data).toBeNull(); expect(error?.message).toBeTruthy()
+  })
+})
