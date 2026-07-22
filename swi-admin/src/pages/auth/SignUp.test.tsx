@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { vi } from 'vitest'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SignUp } from './SignUp'
@@ -20,6 +21,7 @@ const renderAt = () =>
   )
 
 beforeEach(() => window.localStorage.clear())
+afterEach(() => vi.unstubAllGlobals())
 
 type FillData = {
   companyName: string
@@ -130,12 +132,49 @@ describe('SignUp', () => {
     })
   })
 
-  it('navigates to / on successful submission', async () => {
+  it('mostra o painel "cadastro recebido" no sucesso (POST /auth/signup-company, sem logar)', async () => {
+    const f = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ nextStep: 'CHECK_EMAIL' }),
+    } as Response)
+    vi.stubGlobal('fetch', f)
+
     renderAt()
-    fillValid()
+    fillValid({ email: 'maria@acme.com' })
     fireEvent.click(screen.getByRole('button', { name: /finalizar/i }))
     await waitFor(() => {
-      expect(screen.getByTestId('home')).toBeInTheDocument()
+      expect(screen.getByTestId('signup-sent')).toBeInTheDocument()
     })
+    // não navega pro painel: o admin ainda não está logado (e-mail não verificado)
+    expect(screen.queryByTestId('home')).not.toBeInTheDocument()
+
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/auth/signup-company')
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string)
+    expect(body.company.name).toBe('Acme S.A.')
+    expect(body.company.cnpj).toBe('12.345.678/0001-90')
+    expect(body.responsible.email).toBe('maria@acme.com')
+    expect(body.responsible.role).toBe('owner')
+  })
+
+  it('mostra erro do backend sem trocar de painel (ex.: e-mail já cadastrado)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ message: 'E-mail já cadastrado' }),
+      } as Response),
+    )
+
+    renderAt()
+    fillValid({ email: 'maria@acme.com' })
+    fireEvent.click(screen.getByRole('button', { name: /finalizar/i }))
+    await waitFor(() => {
+      expect(screen.getByTestId('form-error')).toHaveTextContent(/cadastrad/i)
+    })
+    expect(screen.queryByTestId('signup-sent')).not.toBeInTheDocument()
   })
 })
