@@ -50,4 +50,27 @@ describe('EmployeesList', () => {
     expect(approve).toHaveBeenCalledWith('p1')
     await waitFor(() => expect(screen.queryByText('Novo Worker')).toBeNull())
   })
+
+  it('rejeitar só remove após confirmar; cancelar mantém', async () => {
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({ data: [NOVO], error: null })
+    const reject = vi
+      .spyOn(approvalsApi, 'reject')
+      .mockResolvedValue({ data: { id: 'p1', approvalStatus: 'REJECTED' }, error: null })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Novo Worker'))
+
+    // Abre a confirmação e cancela: nada é rejeitado, o item continua na lista.
+    fireEvent.click(screen.getByRole('button', { name: /rejeitar novo worker/i }))
+    expect(screen.getByText('Rejeitar cadastro?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /cancelar/i }))
+    expect(reject).not.toHaveBeenCalled()
+    expect(screen.getByText('Novo Worker')).toBeTruthy()
+
+    // Reabre e confirma: o botão "Rejeitar" da confirmação (nome exato, sem o
+    // nome do worker) dispara a rejeição de fato.
+    fireEvent.click(screen.getByRole('button', { name: /rejeitar novo worker/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^rejeitar$/i }))
+    expect(reject).toHaveBeenCalledWith('p1')
+    await waitFor(() => expect(screen.queryByText('Novo Worker')).toBeNull())
+  })
 })
