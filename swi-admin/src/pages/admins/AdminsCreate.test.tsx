@@ -41,6 +41,9 @@ describe('AdminsCreate — submit', () => {
     typeIn('admins-create-email', 'ze@x.com')
     typeIn('admins-create-telefone', '11999999999')
     typeIn('admins-create-senha', 'senha123')
+    // Preenche o nome de usuário (campo de UI que NÃO deve subir): prova que um
+    // campo PREENCHIDO fora da identidade não vaza pro payload, não só um vazio.
+    typeIn('admins-create-usuario', 'zedasilva')
 
     finalizar()
 
@@ -56,6 +59,34 @@ describe('AdminsCreate — submit', () => {
     expect(payload).not.toHaveProperty('tipoSanguineo')
     expect(payload).not.toHaveProperty('genero')
     expect(payload).not.toHaveProperty('nomeUsuario')
+  })
+
+  it('e-mail inválido não chama create e mostra erro', async () => {
+    const create = vi.spyOn(employeesApi, 'create')
+    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'abc')
+    typeIn('admins-create-senha', 'senha123')
+
+    finalizar()
+
+    expect(create).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/e-mail válido/i)
+  })
+
+  it('senha com menos de 8 caracteres não chama create', async () => {
+    const create = vi.spyOn(employeesApi, 'create')
+    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'sete123')
+
+    finalizar()
+
+    expect(create).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/8 caracteres/i)
   })
 
   it('admin usa adminsApi.create', async () => {

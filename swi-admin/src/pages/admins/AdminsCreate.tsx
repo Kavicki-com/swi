@@ -55,16 +55,29 @@ const GENERO_OPTIONS = [
   { value: 'prefiro-nao-informar', label: 'Prefiro não informar' },
 ]
 
-// 'DD/MM/AAAA' → ISO. Vazio ou fora do formato de 3 partes numéricas → undefined
-// (o campo é opcional; não sobe chave vazia). new Date(a, m-1, d) monta a data
-// local à meia-noite e .toISOString() normaliza pro contrato do backend.
+// 'DD/MM/AAAA' → ISO date-only ('AAAA-MM-DD'). Vazio/fora do formato → undefined
+// (o campo é opcional; não sobe chave vazia). Retorna date-only, NÃO .toISOString():
+// a meia-noite local vira UTC e a data recuaria um dia perto do fuso (off-by-one).
+// O backend (@IsISO8601 + new Date(...)) aceita 'AAAA-MM-DD'. O round-trip por
+// new Date rejeita datas impossíveis (31/02 rola pra 02/03 e não bate de volta).
 function parseBR(value: string): string | undefined {
   const parts = value.trim().split('/')
   if (parts.length !== 3) return undefined
   const [dd, mm, aaaa] = parts
   if (!dd || !mm || !aaaa) return undefined
   if ([dd, mm, aaaa].some((p) => !/^\d+$/.test(p))) return undefined
-  return new Date(Number(aaaa), Number(mm) - 1, Number(dd)).toISOString()
+  if (aaaa.length !== 4) return undefined
+  const d = Number(dd)
+  const m = Number(mm)
+  const y = Number(aaaa)
+  if (m < 1 || m > 12 || d < 1 || d > 31) return undefined
+  // Round-trip: se o Date normalizou (ex.: 31/02 → 02/03), os componentes não
+  // batem com o input e a data é impossível → undefined.
+  const date = new Date(y, m - 1, d)
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
+    return undefined
+  }
+  return `${aaaa}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
 // e-mail "de forma" (não RFC): barra o esquecimento óbvio antes de gastar uma
@@ -183,8 +196,8 @@ export function AdminsCreate({
       name: nome,
       email,
       password: form.senha,
-      ...(form.telefone ? { phone: form.telefone } : {}),
-      ...(form.cpf ? { cpf: form.cpf } : {}),
+      ...(form.telefone.trim() ? { phone: form.telefone.trim() } : {}),
+      ...(form.cpf.trim() ? { cpf: form.cpf.trim() } : {}),
       ...(birthDate ? { birthDate } : {}),
     }
     const api = subject === 'funcionário' ? employeesApi : adminsApi
@@ -258,6 +271,7 @@ export function AdminsCreate({
           </View>
           <View style={{ flex: 1 }}>
             <Input
+              testID="admins-create-usuario"
               label="Nome do usuário"
               placeholder="usuario"
               value={form.nomeUsuario}
@@ -391,6 +405,7 @@ export function AdminsCreate({
             variant="outline"
             size="large"
             fullWidth
+            disabled={submitting}
             onPress={() => onBack?.()}
             accessibilityLabel={`Voltar para a lista de ${subject === 'funcionário' ? 'funcionários' : 'administradores'}`}
           />
