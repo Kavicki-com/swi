@@ -16,7 +16,7 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system'
-import { employeesApi, EMPLOYEES_TOTAL, type Employee } from '@/services/employees'
+import { employeesApi, type Employee } from '@/services/api/users'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 
@@ -303,7 +303,7 @@ export function EmployeesList({
       <Title variant="title.s" color={theme.content.dark}>
         {isCreating
           ? 'Cadastrar novo funcionário'
-          : `Você tem (${EMPLOYEES_TOTAL}) funcionários cadastrados`}
+          : `Você tem (${employees.length}) funcionários cadastrados`}
       </Title>
 
       <View
@@ -366,8 +366,8 @@ export function EmployeesList({
           </View>
           <Pagination
             current={page}
-            // 1205 / 10 per page (Figma "1205 funcionários cadastrados").
-            total={Math.ceil(EMPLOYEES_TOTAL / 10)}
+            // 10 por página sobre o total real carregado do backend.
+            total={Math.max(1, Math.ceil(employees.length / 10))}
             onChange={setPage}
           />
         </>
