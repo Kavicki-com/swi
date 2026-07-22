@@ -19,6 +19,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
+import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 
@@ -335,94 +336,6 @@ function PendingRow({
   )
 }
 
-// Overlay de confirmação de rejeição — composição page-level (View + Title +
-// Text + Button). Rejeitar é destrutivo, então exige confirmação; Aprovar é
-// direto. O botão "Rejeitar" aqui tem label sem nome (só "Rejeitar") pra
-// diferenciar do botão da linha ("Rejeitar {nome}").
-function ConfirmReject({
-  pending,
-  onCancel,
-  onConfirm,
-}: {
-  pending: PendingUser
-  onCancel: () => void
-  onConfirm: (p: PendingUser) => void
-}) {
-  const theme = useTheme()
-  // Escape fecha o diálogo (semântica de modal). Listener no window enquanto
-  // o overlay está montado; removido no cleanup.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onCancel])
-  return (
-    <Pressable
-      accessibilityLabel="Fechar"
-      onPress={onCancel}
-      style={{
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: theme.padding.m,
-        zIndex: 1000,
-      }}
-    >
-      {/* Card por cima do scrim: clique dentro dele é capturado aqui e NÃO
-          propaga pro scrim (que fecharia). accessibilityViewIsModal marca o
-          card como modal (aria-modal no react-native-web). */}
-      <Pressable
-        accessibilityViewIsModal
-        onPress={() => {}}
-        style={{
-          backgroundColor: theme.surface.standard,
-          borderRadius: theme.border.radius.m,
-          padding: theme.padding.l,
-          gap: theme.gap.m,
-          maxWidth: 420,
-          width: '100%',
-        }}
-      >
-        <Title variant="title.xs" color={theme.content.dark}>
-          Rejeitar cadastro?
-        </Title>
-        <Text variant="body.m" color={theme.content.dark}>
-          {pending.name} não terá acesso ao sistema.
-        </Text>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: theme.gap.s,
-          }}
-        >
-          <Button
-            label="Cancelar"
-            variant="outline"
-            accessibilityLabel="Cancelar"
-            onPress={onCancel}
-          />
-          <Button
-            label="Rejeitar"
-            variant="contained"
-            backgroundColor={theme.surface.error}
-            accessibilityLabel="Rejeitar"
-            onPress={() => onConfirm(pending)}
-          />
-        </View>
-      </Pressable>
-    </Pressable>
-  )
-}
-
 export function EmployeesList({
   initialTab = 'cadastrados',
 }: {
@@ -627,10 +540,13 @@ export function EmployeesList({
       )}
 
       {rejecting ? (
-        <ConfirmReject
-          pending={rejecting}
+        <ConfirmDialog
+          title="Rejeitar cadastro?"
+          message={`${rejecting.name} não terá acesso ao sistema.`}
+          confirmLabel="Rejeitar"
+          confirmDanger
+          onConfirm={() => handleReject(rejecting)}
           onCancel={() => setRejecting(null)}
-          onConfirm={handleReject}
         />
       ) : null}
     </View>
