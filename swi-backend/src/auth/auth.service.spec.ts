@@ -5,8 +5,15 @@ import { DUMMY_HASH } from './codes'
 
 function deps() {
   const users = { findByEmail: jest.fn(), findById: jest.fn(), approve: jest.fn() }
-  const prisma = { user: { create: jest.fn(), update: jest.fn(), delete: jest.fn() } }
-  const mail = { sendConfirmationCode: jest.fn().mockResolvedValue(undefined), sendResetCode: jest.fn().mockResolvedValue(undefined) }
+  const prisma = {
+    user: { create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    company: { create: jest.fn(), delete: jest.fn() },
+  }
+  const mail = {
+    sendConfirmationCode: jest.fn().mockResolvedValue(undefined),
+    sendResetCode: jest.fn().mockResolvedValue(undefined),
+    sendAdminPasswordLink: jest.fn().mockResolvedValue(undefined),
+  }
   const jwt = { sign: jest.fn().mockReturnValue('jwt-token') }
   const svc = new AuthService(prisma as any, users as any, mail as any, jwt as any)
   return { svc, users, prisma, mail, jwt }
@@ -210,5 +217,131 @@ describe('AuthService.resendConfirmationCode', () => {
     await expect(svc.resendConfirmationCode({ email: 'j@ex.com' })).resolves.toBeUndefined()
     expect(mail.sendConfirmationCode).not.toHaveBeenCalled()
     expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Onboarding de empresa + admin responsável (fatia feat/backend-admin-auth).
+// A SignUp.tsx do painel é onboarding de empresa: cria Company + o responsável
+// como ADMIN. A senha NÃO vem no form — o admin nasce sem senha usável,
+// emailVerified=false, e recebe um LINK ("defina sua senha") que cai na mesma
+// tela de nova senha e chama /auth/password/reset (código embutido no link).
+// O link é o portão: mesmo APPROVED, sem e-mail verificado o login barra.
+// ---------------------------------------------------------------------------
+describe('AuthService.signupCompany', () => {
+  const payload = () => ({
+    company: {
+      name: 'ACME Construções',
+      cnpj: '00.000.000/0001-00',
+      site: 'www.acme.com.br',
+      cep: '30000-000',
+      street: 'Avenida Quatro de Julho',
+      number: '100',
+      neighborhood: 'Pampulha',
+      uf: 'MG',
+    },
+    responsible: { name: 'Maria', phone: '(31) 99999-0000', email: 'maria@acme.com', role: 'owner' },
+  })
+
+  it('cria Company + admin APPROVED/não-verificado, grava reset code e manda LINK de definir senha', async () => {
+    const { svc, users, prisma, mail } = deps()
+    users.findByEmail.mockResolvedValue(null)
+    prisma.company.create.mockResolvedValue({ id: 'c1' })
+    prisma.user.create.mockResolvedValue({ id: 'u1' })
+
+    const r = await svc.signupCompany(payload())
+    expect(r).toEqual({ nextStep: 'CHECK_EMAIL' })
+
+    // Company persistida com os campos do form
+    const cdata = prisma.company.create.mock.calls[0][0].data
+    expect(cdata.name).toBe('ACME Construções')
+    expect(cdata.cnpj).toBe('00.000.000/0001-00')
+    expect(cdata.uf).toBe('MG')
+
+    // Admin: ADMIN + APPROVED, mas emailVerified=false (link é o portão)
+    const udata = prisma.user.create.mock.calls[0][0].data
+    expect(udata.email).toBe('maria@acme.com')
+    expect(udata.name).toBe('Maria')
+    expect(udata.role).toBe('ADMIN')
+    expect(udata.approvalStatus).toBe('APPROVED')
+    expect(udata.emailVerified).toBe(false)
+    expect(udata.companyId).toBe('c1')
+    expect(udata.companyRole).toBe('owner')
+    // senha placeholder inutilizável, mas o campo (NOT NULL) fica setado
+    expect(typeof udata.passwordHash).toBe('string')
+    expect(udata.passwordHash.length).toBeGreaterThan(0)
+    // código de reset gravado (o mesmo que vai no link)
+    expect(typeof udata.resetCodeHash).toBe('string')
+    expect(udata.resetExpires).toBeInstanceOf(Date)
+
+    // manda LINK (não código cru): url pra tela de nova senha, com email + code
+    expect(mail.sendAdminPasswordLink).toHaveBeenCalledTimes(1)
+    const [to, url] = mail.sendAdminPasswordLink.mock.calls[0]
+    expect(to).toBe('maria@acme.com')
+    expect(url).toContain('recovery/new-password?')
+    expect(url).toMatch(/[?&]email=maria%40acme\.com/)
+    expect(url).toMatch(/[?&]code=\d{6}/)
+  })
+
+  it('lança Conflict se o e-mail já existe e não cria Company nem admin', async () => {
+    const { svc, users, prisma, mail } = deps()
+    users.findByEmail.mockResolvedValue({ id: 'x' })
+    await expect(svc.signupCompany(payload())).rejects.toBeInstanceOf(ConflictException)
+    expect(prisma.company.create).not.toHaveBeenCalled()
+    expect(prisma.user.create).not.toHaveBeenCalled()
+    expect(mail.sendAdminPasswordLink).not.toHaveBeenCalled()
+  })
+
+  it('e-mail falha → deleta admin e Company (sem órfãos) e re-lança', async () => {
+    const { svc, users, prisma, mail } = deps()
+    users.findByEmail.mockResolvedValue(null)
+    prisma.company.create.mockResolvedValue({ id: 'c9' })
+    prisma.user.create.mockResolvedValue({ id: 'u9' })
+    ;(mail.sendAdminPasswordLink as jest.Mock).mockRejectedValue(new Error('smtp down'))
+    await expect(svc.signupCompany(payload())).rejects.toThrow('smtp down')
+    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'u9' } })
+    expect(prisma.company.delete).toHaveBeenCalledWith({ where: { id: 'c9' } })
+  })
+})
+
+describe('AuthService.resetPassword (destrava admin recém-criado)', () => {
+  it('também marca emailVerified=true — provar posse do e-mail via código é o portão do admin', async () => {
+    const { svc, users, prisma } = deps()
+    const { hash } = jest.requireActual('./codes')
+    users.findByEmail.mockResolvedValue({
+      id: 'u1',
+      resetCodeHash: await hash('123456'),
+      resetExpires: new Date(Date.now() + 60_000),
+    })
+    prisma.user.update.mockResolvedValue({})
+    await svc.resetPassword({ email: 'j@ex.com', code: '123456', newPassword: 'nova123' })
+    const data = prisma.user.update.mock.calls[0][0].data
+    expect(data.emailVerified).toBe(true)
+  })
+})
+
+describe('AuthService.forgotPasswordAdmin (manda link, não código)', () => {
+  it('e-mail inexistente → silencioso, sem link (não vaza) e AINDA roda bcrypt.hash dummy', async () => {
+    const { svc, users, mail } = deps()
+    users.findByEmail.mockResolvedValue(null)
+    const spy = jest.spyOn(bcrypt, 'hash')
+    await expect(svc.forgotPasswordAdmin({ email: 'nao@existe.com' })).resolves.toBeUndefined()
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(mail.sendAdminPasswordLink).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('admin real → grava reset code e manda LINK com email + code', async () => {
+    const { svc, users, prisma, mail } = deps()
+    users.findByEmail.mockResolvedValue({ id: 'u1', email: 'a@swi.com' })
+    prisma.user.update.mockResolvedValue({})
+    await svc.forgotPasswordAdmin({ email: 'a@swi.com' })
+    const data = prisma.user.update.mock.calls[0][0].data
+    expect(typeof data.resetCodeHash).toBe('string')
+    expect(data.resetExpires).toBeInstanceOf(Date)
+    const [to, url] = mail.sendAdminPasswordLink.mock.calls[0]
+    expect(to).toBe('a@swi.com')
+    expect(url).toContain('recovery/new-password?')
+    expect(url).toMatch(/[?&]code=\d{6}/)
   })
 })

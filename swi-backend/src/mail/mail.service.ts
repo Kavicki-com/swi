@@ -28,4 +28,14 @@ export class MailService {
       text: `Seu código de redefinição é: ${code}`,
     })
   }
+
+  // Painel admin: em vez do código cru, manda o LINK clicável que já cai na
+  // tela de definir/redefinir senha (código embutido na URL). Serve tanto pro
+  // cadastro (senha inicial) quanto pra recuperação do admin.
+  async sendAdminPasswordLink(to: string, url: string): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.from, to, subject: 'SWI — Defina sua senha',
+      text: `Para definir sua senha de acesso ao painel SWI, acesse: ${url}`,
+    })
+  }
 }
