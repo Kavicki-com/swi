@@ -1,0 +1,231 @@
+// Wiring do diretório do painel (Colaboradores + Admins) contra GET /users.
+// vitest globals (describe/it/expect/afterEach) via globals: true — importar de
+// 'vitest' duplicaria a instância (ver nota no auth.test.ts).
+import { vi } from 'vitest'
+import { employeesApi, adminsApi, approvalsApi, ageFrom } from './users'
+
+const okJson = (body: unknown) =>
+  vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body } as Response)
+
+// DTO do backend (só identidade — vitais/saúde ficam pra smartband).
+const summary = (over: Record<string, unknown> = {}) => ({
+  id: 'u1',
+  name: 'Worker Um',
+  email: 'w1@x.com',
+  role: 'WORKER',
+  approvalStatus: 'APPROVED',
+  jobTitle: 'Operador',
+  sector: 'Norte',
+  birthDate: '1990-05-04T00:00:00.000Z',
+  avatar: 'signed:av1',
+  companyRole: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  ...over,
+})
+
+afterEach(() => vi.unstubAllGlobals())
+
+describe('ageFrom', () => {
+  it('calcula idade a partir do nascimento (ISO)', () => {
+    expect(ageFrom('1990-05-04T00:00:00.000Z', new Date('2026-07-22'))).toBe(36)
+  })
+  it('ainda não fez aniversário no ano → idade um a menos', () => {
+    expect(ageFrom('1990-12-31T00:00:00.000Z', new Date('2026-07-22'))).toBe(35)
+  })
+  it('nascimento nulo → 0 (placeholder até o cadastro preencher)', () => {
+    expect(ageFrom(null, new Date('2026-07-22'))).toBe(0)
+  })
+})
+
+describe('employeesApi.list (real)', () => {
+  it('GET /users?role=WORKER e mapeia pro Employee com placeholders de saúde', async () => {
+    const f = okJson([summary()])
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await employeesApi.list()
+
+    expect(error).toBeNull()
+    const e = data![0]!
+    expect(e.id).toBe('u1')
+    expect(e.name).toBe('Worker Um')
+    expect(e.role).toBe('Operador') // jobTitle → linha 1
+    expect(e.specialization).toBe('Norte') // sector → linha 2
+    expect(e.sector).toBe('Norte')
+    expect(e.avatarUri).toBe('signed:av1')
+    expect(e.bloodType).toBe('—') // placeholder: backend não tem o campo
+    expect(e.vitalsStatus).toBe('good') // placeholder neutro até a smartband
+    const [url] = f.mock.calls[0] as [string]
+    expect(url).toContain('/users?role=WORKER')
+  })
+
+  it('falha de rede → { data: null, error }', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    const { data, error } = await employeesApi.list()
+
+    expect(data).toBeNull()
+    expect(error?.message).toBeTruthy()
+  })
+})
+
+describe('adminsApi.list (real)', () => {
+  it('GET /users?role=ADMIN; active/status derivam do approvalStatus', async () => {
+    const f = okJson([
+      summary({
+        role: 'ADMIN',
+        approvalStatus: 'PENDING',
+        jobTitle: 'Diretor',
+        companyRole: 'owner',
+      }),
+    ])
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await adminsApi.list()
+
+    expect(error).toBeNull()
+    const a = data![0]!
+    expect(a.role).toBe('Diretor')
+    expect(a.active).toBe(false) // PENDING → não ativo
+    expect(a.status).toBe('pending')
+    const [url] = f.mock.calls[0] as [string]
+    expect(url).toContain('/users?role=ADMIN')
+  })
+
+  it('APPROVED → active true / status accept', async () => {
+    vi.stubGlobal('fetch', okJson([summary({ role: 'ADMIN' })]))
+    const { data } = await adminsApi.list()
+    expect(data![0]!.active).toBe(true)
+    expect(data![0]!.status).toBe('accept')
+  })
+})
+
+describe('employeesApi.get (real)', () => {
+  it('GET /users/:id e mapeia o detalhe', async () => {
+    const f = okJson({
+      ...summary(),
+      phone: '119',
+      cpf: '123',
+      company: { id: 'c1', name: 'ACME' },
+    })
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await employeesApi.get('u1')
+
+    expect(error).toBeNull()
+    expect(data?.name).toBe('Worker Um')
+    expect(data?.role).toBe('Operador')
+    const [url] = f.mock.calls[0] as [string]
+    expect(url).toContain('/users/u1')
+  })
+
+  it('não encontrado (404) → data null (tela mostra "não encontrado")', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({ message: 'Usuário não encontrado' }),
+      } as Response),
+    )
+
+    const { data } = await employeesApi.get('nope')
+
+    expect(data).toBeNull()
+  })
+})
+
+describe('approvalsApi.listPendingWorkers (real)', () => {
+  it('GET /users?role=WORKER&approvalStatus=PENDING e mapeia createdAt→requestedAt', async () => {
+    const f = okJson([
+      summary({ approvalStatus: 'PENDING', createdAt: '2026-07-10T00:00:00.000Z' }),
+    ])
+    vi.stubGlobal('fetch', f)
+    const { data, error } = await approvalsApi.listPendingWorkers()
+    expect(error).toBeNull()
+    expect(data![0]!).toEqual({
+      id: 'u1',
+      name: 'Worker Um',
+      email: 'w1@x.com',
+      requestedAt: '2026-07-10T00:00:00.000Z',
+    })
+    const [url] = f.mock.calls[0] as [string]
+    expect(url).toContain('/users?role=WORKER&approvalStatus=PENDING')
+  })
+})
+
+describe('create (real)', () => {
+  it('employeesApi.create → POST /users role WORKER + identidade', async () => {
+    const f = okJson({ id: 'n', name: 'Zé' })
+    vi.stubGlobal('fetch', f)
+    const { error } = await employeesApi.create({
+      name: 'Zé',
+      email: 'ze@x.com',
+      password: 'senha123',
+      phone: '11',
+    })
+    expect(error).toBeNull()
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({
+      role: 'WORKER',
+      name: 'Zé',
+      email: 'ze@x.com',
+      password: 'senha123',
+      phone: '11',
+    })
+  })
+  it('adminsApi.create → role ADMIN', async () => {
+    const f = okJson({ id: 'n' })
+    vi.stubGlobal('fetch', f)
+    await adminsApi.create({ name: 'A', email: 'a@x.com', password: 'senha123' })
+    expect(JSON.parse((f.mock.calls[0] as [string, RequestInit])[1].body as string).role).toBe(
+      'ADMIN',
+    )
+  })
+  it('erro (409) → { data:null, error }', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ message: 'E-mail já cadastrado' }),
+      } as Response),
+    )
+    const { data, error } = await employeesApi.create({
+      name: 'A',
+      email: 'a@x.com',
+      password: 'senha123',
+    })
+    expect(data).toBeNull()
+    expect(error?.message).toMatch(/cadastrad/i)
+  })
+})
+
+describe('approvalsApi.approve/reject (real)', () => {
+  it('approve() faz POST /users/:id/approve', async () => {
+    const f = okJson({ id: 'u1', approvalStatus: 'APPROVED' })
+    vi.stubGlobal('fetch', f)
+    const { data, error } = await approvalsApi.approve('u1')
+    expect(error).toBeNull()
+    expect(data).toEqual({ id: 'u1', approvalStatus: 'APPROVED' })
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/u1/approve')
+    expect(init.method).toBe('POST')
+  })
+  it('reject() faz POST /users/:id/reject', async () => {
+    const f = okJson({ id: 'u1', approvalStatus: 'REJECTED' })
+    vi.stubGlobal('fetch', f)
+    const { data } = await approvalsApi.reject('u1')
+    expect(data?.approvalStatus).toBe('REJECTED')
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/u1/reject')
+    expect(init.method).toBe('POST')
+  })
+  it('erro no approve → { data:null, error }', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const { data, error } = await approvalsApi.approve('u1')
+    expect(data).toBeNull()
+    expect(error?.message).toBeTruthy()
+  })
+})

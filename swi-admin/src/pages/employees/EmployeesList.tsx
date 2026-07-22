@@ -8,6 +8,7 @@ import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
   Avatar,
+  Button,
   Icon,
   SearchInput,
   Tabs,
@@ -16,8 +17,9 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system'
-import { employeesApi, EMPLOYEES_TOTAL, type Employee } from '@/services/employees'
+import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
+import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 
 type EmployeeRowProps = {
@@ -268,19 +270,182 @@ function ActionIcon({
   )
 }
 
+// Fila de aprovação — uma linha por WORKER pendente. Composição de View +
+// Text + Button do DS (não reimplementa primitiva): à esquerda nome/email/data
+// da solicitação, à direita as ações Aprovar (verde) / Rejeitar (outline).
+function PendingRow({
+  pending,
+  onApprove,
+  onReject,
+}: {
+  pending: PendingUser
+  onApprove: (p: PendingUser) => void
+  onReject: (p: PendingUser) => void
+}) {
+  const theme = useTheme()
+  // Guarda contra requestedAt inválido: Intl formataria "Invalid Date". Mostra
+  // um traço neutro em vez de vazar o erro pro cliente.
+  const parsed = new Date(pending.requestedAt)
+  const requestedAt = Number.isNaN(parsed.getTime())
+    ? '—'
+    : new Intl.DateTimeFormat('pt-BR').format(parsed)
+  return (
+    <View
+      testID={`pending-row-${pending.id}`}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: theme.surface.standard,
+        borderRadius: theme.border.radius.m,
+        paddingHorizontal: theme.padding.m,
+        paddingVertical: theme.padding.sm,
+        gap: theme.gap.m,
+        flexWrap: 'wrap',
+        rowGap: theme.gap.s,
+      }}
+    >
+      <View style={{ flexDirection: 'column', gap: theme.gap.xs }}>
+        <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+          {pending.name}
+        </Text>
+        <Text variant="body.m" color={theme.content.dark}>
+          {pending.email}
+        </Text>
+        <Text variant="body.s" color={theme.content.medium}>
+          Solicitado em {requestedAt}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
+        <Button
+          label="Aprovar"
+          variant="contained"
+          backgroundColor={theme.surface.primary}
+          accessibilityLabel={`Aprovar ${pending.name}`}
+          onPress={() => onApprove(pending)}
+        />
+        <Button
+          label="Rejeitar"
+          variant="outline"
+          accessibilityLabel={`Rejeitar ${pending.name}`}
+          onPress={() => onReject(pending)}
+        />
+      </View>
+    </View>
+  )
+}
+
+// Overlay de confirmação de rejeição — composição page-level (View + Title +
+// Text + Button). Rejeitar é destrutivo, então exige confirmação; Aprovar é
+// direto. O botão "Rejeitar" aqui tem label sem nome (só "Rejeitar") pra
+// diferenciar do botão da linha ("Rejeitar {nome}").
+function ConfirmReject({
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  pending: PendingUser
+  onCancel: () => void
+  onConfirm: (p: PendingUser) => void
+}) {
+  const theme = useTheme()
+  // Escape fecha o diálogo (semântica de modal). Listener no window enquanto
+  // o overlay está montado; removido no cleanup.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onCancel])
+  return (
+    <Pressable
+      accessibilityLabel="Fechar"
+      onPress={onCancel}
+      style={{
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: theme.padding.m,
+        zIndex: 1000,
+      }}
+    >
+      {/* Card por cima do scrim: clique dentro dele é capturado aqui e NÃO
+          propaga pro scrim (que fecharia). accessibilityViewIsModal marca o
+          card como modal (aria-modal no react-native-web). */}
+      <Pressable
+        accessibilityViewIsModal
+        onPress={() => {}}
+        style={{
+          backgroundColor: theme.surface.standard,
+          borderRadius: theme.border.radius.m,
+          padding: theme.padding.l,
+          gap: theme.gap.m,
+          maxWidth: 420,
+          width: '100%',
+        }}
+      >
+        <Title variant="title.xs" color={theme.content.dark}>
+          Rejeitar cadastro?
+        </Title>
+        <Text variant="body.m" color={theme.content.dark}>
+          {pending.name} não terá acesso ao sistema.
+        </Text>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: theme.gap.s,
+          }}
+        >
+          <Button
+            label="Cancelar"
+            variant="outline"
+            accessibilityLabel="Cancelar"
+            onPress={onCancel}
+          />
+          <Button
+            label="Rejeitar"
+            variant="contained"
+            backgroundColor={theme.surface.error}
+            accessibilityLabel="Rejeitar"
+            onPress={() => onConfirm(pending)}
+          />
+        </View>
+      </Pressable>
+    </Pressable>
+  )
+}
+
 export function EmployeesList({
   initialTab = 'cadastrados',
 }: {
-  initialTab?: 'cadastrados' | 'cadastrar'
+  initialTab?: 'cadastrados' | 'cadastrar' | 'pendentes'
 } = {}) {
   const theme = useTheme()
   const navigate = useNavigate()
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
+  const { show: showToast } = useDemoToast()
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [pendentes, setPendentes] = useState<PendingUser[]>([])
+  // true enquanto o fetch da aba Pendentes está em voo. Começa true quando a
+  // aba inicial já é 'pendentes' pra não piscar o empty state antes do fetch.
+  const [loadingPendentes, setLoadingPendentes] = useState(initialTab === 'pendentes')
+  const [rejecting, setRejecting] = useState<PendingUser | null>(null)
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  // Bump pra forçar o refetch da lista "cadastrados" após um cadastro novo:
+  // ao voltar do form, o incremento reexecuta o useEffect e a lista já mostra
+  // o usuário recém-criado.
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -290,20 +455,77 @@ export function EmployeesList({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
+
+  useEffect(() => {
+    if (tab !== 'pendentes') return
+    let cancelled = false
+    setLoadingPendentes(true)
+    approvalsApi.listPendingWorkers().then(({ data }) => {
+      if (cancelled) return
+      if (data) setPendentes([...data])
+      setLoadingPendentes(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [tab])
+
+  // Rollback otimista: reinsere `p` na posição original `idx` e de forma
+  // idempotente — se um refetch concorrente já recolocou o item, não duplica.
+  const reinsertPending = (idx: number, p: PendingUser) => {
+    setPendentes((prev) => {
+      if (prev.some((x) => x.id === p.id)) return prev
+      const next = [...prev]
+      next.splice(idx < 0 ? next.length : idx, 0, p)
+      return next
+    })
+  }
+
+  // Aprovação é direta (otimista): tira o item da lista já, confirma no backend,
+  // e reinsere na posição original + avisa se falhar.
+  const handleApprove = async (p: PendingUser) => {
+    const idx = pendentes.findIndex((x) => x.id === p.id)
+    setPendentes((prev) => prev.filter((x) => x.id !== p.id))
+    const { error } = await approvalsApi.approve(p.id)
+    if (error) {
+      reinsertPending(idx, p)
+      showToast('Erro', error.message)
+      return
+    }
+    showToast('Cadastro aprovado', `${p.name} foi aprovado`)
+  }
+
+  // Rejeição passa por confirmação (ConfirmReject) antes de chegar aqui — a
+  // partir daí é otimista igual ao approve (rollback na posição original).
+  const handleReject = async (p: PendingUser) => {
+    const idx = pendentes.findIndex((x) => x.id === p.id)
+    setRejecting(null)
+    setPendentes((prev) => prev.filter((x) => x.id !== p.id))
+    const { error } = await approvalsApi.reject(p.id)
+    if (error) {
+      reinsertPending(idx, p)
+      showToast('Erro', error.message)
+      return
+    }
+    showToast('Cadastro rejeitado', `${p.name} não terá acesso ao sistema`)
+  }
 
   const filtered = employees.filter((e) =>
     search.trim() ? e.name.toLowerCase().includes(search.toLowerCase()) : true,
   )
 
   const isCreating = tab === 'cadastrar'
+  const isPending = tab === 'pendentes'
 
   return (
     <View testID="employees-page" style={{ gap: theme.gap.m }}>
       <Title variant="title.s" color={theme.content.dark}>
         {isCreating
           ? 'Cadastrar novo funcionário'
-          : `Você tem (${EMPLOYEES_TOTAL}) funcionários cadastrados`}
+          : isPending
+            ? `Você tem (${pendentes.length}) cadastros pendentes`
+            : `Você tem (${employees.length}) funcionários cadastrados`}
       </Title>
 
       <View
@@ -327,6 +549,10 @@ export function EmployeesList({
           <Tabs
             tabs={[
               { value: 'cadastrados', label: 'Cadastrados' },
+              {
+                value: 'pendentes',
+                label: pendentes.length ? `Pendentes (${pendentes.length})` : 'Pendentes',
+              },
               { value: 'cadastrar', label: 'Cadastrar' },
             ]}
             value={tab}
@@ -335,7 +561,7 @@ export function EmployeesList({
             accessibilityLabel="Modo de visualização"
           />
         </View>
-        {!isCreating ? (
+        {!isCreating && !isPending ? (
           <View style={{ flex: 1, maxWidth: 548 }}>
             <SearchInput
               value={search}
@@ -348,7 +574,34 @@ export function EmployeesList({
       </View>
 
       {isCreating ? (
-        <AdminsCreate subject="funcionário" onBack={() => setTab('cadastrados')} />
+        <AdminsCreate
+          subject="funcionário"
+          onBack={() => {
+            setTab('cadastrados')
+            setReloadKey((k) => k + 1)
+          }}
+        />
+      ) : isPending ? (
+        <View style={{ gap: theme.gap.m }}>
+          {pendentes.length ? (
+            pendentes.map((pending) => (
+              <PendingRow
+                key={pending.id}
+                pending={pending}
+                onApprove={handleApprove}
+                onReject={setRejecting}
+              />
+            ))
+          ) : loadingPendentes ? (
+            <Text variant="body.m" color={theme.content.medium}>
+              Carregando…
+            </Text>
+          ) : (
+            <Text variant="body.m" color={theme.content.medium}>
+              Nenhum cadastro pendente
+            </Text>
+          )}
+        </View>
       ) : (
         <>
           {/* QA cliente §2: gap entre cards de 8→16 (theme.gap.m). */}
@@ -366,12 +619,20 @@ export function EmployeesList({
           </View>
           <Pagination
             current={page}
-            // 1205 / 10 per page (Figma "1205 funcionários cadastrados").
-            total={Math.ceil(EMPLOYEES_TOTAL / 10)}
+            // 10 por página sobre o total real carregado do backend.
+            total={Math.max(1, Math.ceil(employees.length / 10))}
             onChange={setPage}
           />
         </>
       )}
+
+      {rejecting ? (
+        <ConfirmReject
+          pending={rejecting}
+          onCancel={() => setRejecting(null)}
+          onConfirm={handleReject}
+        />
+      ) : null}
     </View>
   )
 }
