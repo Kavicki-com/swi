@@ -144,6 +144,7 @@ export class UsersService {
       email: u.email,
       role: u.role,
       approvalStatus: u.approvalStatus,
+      active: u.active,
       jobTitle: u.profile?.jobTitle ?? '',
       sector: u.profile?.sector ?? '',
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
