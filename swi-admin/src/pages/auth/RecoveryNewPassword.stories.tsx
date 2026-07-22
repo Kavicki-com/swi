@@ -9,7 +9,9 @@ const meta: Meta<typeof RecoveryNewPassword> = {
   decorators: [
     (Story) => (
       <SwiThemeProvider>
-        <MemoryRouter initialEntries={['/recovery/new-password?token=tok123']}>
+        <MemoryRouter
+          initialEntries={['/recovery/new-password?email=maria%40acme.com&code=123456']}
+        >
           <Story />
         </MemoryRouter>
       </SwiThemeProvider>

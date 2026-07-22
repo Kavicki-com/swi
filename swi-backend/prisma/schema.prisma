@@ -32,6 +32,14 @@ model User {
   resetCodeHash        String?
   resetExpires         DateTime?
 
+  // Onboarding de empresa (painel admin): o responsável do cadastro vira ADMIN
+  // ligado à Company. companyRole é a função declarada no form
+  // (owner/partner/manager/safety) — distinta do enum Role de autorização.
+  // Nullable: seed/workers e o admin de seed não têm empresa.
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id])
+  companyRole String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -43,6 +51,24 @@ model User {
 
   authoredWorkOrders WorkOrder[] @relation("authoredWorkOrders")
   responsibleFor     WorkOrder[] @relation("workOrderResponsibles")
+}
+
+// Empresa cadastrada no onboarding do painel (SignUp.tsx). Um cadastro cria a
+// Company + o responsável como ADMIN (members[0]). Endereço mora aqui (não no
+// Profile do admin) porque é da empresa, não da pessoa.
+model Company {
+  id           String   @id @default(uuid())
+  name         String
+  cnpj         String
+  site         String?
+  cep          String
+  street       String
+  number       String
+  neighborhood String
+  uf           String
+  members      User[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------------------

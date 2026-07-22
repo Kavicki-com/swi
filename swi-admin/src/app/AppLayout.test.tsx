@@ -2,11 +2,14 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
-import { AppLayout } from './AppLayout'
+import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
+import { AppLayout, resolveActiveNavValue } from './AppLayout'
 
 beforeEach(() => {
+  // getSession real exige token + sessão.
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
   window.localStorage.setItem(
-    'swi.admin.session',
+    SESSION_STORAGE_KEY,
     JSON.stringify({
       id: 'u_seed_1',
       org_id: 'org_seed_1',
@@ -67,7 +70,7 @@ describe('AppLayout', () => {
     })
   })
 
-  it('renders the 7 Figma navigation cards in order with icons', async () => {
+  it('renders the 8 Figma navigation cards in order with icons', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()
@@ -80,6 +83,7 @@ describe('AppLayout', () => {
       'Relatórios',
       'Alertas',
       'Configurações',
+      'Tarefas',
     ]
     for (const label of labels) {
       expect(screen.getByText(label)).toBeInTheDocument()
@@ -108,6 +112,24 @@ describe('AppLayout', () => {
     expect(screen.getByText('Júlio Lacerda')).toBeInTheDocument()
     expect(screen.getByText('Jennifer Gomes')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Pesquisar Contatos')).toBeInTheDocument()
+  })
+
+  // O item ativo da sidebar sai de resolveActiveNavValue. Testamos a função
+  // direto porque o react-native-web não emite `aria-selected` pro
+  // accessibilityState.selected do MenuItem (role="button"), então não há
+  // marcador de ativo consultável no DOM.
+  describe('resolveActiveNavValue', () => {
+    it('marca Tarefas na rota exata e nas sub-rotas', () => {
+      expect(resolveActiveNavValue('/tasks')).toBe('/tasks')
+      expect(resolveActiveNavValue('/tasks/new')).toBe('/tasks')
+      expect(resolveActiveNavValue('/tasks/abc')).toBe('/tasks')
+      expect(resolveActiveNavValue('/tasks/abc/edit')).toBe('/tasks')
+    })
+
+    it('não deixa Tarefas vazar pra outras seções', () => {
+      expect(resolveActiveNavValue('/alerts')).toBe('/alerts')
+      expect(resolveActiveNavValue('/')).toBe('/')
+    })
   })
 
   // Responsive system tests — one per breakpoint class.

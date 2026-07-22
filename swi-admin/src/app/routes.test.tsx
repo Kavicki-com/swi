@@ -1,6 +1,7 @@
 // src/app/routes.test.tsx
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { App } from './App'
 
@@ -42,7 +43,9 @@ const REAL_ROUTE_PATHS = new Set<string>([
 
 describe('Admin router', () => {
   beforeEach(() => {
-    window.localStorage.setItem('swi.admin.session', SEED_SESSION)
+    // getSession real exige token + sessão.
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
+    window.localStorage.setItem(SESSION_STORAGE_KEY, SEED_SESSION)
   })
   afterEach(() => window.localStorage.clear())
 

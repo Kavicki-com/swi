@@ -535,11 +535,10 @@ export function ChatInbox() {
     <View
       testID="chat-inbox"
       style={{
-        // Chat grows to fill the available space below the DemoBanner with
-        // a 52 px gutter at the bottom (user-approved spec). minHeight 728
-        // = Figma 88 header + 640 row floors the chat at tall content height
-        // when the viewport is short — the page scrolls in that case.
-        // At 1920x1080: viewport 1080 - banner 53 - margin 52 = 975 chat.
+        // Chat grows to fill the available viewport space with a 52 px gutter
+        // at the bottom (user-approved spec). minHeight 728 = Figma 88 header
+        // + 640 row floors the chat at tall content height when the viewport
+        // is short — the page scrolls in that case.
         // At 1366x768: minHeight kicks in, chat = 728, page scrolls ~65px.
         flex: 1,
         minHeight: 728,

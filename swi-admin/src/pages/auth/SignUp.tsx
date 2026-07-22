@@ -4,10 +4,10 @@
 // Layout: 2-column (form on the left, Logo top-right) on wider viewports;
 // stacks naturally on narrow viewports thanks to flex-wrap on the form rows.
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Image, View } from 'react-native'
 import { Button, Input, Logo, Radio, Text, Title, useTheme } from '@kavicki/swi-design-system'
-import { useAuth } from '@/hooks/useAuth'
+import { authApi } from '@/services/auth'
 import { isEmail, requiredText } from '@/lib/validators'
 import { FormError } from '@/components/FormError'
 import signupBg from '@/assets/bg/signup-bg.png'
@@ -22,7 +22,6 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
 ]
 
 export function SignUp() {
-  const { signUp } = useAuth()
   const navigate = useNavigate()
   const theme = useTheme()
 
@@ -43,6 +42,9 @@ export function SignUp() {
 
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // 'sent': cadastro aceito, mas o admin ainda não está logado (precisa
+  // confirmar o e-mail pelo link) — mostra o painel de confirmação.
+  const [phase, setPhase] = useState<'form' | 'sent'>('form')
 
   const onSubmit = async () => {
     setError(null)
@@ -99,19 +101,32 @@ export function SignUp() {
     }
 
     setLoading(true)
-    const result = await signUp({
-      email: responsible.email,
-      // TODO(S2): replace with proper invite-flow when mockApi.signUp accepts B2B payload
-      password: 'pending',
-      full_name: responsible.name,
-      consent: true,
+    const { error: apiError } = await authApi.signUpCompany({
+      company: {
+        name: company.name,
+        cnpj: company.cnpj,
+        site: company.site || undefined,
+        cep: address.cep,
+        street: address.street,
+        number: address.number,
+        neighborhood: address.neighborhood,
+        uf: address.uf,
+      },
+      responsible: {
+        name: responsible.name,
+        phone: responsible.phone,
+        email: responsible.email,
+        role: responsible.role, // 'owner' | 'partner' | 'manager' | 'safety' (validado acima)
+      },
     })
     setLoading(false)
-    if (result.ok) {
-      navigate('/', { replace: true })
-    } else {
-      setError(result.message ?? 'Falha ao cadastrar')
+    if (apiError) {
+      setError(apiError.message ?? 'Falha ao cadastrar')
+      return
     }
+    // Sucesso NÃO loga: o admin nasce não-verificado e confirma o e-mail pelo
+    // link pra definir a senha. Painel de confirmação, sem navegar pro painel.
+    setPhase('sent')
   }
 
   const sectionHeader = (label: string) => (
@@ -182,174 +197,191 @@ export function SignUp() {
             gap: theme.gap.xl,
           }}
         >
-          {/* Section 1: Dados da empresa */}
-          <View style={{ gap: theme.gap.sm }}>
-            {sectionHeader('Dados da empresa')}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.sm }}>
-              <View style={{ width: 596, maxWidth: '100%' as unknown as number }}>
-                <Input
-                  label="Nome da empresa"
-                  accessibilityLabel="Nome da empresa"
-                  value={company.name}
-                  onChangeText={(v: string) => setCompany((c) => ({ ...c, name: v }))}
-                />
-              </View>
-              <View style={{ width: 292, flexGrow: 1 }}>
-                <Input
-                  label="CNPJ"
-                  accessibilityLabel="CNPJ"
-                  placeholder="00.000.000/0001-00"
-                  value={company.cnpj}
-                  onChangeText={(v: string) => setCompany((c) => ({ ...c, cnpj: v }))}
-                />
-              </View>
-              <View style={{ width: 292, flexGrow: 1 }}>
-                <Input
-                  label="Site"
-                  accessibilityLabel="Site"
-                  placeholder="www.sitedaempresa.com.br"
-                  value={company.site}
-                  onChangeText={(v: string) => setCompany((c) => ({ ...c, site: v }))}
-                  autoCapitalize="none"
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* Section 2: Dados do endereço */}
-          <View style={{ gap: theme.gap.sm }}>
-            {sectionHeader('Dados do endereço')}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.sm }}>
-              <View style={{ width: 107 }}>
-                <Input
-                  label="CEP"
-                  accessibilityLabel="CEP"
-                  placeholder="00000-000"
-                  value={address.cep}
-                  onChangeText={(v: string) => setAddress((a) => ({ ...a, cep: v }))}
-                />
-              </View>
-              <View style={{ width: 477, flexGrow: 1 }}>
-                <Input
-                  label="Logradouro"
-                  accessibilityLabel="Logradouro"
-                  placeholder="Avenida Quatro de Julho"
-                  value={address.street}
-                  onChangeText={(v: string) => setAddress((a) => ({ ...a, street: v }))}
-                />
-              </View>
-              <View style={{ width: 147 }}>
-                <Input
-                  label="Número"
-                  accessibilityLabel="Número"
-                  placeholder="00"
-                  value={address.number}
-                  onChangeText={(v: string) => setAddress((a) => ({ ...a, number: v }))}
-                />
-              </View>
-              <View style={{ width: 353, flexGrow: 1 }}>
-                <Input
-                  label="Bairro"
-                  accessibilityLabel="Bairro"
-                  placeholder="Pampulha"
-                  value={address.neighborhood}
-                  onChangeText={(v: string) => setAddress((a) => ({ ...a, neighborhood: v }))}
-                />
-              </View>
-              <View style={{ width: 71 }}>
-                <Input
-                  label="UF"
-                  accessibilityLabel="UF"
-                  placeholder="MG"
-                  value={address.uf}
-                  onChangeText={(v: string) => setAddress((a) => ({ ...a, uf: v }))}
-                  autoCapitalize="characters"
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* Section 3: Dados do responsável */}
-          <View style={{ gap: theme.gap.sm }}>
-            {sectionHeader('Dados do responsável')}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.sm }}>
-              <View style={{ width: 596, maxWidth: '100%' as unknown as number }}>
-                <Input
-                  label="Nome"
-                  accessibilityLabel="Nome"
-                  placeholder="Nome do Responsável"
-                  value={responsible.name}
-                  onChangeText={(v: string) => setResponsible((r) => ({ ...r, name: v }))}
-                />
-              </View>
-              <View style={{ width: 284, flexGrow: 1 }}>
-                <Input
-                  label="Telefone"
-                  accessibilityLabel="Telefone"
-                  placeholder="(00) 00000-0000"
-                  value={responsible.phone}
-                  onChangeText={(v: string) => setResponsible((r) => ({ ...r, phone: v }))}
-                  keyboardType="phone-pad"
-                />
-              </View>
-              <View style={{ width: 296, flexGrow: 1 }}>
-                <Input
-                  label="Email"
-                  accessibilityLabel="Email"
-                  placeholder="seu@email.com"
-                  value={responsible.email}
-                  onChangeText={(v: string) => setResponsible((r) => ({ ...r, email: v }))}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-            </View>
-
-            <View style={{ gap: theme.gap.sm, marginTop: theme.gap.s }}>
-              <Text variant="body.m" style={{ fontWeight: '700' as const }}>
-                Qual a sua função na empresa?
+          {phase === 'sent' ? (
+            <View testID="signup-sent" style={{ gap: theme.gap.l }}>
+              <Title variant="title.xs" color={theme.content.light}>
+                Cadastro recebido
+              </Title>
+              <Text variant="body.m" color={theme.content.light}>
+                Enviamos um link para confirmar seu e-mail e definir sua senha. Verifique sua caixa
+                de entrada.
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.m }}>
-                {ROLE_OPTIONS.map((opt) => (
-                  <Radio
-                    key={opt.value}
-                    label={opt.label}
-                    accessibilityLabel={opt.label}
-                    value={opt.value}
-                    checked={responsible.role === opt.value}
-                    onChange={(checked: boolean) => {
-                      if (checked) setResponsible((r) => ({ ...r, role: opt.value }))
-                    }}
-                  />
-                ))}
+              <Text variant="body.m" color={theme.content.light}>
+                <Link to="/login">Voltar para o login</Link>
+              </Text>
+            </View>
+          ) : (
+            <>
+              {/* Section 1: Dados da empresa */}
+              <View style={{ gap: theme.gap.sm }}>
+                {sectionHeader('Dados da empresa')}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.sm }}>
+                  <View style={{ width: 596, maxWidth: '100%' as unknown as number }}>
+                    <Input
+                      label="Nome da empresa"
+                      accessibilityLabel="Nome da empresa"
+                      value={company.name}
+                      onChangeText={(v: string) => setCompany((c) => ({ ...c, name: v }))}
+                    />
+                  </View>
+                  <View style={{ width: 292, flexGrow: 1 }}>
+                    <Input
+                      label="CNPJ"
+                      accessibilityLabel="CNPJ"
+                      placeholder="00.000.000/0001-00"
+                      value={company.cnpj}
+                      onChangeText={(v: string) => setCompany((c) => ({ ...c, cnpj: v }))}
+                    />
+                  </View>
+                  <View style={{ width: 292, flexGrow: 1 }}>
+                    <Input
+                      label="Site"
+                      accessibilityLabel="Site"
+                      placeholder="www.sitedaempresa.com.br"
+                      value={company.site}
+                      onChangeText={(v: string) => setCompany((c) => ({ ...c, site: v }))}
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
               </View>
-            </View>
-          </View>
 
-          <FormError message={error} />
+              {/* Section 2: Dados do endereço */}
+              <View style={{ gap: theme.gap.sm }}>
+                {sectionHeader('Dados do endereço')}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.sm }}>
+                  <View style={{ width: 107 }}>
+                    <Input
+                      label="CEP"
+                      accessibilityLabel="CEP"
+                      placeholder="00000-000"
+                      value={address.cep}
+                      onChangeText={(v: string) => setAddress((a) => ({ ...a, cep: v }))}
+                    />
+                  </View>
+                  <View style={{ width: 477, flexGrow: 1 }}>
+                    <Input
+                      label="Logradouro"
+                      accessibilityLabel="Logradouro"
+                      placeholder="Avenida Quatro de Julho"
+                      value={address.street}
+                      onChangeText={(v: string) => setAddress((a) => ({ ...a, street: v }))}
+                    />
+                  </View>
+                  <View style={{ width: 147 }}>
+                    <Input
+                      label="Número"
+                      accessibilityLabel="Número"
+                      placeholder="00"
+                      value={address.number}
+                      onChangeText={(v: string) => setAddress((a) => ({ ...a, number: v }))}
+                    />
+                  </View>
+                  <View style={{ width: 353, flexGrow: 1 }}>
+                    <Input
+                      label="Bairro"
+                      accessibilityLabel="Bairro"
+                      placeholder="Pampulha"
+                      value={address.neighborhood}
+                      onChangeText={(v: string) => setAddress((a) => ({ ...a, neighborhood: v }))}
+                    />
+                  </View>
+                  <View style={{ width: 71 }}>
+                    <Input
+                      label="UF"
+                      accessibilityLabel="UF"
+                      placeholder="MG"
+                      value={address.uf}
+                      onChangeText={(v: string) => setAddress((a) => ({ ...a, uf: v }))}
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                </View>
+              </View>
 
-          {/* Actions row */}
-          <View style={{ flexDirection: 'row', gap: theme.gap.sm }}>
-            <View style={{ flex: 1 }}>
-              <Button
-                variant="outline"
-                label="Voltar"
-                fullWidth
-                accessibilityLabel="Voltar"
-                onPress={() => navigate('/login')}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                variant="contained"
-                label="Finalizar Cadastro"
-                fullWidth
-                accessibilityLabel="Finalizar Cadastro"
-                onPress={onSubmit}
-                disabled={loading}
-              />
-            </View>
-          </View>
+              {/* Section 3: Dados do responsável */}
+              <View style={{ gap: theme.gap.sm }}>
+                {sectionHeader('Dados do responsável')}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.sm }}>
+                  <View style={{ width: 596, maxWidth: '100%' as unknown as number }}>
+                    <Input
+                      label="Nome"
+                      accessibilityLabel="Nome"
+                      placeholder="Nome do Responsável"
+                      value={responsible.name}
+                      onChangeText={(v: string) => setResponsible((r) => ({ ...r, name: v }))}
+                    />
+                  </View>
+                  <View style={{ width: 284, flexGrow: 1 }}>
+                    <Input
+                      label="Telefone"
+                      accessibilityLabel="Telefone"
+                      placeholder="(00) 00000-0000"
+                      value={responsible.phone}
+                      onChangeText={(v: string) => setResponsible((r) => ({ ...r, phone: v }))}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                  <View style={{ width: 296, flexGrow: 1 }}>
+                    <Input
+                      label="Email"
+                      accessibilityLabel="Email"
+                      placeholder="seu@email.com"
+                      value={responsible.email}
+                      onChangeText={(v: string) => setResponsible((r) => ({ ...r, email: v }))}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+
+                <View style={{ gap: theme.gap.sm, marginTop: theme.gap.s }}>
+                  <Text variant="body.m" style={{ fontWeight: '700' as const }}>
+                    Qual a sua função na empresa?
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.m }}>
+                    {ROLE_OPTIONS.map((opt) => (
+                      <Radio
+                        key={opt.value}
+                        label={opt.label}
+                        accessibilityLabel={opt.label}
+                        value={opt.value}
+                        checked={responsible.role === opt.value}
+                        onChange={(checked: boolean) => {
+                          if (checked) setResponsible((r) => ({ ...r, role: opt.value }))
+                        }}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </View>
+
+              <FormError message={error} />
+
+              {/* Actions row */}
+              <View style={{ flexDirection: 'row', gap: theme.gap.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    variant="outline"
+                    label="Voltar"
+                    fullWidth
+                    accessibilityLabel="Voltar"
+                    onPress={() => navigate('/login')}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    variant="contained"
+                    label="Finalizar Cadastro"
+                    fullWidth
+                    accessibilityLabel="Finalizar Cadastro"
+                    onPress={onSubmit}
+                    disabled={loading}
+                  />
+                </View>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Logo column (right top) */}

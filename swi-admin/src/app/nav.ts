@@ -20,6 +20,11 @@ export const NAV_ITEMS: NavItem[] = [
   { value: '/reports', label: 'Relatórios', icon: 'reports_filled' },
   { value: '/alerts', label: 'Alertas', icon: 'bell_filled' },
   { value: '/user/settings', label: 'Configurações', icon: 'settings_filled' },
+  // Tarefas é o ÚLTIMO item, depois de Configurações e logo acima da seção de
+  // chat (Figma 1606-11583 @1366px). O DS não tem variante `assignment_filled`;
+  // `assignment` é o único glifo quadrado-com-checklist disponível
+  // (icons/paths.ts:95) — outline vs filled fica pra fase de fidelidade visual.
+  { value: '/tasks', label: 'Tarefas', icon: 'assignment' },
 ]
 
 export function withBadges(overrides: Record<string, string>): NavItem[] {

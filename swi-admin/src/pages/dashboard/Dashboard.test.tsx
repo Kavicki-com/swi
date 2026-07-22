@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
+import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { dashboardApi, type DashboardSummary } from '@/services/dashboard'
 import { Dashboard } from './Dashboard'
 
@@ -113,9 +114,10 @@ const FAKE_SUMMARY: DashboardSummary = {
 }
 
 beforeEach(() => {
-  // Seed an authenticated session
+  // Seed an authenticated session (getSession real exige token + sessão)
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
   window.localStorage.setItem(
-    'swi.admin.session',
+    SESSION_STORAGE_KEY,
     JSON.stringify({
       id: 'u_seed_1',
       org_id: 'org_seed_1',
