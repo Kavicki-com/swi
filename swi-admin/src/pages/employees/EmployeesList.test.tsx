@@ -1,6 +1,8 @@
 // Smoke + behaviour tests. The smoke test guards mount regressions (DS bumps,
 // route refactors, import-graph changes); the "Pendentes" tab tests cover the
-// approval queue (list + aprovar + rejeitar com confirmação).
+// approval queue (list + aprovar + rejeitar com confirmação + rollback de erro).
+// Interactions use fireEvent (Testing Library) — @testing-library/user-event is
+// not a direct dependency of this app, so we follow the project convention.
 // vitest globals (describe/it/expect/afterEach) are available via globals: true
 import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
@@ -22,9 +24,7 @@ describe('EmployeesList', () => {
   })
 
   it('renders without crashing', () => {
-    expect(() =>
-      renderPage(<EmployeesList />, { route: '/employees' }),
-    ).not.toThrow()
+    expect(() => renderPage(<EmployeesList />, { route: '/employees' })).not.toThrow()
   })
 
   it('aba Pendentes lista os colaboradores PENDING', async () => {
@@ -72,5 +72,93 @@ describe('EmployeesList', () => {
     fireEvent.click(screen.getByRole('button', { name: /^rejeitar$/i }))
     expect(reject).toHaveBeenCalledWith('p1')
     await waitFor(() => expect(screen.queryByText('Novo Worker')).toBeNull())
+  })
+
+  it('approve com erro faz a linha reaparecer (rollback)', async () => {
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({ data: [NOVO], error: null })
+    vi.spyOn(approvalsApi, 'approve').mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Novo Worker'))
+
+    fireEvent.click(screen.getByRole('button', { name: /aprovar novo worker/i }))
+
+    // Removido de forma otimista, mas volta quando o backend responde erro.
+    await waitFor(() => expect(screen.getByText('Novo Worker')).toBeTruthy())
+  })
+
+  it('reject com erro faz a linha reaparecer (rollback)', async () => {
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({ data: [NOVO], error: null })
+    vi.spyOn(approvalsApi, 'reject').mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Novo Worker'))
+
+    fireEvent.click(screen.getByRole('button', { name: /rejeitar novo worker/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^rejeitar$/i }))
+
+    await waitFor(() => expect(screen.getByText('Novo Worker')).toBeTruthy())
+  })
+
+  it('rollback reinsere na posição original, não no fim da lista', async () => {
+    const ALFA: PendingUser = { id: 'a', name: 'Alfa', email: 'a@x.com', requestedAt: NOVO.requestedAt }
+    const BRAVO: PendingUser = { id: 'b', name: 'Bravo', email: 'b@x.com', requestedAt: NOVO.requestedAt }
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({
+      data: [ALFA, BRAVO],
+      error: null,
+    })
+    vi.spyOn(approvalsApi, 'approve').mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Alfa'))
+
+    fireEvent.click(screen.getByRole('button', { name: /aprovar alfa/i }))
+    await waitFor(() => expect(screen.getByText('Alfa')).toBeTruthy())
+
+    // Alfa (índice 0) tem que voltar ANTES de Bravo, não jogado pro fim.
+    const alfa = screen.getByText('Alfa')
+    const bravo = screen.getByText('Bravo')
+    expect(alfa.compareDocumentPosition(bravo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('Escape fecha o ConfirmReject sem rejeitar', async () => {
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({ data: [NOVO], error: null })
+    const reject = vi
+      .spyOn(approvalsApi, 'reject')
+      .mockResolvedValue({ data: { id: 'p1', approvalStatus: 'REJECTED' }, error: null })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Novo Worker'))
+
+    fireEvent.click(screen.getByRole('button', { name: /rejeitar novo worker/i }))
+    expect(screen.getByText('Rejeitar cadastro?')).toBeTruthy()
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByText('Rejeitar cadastro?')).toBeNull())
+    expect(reject).not.toHaveBeenCalled()
+    expect(screen.getByText('Novo Worker')).toBeTruthy()
+  })
+
+  it('clicar no scrim fecha o ConfirmReject sem rejeitar', async () => {
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({ data: [NOVO], error: null })
+    const reject = vi
+      .spyOn(approvalsApi, 'reject')
+      .mockResolvedValue({ data: { id: 'p1', approvalStatus: 'REJECTED' }, error: null })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Novo Worker'))
+
+    fireEvent.click(screen.getByRole('button', { name: /rejeitar novo worker/i }))
+    expect(screen.getByText('Rejeitar cadastro?')).toBeTruthy()
+
+    fireEvent.click(screen.getByLabelText('Fechar'))
+
+    await waitFor(() => expect(screen.queryByText('Rejeitar cadastro?')).toBeNull())
+    expect(reject).not.toHaveBeenCalled()
   })
 })

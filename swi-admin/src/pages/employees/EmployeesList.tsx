@@ -283,7 +283,12 @@ function PendingRow({
   onReject: (p: PendingUser) => void
 }) {
   const theme = useTheme()
-  const requestedAt = new Intl.DateTimeFormat('pt-BR').format(new Date(pending.requestedAt))
+  // Guarda contra requestedAt inválido: Intl formataria "Invalid Date". Mostra
+  // um traço neutro em vez de vazar o erro pro cliente.
+  const parsed = new Date(pending.requestedAt)
+  const requestedAt = Number.isNaN(parsed.getTime())
+    ? '—'
+    : new Intl.DateTimeFormat('pt-BR').format(parsed)
   return (
     <View
       testID={`pending-row-${pending.id}`}
@@ -344,8 +349,19 @@ function ConfirmReject({
   onConfirm: (p: PendingUser) => void
 }) {
   const theme = useTheme()
+  // Escape fecha o diálogo (semântica de modal). Listener no window enquanto
+  // o overlay está montado; removido no cleanup.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onCancel])
   return (
-    <View
+    <Pressable
+      accessibilityLabel="Fechar"
+      onPress={onCancel}
       style={{
         position: 'absolute',
         top: 0,
@@ -359,7 +375,12 @@ function ConfirmReject({
         zIndex: 1000,
       }}
     >
-      <View
+      {/* Card por cima do scrim: clique dentro dele é capturado aqui e NÃO
+          propaga pro scrim (que fecharia). accessibilityViewIsModal marca o
+          card como modal (aria-modal no react-native-web). */}
+      <Pressable
+        accessibilityViewIsModal
+        onPress={() => {}}
         style={{
           backgroundColor: theme.surface.standard,
           borderRadius: theme.border.radius.m,
@@ -397,8 +418,8 @@ function ConfirmReject({
             onPress={() => onConfirm(pending)}
           />
         </View>
-      </View>
-    </View>
+      </Pressable>
+    </Pressable>
   )
 }
 
@@ -414,6 +435,9 @@ export function EmployeesList({
   const { show: showToast } = useDemoToast()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [pendentes, setPendentes] = useState<PendingUser[]>([])
+  // true enquanto o fetch da aba Pendentes está em voo. Começa true quando a
+  // aba inicial já é 'pendentes' pra não piscar o empty state antes do fetch.
+  const [loadingPendentes, setLoadingPendentes] = useState(initialTab === 'pendentes')
   const [rejecting, setRejecting] = useState<PendingUser | null>(null)
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
@@ -432,21 +456,36 @@ export function EmployeesList({
   useEffect(() => {
     if (tab !== 'pendentes') return
     let cancelled = false
+    setLoadingPendentes(true)
     approvalsApi.listPendingWorkers().then(({ data }) => {
-      if (!cancelled && data) setPendentes([...data])
+      if (cancelled) return
+      if (data) setPendentes([...data])
+      setLoadingPendentes(false)
     })
     return () => {
       cancelled = true
     }
   }, [tab])
 
+  // Rollback otimista: reinsere `p` na posição original `idx` e de forma
+  // idempotente — se um refetch concorrente já recolocou o item, não duplica.
+  const reinsertPending = (idx: number, p: PendingUser) => {
+    setPendentes((prev) => {
+      if (prev.some((x) => x.id === p.id)) return prev
+      const next = [...prev]
+      next.splice(idx < 0 ? next.length : idx, 0, p)
+      return next
+    })
+  }
+
   // Aprovação é direta (otimista): tira o item da lista já, confirma no backend,
-  // e reinsere + avisa se falhar.
+  // e reinsere na posição original + avisa se falhar.
   const handleApprove = async (p: PendingUser) => {
+    const idx = pendentes.findIndex((x) => x.id === p.id)
     setPendentes((prev) => prev.filter((x) => x.id !== p.id))
     const { error } = await approvalsApi.approve(p.id)
     if (error) {
-      setPendentes((prev) => [...prev, p])
+      reinsertPending(idx, p)
       showToast('Erro', error.message)
       return
     }
@@ -454,13 +493,14 @@ export function EmployeesList({
   }
 
   // Rejeição passa por confirmação (ConfirmReject) antes de chegar aqui — a
-  // partir daí é otimista igual ao approve.
+  // partir daí é otimista igual ao approve (rollback na posição original).
   const handleReject = async (p: PendingUser) => {
+    const idx = pendentes.findIndex((x) => x.id === p.id)
     setRejecting(null)
     setPendentes((prev) => prev.filter((x) => x.id !== p.id))
     const { error } = await approvalsApi.reject(p.id)
     if (error) {
-      setPendentes((prev) => [...prev, p])
+      reinsertPending(idx, p)
       showToast('Erro', error.message)
       return
     }
@@ -542,6 +582,10 @@ export function EmployeesList({
                 onReject={setRejecting}
               />
             ))
+          ) : loadingPendentes ? (
+            <Text variant="body.m" color={theme.content.medium}>
+              Carregando…
+            </Text>
           ) : (
             <Text variant="body.m" color={theme.content.medium}>
               Nenhum cadastro pendente
