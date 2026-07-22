@@ -15,6 +15,8 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
+import { adminsApi, employeesApi, type CreateUserInput } from '@/services/api/users'
+import { useDemoToast } from '@/lib/demoToast'
 
 type FormState = {
   // Dados do cadastro
@@ -52,6 +54,22 @@ const GENERO_OPTIONS = [
   { value: 'outro', label: 'Outro' },
   { value: 'prefiro-nao-informar', label: 'Prefiro não informar' },
 ]
+
+// 'DD/MM/AAAA' → ISO. Vazio ou fora do formato de 3 partes numéricas → undefined
+// (o campo é opcional; não sobe chave vazia). new Date(a, m-1, d) monta a data
+// local à meia-noite e .toISOString() normaliza pro contrato do backend.
+function parseBR(value: string): string | undefined {
+  const parts = value.trim().split('/')
+  if (parts.length !== 3) return undefined
+  const [dd, mm, aaaa] = parts
+  if (!dd || !mm || !aaaa) return undefined
+  if ([dd, mm, aaaa].some((p) => !/^\d+$/.test(p))) return undefined
+  return new Date(Number(aaaa), Number(mm) - 1, Number(dd)).toISOString()
+}
+
+// e-mail "de forma" (não RFC): barra o esquecimento óbvio antes de gastar uma
+// ida ao backend só pra receber um 400.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 type SectionProps = { title: string; children: React.ReactNode }
 
@@ -115,6 +133,9 @@ export function AdminsCreate({
   subject?: 'administrador' | 'funcionário'
 }) {
   const theme = useTheme()
+  const { show: showToast } = useDemoToast()
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({
     nomeCompleto: '',
     email: '',
@@ -135,12 +156,59 @@ export function AdminsCreate({
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  // Só campos de IDENTIDADE sobem (name/email/senha + phone/cpf/nascimento
+  // opcionais). Saúde (tipo sanguíneo, gênero, alergias, doenças) e nome de
+  // usuário ficam renderizados na UI mas fora do corpo — dependem da smartband
+  // / de um cadastro clínico que ainda não existe no backend.
+  async function handleSubmit() {
+    if (submitting) return
+    const nome = form.nomeCompleto.trim()
+    const email = form.email.trim()
+    if (!nome || !email || !form.senha) {
+      setError('Preencha nome, e-mail e senha.')
+      return
+    }
+    if (!EMAIL_RE.test(email)) {
+      setError('Informe um e-mail válido.')
+      return
+    }
+    if (form.senha.length < 8) {
+      setError('A senha deve ter no mínimo 8 caracteres.')
+      return
+    }
+    setError(null)
+    setSubmitting(true)
+    const birthDate = parseBR(form.dataNascimento)
+    const payload: CreateUserInput = {
+      name: nome,
+      email,
+      password: form.senha,
+      ...(form.telefone ? { phone: form.telefone } : {}),
+      ...(form.cpf ? { cpf: form.cpf } : {}),
+      ...(birthDate ? { birthDate } : {}),
+    }
+    const api = subject === 'funcionário' ? employeesApi : adminsApi
+    try {
+      const { error: apiError } = await api.create(payload)
+      if (apiError) {
+        setError(apiError.message)
+        showToast('Erro', apiError.message)
+        return
+      }
+      showToast('Cadastro concluído', `${nome} foi cadastrado com sucesso`)
+      onBack?.()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <View testID="admins-create" style={{ gap: theme.gap.l }}>
       <Section title="Dados de cadastro">
         <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
           <View style={{ flex: 1 }}>
             <Input
+              testID="admins-create-nome"
               label="Nome Completo"
               placeholder={`Nome completo do novo ${subject}`}
               value={form.nomeCompleto}
@@ -149,6 +217,7 @@ export function AdminsCreate({
           </View>
           <View style={{ flex: 1 }}>
             <Input
+              testID="admins-create-email"
               label="Email"
               placeholder="seu@email.com"
               value={form.email}
@@ -159,6 +228,7 @@ export function AdminsCreate({
           </View>
           <View style={{ flex: 1 }}>
             <Input
+              testID="admins-create-telefone"
               label="Telefone"
               placeholder="(00) 00000-0000"
               value={form.telefone}
@@ -197,6 +267,7 @@ export function AdminsCreate({
           </View>
           <View style={{ flex: 1 }}>
             <Input
+              testID="admins-create-senha"
               label="Senha"
               placeholder="digite aqui"
               value={form.senha}
@@ -294,6 +365,14 @@ export function AdminsCreate({
         <ImageUploader showTakePhoto={false} accessibilityLabel="Upload de exames clínicos" />
       </Section>
 
+      {/* Erro de validação/backend em vermelho acima do rodapé (role=alert via
+          accessibilityRole). Só aparece quando setError foi disparado. */}
+      {error ? (
+        <Text variant="body.m" color={theme.content.error} accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : null}
+
       {/* Footer: two buttons sharing the section width 50/50 (full-width
           split) per Figma 48:5151. Voltar uses outline; Finalizar Cadastro
           is the primary green CTA (surface.primary), not the blue used
@@ -313,7 +392,7 @@ export function AdminsCreate({
             size="large"
             fullWidth
             onPress={() => onBack?.()}
-            accessibilityLabel="Voltar para a lista de administradores"
+            accessibilityLabel={`Voltar para a lista de ${subject === 'funcionário' ? 'funcionários' : 'administradores'}`}
           />
         </View>
         <View style={{ flex: 1 }}>
@@ -322,11 +401,10 @@ export function AdminsCreate({
             variant="contained"
             size="large"
             fullWidth
+            disabled={submitting}
             backgroundColor={theme.surface.primary}
-            onPress={() => {
-              /* Mock: no backend wiring yet. */
-            }}
-            accessibilityLabel="Finalizar cadastro do administrador"
+            onPress={handleSubmit}
+            accessibilityLabel={`Finalizar cadastro do ${subject}`}
           />
         </View>
       </View>
