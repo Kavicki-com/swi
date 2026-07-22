@@ -138,17 +138,19 @@ const toPending = (u: UserSummaryDto): PendingUser => ({
 // Ação de moderação: aprovar/rejeitar um cadastro. O backend responde só o novo
 // estado ({id, approvalStatus}); a fila usa isso pra tirar o item da lista.
 type ApprovalResult = { id: string; approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED' }
-const postAction = (id: string, action: 'approve' | 'reject'): Promise<MockResponse<ApprovalResult>> =>
-  (async () => {
-    try {
-      const r = await apiFetch<ApprovalResult>(`/users/${id}/${action}`, { method: 'POST' })
-      return { data: r, error: null }
-    } catch (e) {
-      return { data: null, error: { message: errorMessage(e, 'Falha na ação') } }
-    }
-  })()
+const postAction = async (
+  id: string,
+  action: 'approve' | 'reject',
+): Promise<MockResponse<ApprovalResult>> => {
+  try {
+    const r = await apiFetch<ApprovalResult>(`/users/${id}/${action}`, { method: 'POST' })
+    return { data: r, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha na ação') } }
+  }
+}
 
-export const usersApi = {
+export const approvalsApi = {
   listPendingWorkers: async (): Promise<MockResponse<PendingUser[]>> => {
     try {
       const users = await apiFetch<UserSummaryDto[]>('/users?role=WORKER&approvalStatus=PENDING')
