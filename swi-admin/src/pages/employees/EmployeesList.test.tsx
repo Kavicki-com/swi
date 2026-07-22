@@ -36,4 +36,18 @@ describe('EmployeesList', () => {
     await waitFor(() => expect(screen.getByText('Novo Worker')).toBeTruthy())
     expect(screen.getByText('novo@x.com')).toBeTruthy()
   })
+
+  it('aprovar remove o pendente da lista', async () => {
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({ data: [NOVO], error: null })
+    const approve = vi
+      .spyOn(approvalsApi, 'approve')
+      .mockResolvedValue({ data: { id: 'p1', approvalStatus: 'APPROVED' }, error: null })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Novo Worker'))
+
+    fireEvent.click(screen.getByRole('button', { name: /aprovar novo worker/i }))
+
+    expect(approve).toHaveBeenCalledWith('p1')
+    await waitFor(() => expect(screen.queryByText('Novo Worker')).toBeNull())
+  })
 })
