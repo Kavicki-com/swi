@@ -124,3 +124,24 @@ export const adminsApi = {
   list: () => listMapped('ADMIN', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
 }
+
+// Fila de aprovação: WORKERs pendentes. createdAt (quando o cadastro entrou) vira
+// requestedAt na UI da fila.
+export type PendingUser = { id: string; name: string; email: string; requestedAt: string }
+const toPending = (u: UserSummaryDto): PendingUser => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  requestedAt: u.createdAt,
+})
+
+export const usersApi = {
+  listPendingWorkers: async (): Promise<MockResponse<PendingUser[]>> => {
+    try {
+      const users = await apiFetch<UserSummaryDto[]>('/users?role=WORKER&approvalStatus=PENDING')
+      return { data: users.map(toPending), error: null }
+    } catch (e) {
+      return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }
+    }
+  },
+}

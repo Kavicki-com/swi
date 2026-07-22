@@ -2,7 +2,7 @@
 // vitest globals (describe/it/expect/afterEach) via globals: true — importar de
 // 'vitest' duplicaria a instância (ver nota no auth.test.ts).
 import { vi } from 'vitest'
-import { employeesApi, adminsApi, ageFrom } from './users'
+import { employeesApi, adminsApi, usersApi, ageFrom } from './users'
 
 const okJson = (body: unknown) =>
   vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body } as Response)
@@ -131,5 +131,17 @@ describe('employeesApi.get (real)', () => {
     const { data } = await employeesApi.get('nope')
 
     expect(data).toBeNull()
+  })
+})
+
+describe('usersApi.listPendingWorkers (real)', () => {
+  it('GET /users?role=WORKER&approvalStatus=PENDING e mapeia createdAt→requestedAt', async () => {
+    const f = okJson([summary({ approvalStatus: 'PENDING', createdAt: '2026-07-10T00:00:00.000Z' })])
+    vi.stubGlobal('fetch', f)
+    const { data, error } = await usersApi.listPendingWorkers()
+    expect(error).toBeNull()
+    expect(data![0]!).toEqual({ id: 'u1', name: 'Worker Um', email: 'w1@x.com', requestedAt: '2026-07-10T00:00:00.000Z' })
+    const [url] = f.mock.calls[0] as [string]
+    expect(url).toContain('/users?role=WORKER&approvalStatus=PENDING')
   })
 })
