@@ -153,6 +153,55 @@ describe('approvalsApi.listPendingWorkers (real)', () => {
   })
 })
 
+describe('create (real)', () => {
+  it('employeesApi.create → POST /users role WORKER + identidade', async () => {
+    const f = okJson({ id: 'n', name: 'Zé' })
+    vi.stubGlobal('fetch', f)
+    const { error } = await employeesApi.create({
+      name: 'Zé',
+      email: 'ze@x.com',
+      password: 'senha123',
+      phone: '11',
+    })
+    expect(error).toBeNull()
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({
+      role: 'WORKER',
+      name: 'Zé',
+      email: 'ze@x.com',
+      password: 'senha123',
+      phone: '11',
+    })
+  })
+  it('adminsApi.create → role ADMIN', async () => {
+    const f = okJson({ id: 'n' })
+    vi.stubGlobal('fetch', f)
+    await adminsApi.create({ name: 'A', email: 'a@x.com', password: 'senha123' })
+    expect(JSON.parse((f.mock.calls[0] as [string, RequestInit])[1].body as string).role).toBe(
+      'ADMIN',
+    )
+  })
+  it('erro (409) → { data:null, error }', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ message: 'E-mail já cadastrado' }),
+      } as Response),
+    )
+    const { data, error } = await employeesApi.create({
+      name: 'A',
+      email: 'a@x.com',
+      password: 'senha123',
+    })
+    expect(data).toBeNull()
+    expect(error?.message).toMatch(/cadastrad/i)
+  })
+})
+
 describe('approvalsApi.approve/reject (real)', () => {
   it('approve() faz POST /users/:id/approve', async () => {
     const f = okJson({ id: 'u1', approvalStatus: 'APPROVED' })

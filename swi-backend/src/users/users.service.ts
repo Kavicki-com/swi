@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
-import { Role } from '@prisma/client'
+import { hash } from '../auth/codes'
+import { Prisma, Role } from '@prisma/client'
 import type { ApprovalStatus, Company, Profile, User } from '@prisma/client'
 
 type UserWithProfile = User & { profile: Profile | null }
@@ -18,6 +19,48 @@ export class UsersService {
 
   findByEmail(email: string) { return this.prisma.user.findUnique({ where: { email } }) }
   findById(id: string) { return this.prisma.user.findUnique({ where: { id } }) }
+
+  // Cadastro pelo painel: o admin define a senha e o usuário nasce pronto pra
+  // logar (APPROVED + emailVerified) — sem código de confirmação. Herda a empresa
+  // do admin logado (null se ele não tiver). Reusa o hash bcrypt do módulo auth.
+  async create(
+    adminId: string,
+    dto: { name: string; email: string; password: string; role: Role; phone?: string; cpf?: string; birthDate?: string },
+  ) {
+    const exists = await this.findByEmail(dto.email)
+    if (exists) throw new ConflictException('E-mail já cadastrado')
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId }, select: { companyId: true } })
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          name: dto.name,
+          email: dto.email,
+          passwordHash: await hash(dto.password),
+          role: dto.role,
+          approvalStatus: 'APPROVED',
+          emailVerified: true,
+          companyId: admin?.companyId ?? null,
+          profile: {
+            create: {
+              fullName: dto.name,
+              ...(dto.phone ? { phone: dto.phone } : {}),
+              ...(dto.cpf ? { cpf: dto.cpf } : {}),
+              ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}),
+            },
+          },
+        },
+        include: { profile: true },
+      })
+      return this.toSummaryDto(user)
+    } catch (e) {
+      // Rede de segurança pra corrida: se dois creates concorrentes passarem o
+      // pré-check, o segundo bate no unique de email (P2002) → traduz pra 409.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('E-mail já cadastrado')
+      }
+      throw e
+    }
+  }
 
   async approve(id: string): Promise<User> {
     const u = await this.prisma.user.findUnique({ where: { id } })

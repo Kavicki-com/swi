@@ -207,6 +207,9 @@ export function AdminsList({
   const [admins, setAdmins] = useState<Admin[]>([])
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
+  // Bump pra forçar o refetch após um cadastro novo: ao voltar do form o
+  // incremento reexecuta o useEffect e a lista já mostra o admin recém-criado.
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -216,7 +219,7 @@ export function AdminsList({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   const filtered = admins.filter((a) =>
     search.trim() ? a.name.toLowerCase().includes(search.toLowerCase()) : true,
@@ -290,7 +293,12 @@ export function AdminsList({
       </View>
 
       {isCreating ? (
-        <AdminsCreate onBack={() => setTab('cadastrados')} />
+        <AdminsCreate
+          onBack={() => {
+            setTab('cadastrados')
+            setReloadKey((k) => k + 1)
+          }}
+        />
       ) : (
         // QA cliente §2: gap entre cards de 8→16 (theme.gap.m) — cards muito
         // próximos uns dos outros no baseline.

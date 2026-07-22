@@ -442,6 +442,10 @@ export function EmployeesList({
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  // Bump pra forçar o refetch da lista "cadastrados" após um cadastro novo:
+  // ao voltar do form, o incremento reexecuta o useEffect e a lista já mostra
+  // o usuário recém-criado.
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -451,7 +455,7 @@ export function EmployeesList({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   useEffect(() => {
     if (tab !== 'pendentes') return
@@ -570,7 +574,13 @@ export function EmployeesList({
       </View>
 
       {isCreating ? (
-        <AdminsCreate subject="funcionário" onBack={() => setTab('cadastrados')} />
+        <AdminsCreate
+          subject="funcionário"
+          onBack={() => {
+            setTab('cadastrados')
+            setReloadKey((k) => k + 1)
+          }}
+        />
       ) : isPending ? (
         <View style={{ gap: theme.gap.m }}>
           {pendentes.length ? (

@@ -1,13 +1,22 @@
-import { Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { UsersService } from './users.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
+import { CurrentUserId } from '../auth/current-user.decorator'
+import { CreateUserDto } from './dto'
 import type { ApprovalStatus, Role } from '@prisma/client'
 
 @Controller('users')
 export class UsersController {
   constructor(private readonly users: UsersService) {}
+
+  // Cadastro pelo painel: cria WORKER/ADMIN com senha do admin, já APPROVED +
+  // verificado (loga na hora). Herda a empresa do admin logado.
+  @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN') @Post()
+  create(@CurrentUserId() adminId: string, @Body() dto: CreateUserDto) {
+    return this.users.create(adminId, dto)
+  }
 
   // Diretório do painel: Colaboradores (?role=WORKER) e Admins (?role=ADMIN).
   @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN') @Get()
