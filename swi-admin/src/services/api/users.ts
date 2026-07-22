@@ -124,3 +124,41 @@ export const adminsApi = {
   list: () => listMapped('ADMIN', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
 }
+
+// Fila de aprovação: WORKERs pendentes. createdAt (quando o cadastro entrou) vira
+// requestedAt na UI da fila.
+export type PendingUser = { id: string; name: string; email: string; requestedAt: string }
+const toPending = (u: UserSummaryDto): PendingUser => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  requestedAt: u.createdAt,
+})
+
+// Ação de moderação: aprovar/rejeitar um cadastro. O backend responde só o novo
+// estado ({id, approvalStatus}); a fila usa isso pra tirar o item da lista.
+type ApprovalResult = { id: string; approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED' }
+const postAction = async (
+  id: string,
+  action: 'approve' | 'reject',
+): Promise<MockResponse<ApprovalResult>> => {
+  try {
+    const r = await apiFetch<ApprovalResult>(`/users/${id}/${action}`, { method: 'POST' })
+    return { data: r, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha na ação') } }
+  }
+}
+
+export const approvalsApi = {
+  listPendingWorkers: async (): Promise<MockResponse<PendingUser[]>> => {
+    try {
+      const users = await apiFetch<UserSummaryDto[]>('/users?role=WORKER&approvalStatus=PENDING')
+      return { data: users.map(toPending), error: null }
+    } catch (e) {
+      return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }
+    }
+  },
+  approve: (id: string) => postAction(id, 'approve'),
+  reject: (id: string) => postAction(id, 'reject'),
+}

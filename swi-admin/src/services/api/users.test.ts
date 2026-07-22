@@ -2,7 +2,7 @@
 // vitest globals (describe/it/expect/afterEach) via globals: true — importar de
 // 'vitest' duplicaria a instância (ver nota no auth.test.ts).
 import { vi } from 'vitest'
-import { employeesApi, adminsApi, ageFrom } from './users'
+import { employeesApi, adminsApi, approvalsApi, ageFrom } from './users'
 
 const okJson = (body: unknown) =>
   vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body } as Response)
@@ -131,5 +131,52 @@ describe('employeesApi.get (real)', () => {
     const { data } = await employeesApi.get('nope')
 
     expect(data).toBeNull()
+  })
+})
+
+describe('approvalsApi.listPendingWorkers (real)', () => {
+  it('GET /users?role=WORKER&approvalStatus=PENDING e mapeia createdAt→requestedAt', async () => {
+    const f = okJson([
+      summary({ approvalStatus: 'PENDING', createdAt: '2026-07-10T00:00:00.000Z' }),
+    ])
+    vi.stubGlobal('fetch', f)
+    const { data, error } = await approvalsApi.listPendingWorkers()
+    expect(error).toBeNull()
+    expect(data![0]!).toEqual({
+      id: 'u1',
+      name: 'Worker Um',
+      email: 'w1@x.com',
+      requestedAt: '2026-07-10T00:00:00.000Z',
+    })
+    const [url] = f.mock.calls[0] as [string]
+    expect(url).toContain('/users?role=WORKER&approvalStatus=PENDING')
+  })
+})
+
+describe('approvalsApi.approve/reject (real)', () => {
+  it('approve() faz POST /users/:id/approve', async () => {
+    const f = okJson({ id: 'u1', approvalStatus: 'APPROVED' })
+    vi.stubGlobal('fetch', f)
+    const { data, error } = await approvalsApi.approve('u1')
+    expect(error).toBeNull()
+    expect(data).toEqual({ id: 'u1', approvalStatus: 'APPROVED' })
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/u1/approve')
+    expect(init.method).toBe('POST')
+  })
+  it('reject() faz POST /users/:id/reject', async () => {
+    const f = okJson({ id: 'u1', approvalStatus: 'REJECTED' })
+    vi.stubGlobal('fetch', f)
+    const { data } = await approvalsApi.reject('u1')
+    expect(data?.approvalStatus).toBe('REJECTED')
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/u1/reject')
+    expect(init.method).toBe('POST')
+  })
+  it('erro no approve → { data:null, error }', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const { data, error } = await approvalsApi.approve('u1')
+    expect(data).toBeNull()
+    expect(error?.message).toBeTruthy()
   })
 })
