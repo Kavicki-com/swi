@@ -115,14 +115,43 @@ async function getMapped<T>(
   }
 }
 
+// Cadastro pelo painel (POST /users). Só campos de IDENTIDADE — o role separa
+// funcionário (WORKER) de admin (ADMIN). Campos opcionais ausentes NÃO entram no
+// corpo (JSON.stringify já descarta `undefined`), pra não mandar chave vazia.
+export type CreateUserInput = {
+  name: string
+  email: string
+  password: string
+  phone?: string
+  cpf?: string
+  birthDate?: string // ISO
+}
+
+async function createUser(
+  role: 'WORKER' | 'ADMIN',
+  input: CreateUserInput,
+): Promise<MockResponse<UserSummaryDto>> {
+  try {
+    const created = await apiFetch<UserSummaryDto>('/users', {
+      method: 'POST',
+      body: JSON.stringify({ role, ...input }),
+    })
+    return { data: created, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha ao cadastrar') } }
+  }
+}
+
 export const employeesApi = {
   list: () => listMapped('WORKER', toEmployee),
   get: (id: string) => getMapped(id, toEmployee),
+  create: (input: CreateUserInput) => createUser('WORKER', input),
 }
 
 export const adminsApi = {
   list: () => listMapped('ADMIN', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
+  create: (input: CreateUserInput) => createUser('ADMIN', input),
 }
 
 // Fila de aprovação: WORKERs pendentes. createdAt (quando o cadastro entrou) vira
