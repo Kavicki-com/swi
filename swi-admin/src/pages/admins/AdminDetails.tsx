@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system'
-import { adminsApi, type Admin } from '@/services/admins'
+import { adminsApi, type Admin } from '@/services/api/users'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 
 export function AdminDetails({ adminId }: { adminId?: string } = {}) {
