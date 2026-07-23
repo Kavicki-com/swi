@@ -21,15 +21,23 @@ export function messageToUi(m: Message, myId: string): ChatMessage {
 export function conversationToContact(c: Conversation, msgs: Message[], myId: string): ChatContact {
   const r = resolveContact(c, myId)
   return {
-    id: c.id, name: r.name, sector: r.subtitle, avatarUri: r.avatarUri,
-    subtitle: r.subtitle, unreadCount: unreadFor(c, myId) || undefined,
+    id: c.id,
+    name: r.name,
+    sector: r.subtitle,
+    avatarUri: r.avatarUri,
+    subtitle: r.subtitle,
+    unreadCount: unreadFor(c, myId) || undefined,
     messages: msgs.map((m) => messageToUi(m, myId)),
   }
 }
 
 export function directoryToContact(d: Contact, myId: string): ChatContact {
   return {
-    id: conversationKey(myId, d.workerId), name: d.name, sector: d.sector,
-    avatarUri: d.avatarUri, role: d.role, subtitle: d.sector,
+    id: conversationKey(myId, d.workerId),
+    name: d.name,
+    sector: d.sector,
+    avatarUri: d.avatarUri,
+    role: d.role,
+    subtitle: d.sector,
   }
 }

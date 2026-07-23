@@ -1,4 +1,11 @@
-import { conversationKey, applyMessage, markRead, unreadFor, resolveContact, sortByRecent } from './chatReducers'
+import {
+  conversationKey,
+  applyMessage,
+  markRead,
+  unreadFor,
+  resolveContact,
+  sortByRecent,
+} from './chatReducers'
 import type { Conversation, Message } from './types'
 
 const conv = (over: Partial<Conversation> = {}): Conversation => ({

@@ -6,30 +6,30 @@
 // são uris resolvidas. Datas são ISO strings; a
 // ordenação por recência usa comparação lexicográfica (= cronológica).
 export interface Conversation {
-  id: string;
-  participants: string[];           // [myId, contactId] (Cognito subs)
-  participantNames: string[];       // paralelo a participants
-  participantSubtitles: string[];   // "Setor Leste"
-  participantAvatars: string[];     // uris (resolvidas de keys no amplify)
-  lastMessageBody: string;
-  lastMessageAt: string | null;     // ISO datetime
-  unreadBy: Record<string, number>; // sub -> count (de unreadByJson)
+  id: string
+  participants: string[] // [myId, contactId] (Cognito subs)
+  participantNames: string[] // paralelo a participants
+  participantSubtitles: string[] // "Setor Leste"
+  participantAvatars: string[] // uris (resolvidas de keys no amplify)
+  lastMessageBody: string
+  lastMessageAt: string | null // ISO datetime
+  unreadBy: Record<string, number> // sub -> count (de unreadByJson)
 }
 
 export interface Message {
-  id: string;
-  conversationId: string;
-  participants: string[];
-  senderId: string;                 // === myId ⇒ bubble "me"
-  body: string;
-  imageUri: string | null;          // anexo resolvido (de imageKey no amplify)
-  sentAt: string;                   // ISO datetime
+  id: string
+  conversationId: string
+  participants: string[]
+  senderId: string // === myId ⇒ bubble "me"
+  body: string
+  imageUri: string | null // anexo resolvido (de imageKey no amplify)
+  sentAt: string // ISO datetime
 }
 
 export interface Contact {
-  workerId: string;
-  name: string;
-  sector: string;                   // → subtitle do card
-  role: string;                     // header do user-info
-  avatarUri: string;                // uri resolvida
+  workerId: string
+  name: string
+  sector: string // → subtitle do card
+  role: string // header do user-info
+  avatarUri: string // uri resolvida
 }

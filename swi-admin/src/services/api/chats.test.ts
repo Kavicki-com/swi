@@ -17,9 +17,11 @@ describe('chatsApi.listConversations', () => {
 })
 describe('chatsApi.listDirectory', () => {
   it('GET /chat/directory no envelope', async () => {
-    const f = okJson([{ workerId: 'w1' }]); vi.stubGlobal('fetch', f)
+    const f = okJson([{ workerId: 'w1' }])
+    vi.stubGlobal('fetch', f)
     const { data, error } = await chatsApi.listDirectory()
-    expect(error).toBeNull(); expect(data![0]!.workerId).toBe('w1')
+    expect(error).toBeNull()
+    expect(data![0]!.workerId).toBe('w1')
     expect((f.mock.calls[0] as [string])[0]).toContain('/chat/directory')
   })
 })

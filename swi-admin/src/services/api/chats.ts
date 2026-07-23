@@ -34,6 +34,5 @@ export const chatsApi = {
       apiFetch<Message>(`${conv(id)}/messages`, { method: 'POST', body: JSON.stringify(dto) }),
       'Falha ao enviar mensagem',
     ),
-  markRead: (id: string) =>
-    envelope(apiFetch<null>(`${conv(id)}/read`, { method: 'POST' })),
+  markRead: (id: string) => envelope(apiFetch<null>(`${conv(id)}/read`, { method: 'POST' })),
 }
