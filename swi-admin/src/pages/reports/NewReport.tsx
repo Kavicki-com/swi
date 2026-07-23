@@ -1,20 +1,28 @@
 // src/pages/reports/NewReport.tsx
-// /reports/new — Figma 105:11725. Lives inside AppLayout. Form with:
+// /reports/new (criação) e /reports/:id/edit (revisão) — Figma 105:11725. Lives
+// inside AppLayout. O MESMO componente serve as duas rotas: a de edição não
+// existe no Figma, é reuso deste form pré-preenchido (mesma decisão do TaskForm).
+// Form com:
 //   1. Voltar GhostButton.
-//   2. Title row: "Novo relatório" green + "Atribuir responsáveis" CTA.
-//   3. Inputs: Título / Resumo / Detalhes (tall).
-//   4. "Anexos" section: image slots (thumbnails dos anexos) + DS ImageUploader.
-//   5. Actions: Cancelar (outline) + Salvar relatório (contained green).
+//   2. Title row: "Novo relatório"/"Editar relatório" verde + "Atribuir
+//      responsáveis" CTA.
+//   3. Status do relatório (SÓ na edição): Combobox com os 4 status.
+//   4. Inputs: Título / Resumo / Detalhes (tall).
+//   5. "Anexos" section: image slots (thumbnails dos anexos) + DS ImageUploader.
+//   6. Actions: Cancelar (outline) + Salvar relatório (contained green).
 //
-// "Salvar relatório" cria de verdade via reportsApi.create: sobe os anexos no
-// submit (uploadImage(file,'reports')) e manda os NOMES dos responsáveis
-// escolhidos no overlay. O overlay de responsáveis é montado AQUI (não é uma
-// rota), então o formulário meio-preenchido não desmonta na ida e volta.
+// "Salvar relatório" cria (reportsApi.create) ou salva a revisão
+// (reportsApi.update). Em ambos, os anexos NOVOS sobem no submit
+// (uploadImage(file,'reports')); na edição as keys crus já existentes
+// (report.imageKeys) são preservadas e mescladas com as novas. O overlay de
+// responsáveis é montado AQUI (não é uma rota), então o formulário
+// meio-preenchido não desmonta na ida e volta.
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Image as RNImage, Modal, Pressable, View } from 'react-native'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   Button,
+  Combobox,
   Icon,
   ImageUploader,
   Input,
@@ -22,6 +30,7 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
+import type { ReportStatus } from '@/services/mockApi/reports'
 import { uploadImage } from '@/services/api/upload'
 import { reportsApi } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
@@ -36,6 +45,25 @@ const ATTACHMENT_SLOTS = 4
 // só então o backend rejeitar — as keys já teriam virado órfãs no bucket.
 const LIMIT_IMAGE_KEYS = 20
 
+// Opções do Combobox de status na edição. Ordem/rótulos batem com o filtro da
+// ReportsList (menos a opção "Todos", que não faz sentido num relatório único).
+const STATUS_OPTIONS: ReadonlyArray<{ label: string; value: ReportStatus }> = [
+  { label: 'Concluído', value: 'accept' },
+  { label: 'Em Revisão', value: 'pending' },
+  { label: 'Em Andamento', value: 'info' },
+  { label: 'Cancelado', value: 'canceled' },
+]
+
+// status → statusLabel enviado no PATCH. O backend guarda os dois campos e a UI
+// (StatusTag) lê o statusLabel cru, então mandar o rótulo em pt junto do status
+// mantém o detalhe consistente com o que o usuário escolheu.
+const STATUS_LABELS: Record<ReportStatus, string> = {
+  accept: 'Concluído',
+  pending: 'Em Revisão',
+  info: 'Em Andamento',
+  canceled: 'Cancelado',
+}
+
 // Anexo escolhido. `preview` é uma object URL só pro thumbnail; pode faltar em
 // ambiente sem URL.createObjectURL (jsdom) — aí o quadro cai no rótulo com o
 // nome do arquivo. `uploadedKey` guarda a key devolvida pelo presign depois que
@@ -44,9 +72,11 @@ const LIMIT_IMAGE_KEYS = 20
 type PickedImage = { file: File; preview?: string; uploadedKey?: string }
 
 // Quadro da fileira de anexos (Figma 105:12461). Vazio = glifo de foto; com
-// anexo = thumbnail (ou nome do arquivo quando não há preview).
-function AttachmentSlot({ entry }: { entry?: PickedImage }) {
+// anexo escolhido = thumbnail (ou nome do arquivo quando não há preview); com
+// `uri` = anexo já gravado (edição), exibido como thumbnail read-only.
+function AttachmentSlot({ entry, uri }: { entry?: PickedImage; uri?: string }) {
   const theme = useTheme()
+  const previewUri = uri ?? entry?.preview
   return (
     <View
       style={{
@@ -61,13 +91,13 @@ function AttachmentSlot({ entry }: { entry?: PickedImage }) {
         gap: theme.gap.xs,
       }}
     >
-      {entry?.preview ? (
+      {previewUri ? (
         <RNImage
-          source={{ uri: entry.preview }}
+          source={{ uri: previewUri }}
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
           accessibilityRole="image"
-          accessibilityLabel={entry.file.name}
+          accessibilityLabel={entry?.file.name ?? 'Anexo do relatório'}
         />
       ) : (
         <>
@@ -87,11 +117,21 @@ export function NewReport() {
   const theme = useTheme()
   const navigate = useNavigate()
   const { show: showToast } = useDemoToast()
+  const { id } = useParams<{ id?: string }>()
+  const isEdit = !!id
+
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
   const [details, setDetails] = useState('')
+  const [status, setStatus] = useState<ReportStatus>('pending')
   const [responsibles, setResponsibles] = useState<ReadonlyArray<string>>([])
   const [images, setImages] = useState<ReadonlyArray<PickedImage>>([])
+  // Anexos já gravados (edição). `existingImageKeys` = keys crus preservadas no
+  // PATCH; `existingImages` = URLs presigned só pro thumbnail read-only. Remover
+  // um anexo existente está FORA de escopo — a edição só preserva e ADICIONA.
+  const [existingImageKeys, setExistingImageKeys] = useState<ReadonlyArray<string>>([])
+  const [existingImages, setExistingImages] = useState<ReadonlyArray<string>>([])
+  const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Contador de aberturas → `key` do overlay. Ele lê `initialSelectedNames` só
@@ -116,6 +156,34 @@ export function NewReport() {
     }
   }, [])
 
+  // Edição: carrega o relatório e pré-preenche o formulário. `responsibles` vem
+  // do backend como string separada por vírgula (o mapper junta os nomes); aqui
+  // desfazemos o join pra re-semear o estado de seleção do overlay. `imageKeys`
+  // (keys crus) preserva os anexos no PATCH; `images` (presigned) só decora.
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    setLoading(true)
+    reportsApi.get(id).then(({ data }) => {
+      if (cancelled) return
+      if (!data) {
+        setLoading(false)
+        return
+      }
+      setTitle(data.title)
+      setSummary(data.summary ?? '')
+      setDetails(data.details ?? '')
+      setStatus(data.status)
+      setResponsibles(data.responsibles ? data.responsibles.split(', ').filter(Boolean) : [])
+      setExistingImageKeys(data.imageKeys ?? [])
+      setExistingImages(data.images ?? [])
+      setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
   const openResponsables = () => {
     setResponsablesOpenings((n) => n + 1)
     setResponsablesOpen(true)
@@ -127,7 +195,9 @@ export function NewReport() {
     // dispara quando o value não muda).
     event.target.value = ''
     if (picked.length === 0) return
-    if (images.length + picked.length > LIMIT_IMAGE_KEYS) {
+    // O teto conta os anexos já gravados (edição) + os escolhidos: o backend
+    // valida imageKeys > 20 no array MESCLADO do PATCH.
+    if (existingImageKeys.length + images.length + picked.length > LIMIT_IMAGE_KEYS) {
       setError(`Anexe no máximo ${LIMIT_IMAGE_KEYS} arquivos por relatório.`)
       return
     }
@@ -157,18 +227,18 @@ export function NewReport() {
     // escolhido faria um formulário preenchido devagar falhar com 403.
     //
     // Idempotente por arquivo: a key resolvida é gravada em `uploadedKey`, então
-    // um retry de save (create falhou com 4xx, upload já tinha ido) REAPROVEITA
-    // as keys em vez de subir tudo de novo e mintar keys órfãs.
-    const imageKeys: string[] = []
+    // um retry de save (create/update falhou com 4xx, upload já tinha ido)
+    // REAPROVEITA as keys em vez de subir tudo de novo e mintar keys órfãs.
+    const newImageKeys: string[] = []
     try {
       for (const entry of images) {
         if (entry.uploadedKey) {
-          imageKeys.push(entry.uploadedKey)
+          newImageKeys.push(entry.uploadedKey)
           continue
         }
         const key = await uploadImage(entry.file, 'reports')
         entry.uploadedKey = key
-        imageKeys.push(key)
+        newImageKeys.push(key)
       }
     } catch (e: unknown) {
       if (leftScreenRef.current) return
@@ -176,7 +246,7 @@ export function NewReport() {
       setError(message)
       showToast('Falha ao enviar anexo', message)
       setSaving(false)
-      // Sem create: um relatório criado com anexo faltando seria pior que
+      // Sem create/update: um relatório salvo com anexo faltando seria pior que
       // nenhum — o usuário reenviaria e duplicaria. Os anexos que subiram antes
       // da falha ficam órfãos no bucket (sem delete de mídia no backend); a
       // limpeza é da infra (lifecycle rule). As keys que JÁ subiram ficam em
@@ -186,13 +256,40 @@ export function NewReport() {
 
     if (leftScreenRef.current) return
 
+    // Edição: PATCH com os campos + status/statusLabel + anexos MESCLADOS
+    // (keys existentes preservadas + novas). Volta pro detalhe no sucesso.
+    if (isEdit && id) {
+      const patch = {
+        title: title.trim(),
+        // undefined é descartado pelo JSON.stringify — não entra no corpo.
+        summary: summary.trim() || undefined,
+        details: details.trim() || undefined,
+        responsibles: responsibles.length > 0 ? [...responsibles] : undefined,
+        imageKeys: [...existingImageKeys, ...newImageKeys],
+        status,
+        statusLabel: STATUS_LABELS[status],
+      }
+      const { data, error: apiError } = await reportsApi.update(id, patch)
+      if (leftScreenRef.current) return
+      if (apiError || !data) {
+        const message = apiError?.message ?? 'Não foi possível salvar o relatório.'
+        setError(message)
+        showToast('Falha ao salvar', message)
+        setSaving(false)
+        return
+      }
+      showToast('Relatório atualizado', data.title)
+      navigate(`/reports/${id}`)
+      return
+    }
+
     const payload = {
       title: title.trim(),
       // undefined é descartado pelo JSON.stringify — não entra no corpo.
       summary: summary.trim() || undefined,
       details: details.trim() || undefined,
       responsibles: responsibles.length > 0 ? [...responsibles] : undefined,
-      imageKeys: imageKeys.length > 0 ? imageKeys : undefined,
+      imageKeys: newImageKeys.length > 0 ? newImageKeys : undefined,
     }
 
     const { data, error: apiError } = await reportsApi.create(payload)
@@ -215,7 +312,11 @@ export function NewReport() {
         ? `1 responsável: ${responsibles[0]}`
         : `${responsibles.length} responsáveis: ${responsibles.join(', ')}`
 
-  const emptySlots = Math.max(0, ATTACHMENT_SLOTS - images.length)
+  const emptySlots = Math.max(0, ATTACHMENT_SLOTS - images.length - existingImages.length)
+
+  // Onde Voltar/Cancelar levam: na edição, de volta ao detalhe; na criação, à
+  // lista.
+  const backTarget = isEdit && id ? `/reports/${id}` : '/reports'
 
   return (
     <View testID="new-report" style={{ gap: theme.gap.l }}>
@@ -224,7 +325,7 @@ export function NewReport() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Voltar para a lista de relatórios"
-          onPress={() => navigate('/reports')}
+          onPress={() => navigate(backTarget)}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -245,7 +346,7 @@ export function NewReport() {
         </Pressable>
       </View>
 
-      {/* Section 2 — Title row: "Novo relatório" + Atribuir responsáveis. */}
+      {/* Section 2 — Title row: "Novo/Editar relatório" + Atribuir responsáveis. */}
       <View
         style={{
           flexDirection: 'row',
@@ -254,7 +355,7 @@ export function NewReport() {
         }}
       >
         <Title variant="title.s" color={theme.content.primary}>
-          Novo relatório
+          {isEdit ? 'Editar relatório' : 'Novo relatório'}
         </Title>
         <Button
           label="Atribuir responsáveis"
@@ -279,6 +380,27 @@ export function NewReport() {
         >
           {error}
         </Text>
+      ) : null}
+
+      {loading ? (
+        <Text testID="new-report-loading" variant="body.m" color={theme.content.medium}>
+          Carregando relatório…
+        </Text>
+      ) : null}
+
+      {/* Status — SÓ na edição. O create nasce `pending` no servidor, então o
+          controle não aparece na criação. */}
+      {isEdit ? (
+        <View style={{ width: 220 }}>
+          <Combobox
+            label="Status do relatório"
+            testID="new-report-status"
+            options={STATUS_OPTIONS as { label: string; value: string }[]}
+            value={status}
+            onChange={(next) => setStatus(next as ReportStatus)}
+            accessibilityLabel="Status do relatório"
+          />
+        </View>
       ) : null}
 
       {/* Section 3 — Form inputs. */}
@@ -327,6 +449,11 @@ export function NewReport() {
             flexWrap: 'wrap',
           }}
         >
+          {/* Anexos já gravados (edição) — thumbnails read-only. Remover está
+              fora de escopo; só preservamos e adicionamos. */}
+          {existingImages.map((uri, index) => (
+            <AttachmentSlot key={`existing_${index}`} uri={uri} />
+          ))}
           {images.map((entry, index) => (
             <AttachmentSlot key={`${entry.file.name}_${index}`} entry={entry} />
           ))}
@@ -364,7 +491,7 @@ export function NewReport() {
             label="Cancelar"
             variant="outline"
             fullWidth
-            onPress={() => navigate('/reports')}
+            onPress={() => navigate(backTarget)}
             accessibilityLabel="Cancelar criação do relatório"
           />
         </View>
@@ -373,7 +500,7 @@ export function NewReport() {
             label="Salvar relatório"
             variant="contained"
             fullWidth
-            disabled={saving}
+            disabled={saving || loading}
             accessibilityLabel="Salvar relatório"
             onPress={() => void handleSave()}
           />

@@ -349,7 +349,7 @@ export function ReportDetails() {
           variant="outline"
           iconLeft={<Icon name="edit" size={20} color={theme.content.primaryLight} />}
           accessibilityLabel="Revisar relatório"
-          onPress={() => showToast('Modo revisão iniciado', 'Relatório aberto para edição')}
+          onPress={() => navigate(`/reports/${id}/edit`)}
         />
       </View>
 

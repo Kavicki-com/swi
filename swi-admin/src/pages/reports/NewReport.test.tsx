@@ -13,14 +13,16 @@ import { AuthProvider } from '@/hooks/useAuth'
 import { seedSession, clearSession } from '@/test-utils/renderPage'
 import { NewReport } from './NewReport'
 
-const { createMock, uploadMock, listMock } = vi.hoisted(() => ({
+const { createMock, updateMock, getMock, uploadMock, listMock } = vi.hoisted(() => ({
   createMock: vi.fn(),
+  updateMock: vi.fn(),
+  getMock: vi.fn(),
   uploadMock: vi.fn(),
   listMock: vi.fn(),
 }))
 
 vi.mock('@/services/api/reports', () => ({
-  reportsApi: { create: createMock },
+  reportsApi: { create: createMock, update: updateMock, get: getMock },
 }))
 
 vi.mock('@/services/api/upload', () => ({
@@ -63,11 +65,36 @@ function renderAt(route = '/reports/new') {
           <Routes>
             <Route path="/reports" element={<div data-testid="reports-route" />} />
             <Route path="/reports/new" element={<NewReport />} />
+            <Route path="/reports/:id" element={<div data-testid="report-detail-route" />} />
+            <Route path="/reports/:id/edit" element={<NewReport />} />
           </Routes>
         </MemoryRouter>
       </AuthProvider>
     </SwiThemeProvider>,
   )
+}
+
+// Relatório mínimo que o reportsApi.get devolve no modo edição — só os campos
+// que a tela lê pra pré-preencher. `responsibles` vem COMMA-JOINED (o mapper
+// junta os nomes) e `imageKeys` são as keys crus preservadas no PATCH.
+const EDIT_REPORT = {
+  id: 'r_9',
+  title: 'Relatório existente',
+  summary: 'Resumo existente',
+  status: 'accept' as const,
+  statusLabel: 'Concluído',
+  authorName: 'Elisa Jordão',
+  authorAvatarUri: '',
+  creationDate: '20/07/2026',
+  sector: 'Manutenção',
+  responsibles: 'Elisa Siqueira Jordão, Mathias Campos S.',
+  responsibleAvatars: [],
+  responsibleTotalCount: 2,
+  details: 'Detalhes existentes',
+  images: ['https://presigned/existing-1.jpg'],
+  activities: [],
+  comments: [],
+  imageKeys: ['reports/existing-1.jpg', 'reports/existing-2.jpg'],
 }
 
 function typeIn(testID: string, value: string) {
@@ -97,9 +124,13 @@ async function pickResponsible(name: string) {
 
 beforeEach(() => {
   createMock.mockReset()
+  updateMock.mockReset()
+  getMock.mockReset()
   uploadMock.mockReset()
   listMock.mockReset()
   createMock.mockResolvedValue({ data: { id: 'r_new', title: 'Relatório de teste' }, error: null })
+  updateMock.mockResolvedValue({ data: { id: 'r_9', title: 'Relatório existente' }, error: null })
+  getMock.mockResolvedValue({ data: EDIT_REPORT, error: null })
   uploadMock.mockResolvedValue('reports/aaa.jpg')
   listMock.mockResolvedValue({ data: [ELISA, MATHIAS], error: null })
 })
@@ -320,5 +351,99 @@ describe('NewReport — responsáveis (handoff do overlay sem perder o form)', (
       'Elisa Siqueira Jordão',
       'Mathias Campos S.',
     ])
+  })
+})
+
+describe('NewReport — edição (revisão)', () => {
+  it('carrega o relatório e pré-preenche título/resumo/detalhes/status', async () => {
+    renderAt('/reports/r_9/edit')
+
+    // O get roda com o id da rota.
+    await waitFor(() => expect(getMock).toHaveBeenCalledWith('r_9'))
+
+    // Título muda pra "Editar relatório" e os campos vêm pré-preenchidos.
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-title')).toHaveValue('Relatório existente')
+    })
+    expect(screen.getByText('Editar relatório')).toBeInTheDocument()
+    expect(screen.getByTestId('new-report-summary')).toHaveValue('Resumo existente')
+    expect(screen.getByTestId('new-report-details')).toHaveValue('Detalhes existentes')
+    // O Combobox de status mostra o rótulo do status carregado.
+    expect(screen.getByText('Concluído')).toBeInTheDocument()
+    // Os nomes vêm do responsibles comma-joined desfeito de volta em nomes.
+    expect(screen.getByTestId('new-report-responsibles-summary')).toHaveTextContent(
+      'Elisa Siqueira Jordão',
+    )
+    expect(screen.getByTestId('new-report-responsibles-summary')).toHaveTextContent(
+      'Mathias Campos S.',
+    )
+  })
+
+  it('muda um campo e salva → update com (id, patch) e navega pro detalhe', async () => {
+    renderAt('/reports/r_9/edit')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-title')).toHaveValue('Relatório existente')
+    })
+
+    typeIn('new-report-title', 'Relatório revisado')
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    // NÃO cria — é edição.
+    expect(createMock).not.toHaveBeenCalled()
+    expect(updateMock.mock.calls[0]?.[0]).toBe('r_9')
+    const patch = updateMock.mock.calls[0]?.[1]
+    expect(patch).toMatchObject({
+      title: 'Relatório revisado',
+      summary: 'Resumo existente',
+      details: 'Detalhes existentes',
+      status: 'accept',
+      statusLabel: 'Concluído',
+    })
+    // As keys crus existentes são PRESERVADAS no PATCH.
+    expect(patch.imageKeys).toEqual(
+      expect.arrayContaining(['reports/existing-1.jpg', 'reports/existing-2.jpg']),
+    )
+    // Sucesso volta pro detalhe do relatório.
+    await waitFor(() => expect(screen.getByTestId('report-detail-route')).toBeInTheDocument())
+  })
+
+  it('sobe anexo NOVO e MESCLA com as keys existentes no PATCH', async () => {
+    uploadMock.mockResolvedValueOnce('reports/nova.jpg')
+    renderAt('/reports/r_9/edit')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-title')).toHaveValue('Relatório existente')
+    })
+
+    fireEvent.change(screen.getByTestId('new-report-file-input'), { target: { files: [jpeg()] } })
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    expect(uploadMock).toHaveBeenCalledWith(expect.any(File), 'reports')
+    // Existentes preservadas + nova, nessa ordem.
+    expect(updateMock.mock.calls[0]?.[1].imageKeys).toEqual([
+      'reports/existing-1.jpg',
+      'reports/existing-2.jpg',
+      'reports/nova.jpg',
+    ])
+  })
+
+  it('erro do backend no update toasta e NÃO navega', async () => {
+    updateMock.mockResolvedValue({ data: null, error: { message: 'Falha no servidor' } })
+    renderAt('/reports/r_9/edit')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-title')).toHaveValue('Relatório existente')
+    })
+
+    typeIn('new-report-title', 'Relatório revisado')
+    save()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-error')).toHaveTextContent('Falha no servidor')
+    })
+    expect(screen.queryByTestId('report-detail-route')).not.toBeInTheDocument()
   })
 })

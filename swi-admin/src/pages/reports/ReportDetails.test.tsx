@@ -66,6 +66,7 @@ function renderAt(comments = [] as Array<typeof COMMENT_A>) {
           <Routes>
             <Route path="/reports" element={<div data-testid="reports-route" />} />
             <Route path="/reports/:id" element={<ReportDetails />} />
+            <Route path="/reports/:id/edit" element={<div data-testid="report-edit-route" />} />
           </Routes>
         </MemoryRouter>
       </AuthProvider>
@@ -160,5 +161,18 @@ describe('ReportDetails — comentários', () => {
     expect(screen.getByPlaceholderText('Digite aqui o seu comentário')).toHaveValue(
       'Meu comentário',
     )
+  })
+})
+
+describe('ReportDetails — revisar', () => {
+  it('"Revisar relatório" navega pra /reports/:id/edit', async () => {
+    renderAt()
+    await waitFor(() => expect(getMock).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar relatório' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('report-edit-route')).toBeInTheDocument()
+    })
   })
 })
