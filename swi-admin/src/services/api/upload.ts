@@ -12,8 +12,10 @@ const ALLOWED = ['image/jpeg', 'image/png']
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 
 /**
- * Sobe um anexo da tarefa: presign no backend → POST multipart direto no
- * S3/MinIO. Devolve a key, que vai em `WorkOrderInput.imageKeys`.
+ * Sobe um anexo: presign no backend → POST multipart direto no S3/MinIO.
+ * Devolve a key. O `prefix` decide o namespace da key ('order' para anexo de
+ * tarefa, que vai em `WorkOrderInput.imageKeys`; 'chat' para anexo de mensagem,
+ * validado pelo controller contra chat/<uuid>.(jpg|png)).
  *
  * CHAME NO SUBMIT DO FORM, NUNCA NO SELECT DO ARQUIVO: o presign vale 300 s
  * (UPLOAD_TTL em media.service.ts). Subir na hora que o usuário escolhe a foto
@@ -26,7 +28,7 @@ export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
  * Sem AbortSignal por YAGNI — a tela desta fatia não tem cancelamento. Se um
  * dia tiver, o parâmetro entra aqui e desce pro fetch do S3.
  */
-export async function uploadOrderImage(file: File): Promise<string> {
+export async function uploadImage(file: File, prefix: 'order' | 'chat'): Promise<string> {
   if (!ALLOWED.includes(file.type)) throw new Error('Selecione arquivos do tipo: JPG ou PNG')
   if (file.size === 0) throw new Error('O arquivo está vazio')
   if (file.size > MAX_UPLOAD_BYTES) throw new Error('O arquivo excede o limite de 15 MB')
@@ -35,7 +37,7 @@ export async function uploadOrderImage(file: File): Promise<string> {
   // status real do presign (401, 400...). Re-embrulhar aqui viraria tudo 0.
   const presign = await apiFetch<Presign>('/media/presign', {
     method: 'POST',
-    body: JSON.stringify({ contentType: file.type, prefix: 'order' }),
+    body: JSON.stringify({ contentType: file.type, prefix }),
   })
 
   // Sem headers de propósito: Authorization quebraria a assinatura do S3 e um
@@ -72,3 +74,6 @@ export async function uploadOrderImage(file: File): Promise<string> {
   }
   return presign.key
 }
+
+// Wrapper fino pro anexo de tarefa — mantém os callers de work-order intactos.
+export const uploadOrderImage = (file: File): Promise<string> => uploadImage(file, 'order')

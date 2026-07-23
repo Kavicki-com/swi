@@ -2,7 +2,7 @@
 // importar hooks de 'vitest' aqui duplica a instância (deps.inline) e quebra o runner.
 import { vi } from 'vitest'
 import { ApiError } from './http'
-import { MAX_UPLOAD_BYTES, uploadOrderImage } from './upload'
+import { MAX_UPLOAD_BYTES, uploadImage, uploadOrderImage } from './upload'
 
 afterEach(() => {
   window.localStorage.clear()
@@ -92,6 +92,20 @@ describe('uploadOrderImage', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       contentType: 'image/png',
       prefix: 'order',
+    })
+  })
+
+  it('presigna com o prefix recebido — "chat" para anexo de mensagem', async () => {
+    const f = stubUpload({ ok: true, status: 204 })
+    await uploadImage(new File([new Uint8Array([1])], 'foto.png', { type: 'image/png' }), 'chat')
+
+    const init = f.mock.calls[0]?.[1] as RequestInit
+    expect(f.mock.calls[0]?.[0]).toMatch(/\/media\/presign$/)
+    expect(init.method).toBe('POST')
+    // O chat valida imageKey contra chat/<uuid>.(jpg|png); o prefix decide a key.
+    expect(JSON.parse(init.body as string)).toEqual({
+      contentType: 'image/png',
+      prefix: 'chat',
     })
   })
 
