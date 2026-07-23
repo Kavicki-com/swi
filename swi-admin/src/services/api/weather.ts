@@ -5,7 +5,8 @@
 // puro `toWeatherStrip` colapsa o snapshot no shape que a UI já consome.
 import type { MockResponse } from '@/services/mockApi/types'
 import { apiFetch } from './http'
-import type { DashboardSummary } from './dashboard'
+// Slot da tira do dashboard — o tipo canônico vive em ./dashboard (um só símbolo).
+import type { WeatherSlot } from './dashboard'
 
 // Espelha o WeatherSnapshot do backend (swi-backend/src/weather/weather.types.ts).
 export type WeatherConditionDto = 'clear' | 'clouds' | 'rain' | 'storm' | 'snow' | 'fog'
@@ -18,8 +19,6 @@ export type WeatherSnapshotDto = {
   fetchedAt: string
 }
 
-// Slot da tira do dashboard — apelido do subtipo canônico em ./dashboard.
-export type WeatherSlot = DashboardSummary['weather'][number]
 type StripCondition = WeatherSlot['condition']
 
 // Condição rica do backend → 3 buckets visuais da tira (Figma). storm é o único
@@ -33,12 +32,13 @@ const CONDITION_TO_STRIP: Record<WeatherConditionDto, StripCondition> = {
   storm: 'storm',
 }
 
-// Labels PT-BR por bucket — texto copiado do mock antigo (mockApi/dashboard.ts)
-// pra manter a paridade com o Figma (quebra de linha via \n).
+// Labels PT-BR coerentes por bucket de condição (derivadas da condição real, não
+// decoração por slot do Figma). Estilo de duas linhas (\n) que a WeatherTimeline
+// espera; storm reflete tempestade, não "parcialmente nublado".
 const STRIP_LABEL: Record<StripCondition, string> = {
   sun: 'SOL\nINTENSO',
   rain: 'CHUVAS\nMODERADAS',
-  storm: 'PARCIALMENTE\nNUBLADO',
+  storm: 'TEMPESTADE',
 }
 
 // Offsets em horas relativos a fetchedAt: passado (-4h), agora (0), futuro (+2h, +4h).

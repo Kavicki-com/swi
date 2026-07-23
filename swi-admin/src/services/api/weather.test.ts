@@ -60,7 +60,7 @@ describe('toWeatherStrip', () => {
       'CHUVAS\nMODERADAS',
       'SOL\nINTENSO',
       'CHUVAS\nMODERADAS',
-      'PARCIALMENTE\nNUBLADO',
+      'TEMPESTADE',
     ])
   })
 
