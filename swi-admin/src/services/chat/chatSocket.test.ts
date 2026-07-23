@@ -15,15 +15,21 @@ afterEach(() => {
   onMock.mockClear()
   closeMock.mockClear()
   ioMock.mockClear()
+  window.localStorage.clear()
 })
 
-it('conecta com auth.token e transports websocket, assina message, cleanup fecha', () => {
+it('conecta com auth.token vindo do readToken e transports websocket, assina message com o cb, cleanup fecha', () => {
+  window.localStorage.setItem('swi.admin.token', 'jwt-123')
   const cb = vi.fn()
   const stop = subscribeMessages(cb)
   const opts = (ioMock.mock.calls[0] as unknown as [string, any])[1]
   expect(opts.transports).toEqual(['websocket'])
-  expect('token' in opts.auth).toBe(true)
-  expect((onMock.mock.calls[0] as unknown as [string, unknown])[0]).toBe('message')
+  // Prova que o token sai do readToken() (localStorage), não de um literal.
+  expect(opts.auth.token).toBe('jwt-123')
+  const onCall = onMock.mock.calls[0] as unknown as [string, (m: unknown) => void]
+  expect(onCall[0]).toBe('message')
+  // Trava que o cb do caller é o próprio handler — não um wrapper vazio.
+  expect(onCall[1]).toBe(cb)
   stop()
   expect(closeMock).toHaveBeenCalled()
 })
