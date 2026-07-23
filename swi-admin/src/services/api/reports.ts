@@ -114,7 +114,7 @@ function toReport(dto: ReportDto): Report {
     authorAvatarUri: dto.authorAvatarUri,
     creationDate: dto.creationDate,
     sector: dto.sector,
-    responsibles: dto.responsibles.join(', '),
+    responsibles: (dto.responsibles ?? []).join(', '),
     responsibleAvatars: DECOR_AVATARS, // decorativo: backend guarda só nomes
     responsibleTotalCount: DECOR_RESPONSIBLE_TOTAL, // decorativo (Figma): +N badge
     details: dto.details,
@@ -135,12 +135,24 @@ export const reportsApi = {
 
   async get(
     id: string,
-  ): Promise<MockResponse<(Report & { comments: ReportComment[]; imageKeys: string[] }) | null>> {
+  ): Promise<
+    MockResponse<
+      | (Report & { comments: ReportComment[]; imageKeys: string[]; responsibleNames: string[] })
+      | null
+    >
+  > {
     try {
       const dto = await apiFetch<ReportDetailDto>(`/reports/${id}`)
       // imageKeys crus (não os `images` presigned) pro form de edição preservar/mesclar anexos.
+      // responsibleNames crus (o array, não a string comma-joined que o mapper produz) pro form
+      // de edição re-semear a seleção sem depender de split(', ') — lossy se um nome tiver ", ".
       return {
-        data: { ...toReport(dto), comments: dto.comments ?? [], imageKeys: dto.imageKeys ?? [] },
+        data: {
+          ...toReport(dto),
+          comments: dto.comments ?? [],
+          imageKeys: dto.imageKeys ?? [],
+          responsibleNames: dto.responsibles ?? [],
+        },
         error: null,
       }
     } catch (e) {

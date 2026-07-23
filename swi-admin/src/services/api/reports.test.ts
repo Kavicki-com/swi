@@ -148,7 +148,10 @@ describe('reportsApi.get (real)', () => {
   })
 
   it('expõe imageKeys crus do DTO (pro form de edição preservar anexos)', async () => {
-    vi.stubGlobal('fetch', okJson(dto({ imageKeys: ['reports/a.jpg', 'reports/b.jpg'], comments: [] })))
+    vi.stubGlobal(
+      'fetch',
+      okJson(dto({ imageKeys: ['reports/a.jpg', 'reports/b.jpg'], comments: [] })),
+    )
     const { data } = await reportsApi.get('r1')
     expect(data!.imageKeys).toEqual(['reports/a.jpg', 'reports/b.jpg']) // keys crus, não os `images` presigned
   })
@@ -157,6 +160,20 @@ describe('reportsApi.get (real)', () => {
     vi.stubGlobal('fetch', okJson(dto({ imageKeys: undefined, comments: [] })))
     const { data } = await reportsApi.get('r1')
     expect(data!.imageKeys).toEqual([])
+  })
+
+  it('expõe responsibleNames crus (array, não a string comma-joined) pro form de edição', async () => {
+    // Um nome com ", " provaria que split(', ') da string seria lossy — o array cru preserva.
+    vi.stubGlobal('fetch', okJson(dto({ responsibles: ['Ana, Jr.', 'Bea'], comments: [] })))
+    const { data } = await reportsApi.get('r1')
+    expect(data!.responsibleNames).toEqual(['Ana, Jr.', 'Bea']) // cru, não desfeito de string
+    expect(data!.responsibles).toBe('Ana, Jr., Bea') // a string comma-joined continua no Report
+  })
+
+  it('responsibles ausente no DTO → responsibleNames [] no retorno', async () => {
+    vi.stubGlobal('fetch', okJson(dto({ responsibles: undefined, comments: [] })))
+    const { data } = await reportsApi.get('r1')
+    expect(data!.responsibleNames).toEqual([])
   })
 
   it('não encontrado (404) → { data: null, error }', async () => {

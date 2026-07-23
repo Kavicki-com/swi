@@ -75,8 +75,9 @@ function renderAt(route = '/reports/new') {
 }
 
 // Relatório mínimo que o reportsApi.get devolve no modo edição — só os campos
-// que a tela lê pra pré-preencher. `responsibles` vem COMMA-JOINED (o mapper
-// junta os nomes) e `imageKeys` são as keys crus preservadas no PATCH.
+// que a tela lê pra pré-preencher. `responsibles` é a string comma-joined do
+// Report; `responsibleNames` são os nomes CRUS (array) que a edição usa pra
+// re-semear sem split lossy; `imageKeys` são as keys crus preservadas no PATCH.
 const EDIT_REPORT = {
   id: 'r_9',
   title: 'Relatório existente',
@@ -88,6 +89,7 @@ const EDIT_REPORT = {
   creationDate: '20/07/2026',
   sector: 'Manutenção',
   responsibles: 'Elisa Siqueira Jordão, Mathias Campos S.',
+  responsibleNames: ['Elisa Siqueira Jordão', 'Mathias Campos S.'],
   responsibleAvatars: [],
   responsibleTotalCount: 2,
   details: 'Detalhes existentes',
@@ -370,7 +372,7 @@ describe('NewReport — edição (revisão)', () => {
     expect(screen.getByTestId('new-report-details')).toHaveValue('Detalhes existentes')
     // O Combobox de status mostra o rótulo do status carregado.
     expect(screen.getByText('Concluído')).toBeInTheDocument()
-    // Os nomes vêm do responsibles comma-joined desfeito de volta em nomes.
+    // Os nomes vêm do array cru `responsibleNames` (não do split da string).
     expect(screen.getByTestId('new-report-responsibles-summary')).toHaveTextContent(
       'Elisa Siqueira Jordão',
     )
@@ -445,5 +447,48 @@ describe('NewReport — edição (revisão)', () => {
       expect(screen.getByTestId('new-report-error')).toHaveTextContent('Falha no servidor')
     })
     expect(screen.queryByTestId('report-detail-route')).not.toBeInTheDocument()
+  })
+
+  it('get {data:null} (404/rede) mostra estado de não-encontrado, não um form vazio', async () => {
+    getMock.mockResolvedValue({ data: null, error: { message: 'Relatório não encontrado' } })
+    renderAt('/reports/r_9/edit')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-not-found')).toBeInTheDocument()
+    })
+    // Não deixa o usuário num formulário de edição vazio.
+    expect(screen.queryByTestId('new-report-title')).not.toBeInTheDocument()
+  })
+
+  // O par status→statusLabel do PATCH. O DS Combobox NÃO abre em jsdom (precisa
+  // de measureInWindow pra medir o trigger e renderizar o painel), então clicar
+  // numa opção de status é impossível aqui. Em vez de forjar um clique que não
+  // acontece, semeamos cada status pelo caminho de carga (reportsApi.get) e
+  // provamos que o rótulo enviado no PATCH é DERIVADO do status (STATUS_LABELS),
+  // não ecoado do statusLabel carregado — por isso o get devolve um statusLabel
+  // proposital-errado. Cobre os 4 pares.
+  it.each([
+    ['accept', 'Concluído'],
+    ['pending', 'Em Revisão'],
+    ['info', 'Em Andamento'],
+    ['canceled', 'Cancelado'],
+  ] as const)('status %s → statusLabel %s no PATCH', async (status, statusLabel) => {
+    getMock.mockResolvedValue({
+      data: { ...EDIT_REPORT, status, statusLabel: 'RÓTULO-ERRADO-DO-BACKEND' },
+      error: null,
+    })
+    renderAt('/reports/r_9/edit')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-title')).toHaveValue('Relatório existente')
+    })
+    typeIn('new-report-title', 'Alterado')
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    const patch = updateMock.mock.calls[0]?.[1]
+    expect(patch.status).toBe(status)
+    // Derivado do status, não o statusLabel carregado.
+    expect(patch.statusLabel).toBe(statusLabel)
   })
 })

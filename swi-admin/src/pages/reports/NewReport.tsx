@@ -56,13 +56,12 @@ const STATUS_OPTIONS: ReadonlyArray<{ label: string; value: ReportStatus }> = [
 
 // status → statusLabel enviado no PATCH. O backend guarda os dois campos e a UI
 // (StatusTag) lê o statusLabel cru, então mandar o rótulo em pt junto do status
-// mantém o detalhe consistente com o que o usuário escolheu.
-const STATUS_LABELS: Record<ReportStatus, string> = {
-  accept: 'Concluído',
-  pending: 'Em Revisão',
-  info: 'Em Andamento',
-  canceled: 'Cancelado',
-}
+// mantém o detalhe consistente com o que o usuário escolheu. DERIVADO de
+// STATUS_OPTIONS pra que o acoplamento rótulo↔status tenha uma fonte só.
+const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.label])) as Record<
+  ReportStatus,
+  string
+>
 
 // Anexo escolhido. `preview` é uma object URL só pro thumbnail; pode faltar em
 // ambiente sem URL.createObjectURL (jsdom) — aí o quadro cai no rótulo com o
@@ -134,6 +133,9 @@ export function NewReport() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Edição: o get devolveu {data:null} (404/rede). Sem isto o usuário ficava
+  // num "Editar relatório" vazio, sem retorno nenhum.
+  const [notFound, setNotFound] = useState(false)
   // Contador de aberturas → `key` do overlay. Ele lê `initialSelectedNames` só
   // na montagem, então remontar a cada abertura é o que re-semeia a seleção.
   const [responsablesOpen, setResponsablesOpen] = useState(false)
@@ -156,17 +158,19 @@ export function NewReport() {
     }
   }, [])
 
-  // Edição: carrega o relatório e pré-preenche o formulário. `responsibles` vem
-  // do backend como string separada por vírgula (o mapper junta os nomes); aqui
-  // desfazemos o join pra re-semear o estado de seleção do overlay. `imageKeys`
+  // Edição: carrega o relatório e pré-preenche o formulário. `responsibleNames`
+  // são os nomes CRUS (o array, não a string comma-joined do Report) — re-semear
+  // do array evita o split(', ') lossy quando um nome contém ", ". `imageKeys`
   // (keys crus) preserva os anexos no PATCH; `images` (presigned) só decora.
   useEffect(() => {
     if (!id) return
     let cancelled = false
     setLoading(true)
+    setNotFound(false)
     reportsApi.get(id).then(({ data }) => {
       if (cancelled) return
       if (!data) {
+        setNotFound(true)
         setLoading(false)
         return
       }
@@ -174,7 +178,7 @@ export function NewReport() {
       setSummary(data.summary ?? '')
       setDetails(data.details ?? '')
       setStatus(data.status)
-      setResponsibles(data.responsibles ? data.responsibles.split(', ').filter(Boolean) : [])
+      setResponsibles([...data.responsibleNames])
       setExistingImageKeys(data.imageKeys ?? [])
       setExistingImages(data.images ?? [])
       setLoading(false)
@@ -317,6 +321,32 @@ export function NewReport() {
   // Onde Voltar/Cancelar levam: na edição, de volta ao detalhe; na criação, à
   // lista.
   const backTarget = isEdit && id ? `/reports/${id}` : '/reports'
+  const backLabel = isEdit ? 'Voltar para o relatório' : 'Voltar para a lista de relatórios'
+  const cancelLabel = isEdit ? 'Cancelar edição do relatório' : 'Cancelar criação do relatório'
+
+  // Edição com get {data:null} (404/rede): estado dedicado em vez de deixar o
+  // usuário num formulário vazio sem retorno. Compõe DS Text + botão de voltar.
+  if (notFound) {
+    return (
+      <View testID="new-report-not-found" style={{ gap: theme.gap.m, padding: theme.padding.m }}>
+        <Title variant="title.s" color={theme.content.primary}>
+          Relatório não encontrado
+        </Title>
+        <Text variant="body.m" color={theme.content.dark}>
+          Não foi possível carregar este relatório para edição. Ele pode ter sido removido ou o link
+          está incorreto.
+        </Text>
+        <View style={{ alignSelf: 'flex-start' }}>
+          <Button
+            label="Voltar para os relatórios"
+            variant="outline"
+            onPress={() => navigate('/reports')}
+            accessibilityLabel="Voltar para a lista de relatórios"
+          />
+        </View>
+      </View>
+    )
+  }
 
   return (
     <View testID="new-report" style={{ gap: theme.gap.l }}>
@@ -324,7 +354,7 @@ export function NewReport() {
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Voltar para a lista de relatórios"
+          accessibilityLabel={backLabel}
           onPress={() => navigate(backTarget)}
           style={{
             flexDirection: 'row',
@@ -492,7 +522,7 @@ export function NewReport() {
             variant="outline"
             fullWidth
             onPress={() => navigate(backTarget)}
-            accessibilityLabel="Cancelar criação do relatório"
+            accessibilityLabel={cancelLabel}
           />
         </View>
         <View style={{ flex: 1 }}>
