@@ -61,8 +61,8 @@ const FAKE_SUMMARY: DashboardSummary = {
   ],
   // All on the same tier so the existing assertions (which render the
   // default tab without interacting with the filter) still see all three.
-  // Tab-filtering behavior is covered separately by the inflated demo
-  // fixture in mockApi/dashboard.ts.
+  // Tab-filtering behavior is covered separately below ("switches the
+  // activity filter when a chip is pressed").
   wearAlerts: [
     {
       id: 'w1',
