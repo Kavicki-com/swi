@@ -108,18 +108,14 @@ describe('ChatInbox', () => {
 
   it('pins the default conversation into the URL when no param is present', async () => {
     renderPage(<ChatInbox />, { route: '/chat' })
-    await waitFor(() =>
-      expect(nav.spy).toHaveBeenCalledWith('/chat/me%23w1', { replace: true }),
-    )
+    await waitFor(() => expect(nav.spy).toHaveBeenCalledWith('/chat/me%23w1', { replace: true }))
   })
 
   it('does not pin (and stays empty) when the inbox is empty', () => {
     setChat({ conversations: [], messagesByConv: {}, loadStatus: 'empty' })
     renderPage(<ChatInbox />, { route: '/chat' })
     expect(nav.spy).not.toHaveBeenCalled()
-    expect(
-      screen.getByText('Selecione uma conversa para visualizar as mensagens'),
-    ).toBeTruthy()
+    expect(screen.getByText('Selecione uma conversa para visualizar as mensagens')).toBeTruthy()
   })
 
   it('shows an error surface (not empty) when the load failed', async () => {
@@ -166,10 +162,14 @@ describe('ChatInbox', () => {
     expect(input.value).toBe('Mensagem que falha')
   })
 
+  it('does not send when both the draft and the pending image are empty', () => {
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    fireEvent.click(screen.getByText('Enviar'))
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('the attach button opens the hidden file picker', () => {
-    const clickSpy = vi
-      .spyOn(HTMLInputElement.prototype, 'click')
-      .mockImplementation(() => {})
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
     renderPage(<ChatInbox />, CONV_ROUTE)
     fireEvent.click(screen.getByTestId('chat-attach'))
     expect(clickSpy).toHaveBeenCalled()

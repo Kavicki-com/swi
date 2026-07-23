@@ -525,8 +525,16 @@ export function ChatInbox() {
   const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
   // Real chat state from the backend-backed provider (REST load + live socket).
-  const { conversations, messagesByConv, directory, myId, openConversation, send, keyFor, loadStatus } =
-    useChat()
+  const {
+    conversations,
+    messagesByConv,
+    directory,
+    myId,
+    openConversation,
+    send,
+    keyFor,
+    loadStatus,
+  } = useChat()
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState('')
   // Optional image attachment for the next send. The provider's `send` does the
@@ -977,11 +985,14 @@ export function ChatInbox() {
                   <Icon name="add_a_photo" size={24} color={theme.content.dark} />
                 </Pressable>
                 <View style={{ flex: 1 }}>
+                  {/* No decorative iconRight here: the DS Input's iconRight slot
+                      is inert (no press handler), so a paperclip there would be
+                      a dead attach affordance. The single functional attach
+                      control is the add_a_photo Pressable to the left. */}
                   <Input
                     value={draft}
                     onChangeText={setDraft}
                     placeholder="Digite aqui sua mensagem"
-                    iconRight={<Icon name="attach_file" size={20} color={theme.content.dark} />}
                   />
                 </View>
                 <Button
