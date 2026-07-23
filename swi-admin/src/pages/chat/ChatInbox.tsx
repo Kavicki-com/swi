@@ -109,6 +109,11 @@ function ContactRow({
   )
 }
 
+// Inline attachment thumbnail layout box. The wrapper View clips the DS Image
+// to radius.m, so both must share the exact same dimensions — keep them here.
+const CHAT_IMG_W = 220
+const CHAT_IMG_H = 160
+
 // Single conversation bubble — Figma 147:5929 (sent / right) and
 // 103:10230 (received / left). Both share the same structure but mirror
 // avatar + border color + horizontal padding.
@@ -146,14 +151,14 @@ export function ChatBubble({ message, contact }: { message: ChatMessage; contact
       }}
     >
       {message.imageUri ? (
-        // Inline attachment thumbnail. Fixed layout box (220×160) clipped to
-        // radius.m via an overflow-hidden wrapper — the DS Image primitive
-        // renders the photo (content image, not a DS "icon"). alignSelf mirrors
-        // the bubble side so image-only messages hug the correct edge.
+        // Inline attachment thumbnail. Fixed layout box clipped to radius.m via
+        // an overflow-hidden wrapper — the DS Image primitive renders the photo
+        // (content image, not a DS "icon"). alignSelf mirrors the bubble side so
+        // image-only messages hug the correct edge.
         <View
           style={{
-            width: 220,
-            height: 160,
+            width: CHAT_IMG_W,
+            height: CHAT_IMG_H,
             borderRadius: theme.border.radius.m,
             overflow: 'hidden',
             alignSelf: isMe ? 'flex-end' : 'flex-start',
@@ -162,8 +167,8 @@ export function ChatBubble({ message, contact }: { message: ChatMessage; contact
           <Image
             testID="chat-bubble-image"
             source={{ uri: message.imageUri }}
-            width={220}
-            height={160}
+            width={CHAT_IMG_W}
+            height={CHAT_IMG_H}
             resizeMode="cover"
             accessibilityLabel="Imagem anexada"
           />

@@ -19,9 +19,7 @@ describe('ChatInbox', () => {
   afterEach(clearSession)
 
   it('renders without crashing', () => {
-    expect(() =>
-      renderPage(<ChatInbox />, { route: '/chat' }),
-    ).not.toThrow()
+    expect(() => renderPage(<ChatInbox />, { route: '/chat' })).not.toThrow()
   })
 })
 
@@ -38,6 +36,18 @@ describe('ChatBubble', () => {
     }
     renderPage(<ChatBubble message={message} contact={CONTACT} />)
     expect(screen.getByTestId('chat-bubble-image')).toBeTruthy()
+  })
+
+  it('does not render an image box for a text-only message', () => {
+    const message: ChatMessage = {
+      id: 'm-text-only',
+      text: 'Sem anexo aqui.',
+      sender: 'them',
+      time: '10:32',
+    }
+    renderPage(<ChatBubble message={message} contact={CONTACT} />)
+    expect(screen.queryByTestId('chat-bubble-image')).toBeNull()
+    expect(screen.getByText('Sem anexo aqui.')).toBeTruthy()
   })
 
   it('renders both the image and the text when the message has both', () => {
