@@ -31,7 +31,9 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
-import { chatsApi, type ChatContact, type ChatMessage } from '@/services/chats'
+import type { ChatContact, ChatMessage } from '@/services/chats'
+import { useChat } from '@/services/chat/ChatProvider'
+import { conversationToContact, directoryToContact } from '@/services/chat/chatMap'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Single contact row in the left list — Figma 103:9931 / 102:9571
@@ -503,6 +505,18 @@ function ContactInfoPanel({
   )
 }
 
+// VITALS / fatigue shown in the right-column info panel are smartband-blocked;
+// until the band feeds real data, every selected contact renders the same demo
+// profile. Identity (name / sector / avatar / role) is real — only these stay
+// mock. Kept local so the old @/services/chats mock import can be dropped.
+const DEMO_VITALS = {
+  gender: 'male' as const,
+  age: 26,
+  bloodType: 'O+',
+  allergies: 'Nenhuma',
+  fatigueRemaining: '1:45:12 h',
+}
+
 export function ChatInbox() {
   const { user } = useAuth()
   const theme = useTheme()
@@ -510,47 +524,68 @@ export function ChatInbox() {
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
-  const [contacts, setContacts] = useState<ReadonlyArray<ChatContact>>([])
+  // Real chat state from the backend-backed provider (REST load + live socket).
+  const { conversations, messagesByConv, directory, myId, openConversation, send, keyFor } =
+    useChat()
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState('')
+  // "Novo Chat" mode: swaps the left list from active conversations to the full
+  // directory so a fresh conversation can be started. Picking a directory
+  // contact navigates to its deterministic conversation id (keyFor) — the same
+  // id an existing conversation would already carry, so it just opens either way.
+  const [newChatOpen, setNewChatOpen] = useState(false)
+
   // Selection is URL-driven via /chat/:contactId so deep-links (e.g. clicks
-  // from the AppLayout chat sidebar) open the right conversation. When no
-  // param is present, default to chat-romulo so the active state still
-  // renders by default (Figma 102:8997).
+  // from the AppLayout chat sidebar) open the right conversation. Conversation
+  // ids contain '#'; react-router DECODES the param, so `contactId` is already
+  // the raw id — use it directly (no re-decode). With no param, default to the
+  // first conversation (or none when the inbox is empty).
   const { contactId } = useParams<{ contactId?: string }>()
-  const selectedContactId = contactId ?? 'chat-romulo'
 
+  // Active conversations mapped to the UI ChatContact shape (identity + thread).
+  const contacts = conversations.map((c) =>
+    conversationToContact(c, messagesByConv[c.id] ?? [], myId),
+  )
+  // Directory contacts for the "Novo Chat" flow — no thread; carries `role`.
+  const directoryContacts = directory.map((d) => directoryToContact(d, myId))
+
+  const selectedContactId = contactId ?? contacts[0]?.id
+
+  // Load the selected thread's messages + mark it read whenever the selection
+  // resolves to a real conversation id (also fires for the mount-time default).
   useEffect(() => {
-    let cancelled = false
-    chatsApi.list().then(({ data }) => {
-      if (!cancelled && data) setContacts(data)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    if (selectedContactId) openConversation(selectedContactId)
+  }, [selectedContactId, openConversation])
 
-  const filtered = contacts.filter((c) =>
+  const listSource = newChatOpen ? directoryContacts : contacts
+  const filtered = listSource.filter((c) =>
     search.trim() ? c.name.toLowerCase().includes(search.toLowerCase()) : true,
   )
   const selectedContact = contacts.find((c) => c.id === selectedContactId) ?? null
   const messages = selectedContact?.messages ?? []
 
-  const handleSend = () => {
+  // Right-panel identity is real (name / sector / avatar from the conversation);
+  // `role` is looked up from the matching directory entry by workerId (the
+  // Conversation DTO has no role). VITALS / fatigue stay mock (DEMO_VITALS).
+  const panelContact: ChatContact | null = selectedContact
+    ? {
+        ...selectedContact,
+        role: directory.find((d) => keyFor(d.workerId) === selectedContact.id)?.role ?? '',
+        ...DEMO_VITALS,
+      }
+    : null
+
+  const openContact = (id: string) => {
+    navigate(`/chat/${encodeURIComponent(id)}`)
+    setNewChatOpen(false)
+  }
+
+  const handleSend = async () => {
     const text = draft.trim()
-    if (!text || !selectedContact) return
-    const nextMessage: ChatMessage = {
-      id: `local-${Date.now()}`,
-      text,
-      sender: 'me',
-      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    }
-    setContacts((prev) =>
-      prev.map((c) =>
-        c.id === selectedContact.id ? { ...c, messages: [...(c.messages ?? []), nextMessage] } : c,
-      ),
-    )
-    setDraft('')
+    if (!text || !selectedContactId) return
+    const { error } = await send(selectedContactId, text)
+    if (error) showToast(error.message)
+    else setDraft('')
   }
 
   // Keep the chat thread anchored to the latest message: scroll to bottom
@@ -696,7 +731,7 @@ export function ChatInbox() {
                 <ContactRow
                   contact={c}
                   selected={c.id === selectedContactId}
-                  onPress={() => navigate(`/chat/${c.id}`)}
+                  onPress={() => openContact(c.id)}
                 />
               </div>
             ))}
@@ -704,10 +739,8 @@ export function ChatInbox() {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Novo chat"
-            onPress={() =>
-              showToast('Novo chat', 'Selecione um contato à esquerda para iniciar uma conversa')
-            }
+            accessibilityLabel={newChatOpen ? 'Cancelar novo chat' : 'Novo chat'}
+            onPress={() => setNewChatOpen((v) => !v)}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -719,7 +752,7 @@ export function ChatInbox() {
             }}
           >
             <Text variant="body.m" color={theme.content.primaryLight} style={{ fontWeight: '700' }}>
-              Novo Chat
+              {newChatOpen ? 'Cancelar' : 'Novo Chat'}
             </Text>
           </Pressable>
         </View>
@@ -876,9 +909,9 @@ export function ChatInbox() {
                 padding: theme.padding.m,
               }}
             >
-              {selectedContact ? (
+              {panelContact ? (
                 <ContactInfoPanel
-                  contact={selectedContact}
+                  contact={panelContact}
                   onOpenFullMap={() => navigate('/maps/general')}
                 />
               ) : (
