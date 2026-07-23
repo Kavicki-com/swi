@@ -2,7 +2,7 @@
 // vitest globals (describe/it/expect/afterEach) via globals: true — importar de
 // 'vitest' duplicaria a instância (ver nota no auth.test.ts). Só `vi` é importado.
 import { vi } from 'vitest'
-import { reportsApi } from './reports'
+import { reportsApi, DECOR_RESPONSIBLE_TOTAL } from './reports'
 
 const okJson = (body: unknown) =>
   vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body } as Response)
@@ -41,6 +41,8 @@ describe('reportsApi.list (real)', () => {
     expect(r.title).toBe('Inspeção Técnica')
     expect(r.responsibles).toBe('Ana, Bea') // array de nomes → string separada por vírgula
     expect(r.responsibleAvatars.length).toBeGreaterThan(0) // decorativo, não vazio
+    // contagem decorativa fixa (Figma "+N"), não a contagem real de responsáveis
+    expect(r.responsibleTotalCount).toBe(DECOR_RESPONSIBLE_TOTAL)
     expect(r.status).toBe('pending')
     expect(r.statusLabel).toBe('Em Revisão')
     expect(r.authorAvatarUri).toBe('signed:av1')
@@ -68,7 +70,13 @@ describe('reportsApi.get (real)', () => {
     const f = okJson(
       dto({
         activities: [
-          { title: 'Verificação de óleo', sector: 'Setor Noroeste', progress: 80, tone: 'success' },
+          {
+            title: 'Verificação de óleo',
+            sector: 'Setor Noroeste',
+            progress: 80,
+            tone: 'success',
+            overflowCount: 13,
+          },
           { title: 'Manutenção', sector: 'Setor Central', progress: 30, tone: 'error' },
         ],
         comments: [],
@@ -86,9 +94,32 @@ describe('reportsApi.get (real)', () => {
     expect(a.progress).toBe(80)
     expect(a.tone).toBe('success')
     expect(a.avatars.length).toBeGreaterThan(0) // avatares decorativos por linha
-    expect(a.id).toBeTruthy() // id sintetizado quando o backend não manda
+    expect(a.overflowCount).toBe(13) // passthrough quando presente
+    expect(data!.activities![1]!.id).toBe('act-1') // sintetizado quando o backend não manda
     const [url] = f.mock.calls[0] as [string]
     expect(url).toContain('/reports/r1')
+  })
+
+  it('preserva o id da atividade quando o backend manda um', async () => {
+    vi.stubGlobal(
+      'fetch',
+      okJson(
+        dto({
+          activities: [
+            {
+              id: 'server-act-42',
+              title: 'Tarefa',
+              sector: 'Setor Sul',
+              progress: 10,
+              tone: 'warning',
+            },
+          ],
+          comments: [],
+        }),
+      ),
+    )
+    const { data } = await reportsApi.get('r1')
+    expect(data!.activities![0]!.id).toBe('server-act-42') // não sobrescrito pela síntese
   })
 
   it('activities null → [] (sem quebrar)', async () => {
@@ -153,6 +184,16 @@ describe('reportsApi.create (real)', () => {
       responsibles: ['Ana'],
       imageKeys: ['k1'],
     })
+  })
+
+  it('create só com title omite as chaves opcionais undefined do corpo', async () => {
+    const f = okJson(dto())
+    vi.stubGlobal('fetch', f)
+    await reportsApi.create({ title: 'Só título' })
+    const [, init] = f.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body).toEqual({ title: 'Só título' }) // JSON.stringify descarta undefined
+    expect(Object.keys(body)).toEqual(['title'])
   })
 
   it('erro (400) → { data: null, error }', async () => {

@@ -18,6 +18,13 @@ export type { Report, ReportActivity }
 // batendo com o mock antigo (mockApi/reports.ts) pra manter o layout idêntico.
 const DECOR_AVATARS: ReadonlyArray<string> = [workerA, workerB, workerC, workerA, workerB]
 
+// Contagem decorativa do cluster de responsáveis (badge "+N"). Fixa em 9 (igual
+// ao mock antigo) pra reproduzir o Figma: ReportCardV2 mostra 4 faces + "+5". A
+// contagem REAL (2 na seed) some com o badge e ainda mostra 4 faces pra 2 pessoas
+// — pior que o mock. Decorativo: os nomes reais aparecem no texto `responsibles`
+// (comma-joined); o backend guarda responsáveis só como nomes, sem avatar/contagem.
+export const DECOR_RESPONSIBLE_TOTAL = 9
+
 // Um comentário no detalhe do relatório (POST /reports/:id/comments responde um).
 export type ReportComment = {
   id: string
@@ -42,7 +49,7 @@ export type ReportDto = {
   responsibles: string[]
   details?: string
   images?: string[]
-  activities?: unknown
+  activities?: RawActivity[]
 }
 
 // DTO do GET /reports/:id (detalhe) — soma os comentários.
@@ -87,7 +94,7 @@ const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.m
 // DTO → Report (UI). responsibles (array de nomes) → string separada por vírgula;
 // avatares (responsibleAvatars, e por-linha nas atividades) são DECORATIVOS.
 function toReport(dto: ReportDto): Report {
-  const activities = ((dto.activities as RawActivity[] | null | undefined) ?? []).map((a, i) => ({
+  const activities = (dto.activities ?? []).map((a, i) => ({
     id: a.id ?? `act-${i}`, // backend pode não mandar id → sintetiza um estável por posição
     title: a.title,
     sector: a.sector,
@@ -108,7 +115,7 @@ function toReport(dto: ReportDto): Report {
     sector: dto.sector,
     responsibles: dto.responsibles.join(', '),
     responsibleAvatars: DECOR_AVATARS, // decorativo: backend guarda só nomes
-    responsibleTotalCount: dto.responsibles.length,
+    responsibleTotalCount: DECOR_RESPONSIBLE_TOTAL, // decorativo (Figma): +N badge
     details: dto.details,
     images: dto.images ?? [],
     activities,
