@@ -111,7 +111,8 @@ async function main() {
   }
   // Sobe uma imagem de inspeção pro MinIO (mesmo bucket do chat). Key no formato
   // que a regex do backend exige: ^reports\/[0-9a-f-]{36}\.png$ (randomUUID = 36 chars).
-  // Mesmo guard: bucket inacessível → warn + retorna '' (o chamador cai pra []).
+  // Não guarda internamente: se o bucket estiver inacessível ela LANÇA — o loop
+  // chamador captura, dá warn e deixa imageKeys em [] (mesmo padrão do uploadChatAvatar).
   const uploadReportImage = async (localFileName: string): Promise<string> => {
     const key = `reports/${randomUUID()}.png`
     await chatS3.send(new PutObjectCommand({
@@ -394,7 +395,9 @@ async function main() {
     { title: 'Relatório de Produtividade da Mina Oeste', summary: 'Compara projeção de produção com volume realizado nos últimos três meses.', status: 'info', statusLabel: 'Em Andamento', creationDate: '12/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
     { title: 'Análise de Custos Operacionais da Mina Leste', summary: 'Levantamento de custos diretos e indiretos, com sugestão de cortes para Q2.', status: 'accept', statusLabel: 'Concluído', creationDate: '04/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
     { title: 'Monitoramento Hidrológico da Zona Leste', summary: 'Dados dos sensores hidrológicos e variações observadas nas últimas duas semanas.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '25/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Relatório de Condições Meteorológicas da Mina Norte', summary: 'Compilação de dados meteorológicos e impacto nas operações da última quinzena.', status: 'accept', statusLabel: 'Concluído', creationDate: '20/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    // Desvio proposital do mock (que nunca emite 'canceled'): 1 relatório cancelado
+    // pra exercitar o filtro "Cancelado" do admin, que sem isso ficaria morto.
+    { title: 'Relatório de Condições Meteorológicas da Mina Norte', summary: 'Compilação de dados meteorológicos e impacto nas operações da última quinzena.', status: 'canceled', statusLabel: 'Cancelado', creationDate: '20/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
     { title: 'Relatório de Segurança da Planta Sul', summary: 'Análise dos protocolos de segurança aplicados e ocorrências reportadas no mês.', status: 'info', statusLabel: 'Em Andamento', creationDate: '15/02/2026', sector: 'Setor Sul', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
     { title: 'Relatório de Sustentabilidade Corporativa', summary: 'Indicadores ESG do trimestre, metas atingidas e ações para os próximos ciclos.', status: 'accept', statusLabel: 'Concluído', creationDate: '10/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
   ]
