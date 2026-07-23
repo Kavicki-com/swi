@@ -2,6 +2,7 @@ import { PrismaClient, type NotificationDomain } from '@prisma/client'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { randomUUID } from 'crypto'
 import { DEMO_STORM_ALERT_ID } from '../src/weather/weather.types'
 import { hash } from '../src/auth/codes'
 import { distributeMinutes } from '../src/work-orders/order-status'
@@ -104,6 +105,18 @@ async function main() {
     await chatS3.send(new PutObjectCommand({
       Bucket: chatBucket, Key: key,
       Body: readFileSync(join(__dirname, 'fixtures', 'chat-avatars', `worker-${n}.png`)),
+      ContentType: 'image/png',
+    }))
+    return key
+  }
+  // Sobe uma imagem de inspeção pro MinIO (mesmo bucket do chat). Key no formato
+  // que a regex do backend exige: ^reports\/[0-9a-f-]{36}\.png$ (randomUUID = 36 chars).
+  // Mesmo guard: bucket inacessível → warn + retorna '' (o chamador cai pra []).
+  const uploadReportImage = async (localFileName: string): Promise<string> => {
+    const key = `reports/${randomUUID()}.png`
+    await chatS3.send(new PutObjectCommand({
+      Bucket: chatBucket, Key: key,
+      Body: readFileSync(join(__dirname, 'seed-assets', localFileName)),
       ContentType: 'image/png',
     }))
     return key
@@ -341,6 +354,97 @@ async function main() {
       data: { workerId: worker.id, title: n.title, body: n.body, domain: n.domain, read: n.read, createdAt: notifAt(n.min) },
     })
   }
+
+  // ===== Fatia (Relatórios): 12 relatórios ricos + imagens + comentários demo =====
+  // Espelha o mock do admin (swi-admin/src/services/mockApi/reports.ts REPORTS_SEED
+  // + DEMO_DETAILS). As 3 imagens de inspeção sobem UMA vez pro MinIO e são reusadas
+  // em todos os relatórios (imageKeys). Autor rotaciona sobre os 8 workers semeados.
+
+  // Sobe as 3 imagens de inspeção uma única vez (guard próprio: bucket down → '').
+  const reportImageKeys: string[] = []
+  for (const fn of ['inspection-1.png', 'inspection-2.png', 'inspection-3.png']) {
+    try {
+      const k = await uploadReportImage(fn)
+      if (k) { reportImageKeys.push(k); console.log(`[seed] report image up: ${k}`) }
+    } catch (e) {
+      console.warn(`[seed] report image ${fn} falhou (bucket up?):`, (e as Error).message)
+    }
+  }
+
+  // Detalhes/atividades demo (mesmo corpo pra todos, paridade com DEMO_DETAILS do
+  // mock). As atividades NÃO carregam avatares aqui — o admin decora na renderização.
+  const REPORT_DETAILS =
+    'Inspeção realizada nas máquinas pesadas da Mina Córrego Seco, com foco especial no equipamento Komatsu K35E. Inicia o checklist abrangente de manutenção preventiva, abordando desde a verificação dos níveis de óleo e filtros até a substituição de componentes desgastados. A equipe técnica também realizou ajustes de calibração nos sistemas hidráulicos e elétricos, garantindo o desempenho ótimo dos equipamentos. Foram identificadas e corrigidas pequenas falhas no sistema de ignição de uma das escavadeiras, contribuindo para sua eficiência operacional aprimorada. Adicionalmente, foi realizada uma verificação minuciosa nos pneus, monitorando o desgaste e a pressão para garantir a segurança e o bom funcionamento das máquinas em todas as operações de mineração.'
+  const REPORT_ACTIVITIES = [
+    { title: 'Verificação de níveis de óleo e filtros', sector: 'Setor Noroeste', progress: 80, tone: 'success' },
+    { title: 'Manutenção de motores', sector: 'Setor Noroeste', progress: 50, tone: 'warning' },
+    { title: 'Ajustes de sistemas elétricos', sector: 'Setor Central', progress: 30, tone: 'error' },
+  ]
+
+  // Fixture espelhando REPORTS_SEED (title/summary/status/statusLabel/creationDate/
+  // sector/responsibles). Datas dd/mm/yyyy → Date (UTC midnight).
+  type ReportFx = { title: string; summary: string; status: 'accept' | 'pending' | 'canceled' | 'info'; statusLabel: string; creationDate: string; sector: string; responsibles: string }
+  const REPORTS_FX: ReportFx[] = [
+    { title: 'Inspeção Técnica das Máquinas Pesadas', summary: 'Checklist de manutenção preventiva e reparos necessários nos equipamentos da frota.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '12/04/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Relatório de Eficiência Energética da Mina Oeste', summary: 'Análise de consumo e indicadores de eficiência energética por turno e equipamento.', status: 'accept', statusLabel: 'Concluído', creationDate: '08/04/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Análise de Qualidade do Solo na Região Sul', summary: 'Resultados de amostragem geoquímica para validar qualidade do solo na nova frente.', status: 'info', statusLabel: 'Em Andamento', creationDate: '02/04/2026', sector: 'Setor Sul', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Relatório de Treinamento e Capacitação', summary: 'Resumo das ações de treinamento realizadas e avaliação dos participantes do mês.', status: 'accept', statusLabel: 'Concluído', creationDate: '28/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Avaliação de Impacto Ambiental da Mina Central', summary: 'Identificação das principais frentes de impacto ambiental e plano de mitigação.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '25/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Estudo de Riscos Geológicos da Região Centro', summary: 'Mapeamento de falhas e áreas com risco geotécnico identificadas no semestre.', status: 'accept', statusLabel: 'Concluído', creationDate: '18/03/2026', sector: 'Setor Centro', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Relatório de Produtividade da Mina Oeste', summary: 'Compara projeção de produção com volume realizado nos últimos três meses.', status: 'info', statusLabel: 'Em Andamento', creationDate: '12/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Análise de Custos Operacionais da Mina Leste', summary: 'Levantamento de custos diretos e indiretos, com sugestão de cortes para Q2.', status: 'accept', statusLabel: 'Concluído', creationDate: '04/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Monitoramento Hidrológico da Zona Leste', summary: 'Dados dos sensores hidrológicos e variações observadas nas últimas duas semanas.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '25/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Relatório de Condições Meteorológicas da Mina Norte', summary: 'Compilação de dados meteorológicos e impacto nas operações da última quinzena.', status: 'accept', statusLabel: 'Concluído', creationDate: '20/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Relatório de Segurança da Planta Sul', summary: 'Análise dos protocolos de segurança aplicados e ocorrências reportadas no mês.', status: 'info', statusLabel: 'Em Andamento', creationDate: '15/02/2026', sector: 'Setor Sul', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Relatório de Sustentabilidade Corporativa', summary: 'Indicadores ESG do trimestre, metas atingidas e ações para os próximos ciclos.', status: 'accept', statusLabel: 'Concluído', creationDate: '10/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+  ]
+  const parseBrDate = (s: string): Date => {
+    const [d, m, y] = s.split('/').map(Number)
+    return new Date(Date.UTC(y, m - 1, d))
+  }
+
+  // Re-seed limpo: apaga comentários e relatórios anteriores (idempotente).
+  await prisma.comment.deleteMany({})
+  await prisma.report.deleteMany({})
+
+  const createdReports: { id: string }[] = []
+  for (let i = 0; i < REPORTS_FX.length; i++) {
+    const fx = REPORTS_FX[i]
+    const workerN = (i % CONTACTS.length) + 1 // rotaciona 1..8
+    const authorContact = CONTACTS.find((c) => c.n === workerN)!
+    const r = await prisma.report.create({
+      data: {
+        authorId: contactIds.get(workerN)!,
+        title: fx.title,
+        summary: fx.summary,
+        status: fx.status,
+        statusLabel: fx.statusLabel,
+        authorName: authorContact.name,
+        authorAvatarKey: contactAvatarKeys.get(workerN) || null,
+        creationDate: parseBrDate(fx.creationDate),
+        sector: fx.sector,
+        responsibles: fx.responsibles.split(',').map((s) => s.trim()),
+        details: REPORT_DETAILS,
+        imageKeys: reportImageKeys,
+        activities: REPORT_ACTIVITIES,
+      },
+    })
+    createdReports.push({ id: r.id })
+  }
+
+  // Comentários demo em 2 relatórios (autor: admin e um worker).
+  if (createdReports[0]) {
+    await prisma.comment.create({
+      data: { reportId: createdReports[0].id, authorId: admin.id, body: 'Revisado. Anexar as fotos do checklist de óleo antes de aprovar.' },
+    })
+  }
+  if (createdReports[2]) {
+    await prisma.comment.create({
+      data: { reportId: createdReports[2].id, authorId: contactIds.get(3)!, body: 'Amostras coletadas na frente nova; laudo geoquímico sai até sexta.' },
+    })
+  }
+
+  console.log('[seed] reports:', await prisma.report.count(), 'comments:', await prisma.comment.count())
 
   // ===== Fatia 6 (Clima): dedup pré-marcado =====
   // Pré-marca o alerta de demo (wx-0) como já notificado → o cron NÃO duplica a
