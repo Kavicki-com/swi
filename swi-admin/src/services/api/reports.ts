@@ -48,7 +48,8 @@ export type ReportDto = {
   sector: string
   responsibles: string[]
   details?: string
-  images?: string[]
+  images?: string[] // urls presigned (exibição)
+  imageKeys?: string[] // keys crus (edição preserva/mescla anexos)
   activities?: RawActivity[]
 }
 
@@ -132,10 +133,16 @@ export const reportsApi = {
     }
   },
 
-  async get(id: string): Promise<MockResponse<(Report & { comments: ReportComment[] }) | null>> {
+  async get(
+    id: string,
+  ): Promise<MockResponse<(Report & { comments: ReportComment[]; imageKeys: string[] }) | null>> {
     try {
       const dto = await apiFetch<ReportDetailDto>(`/reports/${id}`)
-      return { data: { ...toReport(dto), comments: dto.comments ?? [] }, error: null }
+      // imageKeys crus (não os `images` presigned) pro form de edição preservar/mesclar anexos.
+      return {
+        data: { ...toReport(dto), comments: dto.comments ?? [], imageKeys: dto.imageKeys ?? [] },
+        error: null,
+      }
     } catch (e) {
       // A tela só distingue loading × (data|null) — qualquer erro (404, rede) cai
       // na tela "não encontrado". Mantém o envelope preenchido por consistência.

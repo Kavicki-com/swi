@@ -147,6 +147,18 @@ describe('reportsApi.get (real)', () => {
     expect(data!.comments).toEqual([])
   })
 
+  it('expõe imageKeys crus do DTO (pro form de edição preservar anexos)', async () => {
+    vi.stubGlobal('fetch', okJson(dto({ imageKeys: ['reports/a.jpg', 'reports/b.jpg'], comments: [] })))
+    const { data } = await reportsApi.get('r1')
+    expect(data!.imageKeys).toEqual(['reports/a.jpg', 'reports/b.jpg']) // keys crus, não os `images` presigned
+  })
+
+  it('imageKeys ausente no DTO → [] no retorno', async () => {
+    vi.stubGlobal('fetch', okJson(dto({ imageKeys: undefined, comments: [] })))
+    const { data } = await reportsApi.get('r1')
+    expect(data!.imageKeys).toEqual([])
+  })
+
   it('não encontrado (404) → { data: null, error }', async () => {
     vi.stubGlobal(
       'fetch',
