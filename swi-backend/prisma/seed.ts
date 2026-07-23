@@ -33,15 +33,17 @@ async function main() {
   // conversationKey: paridade EXATA com mobile/services/chat/chatReducers.ts
   const convKey = (a: string, b: string) => [a, b].sort().join('#')
 
+  // birthDate (date-only): demo realista pra a UI do painel calcular idade (antes
+  // todos caíam em "0 anos" por falta do campo). Ver [[swi-open-followups]] #5.
   const CONTACTS = [
-    { n: 1, email: 'romulo@swi.local',   name: 'Romulo Cardoso',          sector: 'Setor Leste', role: 'Operador' },
-    { n: 2, email: 'ezequiel@swi.local', name: 'Ezequiel Almeida',        sector: 'Setor Leste', role: 'Operador' },
-    { n: 3, email: 'josue@swi.local',    name: 'Josué Oliveira',          sector: 'Setor Leste', role: 'Técnico de Manutenção' },
-    { n: 4, email: 'carlos@swi.local',   name: 'Carlos Santos',           sector: 'Setor Leste', role: 'Operador' },
-    { n: 5, email: 'antonio@swi.local',  name: 'Antonio Carlos Figueira', sector: 'Setor Leste', role: 'Supervisor' },
-    { n: 6, email: 'jennifer@swi.local', name: 'Jennifer Gomes',          sector: 'Setor Leste', role: 'Analista de Segurança' },
-    { n: 7, email: 'adriana@swi.local',  name: 'Adriana Santos Almeida',  sector: 'Setor Leste', role: 'Operadora' },
-    { n: 8, email: 'compressor@swi.local', name: 'Carlos Santos (Manut.)', sector: 'Setor Leste', role: 'Operador' },
+    { n: 1, email: 'romulo@swi.local',   name: 'Romulo Cardoso',          sector: 'Setor Leste', role: 'Operador',                birthDate: '1985-03-12' },
+    { n: 2, email: 'ezequiel@swi.local', name: 'Ezequiel Almeida',        sector: 'Setor Leste', role: 'Operador',                birthDate: '1990-07-25' },
+    { n: 3, email: 'josue@swi.local',    name: 'Josué Oliveira',          sector: 'Setor Leste', role: 'Técnico de Manutenção',   birthDate: '1982-11-03' },
+    { n: 4, email: 'carlos@swi.local',   name: 'Carlos Santos',           sector: 'Setor Leste', role: 'Operador',                birthDate: '1978-01-19' },
+    { n: 5, email: 'antonio@swi.local',  name: 'Antonio Carlos Figueira', sector: 'Setor Leste', role: 'Supervisor',              birthDate: '1971-09-08' },
+    { n: 6, email: 'jennifer@swi.local', name: 'Jennifer Gomes',          sector: 'Setor Leste', role: 'Analista de Segurança',   birthDate: '1993-05-14' },
+    { n: 7, email: 'adriana@swi.local',  name: 'Adriana Santos Almeida',  sector: 'Setor Leste', role: 'Operadora',               birthDate: '1988-12-02' },
+    { n: 8, email: 'compressor@swi.local', name: 'Carlos Santos (Manut.)', sector: 'Setor Leste', role: 'Operador',               birthDate: '1995-04-21' },
   ]
 
   type Seg = { from: 'me' | 'them'; body: string; time: string }
@@ -124,8 +126,8 @@ async function main() {
     contactIds.set(c.n, u.id)
     await prisma.profile.upsert({
       where: { userId: u.id },
-      update: { fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey },
-      create: { userId: u.id, fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey },
+      update: { fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey, birthDate: new Date(c.birthDate) },
+      create: { userId: u.id, fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey, birthDate: new Date(c.birthDate) },
     })
   }
 
