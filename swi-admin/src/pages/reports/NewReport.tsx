@@ -30,9 +30,8 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
-import type { ReportStatus } from '@/services/mockApi/reports'
 import { uploadImage } from '@/services/api/upload'
-import { reportsApi } from '@/services/api/reports'
+import { reportsApi, type ReportStatus } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
 import { ResponsablesModal } from '@/pages/modals/ResponsablesModal'
 

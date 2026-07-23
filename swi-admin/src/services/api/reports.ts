@@ -5,13 +5,57 @@
 // responsáveis só como nomes, sem avatar; injetamos avatares fixos no mapeamento
 // pra preservar o visual do redesign (AvatarGroup) até o hardware/upload existir.
 import type { MockResponse } from '@/services/mockApi/types'
-import type { Report, ReportActivity, ReportStatus } from '@/services/mockApi/reports'
 import { apiFetch } from './http'
 import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'
 import workerC from '@/assets/avatars/worker-c.png'
 
-export type { Report, ReportActivity }
+// Tipos canônicos dos Relatórios (antes moravam em mockApi/reports.ts, hoje morto).
+// Statuses mapeiam os valores do DS StatusTag: 'accept' (verde), 'pending'
+// (amarelo), 'canceled' (vermelho), 'info' (azul).
+export type ReportStatus = 'accept' | 'pending' | 'canceled' | 'info'
+
+// Uma linha de atividade em /reports/:id (Figma 98:4877 seção "Atividades").
+// A linha renderiza: ícone chave | divisor | título + setor + ProgressBar |
+// AvatarGroup (count) | ícone location_on. O tone colore a barra: success
+// (verde), warning (laranja), error (vermelho).
+export type ReportActivity = {
+  id: string
+  title: string
+  sector: string
+  progress: number
+  tone: 'success' | 'warning' | 'error'
+  avatars: ReadonlyArray<string>
+  overflowCount?: number
+}
+
+export type Report = {
+  id: string
+  title: string
+  summary: string
+  status: ReportStatus
+  statusLabel: string
+  authorName: string
+  authorAvatarUri: string
+  creationDate: string
+  sector: string
+  // Lista separada por vírgula de responsáveis — renderizada na seção
+  // "Responsáveis" do ReportDetails (footer legado do DS ReportCard).
+  responsibles: string
+  // Grupo de avatares sobrepostos no card redesenhado da ReportsList
+  // ("Responsável:", mockup QA cliente §4). As primeiras N faces sobrepõem;
+  // as restantes viram um badge "+N".
+  responsibleAvatars: ReadonlyArray<string>
+  // Override opcional quando a demo quer que o badge "+N" indique mais pessoas
+  // do que existem no array de avatares visíveis.
+  responsibleTotalCount?: number
+  // Corpo dos detalhes exibido em /reports/:id (Figma 98:4877 "Detalhes do relatório").
+  details?: string
+  // Thumbnails de imagem da seção "Imagens".
+  images?: ReadonlyArray<string>
+  // Lista de atividades da seção "Atividades".
+  activities?: ReadonlyArray<ReportActivity>
+}
 
 // Avatares decorativos: o backend não persiste avatar de responsável, então a
 // UI (AvatarGroup) consome esta rotação fixa. Rotação a,b,c,a,b — 5 slots,
