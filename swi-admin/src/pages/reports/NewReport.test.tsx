@@ -202,6 +202,53 @@ describe('NewReport — anexos', () => {
     expect(createMock.mock.calls[0]?.[0].imageKeys).toEqual(['reports/a.jpg', 'reports/b.png'])
   })
 
+  it('retry após create falhar REAPROVEITA a key (não sobe o arquivo de novo)', async () => {
+    // 1º save: upload OK, mas create rejeita (4xx do backend). 2º save: o
+    // arquivo NÃO deve subir de novo (a key já resolvida é reusada) e o create
+    // manda o MESMO imageKeys — sem mintar key órfã.
+    createMock
+      .mockResolvedValueOnce({ data: null, error: { message: 'Título já usado' } })
+      .mockResolvedValueOnce({ data: { id: 'r_new', title: 'Com anexo' }, error: null })
+    renderAt()
+    typeIn('new-report-title', 'Com anexo')
+    fireEvent.change(screen.getByTestId('new-report-file-input'), { target: { files: [jpeg()] } })
+
+    save()
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-error')).toHaveTextContent('Título já usado')
+    })
+    expect(uploadMock).toHaveBeenCalledTimes(1)
+
+    save()
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(2))
+    // A 2ª tentativa não reenviou o arquivo…
+    expect(uploadMock).toHaveBeenCalledTimes(1)
+    // …e mandou a MESMA key do 1º upload.
+    expect(createMock.mock.calls[1]?.[0].imageKeys).toEqual(['reports/aaa.jpg'])
+  })
+
+  it('recusa mais de 20 anexos sem subir NENHUM arquivo nem criar o relatório', async () => {
+    renderAt()
+    typeIn('new-report-title', 'Muitos anexos')
+
+    const twentyOne = Array.from({ length: 21 }, (_, i) => jpeg(`foto_${i}.jpg`))
+    fireEvent.change(screen.getByTestId('new-report-file-input'), { target: { files: twentyOne } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-error')).toHaveTextContent(
+        'Anexe no máximo 20 arquivos por relatório.',
+      )
+    })
+    // O teto vale na SELEÇÃO: nada subiu e nada ficou pendurado pro submit.
+    expect(uploadMock).not.toHaveBeenCalled()
+
+    save()
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
+    expect(uploadMock).not.toHaveBeenCalled()
+    expect(createMock.mock.calls[0]?.[0].imageKeys).toBeUndefined()
+  })
+
   it('falha de upload mostra o erro e NÃO cria o relatório', async () => {
     uploadMock.mockRejectedValue(new Error('O link de envio expirou.'))
     renderAt()

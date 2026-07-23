@@ -36,10 +36,12 @@ const ATTACHMENT_SLOTS = 4
 // só então o backend rejeitar — as keys já teriam virado órfãs no bucket.
 const LIMIT_IMAGE_KEYS = 20
 
-// Anexo escolhido ainda não enviado. `preview` é uma object URL só pro
-// thumbnail; pode faltar em ambiente sem URL.createObjectURL (jsdom) — aí o
-// quadro cai no rótulo com o nome do arquivo.
-type PickedImage = { file: File; preview?: string }
+// Anexo escolhido. `preview` é uma object URL só pro thumbnail; pode faltar em
+// ambiente sem URL.createObjectURL (jsdom) — aí o quadro cai no rótulo com o
+// nome do arquivo. `uploadedKey` guarda a key devolvida pelo presign depois que
+// o arquivo já subiu, pra que um retry de save (ex.: create falhou com 4xx)
+// REAPROVEITE a key em vez de subir o arquivo de novo (e mintar key órfã).
+type PickedImage = { file: File; preview?: string; uploadedKey?: string }
 
 // Quadro da fileira de anexos (Figma 105:12461). Vazio = glifo de foto; com
 // anexo = thumbnail (ou nome do arquivo quando não há preview).
@@ -153,10 +155,20 @@ export function NewReport() {
     setSaving(true)
     // Upload SÓ AGORA: o presign vale 300 s. Subir na hora que o arquivo é
     // escolhido faria um formulário preenchido devagar falhar com 403.
+    //
+    // Idempotente por arquivo: a key resolvida é gravada em `uploadedKey`, então
+    // um retry de save (create falhou com 4xx, upload já tinha ido) REAPROVEITA
+    // as keys em vez de subir tudo de novo e mintar keys órfãs.
     const imageKeys: string[] = []
     try {
-      for (const { file } of images) {
-        imageKeys.push(await uploadImage(file, 'reports'))
+      for (const entry of images) {
+        if (entry.uploadedKey) {
+          imageKeys.push(entry.uploadedKey)
+          continue
+        }
+        const key = await uploadImage(entry.file, 'reports')
+        entry.uploadedKey = key
+        imageKeys.push(key)
       }
     } catch (e: unknown) {
       if (leftScreenRef.current) return
@@ -167,7 +179,8 @@ export function NewReport() {
       // Sem create: um relatório criado com anexo faltando seria pior que
       // nenhum — o usuário reenviaria e duplicaria. Os anexos que subiram antes
       // da falha ficam órfãos no bucket (sem delete de mídia no backend); a
-      // limpeza é da infra (lifecycle rule).
+      // limpeza é da infra (lifecycle rule). As keys que JÁ subiram ficam em
+      // `uploadedKey`, então o próximo save não as reenvia.
       return
     }
 
