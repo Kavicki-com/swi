@@ -127,6 +127,7 @@ export class ReportsService {
       responsibles: r.responsibles,
       details: r.details ?? '',
       images: await this.media.presignGetMany(r.imageKeys),
+      imageKeys: r.imageKeys, // keys crus (não-presigned) pro form de edição preservar/mesclar anexos
       activities: (r.activities as unknown) ?? [],
     }
   }

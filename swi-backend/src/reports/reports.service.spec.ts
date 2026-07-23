@@ -41,9 +41,18 @@ describe('ReportsService', () => {
     const out = await new ReportsService(db, media(), notifications()).list()
     expect(db.report.findMany).toHaveBeenCalledWith({ orderBy: { createdAt: 'desc' }, take: 200 })
     expect(out[0].images).toEqual(['signed:reports/x.jpg'])
+    expect(out[0].imageKeys).toEqual(['reports/x.jpg']) // keys crus coexistem com as urls presigned
     expect(out[0].authorAvatarUri).toBe('signed:reports/av.jpg')
     expect(out[0].creationDate).toBe('01/01/2026') // BRT (UTC-3) rola pro dia anterior
     expect(out[0].summary).toBe('') // null → '' (telas exigem string)
+  })
+
+  it('DTO carrega os imageKeys crus além das urls presigned (destrava edição de anexo)', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(row({ imageKeys: ['reports/a.jpg', 'reports/b.jpg'], comments: [] }))
+    const out = await new ReportsService(db, media(), notifications()).get('r1')
+    expect(out!.imageKeys).toEqual(['reports/a.jpg', 'reports/b.jpg']) // keys crus, sem presign
+    expect(out!.images).toEqual(['signed:reports/a.jpg', 'signed:reports/b.jpg']) // urls presigned coexistem
   })
 
   it('get inexistente → null', async () => {
