@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
-import type { Report } from '@prisma/client'
-import type { CreateReportDto } from './dto'
+import type { Comment, Profile, Report, ReportStatus, User } from '@prisma/client'
+import type { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
 
 const LIST_CAP = 200
 
@@ -21,8 +21,18 @@ export class ReportsService {
   }
 
   async get(id: string) {
-    const r = await this.prisma.report.findUnique({ where: { id } })
-    return r ? this.toDto(r) : null
+    const r = await this.prisma.report.findUnique({
+      where: { id },
+      include: {
+        comments: {
+          orderBy: { createdAt: 'asc' },
+          include: { author: { include: { profile: true } } },
+        },
+      },
+    })
+    if (!r) return null
+    const comments = await Promise.all(r.comments.map((c) => this.toCommentDto(c, c.author)))
+    return { ...(await this.toDto(r)), comments }
   }
 
   async create(authorId: string, dto: CreateReportDto) {
@@ -60,6 +70,47 @@ export class ReportsService {
     return this.toDto(r)
   }
 
+  async update(id: string, _userId: string, dto: UpdateReportDto) {
+    try {
+      const r = await this.prisma.report.update({
+        where: { id },
+        data: {
+          ...(dto.title !== undefined && { title: dto.title }),
+          ...(dto.summary !== undefined && { summary: dto.summary }),
+          ...(dto.details !== undefined && { details: dto.details }),
+          ...(dto.responsibles !== undefined && { responsibles: dto.responsibles }),
+          ...(dto.status !== undefined && { status: dto.status as ReportStatus }),
+          ...(dto.statusLabel !== undefined && { statusLabel: dto.statusLabel }),
+          ...(dto.imageKeys !== undefined && { imageKeys: dto.imageKeys }),
+        },
+      })
+      return this.toDto(r)
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException('Relatório não encontrado')
+      throw e
+    }
+  }
+
+  async addComment(reportId: string, authorId: string, dto: CreateCommentDto) {
+    const exists = await this.prisma.report.findUnique({ where: { id: reportId }, select: { id: true } })
+    if (!exists) throw new NotFoundException('Relatório não encontrado')
+    const author = await this.prisma.user.findUnique({ where: { id: authorId }, include: { profile: true } })
+    const c = await this.prisma.comment.create({ data: { reportId, authorId, body: dto.body } })
+    return this.toCommentDto(c, author)
+  }
+
+  private async toCommentDto(c: Comment, author: (User & { profile: Profile | null }) | null) {
+    // Identidade do autor resolvida ao vivo (nome/avatar atuais), ao contrário do
+    // Report que faz snapshot do autor na criação — escolha deliberada.
+    return {
+      id: c.id,
+      body: c.body,
+      authorName: author?.profile?.fullName ?? author?.name ?? '',
+      authorAvatarUri: author?.profile?.avatarKey ? await this.media.presignGet(author.profile.avatarKey) : '',
+      createdAt: this.formatDate(c.createdAt),
+    }
+  }
+
   // Devolve exatamente o shape mobile `Report` (keys→urls presigned, date
   // dd/mm/yyyy, null→'' nos campos string que as telas exigem).
   private async toDto(r: Report) {
@@ -76,6 +127,7 @@ export class ReportsService {
       responsibles: r.responsibles,
       details: r.details ?? '',
       images: await this.media.presignGetMany(r.imageKeys),
+      imageKeys: r.imageKeys, // keys crus (não-presigned) pro form de edição preservar/mesclar anexos
       activities: (r.activities as unknown) ?? [],
     }
   }

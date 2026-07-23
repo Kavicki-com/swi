@@ -109,6 +109,21 @@ describe('uploadOrderImage', () => {
     })
   })
 
+  it('presigna com o prefix "reports" — anexo de relatório', async () => {
+    const f = stubUpload({ ok: true, status: 204 })
+    await uploadImage(new File([new Uint8Array([1])], 'foto.png', { type: 'image/png' }), 'reports')
+
+    const init = f.mock.calls[0]?.[1] as RequestInit
+    expect(f.mock.calls[0]?.[0]).toMatch(/\/media\/presign$/)
+    expect(init.method).toBe('POST')
+    // O backend valida imageKeys de relatório contra reports/<uuid>.(jpg|png);
+    // 'reports' é o prefixo default do presign, então já é aceito.
+    expect(JSON.parse(init.body as string)).toEqual({
+      contentType: 'image/png',
+      prefix: 'reports',
+    })
+  })
+
   it('não manda Authorization nem Content-Type manual no POST ao S3', async () => {
     window.localStorage.setItem('swi.admin.token', 'jwt-do-admin')
     const f = stubUpload({ ok: true, status: 204 })

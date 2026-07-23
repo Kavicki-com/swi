@@ -1,8 +1,16 @@
 // src/pages/modals/ResponsablesModal.tsx
-// /modals/responsables — Figma 165:24210. Centered modal that lets an
-// author pick 1+ admins to review the report being created. Rendered as
-// a full route per the existing routes.tsx convention (modals promoted to
-// overlays in S5).
+// Figma 165:24210. Centered modal that lets an author pick 1+ admins to review
+// the report being created.
+//
+// Dois modos:
+//  1. CONTROLADO (props `onConfirm`/`onClose`) — o NewReport monta este overlay
+//     dentro da própria árvore (sem trocar de rota), então o formulário
+//     meio-preenchido NÃO desmonta. `onConfirm` recebe os NOMES dos admins
+//     marcados (o backend guarda responsáveis só como nome), e o pai fecha o
+//     overlay. `initialSelectedNames` pré-marca quem já foi escolhido.
+//  2. FALLBACK (sem props) — segue vivendo na rota /modals/responsables como
+//     antes (navigate(-1) + toast demo), pra não quebrar quem ainda a abrir
+//     como rota.
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
@@ -93,7 +101,28 @@ function AdminPickRow({
   )
 }
 
-export function ResponsablesModal() {
+export type ResponsablesModalProps = {
+  /**
+   * MODO CONTROLADO. Recebe os NOMES dos admins marcados quando o autor confirma
+   * — o backend guarda responsável só como nome (sem id/avatar). Presente ⇒ o
+   * pai (NewReport) é dono do estado e do fechamento; ausente ⇒ modo rota.
+   */
+  onConfirm?: (selectedNames: string[]) => void
+  /** MODO CONTROLADO. Fecha o overlay sem confirmar. Ausente ⇒ navigate(-1). */
+  onClose?: () => void
+  /**
+   * Nomes já atribuídos — chegam pré-marcados. Lido só na MONTAGEM (semente do
+   * estado interno). O pai deve remontar o overlay a cada abertura (`key`) pra
+   * re-semear; reaproveitar a instância ignora mudanças posteriores no prop.
+   */
+  initialSelectedNames?: ReadonlyArray<string>
+}
+
+export function ResponsablesModal({
+  onConfirm,
+  onClose,
+  initialSelectedNames,
+}: ResponsablesModalProps = {}) {
   const theme = useTheme()
   const navigate = useNavigate()
   const { show: showToast } = useDemoToast()
@@ -104,11 +133,20 @@ export function ResponsablesModal() {
   useEffect(() => {
     let cancelled = false
     adminsApi.list().then(({ data }) => {
-      if (!cancelled && data) setAdmins(data)
+      if (cancelled || !data) return
+      setAdmins(data)
+      // Pré-marca por nome só depois de ter a lista (o estado é keyed por id, e
+      // só aqui dá pra mapear nome→id). Roda uma vez na montagem — o contrato
+      // pede remontagem por abertura.
+      if (initialSelectedNames && initialSelectedNames.length > 0) {
+        const names = new Set(initialSelectedNames)
+        setSelected(new Set(data.filter((a) => names.has(a.name)).map((a) => a.id)))
+      }
     })
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- semente lida só na montagem (ver JSDoc)
   }, [])
 
   const filtered = useMemo(
@@ -128,22 +166,32 @@ export function ResponsablesModal() {
     })
   }
 
-  const dismiss = () => navigate(-1)
+  const dismiss = () => {
+    if (onClose) onClose()
+    else navigate(-1)
+  }
 
   const confirm = () => {
-    const count = selected.size
-    if (count === 0) {
-      showToast('Nenhum responsável selecionado', 'Selecione ao menos um para continuar')
+    // Nomes na ordem da lista carregada (estável), não na ordem de clique.
+    const selectedNames = admins.filter((a) => selected.has(a.id)).map((a) => a.name)
+    if (onConfirm) {
+      onConfirm(selectedNames)
       return
     }
+    // Fallback (rota standalone): mantém o comportamento demo de antes.
     showToast(
       'Responsáveis atribuídos',
-      count === 1
+      selectedNames.length === 1
         ? '1 responsável adicionado ao relatório'
-        : `${count} responsáveis adicionados ao relatório`,
+        : `${selectedNames.length} responsáveis adicionados ao relatório`,
     )
     navigate(-1)
   }
+
+  // O CTA fica travado sem ninguém marcado: o overlay existe pra ATRIBUIR, e
+  // confirmar zero equivale a fechar (o que o Cancelar já faz). Espelha o
+  // ResponsiblePicker das tarefas.
+  const canConfirm = selected.size > 0
 
   return (
     <View
@@ -212,6 +260,7 @@ export function ResponsablesModal() {
               label="Continuar"
               variant="contained"
               fullWidth
+              disabled={!canConfirm}
               onPress={confirm}
               accessibilityLabel="Confirmar responsáveis"
             />

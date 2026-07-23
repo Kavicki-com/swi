@@ -25,11 +25,50 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
-import { reportsApi, type Report, type ReportActivity } from '@/services/reports'
+import {
+  reportsApi,
+  type Report,
+  type ReportActivity,
+  type ReportComment,
+} from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
 import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'
 import workerC from '@/assets/avatars/worker-c.png'
+
+// reportsApi.get resolve o detalhe (Report) somado à lista de comentários — o
+// estado da página guarda os dois juntos pra renderizar a seção de comentários
+// e apendar o novo sem refetch.
+type ReportWithComments = Report & { comments: ReportComment[] }
+
+// Uma linha da lista de comentários — compõe primitivas do DS (Avatar + Text),
+// sem reimplementar componente. Avatar cai no fallback quando authorAvatarUri
+// vem vazio.
+function CommentRow({ comment }: { comment: ReportComment }) {
+  const theme = useTheme()
+  return (
+    <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
+      <Avatar
+        uri={comment.authorAvatarUri}
+        customSize={32}
+        accessibilityLabel={comment.authorName}
+      />
+      <View style={{ flex: 1, gap: theme.gap.xs }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
+          <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+            {comment.authorName}
+          </Text>
+          <Text variant="body.s" color={theme.content.medium}>
+            {comment.createdAt}
+          </Text>
+        </View>
+        <Text variant="body.m" color={theme.content.dark}>
+          {comment.body}
+        </Text>
+      </View>
+    </View>
+  )
+}
 
 // Avatar group (small overlapping circles) — Figma "Avatar Group" element
 // at the top of the main report card. 4 avatars + "+13" counter pill.
@@ -217,9 +256,10 @@ export function ReportDetails() {
   const navigate = useNavigate()
   const { show: showToast } = useDemoToast()
   const { id } = useParams<{ id: string }>()
-  const [report, setReport] = useState<Report | null>(null)
+  const [report, setReport] = useState<ReportWithComments | null>(null)
   const [search, setSearch] = useState('')
   const [comment, setComment] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -231,6 +271,25 @@ export function ReportDetails() {
       cancelled = true
     }
   }, [id])
+
+  // Envia o comentário: bloqueia vazio/whitespace e envio duplo (submitting).
+  // Sucesso apenda o ReportComment retornado e limpa o campo; erro toasta e
+  // preserva o texto pra nova tentativa.
+  async function submitComment() {
+    const body = comment.trim()
+    if (!body || submitting || !report) return
+    setSubmitting(true)
+    const { data, error } = await reportsApi.addComment(report.id, body)
+    setSubmitting(false)
+    if (error) {
+      showToast('Não foi possível comentar', error.message)
+      return
+    }
+    if (data) {
+      setReport((prev) => (prev ? { ...prev, comments: [...prev.comments, data] } : prev))
+      setComment('')
+    }
+  }
 
   if (!report) {
     return (
@@ -290,7 +349,7 @@ export function ReportDetails() {
           variant="outline"
           iconLeft={<Icon name="edit" size={20} color={theme.content.primaryLight} />}
           accessibilityLabel="Revisar relatório"
-          onPress={() => showToast('Modo revisão iniciado', 'Relatório aberto para edição')}
+          onPress={() => navigate(`/reports/${id}/edit`)}
         />
       </View>
 
@@ -439,15 +498,25 @@ export function ReportDetails() {
         </View>
       </View>
 
-      {/* Section 6 — Adicionar comentário. */}
+      {/* Section 6 — Comentários + Adicionar comentário. */}
       <View style={{ gap: theme.gap.s }}>
         <Text
           variant="body.m"
           color={theme.content.dark}
           style={{ fontWeight: '700', fontSize: 16 }}
         >
-          Adicionar comentário
+          Comentários
         </Text>
+
+        {/* Lista de comentários — some quando não há nenhum. */}
+        {report.comments.length > 0 ? (
+          <View testID="report-comments" style={{ gap: theme.gap.m }}>
+            {report.comments.map((c) => (
+              <CommentRow key={c.id} comment={c} />
+            ))}
+          </View>
+        ) : null}
+
         <Input
           value={comment}
           onChangeText={setComment}
@@ -460,6 +529,8 @@ export function ReportDetails() {
             label="Fazer comentário"
             variant="contained"
             accessibilityLabel="Enviar comentário"
+            disabled={submitting}
+            onPress={submitComment}
           />
         </View>
       </View>
