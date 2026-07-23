@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common'
 import { ReportsService } from './reports.service'
 
 const media = () =>
@@ -10,7 +11,7 @@ const notifications = () => ({ enqueueForMany: jest.fn() }) as any
 
 const prisma = () =>
   ({
-    report: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
+    report: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
   }) as any
 
@@ -101,5 +102,29 @@ describe('ReportsService', () => {
     notif.enqueueForMany.mockRejectedValue(new Error('boom'))
     const out = await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' } as any)
     expect(out.id).toBe('r9')
+  })
+
+  it('update aplica só os campos fornecidos e devolve o DTO', async () => {
+    const db = prisma()
+    db.report.update.mockResolvedValue(row({ title: 'Novo', status: 'accept', statusLabel: 'Aceito' }))
+    const out = await new ReportsService(db, media(), notifications()).update('r1', 'u1', {
+      title: 'Novo',
+      status: 'accept',
+      statusLabel: 'Aceito',
+    } as any)
+    const arg = db.report.update.mock.calls[0][0]
+    expect(arg.where).toEqual({ id: 'r1' })
+    expect(arg.data).toEqual({ title: 'Novo', status: 'accept', statusLabel: 'Aceito' })
+    expect(out.title).toBe('Novo')
+    expect(out.status).toBe('accept')
+    expect(out.statusLabel).toBe('Aceito')
+  })
+
+  it('update com P2025 → NotFoundException', async () => {
+    const db = prisma()
+    db.report.update.mockRejectedValue({ code: 'P2025' })
+    await expect(
+      new ReportsService(db, media(), notifications()).update('nope', 'u1', { title: 'x' } as any),
+    ).rejects.toBeInstanceOf(NotFoundException)
   })
 })

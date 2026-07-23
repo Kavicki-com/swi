@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
-import type { Report } from '@prisma/client'
-import type { CreateReportDto } from './dto'
+import type { Report, ReportStatus } from '@prisma/client'
+import type { CreateReportDto, UpdateReportDto } from './dto'
 
 const LIST_CAP = 200
 
@@ -58,6 +58,27 @@ export class ReportsService {
       })
     } catch { /* best-effort */ }
     return this.toDto(r)
+  }
+
+  async update(id: string, _userId: string, dto: UpdateReportDto) {
+    try {
+      const r = await this.prisma.report.update({
+        where: { id },
+        data: {
+          ...(dto.title !== undefined && { title: dto.title }),
+          ...(dto.summary !== undefined && { summary: dto.summary }),
+          ...(dto.details !== undefined && { details: dto.details }),
+          ...(dto.responsibles !== undefined && { responsibles: dto.responsibles }),
+          ...(dto.status !== undefined && { status: dto.status as ReportStatus }),
+          ...(dto.statusLabel !== undefined && { statusLabel: dto.statusLabel }),
+          ...(dto.imageKeys !== undefined && { imageKeys: dto.imageKeys }),
+        },
+      })
+      return this.toDto(r)
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException('Relatório não encontrado')
+      throw e
+    }
   }
 
   // Devolve exatamente o shape mobile `Report` (keys→urls presigned, date
