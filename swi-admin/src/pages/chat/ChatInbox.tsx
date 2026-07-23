@@ -525,10 +525,13 @@ export function ChatInbox() {
   const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
   // Real chat state from the backend-backed provider (REST load + live socket).
-  const { conversations, messagesByConv, directory, myId, openConversation, send, keyFor } =
+  const { conversations, messagesByConv, directory, myId, openConversation, send, keyFor, loadStatus } =
     useChat()
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState('')
+  // Guard against double-send: `handleSend` awaits before clearing `draft`, so
+  // two fast clicks would both read the same draft and fire duplicate messages.
+  const [sending, setSending] = useState(false)
   // "Novo Chat" mode: swaps the left list from active conversations to the full
   // directory so a fresh conversation can be started. Picking a directory
   // contact navigates to its deterministic conversation id (keyFor) — the same
@@ -538,9 +541,10 @@ export function ChatInbox() {
   // Selection is URL-driven via /chat/:contactId so deep-links (e.g. clicks
   // from the AppLayout chat sidebar) open the right conversation. Conversation
   // ids contain '#'; react-router DECODES the param, so `contactId` is already
-  // the raw id — use it directly (no re-decode). With no param, default to the
-  // first conversation (or none when the inbox is empty).
+  // the raw id — use it directly (no re-decode). The URL param is the single
+  // source of truth for the selection.
   const { contactId } = useParams<{ contactId?: string }>()
+  const selectedContactId = contactId
 
   // Active conversations mapped to the UI ChatContact shape (identity + thread).
   const contacts = conversations.map((c) =>
@@ -549,13 +553,34 @@ export function ChatInbox() {
   // Directory contacts for the "Novo Chat" flow — no thread; carries `role`.
   const directoryContacts = directory.map((d) => directoryToContact(d, myId))
 
-  const selectedContactId = contactId ?? contacts[0]?.id
+  // Pin the default selection ONCE into the URL. `contacts` is sortByRecent-
+  // ordered, so an incoming message on another thread can leapfrog it to index
+  // 0; if the default tracked `contacts[0]` live it would flip the selected
+  // thread AND markRead a conversation the admin never opened. Navigating
+  // (replace) pins it via the param — after which re-sorts can't re-drive it.
+  const firstContactId = contacts[0]?.id
+  useEffect(() => {
+    if (!contactId && firstContactId) {
+      navigate(`/chat/${encodeURIComponent(firstContactId)}`, { replace: true })
+    }
+  }, [contactId, firstContactId, navigate])
 
-  // Load the selected thread's messages + mark it read whenever the selection
-  // resolves to a real conversation id (also fires for the mount-time default).
+  // Load the selected thread's messages + mark it read once the URL pins a real
+  // conversation id.
   useEffect(() => {
     if (selectedContactId) openConversation(selectedContactId)
   }, [selectedContactId, openConversation])
+
+  // Backend-down surface: toast once per error episode so a failed load doesn't
+  // silently read as an empty inbox (the middle placeholder also switches copy).
+  const errorToastedRef = useRef(false)
+  useEffect(() => {
+    if (loadStatus === 'error' && !errorToastedRef.current) {
+      errorToastedRef.current = true
+      showToast('Não foi possível carregar as conversas.')
+    }
+    if (loadStatus !== 'error') errorToastedRef.current = false
+  }, [loadStatus, showToast])
 
   const listSource = newChatOpen ? directoryContacts : contacts
   const filtered = listSource.filter((c) =>
@@ -576,16 +601,24 @@ export function ChatInbox() {
     : null
 
   const openContact = (id: string) => {
+    // Composing to a brand-new directory contact (no conversation yet) briefly
+    // shows a blank middle/right until the first send's socket echo refetches
+    // the list into `conversations` — expected until the echo lands.
     navigate(`/chat/${encodeURIComponent(id)}`)
     setNewChatOpen(false)
   }
 
   const handleSend = async () => {
     const text = draft.trim()
-    if (!text || !selectedContactId) return
-    const { error } = await send(selectedContactId, text)
-    if (error) showToast(error.message)
-    else setDraft('')
+    if (!text || !selectedContactId || sending) return
+    setSending(true)
+    try {
+      const { error } = await send(selectedContactId, text)
+      if (error) showToast(error.message)
+      else setDraft('')
+    } finally {
+      setSending(false)
+    }
   }
 
   // Keep the chat thread anchored to the latest message: scroll to bottom
@@ -856,8 +889,13 @@ export function ChatInbox() {
                   ))}
                 </>
               ) : (
-                <Text variant="body.s" color={theme.content.medium}>
-                  Selecione uma conversa para visualizar as mensagens
+                <Text
+                  variant="body.s"
+                  color={loadStatus === 'error' ? theme.content.error : theme.content.medium}
+                >
+                  {loadStatus === 'error'
+                    ? 'Não foi possível carregar as conversas.'
+                    : 'Selecione uma conversa para visualizar as mensagens'}
                 </Text>
               )}
             </div>
@@ -884,6 +922,7 @@ export function ChatInbox() {
                 iconRight={<Icon name="send" size={16} color={theme.content.light} />}
                 accessibilityLabel="Enviar mensagem"
                 onPress={handleSend}
+                disabled={sending}
               />
             </View>
           </div>
