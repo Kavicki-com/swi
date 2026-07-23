@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenMeteoProvider } from './weather.provider'
-import { CANNED_CURRENT, CANNED_DAILY, DEMO_STORM_ALERT_ID } from './weather.types'
-import type { WeatherAlert, WeatherSnapshot } from './weather.types'
+import { CANNED_CURRENT, CANNED_DAILY, CANNED_HOURLY, DEMO_STORM_ALERT_ID } from './weather.types'
+import type { WeatherAlert, WeatherHourly, WeatherSnapshot } from './weather.types'
 
 const STORM_DESC =
   'Risco de desabamentos nas primeiras horas do dia, procure a rota de siga as instruções para a evacuação.'
@@ -27,14 +27,25 @@ export class WeatherService {
   async getSnapshot(): Promise<WeatherSnapshot> {
     const now = new Date()
     let current = CANNED_CURRENT, daily = CANNED_DAILY
+    let hourly: WeatherHourly[] = this.cannedHourly(now)
     try {
       const real = await this.provider.fetch()
       current = real.current; daily = real.daily
+      hourly = real.hourly ?? this.cannedHourly(now)
     } catch (err) {
       // fallback canned — tela de segurança nunca pode quebrar
       this.logger.warn(`open-meteo indisponível, servindo fallback canned: ${err}`)
     }
-    return { current, daily, alerts: this.alerts(now), fetchedAt: now.toISOString() }
+    return { current, daily, hourly, alerts: this.alerts(now), fetchedAt: now.toISOString() }
+  }
+
+  // Série horária canned resolvida em runtime (offsets → ISO a partir de `now`).
+  private cannedHourly(now: Date): WeatherHourly[] {
+    return CANNED_HOURLY.map((h) => ({
+      at: new Date(now.getTime() + h.offsetH * 3_600_000).toISOString(),
+      tempC: h.tempC,
+      condition: h.condition,
+    }))
   }
 
   // Alerta: dev via WEATHER_SCENARIO='alert'; prod → fonte real (ainda não
