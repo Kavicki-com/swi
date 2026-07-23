@@ -15,6 +15,10 @@ export class CreateReportDto {
   imageKeys?: string[]
 }
 
+export class CreateCommentDto {
+  @IsString() @IsNotEmpty() body!: string
+}
+
 export class UpdateReportDto {
   @IsOptional() @IsString() @IsNotEmpty() title?: string
   @IsOptional() @IsString() summary?: string

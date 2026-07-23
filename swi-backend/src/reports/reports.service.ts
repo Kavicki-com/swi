@@ -2,8 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
-import type { Report, ReportStatus } from '@prisma/client'
-import type { CreateReportDto, UpdateReportDto } from './dto'
+import type { Comment, Profile, Report, ReportStatus, User } from '@prisma/client'
+import type { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
 
 const LIST_CAP = 200
 
@@ -21,8 +21,18 @@ export class ReportsService {
   }
 
   async get(id: string) {
-    const r = await this.prisma.report.findUnique({ where: { id } })
-    return r ? this.toDto(r) : null
+    const r = await this.prisma.report.findUnique({
+      where: { id },
+      include: { comments: { orderBy: { createdAt: 'asc' } } },
+    })
+    if (!r) return null
+    const comments = await Promise.all(
+      r.comments.map(async (c) => {
+        const author = await this.prisma.user.findUnique({ where: { id: c.authorId }, include: { profile: true } })
+        return this.toCommentDto(c, author)
+      }),
+    )
+    return { ...(await this.toDto(r)), comments }
   }
 
   async create(authorId: string, dto: CreateReportDto) {
@@ -78,6 +88,24 @@ export class ReportsService {
     } catch (e) {
       if ((e as { code?: string }).code === 'P2025') throw new NotFoundException('Relatório não encontrado')
       throw e
+    }
+  }
+
+  async addComment(reportId: string, authorId: string, dto: CreateCommentDto) {
+    const exists = await this.prisma.report.findUnique({ where: { id: reportId }, select: { id: true } })
+    if (!exists) throw new NotFoundException('Relatório não encontrado')
+    const author = await this.prisma.user.findUnique({ where: { id: authorId }, include: { profile: true } })
+    const c = await this.prisma.comment.create({ data: { reportId, authorId, body: dto.body } })
+    return this.toCommentDto(c, author)
+  }
+
+  private async toCommentDto(c: Comment, author: (User & { profile: Profile | null }) | null) {
+    return {
+      id: c.id,
+      body: c.body,
+      authorName: author?.profile?.fullName ?? author?.name ?? '',
+      authorAvatarUri: author?.profile?.avatarKey ? await this.media.presignGet(author.profile.avatarKey) : '',
+      createdAt: this.formatDate(c.createdAt),
     }
   }
 

@@ -13,6 +13,7 @@ const prisma = () =>
   ({
     report: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
+    comment: { create: jest.fn() },
   }) as any
 
 const row = (over = {}) => ({
@@ -126,5 +127,80 @@ describe('ReportsService', () => {
     await expect(
       new ReportsService(db, media(), notifications()).update('nope', 'u1', { title: 'x' } as any),
     ).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it('addComment cria comentário e devolve o DTO (authorName do profile, avatar presigned)', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue({ id: 'r1' })
+    db.user.findUnique.mockResolvedValue({
+      name: 'Fallback',
+      profile: { fullName: 'Ana Perfil', avatarKey: 'reports/av.jpg' },
+    })
+    db.comment.create.mockResolvedValue({
+      id: 'c1',
+      reportId: 'r1',
+      authorId: 'u1',
+      body: 'Comentário',
+      createdAt: new Date('2026-01-02T00:00:00Z'),
+    })
+    const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Comentário' } as any)
+    expect(db.report.findUnique).toHaveBeenCalledWith({ where: { id: 'r1' }, select: { id: true } })
+    expect(db.comment.create.mock.calls[0][0].data).toEqual({ reportId: 'r1', authorId: 'u1', body: 'Comentário' })
+    expect(out).toEqual({
+      id: 'c1',
+      body: 'Comentário',
+      authorName: 'Ana Perfil',
+      authorAvatarUri: 'signed:reports/av.jpg',
+      createdAt: '01/01/2026',
+    })
+  })
+
+  it('addComment sem profile usa user.name e avatar vazio', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue({ id: 'r1' })
+    db.user.findUnique.mockResolvedValue({ name: 'Fallback', profile: null })
+    db.comment.create.mockResolvedValue({
+      id: 'c2',
+      reportId: 'r1',
+      authorId: 'u1',
+      body: 'Oi',
+      createdAt: new Date('2026-01-02T00:00:00Z'),
+    })
+    const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Oi' } as any)
+    expect(out.authorName).toBe('Fallback')
+    expect(out.authorAvatarUri).toBe('')
+  })
+
+  it('addComment em relatório inexistente → NotFoundException', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(null)
+    await expect(
+      new ReportsService(db, media(), notifications()).addComment('nope', 'u1', { body: 'x' } as any),
+    ).rejects.toBeInstanceOf(NotFoundException)
+    expect(db.comment.create).not.toHaveBeenCalled()
+  })
+
+  it('get embute comments ordenados por createdAt asc, cada um com seu autor', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(
+      row({
+        comments: [
+          { id: 'c1', reportId: 'r1', authorId: 'u1', body: 'Primeiro', createdAt: new Date('2026-01-02T00:00:00Z') },
+          { id: 'c2', reportId: 'r1', authorId: 'u2', body: 'Segundo', createdAt: new Date('2026-01-03T00:00:00Z') },
+        ],
+      }),
+    )
+    db.user.findUnique
+      .mockResolvedValueOnce({ name: 'Ana', profile: { fullName: 'Ana Perfil', avatarKey: 'reports/av.jpg' } })
+      .mockResolvedValueOnce({ name: 'Bruno', profile: null })
+    const out = await new ReportsService(db, media(), notifications()).get('r1')
+    expect(db.report.findUnique).toHaveBeenCalledWith({
+      where: { id: 'r1' },
+      include: { comments: { orderBy: { createdAt: 'asc' } } },
+    })
+    expect(out!.comments).toEqual([
+      { id: 'c1', body: 'Primeiro', authorName: 'Ana Perfil', authorAvatarUri: 'signed:reports/av.jpg', createdAt: '01/01/2026' },
+      { id: 'c2', body: 'Segundo', authorName: 'Bruno', authorAvatarUri: '', createdAt: '02/01/2026' },
+    ])
   })
 })
