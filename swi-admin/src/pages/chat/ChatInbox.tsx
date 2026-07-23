@@ -19,6 +19,7 @@ import {
   Button,
   HeaderUserInfo,
   Icon,
+  Image,
   Input,
   Logo,
   SearchInput,
@@ -111,7 +112,7 @@ function ContactRow({
 // Single conversation bubble — Figma 147:5929 (sent / right) and
 // 103:10230 (received / left). Both share the same structure but mirror
 // avatar + border color + horizontal padding.
-function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatContact }) {
+export function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatContact }) {
   const theme = useTheme()
   const isMe = message.sender === 'me'
   const bubbleBorderColor = isMe ? theme.content.secondaryLight : theme.content.primaryLight
@@ -144,24 +145,50 @@ function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatC
         overflow: 'hidden',
       }}
     >
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: theme.gap.s,
-          width: '100%',
-        }}
-      >
-        {isMe ? <Icon name="more_vert" size={16} color={theme.content.dark} /> : null}
-        <Text
-          variant="body.m"
-          color={theme.content.dark}
-          style={{ flex: 1, textAlign: isMe ? 'right' : 'left' }}
+      {message.imageUri ? (
+        // Inline attachment thumbnail. Fixed layout box (220×160) clipped to
+        // radius.m via an overflow-hidden wrapper — the DS Image primitive
+        // renders the photo (content image, not a DS "icon"). alignSelf mirrors
+        // the bubble side so image-only messages hug the correct edge.
+        <View
+          style={{
+            width: 220,
+            height: 160,
+            borderRadius: theme.border.radius.m,
+            overflow: 'hidden',
+            alignSelf: isMe ? 'flex-end' : 'flex-start',
+          }}
         >
-          {message.text}
-        </Text>
-        {isMe ? null : <Icon name="more_vert" size={16} color={theme.content.dark} />}
-      </View>
+          <Image
+            testID="chat-bubble-image"
+            source={{ uri: message.imageUri }}
+            width={220}
+            height={160}
+            resizeMode="cover"
+            accessibilityLabel="Imagem anexada"
+          />
+        </View>
+      ) : null}
+      {message.text ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.gap.s,
+            width: '100%',
+          }}
+        >
+          {isMe ? <Icon name="more_vert" size={16} color={theme.content.dark} /> : null}
+          <Text
+            variant="body.m"
+            color={theme.content.dark}
+            style={{ flex: 1, textAlign: isMe ? 'right' : 'left' }}
+          >
+            {message.text}
+          </Text>
+          {isMe ? null : <Icon name="more_vert" size={16} color={theme.content.dark} />}
+        </View>
+      ) : null}
       <Text variant="caption.xs" color={theme.content.dark}>
         {message.time}
       </Text>
