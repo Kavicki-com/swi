@@ -23,6 +23,8 @@ export type ChatMessage = {
   // 'me'   = sent bubble (right, secondary-light border, avatar on right).
   sender: 'me' | 'them'
   time: string
+  // anexo resolvido (presigned); quando presente, a bolha mostra a imagem (render na B1)
+  imageUri?: string
 }
 
 export type ChatContact = {

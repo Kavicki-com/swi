@@ -19,6 +19,7 @@ import {
   Button,
   HeaderUserInfo,
   Icon,
+  Image,
   Input,
   Logo,
   SearchInput,
@@ -30,7 +31,9 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
-import { chatsApi, type ChatContact, type ChatMessage } from '@/services/chats'
+import type { ChatContact, ChatMessage } from '@/services/chats'
+import { useChat } from '@/services/chat/ChatProvider'
+import { conversationToContact, directoryToContact } from '@/services/chat/chatMap'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Single contact row in the left list — Figma 103:9931 / 102:9571
@@ -108,10 +111,15 @@ function ContactRow({
   )
 }
 
+// Inline attachment thumbnail layout box. The wrapper View clips the DS Image
+// to radius.m, so both must share the exact same dimensions — keep them here.
+const CHAT_IMG_W = 220
+const CHAT_IMG_H = 160
+
 // Single conversation bubble — Figma 147:5929 (sent / right) and
 // 103:10230 (received / left). Both share the same structure but mirror
 // avatar + border color + horizontal padding.
-function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatContact }) {
+export function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatContact }) {
   const theme = useTheme()
   const isMe = message.sender === 'me'
   const bubbleBorderColor = isMe ? theme.content.secondaryLight : theme.content.primaryLight
@@ -144,24 +152,50 @@ function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatC
         overflow: 'hidden',
       }}
     >
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: theme.gap.s,
-          width: '100%',
-        }}
-      >
-        {isMe ? <Icon name="more_vert" size={16} color={theme.content.dark} /> : null}
-        <Text
-          variant="body.m"
-          color={theme.content.dark}
-          style={{ flex: 1, textAlign: isMe ? 'right' : 'left' }}
+      {message.imageUri ? (
+        // Inline attachment thumbnail. Fixed layout box clipped to radius.m via
+        // an overflow-hidden wrapper — the DS Image primitive renders the photo
+        // (content image, not a DS "icon"). alignSelf mirrors the bubble side so
+        // image-only messages hug the correct edge.
+        <View
+          style={{
+            width: CHAT_IMG_W,
+            height: CHAT_IMG_H,
+            borderRadius: theme.border.radius.m,
+            overflow: 'hidden',
+            alignSelf: isMe ? 'flex-end' : 'flex-start',
+          }}
         >
-          {message.text}
-        </Text>
-        {isMe ? null : <Icon name="more_vert" size={16} color={theme.content.dark} />}
-      </View>
+          <Image
+            testID="chat-bubble-image"
+            source={{ uri: message.imageUri }}
+            width={CHAT_IMG_W}
+            height={CHAT_IMG_H}
+            resizeMode="cover"
+            accessibilityLabel="Imagem anexada"
+          />
+        </View>
+      ) : null}
+      {message.text ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.gap.s,
+            width: '100%',
+          }}
+        >
+          {isMe ? <Icon name="more_vert" size={16} color={theme.content.dark} /> : null}
+          <Text
+            variant="body.m"
+            color={theme.content.dark}
+            style={{ flex: 1, textAlign: isMe ? 'right' : 'left' }}
+          >
+            {message.text}
+          </Text>
+          {isMe ? null : <Icon name="more_vert" size={16} color={theme.content.dark} />}
+        </View>
+      ) : null}
       <Text variant="caption.xs" color={theme.content.dark}>
         {message.time}
       </Text>
@@ -471,6 +505,18 @@ function ContactInfoPanel({
   )
 }
 
+// VITALS / fatigue shown in the right-column info panel are smartband-blocked;
+// until the band feeds real data, every selected contact renders the same demo
+// profile. Identity (name / sector / avatar / role) is real — only these stay
+// mock. Kept local so the old @/services/chats mock import can be dropped.
+const DEMO_VITALS = {
+  gender: 'male' as const,
+  age: 26,
+  bloodType: 'O+',
+  allergies: 'Nenhuma',
+  fatigueRemaining: '1:45:12 h',
+}
+
 export function ChatInbox() {
   const { user } = useAuth()
   const theme = useTheme()
@@ -478,47 +524,131 @@ export function ChatInbox() {
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
-  const [contacts, setContacts] = useState<ReadonlyArray<ChatContact>>([])
+  // Real chat state from the backend-backed provider (REST load + live socket).
+  const {
+    conversations,
+    messagesByConv,
+    directory,
+    myId,
+    openConversation,
+    closeConversation,
+    send,
+    keyFor,
+    loadStatus,
+  } = useChat()
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState('')
+  // Optional image attachment for the next send. The provider's `send` does the
+  // upload (uploadImage → object key); the composer only holds the picked File
+  // and hands it over. Cleared on a successful send, kept on error for retry.
+  const [pendingImage, setPendingImage] = useState<File | null>(null)
+  // Hidden native <input type="file"> we trigger via the attach button. Not a DS
+  // primitive — a browser control, so a raw ref-driven input is appropriate.
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  // Guard against double-send: `handleSend` awaits before clearing `draft`, so
+  // two fast clicks would both read the same draft and fire duplicate messages.
+  const [sending, setSending] = useState(false)
+  // "Novo Chat" mode: swaps the left list from active conversations to the full
+  // directory so a fresh conversation can be started. Picking a directory
+  // contact navigates to its deterministic conversation id (keyFor) — the same
+  // id an existing conversation would already carry, so it just opens either way.
+  const [newChatOpen, setNewChatOpen] = useState(false)
+
   // Selection is URL-driven via /chat/:contactId so deep-links (e.g. clicks
-  // from the AppLayout chat sidebar) open the right conversation. When no
-  // param is present, default to chat-romulo so the active state still
-  // renders by default (Figma 102:8997).
+  // from the AppLayout chat sidebar) open the right conversation. Conversation
+  // ids contain '#'; react-router DECODES the param, so `contactId` is already
+  // the raw id — use it directly (no re-decode). The URL param is the single
+  // source of truth for the selection.
   const { contactId } = useParams<{ contactId?: string }>()
-  const selectedContactId = contactId ?? 'chat-romulo'
+  const selectedContactId = contactId
 
+  // Active conversations mapped to the UI ChatContact shape (identity + thread).
+  const contacts = conversations.map((c) =>
+    conversationToContact(c, messagesByConv[c.id] ?? [], myId),
+  )
+  // Directory contacts for the "Novo Chat" flow — no thread; carries `role`.
+  const directoryContacts = directory.map((d) => directoryToContact(d, myId))
+
+  // Pin the default selection ONCE into the URL. `contacts` is sortByRecent-
+  // ordered, so an incoming message on another thread can leapfrog it to index
+  // 0; if the default tracked `contacts[0]` live it would flip the selected
+  // thread AND markRead a conversation the admin never opened. Navigating
+  // (replace) pins it via the param — after which re-sorts can't re-drive it.
+  const firstContactId = contacts[0]?.id
   useEffect(() => {
-    let cancelled = false
-    chatsApi.list().then(({ data }) => {
-      if (!cancelled && data) setContacts(data)
-    })
-    return () => {
-      cancelled = true
+    if (!contactId && firstContactId) {
+      navigate(`/chat/${encodeURIComponent(firstContactId)}`, { replace: true })
     }
-  }, [])
+  }, [contactId, firstContactId, navigate])
 
-  const filtered = contacts.filter((c) =>
+  // Load the selected thread's messages + mark it read once the URL pins a real
+  // conversation id.
+  useEffect(() => {
+    if (selectedContactId) openConversation(selectedContactId)
+  }, [selectedContactId, openConversation])
+
+  // Ao desmontar o inbox (admin navega pra outra tela), libera a conversa ativa
+  // no provider — que permanece montado como ancestral de layout-route. Sem
+  // isso, uma mensagem que chega depois seria marcada como lida sem ninguém ter
+  // aberto a tela, zerando o badge de não-lidas da sidebar. closeConversation é
+  // estável (useCallback deps vazias), então o cleanup roda só no unmount.
+  useEffect(() => () => closeConversation(), [closeConversation])
+
+  // Backend-down surface: toast once per error episode so a failed load doesn't
+  // silently read as an empty inbox (the middle placeholder also switches copy).
+  const errorToastedRef = useRef(false)
+  useEffect(() => {
+    if (loadStatus === 'error' && !errorToastedRef.current) {
+      errorToastedRef.current = true
+      showToast('Não foi possível carregar as conversas.')
+    }
+    if (loadStatus !== 'error') errorToastedRef.current = false
+  }, [loadStatus, showToast])
+
+  const listSource = newChatOpen ? directoryContacts : contacts
+  const filtered = listSource.filter((c) =>
     search.trim() ? c.name.toLowerCase().includes(search.toLowerCase()) : true,
   )
   const selectedContact = contacts.find((c) => c.id === selectedContactId) ?? null
   const messages = selectedContact?.messages ?? []
 
-  const handleSend = () => {
+  // Right-panel identity is real (name / sector / avatar from the conversation);
+  // `role` is looked up from the matching directory entry by workerId (the
+  // Conversation DTO has no role). VITALS / fatigue stay mock (DEMO_VITALS).
+  const panelContact: ChatContact | null = selectedContact
+    ? {
+        ...selectedContact,
+        role: directory.find((d) => keyFor(d.workerId) === selectedContact.id)?.role ?? '',
+        ...DEMO_VITALS,
+      }
+    : null
+
+  const openContact = (id: string) => {
+    // Composing to a brand-new directory contact (no conversation yet) briefly
+    // shows a blank middle/right until the first send's socket echo refetches
+    // the list into `conversations` — expected until the echo lands.
+    navigate(`/chat/${encodeURIComponent(id)}`)
+    setNewChatOpen(false)
+  }
+
+  const handleSend = async () => {
     const text = draft.trim()
-    if (!text || !selectedContact) return
-    const nextMessage: ChatMessage = {
-      id: `local-${Date.now()}`,
-      text,
-      sender: 'me',
-      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    // An image-only message (empty text + a pending image) is valid — the
+    // backend accepts body OR imageKey and only 400s when BOTH are empty.
+    if ((!text && !pendingImage) || !selectedContactId || sending) return
+    setSending(true)
+    try {
+      const { error } = await send(selectedContactId, text, pendingImage ?? undefined)
+      if (error) {
+        // Keep BOTH draft and pendingImage so the user can retry the same send.
+        showToast(error.message)
+      } else {
+        setDraft('')
+        setPendingImage(null)
+      }
+    } finally {
+      setSending(false)
     }
-    setContacts((prev) =>
-      prev.map((c) =>
-        c.id === selectedContact.id ? { ...c, messages: [...(c.messages ?? []), nextMessage] } : c,
-      ),
-    )
-    setDraft('')
   }
 
   // Keep the chat thread anchored to the latest message: scroll to bottom
@@ -664,7 +794,7 @@ export function ChatInbox() {
                 <ContactRow
                   contact={c}
                   selected={c.id === selectedContactId}
-                  onPress={() => navigate(`/chat/${c.id}`)}
+                  onPress={() => openContact(c.id)}
                 />
               </div>
             ))}
@@ -672,10 +802,8 @@ export function ChatInbox() {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Novo chat"
-            onPress={() =>
-              showToast('Novo chat', 'Selecione um contato à esquerda para iniciar uma conversa')
-            }
+            accessibilityLabel={newChatOpen ? 'Cancelar novo chat' : 'Novo chat'}
+            onPress={() => setNewChatOpen((v) => !v)}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -687,7 +815,7 @@ export function ChatInbox() {
             }}
           >
             <Text variant="body.m" color={theme.content.primaryLight} style={{ fontWeight: '700' }}>
-              Novo Chat
+              {newChatOpen ? 'Cancelar' : 'Novo Chat'}
             </Text>
           </Pressable>
         </View>
@@ -791,35 +919,99 @@ export function ChatInbox() {
                   ))}
                 </>
               ) : (
-                <Text variant="body.s" color={theme.content.medium}>
-                  Selecione uma conversa para visualizar as mensagens
+                <Text
+                  variant="body.s"
+                  color={loadStatus === 'error' ? theme.content.error : theme.content.medium}
+                >
+                  {loadStatus === 'error'
+                    ? 'Não foi possível carregar as conversas.'
+                    : 'Selecione uma conversa para visualizar as mensagens'}
                 </Text>
               )}
             </div>
 
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: theme.gap.m,
-                width: '100%',
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Input
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder="Digite aqui sua mensagem"
-                  iconRight={<Icon name="attach_file" size={20} color={theme.content.dark} />}
+            <View style={{ gap: theme.gap.s, width: '100%' }}>
+              {/* Attachment preview — a small chip with the picked file's name
+                  and a remove control. Shows only while an image is pending;
+                  cleared on send success or via the remove Pressable. */}
+              {pendingImage ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    alignSelf: 'flex-start',
+                    gap: theme.gap.s,
+                    backgroundColor: theme.surface.standard,
+                    borderRadius: theme.border.radius.m,
+                    paddingHorizontal: theme.padding.sm,
+                    paddingVertical: theme.padding.s,
+                  }}
+                >
+                  <Icon name="add_a_photo" size={16} color={theme.content.dark} />
+                  <Text variant="body.s" color={theme.content.dark}>
+                    {pendingImage.name}
+                  </Text>
+                  <Pressable
+                    testID="chat-attach-remove"
+                    accessibilityRole="button"
+                    accessibilityLabel="Remover imagem"
+                    onPress={() => setPendingImage(null)}
+                  >
+                    <Icon name="close" size={16} color={theme.content.dark} />
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: theme.gap.m,
+                  width: '100%',
+                }}
+              >
+                {/* Hidden native file picker — triggered via the attach button
+                    ref. Resets value on change so re-picking the same file
+                    still fires onChange. */}
+                <input
+                  ref={fileInputRef}
+                  data-testid="chat-file-input"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    setPendingImage(e.target.files?.[0] ?? null)
+                    e.target.value = ''
+                  }}
+                />
+                <Pressable
+                  testID="chat-attach"
+                  accessibilityRole="button"
+                  accessibilityLabel="Anexar imagem"
+                  onPress={() => fileInputRef.current?.click()}
+                >
+                  <Icon name="add_a_photo" size={24} color={theme.content.dark} />
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  {/* No decorative iconRight here: the DS Input's iconRight slot
+                      is inert (no press handler), so a paperclip there would be
+                      a dead attach affordance. The single functional attach
+                      control is the add_a_photo Pressable to the left. */}
+                  <Input
+                    value={draft}
+                    onChangeText={setDraft}
+                    placeholder="Digite aqui sua mensagem"
+                  />
+                </View>
+                <Button
+                  label="Enviar"
+                  variant="contained"
+                  iconRight={<Icon name="send" size={16} color={theme.content.light} />}
+                  accessibilityLabel="Enviar mensagem"
+                  onPress={handleSend}
+                  disabled={sending}
                 />
               </View>
-              <Button
-                label="Enviar"
-                variant="contained"
-                iconRight={<Icon name="send" size={16} color={theme.content.light} />}
-                accessibilityLabel="Enviar mensagem"
-                onPress={handleSend}
-              />
             </View>
           </div>
         </View>
@@ -844,9 +1036,9 @@ export function ChatInbox() {
                 padding: theme.padding.m,
               }}
             >
-              {selectedContact ? (
+              {panelContact ? (
                 <ContactInfoPanel
-                  contact={selectedContact}
+                  contact={panelContact}
                   onOpenFullMap={() => navigate('/maps/general')}
                 />
               ) : (
