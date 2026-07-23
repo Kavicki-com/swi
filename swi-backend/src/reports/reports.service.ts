@@ -23,15 +23,15 @@ export class ReportsService {
   async get(id: string) {
     const r = await this.prisma.report.findUnique({
       where: { id },
-      include: { comments: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        comments: {
+          orderBy: { createdAt: 'asc' },
+          include: { author: { include: { profile: true } } },
+        },
+      },
     })
     if (!r) return null
-    const comments = await Promise.all(
-      r.comments.map(async (c) => {
-        const author = await this.prisma.user.findUnique({ where: { id: c.authorId }, include: { profile: true } })
-        return this.toCommentDto(c, author)
-      }),
-    )
+    const comments = await Promise.all(r.comments.map((c) => this.toCommentDto(c, c.author)))
     return { ...(await this.toDto(r)), comments }
   }
 
@@ -100,6 +100,8 @@ export class ReportsService {
   }
 
   private async toCommentDto(c: Comment, author: (User & { profile: Profile | null }) | null) {
+    // Identidade do autor resolvida ao vivo (nome/avatar atuais), ao contrário do
+    // Report que faz snapshot do autor na criação — escolha deliberada.
     return {
       id: c.id,
       body: c.body,

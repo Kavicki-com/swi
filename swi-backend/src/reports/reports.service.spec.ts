@@ -185,19 +185,36 @@ describe('ReportsService', () => {
     db.report.findUnique.mockResolvedValue(
       row({
         comments: [
-          { id: 'c1', reportId: 'r1', authorId: 'u1', body: 'Primeiro', createdAt: new Date('2026-01-02T00:00:00Z') },
-          { id: 'c2', reportId: 'r1', authorId: 'u2', body: 'Segundo', createdAt: new Date('2026-01-03T00:00:00Z') },
+          {
+            id: 'c1',
+            reportId: 'r1',
+            authorId: 'u1',
+            body: 'Primeiro',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            author: { name: 'Ana', profile: { fullName: 'Ana Perfil', avatarKey: 'reports/av.jpg' } },
+          },
+          {
+            id: 'c2',
+            reportId: 'r1',
+            authorId: 'u2',
+            body: 'Segundo',
+            createdAt: new Date('2026-01-03T00:00:00Z'),
+            author: { name: 'Bruno', profile: null },
+          },
         ],
       }),
     )
-    db.user.findUnique
-      .mockResolvedValueOnce({ name: 'Ana', profile: { fullName: 'Ana Perfil', avatarKey: 'reports/av.jpg' } })
-      .mockResolvedValueOnce({ name: 'Bruno', profile: null })
     const out = await new ReportsService(db, media(), notifications()).get('r1')
     expect(db.report.findUnique).toHaveBeenCalledWith({
       where: { id: 'r1' },
-      include: { comments: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        comments: {
+          orderBy: { createdAt: 'asc' },
+          include: { author: { include: { profile: true } } },
+        },
+      },
     })
+    expect(db.user.findUnique).not.toHaveBeenCalled()
     expect(out!.comments).toEqual([
       { id: 'c1', body: 'Primeiro', authorName: 'Ana Perfil', authorAvatarUri: 'signed:reports/av.jpg', createdAt: '01/01/2026' },
       { id: 'c2', body: 'Segundo', authorName: 'Bruno', authorAvatarUri: '', createdAt: '02/01/2026' },
