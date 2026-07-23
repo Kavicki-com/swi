@@ -66,10 +66,12 @@ const DIR: Contact = {
 }
 
 let openConversation: ReturnType<typeof vi.fn>
+let closeConversation: ReturnType<typeof vi.fn>
 let send: ReturnType<typeof vi.fn>
 
 function setChat(over: Record<string, unknown> = {}) {
   openConversation = vi.fn(async () => {})
+  closeConversation = vi.fn()
   send = vi.fn(async () => ({ error: null }))
   chat.value = {
     myId: 'me',
@@ -79,6 +81,7 @@ function setChat(over: Record<string, unknown> = {}) {
     directory: [DIR],
     load: vi.fn(async () => {}),
     openConversation,
+    closeConversation,
     send,
     keyFor,
     ...over,
@@ -130,6 +133,13 @@ describe('ChatInbox', () => {
   it('opens the selected conversation on mount', async () => {
     renderPage(<ChatInbox />, CONV_ROUTE)
     await waitFor(() => expect(openConversation).toHaveBeenCalledWith('me#w1'))
+  })
+
+  it('closes the active conversation on unmount (frees openConvRef)', () => {
+    const { unmount } = renderPage(<ChatInbox />, CONV_ROUTE)
+    expect(closeConversation).not.toHaveBeenCalled()
+    unmount()
+    expect(closeConversation).toHaveBeenCalledTimes(1)
   })
 
   it('selecting a conversation navigates with the %23-encoded id', () => {

@@ -4,16 +4,23 @@ import { vi } from 'vitest'
 // vi.mock é hoistado pro topo; os mocks têm que existir antes dele — por isso
 // vi.hoisted (padrão do repo, ver chatSocket.test.ts / Login.test.tsx). `socket`
 // é um holder mutável pra capturar o callback passado a subscribeMessages.
-const { listConversations, listDirectory, listMessages, sendMessage, markRead, uploadImage, socket } =
-  vi.hoisted(() => ({
-    listConversations: vi.fn(),
-    listDirectory: vi.fn(async () => ({ data: [], error: null })),
-    listMessages: vi.fn(async () => ({ data: [], error: null })),
-    sendMessage: vi.fn(async () => ({ data: null, error: null })),
-    markRead: vi.fn(async () => ({ data: null, error: null })),
-    uploadImage: vi.fn(async () => 'chat/x.jpg'),
-    socket: { cb: (_m: any) => {} },
-  }))
+const {
+  listConversations,
+  listDirectory,
+  listMessages,
+  sendMessage,
+  markRead,
+  uploadImage,
+  socket,
+} = vi.hoisted(() => ({
+  listConversations: vi.fn(),
+  listDirectory: vi.fn(async () => ({ data: [], error: null })),
+  listMessages: vi.fn(async () => ({ data: [], error: null })),
+  sendMessage: vi.fn(async () => ({ data: null, error: null })),
+  markRead: vi.fn(async () => ({ data: null, error: null })),
+  uploadImage: vi.fn(async () => 'chat/x.jpg'),
+  socket: { cb: (_m: any) => {} },
+}))
 vi.mock('../api/chats', () => ({
   chatsApi: { listConversations, listDirectory, listMessages, sendMessage, markRead },
 }))
@@ -85,7 +92,13 @@ it('mensagem do socket de conversa desconhecida → refetch da lista', async () 
   setup()
   await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('empty'))
   listConversations.mockResolvedValueOnce({
-    data: [conv('me#w2', { lastMessageBody: 'oi', lastMessageAt: '2026-07-23T10:00:00Z', unreadBy: { me: 1 } })],
+    data: [
+      conv('me#w2', {
+        lastMessageBody: 'oi',
+        lastMessageAt: '2026-07-23T10:00:00Z',
+        unreadBy: { me: 1 },
+      }),
+    ],
     error: null,
   })
   act(() =>
@@ -103,7 +116,10 @@ it('mensagem do socket de conversa desconhecida → refetch da lista', async () 
 })
 
 it('mensagem do outro na conversa aberta → markRead automático', async () => {
-  listConversations.mockResolvedValueOnce({ data: [conv('me#w1', { unreadBy: { me: 2 } })], error: null })
+  listConversations.mockResolvedValueOnce({
+    data: [conv('me#w1', { unreadBy: { me: 2 } })],
+    error: null,
+  })
   listMessages.mockResolvedValueOnce({ data: [], error: null })
   setup()
   await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
@@ -123,6 +139,67 @@ it('mensagem do outro na conversa aberta → markRead automático', async () => 
     }),
   )
   await waitFor(() => expect(markRead).toHaveBeenCalledWith('me#w1'))
+})
+
+it('openConversation em conversa conhecida → listMessages + markRead', async () => {
+  listConversations.mockResolvedValueOnce({
+    data: [conv('me#w1', { unreadBy: { me: 3 } })],
+    error: null,
+  })
+  listMessages.mockResolvedValueOnce({ data: [], error: null })
+  setup()
+  await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+  await act(async () => {
+    await ctx.openConversation('me#w1')
+  })
+  expect(listMessages).toHaveBeenCalledWith('me#w1')
+  expect(markRead).toHaveBeenCalledWith('me#w1')
+})
+
+it('openConversation em conversa nova (desconhecida) → sem listMessages/markRead, thread []', async () => {
+  listConversations.mockResolvedValueOnce({ data: [conv('me#w1')], error: null })
+  setup()
+  await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+  await act(async () => {
+    await ctx.openConversation('me#wNEW')
+  })
+  // Conversa lazy ainda não existe no backend → nenhum REST 404-prone é disparado.
+  expect(listMessages).not.toHaveBeenCalled()
+  expect(markRead).not.toHaveBeenCalled()
+  // Thread inicializada vazia pro echo do 1º send poder dar append.
+  expect(ctx.messagesByConv['me#wNEW']).toEqual([])
+})
+
+it('closeConversation → mensagem do outro na conversa antes-aberta NÃO é auto-lida', async () => {
+  listConversations.mockResolvedValueOnce({
+    data: [conv('me#w1', { unreadBy: {} })],
+    error: null,
+  })
+  listMessages.mockResolvedValueOnce({ data: [], error: null })
+  setup()
+  await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+  await act(async () => {
+    await ctx.openConversation('me#w1')
+  })
+  // Admin sai do inbox: libera a conversa ativa.
+  act(() => {
+    ctx.closeConversation()
+  })
+  markRead.mockClear() // isola qualquer markRead pós-close
+  act(() =>
+    socketCb({
+      id: 'm2',
+      conversationId: 'me#w1',
+      participants: ['me', 'w1'],
+      senderId: 'w1',
+      body: 'oi',
+      imageUri: null,
+      sentAt: '2026-07-23T11:00:00Z',
+    }),
+  )
+  // openConvRef foi limpo → nada de markRead; o unread INCREMENTA via applyMessage.
+  expect(markRead).not.toHaveBeenCalled()
+  await waitFor(() => expect(ctx.conversations[0]?.unreadBy.me).toBe(1))
 })
 
 it('send chama chatsApi.sendMessage', async () => {

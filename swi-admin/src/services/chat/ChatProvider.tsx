@@ -39,6 +39,7 @@ interface ChatContextValue {
   directory: Contact[]
   load: () => Promise<void>
   openConversation: (conversationId: string) => Promise<void>
+  closeConversation: () => void
   send: (conversationId: string, body: string, file?: File) => Promise<{ error: MockError | null }>
   keyFor: (workerId: string) => string
 }
@@ -126,6 +127,18 @@ export function ChatProvider({ children }: PropsWithChildren) {
   const openConversation = useCallback(
     async (conversationId: string) => {
       openConvRef.current = conversationId
+      // Conversa nova (contato do diretório sem thread ainda) não existe no
+      // backend — ela é criada lazy no 1º send. listMessages/markRead
+      // devolveriam 404 (barulho no console). Uma thread nova não tem mensagem
+      // nem unread: inicializa vazia (se ainda não houver) e sai. O echo do 1º
+      // send chega via socket, onMessage refaz a lista e o append usa este [].
+      const known = conversationsRef.current.some((c) => c.id === conversationId)
+      if (!known) {
+        setMessagesByConv((prev) =>
+          prev[conversationId] ? prev : { ...prev, [conversationId]: [] },
+        )
+        return
+      }
       // last-write-wins: server snapshot is source of truth; a concurrent socket msg may be re-fetched on next open
       // TODO(followup): listMessages error currently shows as empty thread; no per-thread error surface yet
       const { data } = await chatsApi.listMessages(conversationId)
@@ -135,6 +148,14 @@ export function ChatProvider({ children }: PropsWithChildren) {
     },
     [applyConversations],
   )
+
+  // Limpa a conversa ativa ao sair do inbox. Sem isso, openConvRef fica travado
+  // no último id aberto e onMessage marcaria como lida uma mensagem que chega
+  // depois que o admin já saiu da tela — zerando o badge sem ninguém ter visto.
+  // Estável (deps vazias) pro cleanup de unmount do ChatInbox não re-disparar.
+  const closeConversation = useCallback(() => {
+    openConvRef.current = null
+  }, [])
 
   const send = useCallback(async (conversationId: string, body: string, file?: File) => {
     // Sem otimista: o echo da mensagem volta pelo socket (onMessage) e atualiza o
@@ -153,7 +174,10 @@ export function ChatProvider({ children }: PropsWithChildren) {
         return { error: { message: e instanceof Error ? e.message : 'Falha ao enviar imagem' } }
       }
     }
-    const { error } = await chatsApi.sendMessage(conversationId, imageKey ? { body, imageKey } : { body })
+    const { error } = await chatsApi.sendMessage(
+      conversationId,
+      imageKey ? { body, imageKey } : { body },
+    )
     return { error }
   }, [])
 
@@ -168,6 +192,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
       directory,
       load,
       openConversation,
+      closeConversation,
       send,
       keyFor,
     }),
@@ -179,6 +204,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
       directory,
       load,
       openConversation,
+      closeConversation,
       send,
       keyFor,
     ],

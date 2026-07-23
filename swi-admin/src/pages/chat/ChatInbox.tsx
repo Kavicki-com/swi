@@ -531,6 +531,7 @@ export function ChatInbox() {
     directory,
     myId,
     openConversation,
+    closeConversation,
     send,
     keyFor,
     loadStatus,
@@ -585,6 +586,13 @@ export function ChatInbox() {
   useEffect(() => {
     if (selectedContactId) openConversation(selectedContactId)
   }, [selectedContactId, openConversation])
+
+  // Ao desmontar o inbox (admin navega pra outra tela), libera a conversa ativa
+  // no provider — que permanece montado como ancestral de layout-route. Sem
+  // isso, uma mensagem que chega depois seria marcada como lida sem ninguém ter
+  // aberto a tela, zerando o badge de não-lidas da sidebar. closeConversation é
+  // estável (useCallback deps vazias), então o cleanup roda só no unmount.
+  useEffect(() => () => closeConversation(), [closeConversation])
 
   // Backend-down surface: toast once per error episode so a failed load doesn't
   // silently read as an empty inbox (the middle placeholder also switches copy).
