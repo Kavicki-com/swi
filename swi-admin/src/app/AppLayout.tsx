@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Pressable, View } from 'react-native'
 import { flushSync } from 'react-dom'
@@ -28,11 +28,9 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { NAV_ITEMS } from '@/app/nav'
+import { useChat } from '@/services/chat/ChatProvider'
+import { resolveContact, unreadFor } from '@/services/chat/chatReducers'
 import workerA from '@/assets/avatars/worker-a.png'
-import chatEzequiel from '@/assets/avatars/chat-ezequiel.png'
-import chatRomulo from '@/assets/avatars/chat-romulo.png'
-import chatJulio from '@/assets/avatars/chat-julio.png'
-import chatJennifer from '@/assets/avatars/chat-jennifer.png'
 
 // DS module is shimmed to `any`; mirror the types we need locally.
 type ChatSectionUser = {
@@ -42,29 +40,6 @@ type ChatSectionUser = {
   avatarUri?: string
   unreadCount?: number
 }
-
-// Sidebar chat list — Figma frame 4:2 mocks 4 contacts. Real chat ships in S5.
-// Avatars are real worker photos exported from the same Figma frame.
-// IDs match the chat-* prefix used by mockApi/chats.ts so a click in the
-// sidebar can deep-link straight into /chat/:contactId without translation.
-const CHAT_USERS: ChatSectionUser[] = [
-  {
-    id: 'chat-ezequiel',
-    name: 'Ezequiel Almeida',
-    subtitle: 'Setor Leste',
-    avatarUri: chatEzequiel,
-    unreadCount: 2,
-  },
-  { id: 'chat-romulo', name: 'Romulo Cardoso', subtitle: 'Setor Norte', avatarUri: chatRomulo },
-  {
-    id: 'chat-josue',
-    name: 'Júlio Lacerda',
-    subtitle: 'Setor Sul',
-    avatarUri: chatJulio,
-    unreadCount: 1,
-  },
-  { id: 'chat-jennifer', name: 'Jennifer Gomes', subtitle: 'Setor Oeste', avatarUri: chatJennifer },
-]
 
 /**
  * Resolve which sidebar item should be highlighted for a given pathname.
@@ -104,6 +79,27 @@ export function AppLayout() {
   const breakpoint = useBreakpoint()
   const activeNavValue = resolveActiveNavValue(location.pathname)
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Chat sidebar/drawer list vem do ChatProvider (conversas reais). Deriva a
+  // shape do ChatSection (id/name/subtitle/avatarUri/unreadCount) uma vez por
+  // mudança de conversations/myId. unreadCount 0 vira undefined pra não pintar
+  // badge zerado. O id é a conversationId (`me#w1`) — encodeURIComponent no
+  // handler evita que o `#` vire fragmento de URL no react-router.
+  const { conversations, myId } = useChat()
+  const chatUsers = useMemo<ChatSectionUser[]>(
+    () =>
+      conversations.map((c) => {
+        const r = resolveContact(c, myId)
+        return {
+          id: c.id,
+          name: r.name,
+          subtitle: r.subtitle,
+          avatarUri: r.avatarUri,
+          unreadCount: unreadFor(c, myId) || undefined,
+        }
+      }),
+    [conversations, myId],
+  )
 
   // Close the drawer whenever the route changes — clicking a nav item should
   // both navigate and dismiss the overlay without extra plumbing.
@@ -227,10 +223,12 @@ export function AppLayout() {
               />
               <View testID="app-drawer-chat">
                 <ChatSection
-                  users={CHAT_USERS}
+                  users={chatUsers}
                   searchPlaceholder="Pesquisar Contatos"
                   expandLabel="Expandir chat"
-                  onUserPress={(id: string) => navigateWithTransition(navigate, `/chat/${id}`)}
+                  onUserPress={(id: string) =>
+                    navigateWithTransition(navigate, `/chat/${encodeURIComponent(id)}`)
+                  }
                   onExpand={() => navigateWithTransition(navigate, '/chat')}
                   fullWidth
                   renderCard={(card: ReactNode, user: ChatSectionUser) => (
@@ -313,10 +311,12 @@ export function AppLayout() {
         />
         <View testID="app-sidebar-chat" style={{ marginTop: theme.gap.s }}>
           <ChatSection
-            users={CHAT_USERS}
+            users={chatUsers}
             searchPlaceholder="Pesquisar Contatos"
             expandLabel="Expandir chat"
-            onUserPress={(id: string) => navigateWithTransition(navigate, `/chat/${id}`)}
+            onUserPress={(id: string) =>
+              navigateWithTransition(navigate, `/chat/${encodeURIComponent(id)}`)
+            }
             onExpand={() => navigateWithTransition(navigate, '/chat')}
             fullWidth
             renderCard={(card: ReactNode, user: ChatSectionUser) => (

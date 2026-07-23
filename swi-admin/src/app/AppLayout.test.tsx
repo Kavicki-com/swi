@@ -1,8 +1,32 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
+
+// AppLayout agora consome useChat() (ChatProvider). Este teste NÃO monta o
+// provider real (isso é a task B5) — mocka useChat pra devolver um contexto
+// fixo com uma conversa que tem contato resolvível e badge de não-lidas. Os
+// helpers puros resolveContact/unreadFor rodam de verdade sobre a conversa.
+vi.mock('@/services/chat/ChatProvider', () => ({
+  useChat: () => ({
+    myId: 'me',
+    conversations: [
+      {
+        id: 'me#w1',
+        participants: ['me', 'w1'],
+        participantNames: ['Eu', 'Ezequiel Almeida'],
+        participantSubtitles: ['', 'Setor Leste'],
+        participantAvatars: ['', ''],
+        lastMessageBody: 'oi',
+        lastMessageAt: '2026-07-23T10:00:00Z',
+        unreadBy: { me: 3 },
+      },
+    ],
+  }),
+}))
+
 import { AppLayout, resolveActiveNavValue } from './AppLayout'
 
 beforeEach(() => {
@@ -102,15 +126,15 @@ describe('AppLayout', () => {
     })
   })
 
-  it('renders the ChatSection with mocked contacts in the sidebar', async () => {
+  it('renders the ChatSection fed by the ChatProvider conversations', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-sidebar-chat')).toBeInTheDocument()
     })
+    // Nome do contato resolvido (o outro participante), não mais a lista hardcoded.
     expect(screen.getByText('Ezequiel Almeida')).toBeInTheDocument()
-    expect(screen.getByText('Romulo Cardoso')).toBeInTheDocument()
-    expect(screen.getByText('Júlio Lacerda')).toBeInTheDocument()
-    expect(screen.getByText('Jennifer Gomes')).toBeInTheDocument()
+    // Badge de não-lidas: unreadBy.me === 3 → ChatUserCard pad pra "03".
+    expect(screen.getByText('03')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Pesquisar Contatos')).toBeInTheDocument()
   })
 
