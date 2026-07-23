@@ -1,0 +1,174 @@
+// Relatórios do painel (GET /reports, GET /reports/:id, POST/PATCH) contra o
+// backend Nest. Mantém o envelope MockResponse pra que as telas de Reports não
+// mudem de contrato na migração (mesmo padrão do services/api/users.ts). Os
+// avatares dos responsáveis e das atividades são DECORATIVOS — o backend guarda
+// responsáveis só como nomes, sem avatar; injetamos avatares fixos no mapeamento
+// pra preservar o visual do redesign (AvatarGroup) até o hardware/upload existir.
+import type { MockResponse } from '@/services/mockApi/types'
+import type { Report, ReportActivity, ReportStatus } from '@/services/mockApi/reports'
+import { apiFetch } from './http'
+import workerA from '@/assets/avatars/worker-a.png'
+import workerB from '@/assets/avatars/worker-b.png'
+import workerC from '@/assets/avatars/worker-c.png'
+
+export type { Report, ReportActivity }
+
+// Avatares decorativos: o backend não persiste avatar de responsável, então a
+// UI (AvatarGroup) consome esta rotação fixa. Rotação a,b,c,a,b — 5 slots,
+// batendo com o mock antigo (mockApi/reports.ts) pra manter o layout idêntico.
+const DECOR_AVATARS: ReadonlyArray<string> = [workerA, workerB, workerC, workerA, workerB]
+
+// Um comentário no detalhe do relatório (POST /reports/:id/comments responde um).
+export type ReportComment = {
+  id: string
+  body: string
+  authorName: string
+  authorAvatarUri: string
+  createdAt: string
+}
+
+// DTO do GET /reports (item da lista). responsibles vem como array de nomes (o
+// mapper junta em string); activities/comments só aparecem no detalhe.
+export type ReportDto = {
+  id: string
+  title: string
+  summary: string
+  status: ReportStatus
+  statusLabel: string
+  authorName: string
+  authorAvatarUri: string
+  creationDate: string // dd/mm/yyyy
+  sector: string
+  responsibles: string[]
+  details?: string
+  images?: string[]
+  activities?: unknown
+}
+
+// DTO do GET /reports/:id (detalhe) — soma os comentários.
+export type ReportDetailDto = ReportDto & {
+  comments?: ReportComment[]
+}
+
+// Atividade crua do backend (sem id garantido, sem avatares — decorativos entram
+// no mapeamento).
+type RawActivity = {
+  id?: string
+  title: string
+  sector: string
+  progress: number
+  tone: ReportActivity['tone']
+  overflowCount?: number
+}
+
+// Corpo do POST /reports — cadastro pelo painel. Campos opcionais ausentes NÃO
+// entram no corpo (JSON.stringify descarta `undefined`).
+export type CreateReportInput = {
+  title: string
+  summary?: string
+  details?: string
+  responsibles?: string[]
+  imageKeys?: string[]
+}
+
+// Corpo do PATCH /reports/:id — edição parcial (qualquer subconjunto).
+export type UpdateReportInput = {
+  title?: string
+  summary?: string
+  details?: string
+  responsibles?: string[]
+  imageKeys?: string[]
+  status?: ReportStatus
+  statusLabel?: string
+}
+
+const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)
+
+// DTO → Report (UI). responsibles (array de nomes) → string separada por vírgula;
+// avatares (responsibleAvatars, e por-linha nas atividades) são DECORATIVOS.
+function toReport(dto: ReportDto): Report {
+  const activities = ((dto.activities as RawActivity[] | null | undefined) ?? []).map((a, i) => ({
+    id: a.id ?? `act-${i}`, // backend pode não mandar id → sintetiza um estável por posição
+    title: a.title,
+    sector: a.sector,
+    progress: a.progress,
+    tone: a.tone,
+    overflowCount: a.overflowCount,
+    avatars: DECOR_AVATARS, // decorativo: atividades do backend não carregam avatar
+  }))
+  return {
+    id: dto.id,
+    title: dto.title,
+    summary: dto.summary,
+    status: dto.status,
+    statusLabel: dto.statusLabel,
+    authorName: dto.authorName,
+    authorAvatarUri: dto.authorAvatarUri,
+    creationDate: dto.creationDate,
+    sector: dto.sector,
+    responsibles: dto.responsibles.join(', '),
+    responsibleAvatars: DECOR_AVATARS, // decorativo: backend guarda só nomes
+    responsibleTotalCount: dto.responsibles.length,
+    details: dto.details,
+    images: dto.images ?? [],
+    activities,
+  }
+}
+
+export const reportsApi = {
+  async list(): Promise<MockResponse<Report[]>> {
+    try {
+      const reports = await apiFetch<ReportDto[]>('/reports')
+      return { data: reports.map(toReport), error: null }
+    } catch (e) {
+      return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }
+    }
+  },
+
+  async get(id: string): Promise<MockResponse<(Report & { comments: ReportComment[] }) | null>> {
+    try {
+      const dto = await apiFetch<ReportDetailDto>(`/reports/${id}`)
+      return { data: { ...toReport(dto), comments: dto.comments ?? [] }, error: null }
+    } catch (e) {
+      // A tela só distingue loading × (data|null) — qualquer erro (404, rede) cai
+      // na tela "não encontrado". Mantém o envelope preenchido por consistência.
+      return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }
+    }
+  },
+
+  async create(input: CreateReportInput): Promise<MockResponse<Report>> {
+    try {
+      const created = await apiFetch<ReportDto>('/reports', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return { data: toReport(created), error: null }
+    } catch (e) {
+      return { data: null, error: { message: errorMessage(e, 'Falha ao cadastrar') } }
+    }
+  },
+
+  async update(id: string, patch: UpdateReportInput): Promise<MockResponse<Report>> {
+    try {
+      const updated = await apiFetch<ReportDto>(`/reports/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      })
+      return { data: toReport(updated), error: null }
+    } catch (e) {
+      return { data: null, error: { message: errorMessage(e, 'Falha ao salvar') } }
+    }
+  },
+
+  async addComment(id: string, body: string): Promise<MockResponse<ReportComment>> {
+    try {
+      const comment = await apiFetch<ReportComment>(`/reports/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      })
+      return { data: comment, error: null }
+    } catch (e) {
+      return { data: null, error: { message: errorMessage(e, 'Falha ao comentar') } }
+    }
+  },
+}
