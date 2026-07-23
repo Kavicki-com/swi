@@ -134,6 +134,7 @@ const WEATHER_CONDITION_MAP: Record<
   WeatherTimelineEvent['condition']
 > = {
   sun: 'sunny',
+  cloudy: 'partly-cloudy',
   rain: 'rainy',
   storm: 'rainy',
 }

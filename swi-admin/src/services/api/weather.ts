@@ -21,12 +21,13 @@ export type WeatherSnapshotDto = {
 
 type StripCondition = WeatherSlot['condition']
 
-// Condição rica do backend → 3 buckets visuais da tira (Figma). storm é o único
-// distinto; nuvem/névoa/sol viram "sun", neve/chuva viram "rain".
+// Condição rica do backend → buckets visuais da tira (Figma). sol vira "sun",
+// nuvem/névoa viram "cloudy" (parcialmente nublado), neve/chuva viram "rain",
+// tempestade fica distinta.
 const CONDITION_TO_STRIP: Record<WeatherConditionDto, StripCondition> = {
   clear: 'sun',
-  clouds: 'sun',
-  fog: 'sun',
+  clouds: 'cloudy',
+  fog: 'cloudy',
   rain: 'rain',
   snow: 'rain',
   storm: 'storm',
@@ -37,6 +38,7 @@ const CONDITION_TO_STRIP: Record<WeatherConditionDto, StripCondition> = {
 // espera; storm reflete tempestade, não "parcialmente nublado".
 const STRIP_LABEL: Record<StripCondition, string> = {
   sun: 'SOL\nINTENSO',
+  cloudy: 'PARCIALMENTE\nNUBLADO',
   rain: 'CHUVAS\nMODERADAS',
   storm: 'TEMPESTADE',
 }

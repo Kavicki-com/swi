@@ -37,29 +37,29 @@ describe('toWeatherStrip', () => {
     expect(strip.map((s) => s.isNow ?? false)).toEqual([false, true, false, false])
   })
 
-  it('maps conditions: clear/clouds/fog → sun, rain/snow → rain, storm → storm', () => {
+  it('maps conditions: clear → sun, clouds/fog → cloudy, rain/snow → rain, storm → storm', () => {
     const snap = snapshotWith([
       { at: hourAt(-4), tempC: 16, condition: 'snow' }, // → rain
-      { at: hourAt(0), tempC: 18, condition: 'fog' }, // → sun
+      { at: hourAt(0), tempC: 18, condition: 'fog' }, // → cloudy
       { at: hourAt(2), tempC: 19, condition: 'storm' }, // → storm
-      { at: hourAt(4), tempC: 20, condition: 'clouds' }, // → sun
+      { at: hourAt(4), tempC: 20, condition: 'clouds' }, // → cloudy
     ])
     const strip = toWeatherStrip(snap)
-    expect(strip.map((s) => s.condition)).toEqual(['rain', 'sun', 'storm', 'sun'])
+    expect(strip.map((s) => s.condition)).toEqual(['rain', 'cloudy', 'storm', 'cloudy'])
   })
 
   it('derives the PT-BR label from the mapped condition (Figma parity)', () => {
     const snap = snapshotWith([
       { at: hourAt(-4), tempC: 16, condition: 'rain' },
       { at: hourAt(0), tempC: 18, condition: 'clear' },
-      { at: hourAt(2), tempC: 19, condition: 'rain' },
+      { at: hourAt(2), tempC: 19, condition: 'clouds' },
       { at: hourAt(4), tempC: 20, condition: 'storm' },
     ])
     const strip = toWeatherStrip(snap)
     expect(strip.map((s) => s.label)).toEqual([
       'CHUVAS\nMODERADAS',
       'SOL\nINTENSO',
-      'CHUVAS\nMODERADAS',
+      'PARCIALMENTE\nNUBLADO',
       'TEMPESTADE',
     ])
   })
