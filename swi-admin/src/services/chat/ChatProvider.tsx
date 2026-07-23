@@ -7,12 +7,21 @@
 //  - send recebe um File do browser, subido via uploadImage(file, 'chat').
 // Serve tanto o inbox quanto o painel lateral (tasks posteriores consomem).
 import {
-  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
   type PropsWithChildren,
 } from 'react'
 import type { Conversation, Contact, Message } from './types'
 import {
-  applyMessage, markRead as markReadReducer, conversationKey, sortByRecent,
+  applyMessage,
+  markRead as markReadReducer,
+  conversationKey,
+  sortByRecent,
 } from './chatReducers'
 import { subscribeMessages } from './chatSocket'
 import { chatsApi } from '../api/chats'
@@ -53,7 +62,9 @@ export function ChatProvider({ children }: PropsWithChildren) {
   // myId também espelhado: onMessage é registrado uma vez no mount e não deve
   // fechar sobre um myId vazio se a sessão resolver depois.
   const myIdRef = useRef(myId)
-  useEffect(() => { myIdRef.current = myId }, [myId])
+  useEffect(() => {
+    myIdRef.current = myId
+  }, [myId])
 
   const applyConversations = useCallback((next: Conversation[]) => {
     conversationsRef.current = next
@@ -62,10 +73,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
 
   const load = useCallback(async () => {
     setLoadStatus('loading')
-    const [cRes, dRes] = await Promise.all([
-      chatsApi.listConversations(),
-      chatsApi.listDirectory(),
-    ])
+    const [cRes, dRes] = await Promise.all([chatsApi.listConversations(), chatsApi.listDirectory()])
     if (cRes.error || dRes.error) {
       setLoadStatus('error')
       return
@@ -76,32 +84,36 @@ export function ChatProvider({ children }: PropsWithChildren) {
     setLoadStatus(cs.length ? 'ready' : 'empty')
   }, [applyConversations])
 
-  const onMessage = useCallback((msg: Message) => {
-    const me = myIdRef.current
-    const known = conversationsRef.current.some((c) => c.id === msg.conversationId)
-    if (known) {
-      applyConversations(applyMessage(conversationsRef.current, msg))
-    } else {
-      // Conversa criada lazy (1ª mensagem a um contato novo) ainda não está no
-      // state — applyMessage seria no-op. Buscamos a lista fresca do backend,
-      // sem mexer no loadStatus (nada de flash de loading).
-      chatsApi.listConversations().then(({ data, error }) => {
-        if (error) return
-        applyConversations(sortByRecent(data ?? []))
+  const onMessage = useCallback(
+    (msg: Message) => {
+      const me = myIdRef.current
+      const known = conversationsRef.current.some((c) => c.id === msg.conversationId)
+      if (known) {
+        applyConversations(applyMessage(conversationsRef.current, msg))
+      } else {
+        // Conversa criada lazy (1ª mensagem a um contato novo) ainda não está no
+        // state — applyMessage seria no-op. Buscamos a lista fresca do backend,
+        // sem mexer no loadStatus (nada de flash de loading).
+        // last-write-wins: server snapshot is source of truth; a concurrent socket msg may be re-fetched on next open
+        chatsApi.listConversations().then(({ data, error }) => {
+          if (error) return
+          applyConversations(sortByRecent(data ?? []))
+        })
+      }
+      // Append ao histórico já carregado da thread (inclui a 1ª msg de conversa
+      // nova, se openConversation já inicializou messagesByConv[convId]).
+      setMessagesByConv((prev) => {
+        const existing = prev[msg.conversationId]
+        return existing ? { ...prev, [msg.conversationId]: [...existing, msg] } : prev
       })
-    }
-    // Append ao histórico já carregado da thread (inclui a 1ª msg de conversa
-    // nova, se openConversation já inicializou messagesByConv[convId]).
-    setMessagesByConv((prev) => {
-      const existing = prev[msg.conversationId]
-      return existing ? { ...prev, [msg.conversationId]: [...existing, msg] } : prev
-    })
-    // Mensagem do outro na conversa aberta → zera o badge ao vivo.
-    if (openConvRef.current === msg.conversationId && msg.senderId !== me) {
-      chatsApi.markRead(msg.conversationId)
-      applyConversations(markReadReducer(conversationsRef.current, msg.conversationId, me))
-    }
-  }, [applyConversations])
+      // Mensagem do outro na conversa aberta → zera o badge ao vivo.
+      if (openConvRef.current === msg.conversationId && msg.senderId !== me) {
+        chatsApi.markRead(msg.conversationId)
+        applyConversations(markReadReducer(conversationsRef.current, msg.conversationId, me))
+      }
+    },
+    [applyConversations],
+  )
 
   useEffect(() => {
     load()
@@ -111,30 +123,66 @@ export function ChatProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const openConversation = useCallback(async (conversationId: string) => {
-    openConvRef.current = conversationId
-    const { data } = await chatsApi.listMessages(conversationId)
-    setMessagesByConv((prev) => ({ ...prev, [conversationId]: data ?? [] }))
-    await chatsApi.markRead(conversationId)
-    applyConversations(markReadReducer(conversationsRef.current, conversationId, myIdRef.current))
-  }, [applyConversations])
+  const openConversation = useCallback(
+    async (conversationId: string) => {
+      openConvRef.current = conversationId
+      // last-write-wins: server snapshot is source of truth; a concurrent socket msg may be re-fetched on next open
+      // TODO(followup): listMessages error currently shows as empty thread; no per-thread error surface yet
+      const { data } = await chatsApi.listMessages(conversationId)
+      setMessagesByConv((prev) => ({ ...prev, [conversationId]: data ?? [] }))
+      await chatsApi.markRead(conversationId)
+      applyConversations(markReadReducer(conversationsRef.current, conversationId, myIdRef.current))
+    },
+    [applyConversations],
+  )
 
   const send = useCallback(async (conversationId: string, body: string, file?: File) => {
     // Sem otimista: o echo da mensagem volta pelo socket (onMessage) e atualiza o
     // state — evita a complexidade de dedup. O dto sem imagem é exatamente
     // { body } (nada de imageKey: undefined) pra casar o contrato do backend.
-    const imageKey = file ? await uploadImage(file, 'chat') : undefined
-    const dto = imageKey ? { body, imageKey } : { body }
-    const { error } = await chatsApi.sendMessage(conversationId, dto)
+    //
+    // uploadImage LANÇA (tipo inválido, >15MB, presign 403, queda de rede) — não
+    // é enveloped como a camada api/. Sem este try o caminho de imagem (o mais
+    // propenso a falhar) rejeitaria enquanto o de texto devolve { error },
+    // quebrando o contrato Promise<{ error }> e dando unhandled rejection na UI.
+    let imageKey: string | undefined
+    if (file) {
+      try {
+        imageKey = await uploadImage(file, 'chat')
+      } catch (e) {
+        return { error: { message: e instanceof Error ? e.message : 'Falha ao enviar imagem' } }
+      }
+    }
+    const { error } = await chatsApi.sendMessage(conversationId, imageKey ? { body, imageKey } : { body })
     return { error }
   }, [])
 
   const keyFor = useCallback((workerId: string) => conversationKey(myId, workerId), [myId])
 
-  const value = useMemo<ChatContextValue>(() => ({
-    myId, loadStatus, conversations, messagesByConv, directory,
-    load, openConversation, send, keyFor,
-  }), [myId, loadStatus, conversations, messagesByConv, directory, load, openConversation, send, keyFor])
+  const value = useMemo<ChatContextValue>(
+    () => ({
+      myId,
+      loadStatus,
+      conversations,
+      messagesByConv,
+      directory,
+      load,
+      openConversation,
+      send,
+      keyFor,
+    }),
+    [
+      myId,
+      loadStatus,
+      conversations,
+      messagesByConv,
+      directory,
+      load,
+      openConversation,
+      send,
+      keyFor,
+    ],
+  )
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
 }
