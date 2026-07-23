@@ -1,6 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi } from 'vitest'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
@@ -22,6 +22,18 @@ vi.mock('@/services/chat/ChatProvider', () => ({
         lastMessageBody: 'oi',
         lastMessageAt: '2026-07-23T10:00:00Z',
         unreadBy: { me: 3 },
+      },
+      // Conversa sem não-lidas: unreadFor === 0 → `|| undefined` colapsa o
+      // unreadCount, e o ChatUserCard não pinta badge (showBadge = count > 0).
+      {
+        id: 'me#w2',
+        participants: ['me', 'w2'],
+        participantNames: ['Eu', 'Silvana Sem Badge'],
+        participantSubtitles: ['', 'Setor Oeste'],
+        participantAvatars: ['', ''],
+        lastMessageBody: 'ok',
+        lastMessageAt: '2026-07-22T09:00:00Z',
+        unreadBy: { me: 0 },
       },
     ],
   }),
@@ -51,6 +63,14 @@ beforeEach(() => {
 
 afterEach(() => window.localStorage.clear())
 
+// Expõe o pathname CRU (com o `#` ainda percent-encodado como %23) pra travar
+// a codificação da navegação do lado do AppLayout sem mockar useNavigate — o que
+// quebraria o teste de navegação do header, que depende do navigate real.
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location-pathname">{location.pathname}</div>
+}
+
 const renderTree = () =>
   render(
     <SwiThemeProvider>
@@ -63,6 +83,7 @@ const renderTree = () =>
                 path="/user/profile"
                 element={<div data-testid="profile-content">profile</div>}
               />
+              <Route path="/chat/:conversationId" element={<LocationProbe />} />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -136,6 +157,31 @@ describe('AppLayout', () => {
     // Badge de não-lidas: unreadBy.me === 3 → ChatUserCard pad pra "03".
     expect(screen.getByText('03')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Pesquisar Contatos')).toBeInTheDocument()
+  })
+
+  it('navega pro chat com o id da conversa percent-encodado (# → %23)', async () => {
+    renderTree()
+    await waitFor(() => {
+      expect(screen.getByTestId('app-sidebar-chat')).toBeInTheDocument()
+    })
+    // O card do ChatUserCard é um Pressable com accessibilityRole="button" e
+    // accessibilityLabel = name → acessível como button pelo nome do contato.
+    fireEvent.click(screen.getByRole('button', { name: 'Ezequiel Almeida' }))
+    // A conversationId `me#w1` TEM que virar `/chat/me%23w1` — sem o
+    // encodeURIComponent o `#` vira fragmento de URL e o react-router perde o id.
+    await waitFor(() => {
+      expect(screen.getByTestId('location-pathname')).toHaveTextContent('/chat/me%23w1')
+    })
+  })
+
+  it('não pinta badge quando a conversa não tem não-lidas (0 → sem badge)', async () => {
+    renderTree()
+    await waitFor(() => {
+      expect(screen.getByText('Silvana Sem Badge')).toBeInTheDocument()
+    })
+    // unreadBy.me === 0 → unreadCount undefined → nenhum badge; o "00" que o
+    // padStart geraria pra um count>0 de 1 dígito NÃO aparece.
+    expect(screen.queryByText('00')).not.toBeInTheDocument()
   })
 
   // O item ativo da sidebar sai de resolveActiveNavValue. Testamos a função
