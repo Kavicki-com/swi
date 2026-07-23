@@ -1,4 +1,4 @@
 export { authApi } from './auth'
-export { dashboardApi } from './dashboard'
-export type { DashboardSummary } from './dashboard'
+// dashboard migrou pra api/dashboard.ts (fan-out real + vitais mock); saiu deste
+// barrel mock no Passo 5.
 export type { MockResponse, MockChannel, MockError, MockRealtimeEvent } from './types'
