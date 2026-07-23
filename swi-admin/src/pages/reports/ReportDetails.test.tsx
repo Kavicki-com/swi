@@ -129,6 +129,9 @@ describe('ReportDetails — comentários', () => {
 
     // Comentário retornado aparece na lista…
     await waitFor(() => expect(screen.getByText('Comentário novo')).toBeInTheDocument())
+    // …incluindo o authorName que veio do SERVIDOR ('Admin Seed'), não o texto
+    // digitado — prova que a lista apenda o objeto RETORNADO, não o input echoado.
+    expect(screen.getByText('Admin Seed')).toBeInTheDocument()
     // …e o campo foi limpo.
     expect(screen.getByPlaceholderText('Digite aqui o seu comentário')).toHaveValue('')
   })
@@ -154,6 +157,8 @@ describe('ReportDetails — comentários', () => {
     await waitFor(() => expect(toastShow).toHaveBeenCalled())
     expect(toastShow.mock.calls[0]).toContain('Falha ao comentar')
     // O texto sobrevive pra nova tentativa.
-    expect(screen.getByPlaceholderText('Digite aqui o seu comentário')).toHaveValue('Meu comentário')
+    expect(screen.getByPlaceholderText('Digite aqui o seu comentário')).toHaveValue(
+      'Meu comentário',
+    )
   })
 })
