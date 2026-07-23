@@ -147,8 +147,9 @@ describe('ChatInbox', () => {
     const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
     fireEvent.change(input, { target: { value: 'Nova mensagem de teste' } })
     fireEvent.click(screen.getByText('Enviar'))
+    // Third arg is the optional image File — undefined for a text-only send.
     await waitFor(() =>
-      expect(send).toHaveBeenCalledWith('me#w1', 'Nova mensagem de teste'),
+      expect(send).toHaveBeenCalledWith('me#w1', 'Nova mensagem de teste', undefined),
     )
     // Draft cleared on success; no optimistic bubble for the typed text.
     await waitFor(() => expect(input.value).toBe(''))
@@ -163,6 +164,70 @@ describe('ChatInbox', () => {
     fireEvent.click(screen.getByText('Enviar'))
     await waitFor(() => expect(toast.show).toHaveBeenCalledWith('falhou'))
     expect(input.value).toBe('Mensagem que falha')
+  })
+
+  it('the attach button opens the hidden file picker', () => {
+    const clickSpy = vi
+      .spyOn(HTMLInputElement.prototype, 'click')
+      .mockImplementation(() => {})
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    fireEvent.click(screen.getByTestId('chat-attach'))
+    expect(clickSpy).toHaveBeenCalled()
+    clickSpy.mockRestore()
+  })
+
+  it('shows the attachment preview + remove control after picking a file', () => {
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    const fileInput = screen.getByTestId('chat-file-input') as HTMLInputElement
+    const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+    expect(screen.getByText('foto.jpg')).toBeTruthy()
+    expect(screen.getByTestId('chat-attach-remove')).toBeTruthy()
+  })
+
+  it('sends the picked image as the third arg to the provider', async () => {
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'Com foto' } })
+    const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
+    fireEvent.click(screen.getByText('Enviar'))
+    await waitFor(() => expect(send).toHaveBeenCalledWith('me#w1', 'Com foto', file))
+  })
+
+  it('allows an image-only send (empty draft + a pending image)', async () => {
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
+    fireEvent.click(screen.getByText('Enviar'))
+    await waitFor(() => expect(send).toHaveBeenCalledWith('me#w1', '', file))
+  })
+
+  it('clears the pending image after a successful send', async () => {
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
+    fireEvent.click(screen.getByText('Enviar'))
+    await waitFor(() => expect(screen.queryByText('foto.jpg')).toBeNull())
+  })
+
+  it('keeps the pending image on a send error', async () => {
+    send.mockResolvedValueOnce({ error: { message: 'falhou' } })
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
+    fireEvent.click(screen.getByText('Enviar'))
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith('falhou'))
+    expect(screen.getByText('foto.jpg')).toBeTruthy()
+  })
+
+  it('the remove control clears the pending image', () => {
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
+    expect(screen.getByText('foto.jpg')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('chat-attach-remove'))
+    expect(screen.queryByText('foto.jpg')).toBeNull()
   })
 
   it('"Novo Chat" swaps the left list to the directory contacts', () => {

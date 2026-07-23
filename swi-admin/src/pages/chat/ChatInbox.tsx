@@ -529,6 +529,13 @@ export function ChatInbox() {
     useChat()
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState('')
+  // Optional image attachment for the next send. The provider's `send` does the
+  // upload (uploadImage → object key); the composer only holds the picked File
+  // and hands it over. Cleared on a successful send, kept on error for retry.
+  const [pendingImage, setPendingImage] = useState<File | null>(null)
+  // Hidden native <input type="file"> we trigger via the attach button. Not a DS
+  // primitive — a browser control, so a raw ref-driven input is appropriate.
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   // Guard against double-send: `handleSend` awaits before clearing `draft`, so
   // two fast clicks would both read the same draft and fire duplicate messages.
   const [sending, setSending] = useState(false)
@@ -610,12 +617,19 @@ export function ChatInbox() {
 
   const handleSend = async () => {
     const text = draft.trim()
-    if (!text || !selectedContactId || sending) return
+    // An image-only message (empty text + a pending image) is valid — the
+    // backend accepts body OR imageKey and only 400s when BOTH are empty.
+    if ((!text && !pendingImage) || !selectedContactId || sending) return
     setSending(true)
     try {
-      const { error } = await send(selectedContactId, text)
-      if (error) showToast(error.message)
-      else setDraft('')
+      const { error } = await send(selectedContactId, text, pendingImage ?? undefined)
+      if (error) {
+        // Keep BOTH draft and pendingImage so the user can retry the same send.
+        showToast(error.message)
+      } else {
+        setDraft('')
+        setPendingImage(null)
+      }
     } finally {
       setSending(false)
     }
@@ -900,30 +914,85 @@ export function ChatInbox() {
               )}
             </div>
 
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: theme.gap.m,
-                width: '100%',
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Input
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder="Digite aqui sua mensagem"
-                  iconRight={<Icon name="attach_file" size={20} color={theme.content.dark} />}
+            <View style={{ gap: theme.gap.s, width: '100%' }}>
+              {/* Attachment preview — a small chip with the picked file's name
+                  and a remove control. Shows only while an image is pending;
+                  cleared on send success or via the remove Pressable. */}
+              {pendingImage ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    alignSelf: 'flex-start',
+                    gap: theme.gap.s,
+                    backgroundColor: theme.surface.standard,
+                    borderRadius: theme.border.radius.m,
+                    paddingHorizontal: theme.padding.sm,
+                    paddingVertical: theme.padding.s,
+                  }}
+                >
+                  <Icon name="add_a_photo" size={16} color={theme.content.dark} />
+                  <Text variant="body.s" color={theme.content.dark}>
+                    {pendingImage.name}
+                  </Text>
+                  <Pressable
+                    testID="chat-attach-remove"
+                    accessibilityRole="button"
+                    accessibilityLabel="Remover imagem"
+                    onPress={() => setPendingImage(null)}
+                  >
+                    <Icon name="close" size={16} color={theme.content.dark} />
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: theme.gap.m,
+                  width: '100%',
+                }}
+              >
+                {/* Hidden native file picker — triggered via the attach button
+                    ref. Resets value on change so re-picking the same file
+                    still fires onChange. */}
+                <input
+                  ref={fileInputRef}
+                  data-testid="chat-file-input"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    setPendingImage(e.target.files?.[0] ?? null)
+                    e.target.value = ''
+                  }}
+                />
+                <Pressable
+                  testID="chat-attach"
+                  accessibilityRole="button"
+                  accessibilityLabel="Anexar imagem"
+                  onPress={() => fileInputRef.current?.click()}
+                >
+                  <Icon name="add_a_photo" size={24} color={theme.content.dark} />
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    value={draft}
+                    onChangeText={setDraft}
+                    placeholder="Digite aqui sua mensagem"
+                    iconRight={<Icon name="attach_file" size={20} color={theme.content.dark} />}
+                  />
+                </View>
+                <Button
+                  label="Enviar"
+                  variant="contained"
+                  iconRight={<Icon name="send" size={16} color={theme.content.light} />}
+                  accessibilityLabel="Enviar mensagem"
+                  onPress={handleSend}
+                  disabled={sending}
                 />
               </View>
-              <Button
-                label="Enviar"
-                variant="contained"
-                iconRight={<Icon name="send" size={16} color={theme.content.light} />}
-                accessibilityLabel="Enviar mensagem"
-                onPress={handleSend}
-                disabled={sending}
-              />
             </View>
           </div>
         </View>
