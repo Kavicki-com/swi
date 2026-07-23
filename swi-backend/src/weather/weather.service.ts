@@ -31,7 +31,7 @@ export class WeatherService {
     try {
       const real = await this.provider.fetch()
       current = real.current; daily = real.daily
-      hourly = real.hourly ?? this.cannedHourly(now)
+      hourly = real.hourly?.length ? real.hourly : this.cannedHourly(now)
     } catch (err) {
       // fallback canned — tela de segurança nunca pode quebrar
       this.logger.warn(`open-meteo indisponível, servindo fallback canned: ${err}`)

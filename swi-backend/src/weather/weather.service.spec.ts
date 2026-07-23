@@ -30,6 +30,10 @@ describe('WeatherService.getSnapshot', () => {
     expect(snap.hourly).toHaveLength(CANNED_HOURLY.length)
     expect(new Date(snap.hourly![0].at).toString()).not.toBe('Invalid Date')
   })
+  it('getSnapshot serve CANNED_HOURLY quando o provider retorna série vazia', async () => {
+    const svc = new WeatherService(provider(async () => ({ current: CANNED_CURRENT, daily: CANNED_DAILY, hourly: [] })))
+    expect((await svc.getSnapshot()).hourly).toHaveLength(CANNED_HOURLY.length)
+  })
   it('WEATHER_SCENARIO=alert → 1 alerta vigente (endsAt no futuro)', async () => {
     process.env.WEATHER_SCENARIO = 'alert'
     const s = await new WeatherService(provider(async () => { throw new Error('x') })).getSnapshot()

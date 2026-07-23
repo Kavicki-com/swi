@@ -66,6 +66,8 @@ describe('OpenMeteoProvider.fetch', () => {
     const calledUrl = spy.mock.calls[0][0] as string
     expect(calledUrl).toContain('current=temperature_2m')
     expect(calledUrl).toContain('daily=temperature_2m_max')
+    expect(calledUrl).toContain('hourly=temperature_2m,weather_code')
+    expect(calledUrl).toContain('past_days=1')
   })
   it('HTTP !ok → lança (caller faz fallback)', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 503 } as any)
