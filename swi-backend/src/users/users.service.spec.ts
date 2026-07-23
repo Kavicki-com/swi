@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { Prisma } from '@prisma/client'
 import { UsersService } from './users.service'
 
-const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn() } }) as any
+const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn() } }) as any
 // Espelha a convenção do work-orders.service.spec: presignGet devolve 'signed:<key>'.
 const media = () => ({ presignGet: jest.fn((k: string) => Promise.resolve('signed:' + k)) }) as any
 
@@ -61,6 +61,7 @@ describe('UsersService', () => {
         email: 'w1@x.com',
         role: 'WORKER',
         approvalStatus: 'APPROVED',
+        active: true,
         companyRole: null,
         createdAt: new Date(0),
         profile: {
@@ -86,6 +87,7 @@ describe('UsersService', () => {
       email: 'w1@x.com',
       role: 'WORKER',
       approvalStatus: 'APPROVED',
+      active: true,
       jobTitle: 'Operador',
       sector: 'Norte',
       birthDate: new Date('1990-05-04').toISOString(),
@@ -116,6 +118,7 @@ describe('UsersService', () => {
         email: 'w2@x.com',
         role: 'WORKER',
         approvalStatus: 'PENDING',
+        active: false,
         companyRole: null,
         createdAt: new Date(0),
         profile: null,
@@ -128,6 +131,7 @@ describe('UsersService', () => {
       email: 'w2@x.com',
       role: 'WORKER',
       approvalStatus: 'PENDING',
+      active: false,
       jobTitle: '',
       sector: '',
       birthDate: null,
@@ -152,6 +156,7 @@ describe('UsersService', () => {
       email: 'a@x.com',
       role: 'ADMIN',
       approvalStatus: 'APPROVED',
+      active: true,
       companyRole: 'owner',
       createdAt: new Date(0),
       profile: {
@@ -176,6 +181,7 @@ describe('UsersService', () => {
       email: 'a@x.com',
       role: 'ADMIN',
       approvalStatus: 'APPROVED',
+      active: true,
       jobTitle: 'Diretor',
       sector: 'Gestão',
       birthDate: new Date('1980-01-02').toISOString(),
@@ -201,9 +207,10 @@ describe('UsersService.create', () => {
     db.user.findUnique
       .mockResolvedValueOnce(null)                          // findByEmail: não existe
       .mockResolvedValueOnce({ id: 'adm', companyId: 'c1' }) // findById(admin)
-    db.user.create.mockResolvedValue({ id: 'new', name: 'Zé', email: 'ze@x.com', role: 'WORKER', approvalStatus: 'APPROVED', companyRole: null, createdAt: new Date(0), profile: null })
+    db.user.create.mockResolvedValue({ id: 'new', name: 'Zé', email: 'ze@x.com', role: 'WORKER', approvalStatus: 'APPROVED', active: true, companyRole: null, createdAt: new Date(0), profile: null })
     const svc = new UsersService(db, media())
-    await svc.create('adm', { name: 'Zé', email: 'ze@x.com', password: 'senha123', role: 'WORKER', phone: '11', cpf: '123', birthDate: '1990-05-04' })
+    const created = await svc.create('adm', { name: 'Zé', email: 'ze@x.com', password: 'senha123', role: 'WORKER', phone: '11', cpf: '123', birthDate: '1990-05-04' })
+    expect(created.active).toBe(true)
     const arg = db.user.create.mock.calls[0][0]
     expect(arg.data).toMatchObject({ name: 'Zé', email: 'ze@x.com', role: 'WORKER', approvalStatus: 'APPROVED', emailVerified: true, companyId: 'c1' })
     expect(arg.data.passwordHash).toBeTruthy()
@@ -224,8 +231,61 @@ describe('UsersService.create', () => {
   it('admin sem empresa → companyId null', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'adm', companyId: null })
-    db.user.create.mockResolvedValue({ id: 'n', name: 'Z', email: 'z@x.com', role: 'WORKER', approvalStatus: 'APPROVED', companyRole: null, createdAt: new Date(0), profile: null })
+    db.user.create.mockResolvedValue({ id: 'n', name: 'Z', email: 'z@x.com', role: 'WORKER', approvalStatus: 'APPROVED', active: true, companyRole: null, createdAt: new Date(0), profile: null })
     await new UsersService(db, media()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })
     expect(db.user.create.mock.calls[0][0].data.companyId).toBeNull()
+  })
+})
+
+describe('UsersService.setActive', () => {
+  it('atualiza active', async () => {
+    const db = prisma(); db.user.update.mockResolvedValue({ id: 'u1', active: false })
+    const r = await new UsersService(db, media()).setActive('u1', false, 'admin')
+    expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { active: false } })
+    expect(r).toEqual({ id: 'u1', active: false })
+  })
+  it('desativar a si mesmo → BadRequest (sem tocar no banco)', async () => {
+    const db = prisma()
+    await expect(new UsersService(db, media()).setActive('me', false, 'me')).rejects.toBeInstanceOf(BadRequestException)
+    expect(db.user.update).not.toHaveBeenCalled()
+  })
+  it('reativar a si mesmo é permitido', async () => {
+    const db = prisma(); db.user.update.mockResolvedValue({ id: 'me', active: true })
+    const r = await new UsersService(db, media()).setActive('me', true, 'me')
+    expect(r).toEqual({ id: 'me', active: true })
+  })
+  it('id inexistente (P2025) → NotFound', async () => {
+    const db = prisma()
+    db.user.update.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('nf', { code: 'P2025', clientVersion: 'x' }))
+    await expect(new UsersService(db, media()).setActive('ghost', false, 'admin')).rejects.toBeInstanceOf(NotFoundException)
+  })
+})
+
+describe('UsersService.remove', () => {
+  it('excluir a si mesmo → BadRequest', async () => {
+    await expect(new UsersService(prisma(), media()).remove('me', 'me')).rejects.toBeInstanceOf(BadRequestException)
+  })
+  it('happy: apaga profile + user', async () => {
+    const db = prisma()
+    db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
+    db.$transaction = jest.fn(async (fn: any) => fn(db))
+    db.user.delete = jest.fn().mockResolvedValue({ id: 'u1' })
+    await new UsersService(db, media()).remove('u1', 'admin')
+    expect(db.profile.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } })
+    expect(db.user.delete).toHaveBeenCalledWith({ where: { id: 'u1' } })
+  })
+  it('FK vinculada (P2003) → Conflict', async () => {
+    const db = prisma()
+    db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
+    db.$transaction = jest.fn(async (fn: any) => fn(db))
+    db.user.delete = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'x' }))
+    await expect(new UsersService(db, media()).remove('u1', 'admin')).rejects.toBeInstanceOf(ConflictException)
+  })
+  it('id inexistente (P2025) → NotFound', async () => {
+    const db = prisma()
+    db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
+    db.$transaction = jest.fn(async (fn: any) => fn(db))
+    db.user.delete = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('nf', { code: 'P2025', clientVersion: 'x' }))
+    await expect(new UsersService(db, media()).remove('ghost', 'admin')).rejects.toBeInstanceOf(NotFoundException)
   })
 })

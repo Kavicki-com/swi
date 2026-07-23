@@ -26,6 +26,7 @@ model User {
   role           Role           @default(WORKER)
   emailVerified  Boolean        @default(false)
   approvalStatus ApprovalStatus @default(PENDING)
+  active         Boolean        @default(true)
 
   confirmationCodeHash String?
   confirmationExpires  DateTime?

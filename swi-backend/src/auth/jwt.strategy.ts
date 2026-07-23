@@ -1,15 +1,22 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { requireJwtSecret } from './jwt-secret'
+import { UsersService } from '../users/users.service'
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private readonly users: UsersService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: requireJwtSecret(),
     })
   }
-  validate(payload: { sub: string; role: string }) { return { userId: payload.sub, role: payload.role } }
+  // Reconsulta o banco a cada request: desativar/excluir revoga a sessão na hora
+  // (o token vive 7 dias). role vem fresca do banco, não do payload assinado.
+  async validate(payload: { sub: string; role: string }) {
+    const u = await this.users.findById(payload.sub)
+    if (!u || !u.active) throw new UnauthorizedException()
+    return { userId: u.id, role: u.role }
+  }
 }

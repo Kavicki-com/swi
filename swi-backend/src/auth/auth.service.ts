@@ -78,6 +78,7 @@ export class AuthService {
     if (!u || !ok) throw new UnauthorizedException('Credenciais inválidas')
     if (!u.emailVerified) throw new ForbiddenException({ reason: 'EMAIL_NOT_VERIFIED', message: 'Confirme seu e-mail antes de entrar' })
     if (u.approvalStatus !== 'APPROVED') throw new ForbiddenException({ reason: 'NOT_APPROVED', message: 'Sua conta está aguardando aprovação do administrador' })
+    if (!u.active) throw new ForbiddenException({ reason: 'INACTIVE', message: 'Sua conta está desativada' })
     return { accessToken: this.jwt.sign({ sub: u.id, role: u.role }), user: { id: u.id, email: u.email, name: u.name } }
   }
 

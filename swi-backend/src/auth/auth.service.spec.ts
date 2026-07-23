@@ -75,7 +75,7 @@ describe('AuthService.login (2 portas)', () => {
   const { hash } = jest.requireActual('./codes')
   async function userWith(over: any) {
     return { id: 'u1', email: 'j@ex.com', name: 'J', role: 'WORKER',
-      passwordHash: await hash('senha123'), emailVerified: true, approvalStatus: 'APPROVED', ...over }
+      passwordHash: await hash('senha123'), emailVerified: true, approvalStatus: 'APPROVED', active: true, ...over }
   }
   it('barra e-mail não verificado (403 reason confirme)', async () => {
     const { svc, users } = deps(); users.findByEmail.mockResolvedValue(await userWith({ emailVerified: false }))
@@ -88,6 +88,10 @@ describe('AuthService.login (2 portas)', () => {
   it('senha errada = 401', async () => {
     const { svc, users } = deps(); users.findByEmail.mockResolvedValue(await userWith({}))
     await expect(svc.login({ email: 'j@ex.com', password: 'errada' })).rejects.toThrow()
+  })
+  it('barra usuário inativo (403 reason INACTIVE)', async () => {
+    const { svc, users } = deps(); users.findByEmail.mockResolvedValue(await userWith({ active: false }))
+    await expect(svc.login({ email: 'j@ex.com', password: 'senha123' })).rejects.toMatchObject({ response: { reason: 'INACTIVE' } })
   })
   it('as 2 portas ok -> emite JWT + user', async () => {
     const { svc, users, jwt } = deps(); users.findByEmail.mockResolvedValue(await userWith({}))

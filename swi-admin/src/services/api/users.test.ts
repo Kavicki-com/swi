@@ -14,6 +14,7 @@ const summary = (over: Record<string, unknown> = {}) => ({
   email: 'w1@x.com',
   role: 'WORKER',
   approvalStatus: 'APPROVED',
+  active: true,
   jobTitle: 'Operador',
   sector: 'Norte',
   birthDate: '1990-05-04T00:00:00.000Z',
@@ -69,11 +70,12 @@ describe('employeesApi.list (real)', () => {
 })
 
 describe('adminsApi.list (real)', () => {
-  it('GET /users?role=ADMIN; active/status derivam do approvalStatus', async () => {
+  it('GET /users?role=ADMIN; status deriva do approvalStatus, active vem do campo real', async () => {
     const f = okJson([
       summary({
         role: 'ADMIN',
         approvalStatus: 'PENDING',
+        active: false, // campo real de ativação — independente do approvalStatus
         jobTitle: 'Diretor',
         companyRole: 'owner',
       }),
@@ -85,17 +87,63 @@ describe('adminsApi.list (real)', () => {
     expect(error).toBeNull()
     const a = data![0]!
     expect(a.role).toBe('Diretor')
-    expect(a.active).toBe(false) // PENDING → não ativo
+    expect(a.active).toBe(false) // reflete o DTO (active:false), não o approvalStatus
     expect(a.status).toBe('pending')
     const [url] = f.mock.calls[0] as [string]
     expect(url).toContain('/users?role=ADMIN')
   })
 
-  it('APPROVED → active true / status accept', async () => {
+  it('active vem do campo real mesmo com approvalStatus APPROVED', async () => {
+    // Decopla active de approvalStatus: um admin APPROVED mas desativado tem
+    // status 'accept' porém active:false.
+    vi.stubGlobal('fetch', okJson([summary({ role: 'ADMIN', active: false })]))
+    const { data } = await adminsApi.list()
+    expect(data![0]!.active).toBe(false)
+    expect(data![0]!.status).toBe('accept')
+  })
+
+  it('APPROVED + active → active true / status accept', async () => {
     vi.stubGlobal('fetch', okJson([summary({ role: 'ADMIN' })]))
     const { data } = await adminsApi.list()
     expect(data![0]!.active).toBe(true)
     expect(data![0]!.status).toBe('accept')
+  })
+})
+
+describe('adminsApi.setActive/remove (real)', () => {
+  it('setActive → PATCH /users/:id {active}', async () => {
+    const f = okJson({ id: 'a1', active: false })
+    vi.stubGlobal('fetch', f)
+    const { error } = await adminsApi.setActive('a1', false)
+    expect(error).toBeNull()
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/a1')
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(init.body as string)).toEqual({ active: false })
+  })
+  it('remove → DELETE /users/:id', async () => {
+    const f = vi.fn().mockResolvedValue({ ok: true, status: 204, json: async () => null } as Response)
+    vi.stubGlobal('fetch', f)
+    const { error } = await adminsApi.remove('a1')
+    expect(error).toBeNull()
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/a1')
+    expect(init.method).toBe('DELETE')
+  })
+  it('remove com 409 → { data:null, error }', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          message: 'Usuário possui registros vinculados; desative-o em vez de excluir',
+        }),
+      } as Response),
+    )
+    const { data, error } = await adminsApi.remove('a1')
+    expect(data).toBeNull()
+    expect(error?.message).toMatch(/vinculado/i)
   })
 })
 

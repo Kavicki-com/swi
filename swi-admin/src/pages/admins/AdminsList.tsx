@@ -18,6 +18,8 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/api/users'
+import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
+import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { AdminsCreate } from './AdminsCreate'
@@ -25,6 +27,10 @@ import { AdminsCreate } from './AdminsCreate'
 type AdminRowProps = {
   admin: Admin
   isTablet: boolean
+  // A linha do admin logado: ele não pode excluir a si mesmo (backend responde
+  // 400) nem se auto-desativar. A lixeira some e o Toggle vem desabilitado — em
+  // vez de oferecer ações que só fariam round-trip e reverteriam feio.
+  isSelf: boolean
   onToggle: (id: string, active: boolean) => void
   onOpen: (id: string) => void
   onDelete: (admin: Admin) => void
@@ -35,6 +41,7 @@ type AdminRowProps = {
 function AdminRow({
   admin,
   isTablet,
+  isSelf,
   onToggle,
   onOpen,
   onDelete,
@@ -125,6 +132,7 @@ function AdminRow({
         <Toggle
           value={admin.active}
           onChange={(v) => onToggle(admin.id, v)}
+          disabled={isSelf}
           accessibilityLabel={`Ativar ${admin.name}`}
         />
       </View>
@@ -133,11 +141,13 @@ function AdminRow({
           followed by a chevron-down affordance (the whole row is clickable
           per Figma but the chevron makes the affordance discoverable). */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-        <ActionIcon
-          icon="delete_icon"
-          label={`Excluir ${admin.name}`}
-          onPress={() => onDelete(admin)}
-        />
+        {!isSelf ? (
+          <ActionIcon
+            icon="delete_icon"
+            label={`Excluir ${admin.name}`}
+            onPress={() => onDelete(admin)}
+          />
+        ) : null}
         <ActionIcon
           icon="chat_bubble"
           label={`Conversar com ${admin.name}`}
@@ -204,7 +214,10 @@ export function AdminsList({
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
+  const { user } = useAuth()
+  const currentUserId = user?.id
   const [admins, setAdmins] = useState<Admin[]>([])
+  const [removing, setRemoving] = useState<Admin | null>(null)
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
   // Bump pra forçar o refetch após um cadastro novo: ao voltar do form o
@@ -225,8 +238,36 @@ export function AdminsList({
     search.trim() ? a.name.toLowerCase().includes(search.toLowerCase()) : true,
   )
 
-  function handleToggle(id: string, active: boolean) {
+  // Toggle otimista: liga/desliga já na UI, confirma no backend (PATCH), e
+  // reverte + avisa se falhar.
+  async function handleToggle(id: string, active: boolean) {
     setAdmins((prev) => prev.map((a) => (a.id === id ? { ...a, active } : a)))
+    const { error } = await adminsApi.setActive(id, active)
+    if (error) {
+      setAdmins((prev) => prev.map((a) => (a.id === id ? { ...a, active: !active } : a)))
+      showToast('Erro', error.message)
+    }
+  }
+
+  // Exclusão otimista (após confirmação): tira a linha da lista já, chama o
+  // DELETE, e reinsere na posição original + avisa se o backend recusar (ex.:
+  // 409 quando o admin tem registros vinculados).
+  async function handleRemove(a: Admin) {
+    setRemoving(null)
+    const idx = admins.findIndex((x) => x.id === a.id)
+    setAdmins((prev) => prev.filter((x) => x.id !== a.id))
+    const { error } = await adminsApi.remove(a.id)
+    if (error) {
+      setAdmins((prev) => {
+        if (prev.some((x) => x.id === a.id)) return prev
+        const next = [...prev]
+        next.splice(idx < 0 ? next.length : idx, 0, a)
+        return next
+      })
+      showToast('Erro', error.message)
+      return
+    }
+    showToast('Administrador excluído', `${a.name} foi removido do sistema`)
   }
 
   const isCreating = tab === 'cadastrar'
@@ -308,17 +349,27 @@ export function AdminsList({
               key={admin.id}
               admin={admin}
               isTablet={isTablet}
+              isSelf={admin.id === currentUserId}
               onToggle={handleToggle}
               onOpen={(adminId) => navigate(`/admins/${adminId}`)}
-              onDelete={(a) =>
-                showToast('Administrador removido', `${a.name} foi removido do sistema`)
-              }
+              onDelete={(a) => setRemoving(a)}
               onChat={() => navigate('/chat')}
               onLocation={() => navigate('/maps/general')}
             />
           ))}
         </View>
       )}
+
+      {removing ? (
+        <ConfirmDialog
+          title="Excluir administrador?"
+          message={`${removing.name} será removido do sistema.`}
+          confirmLabel="Excluir"
+          confirmDanger
+          onConfirm={() => handleRemove(removing)}
+          onCancel={() => setRemoving(null)}
+        />
+      ) : null}
     </View>
   )
 }

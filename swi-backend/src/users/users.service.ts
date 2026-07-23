@@ -99,6 +99,41 @@ export class UsersService {
     return Promise.all(users.map((u) => this.toSummaryDto(u)))
   }
 
+  // Ativar/desativar: usuário inativo não loga (guarda no AuthService.login) e
+  // tem a sessão revogada na hora (JwtStrategy reconsulta o banco). Aditivo e
+  // reversível — não apaga nada. Guarda de auto-desativação: como o self-delete
+  // do remove, o admin não pode se auto-trancar (reativar a si mesmo é ok).
+  async setActive(id: string, active: boolean, requesterId: string) {
+    if (id === requesterId && active === false) throw new BadRequestException('Não é possível desativar a si mesmo')
+    try {
+      const u = await this.prisma.user.update({ where: { id }, data: { active } })
+      return { id: u.id, active: u.active }
+    } catch (e) {
+      // sem exception filter global: sem isto, P2025 (id inexistente) vira 500.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') throw new NotFoundException('Usuário não encontrado')
+      throw e
+    }
+  }
+
+  // Exclusão dura: apaga o Profile (1:1) e o User na mesma transação. Guardas:
+  // não deixa o admin excluir a si mesmo; se o User tiver registros vinculados
+  // por FK (P2003, ex.: reports/journeys) orienta a desativar em vez de excluir.
+  async remove(id: string, requesterId: string) {
+    if (id === requesterId) throw new BadRequestException('Não é possível excluir a si mesmo')
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.profile.deleteMany({ where: { userId: id } })
+        await tx.user.delete({ where: { id } })
+      })
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === 'P2025') throw new NotFoundException('Usuário não encontrado')
+        if (e.code === 'P2003') throw new ConflictException('Usuário possui registros vinculados; desative-o em vez de excluir')
+      }
+      throw e
+    }
+  }
+
   async getOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -118,6 +153,7 @@ export class UsersService {
       email: u.email,
       role: u.role,
       approvalStatus: u.approvalStatus,
+      active: u.active,
       jobTitle: u.profile?.jobTitle ?? '',
       sector: u.profile?.sector ?? '',
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
