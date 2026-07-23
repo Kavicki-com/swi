@@ -1,5 +1,5 @@
 // src/app/App.tsx
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Outlet } from 'react-router-dom'
 import { View } from 'react-native'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -7,6 +7,7 @@ import { DemoToastProvider } from '@/lib/demoToast'
 import { GuestOnly } from './GuestOnly'
 import { RequireAuth } from './RequireAuth'
 import { AppLayout } from './AppLayout'
+import { ChatProvider } from '@/services/chat/ChatProvider'
 import { Placeholder } from './Placeholder'
 import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { Login } from '@/pages/auth/Login'
@@ -37,6 +38,21 @@ import { UserSettings } from '@/pages/user/UserSettings'
 import { UserProfile } from '@/pages/user/UserProfile'
 import { FidelityReview } from '@/dev/fidelity/FidelityReview'
 
+// Uma única instância do ChatProvider pra toda a subárvore autenticada: como
+// é uma rota de layout, o React Router a mantém montada ao navegar entre /chat
+// (inbox) e as rotas do AppLayout (sidebar), então ambos compartilham o mesmo
+// estado (conversas/mensagens). Fica ABAIXO do RequireAuth de propósito — só
+// monta quando há sessão, garantindo que useAuth().user?.id já está populado e
+// que o socket/REST não abrem deslogado (RequireAuth redireciona pro /login
+// antes de renderizar este Outlet).
+function ChatShell() {
+  return (
+    <ChatProvider>
+      <Outlet />
+    </ChatProvider>
+  )
+}
+
 export function App() {
   return (
     <SwiThemeProvider>
@@ -53,6 +69,7 @@ export function App() {
                 <Route path="/recovery/new-password" element={<RecoveryNewPassword />} />
               </Route>
               <Route element={<RequireAuth />}>
+                <Route element={<ChatShell />}>
                 {import.meta.env.DEV && <Route path="/dev/fidelity" element={<FidelityReview />} />}
                 {/* Full-bleed routes (no AppLayout sidebar/header) — Maps live here. */}
                 <Route path="/maps/general" element={<MapsGeneral />} />
@@ -127,6 +144,7 @@ export function App() {
                   ).map((r) => (
                     <Route key={r.path} path={r.path} element={<Placeholder label={r.label} />} />
                   ))}
+                </Route>
                 </Route>
               </Route>
             </Routes>

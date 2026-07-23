@@ -2,12 +2,23 @@
 // Prova o ranking de rotas do React Router pras telas de Tarefas: o segmento
 // estático /tasks/new tem que ganhar do dinâmico /tasks/:id, senão "new" vira
 // um id e o usuário cai no detalhe em vez do formulário.
+import type { ReactNode } from 'react'
 import { vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import type { WorkOrderDetail } from '@/services/api/workOrders'
 import { App } from './App'
+
+// App agora monta o ChatProvider real acima do AppLayout (task B5). Aqui o teste
+// é de roteamento de Tarefas, não de chat: mockamos o módulo com um ChatProvider
+// passthrough e um useChat() de conversas vazias, pra que o socket/REST reais
+// não disparem e a sidebar renderize vazia (o que está sob teste é o ranking das
+// rotas de /tasks dentro do shell do AppLayout).
+vi.mock('@/services/chat/ChatProvider', () => ({
+  ChatProvider: ({ children }: { children: ReactNode }) => children,
+  useChat: () => ({ myId: 'me', conversations: [] }),
+}))
 
 // Detalhe mínimo pro TaskDetails montar pelo caminho feliz. `get: vi.fn()` sem
 // implementação devolveria undefined e a tela quebraria no `.then` — o teste
