@@ -15,7 +15,9 @@ export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
  * Sobe um anexo: presign no backend → POST multipart direto no S3/MinIO.
  * Devolve a key. O `prefix` decide o namespace da key ('order' para anexo de
  * tarefa, que vai em `WorkOrderInput.imageKeys`; 'chat' para anexo de mensagem,
- * validado pelo controller contra chat/<uuid>.(jpg|png)).
+ * validado pelo controller contra chat/<uuid>.(jpg|png); 'reports' para anexo
+ * de relatório, validado contra reports/<uuid>.(jpg|png) — é o prefixo default
+ * do presign, então o backend já o aceita sem mudança).
  *
  * CHAME NO SUBMIT DO FORM, NUNCA NO SELECT DO ARQUIVO: o presign vale 300 s
  * (UPLOAD_TTL em media.service.ts). Subir na hora que o usuário escolhe a foto
@@ -28,7 +30,10 @@ export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
  * Sem AbortSignal por YAGNI — a tela desta fatia não tem cancelamento. Se um
  * dia tiver, o parâmetro entra aqui e desce pro fetch do S3.
  */
-export async function uploadImage(file: File, prefix: 'order' | 'chat'): Promise<string> {
+export async function uploadImage(
+  file: File,
+  prefix: 'order' | 'chat' | 'reports',
+): Promise<string> {
   if (!ALLOWED.includes(file.type)) throw new Error('Selecione arquivos do tipo: JPG ou PNG')
   if (file.size === 0) throw new Error('O arquivo está vazio')
   if (file.size > MAX_UPLOAD_BYTES) throw new Error('O arquivo excede o limite de 15 MB')
