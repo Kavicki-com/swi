@@ -26,11 +26,7 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
 import { withBadges } from '@/app/nav'
-import {
-  dashboardApi,
-  type DashboardMapMarker,
-  type DashboardSummary,
-} from '@/services/dashboard'
+import { dashboardApi, type DashboardMapMarker } from '@/services/dashboard'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Compact navigation list — Figma 32:2488 map-side-menu shows 7 icon-only items.
@@ -109,7 +105,7 @@ export function MapsGeneral() {
   const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [mapMarkers, setMapMarkers] = useState<DashboardMapMarker[] | null>(null)
   const [mapReady, setMapReady] = useState(false)
   // Figma neutral state hides employee pins (node 33:3917 opacity:0).
   // Pins appear when the user expands the "operators" map control.
@@ -166,14 +162,14 @@ export function MapsGeneral() {
   )
 
   const shiftedMarkers = useMemo<DashboardMapMarker[]>(() => {
-    const markers = summary?.mapMarkers ?? []
+    const markers = mapMarkers ?? []
     if (!geolocOrigin) return [...markers]
     return markers.map((m) => ({
       ...m,
       lng: geolocOrigin[0] + (m.lng - MOCK_ORIGIN[0]) * SHIFT_SCALE,
       lat: geolocOrigin[1] + (m.lat - MOCK_ORIGIN[1]) * SHIFT_SCALE,
     }))
-  }, [summary, geolocOrigin])
+  }, [mapMarkers, geolocOrigin])
 
   const shiftedCameras = useMemo<ReadonlyArray<CameraLocation>>(() => {
     if (!geolocOrigin) return CAMERA_LOCATIONS
@@ -232,8 +228,10 @@ export function MapsGeneral() {
 
   useEffect(() => {
     let cancelled = false
-    dashboardApi.summary({ orgId: 'org_seed_1' }).then(({ data }) => {
-      if (!cancelled && data) setSummary(data)
+    // Markers-only: os pins são mock (vitais); summary() dispararia o fan-out
+    // real inteiro só pra descartar tudo menos mapMarkers.
+    dashboardApi.mapMarkers({ orgId: 'org_seed_1' }).then(({ data }) => {
+      if (!cancelled && data) setMapMarkers(data)
     })
     return () => {
       cancelled = true
@@ -252,9 +250,9 @@ export function MapsGeneral() {
   }, [])
 
   useEffect(() => {
-    if (!lib || !containerRef.current || !summary) return
+    if (!lib || !containerRef.current || !mapMarkers) return
 
-    const markers = summary.mapMarkers
+    const markers = mapMarkers
     const center: [number, number] =
       markers.length > 0
         ? [
@@ -286,7 +284,7 @@ export function MapsGeneral() {
       mapRef.current = null
       setMapReady(false)
     }
-  }, [summary, lib])
+  }, [mapMarkers, lib])
 
   useEffect(() => {
     const map = mapRef.current
