@@ -15,22 +15,28 @@ export class ReportsService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async list() {
-    const rows = await this.prisma.report.findMany({ orderBy: { createdAt: 'desc' }, take: LIST_CAP })
+  // Org-scoping (QA C1): Report não tem companyId — a empresa é a do autor.
+  async list(companyId: string | null) {
+    const rows = await this.prisma.report.findMany({
+      where: { author: { companyId } },
+      orderBy: { createdAt: 'desc' },
+      take: LIST_CAP,
+    })
     return Promise.all(rows.map((r) => this.toDto(r)))
   }
 
-  async get(id: string) {
+  async get(id: string, companyId: string | null) {
     const r = await this.prisma.report.findUnique({
       where: { id },
       include: {
+        author: { select: { companyId: true } },
         comments: {
           orderBy: { createdAt: 'asc' },
           include: { author: { include: { profile: true } } },
         },
       },
     })
-    if (!r) return null
+    if (!r || r.author.companyId !== companyId) return null
     const comments = await Promise.all(r.comments.map((c) => this.toCommentDto(c, c.author)))
     return { ...(await this.toDto(r)), comments }
   }
@@ -57,7 +63,8 @@ export class ReportsService {
     // (inbox de relatórios é org-wide). Falha aqui não quebra a criação.
     try {
       const others = await this.prisma.user.findMany({
-        where: { role: 'WORKER', approvalStatus: 'APPROVED', id: { not: authorId } },
+        // Broadcast restrito à empresa do autor — inbox é org-wide, não global.
+        where: { role: 'WORKER', approvalStatus: 'APPROVED', id: { not: authorId }, companyId: author?.companyId ?? null },
         select: { id: true },
       })
       await this.notifications.enqueueForMany(others.map((u) => u.id), {
@@ -70,7 +77,12 @@ export class ReportsService {
     return this.toDto(r)
   }
 
-  async update(id: string, _userId: string, dto: UpdateReportDto) {
+  async update(id: string, _userId: string, dto: UpdateReportDto, companyId: string | null) {
+    const existing = await this.prisma.report.findUnique({
+      where: { id },
+      select: { id: true, author: { select: { companyId: true } } },
+    })
+    if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Relatório não encontrado')
     try {
       const r = await this.prisma.report.update({
         where: { id },
@@ -92,9 +104,14 @@ export class ReportsService {
   }
 
   async addComment(reportId: string, authorId: string, dto: CreateCommentDto) {
-    const exists = await this.prisma.report.findUnique({ where: { id: reportId }, select: { id: true } })
+    const exists = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      select: { id: true, author: { select: { companyId: true } } },
+    })
     if (!exists) throw new NotFoundException('Relatório não encontrado')
     const author = await this.prisma.user.findUnique({ where: { id: authorId }, include: { profile: true } })
+    // Comentar exige pertencer à mesma empresa do relatório (org-scoping).
+    if (exists.author.companyId !== (author?.companyId ?? null)) throw new NotFoundException('Relatório não encontrado')
     const c = await this.prisma.comment.create({ data: { reportId, authorId, body: dto.body } })
     return this.toCommentDto(c, author)
   }

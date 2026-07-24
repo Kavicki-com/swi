@@ -17,6 +17,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: { sub: string; role: string }) {
     const u = await this.users.findById(payload.sub)
     if (!u || !u.active) throw new UnauthorizedException()
-    return { userId: u.id, role: u.role }
+    // companyId fresco alimenta o org-scoping (QA C1) — todo controller escopa
+    // leituras/mutações pela empresa do requisitante.
+    return { userId: u.id, role: u.role, companyId: u.companyId }
   }
 }

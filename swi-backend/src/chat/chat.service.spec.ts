@@ -33,11 +33,11 @@ const msgRow = (over: any = {}) => ({
 })
 
 describe('ChatService', () => {
-  it('listDirectory traz workers aprovados exceto eu, presignando avatar', async () => {
+  it('listDirectory traz workers aprovados DA MESMA empresa exceto eu, presignando avatar', async () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
-    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
+    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, 'org1')
     const where = db.user.findMany.mock.calls[0][0].where
-    expect(where).toMatchObject({ approvalStatus: 'APPROVED', role: 'WORKER', id: { not: A } })
+    expect(where).toMatchObject({ approvalStatus: 'APPROVED', role: 'WORKER', id: { not: A }, companyId: 'org1' })
     expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
     expect(out[0]).toEqual({ workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador', avatarUri: 'signed:chat/avatars/bbbb.png' })
   })
