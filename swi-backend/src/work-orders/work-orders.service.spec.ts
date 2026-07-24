@@ -190,6 +190,17 @@ describe('WorkOrdersService', () => {
     expect(out.progressPct).toBe(0)
   })
 
+  it('get expõe imageKeys cruas junto das URLs assinadas (destrava edição de anexo no admin)', async () => {
+    const db = prisma()
+    db.workOrder.findUnique.mockResolvedValue(detailRow())
+    const out = await new WorkOrdersService(db, media(), notifications()).get('o1')
+    // Par posicional: images[i] é a URL assinada de imageKeys[i]. O PATCH
+    // substitui o array inteiro, então o form precisa das keys pra reenviar
+    // as existentes (URL assinada não passa no regex ^order/<uuid>.(jpg|png)$).
+    expect(out.imageKeys).toEqual(['order/a.jpg'])
+    expect(out.images).toEqual(['signed:order/a.jpg'])
+  })
+
   it('get expõe createdAt em ISO (tela de detalhe mostra "Data de criação")', async () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValue(detailRow())
