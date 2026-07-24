@@ -705,6 +705,7 @@ function HealthDonuts({
         iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
+        locationAccessibilityLabel="Abrir localização no mapa"
         testID="kpi-vital-signs"
       />
       <DonutChart
@@ -719,6 +720,7 @@ function HealthDonuts({
         iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
+        locationAccessibilityLabel="Abrir localização no mapa"
         testID="kpi-wear-rate"
       />
       <DonutChart
@@ -733,6 +735,7 @@ function HealthDonuts({
         iconGradient={VITAL_GRADIENT}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
+        locationAccessibilityLabel="Abrir localização no mapa"
         testID="kpi-urgent-alerts"
       />
     </View>

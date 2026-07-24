@@ -176,6 +176,7 @@ export function TasksList() {
               totalAvatarsCount={row.responsibleCount}
               onPress={() => navigate(`/tasks/${row.id}`)}
               onLocationPress={() => navigate('/maps/general')}
+              locationAccessibilityLabel={`Abrir localização da tarefa ${row.title}`}
               fullWidth
             />
           ))}
