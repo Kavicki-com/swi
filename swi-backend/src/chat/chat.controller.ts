@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post, UseG
 import { ChatService } from './chat.service'
 import { SendMessageDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
-import { CurrentUserId } from '../auth/current-user.decorator'
+import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
@@ -13,7 +13,7 @@ export class ChatController {
   listConversations(@CurrentUserId() userId: string) { return this.chat.listConversations(userId) }
 
   @Get('directory')
-  listDirectory(@CurrentUserId() userId: string) { return this.chat.listDirectory(userId) }
+  listDirectory(@CurrentUser() user: JwtUser) { return this.chat.listDirectory(user.userId, user.companyId) }
 
   @Get('conversations/:id/messages')
   listMessages(@CurrentUserId() userId: string, @Param('id') id: string) { return this.chat.listMessages(userId, id) }

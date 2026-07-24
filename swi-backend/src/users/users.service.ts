@@ -62,33 +62,41 @@ export class UsersService {
     }
   }
 
-  async approve(id: string): Promise<User> {
+  // Org-scoping (QA C1): alvo fora da empresa do requisitante responde NotFound
+  // — não vaza nem a existência do usuário. companyId null = balde legado
+  // (usuários sem empresa só se enxergam entre si).
+  private async requireSameCompany(id: string, companyId: string | null) {
     const u = await this.prisma.user.findUnique({ where: { id } })
-    if (!u) throw new NotFoundException('Usuário não encontrado')
+    if (!u || u.companyId !== companyId) throw new NotFoundException('Usuário não encontrado')
+    return u
+  }
+
+  async approve(id: string, companyId: string | null): Promise<User> {
+    await this.requireSameCompany(id, companyId)
     return this.prisma.user.update({ where: { id }, data: { approvalStatus: 'APPROVED' } })
   }
 
-  listPending() {
+  listPending(companyId: string | null) {
     return this.prisma.user.findMany({
-      where: { approvalStatus: 'PENDING' },
+      where: { approvalStatus: 'PENDING', companyId },
       select: { id: true, email: true, name: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     })
   }
 
-  async reject(id: string): Promise<User> {
-    const u = await this.prisma.user.findUnique({ where: { id } })
-    if (!u) throw new NotFoundException('Usuário não encontrado')
+  async reject(id: string, companyId: string | null): Promise<User> {
+    await this.requireSameCompany(id, companyId)
     return this.prisma.user.update({ where: { id }, data: { approvalStatus: 'REJECTED' } })
   }
 
   // Lista o diretório do painel (Colaboradores = role WORKER, Admins = role
   // ADMIN). Filtros opcionais; sem filtro devolve todos. Só campos de identidade
   // — vitais/saúde ficam por conta da smartband (mock no front até o hardware).
-  async list(role?: Role, approvalStatus?: ApprovalStatus) {
+  async list(companyId: string | null, role?: Role, approvalStatus?: ApprovalStatus) {
     if (role !== undefined && !(role in Role)) throw new BadRequestException('role inválido')
     const users = await this.prisma.user.findMany({
       where: {
+        companyId,
         ...(role !== undefined ? { role } : {}),
         ...(approvalStatus !== undefined ? { approvalStatus } : {}),
       },
@@ -103,8 +111,9 @@ export class UsersService {
   // tem a sessão revogada na hora (JwtStrategy reconsulta o banco). Aditivo e
   // reversível — não apaga nada. Guarda de auto-desativação: como o self-delete
   // do remove, o admin não pode se auto-trancar (reativar a si mesmo é ok).
-  async setActive(id: string, active: boolean, requesterId: string) {
+  async setActive(id: string, active: boolean, requesterId: string, companyId: string | null) {
     if (id === requesterId && active === false) throw new BadRequestException('Não é possível desativar a si mesmo')
+    await this.requireSameCompany(id, companyId)
     try {
       const u = await this.prisma.user.update({ where: { id }, data: { active } })
       return { id: u.id, active: u.active }
@@ -118,8 +127,9 @@ export class UsersService {
   // Exclusão dura: apaga o Profile (1:1) e o User na mesma transação. Guardas:
   // não deixa o admin excluir a si mesmo; se o User tiver registros vinculados
   // por FK (P2003, ex.: reports/journeys) orienta a desativar em vez de excluir.
-  async remove(id: string, requesterId: string) {
+  async remove(id: string, requesterId: string, companyId: string | null) {
     if (id === requesterId) throw new BadRequestException('Não é possível excluir a si mesmo')
+    await this.requireSameCompany(id, companyId)
     try {
       await this.prisma.$transaction(async (tx) => {
         await tx.profile.deleteMany({ where: { userId: id } })
@@ -134,12 +144,12 @@ export class UsersService {
     }
   }
 
-  async getOne(id: string) {
+  async getOne(id: string, companyId: string | null) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: { profile: true, company: true },
     })
-    if (!user) throw new NotFoundException('Usuário não encontrado')
+    if (!user || user.companyId !== companyId) throw new NotFoundException('Usuário não encontrado')
     return this.toDetailDto(user)
   }
 

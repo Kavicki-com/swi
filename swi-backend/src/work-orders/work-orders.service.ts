@@ -39,8 +39,8 @@ export class WorkOrdersService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async create(adminId: string, dto: CreateWorkOrderDto) {
-    const ids = await this.validateResponsibles(this.prisma, dto.responsibleIds)
+  async create(adminId: string, dto: CreateWorkOrderDto, companyId: string | null) {
+    const ids = await this.validateResponsibles(this.prisma, dto.responsibleIds, companyId)
     // Decisão B: sem checklist explícito, cria 1 item automático (título=título
     // do pai, descrição=summary) — o worker precisa de ao menos um card.
     const items = dto.items?.length ? dto.items : [{ title: dto.title, description: dto.summary ?? '' }]
@@ -70,12 +70,16 @@ export class WorkOrdersService {
     // status default = pending (todos os itens nascem pending) → um recompute
     // seria no-op na criação, então não é chamado.
     await this.notify(ids, order.id, order.title) // ids já deduplicados
-    return this.get(order.id)
+    return this.detailById(order.id)
   }
 
-  async list(status?: string) {
+  // Org-scoping (QA C1): WorkOrder não tem companyId — a empresa é a do autor.
+  async list(status: string | undefined, companyId: string | null) {
     const rows = await this.prisma.workOrder.findMany({
-      where: status ? { status: status as WorkOrderStatus } : {},
+      where: {
+        ...(status ? { status: status as WorkOrderStatus } : {}),
+        author: { companyId },
+      },
       orderBy: { createdAt: 'desc' },
       take: LIST_CAP,
       include: listInclude,
@@ -83,20 +87,33 @@ export class WorkOrdersService {
     return Promise.all(rows.map((r) => this.toRowDto(r)))
   }
 
-  async get(id: string) {
+  async get(id: string, companyId: string | null) {
+    const order = await this.prisma.workOrder.findUnique({ where: { id }, include: detailInclude })
+    if (!order || order.author.companyId !== companyId) throw new NotFoundException('Tarefa não encontrada')
+    return this.toDetailDto(order)
+  }
+
+  // Caminho interno de create/update: o id acabou de ser validado na mesma
+  // operação, então não repete o check de empresa.
+  private async detailById(id: string) {
     const order = await this.prisma.workOrder.findUnique({ where: { id }, include: detailInclude })
     if (!order) throw new NotFoundException('Tarefa não encontrada')
     return this.toDetailDto(order)
   }
 
-  async update(id: string, dto: UpdateWorkOrderDto) {
+  async update(id: string, dto: UpdateWorkOrderDto, companyId: string | null) {
     const { newlyAdded, title } = await this.prisma.$transaction(async (tx) => {
       await lockOrder(tx, id)
       const existing = await tx.workOrder.findUnique({
         where: { id },
-        include: { items: { orderBy: { position: 'asc' } }, responsibles: { select: { id: true } } },
+        include: {
+          items: { orderBy: { position: 'asc' } },
+          responsibles: { select: { id: true } },
+          author: { select: { companyId: true } },
+        },
       })
-      if (!existing) throw new NotFoundException('Tarefa não encontrada')
+      // Org-scoping: tarefa de outra empresa é invisível (404, não 403).
+      if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Tarefa não encontrada')
 
       // ---- patch de escalares + responsáveis ----
       const data: Prisma.WorkOrderUpdateInput = {}
@@ -111,7 +128,7 @@ export class WorkOrdersService {
 
       let newlyAdded: string[] = []
       if (dto.responsibleIds !== undefined) {
-        const ids = await this.validateResponsibles(tx, dto.responsibleIds)
+        const ids = await this.validateResponsibles(tx, dto.responsibleIds, companyId)
         data.responsibles = { set: ids.map((rid) => ({ id: rid })) }
         const oldIds = new Set(existing.responsibles.map((r) => r.id))
         newlyAdded = ids.filter((rid) => !oldIds.has(rid))
@@ -180,14 +197,14 @@ export class WorkOrdersService {
     // Best-effort, FORA da tx (derivado do write commitado): notifica só os
     // responsáveis recém-adicionados. Falha aqui não quebra o update.
     await this.notify(newlyAdded, id, title)
-    return this.get(id)
+    return this.detailById(id)
   }
 
-  async listAssignable() {
+  async listAssignable(companyId: string | null) {
     // Espelha chat.listDirectory, mas SEM excluir ninguém (o admin pode atribuir
-    // a qualquer worker aprovado).
+    // a qualquer worker aprovado DA SUA empresa).
     const users = await this.prisma.user.findMany({
-      where: { role: 'WORKER', approvalStatus: 'APPROVED' },
+      where: { role: 'WORKER', approvalStatus: 'APPROVED', companyId },
       include: { profile: true },
       orderBy: { name: 'asc' },
       take: LIST_CAP,
@@ -197,10 +214,11 @@ export class WorkOrdersService {
 
   // Valida que TODOS os ids (deduplicados) são workers APROVADOS; devolve os ids
   // únicos. Usado no create e no update (com o client da tx).
-  private async validateResponsibles(db: Db, responsibleIds: string[]): Promise<string[]> {
+  private async validateResponsibles(db: Db, responsibleIds: string[], companyId: string | null): Promise<string[]> {
     const ids = [...new Set(responsibleIds)]
     const found = await db.user.findMany({
-      where: { id: { in: ids }, role: 'WORKER', approvalStatus: 'APPROVED' },
+      // Org-scoping: worker de outra empresa é inválido como responsável.
+      where: { id: { in: ids }, role: 'WORKER', approvalStatus: 'APPROVED', companyId },
       select: { id: true },
     })
     if (found.length !== ids.length) throw new BadRequestException('responsável inválido')

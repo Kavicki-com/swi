@@ -30,12 +30,13 @@ const prisma = () => {
   return db
 }
 
-// Detalhe devolvido por get (create/update chamam this.get na volta).
+// Org-scoping (QA C1): WorkOrder não tem companyId — a empresa é a do autor.
+// Detalhe devolvido por get (create/update chamam o detail interno na volta).
 const detailRow = (over: any = {}) => ({
   id: 'o1', title: 'Ordem', summary: 'Resumo', details: 'Detalhes', sector: 'Norte',
   estimatedMinutes: 120, startDate: null, dueDate: null, status: 'pending', imageKeys: ['order/a.jpg'],
   createdAt: new Date('2026-03-10T12:00:00.000Z'),
-  author: { name: 'Admin', profile: { fullName: 'Admin Full', avatarKey: 'chat/av-admin.png' } },
+  author: { name: 'Admin', companyId: 'org1', profile: { fullName: 'Admin Full', avatarKey: 'chat/av-admin.png' } },
   responsibles: [
     { id: 'u1', name: 'W1', profile: { fullName: 'Worker Um', jobTitle: 'Op', sector: 'Norte', birthDate: new Date('1990-05-04'), avatarKey: 'chat/av1.png' } },
   ],
@@ -43,10 +44,11 @@ const detailRow = (over: any = {}) => ({
   ...over,
 })
 
-// Estado existente lido SOB a trava no update (items+responsáveis+estimativa).
+// Estado existente lido SOB a trava no update (items+responsáveis+estimativa+autor).
 const existingRow = (over: any = {}) => ({
   id: 'o1', title: 'Ordem', summary: 'S', details: 'D', sector: 'N',
   estimatedMinutes: 120, startDate: null, dueDate: null, status: 'in_progress', imageKeys: [],
+  author: { companyId: 'org1' },
   items: [
     { id: 't1', position: 0, title: 'Item 1', description: 'd1', status: 'pending' },
     { id: 't2', position: 1, title: 'Item 2', description: 'd2', status: 'done' },
@@ -57,7 +59,7 @@ const existingRow = (over: any = {}) => ({
 
 describe('WorkOrdersService', () => {
   // ---------------- create ----------------
-  it('create com checklist: cria os itens do dto, rateia a estimativa e devolve o shape do get', async () => {
+  it('create com checklist: valida responsáveis NA EMPRESA, cria itens, rateia e devolve o shape do get', async () => {
     const db = prisma()
     db.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }])
     db.workOrder.create.mockResolvedValue({ id: 'o1', title: 'Ordem' })
@@ -66,7 +68,11 @@ describe('WorkOrdersService', () => {
       title: 'Ordem', summary: 'Resumo', estimatedMinutes: 100,
       responsibleIds: ['u1', 'u2'],
       items: [{ title: 'A' }, { title: 'B' }, { title: 'C' }],
-    } as any)
+    } as any, 'org1')
+    // validateResponsibles restrito à empresa do admin — worker de outra org é inválido.
+    expect(db.user.findMany.mock.calls[0][0].where).toEqual({
+      id: { in: ['u1', 'u2'] }, role: 'WORKER', approvalStatus: 'APPROVED', companyId: 'org1',
+    })
     const data = db.workOrder.create.mock.calls[0][0].data
     expect(data.authorId).toBe('admin1')
     expect(data.responsibles).toEqual({ connect: [{ id: 'u1' }, { id: 'u2' }] })
@@ -84,7 +90,7 @@ describe('WorkOrdersService', () => {
     db.workOrder.findUnique.mockResolvedValue(detailRow())
     await new WorkOrdersService(db, media(), notifications()).create('admin1', {
       title: 'Ordem X', summary: 'O resumo', estimatedMinutes: 60, responsibleIds: ['u1'],
-    } as any)
+    } as any, 'org1')
     const items = db.workOrder.create.mock.calls[0][0].data.items.create
     expect(items).toHaveLength(1)
     expect(items[0].title).toBe('Ordem X')
@@ -92,13 +98,13 @@ describe('WorkOrdersService', () => {
     expect(items[0].estimatedMinutes).toBe(60) // rateio 60/1
   })
 
-  it('create com responsável inválido (não-worker/não-aprovado) → 400 e NÃO cria', async () => {
+  it('create com responsável inválido (não-worker/não-aprovado/outra org) → 400 e NÃO cria', async () => {
     const db = prisma()
     db.user.findMany.mockResolvedValue([{ id: 'u1' }]) // só 1 dos 2 casou o filtro
     await expect(
       new WorkOrdersService(db, media(), notifications()).create('admin1', {
         title: 'T', responsibleIds: ['u1', 'u2'],
-      } as any),
+      } as any, 'org1'),
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(db.workOrder.create).not.toHaveBeenCalled()
   })
@@ -111,7 +117,7 @@ describe('WorkOrdersService', () => {
     const notif = notifications()
     await new WorkOrdersService(db, media(), notif).create('admin1', {
       title: 'Ordem 9', responsibleIds: ['u1', 'u2'],
-    } as any)
+    } as any, 'org1')
     expect(notif.enqueueForMany).toHaveBeenCalledWith(['u1', 'u2'], expect.objectContaining({
       domain: 'journey', title: 'Nova tarefa atribuída', body: 'Ordem 9', targetId: 'o9',
     }))
@@ -125,7 +131,7 @@ describe('WorkOrdersService', () => {
     const notif = notifications()
     await new WorkOrdersService(db, media(), notif).create('admin1', {
       title: 'Ordem', responsibleIds: ['u1', 'u1', 'u2'], // 'u1' duplicado no payload
-    } as any)
+    } as any, 'org1')
     expect(notif.enqueueForMany).toHaveBeenCalledWith(['u1', 'u2'], expect.anything()) // deduplicado
   })
 
@@ -136,12 +142,12 @@ describe('WorkOrdersService', () => {
     db.workOrder.findUnique.mockResolvedValue(detailRow())
     const notif = notifications()
     notif.enqueueForMany.mockRejectedValue(new Error('boom'))
-    const out = await new WorkOrdersService(db, media(), notif).create('admin1', { title: 'Ordem', responsibleIds: ['u1'] } as any)
+    const out = await new WorkOrdersService(db, media(), notif).create('admin1', { title: 'Ordem', responsibleIds: ['u1'] } as any, 'org1')
     expect(out.id).toBe('o1')
   })
 
   // ---------------- list ----------------
-  it('list filtra por status e deriva progressPct dos itens', async () => {
+  it('list escopa pela empresa do autor, filtra por status e deriva progressPct dos itens', async () => {
     const db = prisma()
     db.workOrder.findMany.mockResolvedValue([
       {
@@ -150,8 +156,8 @@ describe('WorkOrdersService', () => {
         responsibles: [{ profile: { avatarKey: 'chat/av1.png' } }, { profile: { avatarKey: null } }],
       },
     ])
-    const out = await new WorkOrdersService(db, media(), notifications()).list('in_progress')
-    expect(db.workOrder.findMany.mock.calls[0][0].where).toEqual({ status: 'in_progress' })
+    const out = await new WorkOrdersService(db, media(), notifications()).list('in_progress', 'org1')
+    expect(db.workOrder.findMany.mock.calls[0][0].where).toEqual({ status: 'in_progress', author: { companyId: 'org1' } })
     expect(db.workOrder.findMany.mock.calls[0][0].take).toBe(200)
     expect(out[0].progressPct).toBe(50) // 2/4
     expect(out[0].responsibleCount).toBe(2)
@@ -161,24 +167,30 @@ describe('WorkOrdersService', () => {
     expect(out[0].sector).toBe('N')
   })
 
-  it('list sem status usa where vazio', async () => {
+  it('list sem status ainda escopa pela empresa', async () => {
     const db = prisma()
     db.workOrder.findMany.mockResolvedValue([])
-    await new WorkOrdersService(db, media(), notifications()).list()
-    expect(db.workOrder.findMany.mock.calls[0][0].where).toEqual({})
+    await new WorkOrdersService(db, media(), notifications()).list(undefined, 'org1')
+    expect(db.workOrder.findMany.mock.calls[0][0].where).toEqual({ author: { companyId: 'org1' } })
   })
 
   // ---------------- get ----------------
   it('get inexistente → 404', async () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValue(null)
-    await expect(new WorkOrdersService(db, media(), notifications()).get('nope')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new WorkOrdersService(db, media(), notifications()).get('nope', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it('get de tarefa de OUTRA empresa → 404 (não vaza conteúdo)', async () => {
+    const db = prisma()
+    db.workOrder.findUnique.mockResolvedValue(detailRow({ author: { name: 'X', companyId: 'org2', profile: null } }))
+    await expect(new WorkOrdersService(db, media(), notifications()).get('o1', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
 
   it('get monta o detalhe: autor, responsáveis (sem bloodType, birthDate ISO), itens e imagens presignadas', async () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValue(detailRow())
-    const out = await new WorkOrdersService(db, media(), notifications()).get('o1')
+    const out = await new WorkOrdersService(db, media(), notifications()).get('o1', 'org1')
     expect(out.author).toEqual({ name: 'Admin Full', avatar: 'signed:chat/av-admin.png' })
     expect(out.responsibles[0]).toEqual({
       id: 'u1', name: 'Worker Um', jobTitle: 'Op', sector: 'Norte',
@@ -193,7 +205,7 @@ describe('WorkOrdersService', () => {
   it('get expõe imageKeys cruas junto das URLs assinadas (destrava edição de anexo no admin)', async () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValue(detailRow())
-    const out = await new WorkOrdersService(db, media(), notifications()).get('o1')
+    const out = await new WorkOrdersService(db, media(), notifications()).get('o1', 'org1')
     // Par posicional: images[i] é a URL assinada de imageKeys[i]. O PATCH
     // substitui o array inteiro, então o form precisa das keys pra reenviar
     // as existentes (URL assinada não passa no regex ^order/<uuid>.(jpg|png)$).
@@ -204,7 +216,7 @@ describe('WorkOrdersService', () => {
   it('get expõe createdAt em ISO (tela de detalhe mostra "Data de criação")', async () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValue(detailRow())
-    const out = await new WorkOrdersService(db, media(), notifications()).get('o1')
+    const out = await new WorkOrdersService(db, media(), notifications()).get('o1', 'org1')
     expect(out.createdAt).toBe('2026-03-10T12:00:00.000Z')
   })
 
@@ -217,7 +229,7 @@ describe('WorkOrdersService', () => {
         { id: 't1', title: 'Item 1 editado', description: 'd1x' },
         { title: 'Item novo' },
       ],
-    } as any)
+    } as any, 'org1')
     expect(db.task.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['t2'] } } }) // t2 fora do payload
     const upd = db.task.update.mock.calls.find((c: any) => c[0].where.id === 't1')[0].data
     expect(upd.title).toBe('Item 1 editado')
@@ -230,11 +242,21 @@ describe('WorkOrdersService', () => {
     expect(db.workOrder.update).toHaveBeenCalled() // recompute do pai
   })
 
+  it('update de tarefa de OUTRA empresa → 404 sem tocar em nada', async () => {
+    const db = prisma()
+    db.workOrder.findUnique.mockResolvedValueOnce(existingRow({ author: { companyId: 'org2' } }))
+    await expect(
+      new WorkOrdersService(db, media(), notifications()).update('o1', { title: 'X' } as any, 'org1'),
+    ).rejects.toBeInstanceOf(NotFoundException)
+    expect(db.workOrder.update).not.toHaveBeenCalled()
+    expect(db.task.deleteMany).not.toHaveBeenCalled()
+  })
+
   it('update com items:[] (esvazia o checklist) → 400 e não toca nos itens', async () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValueOnce(existingRow())
     await expect(
-      new WorkOrdersService(db, media(), notifications()).update('o1', { items: [] } as any),
+      new WorkOrdersService(db, media(), notifications()).update('o1', { items: [] } as any, 'org1'),
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(db.task.create).not.toHaveBeenCalled()
     expect(db.task.deleteMany).not.toHaveBeenCalled()
@@ -244,7 +266,7 @@ describe('WorkOrdersService', () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValueOnce(existingRow())
     await expect(
-      new WorkOrdersService(db, media(), notifications()).update('o1', { items: [{ id: 'ghost', title: 'X' }] } as any),
+      new WorkOrdersService(db, media(), notifications()).update('o1', { items: [{ id: 'ghost', title: 'X' }] } as any, 'org1'),
     ).rejects.toBeInstanceOf(BadRequestException)
   })
 
@@ -255,7 +277,7 @@ describe('WorkOrdersService', () => {
       // t1 repetido, t2 omitido: o guard antigo (Set) deletaria t2 e faria 2 updates em t1.
       new WorkOrdersService(db, media(), notifications()).update('o1', {
         items: [{ id: 't1', title: 'A' }, { id: 't1', title: 'B' }],
-      } as any),
+      } as any, 'org1'),
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(db.task.deleteMany).not.toHaveBeenCalled() // nada foi apagado
   })
@@ -264,7 +286,7 @@ describe('WorkOrdersService', () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValueOnce(null)
     await expect(
-      new WorkOrdersService(db, media(), notifications()).update('nope', { title: 'X' } as any),
+      new WorkOrdersService(db, media(), notifications()).update('nope', { title: 'X' } as any, 'org1'),
     ).rejects.toBeInstanceOf(NotFoundException)
   })
 
@@ -275,7 +297,7 @@ describe('WorkOrdersService', () => {
       .mockResolvedValue(detailRow())
     db.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u3' }]) // novo conjunto (u2 sai, u3 entra)
     const notif = notifications()
-    await new WorkOrdersService(db, media(), notif).update('o1', { responsibleIds: ['u1', 'u3'] } as any)
+    await new WorkOrdersService(db, media(), notif).update('o1', { responsibleIds: ['u1', 'u3'] } as any, 'org1')
     expect(notif.enqueueForMany).toHaveBeenCalledTimes(1)
     expect(notif.enqueueForMany).toHaveBeenCalledWith(['u3'], expect.objectContaining({ domain: 'journey', targetId: 'o1' }))
     expect(db.workOrder.update.mock.calls.some((c: any) => c[0].data.responsibles?.set)).toBe(true) // set aplicado no pai
@@ -288,7 +310,7 @@ describe('WorkOrdersService', () => {
       .mockResolvedValue(detailRow())
     await new WorkOrdersService(db, media(), notifications()).update('o1', {
       items: [{ id: 't1', title: 'I1' }, { title: 'I2' }, { title: 'I3' }],
-    } as any)
+    } as any, 'org1')
     const t1 = db.task.update.mock.calls.find((c: any) => c[0].where.id === 't1')[0].data
     expect(t1.estimatedMinutes).toBe(30) // 90/3
     expect(db.task.create.mock.calls.map((c: any) => c[0].data.estimatedMinutes)).toEqual([30, 30])
@@ -299,7 +321,7 @@ describe('WorkOrdersService', () => {
     db.workOrder.findUnique.mockResolvedValueOnce(existingRow()).mockResolvedValue(detailRow())
     await new WorkOrdersService(db, media(), notifications()).update('o1', {
       items: [{ id: 't1', title: 'Novo título' }, { id: 't2', title: 'Item 2' }],
-    } as any)
+    } as any, 'org1')
     for (const c of db.task.update.mock.calls) expect(c[0].data.estimatedMinutes).toBeUndefined()
     const t1 = db.task.update.mock.calls.find((c: any) => c[0].where.id === 't1')[0].data
     expect(t1.title).toBe('Novo título')
@@ -311,7 +333,7 @@ describe('WorkOrdersService', () => {
   it('update roda sob transação e trava o pai; edição SEM mudança de conjunto NÃO recomputa (Fix 4)', async () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValueOnce(existingRow()).mockResolvedValue(detailRow())
-    await new WorkOrdersService(db, media(), notifications()).update('o1', { title: 'Renomeada' } as any)
+    await new WorkOrdersService(db, media(), notifications()).update('o1', { title: 'Renomeada' } as any, 'org1')
     expect(db.$transaction).toHaveBeenCalledTimes(1)
     expect(db.$queryRaw).toHaveBeenCalled() // lockOrder (SELECT ... FOR UPDATE)
     // gate do Fix 4: sem add/delete, o status derivado não muda → recompute é pulado.
@@ -330,21 +352,21 @@ describe('WorkOrdersService', () => {
     db.task.findMany.mockResolvedValue([{ status: 'done' }]) // sobra só t1 (done)
     await new WorkOrdersService(db, media(), notifications()).update('o1', {
       items: [{ id: 't1', title: 'I1' }], // t2 deletado → conjunto muda
-    } as any)
+    } as any, 'org1')
     expect(db.task.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['t2'] } } })
     const statusCall = db.workOrder.update.mock.calls.find((c: any) => c[0].data.status)
     expect(statusCall[0].data.status).toBe('done') // recompute rodou e virou o pai
   })
 
   // ---------------- assignable ----------------
-  it('listAssignable devolve só workers aprovados (where trava role+approvalStatus)', async () => {
+  it('listAssignable devolve só workers aprovados DA EMPRESA (where trava role+approvalStatus+companyId)', async () => {
     const db = prisma()
     db.user.findMany.mockResolvedValue([
       { id: 'u1', name: 'W1', profile: { fullName: 'Worker Um', jobTitle: 'Op', sector: 'N', birthDate: new Date('1988-03-02'), avatarKey: 'chat/av1.png' } },
       { id: 'u2', name: 'W2', profile: null },
     ])
-    const out = await new WorkOrdersService(db, media(), notifications()).listAssignable()
-    expect(db.user.findMany.mock.calls[0][0].where).toEqual({ role: 'WORKER', approvalStatus: 'APPROVED' })
+    const out = await new WorkOrdersService(db, media(), notifications()).listAssignable('org1')
+    expect(db.user.findMany.mock.calls[0][0].where).toEqual({ role: 'WORKER', approvalStatus: 'APPROVED', companyId: 'org1' })
     expect(out).toHaveLength(2)
     expect(out[0]).toEqual({
       id: 'u1', name: 'Worker Um', jobTitle: 'Op', sector: 'N',
