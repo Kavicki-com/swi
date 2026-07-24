@@ -30,6 +30,14 @@ describe('WeatherService.getSnapshot', () => {
     expect(snap.hourly).toHaveLength(CANNED_HOURLY.length)
     expect(new Date(snap.hourly![0].at).toString()).not.toBe('Invalid Date')
   })
+  it('CANNED_HOURLY resolvido ganha isDay coerente com a hora local do slot', async () => {
+    const svc = new WeatherService(provider(async () => { throw new Error('open-meteo down') }))
+    const snap = await svc.getSnapshot()
+    for (const h of snap.hourly!) {
+      const hr = new Date(h.at).getHours()
+      expect(h.isDay).toBe(hr >= 6 && hr < 18)
+    }
+  })
   it('getSnapshot serve CANNED_HOURLY quando o provider retorna série vazia', async () => {
     const svc = new WeatherService(provider(async () => ({ current: CANNED_CURRENT, daily: CANNED_DAILY, hourly: [] })))
     expect((await svc.getSnapshot()).hourly).toHaveLength(CANNED_HOURLY.length)

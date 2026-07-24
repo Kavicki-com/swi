@@ -39,6 +39,8 @@ export function coerceOpenMeteo(raw: any): { current: WeatherCurrent; daily: Wea
           at,
           tempC: Math.round(num(h.temperature_2m[i])),
           condition: mapWeatherCode(num(h.weather_code[i])),
+          // is_day (0|1) é aditivo — payload sem o array segue válido, isDay omitido.
+          ...(Array.isArray(h.is_day) ? { isDay: num(h.is_day[i]) === 1 } : {}),
         }))
       : []
   return { current, daily, hourly }
@@ -52,7 +54,7 @@ export class OpenMeteoProvider {
       `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}` +
       `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code` +
       `&daily=temperature_2m_max,temperature_2m_min` +
-      `&hourly=temperature_2m,weather_code&past_days=1` +
+      `&hourly=temperature_2m,weather_code,is_day&past_days=1` +
       `&timezone=auto&forecast_days=1`
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
     if (!res.ok) throw new Error(`open-meteo: HTTP ${res.status}`)

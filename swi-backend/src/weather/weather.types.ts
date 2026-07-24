@@ -6,6 +6,7 @@ export interface WeatherHourly {
   at: string // ISO datetime da hora cheia
   tempC: number
   condition: WeatherCondition
+  isDay?: boolean // is_day do Open-Meteo (aditivo; ausente em payload antigo)
 }
 export interface WeatherAlert { id: string; event: string; description: string; startsAt: string; endsAt: string }
 export interface WeatherSnapshot { current: WeatherCurrent; daily: WeatherDaily; hourly?: WeatherHourly[]; alerts: WeatherAlert[]; fetchedAt: string }
