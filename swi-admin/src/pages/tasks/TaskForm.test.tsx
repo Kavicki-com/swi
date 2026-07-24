@@ -75,6 +75,7 @@ function detail(overrides: Partial<WorkOrderDetail> = {}): WorkOrderDetail {
     responsibles: [CARLOS],
     items: [{ id: 'it_1', title: 'Item 1', description: 'Desc 1', status: 'pending' }],
     images: [],
+    imageKeys: [],
     ...overrides,
   }
 }
@@ -676,6 +677,99 @@ describe('TaskForm — responsáveis', () => {
 
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
     expect(createMock.mock.calls[0]?.[0].responsibleIds).toEqual(['w_1'])
+  })
+})
+
+describe('TaskForm — anexos na edição (imageKeys no detail)', () => {
+  it('uploader ativo na edição: anexo novo vai no PATCH junto das keys existentes', async () => {
+    getMock.mockResolvedValue(
+      detail({ images: ['signed:order/a.jpg'], imageKeys: ['order/a.jpg'] }),
+    )
+    renderAt('/tasks/wo_7/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
+    })
+    // O aviso de edição travada não existe mais.
+    expect(screen.queryByText('Anexos não podem ser alterados na edição.')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByTestId('task-file-input'), { target: { files: [jpeg()] } })
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    // Keys existentes reenviadas + a nova no fim (PATCH substitui o array inteiro).
+    expect(updateMock.mock.calls[0]?.[1].imageKeys).toEqual(['order/a.jpg', 'order/aaa.jpg'])
+  })
+
+  it('remover um anexo existente o tira do PATCH', async () => {
+    getMock.mockResolvedValue(
+      detail({
+        images: ['signed:order/a.jpg', 'signed:order/b.png'],
+        imageKeys: ['order/a.jpg', 'order/b.png'],
+      }),
+    )
+    renderAt('/tasks/wo_7/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover anexo 1' }))
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    expect(updateMock.mock.calls[0]?.[1].imageKeys).toEqual(['order/b.png'])
+  })
+
+  it('remover um arquivo recém-escolhido o tira do upload e do PATCH', async () => {
+    uploadMock.mockImplementation(async (f: File) => `order/${f.name}`)
+    getMock.mockResolvedValue(detail({ images: [], imageKeys: [] }))
+    renderAt('/tasks/wo_7/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
+    })
+
+    const input = screen.getByTestId('task-file-input')
+    fireEvent.change(input, { target: { files: [jpeg('um.jpg'), jpeg('dois.jpg')] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Remover arquivo um.jpg' }))
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    expect(uploadMock).toHaveBeenCalledTimes(1)
+    expect(updateMock.mock.calls[0]?.[1].imageKeys).toEqual(['order/dois.jpg'])
+  })
+
+  it('sem mexer em anexos, o PATCH NÃO traz imageKeys (não reescreve à toa)', async () => {
+    getMock.mockResolvedValue(
+      detail({ images: ['signed:order/a.jpg'], imageKeys: ['order/a.jpg'] }),
+    )
+    renderAt('/tasks/wo_7/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
+    })
+
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    expect(updateMock.mock.calls[0]?.[1]).not.toHaveProperty('imageKeys')
+  })
+
+  it('o teto de 20 conta os anexos que já existem na tarefa', async () => {
+    const nineteen = Array.from({ length: 19 }, (_, i) => `order/k_${i}.jpg`)
+    getMock.mockResolvedValue(
+      detail({ images: nineteen.map((k) => `signed:${k}`), imageKeys: nineteen }),
+    )
+    renderAt('/tasks/wo_7/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
+    })
+
+    // 19 existentes + 2 novos = 21 → recusa a seleção inteira.
+    fireEvent.change(screen.getByTestId('task-file-input'), {
+      target: { files: [jpeg('x1.jpg'), jpeg('x2.jpg')] },
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('task-form-error')).toHaveTextContent(/no máximo 20 arquivos/i)
+    })
+    expect(uploadMock).not.toHaveBeenCalled()
   })
 })
 

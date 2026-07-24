@@ -39,6 +39,7 @@ const DETAIL: WorkOrderDetail = {
   responsibles: [],
   items: [],
   images: [],
+  imageKeys: [],
 }
 
 // Teste de roteamento, não de dados: sem este mock a TasksList dispararia um

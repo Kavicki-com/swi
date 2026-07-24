@@ -63,6 +63,9 @@ export type WorkOrderDetail = {
   responsibles: AssignableWorker[]
   items: WorkOrderItem[]
   images: string[]
+  // Keys cruas em par posicional com `images` (images[i] assina imageKeys[i]).
+  // São o que o PATCH aceita de volta — a URL assinada não passa no regex do DTO.
+  imageKeys: string[]
 }
 
 // Item do payload de escrita. `id` opcional expressa a reconciliação do PATCH:

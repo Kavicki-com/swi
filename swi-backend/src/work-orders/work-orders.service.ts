@@ -265,6 +265,11 @@ export class WorkOrdersService {
         status: it.status,
       })),
       images,
+      // Keys cruas em par posicional com `images` (images[i] assina imageKeys[i]).
+      // O PATCH substitui o array inteiro, então o cliente precisa das keys pra
+      // reenviar as existentes ao editar anexos — a URL assinada não passa no
+      // regex ^order/<uuid>.(jpg|png)$ do DTO.
+      imageKeys: order.imageKeys,
     }
   }
 

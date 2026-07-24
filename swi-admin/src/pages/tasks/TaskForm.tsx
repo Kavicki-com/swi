@@ -94,8 +94,18 @@ function toItemInput(draft: ChecklistDraft): WorkOrderItemInput {
   return draft.id ? { id: draft.id, ...base } : base
 }
 
-// Quadro vazio da fileira de anexos (Figma 105:12461).
-function AttachmentSlot({ label }: { label?: string }) {
+// Quadro vazio da fileira de anexos (Figma 105:12461). `onRemove` (com o
+// respectivo label acessível) põe o botão de remoção — mesmo padrão ghost +
+// delete_icon dos cards do checklist.
+function AttachmentSlot({
+  label,
+  onRemove,
+  removeLabel,
+}: {
+  label?: string
+  onRemove?: () => void
+  removeLabel?: string
+}) {
   const theme = useTheme()
   return (
     <View
@@ -115,6 +125,14 @@ function AttachmentSlot({ label }: { label?: string }) {
         <Text variant="body.s" color={theme.content.medium} numberOfLines={1}>
           {label}
         </Text>
+      ) : null}
+      {onRemove ? (
+        <Button
+          variant="ghost"
+          onPress={onRemove}
+          iconLeft={<Icon name="delete_icon" size={20} color={theme.content.error} />}
+          accessibilityLabel={removeLabel ?? 'Remover anexo'}
+        />
       ) : null}
     </View>
   )
@@ -148,7 +166,13 @@ export function TaskForm() {
   const [checklistLocked, setChecklistLocked] = useState(false)
   const [drafts, setDrafts] = useState<ReadonlyArray<ChecklistDraft>>([emptyDraft()])
   const [files, setFiles] = useState<ReadonlyArray<File>>([])
-  const [existingImages, setExistingImages] = useState<ReadonlyArray<string>>([])
+  // Anexos já gravados: key crua (o que o PATCH aceita) + URL assinada (preview).
+  // `removedExisting` marca a fileira como suja — sem mudança, o PATCH omite
+  // imageKeys e não reescreve o array à toa.
+  const [existingAttachments, setExistingAttachments] = useState<
+    ReadonlyArray<{ key: string; url: string }>
+  >([])
+  const [removedExisting, setRemovedExisting] = useState(false)
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -193,7 +217,10 @@ export function TaskForm() {
         setStartDate(isoToDisplayDate(detail.startDate))
         setDueDate(isoToDisplayDate(detail.dueDate))
         setResponsibleIds(detail.responsibles.map((r) => r.id))
-        setExistingImages(detail.images)
+        // Par posicional: images[i] é a URL assinada de imageKeys[i].
+        setExistingAttachments(
+          detail.imageKeys.map((key, i) => ({ key, url: detail.images[i] ?? '' })),
+        )
         // O backend garante ≥1 item (cria um espelhando título+resumo quando a
         // tarefa nasce sem checklist), então toda tarefa carregada tem lista.
         // Os ids vêm junto — é o que faz o PATCH ATUALIZAR os itens existentes.
@@ -246,7 +273,7 @@ export function TaskForm() {
     // então o backend rejeitava imageKeys > 20 — os 25 já estavam no bucket,
     // órfãos, sem tarefa nenhuma referenciando as keys. E ao contrário da falha
     // de rede (rara), este caminho é trivial de alcançar.
-    if (files.length + picked.length > LIMITS.imageKeys) {
+    if (existingAttachments.length + files.length + picked.length > LIMITS.imageKeys) {
       setError(`Anexe no máximo ${LIMITS.imageKeys} arquivos por tarefa.`)
       return
     }
@@ -376,11 +403,16 @@ export function TaskForm() {
     // sozinho 1 item espelhando título+resumo (no POST) ou deixa o checklist
     // intocado (no PATCH). Mandar [] em qualquer um dos dois dá 400.
     if (checklistOn) payload.items = items
-    // imageKeys só no create: o PATCH SUBSTITUI o array inteiro e o detalhe
-    // devolve URLs assinadas, não keys — mandar as novas apagaria os anexos que
-    // já existem. Enquanto o detalhe não expuser as keys, a edição não mexe em
-    // anexo (o uploader fica desabilitado nesse modo).
-    if (!isEdit && imageKeys.length > 0) payload.imageKeys = imageKeys
+    // O PATCH SUBSTITUI o array inteiro, então na edição o payload leva as keys
+    // existentes remanescentes + as novas — e SÓ quando a fileira mudou (anexo
+    // novo ou remoção); intocada, a chave é omitida e o backend não mexe.
+    if (isEdit) {
+      if (imageKeys.length > 0 || removedExisting) {
+        payload.imageKeys = [...existingAttachments.map((a) => a.key), ...imageKeys]
+      }
+    } else if (imageKeys.length > 0) {
+      payload.imageKeys = imageKeys
+    }
 
     try {
       const saved = id
@@ -406,7 +438,7 @@ export function TaskForm() {
         ? '1 responsável atribuído.'
         : `${responsibleIds.length} responsáveis atribuídos.`
 
-  const emptySlots = Math.max(0, ATTACHMENT_SLOTS - files.length - existingImages.length)
+  const emptySlots = Math.max(0, ATTACHMENT_SLOTS - files.length - existingAttachments.length)
 
   return (
     <View testID="task-form" style={{ gap: theme.gap.l }}>
@@ -647,29 +679,37 @@ export function TaskForm() {
             flexWrap: 'wrap',
           }}
         >
-          {/* Anexos já gravados: só o quadro rotulado. O DS `Image` exige
-              width/height numéricos (fora do sistema de tokens) e a edição não
-              mexe em anexo, então o preview real não paga o hardcode. */}
-          {existingImages.map((uri, index) => (
-            <AttachmentSlot key={uri} label={`Anexo ${index + 1}`} />
+          {/* Anexos já gravados: quadro rotulado + remoção. O DS `Image` exige
+              width/height numéricos (fora do sistema de tokens), então o
+              preview real segue de fora — a key é o que o PATCH precisa. */}
+          {existingAttachments.map((att, index) => (
+            <AttachmentSlot
+              key={att.key}
+              label={`Anexo ${index + 1}`}
+              removeLabel={`Remover anexo ${index + 1}`}
+              onRemove={() => {
+                setRemovedExisting(true)
+                setExistingAttachments((prev) => prev.filter((a) => a.key !== att.key))
+              }}
+            />
           ))}
           {files.map((file, index) => (
-            <AttachmentSlot key={`${file.name}_${index}`} label={file.name} />
+            <AttachmentSlot
+              key={`${file.name}_${index}`}
+              label={file.name}
+              removeLabel={`Remover arquivo ${file.name}`}
+              onRemove={() => setFiles((prev) => prev.filter((f) => f !== file))}
+            />
           ))}
           {Array.from({ length: emptySlots }, (_, i) => (
             <AttachmentSlot key={`empty_${i}`} />
           ))}
           <View style={{ flex: 1 }}>
             <ImageUploader
-              helperText={
-                isEdit
-                  ? 'Anexos não podem ser alterados na edição.'
-                  : 'Selecione arquivos do tipo: JPG ou PNG'
-              }
+              helperText="Selecione arquivos do tipo: JPG ou PNG"
               pickFileLabel="Enviar arquivo"
               accentColor={theme.content.primary}
               showTakePhoto={false}
-              disabled={isEdit}
               onPickFile={() => fileInputRef.current?.click()}
             />
           </View>

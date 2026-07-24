@@ -89,6 +89,7 @@ function makeDetail(overrides: Partial<WorkOrderDetail> = {}): WorkOrderDetail {
     responsibles: [ANA, BRUNO],
     items: ITEMS,
     images: ['https://s3.test/a.jpg?sig=1', 'https://s3.test/b.jpg?sig=2'],
+    imageKeys: ['order/a.jpg', 'order/b.jpg'],
     ...overrides,
   }
 }
