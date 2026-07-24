@@ -8,10 +8,16 @@ describe('JwtStrategy.validate', () => {
   const usersWith = (u: any) => ({ findById: jest.fn().mockResolvedValue(u) }) as any
   beforeAll(() => { process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret' })
 
-  it('user ativo → {userId, role} com role fresca do banco (ignora a role do token)', async () => {
-    const s = new JwtStrategy(usersWith({ id: 'u1', role: 'ADMIN', active: true }))
+  it('user ativo → {userId, role, companyId} frescos do banco (ignora a role do token)', async () => {
+    const s = new JwtStrategy(usersWith({ id: 'u1', role: 'ADMIN', active: true, companyId: 'org1' }))
     const r = await s.validate({ sub: 'u1', role: 'WORKER' })
-    expect(r).toEqual({ userId: 'u1', role: 'ADMIN' })
+    expect(r).toEqual({ userId: 'u1', role: 'ADMIN', companyId: 'org1' })
+  })
+
+  it('user sem empresa → companyId null (balde legado, org-scoping)', async () => {
+    const s = new JwtStrategy(usersWith({ id: 'u1', role: 'WORKER', active: true, companyId: null }))
+    const r = await s.validate({ sub: 'u1', role: 'WORKER' })
+    expect(r.companyId).toBeNull()
   })
 
   it('user inativo → UnauthorizedException (sessão revogada)', async () => {

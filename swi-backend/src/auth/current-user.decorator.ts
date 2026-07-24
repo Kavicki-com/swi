@@ -3,6 +3,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common'
 export interface JwtUser {
   userId: string
   role: string
+  companyId: string | null
   // reflete exatamente o retorno de JwtStrategy.validate() — single source of truth do shape do JWT
 }
 

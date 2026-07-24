@@ -19,9 +19,10 @@ export class ChatService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async listDirectory(userId: string) {
+  async listDirectory(userId: string, companyId: string | null) {
     const users = await this.prisma.user.findMany({
-      where: { approvalStatus: 'APPROVED', role: 'WORKER', id: { not: userId } },
+      // Org-scoping (QA C1): diretório restrito à empresa do usuário.
+      where: { approvalStatus: 'APPROVED', role: 'WORKER', id: { not: userId }, companyId },
       include: { profile: true },
       orderBy: { name: 'asc' },
       take: LIST_CAP,

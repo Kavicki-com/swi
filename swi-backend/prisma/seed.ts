@@ -9,15 +9,28 @@ import { distributeMinutes } from '../src/work-orders/order-status'
 const prisma = new PrismaClient()
 
 async function main() {
+  // Org-scoping (QA C1): TODO usuário seed pertence à empresa demo — sem isto,
+  // ficam com companyId null (balde legado) e as listas escopadas vêm vazias.
+  // id fixo → upsert idempotente; o `update` dos upserts abaixo re-vincula
+  // usuários que já existiam no banco dev antes do scoping.
+  const company = await prisma.company.upsert({
+    where: { id: 'company-seed-1' }, update: {},
+    create: {
+      id: 'company-seed-1', name: 'SWI Demo Mineração', cnpj: '00000000000191',
+      site: 'www.swi.local', cep: '30130000', street: 'Avenida Demo', number: '100',
+      neighborhood: 'Centro', uf: 'MG',
+    },
+  })
+
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@swi.local' }, update: {},
+    where: { email: 'admin@swi.local' }, update: { companyId: company.id },
     create: { email: 'admin@swi.local', name: 'Admin', passwordHash: await hash('admin123'),
-      role: 'ADMIN', emailVerified: true, approvalStatus: 'APPROVED' },
+      role: 'ADMIN', emailVerified: true, approvalStatus: 'APPROVED', companyId: company.id },
   })
   const worker = await prisma.user.upsert({
-    where: { email: 'worker@swi.local' }, update: {},
+    where: { email: 'worker@swi.local' }, update: { companyId: company.id },
     create: { email: 'worker@swi.local', name: 'Worker Demo', passwordHash: await hash('worker123'),
-      role: 'WORKER', emailVerified: true, approvalStatus: 'APPROVED' },   // demo entra direto
+      role: 'WORKER', emailVerified: true, approvalStatus: 'APPROVED', companyId: company.id },   // demo entra direto
   })
   await prisma.profile.upsert({
     where: { userId: worker.id }, update: {},
@@ -134,8 +147,8 @@ async function main() {
     contactAvatarKeys.set(c.n, avatarKey)
     const u = await prisma.user.upsert({
       where: { email: c.email },
-      update: { approvalStatus: 'APPROVED', emailVerified: true },
-      create: { email: c.email, name: c.name, passwordHash: chatPass, role: 'WORKER', emailVerified: true, approvalStatus: 'APPROVED' },
+      update: { approvalStatus: 'APPROVED', emailVerified: true, companyId: company.id },
+      create: { email: c.email, name: c.name, passwordHash: chatPass, role: 'WORKER', emailVerified: true, approvalStatus: 'APPROVED', companyId: company.id },
     })
     contactIds.set(c.n, u.id)
     await prisma.profile.upsert({
