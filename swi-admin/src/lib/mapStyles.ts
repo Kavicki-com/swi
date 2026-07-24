@@ -14,27 +14,48 @@
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
 
 if (!MAPBOX_TOKEN && typeof window !== 'undefined') {
-  // Dev-time warning. Test env stubs maplibre-gl so tiles never load there.
+  // QA C4: sem token os tiles do Mapbox falhavam com centenas de 401 e o mapa
+  // virava um vazio preto. Agora a ausência cai no Esri (aviso segue útil:
+  // Mapbox tem cobertura z17+ melhor no interior do BR).
   // eslint-disable-next-line no-console
   console.warn(
-    '[mapStyles] VITE_MAPBOX_TOKEN missing — satellite tiles will fail. Copy .env.example to .env.local.',
+    '[mapStyles] VITE_MAPBOX_TOKEN ausente — usando fallback Esri World Imagery (cobertura z17+ inferior). Copie .env.example para .env.local para usar Mapbox.',
   )
 }
 
-export const SATELLITE_STYLE = {
-  version: 8 as const,
-  sources: {
-    satellite: {
+// Fonte condicional: Mapbox quando há token (provider preferido — cobertura),
+// Esri World Imagery (sem chave) como fallback funcional. Mesmo shape de style
+// pros três consumidores (MapsGeneral, AlertsList, AlertsRescueRoute).
+const SOURCE = MAPBOX_TOKEN
+  ? {
       type: 'raster' as const,
       tiles: [
-        `https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}.jpg?access_token=${MAPBOX_TOKEN ?? ''}`,
+        `https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}.jpg?access_token=${MAPBOX_TOKEN}`,
       ],
       tileSize: 256,
       attribution:
         '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       minzoom: 0,
       maxzoom: 22,
-    },
+    }
+  : {
+      type: 'raster' as const,
+      // Esri: atenção à ordem {z}/{y}/{x} (y antes de x) — igual ao MapBanner
+      // do dashboard, que sempre usou Esri e nunca quebrou sem chave.
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      attribution:
+        'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+      minzoom: 0,
+      maxzoom: 19,
+    }
+
+export const SATELLITE_STYLE = {
+  version: 8 as const,
+  sources: {
+    satellite: SOURCE,
   },
   layers: [
     {
@@ -44,3 +65,9 @@ export const SATELLITE_STYLE = {
     },
   ],
 }
+
+// Label curto do overlay MapAttribution — acompanha o provider ativo (um
+// hardcode aqui mentiria a atribuição quando o fallback Esri está servindo).
+export const SATELLITE_ATTRIBUTION_LABEL = MAPBOX_TOKEN
+  ? '© Mapbox © OpenStreetMap'
+  : '© Esri — World Imagery'

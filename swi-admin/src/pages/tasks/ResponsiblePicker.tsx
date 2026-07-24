@@ -5,7 +5,7 @@
 // medidas, divisor vertical, anatomia da linha), mas aquele é rota, escolhe
 // admins e não devolve nada — daí um componente novo em vez de reuso.
 import { useEffect, useMemo, useState } from 'react'
-import { View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import {
   Avatar,
   Button,
@@ -221,6 +221,10 @@ export function ResponsiblePicker({ selectedIds, onConfirm, onCancel }: Responsi
         borderRadius: theme.border.radius.m,
         padding: theme.padding.m,
         gap: theme.gap.l,
+        // QA C2: sem teto, a lista estourava o viewport em 1366×900 e o rodapé
+        // Cancelar/Continuar ficava inalcançável. O backdrop (flex:1 + padding)
+        // dá a altura definida; a lista rola internamente (ScrollView abaixo).
+        maxHeight: '100%',
       }}
     >
       <View style={{ gap: theme.gap.s }}>
@@ -261,7 +265,11 @@ export function ResponsiblePicker({ selectedIds, onConfirm, onCancel }: Responsi
             : 'Nenhum responsável disponível para atribuição.'}
         </Text>
       ) : (
-        <View style={{ gap: theme.gap.s }}>
+        <ScrollView
+          testID="responsible-picker-list"
+          style={{ flexShrink: 1 }}
+          contentContainerStyle={{ gap: theme.gap.s }}
+        >
           {filtered.map((w) => (
             <WorkerPickRow
               key={w.id}
@@ -271,7 +279,7 @@ export function ResponsiblePicker({ selectedIds, onConfirm, onCancel }: Responsi
               onToggle={(next) => toggle(w.id, next)}
             />
           ))}
-        </View>
+        </ScrollView>
       )}
 
       <View style={{ flexDirection: 'row', gap: theme.gap.sm }}>

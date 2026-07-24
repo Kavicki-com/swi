@@ -117,6 +117,20 @@ describe('ResponsiblePicker', () => {
     expect(screen.getByText('Engenharia Civil')).toBeInTheDocument()
   })
 
+  // QA C2 (2026-07-24): em 1366×900 a lista estourava o viewport e o rodapé
+  // Cancelar/Continuar ficava inalcançável (overlay sem scroll interno). A
+  // lista vive num container ROLÁVEL próprio; header/busca/rodapé ficam fixos.
+  it('as linhas ficam dentro do container rolável da lista (rodapé fora dele)', async () => {
+    renderPicker()
+    await waitFor(() => expect(screen.getByText('Ana Souza')).toBeInTheDocument())
+    const list = screen.getByTestId('responsible-picker-list')
+    expect(list).toContainElement(screen.getByText('Ana Souza'))
+    // O rodapé NÃO pode estar dentro do scroll — precisa ficar sempre visível.
+    expect(list).not.toContainElement(
+      screen.getByRole('button', { name: 'Confirmar responsáveis' }),
+    )
+  })
+
   it('calcula a idade a partir do birthDate ISO', async () => {
     renderPicker()
 
