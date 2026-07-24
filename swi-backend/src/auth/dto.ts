@@ -6,6 +6,8 @@ export class LoginDto { @IsEmail() email!: string; @IsString() password!: string
 export class ForgotDto { @IsEmail() email!: string }
 export class ResendDto { @IsEmail() email!: string }
 export class ResetDto { @IsEmail() email!: string; @IsString() code!: string; @MinLength(6) newPassword!: string }
+// QA F (2026-07-24): troca de senha autenticada (settings) — exige a atual.
+export class ChangePasswordDto { @IsString() currentPassword!: string; @MinLength(6) newPassword!: string }
 
 // Onboarding de empresa (painel). Aninhado (company/responsible) pra casar com
 // o payload da SignUp.tsx e com SignupCompanyInput do service. Validação

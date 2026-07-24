@@ -8,12 +8,49 @@ const prisma = () => ({
     findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(),
     update: jest.fn(), updateMany: jest.fn(),
   },
+  user: { findUnique: jest.fn() },
 }) as any
 
 const W = 'worker-1'
 const row = (over: any = {}) => ({
   id: 'n1', workerId: W, title: 'T', body: 'B', domain: 'chat',
   targetId: null, read: false, createdAt: new Date('2026-06-23T15:00:00Z'), ...over,
+})
+
+// QA F (2026-07-24): o "Solicitar Pausa" do detalhe do funcionário não fazia
+// nada. Vira notificação REAL pro worker (domain journey), com org-scoping.
+describe('NotificationService.requestPause', () => {
+  it('worker da mesma empresa → enfileira notificação de pausa', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: W, role: 'WORKER', companyId: 'org1' })
+    const q = queue()
+    const svc = new NotificationService(db, realtime(), q)
+    const spy = jest.spyOn(svc, 'enqueueForMany').mockResolvedValue(undefined)
+    await svc.requestPause(W, 'org1')
+    expect(spy).toHaveBeenCalledWith([W], expect.objectContaining({
+      domain: 'journey',
+      title: 'Pausa solicitada',
+      targetId: W,
+    }))
+  })
+
+  it('worker de OUTRA empresa → NotFound sem enfileirar', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: W, role: 'WORKER', companyId: 'org2' })
+    const svc = new NotificationService(db, realtime(), queue())
+    const spy = jest.spyOn(svc, 'enqueueForMany')
+    await expect(svc.requestPause(W, 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('alvo inexistente ou não-worker → NotFound', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(null)
+    await expect(new NotificationService(db, realtime(), queue()).requestPause('ghost', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    const db2 = prisma()
+    db2.user.findUnique.mockResolvedValue({ id: 'a1', role: 'ADMIN', companyId: 'org1' })
+    await expect(new NotificationService(db2, realtime(), queue()).requestPause('a1', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+  })
 })
 
 describe('NotificationService', () => {

@@ -96,6 +96,19 @@ export class AuthService {
     await this.mail.sendResetCode(p.email, code)
   }
 
+  // QA F (2026-07-24): "Alterar senha" do settings. Autenticado; a senha ATUAL
+  // é o portão (Unauthorized genérico — não diferencia usuário órfão de senha
+  // errada pra não virar oráculo).
+  async changePassword(userId: string, p: { currentPassword: string; newPassword: string }): Promise<void> {
+    const u = await this.users.findById(userId)
+    const ok = await verifyHash(p.currentPassword, u?.passwordHash ?? DUMMY_HASH) // sempre 1 compare
+    if (!u || !ok) throw new UnauthorizedException('Senha atual incorreta')
+    await this.prisma.user.update({
+      where: { id: u.id },
+      data: { passwordHash: await hash(p.newPassword) },
+    })
+  }
+
   async resetPassword(p: { email: string; code: string; newPassword: string }): Promise<void> {
     const u = await this.users.findByEmail(p.email)
     const ok = await verifyHash(p.code, u?.resetCodeHash ?? DUMMY_HASH)          // sempre 1 compare
