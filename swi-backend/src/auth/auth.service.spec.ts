@@ -19,6 +19,37 @@ function deps() {
   return { svc, users, prisma, mail, jwt }
 }
 
+// QA F (2026-07-24): o "Alterar senha" do settings não fazia nada. Endpoint
+// autenticado: exige a senha ATUAL (verifyHash) antes de gravar a nova.
+describe('AuthService.changePassword', () => {
+  it('senha atual correta → grava o hash novo', async () => {
+    const { svc, users, prisma } = deps()
+    users.findById.mockResolvedValue({ id: 'u1', passwordHash: await bcrypt.hash('atual123', 4) })
+    await svc.changePassword('u1', { currentPassword: 'atual123', newPassword: 'NovaSenha@2026' })
+    const arg = prisma.user.update.mock.calls[0][0]
+    expect(arg.where).toEqual({ id: 'u1' })
+    expect(arg.data.passwordHash).toMatch(/^\$2[aby]\$/)
+    expect(arg.data.passwordHash).not.toBe('NovaSenha@2026')
+  })
+
+  it('senha atual ERRADA → Unauthorized sem tocar no banco', async () => {
+    const { svc, users, prisma } = deps()
+    users.findById.mockResolvedValue({ id: 'u1', passwordHash: await bcrypt.hash('atual123', 4) })
+    await expect(
+      svc.changePassword('u1', { currentPassword: 'errada', newPassword: 'NovaSenha@2026' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException)
+    expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+
+  it('usuário inexistente (sessão órfã) → Unauthorized', async () => {
+    const { svc, users } = deps()
+    users.findById.mockResolvedValue(null)
+    await expect(
+      svc.changePassword('ghost', { currentPassword: 'x', newPassword: 'NovaSenha@2026' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException)
+  })
+})
+
 describe('AuthService.signup', () => {
   it('cria worker pendente/não-verificado, gera código e manda e-mail', async () => {
     const { svc, users, prisma, mail } = deps()

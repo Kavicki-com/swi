@@ -35,6 +35,21 @@ export class NotificationService implements OnModuleInit {
     })
   }
 
+  // QA F (2026-07-24): "Solicitar Pausa" real — notificação pro worker, com
+  // org-scoping (alvo de outra empresa/inexistente/não-worker → NotFound).
+  async requestPause(workerId: string, adminCompanyId: string | null): Promise<void> {
+    const target = await this.prisma.user.findUnique({ where: { id: workerId } })
+    if (!target || target.role !== 'WORKER' || target.companyId !== adminCompanyId) {
+      throw new NotFoundException('Funcionário não encontrado')
+    }
+    await this.enqueueForMany([workerId], {
+      domain: 'journey',
+      title: 'Pausa solicitada',
+      body: 'A administração solicitou que você faça uma pausa.',
+      targetId: workerId,
+    })
+  }
+
   async list(workerId: string) {
     const rows = await this.prisma.notification.findMany({ where: { workerId }, orderBy: { createdAt: 'desc' }, take: LIST_CAP })
     return rows.map((n) => this.toDto(n))

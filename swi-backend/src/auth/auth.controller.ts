@@ -4,7 +4,7 @@ import { AuthService } from './auth.service'
 import { UsersService } from '../users/users.service'
 import { JwtAuthGuard } from './jwt-auth.guard'
 import { CurrentUserId } from './current-user.decorator'
-import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto, ResendDto, SignupCompanyDto } from './dto'
+import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto, ResendDto, SignupCompanyDto, ChangePasswordDto } from './dto'
 
 @Controller('auth')
 export class AuthController {
@@ -16,6 +16,9 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60000 } }) @Post('login') @HttpCode(200) login(@Body() b: LoginDto) { return this.auth.login(b) }
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/forgot') @HttpCode(200) forgot(@Body() b: ForgotDto) { return this.auth.forgotPassword(b) }
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/reset') @HttpCode(200) reset(@Body() b: ResetDto) { return this.auth.resetPassword(b) }
+  // QA F (2026-07-24): troca de senha autenticada do settings — exige a atual.
+  @UseGuards(JwtAuthGuard) @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/change') @HttpCode(200)
+  change(@CurrentUserId() userId: string, @Body() b: ChangePasswordDto) { return this.auth.changePassword(userId, b) }
 
   // Onboarding do painel: cria empresa + admin responsável e manda link de senha.
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('signup-company') @HttpCode(200) signupCompany(@Body() b: SignupCompanyDto) { return this.auth.signupCompany(b) }

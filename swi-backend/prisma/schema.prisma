@@ -136,8 +136,34 @@ model Profile {
   sector       String?
   jobTitle     String? // cargo de exibição ("Operador de escavadeira") — distinto do enum Role
   avatarKey    String?
+  // QA F (2026-07-24): os "Dados de saúde" do cadastro de funcionário e do
+  // settings eram coletados e DESCARTADOS (sem coluna). Todos opcionais —
+  // dados declaratórios de cadastro, não telemetria (a telemetria segue mock
+  // até a smartband).
+  gender            String?
+  bloodType         String?
+  duty              String? // "Função" do settings (Operação/Manutenção/Supervisão) — distinto de jobTitle (cargo)
+  allergies         String?
+  chronicConditions String?
+  managerName       String?
+  // Exames clínicos enviados (keys do bucket, prefixo exams/) — par do
+  // "Histórico de exames" que renderizava vazio.
+  examKeys     String[]  @default([])
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+// QA F (2026-07-24): o modal "Solicitação de suporte" (login e settings)
+// descartava o pedido em silêncio. userId/email opcionais: no login não há
+// sessão, então o form pede contato; logado, o vínculo vem do JWT.
+model SupportRequest {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String?
+  reason    String
+  title     String
+  message   String
+  createdAt DateTime @default(now())
 }
 
 model Report {

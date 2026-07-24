@@ -3,17 +3,22 @@ import { ProfileService } from './profile.service'
 import { UpdateProfileDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUserId } from '../auth/current-user.decorator'
+import { MediaService } from '../media/media.service'
 
 @Controller('profile')
 @UseGuards(JwtAuthGuard)
 export class ProfileController {
-  constructor(private readonly profile: ProfileService) {}
+  constructor(private readonly profile: ProfileService, private readonly media: MediaService) {}
 
+  // Devolve as keys cruas (o form mescla exames novos sobre elas) + URLs de
+  // view presignadas (padrão house: reports/users/chat presignam no read).
   @Get('me')
   async me(@CurrentUserId() userId: string) {
     const p = await this.profile.getByUserId(userId)
     if (!p) throw new NotFoundException('Perfil ainda não preenchido')
-    return p
+    const avatarUrl = p.avatarKey ? await this.media.presignGet(p.avatarKey) : null
+    const examUrls = await this.media.presignGetMany(p.examKeys ?? [])
+    return { ...p, avatarUrl, examUrls }
   }
 
   @Put('me')
