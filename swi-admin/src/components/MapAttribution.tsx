@@ -1,11 +1,12 @@
 import { Text, View } from 'react-native'
+import { SATELLITE_ATTRIBUTION_LABEL } from '@/lib/mapStyles'
 
-// Mapbox + OpenStreetMap terms require attribution wherever their tiles are
-// shown. We disable maplibre's built-in attributionControl (it injects a white
-// box that fights the dark satellite imagery) and render a small, fixed,
-// non-interactive label in the bottom-right corner instead. Color is
-// intentionally hard-coded white over the always-dark satellite tiles —
-// theme tokens would invert in dark/light mode and break contrast.
+// Os termos dos provedores exigem atribuição onde os tiles aparecem. O
+// attributionControl nativo do maplibre é desligado (caixa branca briga com o
+// satélite escuro) e este label fixo entra no canto — o TEXTO vem do
+// mapStyles, acompanhando o provider ativo (Mapbox com token; Esri no
+// fallback). Cor hardcoded branca de propósito: os tiles são sempre escuros e
+// tokens de tema inverteriam no light mode.
 export function MapAttribution() {
   return (
     <View pointerEvents="none" style={{ position: 'absolute', right: 8, bottom: 8, zIndex: 1 }}>
@@ -18,7 +19,7 @@ export function MapAttribution() {
           fontFamily: 'Inter, system-ui, sans-serif',
         }}
       >
-        © Mapbox © OpenStreetMap
+        {SATELLITE_ATTRIBUTION_LABEL}
       </Text>
     </View>
   )

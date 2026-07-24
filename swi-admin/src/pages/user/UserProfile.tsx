@@ -3,15 +3,15 @@
 // with the same three-column layout as /admins/:id (Figma 53:6344). Reuses
 // AdminDetails directly so a future polish on either page flows to both.
 //
-// Demo wire-up: the seed auth user (`u_seed_1` / "Admin Seed") has no entry in
-// the admins mock list, which uses `admin-01`…`admin-NN`. For the demo the
-// logged-in admin's profile is hardcoded to `admin-01` (Elisa Siqueira Jordão,
-// the featured admin in the Figma frame). When the real backend lands, replace
-// the constant with the actual mapping from auth user → admin record.
+// QA C3 (2026-07-24): o id era hardcoded em 'admin-01' (era mock) — todo
+// usuário real caía em "Administrador não encontrado". Agora o perfil é o do
+// usuário DA SESSÃO (useAuth), como o AdminDetails sempre previu.
 import { AdminDetails } from '@/pages/admins/AdminDetails'
-
-const DEMO_SELF_ADMIN_ID = 'admin-01'
+import { useAuth } from '@/hooks/useAuth'
 
 export function UserProfile() {
-  return <AdminDetails adminId={DEMO_SELF_ADMIN_ID} />
+  const { user } = useAuth()
+  // Sem sessão o RequireAuth já redirecionou; o null aqui é só transição.
+  if (!user) return null
+  return <AdminDetails adminId={user.id} />
 }
