@@ -1,5 +1,6 @@
 import { RealtimeGateway } from './realtime.gateway'
 import { JwtService } from '@nestjs/jwt'
+import { corsOrigins } from '../cors'
 
 const secret = 'test-secret-realtime'
 
@@ -27,6 +28,14 @@ describe('RealtimeGateway', () => {
     expect(c.data.userId).toBe('u1')
     expect(c._joined).toContain('user:u1')
     expect(c.disconnect).not.toHaveBeenCalled()
+  })
+
+  it('CORS do WS alinhado ao corsOrigins do HTTP (fim do origin *)', () => {
+    // Mesma env que rege o enableCors do REST (PR #41). Cliente RN não manda
+    // header Origin no handshake, então restringir não afeta o mobile.
+    const opts = Reflect.getMetadata('websockets:gateway_options', RealtimeGateway)
+    expect(opts?.cors?.origin).not.toBe('*')
+    expect(opts?.cors?.origin).toEqual(corsOrigins(process.env))
   })
 
   it('connect sem/ com token inválido desconecta', () => {
