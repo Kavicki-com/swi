@@ -5,7 +5,12 @@ const listen = jest.fn()
 const fakeApp = { listen, enableCors: jest.fn() }
 
 jest.mock('@nestjs/core', () => ({ NestFactory: { create: async () => fakeApp } }))
-jest.mock('./cors', () => ({ applyCors: jest.fn() }))
+// corsOrigins também é consumido no decorator do RealtimeGateway (avaliado no
+// import do grafo do app) — o mock precisa expô-lo como função de verdade.
+jest.mock('./cors', () => ({
+  applyCors: jest.fn(),
+  corsOrigins: jest.fn(() => ['http://localhost:5173']),
+}))
 
 import { applyCors } from './cors'
 
