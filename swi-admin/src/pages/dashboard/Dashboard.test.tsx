@@ -189,6 +189,9 @@ describe('Dashboard', () => {
     expect(screen.getAllByText('512').length).toBeGreaterThanOrEqual(2)
     // Caption from the Alertas urgentes donut.
     expect(screen.getByText(/Necessária mobilização/i)).toBeInTheDocument()
+    // DS 0.1.118: pinos dos 3 donuts com label pt-BR (fim do 'Open location').
+    expect(screen.getAllByLabelText('Abrir localização no mapa')).toHaveLength(3)
+    expect(screen.queryByLabelText('Open location')).not.toBeInTheDocument()
   })
 
   it('renders the map preview banner and navigates on CTA press', async () => {

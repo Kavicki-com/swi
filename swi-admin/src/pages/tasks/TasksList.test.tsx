@@ -150,6 +150,17 @@ describe('TasksList', () => {
     expect(listMock).toHaveBeenCalledWith('in_progress')
   })
 
+  // DS 0.1.118: locationAccessibilityLabel — o pino saía com 'Open location'
+  // fixo em inglês; a lista passa o label pt-BR por tarefa.
+  it('o pino de localização tem label pt-BR com o título da tarefa', async () => {
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByText('Inspeção')).toBeInTheDocument()
+    })
+    expect(screen.getByLabelText('Abrir localização da tarefa Inspeção')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Open location')).not.toBeInTheDocument()
+  })
+
   it('trocar pra "Concluídas" refaz a busca com done', async () => {
     renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
@@ -284,7 +295,7 @@ describe('TasksList', () => {
 
     // Pressables aninhados: o pino vive dentro do card clicável. Só o interno
     // pode vencer — se o clique vazar pro card, a rota final vira /tasks/wo_1.
-    const pins = screen.getAllByRole('button', { name: 'Open location' })
+    const pins = screen.getAllByRole('button', { name: /Abrir localização da tarefa/ })
     const firstPin = pins.at(0)
     expect(firstPin).toBeDefined()
     fireEvent.click(firstPin as HTMLElement)
