@@ -3,7 +3,7 @@
 import type { User } from '@/services/types'
 import type { MockResponse } from '@/services/mockApi/types'
 import { SEED_ORG_ID } from '@/services/mockApi/seed'
-import { apiFetch, clearSession, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from './http'
+import { ApiError, apiFetch, clearSession, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from './http'
 
 type LoginResponse = { accessToken: string; user: { id: string; email: string; name: string } }
 
@@ -132,6 +132,38 @@ export const authApi = {
       return {
         data: null,
         error: { message: e instanceof Error ? e.message : 'Falha ao enviar instruções' },
+      }
+    }
+  },
+
+  // QA F (2026-07-24): troca de senha autenticada do settings (POST
+  // /auth/password/change) — exige a senha atual. O backend responde 401
+  // genérico quando ela não confere; traduzimos pro erro específico da tela.
+  changePassword: async ({
+    currentPassword,
+    newPassword,
+  }: {
+    currentPassword: string
+    newPassword: string
+  }): Promise<MockResponse<{ changed: true }>> => {
+    try {
+      await apiFetch<unknown>(
+        '/auth/password/change',
+        {
+          method: 'POST',
+          body: JSON.stringify({ currentPassword, newPassword }),
+        },
+        // 401 aqui = senha atual errada (resposta de negócio) — não derruba a sessão.
+        { keepSessionOn401: true },
+      )
+      return { data: { changed: true }, error: null }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        return { data: null, error: { message: 'Senha atual incorreta.' } }
+      }
+      return {
+        data: null,
+        error: { message: e instanceof Error ? e.message : 'Falha ao alterar a senha' },
       }
     }
   },

@@ -32,7 +32,8 @@ export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
  */
 export async function uploadImage(
   file: File,
-  prefix: 'order' | 'chat' | 'reports',
+  // 'avatars'/'exams' — foto de perfil e exames clínicos do settings (QA F).
+  prefix: 'order' | 'chat' | 'reports' | 'avatars' | 'exams',
 ): Promise<string> {
   if (!ALLOWED.includes(file.type)) throw new Error('Selecione arquivos do tipo: JPG ou PNG')
   if (file.size === 0) throw new Error('O arquivo está vazio')

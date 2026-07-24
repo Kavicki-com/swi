@@ -318,3 +318,52 @@ describe('authApi.resetPassword (real, email + code)', () => {
     expect(error?.message).toMatch(/inválido/i)
   })
 })
+
+// QA F (2026-07-24): "Alterar senha" do settings era toast fake. Client real:
+// POST /auth/password/change (autenticado; exige a senha atual).
+describe('authApi.changePassword', () => {
+  it('POST /auth/password/change com current/new → { changed: true }', async () => {
+    const f = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ changed: true }) } as Response)
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await authApi.changePassword({
+      currentPassword: 'atual123',
+      newPassword: 'nova1234',
+    })
+
+    expect(error).toBeNull()
+    expect(data).toEqual({ changed: true })
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/auth/password/change')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ currentPassword: 'atual123', newPassword: 'nova1234' })
+  })
+
+  it('401 (senha atual incorreta) → erro pt-BR específico', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ message: 'Unauthorized' }) } as Response),
+    )
+    const { data, error } = await authApi.changePassword({ currentPassword: 'errada', newPassword: 'nova1234' })
+    expect(data).toBeNull()
+    expect(error?.message).toMatch(/senha atual/i)
+  })
+})
+
+  // Achado no E2E (2026-07-24): o 401 de senha-atual-errada disparava o
+  // logout global do apiFetch — errar a senha DESLOGAVA o admin. O 401 aqui
+  // é resposta de negócio, não sessão morta: a sessão local deve sobreviver.
+  it('401 de senha errada NÃO derruba a sessão local', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-vivo')
+    window.localStorage.setItem(SESSION_STORAGE_KEY, '{"id":"u1"}')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ message: 'Unauthorized' }) } as Response),
+    )
+
+    const { error } = await authApi.changePassword({ currentPassword: 'errada', newPassword: 'nova1234' })
+
+    expect(error?.message).toMatch(/senha atual/i)
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-vivo')
+    expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBe('{"id":"u1"}')
+  })
