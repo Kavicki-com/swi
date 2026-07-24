@@ -297,6 +297,31 @@ describe('Dashboard', () => {
     expect(screen.getByText(/PARCIALMENTE/)).toBeInTheDocument()
   })
 
+  it('storm slot renderiza a ilustração de tempestade (sem colapsar em rainy)', async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
+      data: {
+        ...FAKE_SUMMARY,
+        weather: [
+          ...FAKE_SUMMARY.weather.slice(0, 3),
+          {
+            at: '2026-05-08T14:00:00.000Z',
+            condition: 'storm' as const,
+            tempC: 21,
+            label: 'TEMPESTADE',
+          },
+        ],
+      },
+      error: null,
+    })
+    renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('weather-timeline')).toBeInTheDocument()
+    })
+    // WeatherIcon usa a condition como accessibilityLabel — storm deve chegar
+    // como 'storm' no DS, não como 'rainy'.
+    expect(screen.getByLabelText('storm')).toBeInTheDocument()
+  })
+
   it('renders error panel when summary returns an error', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: null,

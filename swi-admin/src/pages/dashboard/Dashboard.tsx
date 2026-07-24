@@ -34,7 +34,7 @@ import {
 import { FormError } from '@/components/FormError'
 
 // DS module is shimmed to `any`; mirror the WeatherTimelineEvent shape locally.
-type WeatherTimelineCondition = 'sunny' | 'rainy' | 'partly-cloudy'
+type WeatherTimelineCondition = 'sunny' | 'rainy' | 'partly-cloudy' | 'storm'
 type WeatherTimelineEvent = {
   id: string
   condition: WeatherTimelineCondition
@@ -137,7 +137,7 @@ const WEATHER_CONDITION_MAP: Record<
   sun: 'sunny',
   cloudy: 'partly-cloudy',
   rain: 'rainy',
-  storm: 'rainy',
+  storm: 'storm',
 }
 
 const formatHourLabel = (iso: string): string => {

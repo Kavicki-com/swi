@@ -144,6 +144,17 @@ async function fetchActivities(): Promise<DashboardActivity[]> {
 }
 
 export const dashboardApi = {
+  // Acessor markers-only pra Maps/Alerts: os markers são 100% mock (vitais),
+  // então buscar o summary inteiro dispararia 5 chamadas reais descartadas.
+  mapMarkers: async ({
+    orgId,
+  }: {
+    orgId: string
+  }): Promise<MockResponse<DashboardMapMarker[]>> => ({
+    data: buildMockMapMarkers(orgId),
+    error: null,
+  }),
+
   summary: async ({ orgId }: { orgId: string }): Promise<MockResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
     // erro degrada só a própria seção — o summary nunca propaga erro total.

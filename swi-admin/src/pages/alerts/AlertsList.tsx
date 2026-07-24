@@ -99,8 +99,10 @@ export function AlertsList() {
 
   useEffect(() => {
     let cancelled = false
-    dashboardApi.summary({ orgId: 'org_seed_1' }).then(({ data }) => {
-      if (!cancelled && data) setMarkers([...data.mapMarkers])
+    // Markers-only: os pins são mock (vitais); summary() dispararia o fan-out
+    // real inteiro só pra descartar tudo menos mapMarkers.
+    dashboardApi.mapMarkers({ orgId: 'org_seed_1' }).then(({ data }) => {
+      if (!cancelled && data) setMarkers([...data])
     })
     return () => {
       cancelled = true

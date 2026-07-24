@@ -62,8 +62,11 @@ export function toWeatherStrip(snap: WeatherSnapshotDto): WeatherSlot[] {
   const hourly = snap.hourly
   if (!hourly || hourly.length === 0) return []
   const base = Date.parse(snap.fetchedAt)
+  // fetchedAt inválido → todo offset vira NaN e o reduce degenera; melhor
+  // sumir com a seção (mesma degradação de hourly ausente) do que exibir lixo.
+  if (Number.isNaN(base)) return []
 
-  return SLOT_OFFSETS_H.map((offsetH) => {
+  const slots = SLOT_OFFSETS_H.map((offsetH) => {
     const targetMs = base + offsetH * 3_600_000
     const nearest = hourly.reduce((best, h) =>
       Math.abs(Date.parse(h.at) - targetMs) < Math.abs(Date.parse(best.at) - targetMs) ? h : best,
@@ -80,6 +83,16 @@ export function toWeatherStrip(snap: WeatherSnapshotDto): WeatherSlot[] {
     if (nearest.isDay === false) slot.isNight = true
     return slot
   })
+
+  // Série esparsa faz offsets distintos resolverem pra mesma hora — dedup por
+  // `at`, preservando o isNow de qualquer duplicata colapsada.
+  const byAt = new Map<string, WeatherSlot>()
+  for (const slot of slots) {
+    const seen = byAt.get(slot.at)
+    if (!seen) byAt.set(slot.at, slot)
+    else if (slot.isNow) seen.isNow = true
+  }
+  return [...byAt.values()]
 }
 
 const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)

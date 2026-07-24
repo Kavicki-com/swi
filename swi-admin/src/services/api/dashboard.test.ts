@@ -72,6 +72,21 @@ beforeEach(() => {
   vi.mocked(weatherApi.get).mockResolvedValue({ data: [weatherSlot], error: null } as never)
 })
 
+describe('dashboardApi.mapMarkers', () => {
+  it('serve os markers mock direto, sem disparar o fan-out de rede', async () => {
+    const { data, error } = await dashboardApi.mapMarkers({ orgId: 'org_seed_1' })
+    expect(error).toBeNull()
+    expect(data).toEqual(buildMockMapMarkers('org_seed_1'))
+    // Razão de existir do acessor: Maps/Alerts só precisam dos markers (mock);
+    // summary() dispararia 5 chamadas reais descartadas.
+    expect(adminsApi.list).not.toHaveBeenCalled()
+    expect(employeesApi.list).not.toHaveBeenCalled()
+    expect(reportsApi.list).not.toHaveBeenCalled()
+    expect(workOrdersApi.list).not.toHaveBeenCalled()
+    expect(weatherApi.get).not.toHaveBeenCalled()
+  })
+})
+
 describe('dashboardApi.summary', () => {
   it('derives real KPI counts: admins / totalEmployees / newReports (pending filter)', async () => {
     const { data, error } = await dashboardApi.summary({ orgId: 'org_seed_1' })

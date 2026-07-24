@@ -37,6 +37,26 @@ describe('toWeatherStrip', () => {
     expect(strip.map((s) => s.isNow ?? false)).toEqual([false, true, false, false])
   })
 
+  it('fetchedAt inválido → [] (degradação graciosa, sem slots NaN)', () => {
+    const snap = snapshotWith(
+      [
+        { at: hourAt(-4), tempC: 16, condition: 'rain' },
+        { at: hourAt(0), tempC: 18, condition: 'clear' },
+      ],
+      'not-a-date',
+    )
+    expect(toWeatherStrip(snap)).toEqual([])
+  })
+
+  it('série esparsa não duplica slots: dedup por hora resolvida, preservando isNow', () => {
+    // 1 entrada só → os 4 offsets resolvem todos pra mesma hora.
+    const snap = snapshotWith([{ at: hourAt(0), tempC: 18, condition: 'clear' }])
+    const strip = toWeatherStrip(snap)
+    expect(strip).toHaveLength(1)
+    expect(strip[0]?.at).toBe(hourAt(0))
+    expect(strip[0]?.isNow).toBe(true)
+  })
+
   it('propaga isNight a partir do isDay do backend (false → noite, true → dia)', () => {
     const snap = snapshotWith([
       { at: hourAt(-4), tempC: 16, condition: 'clear', isDay: true },
