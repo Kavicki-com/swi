@@ -105,7 +105,7 @@ const FAKE_SUMMARY: DashboardSummary = {
     { at: '2026-05-08T14:00:00.000Z', condition: 'rain', tempC: 23, label: 'CHUVAS\nMODERADAS' },
     {
       at: '2026-05-08T16:00:00.000Z',
-      condition: 'storm',
+      condition: 'cloudy',
       tempC: 21,
       label: 'PARCIALMENTE\nNUBLADO',
     },

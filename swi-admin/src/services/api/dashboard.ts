@@ -76,7 +76,7 @@ export type DashboardMapMarker = {
 // este shape a partir do snapshot do backend.
 export type WeatherSlot = {
   at: string
-  condition: 'sun' | 'rain' | 'storm'
+  condition: 'sun' | 'rain' | 'storm' | 'cloudy'
   tempC: number
   label?: string
   isNow?: boolean
