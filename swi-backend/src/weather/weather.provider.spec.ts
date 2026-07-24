@@ -22,20 +22,36 @@ describe('coerceOpenMeteo', () => {
   it('lança se número essencial ausente', () =>
     expect(() => coerceOpenMeteo({ current: {}, daily: { temperature_2m_max: [1], temperature_2m_min: [1] } })).toThrow())
 
-  it('coerceOpenMeteo extrai série horária (time[] + temperature_2m[] + weather_code[])', () => {
+  it('coerceOpenMeteo extrai série horária (time[] + temperature_2m[] + weather_code[] + is_day[])', () => {
     const raw = {
       current: { temperature_2m: 17.2, relative_humidity_2m: 65, wind_speed_10m: 64.5, weather_code: 61 },
       daily: { temperature_2m_max: [32.1], temperature_2m_min: [19.4] },
       hourly: {
-        time: ['2026-07-23T09:00', '2026-07-23T10:00'],
+        time: ['2026-07-23T09:00', '2026-07-23T22:00'],
         temperature_2m: [16.6, 18.9],
         weather_code: [3, 0],
+        is_day: [1, 0],
       },
     }
     const out = coerceOpenMeteo(raw)
     expect(out.hourly).toEqual([
+      { at: '2026-07-23T09:00', tempC: 17, condition: 'clouds', isDay: true },
+      { at: '2026-07-23T22:00', tempC: 19, condition: 'clear', isDay: false },
+    ])
+  })
+
+  it('coerceOpenMeteo tolera hourly sem is_day (isDay omitido)', () => {
+    const raw = {
+      current: { temperature_2m: 17, relative_humidity_2m: 65, wind_speed_10m: 64, weather_code: 61 },
+      daily: { temperature_2m_max: [32], temperature_2m_min: [19] },
+      hourly: {
+        time: ['2026-07-23T09:00'],
+        temperature_2m: [16.6],
+        weather_code: [3],
+      },
+    }
+    expect(coerceOpenMeteo(raw).hourly).toEqual([
       { at: '2026-07-23T09:00', tempC: 17, condition: 'clouds' },
-      { at: '2026-07-23T10:00', tempC: 19, condition: 'clear' },
     ])
   })
 
@@ -66,7 +82,7 @@ describe('OpenMeteoProvider.fetch', () => {
     const calledUrl = spy.mock.calls[0][0] as string
     expect(calledUrl).toContain('current=temperature_2m')
     expect(calledUrl).toContain('daily=temperature_2m_max')
-    expect(calledUrl).toContain('hourly=temperature_2m,weather_code')
+    expect(calledUrl).toContain('hourly=temperature_2m,weather_code,is_day')
     expect(calledUrl).toContain('past_days=1')
   })
   it('HTTP !ok → lança (caller faz fallback)', async () => {

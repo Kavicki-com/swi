@@ -10,7 +10,12 @@ import type { WeatherSlot } from './dashboard'
 
 // Espelha o WeatherSnapshot do backend (swi-backend/src/weather/weather.types.ts).
 export type WeatherConditionDto = 'clear' | 'clouds' | 'rain' | 'storm' | 'snow' | 'fog'
-export type WeatherHourlyDto = { at: string; tempC: number; condition: WeatherConditionDto }
+export type WeatherHourlyDto = {
+  at: string
+  tempC: number
+  condition: WeatherConditionDto
+  isDay?: boolean // is_day do Open-Meteo (aditivo; ausente em payload antigo)
+}
 export type WeatherSnapshotDto = {
   current: { tempC: number; condition: WeatherConditionDto; humidityPct: number; windKmh: number }
   daily: { minC: number; maxC: number }
@@ -71,6 +76,8 @@ export function toWeatherStrip(snap: WeatherSnapshotDto): WeatherSlot[] {
       label: STRIP_LABEL[condition],
     }
     if (offsetH === 0) slot.isNow = true
+    // Noite só quando o backend AFIRMA isDay=false; sem is_day não inventa.
+    if (nearest.isDay === false) slot.isNight = true
     return slot
   })
 }

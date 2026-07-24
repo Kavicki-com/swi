@@ -41,11 +41,16 @@ export class WeatherService {
 
   // Série horária canned resolvida em runtime (offsets → ISO a partir de `now`).
   private cannedHourly(now: Date): WeatherHourly[] {
-    return CANNED_HOURLY.map((h) => ({
-      at: new Date(now.getTime() + h.offsetH * 3_600_000).toISOString(),
-      tempC: h.tempC,
-      condition: h.condition,
-    }))
+    return CANNED_HOURLY.map((h) => {
+      const at = new Date(now.getTime() + h.offsetH * 3_600_000)
+      return {
+        at: at.toISOString(),
+        tempC: h.tempC,
+        condition: h.condition,
+        // Canned não tem is_day real; deriva da hora local (06–18 = dia).
+        isDay: at.getHours() >= 6 && at.getHours() < 18,
+      }
+    })
   }
 
   // Alerta: dev via WEATHER_SCENARIO='alert'; prod → fonte real (ainda não

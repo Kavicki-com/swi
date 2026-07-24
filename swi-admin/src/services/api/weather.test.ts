@@ -37,6 +37,29 @@ describe('toWeatherStrip', () => {
     expect(strip.map((s) => s.isNow ?? false)).toEqual([false, true, false, false])
   })
 
+  it('propaga isNight a partir do isDay do backend (false → noite, true → dia)', () => {
+    const snap = snapshotWith([
+      { at: hourAt(-4), tempC: 16, condition: 'clear', isDay: true },
+      { at: hourAt(0), tempC: 18, condition: 'clear', isDay: true },
+      { at: hourAt(2), tempC: 17, condition: 'clouds', isDay: false },
+      { at: hourAt(4), tempC: 16, condition: 'rain', isDay: false },
+    ])
+    const strip = toWeatherStrip(snap)
+    expect(strip.map((s) => s.isNight ?? false)).toEqual([false, false, true, true])
+  })
+
+  it('sem isDay no payload (backend antigo) → isNight omitido, nunca inventa noite', () => {
+    const snap = snapshotWith([
+      { at: hourAt(-4), tempC: 16, condition: 'rain' },
+      { at: hourAt(0), tempC: 18, condition: 'clear' },
+      { at: hourAt(2), tempC: 19, condition: 'clouds' },
+      { at: hourAt(4), tempC: 20, condition: 'storm' },
+    ])
+    for (const slot of toWeatherStrip(snap)) {
+      expect(slot.isNight).toBeUndefined()
+    }
+  })
+
   it('maps conditions: clear → sun, clouds/fog → cloudy, rain/snow → rain, storm → storm', () => {
     const snap = snapshotWith([
       { at: hourAt(-4), tempC: 16, condition: 'snow' }, // → rain

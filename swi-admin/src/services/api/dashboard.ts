@@ -80,6 +80,7 @@ export type WeatherSlot = {
   tempC: number
   label?: string
   isNow?: boolean
+  isNight?: boolean // slot noturno (isDay=false no backend) → ilustração de lua
 }
 
 export type DashboardSummary = {

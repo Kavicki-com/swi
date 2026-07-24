@@ -38,6 +38,7 @@ type WeatherTimelineCondition = 'sunny' | 'rainy' | 'partly-cloudy'
 type WeatherTimelineEvent = {
   id: string
   condition: WeatherTimelineCondition
+  isNight?: boolean
   time: string
   label: string
   isNow?: boolean
@@ -746,6 +747,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
   const weatherEvents: WeatherTimelineEvent[] = summary.weather.map((w, idx) => ({
     id: `weather-${idx}`,
     condition: WEATHER_CONDITION_MAP[w.condition],
+    isNight: w.isNight,
     time: formatHourLabel(w.at),
     label: w.label ?? `${w.tempC}°C`,
     isNow: w.isNow,
