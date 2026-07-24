@@ -21,10 +21,10 @@ export const NAV_ITEMS: NavItem[] = [
   { value: '/alerts', label: 'Alertas', icon: 'bell_filled' },
   { value: '/user/settings', label: 'Configurações', icon: 'settings_filled' },
   // Tarefas é o ÚLTIMO item, depois de Configurações e logo acima da seção de
-  // chat (Figma 1606-11583 @1366px). O DS não tem variante `assignment_filled`;
-  // `assignment` é o único glifo quadrado-com-checklist disponível
-  // (icons/paths.ts:95) — outline vs filled fica pra fase de fidelidade visual.
-  { value: '/tasks', label: 'Tarefas', icon: 'assignment' },
+  // chat (Figma 1606-11583 @1366px). `assignment_filled` entrou no DS 0.1.117
+  // (clipboard preenchido, export Figma) — decisão do designer 2026-07-24,
+  // encerrando a exceção de outline na sidebar.
+  { value: '/tasks', label: 'Tarefas', icon: 'assignment_filled' },
 ]
 
 export function withBadges(overrides: Record<string, string>): NavItem[] {
