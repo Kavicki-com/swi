@@ -1,0 +1,27 @@
+// QA F (2026-07-24): o "Solicitar suporte" do settings descartava o form.
+// POST /support — rota PÚBLICA no backend (suporte precisa funcionar até
+// deslogado); logado, o modal manda o e-mail da sessão pra facilitar retorno.
+import type { MockResponse } from '@/services/mockApi/types'
+import { apiFetch } from './http'
+
+export const supportApi = {
+  send: async (input: {
+    reason: string
+    title: string
+    message: string
+    email?: string
+  }): Promise<MockResponse<{ sent: true }>> => {
+    try {
+      await apiFetch<unknown>('/support', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return { data: { sent: true }, error: null }
+    } catch (e) {
+      return {
+        data: null,
+        error: { message: e instanceof Error ? e.message : 'Falha ao enviar solicitação' },
+      }
+    }
+  },
+}

@@ -57,7 +57,14 @@ const mergeHeaders = (
   return merged
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  // keepSessionOn401: pra rotas onde 401 é resposta de NEGÓCIO e não sessão
+  // morta (ex.: /auth/password/change com a senha atual errada). Sem isso,
+  // errar a senha atual deslogava o admin (achado no E2E de 2026-07-24).
+  opts: { keepSessionOn401?: boolean } = {},
+): Promise<T> {
   const token = readToken()
   let res: Response
   try {
@@ -96,7 +103,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     // 401 SEM token é outra coisa: é o /auth/login recusando a credencial. Aí a
     // mensagem do backend já vem em pt e é a única que explica o que houve —
     // substituir por "sua sessão expirou" mentiria pra quem só errou a senha.
-    if (res.status === 401 && token) {
+    if (res.status === 401 && token && !opts.keepSessionOn401) {
       clearSession()
       throw new ApiError('Sua sessão expirou. Entre novamente.', 401)
     }

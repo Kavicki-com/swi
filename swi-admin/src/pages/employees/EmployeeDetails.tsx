@@ -8,6 +8,7 @@ import { View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { employeesApi, type Employee } from '@/services/api/users'
+import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { useDemoToast } from '@/lib/demoToast'
 
@@ -18,6 +19,20 @@ export function EmployeeDetails() {
   const { id } = useParams<{ id: string }>()
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [loading, setLoading] = useState(true)
+  const [pausing, setPausing] = useState(false)
+
+  // QA F (2026-07-24): era toast fake. POST real — o worker recebe a
+  // notificação de journey no app; erro do backend aparece no toast.
+  const requestPause = async (target: Employee) => {
+    setPausing(true)
+    const { error } = await notificationsApi.requestPause(target.id)
+    setPausing(false)
+    if (error) {
+      showToast('Falha ao solicitar pausa', error.message)
+      return
+    }
+    showToast('Pausa solicitada', `${target.name} foi notificado para pausar a atividade`)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -61,13 +76,12 @@ export function EmployeeDetails() {
       onOpenFullMap={() => navigate('/maps/general')}
       topRightAction={
         <Button
-          label="Solicitar Pausa"
+          label={pausing ? 'Solicitando…' : 'Solicitar Pausa'}
           variant="contained"
           backgroundColor={theme.surface.accent}
           accessibilityLabel="Solicitar pausa para o funcionário"
-          onPress={() =>
-            showToast('Pausa solicitada', `${employee.name} foi notificado para pausar a atividade`)
-          }
+          disabled={pausing}
+          onPress={() => requestPause(employee)}
         />
       }
     />

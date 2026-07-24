@@ -6,9 +6,16 @@
 //
 // Scrim is absolute-positioned and pressable — clicking outside the form
 // closes the modal. Z-index 100 puts it above all in-page content.
+//
+// QA F (2026-07-24): o submit era onPress={onClose} — descartava o form.
+// Agora envia de verdade (POST /support via supportApi); logado, anexa o
+// e-mail da sessão pro suporte responder.
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
-import { Button, Combobox, Icon, Input, Title, useTheme } from '@kavicki/swi-design-system'
+import { Button, Combobox, Icon, Input, Text, Title, useTheme } from '@kavicki/swi-design-system'
+import { supportApi } from '@/services/api/support'
+import { useAuth } from '@/hooks/useAuth'
+import { FormError } from '@/components/FormError'
 
 export const SUPPORT_MOTIVO_OPTIONS = [
   { label: 'Problema técnico', value: 'tech' },
@@ -20,9 +27,36 @@ export const SUPPORT_MOTIVO_OPTIONS = [
 
 export function SupportModal({ onClose }: { onClose: () => void }) {
   const theme = useTheme()
+  const { user } = useAuth()
   const [motivo, setMotivo] = useState('')
   const [titulo, setTitulo] = useState('')
   const [mensagem, setMensagem] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    if (!motivo || !titulo.trim() || !mensagem.trim()) {
+      setError('Preencha motivo, título e mensagem.')
+      return
+    }
+    setError(null)
+    setStatus('sending')
+    // Manda o LABEL do motivo (legível pro suporte), não o slug interno.
+    const reason = SUPPORT_MOTIVO_OPTIONS.find((o) => o.value === motivo)?.label ?? motivo
+    const { error: err } = await supportApi.send({
+      reason,
+      title: titulo.trim(),
+      message: mensagem.trim(),
+      ...(user?.email ? { email: user.email } : {}),
+    })
+    if (err) {
+      setStatus('idle')
+      setError(err.message)
+      return
+    }
+    setStatus('sent')
+  }
+
   return (
     <View
       style={{
@@ -67,34 +101,57 @@ export function SupportModal({ onClose }: { onClose: () => void }) {
             <Icon name="close" size={20} color={theme.content.dark} />
           </Pressable>
         </View>
-        <Combobox
-          label="Motivo da solicitação"
-          placeholder="Selecione aqui"
-          options={SUPPORT_MOTIVO_OPTIONS}
-          value={motivo}
-          onChange={setMotivo}
-        />
-        <Input
-          label="Título da sua solicitação"
-          placeholder="Digite aqui"
-          value={titulo}
-          onChangeText={setTitulo}
-        />
-        <Input
-          label="Mensagem"
-          placeholder="Digite aqui a sua mensagem"
-          value={mensagem}
-          onChangeText={setMensagem}
-          multiline
-          numberOfLines={6}
-        />
-        <Button
-          label="Enviar solicitação"
-          variant="contained"
-          backgroundColor={theme.surface.primary}
-          fullWidth
-          onPress={onClose}
-        />
+        {status === 'sent' ? (
+          <View style={{ gap: theme.gap.m, alignItems: 'center' }}>
+            <Title variant="title.xs" color={theme.content.primary}>
+              Solicitação enviada
+            </Title>
+            <Text variant="body.m" color={theme.content.dark}>
+              Recebemos a sua solicitação. A equipe de suporte vai retornar
+              {user?.email ? ` pelo e-mail ${user.email}` : ' em breve'}.
+            </Text>
+            <Button
+              label="Fechar"
+              variant="contained"
+              backgroundColor={theme.surface.primary}
+              fullWidth
+              onPress={onClose}
+            />
+          </View>
+        ) : (
+          <>
+            <Combobox
+              label="Motivo da solicitação"
+              placeholder="Selecione aqui"
+              options={SUPPORT_MOTIVO_OPTIONS}
+              value={motivo}
+              onChange={setMotivo}
+            />
+            <Input
+              label="Título da sua solicitação"
+              placeholder="Digite aqui"
+              value={titulo}
+              onChangeText={setTitulo}
+            />
+            <Input
+              label="Mensagem"
+              placeholder="Digite aqui a sua mensagem"
+              value={mensagem}
+              onChangeText={setMensagem}
+              multiline
+              numberOfLines={6}
+            />
+            <FormError message={error} />
+            <Button
+              label={status === 'sending' ? 'Enviando…' : 'Enviar solicitação'}
+              variant="contained"
+              backgroundColor={theme.surface.primary}
+              fullWidth
+              disabled={status === 'sending'}
+              onPress={submit}
+            />
+          </>
+        )}
       </View>
     </View>
   )
