@@ -6,12 +6,18 @@
 import { MapsGeneral } from './MapsGeneral'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 
+// Posições live têm suite própria (useLivePositions.test); o smoke não deve
+// abrir fetch/socket reais no jsdom.
+vi.mock('@/hooks/useLivePositions', () => ({
+  useLivePositions: () => [
+    { id: 'w1', name: 'A', lat: -23.55, lng: -46.63, status: 'good', avatarUri: '' },
+  ],
+}))
+
 describe('MapsGeneral', () => {
   afterEach(clearSession)
 
   it('renders without crashing', () => {
-    expect(() =>
-      renderPage(<MapsGeneral />, { route: '/maps/general' }),
-    ).not.toThrow()
+    expect(() => renderPage(<MapsGeneral />, { route: '/maps/general' })).not.toThrow()
   })
 })

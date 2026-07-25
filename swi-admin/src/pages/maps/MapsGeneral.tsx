@@ -26,7 +26,8 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
 import { withBadges } from '@/app/nav'
-import { dashboardApi, type DashboardMapMarker } from '@/services/dashboard'
+import { type DashboardMapMarker } from '@/services/dashboard'
+import { useLivePositions } from '@/hooks/useLivePositions'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Compact navigation list — Figma 32:2488 map-side-menu shows 7 icon-only items.
@@ -105,7 +106,8 @@ export function MapsGeneral() {
   const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  const [mapMarkers, setMapMarkers] = useState<DashboardMapMarker[] | null>(null)
+  // Posições REAIS ao vivo (REST snapshot + WS). null = carregando.
+  const mapMarkers = useLivePositions()
   const [mapReady, setMapReady] = useState(false)
   // Figma neutral state hides employee pins (node 33:3917 opacity:0).
   // Pins appear when the user expands the "operators" map control.
@@ -226,18 +228,6 @@ export function MapsGeneral() {
     }),
   ).current
 
-  useEffect(() => {
-    let cancelled = false
-    // Markers-only: os pins são mock (vitais); summary() dispararia o fan-out
-    // real inteiro só pra descartar tudo menos mapMarkers.
-    dashboardApi.mapMarkers({ orgId: 'org_seed_1' }).then(({ data }) => {
-      if (!cancelled && data) setMapMarkers(data)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   // Maps is a full-bleed canvas: kill page-level scrollbar reservation while
   // this route is mounted so the fixed root truly spans the full viewport
   // width (otherwise html keeps a ~15px scrollbar gutter visible on the right).
@@ -249,10 +239,19 @@ export function MapsGeneral() {
     }
   }, [])
 
-  useEffect(() => {
-    if (!lib || !containerRef.current || !mapMarkers) return
+  // O mapa nasce UMA vez, quando o primeiro snapshot chega. Depender de
+  // mapMarkers direto destruiria/recriaria o mapa a cada heartbeat WS (3s) —
+  // por isso o gate é o booleano "carregou" e o centro sai de um ref.
+  const markersLoaded = mapMarkers !== null
+  const initialMarkersRef = useRef<DashboardMapMarker[] | null>(null)
+  if (initialMarkersRef.current === null && mapMarkers !== null) {
+    initialMarkersRef.current = mapMarkers
+  }
 
-    const markers = mapMarkers
+  useEffect(() => {
+    if (!lib || !containerRef.current || !markersLoaded) return
+
+    const markers = initialMarkersRef.current ?? []
     const center: [number, number] =
       markers.length > 0
         ? [
@@ -284,7 +283,7 @@ export function MapsGeneral() {
       mapRef.current = null
       setMapReady(false)
     }
-  }, [mapMarkers, lib])
+  }, [markersLoaded, lib])
 
   useEffect(() => {
     const map = mapRef.current

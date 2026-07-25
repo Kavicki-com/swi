@@ -24,7 +24,7 @@ import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi } from './workOrders'
 import { weatherApi } from './weather'
-import { buildMockMapMarkers, MOCK_VITAL_KPIS, MOCK_WEAR_ALERTS } from './dashboardMockVitals'
+import { MOCK_VITAL_KPIS, MOCK_WEAR_ALERTS } from './dashboardMockVitals'
 
 const list = (n: number) => new Array(n).fill({})
 const report = (status: string) => ({ status })
@@ -72,21 +72,6 @@ beforeEach(() => {
   vi.mocked(weatherApi.get).mockResolvedValue({ data: [weatherSlot], error: null } as never)
 })
 
-describe('dashboardApi.mapMarkers', () => {
-  it('serve os markers mock direto, sem disparar o fan-out de rede', async () => {
-    const { data, error } = await dashboardApi.mapMarkers({ orgId: 'org_seed_1' })
-    expect(error).toBeNull()
-    expect(data).toEqual(buildMockMapMarkers('org_seed_1'))
-    // Razão de existir do acessor: Maps/Alerts só precisam dos markers (mock);
-    // summary() dispararia 5 chamadas reais descartadas.
-    expect(adminsApi.list).not.toHaveBeenCalled()
-    expect(employeesApi.list).not.toHaveBeenCalled()
-    expect(reportsApi.list).not.toHaveBeenCalled()
-    expect(workOrdersApi.list).not.toHaveBeenCalled()
-    expect(weatherApi.get).not.toHaveBeenCalled()
-  })
-})
-
 describe('dashboardApi.summary', () => {
   it('derives real KPI counts: admins / totalEmployees / newReports (pending filter)', async () => {
     const { data, error } = await dashboardApi.summary({ orgId: 'org_seed_1' })
@@ -121,10 +106,11 @@ describe('dashboardApi.summary', () => {
     expect(a3!.risk).toBeUndefined()
   })
 
-  it('overlays mock vitals (mapMarkers / wearAlerts / activeCameras) from the fixture', async () => {
+  it('overlays mock vitals (wearAlerts / activeCameras); mapMarkers vem vazio (live no render)', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
-    expect(data!.mapMarkers).toEqual(buildMockMapMarkers('org_seed_1'))
-    expect(data!.mapMarkers.length).toBeGreaterThan(0)
+    // Posições agora são reais: o Dashboard splica useLivePositions() sobre o
+    // summary — o serviço não fabrica mais markers mock.
+    expect(data!.mapMarkers).toEqual([])
     expect(data!.wearAlerts).toEqual(MOCK_WEAR_ALERTS)
     expect(data!.kpis.activeCameras).toBe(MOCK_VITAL_KPIS.activeCameras)
     expect(data!.kpis.vitalSigns).toBe(MOCK_VITAL_KPIS.vitalSigns)
