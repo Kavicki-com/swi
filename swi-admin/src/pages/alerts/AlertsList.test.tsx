@@ -14,6 +14,15 @@ vi.mock('@/hooks/useLivePositions', () => ({
   ],
 }))
 
+vi.mock('@/hooks/useEvacuation', () => ({
+  useEvacuation: () => ({
+    evacuation: null,
+    error: null,
+    start: async () => {},
+    end: async () => {},
+  }),
+}))
+
 describe('AlertsList', () => {
   afterEach(clearSession)
 

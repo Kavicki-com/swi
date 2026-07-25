@@ -37,7 +37,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLivePositions } from '@/hooks/useLivePositions'
-import { useDemoToast } from '@/lib/demoToast'
+import { useEvacuation } from '@/hooks/useEvacuation'
 
 const FILTER_CHIPS = [
   { value: 'all', label: 'Todos' },
@@ -75,11 +75,21 @@ function buildMarker(
 export function AlertsList() {
   const theme = useTheme()
   const navigate = useNavigate()
-  const { show: showToast } = useDemoToast()
   const { employeeId } = useParams<{ employeeId?: string }>()
   // Posições REAIS ao vivo (REST snapshot + WS). null (carregando) → [].
   const liveMarkers = useLivePositions()
   const markers = useMemo<DashboardMapMarker[]>(() => liveMarkers ?? [], [liveMarkers])
+  // Evacuação real (Fase 2): dispatch/encerramento + progresso X/N ao vivo.
+  const {
+    evacuation,
+    error: evacError,
+    start: startEvacuation,
+    end: endEvacuation,
+  } = useEvacuation()
+  const ackedIds = useMemo(
+    () => new Set((evacuation?.workers ?? []).filter((w) => w.acked).map((w) => w.id)),
+    [evacuation],
+  )
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [mapMode, setMapMode] = useState<'pins' | 'heat' | 'meteo'>('pins')
@@ -155,12 +165,26 @@ export function AlertsList() {
     }
   }, [lib, markersLoaded])
 
+  // Durante evacuação ativa, a borda do pino mostra o estado do ACK (verde =
+  // confirmou no ponto de encontro, laranja = a caminho) — estado real do
+  // fluxo, não vitais. Sem evacuação, mantém o status de saúde de sempre.
+  const displayMarkers = useMemo<DashboardMapMarker[]>(
+    () =>
+      evacuation
+        ? filteredMarkers.map((m) => ({
+            ...m,
+            status: (ackedIds.has(m.id) ? 'good' : 'alert') as DashboardMapMarker['status'],
+          }))
+        : filteredMarkers,
+    [filteredMarkers, evacuation, ackedIds],
+  )
+
   // Render worker pins as maplibre Markers. Re-render when the filtered
   // list changes. Click toggles selection via URL.
   useEffect(() => {
     const map = mapRef.current
     if (!lib || !map || !mapReady) return
-    const handles = filteredMarkers.map((m) =>
+    const handles = displayMarkers.map((m) =>
       buildMarker(m, map, lib, () => {
         const cur = employeeIdRef.current
         navigateRef.current(cur === m.id ? '/alerts' : `/alerts/${m.id}`)
@@ -183,7 +207,7 @@ export function AlertsList() {
         })
       })
     }
-  }, [lib, mapReady, filteredMarkers])
+  }, [lib, mapReady, displayMarkers])
 
   // Heatmap layer — only when mapMode === 'heat'. Mock points clustered
   // around the markers' centroid produce the same blob shape as MapsGeneral.
@@ -288,16 +312,69 @@ export function AlertsList() {
         onClear={() => setSearch('')}
       />
 
-      <View style={{ flexDirection: 'row', gap: theme.gap.s, flexWrap: 'wrap' }}>
-        {FILTER_CHIPS.map((c) => (
-          <Chip
-            key={c.value}
-            label={c.label}
-            variant={filter === c.value ? 'filled' : 'outline'}
-            onPress={() => setFilter(c.value)}
+      <View
+        style={{
+          flexDirection: 'row',
+          gap: theme.gap.s,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <View style={{ flexDirection: 'row', gap: theme.gap.s, flexWrap: 'wrap' }}>
+          {FILTER_CHIPS.map((c) => (
+            <Chip
+              key={c.value}
+              label={c.label}
+              variant={filter === c.value ? 'filled' : 'outline'}
+              onPress={() => setFilter(c.value)}
+            />
+          ))}
+        </View>
+
+        {/* Evacuação real (Fase 2): sem ativa → dispatch; ativa → progresso
+            X/N ao vivo (WS evacuation-ack) + encerramento. */}
+        {evacuation ? (
+          <View
+            testID="evacuation-banner"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: theme.gap.m,
+              paddingHorizontal: theme.padding.s,
+              paddingVertical: theme.padding.xs,
+              borderRadius: theme.border.radius.m,
+              backgroundColor: theme.surface.errorLight,
+            }}
+          >
+            <Icon name="notifications" size={18} color={theme.content.light} />
+            <Text
+              variant="body.s"
+              color={theme.content.light}
+              style={{ fontWeight: '700' as const }}
+            >
+              Evacuação em andamento — {evacuation.acked}/{evacuation.total} confirmados
+            </Text>
+            <Button
+              label="Encerrar evacuação"
+              backgroundColor={theme.surface.error}
+              onPress={() => void endEvacuation()}
+            />
+          </View>
+        ) : (
+          <Button
+            label="Iniciar evacuação"
+            backgroundColor={theme.surface.error}
+            onPress={() => void startEvacuation()}
           />
-        ))}
+        )}
       </View>
+
+      {evacError ? (
+        <Text variant="body.s" color={theme.content.error}>
+          {evacError}
+        </Text>
+      ) : null}
 
       <View
         style={{
@@ -436,9 +513,9 @@ export function AlertsList() {
             <Button
               label="Evacuar área"
               backgroundColor={theme.surface.error}
-              onPress={() =>
-                showToast('Evacuação iniciada', 'Notificação enviada aos colaboradores da área')
-              }
+              // Dispatch REAL (Fase 2): notifica os workers da org e liga o
+              // progresso X/N — o banner acima é o feedback, não um toast fake.
+              onPress={() => void startEvacuation()}
             />
           </View>
         ) : null}
