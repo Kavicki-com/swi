@@ -21,6 +21,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { useLivePositions } from '@/hooks/useLivePositions'
 import { useDemoToast } from '@/lib/demoToast'
 import {
   dashboardApi,
@@ -56,6 +57,9 @@ type Phase = 'loading' | 'error' | 'populated'
 
 export function Dashboard() {
   const { user } = useAuth()
+  // Posições REAIS ao vivo (REST + WS) — splicadas sobre o summary no render;
+  // o resto do summary continua vindo do fan-out.
+  const liveMarkers = useLivePositions()
   const [phase, setPhase] = useState<Phase>('loading')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -86,7 +90,9 @@ export function Dashboard() {
       {phase === 'error' && (
         <DashboardError message={error} onRetry={() => setRefetchTrigger((n) => n + 1)} />
       )}
-      {phase === 'populated' && summary && <DashboardContent summary={summary} />}
+      {phase === 'populated' && summary && (
+        <DashboardContent summary={{ ...summary, mapMarkers: liveMarkers ?? [] }} />
+      )}
     </View>
   )
 }
@@ -215,36 +221,47 @@ function MapBanner({
   const lib = useMapLibre()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
+  const [mapReady, setMapReady] = useState(false)
+  // Enquadra a frota UMA vez, no primeiro lote de markers — depois disso o
+  // usuário manda no pan/zoom e os heartbeats só movem os pinos.
+  const didFitRef = useRef(false)
 
+  // Mapa nasce uma vez. Com posições ao vivo, depender de `markers` aqui
+  // destruiria/recriaria o banner (flash de tiles) a cada heartbeat de 3s.
   useEffect(() => {
     if (!lib || !containerRef.current) return
-
-    // Center on the centroid of markers; fall back to São Paulo if no markers yet.
-    const center: [number, number] =
-      markers.length > 0
-        ? [
-            markers.reduce((s, m) => s + m.lng, 0) / markers.length,
-            markers.reduce((s, m) => s + m.lat, 0) / markers.length,
-          ]
-        : [-46.63, -23.55]
-
     const map = new lib.Map({
       container: containerRef.current,
       style: ESRI_SATELLITE_STYLE,
-      center,
+      // Fallback São Paulo até o primeiro snapshot chegar e enquadrar.
+      center: [-46.63, -23.55],
       zoom: 13,
       attributionControl: false,
     })
     mapRef.current = map
+    map.on('load', () => setMapReady(true))
+    return () => {
+      map.remove()
+      mapRef.current = null
+      setMapReady(false)
+      didFitRef.current = false
+    }
+  }, [lib])
 
-    map.on('load', () => {
-      // Auto-fit to all markers if there are 2+, otherwise stick with the centroid + zoom 13.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!lib || !map || !mapReady || markers.length === 0) return
+
+    if (!didFitRef.current) {
+      didFitRef.current = true
       if (markers.length >= 2) {
         const bounds = new lib.LngLatBounds()
         markers.forEach((m) => bounds.extend([m.lng, m.lat]))
         map.fitBounds(bounds, { padding: 60, animate: false, maxZoom: 15 })
+      } else {
+        map.setCenter([markers[0]!.lng, markers[0]!.lat])
       }
-    })
+    }
 
     const markerHandles = markers.map((m) =>
       new lib.Marker({
@@ -256,10 +273,8 @@ function MapBanner({
 
     return () => {
       markerHandles.forEach((h) => h.remove())
-      map.remove()
-      mapRef.current = null
     }
-  }, [markers, lib, navigate])
+  }, [markers, mapReady, lib, navigate])
 
   return (
     <View

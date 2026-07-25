@@ -35,7 +35,8 @@ import {
   Text,
   useTheme,
 } from '@kavicki/swi-design-system'
-import { dashboardApi, type DashboardMapMarker } from '@/services/dashboard'
+import { type DashboardMapMarker } from '@/services/dashboard'
+import { useLivePositions } from '@/hooks/useLivePositions'
 import { useDemoToast } from '@/lib/demoToast'
 
 const FILTER_CHIPS = [
@@ -76,7 +77,9 @@ export function AlertsList() {
   const navigate = useNavigate()
   const { show: showToast } = useDemoToast()
   const { employeeId } = useParams<{ employeeId?: string }>()
-  const [markers, setMarkers] = useState<DashboardMapMarker[]>([])
+  // Posições REAIS ao vivo (REST snapshot + WS). null (carregando) → [].
+  const liveMarkers = useLivePositions()
+  const markers = useMemo<DashboardMapMarker[]>(() => liveMarkers ?? [], [liveMarkers])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [mapMode, setMapMode] = useState<'pins' | 'heat' | 'meteo'>('pins')
@@ -97,18 +100,6 @@ export function AlertsList() {
   const employeeIdRef = useRef(employeeId)
   employeeIdRef.current = employeeId
 
-  useEffect(() => {
-    let cancelled = false
-    // Markers-only: os pins são mock (vitais); summary() dispararia o fan-out
-    // real inteiro só pra descartar tudo menos mapMarkers.
-    dashboardApi.mapMarkers({ orgId: 'org_seed_1' }).then(({ data }) => {
-      if (!cancelled && data) setMarkers([...data])
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   const filteredMarkers = useMemo(
     () =>
       markers.filter((m) => {
@@ -126,11 +117,20 @@ export function AlertsList() {
 
   // Init the map once we have lib + container + at least one marker (so
   // we know where to center). Tear down on unmount.
+  // O mapa nasce UMA vez, no primeiro snapshot com workers. Depender de
+  // `markers` direto destruiria/recriaria o mapa a cada heartbeat WS (3s).
+  const markersLoaded = markers.length > 0
+  const initialMarkersRef = useRef<DashboardMapMarker[] | null>(null)
+  if (initialMarkersRef.current === null && markers.length > 0) {
+    initialMarkersRef.current = markers
+  }
+
   useEffect(() => {
-    if (!lib || !containerRef.current || markers.length === 0) return
+    if (!lib || !containerRef.current || !markersLoaded) return
+    const initial = initialMarkersRef.current ?? []
     const center: [number, number] = [
-      markers.reduce((s, m) => s + m.lng, 0) / markers.length,
-      markers.reduce((s, m) => s + m.lat, 0) / markers.length,
+      initial.reduce((s, m) => s + m.lng, 0) / initial.length,
+      initial.reduce((s, m) => s + m.lat, 0) / initial.length,
     ]
     const map = new lib.Map({
       container: containerRef.current,
@@ -141,9 +141,9 @@ export function AlertsList() {
     })
     mapRef.current = map
     map.on('load', () => {
-      if (markers.length >= 2) {
+      if (initial.length >= 2) {
         const bounds = new lib.LngLatBounds()
-        markers.forEach((m) => bounds.extend([m.lng, m.lat]))
+        initial.forEach((m) => bounds.extend([m.lng, m.lat]))
         map.fitBounds(bounds, { padding: 80, animate: false, maxZoom: 16 })
       }
       setMapReady(true)
@@ -153,7 +153,7 @@ export function AlertsList() {
       mapRef.current = null
       setMapReady(false)
     }
-  }, [lib, markers])
+  }, [lib, markersLoaded])
 
   // Render worker pins as maplibre Markers. Re-render when the filtered
   // list changes. Click toggles selection via URL.
@@ -187,12 +187,15 @@ export function AlertsList() {
 
   // Heatmap layer — only when mapMode === 'heat'. Mock points clustered
   // around the markers' centroid produce the same blob shape as MapsGeneral.
+  // Ancorado no snapshot INICIAL: o blob é mock de produtividade; seguir o
+  // heartbeat recriaria a layer a cada 3s sem ganho visual.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady || mapMode !== 'heat' || markers.length === 0) return
+    const initial = initialMarkersRef.current ?? []
+    if (!map || !mapReady || mapMode !== 'heat' || initial.length === 0) return
     const center: [number, number] = [
-      markers.reduce((s, m) => s + m.lng, 0) / markers.length,
-      markers.reduce((s, m) => s + m.lat, 0) / markers.length,
+      initial.reduce((s, m) => s + m.lng, 0) / initial.length,
+      initial.reduce((s, m) => s + m.lat, 0) / initial.length,
     ]
     const corePoints = buildHeatmapPoints(center, 220, 0.006)
     const haloPoints = buildHeatmapPoints(center, 280, 0.018)
@@ -216,7 +219,7 @@ export function AlertsList() {
       if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
       if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
     }
-  }, [mapReady, mapMode, markers])
+  }, [mapReady, mapMode, markersLoaded])
 
   // Meteo layer — RainViewer real-time precipitation radar. Free, no key.
   // We hit their public manifest for the latest timestamp and use it as a

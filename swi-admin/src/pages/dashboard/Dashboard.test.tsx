@@ -8,6 +8,12 @@ import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { dashboardApi, type DashboardSummary } from '@/services/dashboard'
 import { Dashboard } from './Dashboard'
 
+// Posições live têm suite própria (useLivePositions.test); aqui devolvemos os
+// markers do fixture direto pra não abrir fetch/socket reais no jsdom.
+vi.mock('@/hooks/useLivePositions', () => ({
+  useLivePositions: () => FAKE_SUMMARY.mapMarkers,
+}))
+
 const FAKE_SUMMARY: DashboardSummary = {
   employees: { total: 12, byStatus: { good: 8, alert: 2, low: 1, offline: 1 } },
   alerts: {

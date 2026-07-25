@@ -12,12 +12,7 @@ import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi, type WorkOrderRow, type WorkOrderStatus } from './workOrders'
 import { weatherApi } from './weather'
-import {
-  buildLegacyAggregates,
-  buildMockMapMarkers,
-  MOCK_VITAL_KPIS,
-  MOCK_WEAR_ALERTS,
-} from './dashboardMockVitals'
+import { buildLegacyAggregates, MOCK_VITAL_KPIS, MOCK_WEAR_ALERTS } from './dashboardMockVitals'
 
 export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
 
@@ -144,17 +139,6 @@ async function fetchActivities(): Promise<DashboardActivity[]> {
 }
 
 export const dashboardApi = {
-  // Acessor markers-only pra Maps/Alerts: os markers são 100% mock (vitais),
-  // então buscar o summary inteiro dispararia 5 chamadas reais descartadas.
-  mapMarkers: async ({
-    orgId,
-  }: {
-    orgId: string
-  }): Promise<MockResponse<DashboardMapMarker[]>> => ({
-    data: buildMockMapMarkers(orgId),
-    error: null,
-  }),
-
   summary: async ({ orgId }: { orgId: string }): Promise<MockResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
     // erro degrada só a própria seção — o summary nunca propaga erro total.
@@ -184,7 +168,9 @@ export const dashboardApi = {
           urgentAlerts,
           commonAlerts,
         },
-        mapMarkers: buildMockMapMarkers(orgId),
+        // Posições agora são REAIS (GET /positions + WS): o Dashboard splica
+        // useLivePositions() sobre o summary no render. Vazio aqui de propósito.
+        mapMarkers: [],
         activities,
         wearAlerts: MOCK_WEAR_ALERTS,
         weather: weather.data ?? [],
