@@ -53,6 +53,21 @@ model User {
 
   authoredWorkOrders WorkOrder[] @relation("authoredWorkOrders")
   responsibleFor     WorkOrder[] @relation("workOrderResponsibles")
+  position           WorkerPosition?
+}
+
+// Última posição conhecida de cada worker (Fase 1 do realtime de localização,
+// 2026-07-24). SÓ a última — upsert por worker, sem trilha (decisão do piloto).
+// Fonte em produção: GPS do app mobile via POST /positions/heartbeat; em dev,
+// o PositionSimulatorService (env SIM_POSITIONS=1) alimenta o MESMO caminho.
+model WorkerPosition {
+  id         String   @id @default(uuid())
+  workerId   String   @unique
+  worker     User     @relation(fields: [workerId], references: [id])
+  lat        Float
+  lng        Float
+  recordedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 // Empresa cadastrada no onboarding do painel (SignUp.tsx). Um cadastro cria a
