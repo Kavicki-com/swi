@@ -64,6 +64,10 @@ services:
       # STACK DEV/DEMO SÓ. default 'alert' = fidelidade Figma (mostra a tempestade + dispara clima→notif).
       # PRODUÇÃO (AWS ECS) NÃO usa este compose e DEIXA WEATHER_SCENARIO UNSET → sem alerta fabricado.
       WEATHER_SCENARIO: ${WEATHER_SCENARIO:-alert}
+      # STACK DEV/DEMO SÓ: simulador de posições (move os workers do seed pelo
+      # site e alimenta o pipeline REAL de heartbeat). PRODUÇÃO deixa unset —
+      # lá a fonte é o GPS do app mobile.
+      SIM_POSITIONS: ${SIM_POSITIONS:-1}
       WEATHER_CRON: ${WEATHER_CRON:-}                # vazio → default 30min no código
       # STACK DEV/DEMO SÓ. Vazio → RouteProvider usa OSRM público (keyless) = rota real no container.
       # PRODUÇÃO (AWS ECS) injeta o token Mapbox do cliente aqui (perfil walking premium).
