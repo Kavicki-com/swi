@@ -54,6 +54,8 @@ model User {
   authoredWorkOrders WorkOrder[] @relation("authoredWorkOrders")
   responsibleFor     WorkOrder[] @relation("workOrderResponsibles")
   position           WorkerPosition?
+  startedEvacuations Evacuation[]    @relation("startedEvacuations")
+  evacuationAcks     EvacuationAck[]
 }
 
 // Última posição conhecida de cada worker (Fase 1 do realtime de localização,
@@ -84,6 +86,7 @@ model Company {
   neighborhood String
   uf           String
   members      User[]
+  evacuations  Evacuation[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -129,6 +132,43 @@ enum NotificationDomain {
   reports
   journey
   faq
+  evacuation
+}
+
+// ---------------------------------------------------------------------------
+// Evacuação real (Fase 2 do realtime, 2026-07-25). O admin dispara, os workers
+// da org são notificados (fila) e confirmam presença no ponto de encontro
+// (ack idempotente); o progresso X/N flui ao vivo por WS. Uma ativa por org.
+// ---------------------------------------------------------------------------
+
+enum EvacuationStatus {
+  ACTIVE
+  ENDED
+}
+
+model Evacuation {
+  id          String           @id @default(uuid())
+  // Nullable = bucket legado (null casa só com null), como User.companyId.
+  companyId   String?
+  company     Company?         @relation(fields: [companyId], references: [id])
+  startedById String
+  startedBy   User             @relation("startedEvacuations", fields: [startedById], references: [id])
+  status      EvacuationStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  endedAt     DateTime?
+  acks        EvacuationAck[]
+}
+
+model EvacuationAck {
+  id           String     @id @default(uuid())
+  evacuationId String
+  evacuation   Evacuation @relation(fields: [evacuationId], references: [id])
+  workerId     String
+  worker       User       @relation(fields: [workerId], references: [id])
+  ackAt        DateTime   @default(now())
+
+  // Ack é idempotente: 1 confirmação por worker por evacuação.
+  @@unique([evacuationId, workerId])
 }
 
 model Profile {
