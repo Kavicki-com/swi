@@ -37,6 +37,27 @@ const segmentMeters = (a: LngLat, b: LngLat): number => {
   return Math.hypot(dx, dy)
 }
 
+export const distanceMeters = segmentMeters
+
+// Ponto de encontro da evacuação simulada — centro da área dos loops. Em
+// produção o muster real vem do site (SITE_ROUTE.destination no mobile).
+export const MUSTER_POINT: LngLat = [-46.6275, -23.549]
+
+// Passo em linha reta na direção do alvo, clampando SEM overshoot: chegou,
+// fica exatamente no alvo (o simulador usa igualdade pra disparar o ack).
+export function stepToward(
+  cur: LngLat,
+  target: LngLat,
+  dtSec: number,
+  speedMps: number,
+): LngLat {
+  const dist = segmentMeters(cur, target)
+  const step = dtSec * speedMps
+  if (step >= dist || dist === 0) return [target[0], target[1]]
+  const f = step / dist
+  return [cur[0] + (target[0] - cur[0]) * f, cur[1] + (target[1] - cur[1]) * f]
+}
+
 export function advance(
   route: LngLat[],
   state: SimState,

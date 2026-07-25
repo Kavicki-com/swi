@@ -4,9 +4,11 @@ import { PositionsController } from './positions.controller'
 import { PositionSimulatorService } from './position-simulator.service'
 import { RealtimeModule } from '../realtime/realtime.module'
 import { MediaModule } from '../media/media.module'
+import { EvacuationModule } from '../evacuation/evacuation.module'
 
 @Module({
-  imports: [RealtimeModule, MediaModule],
+  // EvacuationModule: o simulador ack'a a evacuação na chegada ao muster.
+  imports: [RealtimeModule, MediaModule, EvacuationModule],
   providers: [PositionsService, PositionSimulatorService],
   controllers: [PositionsController],
   exports: [PositionsService],

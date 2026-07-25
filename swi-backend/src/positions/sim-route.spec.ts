@@ -1,4 +1,11 @@
-import { advance, loopForWorker, type SimState } from './sim-route'
+import {
+  advance,
+  distanceMeters,
+  loopForWorker,
+  MUSTER_POINT,
+  stepToward,
+  type SimState,
+} from './sim-route'
 
 // Núcleo PURO do simulador dev de posições: anda um ponto ao longo de uma
 // polilinha fechada em passos de tempo. Determinístico — sem Date/random.
@@ -52,5 +59,48 @@ describe('advance', () => {
     const a = advance(square, { seg: 1, t: 0.5 }, 30, 1.4)
     const b = advance(square, { seg: 1, t: 0.5 }, 30, 1.4)
     expect(a).toEqual(b)
+  })
+})
+
+// Fase 2 (evacuação): convergência em linha reta pro ponto de encontro.
+describe('stepToward', () => {
+  const from: [number, number] = [-46.631, -23.551]
+
+  it('cada passo REDUZ a distância até o alvo', () => {
+    let cur = from
+    let last = distanceMeters(cur, MUSTER_POINT)
+    for (let i = 0; i < 5; i++) {
+      cur = stepToward(cur, MUSTER_POINT, 3, 1.4)
+      const d = distanceMeters(cur, MUSTER_POINT)
+      expect(d).toBeLessThan(last)
+      last = d
+    }
+  })
+
+  it('clampa EXATAMENTE no alvo sem overshoot (e fica lá)', () => {
+    let cur = from
+    // Passos gigantes: chega e não passa do ponto.
+    for (let i = 0; i < 10; i++) cur = stepToward(cur, MUSTER_POINT, 600, 1.4)
+    expect(cur).toEqual(MUSTER_POINT)
+    expect(stepToward(cur, MUSTER_POINT, 3, 1.4)).toEqual(MUSTER_POINT)
+  })
+
+  it('é determinístico', () => {
+    expect(stepToward(from, MUSTER_POINT, 3, 1.4)).toEqual(stepToward(from, MUSTER_POINT, 3, 1.4))
+  })
+})
+
+describe('distanceMeters / MUSTER_POINT', () => {
+  it('muster fica dentro da área do site', () => {
+    expect(MUSTER_POINT[0]).toBeGreaterThan(-46.7)
+    expect(MUSTER_POINT[0]).toBeLessThan(-46.55)
+    expect(MUSTER_POINT[1]).toBeGreaterThan(-23.6)
+    expect(MUSTER_POINT[1]).toBeLessThan(-23.5)
+  })
+
+  it('distância equiretangular bate a escala esperada (~111 m por 0.001° de lat)', () => {
+    const d = distanceMeters([-46.63, -23.55], [-46.63, -23.549])
+    expect(d).toBeGreaterThan(100)
+    expect(d).toBeLessThan(120)
   })
 })
