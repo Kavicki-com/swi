@@ -27,6 +27,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { ApiError } from '@/services/api/http'
+import { profileApi } from '@/services/api/profile'
 import { uploadOrderImage } from '@/services/api/upload'
 import {
   workOrdersApi,
@@ -42,13 +43,13 @@ import {
   minutesToDisplayTime,
 } from './format'
 
-// LISTA PROVISÓRIA. O backend aceita `sector` como string livre e NÃO existe
-// endpoint de setores — não há fonte de verdade pra popular o dropdown que o
-// Figma desenha. Os rótulos repetem o vocabulário que o admin já usa
-// (ReportsList, UserSettings, mocks de chat) e o `value` é igual ao `label` de
-// propósito: o que for gravado é exatamente o texto que a TasksList exibe na
-// coluna de setor. Substituir por dados reais quando houver /sectors.
-const SECTOR_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
+// FALLBACK. A fonte primária virou o catálogo real da org (GET
+// /profile/catalog — DISTINCT dos setores gravados); esta lista só segura a
+// UX de uma org SEM cadastro nenhum, onde o DISTINCT volta vazio e um
+// Combobox sem opções impediria de criar a primeira tarefa. `value` igual ao
+// `label` de propósito: o que for gravado é exatamente o texto que a
+// TasksList exibe na coluna de setor.
+const SECTOR_FALLBACK_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
   { label: 'Setor Leste', value: 'Setor Leste' },
   { label: 'Setor Norte', value: 'Setor Norte' },
   { label: 'Setor Sul', value: 'Setor Sul' },
@@ -248,15 +249,31 @@ export function TaskForm() {
     }
   }, [id])
 
-  // Um setor gravado fora da lista provisória (string livre no backend) sumiria
-  // do Combobox e o save seguinte o apagaria. Injetar a opção preserva o dado.
+  // Setores REAIS da org (DISTINCT do backend). null enquanto carrega.
+  const [catalogSectors, setCatalogSectors] = useState<string[] | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    profileApi.catalog().then(({ data }) => {
+      if (!cancelled && data) setCatalogSectors(data.sectors)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Catálogo quando existe; fallback só pra org sem cadastro nenhum. Um setor
+  // gravado fora da lista (string livre no backend) sumiria do Combobox e o
+  // save seguinte o apagaria — injetar a opção preserva o dado.
   const sectorOptions = useMemo(() => {
-    const base = SECTOR_OPTIONS.map((o) => ({ ...o }))
+    const base =
+      catalogSectors && catalogSectors.length > 0
+        ? catalogSectors.map((s) => ({ label: s, value: s }))
+        : SECTOR_FALLBACK_OPTIONS.map((o) => ({ ...o }))
     if (sector && !base.some((o) => o.value === sector)) {
       base.unshift({ label: sector, value: sector })
     }
     return base
-  }, [sector])
+  }, [catalogSectors, sector])
 
   const updateDraft = (key: string, patch: Partial<ChecklistDraft>) => {
     setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)))

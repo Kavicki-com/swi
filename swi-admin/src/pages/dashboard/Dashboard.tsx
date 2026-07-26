@@ -1,5 +1,5 @@
 // src/pages/dashboard/Dashboard.tsx
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import type maplibregl from 'maplibre-gl'
@@ -224,8 +224,39 @@ function MapBanner({
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
   // Enquadra a frota UMA vez, no primeiro lote de markers — depois disso o
-  // usuário manda no pan/zoom e os heartbeats só movem os pinos.
+  // usuário manda no pan/zoom e os heartbeats só movem os pinos. O simulador
+  // MOVE gente depois do enquadramento inicial, então um pino pode sair da
+  // moldura: o selo "N de M visíveis" avisa e o botão "Recentralizar"
+  // re-enquadra sob demanda (QA 2026-07-26 — decisão do usuário: botão +
+  // contador; nada de mapa se movendo sozinho).
   const didFitRef = useRef(false)
+  const [visibleCount, setVisibleCount] = useState(0)
+  // O handler de moveend precisa do lote ATUAL sem re-registrar listener.
+  const markersRef = useRef<DashboardMapMarker[]>([])
+
+  // Enquadra o lote atual. Usada no fit inicial e no botão "Recentralizar" —
+  // MESMA moldura nos dois caminhos, senão o botão "corrige" pra outro corte.
+  const fitToMarkers = useCallback(() => {
+    const map = mapRef.current
+    const current = markersRef.current
+    if (!lib || !map || current.length === 0) return
+    if (current.length >= 2) {
+      const bounds = new lib.LngLatBounds()
+      current.forEach((m) => bounds.extend([m.lng, m.lat]))
+      map.fitBounds(bounds, { padding: 60, animate: false, maxZoom: 15 })
+    } else {
+      map.setCenter([current[0]!.lng, current[0]!.lat])
+    }
+  }, [lib])
+
+  // Quantos do lote atual caem na moldura atual. Roda no moveend (pan/zoom do
+  // usuário ou fitBounds) e a cada heartbeat — é o que alimenta o selo.
+  const recountVisible = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+    const bounds = map.getBounds()
+    setVisibleCount(markersRef.current.filter((m) => bounds.contains([m.lng, m.lat])).length)
+  }, [])
 
   // Mapa nasce uma vez. Com posições ao vivo, depender de `markers` aqui
   // destruiria/recriaria o banner (flash de tiles) a cada heartbeat de 3s.
@@ -241,27 +272,23 @@ function MapBanner({
     })
     mapRef.current = map
     map.on('load', () => setMapReady(true))
+    map.on('moveend', recountVisible)
     return () => {
       map.remove()
       mapRef.current = null
       setMapReady(false)
       didFitRef.current = false
     }
-  }, [lib])
+  }, [lib, recountVisible])
 
   useEffect(() => {
     const map = mapRef.current
     if (!lib || !map || !mapReady || markers.length === 0) return
 
+    markersRef.current = markers
     if (!didFitRef.current) {
       didFitRef.current = true
-      if (markers.length >= 2) {
-        const bounds = new lib.LngLatBounds()
-        markers.forEach((m) => bounds.extend([m.lng, m.lat]))
-        map.fitBounds(bounds, { padding: 60, animate: false, maxZoom: 15 })
-      } else {
-        map.setCenter([markers[0]!.lng, markers[0]!.lat])
-      }
+      fitToMarkers()
     }
 
     const markerHandles = markers.map((m) =>
@@ -271,11 +298,13 @@ function MapBanner({
         .setLngLat([m.lng, m.lat])
         .addTo(map),
     )
+    // O heartbeat move pinos sem mexer na câmera — reconta a cada lote.
+    recountVisible()
 
     return () => {
       markerHandles.forEach((h) => h.remove())
     }
-  }, [markers, mapReady, lib, navigate])
+  }, [markers, mapReady, lib, navigate, fitToMarkers, recountVisible])
 
   return (
     <View
@@ -293,13 +322,47 @@ function MapBanner({
         data-testid="dashboard-map-canvas"
         style={{ width: '100%', height: '100%' }}
       />
+      {/* Selo de honestidade: só aparece quando o simulador tirou alguém da
+          moldura — "9 de 9" o tempo todo seria ruído (mesmo princípio do
+          badge de fadiga do monitoramento). */}
+      {markers.length > 0 && visibleCount < markers.length ? (
+        <View
+          accessibilityLabel={`${visibleCount} de ${markers.length} funcionários visíveis no mapa`}
+          testID="dashboard-map-visible-count"
+          style={{
+            position: 'absolute' as unknown as never,
+            left: theme.padding.m,
+            top: theme.padding.m,
+            backgroundColor: theme.background,
+            borderRadius: theme.border.radius.m,
+            paddingHorizontal: theme.padding.sm,
+            paddingVertical: theme.padding.s,
+          }}
+        >
+          <Text variant="body.s" color={theme.content.dark} style={{ fontWeight: '700' }}>
+            {`${visibleCount} de ${markers.length} visíveis`}
+          </Text>
+        </View>
+      ) : null}
       <View
         style={{
           position: 'absolute' as unknown as never,
           right: theme.padding.m,
           bottom: theme.padding.m,
+          flexDirection: 'row',
+          gap: theme.gap.s,
         }}
       >
+        <Button
+          label="Recentralizar"
+          variant="contained"
+          size="small"
+          backgroundColor={theme.background}
+          labelColor={theme.content.dark}
+          accessibilityLabel="Recentralizar o mapa na equipe"
+          onPress={fitToMarkers}
+          testID="dashboard-map-refit"
+        />
         <Button
           label="Ver mapa geral"
           variant="contained"
