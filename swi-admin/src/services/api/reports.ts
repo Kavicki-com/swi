@@ -23,6 +23,8 @@ export type ReportActivity = {
   progress: number
   tone: 'success' | 'warning' | 'error'
   avatars: ReadonlyArray<string>
+  /** Nomes da equipe, index-parallel com `avatars` (iniciais + a11y). */
+  names: ReadonlyArray<string>
   overflowCount?: number
 }
 
@@ -91,8 +93,9 @@ export type ReportDetailDto = ReportDto & {
   comments?: ReportComment[]
 }
 
-// Atividade crua do backend (sem id garantido, sem avatares — decorativos entram
-// no mapeamento).
+// Atividade crua do backend (sem id garantido). responsibleNames/Avatars são a
+// equipe REAL da atividade — o backend resolve nome → foto presigned no
+// detalhe (decisão 2026-07-26: seguir o Figma com gente de verdade).
 type RawActivity = {
   id?: string
   title: string
@@ -100,6 +103,8 @@ type RawActivity = {
   progress: number
   tone: ReportActivity['tone']
   overflowCount?: number
+  responsibleNames?: string[]
+  responsibleAvatars?: string[]
 }
 
 // Corpo do POST /reports — cadastro pelo painel. Campos opcionais ausentes NÃO
@@ -135,10 +140,10 @@ function toReport(dto: ReportDto): Report {
     progress: a.progress,
     tone: a.tone,
     overflowCount: a.overflowCount,
-    // Atividade do backend não carrega pessoas: antes cada linha pintava 5
-    // faces decorativas, sugerindo uma equipe que o dado não afirma
-    // (QA 2026-07-26). Sem gente conhecida → sem faces.
-    avatars: [],
+    // Equipe REAL da atividade (backend resolve nome → foto presigned; ''
+    // sem match). Backend antigo sem os campos → sem faces, nunca face errada.
+    avatars: a.responsibleAvatars ?? [],
+    names: a.responsibleNames ?? [],
   }))
   return {
     id: dto.id,
