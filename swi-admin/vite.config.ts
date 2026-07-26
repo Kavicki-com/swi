@@ -133,6 +133,12 @@ export default defineConfig({
       // Allow vite to read the local DS clone outside the swi-admin root.
       allow: useLocalDs ? [path.resolve(__dirname), dsLocalRoot] : [path.resolve(__dirname)],
     },
+    // QA remoto (cliente/QA acessando o painel de fora): o dev server do Vite
+    // recusa Host desconhecido com "Blocked request. This host is not
+    // allowed." — proteção contra DNS rebinding. Liberamos os SUFIXOS dos
+    // provedores de túnel em vez das URLs, que mudam a cada sessão do agente.
+    // Só afeta `vite dev`; o build de produção não tem host check.
+    allowedHosts: ['.trycloudflare.com', '.ngrok-free.dev', '.ngrok-free.app'],
   },
   optimizeDeps: {
     include: ['react-native-web', 'styled-components', 'styled-components/native'],
