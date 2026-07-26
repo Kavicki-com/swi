@@ -1,4 +1,5 @@
-import { Body, Controller, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common'
+import type { Response } from 'express'
 import { ReportsService } from './reports.service'
 import { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -9,9 +10,24 @@ import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.d
 export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
+  // Resposta segue sendo o ARRAY de sempre (mobile intacto); o total da empresa
+  // viaja no header X-Total-Count pra UI saber quantos ficaram fora da página.
+  // `limit`/`offset` são opcionais — sem eles, o comportamento é o de antes.
   @Get()
-  list(@CurrentUser() user: JwtUser) {
-    return this.reports.list(user.companyId)
+  async list(
+    @CurrentUser() user: JwtUser,
+    @Res({ passthrough: true }) res: Response,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const { items, total } = await this.reports.list(user.companyId, {
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    })
+    res.setHeader('X-Total-Count', String(total))
+    // Sem isto o browser não enxerga o header (CORS esconde tudo fora da lista segura).
+    res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count')
+    return items
   }
 
   @Get(':id')

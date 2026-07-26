@@ -175,6 +175,29 @@ describe('apiFetch', () => {
     await expect(apiFetch('/work-orders/999')).rejects.toMatchObject({ status: 404 })
   })
 
+  // Paginação (QA de volume 2026-07-26): o total da coleção vem em header
+  // (X-Total-Count), e o corpo segue sendo só o array — o caller precisa de um
+  // gancho pra ler a resposta crua sem duplicar token/erro do apiFetch.
+  it('onResponse recebe a Response crua (headers legíveis) antes do parse', async () => {
+    const headers = new Headers({ 'X-Total-Count': '262' })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, status: 200, headers, json: async () => [{ id: 'r1' }] }),
+    )
+    let total: string | null = null
+    const data = await apiFetch<{ id: string }[]>(
+      '/reports',
+      {},
+      {
+        onResponse: (res) => {
+          total = res.headers.get('X-Total-Count')
+        },
+      },
+    )
+    expect(total).toBe('262')
+    expect(data).toEqual([{ id: 'r1' }])
+  })
+
   it('avisa no console em build de produção sem VITE_API_URL', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.stubEnv('PROD', true)

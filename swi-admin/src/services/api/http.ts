@@ -63,7 +63,10 @@ export async function apiFetch<T>(
   // keepSessionOn401: pra rotas onde 401 é resposta de NEGÓCIO e não sessão
   // morta (ex.: /auth/password/change com a senha atual errada). Sem isso,
   // errar a senha atual deslogava o admin (achado no E2E de 2026-07-24).
-  opts: { keepSessionOn401?: boolean } = {},
+  // onResponse: gancho pra ler a Response crua (headers) sem duplicar a
+  // política de token/erro daqui. Usado pela paginação, que traz o total da
+  // coleção em `X-Total-Count` enquanto o corpo continua sendo só o array.
+  opts: { keepSessionOn401?: boolean; onResponse?: (res: Response) => void } = {},
 ): Promise<T> {
   const token = readToken()
   let res: Response
@@ -84,6 +87,8 @@ export async function apiFetch<T>(
     // status 0 = a request nem chegou no backend.
     throw new ApiError('Não foi possível conectar ao servidor', 0)
   }
+
+  opts.onResponse?.(res)
 
   let body: unknown = null
   try {
