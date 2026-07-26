@@ -166,6 +166,10 @@ export class UsersService {
       active: u.active,
       jobTitle: u.profile?.jobTitle ?? '',
       sector: u.profile?.sector ?? '',
+      // Fase 3 (monitoramento honesto): tipo sanguíneo REAL do Profile (o
+      // worker/admin edita no settings desde o QA F) — null quando não
+      // preenchido, NUNCA um default universal.
+      bloodType: u.profile?.bloodType ?? null,
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
       avatar: u.profile?.avatarKey ? await this.media.presignGet(u.profile.avatarKey) : '',
       companyRole: u.companyRole,
