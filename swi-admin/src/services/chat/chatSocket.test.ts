@@ -22,7 +22,12 @@ it('conecta com auth.token vindo do readToken e transports websocket, assina mes
   window.localStorage.setItem('swi.admin.token', 'jwt-123')
   const cb = vi.fn()
   const stop = subscribeMessages(cb)
-  const opts = (ioMock.mock.calls[0] as unknown as [string, any])[1]
+  const opts = (
+    ioMock.mock.calls[0] as unknown as [
+      string,
+      { transports: string[]; auth: { token: string | null } },
+    ]
+  )[1]
   expect(opts.transports).toEqual(['websocket'])
   // Prova que o token sai do readToken() (localStorage), não de um literal.
   expect(opts.auth.token).toBe('jwt-123')

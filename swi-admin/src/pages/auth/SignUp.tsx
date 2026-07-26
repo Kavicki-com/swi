@@ -154,7 +154,6 @@ export function SignUp() {
         accessible={false}
         resizeMode="cover"
         testID="signup-bg-l0"
-        // eslint-disable-next-line react-native/no-inline-styles
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
       {/* L1 — dark panel (#171717) with diagonal cut at bottom-right.
