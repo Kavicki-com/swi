@@ -9,9 +9,22 @@ export interface RouteSnapshot {
   fetchedAt: string;               // ISO datetime
 }
 
+// Evacuação ATIVA da org vista pelo worker (Fase 2 do realtime): o suficiente
+// pra tela decidir mostrar o CTA de confirmação e pro ack ter alvo.
+export interface ActiveEvacuationView {
+  id: string;
+  total: number;
+  ackedCount: number;
+  myAck: boolean;          // eu já confirmei presença no ponto de encontro?
+}
+
 export interface EvacuationBackend {
   // sem args: usa as constantes SITE_ROUTE (rota fixa do site).
   getRoute(): Promise<RouteSnapshot>;
+  // null = nenhuma evacuação ativa na minha org (estado normal).
+  getActive(): Promise<ActiveEvacuationView | null>;
+  // Confirma presença no ponto de encontro (idempotente no backend).
+  ack(evacuationId: string): Promise<void>;
 }
 
 // Rota fixa do site (piloto SP) — origem (local da obra) + destino (ponto de

@@ -36,4 +36,15 @@ export const mockEvacuationBackend: EvacuationBackend = {
     if (EVACUATION_SCENARIO === 'error') throw new Error('mock evacuation error');
     return snapshot();
   },
+
+  // No mock não existe evacuação DISPARADA (o dispatch é do admin real): a tela
+  // nunca mostra o CTA de confirmação — honesto com o caminho demo.
+  async getActive() {
+    await tick();
+    return null;
+  },
+
+  async ack() {
+    await tick();
+  },
 };

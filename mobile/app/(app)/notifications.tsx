@@ -32,13 +32,17 @@ type Href =
   | '/(app)/chat/inbox'
   | '/(app)/reports'
   | '/(app)/journey'
-  | '/(app)/settings/faq';
+  | '/(app)/settings/faq'
+  | '/(app)/evacuation';
 
 const DOMAIN_ROUTE: Record<Exclude<NotificationDomain, 'weather'>, Href> = {
   chat: '/(app)/chat/inbox',
   reports: '/(app)/reports',
   journey: '/(app)/journey',
   faq: '/(app)/settings/faq',
+  // Evacuação real (Fase 2): tap → tela da rota de fuga; o CTA de confirmação
+  // de presença vive lá.
+  evacuation: '/(app)/evacuation',
 };
 
 // T4.4: NotificationCard memoizado pra impedir que os cards re-renderizem

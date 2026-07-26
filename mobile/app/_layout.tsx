@@ -19,13 +19,14 @@ import { Montserrat_400Regular } from '@expo-google-fonts/montserrat/400Regular'
 import { Montserrat_500Medium } from '@expo-google-fonts/montserrat/500Medium';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat/700Bold';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
-import { AuthProvider } from '../services/auth/AuthProvider';
+import { AuthProvider, useAuth } from '../services/auth/AuthProvider';
 import { ProfileProvider } from '../services/profile/ProfileProvider';
 import { ReportsProvider } from '../services/reports/ReportsProvider';
 import { VitalsProvider, useVitals } from '../services/vitals/VitalsProvider';
 import { LocationProvider, useLocation } from '../services/location/LocationProvider';
 import { WeatherProvider } from '../services/weather/WeatherProvider';
 import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
+import { usePositionHeartbeat } from '../services/positions/usePositionHeartbeat';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -59,6 +60,18 @@ function TelemetryRoot() {
   const { vitals } = useVitals();
   const { coords } = useLocation();
   useTelemetrySampler(() => vitals, () => coords);
+  return null;
+}
+
+// Fase 1/2 do realtime: em produção o APP é a fonte das posições — heartbeat
+// GPS pro backend (upsert + WS pros admins). Null-render; gated no login
+// (sem token o POST só viraria 401 a cada batida).
+function PositionsRoot() {
+  const { user } = useAuth();
+  const { coords, source } = useLocation();
+  // Só posta posição REAL (source 'gps'): o fallback mock do LocationProvider
+  // não pode virar "última posição" do worker no mapa do admin.
+  usePositionHeartbeat(() => (user && source === 'gps' ? coords : null));
   return null;
 }
 
@@ -164,6 +177,7 @@ export default function RootLayout() {
             {/* Feeds live vitals + coords into the telemetry sampler. Renders
                 null; sits alongside the Stack inside both providers. */}
             <TelemetryRoot />
+            <PositionsRoot />
             <WeatherProvider>
             <View style={mobileFrameStyle}>
               {/* freezeOnBlur: pausa renderização de telas cached no Stack

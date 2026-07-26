@@ -19,7 +19,9 @@ export class EvacuationsController {
     return this.events.start(user.userId, user.companyId)
   }
 
-  @Roles('ADMIN') @Get('active')
+  // WORKER também lê: o app mobile precisa da ativa da PRÓPRIA org pra saber
+  // o que confirmar (ack) — org-scoping idêntico ao do admin.
+  @Roles('ADMIN', 'WORKER') @Get('active')
   active(@CurrentUser() user: JwtUser) {
     return this.events.active(user.companyId)
   }
