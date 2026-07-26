@@ -8,10 +8,16 @@ export class MailService {
   constructor(
     // @Optional(): o Nest não injeta um Transporter (não é provider) — passa undefined,
     // e o default do JS cria o transporter real do MailHog. O teste passa um mock explícito.
+    // Defaults = MailHog (dev, sem auth). Com SMTP real (Resend/SendGrid),
+    // setar SMTP_USER/SMTP_PASS (+ SMTP_SECURE=1 na porta 465) no .env —
+    // sem essas envs o comportamento é idêntico ao de sempre.
     @Optional() private readonly transporter: nodemailer.Transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST ?? 'localhost',
       port: Number(process.env.SMTP_PORT ?? 1025),
-      secure: false,
+      secure: process.env.SMTP_SECURE === '1',
+      ...(process.env.SMTP_USER
+        ? { auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS ?? '' } }
+        : {}),
     }),
   ) {}
 

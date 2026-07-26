@@ -49,6 +49,11 @@ export class AuthService {
       await this.mail.sendConfirmationCode(p.email, code)
     } catch (err) {
       try {
+        // Profile PRIMEIRO (mesmo padrão do signupCompany): o cadastro agora
+        // cria o Profile junto, e a FK Profile→User sem cascade estourava o
+        // user.delete deixando os DOIS órfãos — visto ao vivo no 550 do
+        // Resend com domínio não verificado (2026-07-26).
+        await this.prisma.profile.deleteMany({ where: { userId: user.id } })
         await this.prisma.user.delete({ where: { id: user.id } })   // sem órfão
       } catch (delErr) {
         this.logger.error(`falha ao reverter usuário órfão ${user.id}: ${delErr}`)
