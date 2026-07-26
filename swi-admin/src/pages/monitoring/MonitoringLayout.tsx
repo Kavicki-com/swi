@@ -30,6 +30,7 @@ import {
 } from '@/services/monitoring'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
+import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 
 // --- Shared row helpers ---
 
@@ -480,9 +481,20 @@ export function MonitoringLayout() {
 
       {/* "Alertas de Desgaste" section — shared. */}
       <View style={{ gap: theme.gap.m }}>
-        <Title variant="title.s" color={theme.content.dark}>
-          Alertas de Desgaste
-        </Title>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: theme.gap.s,
+          }}
+        >
+          <Title variant="title.s" color={theme.content.dark}>
+            Alertas de Desgaste
+          </Title>
+          {/* Fase 3: vitais/alertas derivam de dados SIMULADOS (funcionários reais). */}
+          <SimulatedDataBadge />
+        </View>
 
         <View
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}

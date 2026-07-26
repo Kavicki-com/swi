@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/api/users'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
+import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 
 export function AdminDetails({ adminId }: { adminId?: string } = {}) {
   const theme = useTheme()
@@ -56,7 +57,21 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
 
   return (
     <WorkerDetailsLayout
-      worker={admin}
+      worker={{
+        ...admin,
+        // Fase 3: vitais simulados plausíveis + selo no layout (fim do 0 bpm).
+        ...(() => {
+          const v = simulatedVitalsFor(admin.id, Date.now())
+          return {
+            bpm: v.bpm,
+            pressure: v.pressure,
+            fatigueRate: v.fatiguePct,
+            effort: v.effortPct,
+            fatigueMinutes: v.fatigueMinutes,
+            statusLabel: v.statusLabel,
+          }
+        })(),
+      }}
       testID="admin-details"
       onBack={() => navigate('/admins')}
       backA11yLabel="Voltar para a lista de administradores"

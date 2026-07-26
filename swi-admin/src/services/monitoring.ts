@@ -1,5 +1,5 @@
-import { DATA_BACKEND } from './dataBackend'
-import { monitoringApi as mockMonitoringApi } from './mockApi/monitoring'
-import { monitoringApi as amplifyMonitoringApi } from './amplifyApi/monitoring'
-export * from './mockApi/monitoring'
-export const monitoringApi = DATA_BACKEND === 'amplify' ? amplifyMonitoringApi : mockMonitoringApi
+// Fachada do monitoramento — Fase 3: derivado do diretório REAL da org com
+// vitais simulados rotulados (api/monitoring.ts). O eixo DATA_BACKEND
+// (mock vs amplify) morreu pro monitoring — mesmo movimento do dashboard.
+// Re-export fino mantém os imports existentes (@/services/monitoring).
+export * from './api/monitoring'

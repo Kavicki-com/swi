@@ -23,6 +23,9 @@ export type UserSummaryDto = {
   active: boolean
   jobTitle: string
   sector: string
+  // Tipo sanguíneo REAL do Profile (editável no settings) — null quando o
+  // cadastro clínico ainda não foi preenchido.
+  bloodType: string | null
   birthDate: string | null // ISO
   avatar: string
   companyRole: string | null
@@ -36,8 +39,8 @@ export type UserDetailDto = UserSummaryDto & {
   company: { id: string; name: string } | null
 }
 
-// Sem campo de tipo sanguíneo no Profile do backend — placeholder até o cadastro
-// clínico existir.
+// Placeholder pra quando o Profile ainda não tem o tipo sanguíneo preenchido —
+// NUNCA um default universal tipo O+.
 const BLOOD_TYPE_PLACEHOLDER = '—'
 
 // Idade a partir do nascimento (ISO). Sem data → 0 (placeholder; o layout mostra
@@ -66,7 +69,7 @@ function toEmployee(u: UserSummaryDto): Employee {
     id: u.id,
     name: u.name,
     age: ageFrom(u.birthDate, new Date()),
-    bloodType: BLOOD_TYPE_PLACEHOLDER,
+    bloodType: u.bloodType ?? BLOOD_TYPE_PLACEHOLDER,
     role: u.jobTitle,
     specialization: u.sector,
     avatarUri: u.avatar,
@@ -82,7 +85,7 @@ function toAdmin(u: UserSummaryDto): Admin {
     id: u.id,
     name: u.name,
     age: ageFrom(u.birthDate, new Date()),
-    bloodType: BLOOD_TYPE_PLACEHOLDER,
+    bloodType: u.bloodType ?? BLOOD_TYPE_PLACEHOLDER,
     role: u.jobTitle,
     specialization: u.sector,
     avatarUri: u.avatar,

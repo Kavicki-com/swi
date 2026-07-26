@@ -10,6 +10,7 @@ import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { employeesApi, type Employee } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
+import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 import { useDemoToast } from '@/lib/demoToast'
 
 export function EmployeeDetails() {
@@ -67,9 +68,21 @@ export function EmployeeDetails() {
     )
   }
 
+  // Fase 3 (monitoramento honesto): vitais SIMULADOS plausíveis (o layout
+  // exibe o selo "Dados simulados") — fim do 0 bpm + "excelentes" default.
+  const vitals = simulatedVitalsFor(employee.id, Date.now())
+
   return (
     <WorkerDetailsLayout
-      worker={employee}
+      worker={{
+        ...employee,
+        bpm: vitals.bpm,
+        pressure: vitals.pressure,
+        fatigueRate: vitals.fatiguePct,
+        effort: vitals.effortPct,
+        fatigueMinutes: vitals.fatigueMinutes,
+        statusLabel: vitals.statusLabel,
+      }}
       testID="employee-details"
       onBack={() => navigate('/employees')}
       backA11yLabel="Voltar para a lista de funcionários"

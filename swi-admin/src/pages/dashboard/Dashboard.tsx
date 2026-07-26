@@ -33,6 +33,7 @@ import {
   type DashboardWearAlert,
 } from '@/services/dashboard'
 import { FormError } from '@/components/FormError'
+import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 
 // DS module is shimmed to `any`; mirror the WeatherTimelineEvent shape locally.
 type WeatherTimelineCondition = 'sunny' | 'rainy' | 'partly-cloudy' | 'storm'
@@ -479,7 +480,18 @@ function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
       dataSet={{ fidelity: 'wear-alerts' }}
       style={{ gap: theme.gap.m }}
     >
-      <Title variant="title.s">Alertas de Desgaste</Title>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: theme.gap.s,
+        }}
+      >
+        <Title variant="title.s">Alertas de Desgaste</Title>
+        {/* Fase 3: desgaste deriva de vitais SIMULADOS (funcionários reais). */}
+        <SimulatedDataBadge />
+      </View>
       <View
         style={{
           flexDirection: 'row',
@@ -727,7 +739,7 @@ function HealthDonuts({
         title="Taxa de desgaste"
         value={summary.kpis.wearRate}
         label="Funcionários"
-        caption="Desgaste baixo"
+        caption="Desgastados"
         progress={70}
         progressGradient={WEAR_GRADIENT}
         icon="heartbeat_filled"
