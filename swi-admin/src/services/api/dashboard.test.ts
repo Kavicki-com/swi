@@ -2,9 +2,9 @@
 // 'vitest' duplicaria a instância e quebraria o suite (ver nota no auth.test.ts).
 import { vi } from 'vitest'
 
-// As 4 fachadas do fan-out são mockadas; os VITAIS (dashboardMockVitals) usam a
-// fixture real (SEED/ROSTER) de propósito — o teste assere que a sobreposição
-// mock vem de lá.
+// As 4 fachadas do fan-out são mockadas; os VITAIS derivam dos funcionários
+// sintéticos via simulatedVitalsFor (determinístico) — o teste assere a
+// derivação, não fixtures.
 vi.mock('./users', () => ({
   adminsApi: { list: vi.fn() },
   employeesApi: { list: vi.fn() },
@@ -24,9 +24,15 @@ import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi } from './workOrders'
 import { weatherApi } from './weather'
-import { MOCK_VITAL_KPIS, MOCK_WEAR_ALERTS } from './dashboardMockVitals'
 
-const list = (n: number) => new Array(n).fill({})
+// Funcionários sintéticos COM identidade — os vitais simulados derivam do id.
+const list = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `emp-${i}`,
+    name: `Func ${i}`,
+    sector: `Setor ${i % 3}`,
+    avatarUri: i % 2 ? `url-${i}` : '',
+  }))
 const report = (status: string) => ({ status })
 const weatherSlot = { at: '2026-07-23T12:00:00.000Z', condition: 'sun', tempC: 20, label: 'SOL' }
 
@@ -106,15 +112,35 @@ describe('dashboardApi.summary', () => {
     expect(a3!.risk).toBeUndefined()
   })
 
-  it('overlays mock vitals (wearAlerts / activeCameras); mapMarkers vem vazio (live no render)', async () => {
+  it('deriva desgaste/vitais dos funcionários REAIS com vitais simulados plausíveis', async () => {
     const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
     // Posições agora são reais: o Dashboard splica useLivePositions() sobre o
     // summary — o serviço não fabrica mais markers mock.
     expect(data!.mapMarkers).toEqual([])
-    expect(data!.wearAlerts).toEqual(MOCK_WEAR_ALERTS)
-    expect(data!.kpis.activeCameras).toBe(MOCK_VITAL_KPIS.activeCameras)
-    expect(data!.kpis.vitalSigns).toBe(MOCK_VITAL_KPIS.vitalSigns)
-    expect(data!.kpis.wearRate).toBe(MOCK_VITAL_KPIS.wearRate)
+    // Wear alerts: um por funcionário real, com nome/setor do diretório e
+    // vitais plausíveis (nunca 0 bpm).
+    expect(data!.wearAlerts).toHaveLength(5)
+    expect(data!.wearAlerts.map((w) => w.employeeName)).toEqual([
+      'Func 0',
+      'Func 1',
+      'Func 2',
+      'Func 3',
+      'Func 4',
+    ])
+    for (const w of data!.wearAlerts) {
+      expect(w.bpm).toBeGreaterThanOrEqual(55)
+      expect(w.pressure).toMatch(/^\d{2}\/\d{1,2}$/)
+      expect(['excelente', 'desgastado', 'alerta-fadiga']).toContain(w.tier)
+    }
+    // KPIs vitais: partição dos 5 funcionários pelos 3 tiers (soma fecha).
+    const { vitalSigns, wearRate, urgentAlerts } = data!.kpis
+    expect(vitalSigns + wearRate + urgentAlerts).toBe(5)
+    expect(data!.employees.total).toBe(5)
+    expect(
+      data!.employees.byStatus.good + data!.employees.byStatus.alert + data!.employees.byStatus.low,
+    ).toBe(5)
+    // Único KPI que segue fixture: câmeras (hardware inexistente no piloto).
+    expect(data!.kpis.activeCameras).toBe(564)
   })
 
   it('passes the real weather strip through', async () => {
@@ -159,7 +185,7 @@ describe('dashboardApi.summary', () => {
     expect(data!.kpis.newReports).toBe(0)
     expect(data!.activities).toEqual([])
     expect(data!.weather).toEqual([])
-    // vitals always present
-    expect(data!.wearAlerts).toEqual(MOCK_WEAR_ALERTS)
+    // Sem diretório → sem desgaste fabricado: lista vazia, não roster fake.
+    expect(data!.wearAlerts).toEqual([])
   })
 })

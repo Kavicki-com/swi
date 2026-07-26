@@ -9,6 +9,7 @@ import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
+import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import {
   Avatar,
   Button,
@@ -513,6 +514,12 @@ export function WorkerDetailsLayout({
               {worker.statusLabel ?? 'Condições excelentes'}
             </Title>
           </div>
+
+          {/* Fase 3 (monitoramento honesto): biometria é SIMULADA até a
+              smartband — o selo deixa isso explícito pro operador. */}
+          <View style={{ alignItems: 'flex-end' }}>
+            <SimulatedDataBadge />
+          </View>
 
           {/* Fatigue total time — Figma 159:14118 / 159:16087. Pill-rounded
               outer container (bg=background) with padding.xs inset and an

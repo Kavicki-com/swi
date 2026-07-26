@@ -1,18 +1,16 @@
-// Fachada-cliente do dashboard. summary() faz fan-out sobre endpoints já reais
-// (admins/funcionários/relatórios/tarefas/clima) e SOBREPÕE os vitais mock
-// (dashboardMockVitals) — preservando o shape DashboardSummary que a UI já
-// consome. Nenhuma seção real derruba as outras: cada chamada é isolada e
-// degrada só a sua fatia (KPIs→0, activities→[], weather→[]); os vitais estão
-// sempre presentes. Este é o lar canônico dos tipos do dashboard (antes moravam
-// em mockApi/dashboard.ts, hoje morto) — mesmo movimento que o Passo 4 fez com
-// Reports.
+// Fachada-cliente do dashboard. summary() faz fan-out sobre endpoints reais
+// (admins/funcionários/relatórios/tarefas/clima); desgaste/vitais derivam dos
+// funcionários REAIS com vitais SIMULADOS plausíveis (simulatedVitalsFor,
+// rotulados na UI) — Fase 3, fim do roster fake. Nenhuma seção real derruba as
+// outras: cada chamada é isolada e degrada só a sua fatia (KPIs→0,
+// activities→[], weather→[]). Este é o lar canônico dos tipos do dashboard.
 import type { Alert, Employee } from '../types'
 import type { MockResponse } from '@/services/mockApi/types'
 import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi, type WorkOrderRow, type WorkOrderStatus } from './workOrders'
 import { weatherApi } from './weather'
-import { buildLegacyAggregates, MOCK_VITAL_KPIS, MOCK_WEAR_ALERTS } from './dashboardMockVitals'
+import { simulatedVitalsFor, type SimulatedTier } from '@/services/vitals/simulatedVitals'
 
 export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
 
@@ -138,8 +136,17 @@ async function fetchActivities(): Promise<DashboardActivity[]> {
   }
 }
 
+// Hardware que não existe no piloto (câmeras) — único KPI que segue fixture.
+const MOCK_ACTIVE_CAMERAS = 564
+
+const TIER_TO_STATUS: Record<SimulatedTier, 'good' | 'alert' | 'low'> = {
+  excelente: 'good',
+  desgastado: 'alert',
+  'alerta-fadiga': 'low',
+}
+
 export const dashboardApi = {
-  summary: async ({ orgId }: { orgId: string }): Promise<MockResponse<DashboardSummary>> => {
+  summary: async (_opts: { orgId: string }): Promise<MockResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
     // erro degrada só a própria seção — o summary nunca propaga erro total.
     const [admins, employees, reports, activities, weather] = await Promise.all([
@@ -150,21 +157,52 @@ export const dashboardApi = {
       weatherApi.get(),
     ])
 
-    const { employees: employeesAgg, alerts: alertsAgg } = buildLegacyAggregates(orgId)
+    // Fase 3 (monitoramento honesto): desgaste/vitais derivam dos funcionários
+    // REAIS da org com vitais SIMULADOS plausíveis (rotulados na UI) — nada de
+    // roster fake com nomes que não existem no diretório.
+    const now = Date.now()
+    const workers = employees.data ?? []
+    const withVitals = workers.map((w) => ({ w, v: simulatedVitalsFor(w.id, now) }))
+    const tierCount: Record<SimulatedTier, number> = {
+      excelente: 0,
+      desgastado: 0,
+      'alerta-fadiga': 0,
+    }
+    const byStatus = { good: 0, alert: 0, low: 0, offline: 0 }
+    withVitals.forEach(({ v }) => {
+      tierCount[v.tier] += 1
+      byStatus[TIER_TO_STATUS[v.tier]] += 1
+    })
+
+    const wearAlerts = withVitals.map(({ w, v }) => ({
+      id: w.id,
+      employeeName: w.name,
+      sector: w.sector ?? '',
+      progress: v.fatiguePct,
+      bpm: v.bpm,
+      pressure: v.pressure,
+      tier: v.tier,
+      avatarUri: w.avatarUri || undefined,
+    }))
 
     const newReports = (reports.data ?? []).filter((r) => r.status === 'pending').length
-    const urgentAlerts = alertsAgg.bySeverity.critical + alertsAgg.bySeverity.warning
-    const commonAlerts = alertsAgg.bySeverity.info
+    const urgentAlerts = tierCount['alerta-fadiga']
+    const commonAlerts = tierCount.desgastado
 
     return {
       data: {
-        employees: employeesAgg,
-        alerts: alertsAgg,
+        employees: { total: workers.length, byStatus },
+        alerts: {
+          openOrAcknowledged: urgentAlerts + commonAlerts,
+          bySeverity: { info: 0, warning: commonAlerts, critical: urgentAlerts },
+        },
         kpis: {
           admins: admins.data?.length ?? 0,
-          totalEmployees: employees.data?.length ?? 0,
+          totalEmployees: workers.length,
           newReports,
-          ...MOCK_VITAL_KPIS,
+          activeCameras: MOCK_ACTIVE_CAMERAS,
+          vitalSigns: tierCount.excelente,
+          wearRate: tierCount.desgastado,
           urgentAlerts,
           commonAlerts,
         },
@@ -172,7 +210,7 @@ export const dashboardApi = {
         // useLivePositions() sobre o summary no render. Vazio aqui de propósito.
         mapMarkers: [],
         activities,
-        wearAlerts: MOCK_WEAR_ALERTS,
+        wearAlerts,
         weather: weather.data ?? [],
       },
       error: null,
