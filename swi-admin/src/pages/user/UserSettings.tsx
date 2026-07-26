@@ -517,7 +517,15 @@ export function UserSettings() {
           onChange={onExamsSelected}
         />
         <View style={{ position: 'relative' }}>
-          <Avatar uri={avatarUrl ?? user?.avatarUri} customSize={108} bordered borderWidth={4} />
+          {/* `name` alimenta o fallback de iniciais do DS 0.1.120 — este é o
+              avatar de 108px, onde o disco cinza vazio era mais gritante. */}
+          <Avatar
+            uri={avatarUrl ?? user?.avatarUri}
+            name={name}
+            customSize={108}
+            bordered
+            borderWidth={4}
+          />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Editar foto"
