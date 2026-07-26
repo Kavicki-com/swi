@@ -37,6 +37,13 @@ export type ProfileDto = {
 // as URLs presignadas são derivados, não entram no patch).
 export type ProfilePatch = Partial<Omit<ProfileDto, 'id' | 'userId' | 'avatarUrl' | 'examUrls'>>
 
+// GET /profile/catalog — DISTINCT org-scoped, ordenado pt-BR, sem vazios.
+export type ProfileCatalog = {
+  jobTitles: string[]
+  sectors: string[]
+  duties: string[]
+}
+
 export const profileApi = {
   me: async (): Promise<MockResponse<ProfileDto | null>> => {
     try {
@@ -48,6 +55,21 @@ export const profileApi = {
       return {
         data: null,
         error: { message: e instanceof Error ? e.message : 'Falha ao carregar o perfil' },
+      }
+    }
+  },
+
+  // Vocabulário REAL da org (DISTINCT de jobTitle/sector/duty do backend).
+  // Alimenta os Comboboxes do settings e o setor do form de tarefas — fim das
+  // listas fixas inventadas e divergentes entre telas (QA 2026-07-26).
+  catalog: async (): Promise<MockResponse<ProfileCatalog>> => {
+    try {
+      const c = await apiFetch<ProfileCatalog>('/profile/catalog')
+      return { data: c, error: null }
+    } catch (e) {
+      return {
+        data: null,
+        error: { message: e instanceof Error ? e.message : 'Falha ao carregar o catálogo' },
       }
     }
   },

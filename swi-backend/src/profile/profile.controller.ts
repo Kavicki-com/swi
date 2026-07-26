@@ -21,6 +21,13 @@ export class ProfileController {
     return { ...p, avatarUrl, examUrls }
   }
 
+  // Vocabulário real da org (DISTINCT de jobTitle/sector/duty) pros selects
+  // do settings e do form de tarefas — ver ProfileService.catalog.
+  @Get('catalog')
+  catalog(@CurrentUserId() userId: string) {
+    return this.profile.catalog(userId)
+  }
+
   @Put('me')
   update(@CurrentUserId() userId: string, @Body() dto: UpdateProfileDto) {
     const data = { ...dto, ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}) }

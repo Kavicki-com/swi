@@ -12,7 +12,7 @@ import { authApi } from '@/services/api/auth'
 import { uploadImage } from '@/services/api/upload'
 
 vi.mock('@/services/api/profile', () => ({
-  profileApi: { me: vi.fn(), update: vi.fn() },
+  profileApi: { me: vi.fn(), update: vi.fn(), catalog: vi.fn() },
 }))
 // Só o changePassword é mockado — o AuthProvider precisa do getSession real.
 vi.mock('@/services/api/auth', async (importOriginal) => {
@@ -53,6 +53,15 @@ vi.mock('@kavicki/swi-design-system', async (importOriginal) => {
 
 const meMock = vi.mocked(profileApi.me)
 const updateMock = vi.mocked(profileApi.update)
+const catalogMock = vi.mocked(profileApi.catalog)
+
+// Catálogo REAL da org (DISTINCT do backend) — fonte dos selects de
+// Profissão/Setor/Função desde o QA 2026-07-26. value === label.
+const CATALOG = {
+  jobTitles: ['Operador de caminhão', 'Operador de escavadeira'],
+  sectors: ['Setor Leste', 'Setor Norte'],
+  duties: ['Operação', 'Supervisão'],
+}
 const changePwMock = vi.mocked(authApi.changePassword)
 const uploadMock = vi.mocked(uploadImage)
 
@@ -92,6 +101,10 @@ const renderSettings = async () => {
 
 const typeIn = (testID: string, value: string) =>
   fireEvent.change(screen.getByTestId(testID), { target: { value } })
+
+beforeEach(() => {
+  catalogMock.mockResolvedValue({ data: CATALOG, error: null })
+})
 
 afterEach(() => {
   clearSession()
@@ -144,12 +157,11 @@ describe('UserSettings', () => {
     expect(patch.bloodType).toBe('O+')
   })
 
-  // As listas de Profissão/Setor/Função/Gerente são constantes no arquivo, mas
-  // os campos são string livre no banco: o admin semeado tem 'Administrador' /
-  // 'Gestão'. Antes do paliativo, valueOf devolvia '' → o Combobox exibia
-  // "Selecione aqui" e salvar QUALQUER campo da tela apagava os dois em
-  // silêncio, porque save() só inclui o campo quando o value é truthy.
-  it('cargo/setor fora da lista fixa: exibe o valor do perfil e NÃO o apaga ao salvar', async () => {
+  // Os campos são string livre no banco e o catálogo é DISTINCT — mas pode
+  // haver corrida (perfil chega antes do catálogo) ou valor recém-gravado por
+  // outra tela. withCurrent injeta o valor atual pra ele se exibir e
+  // sobreviver ao save.
+  it('cargo/setor fora do catálogo: exibe o valor do perfil e NÃO o apaga ao salvar', async () => {
     meMock.mockResolvedValue({
       data: { ...DTO, jobTitle: 'Administrador', sector: 'Gestão' },
       error: null,
@@ -170,12 +182,12 @@ describe('UserSettings', () => {
     expect(patch.sector).toBe('Gestão')
   })
 
-  it('valor da lista fixa não é duplicado nas opções', async () => {
+  it('valor que já está no catálogo não é duplicado nas opções', async () => {
     meMock.mockResolvedValue({ data: DTO, error: null })
     await renderSettings()
 
-    // DTO traz 'Operador de caminhão', que ESTÁ em PROFISSAO_OPTIONS: a
-    // injeção do withCurrent não pode criar uma segunda linha idêntica.
+    // DTO traz 'Operador de caminhão', que ESTÁ no catálogo: a injeção do
+    // withCurrent não pode criar uma segunda linha idêntica.
     expect(screen.getAllByRole('button', { name: 'Profissão: Operador de caminhão' })).toHaveLength(
       1,
     )

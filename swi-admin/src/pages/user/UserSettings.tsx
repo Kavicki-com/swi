@@ -28,7 +28,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SupportModal } from '@/components/SupportModal'
 import { FormError } from '@/components/FormError'
-import { profileApi, type ProfilePatch } from '@/services/api/profile'
+import { profileApi, type ProfileCatalog, type ProfilePatch } from '@/services/api/profile'
 import { authApi } from '@/services/api/auth'
 import { uploadImage } from '@/services/api/upload'
 import { maskCpf, maskDate, maskPhone, onlyDigits } from '@/lib/masks'
@@ -50,40 +50,23 @@ const GENDER_OPTIONS = [
   { label: 'Outro', value: 'other' },
 ]
 
-const PROFISSAO_OPTIONS = [
-  { label: 'Operador de escavadeira', value: 'op-escavadeira' },
-  { label: 'Operador de caminhão', value: 'op-caminhao' },
-  { label: 'Técnico de segurança', value: 'tec-seguranca' },
-  { label: 'Engenheiro de mineração', value: 'eng-mineracao' },
-]
-
-const SETOR_OPTIONS = [
-  { label: 'Mineração K22', value: 'k22' },
-  { label: 'Setor Leste', value: 'leste' },
-  { label: 'Setor Norte', value: 'norte' },
-]
-
-const FUNCAO_OPTIONS = [
-  { label: 'Operação', value: 'operacao' },
-  { label: 'Manutenção', value: 'manutencao' },
-  { label: 'Supervisão', value: 'supervisao' },
-]
-
 const GERENTE_OPTIONS = [
   { label: 'João Soares Ribeiro', value: 'joao' },
   { label: 'Mathias Campos', value: 'mathias' },
 ]
 
 type Option = { label: string; value: string }
-// O backend guarda o LABEL de exibição (jobTitle "Operador de caminhão");
-// o Combobox trabalha com o value interno. Conversão nas duas direções.
-//
-// As listas acima são CONSTANTES, mas os campos são string livre no banco: o
-// admin semeado tem jobTitle 'Administrador' e sector 'Gestão', nenhum dos dois
-// na lista. Sem fallback, `valueOf` devolvia '', o Combobox abria em "Selecione
-// aqui" e salvar QUALQUER campo da tela apagava o cargo em silêncio (QA
-// 2026-07-26). Rótulo desconhecido vira o próprio value — mesma convenção do
-// TaskForm, onde value === label para strings de exibição livres.
+
+// Profissão/Setor/Função vêm do catálogo REAL da org (GET /profile/catalog:
+// DISTINCT de jobTitle/sector/duty). As listas fixas anteriores eram
+// inventadas, divergiam do TaskForm e não continham os valores do banco
+// ('Administrador'/'Gestão') — o Combobox abria em "Selecione aqui" e uma
+// seleção qualquer sobrescrevia o cargo real (QA 2026-07-26). value === label
+// de propósito: o backend guarda o rótulo de exibição verbatim.
+const toOptions = (values: ReadonlyArray<string>): Option[] =>
+  values.map((v) => ({ label: v, value: v }))
+
+// Gerente segue lista fixa (pessoas, fonte diferente — fora do catálogo).
 const valueOf = (options: Option[], label: string | null): string =>
   label ? (options.find((o) => o.label === label)?.value ?? label) : ''
 const labelOf = (options: Option[], value: string): string =>
@@ -294,11 +277,24 @@ export function UserSettings() {
   const [showSupportModal, setShowSupportModal] = useState(false)
   const [showPrivacyModal, setShowPrivacyModal] = useState(false)
 
-  // Listas de exibição = constante + o valor atual, quando ele for um rótulo
-  // livre que a constante não prevê (ver withCurrent).
-  const profissaoOptions = useMemo(() => withCurrent(PROFISSAO_OPTIONS, profissao), [profissao])
-  const setorOptions = useMemo(() => withCurrent(SETOR_OPTIONS, setor), [setor])
-  const funcaoOptions = useMemo(() => withCurrent(FUNCAO_OPTIONS, funcao), [funcao])
+  // Vocabulário real da org. null enquanto carrega (as listas ficam só com o
+  // valor atual via withCurrent — nada de opção inventada no meio-tempo).
+  const [catalog, setCatalog] = useState<ProfileCatalog | null>(null)
+
+  // Listas de exibição = catálogo + o valor atual, quando ele ainda não
+  // estiver no DISTINCT (ver withCurrent — cinto contra corrida com o load).
+  const profissaoOptions = useMemo(
+    () => withCurrent(toOptions(catalog?.jobTitles ?? []), profissao),
+    [catalog, profissao],
+  )
+  const setorOptions = useMemo(
+    () => withCurrent(toOptions(catalog?.sectors ?? []), setor),
+    [catalog, setor],
+  )
+  const funcaoOptions = useMemo(
+    () => withCurrent(toOptions(catalog?.duties ?? []), funcao),
+    [catalog, funcao],
+  )
   const gerenteOptions = useMemo(() => withCurrent(GERENTE_OPTIONS, gerente), [gerente])
 
   const [examKeys, setExamKeys] = useState<string[]>([])
@@ -311,6 +307,18 @@ export function UserSettings() {
   const [examsBusy, setExamsBusy] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const examsInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Catálogo em paralelo ao prefill: as opções chegam quando chegam; o valor
+  // atual aparece antes disso via withCurrent.
+  useEffect(() => {
+    let cancelled = false
+    profileApi.catalog().then(({ data }) => {
+      if (!cancelled && data) setCatalog(data)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Prefill real: GET /profile/me (404 = perfil ainda não preenchido → form
   // vazio, sem erro). Labels do backend viram values dos comboboxes.
@@ -326,9 +334,10 @@ export function UserSettings() {
       setPhone(maskPhone(data.phone ?? ''))
       setUf(data.uf ?? '')
       setCity(data.city ?? '')
-      setProfissao(valueOf(PROFISSAO_OPTIONS, data.jobTitle))
-      setSetor(valueOf(SETOR_OPTIONS, data.sector))
-      setFuncao(valueOf(FUNCAO_OPTIONS, data.duty))
+      // value === label nos campos de catálogo: o rótulo do banco É o value.
+      setProfissao(data.jobTitle ?? '')
+      setSetor(data.sector ?? '')
+      setFuncao(data.duty ?? '')
       setGerente(valueOf(GERENTE_OPTIONS, data.managerName))
       setBloodType(data.bloodType ?? '')
       // gender é um CÓDIGO ('male'/'female'), não um rótulo: o resto do painel
@@ -365,9 +374,10 @@ export function UserSettings() {
       // não devem apagar o que já está salvo.
       ...(uf.trim() ? { uf: uf.trim() } : {}),
       ...(iso ? { birthDate: iso } : {}),
-      ...(profissao ? { jobTitle: labelOf(PROFISSAO_OPTIONS, profissao) } : {}),
-      ...(setor ? { sector: labelOf(SETOR_OPTIONS, setor) } : {}),
-      ...(funcao ? { duty: labelOf(FUNCAO_OPTIONS, funcao) } : {}),
+      // Campos de catálogo: value === label, o estado JÁ é o rótulo final.
+      ...(profissao ? { jobTitle: profissao } : {}),
+      ...(setor ? { sector: setor } : {}),
+      ...(funcao ? { duty: funcao } : {}),
       ...(gerente ? { managerName: labelOf(GERENTE_OPTIONS, gerente) } : {}),
       // Grava o CÓDIGO, não o rótulo — ver readGender.
       ...(gender ? { gender } : {}),
