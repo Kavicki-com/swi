@@ -30,6 +30,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { NAV_ITEMS } from '@/app/nav'
 import { useChat } from '@/services/chat/ChatProvider'
 import { resolveContact, unreadFor } from '@/services/chat/chatReducers'
+import { useMyVitals } from '@/hooks/useMyVitals'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // DS module is shimmed to `any`; mirror the types we need locally.
@@ -73,6 +74,7 @@ export function resolveActiveNavValue(pathname: string): string {
 
 export function AppLayout() {
   const { user } = useAuth()
+  const myVitals = useMyVitals()
   const navigate = useNavigate()
   const location = useLocation()
   const theme = useTheme()
@@ -115,9 +117,9 @@ export function AppLayout() {
       testID="app-header-user-info-pressable"
     >
       <HeaderUserInfo
-        bpm={user?.bpm ?? 99}
-        pressure={user?.pressure ?? '12/8'}
-        progress={50}
+        bpm={myVitals.bpm}
+        pressure={myVitals.pressure}
+        progress={myVitals.progress}
         avatarUri={user?.avatarUri ?? workerA}
         heartIconName="heart_filled"
         pressureIconName="vitals_pulse"

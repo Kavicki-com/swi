@@ -34,7 +34,7 @@ async function main() {
   })
   await prisma.profile.upsert({
     where: { userId: worker.id }, update: {},
-    create: { userId: worker.id, fullName: 'Worker Demo', phone: '(11) 90000-0000',
+    create: { userId: worker.id, fullName: 'Worker Demo', phone: '11900000000',
       city: 'São Paulo', uf: 'SP', sector: 'Operações', jobTitle: 'Operador de escavadeira' },
   })
 
@@ -113,15 +113,16 @@ async function main() {
     },
   })
   const chatBucket = process.env.MINIO_BUCKET ?? 'swi-media'
-  const uploadChatAvatar = async (n: number): Promise<string> => {
-    const key = `chat/avatars/worker-${n}.png`
+  const uploadAvatarFile = async (fileName: string): Promise<string> => {
+    const key = `chat/avatars/${fileName}`
     await chatS3.send(new PutObjectCommand({
       Bucket: chatBucket, Key: key,
-      Body: readFileSync(join(__dirname, 'fixtures', 'chat-avatars', `worker-${n}.png`)),
+      Body: readFileSync(join(__dirname, 'fixtures', 'chat-avatars', fileName)),
       ContentType: 'image/png',
     }))
     return key
   }
+  const uploadChatAvatar = (n: number): Promise<string> => uploadAvatarFile(`worker-${n}.png`)
   // Sobe uma imagem de inspeção pro MinIO (mesmo bucket do chat). Key no formato
   // que a regex do backend exige: ^reports\/[0-9a-f-]{36}\.png$ (randomUUID = 36 chars).
   // Não guarda internamente: se o bucket estiver inacessível ela LANÇA — o loop
@@ -155,6 +156,27 @@ async function main() {
       where: { userId: u.id },
       update: { fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey, birthDate: new Date(c.birthDate) },
       create: { userId: u.id, fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey, birthDate: new Date(c.birthDate) },
+    })
+  }
+
+  // TODO usuário semeado tem foto: sem avatarKey a UI cai no círculo cinza do
+  // DS e o mapa/listas ficam com "buracos" (QA de volume 2026-07-26). Os 8
+  // contatos já ganharam a sua no laço acima; aqui fecham o worker demo e o
+  // admin, que antes nasciam sem Profile completo.
+  for (const p of [
+    { user: worker, file: 'worker-demo.png', fullName: 'Worker Demo', sector: 'Operações', jobTitle: 'Operador de escavadeira', birthDate: '1994-02-17' },
+    { user: admin, file: 'admin-1.png', fullName: 'Admin', sector: 'Gestão', jobTitle: 'Administrador', birthDate: '1986-06-09' },
+  ]) {
+    let avatarKey = ''
+    try { avatarKey = await uploadAvatarFile(p.file) }
+    catch (e) { console.warn(`[seed] avatar ${p.file} falhou (bucket up?):`, (e as Error).message) }
+    await prisma.profile.upsert({
+      where: { userId: p.user.id },
+      update: { fullName: p.fullName, sector: p.sector, jobTitle: p.jobTitle, avatarKey, birthDate: new Date(p.birthDate) },
+      create: {
+        userId: p.user.id, fullName: p.fullName, sector: p.sector, jobTitle: p.jobTitle,
+        avatarKey, birthDate: new Date(p.birthDate), city: 'São Paulo', uf: 'SP',
+      },
     })
   }
 

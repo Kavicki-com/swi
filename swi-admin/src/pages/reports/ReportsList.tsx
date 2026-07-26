@@ -232,7 +232,12 @@ export function ReportsList() {
           resto. Nada de esconder registro em silêncio (QA de volume). */}
       <View
         testID="reports-footer"
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.gap.m }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: theme.gap.m,
+        }}
       >
         <Text variant="body.s" color={theme.content.medium}>
           {`Mostrando ${Math.min(visible, filtered.length)} de ${filtered.length}`}

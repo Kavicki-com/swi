@@ -11,6 +11,7 @@ import { reportsApi } from './reports'
 import { workOrdersApi, type WorkOrderRow, type WorkOrderStatus } from './workOrders'
 import { weatherApi } from './weather'
 import { simulatedVitalsFor, type SimulatedTier } from '@/services/vitals/simulatedVitals'
+import { ACTIVE_CAMERAS } from '@/services/cameras'
 
 export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
 
@@ -136,8 +137,8 @@ async function fetchActivities(): Promise<DashboardActivity[]> {
   }
 }
 
-// Hardware que não existe no piloto (câmeras) — único KPI que segue fixture.
-const MOCK_ACTIVE_CAMERAS = 564
+// Câmeras: MESMA frota que o mapa desenha (services/cameras). Era 564 fixo
+// contra 12 pinos no mapa — número que não correspondia a nada.
 
 const TIER_TO_STATUS: Record<SimulatedTier, 'good' | 'alert' | 'low'> = {
   excelente: 'good',
@@ -200,7 +201,7 @@ export const dashboardApi = {
           admins: admins.data?.length ?? 0,
           totalEmployees: workers.length,
           newReports,
-          activeCameras: MOCK_ACTIVE_CAMERAS,
+          activeCameras: ACTIVE_CAMERAS,
           vitalSigns: tierCount.excelente,
           wearRate: tierCount.desgastado,
           urgentAlerts,

@@ -24,6 +24,7 @@ import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi } from './workOrders'
 import { weatherApi } from './weather'
+import { ACTIVE_CAMERAS } from '@/services/cameras'
 
 // Funcionários sintéticos COM identidade — os vitais simulados derivam do id.
 const list = (n: number) =>
@@ -139,8 +140,9 @@ describe('dashboardApi.summary', () => {
     expect(
       data!.employees.byStatus.good + data!.employees.byStatus.alert + data!.employees.byStatus.low,
     ).toBe(5)
-    // Único KPI que segue fixture: câmeras (hardware inexistente no piloto).
-    expect(data!.kpis.activeCameras).toBe(564)
+    // Câmeras: conta a MESMA frota que o mapa desenha (services/cameras) — era
+    // 564 fixo contra 12 pinos no mapa (QA de volume 2026-07-26).
+    expect(data!.kpis.activeCameras).toBe(ACTIVE_CAMERAS)
   })
 
   it('passes the real weather strip through', async () => {
