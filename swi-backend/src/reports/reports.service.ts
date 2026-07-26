@@ -16,13 +16,20 @@ export class ReportsService {
   ) {}
 
   // Org-scoping (QA C1): Report não tem companyId — a empresa é a do autor.
-  async list(companyId: string | null) {
-    const rows = await this.prisma.report.findMany({
-      where: { author: { companyId } },
-      orderBy: { createdAt: 'desc' },
-      take: LIST_CAP,
-    })
-    return Promise.all(rows.map((r) => this.toDto(r)))
+  //
+  // Devolve `{ items, total }`: o cap de 200 continua valendo por segurança, mas
+  // o TOTAL vai junto pra UI poder dizer quantos ficaram de fora (QA de volume
+  // 2026-07-26: 262 no banco, 200 na resposta, silêncio na tela). O controller
+  // achata em array + header, então o contrato do wire (e o mobile) não muda.
+  async list(companyId: string | null, page?: { limit?: number; offset?: number }) {
+    const where = { author: { companyId } }
+    const take = Math.min(Math.max(page?.limit ?? LIST_CAP, 1), LIST_CAP)
+    const skip = Math.max(page?.offset ?? 0, 0)
+    const [rows, total] = await Promise.all([
+      this.prisma.report.findMany({ where, orderBy: { createdAt: 'desc' }, take, skip }),
+      this.prisma.report.count({ where }),
+    ])
+    return { items: await Promise.all(rows.map((r) => this.toDto(r))), total }
   }
 
   async get(id: string, companyId: string | null) {

@@ -172,10 +172,29 @@ function toReport(dto: ReportDto): Report {
 }
 
 export const reportsApi = {
-  async list(): Promise<MockResponse<Report[]>> {
+  // `count` = total da EMPRESA (header X-Total-Count), não o tamanho da página:
+  // é o que deixa a tela avisar "mostrando 200 de 262" em vez de esconder 62
+  // relatórios em silêncio (QA de volume 2026-07-26). Sem paginação explícita,
+  // o backend devolve os 200 mais recentes, como antes.
+  async list(page?: { limit?: number; offset?: number }): Promise<MockResponse<Report[]>> {
     try {
-      const reports = await apiFetch<ReportDto[]>('/reports')
-      return { data: reports.map(toReport), error: null }
+      const qs = new URLSearchParams()
+      if (page?.limit != null) qs.set('limit', String(page.limit))
+      if (page?.offset != null) qs.set('offset', String(page.offset))
+      const suffix = qs.toString() ? `?${qs}` : ''
+      let total: number | undefined
+      const reports = await apiFetch<ReportDto[]>(
+        `/reports${suffix}`,
+        {},
+        {
+          onResponse: (res) => {
+            const raw = res.headers?.get?.('X-Total-Count')
+            if (raw != null && raw !== '') total = Number(raw)
+          },
+        },
+      )
+      const items = reports.map(toReport)
+      return { data: items, error: null, count: total ?? items.length }
     } catch (e) {
       return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }
     }

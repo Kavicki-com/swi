@@ -11,7 +11,13 @@ const notifications = () => ({ enqueueForMany: jest.fn() }) as any
 
 const prisma = () =>
   ({
-    report: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+    report: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
+    },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
     comment: { create: jest.fn() },
   }) as any
@@ -47,12 +53,42 @@ describe('ReportsService', () => {
       where: { author: { companyId: 'org1' } },
       orderBy: { createdAt: 'desc' },
       take: 200,
+      skip: 0,
     })
-    expect(out[0].images).toEqual(['signed:reports/x.jpg'])
-    expect(out[0].imageKeys).toEqual(['reports/x.jpg']) // keys crus coexistem com as urls presigned
-    expect(out[0].authorAvatarUri).toBe('signed:reports/av.jpg')
-    expect(out[0].creationDate).toBe('01/01/2026') // BRT (UTC-3) rola pro dia anterior
-    expect(out[0].summary).toBe('') // null → '' (telas exigem string)
+    expect(out.items[0].images).toEqual(['signed:reports/x.jpg'])
+    expect(out.items[0].imageKeys).toEqual(['reports/x.jpg']) // keys crus coexistem com as urls presigned
+    expect(out.items[0].authorAvatarUri).toBe('signed:reports/av.jpg')
+    expect(out.items[0].creationDate).toBe('01/01/2026') // BRT (UTC-3) rola pro dia anterior
+    expect(out.items[0].summary).toBe('') // null → '' (telas exigem string)
+  })
+
+  // QA de volume (2026-07-26): 262 relatórios no banco, a API devolvia 200 e a
+  // tela não dizia nada — 62 sumiam em silêncio. O total vem junto pra UI poder
+  // avisar, e limit/offset permitem buscar o resto.
+  it('list devolve o TOTAL da empresa junto (não só a página) e aceita limit/offset', async () => {
+    const db = prisma()
+    db.report.findMany.mockResolvedValue([row()])
+    db.report.count.mockResolvedValue(262)
+    const out = await new ReportsService(db, media(), notifications()).list('org1', { limit: 50, offset: 100 })
+    expect(db.report.findMany).toHaveBeenCalledWith({
+      where: { author: { companyId: 'org1' } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      skip: 100,
+    })
+    // count usa o MESMO where da página — total da empresa, não do banco todo.
+    expect(db.report.count).toHaveBeenCalledWith({ where: { author: { companyId: 'org1' } } })
+    expect(out.total).toBe(262)
+  })
+
+  it('list satura o limit no cap de segurança e ignora offset negativo', async () => {
+    const db = prisma()
+    db.report.findMany.mockResolvedValue([])
+    db.report.count.mockResolvedValue(0)
+    await new ReportsService(db, media(), notifications()).list('org1', { limit: 5000, offset: -10 })
+    const arg = db.report.findMany.mock.calls[0][0]
+    expect(arg.take).toBe(200)
+    expect(arg.skip).toBe(0)
   })
 
   it('DTO carrega os imageKeys crus além das urls presigned (destrava edição de anexo)', async () => {

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
-import { Button, Combobox, SearchInput, useTheme } from '@kavicki/swi-design-system'
+import { Button, Combobox, SearchInput, Text, useTheme } from '@kavicki/swi-design-system'
 import { reportsApi, type Report } from '@/services/api/reports'
 import { ReportCardV2 } from '@/components/ReportCardV2'
 
@@ -24,6 +24,10 @@ const STATUS_OPTIONS = [
 // oferecia gente que não existe no backend ("Ana Clara Mendonça"…) e filtrar
 // por ela devolvia vazio. Opção só existe se há relatório correspondente.
 const ALL = 'all'
+
+// Cards desenhados por vez. 24 = 6 linhas na grade de 4 colunas do admin —
+// enche a tela sem transformar a página num scroll infinito (QA de volume).
+const PAGE_SIZE = 24
 
 function optionsFrom(
   reports: ReadonlyArray<Report>,
@@ -62,15 +66,35 @@ export function ReportsList() {
   const [author, setAuthor] = useState(ALL)
   const [period, setPeriod] = useState(ALL)
 
+  // Total da empresa (header do backend). Enquanto `reports.length < total` há
+  // relatório que a tela AINDA não tem — antes isso era silencioso (QA de
+  // volume: 262 no banco, 200 na resposta, nenhum aviso).
+  const [total, setTotal] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // Quantos cards desenhar. Sem isto a página virava um scroll de 14.000 px.
+  const [visible, setVisible] = useState(PAGE_SIZE)
+
   useEffect(() => {
     let cancelled = false
-    reportsApi.list().then(({ data }) => {
-      if (!cancelled && data) setReports(data)
+    reportsApi.list().then(({ data, count }) => {
+      if (cancelled || !data) return
+      setReports(data)
+      setTotal(count ?? data.length)
     })
     return () => {
       cancelled = true
     }
   }, [])
+
+  const loadMore = async () => {
+    if (loadingMore) return
+    setLoadingMore(true)
+    const { data, count } = await reportsApi.list({ offset: reports.length })
+    setLoadingMore(false)
+    if (!data) return
+    setReports((cur) => [...cur, ...data])
+    setTotal((cur) => count ?? cur)
+  }
 
   // Opções derivadas do que existe: nunca oferece um filtro que devolve vazio.
   const sectorOptions = useMemo(
@@ -186,7 +210,7 @@ export function ReportsList() {
           width: '100%',
         }}
       >
-        {filtered.map((r) => (
+        {filtered.slice(0, visible).map((r) => (
           <ReportCardV2
             key={r.id}
             status={r.status}
@@ -203,6 +227,34 @@ export function ReportsList() {
           />
         ))}
       </div>
+
+      {/* Rodapé honesto: quantos estão à vista, quantos existem, e como ver o
+          resto. Nada de esconder registro em silêncio (QA de volume). */}
+      <View
+        testID="reports-footer"
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.gap.m }}
+      >
+        <Text variant="body.s" color={theme.content.medium}>
+          {`Mostrando ${Math.min(visible, filtered.length)} de ${filtered.length}`}
+          {filtered.length < total ? ` (${total} no total)` : ''}
+        </Text>
+        {visible < filtered.length ? (
+          <Button
+            label="Ver mais"
+            variant="outline"
+            accessibilityLabel="Ver mais relatórios"
+            onPress={() => setVisible((v) => v + PAGE_SIZE)}
+          />
+        ) : reports.length < total ? (
+          <Button
+            label={loadingMore ? 'Carregando…' : 'Carregar mais do servidor'}
+            variant="outline"
+            disabled={loadingMore}
+            accessibilityLabel="Carregar mais relatórios do servidor"
+            onPress={() => void loadMore()}
+          />
+        ) : null}
+      </View>
     </View>
   )
 }

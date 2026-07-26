@@ -20,7 +20,11 @@ const CONV = [A, B].sort().join('#')
 
 const userRow = (id: string, over: any = {}) => ({
   id, name: `n-${id}`, role: 'WORKER', approvalStatus: 'APPROVED',
-  profile: { fullName: `full-${id}`, sector: 'Setor Leste', jobTitle: 'Operador', avatarKey: `chat/avatars/${id}.png` },
+  profile: {
+    fullName: `full-${id}`, sector: 'Setor Leste', jobTitle: 'Operador',
+    avatarKey: `chat/avatars/${id}.png`,
+    birthDate: new Date('1990-05-04'), bloodType: 'B+', allergies: 'Poeira',
+  },
   ...over,
 })
 const convRow = (over: any = {}) => ({
@@ -39,7 +43,13 @@ describe('ChatService', () => {
     const where = db.user.findMany.mock.calls[0][0].where
     expect(where).toMatchObject({ approvalStatus: 'APPROVED', role: 'WORKER', id: { not: A }, companyId: 'org1' })
     expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
-    expect(out[0]).toEqual({ workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador', avatarUri: 'signed:chat/avatars/bbbb.png' })
+    // birthDate/bloodType/allergies vão junto: o painel do chat mostrava
+    // 26 anos / O+ pra todo contato por não ter esses campos (QA de volume).
+    expect(out[0]).toEqual({
+      workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador',
+      avatarUri: 'signed:chat/avatars/bbbb.png',
+      birthDate: new Date('1990-05-04').toISOString(), bloodType: 'B+', allergies: 'Poeira',
+    })
   })
 
   it('listConversations escopa em participants ∋ eu e ordena por recência', async () => {
