@@ -3,7 +3,7 @@
 // and EmployeeDetails (Figma 54:6561). Pure presentational: takes a `worker`
 // payload + a `topRightAction` slot for the page-specific CTA. The page owns
 // data fetching, loading/empty states, and back/CTA navigation.
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
@@ -11,6 +11,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { formatAge } from '@/lib/formatAge'
+import { simulatedCaloriesFor } from '@/services/vitals/simulatedVitals'
 import {
   Avatar,
   Button,
@@ -53,6 +54,13 @@ export type WorkerDetailsData = {
   fatigueMinutes?: number
   allergies?: ReadonlyArray<string>
   examHistory?: ReadonlyArray<WorkerExamEntry>
+  /**
+   * Semente do gasto calórico simulado — o `User.id` da pessoa. Sem ela a
+   * curva cai no seed do nome, que ainda diferencia pessoas mas colide entre
+   * homônimos ("Carlos Santos" × "Carlos Santos (Manut.)" não colidem, mas
+   * dois Carlos Santos exatos colidiriam).
+   */
+  seedId?: string
 }
 
 export type WorkerDetailsLayoutProps = {
@@ -69,43 +77,10 @@ export type WorkerDetailsLayoutProps = {
   topRightAction: ReactNode
 }
 
-// Mock caloric expenditure curves per period — the period combobox switches
-// between these. The "today" curve mirrors Figma 105:12586 (intra-day shift
-// timestamps); week/month aggregate to days/weeks so the X-axis labels make
-// sense for the chosen window.
-const CALORIES_DAY = [
-  { time: '07:15', kcal: 41 },
-  { time: '08:42', kcal: 57 },
-  { time: '10:51', kcal: 62 },
-  { time: '14:22', kcal: 38 },
-  { time: '16:33', kcal: 55 },
-  { time: '18:54', kcal: 49 },
-  { time: '19:00', kcal: 22 },
-  { time: '19:30', kcal: 19 },
-]
-
-const CALORIES_WEEK = [
-  { time: 'Seg', kcal: 312 },
-  { time: 'Ter', kcal: 285 },
-  { time: 'Qua', kcal: 340 },
-  { time: 'Qui', kcal: 298 },
-  { time: 'Sex', kcal: 365 },
-  { time: 'Sáb', kcal: 180 },
-  { time: 'Dom', kcal: 95 },
-]
-
-const CALORIES_MONTH = [
-  { time: 'Sem 1', kcal: 1820 },
-  { time: 'Sem 2', kcal: 2010 },
-  { time: 'Sem 3', kcal: 1950 },
-  { time: 'Sem 4', kcal: 2180 },
-]
-
-const CALORIES_BY_PERIOD = {
-  today: CALORIES_DAY,
-  week: CALORIES_WEEK,
-  month: CALORIES_MONTH,
-} as const
+// O gasto calórico por período sai de simulatedCaloriesFor(seedId): era uma
+// constante única, então Worker Demo, o admin e o perfil próprio exibiam a
+// MESMA curva 41/57/62… nos mesmos horários (QA 2026-07-26). A forma do Figma
+// 105:12586 é preservada; a magnitude varia por pessoa.
 
 // ESRI World Imagery — same satellite tile source the dashboard MapBanner
 // and /maps/general use. Reused here for the mini-map in the user profile.
@@ -222,7 +197,14 @@ function MiniMap({
     >
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       {!lngLat ? (
-        <View style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.surface.medium }}>
+        <View
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.surface.medium,
+          }}
+        >
           <Text variant="body.s" color={theme.content.medium}>
             Sem posição ao vivo
           </Text>
@@ -311,7 +293,11 @@ export function WorkerDetailsLayout({
   // Sem gênero no cadastro NÃO se inventa um: antes o ternário mandava todo
   // funcionário sem o campo pra "Feminino" (QA 2026-07-26).
   const genderLabel =
-    worker.gender === 'male' ? 'Masculino' : worker.gender === 'female' ? 'Feminino' : 'Não informado'
+    worker.gender === 'male'
+      ? 'Masculino'
+      : worker.gender === 'female'
+        ? 'Feminino'
+        : 'Não informado'
   const genderIcon: IconName = worker.gender === 'female' ? 'humidity_mid' : 'admin_filled'
   // fatigueRate/effort já vêm em 0-100. O formatPct antigo multiplicava por 100
   // de novo (herança das fixtures em fração 0-1) e a tela exibia "8.900,0%".
@@ -324,6 +310,12 @@ export function WorkerDetailsLayout({
   const allergies = worker.allergies ?? []
   const exams = worker.examHistory ?? []
   const [caloriesPeriod, setCaloriesPeriod] = useState('today')
+  // Seed do id quando a página o passa; cai no nome só pra não quebrar quem
+  // ainda não migrou (o valor continua variando por pessoa nos dois casos).
+  const calories = useMemo(
+    () => simulatedCaloriesFor(worker.seedId ?? worker.name),
+    [worker.seedId, worker.name],
+  )
 
   return (
     <View testID={testID} style={{ gap: theme.gap.m }}>
@@ -710,9 +702,7 @@ export function WorkerDetailsLayout({
           </View>
         </View>
         <LineCaloriesChart
-          points={
-            CALORIES_BY_PERIOD[caloriesPeriod as keyof typeof CALORIES_BY_PERIOD] ?? CALORIES_DAY
-          }
+          points={calories[caloriesPeriod as keyof typeof calories] ?? calories.today}
           unit="kcal"
           fullWidth
         />

@@ -161,6 +161,9 @@ export const monitoringApi = {
         specialization: w.specialization,
         avatarUri: w.avatarUri,
         active: true,
+        // Tier explícito pra régua de abas filtrar sem re-derivar do `tone`
+        // dos alertas (o tier é a fonte; o alerta é consequência dele).
+        tier: v.tier,
         alerts: alertsFor(v),
       }))
     return { data: rows, error: null }

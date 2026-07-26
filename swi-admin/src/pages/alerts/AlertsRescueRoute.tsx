@@ -177,10 +177,7 @@ export function AlertsRescueRoute() {
     const map = new lib.Map({
       container: containerRef.current,
       style: SATELLITE_STYLE,
-      center: [
-        (ends.injured[0] + ends.rescuer[0]) / 2,
-        (ends.injured[1] + ends.rescuer[1]) / 2,
-      ],
+      center: [(ends.injured[0] + ends.rescuer[0]) / 2, (ends.injured[1] + ends.rescuer[1]) / 2],
       zoom: 15,
       attributionControl: false,
     })

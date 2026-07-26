@@ -23,6 +23,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { formatAge } from '@/lib/formatAge'
+import { pluralize } from '@/lib/pluralize'
 import { AdminsCreate } from './AdminsCreate'
 
 type AdminRowProps = {
@@ -278,7 +279,11 @@ export function AdminsList({
       <Title variant="title.s" color={theme.content.dark}>
         {isCreating
           ? 'Cadastrar novo administrador'
-          : `Você tem (${admins.length}) administradores cadastrados`}
+          : `Você tem (${admins.length}) ${pluralize(
+              admins.length,
+              'administrador cadastrado',
+              'administradores cadastrados',
+            )}`}
       </Title>
 
       <View

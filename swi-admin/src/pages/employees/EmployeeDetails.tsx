@@ -81,6 +81,9 @@ export function EmployeeDetails() {
     <WorkerDetailsLayout
       worker={{
         ...employee,
+        // Semente da curva de gasto calórico — sem ela todo mundo compartilha
+        // a mesma série de kcal (QA 2026-07-26).
+        seedId: employee.id,
         bpm: vitals.bpm,
         pressure: vitals.pressure,
         fatigueRate: vitals.fatiguePct,

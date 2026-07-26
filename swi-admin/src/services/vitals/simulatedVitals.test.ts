@@ -1,6 +1,11 @@
 // vitest globals (describe/it/expect) via globals: true — importar de 'vitest'
 // duplicaria a instância e quebraria o registro do suite (ver weather.test.ts).
-import { simulatedVitalsFor, SIMULATED_DATA_LABEL, type SimulatedVitals } from './simulatedVitals'
+import {
+  simulatedCaloriesFor,
+  simulatedVitalsFor,
+  SIMULATED_DATA_LABEL,
+  type SimulatedVitals,
+} from './simulatedVitals'
 
 const T0 = Date.parse('2026-07-25T12:00:00.000Z')
 
@@ -60,5 +65,45 @@ describe('simulatedVitalsFor', () => {
 
   it('expõe o rótulo do selo', () => {
     expect(SIMULATED_DATA_LABEL).toBe('Dados simulados')
+  })
+})
+
+describe('simulatedCaloriesFor', () => {
+  it('é determinístico e SEM componente temporal (o gráfico não redesenha)', () => {
+    expect(simulatedCaloriesFor('w1')).toEqual(simulatedCaloriesFor('w1'))
+  })
+
+  it('pessoas diferentes têm curvas diferentes', () => {
+    // A curva era uma constante única: o detalhe do funcionário, o do admin e o
+    // perfil próprio exibiam os mesmos 41/57/62… kcal (QA 2026-07-26).
+    const series = IDS.map((id) =>
+      simulatedCaloriesFor(id)
+        .today.map((p) => p.kcal)
+        .join(','),
+    )
+    const distintas = new Set(series)
+    // Não exijo 40/40 (colisão de hash é legítima), mas a esmagadora maioria
+    // precisa ser única — senão a regressão volta silenciosa.
+    expect(distintas.size).toBeGreaterThan(IDS.length * 0.9)
+  })
+
+  it('preserva os horários/rótulos do Figma e mantém os kcal plausíveis', () => {
+    const c = simulatedCaloriesFor('w1')
+    expect(c.today.map((p) => p.time)).toEqual([
+      '07:15',
+      '08:42',
+      '10:51',
+      '14:22',
+      '16:33',
+      '18:54',
+      '19:00',
+      '19:30',
+    ])
+    expect(c.week.map((p) => p.time)).toEqual(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'])
+    expect(c.month).toHaveLength(4)
+    for (const p of [...c.today, ...c.week, ...c.month]) {
+      expect(p.kcal).toBeGreaterThan(0)
+      expect(Number.isInteger(p.kcal)).toBe(true)
+    }
   })
 })

@@ -9,7 +9,7 @@
 // QA F (2026-07-24): a tela era 100% fake (prefill 'Carlos Sampaio', botões
 // com toasts simulados). Agora: GET /profile/me pré-preenche, Salvar faz PUT,
 // Alterar senha bate no /auth/password/change, foto/exames sobem via presign.
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -77,10 +77,23 @@ const GERENTE_OPTIONS = [
 type Option = { label: string; value: string }
 // O backend guarda o LABEL de exibição (jobTitle "Operador de caminhão");
 // o Combobox trabalha com o value interno. Conversão nas duas direções.
+//
+// As listas acima são CONSTANTES, mas os campos são string livre no banco: o
+// admin semeado tem jobTitle 'Administrador' e sector 'Gestão', nenhum dos dois
+// na lista. Sem fallback, `valueOf` devolvia '', o Combobox abria em "Selecione
+// aqui" e salvar QUALQUER campo da tela apagava o cargo em silêncio (QA
+// 2026-07-26). Rótulo desconhecido vira o próprio value — mesma convenção do
+// TaskForm, onde value === label para strings de exibição livres.
 const valueOf = (options: Option[], label: string | null): string =>
-  options.find((o) => o.label === label)?.value ?? ''
-const labelOf = (options: Option[], value: string): string | undefined =>
-  options.find((o) => o.value === value)?.label
+  label ? (options.find((o) => o.label === label)?.value ?? label) : ''
+const labelOf = (options: Option[], value: string): string =>
+  options.find((o) => o.value === value)?.label ?? value
+
+// O Combobox do DS resolve o texto do trigger por `options.find(o => o.value
+// === value)` (Combobox.tsx:73) — um value fora da lista renderiza o
+// placeholder. Injeta o valor atual como opção para ele conseguir se exibir.
+const withCurrent = (options: Option[], value: string): Option[] =>
+  !value || options.some((o) => o.value === value) ? options : [...options, { label: value, value }]
 
 /**
  * Gênero persiste como CÓDIGO ('male'/'female'/'other'). O form gravava o
@@ -280,6 +293,13 @@ export function UserSettings() {
   const [permCalls, setPermCalls] = useState(true)
   const [showSupportModal, setShowSupportModal] = useState(false)
   const [showPrivacyModal, setShowPrivacyModal] = useState(false)
+
+  // Listas de exibição = constante + o valor atual, quando ele for um rótulo
+  // livre que a constante não prevê (ver withCurrent).
+  const profissaoOptions = useMemo(() => withCurrent(PROFISSAO_OPTIONS, profissao), [profissao])
+  const setorOptions = useMemo(() => withCurrent(SETOR_OPTIONS, setor), [setor])
+  const funcaoOptions = useMemo(() => withCurrent(FUNCAO_OPTIONS, funcao), [funcao])
+  const gerenteOptions = useMemo(() => withCurrent(GERENTE_OPTIONS, gerente), [gerente])
 
   const [examKeys, setExamKeys] = useState<string[]>([])
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -671,7 +691,7 @@ export function UserSettings() {
             <Combobox
               label="Profissão"
               placeholder="Selecione aqui"
-              options={PROFISSAO_OPTIONS}
+              options={profissaoOptions}
               value={profissao}
               onChange={setProfissao}
             />
@@ -680,7 +700,7 @@ export function UserSettings() {
             <Combobox
               label="Setor"
               placeholder="Selecione aqui"
-              options={SETOR_OPTIONS}
+              options={setorOptions}
               value={setor}
               onChange={setSetor}
             />
@@ -689,7 +709,7 @@ export function UserSettings() {
             <Combobox
               label="Função"
               placeholder="Selecione aqui"
-              options={FUNCAO_OPTIONS}
+              options={funcaoOptions}
               value={funcao}
               onChange={setFuncao}
             />
@@ -698,7 +718,7 @@ export function UserSettings() {
             <Combobox
               label="Gerente responsável"
               placeholder="Selecione aqui"
-              options={GERENTE_OPTIONS}
+              options={gerenteOptions}
               value={gerente}
               onChange={setGerente}
             />

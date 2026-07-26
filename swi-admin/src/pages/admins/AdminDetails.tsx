@@ -65,6 +65,9 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
     <WorkerDetailsLayout
       worker={{
         ...admin,
+        // Semente da curva de gasto calórico — sem ela todo mundo compartilha
+        // a mesma série de kcal (QA 2026-07-26).
+        seedId: admin.id,
         // Fase 3: vitais simulados plausíveis + selo no layout (fim do 0 bpm).
         ...(() => {
           const v = simulatedVitalsFor(admin.id, Date.now())
