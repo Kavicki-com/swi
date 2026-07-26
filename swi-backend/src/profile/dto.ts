@@ -1,4 +1,4 @@
-import { IsOptional, IsString, Length, Matches } from 'class-validator'
+import { IsBoolean, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from 'class-validator'
 import { IsCalendarDate } from './is-calendar-date'
 export class UpdateProfileDto {
   @IsOptional() @IsString() fullName?: string
@@ -22,6 +22,12 @@ export class UpdateProfileDto {
   @IsOptional() @IsString() chronicConditions?: string
   @IsOptional() @IsString() managerName?: string
   @IsOptional() @IsString() duty?: string
+  // Wizard de onboarding do app (step 3). Digitáveis, então persistem de
+  // verdade — o combobox oferece 140-220 cm e 40-160 kg, e os limites aqui
+  // são a rede pra quem chamar a API direto.
+  @IsOptional() @IsInt() @Min(50) @Max(260) heightCm?: number
+  @IsOptional() @IsInt() @Min(20) @Max(400) weightKg?: number
+  @IsOptional() @IsBoolean() hasDisability?: boolean
   // Só keys emitidas pelo presign no namespace avatars/ — URL assinada não passa.
   @IsOptional() @Matches(/^avatars\/[0-9a-f-]{36}\.(jpg|png)$/) avatarKey?: string
   // Só keys emitidas pelo presign no namespace exams/ — URL assinada não passa.

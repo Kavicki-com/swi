@@ -130,7 +130,11 @@ async function listMapped<T>(
   map: (u: UserSummaryDto) => T,
 ): Promise<MockResponse<T[]>> {
   try {
-    const users = await apiFetch<UserSummaryDto[]>(`/users?role=${role}`)
+    // approvalStatus=APPROVED: sem ele, um cadastro AINDA PENDENTE (ou até
+    // rejeitado) já entrava na lista, nos KPIs e nos vitais do monitoramento —
+    // o número subia no cadastro, e aprovar não mudava nada visível
+    // (QA 2026-07-26). Aprovação é o que promove o usuário pras listas.
+    const users = await apiFetch<UserSummaryDto[]>(`/users?role=${role}&approvalStatus=APPROVED`)
     return { data: users.map(map), error: null }
   } catch (e) {
     return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }

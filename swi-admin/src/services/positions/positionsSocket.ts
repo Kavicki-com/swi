@@ -10,7 +10,13 @@ const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http:/
 export function subscribePositions(cb: (m: PositionMarkerDto) => void): () => void {
   const socket: Socket = io(BASE_URL, {
     auth: { token: readToken() },
-    transports: ['websocket'],
+    // Espelho do chatSocket: polling primeiro pra atravessar a interstitial do
+    // ngrok no QA remoto (WS puro morre no handshake; polling é XHR e carrega
+    // o header). Upgrade pra WS quando o caminho deixa.
+    transports: ['polling', 'websocket'],
+    transportOptions: {
+      polling: { extraHeaders: { 'ngrok-skip-browser-warning': 'true' } },
+    },
   })
   socket.on('position', cb)
   return () => {

@@ -29,7 +29,10 @@ export class PositionsService {
     private readonly media: MediaService,
   ) {}
 
-  async heartbeat(workerId: string, lat: number, lng: number): Promise<void> {
+  // source: 'real' = GPS do app (default — o controller não precisa saber que
+  // existe simulador); 'sim' = PositionSimulatorService. O simulador usa a
+  // marca pra CEDER o pino a quem tem heartbeat real recente.
+  async heartbeat(workerId: string, lat: number, lng: number, source: 'real' | 'sim' = 'real'): Promise<void> {
     const worker = (await this.prisma.user.findUnique({
       where: { id: workerId },
       include: { profile: true },
@@ -38,9 +41,9 @@ export class PositionsService {
 
     const pos = await this.prisma.workerPosition.upsert({
       where: { workerId },
-      create: { workerId, lat, lng },
+      create: { workerId, lat, lng, source },
       // @updatedAt não cobre recordedAt — renova explícito no update.
-      update: { lat, lng, recordedAt: new Date() },
+      update: { lat, lng, source, recordedAt: new Date() },
     })
 
     // Push é derivado do write (que já commitou): falha de emit não pode

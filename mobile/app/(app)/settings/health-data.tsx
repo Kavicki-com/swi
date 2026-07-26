@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Image as RNImage, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Image as RNImage, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,19 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { HomeFAB } from '../../../components/HomeFAB';
+import { useProfile } from '../../../services/profile/ProfileProvider';
+
+const BLOOD_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((v) => ({
+  label: v,
+  value: v,
+}));
+// gender persiste como CÓDIGO ('male'/'female'/'other') — a convenção que o
+// painel inteiro compara (detalhe do funcionário, painel do chat).
+const GENDER_OPTIONS = [
+  { label: 'Masculino', value: 'male' },
+  { label: 'Feminino', value: 'female' },
+  { label: 'Outro', value: 'other' },
+];
 
 // Figma 353:12057 — settings sub-screen "Dados de saúde". Form-based.
 // TopBar + section title + 2 comboboxes + 2 multiline inputs +
@@ -25,10 +38,50 @@ export default function SettingsHealthData() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  // Prefill REAL + salvar de verdade — a tela era useState solto e o Salvar
+  // um router.back(): edição de saúde era descartada (QA 2026-07-26).
+  const { loadProfile, saveProfile } = useProfile();
   const [tipoSanguineo, setTipoSanguineo] = useState('');
   const [genero, setGenero] = useState('');
   const [alergias, setAlergias] = useState('');
   const [doencas, setDoencas] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadProfile()
+      .then((p) => {
+        if (cancelled || !p) return;
+        setTipoSanguineo(p.bloodType ?? '');
+        setGenero(p.gender ?? '');
+        setAlergias(p.allergies ?? '');
+        setDoencas(p.chronicConditions ?? '');
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // loadProfile é estável (useCallback no provider); rodar 1x no mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveProfile({
+        bloodType: tipoSanguineo || undefined,
+        gender: genero || undefined,
+        allergies: alergias || undefined,
+        chronicConditions: doencas || undefined,
+      });
+      Alert.alert('Pronto', 'Seus dados foram salvos.');
+      router.back();
+    } catch {
+      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const exams: Array<{
     year: number;
@@ -83,14 +136,14 @@ export default function SettingsHealthData() {
           <Combobox
             label="Tipo sanguíneo"
             placeholder="Selecione aqui"
-            options={[]}
+            options={BLOOD_OPTIONS}
             value={tipoSanguineo}
             onChange={setTipoSanguineo}
           />
           <Combobox
             label="Gênero"
             placeholder="Selecione aqui"
-            options={[]}
+            options={GENDER_OPTIONS}
             value={genero}
             onChange={setGenero}
           />
@@ -145,10 +198,10 @@ export default function SettingsHealthData() {
             variant="contained"
             backgroundColor={theme.surface.primary}
             labelColor={theme.content.light}
-            label="Salvar alterações"
+            label={saving ? 'Salvando…' : 'Salvar alterações'}
             elevation="lg"
             accessibilityLabel="Salvar alterações"
-            onPress={() => router.back()}
+            onPress={handleSave}
           />
         </View>
       </KeyboardAwareScrollView>

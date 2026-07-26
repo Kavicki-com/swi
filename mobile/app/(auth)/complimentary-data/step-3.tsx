@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, View } from 'react-native';
+import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import {
 import type { GenderValue } from '@kavicki/swi-design-system';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
+import { useProfile } from '../../../services/profile/ProfileProvider';
 
 const HEIGHT_OPTIONS = Array.from({ length: 81 }, (_, i) => {
   const v = 140 + i; // 140cm..220cm
@@ -38,6 +39,7 @@ export default function ComplimentaryDataStep3() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { username } = useLocalSearchParams<{ username?: string }>();
+  const { saveProfile } = useProfile();
 
   const [gender, setGender] = useState<GenderValue | null>(null);
   const [height, setHeight] = useState('');
@@ -66,8 +68,26 @@ export default function ComplimentaryDataStep3() {
     bloodType.length > 0 &&
     disability !== null;
 
-  const finish = () => {
+  const finish = async () => {
     if (!canSubmit) return;
+    // Persiste o step-3 como os steps 1-2 já fazem. Tudo aqui é DIGITÁVEL
+    // (nada vem da smartband), então é dado real — até 2026-07-26 este step
+    // simplesmente descartava o que o usuário preencheu. Sem sessão (fluxo
+    // api pré-aprovação) o save cai no stash local e o flush roda no 1º login.
+    try {
+      await saveProfile({
+        gender: gender ?? undefined,
+        bloodType,
+        allergies: allergies || undefined,
+        chronicConditions: conditions || undefined,
+        heightCm: parseInt(height, 10),
+        weightKg: parseInt(weight, 10),
+        hasDisability: disability === 'sim',
+      });
+    } catch {
+      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+      return;
+    }
     // Onboarding continues into the Smartband configuration flow before the
     // dashboard. Smartband-complete is what finally lands on /(app)/dashboard.
     //

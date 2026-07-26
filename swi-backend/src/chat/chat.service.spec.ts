@@ -41,7 +41,14 @@ describe('ChatService', () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
     const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, 'org1')
     const where = db.user.findMany.mock.calls[0][0].where
-    expect(where).toMatchObject({ approvalStatus: 'APPROVED', role: 'WORKER', id: { not: A }, companyId: 'org1' })
+    // ADMIN entra junto (2026-07-26): sem isso o app não tinha como INICIAR
+    // conversa com o painel — só responder numa thread aberta pelo admin.
+    expect(where).toMatchObject({
+      approvalStatus: 'APPROVED',
+      role: { in: ['WORKER', 'ADMIN'] },
+      id: { not: A },
+      companyId: 'org1',
+    })
     expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
     // birthDate/bloodType/allergies/gender vão junto: o painel do chat mostrava
     // 26 anos / O+ pra todo contato por não ter esses campos (QA de volume), e

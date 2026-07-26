@@ -3,6 +3,13 @@ import { API_URL } from '../auth/apiConfig';
 
 const TOKEN_KEY = 'swi.auth.token';
 
+// Há sessão api? Usado pelo apiProfileBackend pra decidir entre PUT imediato
+// e stash local (o wizard de onboarding roda ANTES do primeiro login — o
+// cadastro só destrava depois da aprovação do admin no painel).
+export async function hasToken(): Promise<boolean> {
+  return Boolean(await SecureStore.getItemAsync(TOKEN_KEY));
+}
+
 export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PUT';
   body?: unknown;

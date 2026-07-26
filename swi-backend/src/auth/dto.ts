@@ -1,6 +1,13 @@
 import { IsEmail, IsIn, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
-export class SignupDto { @IsEmail() email!: string; @MinLength(6) password!: string; @IsString() name!: string }
+// companyId: a empresa que o usuário escolhe na tela de cadastro do app. Sem
+// ele o WORKER nascia sem vínculo e ficava INVISÍVEL na fila de aprovação do
+// painel, que é org-scoped — o fluxo cadastro→aprovação morria aí (QA
+// 2026-07-26). Opcional pra não quebrar build antiga do app que ainda não manda.
+// @IsString e não @IsUUID: nem todo id de Company é uuid (o seed usa
+// 'company-seed-1', legível de propósito). A validação que importa é a
+// existência no banco, feita no AuthService.signup.
+export class SignupDto { @IsEmail() email!: string; @MinLength(6) password!: string; @IsString() name!: string; @IsOptional() @IsString() companyId?: string }
 export class ConfirmDto { @IsEmail() email!: string; @IsString() code!: string }
 export class LoginDto { @IsEmail() email!: string; @IsString() password!: string }
 export class ForgotDto { @IsEmail() email!: string }

@@ -13,6 +13,21 @@ export interface Profile {
   neighborhood?: string;
   city?: string;
   uf?: string;
+  // Cadastro profissional (settings/dados pessoais) — livres no backend.
+  sector?: string;
+  jobTitle?: string;
+  duty?: string;
+  managerName?: string;
+  // Saúde DIGITÁVEL (wizard step-3 + settings/dados de saúde). Nada aqui vem
+  // da smartband: ou o usuário digitou, ou fica vazio — nunca mock (decisão
+  // 2026-07-26). gender é CÓDIGO ('male'/'female'), a convenção do painel.
+  gender?: string;
+  bloodType?: string;
+  allergies?: string;
+  chronicConditions?: string;
+  heightCm?: number;
+  weightKg?: number;
+  hasDisability?: boolean;
 }
 
 export interface ProfileBackend {

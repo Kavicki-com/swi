@@ -1,12 +1,22 @@
 import { apiProfileBackend, brToIso, isoToBr } from './apiProfileBackend';
-import { apiRequest } from '../api/http';
+import { apiRequest, hasToken } from '../api/http';
+import { stashPendingProfile } from './pendingProfile';
 
-jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
+jest.mock('../api/http', () => ({ apiRequest: jest.fn(), hasToken: jest.fn() }));
+jest.mock('./pendingProfile', () => ({ stashPendingProfile: jest.fn() }));
 
 const mockApiRequest = apiRequest as jest.Mock;
+const mockHasToken = hasToken as jest.Mock;
+const mockStash = stashPendingProfile as jest.Mock;
 
 describe('apiProfileBackend', () => {
-  beforeEach(() => { mockApiRequest.mockReset(); });
+  beforeEach(() => {
+    mockApiRequest.mockReset();
+    mockStash.mockReset();
+    // Default: COM sessão (o caminho normal das telas autenticadas).
+    mockHasToken.mockReset();
+    mockHasToken.mockResolvedValue(true);
+  });
 
   it('get chama /profile/me com auth e converte birthDate ISO→BR', async () => {
     mockApiRequest.mockResolvedValue({ fullName: 'Ana', birthDate: '1990-12-25T00:00:00.000Z', city: 'SP' });
@@ -27,6 +37,17 @@ describe('apiProfileBackend', () => {
     (err as any).status = 500;
     mockApiRequest.mockRejectedValue(err);
     await expect(apiProfileBackend.get()).rejects.toThrow('Internal Server Error');
+  });
+
+  it('save SEM sessão vai pro stash local (wizard pré-aprovação) e não bate na API', async () => {
+    mockHasToken.mockResolvedValue(false);
+    mockStash.mockResolvedValue({ city: 'SP', birthDate: '1990-12-25' });
+    const profile = await apiProfileBackend.save({ city: 'SP', birthDate: '25/12/1990' });
+    // O stash guarda o body JÁ no formato da API (ISO) — o flush faz PUT cru.
+    expect(mockStash).toHaveBeenCalledWith({ city: 'SP', birthDate: '1990-12-25' });
+    expect(mockApiRequest).not.toHaveBeenCalled();
+    // A tela vê o que digitou, re-convertido pro formato dela.
+    expect(profile).toEqual({ city: 'SP', birthDate: '25/12/1990' });
   });
 
   it('save envia PUT com birthDate BR→ISO e devolve o profile em BR', async () => {

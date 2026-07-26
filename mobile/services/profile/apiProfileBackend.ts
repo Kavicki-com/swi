@@ -1,5 +1,6 @@
 import type { Profile, ProfileBackend } from './types';
-import { apiRequest } from '../api/http';
+import { apiRequest, hasToken } from '../api/http';
+import { stashPendingProfile } from './pendingProfile';
 
 // birthDate no backend é date-only: enviado como 'YYYY-MM-DD', retornado como
 // ISO datetime 'YYYY-MM-DDT00:00:00.000Z'. As telas usam 'DD/MM/YYYY'.
@@ -35,6 +36,14 @@ export const apiProfileBackend: ProfileBackend = {
   },
   async save(patch) {
     const body = { ...patch, birthDate: brToIso(patch.birthDate) };
+    // Sem sessão = wizard de onboarding pré-login (a conta ainda aguarda
+    // aprovação do admin). Stash local em vez de PUT: sem isso o 401 alertava
+    // "Não foi possível salvar" e o step-1 nem avançava (QA 2026-07-26).
+    // O flush roda no primeiro login (apiAuthBackend.signIn).
+    if (!(await hasToken())) {
+      const merged = await stashPendingProfile(body as Record<string, unknown>);
+      return fromApi(merged as Profile);
+    }
     const profile = await apiRequest('/profile/me', { method: 'PUT', body, auth: true });
     return fromApi(profile);
   },

@@ -67,7 +67,13 @@ export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
   // Público pros testes dirigirem o relógio sem timers reais.
   async tick(): Promise<void> {
     const evacByOrg = await this.activeEvacuations()
+    // Quem tem GPS REAL recente é dono do próprio pino: o app no celular posta
+    // no mesmo heartbeat, e sem esta cedência o simulador sobrescreveria a
+    // posição verdadeira ~3s depois de ela chegar (decisão 2026-07-26). Janela
+    // de 60s: app fechado → o pino congela 1 min e o simulador retoma.
+    const liveReal = await this.recentRealWorkers()
     for (const w of this.workers) {
+      if (liveReal.has(w.id)) continue
       const evacId = evacByOrg.get(w.companyId)
       if (evacId) {
         w.pos = stepToward(w.pos, MUSTER_POINT, TICK_MS / 1000, WALK_SPEED_MPS)
@@ -77,11 +83,25 @@ export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
         w.pos = pos
       }
       try {
-        await this.positions.heartbeat(w.id, w.pos[1], w.pos[0])
+        await this.positions.heartbeat(w.id, w.pos[1], w.pos[0], 'sim')
       } catch {
         // Worker removido/desativado no meio da simulação — não derruba os demais.
       }
       if (evacId) await this.maybeAck(w, evacId)
+    }
+  }
+
+  // Ids com heartbeat REAL nos últimos 60s. Falha de leitura degrada pra
+  // "ninguém real" — o simulador nunca pode morrer por uma query.
+  private async recentRealWorkers(): Promise<Set<string>> {
+    try {
+      const rows = await this.prisma.workerPosition.findMany({
+        where: { source: 'real', recordedAt: { gt: new Date(Date.now() - 60_000) } },
+        select: { workerId: true },
+      })
+      return new Set(rows.map((r: { workerId: string }) => r.workerId))
+    } catch {
+      return new Set()
     }
   }
 

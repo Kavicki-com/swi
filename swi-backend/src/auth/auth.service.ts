@@ -19,8 +19,14 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
-  async signup(p: { email: string; password: string; name: string }): Promise<{ nextStep: 'CONFIRM' }> {
+  async signup(p: { email: string; password: string; name: string; companyId?: string }): Promise<{ nextStep: 'CONFIRM' }> {
     if (await this.users.findByEmail(p.email)) throw new ConflictException('E-mail já cadastrado')
+    // Empresa escolhida na tela de cadastro do app. Validada aqui pra um id
+    // inventado virar 400 em vez de FK error 500 — e porque um WORKER sem
+    // companyId fica invisível na fila de aprovação do painel (org-scoped).
+    if (p.companyId && !(await this.prisma.company.findUnique({ where: { id: p.companyId } }))) {
+      throw new BadRequestException('Empresa não encontrada')
+    }
     const code = generateCode()
     const user = await this.prisma.user.create({
       data: {
@@ -30,8 +36,13 @@ export class AuthService {
         role: 'WORKER',
         emailVerified: false,
         approvalStatus: 'PENDING',
+        companyId: p.companyId ?? null,
         confirmationCodeHash: await hash(code),
         confirmationExpires: new Date(Date.now() + CODE_TTL_MIN * 60_000),
+        // Profile já no cadastro: o wizard de onboarding faz PUT /profile/me
+        // logo depois (upsert), e o diretório do chat / listas do painel leem
+        // profile.fullName. Sem isto o usuário aparecia sem nome até salvar.
+        profile: { create: { fullName: p.name } },
       },
     })
     try {
