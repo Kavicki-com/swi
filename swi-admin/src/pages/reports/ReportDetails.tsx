@@ -99,8 +99,13 @@ function AvatarGroup({
             borderColor: theme.surface.standard,
           }}
         >
+          {/* `name` explícito: com o fallback de iniciais do DS 0.1.120, o
+              accessibilityLabel genérico ("Responsável 2") viraria a inicial
+              "R" — letra que não é de ninguém. Nome real quando existe;
+              '' suprime a inicial e mantém a moldura neutra. */}
           <Avatar
             uri={uri}
+            name={names[i] ?? ''}
             customSize={32}
             accessibilityLabel={names[i] ?? `Responsável ${i + 1}`}
           />
@@ -159,7 +164,9 @@ function ActivityAvatars({
             borderColor: theme.surface.standard,
           }}
         >
-          <Avatar uri={uri} customSize={32} accessibilityLabel={`Membro ${i + 1}`} />
+          {/* name="" de propósito: este strip só recebe URLs, sem nomes — sem
+              foto, moldura neutra em vez da inicial "M" de "Membro N". */}
+          <Avatar uri={uri} name="" customSize={32} accessibilityLabel={`Membro ${i + 1}`} />
         </View>
       ))}
       {overflowCount ? (
