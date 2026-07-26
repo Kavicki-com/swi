@@ -45,7 +45,30 @@ export class ReportsService {
     })
     if (!r || r.author.companyId !== companyId) return null
     const comments = await Promise.all(r.comments.map((c) => this.toCommentDto(c, c.author)))
-    return { ...(await this.toDto(r)), comments }
+    const dto = await this.toDto(r)
+    // Fotos reais das equipes por atividade (o Figma desenha o grupo de
+    // avatares em cada linha; decorativos foram banidos no QA 2026-07-26).
+    // Só no detalhe: a lista não renderiza atividades e não paga a query.
+    return { ...dto, activities: await this.resolveActivityAvatars(dto.activities), comments }
+  }
+
+  /**
+   * `responsibleNames` de cada atividade → `responsibleAvatars` presigned, na
+   * MESMA ordem ('' sem match — nunca a foto de outra pessoa). Uma única
+   * passada do avatarsForNames sobre os nomes únicos de TODAS as atividades.
+   */
+  private async resolveActivityAvatars(activities: unknown): Promise<unknown[]> {
+    const acts = Array.isArray(activities)
+      ? (activities as Array<{ responsibleNames?: string[] }>)
+      : []
+    const allNames = [...new Set(acts.flatMap((a) => a.responsibleNames ?? []))]
+    if (allNames.length === 0) return acts
+    const urls = await this.avatarsForNames(allNames)
+    const byName = new Map(allNames.map((n, i) => [n, urls[i] ?? '']))
+    return acts.map((a) => ({
+      ...a,
+      responsibleAvatars: (a.responsibleNames ?? []).map((n) => byName.get(n) ?? ''),
+    }))
   }
 
   async create(authorId: string, dto: CreateReportDto) {

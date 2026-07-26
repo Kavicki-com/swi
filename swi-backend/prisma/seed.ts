@@ -416,10 +416,14 @@ async function main() {
   // mock). As atividades NÃO carregam avatares aqui — o admin decora na renderização.
   const REPORT_DETAILS =
     'Inspeção realizada nas máquinas pesadas da Mina Córrego Seco, com foco especial no equipamento Komatsu K35E. Inicia o checklist abrangente de manutenção preventiva, abordando desde a verificação dos níveis de óleo e filtros até a substituição de componentes desgastados. A equipe técnica também realizou ajustes de calibração nos sistemas hidráulicos e elétricos, garantindo o desempenho ótimo dos equipamentos. Foram identificadas e corrigidas pequenas falhas no sistema de ignição de uma das escavadeiras, contribuindo para sua eficiência operacional aprimorada. Adicionalmente, foi realizada uma verificação minuciosa nos pneus, monitorando o desgaste e a pressão para garantir a segurança e o bom funcionamento das máquinas em todas as operações de mineração.'
+  // `responsibleNames`: equipes REAIS do CONTACTS (o Figma desenha rostos por
+  // atividade; faces decorativas foram banidas no QA 2026-07-26 — decisão do
+  // usuário: seguir o Figma COM gente de verdade). O read resolve nome → foto
+  // via avatarsForNames, igual aos responsáveis do relatório.
   const REPORT_ACTIVITIES = [
-    { title: 'Verificação de níveis de óleo e filtros', sector: 'Setor Noroeste', progress: 80, tone: 'success' },
-    { title: 'Manutenção de motores', sector: 'Setor Noroeste', progress: 50, tone: 'warning' },
-    { title: 'Ajustes de sistemas elétricos', sector: 'Setor Central', progress: 30, tone: 'error' },
+    { title: 'Verificação de níveis de óleo e filtros', sector: 'Setor Noroeste', progress: 80, tone: 'success', responsibleNames: ['Josué Oliveira', 'Ezequiel Almeida'] },
+    { title: 'Manutenção de motores', sector: 'Setor Noroeste', progress: 50, tone: 'warning', responsibleNames: ['Carlos Santos (Manut.)', 'Romulo Cardoso'] },
+    { title: 'Ajustes de sistemas elétricos', sector: 'Setor Central', progress: 30, tone: 'error', responsibleNames: ['Antonio Carlos Figueira', 'Adriana Santos Almeida', 'Jennifer Gomes'] },
   ]
 
   // Fixture espelhando REPORTS_SEED (title/summary/status/statusLabel/creationDate/

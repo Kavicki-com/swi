@@ -135,6 +135,44 @@ describe('ReportsService', () => {
     expect(db.profile.findMany).not.toHaveBeenCalled()
   })
 
+  // Decisão 2026-07-26 (seguir o Figma): cada atividade tem o grupo de rostos
+  // da EQUIPE REAL — responsibleNames no Json, resolvidos pra foto no detalhe.
+  it('resolve as fotos das equipes por atividade, em UMA query, ordem preservada', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(
+      row({
+        responsibles: [], // isola a query das atividades da query dos responsáveis
+        comments: [],
+        activities: [
+          { title: 'Manutenção de motores', responsibleNames: ['Josué Oliveira', 'Sem Cadastro'] },
+          { title: 'Ajustes elétricos', responsibleNames: ['Josué Oliveira'] },
+        ],
+      }),
+    )
+    db.profile.findMany.mockResolvedValue([
+      { fullName: 'Josué Oliveira', avatarKey: 'chat/avatars/worker-3.png' },
+    ])
+    const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1')
+    // Nomes únicos das DUAS atividades numa única ida ao banco.
+    expect(db.profile.findMany).toHaveBeenCalledTimes(1)
+    expect(db.profile.findMany.mock.calls[0][0].where).toEqual({
+      fullName: { in: ['Josué Oliveira', 'Sem Cadastro'] },
+    })
+    const acts = out!.activities as Array<{ responsibleAvatars: string[] }>
+    expect(acts[0].responsibleAvatars).toEqual(['signed:chat/avatars/worker-3.png', ''])
+    expect(acts[1].responsibleAvatars).toEqual(['signed:chat/avatars/worker-3.png'])
+  })
+
+  it('atividade sem responsibleNames passa intocada (sem query, sem campo inventado)', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(
+      row({ responsibles: [], comments: [], activities: [{ title: 'Só texto' }] }),
+    )
+    const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1')
+    expect(db.profile.findMany).not.toHaveBeenCalled()
+    expect(out!.activities).toEqual([{ title: 'Só texto' }])
+  })
+
   it('get inexistente → null', async () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue(null)

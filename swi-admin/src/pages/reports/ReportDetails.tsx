@@ -140,9 +140,12 @@ function AvatarGroup({
 // stack on its left (which is taller than the avatar pills).
 function ActivityAvatars({
   avatars,
+  names = [],
   overflowCount,
 }: {
   avatars: ReadonlyArray<string>
+  /** Index-parallel com `avatars` — alimenta iniciais e a11y. */
+  names?: ReadonlyArray<string>
   overflowCount?: number
 }) {
   const theme = useTheme()
@@ -164,9 +167,15 @@ function ActivityAvatars({
             borderColor: theme.surface.standard,
           }}
         >
-          {/* name="" de propósito: este strip só recebe URLs, sem nomes — sem
-              foto, moldura neutra em vez da inicial "M" de "Membro N". */}
-          <Avatar uri={uri} name="" customSize={32} accessibilityLabel={`Membro ${i + 1}`} />
+          {/* Nome real quando o backend o manda (equipe da atividade —
+              decisão 2026-07-26: seguir o Figma com gente de verdade); sem
+              nome, '' suprime a inicial e fica a moldura neutra. */}
+          <Avatar
+            uri={uri}
+            name={names[i] ?? ''}
+            customSize={32}
+            accessibilityLabel={names[i] ?? `Membro ${i + 1}`}
+          />
         </View>
       ))}
       {overflowCount ? (
@@ -258,7 +267,11 @@ function ActivityRow({
       </View>
 
       {/* Avatar group on the right of the body. */}
-      <ActivityAvatars avatars={activity.avatars} overflowCount={activity.overflowCount} />
+      <ActivityAvatars
+        avatars={activity.avatars}
+        names={activity.names}
+        overflowCount={activity.overflowCount}
+      />
 
       {/* Location pin button — Figma renders a flat icon on the far right. */}
       <Pressable
