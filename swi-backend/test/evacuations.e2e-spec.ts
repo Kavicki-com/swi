@@ -10,6 +10,13 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/prisma/prisma.service'
 
+// CNPJs EXCLUSIVOS deste teste. Não reutilizar valores do seed: a suíte roda
+// contra o banco de DEV e o cleanup apaga por CNPJ — usar o `00000000000191`
+// (SWI Demo Mineração) apagou a empresa demo e, como `User.companyId` é
+// opcional (Prisma aplica SetNull), desvinculou TODOS os usuários do seed.
+const CNPJ_A = '99000000000101'
+const CNPJ_B = '99000000000202'
+
 // Fase 2 do realtime: fluxo completo da evacuação real — dispatch do admin,
 // notificação real (fila inline em NODE_ENV=test), ack idempotente do worker,
 // progresso X/N org-scoped e encerramento.
@@ -24,10 +31,6 @@ describe('Evacuations e2e', () => {
   let ids: Record<string, string> = {}
   let companyId: string, otherCompanyId: string
 
-  // CNPJs próprios deste spec — ver nota no cleanup.
-  const CNPJ_A = '99000000000303'
-  const CNPJ_B = '99000000000404'
-
   const cleanup = async () => {
     const users = await prisma.user.findMany({ where: { email: { in: Object.values(emails) } }, select: { id: true } })
     const userIds = users.map((u) => u.id)
@@ -35,10 +38,6 @@ describe('Evacuations e2e', () => {
     await prisma.evacuation.deleteMany({ where: { startedById: { in: userIds } } })
     await prisma.notification.deleteMany({ where: { workerId: { in: userIds } } })
     await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
-    // CNPJs exclusivos deste spec. '00000000000191' é o da "SWI Demo Mineração"
-    // do seed: como User.companyId é opcional, o delete em cascata aplicava
-    // SetNull e ESVAZIAVA a empresa demo do dev stack a cada rodada de e2e
-    // (QA 2026-07-26 — mesma armadilha já corrigida no evacuation.e2e-spec).
     await prisma.company.deleteMany({ where: { cnpj: { in: [CNPJ_A, CNPJ_B] } } })
   }
 

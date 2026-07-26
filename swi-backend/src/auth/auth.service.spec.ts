@@ -8,6 +8,7 @@ function deps() {
   const prisma = {
     user: { create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     company: { create: jest.fn(), delete: jest.fn() },
+    profile: { deleteMany: jest.fn() },
   }
   const mail = {
     sendConfirmationCode: jest.fn().mockResolvedValue(undefined),
@@ -308,6 +309,12 @@ describe('AuthService.signupCompany', () => {
     // código de reset gravado (o mesmo que vai no link)
     expect(typeof udata.resetCodeHash).toBe('string')
     expect(udata.resetExpires).toBeInstanceOf(Date)
+    // Telefone do responsável PERSISTE (era coletado no form, validado no DTO
+    // e jogado fora — o cadastro perdia o único contato do admin).
+    expect(udata.profile.create).toMatchObject({
+      fullName: 'Maria',
+      phone: '(31) 99999-0000',
+    })
 
     // manda LINK (não código cru): url pra tela de nova senha, com email + code
     expect(mail.sendAdminPasswordLink).toHaveBeenCalledTimes(1)
@@ -334,6 +341,9 @@ describe('AuthService.signupCompany', () => {
     prisma.user.create.mockResolvedValue({ id: 'u9' })
     ;(mail.sendAdminPasswordLink as jest.Mock).mockRejectedValue(new Error('smtp down'))
     await expect(svc.signupCompany(payload())).rejects.toThrow('smtp down')
+    // Profile PRIMEIRO: a FK Profile→User não tem cascade, então deletar o
+    // user com o profile vivo estouraria e deixaria os dois órfãos.
+    expect(prisma.profile.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u9' } })
     expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'u9' } })
     expect(prisma.company.delete).toHaveBeenCalledWith({ where: { id: 'c9' } })
   })

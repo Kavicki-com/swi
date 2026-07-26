@@ -156,6 +156,10 @@ export class AuthService {
         passwordHash: await hash(randomBytes(24).toString('hex')),
         resetCodeHash: await hash(code),
         resetExpires: new Date(Date.now() + CODE_TTL_MIN * 60_000),
+        // O form coleta o telefone do responsável e o DTO exige — mas até aqui
+        // ninguém o gravava, então o cadastro perdia o único contato do admin.
+        // Profile aninhado: é onde `phone` mora (o User não tem coluna).
+        profile: { create: { fullName: p.responsible.name, phone: p.responsible.phone } },
       },
     })
     try {
@@ -163,6 +167,9 @@ export class AuthService {
     } catch (err) {
       // e-mail falhou → reverte admin e Company (sem órfãos), como o signup do worker
       try {
+        // Profile PRIMEIRO: a FK Profile→User não tem cascade, então deletar o
+        // user com o profile vivo estoura e deixa os DOIS órfãos.
+        await this.prisma.profile.deleteMany({ where: { userId: user.id } })
         await this.prisma.user.delete({ where: { id: user.id } })
       } catch (delErr) {
         this.logger.error(`falha ao reverter admin órfão ${user.id}: ${delErr}`)
