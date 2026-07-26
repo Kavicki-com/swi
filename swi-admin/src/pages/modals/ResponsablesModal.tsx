@@ -26,6 +26,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/admins'
 import { useDemoToast } from '@/lib/demoToast'
+import { formatAge } from '@/lib/formatAge'
 
 function VerticalDivider() {
   const theme = useTheme()
@@ -64,7 +65,7 @@ function AdminPickRow({
                 {admin.name}
               </Text>
               <Text variant="body.m" color={theme.content.dark}>
-                {admin.age} anos
+                {formatAge(admin.age)}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>

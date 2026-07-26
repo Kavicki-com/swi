@@ -22,6 +22,7 @@ import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { formatAge } from '@/lib/formatAge'
 import { AdminsCreate } from './AdminsCreate'
 
 type AdminRowProps = {
@@ -98,7 +99,7 @@ function AdminRow({
               </Text>
             </Pressable>
             <Text variant="body.m" color={theme.content.dark}>
-              {admin.age} anos
+              {formatAge(admin.age)}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               {/* Figma uses a humidity-drop glyph (humidity_mid) for the

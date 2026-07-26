@@ -20,30 +20,29 @@ const STATUS_OPTIONS = [
   { label: 'Cancelado', value: 'canceled' },
 ]
 
-const SECTOR_OPTIONS = [
-  { label: 'Todos os setores', value: 'all' },
-  { label: 'Setor Nordeste', value: 'nordeste' },
-  { label: 'Setor Sul', value: 'sul' },
-  { label: 'Setor Centro', value: 'centro' },
-]
+// Setor e Autor saem dos relatórios CARREGADOS (QA 2026-07-24): a lista fixa
+// oferecia gente que não existe no backend ("Ana Clara Mendonça"…) e filtrar
+// por ela devolvia vazio. Opção só existe se há relatório correspondente.
+const ALL = 'all'
 
-const AUTHOR_OPTIONS = [
-  { label: 'Todos os autores', value: 'all' },
-  { label: 'Ana Clara Mendonça', value: 'ana' },
-  { label: 'Mariana Pinto', value: 'mariana' },
-  { label: 'Lucas Almeida Silva', value: 'lucas' },
-]
+function optionsFrom(
+  reports: ReadonlyArray<Report>,
+  pick: (r: Report) => string,
+  allLabel: string,
+): Array<{ label: string; value: string }> {
+  const seen = Array.from(new Set(reports.map(pick).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, 'pt-BR'),
+  )
+  return [{ label: allLabel, value: ALL }, ...seen.map((v) => ({ label: v, value: v }))]
+}
 
 const PERIOD_OPTIONS = [
+  // Default honesto: sem recorte. Antes o default era um intervalo de datas
+  // fixo ("de 11/07/2025 até 25/04/2026") que NÃO filtrava nada.
+  { label: 'Todo o período', value: ALL },
   { label: 'Últimos 30 dias', value: '30d' },
   { label: 'Últimos 90 dias', value: '90d' },
-  { label: 'de 11/07/2025 até 25/04/2026', value: 'custom' },
 ]
-
-// Demo anchor: today is conceptually 2026-05-01 for the filter math, so the
-// 30/90-day windows actually contain rows from the seed (newest = 12/04/2026).
-// Production replaces this with new Date() against a live API.
-const DEMO_TODAY = new Date(2026, 4, 1)
 
 // Parse BR-format dd/mm/yyyy creation dates from the report seed.
 // Defaults guard against malformed strings so the function stays
@@ -53,27 +52,15 @@ function parseBRDate(value: string): Date {
   return new Date(year, month - 1, day)
 }
 
-const SECTOR_MATCHERS: Record<string, string> = {
-  nordeste: 'Nordeste',
-  sul: 'Sul',
-  centro: 'Centro',
-}
-
-const AUTHOR_MATCHERS: Record<string, string> = {
-  ana: 'Ana',
-  mariana: 'Mariana',
-  lucas: 'Lucas',
-}
-
 export function ReportsList() {
   const theme = useTheme()
   const navigate = useNavigate()
   const [reports, setReports] = useState<ReadonlyArray<Report>>([])
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
-  const [sector, setSector] = useState('all')
-  const [author, setAuthor] = useState('all')
-  const [period, setPeriod] = useState('custom')
+  const [status, setStatus] = useState(ALL)
+  const [sector, setSector] = useState(ALL)
+  const [author, setAuthor] = useState(ALL)
+  const [period, setPeriod] = useState(ALL)
 
   useEffect(() => {
     let cancelled = false
@@ -85,22 +72,29 @@ export function ReportsList() {
     }
   }, [])
 
+  // Opções derivadas do que existe: nunca oferece um filtro que devolve vazio.
+  const sectorOptions = useMemo(
+    () => optionsFrom(reports, (r) => r.sector, 'Todos os setores'),
+    [reports],
+  )
+  const authorOptions = useMemo(
+    () => optionsFrom(reports, (r) => r.authorName, 'Todos os autores'),
+    [reports],
+  )
+
   const filtered = useMemo(
     () =>
       reports.filter((r) => {
         if (search.trim() && !r.title.toLowerCase().includes(search.toLowerCase())) return false
-        if (status !== 'all' && r.status !== status) return false
-        if (sector !== 'all') {
-          const needle = SECTOR_MATCHERS[sector]
-          if (needle && !r.sector.includes(needle)) return false
-        }
-        if (author !== 'all') {
-          const needle = AUTHOR_MATCHERS[author]
-          if (needle && !r.authorName.includes(needle)) return false
-        }
-        if (period !== 'custom') {
+        if (status !== ALL && r.status !== status) return false
+        // Comparação por valor exato — as opções SÃO os valores dos relatórios.
+        if (sector !== ALL && r.sector !== sector) return false
+        if (author !== ALL && r.authorName !== author) return false
+        if (period !== ALL) {
+          // Janela contada do dia de HOJE (era uma âncora fixa em 2026-05-01,
+          // que com dados reais recortava o período errado).
           const days = period === '30d' ? 30 : 90
-          const cutoff = new Date(DEMO_TODAY.getTime() - days * 86_400_000)
+          const cutoff = new Date(Date.now() - days * 86_400_000)
           if (parseBRDate(r.creationDate) < cutoff) return false
         }
         return true
@@ -155,7 +149,7 @@ export function ReportsList() {
         <View style={{ width: 160 }}>
           <Combobox
             label="Setor"
-            options={SECTOR_OPTIONS}
+            options={sectorOptions}
             value={sector}
             onChange={setSector}
             accessibilityLabel="Filtrar por setor"
@@ -164,7 +158,7 @@ export function ReportsList() {
         <View style={{ width: 220 }}>
           <Combobox
             label="Autor do relatório"
-            options={AUTHOR_OPTIONS}
+            options={authorOptions}
             value={author}
             onChange={setAuthor}
             accessibilityLabel="Filtrar por autor"

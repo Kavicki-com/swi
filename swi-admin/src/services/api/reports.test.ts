@@ -2,7 +2,7 @@
 // vitest globals (describe/it/expect/afterEach) via globals: true — importar de
 // 'vitest' duplicaria a instância (ver nota no auth.test.ts). Só `vi` é importado.
 import { vi } from 'vitest'
-import { reportsApi, DECOR_RESPONSIBLE_TOTAL } from './reports'
+import { reportsApi } from './reports'
 
 const okJson = (body: unknown) =>
   vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body } as Response)
@@ -40,9 +40,11 @@ describe('reportsApi.list (real)', () => {
     expect(r.id).toBe('r1')
     expect(r.title).toBe('Inspeção Técnica')
     expect(r.responsibles).toBe('Ana, Bea') // array de nomes → string separada por vírgula
-    expect(r.responsibleAvatars.length).toBeGreaterThan(0) // decorativo, não vazio
-    // contagem decorativa fixa (Figma "+N"), não a contagem real de responsáveis
-    expect(r.responsibleTotalCount).toBe(DECOR_RESPONSIBLE_TOTAL)
+    // Contagem e nº de faces = responsáveis REAIS (QA 2026-07-24: era 9 fixo,
+    // então todo card mentia "+5" mesmo com 2 pessoas). Avatares seguem
+    // decorativos (o backend guarda só nomes), mas a QUANTIDADE é verdadeira.
+    expect(r.responsibleTotalCount).toBe(2)
+    expect(r.responsibleAvatars).toHaveLength(2)
     expect(r.status).toBe('pending')
     expect(r.statusLabel).toBe('Em Revisão')
     expect(r.authorAvatarUri).toBe('signed:av1')

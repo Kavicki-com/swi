@@ -10,6 +10,7 @@ import { useMapLibre } from '@/lib/useMapLibre'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { formatAge } from '@/lib/formatAge'
 import {
   Avatar,
   Button,
@@ -571,7 +572,7 @@ export function WorkerDetailsLayout({
             }}
           >
             <InlineStat label="Gênero" value={genderLabel} icon={genderIcon} />
-            <InlineStat label="Idade" value={`${worker.age} anos`} />
+            <InlineStat label="Idade" value={formatAge(worker.age)} />
             <InlineStat
               label="Tipo sanguíneo"
               value={worker.bloodType}
