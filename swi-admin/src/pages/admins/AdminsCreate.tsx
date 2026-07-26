@@ -17,6 +17,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { adminsApi, employeesApi, type CreateUserInput } from '@/services/api/users'
 import { useDemoToast } from '@/lib/demoToast'
+import { maskCpf, maskDate, maskPhone, onlyDigits } from '@/lib/masks'
 
 type FormState = {
   // Dados do cadastro
@@ -196,8 +197,10 @@ export function AdminsCreate({
       name: nome,
       email,
       password: form.senha,
-      ...(form.telefone.trim() ? { phone: form.telefone.trim() } : {}),
-      ...(form.cpf.trim() ? { cpf: form.cpf.trim() } : {}),
+      // Persiste só dígitos: a máscara é apresentação, e cadastros com
+      // pontuação diferente virariam o mesmo CPF em formatos distintos no banco.
+      ...(onlyDigits(form.telefone) ? { phone: onlyDigits(form.telefone) } : {}),
+      ...(onlyDigits(form.cpf) ? { cpf: onlyDigits(form.cpf) } : {}),
       ...(birthDate ? { birthDate } : {}),
     }
     const api = subject === 'funcionário' ? employeesApi : adminsApi
@@ -245,7 +248,7 @@ export function AdminsCreate({
               label="Telefone"
               placeholder="(00) 00000-0000"
               value={form.telefone}
-              onChangeText={(v) => update('telefone', v)}
+              onChangeText={(v) => update('telefone', maskPhone(v))}
               keyboardType="phone-pad"
             />
           </View>
@@ -257,7 +260,7 @@ export function AdminsCreate({
               label="Data de Nascimento"
               placeholder="DD/MM/AAAA"
               value={form.dataNascimento}
-              onChangeText={(v) => update('dataNascimento', v)}
+              onChangeText={(v) => update('dataNascimento', maskDate(v))}
             />
           </View>
           <View style={{ flex: 1 }}>
@@ -265,7 +268,7 @@ export function AdminsCreate({
               label="CPF"
               placeholder="000.000.000-00"
               value={form.cpf}
-              onChangeText={(v) => update('cpf', v)}
+              onChangeText={(v) => update('cpf', maskCpf(v))}
               keyboardType="number-pad"
             />
           </View>
