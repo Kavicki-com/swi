@@ -10,6 +10,13 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/prisma/prisma.service'
 
+// CNPJs EXCLUSIVOS deste teste. Não reutilizar valores do seed: a suíte roda
+// contra o banco de DEV e o cleanup apaga por CNPJ — usar o `00000000000191`
+// (SWI Demo Mineração) apagou a empresa demo e, como `User.companyId` é
+// opcional (Prisma aplica SetNull), desvinculou TODOS os usuários do seed.
+const CNPJ_A = '99000000000101'
+const CNPJ_B = '99000000000202'
+
 // Fase 2 do realtime: fluxo completo da evacuação real — dispatch do admin,
 // notificação real (fila inline em NODE_ENV=test), ack idempotente do worker,
 // progresso X/N org-scoped e encerramento.
@@ -31,7 +38,7 @@ describe('Evacuations e2e', () => {
     await prisma.evacuation.deleteMany({ where: { startedById: { in: userIds } } })
     await prisma.notification.deleteMany({ where: { workerId: { in: userIds } } })
     await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
-    await prisma.company.deleteMany({ where: { cnpj: { in: ['00000000000191', '00000000000272'] } } })
+    await prisma.company.deleteMany({ where: { cnpj: { in: [CNPJ_A, CNPJ_B] } } })
   }
 
   beforeAll(async () => {
@@ -40,8 +47,8 @@ describe('Evacuations e2e', () => {
     prisma = app.get(PrismaService)
     await cleanup()
     const addr = { cep: '01000-000', street: 'Rua A', number: '1', neighborhood: 'Centro', uf: 'SP' }
-    companyId = (await prisma.company.create({ data: { name: 'Evac Co', cnpj: '00000000000191', ...addr } })).id
-    otherCompanyId = (await prisma.company.create({ data: { name: 'Other Co', cnpj: '00000000000272', ...addr } })).id
+    companyId = (await prisma.company.create({ data: { name: 'Evac Co', cnpj: CNPJ_A, ...addr } })).id
+    otherCompanyId = (await prisma.company.create({ data: { name: 'Other Co', cnpj: CNPJ_B, ...addr } })).id
     const bcrypt = await import('bcrypt')
     const passwordHash = await bcrypt.hash('test1234', 10)
     const base = { passwordHash, emailVerified: true, approvalStatus: 'APPROVED' as const }
