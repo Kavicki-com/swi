@@ -1,4 +1,5 @@
 import js from '@eslint/js'
+import globals from 'globals'
 import tsParser from '@typescript-eslint/parser'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 import reactPlugin from 'eslint-plugin-react'
@@ -15,12 +16,13 @@ export default [
         sourceType: 'module',
         ecmaFeatures: { jsx: true },
       },
+      // O app roda em browser (RN-web/Vite): sem estes globals o no-undef
+      // acusava File, fetch, HTMLInputElement etc. — 197 erros de ambiente,
+      // não de código — e o CI vermelho permanente deixou de ser sinal
+      // (QA 2026-07-26). Nenhuma regra é afrouxada aqui.
       globals: {
-        window: 'readonly',
-        document: 'readonly',
-        console: 'readonly',
-        performance: 'readonly',
-        setTimeout: 'readonly',
+        ...globals.browser,
+        ...globals.es2021,
       },
     },
     plugins: {
@@ -30,6 +32,11 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      // Recomendação oficial do typescript-eslint: no-undef não entende
+      // tipos (RequestInit, GeoJSON, React.*) e vira falso-positivo em TS.
+      // Identificador inexistente é responsabilidade do compilador — e o CI
+      // roda `npm run typecheck` ANTES do lint, então nada fica descoberto.
+      'no-undef': 'off',
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
       'no-unused-vars': 'off',

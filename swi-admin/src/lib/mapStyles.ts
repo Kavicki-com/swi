@@ -17,7 +17,6 @@ if (!MAPBOX_TOKEN && typeof window !== 'undefined') {
   // QA C4: sem token os tiles do Mapbox falhavam com centenas de 401 e o mapa
   // virava um vazio preto. Agora a ausência cai no Esri (aviso segue útil:
   // Mapbox tem cobertura z17+ melhor no interior do BR).
-  // eslint-disable-next-line no-console
   console.warn(
     '[mapStyles] VITE_MAPBOX_TOKEN ausente — usando fallback Esri World Imagery (cobertura z17+ inferior). Copie .env.example para .env.local para usar Mapbox.',
   )

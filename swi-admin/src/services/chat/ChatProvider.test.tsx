@@ -19,14 +19,14 @@ const {
   sendMessage: vi.fn(async () => ({ data: null, error: null })),
   markRead: vi.fn(async () => ({ data: null, error: null })),
   uploadImage: vi.fn(async () => 'chat/x.jpg'),
-  socket: { cb: (_m: any) => {} },
+  socket: { cb: (_m: unknown) => {} },
 }))
 vi.mock('../api/chats', () => ({
   chatsApi: { listConversations, listDirectory, listMessages, sendMessage, markRead },
 }))
-const socketCb = (m: any) => socket.cb(m)
+const socketCb = (m: unknown) => socket.cb(m)
 vi.mock('./chatSocket', () => ({
-  subscribeMessages: (cb: any) => {
+  subscribeMessages: (cb: (m: unknown) => void) => {
     socket.cb = cb
     return () => {}
   },
