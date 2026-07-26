@@ -173,14 +173,22 @@ export function ReportCardV2({
           >
             Responsáveis:
           </Text>
-          <AvatarGroup
-            avatars={responsibleAvatars.map((uri) => ({ uri }))}
-            totalCount={responsibleTotalCount ?? responsibleAvatars.length}
-            maxVisible={4}
-            size="s"
-            bordered
-            borderColor={theme.surface.standard}
-          />
+          {/* Sem responsáveis o AvatarGroup renderiza nada e o rótulo fica
+              pendurado — dizer "ninguém atribuído" é mais claro que um vazio. */}
+          {responsibleAvatars.length === 0 ? (
+            <Text variant="body.s" color={theme.content.medium}>
+              Ninguém atribuído
+            </Text>
+          ) : (
+            <AvatarGroup
+              avatars={responsibleAvatars.map((uri) => ({ uri }))}
+              totalCount={responsibleTotalCount ?? responsibleAvatars.length}
+              maxVisible={4}
+              size="s"
+              bordered
+              borderColor={theme.surface.standard}
+            />
+          )}
         </View>
 
         <View

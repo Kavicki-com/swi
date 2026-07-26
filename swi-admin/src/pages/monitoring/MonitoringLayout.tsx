@@ -31,6 +31,7 @@ import {
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { formatAge } from '@/lib/formatAge'
 
 // --- Shared row helpers ---
 
@@ -134,7 +135,7 @@ function AlertUserCard({
                 {user.name}
               </Text>
               <Text variant="body.m" color={theme.content.dark}>
-                {user.age} anos
+                {formatAge(user.age)}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>

@@ -62,12 +62,13 @@ export type Report = {
 // batendo com o mock antigo (mockApi/reports.ts) pra manter o layout idêntico.
 const DECOR_AVATARS: ReadonlyArray<string> = [workerA, workerB, workerC, workerA, workerB]
 
-// Contagem decorativa do cluster de responsáveis (badge "+N"). Fixa em 9 (igual
-// ao mock antigo) pra reproduzir o Figma: ReportCardV2 mostra 4 faces + "+5". A
-// contagem REAL (2 na seed) some com o badge e ainda mostra 4 faces pra 2 pessoas
-// — pior que o mock. Decorativo: os nomes reais aparecem no texto `responsibles`
-// (comma-joined); o backend guarda responsáveis só como nomes, sem avatar/contagem.
-export const DECOR_RESPONSIBLE_TOTAL = 9
+// Uma face decorativa por responsável REAL (teto no tamanho da rotação; acima
+// disso o AvatarGroup mostra o excedente como "+N" a partir do totalCount).
+// Os nomes verdadeiros seguem no texto `responsibles` (comma-joined).
+function decorAvatarsFor(count: number): ReadonlyArray<string> {
+  if (count <= 0) return []
+  return DECOR_AVATARS.slice(0, Math.min(count, DECOR_AVATARS.length))
+}
 
 // Um comentário no detalhe do relatório (POST /reports/:id/comments responde um).
 export type ReportComment = {
@@ -159,8 +160,11 @@ function toReport(dto: ReportDto): Report {
     creationDate: dto.creationDate,
     sector: dto.sector,
     responsibles: (dto.responsibles ?? []).join(', '),
-    responsibleAvatars: DECOR_AVATARS, // decorativo: backend guarda só nomes
-    responsibleTotalCount: DECOR_RESPONSIBLE_TOTAL, // decorativo (Figma): +N badge
+    // Faces decorativas (o backend guarda só nomes), mas a QUANTIDADE é real:
+    // 2 responsáveis → 2 faces, sem badge. Antes eram 5 faces + "+5" fixo em
+    // todo card, afirmando 9 pessoas que não existiam (QA 2026-07-24).
+    responsibleAvatars: decorAvatarsFor((dto.responsibles ?? []).length),
+    responsibleTotalCount: (dto.responsibles ?? []).length,
     details: dto.details,
     images: dto.images ?? [],
     activities,

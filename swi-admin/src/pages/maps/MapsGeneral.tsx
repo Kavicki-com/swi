@@ -25,14 +25,11 @@ import {
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
-import { withBadges } from '@/app/nav'
+import { formatBadgeCount, withBadges } from '@/app/nav'
 import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLivePositions } from '@/hooks/useLivePositions'
+import { reportsApi } from '@/services/api/reports'
 import workerA from '@/assets/avatars/worker-a.png'
-
-// Compact navigation list — Figma 32:2488 map-side-menu shows 7 icon-only items.
-// Reports + Alerts carry "+9" unread badges per Figma node 165:21150 / 165:21152.
-const NAV = withBadges({ '/reports': '+9', '/alerts': '+9' })
 
 type PinHandle = PinElement & { marker: maplibregl.Marker }
 
@@ -108,6 +105,24 @@ export function MapsGeneral() {
   const mapRef = useRef<maplibregl.Map | null>(null)
   // Posições REAIS ao vivo (REST snapshot + WS). null = carregando.
   const mapMarkers = useLivePositions()
+  // Badge do menu compacto (Figma 165:21150): contagem REAL de relatórios
+  // pendentes. Sem pendências, sem badge — era "+9" fixo até o QA de 2026-07-24.
+  // Alertas perdeu o badge: não existe entidade de alerta com estado de leitura
+  // pra contar (voltar quando existir, via formatBadgeCount).
+  const [pendingReports, setPendingReports] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    reportsApi.list().then(({ data }) => {
+      if (!cancelled) setPendingReports((data ?? []).filter((r) => r.status === 'pending').length)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  const navItems = useMemo(
+    () => withBadges({ '/reports': formatBadgeCount(pendingReports) }),
+    [pendingReports],
+  )
   const [mapReady, setMapReady] = useState(false)
   // Figma neutral state hides employee pins (node 33:3917 opacity:0).
   // Pins appear when the user expands the "operators" map control.
@@ -620,7 +635,7 @@ export function MapsGeneral() {
         }}
       >
         <SideMenu
-          items={NAV}
+          items={navItems}
           value={location.pathname}
           variant="minimal"
           iconSize={20}

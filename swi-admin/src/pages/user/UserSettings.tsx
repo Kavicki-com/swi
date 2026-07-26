@@ -1,6 +1,6 @@
 // src/pages/user/UserSettings.tsx
 // User settings screen — Figma 101:8704 ("user-settings"). Two-column form:
-// LEFT  → Dados da cadastro (name, dob, cpf, email, phone, UF, city,
+// LEFT  → Dados do cadastro (name, dob, cpf, email, phone, UF, city,
 //         profissão, setor, função, gerente responsável)
 // RIGHT → Tipo sanguíneo + Gênero comboboxes, alergias + doenças crônicas
 //         textareas, Senha de acesso (current/new/confirm + alterar senha),
@@ -586,7 +586,7 @@ export function UserSettings() {
           zIndex: 10,
         }}
       >
-        {/* LEFT column — Dados da cadastro */}
+        {/* LEFT column — Dados do cadastro */}
         <View
           style={{
             ...(isTablet
@@ -598,7 +598,7 @@ export function UserSettings() {
           }}
         >
           <Title variant="title.xs" color={theme.content.primary}>
-            Dados da cadastro
+            Dados do cadastro
           </Title>
           <Input label="Nome Completo" value={name} onChangeText={setName} testID="settings-name" />
           <View style={{ flexDirection: 'row', gap: theme.gap.s }}>

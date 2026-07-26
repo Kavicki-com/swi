@@ -8,6 +8,7 @@ import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Avatar, Button, Chip, Icon, SearchInput, Text, useTheme } from '@kavicki/swi-design-system'
 import { rescueApi, type RescueCandidate } from '@/services/rescue'
+import { formatAge } from '@/lib/formatAge'
 
 const FILTER_CHIPS = [
   { value: 'all', label: 'Todos' },
@@ -88,7 +89,7 @@ export function AlertsRescueRouteSelection() {
                     {c.name}
                   </Text>
                   <Text variant="body.m" color={theme.content.dark}>
-                    {c.age} anos
+                    {formatAge(c.age)}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Icon name="humidity_mid" size={20} color={theme.content.error} />

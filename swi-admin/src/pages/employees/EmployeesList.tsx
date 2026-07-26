@@ -22,6 +22,7 @@ import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { formatAge } from '@/lib/formatAge'
 
 type EmployeeRowProps = {
   employee: Employee
@@ -90,7 +91,7 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
               </Text>
             </Pressable>
             <Text variant="body.m" color={theme.content.dark}>
-              {employee.age} anos
+              {formatAge(employee.age)}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Icon name="humidity_mid" size={20} color={theme.content.error} />

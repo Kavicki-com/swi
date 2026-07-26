@@ -27,8 +27,17 @@ export const NAV_ITEMS: NavItem[] = [
   { value: '/tasks', label: 'Tarefas', icon: 'assignment_filled' },
 ]
 
-export function withBadges(overrides: Record<string, string>): NavItem[] {
-  return NAV_ITEMS.map((item) =>
-    overrides[item.value] ? { ...item, badge: overrides[item.value] } : { ...item },
-  )
+// Contagem REAL → texto do badge. `undefined` (zero/negativo/NaN) some com o
+// badge: um número inventado num console de emergência é pior que nenhum
+// (era daí que vinha o "+9" fixo do QA 2026-07-24).
+export function formatBadgeCount(count: number): string | undefined {
+  if (!Number.isFinite(count) || count <= 0) return undefined
+  return count > 9 ? '+9' : String(count)
+}
+
+export function withBadges(overrides: Record<string, string | undefined>): NavItem[] {
+  return NAV_ITEMS.map((item) => {
+    const badge = overrides[item.value]
+    return badge ? { ...item, badge } : { ...item }
+  })
 }

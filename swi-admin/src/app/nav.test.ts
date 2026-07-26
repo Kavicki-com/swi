@@ -1,4 +1,4 @@
-import { NAV_ITEMS } from './nav'
+import { formatBadgeCount, NAV_ITEMS, withBadges } from './nav'
 
 describe('NAV_ITEMS', () => {
   it('tem Tarefas apontando pra /tasks', () => {
@@ -21,5 +21,39 @@ describe('NAV_ITEMS', () => {
     const labels = NAV_ITEMS.map((i) => i.label)
     expect(labels[labels.length - 1]).toBe('Tarefas')
     expect(labels.indexOf('Tarefas')).toBe(labels.indexOf('Configurações') + 1)
+  })
+})
+
+describe('formatBadgeCount', () => {
+  it('zero → sem badge (nada a avisar)', () => {
+    expect(formatBadgeCount(0)).toBeUndefined()
+  })
+
+  it('contagem pequena aparece exata', () => {
+    expect(formatBadgeCount(1)).toBe('1')
+    expect(formatBadgeCount(9)).toBe('9')
+  })
+
+  it('acima de 9 satura em "+9" (o pino é pequeno demais pra 3 dígitos)', () => {
+    expect(formatBadgeCount(10)).toBe('+9')
+    expect(formatBadgeCount(147)).toBe('+9')
+  })
+
+  it('negativo/NaN não vira badge', () => {
+    expect(formatBadgeCount(-1)).toBeUndefined()
+    expect(formatBadgeCount(Number.NaN)).toBeUndefined()
+  })
+})
+
+describe('withBadges', () => {
+  it('undefined NÃO marca o item — badge só existe com contagem real', () => {
+    const items = withBadges({ '/reports': undefined })
+    expect(items.find((i) => i.value === '/reports')?.badge).toBeUndefined()
+  })
+
+  it('marca só o item pedido', () => {
+    const items = withBadges({ '/reports': '3' })
+    expect(items.find((i) => i.value === '/reports')?.badge).toBe('3')
+    expect(items.find((i) => i.value === '/alerts')?.badge).toBeUndefined()
   })
 })
