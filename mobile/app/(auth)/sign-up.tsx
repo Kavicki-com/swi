@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   Checkbox,
+  Combobox,
   Input,
   Text,
   Title,
@@ -20,6 +21,12 @@ import {
   validatePasswordField,
   validatePasswordMatch,
 } from '../../lib/validation/validators';
+import { listCompanies, type CompanyOption } from '../../services/api/companies';
+import { AUTH_BACKEND } from '../../lib/featureFlags';
+
+// Só o fluxo api tem empresas reais pra escolher; no mock o seletor some e o
+// fluxo fica idêntico ao anterior.
+const NEEDS_COMPANY = AUTH_BACKEND === 'api';
 
 export default function SignUp() {
   const router = useRouter();
@@ -35,6 +42,28 @@ export default function SignUp() {
   });
   const [agreed, setAgreed] = useState(false);
 
+  // Empresa do cadastro: o vínculo é o que coloca o worker na fila de
+  // aprovação org-scoped do painel (QA 2026-07-26).
+  const [companies, setCompanies] = useState<CompanyOption[]>([]);
+  const [companyId, setCompanyId] = useState('');
+  const [companiesError, setCompaniesError] = useState(false);
+  useEffect(() => {
+    if (!NEEDS_COMPANY) return;
+    let cancelled = false;
+    listCompanies()
+      .then((list) => {
+        if (!cancelled) setCompanies(list);
+      })
+      .catch(() => {
+        // Sem a lista o cadastro não anda mesmo (a API está fora do ar) —
+        // mostra o aviso inline em vez de deixar submeter um vínculo vazio.
+        if (!cancelled) setCompaniesError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const pwMatches =
     password.value.length > 0 && password.value === confirmPassword.value;
   const canSubmit =
@@ -42,6 +71,7 @@ export default function SignUp() {
     email.isValid &&
     password.isValid &&
     confirmPassword.isValid &&
+    (!NEEDS_COMPANY || companyId.length > 0) &&
     agreed;
 
   const handleSubmit = async () => {
@@ -57,7 +87,12 @@ export default function SignUp() {
     // demo, email-sent has a manual "Já confirmei" affordance to advance.
     const username = fullName.value.trim().split(/\s+/)[0] ?? '';
     try {
-      await signUp({ email: email.value, password: password.value, name: fullName.value.trim() });
+      await signUp({
+        email: email.value,
+        password: password.value,
+        name: fullName.value.trim(),
+        ...(companyId ? { companyId } : {}),
+      });
       router.push({ pathname: '/(auth)/email-sent', params: { email: email.value, username } });
     } catch {
       Alert.alert('Erro', 'Não foi possível criar a conta.');
@@ -86,6 +121,24 @@ export default function SignUp() {
           </Text>
 
           <View style={{ gap: theme.gap.m }}>
+            {NEEDS_COMPANY ? (
+              <View>
+                <Combobox
+                  label="Empresa"
+                  placeholder="Selecione a sua empresa"
+                  options={companies.map((c) => ({ label: c.name, value: c.id }))}
+                  value={companyId}
+                  onChange={setCompanyId}
+                  accessibilityLabel="Empresa"
+                />
+                {companiesError ? (
+                  <Text variant="body.s" color={theme.content.error}>
+                    Não foi possível carregar as empresas — verifique a conexão.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
             <Input
               {...fullName.bind()}
               label="Nome completo"

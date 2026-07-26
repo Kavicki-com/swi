@@ -9,7 +9,15 @@ const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http:/
 export function subscribeMessages(cb: (m: Message) => void): () => void {
   const socket: Socket = io(BASE_URL, {
     auth: { token: readToken() },
-    transports: ['websocket'],
+    // polling PRIMEIRO: no QA remoto o handshake WS puro morre na interstitial
+    // do ngrok free ("closed before the connection is established") — o browser
+    // não manda header custom em WS. Polling é XHR, carrega o header que fura a
+    // interstitial, e o socket.io tenta o upgrade pra WS depois; se o upgrade
+    // falhar no túnel, fica em polling e o realtime segue funcionando.
+    transports: ['polling', 'websocket'],
+    transportOptions: {
+      polling: { extraHeaders: { 'ngrok-skip-browser-warning': 'true' } },
+    },
   })
   socket.on('message', cb)
   return () => {

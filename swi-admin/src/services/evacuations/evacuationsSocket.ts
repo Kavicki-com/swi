@@ -22,7 +22,13 @@ export interface EvacuationHandlers {
 export function subscribeEvacuationEvents(handlers: EvacuationHandlers): () => void {
   const socket: Socket = io(BASE_URL, {
     auth: { token: readToken() },
-    transports: ['websocket'],
+    // Espelho do chatSocket: polling primeiro pra atravessar a interstitial do
+    // ngrok no QA remoto (WS puro morre no handshake; polling é XHR e carrega
+    // o header). Upgrade pra WS quando o caminho deixa.
+    transports: ['polling', 'websocket'],
+    transportOptions: {
+      polling: { extraHeaders: { 'ngrok-skip-browser-warning': 'true' } },
+    },
   })
   socket.on('evacuation', handlers.onStarted)
   socket.on('evacuation-ack', handlers.onAck)

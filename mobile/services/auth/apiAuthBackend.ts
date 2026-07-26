@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store'
 import type { AuthBackend, User } from './types'
 import { apiRequest } from '../api/http'
 import { setUserId, clearUserId } from '../api/session'
+import { flushPendingProfile } from '../profile/pendingProfile'
 
 const TOKEN_KEY = 'swi.auth.token'
 
@@ -10,9 +11,14 @@ export const apiAuthBackend: AuthBackend = {
     const { accessToken, user } = await apiRequest('/auth/login', { method: 'POST', body: { email, password } })
     await SecureStore.setItemAsync(TOKEN_KEY, accessToken)
     setUserId(user.id)
+    // Descarrega o cadastro digitado no wizard PRÉ-login (stash local — a
+    // conta esperava aprovação do admin). Best-effort: nunca falha o login.
+    await flushPendingProfile()
     return user
   },
-  async signUp({ email, password, name }) { return apiRequest('/auth/signup', { method: 'POST', body: { email, password, name } }) },
+  // companyId: empresa escolhida na tela de cadastro — sem ela o worker nasce
+  // sem vínculo e fica invisível na fila de aprovação do painel (org-scoped).
+  async signUp({ email, password, name, companyId }) { return apiRequest('/auth/signup', { method: 'POST', body: { email, password, name, companyId } }) },
   async confirmSignUp({ email, code }) { await apiRequest('/auth/confirm', { method: 'POST', body: { email, code } }) },
   async resendConfirmation({ email }) { await apiRequest('/auth/confirm/resend', { method: 'POST', body: { email } }) },
   async signOut() { await SecureStore.deleteItemAsync(TOKEN_KEY); clearUserId() },

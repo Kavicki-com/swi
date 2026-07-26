@@ -22,7 +22,12 @@ export class ChatService {
   async listDirectory(userId: string, companyId: string | null) {
     const users = await this.prisma.user.findMany({
       // Org-scoping (QA C1): diretório restrito à empresa do usuário.
-      where: { approvalStatus: 'APPROVED', role: 'WORKER', id: { not: userId }, companyId },
+      //
+      // ADMIN entra na lista (decisão 2026-07-26): o filtro era só role WORKER,
+      // então o funcionário no app via os 8 colegas e NENHUM admin — não tinha
+      // como iniciar conversa com o painel, só responder numa thread que o
+      // admin abrisse. Colegas continuam visíveis; ninguém perdeu contato.
+      where: { approvalStatus: 'APPROVED', role: { in: ['WORKER', 'ADMIN'] }, id: { not: userId }, companyId },
       include: { profile: true },
       orderBy: { name: 'asc' },
       take: LIST_CAP,

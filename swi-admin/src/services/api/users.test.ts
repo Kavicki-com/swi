@@ -56,7 +56,7 @@ describe('employeesApi.list (real)', () => {
     expect(e.bloodType).toBe('—') // placeholder: backend não tem o campo
     expect(e.vitalsStatus).toBe('good') // placeholder neutro até a smartband
     const [url] = f.mock.calls[0] as [string]
-    expect(url).toContain('/users?role=WORKER')
+    expect(url).toContain('/users?role=WORKER&approvalStatus=APPROVED')
   })
 
   it('falha de rede → { data: null, error }', async () => {
@@ -90,7 +90,7 @@ describe('adminsApi.list (real)', () => {
     expect(a.active).toBe(false) // reflete o DTO (active:false), não o approvalStatus
     expect(a.status).toBe('pending')
     const [url] = f.mock.calls[0] as [string]
-    expect(url).toContain('/users?role=ADMIN')
+    expect(url).toContain('/users?role=ADMIN&approvalStatus=APPROVED')
   })
 
   it('active vem do campo real mesmo com approvalStatus APPROVED', async () => {

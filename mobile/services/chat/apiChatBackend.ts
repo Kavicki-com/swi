@@ -36,7 +36,16 @@ export const apiChatBackend: ChatBackend = {
     (async () => {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
       if (closed) return;
-      socket = io(API_URL, { auth: { token }, transports: ['websocket'] });
+      // polling primeiro: espelho do painel — o handshake WS puro morre na
+      // interstitial do ngrok free no QA remoto; polling é XHR e carrega o
+      // header de skip, com upgrade pra WS quando o caminho deixa.
+      socket = io(API_URL, {
+        auth: { token },
+        transports: ['polling', 'websocket'],
+        transportOptions: {
+          polling: { extraHeaders: { 'ngrok-skip-browser-warning': 'true' } },
+        },
+      });
       socket.on('message', (m: Message) => {
         if (conversationId === null || m.conversationId === conversationId) cb(m);
       });

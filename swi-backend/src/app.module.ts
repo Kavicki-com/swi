@@ -18,6 +18,7 @@ import { EvacuationModule } from './evacuation/evacuation.module'
 import { QueueModule } from './queue/queue.module'
 import { SupportModule } from './support/support.module'
 import { PositionsModule } from './positions/positions.module'
+import { CompaniesModule } from './companies/companies.module'
 import { HealthController } from './health.controller'
 
 @Module({
@@ -27,7 +28,7 @@ import { HealthController } from './health.controller'
       throttlers: [{ ttl: 60000, limit: 100 }],
       skipIf: () => process.env.NODE_ENV === 'test',
     }),
-    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, WorkOrdersModule, ChatModule, RealtimeModule, NotificationModule, WeatherModule, EvacuationModule, QueueModule, SupportModule, PositionsModule,
+    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, WorkOrdersModule, ChatModule, RealtimeModule, NotificationModule, WeatherModule, EvacuationModule, QueueModule, SupportModule, PositionsModule, CompaniesModule,
   ],
   controllers: [HealthController],
   providers: [

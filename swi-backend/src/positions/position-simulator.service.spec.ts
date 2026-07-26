@@ -4,6 +4,8 @@ import { distanceMeters, MUSTER_POINT } from './sim-route'
 const prisma = () => ({
   user: { findMany: jest.fn() },
   evacuation: { findMany: jest.fn().mockResolvedValue([]) },
+  // Cedência pro GPS real: o tick consulta quem tem heartbeat 'real' recente.
+  workerPosition: { findMany: jest.fn().mockResolvedValue([]) },
 }) as any
 const positions = () => ({ heartbeat: jest.fn().mockResolvedValue(undefined) }) as any
 const events = () => ({ ack: jest.fn().mockResolvedValue(undefined) }) as any
@@ -14,6 +16,33 @@ afterEach(() => {
 })
 
 describe('PositionSimulatorService', () => {
+  it('cede o pino a quem tem GPS real recente: pula o worker e posta os demais com source sim', async () => {
+    process.env.SIM_POSITIONS = '1'
+    jest.useFakeTimers()
+    const db = prisma()
+    db.user.findMany.mockResolvedValue([
+      { id: 'w1', companyId: 'org1' },
+      { id: 'w2', companyId: 'org1' },
+    ])
+    // w1 abriu o app no celular: heartbeat real há menos de 60s.
+    db.workerPosition.findMany.mockResolvedValue([{ workerId: 'w1' }])
+    const pos = positions()
+    const svc = new PositionSimulatorService(db, pos, events())
+    await svc.onModuleInit()
+    pos.heartbeat.mockClear() // isola o tick dirigido abaixo do tick do init
+    await svc.tick()
+    const ids = pos.heartbeat.mock.calls.map((c: unknown[]) => c[0])
+    expect(ids).not.toContain('w1') // o celular é dono do pino
+    expect(ids).toContain('w2')
+    // Filtro exato da cedência: só source real e só janela recente.
+    const where = db.workerPosition.findMany.mock.calls.at(-1)[0].where
+    expect(where.source).toBe('real')
+    expect(where.recordedAt.gt).toBeInstanceOf(Date)
+    // E o simulador se identifica: heartbeat marcado como 'sim'.
+    expect(pos.heartbeat.mock.calls.every((c: unknown[]) => c[3] === 'sim')).toBe(true)
+    svc.onModuleDestroy()
+  })
+
   it('sem SIM_POSITIONS=1 fica inerte: não consulta workers nem agenda timer', async () => {
     const db = prisma()
     const svc = new PositionSimulatorService(db, positions(), events())

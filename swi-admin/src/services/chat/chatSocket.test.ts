@@ -28,7 +28,9 @@ it('conecta com auth.token vindo do readToken e transports websocket, assina mes
       { transports: string[]; auth: { token: string | null } },
     ]
   )[1]
-  expect(opts.transports).toEqual(['websocket'])
+  // polling primeiro (QA remoto: WS puro morre na interstitial do ngrok;
+  // polling e XHR e carrega o header de skip — upgrade pra WS depois).
+  expect(opts.transports).toEqual(['polling', 'websocket'])
   // Prova que o token sai do readToken() (localStorage), não de um literal.
   expect(opts.auth.token).toBe('jwt-123')
   const onCall = onMock.mock.calls[0] as unknown as [string, (m: unknown) => void]

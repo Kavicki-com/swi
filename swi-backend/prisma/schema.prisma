@@ -68,6 +68,10 @@ model WorkerPosition {
   worker     User     @relation(fields: [workerId], references: [id])
   lat        Float
   lng        Float
+  // 'real' = GPS do app no celular; 'sim' = simulador dev. O simulador PULA
+  // quem tem heartbeat real recente (o celular assume o pino — decisão
+  // 2026-07-26); default 'sim' porque toda linha pré-existente era dele.
+  source     String   @default("sim")
   recordedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
@@ -201,6 +205,13 @@ model Profile {
   allergies         String?
   chronicConditions String?
   managerName       String?
+  // Coletados no wizard de onboarding do app (complimentary-data step 3) e
+  // DESCARTADOS até 2026-07-26: a tela não tinha coluna pra gravar. São dados
+  // DIGITÁVEIS — nada aqui depende da smartband, então são reais, nunca mock
+  // (a fronteira é: digitável = real ou vazio; biometria = simulada por hash).
+  heightCm          Int?
+  weightKg          Int?
+  hasDisability     Boolean?
   // Exames clínicos enviados (keys do bucket, prefixo exams/) — par do
   // "Histórico de exames" que renderizava vazio.
   examKeys     String[]  @default([])
