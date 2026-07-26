@@ -19,6 +19,9 @@ const prisma = () =>
       count: jest.fn().mockResolvedValue(0),
     },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
+    // Resolve nome do responsável → foto do Profile (o DTO devolve
+    // responsibleAvatars). Default vazio: sem match, avatar ''.
+    profile: { findMany: jest.fn().mockResolvedValue([]) },
     comment: { create: jest.fn() },
   }) as any
 
@@ -97,6 +100,39 @@ describe('ReportsService', () => {
     const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1')
     expect(out!.imageKeys).toEqual(['reports/a.jpg', 'reports/b.jpg']) // keys crus, sem presign
     expect(out!.images).toEqual(['signed:reports/a.jpg', 'signed:reports/b.jpg']) // urls presigned coexistem
+  })
+
+  // O painel pintava uma rotação fixa de 3 PNGs decorativos ao lado de
+  // "Responsáveis:" — caras que não eram das pessoas listadas, e uma pílula
+  // "+13" literal (QA 2026-07-26). O DTO agora resolve nome → foto real.
+  it('resolve a foto de cada responsável pelo nome, na mesma ordem', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(
+      row({ responsibles: ['Jennifer Gomes', 'Sem Cadastro', 'Josué Oliveira'], comments: [] }),
+    )
+    db.profile.findMany.mockResolvedValue([
+      { fullName: 'Josué Oliveira', avatarKey: 'chat/avatars/worker-3.png' },
+      { fullName: 'Jennifer Gomes', avatarKey: 'chat/avatars/worker-6.png' },
+    ])
+    const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1')
+    expect(db.profile.findMany.mock.calls[0][0].where).toEqual({
+      fullName: { in: ['Jennifer Gomes', 'Sem Cadastro', 'Josué Oliveira'] },
+    })
+    // Ordem preservada; quem não está no diretório vira '' (placeholder), nunca
+    // a foto de outra pessoa.
+    expect(out!.responsibleAvatars).toEqual([
+      'signed:chat/avatars/worker-6.png',
+      '',
+      'signed:chat/avatars/worker-3.png',
+    ])
+  })
+
+  it('sem responsáveis não consulta o banco por avatar', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(row({ responsibles: [], comments: [] }))
+    const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1')
+    expect(out!.responsibleAvatars).toEqual([])
+    expect(db.profile.findMany).not.toHaveBeenCalled()
   })
 
   it('get inexistente → null', async () => {

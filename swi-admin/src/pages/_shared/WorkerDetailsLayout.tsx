@@ -4,7 +4,7 @@
 // payload + a `topRightAction` slot for the page-specific CTA. The page owns
 // data fetching, loading/empty states, and back/CTA navigation.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Pressable, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
@@ -45,7 +45,9 @@ export type WorkerDetailsData = {
   gender?: 'male' | 'female'
   bpm?: number
   pressure?: string
+  /** Percentual 0-100 (mesma escala de simulatedVitalsFor.fatiguePct). */
   fatigueRate?: number
+  /** Percentual 0-100 (mesma escala de simulatedVitalsFor.effortPct). */
   effort?: number
   statusLabel?: string
   fatigueMinutes?: number
@@ -55,6 +57,11 @@ export type WorkerDetailsData = {
 
 export type WorkerDetailsLayoutProps = {
   worker: WorkerDetailsData
+  /**
+   * Posição AO VIVO da pessoa, pro mini-mapa. Sem ela o mapa não finge saber
+   * onde ela está — antes todo mundo era pinado na MESMA coordenada fixa.
+   */
+  position?: { lat: number; lng: number } | null
   testID: string
   onBack: () => void
   backA11yLabel: string
@@ -129,9 +136,11 @@ const ESRI_SATELLITE_STYLE = {
 // approximating the worker's last known position.
 function MiniMap({
   worker,
+  position,
   onOpenFullMap,
 }: {
   worker: WorkerDetailsData
+  position?: { lat: number; lng: number } | null
   onOpenFullMap: () => void
 }) {
   const theme = useTheme()
@@ -139,13 +148,16 @@ function MiniMap({
   const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
+  const lngLat: [number, number] | null = position ? [position.lng, position.lat] : null
   useEffect(() => {
-    if (!lib || !containerRef.current) return
+    if (!lib || !containerRef.current || !lngLat) return
     const map = new lib.Map({
       container: containerRef.current,
       style: ESRI_SATELLITE_STYLE,
-      center: [-46.633, -23.55],
-      zoom: 13,
+      center: lngLat,
+      // 13 enquadrava a cidade inteira: pra "onde ele está agora" o útil é o
+      // entorno imediato.
+      zoom: 16,
       interactive: false,
       attributionControl: false,
     })
@@ -182,7 +194,7 @@ function MiniMap({
     wrapper.appendChild(avatarEl)
     wrapper.appendChild(tail)
 
-    new lib.Marker({ element: wrapper, anchor: 'bottom' }).setLngLat([-46.633, -23.55]).addTo(map)
+    new lib.Marker({ element: wrapper, anchor: 'bottom' }).setLngLat(lngLat).addTo(map)
     return () => {
       map.remove()
       mapRef.current = null
@@ -192,7 +204,7 @@ function MiniMap({
     // would tear down and rebuild the map for an essentially-static colour
     // that never changes at runtime (the SWI theme is fixed dark mode).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worker, lib])
+  }, [worker, lib, lngLat?.[0], lngLat?.[1]])
   return (
     <View
       style={{
@@ -209,6 +221,13 @@ function MiniMap({
       }}
     >
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+      {!lngLat ? (
+        <View style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.surface.medium }}>
+          <Text variant="body.s" color={theme.content.medium}>
+            Sem posição ao vivo
+          </Text>
+        </View>
+      ) : null}
       <View style={{ position: 'absolute', left: 8, bottom: 8 }}>
         <Button
           label="Mapa completo"
@@ -278,6 +297,7 @@ function InlineStat({
 
 export function WorkerDetailsLayout({
   worker,
+  position,
   testID,
   onBack,
   backA11yLabel,
@@ -288,15 +308,21 @@ export function WorkerDetailsLayout({
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const isWide = breakpoint === 'wide'
-  const genderLabel = worker.gender === 'male' ? 'Masculino' : 'Feminino'
-  const genderIcon: IconName = worker.gender === 'male' ? 'admin_filled' : 'humidity_mid'
-  // Percent with pt-BR locale (comma decimal): 62.5 → "62,5".
+  // Sem gênero no cadastro NÃO se inventa um: antes o ternário mandava todo
+  // funcionário sem o campo pra "Feminino" (QA 2026-07-26).
+  const genderLabel =
+    worker.gender === 'male' ? 'Masculino' : worker.gender === 'female' ? 'Feminino' : 'Não informado'
+  const genderIcon: IconName = worker.gender === 'female' ? 'humidity_mid' : 'admin_filled'
+  // fatigueRate/effort já vêm em 0-100. O formatPct antigo multiplicava por 100
+  // de novo (herança das fixtures em fração 0-1) e a tela exibia "8.900,0%".
   const formatPct = (n: number) =>
     new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(
-      Math.round(n * 1000) / 10,
+      Math.round(Math.min(100, Math.max(0, n)) * 10) / 10,
     )
   const fatiguePct = formatPct(worker.fatigueRate ?? 0)
   const effortPct = formatPct(worker.effort ?? 0)
+  const allergies = worker.allergies ?? []
+  const exams = worker.examHistory ?? []
   const [caloriesPeriod, setCaloriesPeriod] = useState('today')
 
   return (
@@ -395,7 +421,7 @@ export function WorkerDetailsLayout({
           </View>
 
           {/* Mini map with location */}
-          <MiniMap worker={worker} onOpenFullMap={onOpenFullMap} />
+          <MiniMap worker={worker} position={position} onOpenFullMap={onOpenFullMap} />
 
           {/* Exam history — Figma 159:14200 / 159:16070 specifies h-[176px]
               scrollable area. Vertical-only scroll, no visible scrollbar
@@ -415,16 +441,24 @@ export function WorkerDetailsLayout({
                 overflowX: 'hidden',
               }}
             >
-              {(worker.examHistory ?? []).map((exam) => (
-                <ExamInfoCard
-                  key={exam.id}
-                  year={exam.year}
-                  date={exam.date}
-                  examName={exam.title}
-                  compact
-                  fullWidth
-                />
-              ))}
+              {exams.length > 0 ? (
+                exams.map((exam) => (
+                  <ExamInfoCard
+                    key={exam.id}
+                    year={exam.year}
+                    date={exam.date}
+                    examName={exam.title}
+                    compact
+                    fullWidth
+                  />
+                ))
+              ) : (
+                // Um título sozinho lê como "falha de carregamento". Dizer que
+                // não há exames é informação; o vazio mudo não é.
+                <Text variant="body.s" color={theme.content.medium}>
+                  Nenhum exame registrado.
+                </Text>
+              )}
             </div>
           </View>
         </View>
@@ -593,9 +627,15 @@ export function WorkerDetailsLayout({
               Alergias
             </Title>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.s }}>
-              {(worker.allergies ?? []).map((a) => (
-                <Chip key={a} label={a} variant="filled" />
-              ))}
+              {allergies.length > 0 ? (
+                allergies.map((a) => <Chip key={a} label={a} variant="filled" />)
+              ) : (
+                // "Nenhuma alergia registrada" ≠ "nenhuma alergia": o campo é
+                // declaratório e pode simplesmente não ter sido preenchido.
+                <Text variant="body.s" color={theme.content.medium}>
+                  Nenhuma alergia registrada.
+                </Text>
+              )}
             </View>
           </View>
 
@@ -613,8 +653,10 @@ export function WorkerDetailsLayout({
             <DonutChart
               title="Taxa de fadiga"
               value={`${fatiguePct}%`}
-              label="Funcionários"
-              progress={(worker.fatigueRate ?? 0) * 100}
+              // Era "Funcionários" — legenda de KPI de equipe colada num donut
+              // que mede UMA pessoa (QA 2026-07-26).
+              label="Fadiga atual"
+              progress={Math.min(100, Math.max(0, worker.fatigueRate ?? 0))}
               size="small"
               appearance="bevel"
               icon="heartbeat"
@@ -624,7 +666,7 @@ export function WorkerDetailsLayout({
               title="Esforço realizado"
               value={`${effortPct}%`}
               label="Esforço feito"
-              progress={(worker.effort ?? 0) * 100}
+              progress={Math.min(100, Math.max(0, worker.effort ?? 0))}
               size="small"
               appearance="bevel"
               icon="heartbeat"

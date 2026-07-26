@@ -29,8 +29,10 @@ const dto = (over: Record<string, unknown> = {}) => ({
 afterEach(() => vi.unstubAllGlobals())
 
 describe('reportsApi.list (real)', () => {
-  it('GET /reports; junta responsibles em string e injeta avatares decorativos', async () => {
-    const f = okJson([dto({ responsibles: ['Ana', 'Bea'] })])
+  it('GET /reports; junta responsibles em string e usa os avatares REAIS', async () => {
+    const f = okJson([
+      dto({ responsibles: ['Ana', 'Bea'], responsibleAvatars: ['signed:ana', 'signed:bea'] }),
+    ])
     vi.stubGlobal('fetch', f)
 
     const { data, error } = await reportsApi.list()
@@ -40,11 +42,11 @@ describe('reportsApi.list (real)', () => {
     expect(r.id).toBe('r1')
     expect(r.title).toBe('Inspeção Técnica')
     expect(r.responsibles).toBe('Ana, Bea') // array de nomes → string separada por vírgula
-    // Contagem e nº de faces = responsáveis REAIS (QA 2026-07-24: era 9 fixo,
-    // então todo card mentia "+5" mesmo com 2 pessoas). Avatares seguem
-    // decorativos (o backend guarda só nomes), mas a QUANTIDADE é verdadeira.
+    // Contagem e faces = responsáveis REAIS. As faces eram uma rotação fixa de
+    // PNGs decorativos: o card mostrava caras que não eram das pessoas
+    // nomeadas logo abaixo (QA 2026-07-26).
     expect(r.responsibleTotalCount).toBe(2)
-    expect(r.responsibleAvatars).toHaveLength(2)
+    expect(r.responsibleAvatars).toEqual(['signed:ana', 'signed:bea'])
     expect(r.status).toBe('pending')
     expect(r.statusLabel).toBe('Em Revisão')
     expect(r.authorAvatarUri).toBe('signed:av1')
@@ -95,7 +97,9 @@ describe('reportsApi.get (real)', () => {
     expect(a.sector).toBe('Setor Noroeste')
     expect(a.progress).toBe(80)
     expect(a.tone).toBe('success')
-    expect(a.avatars.length).toBeGreaterThan(0) // avatares decorativos por linha
+    // Atividade do backend não carrega pessoas → sem faces. Eram 5 avatares
+    // decorativos por linha, sugerindo uma equipe que o dado não afirma.
+    expect(a.avatars).toEqual([])
     expect(a.overflowCount).toBe(13) // passthrough quando presente
     expect(data!.activities![1]!.id).toBe('act-1') // sintetizado quando o backend não manda
     const [url] = f.mock.calls[0] as [string]

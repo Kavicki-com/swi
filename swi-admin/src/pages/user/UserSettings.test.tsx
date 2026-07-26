@@ -136,7 +136,11 @@ describe('UserSettings', () => {
     expect(patch.jobTitle).toBe('Operador de caminhão')
     expect(patch.sector).toBe('Setor Leste')
     expect(patch.managerName).toBe('João Soares Ribeiro')
-    expect(patch.gender).toBe('Feminino')
+    // gender é CÓDIGO, não rótulo: o form gravava 'Feminino' e quem lê o campo
+    // comparando com 'female' (detalhe do funcionário, painel do chat) caía no
+    // default. O fixture ainda traz o rótulo legado — readGender o aceita na
+    // leitura e o patch volta normalizado (QA 2026-07-26).
+    expect(patch.gender).toBe('female')
     expect(patch.bloodType).toBe('O+')
   })
 

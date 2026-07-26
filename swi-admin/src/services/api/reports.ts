@@ -6,9 +6,6 @@
 // pra preservar o visual do redesign (AvatarGroup) até o hardware/upload existir.
 import type { MockResponse } from '@/services/mockApi/types'
 import { apiFetch } from './http'
-import workerA from '@/assets/avatars/worker-a.png'
-import workerB from '@/assets/avatars/worker-b.png'
-import workerC from '@/assets/avatars/worker-c.png'
 
 // Tipos canônicos dos Relatórios (antes moravam em mockApi/reports.ts, hoje morto).
 // Statuses mapeiam os valores do DS StatusTag: 'accept' (verde), 'pending'
@@ -57,19 +54,6 @@ export type Report = {
   activities?: ReadonlyArray<ReportActivity>
 }
 
-// Avatares decorativos: o backend não persiste avatar de responsável, então a
-// UI (AvatarGroup) consome esta rotação fixa. Rotação a,b,c,a,b — 5 slots,
-// batendo com o mock antigo (mockApi/reports.ts) pra manter o layout idêntico.
-const DECOR_AVATARS: ReadonlyArray<string> = [workerA, workerB, workerC, workerA, workerB]
-
-// Uma face decorativa por responsável REAL (teto no tamanho da rotação; acima
-// disso o AvatarGroup mostra o excedente como "+N" a partir do totalCount).
-// Os nomes verdadeiros seguem no texto `responsibles` (comma-joined).
-function decorAvatarsFor(count: number): ReadonlyArray<string> {
-  if (count <= 0) return []
-  return DECOR_AVATARS.slice(0, Math.min(count, DECOR_AVATARS.length))
-}
-
 // Um comentário no detalhe do relatório (POST /reports/:id/comments responde um).
 export type ReportComment = {
   id: string
@@ -92,6 +76,10 @@ export type ReportDto = {
   creationDate: string // dd/mm/yyyy
   sector: string
   responsibles: string[]
+  // URLs presigned das fotos dos responsáveis, na MESMA ordem de `responsibles`
+  // ('' quando o nome não bate com ninguém do diretório). Opcional: um backend
+  // antigo não manda o campo e a UI cai no placeholder.
+  responsibleAvatars?: string[]
   details?: string
   images?: string[] // urls presigned (exibição)
   imageKeys?: string[] // keys crus (edição preserva/mescla anexos)
@@ -147,7 +135,10 @@ function toReport(dto: ReportDto): Report {
     progress: a.progress,
     tone: a.tone,
     overflowCount: a.overflowCount,
-    avatars: DECOR_AVATARS, // decorativo: atividades do backend não carregam avatar
+    // Atividade do backend não carrega pessoas: antes cada linha pintava 5
+    // faces decorativas, sugerindo uma equipe que o dado não afirma
+    // (QA 2026-07-26). Sem gente conhecida → sem faces.
+    avatars: [],
   }))
   return {
     id: dto.id,
@@ -160,10 +151,11 @@ function toReport(dto: ReportDto): Report {
     creationDate: dto.creationDate,
     sector: dto.sector,
     responsibles: (dto.responsibles ?? []).join(', '),
-    // Faces decorativas (o backend guarda só nomes), mas a QUANTIDADE é real:
-    // 2 responsáveis → 2 faces, sem badge. Antes eram 5 faces + "+5" fixo em
-    // todo card, afirmando 9 pessoas que não existiam (QA 2026-07-24).
-    responsibleAvatars: decorAvatarsFor((dto.responsibles ?? []).length),
+    // Faces REAIS dos responsáveis (o backend resolve nome → foto do Profile).
+    // Antes era uma rotação de 3 PNGs decorativos: o card mostrava caras que
+    // não eram das pessoas nomeadas logo abaixo (QA 2026-07-26). Backend sem o
+    // campo → nenhuma face, nunca uma face errada.
+    responsibleAvatars: dto.responsibleAvatars ?? [],
     responsibleTotalCount: (dto.responsibles ?? []).length,
     details: dto.details,
     images: dto.images ?? [],

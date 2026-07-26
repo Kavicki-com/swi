@@ -11,6 +11,7 @@ import { employeesApi, type Employee } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
+import { useLivePositions } from '@/hooks/useLivePositions'
 import { useDemoToast } from '@/lib/demoToast'
 
 export function EmployeeDetails() {
@@ -21,6 +22,10 @@ export function EmployeeDetails() {
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [loading, setLoading] = useState(true)
   const [pausing, setPausing] = useState(false)
+  // Mini-mapa: posição REAL deste funcionário (o layout pinava todo mundo na
+  // mesma coordenada fixa — QA 2026-07-26).
+  const positions = useLivePositions()
+  const position = positions?.find((p) => p.id === id) ?? null
 
   // QA F (2026-07-24): era toast fake. POST real — o worker recebe a
   // notificação de journey no app; erro do backend aparece no toast.
@@ -83,6 +88,7 @@ export function EmployeeDetails() {
         fatigueMinutes: vitals.fatigueMinutes,
         statusLabel: vitals.statusLabel,
       }}
+      position={position ? { lat: position.lat, lng: position.lng } : null}
       testID="employee-details"
       onBack={() => navigate('/employees')}
       backA11yLabel="Voltar para a lista de funcionários"

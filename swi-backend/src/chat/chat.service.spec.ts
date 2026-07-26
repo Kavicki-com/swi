@@ -23,7 +23,7 @@ const userRow = (id: string, over: any = {}) => ({
   profile: {
     fullName: `full-${id}`, sector: 'Setor Leste', jobTitle: 'Operador',
     avatarKey: `chat/avatars/${id}.png`,
-    birthDate: new Date('1990-05-04'), bloodType: 'B+', allergies: 'Poeira',
+    birthDate: new Date('1990-05-04'), bloodType: 'B+', allergies: 'Poeira', gender: 'female',
   },
   ...over,
 })
@@ -43,12 +43,14 @@ describe('ChatService', () => {
     const where = db.user.findMany.mock.calls[0][0].where
     expect(where).toMatchObject({ approvalStatus: 'APPROVED', role: 'WORKER', id: { not: A }, companyId: 'org1' })
     expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
-    // birthDate/bloodType/allergies vão junto: o painel do chat mostrava
-    // 26 anos / O+ pra todo contato por não ter esses campos (QA de volume).
+    // birthDate/bloodType/allergies/gender vão junto: o painel do chat mostrava
+    // 26 anos / O+ pra todo contato por não ter esses campos (QA de volume), e
+    // fixava "Masculino" mesmo pras colaboradoras (QA 2026-07-26).
     expect(out[0]).toEqual({
       workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador',
       avatarUri: 'signed:chat/avatars/bbbb.png',
       birthDate: new Date('1990-05-04').toISOString(), bloodType: 'B+', allergies: 'Poeira',
+      gender: 'female',
     })
   })
 

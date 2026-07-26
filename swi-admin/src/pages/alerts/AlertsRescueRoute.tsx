@@ -16,6 +16,7 @@ import { useMapLibre } from '@/lib/useMapLibre'
 import { SATELLITE_STYLE } from '@/lib/mapStyles'
 import { MapAttribution } from '@/components/MapAttribution'
 import { useRescueRoute } from '@/hooks/useRescueRoute'
+import { useLivePositions } from '@/hooks/useLivePositions'
 import { lngLatAlongLineString, totalLineLength } from '@/lib/lineString'
 import { formatDuration, formatDistance } from '@/lib/formatRoute'
 import { useDemoToast } from '@/lib/demoToast'
@@ -29,11 +30,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 
-// Real-world coords for the rescue scenario. Placed in the same São Paulo
-// operational area used by /maps/general and /alerts so the whole demo
-// feels like one mine site.
-const INJURED_LNGLAT: [number, number] = [-46.62, -23.545]
-const RESCUER_LNGLAT: [number, number] = [-46.64, -23.555]
+type LngLat = [number, number]
 
 type PinHandle = { marker: maplibregl.Marker; root: Root; el: HTMLDivElement }
 
@@ -80,7 +77,7 @@ function buildDispatchedRescuerMarker(lib: typeof maplibregl): PinHandle {
 
 export function AlertsRescueRoute() {
   const theme = useTheme()
-  const { rescuerId } = useParams<{ employeeId?: string; rescuerId?: string }>()
+  const { employeeId, rescuerId } = useParams<{ employeeId?: string; rescuerId?: string }>()
   // Dispatched state is persisted in the URL (`?dispatched=true`) so a
   // refresh of /alerts/:employeeId/rescue/:rescuerId?dispatched=true
   // returns the user to the post-Continuar view (Figma 101:8359
@@ -90,6 +87,24 @@ export function AlertsRescueRoute() {
   const dispatched = searchParams.get('dispatched') === 'true'
   const [modalVisible, setModalVisible] = useState(!dispatched)
   const routeStroke = dispatched ? '#8B5CF6' : '#2BA8C9'
+
+  // Pontas REAIS do socorro: as posições ao vivo do ferido (:employeeId) e do
+  // socorrista escolhido (:rescuerId). Antes eram duas constantes fixas — o
+  // mapa desenhava sempre a MESMA rota de 2,5 km enquanto a tela anterior
+  // dizia "0,02 Km / 1 minuto" pro mesmo par (QA 2026-07-26).
+  //
+  // Congelamos no primeiro instante em que as duas posições são conhecidas: o
+  // simulador move os pinos a cada 3 s e re-pedir a rota a cada tick faria a
+  // linha piscar (e martelaria a Directions API). Uma rota de socorro é, por
+  // definição, calculada no momento do despacho.
+  const positions = useLivePositions()
+  const [ends, setEnds] = useState<{ injured: LngLat; rescuer: LngLat } | null>(null)
+  useEffect(() => {
+    if (ends || !positions) return
+    const i = positions.find((p) => p.id === employeeId)
+    const r = positions.find((p) => p.id === rescuerId)
+    if (i && r) setEnds({ injured: [i.lng, i.lat], rescuer: [r.lng, r.lat] })
+  }, [positions, employeeId, rescuerId, ends])
 
   const lib = useMapLibre()
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -103,7 +118,7 @@ export function AlertsRescueRoute() {
   // Mapbox Directions API: rescuer -> injured. Replaces the previous
   // hardcoded 3-point LineString with a real road-following polyline +
   // real ETA/distance values. Loading + error states are handled below.
-  const { route, loading, error } = useRescueRoute(RESCUER_LNGLAT, INJURED_LNGLAT)
+  const { route, loading, error } = useRescueRoute(ends?.rescuer ?? null, ends?.injured ?? null)
   const { show: showToast } = useDemoToast()
 
   // Surface the error to the user once per occurrence (no re-toast on
@@ -119,10 +134,11 @@ export function AlertsRescueRoute() {
   // Falls back to a straight 2-point LineString while route is loading
   // or failed — keeps the UI usable, swaps in the real polyline once
   // the API resolves.
-  const coords = useMemo<Array<[number, number]>>(() => {
-    if (!route) return [RESCUER_LNGLAT, INJURED_LNGLAT]
-    return route.geometry.coordinates.map((c) => [c[0]!, c[1]!] as [number, number])
-  }, [route])
+  const coords = useMemo<Array<LngLat>>(() => {
+    if (!ends) return []
+    if (!route) return [ends.rescuer, ends.injured]
+    return route.geometry.coordinates.map((c) => [c[0]!, c[1]!] as LngLat)
+  }, [route, ends])
 
   // 3 floating labels anchored at fractional positions along the route.
   // While the Mapbox response is in-flight, show "..." placeholders so the
@@ -130,7 +146,7 @@ export function AlertsRescueRoute() {
   // values come straight from duration (seconds) + distance (metres).
   // Error case (route===null after loading=false) is handled in C2.
   const labels = useMemo(() => {
-    if (loading) {
+    if (loading || !ends) {
       return [
         { t: 0.25, text: '…' },
         { t: 0.55, text: '…' },
@@ -147,23 +163,23 @@ export function AlertsRescueRoute() {
     // Error fallback: no ETA available, but estimate distance from the
     // straight-line geometry. 1° lat ≈ 111 km globally; lng° varies with
     // latitude but at -23.5° the error is < 10%, fine for the demo label.
-    const distMeters = totalLineLength([RESCUER_LNGLAT, INJURED_LNGLAT]) * 111000
+    const distMeters = totalLineLength([ends.rescuer, ends.injured]) * 111000
     return [
       { t: 0.25, text: '—' },
       { t: 0.55, text: formatDistance(distMeters) },
       { t: 0.78, text: '—' },
     ]
-  }, [route, loading])
+  }, [route, loading, ends])
 
   // Init the map once — frame both pins inside view via fitBounds.
   useEffect(() => {
-    if (!lib || !containerRef.current) return
+    if (!lib || !containerRef.current || !ends) return
     const map = new lib.Map({
       container: containerRef.current,
       style: SATELLITE_STYLE,
       center: [
-        (INJURED_LNGLAT[0] + RESCUER_LNGLAT[0]) / 2,
-        (INJURED_LNGLAT[1] + RESCUER_LNGLAT[1]) / 2,
+        (ends.injured[0] + ends.rescuer[0]) / 2,
+        (ends.injured[1] + ends.rescuer[1]) / 2,
       ],
       zoom: 15,
       attributionControl: false,
@@ -171,8 +187,8 @@ export function AlertsRescueRoute() {
     mapRef.current = map
     map.on('load', () => {
       const bounds = new lib.LngLatBounds()
-      bounds.extend(RESCUER_LNGLAT)
-      bounds.extend(INJURED_LNGLAT)
+      bounds.extend(ends.rescuer)
+      bounds.extend(ends.injured)
       map.fitBounds(bounds, { padding: 100, animate: false, maxZoom: 16 })
       setMapReady(true)
     })
@@ -181,18 +197,18 @@ export function AlertsRescueRoute() {
       mapRef.current = null
       setMapReady(false)
     }
-  }, [lib])
+  }, [lib, ends])
 
   // Mount the 2 pins. The rescuer pin's appearance is dispatched-state
   // dependent (badge before / moving square after).
   useEffect(() => {
     const map = mapRef.current
-    if (!lib || !map || !mapReady) return
+    if (!lib || !map || !mapReady || !ends) return
     const rescuer = dispatched ? buildDispatchedRescuerMarker(lib) : buildBadgePin('good', lib)
-    rescuer.marker.setLngLat(RESCUER_LNGLAT).addTo(map)
+    rescuer.marker.setLngLat(ends.rescuer).addTo(map)
 
     const injured = buildBadgePin('low', lib)
-    injured.marker.setLngLat(INJURED_LNGLAT).addTo(map)
+    injured.marker.setLngLat(ends.injured).addTo(map)
 
     return () => {
       rescuer.marker.remove()
@@ -209,14 +225,14 @@ export function AlertsRescueRoute() {
         injured.el.remove()
       })
     }
-  }, [lib, mapReady, dispatched])
+  }, [lib, mapReady, dispatched, ends])
 
   // Add the route as a GeoJSON LineString layer. Stroke color reflects the
   // dispatched state (cyan → violet). Coordinates come from the Mapbox
   // Directions response (or fallback to a straight line while loading).
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady) return
+    if (!map || !mapReady || coords.length < 2) return
     const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
       type: 'Feature',
       geometry: { type: 'LineString', coordinates: coords },
@@ -258,7 +274,7 @@ export function AlertsRescueRoute() {
   // (possibly multi-segment) route geometry.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady) return
+    if (!map || !mapReady || coords.length < 2) return
     const update = () => {
       const next: Record<number, { left: number; top: number }> = {}
       labels.forEach((l) => {
@@ -301,6 +317,19 @@ export function AlertsRescueRoute() {
       {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
       <MapAttribution />
 
+      {/* Sem posição conhecida das duas pontas não existe rota: dizer isso é
+          melhor que desenhar um trajeto plausível entre coordenadas erradas. */}
+      {!ends && positions ? (
+        <View
+          testID="alerts-rescue-route-sem-posicao"
+          style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text variant="body.m" color={theme.content.dark}>
+            Posição ao vivo indisponível para o par selecionado.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Inline distance/time labels — one per waypoint, tracked via map.project */}
       {labels.map((l) => {
         const pos = labelPos[l.t]
@@ -332,7 +361,7 @@ export function AlertsRescueRoute() {
         )
       })}
 
-      {modalVisible ? (
+      {modalVisible && ends ? (
         <View
           style={{
             position: 'absolute',

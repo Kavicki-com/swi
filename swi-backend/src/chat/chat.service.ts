@@ -158,6 +158,9 @@ export class ChatService {
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
       bloodType: u.profile?.bloodType ?? null,
       allergies: u.profile?.allergies ?? null,
+      // Idem: o painel fixava `gender: 'male'`, então as colaboradoras do
+      // quadro apareciam como "Masculino".
+      gender: u.profile?.gender ?? null,
     }
   }
 

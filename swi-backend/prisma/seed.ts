@@ -49,15 +49,19 @@ async function main() {
 
   // birthDate (date-only): demo realista pra a UI do painel calcular idade (antes
   // todos caíam em "0 anos" por falta do campo). Ver [[swi-open-followups]] #5.
+  // bloodType/allergies/gender: cadastro CLÍNICO (não depende da smartband — são
+  // campos editáveis do Profile). Sem eles a tela de socorro lista "—" pra todo
+  // mundo (a info mais crítica da linha num console de emergência) e o detalhe
+  // do funcionário mostrava "Gênero: Feminino" pra todos, por default do layout.
   const CONTACTS = [
-    { n: 1, email: 'romulo@swi.local',   name: 'Romulo Cardoso',          sector: 'Setor Leste', role: 'Operador',                birthDate: '1985-03-12' },
-    { n: 2, email: 'ezequiel@swi.local', name: 'Ezequiel Almeida',        sector: 'Setor Leste', role: 'Operador',                birthDate: '1990-07-25' },
-    { n: 3, email: 'josue@swi.local',    name: 'Josué Oliveira',          sector: 'Setor Leste', role: 'Técnico de Manutenção',   birthDate: '1982-11-03' },
-    { n: 4, email: 'carlos@swi.local',   name: 'Carlos Santos',           sector: 'Setor Leste', role: 'Operador',                birthDate: '1978-01-19' },
-    { n: 5, email: 'antonio@swi.local',  name: 'Antonio Carlos Figueira', sector: 'Setor Leste', role: 'Supervisor',              birthDate: '1971-09-08' },
-    { n: 6, email: 'jennifer@swi.local', name: 'Jennifer Gomes',          sector: 'Setor Leste', role: 'Analista de Segurança',   birthDate: '1993-05-14' },
-    { n: 7, email: 'adriana@swi.local',  name: 'Adriana Santos Almeida',  sector: 'Setor Leste', role: 'Operadora',               birthDate: '1988-12-02' },
-    { n: 8, email: 'compressor@swi.local', name: 'Carlos Santos (Manut.)', sector: 'Setor Leste', role: 'Operador',               birthDate: '1995-04-21' },
+    { n: 1, email: 'romulo@swi.local',   name: 'Romulo Cardoso',          sector: 'Setor Leste', role: 'Operador',                birthDate: '1985-03-12', bloodType: 'O+',  gender: 'male',   allergies: '' },
+    { n: 2, email: 'ezequiel@swi.local', name: 'Ezequiel Almeida',        sector: 'Setor Leste', role: 'Operador',                birthDate: '1990-07-25', bloodType: 'A+',  gender: 'male',   allergies: 'Dipirona' },
+    { n: 3, email: 'josue@swi.local',    name: 'Josué Oliveira',          sector: 'Setor Leste', role: 'Técnico de Manutenção',   birthDate: '1982-11-03', bloodType: 'B+',  gender: 'male',   allergies: '' },
+    { n: 4, email: 'carlos@swi.local',   name: 'Carlos Santos',           sector: 'Setor Leste', role: 'Operador',                birthDate: '1978-01-19', bloodType: 'O-',  gender: 'male',   allergies: 'Penicilina' },
+    { n: 5, email: 'antonio@swi.local',  name: 'Antonio Carlos Figueira', sector: 'Setor Leste', role: 'Supervisor',              birthDate: '1971-09-08', bloodType: 'AB+', gender: 'male',   allergies: '' },
+    { n: 6, email: 'jennifer@swi.local', name: 'Jennifer Gomes',          sector: 'Setor Leste', role: 'Analista de Segurança',   birthDate: '1993-05-14', bloodType: 'A-',  gender: 'female', allergies: 'Látex' },
+    { n: 7, email: 'adriana@swi.local',  name: 'Adriana Santos Almeida',  sector: 'Setor Leste', role: 'Operadora',               birthDate: '1988-12-02', bloodType: 'B-',  gender: 'female', allergies: '' },
+    { n: 8, email: 'compressor@swi.local', name: 'Carlos Santos (Manut.)', sector: 'Setor Leste', role: 'Operador',               birthDate: '1995-04-21', bloodType: 'O+',  gender: 'male',   allergies: 'Poeira de sílica' },
   ]
 
   type Seg = { from: 'me' | 'them'; body: string; time: string }
@@ -154,8 +158,8 @@ async function main() {
     contactIds.set(c.n, u.id)
     await prisma.profile.upsert({
       where: { userId: u.id },
-      update: { fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey, birthDate: new Date(c.birthDate) },
-      create: { userId: u.id, fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey, birthDate: new Date(c.birthDate) },
+      update: { fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey, birthDate: new Date(c.birthDate), bloodType: c.bloodType, gender: c.gender, allergies: c.allergies },
+      create: { userId: u.id, fullName: c.name, sector: c.sector, jobTitle: c.role, avatarKey, birthDate: new Date(c.birthDate), bloodType: c.bloodType, gender: c.gender, allergies: c.allergies },
     })
   }
 
@@ -164,18 +168,19 @@ async function main() {
   // contatos já ganharam a sua no laço acima; aqui fecham o worker demo e o
   // admin, que antes nasciam sem Profile completo.
   for (const p of [
-    { user: worker, file: 'worker-demo.png', fullName: 'Worker Demo', sector: 'Operações', jobTitle: 'Operador de escavadeira', birthDate: '1994-02-17' },
-    { user: admin, file: 'admin-1.png', fullName: 'Admin', sector: 'Gestão', jobTitle: 'Administrador', birthDate: '1986-06-09' },
+    { user: worker, file: 'worker-demo.png', fullName: 'Worker Demo', sector: 'Operações', jobTitle: 'Operador de escavadeira', birthDate: '1994-02-17', bloodType: 'A+', gender: 'male', allergies: 'Poeira de sílica' },
+    { user: admin, file: 'admin-1.png', fullName: 'Admin', sector: 'Gestão', jobTitle: 'Administrador', birthDate: '1986-06-09', bloodType: 'O+', gender: 'male', allergies: '' },
   ]) {
     let avatarKey = ''
     try { avatarKey = await uploadAvatarFile(p.file) }
     catch (e) { console.warn(`[seed] avatar ${p.file} falhou (bucket up?):`, (e as Error).message) }
     await prisma.profile.upsert({
       where: { userId: p.user.id },
-      update: { fullName: p.fullName, sector: p.sector, jobTitle: p.jobTitle, avatarKey, birthDate: new Date(p.birthDate) },
+      update: { fullName: p.fullName, sector: p.sector, jobTitle: p.jobTitle, avatarKey, birthDate: new Date(p.birthDate), bloodType: p.bloodType, gender: p.gender, allergies: p.allergies },
       create: {
         userId: p.user.id, fullName: p.fullName, sector: p.sector, jobTitle: p.jobTitle,
-        avatarKey, birthDate: new Date(p.birthDate), city: 'São Paulo', uf: 'SP',
+        avatarKey, birthDate: new Date(p.birthDate), bloodType: p.bloodType, gender: p.gender,
+        allergies: p.allergies, city: 'São Paulo', uf: 'SP',
       },
     })
   }
@@ -419,22 +424,25 @@ async function main() {
 
   // Fixture espelhando REPORTS_SEED (title/summary/status/statusLabel/creationDate/
   // sector/responsibles). Datas dd/mm/yyyy → Date (UTC midnight).
-  type ReportFx = { title: string; summary: string; status: 'accept' | 'pending' | 'canceled' | 'info'; statusLabel: string; creationDate: string; sector: string; responsibles: string }
+  // `responsibles` NÃO vem da fixture: era a mesma dupla inventada ("Ana Clara
+  // Mendonça, Antonio Hayde") nos 12 relatórios, gente que não existe no quadro.
+  // Agora sai do próprio CONTACTS, rotacionando (QA 2026-07-26).
+  type ReportFx = { title: string; summary: string; status: 'accept' | 'pending' | 'canceled' | 'info'; statusLabel: string; creationDate: string; sector: string }
   const REPORTS_FX: ReportFx[] = [
-    { title: 'Inspeção Técnica das Máquinas Pesadas', summary: 'Checklist de manutenção preventiva e reparos necessários nos equipamentos da frota.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '12/04/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Relatório de Eficiência Energética da Mina Oeste', summary: 'Análise de consumo e indicadores de eficiência energética por turno e equipamento.', status: 'accept', statusLabel: 'Concluído', creationDate: '08/04/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Análise de Qualidade do Solo na Região Sul', summary: 'Resultados de amostragem geoquímica para validar qualidade do solo na nova frente.', status: 'info', statusLabel: 'Em Andamento', creationDate: '02/04/2026', sector: 'Setor Sul', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Relatório de Treinamento e Capacitação', summary: 'Resumo das ações de treinamento realizadas e avaliação dos participantes do mês.', status: 'accept', statusLabel: 'Concluído', creationDate: '28/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Avaliação de Impacto Ambiental da Mina Central', summary: 'Identificação das principais frentes de impacto ambiental e plano de mitigação.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '25/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Estudo de Riscos Geológicos da Região Centro', summary: 'Mapeamento de falhas e áreas com risco geotécnico identificadas no semestre.', status: 'accept', statusLabel: 'Concluído', creationDate: '18/03/2026', sector: 'Setor Centro', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Relatório de Produtividade da Mina Oeste', summary: 'Compara projeção de produção com volume realizado nos últimos três meses.', status: 'info', statusLabel: 'Em Andamento', creationDate: '12/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Análise de Custos Operacionais da Mina Leste', summary: 'Levantamento de custos diretos e indiretos, com sugestão de cortes para Q2.', status: 'accept', statusLabel: 'Concluído', creationDate: '04/03/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Monitoramento Hidrológico da Zona Leste', summary: 'Dados dos sensores hidrológicos e variações observadas nas últimas duas semanas.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '25/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Inspeção Técnica das Máquinas Pesadas', summary: 'Checklist de manutenção preventiva e reparos necessários nos equipamentos da frota.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '12/04/2026', sector: 'Setor Nordeste' },
+    { title: 'Relatório de Eficiência Energética da Mina Oeste', summary: 'Análise de consumo e indicadores de eficiência energética por turno e equipamento.', status: 'accept', statusLabel: 'Concluído', creationDate: '08/04/2026', sector: 'Setor Nordeste' },
+    { title: 'Análise de Qualidade do Solo na Região Sul', summary: 'Resultados de amostragem geoquímica para validar qualidade do solo na nova frente.', status: 'info', statusLabel: 'Em Andamento', creationDate: '02/04/2026', sector: 'Setor Sul' },
+    { title: 'Relatório de Treinamento e Capacitação', summary: 'Resumo das ações de treinamento realizadas e avaliação dos participantes do mês.', status: 'accept', statusLabel: 'Concluído', creationDate: '28/03/2026', sector: 'Setor Nordeste' },
+    { title: 'Avaliação de Impacto Ambiental da Mina Central', summary: 'Identificação das principais frentes de impacto ambiental e plano de mitigação.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '25/03/2026', sector: 'Setor Nordeste' },
+    { title: 'Estudo de Riscos Geológicos da Região Centro', summary: 'Mapeamento de falhas e áreas com risco geotécnico identificadas no semestre.', status: 'accept', statusLabel: 'Concluído', creationDate: '18/03/2026', sector: 'Setor Centro' },
+    { title: 'Relatório de Produtividade da Mina Oeste', summary: 'Compara projeção de produção com volume realizado nos últimos três meses.', status: 'info', statusLabel: 'Em Andamento', creationDate: '12/03/2026', sector: 'Setor Nordeste' },
+    { title: 'Análise de Custos Operacionais da Mina Leste', summary: 'Levantamento de custos diretos e indiretos, com sugestão de cortes para Q2.', status: 'accept', statusLabel: 'Concluído', creationDate: '04/03/2026', sector: 'Setor Nordeste' },
+    { title: 'Monitoramento Hidrológico da Zona Leste', summary: 'Dados dos sensores hidrológicos e variações observadas nas últimas duas semanas.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '25/02/2026', sector: 'Setor Nordeste' },
     // Desvio proposital do mock (que nunca emite 'canceled'): 1 relatório cancelado
     // pra exercitar o filtro "Cancelado" do admin, que sem isso ficaria morto.
-    { title: 'Relatório de Condições Meteorológicas da Mina Norte', summary: 'Compilação de dados meteorológicos e impacto nas operações da última quinzena.', status: 'canceled', statusLabel: 'Cancelado', creationDate: '20/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Relatório de Segurança da Planta Sul', summary: 'Análise dos protocolos de segurança aplicados e ocorrências reportadas no mês.', status: 'info', statusLabel: 'Em Andamento', creationDate: '15/02/2026', sector: 'Setor Sul', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
-    { title: 'Relatório de Sustentabilidade Corporativa', summary: 'Indicadores ESG do trimestre, metas atingidas e ações para os próximos ciclos.', status: 'accept', statusLabel: 'Concluído', creationDate: '10/02/2026', sector: 'Setor Nordeste', responsibles: 'Ana Clara Mendonça, Antonio Hayde' },
+    { title: 'Relatório de Condições Meteorológicas da Mina Norte', summary: 'Compilação de dados meteorológicos e impacto nas operações da última quinzena.', status: 'canceled', statusLabel: 'Cancelado', creationDate: '20/02/2026', sector: 'Setor Nordeste' },
+    { title: 'Relatório de Segurança da Planta Sul', summary: 'Análise dos protocolos de segurança aplicados e ocorrências reportadas no mês.', status: 'info', statusLabel: 'Em Andamento', creationDate: '15/02/2026', sector: 'Setor Sul' },
+    { title: 'Relatório de Sustentabilidade Corporativa', summary: 'Indicadores ESG do trimestre, metas atingidas e ações para os próximos ciclos.', status: 'accept', statusLabel: 'Concluído', creationDate: '10/02/2026', sector: 'Setor Nordeste' },
   ]
   const parseBrDate = (s: string): Date => {
     const [d, m, y] = s.split('/').map(Number)
@@ -450,6 +458,10 @@ async function main() {
     const fx = REPORTS_FX[i]
     const workerN = (i % CONTACTS.length) + 1 // rotaciona 1..8
     const authorContact = CONTACTS.find((c) => c.n === workerN)!
+    // 2 responsáveis reais, os dois colegas seguintes na roda — nunca o autor.
+    const responsibles = [1, 2].map(
+      (offset) => CONTACTS[(workerN - 1 + offset) % CONTACTS.length]!.name,
+    )
     const r = await prisma.report.create({
       data: {
         authorId: contactIds.get(workerN)!,
@@ -461,7 +473,7 @@ async function main() {
         authorAvatarKey: contactAvatarKeys.get(workerN) || null,
         creationDate: parseBrDate(fx.creationDate),
         sector: fx.sector,
-        responsibles: fx.responsibles.split(',').map((s) => s.trim()),
+        responsibles,
         details: REPORT_DETAILS,
         imageKeys: reportImageKeys,
         activities: REPORT_ACTIVITIES,

@@ -620,7 +620,9 @@ export function ChatInbox() {
         return {
           ...selectedContact,
           role: entry?.role ?? '',
-          gender: 'male' as const,
+          // Gênero REAL do cadastro; era `'male'` fixo, então as colaboradoras
+          // do quadro apareciam como "Masculino" (QA 2026-07-26).
+          gender: entry?.gender === 'female' ? ('female' as const) : ('male' as const),
           age: entry?.birthDate ? ageFrom(entry.birthDate, new Date()) : undefined,
           bloodType: entry?.bloodType ?? undefined,
           allergies: entry?.allergies ?? undefined,

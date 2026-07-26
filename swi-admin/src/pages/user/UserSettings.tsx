@@ -82,6 +82,19 @@ const valueOf = (options: Option[], label: string | null): string =>
 const labelOf = (options: Option[], value: string): string | undefined =>
   options.find((o) => o.value === value)?.label
 
+/**
+ * Gênero persiste como CÓDIGO ('male'/'female'/'other'). O form gravava o
+ * rótulo ('Masculino'), então quem lê o campo comparando com 'male' — detalhe
+ * do funcionário, painel do chat — não achava nada e caía no default
+ * (QA 2026-07-26). Tolera o rótulo legado na leitura.
+ */
+export const readGender = (raw: string | null): string => {
+  if (!raw) return ''
+  const byValue = GENDER_OPTIONS.find((o) => o.value === raw)
+  if (byValue) return byValue.value
+  return GENDER_OPTIONS.find((o) => o.label === raw)?.value ?? ''
+}
+
 // birthDate ISO ↔ dd/mm/aaaa da UI. Partes UTC de propósito: @db.Date chega
 // como meia-noite UTC; getDate() local recuaria um dia a oeste de Greenwich.
 const toDob = (iso: string | null): string => {
@@ -298,7 +311,10 @@ export function UserSettings() {
       setFuncao(valueOf(FUNCAO_OPTIONS, data.duty))
       setGerente(valueOf(GERENTE_OPTIONS, data.managerName))
       setBloodType(data.bloodType ?? '')
-      setGender(valueOf(GENDER_OPTIONS, data.gender))
+      // gender é um CÓDIGO ('male'/'female'), não um rótulo: o resto do painel
+      // (detalhe do funcionário, painel do chat) compara com esses valores.
+      // Aceita também o rótulo legado ('Masculino') gravado antes da correção.
+      setGender(readGender(data.gender))
       setAllergies(data.allergies ?? '')
       setChronic(data.chronicConditions ?? '')
       setExamKeys(data.examKeys ?? [])
@@ -333,7 +349,8 @@ export function UserSettings() {
       ...(setor ? { sector: labelOf(SETOR_OPTIONS, setor) } : {}),
       ...(funcao ? { duty: labelOf(FUNCAO_OPTIONS, funcao) } : {}),
       ...(gerente ? { managerName: labelOf(GERENTE_OPTIONS, gerente) } : {}),
-      ...(gender ? { gender: labelOf(GENDER_OPTIONS, gender) } : {}),
+      // Grava o CÓDIGO, não o rótulo — ver readGender.
+      ...(gender ? { gender } : {}),
       ...(bloodType ? { bloodType } : {}),
     }
     const { error } = await profileApi.update(patch)

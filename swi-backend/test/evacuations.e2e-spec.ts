@@ -24,6 +24,10 @@ describe('Evacuations e2e', () => {
   let ids: Record<string, string> = {}
   let companyId: string, otherCompanyId: string
 
+  // CNPJs próprios deste spec — ver nota no cleanup.
+  const CNPJ_A = '99000000000303'
+  const CNPJ_B = '99000000000404'
+
   const cleanup = async () => {
     const users = await prisma.user.findMany({ where: { email: { in: Object.values(emails) } }, select: { id: true } })
     const userIds = users.map((u) => u.id)
@@ -31,7 +35,11 @@ describe('Evacuations e2e', () => {
     await prisma.evacuation.deleteMany({ where: { startedById: { in: userIds } } })
     await prisma.notification.deleteMany({ where: { workerId: { in: userIds } } })
     await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
-    await prisma.company.deleteMany({ where: { cnpj: { in: ['00000000000191', '00000000000272'] } } })
+    // CNPJs exclusivos deste spec. '00000000000191' é o da "SWI Demo Mineração"
+    // do seed: como User.companyId é opcional, o delete em cascata aplicava
+    // SetNull e ESVAZIAVA a empresa demo do dev stack a cada rodada de e2e
+    // (QA 2026-07-26 — mesma armadilha já corrigida no evacuation.e2e-spec).
+    await prisma.company.deleteMany({ where: { cnpj: { in: [CNPJ_A, CNPJ_B] } } })
   }
 
   beforeAll(async () => {
@@ -40,8 +48,8 @@ describe('Evacuations e2e', () => {
     prisma = app.get(PrismaService)
     await cleanup()
     const addr = { cep: '01000-000', street: 'Rua A', number: '1', neighborhood: 'Centro', uf: 'SP' }
-    companyId = (await prisma.company.create({ data: { name: 'Evac Co', cnpj: '00000000000191', ...addr } })).id
-    otherCompanyId = (await prisma.company.create({ data: { name: 'Other Co', cnpj: '00000000000272', ...addr } })).id
+    companyId = (await prisma.company.create({ data: { name: 'Evac Co', cnpj: CNPJ_A, ...addr } })).id
+    otherCompanyId = (await prisma.company.create({ data: { name: 'Other Co', cnpj: CNPJ_B, ...addr } })).id
     const bcrypt = await import('bcrypt')
     const passwordHash = await bcrypt.hash('test1234', 10)
     const base = { passwordHash, emailVerified: true, approvalStatus: 'APPROVED' as const }

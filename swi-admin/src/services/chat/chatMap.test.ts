@@ -75,6 +75,7 @@ describe('directoryToContact', () => {
       birthDate: null,
       bloodType: null,
       allergies: null,
+      gender: null,
       avatarUri: 'a9',
     }
     const ct = directoryToContact(d, myId)

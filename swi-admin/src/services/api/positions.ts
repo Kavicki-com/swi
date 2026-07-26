@@ -3,6 +3,7 @@
 // pelos mesmos endpoints). Substitui o buildMockMapMarkers dos mapas.
 import type { MockResponse } from '@/services/mockApi/types'
 import type { DashboardMapMarker } from './dashboard'
+import { simulatedVitalsFor, type SimulatedTier } from '@/services/vitals/simulatedVitals'
 import { apiFetch, ApiError } from './http'
 
 // Shape do backend (PositionMarker em swi-backend/src/positions/positions.service.ts).
@@ -16,15 +17,33 @@ export type PositionMarkerDto = {
   recordedAt: string
 }
 
-// Borda do pino deriva de VITAIS (smartband) — até lá, neutro 'good'. Posição
-// é real; status de saúde não existe ainda, e fingir variação aqui mentiria.
+// Borda do pino ↔ tier dos vitais, o MESMO mapeamento do resto do app
+// (rescue.ts). Ver nota de derivação abaixo.
+const TIER_TO_STATUS: Record<SimulatedTier, DashboardMapMarker['status']> = {
+  excelente: 'good',
+  desgastado: 'alert',
+  'alerta-fadiga': 'low',
+}
+
+/**
+ * Posição é REAL (heartbeat); a borda de saúde vem do gerador SIMULADO comum
+ * (Fase 3) — o mesmo que alimenta KPIs, monitoramento e triagem de socorro.
+ *
+ * Antes o status era `'good'` fixo: o mapa de alertas pintava os 9 pinos de
+ * verde enquanto o dashboard, na mesma tela, dizia "5 desgastados / 2 em alerta
+ * de fadiga" (QA 2026-07-26). Um pino verde sobre alguém em alerta é pior que
+ * um pino neutro — é uma afirmação errada.
+ *
+ * O tier é estável por worker (hash do id, sem componente temporal), então o
+ * pino não pisca de cor a cada tick do heartbeat.
+ */
 export function toDashboardMarker(dto: PositionMarkerDto): DashboardMapMarker {
   return {
     id: dto.id,
     name: dto.name,
     lat: dto.lat,
     lng: dto.lng,
-    status: 'good',
+    status: TIER_TO_STATUS[simulatedVitalsFor(dto.id, Date.now()).tier],
     avatarUri: dto.avatar,
   }
 }

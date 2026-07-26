@@ -37,4 +37,5 @@ export interface Contact {
   birthDate: string | null // ISO
   bloodType: string | null
   allergies: string | null
+  gender: string | null // 'male' | 'female' | null (não informado)
 }
