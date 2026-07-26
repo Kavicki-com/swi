@@ -55,6 +55,36 @@ describe('useRescueRoute', () => {
     expect(result.current.error).toBe(false)
   })
 
+  // As pontas do socorro vêm das posições AO VIVO, que só chegam depois do
+  // primeiro render. Enquanto uma delas for null o hook NÃO pode pedir rota:
+  // qualquer coordenada default desenharia um trajeto que não é de ninguém
+  // (era o bug das constantes fixas — QA 2026-07-26).
+  it('não busca rota enquanto uma das pontas for desconhecida', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result, rerender } = renderHook(
+      ({ from }: { from: [number, number] | null }) => useRescueRoute(from, [3, 4]),
+      { initialProps: { from: null as [number, number] | null } },
+    )
+    expect(result.current.loading).toBe(true)
+    expect(result.current.error).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          { geometry: { type: 'LineString', coordinates: [[1, 2]] }, duration: 60, distance: 100 },
+        ],
+      }),
+    })
+    rerender({ from: [1, 2] })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.current.route?.distance).toBe(100)
+  })
+
   it('sets error=true when fetch fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
 

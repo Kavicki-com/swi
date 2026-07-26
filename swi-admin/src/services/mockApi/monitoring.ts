@@ -9,6 +9,7 @@
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
 import type { IconName } from '@kavicki/swi-design-system'
+import type { SimulatedTier } from '@/services/vitals/simulatedVitals'
 import { ROSTER } from './roster'
 
 // One KPI card — Figma 69:14747 row of 7 BigNumbersCards.
@@ -51,6 +52,13 @@ export type MonitoringUserAlert = {
   specialization: string
   avatarUri: string
   active: boolean
+  /**
+   * Tier de vitais da pessoa. Existe pra régua "Excelentes / Desgastados /
+   * Alertas de Fadiga" poder filtrar de verdade — antes as 3 abas listavam a
+   * população inteira enquanto o badge anunciava "2" (QA 2026-07-26).
+   * Opcional porque o seed mock não simula vitais.
+   */
+  tier?: SimulatedTier
   alerts: ReadonlyArray<MonitoringAlertDetail>
 }
 

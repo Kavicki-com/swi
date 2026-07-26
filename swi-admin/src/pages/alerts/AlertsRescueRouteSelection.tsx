@@ -7,7 +7,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Avatar, Button, Chip, Icon, SearchInput, Text, useTheme } from '@kavicki/swi-design-system'
-import { rescueApi, type RescueCandidate } from '@/services/rescue'
+import { rankRescueCandidates, type RescueCandidate } from '@/services/api/rescue'
+import { employeesApi, type Employee } from '@/services/api/users'
+import { useLivePositions } from '@/hooks/useLivePositions'
 import { formatAge } from '@/lib/formatAge'
 
 const FILTER_CHIPS = [
@@ -21,20 +23,27 @@ export function AlertsRescueRouteSelection() {
   const theme = useTheme()
   const navigate = useNavigate()
   const { employeeId } = useParams<{ employeeId?: string }>()
-  const [candidates, setCandidates] = useState<RescueCandidate[]>([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
+  // Socorristas REAIS: posições ao vivo + diretório da empresa. Antes era uma
+  // fixture com 4 pessoas que nem existiam no quadro (QA de volume).
+  const positions = useLivePositions()
+  const [directory, setDirectory] = useState<ReadonlyArray<Employee>>([])
 
   useEffect(() => {
-    if (!employeeId) return
     let cancelled = false
-    rescueApi.candidates({ injuredEmployeeId: employeeId }).then(({ data }) => {
-      if (!cancelled && data) setCandidates(data)
+    employeesApi.list().then(({ data }) => {
+      if (!cancelled && data) setDirectory(data)
     })
     return () => {
       cancelled = true
     }
-  }, [employeeId])
+  }, [])
+
+  const candidates: RescueCandidate[] = useMemo(
+    () => (employeeId ? rankRescueCandidates(employeeId, positions ?? [], directory) : []),
+    [employeeId, positions, directory],
+  )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()

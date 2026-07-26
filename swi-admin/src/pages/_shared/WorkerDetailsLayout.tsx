@@ -3,14 +3,15 @@
 // and EmployeeDetails (Figma 54:6561). Pure presentational: takes a `worker`
 // payload + a `topRightAction` slot for the page-specific CTA. The page owns
 // data fetching, loading/empty states, and back/CTA navigation.
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Pressable, View } from 'react-native'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Pressable, StyleSheet, View } from 'react-native'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { formatAge } from '@/lib/formatAge'
+import { simulatedCaloriesFor } from '@/services/vitals/simulatedVitals'
 import {
   Avatar,
   Button,
@@ -45,16 +46,30 @@ export type WorkerDetailsData = {
   gender?: 'male' | 'female'
   bpm?: number
   pressure?: string
+  /** Percentual 0-100 (mesma escala de simulatedVitalsFor.fatiguePct). */
   fatigueRate?: number
+  /** Percentual 0-100 (mesma escala de simulatedVitalsFor.effortPct). */
   effort?: number
   statusLabel?: string
   fatigueMinutes?: number
   allergies?: ReadonlyArray<string>
   examHistory?: ReadonlyArray<WorkerExamEntry>
+  /**
+   * Semente do gasto calórico simulado — o `User.id` da pessoa. Sem ela a
+   * curva cai no seed do nome, que ainda diferencia pessoas mas colide entre
+   * homônimos ("Carlos Santos" × "Carlos Santos (Manut.)" não colidem, mas
+   * dois Carlos Santos exatos colidiriam).
+   */
+  seedId?: string
 }
 
 export type WorkerDetailsLayoutProps = {
   worker: WorkerDetailsData
+  /**
+   * Posição AO VIVO da pessoa, pro mini-mapa. Sem ela o mapa não finge saber
+   * onde ela está — antes todo mundo era pinado na MESMA coordenada fixa.
+   */
+  position?: { lat: number; lng: number } | null
   testID: string
   onBack: () => void
   backA11yLabel: string
@@ -62,43 +77,10 @@ export type WorkerDetailsLayoutProps = {
   topRightAction: ReactNode
 }
 
-// Mock caloric expenditure curves per period — the period combobox switches
-// between these. The "today" curve mirrors Figma 105:12586 (intra-day shift
-// timestamps); week/month aggregate to days/weeks so the X-axis labels make
-// sense for the chosen window.
-const CALORIES_DAY = [
-  { time: '07:15', kcal: 41 },
-  { time: '08:42', kcal: 57 },
-  { time: '10:51', kcal: 62 },
-  { time: '14:22', kcal: 38 },
-  { time: '16:33', kcal: 55 },
-  { time: '18:54', kcal: 49 },
-  { time: '19:00', kcal: 22 },
-  { time: '19:30', kcal: 19 },
-]
-
-const CALORIES_WEEK = [
-  { time: 'Seg', kcal: 312 },
-  { time: 'Ter', kcal: 285 },
-  { time: 'Qua', kcal: 340 },
-  { time: 'Qui', kcal: 298 },
-  { time: 'Sex', kcal: 365 },
-  { time: 'Sáb', kcal: 180 },
-  { time: 'Dom', kcal: 95 },
-]
-
-const CALORIES_MONTH = [
-  { time: 'Sem 1', kcal: 1820 },
-  { time: 'Sem 2', kcal: 2010 },
-  { time: 'Sem 3', kcal: 1950 },
-  { time: 'Sem 4', kcal: 2180 },
-]
-
-const CALORIES_BY_PERIOD = {
-  today: CALORIES_DAY,
-  week: CALORIES_WEEK,
-  month: CALORIES_MONTH,
-} as const
+// O gasto calórico por período sai de simulatedCaloriesFor(seedId): era uma
+// constante única, então Worker Demo, o admin e o perfil próprio exibiam a
+// MESMA curva 41/57/62… nos mesmos horários (QA 2026-07-26). A forma do Figma
+// 105:12586 é preservada; a magnitude varia por pessoa.
 
 // ESRI World Imagery — same satellite tile source the dashboard MapBanner
 // and /maps/general use. Reused here for the mini-map in the user profile.
@@ -129,9 +111,11 @@ const ESRI_SATELLITE_STYLE = {
 // approximating the worker's last known position.
 function MiniMap({
   worker,
+  position,
   onOpenFullMap,
 }: {
   worker: WorkerDetailsData
+  position?: { lat: number; lng: number } | null
   onOpenFullMap: () => void
 }) {
   const theme = useTheme()
@@ -139,13 +123,16 @@ function MiniMap({
   const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
+  const lngLat: [number, number] | null = position ? [position.lng, position.lat] : null
   useEffect(() => {
-    if (!lib || !containerRef.current) return
+    if (!lib || !containerRef.current || !lngLat) return
     const map = new lib.Map({
       container: containerRef.current,
       style: ESRI_SATELLITE_STYLE,
-      center: [-46.633, -23.55],
-      zoom: 13,
+      center: lngLat,
+      // 13 enquadrava a cidade inteira: pra "onde ele está agora" o útil é o
+      // entorno imediato.
+      zoom: 16,
       interactive: false,
       attributionControl: false,
     })
@@ -182,7 +169,7 @@ function MiniMap({
     wrapper.appendChild(avatarEl)
     wrapper.appendChild(tail)
 
-    new lib.Marker({ element: wrapper, anchor: 'bottom' }).setLngLat([-46.633, -23.55]).addTo(map)
+    new lib.Marker({ element: wrapper, anchor: 'bottom' }).setLngLat(lngLat).addTo(map)
     return () => {
       map.remove()
       mapRef.current = null
@@ -192,7 +179,7 @@ function MiniMap({
     // would tear down and rebuild the map for an essentially-static colour
     // that never changes at runtime (the SWI theme is fixed dark mode).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worker, lib])
+  }, [worker, lib, lngLat?.[0], lngLat?.[1]])
   return (
     <View
       style={{
@@ -209,6 +196,20 @@ function MiniMap({
       }}
     >
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+      {!lngLat ? (
+        <View
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.surface.medium,
+          }}
+        >
+          <Text variant="body.s" color={theme.content.medium}>
+            Sem posição ao vivo
+          </Text>
+        </View>
+      ) : null}
       <View style={{ position: 'absolute', left: 8, bottom: 8 }}>
         <Button
           label="Mapa completo"
@@ -278,6 +279,7 @@ function InlineStat({
 
 export function WorkerDetailsLayout({
   worker,
+  position,
   testID,
   onBack,
   backA11yLabel,
@@ -288,16 +290,32 @@ export function WorkerDetailsLayout({
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const isWide = breakpoint === 'wide'
-  const genderLabel = worker.gender === 'male' ? 'Masculino' : 'Feminino'
-  const genderIcon: IconName = worker.gender === 'male' ? 'admin_filled' : 'humidity_mid'
-  // Percent with pt-BR locale (comma decimal): 62.5 → "62,5".
+  // Sem gênero no cadastro NÃO se inventa um: antes o ternário mandava todo
+  // funcionário sem o campo pra "Feminino" (QA 2026-07-26).
+  const genderLabel =
+    worker.gender === 'male'
+      ? 'Masculino'
+      : worker.gender === 'female'
+        ? 'Feminino'
+        : 'Não informado'
+  const genderIcon: IconName = worker.gender === 'female' ? 'humidity_mid' : 'admin_filled'
+  // fatigueRate/effort já vêm em 0-100. O formatPct antigo multiplicava por 100
+  // de novo (herança das fixtures em fração 0-1) e a tela exibia "8.900,0%".
   const formatPct = (n: number) =>
     new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(
-      Math.round(n * 1000) / 10,
+      Math.round(Math.min(100, Math.max(0, n)) * 10) / 10,
     )
   const fatiguePct = formatPct(worker.fatigueRate ?? 0)
   const effortPct = formatPct(worker.effort ?? 0)
+  const allergies = worker.allergies ?? []
+  const exams = worker.examHistory ?? []
   const [caloriesPeriod, setCaloriesPeriod] = useState('today')
+  // Seed do id quando a página o passa; cai no nome só pra não quebrar quem
+  // ainda não migrou (o valor continua variando por pessoa nos dois casos).
+  const calories = useMemo(
+    () => simulatedCaloriesFor(worker.seedId ?? worker.name),
+    [worker.seedId, worker.name],
+  )
 
   return (
     <View testID={testID} style={{ gap: theme.gap.m }}>
@@ -395,7 +413,7 @@ export function WorkerDetailsLayout({
           </View>
 
           {/* Mini map with location */}
-          <MiniMap worker={worker} onOpenFullMap={onOpenFullMap} />
+          <MiniMap worker={worker} position={position} onOpenFullMap={onOpenFullMap} />
 
           {/* Exam history — Figma 159:14200 / 159:16070 specifies h-[176px]
               scrollable area. Vertical-only scroll, no visible scrollbar
@@ -415,16 +433,24 @@ export function WorkerDetailsLayout({
                 overflowX: 'hidden',
               }}
             >
-              {(worker.examHistory ?? []).map((exam) => (
-                <ExamInfoCard
-                  key={exam.id}
-                  year={exam.year}
-                  date={exam.date}
-                  examName={exam.title}
-                  compact
-                  fullWidth
-                />
-              ))}
+              {exams.length > 0 ? (
+                exams.map((exam) => (
+                  <ExamInfoCard
+                    key={exam.id}
+                    year={exam.year}
+                    date={exam.date}
+                    examName={exam.title}
+                    compact
+                    fullWidth
+                  />
+                ))
+              ) : (
+                // Um título sozinho lê como "falha de carregamento". Dizer que
+                // não há exames é informação; o vazio mudo não é.
+                <Text variant="body.s" color={theme.content.medium}>
+                  Nenhum exame registrado.
+                </Text>
+              )}
             </div>
           </View>
         </View>
@@ -593,9 +619,15 @@ export function WorkerDetailsLayout({
               Alergias
             </Title>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.s }}>
-              {(worker.allergies ?? []).map((a) => (
-                <Chip key={a} label={a} variant="filled" />
-              ))}
+              {allergies.length > 0 ? (
+                allergies.map((a) => <Chip key={a} label={a} variant="filled" />)
+              ) : (
+                // "Nenhuma alergia registrada" ≠ "nenhuma alergia": o campo é
+                // declaratório e pode simplesmente não ter sido preenchido.
+                <Text variant="body.s" color={theme.content.medium}>
+                  Nenhuma alergia registrada.
+                </Text>
+              )}
             </View>
           </View>
 
@@ -613,8 +645,10 @@ export function WorkerDetailsLayout({
             <DonutChart
               title="Taxa de fadiga"
               value={`${fatiguePct}%`}
-              label="Funcionários"
-              progress={(worker.fatigueRate ?? 0) * 100}
+              // Era "Funcionários" — legenda de KPI de equipe colada num donut
+              // que mede UMA pessoa (QA 2026-07-26).
+              label="Fadiga atual"
+              progress={Math.min(100, Math.max(0, worker.fatigueRate ?? 0))}
               size="small"
               appearance="bevel"
               icon="heartbeat"
@@ -624,7 +658,7 @@ export function WorkerDetailsLayout({
               title="Esforço realizado"
               value={`${effortPct}%`}
               label="Esforço feito"
-              progress={(worker.effort ?? 0) * 100}
+              progress={Math.min(100, Math.max(0, worker.effort ?? 0))}
               size="small"
               appearance="bevel"
               icon="heartbeat"
@@ -668,9 +702,7 @@ export function WorkerDetailsLayout({
           </View>
         </View>
         <LineCaloriesChart
-          points={
-            CALORIES_BY_PERIOD[caloriesPeriod as keyof typeof CALORIES_BY_PERIOD] ?? CALORIES_DAY
-          }
+          points={calories[caloriesPeriod as keyof typeof calories] ?? calories.today}
           unit="kcal"
           fullWidth
         />

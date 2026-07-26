@@ -37,6 +37,7 @@ import { conversationToContact, directoryToContact } from '@/services/chat/chatM
 import { ageFrom } from '@/services/api/users'
 import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { useMyVitals } from '@/hooks/useMyVitals'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Single contact row in the left list — Figma 103:9931 / 102:9571
@@ -511,9 +512,9 @@ function ContactInfoPanel({
   )
 }
 
-
 export function ChatInbox() {
   const { user } = useAuth()
+  const myVitals = useMyVitals()
   const theme = useTheme()
   const navigate = useNavigate()
   const breakpoint = useBreakpoint()
@@ -619,7 +620,9 @@ export function ChatInbox() {
         return {
           ...selectedContact,
           role: entry?.role ?? '',
-          gender: 'male' as const,
+          // Gênero REAL do cadastro; era `'male'` fixo, então as colaboradoras
+          // do quadro apareciam como "Masculino" (QA 2026-07-26).
+          gender: entry?.gender === 'female' ? ('female' as const) : ('male' as const),
           age: entry?.birthDate ? ageFrom(entry.birthDate, new Date()) : undefined,
           bloodType: entry?.bloodType ?? undefined,
           allergies: entry?.allergies ?? undefined,
@@ -703,9 +706,9 @@ export function ChatInbox() {
           <Logo type="complete" size="m" />
         </Pressable>
         <HeaderUserInfo
-          bpm={user?.bpm ?? 99}
-          pressure={user?.pressure ?? '12/8'}
-          progress={50}
+          bpm={myVitals.bpm}
+          pressure={myVitals.pressure}
+          progress={myVitals.progress}
           avatarUri={user?.avatarUri ?? workerA}
           heartIconName="heart_filled"
           pressureIconName="vitals_pulse"

@@ -29,6 +29,8 @@ import { formatBadgeCount, withBadges } from '@/app/nav'
 import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLivePositions } from '@/hooks/useLivePositions'
 import { reportsApi } from '@/services/api/reports'
+import { CAMERA_LOCATIONS, type CameraLocation } from '@/services/cameras'
+import { useMyVitals } from '@/hooks/useMyVitals'
 import workerA from '@/assets/avatars/worker-a.png'
 
 type PinHandle = PinElement & { marker: maplibregl.Marker }
@@ -60,25 +62,8 @@ const MOCK_ORIGIN: [number, number] = [-46.63, -23.55]
 // mining/industrial site. Drag the pin to test: workers/cameras stay clustered.
 const SHIFT_SCALE = 0.2
 
-// Mock camera fleet — coords scattered around the São Paulo Bela Vista region
-// where the operator mock data lives. Used to render camera pins on the map
-// when the "Câmeras" MapControl is expanded (Figma 33:4421).
-type CameraLocation = { id: string; lng: number; lat: number; name: string }
-
-const CAMERA_LOCATIONS: ReadonlyArray<CameraLocation> = [
-  { id: 'cam-01', lng: -46.638, lat: -23.541, name: 'Câmera Norte 1' },
-  { id: 'cam-02', lng: -46.625, lat: -23.544, name: 'Câmera Norte 2' },
-  { id: 'cam-03', lng: -46.642, lat: -23.547, name: 'Câmera Centro Oeste' },
-  { id: 'cam-04', lng: -46.628, lat: -23.548, name: 'Câmera Central' },
-  { id: 'cam-05', lng: -46.615, lat: -23.549, name: 'Câmera Leste 1' },
-  { id: 'cam-06', lng: -46.635, lat: -23.552, name: 'Câmera Sul Oeste' },
-  { id: 'cam-07', lng: -46.622, lat: -23.554, name: 'Câmera Sul Central' },
-  { id: 'cam-08', lng: -46.61, lat: -23.553, name: 'Câmera Sul Leste' },
-  { id: 'cam-09', lng: -46.64, lat: -23.558, name: 'Câmera Periferia SW' },
-  { id: 'cam-10', lng: -46.626, lat: -23.56, name: 'Câmera Sul 2' },
-  { id: 'cam-11', lng: -46.615, lat: -23.562, name: 'Câmera Sul Leste 2' },
-  { id: 'cam-12', lng: -46.63, lat: -23.564, name: 'Câmera Sul Periferia' },
-]
+// Frota de câmeras: importada de services/cameras — a MESMA lista que alimenta
+// o KPI "Câmeras ativas" (antes o mapa desenhava 12 e o KPI cravava 564).
 
 function buildCameraPin(
   c: CameraLocation,
@@ -96,6 +81,7 @@ function buildCameraPin(
 
 export function MapsGeneral() {
   const { user } = useAuth()
+  const myVitals = useMyVitals()
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
@@ -612,9 +598,9 @@ export function MapsGeneral() {
       >
         <Logo type="complete" size="m" />
         <HeaderUserInfo
-          bpm={user?.bpm ?? 99}
-          pressure={user?.pressure ?? '12/8'}
-          progress={50}
+          bpm={myVitals.bpm}
+          pressure={myVitals.pressure}
+          progress={myVitals.progress}
           avatarUri={user?.avatarUri ?? workerA}
           heartIconName="heart_filled"
           pressureIconName="vitals_pulse"

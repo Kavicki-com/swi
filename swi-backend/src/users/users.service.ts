@@ -184,6 +184,13 @@ export class UsersService {
       phone: u.profile?.phone ?? null,
       cpf: u.profile?.cpf ?? null,
       company: u.company ? { id: u.company.id, name: u.company.name } : null,
+      // Cadastro clínico declaratório (o worker preenche no settings). O
+      // detalhe do painel já tinha a UI pra isso mas nunca recebeu os campos:
+      // "Gênero" caía num default fixo ("Feminino" pra todo mundo) e "Alergias"
+      // renderizava um título sem conteúdo (QA 2026-07-26).
+      gender: u.profile?.gender ?? null,
+      allergies: u.profile?.allergies ?? null,
+      chronicConditions: u.profile?.chronicConditions ?? null,
     }
   }
 }

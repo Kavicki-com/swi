@@ -215,6 +215,12 @@ describe('UsersService', () => {
       phone: '11999',
       cpf: '12345',
       company: { id: 'c1', name: 'ACME' },
+      // Cadastro clínico declaratório: null quando não preenchido. O detalhe do
+      // painel caía num default fixo ("Gênero: Feminino" pra todo mundo) e
+      // mostrava "Alergias" como título sem conteúdo (QA 2026-07-26).
+      gender: null,
+      allergies: null,
+      chronicConditions: null,
     })
   })
 

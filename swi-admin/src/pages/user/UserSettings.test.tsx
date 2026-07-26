@@ -136,8 +136,50 @@ describe('UserSettings', () => {
     expect(patch.jobTitle).toBe('Operador de caminhão')
     expect(patch.sector).toBe('Setor Leste')
     expect(patch.managerName).toBe('João Soares Ribeiro')
-    expect(patch.gender).toBe('Feminino')
+    // gender é CÓDIGO, não rótulo: o form gravava 'Feminino' e quem lê o campo
+    // comparando com 'female' (detalhe do funcionário, painel do chat) caía no
+    // default. O fixture ainda traz o rótulo legado — readGender o aceita na
+    // leitura e o patch volta normalizado (QA 2026-07-26).
+    expect(patch.gender).toBe('female')
     expect(patch.bloodType).toBe('O+')
+  })
+
+  // As listas de Profissão/Setor/Função/Gerente são constantes no arquivo, mas
+  // os campos são string livre no banco: o admin semeado tem 'Administrador' /
+  // 'Gestão'. Antes do paliativo, valueOf devolvia '' → o Combobox exibia
+  // "Selecione aqui" e salvar QUALQUER campo da tela apagava os dois em
+  // silêncio, porque save() só inclui o campo quando o value é truthy.
+  it('cargo/setor fora da lista fixa: exibe o valor do perfil e NÃO o apaga ao salvar', async () => {
+    meMock.mockResolvedValue({
+      data: { ...DTO, jobTitle: 'Administrador', sector: 'Gestão' },
+      error: null,
+    })
+    updateMock.mockResolvedValue({ data: DTO, error: null })
+    await renderSettings()
+
+    // O mock do Combobox renderiza um botão por opção — o valor do perfil
+    // precisa estar entre elas, senão o DS cai no placeholder.
+    expect(screen.getByRole('button', { name: 'Profissão: Administrador' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Setor: Gestão' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }))
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    const patch = updateMock.mock.calls[0]![0]
+    expect(patch.jobTitle).toBe('Administrador')
+    expect(patch.sector).toBe('Gestão')
+  })
+
+  it('valor da lista fixa não é duplicado nas opções', async () => {
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    await renderSettings()
+
+    // DTO traz 'Operador de caminhão', que ESTÁ em PROFISSAO_OPTIONS: a
+    // injeção do withCurrent não pode criar uma segunda linha idêntica.
+    expect(screen.getAllByRole('button', { name: 'Profissão: Operador de caminhão' })).toHaveLength(
+      1,
+    )
+    expect(screen.getAllByRole('button', { name: 'Setor: Setor Leste' })).toHaveLength(1)
   })
 
   it('Alterar senha: nova ≠ repetição → erro e NENHUMA chamada', async () => {

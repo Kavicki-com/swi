@@ -10,7 +10,13 @@ export type RescueRouteState = {
   error: boolean
 }
 
-export function useRescueRoute(from: LngLat, to: LngLat): RescueRouteState {
+/**
+ * `from`/`to` aceitam null: as pontas do socorro saem das posições AO VIVO
+ * (GET /positions), que chegam depois do primeiro render. Enquanto uma delas
+ * for desconhecida o hook fica em `loading` — pedir rota pra coordenada
+ * inventada devolveria um trajeto que não é de ninguém.
+ */
+export function useRescueRoute(from: LngLat | null, to: LngLat | null): RescueRouteState {
   const [state, setState] = useState<RescueRouteState>({
     route: null,
     loading: true,
@@ -20,6 +26,7 @@ export function useRescueRoute(from: LngLat, to: LngLat): RescueRouteState {
   useEffect(() => {
     let cancelled = false
     setState({ route: null, loading: true, error: false })
+    if (!from || !to) return
     fetchRoute({ from, to })
       .then((route) => {
         if (cancelled) return
@@ -37,7 +44,7 @@ export function useRescueRoute(from: LngLat, to: LngLat): RescueRouteState {
       cancelled = true
     }
     // Re-fetch on coordinate changes only (object identity may flap each render).
-  }, [from[0], from[1], to[0], to[1]])
+  }, [from?.[0], from?.[1], to?.[0], to?.[1]])
 
   return state
 }

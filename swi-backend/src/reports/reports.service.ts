@@ -149,11 +149,37 @@ export class ReportsService {
       creationDate: this.formatDate(r.creationDate),
       sector: r.sector ?? '',
       responsibles: r.responsibles,
+      // Foto REAL de cada responsável, resolvida pelo nome (o campo é um
+      // snapshot denormalizado de nomes). O painel pintava uma rotação fixa de
+      // 3 PNGs decorativos ao lado de "Responsáveis:" — caras que não eram das
+      // pessoas listadas (QA 2026-07-26). Sem match → '' e a UI cai no
+      // placeholder, que é honesto.
+      responsibleAvatars: await this.avatarsForNames(r.responsibles),
       details: r.details ?? '',
       images: await this.media.presignGetMany(r.imageKeys),
       imageKeys: r.imageKeys, // keys crus (não-presigned) pro form de edição preservar/mesclar anexos
       activities: (r.activities as unknown) ?? [],
     }
+  }
+
+  /**
+   * Nomes de responsáveis → URLs presigned dos avatares, na MESMA ordem.
+   * Uma consulta só (`fullName in [...]`); quem não estiver no diretório (ou
+   * não tiver foto) recebe ''. Lista vazia não vai ao banco.
+   */
+  private async avatarsForNames(names: string[]): Promise<string[]> {
+    if (names.length === 0) return []
+    const profiles = await this.prisma.profile.findMany({
+      where: { fullName: { in: names } },
+      select: { fullName: true, avatarKey: true },
+    })
+    const keyByName = new Map(profiles.map((p) => [p.fullName, p.avatarKey]))
+    return Promise.all(
+      names.map(async (n) => {
+        const key = keyByName.get(n)
+        return key ? this.media.presignGet(key) : ''
+      }),
+    )
   }
 
   private formatDate(d: Date): string {

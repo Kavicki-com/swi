@@ -28,6 +28,7 @@ import {
   type MonitoringAlertDetail,
   type MonitoringUserAlert,
 } from '@/services/monitoring'
+import type { SimulatedTier } from '@/services/vitals/simulatedVitals'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
@@ -371,6 +372,23 @@ function activeTabFromPath(pathname: string): string {
   return 'alertas'
 }
 
+// Que tier cada aba mostra. A régua se anuncia "Filtro de status" e o badge
+// vermelho conta os em fadiga, mas as 3 rotas listavam a população inteira —
+// o número e a lista se contradiziam na mesma tela (QA 2026-07-26).
+const TIER_BY_TAB: Record<string, SimulatedTier> = {
+  excelentes: 'excelente',
+  desgastados: 'desgastado',
+  alertas: 'alerta-fadiga',
+}
+
+// Fallback pro caso do tier não vir preenchido (o seed mock não simula vitais):
+// o tom do alerta é consequência direta do tier, então dá pra recuperá-lo.
+function tierOf(u: MonitoringUserAlert): SimulatedTier {
+  if (u.tier) return u.tier
+  if (u.alerts.some((a) => a.tone === 'error')) return 'alerta-fadiga'
+  return u.alerts.length > 0 ? 'desgastado' : 'excelente'
+}
+
 export function MonitoringLayout() {
   const theme = useTheme()
   const navigate = useNavigate()
@@ -388,16 +406,15 @@ export function MonitoringLayout() {
   const [kpis, setKpis] = useState<ReadonlyArray<MonitoringKpi>>([])
   const [users, setUsers] = useState<ReadonlyArray<MonitoringUserAlert>>([])
   const [search, setSearch] = useState('')
-  // Default expanded card only on /monitoring/alerts (Figma 69:14774).
-  // emp-04 (Carlos Henrique Silva) is the first critical worker in the
-  // canonical roster so the demo lands with the full alert detail visible.
-  const initialExpanded = location.pathname === '/monitoring/alerts' ? 'emp-04' : null
-  const [expandedId, setExpandedId] = useState<string | null>(initialExpanded)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  // "Ver Todos" derruba o filtro de tier sem sair da rota — mesmo padrão das
+  // atividades do dashboard (Dashboard.tsx:640). Volta a false a cada troca de
+  // aba, senão a aba seguinte abriria já sem filtro.
+  const [showAllTiers, setShowAllTiers] = useState(false)
 
-  // Quantos estão no tier de fadiga AGORA: a facade já ordena esses primeiro e
-  // só eles recebem alertas de tom 'error'. Alimenta o badge das abas (que era
+  // Quantos estão no tier de fadiga AGORA. Alimenta o badge das abas (que era
   // "+3" fixo) usando o mesmo formatador do menu lateral.
-  const fatigueCount = users.filter((u) => u.alerts.some((a) => a.tone === 'error')).length
+  const fatigueCount = users.filter((u) => tierOf(u) === 'alerta-fadiga').length
   const fatigueBadge = formatBadgeCount(fatigueCount)
 
   // Fetch once for the layout's lifetime. Tab switches don't re-fire these.
@@ -413,10 +430,22 @@ export function MonitoringLayout() {
     }
   }, [])
 
-  const filteredUsers = users.filter((u) =>
-    search.trim() ? u.name.toLowerCase().includes(search.toLowerCase()) : true,
-  )
   const tab = activeTabFromPath(location.pathname)
+  const tierOfTab = TIER_BY_TAB[tab]
+  const filteredUsers = users.filter((u) => {
+    if (!showAllTiers && tierOfTab && tierOf(u) !== tierOfTab) return false
+    return search.trim() ? u.name.toLowerCase().includes(search.toLowerCase()) : true
+  })
+
+  // Abre o primeiro card da aba de fadiga (Figma 69:14774 desenha a tela com o
+  // detalhe visível). Era comparado com 'emp-04', id do roster mock — com ids
+  // reais (UUID) nenhum card abria.
+  useEffect(() => {
+    setShowAllTiers(false)
+    setExpandedId(
+      tab === 'alertas' ? (users.find((u) => tierOf(u) === 'alerta-fadiga')?.id ?? null) : null,
+    )
+  }, [tab, users])
 
   return (
     <View
@@ -514,8 +543,11 @@ export function MonitoringLayout() {
                 { value: 'desgastados', label: 'Desgastados' },
                 { value: 'alertas', label: 'Alertas de Fadiga' },
               ]}
-              value={tab}
+              // Sem seleção enquanto "Ver Todos" está ativo: nenhuma das 3
+              // abas descreve a lista completa (padrão do Dashboard:663).
+              value={showAllTiers ? undefined : tab}
               onChange={(v) => {
+                setShowAllTiers(false)
                 const next = PATH_BY_TAB[v]
                 if (next && next !== location.pathname) navigate(next)
               }}
@@ -554,8 +586,8 @@ export function MonitoringLayout() {
           <Button
             label="Ver Todos"
             variant="contained"
-            accessibilityLabel="Ver todos os alertas"
-            onPress={() => showToast('Lista completa de alertas')}
+            accessibilityLabel="Ver todos os funcionários, sem filtro de status"
+            onPress={() => setShowAllTiers(true)}
           />
         </View>
 

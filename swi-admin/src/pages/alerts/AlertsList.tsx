@@ -24,6 +24,7 @@ import { SATELLITE_STYLE } from '@/lib/mapStyles'
 import { buildHeatmapPoints, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
 import { createPinElement, type PinElement } from '@/lib/pinFactory'
 import { MapAttribution } from '@/components/MapAttribution'
+import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { getRainViewerLatestRadar } from '@/lib/rainViewer'
 import {
   Button,
@@ -321,7 +322,9 @@ export function AlertsList() {
           justifyContent: 'space-between',
         }}
       >
-        <View style={{ flexDirection: 'row', gap: theme.gap.s, flexWrap: 'wrap' }}>
+        <View
+          style={{ flexDirection: 'row', gap: theme.gap.s, flexWrap: 'wrap', alignItems: 'center' }}
+        >
           {FILTER_CHIPS.map((c) => (
             <Chip
               key={c.value}
@@ -330,6 +333,10 @@ export function AlertsList() {
               onPress={() => setFilter(c.value)}
             />
           ))}
+          {/* A posição do pino é real (heartbeat); a COR dele sai do gerador
+              simulado de vitais. Regra da Fase 3: toda superfície que mostra
+              valor simulado carrega o selo. */}
+          <SimulatedDataBadge />
         </View>
 
         {/* Evacuação real (Fase 2): sem ativa → dispatch; ativa → progresso

@@ -10,6 +10,7 @@ import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/api/users'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
+import { useLivePositions } from '@/hooks/useLivePositions'
 
 export function AdminDetails({ adminId }: { adminId?: string } = {}) {
   const theme = useTheme()
@@ -21,6 +22,11 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
   const id = adminId ?? params.id
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [loading, setLoading] = useState(true)
+  // Admin normalmente não tem heartbeat de posição (o /positions cobre os
+  // workers). Sem posição o mini-mapa diz isso em vez de pinar numa coordenada
+  // fixa como fazia antes.
+  const positions = useLivePositions()
+  const position = positions?.find((p) => p.id === id) ?? null
 
   useEffect(() => {
     let cancelled = false
@@ -59,6 +65,9 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
     <WorkerDetailsLayout
       worker={{
         ...admin,
+        // Semente da curva de gasto calórico — sem ela todo mundo compartilha
+        // a mesma série de kcal (QA 2026-07-26).
+        seedId: admin.id,
         // Fase 3: vitais simulados plausíveis + selo no layout (fim do 0 bpm).
         ...(() => {
           const v = simulatedVitalsFor(admin.id, Date.now())
@@ -72,6 +81,7 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
           }
         })(),
       }}
+      position={position ? { lat: position.lat, lng: position.lng } : null}
       testID="admin-details"
       onBack={() => navigate('/admins')}
       backA11yLabel="Voltar para a lista de administradores"

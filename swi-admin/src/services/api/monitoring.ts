@@ -13,6 +13,7 @@ import type { IconName } from '@kavicki/swi-design-system'
 import { adminsApi, employeesApi, type Employee } from './users'
 import { reportsApi } from './reports'
 import { simulatedVitalsFor, type SimulatedVitals } from '@/services/vitals/simulatedVitals'
+import { ACTIVE_CAMERAS } from '@/services/cameras'
 
 export type {
   MonitoringAlertDetail,
@@ -21,8 +22,8 @@ export type {
   MonitoringUserAlert,
 } from '@/services/mockApi/monitoring'
 
-// Hardware inexistente no piloto — único KPI que segue fixture (rotulado).
-const MOCK_ACTIVE_CAMERAS = '564'
+// Câmeras: conta a MESMA frota que o mapa desenha (services/cameras). Era '564'
+// fixo enquanto o mapa mostrava 12 pinos — o painel afirmava câmera inexistente.
 
 // Milhar em pt-BR: com a operação cheia os agregados passam de 6 dígitos e
 // "437715" fica ilegível num card (QA de volume 2026-07-26).
@@ -120,7 +121,7 @@ export const monitoringApi = {
       {
         id: 'cameras',
         icon: 'video_camera_filled',
-        value: MOCK_ACTIVE_CAMERAS,
+        value: num(ACTIVE_CAMERAS),
         label: 'Câmeras ativas',
       },
       {
@@ -160,6 +161,9 @@ export const monitoringApi = {
         specialization: w.specialization,
         avatarUri: w.avatarUri,
         active: true,
+        // Tier explícito pra régua de abas filtrar sem re-derivar do `tone`
+        // dos alertas (o tier é a fonte; o alerta é consequência dele).
+        tier: v.tier,
         alerts: alertsFor(v),
       }))
     return { data: rows, error: null }

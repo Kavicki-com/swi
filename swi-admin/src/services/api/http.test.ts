@@ -182,7 +182,9 @@ describe('apiFetch', () => {
     const headers = new Headers({ 'X-Total-Count': '262' })
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: true, status: 200, headers, json: async () => [{ id: 'r1' }] }),
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200, headers, json: async () => [{ id: 'r1' }] }),
     )
     let total: string | null = null
     const data = await apiFetch<{ id: string }[]>(

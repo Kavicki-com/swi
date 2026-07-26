@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
+import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 
 // AppLayout agora consome useChat() (ChatProvider). Este teste NÃO monta o
 // provider real (isso é a task B5) — mocka useChat pra devolver um contexto
@@ -99,12 +100,16 @@ describe('AppLayout', () => {
     })
   })
 
-  it('shows the user vitals in HeaderUserInfo', async () => {
+  // Os vitais do header saem do MESMO gerador das outras telas (useMyVitals):
+  // antes cada tela caía num literal ("99 bpm", "12/8"), então o header
+  // contradizia o detalhe do próprio admin (QA de volume 2026-07-26).
+  it('mostra os vitais do usuário logado, derivados do gerador (não um literal)', async () => {
     renderTree()
+    const esperado = simulatedVitalsFor('u_seed_1', Date.now())
     await waitFor(() => {
       expect(screen.getByTestId('app-header-user-info')).toBeInTheDocument()
-      expect(screen.getByText(/78/)).toBeInTheDocument()
-      expect(screen.getByText('12/8')).toBeInTheDocument()
+      expect(screen.getByText(String(esperado.bpm))).toBeInTheDocument()
+      expect(screen.getByText(esperado.pressure)).toBeInTheDocument()
     })
   })
 

@@ -23,6 +23,7 @@ import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { formatAge } from '@/lib/formatAge'
+import { pluralize } from '@/lib/pluralize'
 
 type EmployeeRowProps = {
   employee: Employee
@@ -438,8 +439,16 @@ export function EmployeesList({
         {isCreating
           ? 'Cadastrar novo funcionário'
           : isPending
-            ? `Você tem (${pendentes.length}) cadastros pendentes`
-            : `Você tem (${employees.length}) funcionários cadastrados`}
+            ? `Você tem (${pendentes.length}) ${pluralize(
+                pendentes.length,
+                'cadastro pendente',
+                'cadastros pendentes',
+              )}`
+            : `Você tem (${employees.length}) ${pluralize(
+                employees.length,
+                'funcionário cadastrado',
+                'funcionários cadastrados',
+              )}`}
       </Title>
 
       <View

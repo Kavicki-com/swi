@@ -32,9 +32,6 @@ import {
   type ReportComment,
 } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
-import workerA from '@/assets/avatars/worker-a.png'
-import workerB from '@/assets/avatars/worker-b.png'
-import workerC from '@/assets/avatars/worker-c.png'
 
 // reportsApi.get resolve o detalhe (Report) somado à lista de comentários — o
 // estado da página guarda os dois juntos pra renderizar a seção de comentários
@@ -70,16 +67,31 @@ function CommentRow({ comment }: { comment: ReportComment }) {
   )
 }
 
-// Avatar group (small overlapping circles) — Figma "Avatar Group" element
-// at the top of the main report card. 4 avatars + "+13" counter pill.
-function AvatarGroup() {
+// Avatar group (small overlapping circles) — Figma "Avatar Group" no topo do
+// card. As faces são os RESPONSÁVEIS do relatório.
+//
+// Era fixo: 4 PNGs decorativos + a pílula literal "+13" — o card afirmava 17
+// envolvidos num relatório de 2 responsáveis, numa empresa de 10 pessoas no
+// total (QA 2026-07-26). Agora mostra até 4 faces reais e só conta excedente
+// quando ele existe.
+const MAX_FACES = 4
+
+function AvatarGroup({
+  avatars,
+  names,
+}: {
+  avatars: ReadonlyArray<string>
+  names: ReadonlyArray<string>
+}) {
   const theme = useTheme()
-  const avatars = [workerA, workerB, workerC, workerA]
+  const shown = avatars.slice(0, MAX_FACES)
+  const overflow = avatars.length - shown.length
+  if (avatars.length === 0) return null
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      {avatars.map((uri, i) => (
+      {shown.map((uri, i) => (
         <View
-          key={i}
+          key={`${names[i] ?? 'resp'}-${i}`}
           style={{
             marginLeft: i === 0 ? 0 : -8,
             borderRadius: 999,
@@ -87,26 +99,32 @@ function AvatarGroup() {
             borderColor: theme.surface.standard,
           }}
         >
-          <Avatar uri={uri} customSize={32} accessibilityLabel={`Membro ${i + 1}`} />
+          <Avatar
+            uri={uri}
+            customSize={32}
+            accessibilityLabel={names[i] ?? `Responsável ${i + 1}`}
+          />
         </View>
       ))}
-      <View
-        style={{
-          marginLeft: -8,
-          width: 32,
-          height: 32,
-          borderRadius: 999,
-          backgroundColor: theme.surface.error,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: 2,
-          borderColor: theme.surface.standard,
-        }}
-      >
-        <Text variant="body.s" color={theme.content.dark} style={{ fontWeight: '700' }}>
-          +13
-        </Text>
-      </View>
+      {overflow > 0 ? (
+        <View
+          style={{
+            marginLeft: -8,
+            width: 32,
+            height: 32,
+            borderRadius: 999,
+            backgroundColor: theme.surface.error,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 2,
+            borderColor: theme.surface.standard,
+          }}
+        >
+          <Text variant="body.s" color={theme.content.dark} style={{ fontWeight: '700' }}>
+            +{overflow}
+          </Text>
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -376,7 +394,10 @@ export function ReportDetails() {
           }}
         >
           <StatusTag status={report.status} label={report.statusLabel} />
-          <AvatarGroup />
+          <AvatarGroup
+            avatars={report.responsibleAvatars ?? []}
+            names={report.responsibles ? report.responsibles.split(',').map((s) => s.trim()) : []}
+          />
         </View>
 
         {/* Title in content.primary green — matches DS Title styled. */}

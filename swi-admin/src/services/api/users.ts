@@ -32,11 +32,17 @@ export type UserSummaryDto = {
   createdAt: string
 }
 
-// DTO do GET /users/:id (detalhe) — soma contato + empresa.
+// DTO do GET /users/:id (detalhe) — soma contato + empresa + cadastro clínico.
 export type UserDetailDto = UserSummaryDto & {
   phone: string | null
   cpf: string | null
   company: { id: string; name: string } | null
+  // Declaratórios do Profile (o próprio usuário edita no settings). O detalhe
+  // já tinha UI pra eles mas o DTO não os trazia: "Gênero" caía no default
+  // fixo do layout e "Alergias" ficava um título sem conteúdo.
+  gender: string | null
+  allergies: string | null
+  chronicConditions: string | null
 }
 
 // Placeholder pra quando o Profile ainda não tem o tipo sanguíneo preenchido —
@@ -61,10 +67,28 @@ const APPROVAL_TO_STATUS = {
   REJECTED: 'canceled',
 } as const
 
+// "Penicilina, Látex" → ['Penicilina', 'Látex']. Campo livre no cadastro; vira
+// uma chip por item. String vazia/só espaços → undefined (o layout mostra o
+// estado vazio honesto em vez de uma chip em branco).
+export function parseAllergies(raw: string | null | undefined): string[] | undefined {
+  const items = (raw ?? '')
+    .split(/[,;\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return items.length > 0 ? items : undefined
+}
+
+// Só 'male'/'female' são renderizáveis pelo layout; qualquer outro valor (ou
+// ausência) fica undefined pra que a tela diga "não informado" em vez de
+// inventar um gênero.
+const toGender = (raw: string | null | undefined): 'male' | 'female' | undefined =>
+  raw === 'male' || raw === 'female' ? raw : undefined
+
 // DTO → Employee (UI). role=jobTitle (linha 1), specialization=sector (linha 2).
-// Campos de saúde omitidos (opcionais no tipo; o WorkerDetailsLayout já cai no
-// fallback). bloodType e vitalsStatus são obrigatórios → placeholder neutro.
-function toEmployee(u: UserSummaryDto): Employee {
+// Vitais ficam de fora (simulados até a smartband); o cadastro CLÍNICO
+// (gênero/alergias) só existe no DTO de detalhe — na lista vem undefined.
+function toEmployee(u: UserSummaryDto | UserDetailDto): Employee {
+  const detail = u as Partial<UserDetailDto>
   return {
     id: u.id,
     name: u.name,
@@ -75,12 +99,15 @@ function toEmployee(u: UserSummaryDto): Employee {
     avatarUri: u.avatar,
     sector: u.sector,
     vitalsStatus: 'good',
+    gender: toGender(detail.gender),
+    allergies: parseAllergies(detail.allergies),
   }
 }
 
 // DTO → Admin (UI). `active` vem do campo real de ativação (toggle liga/desliga
 // o acesso); `status` continua derivando do approvalStatus (fluxo de aprovação).
-function toAdmin(u: UserSummaryDto): Admin {
+function toAdmin(u: UserSummaryDto | UserDetailDto): Admin {
+  const detail = u as Partial<UserDetailDto>
   return {
     id: u.id,
     name: u.name,
@@ -91,6 +118,8 @@ function toAdmin(u: UserSummaryDto): Admin {
     avatarUri: u.avatar,
     active: u.active,
     status: APPROVAL_TO_STATUS[u.approvalStatus],
+    gender: toGender(detail.gender),
+    allergies: parseAllergies(detail.allergies),
   }
 }
 

@@ -82,3 +82,77 @@ export function simulatedVitalsFor(workerId: string, nowMs: number): SimulatedVi
     statusLabel: LABEL_BY_TIER[tier],
   }
 }
+
+export interface SimulatedCaloriePoint {
+  time: string
+  kcal: number
+}
+
+// Arrays mutáveis de propósito: o LineCaloriesChart do DS declara
+// `points: LineCaloriesPoint[]` e um ReadonlyArray não é atribuível a ele.
+export interface SimulatedCalories {
+  today: SimulatedCaloriePoint[]
+  week: SimulatedCaloriePoint[]
+  month: SimulatedCaloriePoint[]
+}
+
+// Formato da curva por período — horários/rótulos do Figma 105:12586. Os kcal
+// aqui são a FORMA (turno começa forte, cai no fim); a magnitude por pessoa sai
+// de simulatedCaloriesFor.
+const CALORIE_SHAPE = {
+  today: [
+    ['07:15', 41],
+    ['08:42', 57],
+    ['10:51', 62],
+    ['14:22', 38],
+    ['16:33', 55],
+    ['18:54', 49],
+    ['19:00', 22],
+    ['19:30', 19],
+  ],
+  week: [
+    ['Seg', 312],
+    ['Ter', 285],
+    ['Qua', 340],
+    ['Qui', 298],
+    ['Sex', 365],
+    ['Sáb', 180],
+    ['Dom', 95],
+  ],
+  month: [
+    ['Sem 1', 1820],
+    ['Sem 2', 2010],
+    ['Sem 3', 1950],
+    ['Sem 4', 2180],
+  ],
+} as const satisfies Record<string, ReadonlyArray<readonly [string, number]>>
+
+/**
+ * Gasto calórico simulado POR PESSOA. A curva era uma constante única, então o
+ * detalhe do Worker Demo, o do admin e o perfil próprio exibiam os mesmos
+ * 41/57/62… kcal nos mesmos horários — o mesmo tipo de "número confiante que
+ * não é de ninguém" que o resto do painel já tinha eliminado (QA 2026-07-26).
+ *
+ * Determinístico pelo id (sem componente temporal): o gráfico não pode
+ * redesenhar a cada render. Preserva a forma do Figma e escala a magnitude em
+ * ±30%, com jitter por ponto pra curva não virar a mesma silhueta multiplicada.
+ */
+export function simulatedCaloriesFor(seed: string): SimulatedCalories {
+  const h = hash(seed)
+  // 0.70 … 1.30 em passos de 0.01.
+  const scale = 0.7 + (h % 61) / 100
+  const build = (
+    points: ReadonlyArray<readonly [string, number]>,
+    salt: number,
+  ): SimulatedCaloriePoint[] =>
+    points.map(([time, base], i) => {
+      // ±12% por ponto — quebra a silhueta sem desfigurar o formato.
+      const wobble = 0.88 + (hash(`${seed}:${salt}:${i}`) % 25) / 100
+      return { time, kcal: Math.max(1, Math.round(base * scale * wobble)) }
+    })
+  return {
+    today: build(CALORIE_SHAPE.today, 1),
+    week: build(CALORIE_SHAPE.week, 2),
+    month: build(CALORIE_SHAPE.month, 3),
+  }
+}
