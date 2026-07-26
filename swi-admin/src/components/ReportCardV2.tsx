@@ -206,7 +206,9 @@ export function ReportCardV2({
             Criado por:
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-            <Avatar uri={authorAvatarUri} size="s" />
+            {/* `name` alimenta o fallback de iniciais do DS 0.1.120 — sem ele
+                um autor sem foto vira disco cinza anônimo. */}
+            <Avatar uri={authorAvatarUri} name={authorName} size="s" />
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text
                 variant="body.s"
