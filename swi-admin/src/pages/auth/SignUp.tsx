@@ -9,6 +9,7 @@ import { Image, View } from 'react-native'
 import { Button, Input, Logo, Radio, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { authApi } from '@/services/auth'
 import { isEmail, requiredText } from '@/lib/validators'
+import { maskCep, maskCnpj, maskPhone, onlyDigits } from '@/lib/masks'
 import { FormError } from '@/components/FormError'
 import signupBg from '@/assets/bg/signup-bg.png'
 
@@ -104,9 +105,10 @@ export function SignUp() {
     const { error: apiError } = await authApi.signUpCompany({
       company: {
         name: company.name,
-        cnpj: company.cnpj,
+        // Só dígitos no banco — a máscara é apresentação (ver lib/masks).
+        cnpj: onlyDigits(company.cnpj),
         site: company.site || undefined,
-        cep: address.cep,
+        cep: onlyDigits(address.cep),
         street: address.street,
         number: address.number,
         neighborhood: address.neighborhood,
@@ -114,7 +116,7 @@ export function SignUp() {
       },
       responsible: {
         name: responsible.name,
-        phone: responsible.phone,
+        phone: onlyDigits(responsible.phone),
         email: responsible.email,
         role: responsible.role, // 'owner' | 'partner' | 'manager' | 'safety' (validado acima)
       },
@@ -230,7 +232,7 @@ export function SignUp() {
                       accessibilityLabel="CNPJ"
                       placeholder="00.000.000/0001-00"
                       value={company.cnpj}
-                      onChangeText={(v: string) => setCompany((c) => ({ ...c, cnpj: v }))}
+                      onChangeText={(v: string) => setCompany((c) => ({ ...c, cnpj: maskCnpj(v) }))}
                     />
                   </View>
                   <View style={{ width: 292, flexGrow: 1 }}>
@@ -256,7 +258,7 @@ export function SignUp() {
                       accessibilityLabel="CEP"
                       placeholder="00000-000"
                       value={address.cep}
-                      onChangeText={(v: string) => setAddress((a) => ({ ...a, cep: v }))}
+                      onChangeText={(v: string) => setAddress((a) => ({ ...a, cep: maskCep(v) }))}
                     />
                   </View>
                   <View style={{ width: 477, flexGrow: 1 }}>
@@ -318,7 +320,9 @@ export function SignUp() {
                       accessibilityLabel="Telefone"
                       placeholder="(00) 00000-0000"
                       value={responsible.phone}
-                      onChangeText={(v: string) => setResponsible((r) => ({ ...r, phone: v }))}
+                      onChangeText={(v: string) =>
+                        setResponsible((r) => ({ ...r, phone: maskPhone(v) }))
+                      }
                       keyboardType="phone-pad"
                     />
                   </View>

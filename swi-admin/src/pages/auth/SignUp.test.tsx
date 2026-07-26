@@ -154,7 +154,10 @@ describe('SignUp', () => {
     expect(init.method).toBe('POST')
     const body = JSON.parse(init.body as string)
     expect(body.company.name).toBe('Acme S.A.')
-    expect(body.company.cnpj).toBe('12.345.678/0001-90')
+    // O campo é MASCARADO na tela, mas o que sobe é só dígito: guardar a
+    // pontuação faria o mesmo CNPJ existir em formatos diferentes no banco
+    // conforme o que o usuário digitou (QA 2026-07-24, lib/masks).
+    expect(body.company.cnpj).toBe('12345678000190')
     expect(body.responsible.email).toBe('maria@acme.com')
     expect(body.responsible.role).toBe('owner')
   })

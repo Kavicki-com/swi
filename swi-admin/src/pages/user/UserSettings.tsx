@@ -31,6 +31,7 @@ import { FormError } from '@/components/FormError'
 import { profileApi, type ProfilePatch } from '@/services/api/profile'
 import { authApi } from '@/services/api/auth'
 import { uploadImage } from '@/services/api/upload'
+import { maskCpf, maskDate, maskPhone, onlyDigits } from '@/lib/masks'
 
 const BLOOD_OPTIONS = [
   { label: 'A+', value: 'A+' },
@@ -286,8 +287,10 @@ export function UserSettings() {
       if (cancelled || !data) return
       setName(data.fullName ?? '')
       setDob(toDob(data.birthDate))
-      setCpf(data.cpf ?? '')
-      setPhone(data.phone ?? '')
+      // Mascara na leitura também: cadastros antigos guardaram dígitos crus, e
+      // as máscaras são idempotentes sobre valor já formatado.
+      setCpf(maskCpf(data.cpf ?? ''))
+      setPhone(maskPhone(data.phone ?? ''))
       setUf(data.uf ?? '')
       setCity(data.city ?? '')
       setProfissao(valueOf(PROFISSAO_OPTIONS, data.jobTitle))
@@ -316,8 +319,9 @@ export function UserSettings() {
     setSaving(true)
     const patch: ProfilePatch = {
       fullName: name.trim(),
-      phone: phone.trim(),
-      cpf: cpf.trim(),
+      // Só dígitos no banco (a máscara é apresentação) — ver lib/masks.
+      phone: onlyDigits(phone),
+      cpf: onlyDigits(cpf),
       city: city.trim(),
       allergies,
       chronicConditions: chronic,
@@ -607,12 +611,17 @@ export function UserSettings() {
                 label="Data de Nascimento"
                 placeholder="dd/mm/aaaa"
                 value={dob}
-                onChangeText={setDob}
+                onChangeText={(v) => setDob(maskDate(v))}
                 testID="settings-dob"
               />
             </View>
             <View style={{ flex: 1 }}>
-              <Input label="CPF" value={cpf} onChangeText={setCpf} testID="settings-cpf" />
+              <Input
+                label="CPF"
+                value={cpf}
+                onChangeText={(v) => setCpf(maskCpf(v))}
+                testID="settings-cpf"
+              />
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
@@ -624,7 +633,7 @@ export function UserSettings() {
               <Input
                 label="Telefone"
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(v) => setPhone(maskPhone(v))}
                 testID="settings-phone"
               />
             </View>
