@@ -163,7 +163,13 @@ describe('AuthService.signup rollback', () => {
     prisma.user.create.mockResolvedValue({ id: 'u9' })
     ;(mail.sendConfirmationCode as jest.Mock).mockRejectedValue(new Error('smtp down'))
     await expect(svc.signup({ email: 'j@ex.com', password: 'p', name: 'J' })).rejects.toThrow('smtp down')
+    // Profile ANTES do user: a FK Profile→User sem cascade estourava o delete e
+    // deixava os dois órfãos (visto ao vivo no 550 do Resend, 2026-07-26).
+    expect(prisma.profile.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u9' } })
     expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'u9' } })
+    const profileOrder = (prisma.profile.deleteMany as jest.Mock).mock.invocationCallOrder[0]
+    const userOrder = (prisma.user.delete as jest.Mock).mock.invocationCallOrder[0]
+    expect(profileOrder).toBeLessThan(userOrder)
   })
 })
 
