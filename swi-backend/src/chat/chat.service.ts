@@ -152,6 +152,12 @@ export class ChatService {
       sector: u.profile?.sector ?? '',
       role: u.profile?.jobTitle ?? '',
       avatarUri: u.profile?.avatarKey ? await this.media.presignGet(u.profile.avatarKey) : '',
+      // Identidade clínica REAL (QA de volume 2026-07-26): sem estes campos o
+      // painel do chat mostrava 26 anos / O+ pra TODO mundo, contradizendo as
+      // outras telas do mesmo trabalhador. Não são vitais de smartband.
+      birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
+      bloodType: u.profile?.bloodType ?? null,
+      allergies: u.profile?.allergies ?? null,
     }
   }
 

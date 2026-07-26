@@ -32,6 +32,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { formatAge } from '@/lib/formatAge'
+import { formatBadgeCount } from '@/app/nav'
 
 // --- Shared row helpers ---
 
@@ -393,6 +394,12 @@ export function MonitoringLayout() {
   const initialExpanded = location.pathname === '/monitoring/alerts' ? 'emp-04' : null
   const [expandedId, setExpandedId] = useState<string | null>(initialExpanded)
 
+  // Quantos estão no tier de fadiga AGORA: a facade já ordena esses primeiro e
+  // só eles recebem alertas de tom 'error'. Alimenta o badge das abas (que era
+  // "+3" fixo) usando o mesmo formatador do menu lateral.
+  const fatigueCount = users.filter((u) => u.alerts.some((a) => a.tone === 'error')).length
+  const fatigueBadge = formatBadgeCount(fatigueCount)
+
   // Fetch once for the layout's lifetime. Tab switches don't re-fire these.
   useEffect(() => {
     let cancelled = false
@@ -515,28 +522,34 @@ export function MonitoringLayout() {
               fullWidth
               accessibilityLabel="Filtro de status"
             />
-            <View
-              accessibilityLabel="3 alertas novos"
-              // Anchored to the RIGHT edge of the Tabs container instead of a
-              // fixed left:478 keyed to the Tabs' 492 width. -14 = -badgeWidth/2
-              // so the pill sticks out half over the Tabs' right edge — and the
-              // anchor works at any Tabs width as the page becomes responsive.
-              style={{
-                position: 'absolute',
-                right: -14,
-                top: -16,
-                width: 28,
-                height: 28,
-                borderRadius: 999,
-                backgroundColor: theme.surface.error,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text variant="body.s" color={theme.content.dark} style={{ fontWeight: '700' }}>
-                +3
-              </Text>
-            </View>
+            {/* Contagem REAL de quem está no tier de fadiga (era "+3" fixo,
+                contra um KPI que dizia 12 — QA de volume 2026-07-26). Some
+                quando não há ninguém: badge zerado é ruído. */}
+            {fatigueBadge ? (
+              <View
+                accessibilityLabel={`${fatigueCount} alertas de fadiga`}
+                // Anchored to the RIGHT edge of the Tabs container instead of a
+                // fixed left:478 keyed to the Tabs' 492 width. -14 = -badgeWidth/2
+                // so the pill sticks out half over the Tabs' right edge — and the
+                // anchor works at any Tabs width as the page becomes responsive.
+                style={{
+                  position: 'absolute',
+                  right: -14,
+                  top: -16,
+                  minWidth: 28,
+                  height: 28,
+                  paddingHorizontal: 6,
+                  borderRadius: 999,
+                  backgroundColor: theme.surface.error,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text variant="body.s" color={theme.content.dark} style={{ fontWeight: '700' }}>
+                  {fatigueBadge}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <Button
             label="Ver Todos"

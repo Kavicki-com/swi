@@ -88,14 +88,13 @@
         box-shadow: inset 0px 4px 4px 0px rgba(29, 29, 29, 0.56);
       }
       /* Cap the DS Combobox dropdown panel height + enable internal scroll.
-       * The Combobox renders a Trigger button with accessibilityState.expanded
-       * (→ aria-expanded="true") immediately followed by the Panel (role="menu").
-       * Adjacent selector targets ONLY that Panel and not the SideMenu
-       * Container which also uses role="menu" but isn't preceded by an
-       * aria-expanded sibling. 240 px fits ~6 options with DS padding;
-       * dropdowns scroll internally when option counts grow (e.g. "Gerente
-       * responsável" across a large org). */
-      [aria-expanded='true'] + [role='menu'] {
+       * O seletor ANTIGO era `[aria-expanded='true'] + [role='menu']`, mas o
+       * Combobox do DS não emite `aria-expanded` no web — a regra nunca casava
+       * e o painel crescia sem limite (QA de volume 2026-07-26: 29 opções =
+       * 316 px; com 60+ autores passaria do rodapé sem scroll).
+       * O painel é o ÚNICO role="menu" sem aria-label; a SideMenu tem
+       * aria-label="Navegação principal" e fica de fora. 240 px ≈ 6 opções. */
+      [role='menu']:not([aria-label]) {
         max-height: 240px;
         overflow-y: auto;
       }

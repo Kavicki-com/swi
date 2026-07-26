@@ -34,6 +34,9 @@ import { useDemoToast } from '@/lib/demoToast'
 import type { ChatContact, ChatMessage } from '@/services/chats'
 import { useChat } from '@/services/chat/ChatProvider'
 import { conversationToContact, directoryToContact } from '@/services/chat/chatMap'
+import { ageFrom } from '@/services/api/users'
+import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
+import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Single contact row in the left list — Figma 103:9931 / 102:9571
@@ -412,6 +415,9 @@ function ContactInfoPanel({
           <Title variant="title.xs" color={theme.content.dark}>
             {contact.fatigueRemaining ?? '—'}
           </Title>
+          {/* Fadiga é o único número simulado que sobrou aqui (identidade e
+              tipo sanguíneo agora vêm do Profile) — selo igual ao resto do painel. */}
+          <SimulatedDataBadge />
         </View>
 
         {/* Stats card — Figma 103:9876. Bumped from surface.standard to
@@ -505,17 +511,6 @@ function ContactInfoPanel({
   )
 }
 
-// VITALS / fatigue shown in the right-column info panel are smartband-blocked;
-// until the band feeds real data, every selected contact renders the same demo
-// profile. Identity (name / sector / avatar / role) is real — only these stay
-// mock. Kept local so the old @/services/chats mock import can be dropped.
-const DEMO_VITALS = {
-  gender: 'male' as const,
-  age: 26,
-  bloodType: 'O+',
-  allergies: 'Nenhuma',
-  fatigueRemaining: '1:45:12 h',
-}
 
 export function ChatInbox() {
   const { user } = useAuth()
@@ -612,15 +607,27 @@ export function ChatInbox() {
   const selectedContact = contacts.find((c) => c.id === selectedContactId) ?? null
   const messages = selectedContact?.messages ?? []
 
-  // Right-panel identity is real (name / sector / avatar from the conversation);
-  // `role` is looked up from the matching directory entry by workerId (the
-  // Conversation DTO has no role). VITALS / fatigue stay mock (DEMO_VITALS).
+  // Identidade REAL do painel (nome/setor/avatar da conversa) + idade, tipo
+  // sanguíneo e alergias do DIRETÓRIO — antes vinham de um DEMO_VITALS fixo,
+  // então todo contato aparecia com "26 anos / O+", contradizendo as demais
+  // telas do mesmo trabalhador (QA de volume 2026-07-26). Só a fadiga segue
+  // simulada, com o mesmo gerador do resto do painel.
   const panelContact: ChatContact | null = selectedContact
-    ? {
-        ...selectedContact,
-        role: directory.find((d) => keyFor(d.workerId) === selectedContact.id)?.role ?? '',
-        ...DEMO_VITALS,
-      }
+    ? (() => {
+        const entry = directory.find((d) => keyFor(d.workerId) === selectedContact.id)
+        const vitals = entry ? simulatedVitalsFor(entry.workerId, Date.now()) : null
+        return {
+          ...selectedContact,
+          role: entry?.role ?? '',
+          gender: 'male' as const,
+          age: entry?.birthDate ? ageFrom(entry.birthDate, new Date()) : undefined,
+          bloodType: entry?.bloodType ?? undefined,
+          allergies: entry?.allergies ?? undefined,
+          fatigueRemaining: vitals
+            ? `${Math.floor(vitals.fatigueMinutes / 60)}h${String(vitals.fatigueMinutes % 60).padStart(2, '0')}`
+            : '—',
+        }
+      })()
     : null
 
   const openContact = (id: string) => {

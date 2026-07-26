@@ -32,4 +32,9 @@ export interface Contact {
   sector: string // → subtitle do card
   role: string // header do user-info
   avatarUri: string // uri resolvida
+  // Identidade clínica REAL do Profile (o painel do chat mostrava valores
+  // fixos "26 anos / O+" pra todo contato antes disto). null = não preenchido.
+  birthDate: string | null // ISO
+  bloodType: string | null
+  allergies: string | null
 }

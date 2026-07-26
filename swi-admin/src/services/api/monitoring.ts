@@ -24,6 +24,10 @@ export type {
 // Hardware inexistente no piloto — único KPI que segue fixture (rotulado).
 const MOCK_ACTIVE_CAMERAS = '564'
 
+// Milhar em pt-BR: com a operação cheia os agregados passam de 6 dígitos e
+// "437715" fica ilegível num card (QA de volume 2026-07-26).
+const num = (n: number): string => n.toLocaleString('pt-BR')
+
 type WithVitals = { w: Employee; v: SimulatedVitals }
 
 async function population(): Promise<WithVitals[]> {
@@ -134,7 +138,7 @@ export const monitoringApi = {
       {
         id: 'movements',
         icon: 'directions_walk',
-        value: String(movements),
+        value: num(movements),
         label: 'Movimentos realizados',
       },
     ]

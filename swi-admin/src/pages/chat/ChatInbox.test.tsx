@@ -63,6 +63,9 @@ const DIR: Contact = {
   sector: 'Setor Oeste',
   role: 'Operadora',
   avatarUri: 'blob:av9',
+  birthDate: '1992-04-10T00:00:00.000Z',
+  bloodType: 'A+',
+  allergies: null,
 }
 
 let openConversation: ReturnType<typeof vi.fn>
