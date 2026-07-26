@@ -15,6 +15,7 @@ import { MapMarker } from '@/components/MapMarker';
 import { MapLineSource } from '@/components/MapLineSource';
 import { MapChipBody } from '@/components/MapChipBody';
 import { NavFABs } from '@/components/NavFABs';
+import { EvacuationAckBar } from '@/components/EvacuationAckBar';
 import { SITE_ROUTE } from '@/services/evacuation/types';
 import { useEvacuation } from '@/services/evacuation/EvacuationProvider';
 import { chipAnchors, lineFeature, straightLine } from '@/services/evacuation/routeFormat';
@@ -172,6 +173,9 @@ function EvacuationRouteScreen() {
 
         <NavFABs />
       </MapView>
+
+      {/* Evacuação REAL ativa (Fase 2): CTA de confirmação de presença. */}
+      <EvacuationAckBar />
     </View>
   );
 }

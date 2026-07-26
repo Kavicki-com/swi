@@ -94,6 +94,13 @@ describe('Evacuations e2e', () => {
     expect(w1Entry.acked).toBe(true)
     expect(typeof w1Entry.ackAt).toBe('string')
 
+    // WORKER também lê a ativa da PRÓPRIA org (o app mobile precisa do id pro
+    // ack); o outsider recebe a da org DELE — ou seja, nenhuma (vazio).
+    const { body: w1Active } = await request(app.getHttpServer()).get('/evacuations/active').set(w1).expect(200)
+    expect(w1Active).toMatchObject({ id: started.id, acked: 1 })
+    const { body: outActive } = await request(app.getHttpServer()).get('/evacuations/active').set(outsider).expect(200)
+    expect(outActive?.id ?? null).toBeNull()
+
     // Encerra: active esvazia e ack tardio → 409.
     await request(app.getHttpServer()).post(`/evacuations/${started.id}/end`).set(admin).expect(204)
     // `null` do controller vira corpo vazio no wire (supertest lê {}): o

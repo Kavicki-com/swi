@@ -3,7 +3,7 @@
 // substituir por tipos gerados. Mirrors services/chat/types.ts. Datas ISO;
 // ordenação por comparação lexicográfica (= cronológica).
 
-export type NotificationDomain = 'weather' | 'chat' | 'reports' | 'journey' | 'faq';
+export type NotificationDomain = 'weather' | 'chat' | 'reports' | 'journey' | 'faq' | 'evacuation';
 
 // 'AppNotification' (não 'Notification') pra não colidir com o global do DOM/RN.
 export interface AppNotification {
