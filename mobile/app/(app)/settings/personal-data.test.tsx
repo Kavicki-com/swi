@@ -4,13 +4,22 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import SettingsPersonalData from './personal-data';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { fetchProfileCatalog } from '../../../services/api/catalog';
+import { useMediaPicker } from '../../../lib/media/useMediaPicker';
+import { uploadImage } from '../../../services/api/uploadMedia';
 
 jest.mock('../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
 jest.mock('../../../services/api/catalog', () => ({ fetchProfileCatalog: jest.fn() }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ back: jest.fn(), push: jest.fn() }) }));
+jest.mock('../../../lib/media/useMediaPicker', () => ({ useMediaPicker: jest.fn() }));
+jest.mock('../../../services/api/uploadMedia', () => ({ uploadImage: jest.fn() }));
 
 const mockUseProfile = useProfile as jest.Mock;
 const mockCatalog = fetchProfileCatalog as jest.Mock;
+const mockUseMediaPicker = useMediaPicker as jest.Mock;
+const mockUploadImage = uploadImage as jest.Mock;
+
+const FOTO_LOCAL = 'file:///tmp/selfie.jpg';
+const AVATAR_KEY = 'avatars/00000000-0000-4000-8000-000000000000.jpg';
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -58,9 +67,16 @@ const press = async (tree: ReturnType<typeof create>, label: string) => {
 };
 
 beforeEach(() => {
+  jest.clearAllMocks();
   saveProfile = jest.fn(async () => ({}));
   mockUseProfile.mockReturnValue({ loadProfile: jest.fn(async () => null), saveProfile });
   mockCatalog.mockResolvedValue({ jobTitles: [], sectors: [], duties: [] });
+  mockUseMediaPicker.mockReturnValue({
+    pickFromGallery: jest.fn(async () => FOTO_LOCAL),
+    takePhoto: jest.fn(async () => FOTO_LOCAL),
+    showPicker: jest.fn(async () => FOTO_LOCAL),
+  });
+  mockUploadImage.mockResolvedValue(AVATAR_KEY);
 });
 
 describe('Dados pessoais — máscara de entrada', () => {
@@ -133,5 +149,73 @@ describe('Dados pessoais — validação', () => {
   it('campo intocado não mostra erro', async () => {
     const tree = await render();
     expect(field(tree, 'CPF').props.descriptionVariant).not.toBe('error');
+  });
+});
+
+// Até 2026-07-27 NÃO EXISTIA caminho nenhum no app pra definir foto de perfil.
+// O seletor do passo 1 do cadastro guarda a uri num useState e a descarta — e
+// o backend sempre esteve pronto (/media/presign aceita prefix 'avatars', e o
+// PUT /profile/me valida avatarKey). Faltava só alguém ligar os dois.
+//
+// Sem foto, o Avatar cai nas iniciais em todas as telas: jornada, dashboard,
+// chat, mapa e no seletor de responsáveis.
+describe('Dados pessoais — foto de perfil', () => {
+  const uploader = (tree: ReturnType<typeof create>) =>
+    tree.root.findAll((n) => typeof n.props?.onPickFile === 'function')[0];
+
+  const preencherObrigatorios = async (tree: ReturnType<typeof create>) => {
+    await type(tree, 'Nome Completo', 'Fulano de Tal');
+    await type(tree, 'Data de Nascimento', '02011999');
+    await type(tree, 'CPF', CPF_VALIDO);
+    await type(tree, 'Telefone', '41999990000');
+  };
+
+  it('a tela oferece um seletor de foto', async () => {
+    const tree = await render();
+    expect(uploader(tree)).toBeDefined();
+  });
+
+  it('a foto escolhida aparece como preview antes de salvar', async () => {
+    const tree = await render();
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+    expect(uploader(tree).props.value).toEqual({ uri: FOTO_LOCAL });
+  });
+
+  it('salvar sobe o arquivo pro namespace avatars e grava a key', async () => {
+    const tree = await render();
+    await preencherObrigatorios(tree);
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+    await press(tree, 'Salvar alterações');
+
+    expect(mockUploadImage).toHaveBeenCalledWith(FOTO_LOCAL, 'avatars');
+    expect(saveProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ avatarKey: AVATAR_KEY }),
+    );
+  });
+
+  // Sem isto, abrir a tela e salvar qualquer outro campo re-subiria a mesma
+  // foto e criaria um objeto novo no bucket a cada vez.
+  it('sem foto nova, não sobe nada', async () => {
+    const tree = await render();
+    await preencherObrigatorios(tree);
+    await press(tree, 'Salvar alterações');
+
+    expect(mockUploadImage).not.toHaveBeenCalled();
+    expect(saveProfile).toHaveBeenCalledWith(
+      expect.not.objectContaining({ avatarKey: expect.anything() }),
+    );
+  });
+
+  // O upload é o passo que depende de rede; falhar nele não pode levar junto
+  // o resto do cadastro que a pessoa acabou de digitar.
+  it('falha no upload não descarta o que foi digitado', async () => {
+    mockUploadImage.mockRejectedValue(new Error('rede caiu'));
+    const tree = await render();
+    await preencherObrigatorios(tree);
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+    await press(tree, 'Salvar alterações');
+
+    expect(valueOf(tree, 'Nome Completo')).toBe('Fulano de Tal');
+    expect(uploader(tree).props.value).toEqual({ uri: FOTO_LOCAL });
   });
 });
