@@ -22,6 +22,8 @@ import {
   validatePasswordMatch,
 } from '../../lib/validation/validators';
 import { listCompanies, type CompanyOption } from '../../services/api/companies';
+import { errorMessage } from '../../lib/errors/errorMessage';
+import { signupDraft } from '../../services/auth/signupDraft';
 import { AUTH_BACKEND } from '../../lib/featureFlags';
 
 // Só o fluxo api tem empresas reais pra escolher; no mock o seletor some e o
@@ -86,16 +88,31 @@ export default function SignUp() {
     // (success). In production the email link deep-links to confirmation; in the
     // demo, email-sent has a manual "Já confirmei" affordance to advance.
     const username = fullName.value.trim().split(/\s+/)[0] ?? '';
+    const params = {
+      email: email.value,
+      password: password.value,
+      name: fullName.value.trim(),
+      ...(companyId ? { companyId } : {}),
+    };
+
+    // Fluxo real: a conta NÃO nasce aqui. Guarda as credenciais e manda o
+    // worker preencher dados pessoais, endereço e saúde; o cadastro sobe no
+    // fim do wizard, já completo, e só então entra na fila de aprovação do
+    // painel. Antes o wizard era pulado no modo api e o admin aprovava uma
+    // linha com nome e e-mail e mais nada (QA 2026-07-26).
+    if (NEEDS_COMPANY) {
+      signupDraft.set(params);
+      router.push({ pathname: '/(auth)/complimentary-data/step-1', params: { username } });
+      return;
+    }
+
     try {
-      await signUp({
-        email: email.value,
-        password: password.value,
-        name: fullName.value.trim(),
-        ...(companyId ? { companyId } : {}),
-      });
+      await signUp(params);
       router.push({ pathname: '/(auth)/email-sent', params: { email: email.value, username } });
-    } catch {
-      Alert.alert('Erro', 'Não foi possível criar a conta.');
+    } catch (e) {
+      // O motivo vem do servidor ("E-mail já cadastrado", "Empresa não
+      // encontrada") — sem ele o cliente relê o formulário sem achar o erro.
+      Alert.alert('Erro', errorMessage(e, 'Não foi possível criar a conta.'));
     }
   };
 

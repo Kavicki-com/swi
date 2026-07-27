@@ -14,6 +14,7 @@ import {
 import { HomeFAB } from '../../../components/HomeFAB';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { fetchProfileCatalog, type ProfileCatalog } from '../../../services/api/catalog';
+import { errorMessage } from '../../../lib/errors/errorMessage';
 
 // Figma 353:11560 — settings sub-screen "Dados pessoais". Form-based.
 // TopBar (DS v0.1.38) + section title + 11 fields + Salvar button +
@@ -100,8 +101,8 @@ export default function SettingsPersonalData() {
       });
       Alert.alert('Pronto', 'Seus dados foram salvos.');
       router.back();
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+    } catch (e) {
+      Alert.alert('Erro', errorMessage(e, 'Não foi possível salvar seus dados.'));
     } finally {
       setSaving(false);
     }

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
 import { useAuth } from '../../services/auth/AuthProvider';
 import { AUTH_BACKEND } from '../../lib/featureFlags';
+import { errorMessage } from '../../lib/errors/errorMessage';
 
 // Auto-advance to account-confirmation simulating the user clicking the
 // confirmation link in the email. 4s gives enough time to read the message;
@@ -49,8 +50,8 @@ export default function EmailSent() {
     try {
       await resendConfirmation({ email: email ?? '' });
       Alert.alert('Código reenviado', 'Enviamos um novo código para o seu e-mail.');
-    } catch {
-      Alert.alert('Erro', 'Não foi possível reenviar o código. Tente novamente.');
+    } catch (e) {
+      Alert.alert('Erro', errorMessage(e, 'Não foi possível reenviar o código. Tente novamente.'));
     } finally {
       setResending(false);
     }
@@ -65,8 +66,10 @@ export default function EmailSent() {
       // enters (signup→email-sent→account-confirmation→step-1) — that wizard
       // remains mock-only for now.
       router.replace('/(auth)/login');
-    } catch {
-      Alert.alert('Erro', 'Código inválido ou expirado.');
+    } catch (e) {
+      // Servidor separa "Código inválido" de "Código expirado" — a ação do
+      // usuário muda (redigitar vs. pedir reenvio).
+      Alert.alert('Erro', errorMessage(e, 'Código inválido ou expirado.'));
     }
   };
 

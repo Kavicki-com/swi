@@ -165,7 +165,9 @@ export default function ChatThread() {
           />
         </View>
         <Pressable
-          onPress={() => router.push('/(app)/chat/user-info')}
+          onPress={() =>
+            router.push({ pathname: '/(app)/chat/user-info', params: { userId } })
+          }
           accessibilityRole="button"
           accessibilityLabel="Ver perfil do contato"
         >

@@ -1,6 +1,5 @@
 import { Image as RNImage, Pressable, View } from 'react-native';
-import { Asset } from 'expo-asset';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -12,16 +11,38 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { useChat } from '../../../services/chat/ChatProvider';
+import { formatEta } from '../../../services/vitals/formatEta';
+import { ageFrom } from '../../../lib/age';
+import { simulatedFatigueFor } from '../../../services/vitals/simulatedContactFatigue';
 
-// Local avatar (Romulo) — mock contact whose profile is shown.
-const avatarUri = Asset.fromModule(
-  require('../../../assets/avatars/worker-1.png'),
-).uri;
+// Rótulos de gênero a partir do CÓDIGO que o backend guarda ('male'/'female'/
+// 'other') — mesma convenção do painel.
+const GENDER_LABEL: Record<string, { text: string; symbol: string }> = {
+  male: { text: 'Masculino', symbol: '♂' },
+  female: { text: 'Feminino', symbol: '♀' },
+  other: { text: 'Outro', symbol: '⚧' },
+};
+
+const NAO_INFORMADO = 'Não informado';
 
 export default function ChatUserInfo() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // Até 2026-07-26 esta tela não recebia parâmetro nenhum: abrir o avatar de
+  // QUALQUER contato mostrava a ficha fixa do "Romulo Cardoso", com gênero,
+  // idade, tipo sanguíneo e alergias inventados. O /chat/directory já devolvia
+  // a identidade real de cada colega — só faltava dizer de quem é a ficha.
+  const { userId } = useLocalSearchParams<{ userId?: string }>();
+  const { directory } = useChat();
+  const contact = directory.find((c) => c.workerId === userId) ?? null;
+
+  const gender = contact?.gender ? GENDER_LABEL[contact.gender] : undefined;
+  const age = ageFrom(contact?.birthDate);
+  const roleLine = [contact?.role, contact?.sector].filter(Boolean).join('\n');
+  // Fadiga é dado de smartband → simulado, mas por PESSOA (era 62% pra todos).
+  const fatigue = simulatedFatigueFor(contact?.workerId ?? '');
 
   return (
     <View
@@ -47,7 +68,8 @@ export default function ChatUserInfo() {
       <View style={{ gap: theme.padding.m, alignItems: 'center', width: '100%' }}>
         <Avatar
           customSize={56}
-          uri={avatarUri}
+          uri={contact?.avatarUri}
+          name={contact?.name}
           bordered
           borderWidth={4}
           borderColor={theme.content.primary}
@@ -58,14 +80,14 @@ export default function ChatUserInfo() {
             color={theme.content.dark}
             style={{ textAlign: 'center' }}
           >
-            Romulo Cardoso
+            {contact?.name ?? ''}
           </Title>
           <Text
             variant="body.m"
             color={theme.content.dark}
             style={{ textAlign: 'center' }}
           >
-            Operador de escavadeira{'\n'}Maquinário pesado
+            {roleLine}
           </Text>
         </View>
       </View>
@@ -102,7 +124,8 @@ export default function ChatUserInfo() {
         >
           <Avatar
             customSize={24}
-            uri={avatarUri}
+            uri={contact?.avatarUri}
+            name={contact?.name}
             bordered
             borderWidth={2}
             borderColor={theme.content.secondaryLight}
@@ -167,7 +190,7 @@ export default function ChatUserInfo() {
             DS ProgressBar auto-distributes stops evenly across the array,
             close enough to Figma at this width. */}
         <ProgressBar
-          value={62}
+          value={fatigue.pct}
           trackColor={theme.surface.secondaryLight}
           gradient={[
             theme.surface.success,
@@ -177,7 +200,7 @@ export default function ChatUserInfo() {
           accessibilityLabel="Tempo até fadiga"
         />
         <Title variant="title.xs" color={theme.content.dark}>
-          1:45:12 h
+          {formatEta(fatigue.etaMin)}
         </Title>
       </View>
 
@@ -198,13 +221,15 @@ export default function ChatUserInfo() {
           <Text variant="label.l" color={theme.content.dark}>
             Gênero
           </Text>
-          <Text variant="label.l" color={theme.content.dark}>
-            ♂
-          </Text>
+          {gender ? (
+            <Text variant="label.l" color={theme.content.dark}>
+              {gender.symbol}
+            </Text>
+          ) : null}
         </View>
         {/* Row 2 — Masculino (own line per Figma 336:8920 width 188) */}
         <Text variant="body.m" color={theme.content.dark}>
-          Masculino
+          {gender?.text ?? NAO_INFORMADO}
         </Text>
         {/* Row 3 — Idade 26 anos */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
@@ -212,7 +237,7 @@ export default function ChatUserInfo() {
             Idade
           </Text>
           <Text variant="body.m" color={theme.content.dark}>
-            26 anos
+            {age !== null ? `${age} anos` : NAO_INFORMADO}
           </Text>
         </View>
         {/* Row 4 — Tipo sanguíneo 🩸 O+ */}
@@ -222,7 +247,7 @@ export default function ChatUserInfo() {
           </Text>
           <Icon name="humidity_mid" size={16} color={theme.surface.error} />
           <Text variant="body.m" color={theme.content.dark}>
-            O+
+            {contact?.bloodType ?? NAO_INFORMADO}
           </Text>
         </View>
         {/* Row 5 — Alergias Nenhuma */}
@@ -231,7 +256,7 @@ export default function ChatUserInfo() {
             Alergias
           </Text>
           <Text variant="body.m" color={theme.content.dark}>
-            Nenhuma
+            {contact?.allergies?.trim() || NAO_INFORMADO}
           </Text>
         </View>
       </View>

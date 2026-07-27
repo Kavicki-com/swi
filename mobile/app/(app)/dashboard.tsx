@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Image as RNImage, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
-import { Asset } from 'expo-asset';
 import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +10,7 @@ import {
   HeartStatus,
   Icon,
   JourneyTheme,
+  ProgressBar,
   StatusChart as DSStatusChart,
   Text,
   Title,
@@ -41,6 +41,8 @@ import {
 } from '../../lib/alertWeatherSvgs';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 import { useVitals } from '../../services/vitals/VitalsProvider';
+import { useProfile } from '../../services/profile/ProfileProvider';
+import { formatEta } from '../../services/vitals/formatEta';
 import { useWeather } from '../../services/weather/WeatherProvider';
 import { weatherDisplay } from '../../services/weather/weatherFormat';
 import type { WorkerStatus } from '../../services/vitals/types';
@@ -102,8 +104,6 @@ const BG_DECOR_H = 347.935;
 // Resolve local PNG to a Metro-served URI so DS Avatar (which only accepts
 // `uri: string`) can render the asset. TODO: bump DS Avatar to accept
 // `source: ImageSourcePropType` to remove this workaround.
-const avatarUri =
-  Asset.fromModule(require('../../assets/avatar-construction.png')).uri;
 
 // Layout reference (Figma 245:23280, viewport 360×≈800):
 //   - Chart zone: 0,0 → 360×374. Now rendered as edge-to-edge banner with
@@ -121,6 +121,7 @@ const CONTAINER_GAP_XL = 24;
 
 export default function Dashboard() {
   const { phase, vitals, status } = useVitals();
+  const { profile } = useProfile();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -376,7 +377,8 @@ export default function Dashboard() {
         >
           <Avatar
             customSize={72}
-            uri={avatarUri}
+            uri={profile?.avatarUrl}
+            name={profile?.fullName}
             fallbackBackgroundColor={theme.surface.medium}
           />
         </Pressable>
@@ -526,7 +528,7 @@ export default function Dashboard() {
                 color={theme.content.primary}
               />
             }
-            value="12/8"
+            value={`${v.bloodPressureSys}/${v.bloodPressureDia}`}
             label="Boa"
             width={80}
             theme={theme}
@@ -541,7 +543,7 @@ export default function Dashboard() {
                 color={theme.content.primary}
               />
             }
-            value="145"
+            value={String(Math.round(v.caloriesPerHour))}
             label="Kcal/hora"
             width={70}
             theme={theme}
@@ -556,7 +558,7 @@ export default function Dashboard() {
             triggered Fabric HostFunction precision error in DS v0.1.34
             ProgressBar (accessibilityValue.now expects int64; see Gap H). */}
         <View style={{ gap: theme.gap.s, width: '100%' }}>
-          <FatigueBar
+          <ProgressBar
             value={Math.round(v.fatiguePct)}
             gradient={[
               theme.surface.success,
@@ -564,10 +566,12 @@ export default function Dashboard() {
               theme.surface.error,
             ]}
             gradientStops={[43.75, 79.253, 100]}
-            theme={theme}
+            gradientDirection="rtl"
+            bordered
+            accessibilityLabel="Tempo até atingir fadiga total"
           />
           <Text variant="body.m" color={theme.content.dark}>
-            Tempo até atingir fadiga total: 1h45m
+            Tempo até atingir fadiga total: {formatEta(v.fatigueEtaMin)}
           </Text>
         </View>
 
@@ -746,86 +750,6 @@ const StatCol = memo(function StatCol({
       <Text variant="body.s" color={theme.content.dark}>
         {label}
       </Text>
-    </View>
-  );
-});
-
-// FatigueBar — local replacement for DS ProgressBar. The DS component has
-// `id="pb-gradient"` hardcoded in its <Defs>, which collides across multiple
-// dashboard instances (Stack keeps screens mounted) and breaks the visible
-// fill. Mirrors the bordered + gradient layout but with useUniqueId.
-const FatigueBar = memo(function FatigueBar({
-  value,
-  gradient,
-  gradientStops,
-  theme: barTheme,
-}: {
-  value: number;
-  gradient: [string, string, string];
-  gradientStops: [number, number, number];
-  theme: ReturnType<typeof useTheme>;
-}) {
-  const gradId = useUniqueId('pb-gradient');
-  const FILL_HEIGHT = 6;
-  const trackHeight = 22;
-  const innerPad = (trackHeight - FILL_HEIGHT) / 2;
-  const pct = Math.min(Math.max(value, 0), 100);
-  return (
-    <View
-      accessibilityRole="progressbar"
-      accessibilityLabel="Tempo até atingir fadiga total"
-      accessibilityValue={{ min: 0, max: 100, now: pct }}
-      style={{
-        height: trackHeight,
-        alignSelf: 'stretch',
-        borderRadius: barTheme.border.radius.pill,
-        borderWidth: 1,
-        borderColor: barTheme.content.medium,
-        backgroundColor: barTheme.background,
-        paddingHorizontal: innerPad,
-        paddingVertical: innerPad,
-        justifyContent: 'center',
-        overflow: 'hidden',
-      }}
-    >
-      {/* borderRadius:pill + overflow:hidden clipa o SVG retangular interno
-          num formato cilíndrico (Figma 304:2683). Sem isso o fill ficava
-          com cantos retos, conflitando visualmente com o track externo
-          que é pill. */}
-      <View
-        style={{
-          width: `${pct}%`,
-          height: FILL_HEIGHT,
-          borderRadius: barTheme.border.radius.pill,
-          overflow: 'hidden',
-        }}
-      >
-        <Svg
-          width="100%"
-          height="100%"
-          viewBox={`0 0 100 ${FILL_HEIGHT}`}
-          preserveAspectRatio="none"
-        >
-          <Defs>
-            <LinearGradient
-              id={gradId}
-              x1={100}
-              y1="0"
-              x2={0}
-              y2="0"
-              gradientUnits="userSpaceOnUse"
-            >
-              <Stop offset={`${gradientStops[0]}%`} stopColor={gradient[0]} />
-              <Stop offset={`${gradientStops[1]}%`} stopColor={gradient[1]} />
-              <Stop offset={`${gradientStops[2]}%`} stopColor={gradient[2]} />
-            </LinearGradient>
-          </Defs>
-          <Path
-            d={`M0 0 H100 V${FILL_HEIGHT} H0 Z`}
-            fill={`url(#${gradId})`}
-          />
-        </Svg>
-      </View>
     </View>
   );
 });

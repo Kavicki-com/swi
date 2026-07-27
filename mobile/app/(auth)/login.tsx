@@ -6,6 +6,7 @@ import { Button, Icon, Input, Logo, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '../../services/auth/AuthProvider';
 import { useField } from '../../lib/forms/useField';
 import { validateEmail, validateRequired } from '../../lib/validation/validators';
+import { errorMessage } from '../../lib/errors/errorMessage';
 
 export default function Login() {
   const router = useRouter();
@@ -35,10 +36,8 @@ export default function Login() {
       // Backend real (AUTH_BACKEND='api') lança com mensagem pronta do servidor
       // — ex.: gate de aprovação ("aguardando aprovação do administrador") ou
       // e-mail não verificado. Mostra essa mensagem quando houver (é o sinal que
-      // o QA precisa distinguir); no mock nunca cai aqui. Fallback genérico só
-      // pra erro sem message.
-      const msg = e instanceof Error && e.message ? e.message : 'Email ou senha inválidos.';
-      Alert.alert('Erro', msg);
+      // o QA precisa distinguir); no mock nunca cai aqui.
+      Alert.alert('Erro', errorMessage(e, 'Email ou senha inválidos.'));
     }
   };
 

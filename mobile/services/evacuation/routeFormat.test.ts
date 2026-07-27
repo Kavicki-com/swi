@@ -1,4 +1,26 @@
-import { chipAnchors, navArrow, lineFeature, bearingDeg, straightLine } from './routeFormat';
+import { chipAnchors, chipEtaLabel, navArrow, lineFeature, bearingDeg, straightLine } from './routeFormat';
+
+describe('routeFormat — chipEtaLabel', () => {
+  it('deriva o tempo da duração REAL da rota, na fração onde a chip ancora', () => {
+    // 30min de rota: a chip de 35% marca ~11min, a de 70% marca 21min.
+    expect(chipEtaLabel(1800, 0.35)).toBe('11 minutos');
+    expect(chipEtaLabel(1800, 0.7)).toBe('21 minutos');
+  });
+
+  it('concorda no singular', () => {
+    expect(chipEtaLabel(120, 0.35)).toBe('1 minuto');
+  });
+
+  it('nunca mostra "0 minutos" — trecho curto arredonda pra 1', () => {
+    expect(chipEtaLabel(30, 0.35)).toBe('1 minuto');
+  });
+
+  it('sem rota carregada não inventa tempo', () => {
+    expect(chipEtaLabel(null, 0.35)).toBe('—');
+    expect(chipEtaLabel(undefined, 0.35)).toBe('—');
+    expect(chipEtaLabel(0, 0.35)).toBe('—');
+  });
+});
 
 type Pt = [number, number];
 const line: Pt[] = [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]];

@@ -14,6 +14,7 @@ import {
 import { maskCEP, maskUF } from '../../../lib/validation/masks';
 import { useCepLookup } from '../../../lib/cep/useCepLookup';
 import { useProfile } from '../../../services/profile/ProfileProvider';
+import { errorMessage } from '../../../lib/errors/errorMessage';
 
 export default function ComplimentaryDataStep2() {
   const router = useRouter();
@@ -83,8 +84,8 @@ export default function ComplimentaryDataStep2() {
         city: city || undefined,
         uf: uf.value,
       });
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+    } catch (e) {
+      Alert.alert('Erro', errorMessage(e, 'Não foi possível salvar seus dados.'));
       return;
     }
     router.push({

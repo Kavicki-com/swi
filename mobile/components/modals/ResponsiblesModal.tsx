@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { Asset } from 'expo-asset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Avatar,
@@ -12,7 +11,8 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
-import { ADMINS } from '../../lib/admins';
+import { useChat } from '../../services/chat/ChatProvider';
+import { ageFrom } from '../../lib/age';
 
 // Figma 364:18017 — bottom-sheet "Selecionar responsáveis".
 // Body compartilhado; até agora só `(app)/reports/responsibles.tsx`
@@ -26,9 +26,12 @@ import { ADMINS } from '../../lib/admins';
 // lê via `useFocusEffect` ao reentrar. Phase 2: substituir por um
 // store real (zustand/jotai) ou query-cache.
 //
-// `ADMINS` foi extraído pra `lib/admins.ts` (audit cleanup 2026-05-17)
-// pra separar mock data da UI; o singleton de seleção fica aqui por
-// estar tightly coupled ao confirm flow do modal.
+// A lista vem do diretório REAL da empresa (/chat/directory, org-scoped, já
+// carregado pelo ChatProvider). Antes eram 5 pessoas inventadas em
+// lib/admins.ts — e o pior: `reports/new.tsx` resolvia id→nome por elas e
+// GRAVAVA "Elisa Siqueira Jordão" como responsável no backend de verdade
+// (QA 2026-07-26). O singleton de seleção fica aqui por estar acoplado ao
+// confirm flow do modal.
 
 let _selectedIds: string[] = [];
 export const responsiblesSelection = {
@@ -43,10 +46,6 @@ export const responsiblesSelection = {
   },
 };
 
-const avatarUri = Asset.fromModule(
-  require('../../assets/avatar-construction.png'),
-).uri;
-
 interface ResponsiblesModalProps {
   onClose: () => void;
   // Confirma a seleção. Demo phase: o caller só fecha; futuramente
@@ -59,6 +58,13 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const { directory } = useChat();
+
+  // O SearchInput existia mas não filtrava nada — digitar não mudava a lista.
+  const term = search.trim().toLowerCase();
+  const people = term
+    ? directory.filter((c) => c.name.toLowerCase().includes(term))
+    : directory;
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -109,15 +115,16 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
         contentContainerStyle={{ gap: theme.gap.s }}
         showsVerticalScrollIndicator={false}
       >
-        {ADMINS.map((admin) => {
-          const isChecked = selected.has(admin.id);
+        {people.map((person) => {
+          const isChecked = selected.has(person.workerId);
+          const age = ageFrom(person.birthDate);
           return (
             <Pressable
-              key={admin.id}
-              onPress={() => toggle(admin.id)}
+              key={person.workerId}
+              onPress={() => toggle(person.workerId)}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: isChecked }}
-              accessibilityLabel={admin.name}
+              accessibilityLabel={person.name}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -129,7 +136,7 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s, flex: 1 }}>
-                <Avatar uri={avatarUri} size="l" />
+                <Avatar uri={person.avatarUri} name={person.name} size="l" />
                 <View style={{ gap: theme.gap.xs, flex: 1 }}>
                   <Text
                     variant="body.m"
@@ -137,25 +144,25 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
                     color={theme.content.dark}
                     numberOfLines={1}
                   >
-                    {admin.name}
+                    {person.name}
                   </Text>
                   <Text variant="body.m" color={theme.content.dark}>
-                    {admin.age} anos
+                    {age !== null ? `${age} anos` : 'Idade não informada'}
                   </Text>
                   {/* Figma 364:18017 mostra blood type com water_drop icon
                       vermelho à esquerda (theme.surface.error). */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xs }}>
                     <Icon name="water_drop" size={20} color={theme.surface.error} />
                     <Text variant="label.l" color={theme.content.dark}>
-                      {admin.blood}
+                      {person.bloodType ?? '—'}
                     </Text>
                   </View>
                 </View>
               </View>
               <Checkbox
                 checked={isChecked}
-                onChange={() => toggle(admin.id)}
-                accessibilityLabel={`Selecionar ${admin.name}`}
+                onChange={() => toggle(person.workerId)}
+                accessibilityLabel={`Selecionar ${person.name}`}
               />
             </Pressable>
           );

@@ -18,6 +18,12 @@ export interface Profile {
   jobTitle?: string;
   duty?: string;
   managerName?: string;
+  // Foto de perfil. `avatarKey` é o que se ESCREVE (key devolvida pelo presign,
+  // namespace avatars/); `avatarUrl` é o que se LÊ — URL assinada que o
+  // GET /profile/me já devolvia desde sempre e o app ignorava, renderizando um
+  // PNG de estoque como se fosse a cara do usuário (QA 2026-07-26).
+  avatarKey?: string;
+  avatarUrl?: string;
   // Saúde DIGITÁVEL (wizard step-3 + settings/dados de saúde). Nada aqui vem
   // da smartband: ou o usuário digitou, ou fica vazio — nunca mock (decisão
   // 2026-07-26). gender é CÓDIGO ('male'/'female'), a convenção do painel.

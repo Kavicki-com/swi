@@ -13,7 +13,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { responsiblesSelection } from '../../../components/modals/ResponsiblesModal';
-import { ADMINS } from '../../../lib/admins';
+import { useChat } from '../../../services/chat/ChatProvider';
 import { useField } from '../../../lib/forms/useField';
 import { validateRequired } from '../../../lib/validation/validators';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
@@ -32,6 +32,7 @@ export default function NewReport() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { create } = useReports();
+  const { directory } = useChat();
   const [saving, setSaving] = useState(false);
 
   const titulo = useField({ validator: (v) => validateRequired(v, 'Título') });
@@ -93,11 +94,13 @@ export default function NewReport() {
       detalhes.setTouched(true);
       return;
     }
-    // O singleton guarda ids; o card precisa exibir os NOMES reais. ADMINS
-    // (lib/admins.ts) é a mesma fonte que o ResponsiblesModal renderiza, então
-    // o id→nome resolve por aí. Ids desconhecidos caem fora (Boolean filter).
+    // O singleton guarda ids; o backend guarda NOMES (e casa nome↔perfil pra
+    // resolver os avatares do card). A fonte é o diretório real da empresa —
+    // o mesmo que o ResponsiblesModal lista. Até 2026-07-26 isto resolvia por
+    // uma lista fictícia e GRAVAVA "Elisa Siqueira Jordão" como responsável no
+    // banco de verdade. Ids desconhecidos caem fora (Boolean filter).
     const responsibles = responsibleIds
-      .map((id) => ADMINS.find((a) => a.id === id)?.name)
+      .map((id) => directory.find((c) => c.workerId === id)?.name)
       .filter(Boolean) as string[];
     setSaving(true);
     try {

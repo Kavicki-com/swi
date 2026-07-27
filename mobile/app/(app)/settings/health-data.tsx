@@ -16,6 +16,7 @@ import {
 } from '@kavicki/swi-design-system';
 import { HomeFAB } from '../../../components/HomeFAB';
 import { useProfile } from '../../../services/profile/ProfileProvider';
+import { errorMessage } from '../../../lib/errors/errorMessage';
 
 const BLOOD_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((v) => ({
   label: v,
@@ -76,8 +77,8 @@ export default function SettingsHealthData() {
       });
       Alert.alert('Pronto', 'Seus dados foram salvos.');
       router.back();
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+    } catch (e) {
+      Alert.alert('Erro', errorMessage(e, 'Não foi possível salvar seus dados.'));
     } finally {
       setSaving(false);
     }

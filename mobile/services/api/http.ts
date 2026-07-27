@@ -35,7 +35,11 @@ export async function apiRequest<T = any>(path: string, opts: ApiRequestOptions 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     // Anexa o status pro caller distinguir 404 (esperado) de 500/rede (falha real).
-    const err = new Error(data?.message ?? 'Erro na requisição');
+    // O class-validator responde `message` como ARRAY ("email must be an email"),
+    // e `new Error(['a','b'])` vira "a,b" — junta explícito, igual o painel faz.
+    const raw = data?.message;
+    const message = Array.isArray(raw) ? raw.join(', ') : raw;
+    const err = new Error(message ?? 'Erro na requisição');
     (err as any).status = res.status;
     throw err;
   }

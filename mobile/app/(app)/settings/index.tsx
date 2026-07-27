@@ -1,5 +1,4 @@
 import { Image as RNImage, Pressable, ScrollView, View } from 'react-native';
-import { Asset } from 'expo-asset';
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -12,19 +11,18 @@ import {
 } from '@kavicki/swi-design-system';
 import { useAuth } from '../../../services/auth/AuthProvider';
 import { HomeFAB } from '../../../components/HomeFAB';
+import { useProfile } from '../../../services/profile/ProfileProvider';
 
 // Figma 348:10615 — settings hub. Container left=16, top=40, w=328, gap.l=24,
 // items-center. ScrollView pattern matches my-stats; Home FAB sits absolute
 // over the safe-area bottom (matches my-stats home FAB).
-const avatarUri = Asset.fromModule(
-  require('../../../assets/avatar-construction.png'),
-).uri;
 
 export default function Settings() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signOut } = useAuth();
+  const { profile } = useProfile();
 
   const go = (path: Href) => () => router.push(path);
 
@@ -70,7 +68,7 @@ export default function Settings() {
               top:0 absolute) continua no canto top-right do wrapper,
               overlapando o avatar no canto sup-dir (Figma intent). */}
           <View style={{ width: 106, height: 91, justifyContent: 'flex-end', alignItems: 'center' }}>
-            <Avatar customSize={80} uri={avatarUri} />
+            <Avatar customSize={80} uri={profile?.avatarUrl} name={profile?.fullName} />
             <View style={{ position: 'absolute', right: 0, top: 0 }}>
               <Button
                 variant="contained"

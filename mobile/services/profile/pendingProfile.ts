@@ -31,6 +31,14 @@ export async function readPendingProfile(): Promise<Record<string, unknown> | nu
   return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
 }
 
+// Descarta o rascunho. Chamado quando o cadastro sobe COM o perfil embutido
+// (o wizard agora roda antes de criar a conta) — sem isto o mesmo dado subiria
+// de novo no primeiro login, semanas depois, sobrescrevendo edições feitas no
+// settings nesse meio-tempo.
+export async function clearPendingProfile(): Promise<void> {
+  await SecureStore.deleteItemAsync(PENDING_KEY);
+}
+
 export async function flushPendingProfile(): Promise<void> {
   try {
     const pending = await readPendingProfile();

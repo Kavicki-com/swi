@@ -40,6 +40,16 @@
         "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-STATIC-TUNNEL.ngrok-free.app"
       }
     },
+    "qa-testflight": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "ios": { "simulator": false },
+      "env": {
+        "EXPO_PUBLIC_AUTH_BACKEND": "api",
+        "EXPO_PUBLIC_DATA_BACKEND": "api",
+        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-STATIC-TUNNEL.ngrok-free.app"
+      }
+    },
     "production": {
       "autoIncrement": true
     }

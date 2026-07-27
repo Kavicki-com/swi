@@ -22,6 +22,7 @@ import {
   type LocationPinStatus,
 } from '@kavicki/swi-design-system';
 import { useLocation } from '@/services/location/LocationProvider';
+import { useProfile } from '@/services/profile/ProfileProvider';
 import { useVitals } from '@/services/vitals/VitalsProvider';
 import type { WorkerStatus } from '@/services/vitals/types';
 import { MapView } from '@/components/MapView';
@@ -32,7 +33,6 @@ import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import {
   CAMERA_LOCATIONS,
-  USER_AVATAR,
   USER_LOCATION,
   WORKER_LOCATIONS,
 } from '@/lib/mapMockData';
@@ -93,6 +93,7 @@ function MapViewGeneralScreen() {
   // Real GPS coords (falls back to mock when permission denied / no fix yet)
   // + live worker status drive the user's own pin. Other pins stay mock.
   const { coords } = useLocation();
+  const { profile } = useProfile();
   const { status } = useVitals();
 
   // Overlay toggles — 3 botões icon-only independentes (Figma 385:28853).
@@ -156,7 +157,10 @@ function MapViewGeneralScreen() {
         <MapMarker key="user-pin" coordinate={coords} id="user-pin">
             <LocationPin
               variant="avatar"
-              avatarUri={USER_AVATAR}
+              // Foto real do perfil. As coordenadas sempre foram reais (GPS do
+              // aparelho), mas o rosto era um PNG de estoque — o pino mostrava
+              // outra pessoa na posição do usuário (QA 2026-07-26).
+              avatarUri={profile?.avatarUrl ?? ''}
               status={toPinStatus(status)}
               name="Você"
             />
