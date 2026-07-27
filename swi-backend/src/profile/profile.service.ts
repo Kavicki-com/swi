@@ -18,6 +18,25 @@ export class ProfileService {
     })
   }
 
+  // Exames clínicos: nome + validade + arquivo. Validade mais distante primeiro,
+  // que é a ordem do histórico no Figma (342:9907).
+  listExams(userId: string) {
+    return this.prisma.exam.findMany({ where: { userId }, orderBy: { date: 'desc' } })
+  }
+
+  addExam(userId: string, dto: { name: string; date: string; fileKey: string }) {
+    return this.prisma.exam.create({
+      data: { userId, name: dto.name, date: new Date(dto.date), fileKey: dto.fileKey },
+    })
+  }
+
+  // deleteMany com o userId no filtro (e não delete por id): um id de outra
+  // pessoa não apaga nada, em vez de apagar o exame alheio.
+  async removeExam(userId: string, id: string): Promise<boolean> {
+    const { count } = await this.prisma.exam.deleteMany({ where: { id, userId } })
+    return count > 0
+  }
+
   /**
    * Vocabulário REAL da organização: DISTINCT de jobTitle/sector/duty dos
    * Profiles da empresa do caller. Alimenta os Comboboxes do settings e o

@@ -40,7 +40,7 @@ const detailRow = (over: any = {}) => ({
   responsibles: [
     { id: 'u1', name: 'W1', profile: { fullName: 'Worker Um', jobTitle: 'Op', sector: 'Norte', birthDate: new Date('1990-05-04'), avatarKey: 'chat/av1.png' } },
   ],
-  items: [{ id: 't1', position: 0, title: 'Item 1', description: 'd1', status: 'pending' }],
+  items: [{ id: 't1', position: 0, title: 'Item 1', description: 'd1', status: 'pending', startedAt: null, accumulatedSeconds: 0, estimatedMinutes: null }],
   ...over,
 })
 
@@ -147,19 +147,26 @@ describe('WorkOrdersService', () => {
   })
 
   // ---------------- list ----------------
-  it('list escopa pela empresa do autor, filtra por status e deriva progressPct dos itens', async () => {
+  it('list escopa pela empresa do autor, filtra por status e deriva progressPct do TEMPO', async () => {
     const db = prisma()
     db.workOrder.findMany.mockResolvedValue([
       {
-        id: 'o1', title: 'A', sector: 'N', status: 'in_progress',
-        items: [{ status: 'done' }, { status: 'done' }, { status: 'pending' }, { status: 'pending' }],
+        id: 'o1', title: 'A', sector: 'N', status: 'in_progress', estimatedMinutes: 100,
+        // 2 itens concluídos de 4 dariam 50% na régua antiga (checklist); por
+        // TEMPO são 30min de 100 = 30%.
+        items: [
+          { status: 'done', startedAt: null, accumulatedSeconds: 900, estimatedMinutes: 25 },
+          { status: 'done', startedAt: null, accumulatedSeconds: 900, estimatedMinutes: 25 },
+          { status: 'pending', startedAt: null, accumulatedSeconds: 0, estimatedMinutes: 25 },
+          { status: 'pending', startedAt: null, accumulatedSeconds: 0, estimatedMinutes: 25 },
+        ],
         responsibles: [{ profile: { avatarKey: 'chat/av1.png' } }, { profile: { avatarKey: null } }],
       },
     ])
     const out = await new WorkOrdersService(db, media(), notifications()).list('in_progress', 'org1')
     expect(db.workOrder.findMany.mock.calls[0][0].where).toEqual({ status: 'in_progress', author: { companyId: 'org1' } })
     expect(db.workOrder.findMany.mock.calls[0][0].take).toBe(200)
-    expect(out[0].progressPct).toBe(50) // 2/4
+    expect(out[0].progressPct).toBe(30) // 1800s de 100min
     expect(out[0].responsibleCount).toBe(2)
     // #5: index-parallel com responsibleCount — o responsável sem avatarKey vira ''
     // (não filtrado), senão o "+N" do overflow e o pareamento nome↔avatar erram.
@@ -198,7 +205,10 @@ describe('WorkOrdersService', () => {
     })
     expect(out.responsibles[0]).not.toHaveProperty('bloodType') // Decisão 2
     expect(out.images).toEqual(['signed:order/a.jpg'])
-    expect(out.items).toEqual([{ id: 't1', title: 'Item 1', description: 'd1', status: 'pending' }])
+    expect(out.items).toEqual([
+      { id: 't1', title: 'Item 1', description: 'd1', status: 'pending',
+        startedAt: null, accumulatedSeconds: 0, estimatedMinutes: null },
+    ])
     expect(out.progressPct).toBe(0)
   })
 

@@ -1,4 +1,5 @@
-import { IsEmail, IsIn, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator'
+import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Length, Max, Min, MinLength, ValidateNested } from 'class-validator'
+import { IsCalendarDate } from '../profile/is-calendar-date'
 import { Type } from 'class-transformer'
 // companyId: a empresa que o usuário escolhe na tela de cadastro do app. Sem
 // ele o WORKER nascia sem vínculo e ficava INVISÍVEL na fila de aprovação do
@@ -7,7 +8,39 @@ import { Type } from 'class-transformer'
 // @IsString e não @IsUUID: nem todo id de Company é uuid (o seed usa
 // 'company-seed-1', legível de propósito). A validação que importa é a
 // existência no banco, feita no AuthService.signup.
-export class SignupDto { @IsEmail() email!: string; @MinLength(6) password!: string; @IsString() name!: string; @IsOptional() @IsString() companyId?: string }
+// Perfil coletado NO cadastro. Até 2026-07-26 o app criava a conta primeiro e o
+// wizard (dados pessoais, endereço, saúde) só rodava no modo mock — no fluxo
+// real ele era PULADO, então o admin aprovava uma linha com nome e e-mail e
+// nada mais. Tudo aqui é DIGITÁVEL: escolha do worker, não telemetria de
+// smartband. Todos opcionais — cadastro sem perfil segue válido (build antiga
+// do app, integrações, testes).
+export class SignupProfileDto {
+  @IsOptional() @IsString() cpf?: string
+  @IsOptional() @IsString() phone?: string
+  @IsOptional() @IsCalendarDate() birthDate?: string
+  @IsOptional() @IsString() cep?: string
+  @IsOptional() @IsString() street?: string
+  @IsOptional() @IsString() number?: string
+  @IsOptional() @IsString() complement?: string
+  @IsOptional() @IsString() neighborhood?: string
+  @IsOptional() @IsString() city?: string
+  @IsOptional() @IsString() @Length(2, 2) uf?: string
+  @IsOptional() @IsString() gender?: string
+  @IsOptional() @IsString() bloodType?: string
+  @IsOptional() @IsString() allergies?: string
+  @IsOptional() @IsString() chronicConditions?: string
+  @IsOptional() @IsInt() @Min(50) @Max(260) heightCm?: number
+  @IsOptional() @IsInt() @Min(20) @Max(400) weightKg?: number
+  @IsOptional() @IsBoolean() hasDisability?: boolean
+}
+
+export class SignupDto {
+  @IsEmail() email!: string
+  @MinLength(6) password!: string
+  @IsString() name!: string
+  @IsOptional() @IsString() companyId?: string
+  @IsOptional() @ValidateNested() @Type(() => SignupProfileDto) profile?: SignupProfileDto
+}
 export class ConfirmDto { @IsEmail() email!: string; @IsString() code!: string }
 export class LoginDto { @IsEmail() email!: string; @IsString() password!: string }
 export class ForgotDto { @IsEmail() email!: string }

@@ -10,11 +10,25 @@ import { approvalsApi, type PendingUser } from '@/services/api/users'
 import { EmployeesList } from './EmployeesList'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 
+// Cadastro sem perfil: o app antigo não mandava nada junto, e a fila precisa
+// seguir renderizando (dizendo o que falta) em vez de quebrar.
+const SEM_PERFIL = {
+  cpf: null,
+  phone: null,
+  birthDate: null,
+  city: null,
+  uf: null,
+  bloodType: null,
+  allergies: null,
+  avatar: '',
+} as const
+
 const NOVO: PendingUser = {
   id: 'p1',
   name: 'Novo Worker',
   email: 'novo@x.com',
   requestedAt: '2026-07-10T00:00:00.000Z',
+  ...SEM_PERFIL,
 }
 
 describe('EmployeesList', () => {
@@ -35,6 +49,38 @@ describe('EmployeesList', () => {
     renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => expect(screen.getByText('Novo Worker')).toBeTruthy())
     expect(screen.getByText('novo@x.com')).toBeTruthy()
+  })
+
+  // O admin decide aprovar em cima destes campos — a fila mostrava só nome e
+  // e-mail e ele aprovava às cegas (QA 2026-07-26).
+  it('mostra CPF, telefone, tipo sanguíneo e cidade do cadastro', async () => {
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({
+      data: [
+        {
+          ...NOVO,
+          cpf: '000.000.000-00',
+          phone: '(41) 90000-0000',
+          bloodType: 'O-',
+          city: 'Curitiba',
+          uf: 'PR',
+        },
+      ],
+      error: null,
+    })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => expect(screen.getByTestId('pending-doc-p1')).toBeTruthy())
+    expect(screen.getByTestId('pending-doc-p1')).toHaveTextContent('CPF 000.000.000-00')
+    expect(screen.getByTestId('pending-doc-p1')).toHaveTextContent('(41) 90000-0000')
+    expect(screen.getByTestId('pending-health-p1')).toHaveTextContent('Sangue O-')
+    expect(screen.getByTestId('pending-health-p1')).toHaveTextContent('Curitiba/PR')
+  })
+
+  it('cadastro sem perfil diz o que falta em vez de fingir que carregou', async () => {
+    vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({ data: [NOVO], error: null })
+    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await waitFor(() => expect(screen.getByTestId('pending-doc-p1')).toBeTruthy())
+    expect(screen.getByTestId('pending-doc-p1')).toHaveTextContent('não informado')
+    expect(screen.getByTestId('pending-health-p1')).toHaveTextContent('não informado')
   })
 
   it('aprovar remove o pendente da lista', async () => {
@@ -105,8 +151,20 @@ describe('EmployeesList', () => {
   })
 
   it('rollback reinsere na posição original, não no fim da lista', async () => {
-    const ALFA: PendingUser = { id: 'a', name: 'Alfa', email: 'a@x.com', requestedAt: NOVO.requestedAt }
-    const BRAVO: PendingUser = { id: 'b', name: 'Bravo', email: 'b@x.com', requestedAt: NOVO.requestedAt }
+    const ALFA: PendingUser = {
+      id: 'a',
+      name: 'Alfa',
+      email: 'a@x.com',
+      requestedAt: NOVO.requestedAt,
+      ...SEM_PERFIL,
+    }
+    const BRAVO: PendingUser = {
+      id: 'b',
+      name: 'Bravo',
+      email: 'b@x.com',
+      requestedAt: NOVO.requestedAt,
+      ...SEM_PERFIL,
+    }
     vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({
       data: [ALFA, BRAVO],
       error: null,

@@ -40,6 +40,12 @@ export type WorkOrderItem = {
   title: string
   description: string
   status: WorkOrderItemStatus
+  // Âncoras do timer do app. O progresso da tarefa é POR TEMPO, e um item em
+  // andamento continua correndo entre dois requests — a tela recalcula em cima
+  // destas colunas a cada segundo em vez de exibir o snapshot do fetch.
+  startedAt: string | null // ISO datetime
+  accumulatedSeconds: number
+  estimatedMinutes: number | null
 }
 
 // Detalhe (toDetailDto). Os textos opcionais chegam como '' (nunca null); só

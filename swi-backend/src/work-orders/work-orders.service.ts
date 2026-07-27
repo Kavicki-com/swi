@@ -4,7 +4,7 @@ import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
 import { Prisma } from '@prisma/client'
 import type { Profile, User, WorkOrderStatus } from '@prisma/client'
-import { distributeMinutes, orderProgressPct } from './order-status'
+import { distributeMinutes, orderTimeProgressPct } from './order-status'
 import { lockOrder, recomputeOrder } from './order-lock'
 import type { CreateWorkOrderDto, UpdateWorkOrderDto } from './dto'
 
@@ -24,7 +24,9 @@ type OrderDetail = Prisma.WorkOrderGetPayload<{ include: typeof detailInclude }>
 
 // Só o necessário pra linha da lista: status dos itens (progressPct) + avatares.
 const listInclude = {
-  items: { select: { status: true } },
+  // Âncoras do timer: o progresso da ordem é POR TEMPO (decorrido ÷ estimado),
+  // então a lista precisa das mesmas colunas que o detalhe.
+  items: { select: { status: true, startedAt: true, accumulatedSeconds: true, estimatedMinutes: true } },
   responsibles: { include: { profile: true } },
 } satisfies Prisma.WorkOrderInclude
 type OrderRow = Prisma.WorkOrderGetPayload<{ include: typeof listInclude }>
@@ -250,7 +252,7 @@ export class WorkOrdersService {
       title: order.title,
       sector: order.sector ?? '',
       status: order.status,
-      progressPct: orderProgressPct(order.items.map((i) => i.status)),
+      progressPct: orderTimeProgressPct(order.items, order.estimatedMinutes, Date.now()),
       responsibleCount: order.responsibles.length,
       responsibleAvatars,
     }
@@ -273,7 +275,7 @@ export class WorkOrdersService {
       dueDate: order.dueDate ? order.dueDate.toISOString() : null,
       createdAt: order.createdAt.toISOString(),
       status: order.status,
-      progressPct: orderProgressPct(order.items.map((i) => i.status)),
+      progressPct: orderTimeProgressPct(order.items, order.estimatedMinutes, Date.now()),
       author: { name: order.author.profile?.fullName ?? order.author.name, avatar: authorAvatar },
       responsibles,
       items: order.items.map((it) => ({
@@ -281,6 +283,11 @@ export class WorkOrdersService {
         title: it.title,
         description: it.description ?? '',
         status: it.status,
+        // Âncoras do timer: o painel recalcula o progresso a cada segundo em
+        // cima delas, senão a barra fica congelada no valor do último request.
+        startedAt: it.startedAt ? it.startedAt.toISOString() : null,
+        accumulatedSeconds: it.accumulatedSeconds,
+        estimatedMinutes: it.estimatedMinutes,
       })),
       images,
       // Keys cruas em par posicional com `images` (images[i] assina imageKeys[i]).

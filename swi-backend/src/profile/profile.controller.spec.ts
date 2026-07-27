@@ -20,7 +20,7 @@ const mediaMock = () => ({
 
 describe('ProfileController.me', () => {
   it('enriquece com avatarUrl e examUrls presignados quando há keys', async () => {
-    const svc = { getByUserId: jest.fn(async () => profile({ avatarKey: 'avatars/a.png', examKeys: ['exams/e1.jpg', 'exams/e2.png'] })) } as any
+    const svc = { getByUserId: jest.fn(async () => profile({ avatarKey: 'avatars/a.png', examKeys: ['exams/e1.jpg', 'exams/e2.png'] })), listExams: jest.fn(async () => []) } as any
     const media = mediaMock()
     const out = await new ProfileController(svc, media).me('u1')
     expect(out.avatarUrl).toBe('https://s3/view/avatars/a.png')
@@ -31,7 +31,7 @@ describe('ProfileController.me', () => {
   })
 
   it('sem avatarKey → avatarUrl null e nenhum presign de avatar', async () => {
-    const svc = { getByUserId: jest.fn(async () => profile()) } as any
+    const svc = { getByUserId: jest.fn(async () => profile()), listExams: jest.fn(async () => []) } as any
     const media = mediaMock()
     const out = await new ProfileController(svc, media).me('u1')
     expect(out.avatarUrl).toBeNull()
@@ -42,5 +42,58 @@ describe('ProfileController.me', () => {
   it('perfil inexistente → NotFound', async () => {
     const svc = { getByUserId: jest.fn(async () => null) } as any
     await expect(new ProfileController(svc, mediaMock()).me('u1')).rejects.toBeInstanceOf(NotFoundException)
+  })
+})
+
+// O card do design exige nome + validade + download: só a key do arquivo (o
+// antigo examKeys, que nunca chegou a ser preenchido) não desenha nada.
+describe('ProfileController — exames', () => {
+  const exam = {
+    id: 'e1',
+    userId: 'u1',
+    name: 'Exame de reciclagem técnica',
+    date: new Date('2027-03-05T00:00:00.000Z'),
+    fileKey: 'exams/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpg',
+    createdAt: new Date(0),
+  }
+
+  it('lista com data de CALENDÁRIO e URL assinada', async () => {
+    const svc = { listExams: jest.fn(async () => [exam]) } as any
+    const out = await new ProfileController(svc, mediaMock()).exams('u1')
+    expect(out).toEqual([
+      {
+        id: 'e1',
+        name: 'Exame de reciclagem técnica',
+        // 'AAAA-MM-DD' e não ISO datetime: em fuso negativo o dia recuaria um.
+        date: '2027-03-05',
+        fileUrl: `https://s3/view/${exam.fileKey}`,
+      },
+    ])
+  })
+
+  it('cria e devolve o card já pronto pra tela', async () => {
+    const svc = { addExam: jest.fn(async () => exam) } as any
+    const out = await new ProfileController(svc, mediaMock()).addExam('u1', {
+      name: 'Exame de reciclagem técnica',
+      date: '2027-03-05',
+      fileKey: exam.fileKey,
+    })
+    expect(svc.addExam).toHaveBeenCalledWith('u1', {
+      name: 'Exame de reciclagem técnica',
+      date: '2027-03-05',
+      fileKey: exam.fileKey,
+    })
+    expect(out.date).toBe('2027-03-05')
+    expect(out.fileUrl).toContain('exams/')
+  })
+
+  it('apagar exame de outra pessoa é 404, não 403 (invisível)', async () => {
+    const svc = { removeExam: jest.fn(async () => false) } as any
+    await expect(new ProfileController(svc, mediaMock()).removeExam('u1', 'de-outro')).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it('apagar o próprio exame não devolve corpo', async () => {
+    const svc = { removeExam: jest.fn(async () => true) } as any
+    await expect(new ProfileController(svc, mediaMock()).removeExam('u1', 'e1')).resolves.toBeUndefined()
   })
 })

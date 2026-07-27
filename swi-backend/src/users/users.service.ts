@@ -76,12 +76,47 @@ export class UsersService {
     return this.prisma.user.update({ where: { id }, data: { approvalStatus: 'APPROVED' } })
   }
 
-  listPending(companyId: string | null) {
-    return this.prisma.user.findMany({
+  // A fila devolvia só id/email/nome/data: o admin aprovava sem ver CPF,
+  // contato ou tipo sanguíneo — decisão às cegas numa ferramenta de segurança
+  // do trabalho. Agora que o app manda o perfil JUNTO do cadastro (ver
+  // SignupProfileDto), a fila mostra o que o worker preencheu.
+  async listPending(companyId: string | null) {
+    const rows = await this.prisma.user.findMany({
       where: { approvalStatus: 'PENDING', companyId },
-      select: { id: true, email: true, name: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        createdAt: true,
+        profile: {
+          select: {
+            cpf: true, phone: true, birthDate: true,
+            city: true, uf: true,
+            bloodType: true, allergies: true,
+            avatarKey: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     })
+    return Promise.all(
+      rows.map(async (u) => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        createdAt: u.createdAt,
+        // '' e null viram null: a tela decide o texto de "não informado" — o
+        // backend não inventa placeholder.
+        cpf: u.profile?.cpf || null,
+        phone: u.profile?.phone || null,
+        birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
+        city: u.profile?.city || null,
+        uf: u.profile?.uf || null,
+        bloodType: u.profile?.bloodType || null,
+        allergies: u.profile?.allergies || null,
+        avatar: u.profile?.avatarKey ? await this.media.presignGet(u.profile.avatarKey) : '',
+      })),
+    )
   }
 
   async reject(id: string, companyId: string | null): Promise<User> {
