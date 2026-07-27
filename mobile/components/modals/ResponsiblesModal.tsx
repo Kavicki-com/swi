@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import {
   Avatar,
   Button,
@@ -11,7 +12,7 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
-import { getChatBackend } from '../../services/chat/getChatBackend';
+import { listReportAssignees } from '../../services/reports/assignees';
 import type { Contact } from '../../services/chat/types';
 import { ageFrom } from '../../lib/age';
 
@@ -70,18 +71,22 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Busca o diretório DIRETO do backend (a flag decide mock/api), sem
-  // useChat(): o ChatProvider só envolve a subárvore de chat, e este modal
-  // vive na de relatórios — consumir o contexto aqui derrubava a tela na
-  // montagem.
+  // Busca DIRETO do backend (a flag decide mock/api), sem useChat(): o
+  // ChatProvider só envolve a subárvore de chat, e este modal vive na de
+  // relatórios — consumir o contexto aqui derrubava a tela na montagem.
+  //
+  // Fonte trocada em 2026-07-27: era o diretório de CHAT, que devolve a
+  // empresa inteira de propósito (sem os admins ali o worker não consegue
+  // abrir conversa com o painel). O seletor acabava oferecendo os 10
+  // operadores como revisores. Quem revisa é staff, e essa régua vive no
+  // backend — /reports/assignees.
   const [directory, setDirectory] = useState<Contact[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void getChatBackend()
-      .listDirectory()
+    void listReportAssignees()
       .then((list) => { if (!cancelled) setDirectory(list); })
-      // Lista vazia já comunica "ninguém pra atribuir"; um alerta sobre o
-      // diretório atrapalharia quem só quer escrever o relatório.
+      // Lista vazia já comunica "ninguém pra atribuir"; um alerta sobre isso
+      // atrapalharia quem só quer escrever o relatório.
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
@@ -111,6 +116,11 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
   };
 
   return (
+    // O sheet é ancorado no rodapé pelo wrapper de rota (justifyContent
+    // flex-end), então o teclado subia por cima da busca. KeyboardStickyView
+    // translada o sheet inteiro pra cima do teclado — é o primitivo certo pra
+    // conteúdo ancorado embaixo, onde empurrar scroll não resolveria.
+    <KeyboardStickyView>
     <View
       style={{
         // Figma 364:18017 mostra modal um tom mais claro que o conteúdo
@@ -220,5 +230,6 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
         />
       </View>
     </View>
+    </KeyboardStickyView>
   );
 }

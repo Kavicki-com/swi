@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -184,7 +185,15 @@ export default function ChatThread() {
       {/* Chat section — Figma 336:9026 (gap.sm 12). Width era 328 fixo;
           mudado pra esticar via paddingHorizontal:theme.padding.m (match
           Journey pattern). */}
-      <View style={{ flex: 1, paddingTop: 16, paddingHorizontal: theme.padding.m }}>
+      {/* O teclado subia POR CIMA do compositor: a tela não tinha tratamento
+          nenhum e a pessoa digitava às cegas (QA no aparelho, 2026-07-27).
+          KeyboardAvoidingView em vez de scroll empurrado — num chat o
+          compositor é fixo no rodapé, e o que precisa acontecer é ele SUBIR
+          com o teclado, mantendo as mensagens visíveis acima. */}
+      <KeyboardAvoidingView
+        behavior="padding"
+        style={{ flex: 1, paddingTop: 16, paddingHorizontal: theme.padding.m }}
+      >
         <View style={{ flex: 1 }}>
           {/* Estado de carregamento / erro / conversa nova vazia. Mantém o
               chrome (background + topbar acima) e troca só o miolo. */}
@@ -318,7 +327,7 @@ export default function ChatThread() {
             />
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

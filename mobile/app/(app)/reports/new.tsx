@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -51,8 +51,6 @@ export default function NewReport() {
   const [attachments, setAttachments] = useState<(string | undefined)[]>(
     [undefined, undefined, undefined, undefined],
   );
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
-
   const setAttachmentAt = (index: number, uri: string) => {
     setAttachments((prev) => {
       const next = [...prev];
@@ -66,9 +64,20 @@ export default function NewReport() {
     const uri = await media.showPicker();
     if (uri) onPick(uri);
   };
+
+  // "Enviar arquivo" alimenta a GRADE, não a si mesmo. A tela mantinha dois
+  // estados separados — os 4 quadrados e uma preview própria do uploader — e a
+  // foto escolhida por aqui aparecia dentro do próprio botão, longe dos
+  // quadrados que a pessoa estava olhando (QA no aparelho, 2026-07-27).
+  //
+  // Mesmo modelo que journey/task/[id] já usa: um lugar só pras fotos.
+  const primeiroSlotLivre = attachments.findIndex((a) => !a);
   const pickFileForUploader = async () => {
+    // Cheio: nem abre o seletor. Sem isto o 5º toque sobrescreveria o primeiro
+    // anexo em silêncio, e a pessoa perderia uma foto já escolhida.
+    if (primeiroSlotLivre === -1) return;
     const uri = await media.pickFromGallery();
-    if (uri) setUploadedFile(uri);
+    if (uri) setAttachmentAt(primeiroSlotLivre, uri);
   };
 
   // Rehidrata seleção ao reentrar (modal de responsáveis fecha via router.back).
@@ -110,9 +119,7 @@ export default function NewReport() {
         summary: resumo.value,
         details: detalhes.value,
         responsibles: responsibleNames,
-        imageUris: [...attachments.filter(Boolean), uploadedFile].filter(
-          Boolean,
-        ) as string[],
+        imageUris: attachments.filter(Boolean) as string[],
       });
       responsiblesSelection.clear();
       router.back();
@@ -139,8 +146,7 @@ export default function NewReport() {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        extraScrollHeight={60}
-        enableOnAndroid
+        bottomOffset={60}
       >
         {/* Voltar — left-aligned, largura natural (match /reports/[id] e
             Figma 372:21297). marginLeft:-18 compensa: (a) padding-left do
@@ -291,9 +297,10 @@ export default function NewReport() {
           pickFileLabel="Enviar arquivo"
           showTakePhoto={false}
           accentColor={theme.content.primary}
-          value={uploadedFile ? { uri: uploadedFile } : null}
+          // value null de proposito: a preview vive nos 4 quadrados acima.
+          // Mostrar a foto aqui dentro era o bug relatado.
+          value={null}
           onPickFile={pickFileForUploader}
-          onRemove={() => setUploadedFile(null)}
         />
 
         {/* CTAs */}

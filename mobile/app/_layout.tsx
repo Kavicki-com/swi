@@ -8,6 +8,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 // Path-direct imports: o barrel `@expo-google-fonts/{inter,montserrat}`
 // força require() estático de TODOS os 18 weights (incl. Italic/Thin/Black).
 // Metro não tree-shake `require()` → ~30 .ttf desnecessários no bundle (~1.5MB).
@@ -168,6 +169,12 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={rootContainerStyle}>
       <SafeAreaProvider>
+        {/* KeyboardProvider alimenta os componentes de teclado do
+            react-native-keyboard-controller (o teclado cobria o compositor do
+            chat — QA no aparelho, 2026-07-27). Acima do tema porque precisa
+            envolver TODAS as telas, incluindo os modais apresentados por cima
+            do Stack. */}
+        <KeyboardProvider>
         <SwiThemeProvider>
           <AuthProvider>
             <ProfileProvider>
@@ -208,6 +215,7 @@ export default function RootLayout() {
             </ProfileProvider>
           </AuthProvider>
         </SwiThemeProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Image as RNImage, ScrollView, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -111,8 +111,7 @@ export default function ReportDetails() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         // Gap entre input focado e topo do teclado (incluindo QuickType bar).
-        extraScrollHeight={60}
-        enableOnAndroid
+        bottomOffset={60}
       >
         {/* Voltar — ghost button com chevron-left.
             Figma 364:20304 mostra "< Voltar" left-aligned no topo com

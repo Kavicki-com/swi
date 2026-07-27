@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Image, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -133,8 +133,7 @@ export default function SignUp() {
         contentContainerStyle={{ paddingTop: insets.top + 32, paddingBottom: 48, paddingHorizontal: theme.padding.m }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        extraScrollHeight={60}
-        enableOnAndroid
+        bottomOffset={60}
       >
         <View style={{ gap: theme.gap.xl }}>
           <Title variant="title.xs">Crie a sua conta</Title>

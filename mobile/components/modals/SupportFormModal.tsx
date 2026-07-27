@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import {
   Button,
   Combobox,
@@ -29,6 +30,9 @@ export function SupportFormModal({ onClose }: SupportFormModalProps) {
   const [mensagem, setMensagem] = useState('');
 
   return (
+    // Bottom-sheet: o teclado cobria Título e Mensagem. KeyboardStickyView
+    // eleva o sheet acima do teclado (mesmo tratamento do ResponsiblesModal).
+    <KeyboardStickyView>
     <View
       style={{
         backgroundColor: theme.background,
@@ -90,5 +94,6 @@ export function SupportFormModal({ onClose }: SupportFormModalProps) {
         onPress={onClose}
       />
     </View>
+    </KeyboardStickyView>
   );
 }

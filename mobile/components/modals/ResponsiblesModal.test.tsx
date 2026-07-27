@@ -2,11 +2,11 @@ import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { ResponsiblesModal, responsiblesSelection } from './ResponsiblesModal';
-import { getChatBackend } from '../../services/chat/getChatBackend';
+import { listReportAssignees } from '../../services/reports/assignees';
 
-jest.mock('../../services/chat/getChatBackend', () => ({ getChatBackend: jest.fn() }));
+jest.mock('../../services/reports/assignees', () => ({ listReportAssignees: jest.fn() }));
 
-const mockGetChatBackend = getChatBackend as jest.Mock;
+const mockListAssignees = listReportAssignees as jest.Mock;
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -37,7 +37,10 @@ const render = async (onConfirm?: (picks: Array<{ id: string; name: string }>) =
 describe('ResponsiblesModal', () => {
   beforeEach(() => {
     responsiblesSelection.clear();
-    mockGetChatBackend.mockReturnValue({ listDirectory: jest.fn(async () => CONTATOS) });
+    // mockClear: o mock agora é de MÓDULO (antes era um jest.fn() novo por
+    // teste), então a contagem de chamadas vazaria entre os casos.
+    mockListAssignees.mockClear();
+    mockListAssignees.mockResolvedValue(CONTATOS);
   });
 
   // A regressão que motivou o teste: o modal usava useChat(), mas o
@@ -49,17 +52,17 @@ describe('ResponsiblesModal', () => {
     expect(JSON.stringify(tree.toJSON())).toContain('Jennifer Gomes');
   });
 
-  it('busca o diretório pelo backend selecionado pela flag', async () => {
-    const listDirectory = jest.fn(async () => CONTATOS);
-    mockGetChatBackend.mockReturnValue({ listDirectory });
+  // Não é o diretório de CHAT: aquele devolve a empresa inteira de propósito
+  // (os admins entram pra o worker conseguir falar com o painel), e por isso o
+  // seletor oferecia os 10 operadores como revisores no aparelho (QA
+  // 2026-07-27). A régua de quem revisa vive no backend, em /reports/assignees.
+  it('busca a lista de responsáveis, não o diretório de chat', async () => {
     await render();
-    expect(listDirectory).toHaveBeenCalledTimes(1);
+    expect(mockListAssignees).toHaveBeenCalledTimes(1);
   });
 
-  it('diretório indisponível não derruba a tela — só fica sem ninguém pra atribuir', async () => {
-    mockGetChatBackend.mockReturnValue({
-      listDirectory: jest.fn(async () => { throw new Error('rede caiu'); }),
-    });
+  it('lista indisponível não derruba a tela — só fica sem ninguém pra atribuir', async () => {
+    mockListAssignees.mockRejectedValue(new Error('rede caiu'));
     const tree = await render();
     expect(JSON.stringify(tree.toJSON())).toContain('Selecionar responsáveis');
   });

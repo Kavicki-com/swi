@@ -383,3 +383,93 @@ describe('ReportsService', () => {
     ])
   })
 })
+
+// Quem o app oferece como RESPONSÁVEL do relatório. Até 2026-07-27 o app
+// chamava /chat/directory — que inclui todo mundo da empresa de propósito
+// (decisão de 26/07: sem os admins na lista, o worker não tinha como iniciar
+// conversa com o painel). Resultado: o seletor de responsáveis oferecia os 10
+// operadores como revisores. O painel já usava outra régua (adminsApi), então
+// os dois seletores divergiam.
+describe('ReportsService.listAssignees', () => {
+  const baseProfile = {
+    fullName: null,
+    sector: 'Operações',
+    jobTitle: 'Operador',
+    avatarKey: null,
+    birthDate: null,
+    bloodType: null,
+    allergies: null,
+    gender: null,
+  }
+
+  const withTitle = (id: string, jobTitle: string, over: Record<string, unknown> = {}) => ({
+    id,
+    name: 'Fulano',
+    role: 'WORKER',
+    profile: { ...baseProfile, jobTitle },
+    ...over,
+  })
+
+  it('devolve só staff — operador e técnico ficam de fora', async () => {
+    const db = prisma()
+    db.user.findMany.mockResolvedValue([
+      withTitle('u-sup', 'Supervisor'),
+      withTitle('u-ana', 'Analista de Segurança'),
+      withTitle('u-op', 'Operador'),
+      withTitle('u-tec', 'Técnico de Manutenção'),
+    ])
+    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1')
+    expect(out.map((c: { workerId: string }) => c.workerId)).toEqual(['u-sup', 'u-ana'])
+  })
+
+  // A autorização não pode depender de texto livre: quem é ADMIN entra mesmo
+  // com o cargo em branco (2 dos 12 aprovados estão sem cargo declarado).
+  it('inclui ADMIN mesmo sem cargo declarado', async () => {
+    const db = prisma()
+    db.user.findMany.mockResolvedValue([withTitle('u-adm', '', { role: 'ADMIN' })])
+    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1')
+    expect(out.map((c: { workerId: string }) => c.workerId)).toEqual(['u-adm'])
+  })
+
+  it('escopa pela empresa, exclui a si mesmo e só aprovados', async () => {
+    const db = prisma()
+    db.user.findMany.mockResolvedValue([])
+    await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1')
+    expect(db.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { approvalStatus: 'APPROVED', id: { not: 'me' }, companyId: 'org1' },
+      }),
+    )
+  })
+
+  // Mesmo formato do contato do chat: o modal do app já consome esse shape
+  // (avatar presigned, idade a partir do birthDate, tipo sanguíneo).
+  it('devolve o contato com avatar presigned e identidade real', async () => {
+    const db = prisma()
+    db.user.findMany.mockResolvedValue([
+      withTitle('u-sup', 'Supervisor', {
+        name: 'Sem Perfil',
+        profile: {
+          ...baseProfile,
+          fullName: 'Antonio Carlos',
+          sector: 'Segurança',
+          jobTitle: 'Supervisor',
+          avatarKey: 'avatars/ac.jpg',
+          birthDate: new Date('1971-09-08T00:00:00Z'),
+          bloodType: 'AB+',
+        },
+      }),
+    ])
+    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1')
+    expect(out[0]).toEqual(
+      expect.objectContaining({
+        workerId: 'u-sup',
+        name: 'Antonio Carlos',
+        role: 'Supervisor',
+        avatarUri: 'signed:avatars/ac.jpg',
+        bloodType: 'AB+',
+        birthDate: '1971-09-08T00:00:00.000Z',
+      }),
+    )
+  })
+})

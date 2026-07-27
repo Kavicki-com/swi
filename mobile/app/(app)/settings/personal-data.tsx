@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Image as RNImage, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -15,6 +15,32 @@ import { HomeFAB } from '../../../components/HomeFAB';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { fetchProfileCatalog, type ProfileCatalog } from '../../../services/api/catalog';
 import { errorMessage } from '../../../lib/errors/errorMessage';
+import { useField } from '../../../lib/forms/useField';
+import {
+  maskBirthDate,
+  maskCPF,
+  maskPhone,
+  maskUF,
+} from '../../../lib/validation/masks';
+import {
+  validateBirthDate,
+  validateCPF,
+  validateEmail,
+  validateFullName,
+  validatePhone,
+  validateRequired,
+  validateUF,
+  type ValidationResult,
+} from '../../../lib/validation/validators';
+
+// Campo que só precisa ser válido SE preenchido. Os validadores da casa
+// tratam vazio como erro ("UF é obrigatória"), o que é certo no cadastro —
+// mas aqui é EDIÇÃO: quem tem o perfil parcialmente preenchido não pode ficar
+// impedido de corrigir a cidade porque nunca informou a UF.
+const optional =
+  (validator: (v: string) => ValidationResult) =>
+  (v: string): ValidationResult =>
+    v.trim().length === 0 ? { valid: true } : validator(v);
 
 // Figma 353:11560 — settings sub-screen "Dados pessoais". Form-based.
 // TopBar (DS v0.1.38) + section title + 11 fields + Salvar button +
@@ -29,13 +55,19 @@ export default function SettingsPersonalData() {
   // Sampaio', '00/00/0000') eram mock fixo e o Salvar era um router.back():
   // o cliente editava, "salvava" e perdia tudo (QA 2026-07-26).
   const { loadProfile, saveProfile } = useProfile();
-  const [nome, setNome] = useState('');
-  const [data, setData] = useState('');
-  const [cpf, setCpf] = useState('');
-  const [email, setEmail] = useState('');
-  const [telefone, setTelefone] = useState('');
-  const [uf, setUf] = useState('');
-  const [cidade, setCidade] = useState('');
+  // Máscara + validação vêm de lib/validation, as MESMAS já usadas no cadastro
+  // (complimentary-data/step-1). Esta tela nasceu com useState cru: a data de
+  // nascimento aceitava "02011999" sem barras e o Salvar mandava isso pro
+  // backend (QA no aparelho, 2026-07-27).
+  const nome = useField({ validator: validateFullName });
+  const data = useField({ validator: validateBirthDate, mask: maskBirthDate });
+  const cpf = useField({ validator: validateCPF, mask: maskCPF });
+  const telefone = useField({ validator: validatePhone, mask: maskPhone });
+  // Opcionais: o backend aceita perfil parcial, então exigir aqui trancaria
+  // quem só quer corrigir um campo.
+  const email = useField({ validator: optional(validateEmail) });
+  const uf = useField({ validator: optional(validateUF), mask: maskUF });
+  const cidade = useField({ validator: optional((v) => validateRequired(v, 'Cidade')) });
   const [profissao, setProfissao] = useState('');
   const [setor, setSetor] = useState('');
   const [funcao, setFuncao] = useState('');
@@ -49,12 +81,14 @@ export default function SettingsPersonalData() {
     void loadProfile()
       .then((p) => {
         if (cancelled || !p) return;
-        setNome(p.fullName ?? '');
-        setData(p.birthDate ?? '');
-        setCpf(p.cpf ?? '');
-        setTelefone(p.phone ?? '');
-        setUf(p.uf ?? '');
-        setCidade(p.city ?? '');
+        // setValue aplica a máscara: perfil antigo salvo sem formatação entra
+        // na tela já formatado, em vez de perpetuar o dado cru.
+        nome.setValue(p.fullName ?? '');
+        data.setValue(p.birthDate ?? '');
+        cpf.setValue(p.cpf ?? '');
+        telefone.setValue(p.phone ?? '');
+        uf.setValue(p.uf ?? '');
+        cidade.setValue(p.city ?? '');
         setProfissao(p.jobTitle ?? '');
         setSetor(p.sector ?? '');
         setFuncao(p.duty ?? '');
@@ -84,16 +118,26 @@ export default function SettingsPersonalData() {
     return base;
   };
 
+  const campos = [nome, data, cpf, telefone, email, uf, cidade];
+  const podeSalvar = campos.every((f) => f.isValid);
+
   const handleSave = async () => {
+    // Tentar salvar com campo inválido revela os erros de uma vez: sem isto o
+    // botão simplesmente não faria nada e a tela ficaria muda sobre o motivo
+    // (o useField só acusa erro depois do blur).
+    if (!podeSalvar) {
+      campos.forEach((f) => f.setTouched(true));
+      return;
+    }
     setSaving(true);
     try {
       await saveProfile({
-        fullName: nome.trim() || undefined,
-        birthDate: data.trim() || undefined,
-        cpf: cpf.trim() || undefined,
-        phone: telefone.trim() || undefined,
-        uf: uf.trim() || undefined,
-        city: cidade.trim() || undefined,
+        fullName: nome.value.trim() || undefined,
+        birthDate: data.value.trim() || undefined,
+        cpf: cpf.value.trim() || undefined,
+        phone: telefone.value.trim() || undefined,
+        uf: uf.value.trim() || undefined,
+        city: cidade.value.trim() || undefined,
         jobTitle: profissao || undefined,
         sector: setor || undefined,
         duty: funcao || undefined,
@@ -133,8 +177,7 @@ export default function SettingsPersonalData() {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        extraScrollHeight={60}
-        enableOnAndroid
+        bottomOffset={60}
       >
         <TopBar title="Dados pessoais" onBack={() => router.back()} />
 
@@ -149,29 +192,30 @@ export default function SettingsPersonalData() {
             Dados do cadastro
           </Title>
 
-          <Input
-            label="Nome Completo"
-            value={nome}
-            onChangeText={setNome}
-          />
+          <Input label="Nome Completo" {...nome.bind()} />
           <Input
             label="Data de Nascimento"
-            value={data}
-            onChangeText={setData}
+            {...data.bind()}
+            keyboardType="number-pad"
+            maxLength={10}
           />
-          <Input label="CPF" value={cpf} onChangeText={setCpf} />
+          <Input
+            label="CPF"
+            {...cpf.bind()}
+            keyboardType="number-pad"
+            maxLength={14}
+          />
           <Input
             label="Email"
-            value={email}
-            onChangeText={setEmail}
+            {...email.bind()}
             keyboardType="email-address"
             autoCapitalize="none"
           />
           <Input
             label="Telefone"
-            value={telefone}
-            onChangeText={setTelefone}
+            {...telefone.bind()}
             keyboardType="phone-pad"
+            maxLength={15}
           />
 
           {/* Row UF (77) + Cidade (flex), gap.sm between */}
@@ -179,18 +223,13 @@ export default function SettingsPersonalData() {
             <View style={{ width: 77 }}>
               <Input
                 label="UF"
-                value={uf}
-                onChangeText={setUf}
+                {...uf.bind()}
                 maxLength={2}
                 autoCapitalize="characters"
               />
             </View>
             <View style={{ flex: 1 }}>
-              <Input
-                label="Cidade"
-                value={cidade}
-                onChangeText={setCidade}
-              />
+              <Input label="Cidade" {...cidade.bind()} />
             </View>
           </View>
 

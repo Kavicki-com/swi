@@ -4,6 +4,7 @@ import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
 import type { Comment, Profile, Report, ReportStatus, User } from '@prisma/client'
 import type { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
+import { isStaffJobTitle } from '../common/staff'
 
 const LIST_CAP = 200
 
@@ -21,6 +22,55 @@ export class ReportsService {
   // o TOTAL vai junto pra UI poder dizer quantos ficaram de fora (QA de volume
   // 2026-07-26: 262 no banco, 200 na resposta, silêncio na tela). O controller
   // achata em array + header, então o contrato do wire (e o mobile) não muda.
+  /**
+   * Quem pode ser atribuído como responsável por um relatório.
+   *
+   * O app pedia isso ao /chat/directory, que devolve a empresa INTEIRA de
+   * propósito — sem os admins ali o worker não conseguia iniciar conversa com
+   * o painel (decisão 2026-07-26). O efeito colateral era o seletor de
+   * responsáveis oferecer os 10 operadores como revisores (QA no aparelho,
+   * 2026-07-27). São perguntas diferentes: "com quem posso falar" e "quem
+   * revisa meu relatório".
+   *
+   * Fica aqui, e não em chat, porque a régua é de relatórios — e porque o
+   * painel tem o seletor dele (ResponsablesModal, hoje via adminsApi) e
+   * precisa convergir pra mesma fonte.
+   *
+   * Acessível ao worker: /users é @Roles('ADMIN'), e foi essa barreira que
+   * empurrou o app pro diretório de chat em primeiro lugar.
+   */
+  async listAssignees(userId: string, companyId: string | null) {
+    const users = await this.prisma.user.findMany({
+      where: { approvalStatus: 'APPROVED', id: { not: userId }, companyId },
+      include: { profile: true },
+      orderBy: { name: 'asc' },
+      take: LIST_CAP,
+    })
+    // Filtro em JS, não no Prisma: a régua é sobre TEXTO LIVRE acentuado
+    // (jobTitle), e um `contains` do Postgres não normaliza acento nem caixa
+    // sem extensão. O cap de 200 mantém isso barato.
+    const staff = users.filter((u) => u.role === 'ADMIN' || isStaffJobTitle(u.profile?.jobTitle))
+    return Promise.all(staff.map((u) => this.toAssignee(u)))
+  }
+
+  // Mesmo shape do contato do chat — o modal do app já consome esse formato
+  // (avatar presigned, idade derivada do birthDate, tipo sanguíneo). Mantidos
+  // em sincronia à mão: são dois módulos, e unificar exigiria mexer no chat,
+  // que está estável.
+  private async toAssignee(u: User & { profile: Profile | null }) {
+    return {
+      workerId: u.id,
+      name: u.profile?.fullName ?? u.name,
+      sector: u.profile?.sector ?? '',
+      role: u.profile?.jobTitle ?? '',
+      avatarUri: u.profile?.avatarKey ? await this.media.presignGet(u.profile.avatarKey) : '',
+      birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
+      bloodType: u.profile?.bloodType ?? null,
+      allergies: u.profile?.allergies ?? null,
+      gender: u.profile?.gender ?? null,
+    }
+  }
+
   async list(companyId: string | null, page?: { limit?: number; offset?: number }) {
     const where = { author: { companyId } }
     const take = Math.min(Math.max(page?.limit ?? LIST_CAP, 1), LIST_CAP)
