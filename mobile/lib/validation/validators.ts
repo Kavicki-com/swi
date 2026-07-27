@@ -107,6 +107,25 @@ export function validateBirthDate(v: string): ValidationResult {
   return ok();
 }
 
+// Validade de exame clínico. Separado do nascimento porque a regra é o
+// INVERSO: nascimento não pode estar no futuro, validade quase sempre está
+// (as datas do Figma são 2027, 2029…). Aceita passado — exame vencido é um
+// fato, não erro de digitação — e barra ano absurdo.
+export function validateExamDate(v: string): ValidationResult {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v.trim());
+  if (!m) return fail('Data inválida (dd/mm/aaaa)');
+  const dd = Number(m[1]);
+  const mm = Number(m[2]);
+  const yyyy = Number(m[3]);
+  const currentYear = new Date().getFullYear();
+  if (yyyy < currentYear - 50 || yyyy > currentYear + 50) return fail('Ano inválido');
+  if (mm < 1 || mm > 12) return fail('Mês inválido');
+  const isLeap = (yyyy % 4 === 0 && yyyy % 100 !== 0) || yyyy % 400 === 0;
+  const daysIn = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (dd < 1 || dd > daysIn[mm - 1]) return fail('Dia inválido');
+  return ok();
+}
+
 // Senha: regras do projeto (validatePassword.ts). Adapta pro shape comum.
 export function validatePasswordField(v: string): ValidationResult {
   if (v.length === 0) return fail('Senha é obrigatória');

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Image as RNImage, View } from 'react-native';
+import { Alert, Image as RNImage, Linking, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,12 @@ import {
 import { HomeFAB } from '../../../components/HomeFAB';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { errorMessage } from '../../../lib/errors/errorMessage';
+import { createExam, listExams, type Exam } from '../../../services/api/exams';
+import { examCardParts } from '../../../services/api/examCard';
+import { useMediaPicker } from '../../../lib/media/useMediaPicker';
+import { useField } from '../../../lib/forms/useField';
+import { validateExamDate, validateRequired } from '../../../lib/validation/validators';
+import { maskBirthDate } from '../../../lib/validation/masks';
 
 const BLOOD_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((v) => ({
   label: v,
@@ -47,6 +53,53 @@ export default function SettingsHealthData() {
   const [alergias, setAlergias] = useState('');
   const [doencas, setDoencas] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Exames REAIS. A lista era um array fixo de 4 exames inventados, duplicado
+  // com o my-stats, e o botão de enviar tinha `onPickFile={() => {}}` — não
+  // fazia absolutamente nada (QA 2026-07-26).
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [sendingExam, setSendingExam] = useState(false);
+  const examName = useField({ validator: (v) => validateRequired(v, 'Nome do exame') });
+  const examDate = useField({ validator: validateExamDate, mask: maskBirthDate });
+  const media = useMediaPicker();
+
+  useEffect(() => {
+    let cancelled = false;
+    void listExams()
+      .then((list) => { if (!cancelled) setExams(list); })
+      // Sem exames a seção só some; um alerta aqui atrapalharia quem veio
+      // editar tipo sanguíneo e nem liga pro histórico.
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  // Anexar é o ÚLTIMO passo: nome e validade primeiro (decisão do cliente —
+  // campos inline acima do botão), senão o card não tem o que mostrar.
+  const enviarExame = async () => {
+    if (!examName.isValid || !examDate.isValid) {
+      examName.setTouched(true);
+      examDate.setTouched(true);
+      return;
+    }
+    const uri = await media.pickFromGallery();
+    if (!uri) return;
+    setSendingExam(true);
+    try {
+      const [dd, mm, yyyy] = examDate.value.split('/');
+      const novo = await createExam({
+        name: examName.value.trim(),
+        date: `${yyyy}-${mm}-${dd}`,   // a API guarda data de calendário
+        fileUri: uri,
+      });
+      setExams((prev) => [novo, ...prev]);
+      examName.setValue('');
+      examDate.setValue('');
+    } catch (e) {
+      Alert.alert('Erro', errorMessage(e, 'Não foi possível enviar o exame.'));
+    } finally {
+      setSendingExam(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -83,18 +136,6 @@ export default function SettingsHealthData() {
       setSaving(false);
     }
   };
-
-  const exams: Array<{
-    year: number;
-    date: string;
-    examName: string;
-    future?: boolean;
-  }> = [
-    { year: 2027, date: '05 Mar', examName: 'Exame de reciclagem técnica' },
-    { year: 2029, date: '19 Nov', examName: 'Avaliação de segurança' },
-    { year: 2031, date: '14 Jul', examName: 'Certificação em normas ISO' },
-    { year: 2033, date: '28 Fev', examName: 'Exame de aptidão física e mental', future: true },
-  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -172,26 +213,51 @@ export default function SettingsHealthData() {
               Histórico Médico
             </Text>
 
-            {exams.map((exam) => (
-              <ExamInfoCard
-                key={`${exam.year}-${exam.date}`}
-                year={exam.year}
-                date={exam.date}
-                examName={exam.examName}
-                compact
-                mobile
-                fullWidth
-                future={exam.future}
-                onActionPress={() => {}}
-              />
-            ))}
+            {exams.length === 0 ? (
+              <Text variant="body.s" color={theme.content.dark}>
+                Nenhum exame enviado.
+              </Text>
+            ) : null}
+
+            {exams.map((exam) => {
+              const parts = examCardParts(exam);
+              return (
+                <ExamInfoCard
+                  key={exam.id}
+                  year={parts.year}
+                  date={parts.date}
+                  examName={exam.name}
+                  compact
+                  mobile
+                  fullWidth
+                  future={parts.future}
+                  onActionPress={() => Linking.openURL(exam.fileUrl)}
+                />
+              );
+            })}
+
+            {/* Nome e validade ANTES de anexar (decisão do cliente): o card do
+                histórico mostra os três, então o arquivo sozinho não desenha
+                nada. */}
+            <Input
+              {...examName.bind()}
+              label="Nome do exame"
+              placeholder="Ex.: Exame de reciclagem técnica"
+            />
+            <Input
+              {...examDate.bind()}
+              label="Validade"
+              placeholder="dd/mm/aaaa"
+              keyboardType="number-pad"
+              maxLength={10}
+            />
 
             <ImageUploader
               helperText="Selecione arquivos do tipo: JPG ou PNG"
-              pickFileLabel="Enviar novo exame"
+              pickFileLabel={sendingExam ? 'Enviando…' : 'Enviar novo exame'}
               showTakePhoto={false}
               accentColor={theme.content.primary}
-              onPickFile={() => {}}
+              onPickFile={enviarExame}
             />
           </View>
 

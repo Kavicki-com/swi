@@ -24,6 +24,7 @@ import {
 import { listCompanies, type CompanyOption } from '../../services/api/companies';
 import { errorMessage } from '../../lib/errors/errorMessage';
 import { signupDraft } from '../../services/auth/signupDraft';
+import { clearPendingProfile } from '../../services/profile/pendingProfile';
 import { AUTH_BACKEND } from '../../lib/featureFlags';
 
 // Só o fluxo api tem empresas reais pra escolher; no mock o seletor some e o
@@ -101,6 +102,11 @@ export default function SignUp() {
     // painel. Antes o wizard era pulado no modo api e o admin aprovava uma
     // linha com nome e e-mail e mais nada (QA 2026-07-26).
     if (NEEDS_COMPANY) {
+      // Zera rascunho de um cadastro abandonado ANTES de começar. Sem isto, o
+      // merge raso do stash deixava campo opcional não preenchido pela pessoa
+      // nova sobreviver da anterior — alergia de A entrando no cadastro de B
+      // num aparelho compartilhado (review 2026-07-27).
+      await clearPendingProfile();
       signupDraft.set(params);
       router.push({ pathname: '/(auth)/complimentary-data/step-1', params: { username } });
       return;

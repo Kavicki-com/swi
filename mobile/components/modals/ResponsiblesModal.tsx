@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -11,7 +11,8 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
-import { useChat } from '../../services/chat/ChatProvider';
+import { getChatBackend } from '../../services/chat/getChatBackend';
+import type { Contact } from '../../services/chat/types';
 import { ageFrom } from '../../lib/age';
 
 // Figma 364:18017 — bottom-sheet "Selecionar responsáveis".
@@ -33,16 +34,26 @@ import { ageFrom } from '../../lib/age';
 // (QA 2026-07-26). O singleton de seleção fica aqui por estar acoplado ao
 // confirm flow do modal.
 
-let _selectedIds: string[] = [];
+// Guarda id E NOME. Guardando só id, quem exibe precisaria do diretório pra
+// resolver o nome — foi o que derrubou a tela de novo relatório: ela chamava
+// useChat() fora do ChatProvider (que só envolve a subárvore de chat) e morria
+// na montagem. Com o nome aqui, a tela de relatório não depende de provider
+// nenhum.
+export interface ResponsiblePick {
+  id: string;
+  name: string;
+}
+
+let _selected: ResponsiblePick[] = [];
 export const responsiblesSelection = {
-  get(): string[] {
-    return _selectedIds.slice();
+  get(): ResponsiblePick[] {
+    return _selected.slice();
   },
-  set(ids: string[]): void {
-    _selectedIds = ids.slice();
+  set(picks: ResponsiblePick[]): void {
+    _selected = picks.slice();
   },
   clear(): void {
-    _selectedIds = [];
+    _selected = [];
   },
 };
 
@@ -50,7 +61,7 @@ interface ResponsiblesModalProps {
   onClose: () => void;
   // Confirma a seleção. Demo phase: o caller só fecha; futuramente
   // recebe o array de ids escolhidos para hidratar `reports/new`.
-  onConfirm?: (selectedIds: string[]) => void;
+  onConfirm?: (picks: ResponsiblePick[]) => void;
 }
 
 export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps) {
@@ -58,7 +69,22 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const { directory } = useChat();
+
+  // Busca o diretório DIRETO do backend (a flag decide mock/api), sem
+  // useChat(): o ChatProvider só envolve a subárvore de chat, e este modal
+  // vive na de relatórios — consumir o contexto aqui derrubava a tela na
+  // montagem.
+  const [directory, setDirectory] = useState<Contact[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getChatBackend()
+      .listDirectory()
+      .then((list) => { if (!cancelled) setDirectory(list); })
+      // Lista vazia já comunica "ninguém pra atribuir"; um alerta sobre o
+      // diretório atrapalharia quem só quer escrever o relatório.
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   // O SearchInput existia mas não filtrava nada — digitar não mudava a lista.
   const term = search.trim().toLowerCase();
@@ -75,7 +101,12 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
     });
 
   const handleConfirm = () => {
-    onConfirm?.(Array.from(selected));
+    // Devolve id + nome: o backend de relatórios guarda NOMES, e quem exibe
+    // não deve precisar do diretório pra resolver.
+    const picks = directory
+      .filter((c) => selected.has(c.workerId))
+      .map((c) => ({ id: c.workerId, name: c.name }));
+    onConfirm?.(picks);
     onClose();
   };
 

@@ -12,8 +12,10 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
-import { responsiblesSelection } from '../../../components/modals/ResponsiblesModal';
-import { useChat } from '../../../services/chat/ChatProvider';
+import {
+  responsiblesSelection,
+  type ResponsiblePick,
+} from '../../../components/modals/ResponsiblesModal';
 import { useField } from '../../../lib/forms/useField';
 import { validateRequired } from '../../../lib/validation/validators';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
@@ -32,13 +34,15 @@ export default function NewReport() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { create } = useReports();
-  const { directory } = useChat();
   const [saving, setSaving] = useState(false);
 
   const titulo = useField({ validator: (v) => validateRequired(v, 'Título') });
   const resumo = useField({ validator: (v) => validateRequired(v, 'Resumo') });
   const detalhes = useField({ validator: (v) => validateRequired(v, 'Detalhes') });
-  const [responsibleIds, setResponsibleIds] = useState<string[]>(() =>
+  // A seleção já vem com id E NOME. Antes só trazia ids e esta tela resolvia o
+  // nome pelo diretório do chat via useChat() — que vive noutra subárvore de
+  // providers e derrubava a tela na montagem (review 2026-07-27).
+  const [responsibles, setResponsibles] = useState<ResponsiblePick[]>(() =>
     responsiblesSelection.get(),
   );
 
@@ -70,16 +74,16 @@ export default function NewReport() {
   // Rehidrata seleção ao reentrar (modal de responsáveis fecha via router.back).
   useFocusEffect(
     useCallback(() => {
-      setResponsibleIds(responsiblesSelection.get());
+      setResponsibles(responsiblesSelection.get());
     }, []),
   );
 
   const responsiblesLabel =
-    responsibleIds.length === 0
+    responsibles.length === 0
       ? 'Atribuir responsáveis'
-      : responsibleIds.length === 1
+      : responsibles.length === 1
         ? `1 responsável atribuído`
-        : `${responsibleIds.length} responsáveis atribuídos`;
+        : `${responsibles.length} responsáveis atribuídos`;
 
   const canSubmit = titulo.isValid && resumo.isValid && detalhes.isValid;
 
@@ -94,21 +98,18 @@ export default function NewReport() {
       detalhes.setTouched(true);
       return;
     }
-    // O singleton guarda ids; o backend guarda NOMES (e casa nome↔perfil pra
-    // resolver os avatares do card). A fonte é o diretório real da empresa —
-    // o mesmo que o ResponsiblesModal lista. Até 2026-07-26 isto resolvia por
-    // uma lista fictícia e GRAVAVA "Elisa Siqueira Jordão" como responsável no
-    // banco de verdade. Ids desconhecidos caem fora (Boolean filter).
-    const responsibles = responsibleIds
-      .map((id) => directory.find((c) => c.workerId === id)?.name)
-      .filter(Boolean) as string[];
+    // O backend guarda NOMES (e casa nome↔perfil pra resolver os avatares do
+    // card). Vêm da seleção, que já os trouxe do diretório real da empresa —
+    // até 2026-07-26 saíam de uma lista fictícia e "Elisa Siqueira Jordão" era
+    // GRAVADA como responsável no banco de verdade.
+    const responsibleNames = responsibles.map((r) => r.name);
     setSaving(true);
     try {
       await create({
         title: titulo.value,
         summary: resumo.value,
         details: detalhes.value,
-        responsibles,
+        responsibles: responsibleNames,
         imageUris: [...attachments.filter(Boolean), uploadedFile].filter(
           Boolean,
         ) as string[],

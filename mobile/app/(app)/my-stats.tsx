@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Image as RNImage, Platform, ScrollView, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Image as RNImage, Linking, Platform, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
@@ -11,7 +11,6 @@ import {
   DonutChart,
   ExamInfoCard,
   Icon,
-  ImageUploader,
   JourneyTheme,
   LineCaloriesChart,
   ProgressBar,
@@ -23,6 +22,8 @@ import {
 import { NavFABs } from '../../components/NavFABs';
 import { useVitals } from '../../services/vitals/VitalsProvider';
 import { formatEta } from '../../services/vitals/formatEta';
+import { listExams, type Exam } from '../../services/api/exams';
+import { examCardParts } from '../../services/api/examCard';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
 import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
@@ -39,7 +40,6 @@ import {
   KCAL_FLAME_SVG,
 } from '../../lib/myStatsIcons';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
-import { useMediaPicker } from '../../lib/media/useMediaPicker';
 import { useProfile } from '../../services/profile/ProfileProvider';
 
 
@@ -123,18 +123,6 @@ const PERIOD_OPTIONS = [
 // Histórico médico — Figma 342:9907 (4 ExamInfoCard rows). `future`
 // renderiza o year do 2033 em weight regular (não bold) per Figma
 // 342:9911 — não muta cores, só sinaliza exame futuro/agendado.
-const EXAMS: Array<{
-  year: string;
-  date: string;
-  examName: string;
-  future?: boolean;
-}> = [
-  { year: '2027', date: '05 Mar', examName: 'Exame de reciclagem técnica' },
-  { year: '2029', date: '19 Nov', examName: 'Avaliação de segurança' },
-  { year: '2031', date: '14 Jul', examName: 'Certificação em normas ISO' },
-  { year: '2033', date: '28 Fev', examName: 'Exame de aptidão física e mental', future: true },
-];
-
 // Comma-decimal percent string (pt-BR): 62.5 → "62,5%".
 function pct(value: number): string {
   return `${value.toFixed(1).replace('.', ',')}%`;
@@ -158,6 +146,17 @@ export default function MyStats() {
   // (not condition-driven), so only phase + vitals + lastUpdated + history.
   const router = useRouter();
   const { phase, vitals, lastUpdated, history } = useVitals();
+  // Exames REAIS. Eram 4 inventados aqui e os MESMOS 4 duplicados no
+  // settings/dados de saúde (QA 2026-07-26). Aqui é só leitura: enviar é no
+  // settings, onde ficam os campos de nome e validade — um formulário só.
+  const [exams, setExams] = useState<Exam[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void listExams()
+      .then((list) => { if (!cancelled) setExams(list); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   const { profile } = useProfile();
   // Alergias REAIS do cadastro (settings/dados de saúde grava em profile.allergies,
   // texto livre). Até 2026-07-26 esta tela exibia uma lista fixa — "Buscopan,
@@ -180,16 +179,6 @@ export default function MyStats() {
   const footprintXml = useUniqueSvg(FOOTPRINT_SVG);
   const flameDonutXml = useUniqueSvg(FLAME_DONUT_SVG);
   const [period, setPeriod] = useState('today');
-  // Histórico Médico — exame anexado via ImageUploader. Demo phase, useState
-  // efêmero. Wired pra expo-image-picker (galeria only — showTakePhoto=false
-  // na spec original do Figma 342:9907).
-  const [examFile, setExamFile] = useState<string | null>(null);
-  const media = useMediaPicker();
-
-  const pickExamFromGallery = async () => {
-    const uri = await media.pickFromGallery();
-    if (uri) setExamFile(uri);
-  };
 
   // T5.3: gradient arrays memoizados — antes alocavam array nova por render
   // (mudança de period quebrava memoização dos 4 DonutCharts). Theme é
@@ -699,36 +688,45 @@ export default function MyStats() {
         {/* Divider — Figma 342:9906 */}
         <View style={{ height: 2, backgroundColor: theme.surface.standard }} />
 
-        {/* Histórico Médico — Figma 342:9907 (4 ExamInfoCard + ImageUploader).
-            gap.m (16) entre Title→first-card e cards entre si é um pouco
-            compacto vs Figma (~20px); subindo pra 20 dá respiro extra. */}
+        {/* Histórico Médico — Figma 342:9907. Aqui é LEITURA: os exames reais
+            com download. Enviar é no settings, onde ficam os campos de nome e
+            validade (sem eles o card não teria o que mostrar). gap 20 dá o
+            respiro que o gap.m (16) deixava apertado vs Figma. */}
         <View style={{ width: '100%', gap: 20 }}>
           <Title variant="title.xs" color={theme.content.dark}>
             Histórico Médico
           </Title>
-          {EXAMS.map((exam) => (
-            <ExamInfoCard
-              key={`${exam.year}-${exam.date}`}
-              year={exam.year}
-              date={exam.date}
-              examName={exam.examName}
-              compact
-              fullWidth
-              future={exam.future}
-              onActionPress={() => {
-                /* TODO: trigger download */
-              }}
-              accessibilityLabel={`Baixar ${exam.examName}`}
-            />
-          ))}
-          <ImageUploader
-            helperText="Selecione arquivos do tipo: JPG ou PNG"
-            pickFileLabel="Enviar novo exame"
-            showTakePhoto={false}
-            accentColor={theme.content.primary}
-            value={examFile ? { uri: examFile } : null}
-            onPickFile={pickExamFromGallery}
-            onRemove={() => setExamFile(null)}
+          {exams.length === 0 ? (
+            <Text variant="body.s" color={theme.content.dark}>
+              Nenhum exame enviado.
+            </Text>
+          ) : null}
+          {exams.map((exam) => {
+            const parts = examCardParts(exam);
+            return (
+              <ExamInfoCard
+                key={exam.id}
+                year={parts.year}
+                date={parts.date}
+                examName={exam.name}
+                compact
+                fullWidth
+                future={parts.future}
+                onActionPress={() => Linking.openURL(exam.fileUrl)}
+                accessibilityLabel={`Baixar ${exam.name}`}
+              />
+            );
+          })}
+          {/* Enviar acontece no settings, onde estão os campos de nome e
+              validade — sem eles o card não teria o que mostrar. Um formulário
+              só, em vez dos dois arrays duplicados de antes. */}
+          <Button
+            variant="outline"
+            label="Enviar novo exame"
+            borderColor={theme.content.primary}
+            labelColor={theme.content.primary}
+            accessibilityLabel="Enviar novo exame"
+            onPress={() => router.push('/(app)/settings/health-data')}
           />
         </View>
       </View>
