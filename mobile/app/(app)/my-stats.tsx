@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Image as RNImage, Linking, Platform, ScrollView, View } from 'react-native';
+import { Linking, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
@@ -10,10 +10,12 @@ import {
   Combobox,
   DonutChart,
   ExamInfoCard,
+  HeartStatus,
   Icon,
   JourneyTheme,
   LineCaloriesChart,
   ProgressBar,
+  StatusChart,
   Text,
   TimeStamp,
   Title,
@@ -21,16 +23,13 @@ import {
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
 import { useVitals } from '../../services/vitals/VitalsProvider';
+import type { WorkerStatus } from '../../services/vitals/types';
 import { formatEta } from '../../services/vitals/formatEta';
 import { listExams, type Exam } from '../../services/api/exams';
 import { examCardParts } from '../../services/api/examCard';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
 import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
-import {
-  HEART_STATUS_SVG,
-  SILHOUETTE_BODY_SVG,
-} from '../../lib/dashboardKnobSvgs';
 import {
   BPM_HEART_SVG,
   FLAME_DONUT_SVG,
@@ -141,11 +140,23 @@ function formatAgo(lastUpdated: number | null, now: number): string {
   return `atualizado há ${mins}min`;
 }
 
+// Mesmas conversoes do dashboard: 'unknown' cai em 'good' pro grafico (que
+// precisa de UMA cor), mas devolve null pro badge — sem dado, o peito fica
+// vazio em vez de exibir um check que ninguem mediu.
+function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' {
+  return status === 'alert' || status === 'low' ? status : 'good';
+}
+
+function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | null {
+  if (status === 'good') return 'check';
+  if (status === 'alert') return 'alert';
+  if (status === 'low') return 'low';
+  return null;
+}
+
 export default function MyStats() {
-  // status is not consumed here — the my-stats heart badge is a static SVG
-  // (not condition-driven), so only phase + vitals + lastUpdated + history.
   const router = useRouter();
-  const { phase, vitals, lastUpdated, history } = useVitals();
+  const { phase, vitals, status, lastUpdated, history } = useVitals();
   // Exames REAIS. Eram 4 inventados aqui e os MESMOS 4 duplicados no
   // settings/dados de saúde (QA 2026-07-26). Aqui é só leitura: enviar é no
   // settings, onde ficam os campos de nome e validade — um formulário só.
@@ -168,11 +179,7 @@ export default function MyStats() {
     .filter(Boolean);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  // SILHOUETTE_BODY_SVG tem <defs> com gradient ID — namespace por instância
-  // evita colidir com a cópia que a dashboard mantém montada em background.
-  const silhouetteXml = useUniqueSvg(SILHOUETTE_BODY_SVG);
-  // Second silhouette instance for the multiply overlay (Figma Caminho 4123).
-  const silhouetteMultiplyXml = useUniqueSvg(SILHOUETTE_BODY_SVG);
+  const heartCondition = toHeartCondition(status);
   // Donut-center icons usam gradient linear inline — também precisam namespace.
   const heartbeatGreenXml = useUniqueSvg(HEARTBEAT_GREEN_SVG);
   const heartbeatBlueXml = useUniqueSvg(HEARTBEAT_BLUE_SVG);
@@ -245,92 +252,46 @@ export default function MyStats() {
           status, replacing the compact StatusChart. No heart-rate / settings
           sub-badge here — my-stats is already the detail screen (showActionButton
           was false on the old StatusChart). Avatar overlays in the corner. */}
-      {/* Chart zone — same responsive pattern as dashboard.tsx:
-          width:100% + maxWidth:360 + aspectRatio:360/374 + alignSelf:center.
-          Caps at 360×374 on phones wider than the Figma reference (avoiding
-          the silhouette growing disproportionally) while staying edge-to-edge
-          on devices ≤360pt wide. Inner absolute children use percentages so
-          they scale with the chart zone. */}
-      <View
-        style={{
-          width: '100%',
-          maxWidth: 360,
-          aspectRatio: 360 / 374,
-          alignSelf: 'center',
-          position: 'relative',
-        }}
-      >
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-          }}
-        >
-          <RNImage
-            source={require('../../assets/grupo-taigo.png')}
-            resizeMode="contain"
-            style={{ width: '82.78%', aspectRatio: 1 }}
-            accessible={false}
-          />
-        </View>
+      {/* Chart zone — StatusChart do DS (size="compact", Figma 342:9420).
+          ANTES: um PNG estatico ("grupo taigo novo") com a silhueta e o badge
+          empilhados por cima, e o comentario do componente dizia que "status
+          is not consumed here". O anel era imagem, entao NAO PODIA mudar de
+          cor — com o trabalhador em alerta, esta tela mostrava um personagem
+          verde e saudavel, contradizendo o dashboard (QA 2026-07-27).
 
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: '23.39%',
-            left: '39.42%',
-            width: '21.38%',
-            height: '70.14%',
-          }}
-        >
-          <SvgXml xml={silhouetteXml} width="100%" height="100%" />
-        </View>
+          O `condition` do DS dirige quatro coisas de uma vez: gradiente da
+          silhueta, cor do arco, tint do fundo pontilhado e o badge do peito.
+          Mesma fonte de verdade do dashboard (deriveStatus), entao as duas
+          telas nao tem como divergir de novo.
 
-        {/* Silhouette multiply overlay — Figma Caminho 4123. Stacked on top
-            with mix-blend-mode: multiply for deeper/richer green. Web-only —
-            em iOS/Android o overlay vira cópia opaca (wasted layer) sem
-            produzir o efeito de multiply. */}
-        {Platform.OS === 'web' ? (
+          compact = 289.733x301 (0.80481x). O PNG anterior era renderizado a
+          82.78% de 360 = ~298pt, entao a escala na tela fica equivalente.
+          showActionButton=false: my-stats ja E a tela de detalhe, sem os
+          botoes de frequencia/ajustes do dashboard. */}
+      <View style={{ position: 'relative', alignSelf: 'center' }}>
+        <StatusChart
+          condition={toChartCondition(status)}
+          progress={1}
+          size="compact"
+          showActionButton={false}
+          renderHeartStatus={false}
+          accessibilityLabel="Status de saude"
+        />
+
+        {/* Badge do peito renderizado a parte (renderHeartStatus=false) para
+            poder SUMIR quando o status e desconhecido — mostrar um check verde
+            sem dado e pior que nao mostrar nada. Mesmo tratamento do
+            dashboard. As percentagens sao relativas a este wrapper, que
+            encolhe no tamanho do proprio chart, entao valem em qualquer size.
+            DS bump TODO (deferred): condicao neutra de heart-status. */}
+        {heartCondition ? (
           <View
             pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: '23.39%',
-              left: '39.42%',
-              width: '21.38%',
-              height: '70.14%',
-              // @ts-expect-error: mixBlendMode is web-only style (RN-web).
-              mixBlendMode: 'multiply',
-            }}
+            style={{ position: 'absolute', left: '47%', top: '37.25%' }}
           >
-            <SvgXml xml={silhouetteMultiplyXml} width="100%" height="100%" />
+            <HeartStatus condition={heartCondition} size={26.093 * 0.80481} />
           </View>
         ) : null}
-
-        {/* Heart status — composite SVG (heart + check badge). See dashboard
-            wrapper notes for the 31.311×26.093 group geometry.
-            DS bump TODO (deferred): neutral heart-status condition; using
-            hide-badge fallback — when the sample is stale we hide the chest
-            badge entirely rather than show a misleading 'good' check. */}
-        {isStale ? null : (
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: '37.25%',
-              left: '47.0%',
-              width: '8.7%',
-              height: '6.98%',
-            }}
-          >
-            <SvgXml xml={HEART_STATUS_SVG} width="100%" height="100%" />
-          </View>
-        )}
       </View>
 
       {/* Avatar — absolute top-right, overlays the chart (Figma 342:9422).
