@@ -376,12 +376,17 @@ export default function MyStats() {
             opacity: isStale ? 0.5 : 1,
           }}
         >
-          {/* Col 1 — Heart 67 BPM (Figma 342:9432) */}
+          {/* Col 1 — Heart 67 BPM (Figma 342:9432).
+              width:70 (não 41 do Figma) — o simulador vai de 40 a 140 BPM,
+              então 3 dígitos são esperados, e mesmo 2 já quebravam em duas
+              linhas no aparelho (QA 2026-07-27). Mesma largura da coluna de
+              Kcal, que segura "184", e mesmo precedente das colunas 2 e 3, que
+              também subiram do valor do Figma quando o texto quebrava. */}
           <View
             style={{
               alignItems: 'center',
               gap: theme.gap.sm,
-              width: 41,
+              width: 70,
             }}
           >
             <SvgXml
@@ -394,6 +399,7 @@ export default function MyStats() {
               variant="title.l"
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
+              numberOfLines={1}
             >
               {v.heartRate}
             </Title>
@@ -427,6 +433,7 @@ export default function MyStats() {
               variant="title.l"
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
+              numberOfLines={1}
             >
               {`${v.bloodPressureSys}/${v.bloodPressureDia}`}
             </Title>
@@ -461,6 +468,7 @@ export default function MyStats() {
               variant="title.l"
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
+              numberOfLines={1}
             >
               {v.caloriesPerHour}
             </Title>
