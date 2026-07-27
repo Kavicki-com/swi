@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { Asset } from 'expo-asset';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Avatar,
@@ -16,6 +15,7 @@ import {
 import { NavFABs } from '../../../components/NavFABs';
 import { JourneyListState } from '../../../components/journey/JourneyState';
 import { useJourney } from '../../../services/journey/JourneyProvider';
+import { useProfile } from '../../../services/profile/ProfileProvider';
 import { elapsedSeconds, formatDuration } from '../../../services/journey/progress';
 
 // Figma 364:16378 (idle) / 364:17609 (ongoing) / 364:17766 (paused).
@@ -32,9 +32,10 @@ import { elapsedSeconds, formatDuration } from '../../../services/journey/progre
 // voltar pra /journey, esta tela renderiza o layout ongoing automaticamente.
 // O donut deriva o tempo real via progress.ts (âncoras epoch ms da sessão).
 
-const avatarUri = Asset.fromModule(
-  require('../../../assets/avatar-construction.png'),
-).uri;
+// "Hoje" é hoje de verdade. Antes era a string '27/04/2026' cravada do mockup:
+// o app afirmava uma data errada logo abaixo do título (QA 2026-07-26).
+const formatToday = (d: Date): string =>
+  `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
 export default function Journey() {
   const theme = useTheme();
@@ -51,7 +52,22 @@ export default function Journey() {
     resumeJourney,
     endJourney,
     load,
+    refresh,
   } = useJourney();
+  const { profile } = useProfile();
+
+  // 3) foco da tela: o worker volta pra jornada e vê o estado de agora. Cobre
+  //    o caso do socket calado (túnel caído) sem depender de nada externo.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+
+  // Cargo: jobTitle é o cargo de exibição ("Operador de escavadeira"); duty é a
+  // função (Operação/Manutenção). Mostra o que o usuário preencheu, e some se
+  // não preencheu nada — melhor vazio do que o cargo de outra pessoa.
+  const roleLine = [profile?.jobTitle, profile?.duty].filter(Boolean).join(' · ');
 
   const isActive = journeyState !== 'idle';
   const isPaused = journeyState === 'paused';
@@ -141,19 +157,21 @@ export default function Journey() {
                   Hoje
                 </Title>
                 <Text variant="badge.s" color={theme.content.dark}>
-                  27/04/2026
+                  {formatToday(new Date(now))}
                 </Text>
               </View>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-                <Avatar uri={avatarUri} size="l" />
+                <Avatar uri={profile?.avatarUrl} name={profile?.fullName} size="l" />
                 <View style={{ flex: 1 }}>
                   <Text variant="label.m" color={theme.content.dark}>
-                    Romulo Cardoso
+                    {profile?.fullName ?? ''}
                   </Text>
-                  <Text variant="body.m" color={theme.content.dark}>
-                    Mecânico maquinário B2
-                  </Text>
+                  {roleLine ? (
+                    <Text variant="body.m" color={theme.content.dark}>
+                      {roleLine}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             </View>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Image as RNImage, Platform, ScrollView, View } from 'react-native';
-import { Asset } from 'expo-asset';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
 import {
@@ -22,6 +22,7 @@ import {
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
 import { useVitals } from '../../services/vitals/VitalsProvider';
+import { formatEta } from '../../services/vitals/formatEta';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
 import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
@@ -39,9 +40,8 @@ import {
 } from '../../lib/myStatsIcons';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 import { useMediaPicker } from '../../lib/media/useMediaPicker';
+import { useProfile } from '../../services/profile/ProfileProvider';
 
-const avatarUri =
-  Asset.fromModule(require('../../assets/avatar-construction.png')).uri;
 
 // Divider — vertical SVG com gradient banda verde + bordas cinzas perceptíveis.
 // Padronizado com a versão do dashboard.tsx: 2px largura + stops 0/0.2/0.8/1
@@ -140,14 +140,6 @@ function pct(value: number): string {
   return `${value.toFixed(1).replace('.', ',')}%`;
 }
 
-// fatigueEtaMin → "Xh Ym" compact (105 → "1h45m", 5 → "0h05m").
-function formatEta(minutes: number): string {
-  const total = Math.max(0, Math.round(minutes));
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return `${h}h${String(m).padStart(2, '0')}m`;
-}
-
 // Relative "atualizado há…" label from a lastUpdated epoch (ms). NOTE: once the
 // provider reaches 'stale' its context value memo is frozen, so this shows the
 // elapsed time at the moment 'stale' was entered and does NOT count up. That's
@@ -164,7 +156,17 @@ function formatAgo(lastUpdated: number | null, now: number): string {
 export default function MyStats() {
   // status is not consumed here — the my-stats heart badge is a static SVG
   // (not condition-driven), so only phase + vitals + lastUpdated + history.
+  const router = useRouter();
   const { phase, vitals, lastUpdated, history } = useVitals();
+  const { profile } = useProfile();
+  // Alergias REAIS do cadastro (settings/dados de saúde grava em profile.allergies,
+  // texto livre). Até 2026-07-26 esta tela exibia uma lista fixa — "Buscopan,
+  // Dipirona, Chocolate, Camarão" para qualquer pessoa, o que numa tela de
+  // segurança do trabalho é informação clínica falsa.
+  const allergyChips = (profile?.allergies ?? '')
+    .split(/[,;\n]/)
+    .map((a) => a.trim())
+    .filter(Boolean);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   // SILHOUETTE_BODY_SVG tem <defs> com gradient ID — namespace por instância
@@ -354,7 +356,7 @@ export default function MyStats() {
           top: 34,
         }}
       >
-        <Avatar customSize={64} uri={avatarUri} />
+        <Avatar customSize={64} uri={profile?.avatarUrl} name={profile?.fullName} />
       </View>
 
       {/* User Data column — Figma 342:9966 (gap.l 24). Width was 328 fixo,
@@ -662,16 +664,19 @@ export default function MyStats() {
               borderColor={theme.content.primary}
               borderWidth="m"
               labelColor={theme.content.primary}
-              onPress={() => {
-                /* TODO: open edit-alergias sheet */
-              }}
+              onPress={() => router.push('/(app)/settings/health-data')}
             />
           </View>
           {/* Custom inline chips — DS Chip filled+secondary maps to
               surface.secondaryLight (#E2F4F8, very pale) which doesn't
               match Figma's saturated blue (#50B3D2 = surface.secondary). */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.s }}>
-            {['Buscopan', 'Dipirona', 'Chocolate', 'Camarão'].map((allergy) => (
+            {allergyChips.length === 0 ? (
+              <Text variant="body.s" color={theme.content.dark}>
+                Nenhuma alergia informada.
+              </Text>
+            ) : null}
+            {allergyChips.map((allergy) => (
               <View
                 key={allergy}
                 accessibilityRole="text"

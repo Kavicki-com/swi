@@ -21,6 +21,7 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system';
+import { useLocation } from '@/services/location/LocationProvider';
 import { MapView } from '@/components/MapView';
 import { MapMarker } from '@/components/MapMarker';
 import { MapHeatmapSource } from '@/components/MapHeatmapSource';
@@ -89,6 +90,7 @@ export default function MapWeather() {
 
 function MapWeatherScreen() {
   const theme = useTheme();
+  const { coords } = useLocation();
   const router = useRouter();
 
   // 3 icon-only toggle buttons (Figma 385:21840 → 165:21860). Cada botão
@@ -153,7 +155,11 @@ function MapWeatherScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView center={USER_LOCATION} zoom={13}>
+      {/* Centra no GPS real, igual o map.tsx já fazia — as duas telas de mapa
+          divergiam e o clima abria em São Paulo pra quem estava em Curitiba
+          (QA 2026-07-26). Os pontos de calor/alerta seguem ancorados na
+          constante de demo: são dados de clima fabricados, não posição. */}
+      <MapView center={coords} zoom={13}>
         {/* Keys explícitos: toggles condicionais (showHeatmap, showOperators,
             showCameras) shiftam posições no array de children. Sem keys o
             maplibre useFrozenId throws "id cannot be changed". Ver evacuation.tsx. */}

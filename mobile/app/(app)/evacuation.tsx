@@ -18,7 +18,7 @@ import { NavFABs } from '@/components/NavFABs';
 import { EvacuationAckBar } from '@/components/EvacuationAckBar';
 import { SITE_ROUTE } from '@/services/evacuation/types';
 import { useEvacuation } from '@/services/evacuation/EvacuationProvider';
-import { chipAnchors, lineFeature, straightLine } from '@/services/evacuation/routeFormat';
+import { chipAnchors, chipEtaLabel, lineFeature, straightLine } from '@/services/evacuation/routeFormat';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 
@@ -96,12 +96,12 @@ function EvacuationRouteScreen() {
         </MapMarker>
         {anchors && (
           <MapMarker key="evacuation-chip-1" coordinate={anchors.a} id="evacuation-chip-1">
-              <MapChipBody text="6 minutos" />
+              <MapChipBody text={chipEtaLabel(route?.durationSec, 0.35)} />
           </MapMarker>
         )}
         {anchors && (
           <MapMarker key="evacuation-chip-2" coordinate={anchors.b} id="evacuation-chip-2">
-              <MapChipBody text="17 minutos" />
+              <MapChipBody text={chipEtaLabel(route?.durationSec, 0.7)} />
           </MapMarker>
         )}
 

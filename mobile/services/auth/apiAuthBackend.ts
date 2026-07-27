@@ -18,7 +18,7 @@ export const apiAuthBackend: AuthBackend = {
   },
   // companyId: empresa escolhida na tela de cadastro — sem ela o worker nasce
   // sem vínculo e fica invisível na fila de aprovação do painel (org-scoped).
-  async signUp({ email, password, name, companyId }) { return apiRequest('/auth/signup', { method: 'POST', body: { email, password, name, companyId } }) },
+  async signUp({ email, password, name, companyId, profile }) { return apiRequest('/auth/signup', { method: 'POST', body: { email, password, name, companyId, profile } }) },
   async confirmSignUp({ email, code }) { await apiRequest('/auth/confirm', { method: 'POST', body: { email, code } }) },
   async resendConfirmation({ email }) { await apiRequest('/auth/confirm/resend', { method: 'POST', body: { email } }) },
   async signOut() { await SecureStore.deleteItemAsync(TOKEN_KEY); clearUserId() },

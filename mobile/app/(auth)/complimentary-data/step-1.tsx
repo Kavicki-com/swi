@@ -26,6 +26,7 @@ import {
 } from '../../../lib/validation/masks';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
 import { useProfile } from '../../../services/profile/ProfileProvider';
+import { errorMessage } from '../../../lib/errors/errorMessage';
 
 export default function ComplimentaryDataStep1() {
   const router = useRouter();
@@ -73,8 +74,8 @@ export default function ComplimentaryDataStep1() {
         cpf: cpf.value,
         birthDate: birthDate.value,
       });
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+    } catch (e) {
+      Alert.alert('Erro', errorMessage(e, 'Não foi possível salvar seus dados.'));
       return;
     }
     router.push({

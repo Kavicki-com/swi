@@ -18,6 +18,10 @@ import type { GenderValue } from '@kavicki/swi-design-system';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
 import { useProfile } from '../../../services/profile/ProfileProvider';
+import { errorMessage } from '../../../lib/errors/errorMessage';
+import { useAuth } from '../../../services/auth/AuthProvider';
+import { signupDraft } from '../../../services/auth/signupDraft';
+import { clearPendingProfile, readPendingProfile } from '../../../services/profile/pendingProfile';
 
 const HEIGHT_OPTIONS = Array.from({ length: 81 }, (_, i) => {
   const v = 140 + i; // 140cm..220cm
@@ -40,6 +44,7 @@ export default function ComplimentaryDataStep3() {
   const insets = useSafeAreaInsets();
   const { username } = useLocalSearchParams<{ username?: string }>();
   const { saveProfile } = useProfile();
+  const { signUp } = useAuth();
 
   const [gender, setGender] = useState<GenderValue | null>(null);
   const [height, setHeight] = useState('');
@@ -84,8 +89,32 @@ export default function ComplimentaryDataStep3() {
         weightKg: parseInt(weight, 10),
         hasDisability: disability === 'sim',
       });
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar seus dados.');
+    } catch (e) {
+      Alert.alert('Erro', errorMessage(e, 'Não foi possível salvar seus dados.'));
+      return;
+    }
+
+    // Fim do wizard no fluxo real: é AQUI que a conta nasce, com o perfil
+    // inteiro junto — o cadastro entra na fila de aprovação já completo, e o
+    // admin decide vendo CPF, contato e tipo sanguíneo em vez de aprovar às
+    // cegas (QA 2026-07-26). O rascunho acumulou os 3 steps no SecureStore, já
+    // no formato da API; o `signup` do backend aceita como `profile`.
+    const draft = signupDraft.get();
+    if (draft) {
+      try {
+        const profile = (await readPendingProfile()) ?? undefined;
+        await signUp({ ...draft, profile });
+        // Some com o rascunho: sem isto o mesmo perfil subiria de novo no
+        // primeiro login (semanas depois, após a aprovação), sobrescrevendo o
+        // que tiver sido editado no settings nesse meio-tempo.
+        await clearPendingProfile();
+        signupDraft.clear();
+      } catch (e) {
+        Alert.alert('Erro', errorMessage(e, 'Não foi possível criar a conta.'));
+        return;
+      }
+      const username = draft.name.trim().split(/\s+/)[0] ?? '';
+      router.replace({ pathname: '/(auth)/email-sent', params: { email: draft.email, username } });
       return;
     }
     // Onboarding continues into the Smartband configuration flow before the

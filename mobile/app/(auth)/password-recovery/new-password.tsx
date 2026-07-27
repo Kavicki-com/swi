@@ -12,6 +12,7 @@ import {
   validatePasswordMatch,
 } from '../../../lib/validation/validators';
 import { AUTH_BACKEND } from '../../../lib/featureFlags';
+import { errorMessage } from '../../../lib/errors/errorMessage';
 
 export default function PasswordRecoveryNewPassword() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function PasswordRecoveryNewPassword() {
     }
     if (AUTH_BACKEND === 'api') {
       try { await confirmReset({ email: String(email ?? ''), code, newPassword: password.value }); }
-      catch { Alert.alert('Erro', 'Código inválido ou expirado.'); return; }
+      catch (e) { Alert.alert('Erro', errorMessage(e, 'Código inválido ou expirado.')); return; }
     }
     // Demo: recovery complete → back to login. Production would also surface
     // a "senha alterada" toast/screen before login.

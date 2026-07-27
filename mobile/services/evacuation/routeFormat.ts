@@ -18,6 +18,17 @@ export function chipAnchors(waypoints: Pt[]): { a: Pt; b: Pt } | null {
   return { a: waypoints[i1], b: waypoints[i2] };
 }
 
+// Rótulo de tempo das chips ancoradas ao longo da rota. As duas exibiam
+// "6 minutos" e "17 minutos" cravados do mockup, enquanto o RouteSnapshot já
+// trazia a duração real da rota calculada pelo provedor (QA 2026-07-26).
+// `fraction` é a mesma posição em que a chip ancora (0.35 / 0.7), então o
+// número é o tempo acumulado até ali.
+export function chipEtaLabel(durationSec: number | null | undefined, fraction: number): string {
+  if (!durationSec || durationSec <= 0) return '—';
+  const minutes = Math.max(1, Math.round((durationSec * fraction) / 60));
+  return `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+}
+
 // Seta de navegação a ~30% da rota, rotacionada pro próximo waypoint.
 export function navArrow(waypoints: Pt[]): { at: Pt; rotation: number } | null {
   if (waypoints.length < 2) return null;

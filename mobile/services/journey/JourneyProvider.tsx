@@ -7,8 +7,10 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
+import { AppState } from 'react-native';
 import type { JourneyState, JourneySession, Task } from './types';
 import { getJourneyBackend } from './getJourneyBackend';
+import { getNotificationBackend } from '../notifications/getNotificationBackend';
 
 // Shared journey state, agora backed pelo backend (services/journey). Consumido
 // por:
@@ -33,7 +35,9 @@ interface JourneyContextValue {
   /** Âncoras da sessão (ISO string + segundos bancados) pro donut do index. */
   startedAt: string | null;
   accumulatedSeconds: number;
-  load: () => Promise<void>;
+  load: (opts?: { silent?: boolean }) => Promise<void>;
+  /** Recarga de fundo: sem piscar loading e sem perder a lista se falhar. */
+  refresh: () => Promise<void>;
   getTask: (id: string) => Promise<Task | null>;
   startTask: (taskId: string) => Promise<void>;
   completeTask: (taskId: string) => Promise<void>;
@@ -57,21 +61,53 @@ export function JourneyProvider({ children }: PropsWithChildren) {
     accumulatedSeconds: 0,
   });
 
-  const load = useCallback(async () => {
-    setLoadStatus('loading');
+  // `silent`: recarga de fundo (push/foreground/foco) não pode piscar o
+  // esqueleto de loading nem apagar a lista que já está na tela — só troca o
+  // conteúdo quando a resposta chega. Falha silenciosa mantém o que havia:
+  // perder a lista por uma falha de rede momentânea é pior que dado velho.
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoadStatus('loading');
     try {
       const [j, t] = await Promise.all([backend.getJourney(), backend.listTasks()]);
       setSession(j);
       setTasks(t);
       setLoadStatus(t.length ? 'ready' : 'empty');
     } catch {
-      setLoadStatus('error');
+      if (!opts?.silent) setLoadStatus('error');
     }
   }, [backend]);
+
+  const refresh = useCallback(() => load({ silent: true }), [load]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Tarefa nova tem que aparecer sozinha. Até 2026-07-26 a lista era buscada
+  // UMA vez, no mount: o admin atribuía a tarefa e o worker só via depois de
+  // deslogar e logar (o que remontava o provider). Três gatilhos, do mais
+  // imediato ao mais tolerante a falha:
+  //
+  // 1) push: o backend já cria uma notificação de domínio 'journey' pra cada
+  //    responsável e a empurra pelo socket — só ninguém escutava fora da tela
+  //    de notificações. Aqui o provider envolve o app inteiro, então chega
+  //    esteja o worker onde estiver.
+  useEffect(() => {
+    const backendN = getNotificationBackend();
+    const unsub = backendN.subscribe((n) => {
+      if (n.domain === 'journey') void refresh();
+    });
+    return unsub;
+  }, [refresh]);
+
+  // 2) volta do segundo plano: cobre o tempo em que o app esteve fechado (e
+  //    qualquer socket que tenha morrido junto).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refresh();
+    });
+    return () => sub.remove();
+  }, [refresh]);
 
   const getTask = useCallback((id: string) => backend.getTask(id), [backend]);
 
@@ -133,6 +169,7 @@ export function JourneyProvider({ children }: PropsWithChildren) {
       startedAt: session.startedAt,
       accumulatedSeconds: session.accumulatedSeconds,
       load,
+      refresh,
       getTask,
       startTask,
       completeTask,
@@ -147,6 +184,7 @@ export function JourneyProvider({ children }: PropsWithChildren) {
       tasks,
       session,
       load,
+      refresh,
       getTask,
       startTask,
       completeTask,

@@ -7,6 +7,7 @@ import { useAuth } from '../../../services/auth/AuthProvider';
 import { useField } from '../../../lib/forms/useField';
 import { validateEmail } from '../../../lib/validation/validators';
 import { AUTH_BACKEND } from '../../../lib/featureFlags';
+import { errorMessage } from '../../../lib/errors/errorMessage';
 
 export default function PasswordRecoveryEmail() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function PasswordRecoveryEmail() {
     }
     if (AUTH_BACKEND === 'api') {
       try { await resetPassword({ email: email.value }); }
-      catch { Alert.alert('Erro', 'Não foi possível enviar o código.'); return; }
+      catch (e) { Alert.alert('Erro', errorMessage(e, 'Não foi possível enviar o código.')); return; }
     }
     // Figma 290:688 — show the recovery-specific "Acesse o link de
     // recuperação" confirmation screen (distinct from the signup variant
