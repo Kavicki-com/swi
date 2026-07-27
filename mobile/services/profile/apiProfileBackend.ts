@@ -35,7 +35,20 @@ export const apiProfileBackend: ProfileBackend = {
     }
   },
   async save(patch) {
-    const body = { ...patch, birthDate: brToIso(patch.birthDate) };
+    // A chave só entra quando o patch a traz. Antes ela era montada SEMPRE
+    // (`birthDate: brToIso(patch.birthDate)`), valendo `undefined` nos patches
+    // que não a incluem — e o stash do wizard faz `{ ...prev, ...patch }`, então
+    // esse `undefined` do passo 2 (endereço) sobrescrevia a data guardada no
+    // passo 1, e o JSON.stringify apagava a chave de vez. A ficha chegava ao
+    // painel sem data de nascimento e, por consequência, sem idade
+    // (QA 2026-07-27, confirmado no banco: telefone, CPF e endereço inteiros,
+    // birthDate vazio).
+    //
+    // Só a data se perdia porque só ela era reescrita incondicionalmente aqui.
+    const body = {
+      ...patch,
+      ...(patch.birthDate !== undefined ? { birthDate: brToIso(patch.birthDate) } : {}),
+    };
     // Sem sessão = wizard de onboarding pré-login (a conta ainda aguarda
     // aprovação do admin). Stash local em vez de PUT: sem isso o 401 alertava
     // "Não foi possível salvar" e o step-1 nem avançava (QA 2026-07-26).

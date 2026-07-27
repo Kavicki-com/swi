@@ -74,3 +74,38 @@ describe('apiProfileBackend', () => {
     });
   });
 });
+
+// A ficha do "Joao Tester" chegou ao painel SEM data de nascimento — e por
+// isso sem idade — enquanto telefone, CPF e o endereco inteiro passaram (QA
+// 2026-07-27, verificado no banco).
+//
+// A causa: `save` montava o corpo como `{ ...patch, birthDate: brToIso(...) }`,
+// entao a chave `birthDate` existia SEMPRE, valendo `undefined` quando o patch
+// nao a trazia. No stash o merge e `{ ...prev, ...patch }` — o `undefined` do
+// passo 2 (endereco) sobrescrevia a data guardada no passo 1, e o
+// JSON.stringify apagava a chave de vez.
+//
+// O comentario do pendingProfile promete que "o merge nunca apaga um campo
+// stashado por um step anterior". Isso so vale se a chave estiver AUSENTE.
+describe('save sem sessao — o stash do wizard nao pode perder campo', () => {
+  beforeEach(() => {
+    mockApiRequest.mockReset();
+    mockStash.mockReset();
+    mockStash.mockResolvedValue({});
+    mockHasToken.mockReset();
+    mockHasToken.mockResolvedValue(false); // wizard roda antes da conta existir
+  });
+
+  it('patch SEM birthDate nao manda a chave (senao apaga a do passo anterior)', async () => {
+    await apiProfileBackend.save({ cep: '27280-080', street: 'Alameda Quatro' });
+    const enviado = mockStash.mock.calls[0][0];
+    expect('birthDate' in enviado).toBe(false);
+  });
+
+  it('patch COM birthDate manda em ISO', async () => {
+    await apiProfileBackend.save({ fullName: 'Joao Tester', birthDate: '02/01/1999' });
+    expect(mockStash).toHaveBeenCalledWith(
+      expect.objectContaining({ birthDate: '1999-01-02' }),
+    );
+  });
+});
