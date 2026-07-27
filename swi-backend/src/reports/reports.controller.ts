@@ -30,6 +30,18 @@ export class ReportsController {
     return items
   }
 
+  // ANTES de @Get(':id') de propósito: o Nest casa na ordem de declaração, e
+  // invertido 'assignees' viraria um id e responderia "Relatório não
+  // encontrado".
+  //
+  // Quem pode ser atribuído como responsável — staff da empresa. O app pedia
+  // isso ao /chat/directory, que devolve todo mundo (inclusive os operadores),
+  // porque /users é @Roles('ADMIN') e o worker não alcança.
+  @Get('assignees')
+  listAssignees(@CurrentUser() user: JwtUser) {
+    return this.reports.listAssignees(user.userId, user.companyId)
+  }
+
   @Get(':id')
   async get(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     const r = await this.reports.get(id, user.companyId)
