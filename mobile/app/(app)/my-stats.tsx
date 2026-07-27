@@ -11,7 +11,6 @@ import {
   DonutChart,
   ExamInfoCard,
   Icon,
-  ImageUploader,
   JourneyTheme,
   LineCaloriesChart,
   ProgressBar,
@@ -41,7 +40,6 @@ import {
   KCAL_FLAME_SVG,
 } from '../../lib/myStatsIcons';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
-import { useMediaPicker } from '../../lib/media/useMediaPicker';
 import { useProfile } from '../../services/profile/ProfileProvider';
 
 
@@ -181,16 +179,6 @@ export default function MyStats() {
   const footprintXml = useUniqueSvg(FOOTPRINT_SVG);
   const flameDonutXml = useUniqueSvg(FLAME_DONUT_SVG);
   const [period, setPeriod] = useState('today');
-  // Histórico Médico — exame anexado via ImageUploader. Demo phase, useState
-  // efêmero. Wired pra expo-image-picker (galeria only — showTakePhoto=false
-  // na spec original do Figma 342:9907).
-  const [examFile, setExamFile] = useState<string | null>(null);
-  const media = useMediaPicker();
-
-  const pickExamFromGallery = async () => {
-    const uri = await media.pickFromGallery();
-    if (uri) setExamFile(uri);
-  };
 
   // T5.3: gradient arrays memoizados — antes alocavam array nova por render
   // (mudança de period quebrava memoização dos 4 DonutCharts). Theme é
@@ -700,9 +688,10 @@ export default function MyStats() {
         {/* Divider — Figma 342:9906 */}
         <View style={{ height: 2, backgroundColor: theme.surface.standard }} />
 
-        {/* Histórico Médico — Figma 342:9907 (4 ExamInfoCard + ImageUploader).
-            gap.m (16) entre Title→first-card e cards entre si é um pouco
-            compacto vs Figma (~20px); subindo pra 20 dá respiro extra. */}
+        {/* Histórico Médico — Figma 342:9907. Aqui é LEITURA: os exames reais
+            com download. Enviar é no settings, onde ficam os campos de nome e
+            validade (sem eles o card não teria o que mostrar). gap 20 dá o
+            respiro que o gap.m (16) deixava apertado vs Figma. */}
         <View style={{ width: '100%', gap: 20 }}>
           <Title variant="title.xs" color={theme.content.dark}>
             Histórico Médico
