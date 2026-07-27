@@ -515,7 +515,12 @@ export default function Dashboard() {
             }
             value={String(v.heartRate)}
             label="BPM"
-            width={41}
+            // 41 (Figma) só comportava 2 dígitos, e mal: o simulador vai de 40
+            // a 140 BPM, então 3 dígitos são esperados, não exceção. 70 é a
+            // mesma largura da coluna de Kcal, que já segura "184" — e segue o
+            // precedente das outras duas, que também subiram do valor do Figma
+            // quando o texto quebrava (65→80 e 55→70).
+            width={70}
             theme={theme}
           />
           <Divider theme={theme} />
@@ -744,7 +749,12 @@ const StatCol = memo(function StatCol({
       <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
         {iconNode}
       </View>
-      <Title variant="title.l" color={theme.content.dark}>
+      {/* numberOfLines=1 é OBRIGATÓRIO aqui: sem ele o valor quebra em duas
+          linhas, a coluna cresce em altura e empurra os ícones do rodapé pra
+          fora da margem (QA no aparelho, 2026-07-27: BPM 64 renderizou "6"
+          sobre "4"). O comentário no call site já afirmava que isto existia —
+          não existia. */}
+      <Title variant="title.l" color={theme.content.dark} numberOfLines={1}>
         {value}
       </Title>
       <Text variant="body.s" color={theme.content.dark}>
