@@ -10,13 +10,17 @@
     "test": "jest"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|@kavicki))",
+      "/node_modules/react-native-reanimated/plugin/"
+    ]
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/montserrat": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
-    "@kavicki/swi-design-system": "file:./vendor/kavicki-swi-design-system-0.1.124.tgz",
+    "@kavicki/swi-design-system": "file:./vendor/kavicki-swi-design-system-0.1.125.tgz",
     "@maplibre/maplibre-react-native": "^11.2.1",
     "@react-navigation/native": "^7.1.8",
     "@react-three/fiber": "^9.6.1",
