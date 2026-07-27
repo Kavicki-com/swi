@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSubmitOnce } from '../../lib/forms/useSubmitOnce';
 import { Alert, Image, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -74,6 +75,11 @@ export default function EmailSent() {
     }
   };
 
+  // Trava de reentrancia: `disabled` so cobria o formulario incompleto,
+  // nao o periodo da requisicao — um segundo toque disparava de novo
+  // (QA 2026-07-27, no fim do cadastro).
+  const { run: enviar, busy: enviando } = useSubmitOnce(handleConfirm);
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Image
@@ -128,9 +134,10 @@ export default function EmailSent() {
               />
               <Button
                 variant="contained"
-                label="Confirmar conta"
+                label={enviando ? 'Confirmando…' : 'Confirmar conta'}
                 fullWidth
-                onPress={handleConfirm}
+                disabled={enviando}
+                onPress={enviar}
               />
               <Button
                 variant="ghost"

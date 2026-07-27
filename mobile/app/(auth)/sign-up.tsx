@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSubmitOnce } from '../../lib/forms/useSubmitOnce';
 import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
@@ -122,6 +123,12 @@ export default function SignUp() {
     }
   };
 
+  // Trava de reentrancia: `disabled={!canSubmit || enviando}` continua verdadeiro
+  // enquanto a requisicao esta no ar, entao um segundo toque disparava a
+  // acao de novo (QA 2026-07-27: no cadastro, o 2o toque levou 409 de
+  // e-mail ja existente enquanto o 1o ja tinha criado a conta e navegado).
+  const { run: enviar, busy: enviando } = useSubmitOnce(handleSubmit);
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Image
@@ -230,7 +237,7 @@ export default function SignUp() {
               label="Criar conta"
               fullWidth
               disabled={!canSubmit}
-              onPress={handleSubmit}
+              onPress={enviar}
             />
             <Button
               variant="outline"

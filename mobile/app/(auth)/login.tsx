@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSubmitOnce } from '../../lib/forms/useSubmitOnce';
 import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +41,12 @@ export default function Login() {
       Alert.alert('Erro', errorMessage(e, 'Email ou senha inválidos.'));
     }
   };
+
+  // Trava de reentrancia: `disabled={!canSubmit || enviando}` continua verdadeiro
+  // enquanto a requisicao esta no ar, entao um segundo toque disparava a
+  // acao de novo (QA 2026-07-27: no cadastro, o 2o toque levou 409 de
+  // e-mail ja existente enquanto o 1o ja tinha criado a conta e navegado).
+  const { run: enviar, busy: enviando } = useSubmitOnce(handleLogin);
 
   return (
     // Bg: base sólida theme.background + overlay PNG em object-cover (espelha Figma node 138:7937 — `object-cover`, sem opacity).
@@ -133,7 +140,7 @@ export default function Login() {
               label="Entrar"
               fullWidth
               disabled={!canSubmit}
-              onPress={handleLogin}
+              onPress={enviar}
             />
             <Button
               variant="outline"
