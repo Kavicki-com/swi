@@ -10,7 +10,6 @@ import {
   Combobox,
   DonutChart,
   ExamInfoCard,
-  HeartStatus,
   Icon,
   JourneyTheme,
   LineCaloriesChart,
@@ -268,30 +267,30 @@ export default function MyStats() {
           82.78% de 360 = ~298pt, entao a escala na tela fica equivalente.
           showActionButton=false: my-stats ja E a tela de detalhe, sem os
           botoes de frequencia/ajustes do dashboard. */}
-      <View style={{ position: 'relative', alignSelf: 'center' }}>
+      <View style={{ alignSelf: 'center' }}>
         <StatusChart
           condition={toChartCondition(status)}
           progress={1}
           size="compact"
           showActionButton={false}
-          renderHeartStatus={false}
+          // backdrop=false (DS 0.1.126): fica SÓ o que muda de cor com a
+          // condição — personagem, coração e o crescente. Saem o cartão cinza,
+          // os dois discos, o trilho, o poço, a grade de pontos (que duplicava
+          // a do JourneyTheme desta tela) e o "Ellipse 5", um arco decorativo
+          // em PNG que ficava verde-água mesmo em alerta. Decoração que
+          // parece indicador, numa tela de saúde, é pior que nada.
+          backdrop={false}
+          // O badge volta a ser posicionado pelo DS: fazer isso à mão exigia
+          // converter HEART_STATUS_OFFSET pra percentuais do canvas, e no
+          // preset compact a conta muda — o coração saiu do peito, deslocado
+          // pra direita (QA no aparelho, 2026-07-27).
+          //
+          // Sem status conhecido o badge some por inteiro, em vez de exibir um
+          // check verde que ninguém mediu. É o mesmo princípio do resto da
+          // tela: só mostrar o que foi medido.
+          renderHeartStatus={heartCondition !== null}
           accessibilityLabel="Status de saude"
         />
-
-        {/* Badge do peito renderizado a parte (renderHeartStatus=false) para
-            poder SUMIR quando o status e desconhecido — mostrar um check verde
-            sem dado e pior que nao mostrar nada. Mesmo tratamento do
-            dashboard. As percentagens sao relativas a este wrapper, que
-            encolhe no tamanho do proprio chart, entao valem em qualquer size.
-            DS bump TODO (deferred): condicao neutra de heart-status. */}
-        {heartCondition ? (
-          <View
-            pointerEvents="none"
-            style={{ position: 'absolute', left: '47%', top: '37.25%' }}
-          >
-            <HeartStatus condition={heartCondition} size={26.093 * 0.80481} />
-          </View>
-        ) : null}
       </View>
 
       {/* Avatar — absolute top-right, overlays the chart (Figma 342:9422).
