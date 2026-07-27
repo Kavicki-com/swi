@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import {
   Avatar,
   Button,
@@ -115,6 +116,11 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
   };
 
   return (
+    // O sheet é ancorado no rodapé pelo wrapper de rota (justifyContent
+    // flex-end), então o teclado subia por cima da busca. KeyboardStickyView
+    // translada o sheet inteiro pra cima do teclado — é o primitivo certo pra
+    // conteúdo ancorado embaixo, onde empurrar scroll não resolveria.
+    <KeyboardStickyView>
     <View
       style={{
         // Figma 364:18017 mostra modal um tom mais claro que o conteúdo
@@ -224,5 +230,6 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
         />
       </View>
     </View>
+    </KeyboardStickyView>
   );
 }

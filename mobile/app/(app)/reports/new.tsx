@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -139,8 +139,7 @@ export default function NewReport() {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        extraScrollHeight={60}
-        enableOnAndroid
+        bottomOffset={60}
       >
         {/* Voltar — left-aligned, largura natural (match /reports/[id] e
             Figma 372:21297). marginLeft:-18 compensa: (a) padding-left do

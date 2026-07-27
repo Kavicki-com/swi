@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Image, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
@@ -80,7 +81,11 @@ export default function EmailSent() {
         resizeMode="cover"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <View
+      {/* O campo de código fica no meio da tela com o botão logo abaixo — em
+          aparelho menor o teclado cobria os dois. Conteúdo centralizado, então
+          KeyboardAvoidingView (empurra o bloco pra cima) em vez de scroll. */}
+      <KeyboardAvoidingView
+        behavior="padding"
         style={{
           flex: 1,
           paddingTop: insets.top,
@@ -137,7 +142,7 @@ export default function EmailSent() {
             </View>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

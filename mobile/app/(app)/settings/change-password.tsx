@@ -1,5 +1,5 @@
 import { Image as RNImage, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -72,8 +72,7 @@ export default function SettingsChangePassword() {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        extraScrollHeight={60}
-        enableOnAndroid
+        bottomOffset={60}
       >
         <TopBar title="Alterar senha" onBack={() => router.back()} />
 
