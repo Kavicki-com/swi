@@ -26,6 +26,7 @@ import { listCompanies, type CompanyOption } from '../../services/api/companies'
 import { errorMessage } from '../../lib/errors/errorMessage';
 import { signupDraft } from '../../services/auth/signupDraft';
 import { clearPendingProfile } from '../../services/profile/pendingProfile';
+import { clearPendingAvatar } from '../../services/profile/pendingAvatar';
 import { AUTH_BACKEND } from '../../lib/featureFlags';
 
 // Só o fluxo api tem empresas reais pra escolher; no mock o seletor some e o
@@ -108,6 +109,10 @@ export default function SignUp() {
       // nova sobreviver da anterior — alergia de A entrando no cadastro de B
       // num aparelho compartilhado (review 2026-07-27).
       await clearPendingProfile();
+      // A foto pendente sai junto: sem isto, num aparelho compartilhado, a
+      // foto de quem abandonou o cadastro subiria no perfil da proxima pessoa
+      // — mesmo risco que o comentario acima descreve pros campos.
+      await clearPendingAvatar();
       signupDraft.set(params);
       router.push({ pathname: '/(auth)/complimentary-data/step-1', params: { username } });
       return;

@@ -26,6 +26,7 @@ import {
 } from '../../../lib/validation/masks';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
 import { useProfile } from '../../../services/profile/ProfileProvider';
+import { clearPendingAvatar, stashPendingAvatar } from '../../../services/profile/pendingAvatar';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 
 export default function ComplimentaryDataStep1() {
@@ -84,13 +85,23 @@ export default function ComplimentaryDataStep1() {
     });
   };
 
+  // A foto era guardada só num useState e DESCARTADA: o wizard roda antes da
+  // conta existir, e o presign exige token, então não havia como subir na hora.
+  // Agora o arquivo é COPIADO pro armazenamento do app e sobe no primeiro
+  // login (flushPendingProfile). Copiar em vez de guardar a uri é o ponto: o
+  // endereço da galeria é temporário e a aprovação do admin pode levar dias.
+  const guardarFoto = async (uri: string) => {
+    setPhoto({ uri });
+    await stashPendingAvatar(uri);
+  };
+
   const handleTakePhoto = async () => {
     const uri = await media.takePhoto();
-    if (uri) setPhoto({ uri });
+    if (uri) await guardarFoto(uri);
   };
   const handlePickFile = async () => {
     const uri = await media.pickFromGallery();
-    if (uri) setPhoto({ uri });
+    if (uri) await guardarFoto(uri);
   };
 
   return (
@@ -163,7 +174,7 @@ export default function ComplimentaryDataStep1() {
           value={photo}
           onTakePhoto={handleTakePhoto}
           onPickFile={handlePickFile}
-          onRemove={() => setPhoto(null)}
+          onRemove={() => { setPhoto(null); void clearPendingAvatar(); }}
           helperText="Selecione arquivos do tipo: JPG ou PNG"
           takePhotoLabel="Tirar Foto"
           pickFileLabel="Enviar arquivo"

@@ -1,5 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { apiRequest } from '../api/http';
+import { uploadImage } from '../api/uploadMedia';
+import { clearPendingAvatar, readPendingAvatar } from './pendingAvatar';
 
 // O wizard de onboarding (complimentary-data) roda ANTES do primeiro login:
 // no fluxo api o cadastro só destrava depois que o admin aprova no painel —
@@ -41,10 +43,35 @@ export async function clearPendingProfile(): Promise<void> {
 
 export async function flushPendingProfile(): Promise<void> {
   try {
-    const pending = await readPendingProfile();
-    if (!pending) return;
-    await apiRequest('/profile/me', { method: 'PUT', body: pending, auth: true });
-    await SecureStore.deleteItemAsync(PENDING_KEY);
+    const [pending, avatarPath] = await Promise.all([
+      readPendingProfile(),
+      readPendingAvatar(),
+    ]);
+    if (!pending && !avatarPath) return;
+
+    const body: Record<string, unknown> = { ...(pending ?? {}) };
+
+    // A foto escolhida no passo 1 do cadastro só pode subir AGORA: naquele
+    // momento a conta ainda não existia e o presign exige token. O arquivo
+    // ficou copiado no armazenamento do app esperando este login.
+    //
+    // try próprio: se o upload falhar (rede, arquivo corrompido), os CAMPOS do
+    // perfil sobem do mesmo jeito e a foto fica pro próximo login. Sem isso,
+    // uma foto problemática travaria o cadastro inteiro em todo login, pra
+    // sempre.
+    let avatarEnviado = false;
+    if (avatarPath) {
+      try {
+        body.avatarKey = await uploadImage(avatarPath, 'avatars');
+        avatarEnviado = true;
+      } catch {
+        // Fica pendente; tenta de novo no próximo login.
+      }
+    }
+
+    await apiRequest('/profile/me', { method: 'PUT', body, auth: true });
+    if (pending) await SecureStore.deleteItemAsync(PENDING_KEY);
+    if (avatarEnviado) await clearPendingAvatar();
   } catch {
     // Fica pro próximo login — flush é best-effort por contrato.
   }
