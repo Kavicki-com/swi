@@ -276,6 +276,11 @@ function ActionIcon({
 // Fila de aprovação — uma linha por WORKER pendente. Composição de View +
 // Text + Button do DS (não reimplementa primitiva): à esquerda nome/email/data
 // da solicitação, à direita as ações Aprovar (verde) / Rejeitar (outline).
+// Campo que o worker não preencheu. Dizer o que falta é mais honesto que um
+// traço mudo — o admin precisa saber que a informação NÃO existe, não que a
+// tela esqueceu de carregar.
+const NAO_INFORMADO = 'não informado'
+
 function PendingRow({
   pending,
   onApprove,
@@ -308,16 +313,35 @@ function PendingRow({
         rowGap: theme.gap.s,
       }}
     >
-      <View style={{ flexDirection: 'column', gap: theme.gap.xs }}>
-        <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
-          {pending.name}
-        </Text>
-        <Text variant="body.m" color={theme.content.dark}>
-          {pending.email}
-        </Text>
-        <Text variant="body.s" color={theme.content.medium}>
-          Solicitado em {requestedAt}
-        </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m, flex: 1 }}>
+        <Avatar uri={pending.avatar || undefined} name={pending.name} size="l" />
+        <View style={{ flexDirection: 'column', gap: theme.gap.xs }}>
+          <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
+            {pending.name}
+          </Text>
+          <Text variant="body.m" color={theme.content.dark}>
+            {pending.email}
+          </Text>
+          {/* O worker preenche isto no cadastro (o app manda junto). Aprovar
+              sem ver CPF, contato e tipo sanguíneo é decidir às cegas numa
+              ferramenta de segurança do trabalho — era o que a fila obrigava
+              até 2026-07-26. */}
+          <Text testID={`pending-doc-${pending.id}`} variant="body.s" color={theme.content.medium}>
+            {`CPF ${pending.cpf ?? NAO_INFORMADO} · ${pending.phone ?? NAO_INFORMADO}`}
+          </Text>
+          <Text
+            testID={`pending-health-${pending.id}`}
+            variant="body.s"
+            color={theme.content.medium}
+          >
+            {`Sangue ${pending.bloodType ?? NAO_INFORMADO} · ${
+              pending.city ? `${pending.city}${pending.uf ? `/${pending.uf}` : ''}` : NAO_INFORMADO
+            }`}
+          </Text>
+          <Text variant="body.s" color={theme.content.medium}>
+            Solicitado em {requestedAt}
+          </Text>
+        </View>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
         <Button

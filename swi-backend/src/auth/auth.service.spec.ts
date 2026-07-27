@@ -156,6 +156,58 @@ describe('AuthService reset de senha', () => {
   })
 })
 
+describe('AuthService.signup — perfil junto do cadastro', () => {
+  // O app coleta dados pessoais, endereço e saúde ANTES de criar a conta, pra
+  // que a fila de aprovação do painel já nasça completa (QA 2026-07-26: o
+  // wizard era mock-only e o admin aprovava com nome e e-mail só).
+  it('grava o que o worker preencheu, com birthDate virando Date', async () => {
+    const { svc, users, prisma } = deps()
+    users.findByEmail.mockResolvedValue(null)
+    prisma.user.create.mockResolvedValue({ id: 'u9' })
+    await svc.signup({
+      email: 'j@ex.com', password: 'p', name: 'João Silva',
+      profile: {
+        cpf: '000.000.000-00', phone: '(41) 90000-0000', birthDate: '1990-12-25',
+        city: 'Curitiba', uf: 'PR', bloodType: 'O-', heightCm: 175, weightKg: 80,
+        hasDisability: false,
+      },
+    })
+    const created = prisma.user.create.mock.calls[0][0].data.profile.create
+    expect(created).toMatchObject({
+      fullName: 'João Silva',
+      cpf: '000.000.000-00',
+      city: 'Curitiba',
+      bloodType: 'O-',
+      heightCm: 175,
+      hasDisability: false,
+    })
+    expect(created.birthDate).toBeInstanceOf(Date)
+    expect(created.birthDate.toISOString()).toBe('1990-12-25T00:00:00.000Z')
+  })
+
+  it('sem perfil, o cadastro segue válido (build antiga do app / integrações)', async () => {
+    const { svc, users, prisma } = deps()
+    users.findByEmail.mockResolvedValue(null)
+    prisma.user.create.mockResolvedValue({ id: 'u9' })
+    await svc.signup({ email: 'j@ex.com', password: 'p', name: 'J' })
+    expect(prisma.user.create.mock.calls[0][0].data.profile.create).toEqual({ fullName: 'J' })
+  })
+
+  it('campo vazio não vira string vazia no banco (o wizard permite pular)', async () => {
+    const { svc, users, prisma } = deps()
+    users.findByEmail.mockResolvedValue(null)
+    prisma.user.create.mockResolvedValue({ id: 'u9' })
+    await svc.signup({
+      email: 'j@ex.com', password: 'p', name: 'J',
+      profile: { cpf: '', allergies: undefined, bloodType: 'A+' },
+    })
+    const created = prisma.user.create.mock.calls[0][0].data.profile.create
+    expect(created).not.toHaveProperty('cpf')
+    expect(created).not.toHaveProperty('allergies')
+    expect(created.bloodType).toBe('A+')
+  })
+})
+
 describe('AuthService.signup rollback', () => {
   it('e-mail falha → deleta o User recém-criado e re-lança', async () => {
     const { svc, users, prisma, mail } = deps()

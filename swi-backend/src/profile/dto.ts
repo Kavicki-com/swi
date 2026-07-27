@@ -33,3 +33,12 @@ export class UpdateProfileDto {
   // Só keys emitidas pelo presign no namespace exams/ — URL assinada não passa.
   @IsOptional() @Matches(/^exams\/[0-9a-f-]{36}\.(jpg|png)$/, { each: true }) examKeys?: string[]
 }
+
+// Exame clínico: o card do design (ExamInfoCard) exige nome e data além do
+// arquivo — só a key não desenha nada. `date` é a VALIDADE (as datas do Figma
+// são futuras), informada pelo worker nos campos ao lado do botão de envio.
+export class CreateExamDto {
+  @IsString() @Length(2, 120) name!: string
+  @IsCalendarDate() date!: string
+  @Matches(/^exams\/[0-9a-f-]{36}\.(jpg|png)$/) fileKey!: string
+}

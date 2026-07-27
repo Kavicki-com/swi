@@ -122,7 +122,9 @@ describe('adminsApi.setActive/remove (real)', () => {
     expect(JSON.parse(init.body as string)).toEqual({ active: false })
   })
   it('remove → DELETE /users/:id', async () => {
-    const f = vi.fn().mockResolvedValue({ ok: true, status: 204, json: async () => null } as Response)
+    const f = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 204, json: async () => null } as Response)
     vi.stubGlobal('fetch', f)
     const { error } = await adminsApi.remove('a1')
     expect(error).toBeNull()
@@ -190,7 +192,7 @@ describe('approvalsApi.listPendingWorkers (real)', () => {
     vi.stubGlobal('fetch', f)
     const { data, error } = await approvalsApi.listPendingWorkers()
     expect(error).toBeNull()
-    expect(data![0]!).toEqual({
+    expect(data![0]!).toMatchObject({
       id: 'u1',
       name: 'Worker Um',
       email: 'w1@x.com',
@@ -198,6 +200,46 @@ describe('approvalsApi.listPendingWorkers (real)', () => {
     })
     const [url] = f.mock.calls[0] as [string]
     expect(url).toContain('/users?role=WORKER&approvalStatus=PENDING')
+  })
+
+  // O app manda o perfil junto do cadastro; a fila precisa repassar pra tela,
+  // senão o admin continua aprovando às cegas (QA 2026-07-26).
+  it('repassa o perfil que veio no cadastro', async () => {
+    const base = summary({ approvalStatus: 'PENDING', createdAt: '2026-07-10T00:00:00.000Z' })
+    vi.stubGlobal(
+      'fetch',
+      okJson([
+        {
+          ...base,
+          cpf: '000.000.000-00',
+          phone: '(41) 90000-0000',
+          birthDate: '1990-12-25T00:00:00.000Z',
+          city: 'Curitiba',
+          uf: 'PR',
+          bloodType: 'O-',
+          allergies: 'Amendoim',
+        },
+      ]),
+    )
+    const { data } = await approvalsApi.listPendingWorkers()
+    expect(data![0]!).toMatchObject({
+      cpf: '000.000.000-00',
+      phone: '(41) 90000-0000',
+      city: 'Curitiba',
+      uf: 'PR',
+      bloodType: 'O-',
+      allergies: 'Amendoim',
+    })
+  })
+
+  it('cadastro antigo (sem perfil) vira null, não undefined — a tela testa por null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      okJson([summary({ approvalStatus: 'PENDING', createdAt: '2026-07-10T00:00:00.000Z' })]),
+    )
+    const { data } = await approvalsApi.listPendingWorkers()
+    expect(data![0]!.cpf).toBeNull()
+    expect(data![0]!.bloodType).toBeNull()
   })
 })
 

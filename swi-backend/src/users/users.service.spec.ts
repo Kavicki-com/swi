@@ -38,12 +38,49 @@ describe('UsersService', () => {
     const db = prisma()
     db.user.findMany = jest.fn().mockResolvedValue([{ id: 'u1', email: 'a@b.c', name: 'A', createdAt: new Date(0) }])
     const r = await new UsersService(db, media()).listPending('org1')
-    expect(db.user.findMany).toHaveBeenCalledWith({
-      where: { approvalStatus: 'PENDING', companyId: 'org1' },
-      select: { id: true, email: true, name: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    })
+    const args = db.user.findMany.mock.calls[0][0]
+    expect(args.where).toEqual({ approvalStatus: 'PENDING', companyId: 'org1' })
+    expect(args.orderBy).toEqual({ createdAt: 'asc' })
     expect(r).toHaveLength(1)
+  })
+
+  // O admin decide aprovar em cima destes campos; a fila devolvia só nome e
+  // e-mail e ele aprovava às cegas (QA 2026-07-26).
+  it('listPending() devolve o perfil que o worker preencheu no cadastro', async () => {
+    const db = prisma()
+    db.user.findMany = jest.fn().mockResolvedValue([
+      {
+        id: 'u1', email: 'a@b.c', name: 'A', createdAt: new Date(0),
+        profile: {
+          cpf: '000.000.000-00', phone: '(41) 90000-0000',
+          birthDate: new Date('1990-12-25T00:00:00.000Z'),
+          city: 'Curitiba', uf: 'PR', bloodType: 'O-', allergies: 'Amendoim',
+          avatarKey: 'avatars/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpg',
+        },
+      },
+    ])
+    const [row] = await new UsersService(db, media()).listPending('org1')
+    expect(row).toMatchObject({
+      cpf: '000.000.000-00',
+      phone: '(41) 90000-0000',
+      birthDate: '1990-12-25T00:00:00.000Z',
+      city: 'Curitiba',
+      uf: 'PR',
+      bloodType: 'O-',
+      allergies: 'Amendoim',
+    })
+    expect(row.avatar).toContain('avatars/')
+  })
+
+  it('listPending() sem perfil preenchido devolve null (a tela é que decide o texto)', async () => {
+    const db = prisma()
+    db.user.findMany = jest.fn().mockResolvedValue([
+      { id: 'u1', email: 'a@b.c', name: 'A', createdAt: new Date(0), profile: { cpf: '', bloodType: null } },
+    ])
+    const [row] = await new UsersService(db, media()).listPending('org1')
+    expect(row.cpf).toBeNull()
+    expect(row.bloodType).toBeNull()
+    expect(row.avatar).toBe('')
   })
 
   it('reject() vira approvalStatus p/ REJECTED (mesma empresa)', async () => {

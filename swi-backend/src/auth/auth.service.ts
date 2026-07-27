@@ -8,6 +8,40 @@ import { generateCode, hash, verifyHash, DUMMY_HASH } from './codes'
 
 const CODE_TTL_MIN = 30
 
+// Campos digitáveis que o cadastro do app envia junto. `birthDate` chega como
+// data de CALENDÁRIO ('AAAA-MM-DD', validada no DTO) e vira Date pro Prisma;
+// undefined some do objeto pra não sobrescrever nada com null.
+export type SignupProfileInput = {
+  cpf?: string
+  phone?: string
+  birthDate?: string
+  cep?: string
+  street?: string
+  number?: string
+  complement?: string
+  neighborhood?: string
+  city?: string
+  uf?: string
+  gender?: string
+  bloodType?: string
+  allergies?: string
+  chronicConditions?: string
+  heightCm?: number
+  weightKg?: number
+  hasDisability?: boolean
+}
+
+function profileData(p?: SignupProfileInput) {
+  if (!p) return {}
+  const { birthDate, ...rest } = p
+  const entries = Object.entries(rest).filter(([, v]) => v !== undefined && v !== '')
+  return {
+    ...Object.fromEntries(entries),
+    ...(birthDate ? { birthDate: new Date(birthDate) } : {}),
+  }
+}
+
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name)
@@ -19,7 +53,13 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
-  async signup(p: { email: string; password: string; name: string; companyId?: string }): Promise<{ nextStep: 'CONFIRM' }> {
+  async signup(p: {
+    email: string
+    password: string
+    name: string
+    companyId?: string
+    profile?: SignupProfileInput
+  }): Promise<{ nextStep: 'CONFIRM' }> {
     if (await this.users.findByEmail(p.email)) throw new ConflictException('E-mail já cadastrado')
     // Empresa escolhida na tela de cadastro do app. Validada aqui pra um id
     // inventado virar 400 em vez de FK error 500 — e porque um WORKER sem
@@ -39,10 +79,12 @@ export class AuthService {
         companyId: p.companyId ?? null,
         confirmationCodeHash: await hash(code),
         confirmationExpires: new Date(Date.now() + CODE_TTL_MIN * 60_000),
-        // Profile já no cadastro: o wizard de onboarding faz PUT /profile/me
-        // logo depois (upsert), e o diretório do chat / listas do painel leem
-        // profile.fullName. Sem isto o usuário aparecia sem nome até salvar.
-        profile: { create: { fullName: p.name } },
+        // Profile já no cadastro, agora COM o que o worker preencheu no wizard
+        // (o app manda tudo junto, antes da conta existir — ver SignupProfileDto).
+        // O admin precisa disso na hora de aprovar: aprovar alguém sem CPF,
+        // contato nem tipo sanguíneo é decidir às cegas numa ferramenta de
+        // segurança do trabalho.
+        profile: { create: { fullName: p.name, ...profileData(p.profile) } },
       },
     })
     try {

@@ -66,11 +66,56 @@ const CARLA: AssignableWorker = {
 // `paused` e `in_progress` estão aqui de propósito — são os que um
 // `!== 'pending'` ingênuo deixaria passar por concluídos.
 const ITEMS: WorkOrderItem[] = [
-  { id: 'it_1', title: 'Isolar o painel', description: 'Desligar a chave geral', status: 'done' },
-  { id: 'it_2', title: 'Trocar o rolamento', description: 'Modelo 6204', status: 'in_progress' },
-  { id: 'it_3', title: 'Lubrificar', description: 'Graxa azul', status: 'paused' },
-  { id: 'it_4', title: 'Testar a linha', description: 'Ciclo completo', status: 'pending' },
+  {
+    id: 'it_1',
+    title: 'Isolar o painel',
+    description: 'Desligar a chave geral',
+    status: 'done',
+    startedAt: null,
+    accumulatedSeconds: 0,
+    estimatedMinutes: null,
+  },
+  {
+    id: 'it_2',
+    title: 'Trocar o rolamento',
+    description: 'Modelo 6204',
+    status: 'in_progress',
+    startedAt: null,
+    accumulatedSeconds: 0,
+    estimatedMinutes: null,
+  },
+  {
+    id: 'it_3',
+    title: 'Lubrificar',
+    description: 'Graxa azul',
+    status: 'paused',
+    startedAt: null,
+    accumulatedSeconds: 0,
+    estimatedMinutes: null,
+  },
+  {
+    id: 'it_4',
+    title: 'Testar a linha',
+    description: 'Ciclo completo',
+    status: 'pending',
+    startedAt: null,
+    accumulatedSeconds: 0,
+    estimatedMinutes: null,
+  },
 ]
+
+// Base de item pros casos de tempo decorrido: um item só, sem estimativa
+// própria (a da tarefa é que manda) e sem âncora de corrida — o tempo vem
+// todo do acumulado, que é o que os testes controlam.
+const ITEM_BASE: WorkOrderItem = {
+  id: 'it_tempo',
+  title: 'Item cronometrado',
+  description: '',
+  status: 'paused',
+  startedAt: null,
+  accumulatedSeconds: 0,
+  estimatedMinutes: null,
+}
 
 function makeDetail(overrides: Partial<WorkOrderDetail> = {}): WorkOrderDetail {
   return {
@@ -263,6 +308,36 @@ describe('TaskDetails', () => {
     renderAt()
     await waitFor(() => expect(screen.getByTestId('task-details-progress')).toBeInTheDocument())
     expect(screen.getByText('Progresso da tarefa')).toBeInTheDocument()
+  })
+
+  // A barra sozinha só diz "quanto falta" de forma vaga; o admin precisa do
+  // número do tempo gasto ao lado dela.
+  it('mostra quanto tempo já se passou, contra a estimativa', async () => {
+    getMock.mockResolvedValue(
+      makeDetail({
+        estimatedMinutes: 60,
+        items: [{ ...ITEM_BASE, accumulatedSeconds: 926 }],
+      }),
+    )
+    renderAt()
+    await waitFor(() => expect(screen.getByTestId('task-details-elapsed')).toBeInTheDocument())
+    expect(screen.getByTestId('task-details-elapsed')).toHaveTextContent(
+      'Tempo decorrido: 0:15:26 de 1:00:00',
+    )
+  })
+
+  it('sem estimativa cadastrada, ainda mostra o tempo gasto e diz que falta a estimativa', async () => {
+    getMock.mockResolvedValue(
+      makeDetail({
+        estimatedMinutes: null,
+        items: [{ ...ITEM_BASE, accumulatedSeconds: 90 }],
+      }),
+    )
+    renderAt()
+    await waitFor(() => expect(screen.getByTestId('task-details-elapsed')).toBeInTheDocument())
+    expect(screen.getByTestId('task-details-elapsed')).toHaveTextContent(
+      'Tempo decorrido: 0:01:30 (sem estimativa cadastrada)',
+    )
   })
 
   it('mostra o estado de carregando enquanto a busca não resolve', () => {

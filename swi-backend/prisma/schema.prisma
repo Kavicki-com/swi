@@ -45,6 +45,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   profile       Profile?
+  exams         Exam[]
   reports       Report[]
   comments      Comment[]
   journeys      Journey[]
@@ -173,6 +174,27 @@ model EvacuationAck {
 
   // Ack é idempotente: 1 confirmação por worker por evacuação.
   @@unique([evacuationId, workerId])
+}
+
+// Exame clínico enviado pelo worker. O card do design (ExamInfoCard) exige ano,
+// dia/mês e NOME — só a chave do arquivo (o antigo Profile.examKeys, que nunca
+// chegou a ser preenchido) não desenha nada. E as datas do Figma são futuras
+// (2027, 2029…): é VALIDADE, não data de upload — por isso quem informa é o
+// worker, nos campos ao lado do botão de envio.
+model Exam {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  // Validade/vencimento. @db.Date porque é data de calendário: guardar hora
+  // faria o dia virar em fusos negativos (mesma pegadinha do birthDate).
+  date      DateTime @db.Date
+  // Key emitida pelo presign no namespace exams/ — a URL assinada é derivada na
+  // leitura, nunca persistida (expira).
+  fileKey   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
 }
 
 model Profile {

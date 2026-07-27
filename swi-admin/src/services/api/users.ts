@@ -228,12 +228,37 @@ export const adminsApi = {
 
 // Fila de aprovação: WORKERs pendentes. createdAt (quando o cadastro entrou) vira
 // requestedAt na UI da fila.
-export type PendingUser = { id: string; name: string; email: string; requestedAt: string }
-const toPending = (u: UserSummaryDto): PendingUser => ({
+// O perfil vem JUNTO do cadastro desde 2026-07-26 (o app coleta o wizard antes
+// de criar a conta), então a fila pode mostrar em cima de que o admin está
+// decidindo. null = o worker não preencheu — a tela escreve "Não informado",
+// nunca um valor de fachada.
+export type PendingUser = {
+  id: string
+  name: string
+  email: string
+  requestedAt: string
+  cpf: string | null
+  phone: string | null
+  birthDate: string | null
+  city: string | null
+  uf: string | null
+  bloodType: string | null
+  allergies: string | null
+  avatar: string
+}
+const toPending = (u: UserSummaryDto & Partial<PendingUser>): PendingUser => ({
   id: u.id,
   name: u.name,
   email: u.email,
   requestedAt: u.createdAt,
+  cpf: u.cpf ?? null,
+  phone: u.phone ?? null,
+  birthDate: u.birthDate ?? null,
+  city: u.city ?? null,
+  uf: u.uf ?? null,
+  bloodType: u.bloodType ?? null,
+  allergies: u.allergies ?? null,
+  avatar: u.avatar ?? '',
 })
 
 // Ação de moderação: aprovar/rejeitar um cadastro. O backend responde só o novo

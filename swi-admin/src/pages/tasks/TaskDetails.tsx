@@ -50,6 +50,12 @@ import {
   type WorkOrderItem,
   type WorkOrderStatus,
 } from '@/services/api/workOrders'
+import {
+  formatElapsed,
+  hasRunningItem,
+  taskElapsedSeconds,
+  taskTimeProgressPct,
+} from '@/lib/taskProgress'
 import { calcAge, isoToDisplayDate, minutesToDisplayTime } from './format'
 import { BLOOD_TYPE_PLACEHOLDER } from './ResponsiblePicker'
 
@@ -264,6 +270,20 @@ export function TaskDetails() {
   // busca (o id não mudou, então ele sozinho não re-dispara).
   const [reloadKey, setReloadKey] = useState(0)
   const [showAllResponsibles, setShowAllResponsibles] = useState(false)
+
+  // Tick de 1s enquanto houver item correndo: o progresso é POR TEMPO, então o
+  // valor do fetch envelhece a cada segundo. Sem item em andamento não há o que
+  // animar e o intervalo nem é criado.
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const running = hasRunningItem(detail?.items ?? [])
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [running])
+
+  const progressPct = detail ? taskTimeProgressPct(detail.items, detail.estimatedMinutes, nowMs) : 0
+  const elapsedSec = detail ? taskElapsedSeconds(detail.items, nowMs) : 0
 
   useEffect(() => {
     if (!id) return
@@ -495,15 +515,30 @@ export function TaskDetails() {
             <Title variant="title.s" color={theme.content.primary}>
               Progresso da tarefa
             </Title>
-            {/* Sem `color`: o Figma varia a cor da barra entre linhas, mas ela
-                não deriva do percentual e o atributo que a define não existe no
-                contrato. Mesma pendência já registrada na TasksList — até haver
-                fonte de verdade, vale o default do DS. */}
+            {/* Mesmo visual da barra de fadiga do app (dashboard mobile):
+                moldura pill de 22px com preenchimento gradiente verde→amarelo→
+                vermelho da direita pra esquerda. Lá ela mede fadiga; aqui só o
+                visual foi reaproveitado — o que ela mede é o TEMPO decorrido
+                sobre o estimado. No modo liso do DS o trilho vazio é claro e
+                lia como barra cheia mesmo a 0% (QA 2026-07-26). */}
             <ProgressBar
               testID="task-details-progress"
-              value={detail.progressPct}
-              accessibilityLabel={`Progresso da tarefa: ${detail.progressPct}%`}
+              value={progressPct}
+              gradient={[theme.surface.success, theme.surface.warning, theme.surface.error]}
+              gradientStops={[43.75, 79.253, 100]}
+              gradientDirection="rtl"
+              bordered
+              accessibilityLabel={`Progresso da tarefa: ${progressPct}%`}
             />
+            {/* Mesma anatomia do bloco de fadiga do app: barra + leitura em
+                texto logo abaixo. A barra sozinha responde "quanto falta" de
+                forma vaga; o número diz quanto tempo a pessoa realmente gastou
+                — e com estimativa cadastrada, contra o que se esperava. */}
+            <Text testID="task-details-elapsed" variant="body.m" color={theme.content.dark}>
+              {detail.estimatedMinutes
+                ? `Tempo decorrido: ${formatElapsed(elapsedSec)} de ${formatElapsed(detail.estimatedMinutes * 60)}`
+                : `Tempo decorrido: ${formatElapsed(elapsedSec)} (sem estimativa cadastrada)`}
+            </Text>
           </View>
 
           {/* Check List. */}

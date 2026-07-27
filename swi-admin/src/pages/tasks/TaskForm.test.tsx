@@ -73,7 +73,17 @@ function detail(overrides: Partial<WorkOrderDetail> = {}): WorkOrderDetail {
     progressPct: 30,
     author: { name: 'Admin', avatar: '' },
     responsibles: [CARLOS],
-    items: [{ id: 'it_1', title: 'Item 1', description: 'Desc 1', status: 'pending' }],
+    items: [
+      {
+        id: 'it_1',
+        title: 'Item 1',
+        description: 'Desc 1',
+        status: 'pending',
+        startedAt: null,
+        accumulatedSeconds: 0,
+        estimatedMinutes: null,
+      },
+    ],
     images: [],
     imageKeys: [],
     ...overrides,
@@ -443,6 +453,9 @@ describe('TaskForm — limites do DTO', () => {
           title: `Item ${i}`,
           description: '',
           status: 'pending' as const,
+          startedAt: null,
+          accumulatedSeconds: 0,
+          estimatedMinutes: null,
         })),
       }),
     )
@@ -882,8 +895,24 @@ describe('TaskForm — edição', () => {
     getMock.mockResolvedValue(
       detail({
         items: [
-          { id: 'it_1', title: 'Item 1', description: 'Desc 1', status: 'pending' },
-          { id: 'it_2', title: 'Item 2', description: 'Desc 2', status: 'pending' },
+          {
+            id: 'it_1',
+            title: 'Item 1',
+            description: 'Desc 1',
+            status: 'pending',
+            startedAt: null,
+            accumulatedSeconds: 0,
+            estimatedMinutes: null,
+          },
+          {
+            id: 'it_2',
+            title: 'Item 2',
+            description: 'Desc 2',
+            status: 'pending',
+            startedAt: null,
+            accumulatedSeconds: 0,
+            estimatedMinutes: null,
+          },
         ],
       }),
     )
