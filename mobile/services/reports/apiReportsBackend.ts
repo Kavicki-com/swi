@@ -1,4 +1,4 @@
-import type { Report, ReportInput, ReportsBackend } from './types';
+import type { Report, ReportComment, ReportInput, ReportsBackend } from './types';
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 
@@ -28,6 +28,15 @@ export const apiReportsBackend: ReportsBackend = {
         responsibles: input.responsibles,
         imageKeys,
       },
+      auth: true,
+    });
+  },
+  /** POST /reports/:id/comments — o backend devolve o comentario ja resolvido
+   *  (autor, avatar presigned, data DD/MM/AAAA), pronto pra entrar na lista. */
+  async addComment(reportId: string, body: string) {
+    return apiRequest<ReportComment>(`/reports/${reportId}/comments`, {
+      method: 'POST',
+      body: { body },
       auth: true,
     });
   },

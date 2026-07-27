@@ -9,6 +9,11 @@ import { uploadImage } from '../../../services/api/uploadMedia';
 
 jest.mock('../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
 jest.mock('../../../services/api/catalog', () => ({ fetchProfileCatalog: jest.fn() }));
+// A tela passou a ler o e-mail da CONTA (User), nao do Profile — o campo Email
+// antes nao carregava nem salvava nada.
+jest.mock('../../../services/auth/AuthProvider', () => ({
+  useAuth: () => ({ user: { id: 'u1', email: 'fulano@empresa.com', name: 'Fulano' } }),
+}));
 jest.mock('expo-router', () => ({ useRouter: () => ({ back: jest.fn(), push: jest.fn() }) }));
 jest.mock('../../../lib/media/useMediaPicker', () => ({ useMediaPicker: jest.fn() }));
 jest.mock('../../../services/api/uploadMedia', () => ({ uploadImage: jest.fn() }));
@@ -70,7 +75,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   saveProfile = jest.fn(async () => ({}));
   mockUseProfile.mockReturnValue({ loadProfile: jest.fn(async () => null), saveProfile });
-  mockCatalog.mockResolvedValue({ jobTitles: [], sectors: [], duties: [] });
+  mockCatalog.mockResolvedValue({ jobTitles: [], sectors: [], duties: [], managers: [] });
   mockUseMediaPicker.mockReturnValue({
     pickFromGallery: jest.fn(async () => FOTO_LOCAL),
     takePhoto: jest.fn(async () => FOTO_LOCAL),
@@ -114,7 +119,6 @@ describe('Dados pessoais — validação', () => {
     await type(tree, 'Nome Completo', 'Fulano de Tal');
     await type(tree, 'Data de Nascimento', '02011999');
     await type(tree, 'CPF', CPF_VALIDO);
-    await type(tree, 'Email', 'fulano@empresa.com');
     await type(tree, 'Telefone', '41999990000');
     await type(tree, 'UF', 'PR');
     await type(tree, 'Cidade', 'Curitiba');

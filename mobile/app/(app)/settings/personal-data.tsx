@@ -14,6 +14,7 @@ import {
 } from '@kavicki/swi-design-system';
 import { HomeFAB } from '../../../components/HomeFAB';
 import { useProfile } from '../../../services/profile/ProfileProvider';
+import { useAuth } from '../../../services/auth/AuthProvider';
 import { fetchProfileCatalog, type ProfileCatalog } from '../../../services/api/catalog';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
@@ -58,6 +59,12 @@ export default function SettingsPersonalData() {
   // Sampaio', '00/00/0000') eram mock fixo e o Salvar era um router.back():
   // o cliente editava, "salvava" e perdia tudo (QA 2026-07-26).
   const { loadProfile, saveProfile } = useProfile();
+  // O e-mail da conta vive no User, nao no Profile. Ate 2026-07-27 este campo
+  // era um input editavel que NUNCA era preenchido no load nem enviado no
+  // save: digitar ali nao fazia absolutamente nada. Agora ele mostra o e-mail
+  // real, em leitura — trocar e-mail e operacao de autenticacao (exige
+  // verificacao do novo endereco) e nao cabe nesta tela.
+  const { user } = useAuth();
   // Máscara + validação vêm de lib/validation, as MESMAS já usadas no cadastro
   // (complimentary-data/step-1). Esta tela nasceu com useState cru: a data de
   // nascimento aceitava "02011999" sem barras e o Salvar mandava isso pro
@@ -68,7 +75,6 @@ export default function SettingsPersonalData() {
   const telefone = useField({ validator: validatePhone, mask: maskPhone });
   // Opcionais: o backend aceita perfil parcial, então exigir aqui trancaria
   // quem só quer corrigir um campo.
-  const email = useField({ validator: optional(validateEmail) });
   const uf = useField({ validator: optional(validateUF), mask: maskUF });
   const cidade = useField({ validator: optional((v) => validateRequired(v, 'Cidade')) });
   const [profissao, setProfissao] = useState('');
@@ -129,7 +135,7 @@ export default function SettingsPersonalData() {
     return base;
   };
 
-  const campos = [nome, data, cpf, telefone, email, uf, cidade];
+  const campos = [nome, data, cpf, telefone, uf, cidade];
   const podeSalvar = campos.every((f) => f.isValid);
 
   const escolherFoto = async (obter: () => Promise<string | null>) => {
@@ -260,9 +266,12 @@ export default function SettingsPersonalData() {
           />
           <Input
             label="Email"
-            {...email.bind()}
-            keyboardType="email-address"
-            autoCapitalize="none"
+            value={user?.email ?? ''}
+            // `disabled` e a prop do DS pra isto — ele OMITE `editable` de
+            // TextInputProps de proposito, pra que o estado desabilitado venha
+            // com o tratamento visual do design em vez de so travar o toque.
+            disabled
+            description="Para alterar o e-mail, fale com o suporte."
           />
           <Input
             label="Telefone"
@@ -310,7 +319,7 @@ export default function SettingsPersonalData() {
           <Combobox
             label="Gerente responsável"
             placeholder="Selecione aqui"
-            options={toOptions(undefined, gerente)}
+            options={toOptions(catalog?.managers, gerente)}
             value={gerente}
             onChange={setGerente}
           />

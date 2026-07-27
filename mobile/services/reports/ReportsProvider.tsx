@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from 'react';
-import type { Report, ReportInput } from './types';
+import type { Report, ReportComment, ReportInput } from './types';
 import { getReportsBackend } from './getReportsBackend';
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -9,6 +9,7 @@ interface ReportsState {
   load: () => Promise<void>;
   loadOne: (id: string) => Promise<Report | null>;
   create: (input: ReportInput) => Promise<Report>;
+  addComment: (reportId: string, body: string) => Promise<ReportComment>;
 }
 const ReportsContext = createContext<ReportsState | null>(null);
 
@@ -34,7 +35,15 @@ export function ReportsProvider({ children }: PropsWithChildren) {
     return created;
   }, [backend]);
 
-  const value = useMemo<ReportsState>(() => ({ reports, status, load, loadOne, create }), [reports, status, load, loadOne, create]);
+  const addComment = useCallback(
+    (reportId: string, body: string) => backend.addComment(reportId, body),
+    [backend],
+  );
+
+  const value = useMemo<ReportsState>(
+    () => ({ reports, status, load, loadOne, create, addComment }),
+    [reports, status, load, loadOne, create, addComment],
+  );
   return <ReportsContext.Provider value={value}>{children}</ReportsContext.Provider>;
 }
 
