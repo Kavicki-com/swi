@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { isStaffJobTitle } from '../common/staff'
 import { PrismaService } from '../prisma/prisma.service'
 import type { Prisma, Profile } from '@prisma/client'
 
@@ -49,6 +50,7 @@ export class ProfileService {
     jobTitles: string[]
     sectors: string[]
     duties: string[]
+    managers: string[]
   }> {
     const me = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -58,16 +60,32 @@ export class ProfileService {
     // org-scoping do resto do backend.
     const rows = await this.prisma.profile.findMany({
       where: { user: { companyId: me?.companyId ?? null } },
-      select: { jobTitle: true, sector: true, duty: true },
+      // fullName + role entram por causa de `managers`: o combo "Gerente
+      // responsável" do app abria VAZIO (options={[]}), porque o catálogo não
+      // tinha de onde tirar a lista (QA 2026-07-27).
+      select: { jobTitle: true, sector: true, duty: true, fullName: true, user: { select: { role: true, name: true } } },
     })
     const distinct = (pick: (r: (typeof rows)[number]) => string | null): string[] =>
       [...new Set(rows.map(pick).filter((v): v is string => Boolean(v && v.trim())))].sort((a, b) =>
         a.localeCompare(b, 'pt-BR'),
       )
+    // Quem pode ser gerente responsável = a MESMA régua de staff que decide
+    // quem revisa relatório (common/staff + role ADMIN). Uma definição só de
+    // "quem é gestor": duas divergiriam na primeira contratação.
+    const managers = [
+      ...new Set(
+        rows
+          .filter((r) => r.user?.role === 'ADMIN' || isStaffJobTitle(r.jobTitle))
+          .map((r) => (r.fullName?.trim() || r.user?.name?.trim() || ''))
+          .filter(Boolean),
+      ),
+    ].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+
     return {
       jobTitles: distinct((r) => r.jobTitle),
       sectors: distinct((r) => r.sector),
       duties: distinct((r) => r.duty),
+      managers,
     }
   }
 }
