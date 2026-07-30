@@ -15,6 +15,16 @@ export interface ReportActivity {
   overflowCount?: number;
 }
 
+// Comentario de relatorio. O backend ja devolve pronto pra exibir: autor
+// resolvido, avatar presigned e a data formatada em DD/MM/AAAA.
+export interface ReportComment {
+  id: string;
+  body: string;
+  authorName: string;
+  authorAvatarUri: string;
+  createdAt: string;
+}
+
 export interface Report {
   id: string;
   title: string;
@@ -29,6 +39,7 @@ export interface Report {
   details: string;
   images: string[];
   activities: ReportActivity[];
+  comments: ReportComment[];
 }
 
 export interface ReportInput {
@@ -43,4 +54,6 @@ export interface ReportsBackend {
   list(): Promise<Report[]>;
   get(id: string): Promise<Report | null>;
   create(input: ReportInput): Promise<Report>;
+  /** Comenta num relatorio. Devolve o comentario criado, ja pronto pra lista. */
+  addComment(reportId: string, body: string): Promise<ReportComment>;
 }

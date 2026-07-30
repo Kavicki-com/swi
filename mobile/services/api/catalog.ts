@@ -4,6 +4,10 @@ export interface ProfileCatalog {
   jobTitles: string[];
   sectors: string[];
   duties: string[];
+  /** Quem pode ser "Gerente responsável" — mesma régua de staff que decide
+   *  quem revisa relatório (backend common/staff + role ADMIN). O combo abria
+   *  vazio porque o catálogo não devolvia esta lista (QA 2026-07-27). */
+  managers: string[];
 }
 
 // Vocabulário REAL da org (GET /profile/catalog — DISTINCT de

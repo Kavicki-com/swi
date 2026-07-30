@@ -21,6 +21,6 @@ export class MediaController {
     if (prefix === 'order' && req.user?.role !== 'ADMIN') {
       throw new ForbiddenException('prefixo restrito a administradores')
     }
-    return this.media.presignPost(dto.contentType, prefix)
+    return this.media.presignPut(dto.contentType, dto.contentLength, prefix)
   }
 }

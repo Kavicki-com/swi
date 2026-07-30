@@ -39,20 +39,22 @@ describe('ProfileService', () => {
       const db = prisma()
       db.user.findUnique.mockResolvedValue({ companyId: 'c1' })
       db.profile.findMany.mockResolvedValue([
-        { jobTitle: 'Operador', sector: 'Setor Leste', duty: null },
+        { jobTitle: 'Operador', sector: 'Setor Leste', duty: null, fullName: 'Ana', user: { role: 'WORKER', name: 'Ana' } },
         // Duplicado + whitespace: DISTINCT tem que colapsar e o vazio sumir.
-        { jobTitle: 'Operador', sector: '  ', duty: 'Operação' },
-        { jobTitle: 'Administrador', sector: 'Gestão', duty: null },
+        { jobTitle: 'Operador', sector: '  ', duty: 'Operação', fullName: 'Bruno', user: { role: 'WORKER', name: 'Bruno' } },
+        { jobTitle: 'Administrador', sector: 'Gestão', duty: null, fullName: 'Carla', user: { role: 'ADMIN', name: 'Carla' } },
       ])
       const r = await new ProfileService(db).catalog('u1')
       expect(db.profile.findMany).toHaveBeenCalledWith({
         where: { user: { companyId: 'c1' } },
-        select: { jobTitle: true, sector: true, duty: true },
+        select: { jobTitle: true, sector: true, duty: true, fullName: true, user: { select: { role: true, name: true } } },
       })
       expect(r).toEqual({
         jobTitles: ['Administrador', 'Operador'],
         sectors: ['Gestão', 'Setor Leste'],
         duties: ['Operação'],
+        // Só a Carla: os dois operadores executam, não gerenciam.
+        managers: ['Carla'],
       })
     })
 
@@ -63,8 +65,24 @@ describe('ProfileService', () => {
       await new ProfileService(db).catalog('u-legado')
       expect(db.profile.findMany).toHaveBeenCalledWith({
         where: { user: { companyId: null } },
-        select: { jobTitle: true, sector: true, duty: true },
+        select: { jobTitle: true, sector: true, duty: true, fullName: true, user: { select: { role: true, name: true } } },
       })
+    })
+
+    // O combo "Gerente responsável" do app abria VAZIO — o catálogo não tinha
+    // de onde tirar a lista. A régua é a MESMA de quem revisa relatório
+    // (common/staff + role ADMIN): uma definição só de "quem é gestor".
+    it('managers usa a régua de staff, não todo mundo da empresa', async () => {
+      const db = prisma()
+      db.user.findUnique.mockResolvedValue({ companyId: 'c1' })
+      db.profile.findMany.mockResolvedValue([
+        { jobTitle: 'Supervisor', sector: null, duty: null, fullName: 'Antonio', user: { role: 'WORKER', name: 'Antonio' } },
+        { jobTitle: 'Operador de escavadeira', sector: null, duty: null, fullName: 'Romulo', user: { role: 'WORKER', name: 'Romulo' } },
+        // ADMIN entra mesmo sem cargo declarado: autorização não depende de texto livre.
+        { jobTitle: null, sector: null, duty: null, fullName: null, user: { role: 'ADMIN', name: 'Admin' } },
+      ])
+      const r = await new ProfileService(db).catalog('u1')
+      expect(r.managers).toEqual(['Admin', 'Antonio'])
     })
 
     it('org sem cadastros devolve listas vazias (não inventa vocabulário)', async () => {
@@ -75,6 +93,7 @@ describe('ProfileService', () => {
         jobTitles: [],
         sectors: [],
         duties: [],
+        managers: [],
       })
     })
   })

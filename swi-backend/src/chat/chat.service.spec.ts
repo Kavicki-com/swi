@@ -37,17 +37,16 @@ const msgRow = (over: any = {}) => ({
 })
 
 describe('ChatService', () => {
-  it('listDirectory traz workers aprovados DA MESMA empresa exceto eu, presignando avatar', async () => {
+  // 2026-07-27: o diretório deixou de ser org-scoped e de filtrar papel — o
+  // worker conversa com qualquer pessoa no app. Sobra o que ainda faz sentido:
+  // conta aprovada (PENDING/REJECTED nem loga) e eu fora da minha própria lista.
+  it('listDirectory traz qualquer conta aprovada exceto eu, presignando avatar', async () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
-    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, 'org1')
+    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
     const where = db.user.findMany.mock.calls[0][0].where
-    // ADMIN entra junto (2026-07-26): sem isso o app não tinha como INICIAR
-    // conversa com o painel — só responder numa thread aberta pelo admin.
-    expect(where).toMatchObject({
+    expect(where).toEqual({
       approvalStatus: 'APPROVED',
-      role: { in: ['WORKER', 'ADMIN'] },
       id: { not: A },
-      companyId: 'org1',
     })
     expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
     // birthDate/bloodType/allergies/gender vão junto: o painel do chat mostrava
@@ -59,6 +58,16 @@ describe('ChatService', () => {
       birthDate: new Date('1990-05-04').toISOString(), bloodType: 'B+', allergies: 'Poeira',
       gender: 'female',
     })
+  })
+
+  // Antes o `where` levava companyId, então o worker de uma empresa não
+  // enxergava ninguém de outra — nem pra iniciar conversa.
+  it('listDirectory não recorta por empresa nem por papel', async () => {
+    const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
+    await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
+    const where = db.user.findMany.mock.calls[0][0].where
+    expect(where).not.toHaveProperty('companyId')
+    expect(where).not.toHaveProperty('role')
   })
 
   it('listConversations escopa em participants ∋ eu e ordena por recência', async () => {

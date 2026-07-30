@@ -1,10 +1,8 @@
 import { useEffect } from 'react';
 import { Image, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
-import { useAuth } from '../../services/auth/AuthProvider';
-import { AUTH_BACKEND } from '../../lib/featureFlags';
 
 // Auto-redirect timer per Figma description "Você será redirecionado para a
 // tela inicial". 2.5s gives the user time to register the success state and
@@ -15,34 +13,20 @@ export default function AccountConfirmation() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { username, email } = useLocalSearchParams<{ username?: string; email?: string }>();
-  const { signIn } = useAuth();
 
   useEffect(() => {
-    // Confirmation is the moment the user is considered "signed in" in the
-    // demo flow — sign-up doesn't authenticate, so without this call the
-    // post-onboarding redirect to /(app)/dashboard would bounce back to login.
-    // Production: a real backend would mint a session at the confirmation
-    // link click and the client would receive a token here.
-    // Mock-only: the demo treats confirmation as the sign-in moment. In api
-    // mode the user signs in on the login screen after confirming.
-    if (AUTH_BACKEND === 'mock' && email && email.length > 0) {
-      void signIn({ email, password: '' });
-    }
-
     const t = setTimeout(() => {
-      // Account just confirmed → onboarding (complimentary-data). Dashboard
-      // is the final destination after the 3-step flow completes (in step-3).
-      router.replace({
-        pathname: '/(auth)/complimentary-data/step-1',
-        params: { username: username ?? '' },
-      });
+      // Fim do fluxo 1 (reordenação 2026-07-27): a conta existe e o cadastro
+      // está na fila de aprovação do painel. Ninguém está autenticado aqui —
+      // o worker volta pro login e, quando o admin aprovar, o primeiro login
+      // o desvia pro wizard de perfil (complimentary-data).
+      router.replace('/(auth)/login');
     }, REDIRECT_MS);
     return () => clearTimeout(t);
     // `router` from useRouter() is referentially stable across renders;
     // including it in deps re-runs this fire-and-go timer for no reason.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username, email, signIn]);
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -69,7 +53,8 @@ export default function AccountConfirmation() {
           />
           <Title variant="title.xs">Conta criada com sucesso!</Title>
           <Text variant="body.s" style={{ textAlign: 'center', color: theme.content.medium }}>
-            Você será redirecionado para a tela inicial
+            Seu cadastro foi enviado para aprovação do administrador. Você
+            poderá entrar assim que ele for aprovado.
           </Text>
         </View>
       </View>

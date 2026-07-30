@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { httpGetJson } from '../common/httpGet'
 import { SITE_ROUTE } from './evacuation.types'
 import type { Directions } from './evacuation.types'
 
@@ -29,7 +30,8 @@ export class RouteProvider {
     const url = token
       ? `https://api.mapbox.com/directions/v5/mapbox/walking/${coords}?geometries=geojson&overview=full&access_token=${token}`
       : `https://router.project-osrm.org/route/v1/driving/${coords}?geometries=geojson&overview=full`
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    // httpGetJson, nao fetch: o undici/Wasm derrubava o processo no host de 1 GB.
+    const res = await httpGetJson(url, 5000)
     if (!res.ok) throw new Error(`directions: HTTP ${res.status}`)
     return coerceDirections(await res.json())
   }

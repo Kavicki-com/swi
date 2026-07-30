@@ -1,21 +1,18 @@
 import { apiProfileBackend, brToIso, isoToBr } from './apiProfileBackend';
-import { apiRequest, hasToken } from '../api/http';
-import { stashPendingProfile } from './pendingProfile';
+import { apiRequest } from '../api/http';
 
-jest.mock('../api/http', () => ({ apiRequest: jest.fn(), hasToken: jest.fn() }));
-jest.mock('./pendingProfile', () => ({ stashPendingProfile: jest.fn() }));
+jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 
 const mockApiRequest = apiRequest as jest.Mock;
-const mockHasToken = hasToken as jest.Mock;
-const mockStash = stashPendingProfile as jest.Mock;
 
+// Desde a reordenação do cadastro (2026-07-27) todo save roda AUTENTICADO: o
+// wizard de complimentary-data virou pós-login (fluxo 2), então o stash local
+// pré-conta (pendingProfile) morreu — e com ele o incidente do token alheio
+// ("Teste Ricardo" × "Joao Tester": o wizard rodava sem conta e um token
+// esquecido de outro usuário recebia o PUT).
 describe('apiProfileBackend', () => {
   beforeEach(() => {
     mockApiRequest.mockReset();
-    mockStash.mockReset();
-    // Default: COM sessão (o caminho normal das telas autenticadas).
-    mockHasToken.mockReset();
-    mockHasToken.mockResolvedValue(true);
   });
 
   it('get chama /profile/me com auth e converte birthDate ISO→BR', async () => {
@@ -39,17 +36,6 @@ describe('apiProfileBackend', () => {
     await expect(apiProfileBackend.get()).rejects.toThrow('Internal Server Error');
   });
 
-  it('save SEM sessão vai pro stash local (wizard pré-aprovação) e não bate na API', async () => {
-    mockHasToken.mockResolvedValue(false);
-    mockStash.mockResolvedValue({ city: 'SP', birthDate: '1990-12-25' });
-    const profile = await apiProfileBackend.save({ city: 'SP', birthDate: '25/12/1990' });
-    // O stash guarda o body JÁ no formato da API (ISO) — o flush faz PUT cru.
-    expect(mockStash).toHaveBeenCalledWith({ city: 'SP', birthDate: '1990-12-25' });
-    expect(mockApiRequest).not.toHaveBeenCalled();
-    // A tela vê o que digitou, re-convertido pro formato dela.
-    expect(profile).toEqual({ city: 'SP', birthDate: '25/12/1990' });
-  });
-
   it('save envia PUT com birthDate BR→ISO e devolve o profile em BR', async () => {
     mockApiRequest.mockResolvedValue({ city: 'SP', birthDate: '1990-12-25T00:00:00.000Z' });
     const profile = await apiProfileBackend.save({ city: 'SP', birthDate: '25/12/1990' });
@@ -59,6 +45,19 @@ describe('apiProfileBackend', () => {
       auth: true,
     });
     expect(profile).toEqual({ city: 'SP', birthDate: '25/12/1990' });
+  });
+
+  // A ficha do "Joao Tester" chegou ao painel SEM data de nascimento (e por
+  // isso sem idade) enquanto telefone, CPF e endereço passaram (QA 2026-07-27).
+  // Causa: o corpo era montado como `{ ...patch, birthDate: brToIso(...) }` —
+  // a chave existia SEMPRE, valendo `undefined` quando o patch não a trazia, e
+  // apagava a data salva pelo passo anterior. A chave só pode entrar quando o
+  // patch a traz.
+  it('patch SEM birthDate não manda a chave (senão apaga a do passo anterior)', async () => {
+    mockApiRequest.mockResolvedValue({});
+    await apiProfileBackend.save({ cep: '27280-080', street: 'Alameda Quatro' });
+    const body = mockApiRequest.mock.calls[0][1].body;
+    expect('birthDate' in body).toBe(false);
   });
 
   describe('helpers de data', () => {

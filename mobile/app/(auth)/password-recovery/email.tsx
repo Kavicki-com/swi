@@ -1,4 +1,5 @@
 import { Alert, Image, View } from 'react-native';
+import { useSubmitOnce } from '../../../lib/forms/useSubmitOnce';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +37,11 @@ export default function PasswordRecoveryEmail() {
       params: { email: email.value },
     });
   };
+
+  // Trava de reentrancia: `disabled` so cobria o formulario incompleto,
+  // nao o periodo da requisicao — um segundo toque disparava de novo
+  // (QA 2026-07-27, no fim do cadastro).
+  const { run: enviar, busy: enviando } = useSubmitOnce(handleSubmit);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -75,8 +81,8 @@ export default function PasswordRecoveryEmail() {
             variant="contained"
             label="Enviar Link"
             fullWidth
-            disabled={!canSubmit}
-            onPress={handleSubmit}
+            disabled={!canSubmit || enviando}
+            onPress={enviar}
           />
         </View>
       </KeyboardAwareScrollView>

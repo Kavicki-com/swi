@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSubmitOnce } from '../../lib/forms/useSubmitOnce';
 import { Alert, Image, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,7 +18,7 @@ export default function EmailSent() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { email, username } = useLocalSearchParams<{ email?: string; username?: string }>();
+  const { email } = useLocalSearchParams<{ email?: string }>();
   const displayEmail = email && email.length > 0 ? email : 'nomedousuario@email.com';
   const { confirmSignUp, resendConfirmation } = useAuth();
   const [code, setCode] = useState('');
@@ -29,19 +30,15 @@ export default function EmailSent() {
     // into the field below and presses "Confirmar conta".
     if (AUTH_BACKEND !== 'mock') return;
     const t = setTimeout(() => {
-      // Forward `email` to account-confirmation so it can complete the
-      // session (signIn) before redirecting into the wizard. The signup
-      // chain depends on this — see R-1 in 2026-05-17-mobile-routes-audit.md.
-      router.replace({
-        pathname: '/(auth)/account-confirmation',
-        params: { username: username ?? '', email: email ?? '' },
-      });
+      // account-confirmation fecha o fluxo 1 e despacha pro login — ninguém
+      // se autentica aqui (reordenação 2026-07-27).
+      router.replace('/(auth)/account-confirmation');
     }, ADVANCE_MS);
     return () => clearTimeout(t);
     // `router` from useRouter() is referentially stable across renders;
     // including it in deps re-runs this fire-and-go timer for no reason.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username, email]);
+  }, [email]);
 
   const handleResend = async () => {
     // Recuperação do usuário órfão: se o e-mail de confirmação não chegou (ou
@@ -61,18 +58,22 @@ export default function EmailSent() {
   const handleConfirm = async () => {
     try {
       await confirmSignUp({ email: email ?? '', code });
-      // In api mode the REST confirm succeeds here and we route to /login so
-      // the worker signs in with their new credentials. This intentionally
-      // SKIPS the complimentary-data onboarding wizard that the mock flow
-      // enters (signup→email-sent→account-confirmation→step-1) — that wizard
-      // remains mock-only for now.
-      router.replace('/(auth)/login');
+      // Fecha o fluxo 1 na tela de sucesso ("Conta criada"), que despacha pro
+      // login. O wizard de perfil NÃO entra aqui: ele virou o fluxo 2, disparado
+      // no primeiro login depois que o admin aprovar o cadastro no painel
+      // (reordenação 2026-07-27).
+      router.replace('/(auth)/account-confirmation');
     } catch (e) {
       // Servidor separa "Código inválido" de "Código expirado" — a ação do
       // usuário muda (redigitar vs. pedir reenvio).
       Alert.alert('Erro', errorMessage(e, 'Código inválido ou expirado.'));
     }
   };
+
+  // Trava de reentrancia: `disabled` so cobria o formulario incompleto,
+  // nao o periodo da requisicao — um segundo toque disparava de novo
+  // (QA 2026-07-27, no fim do cadastro).
+  const { run: enviar, busy: enviando } = useSubmitOnce(handleConfirm);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -128,9 +129,10 @@ export default function EmailSent() {
               />
               <Button
                 variant="contained"
-                label="Confirmar conta"
+                label={enviando ? 'Confirmando…' : 'Confirmar conta'}
                 fullWidth
-                onPress={handleConfirm}
+                disabled={enviando}
+                onPress={enviar}
               />
               <Button
                 variant="ghost"

@@ -2,7 +2,7 @@ import { OnGatewayConnection, WebSocketGateway, WebSocketServer } from '@nestjs/
 import { Server, Socket } from 'socket.io'
 import { JwtService } from '@nestjs/jwt'
 import { requireJwtSecret } from '../auth/jwt-secret'
-import { corsOrigins } from '../cors'
+import { wsCorsOptions } from '../cors'
 
 // Gateway WS único (chat agora; notificações na Fatia 5). Mesma porta HTTP (3000).
 // Autentica no handshake com o MESMO segredo JWT do REST; cada conexão entra na
@@ -10,7 +10,9 @@ import { corsOrigins } from '../cors'
 // CORS alinhado ao HTTP (mesma env CORS_ORIGINS do PR #41). Cliente RN não manda
 // header Origin no handshake, então o mobile não é afetado; browser (admin) só
 // conecta das origins liberadas.
-@WebSocketGateway({ cors: { origin: corsOrigins(process.env) } })
+// No modo proxy (Cloudez) o cors sai undefined: o socket.io emitindo ACAO
+// duplicaria o `*` que o nginx do host injeta — ver cors.ts.
+@WebSocketGateway({ cors: wsCorsOptions(process.env) })
 export class RealtimeGateway implements OnGatewayConnection {
   @WebSocketServer() server!: Server
   constructor(private readonly jwt: JwtService) {}

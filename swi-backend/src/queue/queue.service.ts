@@ -16,7 +16,13 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     if (this.inline) return // sem pg-boss em test-env (determinismo dos e2e)
-    const { PgBoss } = await import('pg-boss')
+    // `new Function` esconde o import() do tsc: com module=commonjs ele
+    // transpilaria pra require(), que explode com ERR_REQUIRE_ESM no Node <22
+    // (pg-boss v12 é ESM-only). O Docker local roda Node 22 e mascarava isso;
+    // a hospedagem Cloudez roda Node 18 e revelou (deploy 2026-07-29).
+    const { PgBoss } = await (new Function("return import('pg-boss')")() as Promise<
+      typeof import('pg-boss')
+    >)
     const url = process.env.DATABASE_URL
     if (!url) throw new Error('QueueService: DATABASE_URL é obrigatório fora de test-env')
     this.boss = new PgBoss(url)

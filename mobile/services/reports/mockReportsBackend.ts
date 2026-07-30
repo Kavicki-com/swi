@@ -1,5 +1,5 @@
 import { Asset } from 'expo-asset';
-import type { Report, ReportActivity, ReportsBackend, ReportStatus } from './types';
+import type { Report, ReportActivity, ReportsBackend, ReportStatus, ReportComment } from './types';
 
 // In-memory demo backend for the Relatórios slice. Mirrors
 // services/profile/mockProfileBackend.ts: a module-level mutable store seeded at
@@ -67,6 +67,8 @@ const SEED_BASE: SeedBase[] = [
 function enrich(base: SeedBase): Report {
   return {
     ...base,
+    // Mock nao acumula comentario: quem guarda e o backend.
+    comments: [],
     authorAvatarUri: avatarUri,
     creationDate: CREATION_DATE,
     sector: SECTOR,
@@ -101,6 +103,7 @@ export const mockReportsBackend: ReportsBackend = {
   async create(input) {
     await tick();
     const report: Report = {
+      comments: [],
       id: `local-${Date.now()}`,
       title: input.title,
       summary: input.summary,
@@ -117,5 +120,16 @@ export const mockReportsBackend: ReportsBackend = {
     };
     store = [report, ...store];
     return { ...report };
+  },
+  /** Mock: devolve o comentario montado localmente. Nao ha persistencia — o
+   *  mock existe pro dev local, e a regua real de comentario vive no backend. */
+  async addComment(_reportId: string, body: string): Promise<ReportComment> {
+    return {
+      id: `c-${body.length}-${body.slice(0, 8)}`,
+      body,
+      authorName: 'Voce',
+      authorAvatarUri: '',
+      createdAt: '',
+    };
   },
 };

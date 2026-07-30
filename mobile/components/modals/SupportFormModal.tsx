@@ -1,7 +1,11 @@
 import { useState } from 'react';
+import { Alert } from 'react-native';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import { createSupportRequest } from '../../services/api/support';
+import { useSubmitOnce } from '../../lib/forms/useSubmitOnce';
+import { errorMessage } from '../../lib/errors/errorMessage';
 import {
   Button,
   Combobox,
@@ -28,6 +32,43 @@ export function SupportFormModal({ onClose }: SupportFormModalProps) {
   const [motivo, setMotivo] = useState('');
   const [titulo, setTitulo] = useState('');
   const [mensagem, setMensagem] = useState('');
+
+  // O combo vinha com `options={[]}` — impossivel de preencher, e `reason` e
+  // obrigatorio no backend (1-120). Lista provisoria: cobre os motivos que o
+  // suporte recebe hoje. Se o cliente tiver taxonomia propria, vira catalogo
+  // no backend, como jobTitles/sectors.
+  const MOTIVOS = [
+    'Problema para acessar a conta',
+    'Erro no aplicativo',
+    'Duvida sobre uma tarefa',
+    'Problema com a smartband',
+    'Outro assunto',
+  ].map((m) => ({ label: m, value: m }));
+
+  const podeEnviar =
+    motivo.length > 0 && titulo.trim().length > 0 && mensagem.trim().length > 0;
+
+  // Ate 2026-07-27 este botao era `onPress={onClose}`: fechava o modal e
+  // DESCARTAVA tudo. Nao havia rota chamada em lugar nenhum — enquanto o
+  // backend (POST /support) ja existia, com um DTO que espelha estes campos.
+  // Formulario que finge ter enviado e pior que formulario ausente.
+  const enviarSolicitacao = async () => {
+    if (!podeEnviar) return;
+    try {
+      await createSupportRequest({
+        reason: motivo,
+        title: titulo.trim(),
+        message: mensagem.trim(),
+      });
+      Alert.alert('Solicitacao enviada', 'Nossa equipe vai responder em breve.');
+      onClose();
+    } catch (e) {
+      // O motivo real do servidor importa aqui: o throttle e de 5/min, e um
+      // "tente de novo" generico deixaria a pessoa repetindo sem entender.
+      Alert.alert('Erro', errorMessage(e, 'Nao foi possivel enviar a solicitacao.'));
+    }
+  };
+  const { run: enviar, busy: enviando } = useSubmitOnce(enviarSolicitacao);
 
   return (
     // Bottom-sheet: o teclado cobria Título e Mensagem. KeyboardStickyView
@@ -63,7 +104,7 @@ export function SupportFormModal({ onClose }: SupportFormModalProps) {
       <Combobox
         label="Motivo da solicitação"
         placeholder="Selecione aqui"
-        options={[]}
+        options={MOTIVOS}
         value={motivo}
         onChange={setMotivo}
       />
@@ -88,10 +129,11 @@ export function SupportFormModal({ onClose }: SupportFormModalProps) {
         variant="contained"
         backgroundColor={theme.surface.primary}
         labelColor={theme.content.light}
-        label="Enviar solicitação"
+        label={enviando ? 'Enviando…' : 'Enviar solicitação'}
         elevation="lg"
         accessibilityLabel="Enviar solicitação"
-        onPress={onClose}
+        disabled={!podeEnviar || enviando}
+        onPress={enviar}
       />
     </View>
     </KeyboardStickyView>

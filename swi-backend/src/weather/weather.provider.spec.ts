@@ -1,3 +1,4 @@
+import * as httpGet from '../common/httpGet'
 import { mapWeatherCode, coerceOpenMeteo, OpenMeteoProvider } from './weather.provider'
 
 describe('mapWeatherCode (WMO → enum)', () => {
@@ -67,7 +68,7 @@ describe('coerceOpenMeteo', () => {
 describe('OpenMeteoProvider.fetch', () => {
   afterEach(() => jest.restoreAllMocks())
   it('HTTP ok → coerce (+ contrato de URL)', async () => {
-    const spy = jest.spyOn(global, 'fetch').mockResolvedValue({
+    const spy = jest.spyOn(httpGet, 'httpGetJson').mockResolvedValue({
       ok: true,
       json: async () => ({
         current: { temperature_2m: 17, relative_humidity_2m: 65, wind_speed_10m: 65, weather_code: 63 },
@@ -77,7 +78,7 @@ describe('OpenMeteoProvider.fetch', () => {
     expect((await new OpenMeteoProvider().fetch()).current.tempC).toBe(17)
     expect(spy).toHaveBeenCalledWith(
       expect.stringContaining('latitude=-23.55&longitude=-46.63'),
-      expect.objectContaining({ signal: expect.anything() }),
+      5000,
     )
     const calledUrl = spy.mock.calls[0][0] as string
     expect(calledUrl).toContain('current=temperature_2m')
@@ -86,7 +87,7 @@ describe('OpenMeteoProvider.fetch', () => {
     expect(calledUrl).toContain('past_days=1')
   })
   it('HTTP !ok → lança (caller faz fallback)', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 503 } as any)
+    jest.spyOn(httpGet, 'httpGetJson').mockResolvedValue({ ok: false, status: 503 } as any)
     await expect(new OpenMeteoProvider().fetch()).rejects.toThrow()
   })
 })

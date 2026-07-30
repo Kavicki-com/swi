@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSubmitOnce } from '../../lib/forms/useSubmitOnce';
 import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
@@ -23,8 +24,6 @@ import {
 } from '../../lib/validation/validators';
 import { listCompanies, type CompanyOption } from '../../services/api/companies';
 import { errorMessage } from '../../lib/errors/errorMessage';
-import { signupDraft } from '../../services/auth/signupDraft';
-import { clearPendingProfile } from '../../services/profile/pendingProfile';
 import { AUTH_BACKEND } from '../../lib/featureFlags';
 
 // Só o fluxo api tem empresas reais pra escolher; no mock o seletor some e o
@@ -85,10 +84,13 @@ export default function SignUp() {
       confirmPassword.setTouched(true);
       return;
     }
-    // Demo flow: sign-up → email-sent (wait for click) → account-confirmation
-    // (success). In production the email link deep-links to confirmation; in the
-    // demo, email-sent has a manual "Já confirmei" affordance to advance.
-    const username = fullName.value.trim().split(/\s+/)[0] ?? '';
+    // Fluxo 1 (reordenado 2026-07-27): a conta nasce AQUI, com nome, e-mail,
+    // senha e empresa. Segue pra confirmação de e-mail e daí pra fila de
+    // aprovação do painel. O wizard de perfil (complimentary-data) virou o
+    // fluxo 2: roda DEPOIS do primeiro login pós-aprovação, autenticado com o
+    // token do próprio worker — a ordem antiga rodava o wizard sem conta, e um
+    // token alheio esquecido gravava o perfil na conta errada (incidente
+    // 2026-07-27, "Teste Ricardo" × "Joao Tester").
     const params = {
       email: email.value,
       password: password.value,
@@ -96,31 +98,21 @@ export default function SignUp() {
       ...(companyId ? { companyId } : {}),
     };
 
-    // Fluxo real: a conta NÃO nasce aqui. Guarda as credenciais e manda o
-    // worker preencher dados pessoais, endereço e saúde; o cadastro sobe no
-    // fim do wizard, já completo, e só então entra na fila de aprovação do
-    // painel. Antes o wizard era pulado no modo api e o admin aprovava uma
-    // linha com nome e e-mail e mais nada (QA 2026-07-26).
-    if (NEEDS_COMPANY) {
-      // Zera rascunho de um cadastro abandonado ANTES de começar. Sem isto, o
-      // merge raso do stash deixava campo opcional não preenchido pela pessoa
-      // nova sobreviver da anterior — alergia de A entrando no cadastro de B
-      // num aparelho compartilhado (review 2026-07-27).
-      await clearPendingProfile();
-      signupDraft.set(params);
-      router.push({ pathname: '/(auth)/complimentary-data/step-1', params: { username } });
-      return;
-    }
-
     try {
       await signUp(params);
-      router.push({ pathname: '/(auth)/email-sent', params: { email: email.value, username } });
+      router.push({ pathname: '/(auth)/email-sent', params: { email: email.value } });
     } catch (e) {
       // O motivo vem do servidor ("E-mail já cadastrado", "Empresa não
       // encontrada") — sem ele o cliente relê o formulário sem achar o erro.
       Alert.alert('Erro', errorMessage(e, 'Não foi possível criar a conta.'));
     }
   };
+
+  // Trava de reentrancia: `disabled={!canSubmit || enviando}` continua verdadeiro
+  // enquanto a requisicao esta no ar, entao um segundo toque disparava a
+  // acao de novo (QA 2026-07-27: no cadastro, o 2o toque levou 409 de
+  // e-mail ja existente enquanto o 1o ja tinha criado a conta e navegado).
+  const { run: enviar, busy: enviando } = useSubmitOnce(handleSubmit);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -230,7 +222,7 @@ export default function SignUp() {
               label="Criar conta"
               fullWidth
               disabled={!canSubmit}
-              onPress={handleSubmit}
+              onPress={enviar}
             />
             <Button
               variant="outline"

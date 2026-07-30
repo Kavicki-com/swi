@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSubmitOnce } from '../../../lib/forms/useSubmitOnce';
 import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -45,6 +46,11 @@ export default function PasswordRecoveryNewPassword() {
     // a "senha alterada" toast/screen before login.
     router.replace('/(auth)/login');
   };
+
+  // Trava de reentrancia: `disabled` so cobria o formulario incompleto,
+  // nao o periodo da requisicao — um segundo toque disparava de novo
+  // (QA 2026-07-27, no fim do cadastro).
+  const { run: enviar, busy: enviando } = useSubmitOnce(handleSubmit);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -117,8 +123,8 @@ export default function PasswordRecoveryNewPassword() {
             variant="contained"
             label="Alterar senha"
             fullWidth
-            disabled={!canSubmit}
-            onPress={handleSubmit}
+            disabled={!canSubmit || enviando}
+            onPress={enviar}
           />
         </View>
       </KeyboardAwareScrollView>

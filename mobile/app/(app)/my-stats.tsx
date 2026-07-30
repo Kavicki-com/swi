@@ -237,7 +237,11 @@ export default function MyStats() {
     {/* BG: gradient (my-stats-bg.png) + dot-grid (BackgroundDotsGrid layer
         in JourneyTheme, showDotGrid default true). Same pattern as dashboard
         so the dot-grid is consistent across both screens. */}
-    <JourneyTheme gradient={require('../../assets/login-bg.png')} />
+    {/* showDotGrid=false: a grade agora vem do PROPRIO grafico, como no nó
+        Figma 342:9420 — e la ela e tintada por `condition` (p.backgroundTint),
+        entao tambem comunica estado. Deixar as duas ligadas era a duplicacao
+        que o QA viu no aparelho (2026-07-27). */}
+    <JourneyTheme gradient={require('../../assets/login-bg.png')} showDotGrid={false} />
     <ScrollView
       style={{ flex: 1, backgroundColor: 'transparent' }}
       contentContainerStyle={{
@@ -267,19 +271,25 @@ export default function MyStats() {
           82.78% de 360 = ~298pt, entao a escala na tela fica equivalente.
           showActionButton=false: my-stats ja E a tela de detalhe, sem os
           botoes de frequencia/ajustes do dashboard. */}
+      <View
+        style={{
+          width: '100%',
+          maxWidth: 360,
+          alignSelf: 'center',
+          position: 'relative',
+        }}
+      >
       <View style={{ alignSelf: 'center' }}>
         <StatusChart
           condition={toChartCondition(status)}
           progress={1}
+          // compact espelha o nó 342:9420: ele esconde só o Caminho 4122, o
+          // heart-rate-button e o cartão do container. Bezel, pontos, trilho,
+          // Ellipse 5 e poço seguem visíveis — sao eles que dao profundidade
+          // ao botao. (A v0.1.126 escondia sete camadas por leitura errada
+          // minha de um pedido do QA; a prop que fazia isso foi removida.)
           size="compact"
           showActionButton={false}
-          // backdrop=false (DS 0.1.126): fica SÓ o que muda de cor com a
-          // condição — personagem, coração e o crescente. Saem o cartão cinza,
-          // os dois discos, o trilho, o poço, a grade de pontos (que duplicava
-          // a do JourneyTheme desta tela) e o "Ellipse 5", um arco decorativo
-          // em PNG que ficava verde-água mesmo em alerta. Decoração que
-          // parece indicador, numa tela de saúde, é pior que nada.
-          backdrop={false}
           // O badge volta a ser posicionado pelo DS: fazer isso à mão exigia
           // converter HEART_STATUS_OFFSET pra percentuais do canvas, e no
           // preset compact a conta muda — o coração saiu do peito, deslocado
@@ -293,19 +303,27 @@ export default function MyStats() {
         />
       </View>
 
-      {/* Avatar — absolute top-right, overlays the chart (Figma 342:9422).
-          Figma absolute top=34 from the frame top (não há safe-area no design).
-          O Avatar fica DENTRO do ScrollView pra acompanhar o paddingTop do
-          conteúdo, evitando dependência de insets.top que diverge entre
-          plataformas. */}
-      <View
-        style={{
-          position: 'absolute',
-          right: 24,
-          top: 34,
-        }}
-      >
-        <Avatar customSize={64} uri={profile?.avatarUrl} name={profile?.fullName} />
+      {/* Avatar — Figma 342:9422: x=272, y=34, 64x64 num frame de 360, logo
+          right=24 / top=34. Os numeros ja eram esses; o que estava errado era o
+          REFERENCIAL. Absoluto solto no ScrollView, ele nao acompanhava o
+          gráfico: o paddingTop do insets.top empurrava um e nao o outro, e no
+          aparelho com notch o avatar subia pro canto, colado na status bar, em
+          vez de sobrepor a borda do bezel (QA 2026-07-27). Aqui os dois sao
+          filhos do MESMO container de 360, como no frame do Figma.
+
+          O anel de 4px vem da medida do proprio nó: ele renderiza 72x72 para um
+          circulo de 64. borderColor por token, nunca literal. */}
+      <View style={{ position: 'absolute', right: 24, top: 34 }}>
+        <Avatar
+          customSize={64}
+          bordered
+          borderWidth={4}
+          borderColor={theme.content.light}
+          uri={profile?.avatarUrl}
+          name={profile?.fullName}
+          fallbackBackgroundColor={theme.surface.medium}
+        />
+      </View>
       </View>
 
       {/* User Data column — Figma 342:9966 (gap.l 24). Width was 328 fixo,
