@@ -26,9 +26,6 @@ export function subscribeEvacuationEvents(handlers: EvacuationHandlers): () => v
     // ngrok no QA remoto (WS puro morre no handshake; polling é XHR e carrega
     // o header). Upgrade pra WS quando o caminho deixa.
     transports: ['polling', 'websocket'],
-    transportOptions: {
-      polling: { extraHeaders: { 'ngrok-skip-browser-warning': 'true' } },
-    },
   })
   socket.on('evacuation', handlers.onStarted)
   socket.on('evacuation-ack', handlers.onAck)

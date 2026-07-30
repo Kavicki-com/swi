@@ -141,12 +141,30 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
   })
 
-  it('navigates to /user/profile when the header user-info widget is pressed', async () => {
+  // Porte do QA cliente §1.1 (2026-07-28): o avatar do header abre o menu
+  // fullscreen com vídeo + vitais, não navega mais direto. A página de perfil
+  // continua alcançável — pelo avatar grande DENTRO do menu.
+  it('opens the fullscreen user menu when the header user-info widget is pressed', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-header-user-info-pressable')).toBeInTheDocument()
     })
     fireEvent.click(screen.getByTestId('app-header-user-info-pressable'))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Detalhes do usuário')).toBeInTheDocument()
+    })
+  })
+
+  it('navigates to /user/profile from the big avatar inside the user menu', async () => {
+    renderTree()
+    await waitFor(() => {
+      expect(screen.getByTestId('app-header-user-info-pressable')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByTestId('app-header-user-info-pressable'))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Abrir perfil do usuário')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByLabelText('Abrir perfil do usuário'))
     await waitFor(() => {
       expect(screen.getByTestId('profile-content')).toBeInTheDocument()
     })

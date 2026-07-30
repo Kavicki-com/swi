@@ -2,17 +2,20 @@
 // o módulo tem uma operação só e um objeto de um membro seria cerimônia vazia.
 import { ApiError, apiFetch } from './http'
 
-type Presign = { url: string; fields: Record<string, string>; key: string }
+// Sem `fields`: o upload é PUT presignado desde 2026-07-29 — o Cloudflare R2
+// não implementa presigned POST (respondia 501 "Presigned post requests are not
+// yet implemented"). Ver swi-backend/src/media/media.service.ts.
+type Presign = { url: string; key: string }
 
 const ALLOWED = ['image/jpeg', 'image/png']
 
-// Espelha o content-length-range da policy do presign
+// Espelha o teto validado pelo presign
 // (swi-backend/src/media/media.service.ts). Divergir daqui só troca um erro
-// claro no client por um 400 opaco do S3 depois de subir o arquivo inteiro.
+// claro no client por um 400 do servidor depois de escolher o arquivo.
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 
 /**
- * Sobe um anexo: presign no backend → POST multipart direto no S3/MinIO.
+ * Sobe um anexo: presign no backend → PUT direto no storage (R2/MinIO).
  * Devolve a key. O `prefix` decide o namespace da key ('order' para anexo de
  * tarefa, que vai em `WorkOrderInput.imageKeys`; 'chat' para anexo de mensagem,
  * validado pelo controller contra chat/<uuid>.(jpg|png); 'reports' para anexo
@@ -24,8 +27,9 @@ export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
  * e só depois deixá-lo preencher o resto do form faz um form preenchido devagar
  * estourar o TTL e falhar com 403.
  *
- * Quem impõe tipo e tamanho de verdade é a policy do presign; as checagens
- * daqui só evitam gastar a rede com arquivo que já se sabe inválido.
+ * Quem impõe tipo e tamanho de verdade é a assinatura do presign (content-type
+ * e content-length entram nela); as checagens daqui só evitam gastar a rede com
+ * arquivo que já se sabe inválido.
  *
  * Sem AbortSignal por YAGNI — a tela desta fatia não tem cancelamento. Se um
  * dia tiver, o parâmetro entra aqui e desce pro fetch do S3.
@@ -41,20 +45,23 @@ export async function uploadImage(
 
   // Fora do try de baixo de propósito: o apiFetch já devolve ApiError com o
   // status real do presign (401, 400...). Re-embrulhar aqui viraria tudo 0.
+  // contentLength vai junto porque o servidor o inclui na ASSINATURA: o upload
+  // só é aceito com exatamente esse tamanho, e o Content-Type do header precisa
+  // casar com o assinado. Os dois juntos substituem a policy do POST antigo.
   const presign = await apiFetch<Presign>('/media/presign', {
     method: 'POST',
-    body: JSON.stringify({ contentType: file.type, prefix }),
+    body: JSON.stringify({ contentType: file.type, contentLength: file.size, prefix }),
   })
-
-  // Sem headers de propósito: Authorization quebraria a assinatura do S3 e um
-  // Content-Type manual impediria o browser de gerar o boundary do multipart.
-  const form = new FormData()
-  for (const [k, v] of Object.entries(presign.fields)) form.append(k, v)
-  form.append('file', file) // por último — requisito do S3 POST
 
   let res: Response
   try {
-    res = await fetch(presign.url, { method: 'POST', body: form })
+    // Sem Authorization de propósito (quebraria a assinatura). O Content-Type,
+    // ao contrário do POST multipart, é obrigatório aqui: entra na assinatura.
+    res = await fetch(presign.url, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    })
   } catch {
     // Request mais longo e pesado do app, rodando em rede de chão de fábrica:
     // cair no meio é o caso comum, não a exceção. Mesma semântica do http.ts —
@@ -63,11 +70,11 @@ export async function uploadImage(
   }
 
   if (!res.ok) {
-    // O XML do S3 traz o código exato (AccessDenied, EntityTooLarge,
-    // SignatureDoesNotMatch) que separa presign vencido de policy violada muito
-    // melhor que o status. Vale ouro na triagem; não é texto pro usuário.
+    // O XML do storage traz o código exato (AccessDenied, EntityTooLarge,
+    // SignatureDoesNotMatch) que separa presign vencido de assinatura violada
+    // muito melhor que o status. Vale ouro na triagem; não é texto pro usuário.
     const body = await res.text().catch(() => '')
-    console.error(`[upload] S3 recusou o POST (${res.status}):`, body)
+    console.error(`[upload] storage recusou o PUT (${res.status}):`, body)
     // Status fica no .status pro log/suporte; a mensagem é acionável pro
     // operador. Tipo e tamanho já foram barrados acima, então 403 em produção é
     // quase sempre o TTL de 300 s vencido.

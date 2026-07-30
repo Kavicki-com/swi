@@ -15,9 +15,6 @@ export function subscribeMessages(cb: (m: Message) => void): () => void {
     // interstitial, e o socket.io tenta o upgrade pra WS depois; se o upgrade
     // falhar no túnel, fica em polling e o realtime segue funcionando.
     transports: ['polling', 'websocket'],
-    transportOptions: {
-      polling: { extraHeaders: { 'ngrok-skip-browser-warning': 'true' } },
-    },
   })
   socket.on('message', cb)
   return () => {

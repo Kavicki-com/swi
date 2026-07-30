@@ -14,9 +14,6 @@ export function subscribePositions(cb: (m: PositionMarkerDto) => void): () => vo
     // ngrok no QA remoto (WS puro morre no handshake; polling é XHR e carrega
     // o header). Upgrade pra WS quando o caminho deixa.
     transports: ['polling', 'websocket'],
-    transportOptions: {
-      polling: { extraHeaders: { 'ngrok-skip-browser-warning': 'true' } },
-    },
   })
   socket.on('position', cb)
   return () => {

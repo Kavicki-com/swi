@@ -9,22 +9,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-// Resposta do presign. `fields` reproduz o que o createPresignedPost devolve
-// (policy/signature/key), não só o Content-Type.
+// Resposta do presign. Sem `fields`: desde 2026-07-29 o upload é PUT
+// presignado (o R2 nao implementa presigned POST — devolvia 501), e o contrato
+// virou { url, key }.
 const presignOk = () =>
   ({
     ok: true,
     status: 201,
-    json: async () => ({
-      url: 'http://minio/bucket',
-      fields: {
-        key: 'order/uuid.jpg',
-        'Content-Type': 'image/jpeg',
-        Policy: 'eyJwb2xpY3kiOiJ4In0=',
-        'X-Amz-Signature': 'deadbeef',
-      },
-      key: 'order/uuid.jpg',
-    }),
+    json: async () => ({ url: 'http://r2/bucket/order/uuid.jpg', key: 'order/uuid.jpg' }),
   }) as Response
 
 // Presign OK + resposta do S3 configurável. `body` é o XML de erro que o
@@ -49,28 +41,18 @@ const fileOfSize = (bytes: number, type = 'image/jpeg') => {
 const jpeg = () => new File([new Uint8Array([1, 2, 3])], 'foto.jpg', { type: 'image/jpeg' })
 
 describe('uploadOrderImage', () => {
-  it('presigna, sobe com o file por último e devolve a key', async () => {
-    const f = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        json: async () => ({
-          url: 'http://minio/bucket',
-          fields: { key: 'order/uuid.jpg', 'Content-Type': 'image/jpeg' },
-          key: 'order/uuid.jpg',
-        }),
-      } as Response)
-      .mockResolvedValueOnce({ ok: true, status: 204, json: async () => null } as Response)
-    vi.stubGlobal('fetch', f)
-
+  it('presigna, sobe via PUT com o proprio File no corpo e devolve a key', async () => {
+    const f = stubUpload({ ok: true, status: 200 })
     const file = new File([new Uint8Array([1, 2, 3])], 'foto.jpg', { type: 'image/jpeg' })
     const key = await uploadOrderImage(file)
 
     expect(key).toBe('order/uuid.jpg')
-    const form = f.mock.calls[1]?.[1]?.body as FormData
-    // O S3 exige que o campo `file` seja o ÚLTIMO do multipart.
-    expect([...form.keys()].pop()).toBe('file')
+    const [url, init] = f.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('http://r2/bucket/order/uuid.jpg')
+    expect(init.method).toBe('PUT')
+    expect(init.body).toBe(file)
+    // Content-Type tem que casar com o assinado, senao 403 (verificado no R2).
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('image/jpeg')
   })
 
   it('recusa tipo fora de JPG/PNG antes de chamar a rede', async () => {
@@ -91,6 +73,7 @@ describe('uploadOrderImage', () => {
     // prefix 'order' é o único aceito pelo DTO pra anexo de tarefa.
     expect(JSON.parse(init.body as string)).toEqual({
       contentType: 'image/png',
+      contentLength: 1,
       prefix: 'order',
     })
   })
@@ -105,6 +88,7 @@ describe('uploadOrderImage', () => {
     // O chat valida imageKey contra chat/<uuid>.(jpg|png); o prefix decide a key.
     expect(JSON.parse(init.body as string)).toEqual({
       contentType: 'image/png',
+      contentLength: 1,
       prefix: 'chat',
     })
   })
@@ -120,30 +104,31 @@ describe('uploadOrderImage', () => {
     // 'reports' é o prefixo default do presign, então já é aceito.
     expect(JSON.parse(init.body as string)).toEqual({
       contentType: 'image/png',
+      contentLength: 1,
       prefix: 'reports',
     })
   })
 
-  it('não manda Authorization nem Content-Type manual no POST ao S3', async () => {
+  it('nao manda Authorization no PUT, mas manda o Content-Type assinado', async () => {
     window.localStorage.setItem('swi.admin.token', 'jwt-do-admin')
-    const f = stubUpload({ ok: true, status: 204 })
+    const f = stubUpload({ ok: true, status: 200 })
     await uploadOrderImage(jpeg())
 
     const init = f.mock.calls[1]?.[1] as RequestInit
     const headers = new Headers(init.headers)
-    // Bearer no S3 = assinatura inválida; Content-Type manual mata o boundary
-    // que o browser gera pro multipart.
+    // Bearer no storage = assinatura invalida. Já o Content-Type é obrigatorio
+    // no PUT (entra na assinatura), ao contrario do POST multipart de antes.
     expect(headers.get('Authorization')).toBeNull()
-    expect(headers.get('Content-Type')).toBeNull()
+    expect(headers.get('Content-Type')).toBe('image/jpeg')
   })
 
-  it('reenvia todos os fields do presign antes do file', async () => {
-    const f = stubUpload({ ok: true, status: 204 })
+  it('manda o contentLength no presign — o servidor o assina', async () => {
+    const f = stubUpload({ ok: true, status: 200 })
     await uploadOrderImage(jpeg())
 
-    const form = f.mock.calls[1]?.[1]?.body as FormData
-    expect([...form.keys()]).toEqual(['key', 'Content-Type', 'Policy', 'X-Amz-Signature', 'file'])
-    expect(form.get('Policy')).toBe('eyJwb2xpY3kiOiJ4In0=')
+    const init = f.mock.calls[0]?.[1] as RequestInit
+    // jpeg() tem 3 bytes; o valor tem que ser o size real, nao um palpite.
+    expect(JSON.parse(init.body as string).contentLength).toBe(3)
   })
 
   it('403 do S3 vira ApiError com mensagem acionável de link expirado', async () => {
