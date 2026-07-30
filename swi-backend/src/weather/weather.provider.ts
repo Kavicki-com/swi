@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { httpGetJson } from '../common/httpGet'
 import type { WeatherCondition, WeatherCurrent, WeatherDaily, WeatherHourly } from './weather.types'
 import { SITE_LOCATION } from './weather.types'
 
@@ -56,7 +57,8 @@ export class OpenMeteoProvider {
       `&daily=temperature_2m_max,temperature_2m_min` +
       `&hourly=temperature_2m,weather_code,is_day&past_days=1` +
       `&timezone=auto&forecast_days=1`
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    // httpGetJson, nao fetch: o undici/Wasm derrubava o processo no host de 1 GB.
+    const res = await httpGetJson(url, 5000)
     if (!res.ok) throw new Error(`open-meteo: HTTP ${res.status}`)
     return coerceOpenMeteo(await res.json())
   }
