@@ -33,17 +33,13 @@ export const apiNotificationBackend: NotificationBackend = {
     (async () => {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
       if (closed) return;
-      // polling primeiro: espelho do chat e do painel — o handshake WS puro
-      // morre na interstitial do ngrok free no QA remoto, e sem isto NENHUMA
-      // notificação ao vivo chegava pelo túnel (inclusive "nova tarefa
-      // atribuída"). Polling é XHR e carrega o header de skip; sobe pra WS
-      // quando o caminho deixa.
+      // polling primeiro, com upgrade pra WS: espelho do chat e do painel. O
+      // handshake WS puro falha em proxies que não repassam o upgrade, e sem
+      // o fallback NENHUMA notificação ao vivo chegava, inclusive "nova
+      // tarefa atribuída".
       socket = io(API_URL, {
         auth: { token },
         transports: ['polling', 'websocket'],
-        transportOptions: {
-          polling: { extraHeaders: { 'ngrok-skip-browser-warning': 'true' } },
-        },
       });
       socket.on('notification', (n: AppNotification) => { cb(n); });
     })();

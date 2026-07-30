@@ -42,7 +42,7 @@
       "env": {
         "EXPO_PUBLIC_AUTH_BACKEND": "api",
         "EXPO_PUBLIC_DATA_BACKEND": "api",
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-STATIC-TUNNEL.ngrok-free.app"
+        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com"
       },
       "autoIncrement": true
     },
@@ -55,11 +55,16 @@
       "env": {
         "EXPO_PUBLIC_AUTH_BACKEND": "api",
         "EXPO_PUBLIC_DATA_BACKEND": "api",
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-STATIC-TUNNEL.ngrok-free.app"
+        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_AUTH_BACKEND": "api",
+        "EXPO_PUBLIC_DATA_BACKEND": "api",
+        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com"
+      }
     }
   },
   "submit": {
