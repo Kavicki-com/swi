@@ -1,10 +1,14 @@
 import { File } from 'expo-file-system';
-import { apiRequest } from './http';
+import { apiRequest, withDeadline } from './http';
 
-// Infere content-type da extensão (default jpeg — cobre uris sem extensão do picker).
+// Infere content-type da extensão (default jpeg, cobre uris sem extensão do picker).
 export function contentTypeFor(uri: string): string {
   return /\.png(\?|$)/i.test(uri) ? 'image/png' : 'image/jpeg';
 }
+
+// Prazo do PUT no storage. Maior que o das chamadas de API (20 s) porque aqui
+// trafegam até 15 MB, não um JSON pequeno: em 3G, 15 MB não cabem em 20 s.
+export const UPLOAD_TIMEOUT_MS = 90_000;
 
 /**
  * Sobe um arquivo local (file://) numa URL presignada e devolve a key que o
@@ -40,8 +44,17 @@ export async function uploadImage(uri: string, prefix = 'reports'): Promise<stri
   });
   const body = await file.arrayBuffer();
   // Content-Type explícito e idêntico ao assinado: aqui, ao contrário do POST
-  // multipart, ele é obrigatório — faz parte da assinatura.
-  const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': contentType }, body });
+  // multipart, ele é obrigatório, faz parte da assinatura.
+  //
+  // Este PUT vai direto no storage e NÃO passa pelo apiRequest, então precisa do
+  // seu próprio prazo (mesmo defeito do QA Mobile #6: sem prazo, um upload que
+  // trava deixa a tela girando para sempre).
+  const res = await withDeadline(
+    UPLOAD_TIMEOUT_MS,
+    'Tempo esgotado ao enviar a imagem. Verifique sua conexão e tente novamente.',
+    (signal) =>
+      fetch(url, { method: 'PUT', headers: { 'Content-Type': contentType }, body, signal }),
+  );
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     throw new Error(`Falha ao subir imagem (${res.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);

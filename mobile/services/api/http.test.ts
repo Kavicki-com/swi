@@ -1,4 +1,4 @@
-import { apiRequest } from './http';
+import { apiRequest, REQUEST_TIMEOUT_MS } from './http';
 import { API_URL } from '../auth/apiConfig';
 import * as SecureStore from 'expo-secure-store';
 
@@ -69,5 +69,88 @@ describe('apiRequest', () => {
     (global.fetch as jest.Mock).mockResolvedValue(errJson(500, {}));
     await expect(apiRequest('/x'))
       .rejects.toMatchObject({ message: 'Erro na requisição', status: 500 });
+  });
+});
+
+// QA Mobile #6: "o chat fica carregando para sempre". Toda tela que carrega
+// dados só sai do loading quando a promessa da requisição resolve OU rejeita.
+// Sem prazo, uma requisição que trava (rede que some no meio, proxy que segura
+// a conexão, leitura de token que não volta) deixa a promessa pendente PARA
+// SEMPRE: o spinner nunca vira erro e o "Tentar novamente" nunca é alcançado.
+// O RN não salva: o OkHttp que ele monta vem com todos os timeouts em 0. Por
+// isso o prazo cobre o apiRequest inteiro, não só o fetch.
+describe('apiRequest, prazo', () => {
+  beforeEach(() => {
+    (global as any).fetch = jest.fn();
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  // Uma promessa pendente não "falha" um teste sozinha, ela some. Anexar a
+  // expectativa ANTES de avançar o relógio faz duas coisas: torna o pendente
+  // observável (o teste falha de verdade sem a correção) e evita que a rejeição
+  // apareça como unhandled no meio do advanceTimers.
+  const expectPending = (p: Promise<unknown>) => {
+    const state = { done: false };
+    void p.then(() => { state.done = true; }, () => { state.done = true; });
+    return state;
+  };
+
+  it('rejeita quando a resposta não chega no prazo padrão', async () => {
+    (global.fetch as jest.Mock).mockImplementation(() => new Promise(() => {}));
+    const p = apiRequest('/chat/conversations', { auth: true });
+    const rejects = expect(p).rejects.toThrow(/Tempo esgotado/);
+    const state = expectPending(p);
+
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1000);
+    expect(state.done).toBe(false); // antes do prazo segue pendente
+
+    await jest.advanceTimersByTimeAsync(1000);
+    await rejects;
+  });
+
+  it('aborta o fetch ao estourar o prazo (libera a conexão)', async () => {
+    let signal: AbortSignal | undefined;
+    (global.fetch as jest.Mock).mockImplementation((_u: string, init: RequestInit) => {
+      signal = init.signal as AbortSignal;
+      return new Promise(() => {});
+    });
+    const p = apiRequest('/chat/directory', { auth: true });
+    const rejects = expect(p).rejects.toThrow(/Tempo esgotado/);
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    await rejects;
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('o prazo cobre a leitura do token, não só o fetch', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+    const p = apiRequest('/chat/conversations', { auth: true });
+    const rejects = expect(p).rejects.toThrow(/Tempo esgotado/);
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    await rejects;
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('respeita um prazo maior quando o caller pede', async () => {
+    (global.fetch as jest.Mock).mockImplementation(() => new Promise(() => {}));
+    const p = apiRequest('/media/presign', { method: 'POST', timeoutMs: 60_000 });
+    const rejects = expect(p).rejects.toThrow(/Tempo esgotado/);
+    const state = expectPending(p);
+
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 1000);
+    expect(state.done).toBe(false); // o prazo padrão não derruba o upload
+
+    await jest.advanceTimersByTimeAsync(60_000);
+    await rejects;
+  });
+
+  it('resposta dentro do prazo passa normal e não deixa timer pendurado', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({ ok: 1 }));
+    await expect(apiRequest('/a')).resolves.toEqual({ ok: 1 });
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

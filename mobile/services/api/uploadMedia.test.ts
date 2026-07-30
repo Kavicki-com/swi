@@ -1,4 +1,10 @@
-jest.mock('./http', () => ({ apiRequest: jest.fn() }));
+// `withDeadline` fica REAL: é ele que dá prazo ao PUT direto no storage, e é
+// justamente esse comportamento que o teste do prazo verifica. Só o apiRequest
+// (a chamada de presign) vira dublê.
+jest.mock('./http', () => ({
+  ...jest.requireActual('./http'),
+  apiRequest: jest.fn(),
+}));
 jest.mock('expo-file-system', () => ({
   File: jest.fn().mockImplementation((uri: string) => ({
     uri,
@@ -8,7 +14,7 @@ jest.mock('expo-file-system', () => ({
 }));
 import { apiRequest } from './http';
 import { File } from 'expo-file-system';
-import { contentTypeFor, uploadImage } from './uploadMedia';
+import { contentTypeFor, uploadImage, UPLOAD_TIMEOUT_MS } from './uploadMedia';
 
 // O upload virou PUT presignado (2026-07-29). O R2 NÃO implementa presigned
 // POST: devolvia 501 "Presigned post requests are not yet implemented" na cara
@@ -83,5 +89,29 @@ describe('uploadMedia', () => {
       text: async () => 'SignatureDoesNotMatch',
     });
     await expect(uploadImage('file:///a/b.jpg')).rejects.toThrow(/403.*SignatureDoesNotMatch/);
+  });
+
+  // Mesmo defeito do QA Mobile #6, outro ponto: este PUT vai direto no storage,
+  // fora do apiRequest, então não herda o prazo de lá. Sem prazo, um upload que
+  // trava deixa "Salvar relatório" girando para sempre. O prazo aqui é maior
+  // porque trafegam até 15 MB, contra um JSON pequeno nas outras chamadas.
+  it('estoura prazo quando o PUT trava, e aborta a conexão', async () => {
+    jest.useFakeTimers();
+    try {
+      (apiRequest as jest.Mock).mockResolvedValue({ url: 'u', key: 'k' });
+      let signal: AbortSignal | undefined;
+      (global as any).fetch.mockImplementation((_u: string, init: RequestInit) => {
+        signal = init.signal as AbortSignal;
+        return new Promise(() => {});
+      });
+
+      const p = uploadImage('file:///a/b.jpg');
+      const rejects = expect(p).rejects.toThrow(/Tempo esgotado/);
+      await jest.advanceTimersByTimeAsync(UPLOAD_TIMEOUT_MS);
+      await rejects;
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
