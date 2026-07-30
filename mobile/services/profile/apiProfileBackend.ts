@@ -1,6 +1,5 @@
 import type { Profile, ProfileBackend } from './types';
-import { apiRequest, hasToken } from '../api/http';
-import { stashPendingProfile } from './pendingProfile';
+import { apiRequest } from '../api/http';
 
 // birthDate no backend é date-only: enviado como 'YYYY-MM-DD', retornado como
 // ISO datetime 'YYYY-MM-DDT00:00:00.000Z'. As telas usam 'DD/MM/YYYY'.
@@ -49,14 +48,12 @@ export const apiProfileBackend: ProfileBackend = {
       ...patch,
       ...(patch.birthDate !== undefined ? { birthDate: brToIso(patch.birthDate) } : {}),
     };
-    // Sem sessão = wizard de onboarding pré-login (a conta ainda aguarda
-    // aprovação do admin). Stash local em vez de PUT: sem isso o 401 alertava
-    // "Não foi possível salvar" e o step-1 nem avançava (QA 2026-07-26).
-    // O flush roda no primeiro login (apiAuthBackend.signIn).
-    if (!(await hasToken())) {
-      const merged = await stashPendingProfile(body as Record<string, unknown>);
-      return fromApi(merged as Profile);
-    }
+    // Sempre PUT autenticado. Todo save de perfil roda com sessão desde a
+    // reordenação do cadastro (2026-07-27): o wizard de complimentary-data
+    // virou pós-login, então a máquina de stash local (pendingProfile) que
+    // cobria o wizard pré-conta morreu — e com ela o risco de um token alheio
+    // esquecido receber o perfil de outra pessoa (incidente "Teste Ricardo"
+    // × "Joao Tester").
     const profile = await apiRequest('/profile/me', { method: 'PUT', body, auth: true });
     return fromApi(profile);
   },

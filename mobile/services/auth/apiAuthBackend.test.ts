@@ -41,16 +41,16 @@ describe('apiAuthBackend', () => {
     expect(await apiAuthBackend.getCurrentUser()).toBeNull()
   })
 
-  // A conta nasce no FIM do wizard, levando o perfil junto — é o que faz a fila
-  // de aprovação do painel chegar completa em vez de só nome e e-mail.
-  it('signUp manda o perfil do wizard junto do cadastro', async () => {
+  // Reordenação 2026-07-27: o cadastro cria SÓ a conta (fluxo 1). O perfil é
+  // preenchido pelo wizard DEPOIS do primeiro login pós-aprovação, via
+  // PUT /profile/me autenticado — nada de perfil viajando no signup.
+  it('signUp manda só conta e vínculo de empresa', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(okJson({ nextStep: 'CONFIRM' }))
     await apiAuthBackend.signUp({
       email: 'j@ex.com',
       password: 'Senha@123',
       name: 'João Silva',
       companyId: 'company-seed-1',
-      profile: { cpf: '000.000.000-00', bloodType: 'O-' },
     })
     const [url, init] = (global.fetch as jest.Mock).mock.calls[0]
     expect(url).toContain('/auth/signup')
@@ -59,15 +59,7 @@ describe('apiAuthBackend', () => {
       password: 'Senha@123',
       name: 'João Silva',
       companyId: 'company-seed-1',
-      profile: { cpf: '000.000.000-00', bloodType: 'O-' },
     })
-  })
-
-  it('signUp sem perfil segue válido (fluxo mock / build antiga)', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue(okJson({ nextStep: 'CONFIRM' }))
-    await apiAuthBackend.signUp({ email: 'j@ex.com', password: 'p', name: 'J' })
-    const [, init] = (global.fetch as jest.Mock).mock.calls[0]
-    expect(JSON.parse(init.body as string).profile).toBeUndefined()
   })
 
   it('resendConfirmation faz POST em /auth/confirm/resend com o e-mail', async () => {
@@ -77,5 +69,40 @@ describe('apiAuthBackend', () => {
     expect(url).toContain('/auth/confirm/resend')
     expect(init.method).toBe('POST')
     expect(JSON.parse(init.body as string)).toEqual({ email: 'j@ex.com' })
+  })
+})
+
+// INCIDENTE 2026-07-27: o perfil do "Joao Tester" apareceu com o telefone e o
+// tipo sanguineo do "Teste Ricardo", gravados 1 segundo antes da conta do
+// Ricardo nascer. O wizard inteiro rodou com o token do Joao ainda valido.
+//
+// De onde vinha esse token: `getCurrentUser` engolia QUALQUER falha do
+// /auth/me e devolvia null. O app caia na tela de login — mas o token
+// continuava no SecureStore. Os tuneis do backend cairam duas vezes naquele
+// dia; bastou o /auth/me falhar por rede pra virar sessao fantasma.
+//
+// A distincao que faltava: 401 = token morto, apaga. Rede fora = a sessao
+// pode estar perfeitamente boa, so nao da pra confirmar agora — apagar ai
+// deslogaria todo mundo a cada soluco de conexao.
+describe('getCurrentUser — token invalido nao pode sobreviver', () => {
+  const store = () => require('expo-secure-store')
+
+  beforeEach(async () => {
+    (global as any).fetch = jest.fn()
+    await store().setItemAsync('swi.auth.token', 'token-do-joao')
+  })
+
+  it('apaga o token quando o servidor diz 401', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(errJson(401, { message: 'Unauthorized' }))
+
+    expect(await apiAuthBackend.getCurrentUser()).toBeNull()
+    expect(await store().getItemAsync('swi.auth.token')).toBeNull()
+  })
+
+  it('preserva o token quando a rede falha — a sessao pode estar boa', async () => {
+    (global.fetch as jest.Mock).mockRejectedValue(new TypeError('Network request failed'))
+
+    expect(await apiAuthBackend.getCurrentUser()).toBeNull()
+    expect(await store().getItemAsync('swi.auth.token')).toBe('token-do-joao')
   })
 })

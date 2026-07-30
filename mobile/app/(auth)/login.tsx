@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Icon, Input, Logo, useTheme } from '@kavicki/swi-design-system';
 import { useAuth } from '../../services/auth/AuthProvider';
+import { useProfile } from '../../services/profile/ProfileProvider';
+import { onboardingPendente } from '../../services/profile/onboarding';
 import { useField } from '../../lib/forms/useField';
 import { validateEmail, validateRequired } from '../../lib/validation/validators';
 import { errorMessage } from '../../lib/errors/errorMessage';
@@ -14,6 +16,7 @@ export default function Login() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { signIn } = useAuth();
+  const { loadProfile } = useProfile();
   const email = useField({ validator: validateEmail });
   // Senha só precisa ser não-vazia (login usa credencial existente; regras de
   // formato só se aplicam ao cadastrar/trocar).
@@ -32,7 +35,19 @@ export default function Login() {
     }
     try {
       await signIn({ email: email.value, password: password.value });
-      router.replace('/(app)/dashboard');
+      // Fluxo 2 do cadastro (reordenação 2026-07-27): o primeiro login depois
+      // da aprovação do admin desvia pro wizard de complimentary-data, agora
+      // autenticado com o token do próprio worker. Perfil completo (ou wizard
+      // já feito) segue direto pro dashboard. Abandonou no meio? O próximo
+      // login cai aqui de novo e o que já foi salvo continua no servidor.
+      let pendente = false;
+      try {
+        pendente = onboardingPendente(await loadProfile());
+      } catch {
+        // Leitura do perfil falhou (rede): não trava o login por causa do
+        // desvio — o dashboard é o destino seguro.
+      }
+      router.replace(pendente ? '/(auth)/complimentary-data/step-1' : '/(app)/dashboard');
     } catch (e) {
       // Backend real (AUTH_BACKEND='api') lança com mensagem pronta do servidor
       // — ex.: gate de aprovação ("aguardando aprovação do administrador") ou

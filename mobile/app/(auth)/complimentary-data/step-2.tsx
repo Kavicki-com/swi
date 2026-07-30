@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, StepBar, Title, useTheme } from '@kavicki/swi-design-system';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
@@ -14,13 +14,17 @@ import {
 import { maskCEP, maskUF } from '../../../lib/validation/masks';
 import { useCepLookup } from '../../../lib/cep/useCepLookup';
 import { useProfile } from '../../../services/profile/ProfileProvider';
+import { useAuth } from '../../../services/auth/AuthProvider';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 
 export default function ComplimentaryDataStep2() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { username } = useLocalSearchParams<{ username?: string }>();
+  const { user } = useAuth();
+  // Saudação: primeiro nome da conta logada (o wizard roda pós-login desde a
+  // reordenação 2026-07-27 — não há mais param vindo do cadastro).
+  const username = user?.name?.trim().split(/\s+/)[0] || undefined;
 
   const cep = useField({ validator: validateCEP, mask: maskCEP });
   const street = useField({
@@ -88,10 +92,7 @@ export default function ComplimentaryDataStep2() {
       Alert.alert('Erro', errorMessage(e, 'Não foi possível salvar seus dados.'));
       return;
     }
-    router.push({
-      pathname: '/(auth)/complimentary-data/step-3',
-      params: { username },
-    });
+    router.push('/(auth)/complimentary-data/step-3');
   };
 
   return (

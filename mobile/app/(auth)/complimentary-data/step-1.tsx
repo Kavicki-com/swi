@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
@@ -26,20 +26,30 @@ import {
 } from '../../../lib/validation/masks';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
 import { useProfile } from '../../../services/profile/ProfileProvider';
-import { clearPendingAvatar, stashPendingAvatar } from '../../../services/profile/pendingAvatar';
+import { useAuth } from '../../../services/auth/AuthProvider';
+import { uploadImage } from '../../../services/api/uploadMedia';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 
 export default function ComplimentaryDataStep1() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { username } = useLocalSearchParams<{ username?: string }>();
+  const { user } = useAuth();
+  const { profile, saveProfile } = useProfile();
 
-  // Figma 211:13009 mostra Nome completo "já preenchido" — esse é o estado
-  // intencional: o usuário acabou de digitar fullName na step de signup e
-  // esse valor flui via `username` param. Pré-popular evita re-typing.
+  // Fluxo 2 (reordenação 2026-07-27): o wizard roda DEPOIS do primeiro login
+  // pós-aprovação — há sessão do próprio worker, e o login carregou o perfil
+  // antes de navegar pra cá.
+  //
+  // Saudação: primeiro nome da conta, como no Figma ("Boas vindas / Gabriel!").
+  const username = user?.name?.trim().split(/\s+/)[0] || undefined;
+
+  // Figma 211:13009 mostra Nome completo "já preenchido" — o nome digitado no
+  // cadastro da conta é a única fonte (QA 2026-07-27: nada de nome truncado
+  // nem de segunda digitação). Perfil vem primeiro: cobre a retomada de um
+  // wizard abandonado com o passo 1 já salvo.
   const fullName = useField({
-    initial: username ?? '',
+    initial: profile?.fullName ?? user?.name ?? '',
     validator: validateFullName,
   });
   const phone = useField({ validator: validatePhone, mask: maskPhone });
@@ -50,7 +60,6 @@ export default function ComplimentaryDataStep1() {
   });
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
   const media = useMediaPicker();
-  const { saveProfile } = useProfile();
 
   // Required: nome, telefone, CPF, data nascimento. Foto fica opcional (avatar
   // default cobre quem não envia).
@@ -66,42 +75,34 @@ export default function ComplimentaryDataStep1() {
       return;
     }
     try {
-      // Phase 6: birthDate is masked DD/MM/YYYY but Profile.birthDate is
-      // AWSDate YYYY-MM-DD — convert (DD/MM/YYYY → YYYY-MM-DD) before the
-      // amplify path is exercised. Mock stores the raw string fine.
+      // Com sessão ativa (fluxo 2 roda pós-login), a foto sobe na hora via
+      // presign — a máquina de stash local (pendingAvatar/pendingProfile)
+      // morreu junto com o wizard pré-conta.
+      let avatarKey: string | undefined;
+      if (photo) {
+        avatarKey = await uploadImage(photo.uri, 'avatars');
+      }
       await saveProfile({
         fullName: fullName.value,
         phone: phone.value,
         cpf: cpf.value,
         birthDate: birthDate.value,
+        ...(avatarKey ? { avatarKey } : {}),
       });
     } catch (e) {
       Alert.alert('Erro', errorMessage(e, 'Não foi possível salvar seus dados.'));
       return;
     }
-    router.push({
-      pathname: '/(auth)/complimentary-data/step-2',
-      params: { username },
-    });
-  };
-
-  // A foto era guardada só num useState e DESCARTADA: o wizard roda antes da
-  // conta existir, e o presign exige token, então não havia como subir na hora.
-  // Agora o arquivo é COPIADO pro armazenamento do app e sobe no primeiro
-  // login (flushPendingProfile). Copiar em vez de guardar a uri é o ponto: o
-  // endereço da galeria é temporário e a aprovação do admin pode levar dias.
-  const guardarFoto = async (uri: string) => {
-    setPhoto({ uri });
-    await stashPendingAvatar(uri);
+    router.push('/(auth)/complimentary-data/step-2');
   };
 
   const handleTakePhoto = async () => {
     const uri = await media.takePhoto();
-    if (uri) await guardarFoto(uri);
+    if (uri) setPhoto({ uri });
   };
   const handlePickFile = async () => {
     const uri = await media.pickFromGallery();
-    if (uri) await guardarFoto(uri);
+    if (uri) setPhoto({ uri });
   };
 
   return (
@@ -174,7 +175,7 @@ export default function ComplimentaryDataStep1() {
           value={photo}
           onTakePhoto={handleTakePhoto}
           onPickFile={handlePickFile}
-          onRemove={() => { setPhoto(null); void clearPendingAvatar(); }}
+          onRemove={() => setPhoto(null)}
           helperText="Selecione arquivos do tipo: JPG ou PNG"
           takePhotoLabel="Tirar Foto"
           pickFileLabel="Enviar arquivo"
@@ -183,16 +184,16 @@ export default function ComplimentaryDataStep1() {
         {/* Actions inside the scroll (mesmo padrão do step-3): elimina o
             problema de overlap quando o ImageUploader expande, já que os
             botões fluem naturalmente abaixo do conteúdo. */}
-        <View style={{ gap: theme.gap.sm }}>
-          <Button
-            variant="contained"
-            label="Avançar"
-            fullWidth
-            disabled={!canSubmit}
-            onPress={goNext}
-          />
-          <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
-        </View>
+        {/* Sem "Voltar": este é o primeiro passo do fluxo 2, e o worker chegou
+            aqui pelo login, não por outra tela do wizard. Voltar o devolvia pra
+            tela de login já autenticado, um beco sem saída (2026-07-27). */}
+        <Button
+          variant="contained"
+          label="Avançar"
+          fullWidth
+          disabled={!canSubmit}
+          onPress={goNext}
+        />
       </KeyboardAwareScrollView>
     </View>
   );

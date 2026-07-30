@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSubmitOnce } from '../../../lib/forms/useSubmitOnce';
 import { Alert, Image, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
@@ -21,8 +21,6 @@ import { isFeatureEnabled } from '../../../lib/featureFlags';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 import { useAuth } from '../../../services/auth/AuthProvider';
-import { signupDraft } from '../../../services/auth/signupDraft';
-import { clearPendingProfile, readPendingProfile } from '../../../services/profile/pendingProfile';
 
 const HEIGHT_OPTIONS = Array.from({ length: 81 }, (_, i) => {
   const v = 140 + i; // 140cm..220cm
@@ -43,9 +41,11 @@ export default function ComplimentaryDataStep3() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { username } = useLocalSearchParams<{ username?: string }>();
   const { saveProfile } = useProfile();
-  const { signUp } = useAuth();
+  const { user } = useAuth();
+  // Saudação: primeiro nome da conta logada (o wizard roda pós-login desde a
+  // reordenação 2026-07-27 — não há mais param vindo do cadastro).
+  const username = user?.name?.trim().split(/\s+/)[0] || undefined;
 
   const [gender, setGender] = useState<GenderValue | null>(null);
   const [height, setHeight] = useState('');
@@ -78,8 +78,9 @@ export default function ComplimentaryDataStep3() {
     if (!canSubmit) return;
     // Persiste o step-3 como os steps 1-2 já fazem. Tudo aqui é DIGITÁVEL
     // (nada vem da smartband), então é dado real — até 2026-07-26 este step
-    // simplesmente descartava o que o usuário preencheu. Sem sessão (fluxo
-    // api pré-aprovação) o save cai no stash local e o flush roda no 1º login.
+    // simplesmente descartava o que o usuário preencheu. O wizard roda
+    // pós-login (fluxo 2, reordenação 2026-07-27), então o PUT sobe com o
+    // token do próprio worker.
     try {
       await saveProfile({
         gender: gender ?? undefined,
@@ -95,37 +96,14 @@ export default function ComplimentaryDataStep3() {
       return;
     }
 
-    // Fim do wizard no fluxo real: é AQUI que a conta nasce, com o perfil
-    // inteiro junto — o cadastro entra na fila de aprovação já completo, e o
-    // admin decide vendo CPF, contato e tipo sanguíneo em vez de aprovar às
-    // cegas (QA 2026-07-26). O rascunho acumulou os 3 steps no SecureStore, já
-    // no formato da API; o `signup` do backend aceita como `profile`.
-    const draft = signupDraft.get();
-    if (draft) {
-      try {
-        const profile = (await readPendingProfile()) ?? undefined;
-        await signUp({ ...draft, profile });
-        // Some com o rascunho: sem isto o mesmo perfil subiria de novo no
-        // primeiro login (semanas depois, após a aprovação), sobrescrevendo o
-        // que tiver sido editado no settings nesse meio-tempo.
-        await clearPendingProfile();
-        signupDraft.clear();
-      } catch (e) {
-        Alert.alert('Erro', errorMessage(e, 'Não foi possível criar a conta.'));
-        return;
-      }
-      const username = draft.name.trim().split(/\s+/)[0] ?? '';
-      router.replace({ pathname: '/(auth)/email-sent', params: { email: draft.email, username } });
-      return;
-    }
     // Onboarding continues into the Smartband configuration flow before the
     // dashboard. Smartband-complete is what finally lands on /(app)/dashboard.
     //
     // Demo phase: when the smartband gate is off (Expo Go / web preview), the
     // entire smartband sub-tree renders ProdOnlyPlaceholder, dead-ending the
     // signup flow. Skip directly to the dashboard so the demo's signup path
-    // actually reaches the authenticated app. signIn() was already called in
-    // account-confirmation so the (app)/_layout guard lets us through.
+    // actually reaches the authenticated app. O worker fez login de verdade
+    // antes do wizard (fluxo 2), então o guard de (app)/_layout deixa passar.
     if (isFeatureEnabled('smartbandOnboarding')) {
       router.replace('/(onboarding)/smartband/connection');
     } else {
