@@ -1,19 +1,19 @@
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
-import Step2 from './step-2';
-import { useProfile } from '../../../services/profile/ProfileProvider';
-import { useAuth } from '../../../services/auth/AuthProvider';
+import Step2 from '../../../../app/(auth)/complimentary-data/step-2';
+import { useProfile } from '../../../../services/profile/ProfileProvider';
+import { useAuth } from '../../../../services/auth/AuthProvider';
 
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), push: mockPush }),
 }));
-jest.mock('../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
-jest.mock('../../../services/auth/AuthProvider', () => ({ useAuth: jest.fn() }));
+jest.mock('../../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
+jest.mock('../../../../services/auth/AuthProvider', () => ({ useAuth: jest.fn() }));
 // Mockado pra não bater no ViaCEP durante o teste.
-jest.mock('../../../lib/cep/useCepLookup', () => ({
+jest.mock('../../../../lib/cep/useCepLookup', () => ({
   useCepLookup: () => ({ loading: false, lookup: jest.fn() }),
 }));
 
