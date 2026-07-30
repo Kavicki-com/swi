@@ -8,7 +8,7 @@ import { ProdOnlyPlaceholder } from '../../components/ProdOnlyPlaceholder';
 import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
 import { isFeatureEnabled } from '../../lib/featureFlags';
-import { NotificationProvider, useNotifications } from '../../services/notifications/NotificationProvider';
+import { useNotifications } from '../../services/notifications/NotificationProvider';
 import type { AppNotification, NotificationDomain } from '../../services/notifications/types';
 import { NotificationState } from '../../components/notifications/NotificationState';
 
@@ -122,11 +122,11 @@ export default function Notifications() {
   if (!isFeatureEnabled('notifications')) {
     return <ProdOnlyPlaceholder />;
   }
-  return (
-    <NotificationProvider>
-      <NotificationsScreen />
-    </NotificationProvider>
-  );
+  // SEM NotificationProvider aqui: ele subiu pro (app)/_layout (QA Mobile #2).
+  // Montar de novo criaria uma SEGUNDA instância de estado, e aí o badge do
+  // dashboard e esta lista seriam fontes independentes: ler aqui não zeraria
+  // o badge lá.
+  return <NotificationsScreen />;
 }
 
 function NotificationsScreen() {

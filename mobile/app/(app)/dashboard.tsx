@@ -42,6 +42,8 @@ import {
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 import { useVitals } from '../../services/vitals/VitalsProvider';
 import { useProfile } from '../../services/profile/ProfileProvider';
+import { useNotifications } from '../../services/notifications/NotificationProvider';
+import { useReports } from '../../services/reports/ReportsProvider';
 import { formatEta } from '../../services/vitals/formatEta';
 import { useWeather } from '../../services/weather/WeatherProvider';
 import { weatherDisplay } from '../../services/weather/weatherFormat';
@@ -122,6 +124,17 @@ const CONTAINER_GAP_XL = 24;
 export default function Dashboard() {
   const { phase, vitals, status } = useVitals();
   const { profile } = useProfile();
+  // QA Mobile #2 (30/07/2026): os badges de Relatórios e Notificações eram o
+  // literal "4". O contador não vinha de lugar nenhum, então prometia conteúdo
+  // que a lista não tinha. Agora saem da contagem real, e somem quando é zero.
+  const { unreadCount } = useNotifications();
+  const { reports, load: loadReports } = useReports();
+  // O ReportsProvider não auto-carrega (o de notificações carrega). Sem este
+  // disparo o badge ficaria escondido até o usuário abrir Relatórios uma vez.
+  useEffect(() => {
+    void loadReports();
+  }, [loadReports]);
+  const pendingReports = reports.filter((r) => r.status === 'pending').length;
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -595,17 +608,28 @@ export default function Dashboard() {
           }}
         >
           <View style={{ gap: theme.gap.s }}>
+            {/* Contagens REAIS, não mais o literal "4" (QA Mobile #2). Sem
+                pendências, o badge some em vez de anunciar conteúdo que a
+                lista não tem. O rótulo acessível acompanha o número. */}
             <BadgedButton
               icon="reports_filled"
-              badge="4"
-              accessibilityLabel="Relatórios — 4 não lidos"
+              badge={pendingReports > 0 ? String(pendingReports) : undefined}
+              accessibilityLabel={
+                pendingReports > 0
+                  ? `Relatórios, ${pendingReports} pendente${pendingReports > 1 ? 's' : ''}`
+                  : 'Relatórios'
+              }
               onPress={() => router.push('/(app)/reports')}
               theme={theme}
             />
             <BadgedButton
               icon="notifications"
-              badge="4"
-              accessibilityLabel="Notificações — 4 não lidas"
+              badge={unreadCount > 0 ? String(unreadCount) : undefined}
+              accessibilityLabel={
+                unreadCount > 0
+                  ? `Notificações, ${unreadCount} não lida${unreadCount > 1 ? 's' : ''}`
+                  : 'Notificações'
+              }
               onPress={() => router.push('/(app)/notifications')}
               theme={theme}
             />
@@ -820,6 +844,11 @@ const BadgedButton = memo(function BadgedButton({
       />
       {badge ? (
         <View
+          // pointerEvents="none" (QA Mobile #2): o badge é absoluto sobre o
+          // quadrante superior direito do botão de 56×56. Sem isto ele CAPTURA
+          // o toque que cai nos seus 24×24 e não faz nada com ele — e o badge é
+          // justamente a parte mais chamativa, que o usuário tende a mirar.
+          pointerEvents="none"
           style={{
             position: 'absolute',
             top: 0,
