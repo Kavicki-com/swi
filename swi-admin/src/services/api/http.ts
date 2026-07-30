@@ -76,12 +76,6 @@ export async function apiFetch<T>(
       headers: mergeHeaders(
         {
           'Content-Type': 'application/json',
-          // QA remoto via túnel: no plano free o ngrok intercepta requests de
-          // browser com uma página interstitial (Ngrok-Error-Code
-          // ERR_NGROK_6024) — HTML, status 200 e SEM Access-Control-Allow-
-          // Origin, o que o browser reporta como erro de CORS. Este header
-          // pula a interstitial. Inerte quando não há túnel no caminho.
-          'ngrok-skip-browser-warning': 'true',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         init.headers,
