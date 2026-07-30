@@ -187,13 +187,12 @@ export default function ComplimentaryDataStep1() {
         {/* Sem "Voltar": este é o primeiro passo do fluxo 2, e o worker chegou
             aqui pelo login, não por outra tela do wizard. Voltar o devolvia pra
             tela de login já autenticado, um beco sem saída (2026-07-27). */}
-        <Button
-          variant="contained"
-          label="Avançar"
-          fullWidth
-          disabled={!canSubmit}
-          onPress={goNext}
-        />
+        {/* SEM `disabled={!canSubmit}`, mesmo motivo do step-2 (QA Mobile #1):
+            o goNext já marca os campos como tocados pra revelar os erros, e
+            botão desabilitado nunca dispara onPress, o que tornava esse bloco
+            código morto. O QA só reportou na etapa 2 porque foi lá que deixou
+            um campo vazio, mas o beco sem saída era igual aqui. */}
+        <Button variant="contained" label="Avançar" fullWidth onPress={goNext} />
       </KeyboardAwareScrollView>
     </View>
   );

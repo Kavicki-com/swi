@@ -217,13 +217,14 @@ export default function SignUp() {
           />
 
           <View style={{ gap: theme.gap.sm }}>
-            <Button
-              variant="contained"
-              label="Criar conta"
-              fullWidth
-              disabled={!canSubmit}
-              onPress={enviar}
-            />
+            {/* SEM `disabled={!canSubmit}`, mesmo motivo do wizard (QA Mobile
+                #1): o handleSubmit já marca os campos como tocados pra revelar
+                os erros, e botão desabilitado nunca dispara onPress.
+
+                Isto NÃO afrouxa a trava de duplo envio: ela vive no
+                useSubmitOnce (`enviar`), não no disabled. Foi justamente por o
+                disabled ser insuficiente que o useSubmitOnce nasceu. */}
+            <Button variant="contained" label="Criar conta" fullWidth onPress={enviar} />
             <Button
               variant="outline"
               label="Voltar"
