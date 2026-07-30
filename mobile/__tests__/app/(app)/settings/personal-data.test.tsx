@@ -1,22 +1,22 @@
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
-import SettingsPersonalData from './personal-data';
-import { useProfile } from '../../../services/profile/ProfileProvider';
-import { fetchProfileCatalog } from '../../../services/api/catalog';
-import { useMediaPicker } from '../../../lib/media/useMediaPicker';
-import { uploadImage } from '../../../services/api/uploadMedia';
+import SettingsPersonalData from '../../../../app/(app)/settings/personal-data';
+import { useProfile } from '../../../../services/profile/ProfileProvider';
+import { fetchProfileCatalog } from '../../../../services/api/catalog';
+import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
+import { uploadImage } from '../../../../services/api/uploadMedia';
 
-jest.mock('../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
-jest.mock('../../../services/api/catalog', () => ({ fetchProfileCatalog: jest.fn() }));
+jest.mock('../../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
+jest.mock('../../../../services/api/catalog', () => ({ fetchProfileCatalog: jest.fn() }));
 // A tela passou a ler o e-mail da CONTA (User), nao do Profile — o campo Email
 // antes nao carregava nem salvava nada.
-jest.mock('../../../services/auth/AuthProvider', () => ({
+jest.mock('../../../../services/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'u1', email: 'fulano@empresa.com', name: 'Fulano' } }),
 }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ back: jest.fn(), push: jest.fn() }) }));
-jest.mock('../../../lib/media/useMediaPicker', () => ({ useMediaPicker: jest.fn() }));
-jest.mock('../../../services/api/uploadMedia', () => ({ uploadImage: jest.fn() }));
+jest.mock('../../../../lib/media/useMediaPicker', () => ({ useMediaPicker: jest.fn() }));
+jest.mock('../../../../services/api/uploadMedia', () => ({ uploadImage: jest.fn() }));
 
 const mockUseProfile = useProfile as jest.Mock;
 const mockCatalog = fetchProfileCatalog as jest.Mock;

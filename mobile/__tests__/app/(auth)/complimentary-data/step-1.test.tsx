@@ -1,19 +1,19 @@
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
-import Step1 from './step-1';
-import { useProfile } from '../../../services/profile/ProfileProvider';
-import { useAuth } from '../../../services/auth/AuthProvider';
+import Step1 from '../../../../app/(auth)/complimentary-data/step-1';
+import { useProfile } from '../../../../services/profile/ProfileProvider';
+import { useAuth } from '../../../../services/auth/AuthProvider';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
 }));
-jest.mock('../../../lib/media/useMediaPicker', () => ({
+jest.mock('../../../../lib/media/useMediaPicker', () => ({
   useMediaPicker: () => ({ takePhoto: jest.fn(), pickFromGallery: jest.fn(), picking: false }),
 }));
-jest.mock('../../../services/api/uploadMedia', () => ({ uploadImage: jest.fn() }));
-jest.mock('../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
-jest.mock('../../../services/auth/AuthProvider', () => ({ useAuth: jest.fn() }));
+jest.mock('../../../../services/api/uploadMedia', () => ({ uploadImage: jest.fn() }));
+jest.mock('../../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
+jest.mock('../../../../services/auth/AuthProvider', () => ({ useAuth: jest.fn() }));
 
 const mockUseProfile = useProfile as jest.Mock;
 const mockUseAuth = useAuth as jest.Mock;

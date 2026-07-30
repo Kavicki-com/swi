@@ -1,12 +1,12 @@
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
-import NovoRelatorio from './new';
-import { useMediaPicker } from '../../../lib/media/useMediaPicker';
-import { useReports } from '../../../services/reports/ReportsProvider';
+import NovoRelatorio from '../../../../app/(app)/reports/new';
+import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
+import { useReports } from '../../../../services/reports/ReportsProvider';
 
-jest.mock('../../../lib/media/useMediaPicker', () => ({ useMediaPicker: jest.fn() }));
-jest.mock('../../../services/reports/ReportsProvider', () => ({ useReports: jest.fn() }));
+jest.mock('../../../../lib/media/useMediaPicker', () => ({ useMediaPicker: jest.fn() }));
+jest.mock('../../../../services/reports/ReportsProvider', () => ({ useReports: jest.fn() }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
   useFocusEffect: jest.fn(),
