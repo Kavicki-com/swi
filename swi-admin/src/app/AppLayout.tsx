@@ -31,6 +31,7 @@ import { NAV_ITEMS } from '@/app/nav'
 import { useChat } from '@/services/chat/ChatProvider'
 import { resolveContact, unreadFor } from '@/services/chat/chatReducers'
 import { useMyVitals } from '@/hooks/useMyVitals'
+import { UserDetailsMenu } from '@/components/UserDetailsMenu'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // DS module is shimmed to `any`; mirror the types we need locally.
@@ -81,6 +82,7 @@ export function AppLayout() {
   const breakpoint = useBreakpoint()
   const activeNavValue = resolveActiveNavValue(location.pathname)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
 
   // Chat sidebar/drawer list vem do ChatProvider (conversas reais). Deriva a
   // shape do ChatSection (id/name/subtitle/avatarUri/unreadCount) uma vez por
@@ -109,11 +111,14 @@ export function AppLayout() {
     setDrawerOpen(false)
   }, [location.pathname])
 
+  // QA cliente §1.1 (portado do demo em 2026-07-28): o avatar do header abre o
+  // menu fullscreen com vídeo + vitais. A página /user/profile continua
+  // alcançável pelo avatar grande DENTRO do menu.
   const headerUserInfo = (
     <Pressable
-      onPress={() => navigate('/user/profile')}
+      onPress={() => setUserMenuOpen(true)}
       accessibilityRole="button"
-      accessibilityLabel="Abrir perfil do usuário"
+      accessibilityLabel="Abrir menu do usuário"
       testID="app-header-user-info-pressable"
     >
       <HeaderUserInfo
@@ -260,6 +265,7 @@ export function AppLayout() {
             />
           </View>
         )}
+        <UserDetailsMenu open={userMenuOpen} onClose={() => setUserMenuOpen(false)} />
       </View>
     )
   }
@@ -353,6 +359,7 @@ export function AppLayout() {
           <Outlet />
         </View>
       </View>
+      <UserDetailsMenu open={userMenuOpen} onClose={() => setUserMenuOpen(false)} />
     </View>
   )
 }
