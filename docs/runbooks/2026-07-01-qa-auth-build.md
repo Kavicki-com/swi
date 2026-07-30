@@ -1,5 +1,39 @@
 # Runbook — Build de QA ponta a ponta (Docker + túnel + EAS build)
 
+> ## SUPERADO EM 2026-07-30 — leia isto antes de seguir os passos
+>
+> Este runbook descreve o mundo **antes** de existir infra de produção: backend
+> em Docker na máquina do dev, exposto por túnel ngrok, e-mails lidos no
+> MailHog. **Nada disso vale mais para gerar uma build de QA.**
+>
+> | Antes (este runbook) | Agora |
+> |---|---|
+> | `https://<algo>.ngrok-free.app` | `https://api.kavicki.com` |
+> | placeholder `REPLACE-WITH-STATIC-TUNNEL` no `eas.json` | domínio real nos perfis `qa`, `qa-testflight` e `production` |
+> | MinIO local em túnel | Cloudflare R2, bucket `swi-media` |
+> | MailHog em túnel | SMTP de produção |
+> | três túneis ngrok (API, MailHog, MinIO) | nenhum túnel |
+>
+> **Para gerar uma build de QA hoje, é só isto:**
+>
+> ```bash
+> cd mobile && eas build --profile qa --platform android
+> ```
+>
+> O perfil `qa` já aponta para `api.kavicki.com` com `AUTH_BACKEND=api` e
+> `DATA_BACKEND=api`. Para iOS, `--profile qa-testflight`. **Não use `preview`:**
+> ele ficou sem `EXPO_PUBLIC_API_URL` e cai no default.
+>
+> Duas consequências de sair do MailHog: os códigos de confirmação e reset
+> chegam por **e-mail de verdade**, então o QA usa a própria caixa e não há URL
+> de MailHog para enviar; e se o SMTP de produção não estiver configurado, o
+> cadastro trava na confirmação **parecendo bug do app**.
+>
+> As seções 3.3, 3.4 e 3.5 (túneis e placeholder) estão **obsoletas**. As
+> seções 4.x (fluxos de QA e endpoints de auth) continuam válidas, trocando a
+> leitura do MailHog pela caixa de e-mail real. A stack em Docker das seções
+> 3.1 e 3.2 segue válida para **desenvolvimento local**, não para build de QA.
+
 ## 1. Contexto
 
 Este runbook descreve como gerar e validar uma **build de QA (APK Android)** do app mobile
