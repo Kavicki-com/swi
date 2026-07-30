@@ -5,6 +5,9 @@ storybook-static/
 coverage/
 .env
 .env.local
+# Backups de env (.env.local.bak-tunnel e afins): o sufixo escapa dos padrões
+# acima, e um deles já ficou rastreável por engano. Costumam ter credencial.
+.env*.bak*
 .DS_Store
 *.log
 *.tsbuildinfo
