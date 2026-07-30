@@ -24,3 +24,55 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run storybook:build
+
+  # Até 2026-07-30 o CI tinha só o job acima. mobile/ e swi-backend/ passavam
+  # por PR sem verificação nenhuma, incluindo o PR #92, que era quase todo
+  # backend e mobile.
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # Sem typecheck de propósito: o baseline tem 7 erros pré-existentes
+      # (tipos de expressão do mapbox em MapHeatmapSource.web.tsx e @types/three
+      # ausente em Smartwatch3D.native.tsx). Entrar como gate deixaria o CI
+      # vermelho no primeiro run. Zerar esses 7 é pré-requisito pra ligar aqui.
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: swi-backend
+    strategy:
+      fail-fast: false
+      matrix:
+        # 18 é a versão da hospedagem Cloudez; 22 é a do Dockerfile. A matriz
+        # existe por causa de um bug real: pg-boss v12 é ESM-only e estourava
+        # ERR_REQUIRE_ESM só no 18. O Docker local (22) mascarou, e o defeito
+        # apareceu direto em produção, no deploy de 2026-07-29.
+        node: ['18', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+          cache-dependency-path: swi-backend/package-lock.json
+      - run: npm ci
+      # O client do Prisma é gerado, não versionado: sem isto o build não acha
+      # os tipos de @prisma/client.
+      - run: npx prisma generate
+      - run: npm run build
+      # Só os testes unitários. Os 10 e2e falam com Postgres de verdade e
+      # precisariam de service container + migrate deploy; ficam de fora até
+      # serem validados localmente contra o compose.
+      - run: npm test

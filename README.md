@@ -12,7 +12,12 @@ Web admin para o SWI (monitoramento de funcionários em campo). Front-first MVP 
   map banner, KPI row, two-column row (Atividades + Alertas de Desgaste com
   ChipGroup + SearchInput), WeatherTimeline com 6 entradas + AGORA marker.
   Audit em `docs/audits/2026-05-08-s1.7-task0-divergence.md`.
-- **CI:** GitHub Actions em `.github/workflows/ci.yml` (typecheck, lint, test, build, storybook:build)
+- **CI:** GitHub Actions em `.github/workflows/ci.yml`, três jobs:
+  - `admin` — typecheck, lint, test, build, storybook:build
+  - `mobile` — test (typecheck fora: 7 erros pré-existentes no baseline)
+  - `backend` — prisma generate, build, test, em matriz Node 18 e 22 (18 é a
+    hospedagem Cloudez, 22 é o Dockerfile; a divergência já causou um bug que
+    só apareceu em produção)
 - **Vercel preview:** _a configurar via `npx vercel link` em `swi-admin/`_
 
 ## Local dev
@@ -44,7 +49,7 @@ npm run build        # produz dist/
 
 ```
 SWI/
-  .github/workflows/ci.yml     CI (typecheck, lint, test, build, storybook)
+  .github/workflows/ci.yml     CI (jobs admin, mobile e backend)
   docs/plans/                  design doc + plano S0
   swi-admin/
     src/
