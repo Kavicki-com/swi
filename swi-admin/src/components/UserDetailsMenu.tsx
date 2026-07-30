@@ -57,6 +57,16 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
   const fatigueLabel = `${vitals.fatigueHours}horas, ${vitals.fatigueMinutes} minutos`
   const temperatureLabel = `${vitals.temperature.toString().replace('.', ',')}°C, ${vitals.temperatureLabel}`
 
+  // Rótulo em caixa alta da coluna da esquerda. Extraído porque estava copiado
+  // em quatro lugares, e cada cópia carregava o próprio `fontSize: 14` cravado.
+  // `letterSpacing` fica literal: a escala do DS não tem token de tracking.
+  const labelStyle = {
+    fontSize: theme.fontSize.m,
+    fontWeight: '500' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  }
+
   return (
     <View
       // RN typings don't include 'dialog' even though it's a valid ARIA
@@ -175,6 +185,9 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
           style={{
             flexDirection: 'row',
             alignItems: 'flex-start',
+            // 20 fica literal: a escala de gap do DS pula de m (16) pra l (24).
+            // O 20 existe em padding.ml, mas usar token de padding num gap
+            // seria trocar o valor certo pela semântica errada.
             gap: 20,
             width: 459,
           }}
@@ -189,8 +202,8 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
             style={{
               width: 140,
               height: 140,
-              borderRadius: 999,
-              borderWidth: 2,
+              borderRadius: theme.border.radius.pill,
+              borderWidth: theme.border.size.m,
               borderColor: theme.surface.success,
               overflow: 'hidden',
             }}
@@ -202,41 +215,25 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
 
           {/* Content column to the right of the avatar — everything else
               stacks here in a single vertical flow. */}
-          <View style={{ flex: 1, alignItems: 'flex-start', gap: 4 }}>
+          <View style={{ flex: 1, alignItems: 'flex-start', gap: theme.gap.xs }}>
             <Title variant="title.l" color={theme.content.dark}>
               {fullName}
             </Title>
             <Text
               color={theme.content.medium}
-              style={{
-                fontSize: 14,
-                fontWeight: '500',
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-              }}
+              style={labelStyle}
             >
               {vitals.role}
             </Text>
             <Text
               color={theme.content.medium}
-              style={{
-                fontSize: 14,
-                fontWeight: '500',
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-              }}
+              style={labelStyle}
             >
               {vitals.sector}
             </Text>
             <Text
               color={theme.content.medium}
-              style={{
-                fontSize: 14,
-                fontWeight: '500',
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-                marginTop: theme.gap.s,
-              }}
+              style={{ ...labelStyle, marginTop: theme.gap.s }}
             >
               Batimentos cardíacos:
             </Text>
@@ -244,20 +241,26 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
               style={{
                 // Match exato do `.numero-batimentos` da referência
                 // (software/style.css linhas 720-732): 180×40, centro
-                // vertical+horizontal, border-radius 6.
+                // vertical+horizontal, border-radius 6. As três medidas ficam
+                // literais porque são do porte pixel-a-pixel e não existem na
+                // escala do DS (os raios são 2, 4, 8, 16, pill).
                 width: 180,
                 height: 40,
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 6,
                 backgroundColor: theme.surface.standard,
-                marginTop: 4,
+                marginTop: theme.gap.xs,
               }}
             >
               <Text
                 variant="body.m"
                 color={theme.content.dark}
-                style={{ fontFamily: theme.fontFamily.title, fontWeight: '700', fontSize: 24 }}
+                style={{
+                  fontFamily: theme.fontFamily.title,
+                  fontWeight: '700',
+                  fontSize: theme.fontSize.l,
+                }}
               >
                 {vitals.heartRate}bpm
               </Text>
@@ -270,13 +273,7 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
             </View>
             <Text
               color={theme.content.medium}
-              style={{
-                fontSize: 14,
-                fontWeight: '500',
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-                marginTop: theme.gap.s,
-              }}
+              style={{ ...labelStyle, marginTop: theme.gap.s }}
             >
               status:
             </Text>
