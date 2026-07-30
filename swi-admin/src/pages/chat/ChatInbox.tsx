@@ -304,12 +304,25 @@ function ContactMiniMap({
     return () => {
       map.remove()
     }
-    // Intentionally excludes `theme.surface.secondary`: the marker DOM uses
-    // theme tokens at construction; rebuilding maplibre on theme changes is
-    // disruptive for a token that never moves at runtime (single dark theme).
-    // Same trade-off as Admin/EmployeeDetails mini-maps.
+    // Depende de `contact.avatarUri`, NAO do objeto `contact` (QA Web #2,
+    // 30/07/2026: "o painel do mapa fica piscando repetidamente" ao digitar).
+    //
+    // `contacts` e recalculado inline no render de ChatInbox, entao cada
+    // setDraft do composer produzia objetos ChatContact com identidade nova.
+    // Com o objeto nas deps, o efeito rodava a cada tecla: map.remove() seguido
+    // de new Map(), o que piscava E refazia o fetch dos tiles de satelite da
+    // ESRI, uma requisicao por caractere digitado.
+    //
+    // avatarUri e o UNICO valor de `contact` que este efeito consome (o centro
+    // do mapa e fixo), e e uma string, entao a comparacao passa a ser por valor
+    // e sobrevive ao objeto novo.
+    //
+    // Tambem exclui `theme.surface.secondary` de proposito: o DOM do marker le
+    // tokens na construcao, e reconstruir o maplibre por mudanca de tema seria
+    // disruptivo pra um token que nao se move em runtime (tema unico escuro).
+    // Mesmo trade-off dos mini-mapas de Admin/EmployeeDetails.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contact, lib])
+  }, [contact.avatarUri, lib])
   return (
     <View
       style={{

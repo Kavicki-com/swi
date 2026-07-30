@@ -384,6 +384,19 @@ export function MapsGeneral() {
     })
 
     return () => {
+      // Guarda de unmount (QA Web #8, BLOQUEADOR: "a tela fica preta" ao sair
+      // da página com o mapa de calor ligado).
+      //
+      // O React roda cleanups na ORDEM DE DECLARAÇÃO, e o efeito que cria o
+      // mapa é declarado ANTES deste. No unmount, `map.remove()` roda primeiro
+      // e destrói o style; então este cleanup chamava getLayer() num mapa morto
+      // e lançava. Exceção em cleanup derruba a árvore inteira, e era isso que
+      // o usuário via como tela preta.
+      //
+      // `mapRef.current` já foi zerado pelo cleanup do mapa, então a comparação
+      // distingue os dois casos: re-run normal (mesma instância, limpa) e
+      // unmount (instância morta, não toca). Sem API privada da lib.
+      if (mapRef.current !== map) return
       if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
       if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
     }
@@ -453,6 +466,11 @@ export function MapsGeneral() {
     })
     return () => {
       cancelled = true
+      // Mesma guarda do cleanup do heatmap, e pelo mesmo motivo: "Zonas de
+      // alerta" era o SEGUNDO filtro que o QA ligava antes da tela preta
+      // (Web #8). `cancelled` só protege o .then; não protege este cleanup de
+      // rodar depois do map.remove().
+      if (mapRef.current !== map) return
       if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
       if (map.getSource('meteo')) map.removeSource('meteo')
     }

@@ -241,6 +241,13 @@ export function AlertsList() {
       },
     })
     return () => {
+      // Mesma guarda do MapsGeneral (QA Web #8). Cleanups rodam na ordem de
+      // declaração, então no unmount o `map.remove()` do efeito de init já
+      // destruiu o style, e getLayer() aqui lançaria, derrubando a árvore.
+      // Esta tela é o destino que o QA usou no passo a passo ("clicar em um
+      // item do menu lateral, ex.: Alertas"), logo tinha o mesmo defeito na
+      // saída dela.
+      if (mapRef.current !== map) return
       if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
       if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
     }
@@ -277,6 +284,9 @@ export function AlertsList() {
     })
     return () => {
       cancelled = true
+      // `cancelled` só protege o .then do radar; não impede este cleanup de
+      // rodar depois do map.remove(). Ver a guarda gêmea no cleanup do heatmap.
+      if (mapRef.current !== map) return
       if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
       if (map.getSource('meteo')) map.removeSource('meteo')
     }
