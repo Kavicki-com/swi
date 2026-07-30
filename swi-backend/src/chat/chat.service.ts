@@ -19,15 +19,19 @@ export class ChatService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async listDirectory(userId: string, companyId: string | null) {
+  async listDirectory(userId: string) {
     const users = await this.prisma.user.findMany({
-      // Org-scoping (QA C1): diretório restrito à empresa do usuário.
+      // Diretório ABERTO (decisão 2026-07-27): o worker conversa com quem
+      // quiser no app — colegas, painel, gente de outra empresa.
       //
-      // ADMIN entra na lista (decisão 2026-07-26): o filtro era só role WORKER,
-      // então o funcionário no app via os 8 colegas e NENHUM admin — não tinha
-      // como iniciar conversa com o painel, só responder numa thread que o
-      // admin abrisse. Colegas continuam visíveis; ninguém perdeu contato.
-      where: { approvalStatus: 'APPROVED', role: { in: ['WORKER', 'ADMIN'] }, id: { not: userId }, companyId },
+      // Saíram dois recortes: o de empresa (org-scoping da QA C1) e o de papel
+      // (que listava WORKER+ADMIN, hoje todo mundo, mas excluiria em silêncio
+      // qualquer papel novo).
+      //
+      // Sobrou o que ainda faz sentido: conta aprovada — PENDING e REJECTED
+      // sequer conseguem entrar, então oferecê-los como contato só renderia
+      // mensagem sem leitor — e eu fora da minha própria lista.
+      where: { approvalStatus: 'APPROVED', id: { not: userId } },
       include: { profile: true },
       orderBy: { name: 'asc' },
       take: LIST_CAP,
