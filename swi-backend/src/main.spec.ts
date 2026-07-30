@@ -10,6 +10,7 @@ jest.mock('@nestjs/core', () => ({ NestFactory: { create: async () => fakeApp } 
 jest.mock('./cors', () => ({
   applyCors: jest.fn(),
   corsOrigins: jest.fn(() => ['http://localhost:5173']),
+  wsCorsOptions: jest.fn(() => ({ origin: ['http://localhost:5173'] })),
 }))
 
 import { applyCors } from './cors'
