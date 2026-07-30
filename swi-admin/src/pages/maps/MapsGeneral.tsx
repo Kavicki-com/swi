@@ -112,7 +112,11 @@ export function MapsGeneral() {
   const [mapReady, setMapReady] = useState(false)
   // Figma neutral state hides employee pins (node 33:3917 opacity:0).
   // Pins appear when the user expands the "operators" map control.
-  const [showOperators, setShowOperators] = useState(false)
+  // QA Web #3: `?focus=<id>` chega do pin da lista de Funcionarios. Quando ele
+  // existe, a camada de operadores JA nasce ligada, senao o usuario cai num
+  // mapa vazio e precisa de um clique extra pra ver quem foi pedir pra ver.
+  const focusId = new URLSearchParams(location.search).get('focus')
+  const [showOperators, setShowOperators] = useState(focusId !== null)
   // Heatmap state — Figma 33:3924 + Screenshot_41:
   // - showHeatmap drives the MapControl expanded panel
   // - heatmapOptions per-checkbox: produtividade = thermal blob overlay
@@ -285,6 +289,22 @@ export function MapsGeneral() {
       setMapReady(false)
     }
   }, [markersLoaded, lib])
+
+  // QA Web #3: centraliza no funcionario que veio no `?focus`, uma unica vez.
+  // O ref e necessario porque `shiftedMarkers` muda a cada atualizacao de
+  // posicao ao vivo (WebSocket); sem ele a camera seria reescrita embaixo do
+  // operador toda vez que uma posicao chegasse, o que e pior que o bug.
+  const focusedRef = useRef(false)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady || !focusId || focusedRef.current) return
+    const target = shiftedMarkers.find((m) => m.id === focusId)
+    // Sem `return` marcando focusedRef: o alvo pode simplesmente ainda nao ter
+    // chegado no primeiro snapshot, e queremos tentar de novo no proximo.
+    if (!target) return
+    focusedRef.current = true
+    map.flyTo({ center: [target.lng, target.lat], zoom: 16, duration: 1500 })
+  }, [mapReady, focusId, shiftedMarkers])
 
   useEffect(() => {
     const map = mapRef.current

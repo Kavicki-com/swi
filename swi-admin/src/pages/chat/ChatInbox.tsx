@@ -125,11 +125,44 @@ const CHAT_IMG_H = 160
 // avatar + border color + horizontal padding.
 export function ChatBubble({ message, contact }: { message: ChatMessage; contact: ChatContact }) {
   const theme = useTheme()
+  const { show: showToast } = useDemoToast()
   const isMe = message.sender === 'me'
   const bubbleBorderColor = isMe ? theme.content.secondaryLight : theme.content.primaryLight
   const avatarUri = isMe ? workerA : contact.avatarUri
   const avatar = (
     <Avatar uri={avatarUri} customSize={40} accessibilityLabel={isMe ? 'Você' : contact.name} />
+  )
+  // QA Web #4 (30/07/2026): o more_vert era um <Icon> solto, sem Pressable e
+  // sem onPress. Controle morto: o usuário clicava e nada acontecia.
+  //
+  // O relatório sugeria "abrir o menu de ações (editar, excluir, copiar,
+  // responder)". Dessas, a ÚNICA que existe no produto é copiar: o
+  // chat.controller só tem listar, enviar e marcar como lida, e o ChatProvider
+  // só expõe openConversation/closeConversation/send. Editar e excluir seriam
+  // features novas de ponta a ponta, não correção de bug.
+  //
+  // Também não há popover/dropdown no DS (só MenuItem e SideMenu), então um
+  // menu flutuante seria componente local, o que a regra do DS proíbe.
+  //
+  // Logo: o controle passa a executar a ação real que existe, com rótulo
+  // acessível dizendo exatamente o que faz.
+  const copyMessage = () => {
+    const text = message.text
+    if (!text) return
+    const clipboard = navigator.clipboard
+    if (!clipboard) {
+      showToast('Não foi possível copiar', 'Selecione o texto e copie manualmente.')
+      return
+    }
+    clipboard.writeText(text).then(
+      () => showToast('Mensagem copiada'),
+      () => showToast('Não foi possível copiar', 'Selecione o texto e copie manualmente.'),
+    )
+  }
+  const moreButton = (
+    <Pressable accessibilityRole="button" accessibilityLabel="Copiar mensagem" onPress={copyMessage}>
+      <Icon name="more_vert" size={16} color={theme.content.dark} />
+    </Pressable>
   )
   // Bubble pill — surface.standard with 1px border in the assigned color,
   // radius.l, content.dark text, drop shadow 12px y4 alpha 12%.
@@ -189,7 +222,7 @@ export function ChatBubble({ message, contact }: { message: ChatMessage; contact
             width: '100%',
           }}
         >
-          {isMe ? <Icon name="more_vert" size={16} color={theme.content.dark} /> : null}
+          {isMe ? moreButton : null}
           <Text
             variant="body.m"
             color={theme.content.dark}
@@ -197,7 +230,7 @@ export function ChatBubble({ message, contact }: { message: ChatMessage; contact
           >
             {message.text}
           </Text>
-          {isMe ? null : <Icon name="more_vert" size={16} color={theme.content.dark} />}
+          {isMe ? null : moreButton}
         </View>
       ) : null}
       <Text variant="caption.xs" color={theme.content.dark}>
