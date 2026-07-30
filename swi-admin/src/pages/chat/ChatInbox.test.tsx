@@ -32,6 +32,20 @@ vi.mock('@/lib/demoToast', () => ({
   DemoToastProvider: ({ children }: { children: ReactNode }) => children,
 }))
 
+// Stub do maplibre. Sem ele o `lib` fica null em jsdom e o efeito do mini-mapa
+// sai cedo, entao o mapa NUNCA e construido e o bug do QA Web #2 fica invisivel
+// no teste.
+//
+// `lib` e uma referencia ESTAVEL de proposito: devolver um objeto novo a cada
+// chamada faria o proprio stub invalidar o efeito, e o teste passaria a medir o
+// mock em vez do componente.
+const maplibre = vi.hoisted(() => {
+  const MapCtor = vi.fn(() => ({ remove: vi.fn() }))
+  const MarkerCtor = vi.fn(() => ({ setLngLat: () => ({ addTo: () => {} }) }))
+  return { MapCtor, MarkerCtor, lib: { Map: MapCtor, Marker: MarkerCtor } }
+})
+vi.mock('@/lib/useMapLibre', () => ({ useMapLibre: () => maplibre.lib }))
+
 import { ChatBubble, ChatInbox } from './ChatInbox'
 
 const keyFor = (workerId: string): string => ['me', workerId].sort().join('#')
@@ -100,8 +114,31 @@ describe('ChatInbox', () => {
     setChat()
     nav.spy = vi.fn()
     toast.show = vi.fn()
+    maplibre.MapCtor.mockClear()
+    maplibre.MarkerCtor.mockClear()
   })
   afterEach(clearSession)
+
+  // QA Web #2 (30/07/2026): "ao digitar no campo de mensagem, o painel do mapa
+  // fica piscando repetidamente".
+  //
+  // O piscar era o mini-mapa sendo DESTRUIDO e RECONSTRUIDO a cada tecla:
+  // `contacts` e recalculado inline no render de ChatInbox, entao cada
+  // setDraft produzia objetos ChatContact novos, e o efeito do ContactMiniMap
+  // dependia do objeto inteiro. Nao era so visual: cada reconstrucao refazia o
+  // fetch dos tiles de satelite da ESRI, uma requisicao por tecla.
+  it('nao reconstroi o mini-mapa a cada tecla digitada no composer', async () => {
+    renderPage(<ChatInbox />, CONV_ROUTE)
+    await waitFor(() => expect(maplibre.MapCtor).toHaveBeenCalledTimes(1))
+
+    const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
+    for (const value of ['O', 'Ol', 'Olá', 'Olá ', 'Olá t']) {
+      fireEvent.change(input, { target: { value } })
+    }
+
+    // O mapa foi construido UMA vez, na montagem, e nao uma vez por tecla.
+    expect(maplibre.MapCtor).toHaveBeenCalledTimes(1)
+  })
 
   it('renders without crashing', () => {
     expect(() => renderPage(<ChatInbox />, { route: '/chat' })).not.toThrow()
