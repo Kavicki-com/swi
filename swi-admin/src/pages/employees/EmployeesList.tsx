@@ -564,7 +564,9 @@ export function EmployeesList({
                 // desligada. O usuario caia num mapa vazio e precisava de um
                 // clique extra em "Operadores". O `focus` resolve os dois:
                 // liga a camada e centraliza neste funcionario.
-                onLocation={() => navigate(`/maps/general?focus=${encodeURIComponent(employee.id)}`)}
+                onLocation={() =>
+                  navigate(`/maps/general?focus=${encodeURIComponent(employee.id)}`)
+                }
                 isTablet={isTablet}
               />
             ))}

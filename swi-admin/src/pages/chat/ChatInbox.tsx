@@ -160,7 +160,11 @@ export function ChatBubble({ message, contact }: { message: ChatMessage; contact
     )
   }
   const moreButton = (
-    <Pressable accessibilityRole="button" accessibilityLabel="Copiar mensagem" onPress={copyMessage}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Copiar mensagem"
+      onPress={copyMessage}
+    >
       <Icon name="more_vert" size={16} color={theme.content.dark} />
     </Pressable>
   )
