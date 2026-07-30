@@ -14,13 +14,76 @@ export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PUT';
   body?: unknown;
   auth?: boolean;
+  /** Prazo desta chamada. Só suba para operações longas (upload). */
+  timeoutMs?: number;
+}
+
+// Prazo padrão de QUALQUER chamada à API.
+//
+// QA Mobile #6: o chat aberto pela tela de Relatórios ficava "carregando para
+// sempre". A tela só sai do loading quando a promessa resolve OU rejeita, e sem
+// prazo uma requisição travada (rede que some no meio, proxy que segura a
+// conexão, leitura de token que não volta) deixa a promessa pendente para
+// sempre. O spinner nunca vira erro e o "Tentar novamente" fica inalcançável.
+//
+// O React Native não protege: o OkHttp que ele monta vem com connect/read/write
+// timeout em 0, ou seja, infinito. Então o prazo é nosso.
+//
+// 20 s: folgado para 3G ruim e curto o bastante para virar erro acionável.
+export const REQUEST_TIMEOUT_MS = 20_000;
+
+/** Distingue "estourou o prazo" de erro do backend (que vem com `status`). */
+export function isTimeoutError(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { code?: string }).code === 'TIMEOUT';
+}
+
+/**
+ * Roda `work` com prazo. Duas garantias, de propósito:
+ *
+ *  - REJEITA no prazo, por corrida, mesmo que o `work` ignore o sinal. Confiar
+ *    só no abort deixaria o bug de pé se o fetch não honrasse o AbortSignal, e
+ *    "promessa que nunca volta" é exatamente o defeito que estamos matando.
+ *  - ABORTA junto, pra a conexão morrer em vez de ficar ocupando slot (o
+ *    OkHttp do Android só deixa 5 requisições simultâneas por host).
+ *
+ * O prazo cobre a operação INTEIRA, não só o fetch: a leitura do token no
+ * SecureStore é async e também pode não voltar.
+ */
+export async function withDeadline<T>(
+  timeoutMs: number,
+  message: string,
+  work: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      const err = new Error(message);
+      (err as any).code = 'TIMEOUT';
+      reject(err);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([work(controller.signal), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Helper HTTP compartilhado (extraído do req() interno do apiAuthBackend).
 // Default de método: body ? 'POST' : 'GET' (aceita override explícito, ex. PUT).
 // Com auth, anexa Bearer do token guardado no SecureStore. A message de erro
 // já vem pronta do backend.
-export async function apiRequest<T = any>(path: string, opts: ApiRequestOptions = {}): Promise<T> {
+export function apiRequest<T = any>(path: string, opts: ApiRequestOptions = {}): Promise<T> {
+  return withDeadline(
+    opts.timeoutMs ?? REQUEST_TIMEOUT_MS,
+    'Tempo esgotado. Verifique sua conexão e tente novamente.',
+    (signal) => send<T>(path, opts, signal),
+  );
+}
+
+async function send<T>(path: string, opts: ApiRequestOptions, signal: AbortSignal): Promise<T> {
   const { method, body, auth = false } = opts;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (auth) {
@@ -31,12 +94,13 @@ export async function apiRequest<T = any>(path: string, opts: ApiRequestOptions 
     method: method ?? (body ? 'POST' : 'GET'),
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     // Anexa o status pro caller distinguir 404 (esperado) de 500/rede (falha real).
     // O class-validator responde `message` como ARRAY ("email must be an email"),
-    // e `new Error(['a','b'])` vira "a,b" — junta explícito, igual o painel faz.
+    // e `new Error(['a','b'])` vira "a,b": junta explícito, igual o painel faz.
     const raw = data?.message;
     const message = Array.isArray(raw) ? raw.join(', ') : raw;
     const err = new Error(message ?? 'Erro na requisição');

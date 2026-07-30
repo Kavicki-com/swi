@@ -165,13 +165,19 @@ export default function ComplimentaryDataStep2() {
             possibilidade de overlap; user scrolla naturalmente até os
             botões no fim do form. */}
         <View style={{ gap: theme.gap.sm }}>
-          <Button
-            variant="contained"
-            label="Avançar"
-            fullWidth
-            disabled={!canSubmit}
-            onPress={goNext}
-          />
+          {/* SEM `disabled={!canSubmit}` (QA Mobile #1, 30/07/2026: "ao tocar
+              em Avançar, o cadastro não avança e não avisa quais campos estão
+              faltando").
+
+              O `goNext` JÁ trata o caso inválido: marca todos os campos como
+              tocados, o que revela a mensagem de erro de cada um. Só que botão
+              desabilitado não dispara onPress, então esse bloco era código
+              morto e o toque sumia no vazio.
+
+              Deixar habilitado transforma o toque em explicação. A validação
+              não afrouxa: o `if (!canSubmit)` do goNext continua sendo quem
+              decide se avança. */}
+          <Button variant="contained" label="Avançar" fullWidth onPress={goNext} />
           <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
         </View>
       </KeyboardAwareScrollView>
