@@ -24,6 +24,11 @@ export interface Message {
   body: string
   imageUri: string | null // anexo resolvido (de imageKey no amplify)
   sentAt: string // ISO datetime
+  // QA Web #4. Opcionais de propósito: mensagem vinda de um backend anterior
+  // (ou de fixture antiga) simplesmente não é editada nem excluída, em vez de
+  // quebrar a compilação dos 6 arquivos de mockApi/ que montam Message à mão.
+  editedAt?: string | null // ISO datetime — presente ⇒ a bolha mostra "editada"
+  deletedAt?: string | null // ISO datetime — presente ⇒ lápide, sem texto nem anexo
 }
 
 export interface Contact {

@@ -1,10 +1,12 @@
 import {
   conversationKey,
   applyMessage,
+  isRevision,
   markRead,
   unreadFor,
   resolveContact,
   sortByRecent,
+  upsertMessage,
 } from './chatReducers'
 import type { Conversation, Message } from './types'
 
@@ -85,5 +87,56 @@ describe('sortByRecent', () => {
     const out = sortByRecent([none, dated])
     expect(out[0]!.id).toBe('a#b')
     expect(out[1]!.id).toBe('a#c')
+  })
+})
+
+// QA Web #4: editar e excluir mensagem. O backend emite o MESMO evento
+// 'message' com o estado atual, porque um evento novo faria cliente antigo
+// ignorar a edição em silêncio. Isso obriga duas regras aqui.
+describe('revisão de mensagem (editada ou excluída)', () => {
+  it('mensagem nova entra no fim da lista', () => {
+    const antes = [msg({ id: 'm1' })]
+    expect(upsertMessage(antes, msg({ id: 'm2' })).map((m) => m.id)).toEqual(['m1', 'm2'])
+  })
+
+  it('mensagem com id conhecido SUBSTITUI no lugar, sem duplicar a bolha', () => {
+    const antes = [msg({ id: 'm1', body: 'errado' }), msg({ id: 'm2', body: 'depois' })]
+    const depois = upsertMessage(antes, msg({ id: 'm1', body: 'corrigido', editedAt: 'x' }))
+    expect(depois.map((m) => m.id)).toEqual(['m1', 'm2']) // ordem preservada
+    expect(depois[0]!.body).toBe('corrigido')
+    expect(depois).toHaveLength(2)
+  })
+
+  it('isRevision distingue estreia de revisão', () => {
+    expect(isRevision(msg())).toBe(false)
+    expect(isRevision(msg({ editedAt: '2026-07-31T11:00:00.000Z' }))).toBe(true)
+    expect(isRevision(msg({ deletedAt: '2026-07-31T11:00:00.000Z' }))).toBe(true)
+  })
+
+  it('revisão NÃO incrementa não lidas: o badge já contou quando a mensagem estreou', () => {
+    const base = conv({ unreadBy: { a: 1 } })
+    const [c] = applyMessage([base], msg({ senderId: 'b', editedAt: '2026-07-31T11:00:00.000Z' }))
+    expect(c!.unreadBy).toEqual({ a: 1 })
+  })
+
+  it('revisão não mexe no preview nem na ordem da caixa de entrada', () => {
+    // Editar uma mensagem ANTIGA não pode rebaixar a conversa na lista: quem
+    // manda na ordem é a última mensagem, e ela não mudou.
+    const base = conv({
+      lastMessageBody: 'a mais recente',
+      lastMessageAt: '2026-07-31T12:00:00.000Z',
+    })
+    const [c] = applyMessage(
+      [base],
+      msg({ body: 'texto antigo corrigido', sentAt: '2026-07-20T08:00:00.000Z', editedAt: 'x' }),
+    )
+    expect(c!.lastMessageBody).toBe('a mais recente')
+    expect(c!.lastMessageAt).toBe('2026-07-31T12:00:00.000Z')
+  })
+
+  it('mensagem nova segue contando não lida e atualizando o preview', () => {
+    const [c] = applyMessage([conv()], msg({ senderId: 'b', body: 'oi de novo' }))
+    expect(c!.unreadBy.a).toBe(1)
+    expect(c!.lastMessageBody).toBe('oi de novo')
   })
 })

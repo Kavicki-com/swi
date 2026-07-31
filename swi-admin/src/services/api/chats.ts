@@ -34,5 +34,23 @@ export const chatsApi = {
       apiFetch<Message>(`${conv(id)}/messages`, { method: 'POST', body: JSON.stringify(dto) }),
       'Falha ao enviar mensagem',
     ),
+  // QA Web #4 — editar e excluir mensagem. Os dois devolvem a mensagem no
+  // estado novo, e não 204: quem chamou aplica o retorno na hora, sem depender
+  // de o socket chegar.
+  editMessage: (id: string, messageId: string, body: string) =>
+    envelope(
+      apiFetch<Message>(`${conv(id)}/messages/${encodeURIComponent(messageId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ body }),
+      }),
+      'Falha ao editar mensagem',
+    ),
+  deleteMessage: (id: string, messageId: string) =>
+    envelope(
+      apiFetch<Message>(`${conv(id)}/messages/${encodeURIComponent(messageId)}`, {
+        method: 'DELETE',
+      }),
+      'Falha ao excluir mensagem',
+    ),
   markRead: (id: string) => envelope(apiFetch<null>(`${conv(id)}/read`, { method: 'POST' })),
 }

@@ -34,7 +34,39 @@ export function sortByRecent(cs: Conversation[]): Conversation[] {
   return [...cs].sort((a, b) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''))
 }
 
+/**
+ * Se a mensagem que chegou é uma REVISÃO (editada ou excluída) e não uma
+ * estreia. O backend emite o mesmo evento 'message' nos dois casos, com o
+ * estado atual, porque um evento novo faria cliente antigo ignorar a edição em
+ * silêncio e seguir mostrando texto velho.
+ */
+export function isRevision(msg: Message): boolean {
+  return Boolean(msg.editedAt || msg.deletedAt)
+}
+
+/**
+ * Casa a mensagem no histórico pelo id: substitui no lugar se já existe, entra
+ * no fim se é nova.
+ *
+ * O append cru duplicava a bolha na edição, porque o id volta o mesmo. E a
+ * substituição preserva a POSIÇÃO: reinserir no fim faria a mensagem corrigida
+ * pular pro rodapé da conversa, fora da ordem cronológica.
+ */
+export function upsertMessage(list: Message[], msg: Message): Message[] {
+  const i = list.findIndex((m) => m.id === msg.id)
+  if (i === -1) return [...list, msg]
+  const next = [...list]
+  next[i] = msg
+  return next
+}
+
 export function applyMessage(cs: Conversation[], msg: Message): Conversation[] {
+  // Revisão não toca na caixa de entrada, e as duas razões dão bug: o contador
+  // de não lidas já foi incrementado quando a mensagem estreou, e usar o sentAt
+  // de uma mensagem antiga como lastMessageAt rebaixaria a conversa na lista,
+  // exibindo preview de mensagem que não é a última. O preview correto o
+  // servidor já gravou, e ele chega no próximo carregamento.
+  if (isRevision(msg)) return cs
   const next = cs.map((c) => {
     if (c.id !== msg.conversationId) return c
     const unreadBy = { ...c.unreadBy }
