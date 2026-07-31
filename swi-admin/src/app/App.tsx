@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { DemoToastProvider } from '@/lib/demoToast'
+import { GlobalStyles } from './GlobalStyles'
 import { GuestOnly } from './GuestOnly'
 import { RequireAuth } from './RequireAuth'
 import { AppLayout } from './AppLayout'
@@ -56,6 +57,8 @@ function ChatShell() {
 export function App() {
   return (
     <SwiThemeProvider>
+      {/* Dentro do provider de propósito: a regra lê os tokens do tema. */}
+      <GlobalStyles />
       <AuthProvider>
         <DemoToastProvider>
           <View testID="app-root">
