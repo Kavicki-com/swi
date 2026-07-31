@@ -3,7 +3,7 @@
 > Doc **temporário** (família `docs/plans/*backend*`): deletar quando o backend
 > inteiro estiver implementado. Marca um **pivô de arquitetura**: sai o Amplify
 > Gen 2 (as-code, deploy-gated, nunca rodou) e entra um backend **conteinerizado**
-> que roda local no Docker e deploya em AWS depois — o modelo do Ybá.
+> que roda local no Docker e deploya em AWS depois — o modelo local-first do estúdio.
 
 ## Contexto — por que o pivô
 
@@ -12,12 +12,12 @@ Até aqui o "backend" era **Amplify Gen 2, Abordagem A deploy-gated**: código e
 nos `services/*`, `tsc`+`jest` verdes, mas **nunca deployado** (sem conta AWS, R$0).
 O app roda 100% em **mocks em memória**; nada de banco, servidor ou nuvem.
 
-O usuário questionou (2026-06-30/07-01): *"esse backend é real? no Ybá usamos Docker
+O usuário questionou (2026-06-30/07-01): *"esse backend é real? em outro projeto usamos Docker
 local, aqui nunca vi. Quero com Docker local — como assim vai divergir?"*. A resposta
 honesta:
 
 - **"Local no Docker → deploya depois" é o jeito normal e correto** — e funciona
-  como no Ybá **quando o backend é um servidor portável** (Node + Postgres): os
+  como no modelo local-first **quando o backend é um servidor portável** (Node + Postgres): os
   mesmos containers rodam local e em produção.
 - **Amplify Gen 2 não é um servidor** — é uma declaração que provisiona **serviços
   gerenciados AWS** (Cognito/AppSync/DynamoDB/Lambda). Não existe "imagem Docker do
@@ -28,7 +28,7 @@ honesta:
 - **O ponto que destrava:** o cliente exige **AWS**, mas **AWS ≠ Amplify**. Amplify
   foi recomendação nossa, não exigência. Um stack conteinerizado em **AWS ECS/Fargate
   + RDS** é AWS do mesmo jeito — só usa compute/containers em vez de serverless-
-  gerenciado. O modelo do Ybá é 100% viável e honra "cliente quer AWS".
+  gerenciado. Esse modelo é 100% viável e honra "cliente quer AWS".
 
 **Custo do pivô:** joga fora os ~11 models as-code do `swi-backend/amplify/` (viram
 schema SQL + servidor) e passamos a ser donos de auth e real-time (Cognito/AppSync
@@ -76,7 +76,7 @@ swi-backend/
   amplify/                # RETIDO: referência read-only, não buildado
 ```
 
-**docker-compose (o loop do Ybá):**
+**docker-compose (o loop local-first):**
 
 | serviço | imagem | portas | papel |
 | --- | --- | --- | --- |
