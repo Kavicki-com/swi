@@ -20,6 +20,7 @@ import type { Conversation, Contact, Message } from './types'
 import {
   applyMessage,
   markRead as markReadReducer,
+  upsertMessage,
   conversationKey,
   sortByRecent,
 } from './chatReducers'
@@ -41,6 +42,12 @@ interface ChatContextValue {
   openConversation: (conversationId: string) => Promise<void>
   closeConversation: () => void
   send: (conversationId: string, body: string, file?: File) => Promise<{ error: MockError | null }>
+  editMessage: (
+    conversationId: string,
+    messageId: string,
+    body: string,
+  ) => Promise<{ error: MockError | null }>
+  deleteMessage: (conversationId: string, messageId: string) => Promise<{ error: MockError | null }>
   keyFor: (workerId: string) => string
 }
 
@@ -101,11 +108,14 @@ export function ChatProvider({ children }: PropsWithChildren) {
           applyConversations(sortByRecent(data ?? []))
         })
       }
-      // Append ao histórico já carregado da thread (inclui a 1ª msg de conversa
+      // Entra no histórico já carregado da thread (inclui a 1ª msg de conversa
       // nova, se openConversation já inicializou messagesByConv[convId]).
+      //
+      // Upsert por id, e não append: mensagem editada ou excluída volta pelo
+      // MESMO evento, com o mesmo id, e o append duplicava a bolha.
       setMessagesByConv((prev) => {
         const existing = prev[msg.conversationId]
-        return existing ? { ...prev, [msg.conversationId]: [...existing, msg] } : prev
+        return existing ? { ...prev, [msg.conversationId]: upsertMessage(existing, msg) } : prev
       })
       // Mensagem do outro na conversa aberta → zera o badge ao vivo.
       if (openConvRef.current === msg.conversationId && msg.senderId !== me) {
@@ -181,6 +191,34 @@ export function ChatProvider({ children }: PropsWithChildren) {
     return { error }
   }, [])
 
+  // QA Web #4 — editar e excluir. Os dois aplicam o retorno do servidor no
+  // state na hora, em vez de esperar o eco do socket: o menu fecha e a bolha já
+  // mostra o resultado, e se o socket chegar depois o upsert por id é idempotente.
+  const applyRevision = useCallback((msg: Message) => {
+    setMessagesByConv((prev) => {
+      const existing = prev[msg.conversationId]
+      return existing ? { ...prev, [msg.conversationId]: upsertMessage(existing, msg) } : prev
+    })
+  }, [])
+
+  const editMessage = useCallback(
+    async (conversationId: string, messageId: string, body: string) => {
+      const { data, error } = await chatsApi.editMessage(conversationId, messageId, body)
+      if (data) applyRevision(data)
+      return { error }
+    },
+    [applyRevision],
+  )
+
+  const deleteMessage = useCallback(
+    async (conversationId: string, messageId: string) => {
+      const { data, error } = await chatsApi.deleteMessage(conversationId, messageId)
+      if (data) applyRevision(data)
+      return { error }
+    },
+    [applyRevision],
+  )
+
   const keyFor = useCallback((workerId: string) => conversationKey(myId, workerId), [myId])
 
   const value = useMemo<ChatContextValue>(
@@ -194,6 +232,8 @@ export function ChatProvider({ children }: PropsWithChildren) {
       openConversation,
       closeConversation,
       send,
+      editMessage,
+      deleteMessage,
       keyFor,
     }),
     [
@@ -206,6 +246,8 @@ export function ChatProvider({ children }: PropsWithChildren) {
       openConversation,
       closeConversation,
       send,
+      editMessage,
+      deleteMessage,
       keyFor,
     ],
   )

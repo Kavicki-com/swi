@@ -25,6 +25,10 @@ export type ChatMessage = {
   time: string
   // anexo resolvido (presigned); quando presente, a bolha mostra a imagem (render na B1)
   imageUri?: string
+  // Marcas de revisão (QA Web #4). Booleanas de propósito: a bolha só precisa
+  // saber SE, não quando, e o par undefined/null do backend já custou caro.
+  edited?: boolean
+  deleted?: boolean
 }
 
 export type ChatContact = {

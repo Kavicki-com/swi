@@ -86,11 +86,15 @@ const DIR: Contact = {
 let openConversation: ReturnType<typeof vi.fn>
 let closeConversation: ReturnType<typeof vi.fn>
 let send: ReturnType<typeof vi.fn>
+let editMessage: ReturnType<typeof vi.fn>
+let deleteMessage: ReturnType<typeof vi.fn>
 
 function setChat(over: Record<string, unknown> = {}) {
   openConversation = vi.fn(async () => {})
   closeConversation = vi.fn()
   send = vi.fn(async () => ({ error: null }))
+  editMessage = vi.fn(async () => ({ error: null }))
+  deleteMessage = vi.fn(async () => ({ error: null }))
   chat.value = {
     myId: 'me',
     loadStatus: 'ready',
@@ -101,6 +105,8 @@ function setChat(over: Record<string, unknown> = {}) {
     openConversation,
     closeConversation,
     send,
+    editMessage,
+    deleteMessage,
     keyFor,
     ...over,
   }
@@ -213,6 +219,58 @@ describe('ChatInbox', () => {
     expect(input.value).toBe('Mensagem que falha')
   })
 
+  // Editar acontece no campo de mensagem, nao numa caixa separada: e o mesmo
+  // gesto de escrever, e o texto antigo precisa estar ali pra ser corrigido.
+  // Fixture propria porque a MSG padrao e do outro participante, e mensagem do
+  // outro nao oferece editar.
+  const MY_MSG: Message = { ...MSG, id: 'm-mine', senderId: 'me', body: 'Texto original' }
+
+  it('editar carrega a mensagem no campo e troca o CTA para salvar', () => {
+    setChat({ messagesByConv: { 'me#w1': [MY_MSG] } })
+    renderPage(<ChatInbox />, CONV_ROUTE)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }))
+
+    const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
+    expect(input.value).toBe('Texto original')
+    expect(screen.getByText('Salvar')).toBeTruthy()
+  })
+
+  it('salvar a edicao chama editMessage e volta ao modo normal', async () => {
+    setChat({ messagesByConv: { 'me#w1': [MY_MSG] } })
+    renderPage(<ChatInbox />, CONV_ROUTE)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }))
+    const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'Texto corrigido' } })
+    fireEvent.click(screen.getByText('Salvar'))
+
+    await waitFor(() =>
+      expect(editMessage).toHaveBeenCalledWith('me#w1', 'm-mine', 'Texto corrigido'),
+    )
+    await waitFor(() => expect(screen.getByText('Enviar')).toBeTruthy())
+    expect(input.value).toBe('')
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  // Sem saida explicita, quem entra na edicao por engano fica preso: o CTA nao
+  // envia mais, e apagar o texto nao devolve o modo normal.
+  it('cancelar a edicao limpa o campo e devolve o CTA de enviar', () => {
+    setChat({ messagesByConv: { 'me#w1': [MY_MSG] } })
+    renderPage(<ChatInbox />, CONV_ROUTE)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }))
+    fireEvent.click(screen.getByLabelText('Cancelar edição'))
+
+    const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
+    expect(input.value).toBe('')
+    expect(screen.getByText('Enviar')).toBeTruthy()
+    expect(editMessage).not.toHaveBeenCalled()
+  })
+
   it('does not send when both the draft and the pending image are empty', () => {
     renderPage(<ChatInbox />, CONV_ROUTE)
     fireEvent.click(screen.getByText('Enviar'))
@@ -318,6 +376,53 @@ describe('ChatBubble', () => {
     expect(screen.getByTestId('chat-bubble-image')).toBeTruthy()
   })
 
+  // A bolha PRECISOU perder o `overflow: hidden` para o painel do Popover nao
+  // ser recortado (ele e absoluto dentro dela). O anexo so continua com o canto
+  // arredondado porque tem wrapper proprio. Este teste tranca as duas metades:
+  // se alguem devolver o overflow a bolha, o popover quebra; se alguem tirar o
+  // wrapper, a foto vaza o raio. Nenhuma das duas aparece em teste de texto.
+  //
+  // O react-native-web nunca emite os atalhos: `overflow` sai como
+  // overflow-x/overflow-y e o raio sai nos quatro cantos. Procurar por
+  // `style.overflow` devolve string vazia mesmo quando o recorte existe.
+  const IMAGE_MESSAGE: ChatMessage = {
+    id: 'm-img-clip',
+    text: '',
+    sender: 'me',
+    time: '10:33',
+    imageUri: 'blob:some-attachment',
+  }
+
+  it('o anexo tem recorte proprio no raio', () => {
+    renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
+
+    const wrapper = screen.getByTestId('chat-bubble-image').parentElement as HTMLElement
+    expect(wrapper.style.overflowX).toBe('hidden')
+    expect(wrapper.style.borderTopLeftRadius).not.toBe('')
+  })
+
+  // Copiar uma mensagem sem texto copiaria o que? Oferecer o item e recriar o
+  // defeito que o QA reportou: controle que existe e nao faz nada. Editar cai
+  // junto porque o backend recusa corpo vazio.
+  it('mensagem so com imagem nao oferece copiar nem editar', () => {
+    renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    expect(screen.queryByRole('menuitem', { name: 'Copiar' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Editar' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'Excluir' })).toBeTruthy()
+  })
+
+  it('a bolha nao recorta, senao o painel do popover sumiria', () => {
+    renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
+
+    const bubble = screen.getByTestId('chat-bubble') as HTMLElement
+    expect(bubble.style.borderRadius).not.toBe('')
+    expect(bubble.style.overflowX).toBe('')
+    expect(bubble.style.overflow).toBe('')
+  })
+
   it('does not render an image box for a text-only message', () => {
     const message: ChatMessage = {
       id: 'm-text-only',
@@ -356,15 +461,191 @@ describe('ChatBubble', () => {
     time: '10:40',
   }
 
-  it('o more_vert deixa de ser controle morto e copia a mensagem (QA Web #4)', async () => {
+  // ATUALIZADO em 31/07/2026: copiar deixou de ser a acao do proprio gatilho e
+  // virou item do menu. O contrato antigo ("clicar no more_vert copia") foi
+  // substituido por decisao do usuario, entao estes dois testes mudam de
+  // caminho, nao de exigencia: copiar continua tendo que copiar e continua
+  // tendo que avisar quando nao da.
+  it('copiar pelo menu copia a mensagem (QA Web #4)', async () => {
     const writeText = vi.fn(async () => {})
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 
     renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Copiar mensagem' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copiar' }))
 
     expect(writeText).toHaveBeenCalledWith('Copie esta mensagem.')
     await waitFor(() => expect(toast.show).toHaveBeenCalledWith('Mensagem copiada'))
+  })
+
+  // QA Web #4, segunda metade (31/07/2026): o controle deixa de ser so copiar e
+  // vira menu de acoes. Editar e excluir agora existem de ponta a ponta (rotas
+  // PATCH/DELETE no backend, editMessage/deleteMessage no ChatProvider), entao
+  // o que era "acao inexistente" passou a ser acao real.
+  //
+  // Quem pode o que: so o autor edita e exclui. Na mensagem do outro sobra
+  // copiar, e por isso o menu dela e menor, nao desabilitado.
+  const MY_MESSAGE: ChatMessage = {
+    id: 'm-mine',
+    text: 'Minha mensagem.',
+    sender: 'me',
+    time: '10:41',
+  }
+
+  it('o menu da minha mensagem oferece editar, copiar e excluir', () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    expect(screen.getByRole('menuitem', { name: 'Editar' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Copiar' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Excluir' })).toBeTruthy()
+  })
+
+  // A confirmacao mora DENTRO do painel, por decisao do usuario: o menu troca
+  // de conteudo em vez de abrir modal por cima. Excluir mensagem nao merece
+  // segunda camada, e o modal roubaria o contexto de qual bolha e.
+  it('excluir pede confirmacao no proprio painel antes de chamar o backend', () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir' }))
+
+    expect(deleteMessage).not.toHaveBeenCalled()
+    expect(screen.getByRole('menuitem', { name: 'Confirmar exclusão' })).toBeTruthy()
+  })
+
+  it('confirmar exclusao chama deleteMessage com a conversa e a mensagem', async () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Confirmar exclusão' }))
+
+    await waitFor(() => expect(deleteMessage).toHaveBeenCalledWith('chat-test', 'm-mine'))
+  })
+
+  // Reabrir o menu depois de desistir tem que voltar ao estado normal, senao a
+  // proxima abertura ja comeca com o dedo em cima do botao destrutivo.
+  it('desistir volta o painel para as acoes normais', () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancelar' }))
+
+    expect(screen.getByRole('menuitem', { name: 'Editar' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Confirmar exclusão' })).toBeNull()
+    expect(deleteMessage).not.toHaveBeenCalled()
+  })
+
+  // Excluir deixa marca, por decisao do usuario: a bolha continua na conversa
+  // como lapide. O backend ja para de devolver o body, entao a tela nao pode
+  // depender do texto pra saber que foi excluida.
+  const DELETED_MESSAGE: ChatMessage = {
+    id: 'm-del',
+    text: '',
+    sender: 'me',
+    time: '10:42',
+    deleted: true,
+  }
+
+  it('mensagem excluida vira lapide no lugar do texto', () => {
+    renderPage(<ChatBubble message={DELETED_MESSAGE} contact={CONTACT} />)
+
+    expect(screen.getByText('Mensagem excluída')).toBeTruthy()
+  })
+
+  // Sem isso o menu abriria oferecendo editar e excluir uma mensagem que ja
+  // nao existe, e a segunda exclusao bateria no backend a toa.
+  it('na mensagem excluida o menu nao abre', () => {
+    renderPage(<ChatBubble message={DELETED_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    expect(screen.queryByRole('menuitem')).toBeNull()
+  })
+
+  it('mensagem editada ganha a marca "editada"', () => {
+    const edited: ChatMessage = { ...MY_MESSAGE, id: 'm-ed', edited: true }
+    renderPage(<ChatBubble message={edited} contact={CONTACT} />)
+
+    expect(screen.getByText('editada')).toBeTruthy()
+  })
+
+  // O react-native-web poe `position: relative; z-index: 0` em TODA View, entao
+  // cada bolha e um contexto de empilhamento proprio e as bolhas seguintes
+  // pintam por cima do painel da anterior. Visto no navegador em 31/07/2026: os
+  // icones de Copiar e Excluir ficavam tapados pela mensagem de baixo. O
+  // z-index 100 que o painel tem por dentro nao resolve, porque so vale dentro
+  // do contexto da propria bolha.
+  it('a bolha sobe na pilha enquanto o menu esta aberto', () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+    const linha = screen.getByTestId('chat-bubble-row') as HTMLElement
+    expect(linha.style.zIndex).toBe('')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    expect(Number(linha.style.zIndex)).toBeGreaterThan(0)
+  })
+
+  // Subir a bolha inteira resolveu a mensagem SEGUINTE tapando o painel, mas
+  // nao os irmaos DENTRO da bolha: o texto da mensagem e o rodape com "editada"
+  // e a hora vem depois do gatilho na ordem do DOM, sao z-index 0 posicionados,
+  // e pintavam por cima do painel de confirmacao. Visto no navegador em
+  // 31/07/2026. Sao duas disputas distintas, entao dois testes.
+  it('o gatilho sobe dentro da linha enquanto o menu esta aberto', () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+    const ancora = screen.getByTestId('chat-bubble-menu-anchor') as HTMLElement
+    expect(ancora.style.zIndex).toBe('')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    expect(Number(ancora.style.zIndex)).toBeGreaterThan(0)
+  })
+
+  it('a linha que hospeda o menu sobe acima do rodape', () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+    const linha = screen.getByTestId('chat-bubble-line') as HTMLElement
+    expect(linha.style.zIndex).toBe('')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    expect(Number(linha.style.zIndex)).toBeGreaterThan(0)
+  })
+
+  // O painel cresce para o lado OPOSTO ao que a bolha encosta, nao para o lado
+  // onde os pontinhos moram. Minha mensagem cola na borda direita da caixa do
+  // chat, que tem overflowX hidden: crescer para a direita corta o painel.
+  // Foi exatamente o que apareceu no navegador em 31/07/2026.
+  it('na minha mensagem o painel cresce para a esquerda', () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    const panel = screen.getByTestId('chat-bubble-menu-panel')
+    expect(panel.style.right).toBe('0px')
+    expect(panel.style.left).toBe('')
+  })
+
+  it('na mensagem do outro o painel cresce para a direita', () => {
+    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    const panel = screen.getByTestId('chat-bubble-menu-panel')
+    expect(panel.style.left).toBe('0px')
+    expect(panel.style.right).toBe('')
+  })
+
+  it('o menu da mensagem do outro oferece so copiar', () => {
+    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    expect(screen.getByRole('menuitem', { name: 'Copiar' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Editar' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Excluir' })).toBeNull()
   })
 
   // Clipboard exige contexto seguro; em http:// simples o navegador nao expoe a
@@ -373,7 +654,8 @@ describe('ChatBubble', () => {
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
 
     renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Copiar mensagem' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copiar' }))
 
     expect(toast.show).toHaveBeenCalledWith('Não foi possível copiar', expect.any(String))
   })

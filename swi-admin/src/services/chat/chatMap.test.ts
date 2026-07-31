@@ -30,6 +30,18 @@ describe('messageToUi', () => {
   it('imageUri null → undefined (não vaza null pra bolha)', () => {
     expect(messageToUi(message(), myId).imageUri).toBeUndefined()
   })
+  // A bolha só precisa saber SE foi editada/excluída, não quando. Booleano em
+  // vez do ISO cru de propósito: `editedAt` chega `undefined` de fixture antiga
+  // e `null` do backend, e comparar isso na tela foi exatamente o que quebrou
+  // quatro testes do DTO no backend (`undefined !== null` é verdadeiro).
+  it('editedAt presente vira edited; ausente vira false', () => {
+    expect(messageToUi(message(), myId).edited).toBe(false)
+    expect(messageToUi(message({ editedAt: '2026-07-31T10:00:00.000Z' }), myId).edited).toBe(true)
+  })
+  it('deletedAt presente vira deleted; ausente vira false', () => {
+    expect(messageToUi(message(), myId).deleted).toBe(false)
+    expect(messageToUi(message({ deletedAt: '2026-07-31T10:00:00.000Z' }), myId).deleted).toBe(true)
+  })
 })
 describe('conversationToContact', () => {
   it('id = conversationId; nome/setor/avatar do participante que não sou eu; unread e messages', () => {
