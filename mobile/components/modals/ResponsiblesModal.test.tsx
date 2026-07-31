@@ -1,4 +1,5 @@
 import { act, create } from 'react-test-renderer';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { ResponsiblesModal, responsiblesSelection } from './ResponsiblesModal';
@@ -65,6 +66,50 @@ describe('ResponsiblesModal', () => {
     mockListAssignees.mockRejectedValue(new Error('rede caiu'));
     const tree = await render();
     expect(JSON.stringify(tree.toJSON())).toContain('Selecionar responsáveis');
+  });
+});
+
+// QA Mobile #5: "a lista aparece cortada atrás dos botões Cancelar/Continuar
+// (só 'Admin' aparece parcialmente)". Reproduzido nos dois extremos: com lista
+// curta ela virava uma fatia e o card ficava atrás dos botões; com lista longa
+// o sheet estourava a tela e o cabeçalho saía por cima do viewport.
+//
+// Estes testes guardam as REGRAS de layout, não os pixels: o jest não tem motor
+// de layout, medir altura aqui é impossível. O resultado renderizado foi
+// conferido no navegador com 1 e com 15 pessoas. O valor deles é impedir que
+// alguém desfaça uma das três regras sem perceber.
+describe('ResponsiblesModal, layout do bottom-sheet', () => {
+  beforeEach(() => {
+    responsiblesSelection.clear();
+    mockListAssignees.mockClear();
+    mockListAssignees.mockResolvedValue(CONTATOS);
+  });
+
+  const estiloDe = (tree: ReturnType<typeof create>, testID: string) => {
+    const node = tree.root.findAll((n) => n.props?.testID === testID)[0];
+    return StyleSheet.flatten(node.props.style) as Record<string, unknown>;
+  };
+
+  // Percentual só resolve contra pai de altura definida. O pai aqui é o
+  // KeyboardStickyView, que se dimensiona pelo conteúdo, então '85%' não
+  // resolvia e o sheet crescia sem teto. Em pixels o teto sempre vale.
+  it('o teto de altura do sheet é numérico, não percentual', async () => {
+    const tree = await render();
+    expect(typeof estiloDe(tree, 'responsibles-sheet').maxHeight).toBe('number');
+  });
+
+  // A lista é a única parte elástica: é ela que cede espaço quando não cabe
+  // tudo. Sem poder encolher, empurrava os botões pra fora do sheet.
+  it('a lista encolhe quando falta espaço', async () => {
+    const tree = await render();
+    expect(estiloDe(tree, 'responsibles-list').flexShrink).toBe(1);
+  });
+
+  // O oposto do anterior: cabeçalho e botões nunca cedem espaço.
+  it('cabeçalho e botões não encolhem', async () => {
+    const tree = await render();
+    expect(estiloDe(tree, 'responsibles-header').flexShrink).toBe(0);
+    expect(estiloDe(tree, 'responsibles-actions').flexShrink).toBe(0);
   });
 });
 
