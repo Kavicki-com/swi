@@ -219,22 +219,13 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
             <Title variant="title.l" color={theme.content.dark}>
               {fullName}
             </Title>
-            <Text
-              color={theme.content.medium}
-              style={labelStyle}
-            >
+            <Text color={theme.content.medium} style={labelStyle}>
               {vitals.role}
             </Text>
-            <Text
-              color={theme.content.medium}
-              style={labelStyle}
-            >
+            <Text color={theme.content.medium} style={labelStyle}>
               {vitals.sector}
             </Text>
-            <Text
-              color={theme.content.medium}
-              style={{ ...labelStyle, marginTop: theme.gap.s }}
-            >
+            <Text color={theme.content.medium} style={{ ...labelStyle, marginTop: theme.gap.s }}>
               Batimentos cardíacos:
             </Text>
             <View
@@ -265,16 +256,21 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
                 {vitals.heartRate}bpm
               </Text>
             </View>
-            {/* Canvas matches reference 295×147 (measured `#canvasBatimentos`
-                in dashboard.html at 1366 vp). Color #084614 from
-                software/dashboard.html line 970. */}
+            {/* Canvas em 295×147, medida do `#canvasBatimentos` da referência
+                (dashboard.html a 1366 vp).
+
+                A cor saiu do hex `#084614` da referência para
+                `theme.surface.success`. Motivo: `#084614` não existe na paleta
+                do DS (os verdes são green[950] `#112719` e surface.success
+                `#3EAB2E`), então não havia token para onde tokenizá-lo. Era
+                também a intenção declarada no comentário do próprio
+                HeartPulseCanvas, que o call site nunca cumpriu. Efeito
+                colateral bem-vindo: a linha do ECG passa a usar o MESMO verde
+                do fill das barras de progresso ao lado. */}
             <View style={{ marginTop: theme.gap.s }}>
-              <HeartPulseCanvas width={295} height={147} color="#084614" />
+              <HeartPulseCanvas width={295} height={147} color={theme.surface.success} />
             </View>
-            <Text
-              color={theme.content.medium}
-              style={{ ...labelStyle, marginTop: theme.gap.s }}
-            >
+            <Text color={theme.content.medium} style={{ ...labelStyle, marginTop: theme.gap.s }}>
               status:
             </Text>
             <Title

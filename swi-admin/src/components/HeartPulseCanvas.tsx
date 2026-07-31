@@ -9,9 +9,11 @@ import { useEffect, useRef } from 'react'
 export interface HeartPulseCanvasProps {
   width?: number
   height?: number
-  // Stroke color. Reference uses `#084614`; we override at call-site to
-  // theme.surface.success for brand alignment.
-  color?: string
+  // Cor do traço. OBRIGATÓRIA e sem default de propósito: um default em hex
+  // aqui era um token burlado, e o call site ainda passava outro hex por cima
+  // (`#084614`), então existiam dois verdes cravados para uma linha só.
+  // Exigir a prop força quem usa a tirar do `useTheme()`.
+  color: string
   // Glow shadow color (matches stroke by default).
   glowColor?: string
   // Pixels of horizontal scroll per animation tick.
@@ -41,7 +43,7 @@ function ecgSample(cycle: number): number {
 export function HeartPulseCanvas({
   width = 300,
   height = 80,
-  color = '#1F8F36',
+  color,
   glowColor,
   step = 2,
   bpm = 75,
