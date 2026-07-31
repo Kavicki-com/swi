@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
@@ -9,6 +9,9 @@ import type { Conversation, Message, User, Profile } from '@prisma/client'
 type UserWithProfile = User & { profile: Profile | null }
 
 const LIST_CAP = 200
+
+/** Texto que substitui a mensagem excluída no preview da caixa de entrada. */
+const DELETED_PREVIEW = 'Mensagem excluída'
 
 @Injectable()
 export class ChatService {
@@ -124,6 +127,81 @@ export class ChatService {
     return out
   }
 
+  // QA Web #4 — editar e excluir mensagem. Só o AUTOR, sem limite de tempo, e
+  // exclusão deixa marca em vez de apagar (decisões do usuário 2026-07-31).
+  //
+  // Os dois emitem o evento 'message' com o estado ATUAL da mensagem, e não um
+  // evento novo: o cliente reconhece pelo id e faz upsert. Inventar
+  // 'message:edited' obrigaria cada cliente a tratar um caso a mais, e um
+  // cliente antigo simplesmente ignoraria a edição, seguindo com texto velho.
+  async editMessage(userId: string, convId: string, msgId: string, dto: { body: string }) {
+    const conv = await this.assertMember(userId, convId)
+    const msg = await this.assertOwnMessage(userId, convId, msgId)
+    if (msg.deletedAt) throw new BadRequestException('Mensagem excluída não pode ser editada')
+
+    const body = dto.body?.trim()
+    if (!body) throw new BadRequestException('Mensagem vazia')
+
+    const updated = await this.prisma.message.update({
+      where: { id: msgId },
+      data: { body, editedAt: new Date() },
+    })
+    // O preview da caixa de entrada mostra o texto da última mensagem. Sem
+    // isto, a lista continuaria exibindo a versão antiga do que foi corrigido.
+    await this.syncPreviewIfLast(convId, msgId, body)
+
+    const out = await this.toMsgDto(updated)
+    this.realtime.emitToUsers(conv.participants, 'message', out)
+    return out
+  }
+
+  async deleteMessage(userId: string, convId: string, msgId: string) {
+    const conv = await this.assertMember(userId, convId)
+    const msg = await this.assertOwnMessage(userId, convId, msgId)
+
+    // Idempotente: excluir de novo não remarca a data. A primeira exclusão é a
+    // que vale, e é ela que uma auditoria futura vai querer ler.
+    if (msg.deletedAt) return this.toMsgDto(msg)
+
+    const updated = await this.prisma.message.update({
+      where: { id: msgId },
+      // `body` e `imageKey` FICAM na linha: a lápide é reversível, e quem para
+      // de devolver o conteúdo é o toMsgDto.
+      data: { deletedAt: new Date() },
+    })
+    await this.syncPreviewIfLast(convId, msgId, DELETED_PREVIEW)
+
+    const out = await this.toMsgDto(updated)
+    this.realtime.emitToUsers(conv.participants, 'message', out)
+    return out
+  }
+
+  /** 404 se a mensagem não existe ou é de outra conversa, 403 se não é minha. */
+  private async assertOwnMessage(userId: string, convId: string, msgId: string): Promise<Message> {
+    const msg = await this.prisma.message.findUnique({ where: { id: msgId } })
+    // Mensagem de OUTRA conversa vira 404 e não 403 de propósito: responder
+    // "existe, mas não é sua" contaria que a mensagem existe a quem não é
+    // membro de lá.
+    if (!msg || msg.conversationId !== convId) {
+      throw new NotFoundException('Mensagem não encontrada')
+    }
+    if (msg.senderId !== userId) throw new ForbiddenException('Só o autor pode editar ou excluir')
+    return msg
+  }
+
+  /** Atualiza o preview da conversa apenas quando a mensagem tocada é a última. */
+  private async syncPreviewIfLast(convId: string, msgId: string, preview: string) {
+    const last = await this.prisma.message.findFirst({
+      where: { conversationId: convId },
+      orderBy: { sentAt: 'desc' },
+    })
+    if (last?.id !== msgId) return
+    await this.prisma.conversation.update({
+      where: { id: convId },
+      data: { lastMessageBody: preview },
+    })
+  }
+
   async markRead(userId: string, convId: string) {
     await this.assertMember(userId, convId)   // membership → 404 se não-membro
     await this.prisma.$executeRaw`
@@ -190,14 +268,24 @@ export class ChatService {
   }
 
   private async toMsgDto(m: Message) {
+    // Lápide: a mensagem continua na listagem, mantendo a posição e a hora,
+    // mas o conteúdo não sai mais da API. É aqui que "deixa marca" acontece de
+    // verdade — se o texto vazasse no DTO, um cliente distraído mostraria o
+    // que a pessoa acabou de excluir.
+    // Boolean() e não `!== null`: mensagem carregada sem a coluna (fixture
+    // parcial, projeção, cliente antigo) vem `undefined`, e `undefined !== null`
+    // é verdadeiro — a mensagem inteira seria tratada como excluída.
+    const deleted = Boolean(m.deletedAt)
     return {
       id: m.id,
       conversationId: m.conversationId,
       participants: m.conversationId.split('#'),
       senderId: m.senderId,
-      body: m.body ?? '',
-      imageUri: m.imageKey ? await this.media.presignGet(m.imageKey) : null,
+      body: deleted ? '' : (m.body ?? ''),
+      imageUri: deleted || !m.imageKey ? null : await this.media.presignGet(m.imageKey),
       sentAt: m.sentAt.toISOString(),
+      editedAt: m.editedAt ? m.editedAt.toISOString() : null,
+      deletedAt: m.deletedAt ? m.deletedAt.toISOString() : null,
     }
   }
 }

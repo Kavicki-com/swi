@@ -1,5 +1,5 @@
 import { ChatService } from './chat.service'
-import { NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 
 const media = () => ({
@@ -10,7 +10,7 @@ const notifications = () => ({ createFor: jest.fn(), enqueueForMany: jest.fn() }
 
 const prisma = () => ({
   conversation: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
-  message: { findMany: jest.fn(), create: jest.fn() },
+  message: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
   user: { findMany: jest.fn(), findUnique: jest.fn() },
   $executeRaw: jest.fn().mockResolvedValue(1),
 }) as any
@@ -197,5 +197,162 @@ describe('ChatService', () => {
     const out = await new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'novo' })
     expect(out.body).toBe('novo')
     expect(db.conversation.findUnique).toHaveBeenCalledTimes(2) // re-buscou após a colisão
+  })
+})
+
+// QA Web #4: o menu de ações da mensagem pedia editar, excluir, copiar. Copiar é
+// do cliente; editar e excluir não existiam em lugar nenhum — o controller tinha
+// listar, enviar e marcar como lida, e a tabela não tinha campo de edição nem de
+// exclusão.
+//
+// Decisões do usuário (2026-07-31): só o AUTOR edita e exclui, sem limite de
+// tempo; excluir deixa MARCA em vez de apagar; editar deixa a marca "editada".
+describe('ChatService — editar e excluir mensagem', () => {
+  const svc = (db: any, rt: any = realtime()) =>
+    new ChatService(db, media(), rt, notifications())
+
+  const setup = (msgOver: any = {}) => {
+    const db = prisma()
+    db.conversation.findUnique.mockResolvedValue(convRow())
+    db.message.findUnique.mockResolvedValue(msgRow({ senderId: A, ...msgOver }))
+    // Por default a mensagem editada NÃO é a última da conversa.
+    db.message.findFirst.mockResolvedValue(msgRow({ id: 'outra' }))
+    db.message.update.mockImplementation(async ({ data }: any) =>
+      msgRow({ senderId: A, ...msgOver, ...data }),
+    )
+    return db
+  }
+
+  it('autor edita: grava o texto novo, marca editedAt e devolve o dto atualizado', async () => {
+    const db = setup()
+    const out = await svc(db).editMessage(A, CONV, 'm1', { body: '  texto corrigido  ' })
+    const data = db.message.update.mock.calls[0][0].data
+    expect(data.body).toBe('texto corrigido') // trim aplicado
+    expect(data.editedAt).toBeInstanceOf(Date)
+    expect(out.body).toBe('texto corrigido')
+    expect(out.editedAt).toBeTruthy()
+  })
+
+  it('quem não é autor não edita, e nada é gravado', async () => {
+    const db = setup({ senderId: B })
+    await expect(svc(db).editMessage(A, CONV, 'm1', { body: 'na marra' })).rejects.toThrow(
+      ForbiddenException,
+    )
+    expect(db.message.update).not.toHaveBeenCalled()
+  })
+
+  it('mensagem já excluída não pode ser editada', async () => {
+    const db = setup({ deletedAt: new Date('2026-07-30T10:00:00Z') })
+    await expect(svc(db).editMessage(A, CONV, 'm1', { body: 'ressuscita' })).rejects.toThrow(
+      BadRequestException,
+    )
+    expect(db.message.update).not.toHaveBeenCalled()
+  })
+
+  it('texto que fica vazio depois do trim é recusado', async () => {
+    const db = setup()
+    await expect(svc(db).editMessage(A, CONV, 'm1', { body: '   ' })).rejects.toThrow(
+      BadRequestException,
+    )
+    expect(db.message.update).not.toHaveBeenCalled()
+  })
+
+  it('mensagem de outra conversa não é encontrada, mesmo com id válido', async () => {
+    const db = setup()
+    db.message.findUnique.mockResolvedValue(msgRow({ senderId: A, conversationId: 'xxxx#yyyy' }))
+    await expect(svc(db).editMessage(A, CONV, 'm1', { body: 'oi' })).rejects.toThrow(
+      NotFoundException,
+    )
+  })
+
+  it('não-membro da conversa não chega nem a olhar a mensagem', async () => {
+    const db = setup()
+    db.conversation.findUnique.mockResolvedValue(convRow({ participants: [B, 'cccc'] }))
+    await expect(svc(db).editMessage(A, CONV, 'm1', { body: 'oi' })).rejects.toThrow(
+      NotFoundException,
+    )
+    expect(db.message.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('editar a ÚLTIMA mensagem atualiza o preview da conversa', async () => {
+    const db = setup()
+    db.message.findFirst.mockResolvedValue(msgRow({ id: 'm1' })) // a editada é a última
+    await svc(db).editMessage(A, CONV, 'm1', { body: 'texto novo' })
+    const data = db.conversation.update.mock.calls[0][0].data
+    expect(data.lastMessageBody).toBe('texto novo')
+  })
+
+  it('editar mensagem do MEIO não mexe no preview', async () => {
+    const db = setup()
+    await svc(db).editMessage(A, CONV, 'm1', { body: 'texto novo' })
+    expect(db.conversation.update).not.toHaveBeenCalled()
+  })
+
+  it('a edição chega aos dois participantes pelo socket, com o estado atual', async () => {
+    const db = setup()
+    const rt = realtime()
+    await svc(db, rt).editMessage(A, CONV, 'm1', { body: 'texto novo' })
+    const [users, evento, payload] = rt.emitToUsers.mock.calls[0]
+    expect(users).toEqual([A, B])
+    expect(evento).toBe('message')
+    expect(payload.id).toBe('m1')
+    expect(payload.body).toBe('texto novo')
+  })
+
+  it('autor exclui: marca deletedAt e o dto para de vazar o texto', async () => {
+    const db = setup()
+    const out = await svc(db).deleteMessage(A, CONV, 'm1')
+    const data = db.message.update.mock.calls[0][0].data
+    expect(data.deletedAt).toBeInstanceOf(Date)
+    // O body FICA no banco (reversível, auditável), mas não sai na API.
+    expect(data.body).toBeUndefined()
+    expect(out.body).toBe('')
+    expect(out.imageUri).toBeNull()
+    expect(out.deletedAt).toBeTruthy()
+  })
+
+  it('quem não é autor não exclui', async () => {
+    const db = setup({ senderId: B })
+    await expect(svc(db).deleteMessage(A, CONV, 'm1')).rejects.toThrow(ForbiddenException)
+    expect(db.message.update).not.toHaveBeenCalled()
+  })
+
+  it('excluir de novo não remarca a data: a primeira exclusão é a que vale', async () => {
+    const jaEra = new Date('2026-07-30T10:00:00Z')
+    const db = setup({ deletedAt: jaEra })
+    const out = await svc(db).deleteMessage(A, CONV, 'm1')
+    expect(db.message.update).not.toHaveBeenCalled()
+    expect(out.deletedAt).toBe(jaEra.toISOString())
+  })
+
+  it('excluir a ÚLTIMA mensagem troca o preview por "Mensagem excluída"', async () => {
+    const db = setup()
+    db.message.findFirst.mockResolvedValue(msgRow({ id: 'm1' }))
+    await svc(db).deleteMessage(A, CONV, 'm1')
+    expect(db.conversation.update.mock.calls[0][0].data.lastMessageBody).toBe('Mensagem excluída')
+  })
+
+  it('a exclusão também chega pelo socket, pra bolha virar lápide nos dois lados', async () => {
+    const db = setup()
+    const rt = realtime()
+    await svc(db, rt).deleteMessage(A, CONV, 'm1')
+    const [users, evento, payload] = rt.emitToUsers.mock.calls[0]
+    expect(users).toEqual([A, B])
+    expect(evento).toBe('message')
+    expect(payload.deletedAt).toBeTruthy()
+    expect(payload.body).toBe('')
+  })
+
+  it('a listagem carrega editedAt e deletedAt: sem isso a bolha não sabe o que mostrar', async () => {
+    const db = prisma()
+    db.conversation.findUnique.mockResolvedValue(convRow())
+    db.message.findMany.mockResolvedValue([
+      msgRow({ id: 'm1', editedAt: new Date('2026-07-31T09:00:00Z') }),
+      msgRow({ id: 'm2', deletedAt: new Date('2026-07-31T09:30:00Z'), body: 'segredo' }),
+    ])
+    const out = await svc(db).listMessages(A, CONV)
+    expect(out[0].editedAt).toBe(new Date('2026-07-31T09:00:00Z').toISOString())
+    expect(out[1].deletedAt).toBeTruthy()
+    expect(out[1].body).toBe('') // o texto da excluída não sai na listagem
   })
 })

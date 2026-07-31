@@ -374,6 +374,11 @@ model Message {
   imageKey       String?
   sentAt         DateTime
   createdAt      DateTime     @default(now())
+  // QA Web #4: editar e excluir mensagem. Excluir deixa MARCA (decisão do
+  // usuário 2026-07-31), então `deletedAt` é lápide: o `body` continua na
+  // linha, reversível e auditável, e é a API que para de devolvê-lo.
+  editedAt       DateTime?
+  deletedAt      DateTime?
 
   @@index([conversationId, sentAt])
 }
