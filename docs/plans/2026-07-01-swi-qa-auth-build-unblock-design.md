@@ -15,7 +15,7 @@ O vertical de auth (NestJS + Postgres + Prisma conteinerizado) foi entregue e me
 em mock/stub-Amplify-morto.
 
 **Objetivo desta fatia:** cortar uma **build de developer (APK) que o time de QA instala e usa pra
-validar o fluxo de auth de ponta a ponta contra o backend real**, sem deploy AWS — no modelo Ybá
+validar o fluxo de auth de ponta a ponta contra o backend real**, sem deploy AWS — no modelo local-first
 (Docker local + túnel). QA remoto, em qualquer rede.
 
 **Escopo do QA (decidido):** fluxo **completo** — signup → código por e-mail → confirmação → login →
@@ -24,7 +24,7 @@ gate de aprovação → reset de senha — **mais admin aprova/rejeita** um work
 ## 2. Dois eixos independentes (o modelo mental)
 
 - **Alcançabilidade** (o device do QA chega no Docker?) → resolvido com **túnel** (`ngrok`/`cloudflared`).
-  Não exige AWS. É o loop do Ybá.
+  Não exige AWS. É o loop local-first.
 - **Cobertura** (quanto do app fala com o real?) → hoje **só auth**. Esta fatia liga apenas o auth de
   forma limpa; ampliar cobertura é o roadmap de fatias seguintes.
 

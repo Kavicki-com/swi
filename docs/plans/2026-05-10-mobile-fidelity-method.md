@@ -6,7 +6,7 @@
 > - DS spec: `docs/audits/2026-05-08-ds-v0.1.4-spec.md`
 > - Visual artifacts: `docs/audits/dashboard-figma-4-2.png`, `docs/audits/fidelity-method-experiment/`
 >
-> **Sub-skill obrigatória:** `superpowers:executing-plans` ao implementar tela-a-tela. `superpowers:yba-figma-fidelity-review` é usável como checklist visual no checkpoint final.
+> **Sub-skill obrigatória:** `superpowers:executing-plans` ao implementar tela-a-tela. A skill interna de fidelity review vs Figma é usável como checklist visual no checkpoint final.
 
 ---
 
