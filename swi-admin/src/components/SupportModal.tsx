@@ -102,21 +102,31 @@ export function SupportModal({ onClose }: { onClose: () => void }) {
           </Pressable>
         </View>
         {status === 'sent' ? (
-          <View style={{ gap: theme.gap.m, alignItems: 'center' }}>
-            <Title variant="title.xs" color={theme.content.primary}>
-              Solicitação enviada
-            </Title>
-            <Text variant="body.m" color={theme.content.dark}>
-              Recebemos a sua solicitação. A equipe de suporte vai retornar
-              {user?.email ? ` pelo e-mail ${user.email}` : ' em breve'}.
-            </Text>
-            <Button
-              label="Fechar"
-              variant="contained"
-              backgroundColor={theme.surface.primary}
-              fullWidth
-              onPress={onClose}
-            />
+          <View testID="support-sent" style={{ gap: theme.gap.l, alignItems: 'center' }}>
+            {/* Título e mensagem andam juntos (gap.s) e a ação respira longe
+                deles (gap.l): a distância é o que separa o recado do botão. */}
+            <View testID="support-sent-copy" style={{ gap: theme.gap.s, alignItems: 'center' }}>
+              <Title variant="title.s" color={theme.content.primary}>
+                Solicitação enviada
+              </Title>
+              <Text variant="body.m" color={theme.content.medium}>
+                Recebemos a sua solicitação. A equipe de suporte vai retornar
+                {user?.email ? (
+                  <>
+                    {' pelo e-mail '}
+                    <Text variant="body.m" weight="bold" color={theme.content.dark}>
+                      {user.email}
+                    </Text>
+                  </>
+                ) : (
+                  ' em breve'
+                )}
+                .
+              </Text>
+            </View>
+            {/* Não há nada a confirmar aqui, só dispensar: o Fechar desce pra
+                outline e para de competir com o título. */}
+            <Button label="Fechar" variant="outline" onPress={onClose} />
           </View>
         ) : (
           <>

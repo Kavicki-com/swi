@@ -62,6 +62,26 @@ const fillAndSubmit = async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitação' }))
 }
 
+// O react-native-web escreve tipografia como style inline, mas manda o resto
+// (background, width) pra classes atômicas injetadas via CSSOM. Pra ler essas,
+// é preciso iterar document.styleSheets: o textContent das <style> vem vazio.
+const resolveStyle = (el: HTMLElement): Record<string, string> => {
+  const out: Record<string, string> = {}
+  const classes = new Set(el.className.split(' ').filter(Boolean))
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules) as CSSStyleRule[]) {
+      const sel = rule.selectorText
+      if (!sel || !rule.style) continue
+      if (![...classes].some((c) => sel === `.${c}`)) continue
+      for (const prop of Array.from(rule.style)) out[prop] = rule.style.getPropertyValue(prop)
+    }
+  }
+  for (const prop of Array.from(el.style)) out[prop] = el.style.getPropertyValue(prop)
+  return out
+}
+
+const px = (value: string) => Number.parseFloat(value)
+
 describe('SupportModal', () => {
   it('submit válido → supportApi.send com o LABEL do motivo + e-mail da sessão, e mostra sucesso', async () => {
     sendMock.mockResolvedValue({ data: { sent: true }, error: null })
@@ -100,5 +120,63 @@ describe('SupportModal', () => {
     expect((screen.getByPlaceholderText('Digite aqui') as HTMLInputElement).value).toBe(
       'Mapa não carrega',
     )
+  })
+})
+
+// QA Web #7: o pop-up de confirmação tinha título, mensagem e botão no mesmo
+// peso. O cabeçalho e o título do sucesso saíam idênticos (Montserrat 700/16
+// em content.primary), o e-mail de retorno se perdia no meio do parágrafo e o
+// "Fechar" era o mesmo CTA verde de largura cheia do "Enviar solicitação".
+// Estes testes travam RELAÇÕES de hierarquia, não pixels: quem é maior que
+// quem, quem pesa mais que quem, quem deixou de ser o CTA sólido.
+describe('SupportModal, hierarquia da confirmação (QA Web #7)', () => {
+  const renderSent = async () => {
+    sendMock.mockResolvedValue({ data: { sent: true }, error: null })
+    renderPage(<SupportModal onClose={() => {}} />)
+    await fillAndSubmit()
+    await screen.findByText('Solicitação enviada')
+  }
+
+  it('o título da confirmação domina o cabeçalho do modal', async () => {
+    await renderSent()
+
+    const heading = screen.getByText('Solicitação enviada')
+    const header = screen.getByText('Solicitação de suporte')
+
+    expect(px(heading.style.fontSize)).toBeGreaterThan(px(header.style.fontSize))
+  })
+
+  it('o e-mail de retorno se destaca do corpo da mensagem', async () => {
+    await renderSent()
+
+    const email = screen.getByText('admin@swi.test')
+    const message = screen.getByText(/Recebemos a sua solicitação/)
+
+    expect(email.style.fontWeight).toBe('700')
+    expect(px(message.style.fontWeight)).toBeLessThan(px(email.style.fontWeight))
+    // O corpo recua de cor pro e-mail poder subir.
+    expect(message.style.color).not.toBe(email.style.color)
+  })
+
+  it('o Fechar da confirmação deixa de ser o CTA verde de largura cheia', async () => {
+    await renderSent()
+
+    const close = screen.getAllByRole('button', { name: 'Fechar' }).at(-1)!
+    const style = resolveStyle(close)
+
+    // Sólido virou transparente: alpha 0 no rgba do react-native-web.
+    expect(style['background-color']).toMatch(/,\s*0(\.0+)?\)$/)
+    expect(style.width).not.toBe('100%')
+    // Continua sendo botão de verdade, com a borda do variant outline.
+    expect(style['border-top-color']).not.toMatch(/,\s*0(\.0+)?\)$/)
+  })
+
+  it('o espaçamento separa o bloco de texto da ação', async () => {
+    await renderSent()
+
+    const block = screen.getByTestId('support-sent')
+    const copy = screen.getByTestId('support-sent-copy')
+
+    expect(px(resolveStyle(copy).gap!)).toBeLessThan(px(resolveStyle(block).gap!))
   })
 })
