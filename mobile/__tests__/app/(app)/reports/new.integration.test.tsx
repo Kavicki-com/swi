@@ -43,6 +43,8 @@ const FOTO = 'file:///tmp/foto-1.jpg';
 type Botao = { text?: string; style?: string; onPress?: () => void };
 const botoesDoMenu = (chamada = 0): Botao[] =>
   (Alert.alert as jest.Mock).mock.calls[chamada][2] ?? [];
+const tituloDoMenu = (chamada = 0): string =>
+  (Alert.alert as jest.Mock).mock.calls[chamada][0];
 
 const render = async () => {
   let tree!: ReturnType<typeof create>;
@@ -98,6 +100,7 @@ describe('Novo relatório, anexo de ponta a ponta (tela + hook reais)', () => {
 
     await tocar(tree, 'Adicionar anexo 1');
 
+    expect(tituloDoMenu()).toBe('Adicionar imagem');
     expect(botoesDoMenu().map((b) => b.text)).toEqual([
       'Tirar foto',
       'Escolher da galeria',
@@ -113,6 +116,8 @@ describe('Novo relatório, anexo de ponta a ponta (tela + hook reais)', () => {
 
     await tocar(tree, 'Anexo 1 (toque para trocar ou remover)');
     const botoes = botoesDoMenu();
+    // Com foto, o menu troca ou remove; nao adiciona nada.
+    expect(tituloDoMenu()).toBe('Alterar imagem');
     expect(botoes.map((b) => b.text)).toEqual([
       'Tirar foto',
       'Escolher da galeria',
