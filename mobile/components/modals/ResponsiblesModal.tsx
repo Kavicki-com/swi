@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import {
@@ -68,6 +68,7 @@ interface ResponsiblesModalProps {
 export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -122,6 +123,7 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
     // conteúdo ancorado embaixo, onde empurrar scroll não resolveria.
     <KeyboardStickyView>
     <View
+      testID="responsibles-sheet"
       style={{
         // Figma 364:18017 mostra modal um tom mais claro que o conteúdo
         // dentro (SearchInput + admin cards usam standard mais escuro).
@@ -133,10 +135,18 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
         borderTopLeftRadius: theme.border.radius.m,
         borderTopRightRadius: theme.border.radius.m,
         gap: theme.gap.l,
-        maxHeight: '85%',
+        // QA Mobile #5: era '85%'. Percentual só resolve contra pai de altura
+        // DEFINIDA, e o pai aqui é o KeyboardStickyView, que se dimensiona pelo
+        // conteúdo: o teto não valia e o sheet crescia sem limite (com 15
+        // pessoas, título e busca saíam por cima do topo da tela). Em pixels,
+        // derivado da altura da janela, o teto vale sempre.
+        maxHeight: Math.round(windowHeight * 0.85),
       }}
     >
-      <View style={{ gap: theme.gap.s }}>
+      {/* Cabeçalho e bloco de ações são rígidos (flexShrink 0): quem cede
+          espaço quando a lista é longa é a lista, nunca eles. Sem isto, o
+          cabeçalho encolhia e o card do responsável aparecia pela metade. */}
+      <View testID="responsibles-header" style={{ gap: theme.gap.s, flexShrink: 0 }}>
         <Title variant="title.xs" color={theme.content.dark}>
           Selecionar responsáveis
         </Title>
@@ -151,8 +161,13 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
         placeholder="Pesquisar"
       />
 
+      {/* A lista é a única parte elástica do sheet. flexGrow 0 mantém o sheet
+          colado ao conteúdo quando há pouca gente (não estica à toa);
+          flexShrink 1 é o que faltava: sem poder ceder, ela empurrava os
+          botões pra fora e a pessoa via o card cortado atrás deles. */}
       <ScrollView
-        style={{ flexGrow: 0 }}
+        testID="responsibles-list"
+        style={{ flexGrow: 0, flexShrink: 1 }}
         contentContainerStyle={{ gap: theme.gap.s }}
         showsVerticalScrollIndicator={false}
       >
@@ -210,7 +225,7 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
         })}
       </ScrollView>
 
-      <View style={{ gap: theme.gap.sm }}>
+      <View testID="responsibles-actions" style={{ gap: theme.gap.sm, flexShrink: 0 }}>
         <Button
           variant="outline"
           borderColor={theme.content.primaryLight}
