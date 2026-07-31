@@ -1,6 +1,6 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common'
 import { ChatService } from './chat.service'
-import { SendMessageDto } from './dto'
+import { EditMessageDto, SendMessageDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 
@@ -22,6 +22,30 @@ export class ChatController {
   send(@CurrentUserId() userId: string, @Param('id') id: string, @Body() dto: SendMessageDto) {
     if (!dto.body?.trim() && !dto.imageKey) throw new BadRequestException('Mensagem vazia')
     return this.chat.sendMessage(userId, id, dto)
+  }
+
+  // QA Web #4 — editar e excluir mensagem. Só o autor, e exclusão deixa marca.
+  //
+  // Os dois devolvem a mensagem no estado novo, em vez de 204: o cliente aplica
+  // o retorno na hora, sem depender de o socket chegar, e o mesmo payload serve
+  // pro echo em tempo real.
+  @Patch('conversations/:id/messages/:messageId')
+  edit(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() dto: EditMessageDto,
+  ) {
+    return this.chat.editMessage(userId, id, messageId, dto)
+  }
+
+  @Delete('conversations/:id/messages/:messageId')
+  remove(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.chat.deleteMessage(userId, id, messageId)
   }
 
   @Post('conversations/:id/read')
