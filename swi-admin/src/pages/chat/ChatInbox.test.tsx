@@ -342,4 +342,39 @@ describe('ChatBubble', () => {
     expect(screen.getByTestId('chat-bubble-image')).toBeTruthy()
     expect(screen.getByText('Segue a foto do sensor.')).toBeTruthy()
   })
+
+  // QA Web #4 (30/07/2026): o more_vert do balao nao abria nada. Era um <Icon>
+  // solto, sem Pressable e sem onPress.
+  //
+  // Nao virou "menu de acoes" porque nao ha acoes: o backend so tem listar,
+  // enviar e marcar como lida. Copiar e a unica real, e agora e o que o
+  // controle faz, com rotulo acessivel dizendo isso.
+  const TEXT_MESSAGE: ChatMessage = {
+    id: 'm-copy',
+    text: 'Copie esta mensagem.',
+    sender: 'them',
+    time: '10:40',
+  }
+
+  it('o more_vert deixa de ser controle morto e copia a mensagem (QA Web #4)', async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+
+    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar mensagem' }))
+
+    expect(writeText).toHaveBeenCalledWith('Copie esta mensagem.')
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith('Mensagem copiada'))
+  })
+
+  // Clipboard exige contexto seguro; em http:// simples o navegador nao expoe a
+  // API. Cair calado aqui reintroduziria o bug original (clico, nada acontece).
+  it('sem clipboard disponivel, avisa em vez de nao fazer nada', () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+
+    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar mensagem' }))
+
+    expect(toast.show).toHaveBeenCalledWith('Não foi possível copiar', expect.any(String))
+  })
 })

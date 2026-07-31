@@ -3,7 +3,7 @@
 // assertions live in dedicated tests; this guard catches regressions
 // from DS bumps, route refactors, and import-graph changes.
 // vitest globals (describe/it/expect/afterEach) are available via globals: true
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { MapsGeneral } from './MapsGeneral'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 
@@ -24,6 +24,9 @@ vi.mock('@/lib/rainViewer', () => ({ getRainViewerLatestRadar: async () => null 
 // não enxerga a tela preta, porque um stub permissivo aceitaria a chamada
 // pós-remove em silêncio.
 const maplibre = vi.hoisted(() => {
+  // Compartilhado entre instâncias: o teste do Web #3 precisa observar o voo
+  // sem depender de qual instância de mapa foi construída.
+  const flyTo = vi.fn()
   const makeMap = () => {
     let removed = false
     const assertLive = () => {
@@ -47,7 +50,7 @@ const maplibre = vi.hoisted(() => {
       removeLayer: () => {},
       removeSource: () => {},
       fitBounds: () => {},
-      flyTo: () => {},
+      flyTo,
       remove: () => {
         removed = true
       },
@@ -66,15 +69,39 @@ const maplibre = vi.hoisted(() => {
     Marker: vi.fn(() => makeMarker()),
     LngLatBounds: vi.fn(() => ({ extend: () => {} })),
   }
-  return { lib }
+  return { lib, flyTo }
 })
 vi.mock('@/lib/useMapLibre', () => ({ useMapLibre: () => maplibre.lib }))
 
+const flyToSpy = maplibre.flyTo
+
 describe('MapsGeneral', () => {
+  beforeEach(() => flyToSpy.mockClear())
   afterEach(clearSession)
 
   it('renders without crashing', () => {
     expect(() => renderPage(<MapsGeneral />, { route: '/maps/general' })).not.toThrow()
+  })
+
+  // QA Web #3 (30/07/2026): "ao clicar no ícone de localização para ver o
+  // funcionário no mapa, é preciso um clique adicional para exibi-lo".
+  //
+  // Eram duas causas somadas: o pin da lista navegava para /maps/general sem
+  // dizer de QUEM era, e esta tela abre com a camada de operadores desligada.
+  // O usuário caía num mapa vazio. Agora `?focus=<id>` liga a camada e
+  // centraliza no funcionário.
+  it('com ?focus liga a camada de operadores e voa até o funcionário (QA Web #3)', async () => {
+    renderPage(<MapsGeneral />, { route: '/maps/general?focus=w1' })
+
+    // O marcador de w1 vem do mock de useLivePositions no topo do arquivo.
+    await waitFor(() => expect(flyToSpy).toHaveBeenCalled())
+    expect(flyToSpy.mock.calls[0]?.[0]).toMatchObject({ center: [-46.63, -23.55] })
+  })
+
+  it('sem ?focus nao voa pra ninguem (comportamento antigo preservado)', async () => {
+    renderPage(<MapsGeneral />, { route: '/maps/general' })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(flyToSpy).not.toHaveBeenCalled()
   })
 
   // QA Web #8 (30/07/2026), BLOQUEADOR: "após habilitar os filtros do Mapa de

@@ -559,7 +559,14 @@ export function EmployeesList({
                 employee={employee}
                 onOpen={(id) => navigate(`/employees/${id}`)}
                 onChat={() => navigate('/chat')}
-                onLocation={() => navigate('/maps/general')}
+                // QA Web #3 (30/07/2026): o pin levava ao mapa geral SEM dizer
+                // de quem era, e o mapa abre com a camada de operadores
+                // desligada. O usuario caia num mapa vazio e precisava de um
+                // clique extra em "Operadores". O `focus` resolve os dois:
+                // liga a camada e centraliza neste funcionario.
+                onLocation={() =>
+                  navigate(`/maps/general?focus=${encodeURIComponent(employee.id)}`)
+                }
                 isTablet={isTablet}
               />
             ))}
