@@ -88,7 +88,9 @@ export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPicker
     (opts: ShowPickerOptions = {}): Promise<string | null> =>
       new Promise((resolve) => {
         const onRemove = opts.onRemove;
-        Alert.alert('Adicionar imagem', undefined, [
+        // Com foto já escolhida o menu não adiciona nada: troca ou remove.
+        // Chamá-lo de "Adicionar imagem" contradiz as próprias opções.
+        Alert.alert(onRemove ? 'Alterar imagem' : 'Adicionar imagem', undefined, [
           {
             text: 'Tirar foto',
             onPress: async () => resolve(await takePhoto()),

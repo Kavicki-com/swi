@@ -41,7 +41,21 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+const titulo = (): string => (Alert.alert as jest.Mock).mock.calls[0][0];
+
 describe('useMediaPicker.showPicker', () => {
+  // Com foto já escolhida o menu não adiciona nada: ele troca ou remove. Manter
+  // "Adicionar imagem" ali contradiz as opções que o próprio menu oferece.
+  it('slot vazio: o título é "Adicionar imagem"', () => {
+    void picker().showPicker();
+    expect(titulo()).toBe('Adicionar imagem');
+  });
+
+  it('com foto (onRemove): o título é "Alterar imagem"', () => {
+    void picker().showPicker({ onRemove: jest.fn() });
+    expect(titulo()).toBe('Alterar imagem');
+  });
+
   it('sem onRemove o menu é o de sempre: tirar, escolher, cancelar', () => {
     void picker().showPicker();
     expect(botoes().map((b) => b.text)).toEqual([
