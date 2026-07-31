@@ -37,7 +37,12 @@ export function applyCors(app: INestApplication): void {
         res: { setHeader(k: string, v: string): void; statusCode: number; end(): void },
         next: () => void,
       ) => {
-        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+        // PATCH entrou em 31/07/2026, junto com editar mensagem do chat. Sem
+        // ele o preflight respondia 204 e mesmo assim o navegador bloqueava a
+        // requisição real, sem deixar rastro no servidor. Esta lista é fixa, ou
+        // seja, NÃO acompanha as rotas sozinha: verbo novo na API exige mexer
+        // aqui, e é para isso que existe o teste que percorre os verbos.
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS')
         // ngrok-skip-browser-warning: relíquia da era ngrok que builds antigos
         // do painel (em cache de navegador) ainda mandam — permitir é inócuo.
         res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type,ngrok-skip-browser-warning')

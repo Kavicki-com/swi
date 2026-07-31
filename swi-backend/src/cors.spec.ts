@@ -87,6 +87,31 @@ describe('applyCors — modo proxy (CORS_PROXY_SETS_ORIGIN=1)', () => {
     expect('Access-Control-Allow-Origin' in res.headers).toBe(false)
   })
 
+  // Producao, 31/07/2026: editar mensagem no painel morria com erro de CORS
+  // enquanto excluir passava. O preflight respondia 204, mas a lista de metodos
+  // era "GET,POST,PUT,DELETE,OPTIONS" — sem PATCH. O navegador bloqueava a
+  // requisicao real antes de sair da maquina, e o servidor nao registrava nada.
+  // Local nao pegava porque o outro ramo usa o enableCors do Nest, cujo default
+  // ja inclui PATCH.
+  //
+  // O teste nao trava a string: cobra que cada verbo que a API expoe esteja na
+  // lista, para a proxima rota nova falhar aqui e nao em producao.
+  it('libera todo verbo que a API expoe, inclusive PATCH', () => {
+    process.env.CORS_PROXY_SETS_ORIGIN = '1'
+    const app = { enableCors: jest.fn(), use: jest.fn() }
+    applyCors(app as any)
+    const middleware = app.use.mock.calls[0][0]
+    const res = fakeRes()
+    middleware({ method: 'OPTIONS' }, res, jest.fn())
+
+    const permitidos = (res.headers['Access-Control-Allow-Methods'] ?? '')
+      .split(',')
+      .map((m) => m.trim())
+    for (const verbo of ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS']) {
+      expect(permitidos).toContain(verbo)
+    }
+  })
+
   it('requisicao normal segue adiante, tambem sem allow-origin', () => {
     process.env.CORS_PROXY_SETS_ORIGIN = '1'
     const app = { enableCors: jest.fn(), use: jest.fn() }
