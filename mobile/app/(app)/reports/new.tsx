@@ -59,10 +59,26 @@ export default function NewReport() {
     });
   };
 
+  // Esvazia o slot NO LUGAR, sem compactar o array: a pessoa está olhando pra
+  // grade, e puxar as fotos seguintes uma casa pra cima mexeria na posição do
+  // que ela decidiu manter.
+  const clearAttachmentAt = (index: number) => {
+    setAttachments((prev) => {
+      const next = [...prev];
+      next[index] = undefined;
+      return next;
+    });
+  };
+
   const media = useMediaPicker();
-  const showPicker = async (onPick: (uri: string) => void) => {
-    const uri = await media.showPicker();
-    if (uri) onPick(uri);
+  // QA Mobile #4: tocar numa miniatura preenchida só oferecia trocar a foto,
+  // não havia caminho de volta. `onRemove` só vai quando há o que remover; em
+  // slot vazio o menu segue com as três opções de sempre.
+  const showPicker = async (index: number) => {
+    const uri = await media.showPicker(
+      attachments[index] ? { onRemove: () => clearAttachmentAt(index) } : undefined,
+    );
+    if (uri) setAttachmentAt(index, uri);
   };
 
   // "Enviar arquivo" alimenta a GRADE, não a si mesmo. A tela mantinha dois
@@ -233,11 +249,11 @@ export default function NewReport() {
                 return (
                   <Pressable
                     key={i}
-                    onPress={() => showPicker((u) => setAttachmentAt(i, u))}
+                    onPress={() => showPicker(i)}
                     accessibilityRole="button"
                     accessibilityLabel={
                       uri
-                        ? `Anexo ${i + 1} (toque para substituir)`
+                        ? `Anexo ${i + 1} (toque para trocar ou remover)`
                         : `Adicionar anexo ${i + 1}`
                     }
                     style={{

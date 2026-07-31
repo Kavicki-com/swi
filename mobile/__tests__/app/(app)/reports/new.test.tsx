@@ -49,16 +49,42 @@ const slotVazio = (tree: ReturnType<typeof create>, i: number) =>
 
 const slotPreenchido = (tree: ReturnType<typeof create>, i: number) =>
   tree.root.findAll(
-    (n) => n.props?.accessibilityLabel === `Anexo ${i} (toque para substituir)`,
+    (n) => n.props?.accessibilityLabel === `Anexo ${i} (toque para trocar ou remover)`,
   ).length > 0;
+
+const tocarNoSlot = async (tree: ReturnType<typeof create>, rotulo: string) => {
+  const slot = tree.root.findAll((n) => n.props?.accessibilityLabel === rotulo)[0];
+  await act(async () => { await slot.props.onPress(); });
+};
+
+// Campo do form pelo label do DS Input; o save só destrava com os três cheios.
+const preencher = async (tree: ReturnType<typeof create>) => {
+  for (const label of [
+    'Título do relatório',
+    'Resumo do relatório',
+    'Detalhes do relatório',
+  ]) {
+    const input = tree.root.findAll((n) => n.props?.label === label)[0];
+    await act(async () => { input.props.onChangeText('x'); });
+  }
+};
+
+const salvar = async (tree: ReturnType<typeof create>) => {
+  const botao = tree.root.findAll(
+    (n) => n.props?.accessibilityLabel === 'Salvar relatório',
+  )[0];
+  await act(async () => { await botao.props.onPress(); });
+};
+
+let showPicker: jest.Mock;
+let criarRelatorio: jest.Mock;
 
 beforeEach(() => {
   pickFromGallery = jest.fn(async () => FOTO);
-  mockUseMediaPicker.mockReturnValue({
-    showPicker: jest.fn(async () => FOTO),
-    pickFromGallery,
-  });
-  mockUseReports.mockReturnValue({ create: jest.fn(async () => ({})) });
+  showPicker = jest.fn(async () => FOTO);
+  criarRelatorio = jest.fn(async () => ({}));
+  mockUseMediaPicker.mockReturnValue({ showPicker, pickFromGallery });
+  mockUseReports.mockReturnValue({ create: criarRelatorio });
 });
 
 describe('Novo relatório — anexos', () => {
@@ -104,5 +130,80 @@ describe('Novo relatório — anexos', () => {
     await act(async () => { await uploader(tree).props.onPickFile(); });
 
     expect(pickFromGallery).toHaveBeenCalledTimes(4);
+  });
+});
+
+// QA Mobile #4: "não é possível remover uma foto já anexada. Ao tocar na
+// miniatura só abre o menu Adicionar imagem". Não havia caminho nenhum de
+// volta: escolher errado significava salvar com a foto errada.
+describe('Novo relatório, remover anexo', () => {
+  const anexar = async (tree: ReturnType<typeof create>, uri: string) => {
+    pickFromGallery.mockResolvedValue(uri);
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+  };
+
+  it('quadrado com foto oferece remover no menu', async () => {
+    const tree = await render();
+    await anexar(tree, FOTO);
+
+    await tocarNoSlot(tree, 'Anexo 1 (toque para trocar ou remover)');
+
+    expect(showPicker).toHaveBeenCalledWith(
+      expect.objectContaining({ onRemove: expect.any(Function) }),
+    );
+  });
+
+  it('quadrado vazio não oferece remover', async () => {
+    const tree = await render();
+
+    await tocarNoSlot(tree, 'Adicionar anexo 1');
+
+    expect(showPicker.mock.calls[0][0]?.onRemove).toBeUndefined();
+  });
+
+  it('remover esvazia o quadrado e ele volta a aceitar foto', async () => {
+    const tree = await render();
+    await anexar(tree, FOTO);
+    await tocarNoSlot(tree, 'Anexo 1 (toque para trocar ou remover)');
+
+    const { onRemove } = showPicker.mock.calls[0][0];
+    await act(async () => { onRemove(); });
+
+    expect(slotPreenchido(tree, 1)).toBe(false);
+    expect(slotVazio(tree, 1)).toBe(true);
+  });
+
+  // O que o usuário perde se isto quebrar: a foto sai da tela mas sobe assim
+  // mesmo, e ele só descobre com o relatório publicado.
+  it('a foto removida não vai no relatório salvo', async () => {
+    const tree = await render();
+    await anexar(tree, FOTO);
+    await anexar(tree, 'file:///tmp/foto-2.jpg');
+    await tocarNoSlot(tree, 'Anexo 1 (toque para trocar ou remover)');
+
+    const { onRemove } = showPicker.mock.calls[0][0];
+    await act(async () => { onRemove(); });
+
+    await preencher(tree);
+    await salvar(tree);
+
+    expect(criarRelatorio).toHaveBeenCalledWith(
+      expect.objectContaining({ imageUris: ['file:///tmp/foto-2.jpg'] }),
+    );
+  });
+
+  // Remover o 1º de dois não pode empurrar o 2º pra cima: a pessoa está
+  // olhando pra grade e a foto que ela manteve tem que ficar onde estava.
+  it('remover um não mexe na posição dos outros', async () => {
+    const tree = await render();
+    await anexar(tree, FOTO);
+    await anexar(tree, 'file:///tmp/foto-2.jpg');
+    await tocarNoSlot(tree, 'Anexo 1 (toque para trocar ou remover)');
+
+    const { onRemove } = showPicker.mock.calls[0][0];
+    await act(async () => { onRemove(); });
+
+    expect(slotVazio(tree, 1)).toBe(true);
+    expect(slotPreenchido(tree, 2)).toBe(true);
   });
 });
