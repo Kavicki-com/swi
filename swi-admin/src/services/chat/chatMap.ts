@@ -15,6 +15,10 @@ export function messageToUi(m: Message, myId: string): ChatMessage {
     sender: m.senderId === myId ? 'me' : 'them',
     time: timeOf(m.sentAt),
     imageUri: m.imageUri ?? undefined,
+    // Boolean() e não `!== null`: fixture antiga manda undefined, backend manda
+    // null, e comparar com null trata os dois de formas diferentes.
+    edited: Boolean(m.editedAt),
+    deleted: Boolean(m.deletedAt),
   }
 }
 
