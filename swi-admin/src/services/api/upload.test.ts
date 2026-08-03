@@ -227,3 +227,53 @@ describe('uploadOrderImage', () => {
     expect(f).not.toHaveBeenCalled()
   })
 })
+
+// O tipo aceito depende do PREFIXO, espelhando allowed-content-types.ts do
+// backend: laudo clínico costuma vir em PDF, mas liberar PDF pro chat deixaria
+// o presign assinar um arquivo que nenhuma tela conseguiria anexar depois
+// (cada consumidor valida a própria key contra .(jpg|png)).
+describe('uploadImage — tipos aceitos por prefixo', () => {
+  const fileOfType = (type: string, name: string) => new File([new Uint8Array([1])], name, { type })
+
+  it('aceita pdf quando o prefixo é exams', async () => {
+    const f = stubUpload({ ok: true, status: 200 })
+    await expect(
+      uploadImage(fileOfType('application/pdf', 'exame.pdf'), 'exams'),
+    ).resolves.toBeDefined()
+
+    // O content-type vai pro presign e entra na ASSINATURA: mandar um valor
+    // diferente do real faria o storage recusar depois do upload inteiro.
+    const init = f.mock.calls[0]?.[1] as RequestInit
+    expect(JSON.parse(init.body as string).contentType).toBe('application/pdf')
+  })
+
+  it('aceita txt quando o prefixo é exams', async () => {
+    stubUpload({ ok: true, status: 200 })
+    await expect(uploadImage(fileOfType('text/plain', 'exame.txt'), 'exams')).resolves.toBeDefined()
+  })
+
+  it('continua aceitando imagem em exams', async () => {
+    stubUpload({ ok: true, status: 200 })
+    await expect(uploadImage(fileOfType('image/png', 'exame.png'), 'exams')).resolves.toBeDefined()
+  })
+
+  it('recusa pdf fora de exams antes de chamar a rede', async () => {
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    await expect(uploadImage(fileOfType('application/pdf', 'foto.pdf'), 'chat')).rejects.toThrow(
+      /JPG ou PNG/i,
+    )
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('em exams, a mensagem lista os tipos de exame, não só imagem', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    // Sem isso a tela mandaria o operador converter o laudo pra JPG, quando o
+    // PDF que ele tem em mãos seria aceito.
+    const err = await uploadImage(fileOfType('video/mp4', 'exame.mp4'), 'exams').catch(
+      (e: unknown) => e,
+    )
+    expect((err as Error).message).toMatch(/PDF/)
+    expect((err as Error).message).toMatch(/TXT/)
+  })
+})
