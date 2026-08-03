@@ -40,5 +40,9 @@ export class UpdateProfileDto {
 export class CreateExamDto {
   @IsString() @Length(2, 120) name!: string
   @IsCalendarDate() date!: string
-  @Matches(/^exams\/[0-9a-f-]{36}\.(jpg|png)$/) fileKey!: string
+  // Extensões espelham o que o presign emite pro prefixo exams/ (ver
+  // media/allowed-content-types.ts): laudo de laboratório chega como PDF, e
+  // aceitar só jpg/png fazia o upload subir e o cadastro devolver 400 logo em
+  // seguida, deixando o arquivo órfão no bucket.
+  @Matches(/^exams\/[0-9a-f-]{36}\.(jpg|png|pdf|txt)$/) fileKey!: string
 }

@@ -3,7 +3,9 @@ import { Type } from 'class-transformer'
 import { MAX_UPLOAD_BYTES } from './media.service'
 
 export class PresignDto {
-  @IsString() @IsIn(['image/jpeg', 'image/png']) contentType!: string
+  // Sem @IsIn aqui: o tipo permitido DEPENDE do prefix (ver allowed-content-types).
+  // O presignPut valida e devolve 400 com a lista certa.
+  @IsString() contentType!: string
   // Tamanho exato do arquivo, obrigatório desde a migração POST → PUT
   // (2026-07-29, o R2 não faz presigned POST): ele entra na assinatura, então o
   // upload só passa se o corpo tiver exatamente estes bytes. Antes o teto vinha

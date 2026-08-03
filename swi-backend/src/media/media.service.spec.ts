@@ -80,6 +80,50 @@ describe('MediaService', () => {
     ).resolves.toBeDefined()
   })
 
+  // A extensão da key TEM que sair do content-type. Com pdf/txt liberados em
+  // exames, um ternário png/jpg gravaria o PDF como `exams/<uuid>.jpg`: arquivo
+  // com nome mentiroso no bucket, que o regex do CreateExamDto engoliria sem
+  // reclamar. É por isso que esta task anda junto da que liberou os tipos.
+  describe('key do presign por content-type', () => {
+    it.each([
+      ['image/jpeg', 'jpg'],
+      ['image/png', 'png'],
+      ['application/pdf', 'pdf'],
+      ['text/plain', 'txt'],
+    ])('presignPut: %s vira .%s', async (contentType, esperado) => {
+      const { key } = await new MediaService().presignPut(contentType, 1234, 'exams')
+      expect(key).toMatch(new RegExp(`^exams/[0-9a-f-]{36}\\.${esperado}$`))
+    })
+  })
+
+  // A regra allow/deny em si tem teste unitário em allowed-content-types.spec,
+  // mas nada exercitava a LINHA que a chama dentro do presignPut. Sem isto,
+  // remover a guarda por engano não quebraria nenhum teste do service.
+  describe('guarda de content-type por prefixo', () => {
+    it('presignPut recusa pdf em prefixo que só aceita imagem (chat) com 400', async () => {
+      await expect(
+        new MediaService().presignPut('application/pdf', 100, 'chat'),
+      ).rejects.toMatchObject({ status: 400 })
+    })
+
+    // A guarda precisa barrar ANTES de assinar. Se ela rodasse depois do
+    // getSignedUrl, o teste de rejeição acima continuaria verde enquanto a URL
+    // assinada já teria sido gerada: defeito invisível.
+    it('presignPut recusado não chega a assinar nada', async () => {
+      await expect(
+        new MediaService().presignPut('application/pdf', 100, 'chat'),
+      ).rejects.toBeDefined()
+      expect(getSignedUrl).not.toHaveBeenCalled()
+    })
+
+    it('presignPut aceita pdf em exams', async () => {
+      await expect(
+        new MediaService().presignPut('application/pdf', 100, 'exams'),
+      ).resolves.toBeDefined()
+      expect(getSignedUrl).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('presignGetMany assina cada key', async () => {
     const urls = await new MediaService().presignGetMany(['reports/a.jpg', 'reports/b.jpg'])
     expect(urls).toEqual(['https://signed.example/obj?sig=1', 'https://signed.example/obj?sig=1'])

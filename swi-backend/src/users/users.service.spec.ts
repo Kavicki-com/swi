@@ -229,11 +229,12 @@ describe('UsersService', () => {
         cpf: '12345',
       },
       company: { id: 'c1', name: 'ACME' },
+      exams: [],
     })
     const r = await new UsersService(db, media()).getOne('a1', 'c1')
     expect(db.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'a1' },
-      include: { profile: true, company: true },
+      include: { profile: true, company: true, exams: { orderBy: { date: 'desc' } } },
     })
     expect(r).toEqual({
       id: 'a1',
@@ -258,7 +259,61 @@ describe('UsersService', () => {
       gender: null,
       allergies: null,
       chronicConditions: null,
+      // Quem não tem exame sai com lista vazia, e o mock traz a chave porque o
+      // Prisma SEMPRE devolve a relação incluída: não há fallback escondendo
+      // include esquecido.
+      exams: [],
     })
+  })
+
+  // O detalhe do painel já desenhava "Histórico de exames" (ExamInfoCard), mas o
+  // DTO nunca trouxe os exames: a seção ficava vazia pra TODO mundo, mesmo com
+  // exame cadastrado. Data de CALENDÁRIO ('AAAA-MM-DD') e não ISO datetime,
+  // senão o dia recua um em fuso negativo na formatação da tela.
+  it('getOne() devolve o histórico de exames com data de calendário e URL assinada', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({
+      id: 'w1',
+      name: 'Worker',
+      email: 'w@x.com',
+      role: 'WORKER',
+      approvalStatus: 'APPROVED',
+      active: true,
+      companyId: 'c1',
+      companyRole: null,
+      createdAt: new Date(0),
+      profile: null,
+      company: null,
+      exams: [
+        { id: 'e1', name: 'Hemograma', date: new Date('2027-03-10T00:00:00.000Z'), fileKey: 'exams/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf' },
+        { id: 'e2', name: 'Audiometria', date: new Date('2026-11-02T00:00:00.000Z'), fileKey: 'exams/11111111-2222-3333-4444-555555555555.jpg' },
+      ],
+    })
+    const r = await new UsersService(db, media()).getOne('w1', 'c1')
+    // Mesma ordem do ProfileService.listExams (validade mais distante primeiro):
+    // app e painel listando o MESMO histórico em ordens diferentes é bug de
+    // confiança, não detalhe cosmético.
+    expect(db.user.findUnique.mock.calls[0][0].include.exams).toEqual({ orderBy: { date: 'desc' } })
+    // toEqual e não toMatchObject: correspondência PARCIAL por elemento deixaria
+    // passar campo vazado por exame (o fileKey cru do storage ao lado do
+    // fileUrl, por exemplo). Histórico clínico não é lugar de asserção frouxa.
+    expect(r.exams).toEqual([
+      { id: 'e1', name: 'Hemograma', date: '2027-03-10', fileUrl: 'signed:exams/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf' },
+      { id: 'e2', name: 'Audiometria', date: '2026-11-02', fileUrl: 'signed:exams/11111111-2222-3333-4444-555555555555.jpg' },
+    ])
+  })
+
+  it('getOne() de quem não tem exame devolve [], nunca undefined', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({
+      id: 'w2', name: 'Sem Exame', email: 'w2@x.com', role: 'WORKER',
+      approvalStatus: 'APPROVED', active: true, companyId: 'c1', companyRole: null,
+      createdAt: new Date(0), profile: null, company: null, exams: [],
+    })
+    const r = await new UsersService(db, media()).getOne('w2', 'c1')
+    // toHaveProperty e não toMatchObject: undefined tem que reprovar, e não
+    // passar despercebido como "campo opcional que a tela trata".
+    expect(r).toHaveProperty('exams', [])
   })
 
   it('getOne() lança NotFound quando usuário não existe', async () => {

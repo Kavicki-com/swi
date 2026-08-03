@@ -1,6 +1,6 @@
 import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'
-import { UpdateProfileDto } from './dto'
+import { CreateExamDto, UpdateProfileDto } from './dto'
 
 // QA F (2026-07-24): o settings do admin coletava setor/cargo/saúde e o
 // ValidationPipe (whitelist) DESCARTAVA tudo que não estava no DTO — o "salvar"
@@ -59,5 +59,40 @@ describe('UpdateProfileDto', () => {
     expect(bad.errors.length).toBeGreaterThan(0)
     const url = await valid({ examKeys: ['https://bucket/exams/x.jpg'] })
     expect(url.errors.length).toBeGreaterThan(0)
+  })
+})
+
+// Exame clínico costuma chegar como PDF (laudo do laboratório), não como foto.
+// O presign já emite key .pdf/.txt pro prefixo exams/, mas o cadastro ainda
+// recusava a key emitida: o arquivo subia pro bucket e o POST /profile/exams
+// devolvia 400. Estes testes travam as duas pontas na MESMA lista de extensões.
+describe('CreateExamDto', () => {
+  const UUID = '2b0f7c1a-1111-2222-3333-444455556666'
+  const valid = async (body: Record<string, unknown>) => {
+    const dto = plainToInstance(CreateExamDto, body)
+    const errors = await validate(dto, { whitelist: true })
+    return { dto, errors }
+  }
+  // name/date sempre válidos: o que está sob teste é só o fileKey.
+  const withKey = (fileKey: string) => valid({ name: 'Hemograma', date: '2027-03-10', fileKey })
+
+  it.each(['jpg', 'png', 'pdf', 'txt'])('aceita fileKey exams/<uuid>.%s', async (ext) => {
+    const { errors } = await withKey(`exams/${UUID}.${ext}`)
+    expect(errors).toHaveLength(0)
+  })
+
+  it('rejeita fileKey de outro namespace (avatars/) mesmo com extensão permitida', async () => {
+    const { errors } = await withKey(`avatars/${UUID}.pdf`)
+    expect(errors.length).toBeGreaterThan(0)
+  })
+
+  it('rejeita extensão fora da lista (executável não é exame)', async () => {
+    const { errors } = await withKey(`exams/${UUID}.exe`)
+    expect(errors.length).toBeGreaterThan(0)
+  })
+
+  it('rejeita id malformado (só key emitida pelo presign passa)', async () => {
+    const { errors } = await withKey('exams/nao-e-uuid.pdf')
+    expect(errors.length).toBeGreaterThan(0)
   })
 })

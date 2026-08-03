@@ -3,10 +3,20 @@ import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { hash } from '../auth/codes'
 import { Prisma, Role } from '@prisma/client'
-import type { ApprovalStatus, Company, Profile, User } from '@prisma/client'
+import type { ApprovalStatus, Company, Exam, Profile, User } from '@prisma/client'
 
 type UserWithProfile = User & { profile: Profile | null }
-type UserWithProfileCompany = UserWithProfile & { company: Company | null }
+// exams OBRIGATÓRIO. O Prisma não tipa relação incluída como opcional: o
+// findUnique do getOne já devolve `exams: Exam[]` garantido, então declarar `?`
+// aqui só afrouxaria o que o compilador já dava de graça. E o fallback `?? []`
+// que isso permitiria é pior que o crash: "Nenhum exame registrado" para quem
+// TEM exame parece uma tela normal até alguém liberar um trabalhador para área
+// de risco confiando nela. É a mesma família das alergias fixas, do tipo
+// sanguíneo com default universal e dos vitais "excelentes" por padrão: defeito
+// silenciosamente plausível. Um 500 aparece no log e no monitoramento; um
+// histórico clínico vazio por engano não aparece em lugar nenhum. Obrigatório
+// também faz um segundo call site que esqueça o include falhar na COMPILAÇÃO.
+type UserWithProfileCompany = UserWithProfile & { company: Company | null; exams: Exam[] }
 
 const LIST_CAP = 200
 
@@ -182,7 +192,9 @@ export class UsersService {
   async getOne(id: string, companyId: string | null) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { profile: true, company: true },
+      // Ordem igual à do ProfileService.listExams (validade mais distante
+      // primeiro): app e painel lendo o MESMO histórico não podem divergir.
+      include: { profile: true, company: true, exams: { orderBy: { date: 'desc' } } },
     })
     if (!user || user.companyId !== companyId) throw new NotFoundException('Usuário não encontrado')
     return this.toDetailDto(user)
@@ -226,6 +238,18 @@ export class UsersService {
       gender: u.profile?.gender ?? null,
       allergies: u.profile?.allergies ?? null,
       chronicConditions: u.profile?.chronicConditions ?? null,
+      // Histórico clínico REAL do worker. O detalhe do painel já tinha a UI
+      // (ExamInfoCard) mas o DTO nunca trouxe os exames, então a seção ficava
+      // vazia para todo mundo. Data de CALENDÁRIO ('AAAA-MM-DD'): mandar ISO
+      // datetime faria o dia recuar um em fuso negativo na formatação.
+      exams: await Promise.all(
+        u.exams.map(async (e) => ({
+          id: e.id,
+          name: e.name,
+          date: e.date.toISOString().slice(0, 10),
+          fileUrl: await this.media.presignGet(e.fileKey),
+        })),
+      ),
     }
   }
 }
