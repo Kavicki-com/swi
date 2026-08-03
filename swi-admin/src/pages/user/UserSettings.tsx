@@ -16,6 +16,7 @@ import {
   Avatar,
   Button,
   Combobox,
+  ExamInfoCard,
   Icon,
   Input,
   Text,
@@ -31,6 +32,8 @@ import { FormError } from '@/components/FormError'
 import { profileApi, type ProfileCatalog, type ProfilePatch } from '@/services/api/profile'
 import { authApi } from '@/services/api/auth'
 import { uploadImage } from '@/services/api/upload'
+import { examsApi, type Exam } from '@/services/api/exams'
+import { examCardParts, toCalendarDate } from '@/services/api/examCard'
 import { maskCpf, maskDate, maskPhone, onlyDigits } from '@/lib/masks'
 
 const BLOOD_OPTIONS = [
@@ -297,7 +300,13 @@ export function UserSettings() {
   )
   const gerenteOptions = useMemo(() => withCurrent(GERENTE_OPTIONS, gerente), [gerente])
 
-  const [examKeys, setExamKeys] = useState<string[]>([])
+  // Fonte única dos exames: tabela Exam, a mesma que o app e o detalhe do
+  // funcionário leem. Profile.examKeys continua existindo no backend mas não
+  // alimenta mais nada aqui — era ele que fazia o arquivo enviado sumir.
+  const [exams, setExams] = useState<Exam[]>([])
+  const [examName, setExamName] = useState('')
+  const [examDate, setExamDate] = useState('')
+  const [examError, setExamError] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -346,8 +355,19 @@ export function UserSettings() {
       setGender(readGender(data.gender))
       setAllergies(data.allergies ?? '')
       setChronic(data.chronicConditions ?? '')
-      setExamKeys(data.examKeys ?? [])
       setAvatarUrl(data.avatarUrl)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Exames em chamada própria: outro endpoint e outra tabela, e um 500 aqui não
+  // pode derrubar o prefill do cadastro inteiro.
+  useEffect(() => {
+    let cancelled = false
+    examsApi.list().then(({ data }) => {
+      if (!cancelled && data) setExams(data)
     })
     return () => {
       cancelled = true
@@ -443,25 +463,48 @@ export function UserSettings() {
     setAvatarBusy(false)
   }
 
-  const onExamsSelected = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? [])
+  // Anexar é o ÚLTIMO passo: nome e validade primeiro, como no app. O botão
+  // fica habilitado e valida no clique em vez de nascer desabilitado — botão
+  // morto sem explicação deixa o operador sem saber o que falta.
+  const pickExamFile = () => {
+    if (!examName.trim()) {
+      setExamError('Informe o nome do exame.')
+      return
+    }
+    if (!toCalendarDate(examDate)) {
+      setExamError('Validade inválida — use dd/mm/aaaa.')
+      return
+    }
+    setExamError(null)
+    examsInputRef.current?.click()
+  }
+
+  const onExamSelected = async (e: ChangeEvent<HTMLInputElement>) => {
+    // Um por vez: nome e validade são de UM exame, e um chooser múltiplo os
+    // aplicaria igual a todos os arquivos.
+    const file = e.target.files?.[0]
     e.target.value = ''
-    if (files.length === 0) return
+    if (!file) return
+    const nome = examName.trim()
+    const date = toCalendarDate(examDate)
+    // Cinto: o seletor só abre pelo pickExamFile, que já validou. Se ainda
+    // assim chegar inválido, não cadastra exame sem nome nem com data furada.
+    if (!nome || !date) return
     setExamsBusy(true)
     try {
-      // Sequencial de propósito: preserva a ordem escolhida no chooser.
-      const novos: string[] = []
-      for (const f of files) novos.push(await uploadImage(f, 'exams'))
-      const merged = [...examKeys, ...novos]
-      const { error } = await profileApi.update({ examKeys: merged })
-      if (error) {
-        showToast('Falha ao enviar exames', error.message)
+      const fileKey = await uploadImage(file, 'exams')
+      const { data, error } = await examsApi.create({ name: nome, date, fileKey })
+      if (error || !data) {
+        showToast('Falha ao enviar exame', error?.message ?? '')
       } else {
-        setExamKeys(merged)
-        showToast('Exames enviados', `${novos.length} arquivo(s) anexado(s) ao seu perfil`)
+        // Prepend: o mais recente primeiro, como o backend devolve na listagem.
+        setExams((prev) => [data, ...prev])
+        setExamName('')
+        setExamDate('')
+        showToast('Exame enviado', `${data.name} anexado ao seu perfil`)
       }
     } catch (err) {
-      showToast('Falha ao enviar exames', err instanceof Error ? err.message : '')
+      showToast('Falha ao enviar exame', err instanceof Error ? err.message : '')
     }
     setExamsBusy(false)
   }
@@ -517,14 +560,15 @@ export function UserSettings() {
           style={{ display: 'none' }}
           onChange={onAvatarSelected}
         />
+        {/* Laudo clínico costuma vir em PDF; o accept do avatar acima segue só
+            imagem, porque foto de perfil em PDF não renderiza em lugar nenhum. */}
         <input
           ref={examsInputRef}
           data-testid="settings-exams-input"
           type="file"
-          accept="image/jpeg,image/png"
-          multiple
+          accept="application/pdf,image/jpeg,image/png,text/plain"
           style={{ display: 'none' }}
-          onChange={onExamsSelected}
+          onChange={onExamSelected}
         />
         <View style={{ position: 'relative' }}>
           {/* `name` alimenta o fallback de iniciais do DS 0.1.120 — este é o
@@ -588,33 +632,9 @@ export function UserSettings() {
               Política de privacidade e termos de uso
             </Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Enviar exames clínicos"
-            disabled={examsBusy}
-            onPress={() => examsInputRef.current?.click()}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 4,
-              paddingHorizontal: theme.padding.sm,
-              paddingVertical: theme.padding.s,
-            }}
-          >
-            <Icon name="cloud_upload" size={20} color={theme.content.primary} />
-            <Text
-              variant="body.m"
-              color={theme.content.primary}
-              style={{ fontFamily: theme.fontFamily.title, fontWeight: '700' }}
-            >
-              {examsBusy ? 'Enviando exames…' : 'Enviar exames clínicos'}
-            </Text>
-            {examKeys.length > 0 ? (
-              <Text variant="body.s" color={theme.content.medium}>
-                {`(${examKeys.length} no perfil)`}
-              </Text>
-            ) : null}
-          </Pressable>
+          {/* O gatilho de exames saiu daqui: era um upload em lote que só
+              incrementava um contador. Virou a seção "Exames clínicos" da
+              coluna da direita, com nome, validade e card. */}
         </View>
         <View>
           <Button
@@ -804,6 +824,66 @@ export function UserSettings() {
               multiline
               numberOfLines={4}
             />
+          </View>
+
+          {/* Exames clínicos — mora com o resto do dado de saúde. Nome e
+              validade são o que o ExamInfoCard desenha; sem eles o arquivo
+              sobe e não vira card nenhum, que era o bug. */}
+          <View style={{ gap: theme.gap.s }}>
+            <Title variant="title.xs" color={theme.content.primary}>
+              Exames clínicos
+            </Title>
+            <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="Nome do exame"
+                  value={examName}
+                  onChangeText={setExamName}
+                  testID="settings-exam-name"
+                />
+              </View>
+              <View style={{ width: 192 }}>
+                <Input
+                  label="Validade"
+                  placeholder="dd/mm/aaaa"
+                  value={examDate}
+                  onChangeText={(v) => setExamDate(maskDate(v))}
+                  testID="settings-exam-date"
+                />
+              </View>
+            </View>
+            <FormError message={examError} />
+            <Button
+              label={examsBusy ? 'Enviando…' : 'Enviar exame'}
+              variant="contained"
+              backgroundColor={theme.surface.secondary}
+              size="small"
+              disabled={examsBusy}
+              onPress={pickExamFile}
+            />
+            {exams.length === 0 ? (
+              <Text variant="body.s" color={theme.content.medium}>
+                Nenhum exame enviado.
+              </Text>
+            ) : (
+              exams.map((exam) => {
+                const parts = examCardParts(exam.date)
+                return (
+                  <ExamInfoCard
+                    key={exam.id}
+                    compact
+                    fullWidth
+                    year={parts.year}
+                    date={parts.date}
+                    examName={exam.name}
+                    actionLabel={`Baixar ${exam.name}`}
+                    // fileUrl é presignado e expira — abre na hora do clique,
+                    // nunca guardado em href renderizado antes.
+                    onActionPress={() => window.open(exam.fileUrl, '_blank', 'noopener,noreferrer')}
+                  />
+                )
+              })
+            )}
           </View>
 
           {/* Password + Permissions row — stacks vertically at tablet so the

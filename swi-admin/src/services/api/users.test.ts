@@ -292,6 +292,68 @@ describe('create (real)', () => {
   })
 })
 
+// O detalhe já tinha a seção "Histórico de exames", mas o mapper nunca
+// preenchia examHistory: quem TINHA exame via "Nenhum exame registrado".
+// Mesma família das alergias fixas e do tipo sanguíneo com default universal
+// que o repo já corrigiu — defeito que parece certo quando está errado.
+describe('exames reais no detalhe do usuário', () => {
+  const EXAME = {
+    id: 'e1',
+    name: 'Audiometria',
+    // Validade em data de CALENDÁRIO, sem hora.
+    date: '2027-03-05',
+    fileUrl: 'https://exemplo/e1.pdf',
+  }
+
+  it('GET /users/:id mapeia os exames do DTO pro examHistory da UI', async () => {
+    vi.stubGlobal('fetch', okJson(summary({ exams: [EXAME] })))
+
+    const { data } = await employeesApi.get('u1')
+
+    expect(data?.examHistory).toEqual([
+      { id: 'e1', title: 'Audiometria', year: '2027', date: '05 Mar', fileUrl: EXAME.fileUrl },
+    ])
+  })
+
+  it('sem exame não inventa histórico', async () => {
+    vi.stubGlobal('fetch', okJson(summary({ exams: [] })))
+
+    const { data } = await employeesApi.get('u1')
+
+    // undefined, não [] — o layout distingue "não tem" de "não veio".
+    expect(data?.examHistory).toBeUndefined()
+  })
+
+  it('resposta sem o campo exams não quebra o mapeamento', async () => {
+    // Backend antigo (antes do PR feat/backend-exam-filetypes) não manda o campo.
+    vi.stubGlobal('fetch', okJson(summary()))
+
+    const { data } = await employeesApi.get('u1')
+
+    expect(data?.examHistory).toBeUndefined()
+    expect(data?.name).toBe('Worker Um')
+  })
+
+  it('a validade não recua um dia em fuso negativo', async () => {
+    // new Date('2027-03-01') é meia-noite UTC: em UTC-3 os getters locais
+    // devolvem 28/Fev. Por isso o mapper fatia texto em vez de usar Date.
+    vi.stubGlobal('fetch', okJson(summary({ exams: [{ ...EXAME, date: '2027-03-01' }] })))
+
+    const { data } = await employeesApi.get('u1')
+
+    expect(data?.examHistory?.[0]?.date).toBe('01 Mar')
+    expect(data?.examHistory?.[0]?.year).toBe('2027')
+  })
+
+  it('admin também recebe o histórico real', async () => {
+    vi.stubGlobal('fetch', okJson(summary({ role: 'ADMIN', exams: [EXAME] })))
+
+    const { data } = await adminsApi.get('u1')
+
+    expect(data?.examHistory?.[0]?.title).toBe('Audiometria')
+  })
+})
+
 describe('approvalsApi.approve/reject (real)', () => {
   it('approve() faz POST /users/:id/approve', async () => {
     const f = okJson({ id: 'u1', approvalStatus: 'APPROVED' })

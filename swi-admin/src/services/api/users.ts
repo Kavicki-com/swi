@@ -7,6 +7,8 @@
 import type { MockResponse } from '@/services/mockApi/types'
 import type { Employee } from '@/services/mockApi/employees'
 import type { Admin } from '@/services/mockApi/admins'
+import type { ExamEntry } from '@/services/mockApi/roster'
+import { examCardParts } from './examCard'
 import { apiFetch } from './http'
 
 export type { Employee, Admin }
@@ -43,6 +45,10 @@ export type UserDetailDto = UserSummaryDto & {
   gender: string | null
   allergies: string | null
   chronicConditions: string | null
+  // Histórico clínico REAL (tabela Exam). Opcional porque backend anterior ao
+  // PR feat/backend-exam-filetypes não manda o campo — e a tela lendo undefined
+  // mostra o vazio honesto, não uma lista inventada.
+  exams?: ReadonlyArray<{ id: string; name: string; date: string; fileUrl: string }>
 }
 
 // Placeholder pra quando o Profile ainda não tem o tipo sanguíneo preenchido —
@@ -84,6 +90,18 @@ export function parseAllergies(raw: string | null | undefined): string[] | undef
 const toGender = (raw: string | null | undefined): 'male' | 'female' | undefined =>
   raw === 'male' || raw === 'female' ? raw : undefined
 
+// Exames do DTO → entradas do ExamInfoCard. Lista vazia vira undefined porque
+// o layout distingue "não tem exame" de "não veio no DTO", e undefined é o que
+// o `?? []` dele espera. A quebra da data sai do examCardParts (fatia texto,
+// não usa Date — a validade é data de calendário).
+function toExamHistory(exams: UserDetailDto['exams']): ExamEntry[] | undefined {
+  if (!exams || exams.length === 0) return undefined
+  return exams.map((e) => {
+    const parts = examCardParts(e.date)
+    return { id: e.id, title: e.name, year: parts.year, date: parts.date, fileUrl: e.fileUrl }
+  })
+}
+
 // DTO → Employee (UI). role=jobTitle (linha 1), specialization=sector (linha 2).
 // Vitais ficam de fora (simulados até a smartband); o cadastro CLÍNICO
 // (gênero/alergias) só existe no DTO de detalhe — na lista vem undefined.
@@ -101,6 +119,7 @@ function toEmployee(u: UserSummaryDto | UserDetailDto): Employee {
     vitalsStatus: 'good',
     gender: toGender(detail.gender),
     allergies: parseAllergies(detail.allergies),
+    examHistory: toExamHistory(detail.exams),
   }
 }
 
@@ -120,6 +139,7 @@ function toAdmin(u: UserSummaryDto | UserDetailDto): Admin {
     status: APPROVAL_TO_STATUS[u.approvalStatus],
     gender: toGender(detail.gender),
     allergies: parseAllergies(detail.allergies),
+    examHistory: toExamHistory(detail.exams),
   }
 }
 

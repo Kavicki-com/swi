@@ -7,7 +7,13 @@ import { ApiError, apiFetch } from './http'
 // yet implemented"). Ver swi-backend/src/media/media.service.ts.
 type Presign = { url: string; key: string }
 
-const ALLOWED = ['image/jpeg', 'image/png']
+// Espelha swi-backend/src/media/allowed-content-types.ts, que valida POR
+// PREFIXO. Divergir daqui não afrouxa nada (quem decide de verdade é a
+// assinatura do presign), só troca um erro claro no client por um 400 do
+// servidor depois de escolher o arquivo.
+const IMAGE_TYPES = ['image/jpeg', 'image/png']
+// Laudo clínico costuma vir em PDF; txt entra a pedido do cliente.
+const EXAM_TYPES = [...IMAGE_TYPES, 'application/pdf', 'text/plain']
 
 // Espelha o teto validado pelo presign
 // (swi-backend/src/media/media.service.ts). Divergir daqui só troca um erro
@@ -39,7 +45,16 @@ export async function uploadImage(
   // 'avatars'/'exams' — foto de perfil e exames clínicos do settings (QA F).
   prefix: 'order' | 'chat' | 'reports' | 'avatars' | 'exams',
 ): Promise<string> {
-  if (!ALLOWED.includes(file.type)) throw new Error('Selecione arquivos do tipo: JPG ou PNG')
+  // A mensagem sai da mesma decisão que o allow/deny: em 'exams' ela precisa
+  // citar PDF, senão manda o operador converter pra JPG um laudo que seria aceito.
+  const isExam = prefix === 'exams'
+  if (!(isExam ? EXAM_TYPES : IMAGE_TYPES).includes(file.type)) {
+    throw new Error(
+      isExam
+        ? 'Selecione arquivos do tipo: PDF, JPG, PNG ou TXT'
+        : 'Selecione arquivos do tipo: JPG ou PNG',
+    )
+  }
   if (file.size === 0) throw new Error('O arquivo está vazio')
   if (file.size > MAX_UPLOAD_BYTES) throw new Error('O arquivo excede o limite de 15 MB')
 

@@ -9,7 +9,15 @@ export type ExamEntry = {
   year: string
   date: string
   title: string
-  subtitle: string
+  /**
+   * Campo morto: toda entrada de mock o preenche com '' e nenhuma tela o
+   * renderiza (o WorkerExamEntry do layout nem o declara). Opcional para que o
+   * exame REAL, vindo da tabela Exam, não precise inventar uma string vazia
+   * só para satisfazer o tipo.
+   */
+  subtitle?: string
+  /** URL presignada do arquivo. Ausente nas entradas de demo. */
+  fileUrl?: string
 }
 
 export type Admin = {

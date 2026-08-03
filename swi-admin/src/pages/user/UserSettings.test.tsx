@@ -10,6 +10,7 @@ import { clearSession, renderPage } from '@/test-utils/renderPage'
 import { profileApi } from '@/services/api/profile'
 import { authApi } from '@/services/api/auth'
 import { uploadImage } from '@/services/api/upload'
+import { examsApi } from '@/services/api/exams'
 
 vi.mock('@/services/api/profile', () => ({
   profileApi: { me: vi.fn(), update: vi.fn(), catalog: vi.fn() },
@@ -23,6 +24,9 @@ vi.mock('@/services/api/upload', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/api/upload')>()
   return { ...actual, uploadImage: vi.fn() }
 })
+vi.mock('@/services/api/exams', () => ({
+  examsApi: { list: vi.fn(), create: vi.fn() },
+}))
 
 // O DS Combobox NÃO abre em jsdom (ver nota no NewReport.test.tsx) —
 // substituído por opções clicáveis; o resto do DS fica real.
@@ -64,6 +68,17 @@ const CATALOG = {
 }
 const changePwMock = vi.mocked(authApi.changePassword)
 const uploadMock = vi.mocked(uploadImage)
+const examsListMock = vi.mocked(examsApi.list)
+const examsCreateMock = vi.mocked(examsApi.create)
+
+// `date` é a VALIDADE, data de calendário 'AAAA-MM-DD'. Futura de propósito:
+// é o que o cliente cadastra (exame vale até tal dia).
+const EXAME = {
+  id: 'e1',
+  name: 'Audiometria',
+  date: '2027-03-05',
+  fileUrl: 'https://exemplo/e1.pdf',
+}
 
 const DTO = {
   id: 'p1',
@@ -104,6 +119,7 @@ const typeIn = (testID: string, value: string) =>
 
 beforeEach(() => {
   catalogMock.mockResolvedValue({ data: CATALOG, error: null })
+  examsListMock.mockResolvedValue({ data: [], error: null })
 })
 
 afterEach(() => {
@@ -241,29 +257,140 @@ describe('UserSettings', () => {
       }),
     )
   })
+})
 
-  it('Enviar exames → upload exams/ de cada arquivo + PUT examKeys MESCLANDO os existentes', async () => {
+// O exame enviado pelo painel ia pra Profile.examKeys, que guarda só a chave do
+// arquivo. Sem nome nem validade nenhuma tela conseguia desenhar o card, então
+// o usuário mandava o arquivo e ele sumia de vista — o bug reportado. Agora
+// grava na tabela Exam, a MESMA que o app e o detalhe do funcionário leem.
+describe('UserSettings — exames clínicos', () => {
+  it('lista os exames existentes como card, com nome e validade', async () => {
     meMock.mockResolvedValue({ data: DTO, error: null })
-    updateMock.mockResolvedValue({ data: DTO, error: null })
-    uploadMock
-      .mockResolvedValueOnce('exams/2b0f7c1a-aaaa-bbbb-cccc-444455556666.jpg')
-      .mockResolvedValueOnce('exams/2b0f7c1a-dddd-eeee-ffff-444455556666.png')
+    examsListMock.mockResolvedValue({ data: [EXAME], error: null })
     await renderSettings()
 
-    const a = new File(['a'], 'exame-a.jpg', { type: 'image/jpeg' })
-    const b = new File(['b'], 'exame-b.png', { type: 'image/png' })
-    fireEvent.change(screen.getByTestId('settings-exams-input'), { target: { files: [a, b] } })
+    expect(await screen.findByText('Audiometria')).toBeTruthy()
+    // O card separa ano de dia/mês (ExamInfoCard do DS).
+    expect(screen.getByText('2027')).toBeTruthy()
+    expect(screen.getByText('05 Mar')).toBeTruthy()
+  })
 
-    await waitFor(() => expect(uploadMock).toHaveBeenCalledTimes(2))
-    expect(uploadMock).toHaveBeenNthCalledWith(1, a, 'exams')
+  it('sem exame nenhum, diz isso em vez de deixar o espaço mudo', async () => {
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    await renderSettings()
+
+    expect(await screen.findByText(/nenhum exame enviado/i)).toBeTruthy()
+  })
+
+  it('não mostra mais o contador "(N no perfil)" do fluxo antigo', async () => {
+    // DTO ainda traz examKeys (a coluna foi deprecada, não removida). Ela não
+    // pode voltar a alimentar a tela, senão o contador mente sobre a fonte real.
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    await renderSettings()
+
+    expect(screen.queryByText(/no perfil/i)).toBeNull()
+  })
+
+  it('exige nome antes de deixar anexar, e diz qual campo falta', async () => {
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    await renderSettings()
+
+    typeIn('settings-exam-date', '05/03/2027')
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar exame' }))
+
+    expect(await screen.findByText(/informe o nome do exame/i)).toBeTruthy()
+    expect(uploadMock).not.toHaveBeenCalled()
+  })
+
+  it('exige validade em dd/mm/aaaa antes de deixar anexar', async () => {
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    await renderSettings()
+
+    typeIn('settings-exam-name', 'Audiometria')
+    // Passa no formato mas não existe no calendário. O regex sozinho aceitaria.
+    typeIn('settings-exam-date', '31/02/2027')
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar exame' }))
+
+    // Casa a MENSAGEM, não o rótulo "Validade" do campo, que existe sempre.
+    expect(await screen.findByText(/validade inválida/i)).toBeTruthy()
+    expect(uploadMock).not.toHaveBeenCalled()
+  })
+
+  it('nome + validade + arquivo → sobe em exams/ e cadastra na tabela Exam', async () => {
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    uploadMock.mockResolvedValue('exams/2b0f7c1a-aaaa-bbbb-cccc-444455556666.pdf')
+    examsCreateMock.mockResolvedValue({ data: EXAME, error: null })
+    await renderSettings()
+
+    typeIn('settings-exam-name', 'Audiometria')
+    typeIn('settings-exam-date', '05/03/2027')
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar exame' }))
+
+    const pdf = new File(['x'], 'audiometria.pdf', { type: 'application/pdf' })
+    fireEvent.change(screen.getByTestId('settings-exams-input'), { target: { files: [pdf] } })
+
+    await waitFor(() => expect(uploadMock).toHaveBeenCalledWith(pdf, 'exams'))
     await waitFor(() =>
-      expect(updateMock).toHaveBeenCalledWith({
-        examKeys: [
-          'exams/2b0f7c1a-1111-2222-3333-444455556666.jpg', // pré-existente preservado
-          'exams/2b0f7c1a-aaaa-bbbb-cccc-444455556666.jpg',
-          'exams/2b0f7c1a-dddd-eeee-ffff-444455556666.png',
-        ],
+      expect(examsCreateMock).toHaveBeenCalledWith({
+        name: 'Audiometria',
+        // dd/mm/aaaa da UI vira data de calendário na API.
+        date: '2027-03-05',
+        fileKey: 'exams/2b0f7c1a-aaaa-bbbb-cccc-444455556666.pdf',
       }),
+    )
+    // O PUT do perfil não pode mais ser usado pra exame: era ele que fazia o
+    // arquivo cair numa fonte que nenhuma tela lê.
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
+  it('depois de enviar, o card aparece e o estado vazio some', async () => {
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    uploadMock.mockResolvedValue('exams/2b0f7c1a-aaaa-bbbb-cccc-444455556666.pdf')
+    examsCreateMock.mockResolvedValue({ data: EXAME, error: null })
+    await renderSettings()
+
+    expect(await screen.findByText(/nenhum exame enviado/i)).toBeTruthy()
+
+    typeIn('settings-exam-name', 'Audiometria')
+    typeIn('settings-exam-date', '05/03/2027')
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar exame' }))
+    fireEvent.change(screen.getByTestId('settings-exams-input'), {
+      target: { files: [new File(['x'], 'a.pdf', { type: 'application/pdf' })] },
+    })
+
+    // É exatamente o sintoma reportado: o arquivo subia e não aparecia.
+    expect(await screen.findByText('Audiometria')).toBeTruthy()
+    expect(screen.queryByText(/nenhum exame enviado/i)).toBeNull()
+  })
+
+  it('falha no cadastro não finge que deu certo', async () => {
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    uploadMock.mockResolvedValue('exams/2b0f7c1a-aaaa-bbbb-cccc-444455556666.pdf')
+    examsCreateMock.mockResolvedValue({ data: null, error: { message: 'Falha ao enviar o exame' } })
+    await renderSettings()
+
+    typeIn('settings-exam-name', 'Audiometria')
+    typeIn('settings-exam-date', '05/03/2027')
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar exame' }))
+    fireEvent.change(screen.getByTestId('settings-exams-input'), {
+      target: { files: [new File(['x'], 'a.pdf', { type: 'application/pdf' })] },
+    })
+
+    await waitFor(() => expect(examsCreateMock).toHaveBeenCalled())
+    expect(screen.queryByText('Audiometria')).toBeNull()
+    expect(await screen.findByText(/nenhum exame enviado/i)).toBeTruthy()
+  })
+
+  it('o input de exame aceita pdf e txt; o de avatar continua só imagem', async () => {
+    meMock.mockResolvedValue({ data: DTO, error: null })
+    await renderSettings()
+
+    const accept = screen.getByTestId('settings-exams-input').getAttribute('accept') ?? ''
+    expect(accept).toContain('application/pdf')
+    expect(accept).toContain('text/plain')
+    // Foto de perfil em PDF não renderiza em lugar nenhum do painel.
+    expect(screen.getByTestId('settings-avatar-input').getAttribute('accept')).toBe(
+      'image/jpeg,image/png',
     )
   })
 })
