@@ -14,6 +14,12 @@ export type ExamEntry = {
   year: string
   date: string
   title: string
+  /**
+   * URL presignada do arquivo, quando o exame veio da tabela Exam real. As
+   * entradas de demo deste roster não têm arquivo, por isso é opcional: sem
+   * ela o card não oferece download em vez de oferecer um que não baixa nada.
+   */
+  fileUrl?: string
 }
 
 export type WorkerProfile = {

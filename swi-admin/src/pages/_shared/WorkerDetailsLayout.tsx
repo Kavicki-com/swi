@@ -34,6 +34,8 @@ export type WorkerExamEntry = {
   year: string
   date: string
   title: string
+  /** URL presignada do arquivo. Ausente nas entradas de demo do roster. */
+  fileUrl?: string
 }
 
 export type WorkerDetailsData = {
@@ -442,6 +444,14 @@ export function WorkerDetailsLayout({
                     examName={exam.title}
                     compact
                     fullWidth
+                    // Entrada de demo não tem arquivo: desabilita em vez de
+                    // deixar um botão de download que não baixa nada.
+                    actionDisabled={!exam.fileUrl}
+                    onActionPress={
+                      exam.fileUrl
+                        ? () => window.open(exam.fileUrl, '_blank', 'noopener,noreferrer')
+                        : undefined
+                    }
                   />
                 ))
               ) : (
