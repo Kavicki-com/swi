@@ -1,8 +1,12 @@
 import { File } from 'expo-file-system';
 import { apiRequest, withDeadline } from './http';
 
-// Infere content-type da extensão (default jpeg, cobre uris sem extensão do picker).
+// Infere content-type da extensão (default jpeg, cobre uris sem extensão do
+// picker). pdf/txt entram pelo exame (unificação 2026-08-03): sem eles o laudo
+// subiria assinado como image/jpeg e o presign recusaria com 400.
 export function contentTypeFor(uri: string): string {
+  if (/\.pdf(\?|$)/i.test(uri)) return 'application/pdf';
+  if (/\.txt(\?|$)/i.test(uri)) return 'text/plain';
   return /\.png(\?|$)/i.test(uri) ? 'image/png' : 'image/jpeg';
 }
 
