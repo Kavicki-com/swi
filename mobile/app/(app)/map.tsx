@@ -27,9 +27,11 @@ import { useVitals } from '@/services/vitals/VitalsProvider';
 import type { WorkerStatus } from '@/services/vitals/types';
 import { MapView } from '@/components/MapView';
 import { MapMarker } from '@/components/MapMarker';
+import { MapLineSource } from '@/components/MapLineSource';
 import { MapHeatmapSource } from '@/components/MapHeatmapSource';
 import { NavFABs } from '@/components/NavFABs';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
+import { circleFeature, destinationPoint } from '@/lib/mapGeometry';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import {
   CAMERA_LOCATIONS,
@@ -81,6 +83,16 @@ function toPinStatus(status: WorkerStatus): LocationPinStatus {
   return status === 'unknown' ? 'offline' : status;
 }
 
+// Anéis de distância em volta de quem está usando o app (Figma 385:29130).
+// A distância é o dado, e o desenho é consequência: `meters` alimenta tanto a
+// geometria quanto o rótulo, então os dois não têm como divergir. Antes o par
+// era `width: 395`/`647` px com o texto "5KM"/"10KM" digitado à mão do lado —
+// duas verdades separadas, e a do texto quebrava em todo zoom (QA Mobile #10).
+const RADIUS_RINGS = [
+  { meters: 5000, label: '5KM', opacity: 0.9 },
+  { meters: 10000, label: '10KM', opacity: 0.75 },
+] as const;
+
 export default function MapViewGeneral() {
   if (!isFeatureEnabled('maps')) {
     return <ProdOnlyPlaceholder />;
@@ -128,6 +140,22 @@ function MapViewGeneralScreen() {
     };
   }, []);
 
+  // Anéis + âncora do rótulo, recalculados quando chega uma posição nova do
+  // GPS. O centro é a posição REAL de quem está usando (a mesma do pino), não
+  // o centro da tela: arrastar o mapa não pode mudar de onde a distância é
+  // medida.
+  const radiusRings = useMemo(
+    () =>
+      RADIUS_RINGS.map((r) => ({
+        ...r,
+        ring: circleFeature(coords, r.meters),
+        // Rumo 180 = sul. O rótulo pousa na borda sul do anel, como no Figma,
+        // e agora anda junto com ela em qualquer zoom.
+        labelAt: destinationPoint(coords, 180, r.meters),
+      })),
+    [coords],
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <MapView center={coords} zoom={14}>
@@ -151,6 +179,30 @@ function MapViewGeneralScreen() {
             }}
           />
         )}
+
+        {/* Anéis de 5 e 10 km (Figma 385:29130) — geometria de mapa, não
+            overlay de tela: o MapLibre projeta o anel em cada frame, então
+            ele acompanha zoom e arrasto e o rótulo continua verdadeiro.
+            `width` fica em pixels de propósito (a espessura do traço não
+            deve engordar com o zoom; só o raio é que é distância).
+            Vêm ANTES dos pinos pra ficarem por baixo deles. */}
+        {radiusRings.map((r) => (
+          <MapLineSource
+            key={`radius-${r.meters}`}
+            id={`radius-${r.meters}`}
+            shape={r.ring}
+            paint={{ color: theme.content.dark, width: 2, opacity: r.opacity }}
+          />
+        ))}
+        {radiusRings.map((r) => (
+          <MapMarker
+            key={`radius-${r.meters}-label`}
+            id={`radius-${r.meters}-label`}
+            coordinate={r.labelAt}
+          >
+            <RadiusPill label={r.label} theme={theme} />
+          </MapMarker>
+        ))}
 
         {/* User pin (Figma 385:29023) — real GPS coords + live worker status
             (unknown → 'offline'). Other pins stay mock. */}
@@ -194,51 +246,6 @@ function MapViewGeneralScreen() {
                 <LocationPin variant="camera" name={c.name} />
             </MapMarker>
           ))}
-
-        {/* Anéis de raio 5KM e 10KM (Figma 385:29130) — overlays estáticos
-            em viewport space, centrados na tela. Cada anel tem um pill
-            label verde (surface.primary) posicionado próximo da margem
-            sul (bottom-edge) do círculo. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1,
-          }}
-        >
-          {/* Anel interno (5KM) — Elipse 102 — 395×395px no Figma. */}
-          <View
-            style={{
-              position: 'absolute',
-              width: 395,
-              height: 395,
-              borderRadius: 999,
-              borderWidth: 2,
-              borderColor: theme.content.dark,
-              opacity: 0.9,
-            }}
-          />
-          <RadiusPill label="5KM" offsetY={183} theme={theme} />
-          {/* Anel externo (10KM) — Elipse 103 — 647×647px no Figma. */}
-          <View
-            style={{
-              position: 'absolute',
-              width: 647,
-              height: 647,
-              borderRadius: 999,
-              borderWidth: 2,
-              borderColor: theme.content.dark,
-              opacity: 0.75,
-            }}
-          />
-          <RadiusPill label="10KM" offsetY={308} theme={theme} />
-        </View>
 
         {/* Right-side stack de 3 toggle buttons (Figma 385:28853) —
             right:20, vert-centered ~296px acima do centro. Cada botão é
@@ -296,29 +303,25 @@ function MapViewGeneralScreen() {
   );
 }
 
-// Pill verde (Figma 385:29133 / 385:29134) — chip estreito com label
-// "5KM"/"10KM" posicionado na margem sul de cada anel, ligeiramente a
-// oeste do centro. `offsetY` é a distância do centro da viewport até o
-// centro do pill (positivo = abaixo).
-function RadiusPill({
-  label,
-  offsetY,
-  theme,
-}: {
-  label: string;
-  offsetY: number;
-  theme: ReturnType<typeof useTheme>;
-}) {
+// Pill verde (Figma 385:29133 / 385:29134) — chip estreito com o label
+// "5KM"/"10KM". Ancorado pelo <MapMarker> no ponto geográfico da borda sul
+// do anel, então não posiciona a si mesmo: some o `offsetY` que media a
+// distância até o centro da tela.
+//
+// O translateX de -28 sobrevive porque é outra coisa: deslocamento de RÓTULO
+// em espaço de tela, o mesmo que o Figma desenha (o pill fica um pouco a
+// oeste da vertical do centro). Ficar constante em qualquer zoom é o
+// comportamento certo pra um rótulo — quem tem que ser distância é o raio.
+function RadiusPill({ label, theme }: { label: string; theme: ReturnType<typeof useTheme> }) {
   return (
     <View
       pointerEvents="none"
       style={{
-        position: 'absolute',
         backgroundColor: theme.surface.primary,
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
-        transform: [{ translateY: offsetY }, { translateX: -28 }],
+        transform: [{ translateX: -28 }],
       }}
     >
       <Text variant="body.m" color={theme.content.light}>
