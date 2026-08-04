@@ -138,6 +138,13 @@ export default function SettingsChangePassword() {
         }}
       >
         <View>
+          {/* SEM `disabled={!canSubmit}` (QA Mobile #1): o handleSave já marca
+              os campos como tocados pra revelar o erro de cada um, e botão
+              desabilitado nunca dispara onPress — aquele bloco era código
+              morto e o toque sumia no vazio.
+
+              A validação não afrouxa: quem decide salvar continua sendo o
+              `if (!canSubmit)` do handleSave. */}
           <Button
             variant="contained"
             backgroundColor={theme.surface.primary}
@@ -145,7 +152,6 @@ export default function SettingsChangePassword() {
             label="Salvar nova senha"
             elevation="lg"
             accessibilityLabel="Salvar nova senha"
-            disabled={!canSubmit}
             onPress={handleSave}
           />
         </View>

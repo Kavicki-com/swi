@@ -41,7 +41,7 @@ export default function PasswordRecoveryEmail() {
   // Trava de reentrancia: `disabled` so cobria o formulario incompleto,
   // nao o periodo da requisicao — um segundo toque disparava de novo
   // (QA 2026-07-27, no fim do cadastro).
-  const { run: enviar, busy: enviando } = useSubmitOnce(handleSubmit);
+  const { run: enviar } = useSubmitOnce(handleSubmit);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -77,11 +77,18 @@ export default function PasswordRecoveryEmail() {
             autoComplete="email"
             autoCapitalize="none"
           />
+          {/* SEM `disabled={!canSubmit}` (QA Mobile #1): o handleSubmit já
+              marca o campo como tocado pra revelar o erro, e botão
+              desabilitado nunca dispara onPress — aquele bloco era código
+              morto e o toque sumia no vazio.
+
+              A trava de duplo envio não cai junto: ela vive no useSubmitOnce
+              (`enviar`), que foi criado justamente porque o disabled era
+              insuficiente pra isso. */}
           <Button
             variant="contained"
             label="Enviar Link"
             fullWidth
-            disabled={!canSubmit || enviando}
             onPress={enviar}
           />
         </View>

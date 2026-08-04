@@ -42,16 +42,18 @@ const field = (tree: ReturnType<typeof create>, label: string) =>
     (n) => n.props?.label === label && typeof n.props?.onChangeText === 'function',
   )[0];
 
+const botao = (tree: ReturnType<typeof create>, label: string) =>
+  tree.root.findAll(
+    (n) => n.props?.label === label && typeof n.props?.onPress === 'function',
+  )[0];
+
 const entrar = async (tree: ReturnType<typeof create>) => {
   await act(async () => {
     field(tree, 'Login').props.onChangeText('fulana@empresa.com');
     field(tree, 'Senha').props.onChangeText('senha123');
   });
-  const botao = tree.root.findAll(
-    (n) => n.props?.label === 'Entrar' && typeof n.props?.onPress === 'function',
-  )[0];
   await act(async () => {
-    await botao.props.onPress();
+    await botao(tree, 'Entrar').props.onPress();
   });
 };
 
@@ -99,6 +101,46 @@ describe('login — desvio pós-aprovação', () => {
     signIn.mockRejectedValue(new Error('Sua conta está aguardando aprovação do administrador'));
     const tree = await render();
     await entrar(tree);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+// Mesma classe de defeito do QA Mobile #1 (corrigido no step-2 em 6ff9c1f e
+// encontrado aqui pela varredura): o handleLogin já marca os campos como
+// tocados pra revelar o erro de cada um, mas `disabled={!canSubmit}` impedia
+// o onPress de chegar lá. O bloco era código morto e o toque sumia no vazio.
+//
+// A asserção de `disabled` é o coração do teste, e é sutil: o DS faz
+// `onPress={disabled ? undefined : onPress}` no Pressable interno, então
+// chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
+// com o bug de volta. Sem ela o teste não tem dente.
+describe('login — Entrar com formulário incompleto', () => {
+  it('mantém o botão habilitado para que o toque chegue à validação', async () => {
+    const tree = await render();
+    expect(botao(tree, 'Entrar').props.disabled).toBeFalsy();
+  });
+
+  it('revela o erro dos campos obrigatórios em vez de engolir o toque', async () => {
+    const tree = await render();
+    expect(field(tree, 'Login').props.description).toBeFalsy();
+
+    await act(async () => {
+      await botao(tree, 'Entrar').props.onPress();
+    });
+
+    expect(field(tree, 'Login').props.descriptionVariant).toBe('error');
+    expect(field(tree, 'Login').props.description).toBeTruthy();
+    expect(field(tree, 'Senha').props.descriptionVariant).toBe('error');
+  });
+
+  it('continua NÃO autenticando enquanto o formulário está inválido', async () => {
+    const tree = await render();
+
+    await act(async () => {
+      await botao(tree, 'Entrar').props.onPress();
+    });
+
+    expect(signIn).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });
