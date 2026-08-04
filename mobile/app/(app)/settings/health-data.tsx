@@ -19,7 +19,7 @@ import { useProfile } from '../../../services/profile/ProfileProvider';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 import { createExam, listExams, type Exam } from '../../../services/api/exams';
 import { examCardParts } from '../../../services/api/examCard';
-import { useMediaPicker } from '../../../lib/media/useMediaPicker';
+import { pickExamDocument } from '../../../lib/media/pickDocument';
 import { useField } from '../../../lib/forms/useField';
 import { validateExamDate, validateRequired } from '../../../lib/validation/validators';
 import { maskBirthDate } from '../../../lib/validation/masks';
@@ -61,7 +61,6 @@ export default function SettingsHealthData() {
   const [sendingExam, setSendingExam] = useState(false);
   const examName = useField({ validator: (v) => validateRequired(v, 'Nome do exame') });
   const examDate = useField({ validator: validateExamDate, mask: maskBirthDate });
-  const media = useMediaPicker();
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +80,9 @@ export default function SettingsHealthData() {
       examDate.setTouched(true);
       return;
     }
-    const uri = await media.pickFromGallery();
+    // Seletor de DOCUMENTO, não a galeria: laudo costuma ser PDF, e na galeria
+    // ele nem aparece. Era a última ponta que restringia o formato do exame.
+    const uri = await pickExamDocument();
     if (!uri) return;
     setSendingExam(true);
     try {
@@ -252,7 +253,7 @@ export default function SettingsHealthData() {
             />
 
             <ImageUploader
-              helperText="Selecione arquivos do tipo: JPG ou PNG"
+              helperText="Selecione arquivos do tipo: PDF, JPG, PNG ou TXT"
               pickFileLabel={sendingExam ? 'Enviando…' : 'Enviar novo exame'}
               showTakePhoto={false}
               accentColor={theme.content.primary}

@@ -35,6 +35,16 @@ describe('uploadMedia', () => {
     expect(contentTypeFor('file:///a/b')).toBe('image/jpeg');
   });
 
+  // Exame aceita laudo em PDF/TXT (PR 3 da unificação dos exames). Sem estes
+  // casos o PDF subiria assinado como image/jpeg e o presign recusaria com
+  // 400 — o arquivo certo, rejeitado por content-type errado.
+  it('contentTypeFor infere pdf/txt pela extensão', () => {
+    expect(contentTypeFor('file:///a/laudo.pdf')).toBe('application/pdf');
+    expect(contentTypeFor('file:///a/laudo.txt')).toBe('text/plain');
+    expect(contentTypeFor('file:///a/LAUDO.PDF')).toBe('application/pdf');
+    expect(contentTypeFor('file:///a/laudo.pdf?x=1')).toBe('application/pdf');
+  });
+
   it('presign leva contentLength; upload é PUT com bytes e Content-Type casado', async () => {
     (apiRequest as jest.Mock).mockResolvedValue({ url: 'https://r2/bucket/k', key: 'reports/k.jpg' });
     (global as any).fetch.mockResolvedValueOnce({ ok: true, status: 200 });
