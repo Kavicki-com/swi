@@ -8,6 +8,17 @@ export function conversationKey(a: string, b: string): string {
   return [a, b].sort().join('#')
 }
 
+/**
+ * Rota do inbox já aberto na conversa com `otherId` (QA Web #10: as listas
+ * navegavam pra /chat sem destino e o inbox fixava a conversa MAIS RECENTE,
+ * abrindo sempre a mesma pessoa). O '#' da key precisa ser encodado, senão a
+ * URL o trata como fragmento. Sem `myId` (sessão ainda não resolvida) cai no
+ * inbox puro, nunca numa key quebrada tipo '#w9'.
+ */
+export function chatPathTo(myId: string, otherId: string): string {
+  return myId ? `/chat/${encodeURIComponent(conversationKey(myId, otherId))}` : '/chat'
+}
+
 export function unreadFor(c: Conversation, myId: string): number {
   return c.unreadBy[myId] ?? 0
 }

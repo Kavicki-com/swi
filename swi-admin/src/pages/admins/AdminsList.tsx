@@ -19,6 +19,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/api/users'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
+import { chatPathTo } from '@/services/chat/chatReducers'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
@@ -359,7 +360,8 @@ export function AdminsList({
               onToggle={handleToggle}
               onOpen={(adminId) => navigate(`/admins/${adminId}`)}
               onDelete={(a) => setRemoving(a)}
-              onChat={() => navigate('/chat')}
+              // QA Web #10: /chat sem destino fixava a conversa mais recente.
+              onChat={(a) => navigate(chatPathTo(currentUserId ?? '', a.id))}
               onLocation={() => navigate('/maps/general')}
             />
           ))}

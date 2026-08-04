@@ -20,6 +20,8 @@ import {
 import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
+import { chatPathTo } from '@/services/chat/chatReducers'
+import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { formatAge } from '@/lib/formatAge'
@@ -372,6 +374,9 @@ export function EmployeesList({
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
+  // Pro destino do chat (QA Web #10): a conversa determinística eu↔clicado.
+  const { user } = useAuth()
+  const myId = user?.id ?? ''
   const [employees, setEmployees] = useState<Employee[]>([])
   const [pendentes, setPendentes] = useState<PendingUser[]>([])
   // true enquanto o fetch da aba Pendentes está em voo. Começa true quando a
@@ -558,7 +563,10 @@ export function EmployeesList({
                 key={employee.id}
                 employee={employee}
                 onOpen={(id) => navigate(`/employees/${id}`)}
-                onChat={() => navigate('/chat')}
+                // QA Web #10: /chat sem destino fazia o inbox fixar a conversa
+                // mais recente — clicasse em quem clicasse, abria a mesma
+                // pessoa. O destino é a conversa determinística com o clicado.
+                onChat={(e) => navigate(chatPathTo(myId, e.id))}
                 // QA Web #3 (30/07/2026): o pin levava ao mapa geral SEM dizer
                 // de quem era, e o mapa abre com a camada de operadores
                 // desligada. O usuario caia num mapa vazio e precisava de um

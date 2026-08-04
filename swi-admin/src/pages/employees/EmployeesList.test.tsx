@@ -6,9 +6,17 @@
 // vitest globals (describe/it/expect/afterEach) are available via globals: true
 import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { approvalsApi, type PendingUser } from '@/services/api/users'
+import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { EmployeesList } from './EmployeesList'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
+
+// Espião de navegação (padrão do ChatInbox.test.tsx): o MemoryRouter fica, só o
+// useNavigate é observado.
+const nav = vi.hoisted(() => ({ spy: vi.fn() }))
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return { ...actual, useNavigate: () => nav.spy }
+})
 
 // Cadastro sem perfil: o app antigo não mandava nada junto, e a fila precisa
 // seguir renderizando (dizendo o que falta) em vez de quebrar.
@@ -39,6 +47,31 @@ describe('EmployeesList', () => {
 
   it('renders without crashing', () => {
     expect(() => renderPage(<EmployeesList />, { route: '/employees' })).not.toThrow()
+  })
+
+  // QA Web #10: o ícone de chat mandava pra /chat sem dizer QUEM, e o inbox
+  // fixava a conversa mais recente — clicasse em quem clicasse, abria sempre a
+  // mesma pessoa. O destino certo é a conversa determinística com o clicado.
+  it('ícone de chat abre a conversa do funcionário clicado, não /chat solto', async () => {
+    const ALLAN: Employee = {
+      id: 'w9',
+      name: 'Allan Souza',
+      age: 30,
+      bloodType: 'A+',
+      role: 'Operador',
+      specialization: 'Setor Leste',
+      avatarUri: '',
+      sector: 'Setor Leste',
+      vitalsStatus: 'good',
+    }
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [ALLAN], error: null })
+    renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Allan Souza'))
+
+    fireEvent.click(screen.getByRole('button', { name: /conversar com allan souza/i }))
+
+    // Sessão semeada: u_seed_1 (renderPage). Key ordenada + '#' encodado.
+    expect(nav.spy).toHaveBeenCalledWith('/chat/u_seed_1%23w9')
   })
 
   it('aba Pendentes lista os colaboradores PENDING', async () => {

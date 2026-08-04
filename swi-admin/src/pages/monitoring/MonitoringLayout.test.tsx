@@ -17,6 +17,14 @@ vi.mock('@/services/monitoring', () => ({
   monitoringApi: { kpis: vi.fn(), alertUsers: vi.fn() },
 }))
 
+// Espião de navegação (padrão do ChatInbox.test.tsx): o MemoryRouter fica, só o
+// useNavigate é observado.
+const nav = vi.hoisted(() => ({ spy: vi.fn() }))
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return { ...actual, useNavigate: () => nav.spy }
+})
+
 const kpisMock = vi.mocked(monitoringApi.kpis)
 const alertUsersMock = vi.mocked(monitoringApi.alertUsers)
 
@@ -108,6 +116,17 @@ describe('MonitoringLayout', () => {
     // CTA que só existe dentro do bloco expandido (label visível difere do
     // accessibilityLabel — ver MonitoringLayout.tsx:221-228).
     expect(screen.getByRole('button', { name: 'Ver histórico de exames clínicos' })).toBeTruthy()
+  })
+
+  // QA Web #10: mesmo bug das listas de funcionários/admins — /chat sem destino
+  // abre sempre a conversa mais recente, não a pessoa do card clicado.
+  it('ícone de chat abre a conversa da pessoa do card, não /chat solto', async () => {
+    await renderAt('/monitoring/alerts')
+
+    fireEvent.click(screen.getByRole('button', { name: /chat com fadiga um/i }))
+
+    // Sessão semeada: u_seed_1 (renderPage). Key ordenada + '#' encodado.
+    expect(nav.spy).toHaveBeenCalledWith('/chat/u-fad-1%23u_seed_1')
   })
 
   it('"Ver Todos" derruba o filtro e mostra a população inteira', async () => {
