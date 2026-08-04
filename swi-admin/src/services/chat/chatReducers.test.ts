@@ -1,5 +1,6 @@
 import {
   conversationKey,
+  chatPathTo,
   applyMessage,
   isRevision,
   markRead,
@@ -36,6 +37,21 @@ describe('conversationKey', () => {
   it('ordena e junta com #', () => {
     expect(conversationKey('b', 'a')).toBe('a#b')
     expect(conversationKey('a', 'b')).toBe('a#b')
+  })
+})
+
+// QA Web #10: os ícones de chat das listas navegavam pra /chat sem destino, e o
+// inbox fixava a conversa MAIS RECENTE (sempre a mesma pessoa). O caminho certo
+// leva o id determinístico da conversa, com o '#' encodado (senão vira fragmento
+// de URL).
+describe('chatPathTo', () => {
+  it('monta /chat/<key> com o # encodado', () => {
+    expect(chatPathTo('b', 'a')).toBe('/chat/a%23b')
+    expect(chatPathTo('u_seed_1', 'w9')).toBe('/chat/u_seed_1%23w9')
+  })
+
+  it('sem myId cai no inbox puro, nunca numa key quebrada', () => {
+    expect(chatPathTo('', 'w9')).toBe('/chat')
   })
 })
 describe('applyMessage', () => {

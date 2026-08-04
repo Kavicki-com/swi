@@ -29,6 +29,8 @@ import {
   type MonitoringUserAlert,
 } from '@/services/monitoring'
 import type { SimulatedTier } from '@/services/vitals/simulatedVitals'
+import { chatPathTo } from '@/services/chat/chatReducers'
+import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
@@ -393,6 +395,9 @@ export function MonitoringLayout() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  // Pro destino do chat (QA Web #10): a conversa determinística eu↔clicado.
+  const { user } = useAuth()
+  const myId = user?.id ?? ''
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const isWide = breakpoint === 'wide'
@@ -610,7 +615,8 @@ export function MonitoringLayout() {
               onDelete={() =>
                 showToast('Funcionário removido', `${u.name} foi removido do monitoramento`)
               }
-              onChat={() => navigate('/chat')}
+              // QA Web #10: /chat sem destino fixava a conversa mais recente.
+              onChat={() => navigate(chatPathTo(myId, u.id))}
               onLocation={() => navigate('/maps/general')}
               onViewExams={() => navigate(`/employees/${u.id}`)}
               onCall={() => showToast('Chamada iniciada', `Ligando para ${u.name}`)}

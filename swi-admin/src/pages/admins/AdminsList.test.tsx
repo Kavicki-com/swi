@@ -11,6 +11,14 @@ import { adminsApi, type Admin } from '@/services/api/users'
 import { AdminsList } from './AdminsList'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 
+// Espião de navegação (padrão do ChatInbox.test.tsx): o MemoryRouter fica, só o
+// useNavigate é observado.
+const nav = vi.hoisted(() => ({ spy: vi.fn() }))
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return { ...actual, useNavigate: () => nav.spy }
+})
+
 const ELISA: Admin = {
   id: 'admin-01',
   name: 'Elisa Jordão',
@@ -31,6 +39,19 @@ describe('AdminsList', () => {
 
   it('renders without crashing', () => {
     expect(() => renderPage(<AdminsList />, { route: '/admins' })).not.toThrow()
+  })
+
+  // QA Web #10: mesmo bug das outras listas — /chat sem destino abre sempre a
+  // conversa mais recente, não a pessoa clicada.
+  it('ícone de chat abre a conversa do admin clicado, não /chat solto', async () => {
+    vi.spyOn(adminsApi, 'list').mockResolvedValue({ data: [ELISA], error: null })
+    renderPage(<AdminsList />, { route: '/admins' })
+    await waitFor(() => screen.getByText('Elisa Jordão'))
+
+    fireEvent.click(screen.getByRole('button', { name: /conversar com elisa jordão/i }))
+
+    // Sessão semeada: u_seed_1 (renderPage). Key ordenada + '#' encodado.
+    expect(nav.spy).toHaveBeenCalledWith('/chat/admin-01%23u_seed_1')
   })
 
   it('alternar o switch chama adminsApi.setActive(id, novoValor)', async () => {
