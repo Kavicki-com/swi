@@ -10,11 +10,57 @@ describe('apiReportsBackend', () => {
     (uploadImage as jest.Mock).mockReset();
   });
 
-  it('list → GET /reports (o server já devolve o shape pronto)', async () => {
+  it('list → GET /reports', async () => {
     (apiRequest as jest.Mock).mockResolvedValue([{ id: 'r1', title: 'T' }]);
     const out = await apiReportsBackend.list();
     expect(apiRequest).toHaveBeenCalledWith('/reports', { auth: true });
     expect(out[0].id).toBe('r1');
+  });
+
+  // QA Mobile #9 — o app fechava ao abrir QUALQUER relatorio.
+  //
+  // A atividade que o servidor manda NAO tem `avatars` nem `id`: tem
+  // `responsibleNames` e `responsibleAvatars` (o backend resolve nome -> foto
+  // presigned no detalhe). A tela faz `activity.avatars.map(...)`, entao o
+  // primeiro relatorio com atividade estourava TypeError no render e, em build
+  // de release, o app simplesmente fecha. O mock local manda `avatars`, e por
+  // isso a demo e a suite nunca viram o buraco.
+  it('get normaliza a atividade do wire: responsibleAvatars → avatars, id sintetizado', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({
+      id: 'r1',
+      title: 'Inspecao',
+      activities: [
+        {
+          title: 'Verificacao de niveis de oleo',
+          sector: 'Setor Noroeste',
+          progress: 80,
+          tone: 'success',
+          responsibleNames: ['Josue Oliveira', 'Ezequiel Almeida'],
+          responsibleAvatars: ['signed:josue', ''],
+        },
+      ],
+    });
+
+    const out = await apiReportsBackend.get('r1');
+
+    expect(out?.activities[0].avatars).toEqual(['signed:josue', '']);
+    expect(out?.activities[0].id).toBeTruthy();
+    expect(out?.activities[0].progress).toBe(80);
+    expect(out?.activities[0].tone).toBe('success');
+  });
+
+  // O aparelho pode estar numa build mais nova que o servidor no ar (o deploy
+  // do backend e manual e atrasa). Campo de array ausente vira [], nunca
+  // undefined: `report.comments.length` na tela derrubaria o app igual.
+  it('get preenche os arrays que um servidor mais antigo omite', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', title: 'T', status: 'pending' });
+
+    const out = await apiReportsBackend.get('r1');
+
+    expect(out?.activities).toEqual([]);
+    expect(out?.comments).toEqual([]);
+    expect(out?.images).toEqual([]);
+    expect(out?.responsibles).toEqual([]);
   });
 
   it('get inexistente (404) → null', async () => {

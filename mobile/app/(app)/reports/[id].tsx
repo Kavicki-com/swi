@@ -74,21 +74,6 @@ export default function ReportDetails() {
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  if (status !== 'ready' || !report) {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <JourneyTheme
-          gradient={require('../../../assets/login-bg.png')}
-          pattern={require('../../../assets/smartband-bg-pattern.png')}
-        />
-        <ReportDetailState
-          kind={status === 'ready' ? 'empty' : status}
-          onRetry={status === 'error' ? retry : undefined}
-        />
-      </View>
-    );
-  }
-
   // Ate 2026-07-27 este botao era `onPress={() => setComment('')}`: limpava o
   // campo e DESCARTAVA o texto. O comentario do worker nunca saia do aparelho,
   // e por isso tambem nunca aparecia no painel — o backend
@@ -107,7 +92,29 @@ export default function ReportDetails() {
       Alert.alert('Erro', errorMessage(e, 'Nao foi possivel enviar o comentario.'));
     }
   };
+  // ESTE HOOK FICA ACIMA DO RETURN ANTECIPADO, e nao junto do botao que ele
+  // serve (QA Mobile #9). Quando nasceu, em 2026-07-27, foi parar la embaixo:
+  // o primeiro render e 'loading' e sai pelo return, o segundo e 'ready' e
+  // chega ate aqui, entao a contagem de hooks mudava de um render pro outro e
+  // o React lancava "Rendered more hooks than during the previous render". Em
+  // build de release ninguem apara esse erro e o app fecha — era o crash ao
+  // abrir QUALQUER relatorio.
   const { run: comentar, busy: comentando } = useSubmitOnce(enviarComentario);
+
+  if (status !== 'ready' || !report) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <JourneyTheme
+          gradient={require('../../../assets/login-bg.png')}
+          pattern={require('../../../assets/smartband-bg-pattern.png')}
+        />
+        <ReportDetailState
+          kind={status === 'ready' ? 'empty' : status}
+          onRetry={status === 'error' ? retry : undefined}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
