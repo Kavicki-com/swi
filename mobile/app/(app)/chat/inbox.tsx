@@ -102,7 +102,10 @@ export default function ChatInbox() {
   );
 
   // State-views: mantêm o background + topbar pra o chrome ficar consistente.
-  if (loadStatus === 'loading') {
+  // 'idle' é o primeiro frame do provider (o load() dispara em efeito): mostra
+  // o spinner também, senão a tela abaixo afirmaria "Nenhuma conversa" antes de
+  // a busca sequer começar.
+  if (loadStatus === 'idle' || loadStatus === 'loading') {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         {topbar}
@@ -110,14 +113,10 @@ export default function ChatInbox() {
       </View>
     );
   }
-  if (loadStatus === 'empty') {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        {topbar}
-        <ChatInboxState kind="empty" />
-      </View>
-    );
-  }
+  // 'empty' NÃO tem early return (QA Mobile #7): a tela terminava aqui, sem
+  // busca e sem "Novo Chat", então quem ainda não tinha conversa nenhuma ficava
+  // sem NENHUM caminho até o diretório e o app parecia vazio de gente. O aviso
+  // de caixa vazia continua, agora dentro do layout normal.
   if (loadStatus === 'error') {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -144,79 +143,89 @@ export default function ChatInbox() {
             onChangeText={setSearch}
             placeholder="Pesquisar Contatos"
           />
-          <View
-            style={{ flex: 1, marginTop: theme.gap.sm, flexDirection: 'row' }}
-          >
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{ gap: theme.gap.xs, paddingRight: theme.gap.s }}
-              showsVerticalScrollIndicator={false}
-              onLayout={(e: LayoutChangeEvent) =>
-                setLayoutH(e.nativeEvent.layout.height)
-              }
-              onContentSizeChange={(_, h) => setContentH(h)}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                { useNativeDriver: false },
-              )}
-              scrollEventThrottle={16}
+          {/* Caixa vazia: o aviso ocupa a área da lista, e o rodapé com "Novo
+              Chat" segue montado abaixo. Chave em `conversations.length` e não
+              em loadStatus porque o status fica 'empty' mesmo depois de a
+              primeira conversa chegar pelo socket. */}
+          {mode === 'inbox' && conversations.length === 0 ? (
+            <View style={{ flex: 1, marginTop: theme.gap.sm }}>
+              <ChatInboxState kind="empty" />
+            </View>
+          ) : (
+            <View
+              style={{ flex: 1, marginTop: theme.gap.sm, flexDirection: 'row' }}
             >
-              {mode === 'inbox'
-                ? inboxFiltered.map(({ conversation: c, contact }) => (
-                    <ChatUserCard
-                      key={c.id}
-                      name={contact.name}
-                      subtitle={contact.subtitle}
-                      avatarUri={contact.avatarUri}
-                      unreadCount={unreadFor(c, myId)}
-                      onPress={() => router.push(`/(app)/chat/${contact.workerId}`)}
-                      fullWidth
-                    />
-                  ))
-                : directoryFiltered.map((d) => (
-                    <ChatUserCard
-                      key={d.workerId}
-                      name={d.name}
-                      subtitle={d.sector}
-                      avatarUri={d.avatarUri}
-                      onPress={() => {
-                        setMode('inbox');
-                        router.push(`/(app)/chat/${d.workerId}`);
-                      }}
-                      fullWidth
-                    />
-                  ))}
-            </ScrollView>
-            {/* Custom scrollbar — Figma 332:8765 (track) + 332:8766 (thumb) */}
-            {hasScroll ? (
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: 8,
-                  borderRadius: theme.border.radius.l,
-                  backgroundColor: theme.surface.medium,
-                  overflow: 'hidden',
-                }}
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ gap: theme.gap.xs, paddingRight: theme.gap.s }}
+                showsVerticalScrollIndicator={false}
+                onLayout={(e: LayoutChangeEvent) =>
+                  setLayoutH(e.nativeEvent.layout.height)
+                }
+                onContentSizeChange={(_, h) => setContentH(h)}
+                onScroll={Animated.event(
+                  [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                  { useNativeDriver: false },
+                )}
+                scrollEventThrottle={16}
               >
-                <Animated.View
+                {mode === 'inbox'
+                  ? inboxFiltered.map(({ conversation: c, contact }) => (
+                      <ChatUserCard
+                        key={c.id}
+                        name={contact.name}
+                        subtitle={contact.subtitle}
+                        avatarUri={contact.avatarUri}
+                        unreadCount={unreadFor(c, myId)}
+                        onPress={() => router.push(`/(app)/chat/${contact.workerId}`)}
+                        fullWidth
+                      />
+                    ))
+                  : directoryFiltered.map((d) => (
+                      <ChatUserCard
+                        key={d.workerId}
+                        name={d.name}
+                        subtitle={d.sector}
+                        avatarUri={d.avatarUri}
+                        onPress={() => {
+                          setMode('inbox');
+                          router.push(`/(app)/chat/${d.workerId}`);
+                        }}
+                        fullWidth
+                      />
+                    ))}
+              </ScrollView>
+              {/* Custom scrollbar — Figma 332:8765 (track) + 332:8766 (thumb) */}
+              {hasScroll ? (
+                <View
+                  pointerEvents="none"
                   style={{
                     position: 'absolute',
-                    left: 0,
                     right: 0,
                     top: 0,
-                    height: thumbH,
+                    bottom: 0,
+                    width: 8,
                     borderRadius: theme.border.radius.l,
-                    backgroundColor: theme.content.medium,
-                    transform: [{ translateY: thumbTranslate }],
+                    backgroundColor: theme.surface.medium,
+                    overflow: 'hidden',
                   }}
-                />
-              </View>
-            ) : null}
-          </View>
+                >
+                  <Animated.View
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      height: thumbH,
+                      borderRadius: theme.border.radius.l,
+                      backgroundColor: theme.content.medium,
+                      transform: [{ translateY: thumbTranslate }],
+                    }}
+                  />
+                </View>
+              ) : null}
+            </View>
+          )}
           <View
             style={{
               paddingTop: theme.gap.sm,
