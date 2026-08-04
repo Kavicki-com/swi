@@ -1,6 +1,6 @@
 import { validate } from 'class-validator'
 import { plainToInstance } from 'class-transformer'
-import { EditMessageDto, SendMessageDto } from './dto'
+import { EditMessageDto, ReportMessageDto, SendMessageDto } from './dto'
 
 const errs = async (body: string) =>
   (await validate(plainToInstance(SendMessageDto, { body }))).length
@@ -23,5 +23,29 @@ describe('EditMessageDto', () => {
   it('rejeita body só de espaço', async () => { expect(await editErrs('   ')).toBeGreaterThan(0) })
   it('rejeita body > 4000, igual ao envio', async () => {
     expect(await editErrs('a'.repeat(4001))).toBeGreaterThan(0)
+  })
+})
+
+// QA Web #9: denunciar mensagem. Motivo obrigatório (lista fica no painel, o
+// backend valida formato); detalhe opcional limitado aos ~240 da planilha.
+describe('ReportMessageDto', () => {
+  const reportErrs = async (payload: Record<string, unknown>) =>
+    (await validate(plainToInstance(ReportMessageDto, payload))).length
+
+  it('aceita motivo com detalhe no limite', async () => {
+    expect(await reportErrs({ reason: 'Assédio', text: 'a'.repeat(240) })).toBe(0)
+  })
+  it('aceita motivo sem detalhe', async () => {
+    expect(await reportErrs({ reason: 'Spam' })).toBe(0)
+  })
+  it('rejeita motivo ausente ou só de espaço', async () => {
+    expect(await reportErrs({})).toBeGreaterThan(0)
+    expect(await reportErrs({ reason: '   ' })).toBeGreaterThan(0)
+  })
+  it('rejeita detalhe > 240', async () => {
+    expect(await reportErrs({ reason: 'Spam', text: 'a'.repeat(241) })).toBeGreaterThan(0)
+  })
+  it('rejeita motivo > 80', async () => {
+    expect(await reportErrs({ reason: 'a'.repeat(81) })).toBeGreaterThan(0)
   })
 })
