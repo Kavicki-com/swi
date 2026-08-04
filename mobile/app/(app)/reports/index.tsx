@@ -112,12 +112,14 @@ export default function Reports() {
             />
           </View>
 
-          {/* Scrollable cards area — altura calibrada para mostrar 1 card cheio
-              + 2º card cortado logo após o Resumo completo (request do cliente
-              2026-05-22: "deixe apenas até o resumo completo e corte"). maxHeight
-              540 expõe status, título e resumo do card 2 sem mostrar data/autor. */}
+          {/* Scrollable cards area — QA Mobile #8: a altura fixa (maxHeight
+              540, calibrada pro frame de 800dp do Figma) deixava um vão de
+              ~25% da tela até os FABs em aparelho real. flex: 1 faz a lista
+              ocupar tudo até a paginação; o corte do 2º card pedido pelo
+              cliente em 2026-05-22 continua acontecendo, só que na borda real
+              da área de scroll, não num teto fixo. */}
           <ScrollView
-            style={{ maxHeight: 540, marginTop: theme.gap.m }}
+            style={{ flex: 1, marginTop: theme.gap.m }}
             contentContainerStyle={{
               paddingHorizontal: theme.padding.m,
               gap: theme.gap.m,
@@ -132,13 +134,26 @@ export default function Reports() {
                 onPress={handleReportPress}
               />
             ))}
+          </ScrollView>
 
-            {/* Pagination — Figma 461:10196 (shared with settings/faq.tsx) */}
+          {/* Pagination — Figma 461:10196 (shared with settings/faq.tsx).
+              Fora do ScrollView de propósito (QA Mobile #8): como rodapé fixo
+              ela fecha a tela por baixo e card nenhum passa por trás dela.
+              O paddingBottom reserva o obstáculo mais alto do rodapé, o FAB
+              do chat (bottom insets.bottom + 71, altura 56 → topo a
+              insets.bottom + 127), mais um respiro de gap.m. */}
+          <View
+            style={{
+              paddingHorizontal: theme.padding.m,
+              paddingTop: theme.gap.sm,
+              paddingBottom: insets.bottom + 127 + theme.gap.m,
+            }}
+          >
             <Pagination
               currentPage={currentPage}
               onPageChange={setCurrentPage}
             />
-          </ScrollView>
+          </View>
         </>
       )}
 
