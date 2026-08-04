@@ -69,12 +69,17 @@ const preencher = async (tree: ReturnType<typeof create>) => {
   }
 };
 
+const botaoSalvar = (tree: ReturnType<typeof create>) =>
+  tree.root.findAll((n) => n.props?.accessibilityLabel === 'Salvar relatório')[0];
+
 const salvar = async (tree: ReturnType<typeof create>) => {
-  const botao = tree.root.findAll(
-    (n) => n.props?.accessibilityLabel === 'Salvar relatório',
-  )[0];
-  await act(async () => { await botao.props.onPress(); });
+  await act(async () => { await botaoSalvar(tree).props.onPress(); });
 };
+
+const campo = (tree: ReturnType<typeof create>, label: string) =>
+  tree.root.findAll(
+    (n) => n.props?.label === label && typeof n.props?.onChangeText === 'function',
+  )[0];
 
 let showPicker: jest.Mock;
 let criarRelatorio: jest.Mock;
@@ -205,5 +210,45 @@ describe('Novo relatório, remover anexo', () => {
 
     expect(slotVazio(tree, 1)).toBe(true);
     expect(slotPreenchido(tree, 2)).toBe(true);
+  });
+});
+
+// Mesma classe de defeito do QA Mobile #1 (corrigido no step-2 em 6ff9c1f e
+// encontrada aqui pela varredura): o save já marca os campos como tocados pra
+// revelar o erro de cada um, mas `disabled={!canSubmit || saving}` impedia o
+// onPress de chegar lá. O bloco era código morto e o toque sumia no vazio.
+//
+// Aqui a trava de reentrância NÃO pode cair junto: esta tela não usa
+// useSubmitOnce, o `saving` é quem impede o segundo toque de criar um
+// relatório duplicado. Só o `!canSubmit` sai.
+//
+// A asserção de `disabled` é o coração do teste, e é sutil: o DS faz
+// `onPress={disabled ? undefined : onPress}` no Pressable interno, então
+// chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
+// com o bug de volta. Sem ela o teste não tem dente.
+describe('Novo relatório — Salvar com formulário incompleto', () => {
+  it('mantém o botão habilitado para que o toque chegue à validação', async () => {
+    const tree = await render();
+    expect(botaoSalvar(tree).props.disabled).toBeFalsy();
+  });
+
+  it('revela o erro dos campos obrigatórios em vez de engolir o toque', async () => {
+    const tree = await render();
+    expect(campo(tree, 'Título do relatório').props.description).toBeFalsy();
+
+    await salvar(tree);
+
+    expect(campo(tree, 'Título do relatório').props.descriptionVariant).toBe('error');
+    expect(campo(tree, 'Título do relatório').props.description).toBeTruthy();
+    expect(campo(tree, 'Resumo do relatório').props.descriptionVariant).toBe('error');
+    expect(campo(tree, 'Detalhes do relatório').props.descriptionVariant).toBe('error');
+  });
+
+  it('continua NÃO criando o relatório enquanto o formulário está inválido', async () => {
+    const tree = await render();
+
+    await salvar(tree);
+
+    expect(criarRelatorio).not.toHaveBeenCalled();
   });
 });

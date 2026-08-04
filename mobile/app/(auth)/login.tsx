@@ -57,11 +57,11 @@ export default function Login() {
     }
   };
 
-  // Trava de reentrancia: `disabled={!canSubmit || enviando}` continua verdadeiro
-  // enquanto a requisicao esta no ar, entao um segundo toque disparava a
-  // acao de novo (QA 2026-07-27: no cadastro, o 2o toque levou 409 de
-  // e-mail ja existente enquanto o 1o ja tinha criado a conta e navegado).
-  const { run: enviar, busy: enviando } = useSubmitOnce(handleLogin);
+  // Trava de reentrancia: chamadas enquanto a anterior esta no ar sao
+  // ignoradas pelo ref interno (QA 2026-07-27: no cadastro, o 2o toque levou
+  // 409 de e-mail ja existente enquanto o 1o ja tinha criado a conta e
+  // navegado). O `disabled` do botao nunca fez parte desta trava.
+  const { run: enviar } = useSubmitOnce(handleLogin);
 
   return (
     // Bg: base sólida theme.background + overlay PNG em object-cover (espelha Figma node 138:7937 — `object-cover`, sem opacity).
@@ -150,11 +150,18 @@ export default function Login() {
           </View>
 
           <View style={{ gap: theme.gap.sm }}>
+            {/* SEM `disabled={!canSubmit}`, mesmo motivo do wizard (QA Mobile
+                #1): o handleLogin já marca os campos como tocados pra revelar
+                os erros, e botão desabilitado nunca dispara onPress — aquele
+                bloco era código morto e o toque sumia no vazio.
+
+                A validação não afrouxa: quem decide autenticar continua sendo
+                o `if (!canSubmit)` do handleLogin. E a trava de duplo envio
+                não depende disto: ela vive no useSubmitOnce (`enviar`). */}
             <Button
               variant="contained"
               label="Entrar"
               fullWidth
-              disabled={!canSubmit}
               onPress={enviar}
             />
             <Button

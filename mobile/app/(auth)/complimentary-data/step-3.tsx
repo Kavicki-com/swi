@@ -9,7 +9,7 @@ import {
   Combobox,
   GenderSelector,
   Input,
-  Radio,
+  RadioGroup,
   StepBar,
   Text,
   Title,
@@ -36,6 +36,11 @@ const BLOOD_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((v)
   label: v,
   value: v,
 }));
+
+const DISABILITY_OPTIONS = [
+  { label: 'Sim', value: 'sim' },
+  { label: 'Não', value: 'nao' },
+];
 
 export default function ComplimentaryDataStep3() {
   const router = useRouter();
@@ -74,8 +79,27 @@ export default function ComplimentaryDataStep3() {
     bloodType.length > 0 &&
     disability !== null;
 
+  // Um booleano só, não um `touched` por campo: aqui não há blur em que se
+  // pendurar (Combobox e Radio abrem e fecham), então o gatilho é o toque no
+  // CTA. Antes disso a tela fica quieta, como no step-2.
+  const [tentouEnviar, setTentouEnviar] = useState(false);
+
+  // Devolve as props do DS, não um booleano, pelo mesmo motivo do
+  // `useField.bind()`: quem chama não precisa lembrar de casar `description`
+  // com `descriptionVariant`, e campo preenchido não emite prop nenhuma.
+  const faltando = (vazio: boolean, mensagem: string) =>
+    tentouEnviar && vazio
+      ? { description: mensagem, descriptionVariant: 'error' as const }
+      : {};
+
   const finish = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      // QA Mobile #1 (classe): antes isto era um `return` seco. O toque morria
+      // aqui e a tela não dizia nada, então a pessoa ficava presa na última
+      // etapa do cadastro sem saber o que faltava.
+      setTentouEnviar(true);
+      return;
+    }
     // Persiste o step-3 como os steps 1-2 já fazem. Tudo aqui é DIGITÁVEL
     // (nada vem da smartband), então é dado real — até 2026-07-26 este step
     // simplesmente descartava o que o usuário preencheu. O wizard roda
@@ -111,11 +135,11 @@ export default function ComplimentaryDataStep3() {
     }
   };
 
-  // Trava de reentrancia: `disabled={!canSubmit || enviando}` continua verdadeiro
-  // enquanto a requisicao esta no ar, entao um segundo toque disparava a
-  // acao de novo (QA 2026-07-27: no cadastro, o 2o toque levou 409 de
-  // e-mail ja existente enquanto o 1o ja tinha criado a conta e navegado).
-  const { run: enviar, busy: enviando } = useSubmitOnce(finish);
+  // Trava de reentrancia: chamadas enquanto a anterior esta no ar sao
+  // ignoradas pelo ref interno (QA 2026-07-27: no cadastro, o 2o toque levou
+  // 409 de e-mail ja existente enquanto o 1o ja tinha criado a conta e
+  // navegado). O `disabled` do botao nunca fez parte desta trava.
+  const { run: enviar } = useSubmitOnce(finish);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -145,7 +169,12 @@ export default function ComplimentaryDataStep3() {
 
         <View style={{ gap: theme.gap.xs }}>
           <Text variant="label.m">Seu gênero</Text>
-          <GenderSelector value={gender} onChange={setGender} />
+          <GenderSelector
+            testID="genero"
+            value={gender}
+            onChange={setGender}
+            {...faltando(gender === null, 'Selecione uma opção')}
+          />
         </View>
 
         {/* Z-index ladder: each Combobox section gets a higher zIndex than
@@ -168,6 +197,7 @@ export default function ComplimentaryDataStep3() {
               // Lista de 81 opções (140-220cm) cap em 3 visíveis + scroll
               // pra não vazar viewport.
               maxVisibleRows={3}
+              {...faltando(height.length === 0, 'Altura é obrigatória')}
             />
           </View>
           <View style={{ flex: 1, zIndex: 1 }}>
@@ -181,6 +211,7 @@ export default function ComplimentaryDataStep3() {
               onOpenChange={handleOpenChange('peso')}
               // Lista de 121 opções (40-160kg) cap em 3 visíveis + scroll.
               maxVisibleRows={3}
+              {...faltando(weight.length === 0, 'Peso é obrigatório')}
             />
           </View>
         </View>
@@ -197,6 +228,7 @@ export default function ComplimentaryDataStep3() {
             // Lista de 8 tipos (A+, A-, B+, B-, AB+, AB-, O+, O-) cap em 3
             // visíveis + scroll, mesmo padrão de Altura/Peso.
             maxVisibleRows={3}
+            {...faltando(bloodType.length === 0, 'Tipo sanguíneo é obrigatório')}
           />
         </View>
 
@@ -222,28 +254,30 @@ export default function ComplimentaryDataStep3() {
           />
         </View>
 
-        <View style={{ gap: theme.gap.s }}>
-          <Text variant="label.m">Pessoa com deficiência?</Text>
-          <View style={{ flexDirection: 'row', gap: theme.gap.m }}>
-            <Radio
-              label="Sim"
-              checked={disability === 'sim'}
-              onChange={() => setDisability('sim')}
-            />
-            <Radio
-              label="Não"
-              checked={disability === 'nao'}
-              onChange={() => setDisability('nao')}
-            />
-          </View>
-        </View>
+        {/* RadioGroup do DS (v0.1.131) no lugar do par de Radio solto: a
+            mensagem de obrigatório pertence à PERGUNTA, não a um dos dois
+            botões. Solto, não havia onde colocá-la sem deixar o irmão órfão. */}
+        <RadioGroup
+          label="Pessoa com deficiência?"
+          options={DISABILITY_OPTIONS}
+          value={disability}
+          onChange={(v) => setDisability(v as 'sim' | 'nao')}
+          {...faltando(disability === null, 'Selecione uma opção')}
+        />
 
         <View style={{ gap: theme.gap.sm, zIndex: 7 }}>
+          {/* SEM `disabled={!canSubmit}` (QA Mobile #1): o finish já marca
+              `tentouEnviar` pra revelar o que falta, e botão desabilitado
+              nunca dispara onPress — o toque sumia no vazio bem na última
+              porta antes do dashboard.
+
+              A validação não afrouxa: quem decide concluir continua sendo o
+              `if (!canSubmit)` do finish. E a trava de duplo envio vive no
+              useSubmitOnce (`enviar`). */}
           <Button
             variant="contained"
             label="Concluir"
             fullWidth
-            disabled={!canSubmit}
             onPress={enviar}
           />
           <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />

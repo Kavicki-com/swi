@@ -320,6 +320,14 @@ export default function NewReport() {
         />
 
         {/* CTAs */}
+        {/* SEM `!canSubmit` no disabled (QA Mobile #1): o save já marca os
+            campos como tocados pra revelar o erro de cada um, e botão
+            desabilitado nunca dispara onPress — aquele bloco era código morto
+            e o toque sumia no vazio.
+
+            O `saving` FICA. Diferente das telas de (auth), esta não usa
+            useSubmitOnce: é o `saving` que impede o segundo toque de criar um
+            relatório duplicado enquanto o primeiro está no ar. */}
         <Button
           variant="contained"
           backgroundColor={theme.surface.primary}
@@ -327,7 +335,7 @@ export default function NewReport() {
           label="Salvar relatório"
           elevation="lg"
           accessibilityLabel="Salvar relatório"
-          disabled={!canSubmit || saving}
+          disabled={saving}
           onPress={save}
         />
         <Button
