@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { ChatService } from './chat.service'
-import { EditMessageDto, SendMessageDto } from './dto'
+import { EditMessageDto, ReportMessageDto, SendMessageDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 
@@ -51,4 +52,19 @@ export class ChatController {
   @Post('conversations/:id/read')
   @HttpCode(204)
   markRead(@CurrentUserId() userId: string, @Param('id') id: string) { return this.chat.markRead(userId, id) }
+
+  // QA Web #9 — denunciar mensagem de outra pessoa. Aninhada na conversa como
+  // toda operação de mensagem (a autorização parte da membership). Throttle
+  // próprio porque cada chamada dispara e-mail — mesma dose do /support.
+  @Post('conversations/:id/messages/:messageId/report')
+  @HttpCode(204)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  report(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() dto: ReportMessageDto,
+  ) {
+    return this.chat.reportMessage(userId, id, messageId, dto)
+  }
 }

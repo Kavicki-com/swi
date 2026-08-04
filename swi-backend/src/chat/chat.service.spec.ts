@@ -1,5 +1,5 @@
 import { ChatService } from './chat.service'
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 
 const media = () => ({
@@ -354,5 +354,86 @@ describe('ChatService — editar e excluir mensagem', () => {
     expect(out[0].editedAt).toBe(new Date('2026-07-31T09:00:00Z').toISOString())
     expect(out[1].deletedAt).toBeTruthy()
     expect(out[1].body).toBe('') // o texto da excluída não sai na listagem
+  })
+})
+
+// QA Web #9 — "Denunciar" no menu da mensagem de outra pessoa. Decisões do
+// usuário (2026-08-04): o envio é por E-MAIL a um destinatário definido na env
+// REPORT_TO_EMAIL, sem persistência no banco por ora ("evoluir para fluxo
+// próprio depois, se necessário", diz a planilha).
+describe('ChatService — denunciar mensagem', () => {
+  const mail = () => ({ sendMessageReport: jest.fn().mockResolvedValue(undefined) }) as any
+
+  const svc = (db: any, m: any = mail()) =>
+    new ChatService(db, media(), realtime(), notifications(), m)
+
+  const setup = (msgOver: any = {}) => {
+    const db = prisma()
+    db.conversation.findUnique.mockResolvedValue(convRow())
+    // Denunciada é a mensagem do OUTRO (B); quem denuncia é A.
+    db.message.findUnique.mockResolvedValue(msgRow({ senderId: B, body: 'texto ofensivo', ...msgOver }))
+    db.user.findMany.mockResolvedValue([
+      userRow(A, { email: 'a@ex.com' }),
+      userRow(B, { email: 'b@ex.com' }),
+    ])
+    return db
+  }
+
+  beforeEach(() => { process.env.REPORT_TO_EMAIL = 'mod@ex.com' })
+  afterEach(() => { delete process.env.REPORT_TO_EMAIL })
+
+  it('manda o e-mail pro destinatário da env com motivo, detalhe e a mensagem citada', async () => {
+    const db = setup()
+    const m = mail()
+    await svc(db, m).reportMessage(A, CONV, 'm1', { reason: 'Assédio', text: 'ameaçou o colega' })
+    const [to, report] = m.sendMessageReport.mock.calls[0]
+    expect(to).toBe('mod@ex.com')
+    expect(report).toEqual(expect.objectContaining({
+      reason: 'Assédio',
+      text: 'ameaçou o colega',
+      messageId: 'm1',
+      conversationId: CONV,
+      messageBody: 'texto ofensivo',
+    }))
+    // Quem denunciou e quem escreveu, com nome e e-mail: o e-mail é o único
+    // registro da denúncia, precisa se bastar.
+    expect(report.reporterName).toBe('full-aaaa')
+    expect(report.reporterEmail).toBe('a@ex.com')
+    expect(report.authorName).toBe('full-bbbb')
+    expect(report.authorEmail).toBe('b@ex.com')
+  })
+
+  it('não-membro da conversa não chega nem a olhar a mensagem (404)', async () => {
+    const db = setup()
+    db.conversation.findUnique.mockResolvedValue(convRow({ participants: [B, 'cccc'] }))
+    const m = mail()
+    await expect(svc(db, m).reportMessage(A, CONV, 'm1', { reason: 'Spam' })).rejects.toThrow(NotFoundException)
+    expect(db.message.findUnique).not.toHaveBeenCalled()
+    expect(m.sendMessageReport).not.toHaveBeenCalled()
+  })
+
+  it('mensagem de outra conversa é 404, mesmo com id válido (não vaza existência)', async () => {
+    const db = setup({ conversationId: 'xxxx#yyyy' })
+    const m = mail()
+    await expect(svc(db, m).reportMessage(A, CONV, 'm1', { reason: 'Spam' })).rejects.toThrow(NotFoundException)
+    expect(m.sendMessageReport).not.toHaveBeenCalled()
+  })
+
+  it('denunciar a própria mensagem é recusado', async () => {
+    const db = setup({ senderId: A })
+    const m = mail()
+    await expect(svc(db, m).reportMessage(A, CONV, 'm1', { reason: 'Spam' })).rejects.toThrow(BadRequestException)
+    expect(m.sendMessageReport).not.toHaveBeenCalled()
+  })
+
+  // Sem destinatário configurado o backend não tem pra onde mandar; engolir e
+  // responder 204 seria denúncia pro vácuo — o cliente mostraria "enviada" e
+  // ninguém nunca leria.
+  it('sem REPORT_TO_EMAIL a denúncia falha alto, não silenciosamente', async () => {
+    delete process.env.REPORT_TO_EMAIL
+    const db = setup()
+    const m = mail()
+    await expect(svc(db, m).reportMessage(A, CONV, 'm1', { reason: 'Spam' })).rejects.toThrow(ServiceUnavailableException)
+    expect(m.sendMessageReport).not.toHaveBeenCalled()
   })
 })

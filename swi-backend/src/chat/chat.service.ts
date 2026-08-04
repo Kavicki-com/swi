@@ -1,8 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
+import { MailService } from '../mail/mail.service'
 import { Prisma } from '@prisma/client'
 import type { Conversation, Message, User, Profile } from '@prisma/client'
 
@@ -20,6 +21,9 @@ export class ChatService {
     private readonly media: MediaService,
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationService,
+    // Opcional no TIPO só pra não quebrar instanciações antigas (specs com 4
+    // args); em runtime o Nest injeta sempre — ChatModule importa MailModule.
+    private readonly mail?: MailService,
   ) {}
 
   async listDirectory(userId: string) {
@@ -174,6 +178,45 @@ export class ChatService {
     const out = await this.toMsgDto(updated)
     this.realtime.emitToUsers(conv.participants, 'message', out)
     return out
+  }
+
+  // QA Web #9 — denunciar mensagem de outra pessoa. O e-mail é o único
+  // registro (sem persistência por ora, decisão 2026-08-04), então quem não
+  // tem destinatário configurado falha ALTO: 204 com denúncia pro vácuo faria
+  // o cliente mostrar "enviada" pra ninguém ler.
+  async reportMessage(userId: string, convId: string, msgId: string, dto: { reason: string; text?: string }) {
+    await this.assertMember(userId, convId)
+    const msg = await this.prisma.message.findUnique({ where: { id: msgId } })
+    // Mesma regra do assertOwnMessage: mensagem de outra conversa é 404, não
+    // 403 — responder "existe" contaria a existência a quem não é membro.
+    if (!msg || msg.conversationId !== convId) throw new NotFoundException('Mensagem não encontrada')
+    if (msg.senderId === userId) throw new BadRequestException('Não é possível denunciar a própria mensagem')
+
+    const to = process.env.REPORT_TO_EMAIL
+    if (!to || !this.mail) throw new ServiceUnavailableException('Denúncia indisponível no momento')
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: [userId, msg.senderId] } },
+      include: { profile: true },
+    })
+    const byId = new Map(users.map((u) => [u.id, u as UserWithProfile]))
+    const name = (id: string) => byId.get(id)?.profile?.fullName || byId.get(id)?.name || id
+    const email = (id: string) => byId.get(id)?.email ?? ''
+
+    await this.mail.sendMessageReport(to, {
+      reason: dto.reason,
+      text: dto.text,
+      messageId: msg.id,
+      conversationId: convId,
+      sentAt: msg.sentAt.toISOString(),
+      // O corpo vai como está no banco, mesmo se a mensagem foi excluída
+      // depois: quem denuncia viu o conteúdo, e ele é a evidência.
+      messageBody: msg.body || (msg.imageKey ? '📷 Imagem' : ''),
+      reporterName: name(userId),
+      reporterEmail: email(userId),
+      authorName: name(msg.senderId),
+      authorEmail: email(msg.senderId),
+    })
   }
 
   /** 404 se a mensagem não existe ou é de outra conversa, 403 se não é minha. */
