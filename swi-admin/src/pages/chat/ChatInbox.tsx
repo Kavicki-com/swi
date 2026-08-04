@@ -41,6 +41,7 @@ import { ageFrom } from '@/services/api/users'
 import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { useMyVitals } from '@/hooks/useMyVitals'
+import { ReportMessageModal } from './ReportMessageModal'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Single contact row in the left list — Figma 103:9931 / 102:9571
@@ -130,12 +131,17 @@ export function ChatBubble({
   message,
   contact,
   onEdit,
+  onReport,
 }: {
   message: ChatMessage
   contact: ChatContact
   // Editar acontece no campo de mensagem, que mora no ChatInbox. A bolha só
   // avisa qual mensagem entrou em edição; quem guarda o modo é a página.
   onEdit?: (message: ChatMessage) => void
+  // QA Web #9 — denunciar segue o mesmo desenho: o form mora num modal da
+  // página (dentro da bolha ele seria recortado pelo overflow do quadro de
+  // mensagens), a bolha só avisa qual mensagem está sendo denunciada.
+  onReport?: (message: ChatMessage) => void
 }) {
   const theme = useTheme()
   const { show: showToast } = useDemoToast()
@@ -253,6 +259,21 @@ export function ChatBubble({
                 onPress={() => {
                   setMenuOpen(false)
                   copyMessage()
+                }}
+              />
+            ) : null}
+            {/* QA Web #9: denunciar só a mensagem do OUTRO — o backend recusa
+              denunciar a própria, e oferecer o item aqui seria recriar o
+              controle morto do QA Web #4. Vale pra mensagem só de imagem
+              também: o conteúdo ofensivo pode ser a foto. */}
+            {!isMe ? (
+              <PopoverItem
+                label="Denunciar"
+                icon="warning"
+                tone="destructive"
+                onPress={() => {
+                  closeMenu()
+                  onReport?.(message)
                 }}
               />
             ) : null}
@@ -884,6 +905,11 @@ export function ChatInbox() {
     }
   }
 
+  // QA Web #9 — mensagem em denúncia. O modal mora aqui (não na bolha) pelo
+  // mesmo motivo do editingId: a bolha vive num container com overflow que
+  // recortaria o modal, e o modo pertence à página.
+  const [reportingMessage, setReportingMessage] = useState<ChatMessage | null>(null)
+
   // Modo edição. O compositor é o mesmo campo: entrar em edição carrega o texto
   // atual, e o CTA troca de "Enviar" para "Salvar". `editingId` é a única fonte
   // do modo — vazio significa composição normal.
@@ -1170,6 +1196,7 @@ export function ChatInbox() {
                       message={m}
                       contact={selectedContact}
                       onEdit={startEdit}
+                      onReport={setReportingMessage}
                     />
                   ))}
                   {messages.length > 2 ? (
@@ -1187,6 +1214,7 @@ export function ChatInbox() {
                       message={m}
                       contact={selectedContact}
                       onEdit={startEdit}
+                      onReport={setReportingMessage}
                     />
                   ))}
                 </>
@@ -1352,6 +1380,15 @@ export function ChatInbox() {
           </>
         ) : null}
       </View>
+      {/* QA Web #9 — modal de denúncia por cima da página inteira, como o
+          SupportModal. selectedContactId é o id da conversa (contact.id). */}
+      {reportingMessage && selectedContactId ? (
+        <ReportMessageModal
+          conversationId={selectedContactId}
+          message={reportingMessage}
+          onClose={() => setReportingMessage(null)}
+        />
+      ) : null}
     </View>
   )
 }

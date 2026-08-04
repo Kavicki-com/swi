@@ -52,5 +52,15 @@ export const chatsApi = {
       }),
       'Falha ao excluir mensagem',
     ),
+  // QA Web #9 — denunciar mensagem de outra pessoa. 204 sem corpo: não há
+  // estado novo a aplicar no chat, o efeito é o e-mail que sai no backend.
+  reportMessage: (id: string, messageId: string, dto: { reason: string; text?: string }) =>
+    envelope(
+      apiFetch<null>(`${conv(id)}/messages/${encodeURIComponent(messageId)}/report`, {
+        method: 'POST',
+        body: JSON.stringify(dto),
+      }),
+      'Falha ao enviar denúncia',
+    ),
   markRead: (id: string) => envelope(apiFetch<null>(`${conv(id)}/read`, { method: 'POST' })),
 }

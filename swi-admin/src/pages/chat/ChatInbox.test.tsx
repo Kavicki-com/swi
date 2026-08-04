@@ -271,6 +271,18 @@ describe('ChatInbox', () => {
     expect(editMessage).not.toHaveBeenCalled()
   })
 
+  // QA Web #9: o form de denúncia abre num modal da página, como o
+  // SupportModal — montado dentro da bolha ele seria recortado pelo
+  // overflowX hidden do quadro de mensagens.
+  it('denunciar pela bolha abre o modal de denúncia', () => {
+    renderPage(<ChatInbox />, CONV_ROUTE)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Denunciar' }))
+
+    expect(screen.getByText('Denunciar mensagem')).toBeTruthy()
+  })
+
   it('does not send when both the draft and the pending image are empty', () => {
     renderPage(<ChatInbox />, CONV_ROUTE)
     fireEvent.click(screen.getByText('Enviar'))
@@ -492,14 +504,15 @@ describe('ChatBubble', () => {
     time: '10:41',
   }
 
-  it('o menu da minha mensagem oferece editar, copiar e excluir', () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+  it('o menu da minha mensagem oferece editar, copiar e excluir, sem denunciar', () => {
+    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} onReport={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
     expect(screen.getByRole('menuitem', { name: 'Editar' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Copiar' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Excluir' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Denunciar' })).toBeNull()
   })
 
   // A confirmacao mora DENTRO do painel, por decisao do usuario: o menu troca
@@ -638,14 +651,42 @@ describe('ChatBubble', () => {
     expect(panel.style.right).toBe('')
   })
 
-  it('o menu da mensagem do outro oferece so copiar', () => {
+  // QA Web #9 (04/08/2026): na mensagem do OUTRO entra "Denunciar" ao lado de
+  // copiar. Na minha não: o backend recusa denunciar a própria mensagem, e
+  // oferecer o item seria recriar o controle morto do QA Web #4.
+  it('o menu da mensagem do outro oferece copiar e denunciar', () => {
     renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
     expect(screen.getByRole('menuitem', { name: 'Copiar' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Denunciar' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'Editar' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'Excluir' })).toBeNull()
+  })
+
+  // O form mora num modal da página (mesmo padrão do onEdit): a bolha só avisa
+  // QUAL mensagem está sendo denunciada e fecha o menu.
+  it('denunciar avisa a página com a mensagem e fecha o menu', () => {
+    const onReport = vi.fn()
+    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} onReport={onReport} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Denunciar' }))
+
+    expect(onReport).toHaveBeenCalledWith(TEXT_MESSAGE)
+    expect(screen.queryByRole('menuitem')).toBeNull()
+  })
+
+  // Denunciar vale pra mensagem só de imagem também: o conteúdo ofensivo pode
+  // ser a foto. Só texto é exigência do copiar, não do denunciar.
+  it('mensagem do outro so com imagem oferece denunciar', () => {
+    const theirImage: ChatMessage = { ...IMAGE_MESSAGE, id: 'm-img-them', sender: 'them' }
+    renderPage(<ChatBubble message={theirImage} contact={CONTACT} onReport={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
+
+    expect(screen.getByRole('menuitem', { name: 'Denunciar' })).toBeTruthy()
   })
 
   // Clipboard exige contexto seguro; em http:// simples o navegador nao expoe a
