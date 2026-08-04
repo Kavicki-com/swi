@@ -44,6 +44,25 @@ describe('chatsApi.sendMessage', () => {
     expect(JSON.parse(init.body as string)).toEqual({ body: 'oi', imageKey: 'chat/x.jpg' })
   })
 })
+// QA Web #9 — denunciar mensagem. O que vale trancar aqui é o path aninhado
+// com os DOIS encodes (o # da conversa e o id da mensagem) e o dto cru.
+describe('chatsApi.reportMessage', () => {
+  it('POST /report com o path encodado e o dto {reason,text}', async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 204, json: async () => null } as Response)
+    vi.stubGlobal('fetch', f)
+    const { error } = await chatsApi.reportMessage('a#b', 'm1', {
+      reason: 'Spam',
+      text: 'detalhe',
+    })
+    expect(error).toBeNull()
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/chat/conversations/a%23b/messages/m1/report')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({ reason: 'Spam', text: 'detalhe' })
+  })
+})
 describe('chatsApi.markRead', () => {
   it('POST /read (204 → data null, error null)', async () => {
     const f = vi
