@@ -1,4 +1,13 @@
 // src/app/App.tsx
+//
+// As telas de autenticação são importadas normalmente: são a porta de entrada,
+// e adiá-las só acrescentaria uma ida ao servidor antes do login. Todas as telas
+// autenticadas entram por React.lazy, cada uma no seu chunk, para que quem abre
+// o /login não baixe o painel inteiro junto.
+//
+// O `.then` que remapeia para `default` existe porque as páginas exportam com
+// nome, e React.lazy exige um módulo com export default.
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Outlet } from 'react-router-dom'
 import { View } from 'react-native'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
@@ -8,6 +17,7 @@ import { GlobalStyles } from './GlobalStyles'
 import { GuestOnly } from './GuestOnly'
 import { RequireAuth } from './RequireAuth'
 import { AppLayout } from './AppLayout'
+import { RouteFallback } from './RouteFallback'
 import { ChatProvider } from '@/services/chat/ChatProvider'
 import { Placeholder } from './Placeholder'
 import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
@@ -15,28 +25,75 @@ import { Login } from '@/pages/auth/Login'
 import { SignUp } from '@/pages/auth/SignUp'
 import { RecoveryEmail } from '@/pages/auth/RecoveryEmail'
 import { RecoveryNewPassword } from '@/pages/auth/RecoveryNewPassword'
-import { Dashboard } from '@/pages/dashboard/Dashboard'
-import { MapsGeneral } from '@/pages/maps/MapsGeneral'
-import { AdminsList } from '@/pages/admins/AdminsList'
-import { AdminDetails } from '@/pages/admins/AdminDetails'
-import { EmployeesList } from '@/pages/employees/EmployeesList'
-import { EmployeeDetails } from '@/pages/employees/EmployeeDetails'
-import { ChatInbox } from '@/pages/chat/ChatInbox'
-import { MonitoringLayout } from '@/pages/monitoring/MonitoringLayout'
-import { ReportsList } from '@/pages/reports/ReportsList'
-import { ReportDetails } from '@/pages/reports/ReportDetails'
-import { NewReport } from '@/pages/reports/NewReport'
-import { ResponsablesModal } from '@/pages/modals/ResponsablesModal'
-import { AlertsList } from '@/pages/alerts/AlertsList'
-import { AlertsRescueRouteSelection } from '@/pages/alerts/AlertsRescueRouteSelection'
-import { AlertsRescueRoute } from '@/pages/alerts/AlertsRescueRoute'
-import { MonitoringAlerts } from '@/pages/monitoring/MonitoringAlerts'
-import { MonitoringGoodConditions } from '@/pages/monitoring/MonitoringGoodConditions'
-import { TasksList } from '@/pages/tasks/TasksList'
-import { TaskForm } from '@/pages/tasks/TaskForm'
-import { TaskDetails } from '@/pages/tasks/TaskDetails'
-import { UserSettings } from '@/pages/user/UserSettings'
-import { UserProfile } from '@/pages/user/UserProfile'
+
+const Dashboard = lazy(() =>
+  import('@/pages/dashboard/Dashboard').then((m) => ({ default: m.Dashboard })),
+)
+const MapsGeneral = lazy(() =>
+  import('@/pages/maps/MapsGeneral').then((m) => ({ default: m.MapsGeneral })),
+)
+const AdminsList = lazy(() =>
+  import('@/pages/admins/AdminsList').then((m) => ({ default: m.AdminsList })),
+)
+const AdminDetails = lazy(() =>
+  import('@/pages/admins/AdminDetails').then((m) => ({ default: m.AdminDetails })),
+)
+const EmployeesList = lazy(() =>
+  import('@/pages/employees/EmployeesList').then((m) => ({ default: m.EmployeesList })),
+)
+const EmployeeDetails = lazy(() =>
+  import('@/pages/employees/EmployeeDetails').then((m) => ({ default: m.EmployeeDetails })),
+)
+const ChatInbox = lazy(() =>
+  import('@/pages/chat/ChatInbox').then((m) => ({ default: m.ChatInbox })),
+)
+const MonitoringLayout = lazy(() =>
+  import('@/pages/monitoring/MonitoringLayout').then((m) => ({ default: m.MonitoringLayout })),
+)
+const ReportsList = lazy(() =>
+  import('@/pages/reports/ReportsList').then((m) => ({ default: m.ReportsList })),
+)
+const ReportDetails = lazy(() =>
+  import('@/pages/reports/ReportDetails').then((m) => ({ default: m.ReportDetails })),
+)
+const NewReport = lazy(() =>
+  import('@/pages/reports/NewReport').then((m) => ({ default: m.NewReport })),
+)
+const ResponsablesModal = lazy(() =>
+  import('@/pages/modals/ResponsablesModal').then((m) => ({ default: m.ResponsablesModal })),
+)
+const AlertsList = lazy(() =>
+  import('@/pages/alerts/AlertsList').then((m) => ({ default: m.AlertsList })),
+)
+const AlertsRescueRouteSelection = lazy(() =>
+  import('@/pages/alerts/AlertsRescueRouteSelection').then((m) => ({
+    default: m.AlertsRescueRouteSelection,
+  })),
+)
+const AlertsRescueRoute = lazy(() =>
+  import('@/pages/alerts/AlertsRescueRoute').then((m) => ({ default: m.AlertsRescueRoute })),
+)
+const MonitoringAlerts = lazy(() =>
+  import('@/pages/monitoring/MonitoringAlerts').then((m) => ({ default: m.MonitoringAlerts })),
+)
+const MonitoringGoodConditions = lazy(() =>
+  import('@/pages/monitoring/MonitoringGoodConditions').then((m) => ({
+    default: m.MonitoringGoodConditions,
+  })),
+)
+const TasksList = lazy(() =>
+  import('@/pages/tasks/TasksList').then((m) => ({ default: m.TasksList })),
+)
+const TaskForm = lazy(() => import('@/pages/tasks/TaskForm').then((m) => ({ default: m.TaskForm })))
+const TaskDetails = lazy(() =>
+  import('@/pages/tasks/TaskDetails').then((m) => ({ default: m.TaskDetails })),
+)
+const UserSettings = lazy(() =>
+  import('@/pages/user/UserSettings').then((m) => ({ default: m.UserSettings })),
+)
+const UserProfile = lazy(() =>
+  import('@/pages/user/UserProfile').then((m) => ({ default: m.UserProfile })),
+)
 
 // Uma única instância do ChatProvider pra toda a subárvore autenticada: como
 // é uma rota de layout, o React Router a mantém montada ao navegar entre /chat
@@ -45,10 +102,17 @@ import { UserProfile } from '@/pages/user/UserProfile'
 // monta quando há sessão, garantindo que useAuth().user?.id já está populado e
 // que o socket/REST não abrem deslogado (RequireAuth redireciona pro /login
 // antes de renderizar este Outlet).
+//
+// O Suspense daqui cobre as rotas full-bleed (Mapas e Chat), que não têm
+// chrome. As telas com sidebar suspendem na fronteira de dentro do AppLayout,
+// que é a mais próxima, então lá o menu e o header ficam na tela durante a
+// troca de página.
 function ChatShell() {
   return (
     <ChatProvider>
-      <Outlet />
+      <Suspense fallback={<RouteFallback />}>
+        <Outlet />
+      </Suspense>
     </ChatProvider>
   )
 }

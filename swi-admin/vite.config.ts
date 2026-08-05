@@ -48,6 +48,27 @@ export default defineConfig({
     commonjsOptions: {
       transformMixedEsModules: true,
     },
+    rollupOptions: {
+      output: {
+        // As dependências que TODA rota usa (inclusive o /login) somavam 728 kB
+        // dentro do chunk da aplicação, contra 246 kB de código nosso. Sem
+        // separá-las, nenhum React.lazy tiraria o bundle inicial do aviso de
+        // 500 kB, porque o peso não está nas páginas.
+        //
+        // Três grupos por fronteira real de biblioteca, e não um vendor único:
+        // um bloco só ficaria em 728 kB e continuaria acima do limite. Assim
+        // nenhum passa de ~270 kB, e cada um tem seu próprio ritmo de troca, o
+        // que preserva o cache do navegador entre deploys.
+        //
+        // maplibre-gl fica de fora: já vem por import() dinâmico em
+        // lib/useMapLibre e ganha chunk próprio sozinho.
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-react-native': ['react-native-web', 'react-native-svg-web'],
+          'vendor-design-system': ['@kavicki/swi-design-system', 'styled-components'],
+        },
+      },
+    },
   },
   define: {
     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),

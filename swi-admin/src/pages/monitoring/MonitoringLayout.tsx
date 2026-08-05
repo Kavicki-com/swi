@@ -6,9 +6,10 @@
 //
 // The Outlet slot sits between the KPI row and the title so child routes
 // can inject a unique row (e.g. good-conditions adds 4 DonutCharts).
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, Suspense, useEffect, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { RouteFallback } from '@/app/RouteFallback'
 import {
   Avatar,
   BigNumbersCard,
@@ -476,7 +477,13 @@ export function MonitoringLayout() {
             <KpiTwoRowGrid kpis={kpis} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Outlet />
+            {/* As sub-rotas chegam por React.lazy (ver App.tsx). A fronteira
+                fica AQUI, e não só no AppLayout, pra que trocar de tab não
+                substitua os KPIs, o título e a lista pelo fallback enquanto o
+                chunk da tab carrega. Vale para os três branches de layout. */}
+            <Suspense fallback={<RouteFallback />}>
+              <Outlet />
+            </Suspense>
           </View>
         </View>
       ) : isWide ? (
@@ -498,7 +505,9 @@ export function MonitoringLayout() {
               <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
             ))}
           </div>
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </>
       ) : (
         <>
@@ -517,7 +526,9 @@ export function MonitoringLayout() {
           </View>
 
           {/* Child-route unique content (e.g. good-conditions stats row). */}
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </>
       )}
 

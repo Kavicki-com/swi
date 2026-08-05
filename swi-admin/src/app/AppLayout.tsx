@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { RouteFallback } from './RouteFallback'
 import { Pressable, View } from 'react-native'
 import { flushSync } from 'react-dom'
 
@@ -178,7 +179,12 @@ export function AppLayout() {
           {headerUserInfo}
         </View>
         <View style={{ flex: 1, paddingHorizontal: 24, paddingVertical: 24 }}>
-          <Outlet />
+          {/* As páginas chegam por React.lazy (ver App.tsx). A fronteira fica
+              AQUI, e não em volta das rotas, pra que o topbar continue na tela
+              enquanto o chunk da próxima página carrega. */}
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </View>
         {drawerOpen && (
           <View
@@ -352,7 +358,11 @@ export function AppLayout() {
           {headerUserInfo}
         </View>
         <View style={{ flex: 1, padding: 24 }}>
-          <Outlet />
+          {/* Mesma fronteira do layout mobile, pelo mesmo motivo: a sidebar e o
+              header ficam montados enquanto o chunk da página carrega. */}
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </View>
       </View>
       <UserDetailsMenu open={userMenuOpen} onClose={() => setUserMenuOpen(false)} />
