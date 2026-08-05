@@ -46,7 +46,8 @@ const maplibre = vi.hoisted(() => {
 })
 vi.mock('@/lib/useMapLibre', () => ({ useMapLibre: () => maplibre.lib }))
 
-import { ChatBubble, ChatInbox } from './ChatInbox'
+import { ChatInbox } from './ChatInbox'
+import { ChatBubble } from './components/ChatBubble'
 
 const keyFor = (workerId: string): string => ['me', workerId].sort().join('#')
 
