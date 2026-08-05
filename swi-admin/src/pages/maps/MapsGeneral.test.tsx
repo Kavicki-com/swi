@@ -549,9 +549,7 @@ describe('MapsGeneral', () => {
   // não provaria nada.
   it('arrastar o botão Voltar reposiciona sem navegar', async () => {
     await renderMaps()
-    const alvo = screen
-      .getByTestId('back-to-dashboard')
-      .closest('[style*="grab"]') as HTMLElement | null
+    const alvo = screen.getByTestId('back-to-dashboard-drag')
     expect(alvo).toBeTruthy()
     expect(alvo?.style.right).toBe('20px')
     expect(alvo?.style.bottom).toBe('30px')
