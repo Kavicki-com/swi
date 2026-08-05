@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Image as RNImage, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { memo, useCallback, useEffect, useState } from 'react';
+import { Modal, Platform, Pressable, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,13 +13,14 @@ import {
   ProgressBar,
   StatusChart as DSStatusChart,
   Text,
-  Title,
   useTheme,
-  type IconName,
 } from '@kavicki/swi-design-system';
-import { NavFABs } from '../../components/NavFABs';
 import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
+import { AlertActiveView } from '../../components/dashboard/AlertActiveView';
+import { BadgedButton } from '../../components/dashboard/BadgedButton';
+import { StatCol } from '../../components/dashboard/StatCol';
+import { StatDivider } from '../../components/dashboard/StatDivider';
 import {
   FIRE_ICON_SVG,
   GAUGE_ICON_SVG,
@@ -27,19 +28,20 @@ import {
 } from '../../lib/dashboardStatIcons';
 import { SILHOUETTE_BODY_SVG } from '../../lib/dashboardKnobSvgs';
 import {
-  ARROW_DOWN_TRIANGLE_SVG,
-  ARROW_UP_TRIANGLE_SVG,
-  WATER_DROP_SVG,
-  WIND_SPEED_SVG,
-} from '../../lib/alertWeatherSvgs';
+  BG_DECOR_GRAD_BOTTOM,
+  BG_DECOR_GRAD_BOTTOM_ALERT,
+  BG_DECOR_GRAD_TOP,
+  BG_DECOR_GRAD_TOP_ALERT,
+  BG_DECOR_H,
+  BG_DECOR_PATH,
+  BG_DECOR_W,
+} from '../../lib/dashboardDecor';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 import { useVitals } from '../../services/vitals/VitalsProvider';
 import { useProfile } from '../../services/profile/ProfileProvider';
 import { useNotifications } from '../../services/notifications/NotificationProvider';
 import { useReports } from '../../services/reports/ReportsProvider';
 import { formatEta } from '../../services/vitals/formatEta';
-import { useWeather } from '../../services/weather/WeatherProvider';
-import { weatherDisplay } from '../../services/weather/weatherFormat';
 import type { WorkerStatus } from '../../services/vitals/types';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
@@ -76,36 +78,8 @@ function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | nul
   return null;
 }
 
-// Decorative bottom SVG (Figma 304:2430 'background-element') — vertical
-// linear gradient from #3BC958 (top) to #1E652C (bottom), 46% opacity.
-// Hex codes are brand-specific Figma values; DS palette doesn't ship
-// equivalents (audit nit cleanup 2026-05-17 — named here for greppability).
-const BG_DECOR_GRAD_TOP = '#3BC958';
-const BG_DECOR_GRAD_BOTTOM = '#1E652C';
-
-// Alert state (?alert=modal) — gradient red invertido pra indicar emergência.
-// Top/bottom hex extraídos da Screenshot 85 (user reference). Mesmo opacity
-// 46% do estado normal.
-const BG_DECOR_GRAD_TOP_ALERT = '#E04848';
-const BG_DECOR_GRAD_BOTTOM_ALERT = '#5E1818';
-
-// Vertical divider gradient stops (Figma 295:1585 / 304:2455) — fades
-// from dark (#171717, matching theme.background) to brand green
-// (#62BB81, close to theme.content.primary) and back. Kept as literals
-// because the gradient midpoint requires the exact Figma stops.
-// DIVIDER_GRAD_END subido pra #3A3A3A (contraste real contra bg #171717).
-// Tentei #2A2A2A antes mas ainda sumia no Android em gaps estreitos.
-const DIVIDER_GRAD_END = '#3A3A3A';
-const DIVIDER_GRAD_MID = '#62BB81';
-
-const BG_DECOR_PATH =
-  'M157.378 347.935H64.0356C57.6845 347.935 52.0472 346.719 47.2773 344.319C43.4537 342.394 40.1798 339.711 37.5464 336.344C35.2057 333.35 33.8158 330.358 33.0606 328.376C32.2419 326.222 31.9795 324.789 31.9687 324.73L31.9621 324.692V324.654C31.9676 321.759 32.5411 34.8651 31.9621 16.3288C31.8434 12.5266 30.3809 9.36409 27.6136 6.92631C23.1094 2.95899 15.8801 1.5623 10.6078 1.08815C4.86064 0.5719 0.126303 1.01253 0.0786841 1.01662L0 0.183997C0.0474149 0.178683 4.84653 -0.269714 10.6683 0.253076C14.0947 0.560046 17.2042 1.13761 19.9099 1.96941C23.3156 3.01622 26.0927 4.47218 28.1654 6.29765C31.1144 8.89321 32.6729 12.2601 32.7992 16.3018C33.3762 34.7895 32.809 319.802 32.7992 324.616C32.8446 324.847 33.1266 326.2 33.8567 328.112C34.5924 330.041 35.949 332.95 38.229 335.858C42.2505 340.986 49.9918 347.099 64.0356 347.099H177.508H295.964C310.008 347.099 317.749 340.986 321.77 335.858C324.051 332.95 325.407 330.041 326.143 328.112C326.873 326.2 327.155 324.847 327.201 324.616C327.19 319.802 326.623 34.7895 327.201 16.3018C327.327 12.2601 328.886 8.89321 331.833 6.29765C333.906 4.47218 336.684 3.01622 340.089 1.96941C342.796 1.13761 345.905 0.560046 349.332 0.253076C355.153 -0.269714 359.953 0.178683 360 0.183997L359.92 1.01662C359.873 1.01253 355.138 0.5719 349.391 1.08815C344.119 1.5623 336.89 2.95899 332.386 6.92631C329.619 9.36409 328.156 12.5266 328.037 16.3288C327.458 34.8651 328.031 321.759 328.038 324.654V324.692L328.03 324.73C328.019 324.789 327.758 326.222 326.938 328.376C326.184 330.358 324.794 333.35 322.452 336.344C319.819 339.711 316.545 342.394 312.721 344.319C307.953 346.719 302.314 347.935 295.964 347.935H157.378Z';
-const BG_DECOR_W = 360;
-const BG_DECOR_H = 347.935;
-
-// Resolve local PNG to a Metro-served URI so DS Avatar (which only accepts
-// `uri: string`) can render the asset. TODO: bump DS Avatar to accept
-// `source: ImageSourcePropType` to remove this workaround.
+// As constantes de desenho da moldura de fundo e do divisor moram em
+// lib/dashboardDecor.ts, ao lado de dashboardStatIcons e dashboardKnobSvgs.
 
 // Layout reference (Figma 245:23280, viewport 360×≈800):
 //   - Chart zone: 0,0 → 360×374. Now rendered as edge-to-edge banner with
@@ -536,7 +510,7 @@ export default function Dashboard() {
             width={70}
             theme={theme}
           />
-          <Divider theme={theme} />
+          <StatDivider />
           <StatCol
             iconNode={
               <SvgXml
@@ -551,7 +525,7 @@ export default function Dashboard() {
             width={80}
             theme={theme}
           />
-          <Divider theme={theme} />
+          <StatDivider />
           <StatCol
             iconNode={
               <SvgXml
@@ -749,417 +723,6 @@ export default function Dashboard() {
         visible={activeModalOpen}
         onClose={() => setActiveModalOpen(false)}
       />
-    </View>
-  );
-}
-
-// --- Placeholders locais (compõem DS primitives, não substituem nada do DS) ---
-
-const StatCol = memo(function StatCol({
-  iconNode,
-  label,
-  value,
-  width,
-  theme,
-}: {
-  iconNode: ReactNode;
-  label: string;
-  value: string;
-  width: number;
-  theme: ReturnType<typeof useTheme>;
-}) {
-  return (
-    <View style={{ alignItems: 'center', gap: theme.gap.sm, width }}>
-      <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
-        {iconNode}
-      </View>
-      {/* numberOfLines=1 é OBRIGATÓRIO aqui: sem ele o valor quebra em duas
-          linhas, a coluna cresce em altura e empurra os ícones do rodapé pra
-          fora da margem (QA no aparelho, 2026-07-27: BPM 64 renderizou "6"
-          sobre "4"). O comentário no call site já afirmava que isto existia —
-          não existia. */}
-      <Title variant="title.l" color={theme.content.dark} numberOfLines={1}>
-        {value}
-      </Title>
-      <Text variant="body.s" color={theme.content.dark}>
-        {label}
-      </Text>
-    </View>
-  );
-});
-
-// Divider — vertical SVG with linear gradient (Figma 295:1585 / 304:2455):
-// fades #171717 → #62BB81 (midpoint) → #171717 over 106px tall, 1px wide.
-const Divider = memo(function Divider({ theme: _theme }: { theme: ReturnType<typeof useTheme> }) {
-  const gradId = useUniqueId('divider-grad');
-  return (
-    <Svg width={2} height={106} viewBox="0 0 2 106">
-      <Defs>
-        <LinearGradient
-          id={gradId}
-          x1="0.5"
-          y1="0"
-          x2="0.5"
-          y2="106"
-          gradientUnits="userSpaceOnUse"
-        >
-          <Stop offset="0" stopColor={DIVIDER_GRAD_END} />
-          <Stop offset="0.2" stopColor={DIVIDER_GRAD_MID} />
-          <Stop offset="0.8" stopColor={DIVIDER_GRAD_MID} />
-          <Stop offset="1" stopColor={DIVIDER_GRAD_END} />
-        </LinearGradient>
-      </Defs>
-      <Path d="M2 106H0V0H2V106Z" fill={`url(#${gradId})`} />
-    </Svg>
-  );
-});
-
-const BadgedButton = memo(function BadgedButton({
-  icon,
-  badge,
-  accessibilityLabel,
-  onPress,
-  theme,
-}: {
-  icon: IconName;
-  badge?: string;
-  accessibilityLabel: string;
-  onPress?: () => void;
-  theme: ReturnType<typeof useTheme>;
-}) {
-  // 56×56 wrapper per Figma 304:2683 / 304:2725. Badge sits at top-right of
-  // wrapper (overlapping the button's upper-right quadrant), not floating
-  // outside it.
-  return (
-    <View style={{ width: 56, height: 56 }}>
-      <Button
-        variant="outline"
-        size="large"
-        shape="pill"
-        borderColor={theme.content.dark}
-        borderWidth="s"
-        iconLeft={<Icon name={icon} size={24} color={theme.content.dark} />}
-        accessibilityLabel={accessibilityLabel}
-        onPress={onPress ?? (() => {})}
-      />
-      {badge ? (
-        <View
-          // pointerEvents="none" (QA Mobile #2): o badge é absoluto sobre o
-          // quadrante superior direito do botão de 56×56. Sem isto ele CAPTURA
-          // o toque que cai nos seus 24×24 e não faz nada com ele — e o badge é
-          // justamente a parte mais chamativa, que o usuário tende a mirar.
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            width: 24,
-            height: 24,
-            borderRadius: theme.border.radius.pill,
-            backgroundColor: theme.surface.error,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text variant="caption.s" color={theme.content.light}>
-            {badge}
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
-});
-
-// --- Alert-active view (Figma 385:29591 dashboard-alert-active) ---
-// Anteriormente vivia em `app/(app)/alert-instructions.tsx`. Por decisão
-// 2026-05-15, dashboard e alert-instructions são o mesmo screen com 2
-// estados; este componente serve o branch `?alert=active`.
-function AlertActiveView() {
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-
-  // Clima real (Unit 2) com fallback pro texto estático de hoje em
-  // loading/error/sem-alerta — esta é tela de segurança e nunca pode quebrar.
-  const { snapshot, activeAlert } = useWeather();
-  const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
-
-  // Bolinhas da timeline (Figma 385:29807 etc.) usam `surface/secondary`
-  // #50B3D2 (teal escuro). A linha vertical entre bolinhas usa um cyan
-  // mais claro `content/secondary` #8AD2E2 — cores DIFERENTES por design.
-  const stepCircle = (
-    <View
-      style={{
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        backgroundColor: theme.surface.secondary,
-        marginTop: 2,
-      }}
-    />
-  );
-
-  // Cada item exceto o último ganha um segmento de linha que vai do
-  // centro da bolinha até o final do item, conectando com o próximo
-  // segmento na próxima bolinha. Isso garante que a linha SEMPRE termine
-  // no centro da última bolinha (independente da altura dos items).
-  // `top: 12` = bolinha marginTop(2) + raio(10) → centro vertical.
-  const lineSegment = (
-    <View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        left: 9,
-        top: 12,
-        bottom: -theme.gap.m,
-        width: 1,
-        backgroundColor: theme.content.secondary,
-      }}
-    />
-  );
-
-  return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Dot-grid (Figma 385:29751 "Repetição de grade 4") — 27 colunas,
-          opacity 9%, centrado no topo. Mesma camada do dashboard/my-stats. */}
-      <JourneyTheme />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          paddingTop: insets.top + theme.padding.m,
-          paddingBottom: insets.bottom + 160,
-          paddingHorizontal: theme.padding.m,
-          gap: theme.gap.l,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Title */}
-        <View style={{ alignItems: 'center' }}>
-          <Title variant="title.xs" color={theme.content.dark}>
-            Procedimento de evacuação
-          </Title>
-        </View>
-
-        {/* Weather row */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: theme.gap.m,
-          }}
-        >
-          {/* Left: condition card (Figma 385:30119). Fixed 203×100. Content
-              alinha bottom (justify-end) pra deixar espaço pro ícone de chuva
-              transbordar o topo do card. Padding só horizontal+bottom — top
-              fica zero pra não empurrar texto pra baixo do ícone. */}
-          <View
-            style={{
-              width: 203,
-              height: 100,
-              backgroundColor: theme.surface.high,
-              borderRadius: theme.border.radius.m,
-              paddingHorizontal: theme.padding.s,
-              paddingBottom: theme.padding.s,
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: theme.gap.s,
-            }}
-          >
-            {/* Ícone de chuva (Figma 385:30122) — 72×72.76 posicionado
-                top:-28.38 (transborda o topo do card, ~40% fica fora). DS
-                WeatherIcon 404 com asset path em node_modules; renderiza
-                direto via RNImage do mobile/assets/. */}
-            <View
-              style={{
-                position: 'absolute',
-                top: -28,
-                alignSelf: 'center',
-                zIndex: 2,
-              }}
-              pointerEvents="none"
-            >
-              <RNImage
-                source={require('../../assets/weather-rainy.png')}
-                style={{ width: 72, height: 72 }}
-                resizeMode="contain"
-                accessibilityLabel="Chuva intensa"
-              />
-            </View>
-            <Title variant="title.l" color={theme.content.dark}>
-              {tempStr}
-            </Title>
-            <Text variant="body.m" color={theme.content.dark}>
-              {condStr}
-            </Text>
-          </View>
-
-          {/* Right: data column (Figma 385:30123). Width fixa 83px. Os
-              4 ícones vêm dos SVGs do Figma (alertWeatherSvgs) porque
-              os equivalentes do DS têm shapes diferentes. */}
-          <View style={{ width: 83, gap: theme.gap.s }}>
-            <WeatherDataRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value={humStr} theme={theme} />
-            <WeatherDataRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value={windStr} theme={theme} />
-            <WeatherDataRow svg={ARROW_UP_TRIANGLE_SVG} svgW={22} svgH={19} value={maxStr} theme={theme} />
-            <WeatherDataRow svg={ARROW_DOWN_TRIANGLE_SVG} svgW={22} svgH={19} value={minStr} theme={theme} />
-          </View>
-        </View>
-
-        {/* Description */}
-        <Text
-          variant="body.s"
-          color={theme.content.dark}
-          style={{ textAlign: 'center' }}
-        >
-          {descStr}
-        </Text>
-
-        {/* Instructions list */}
-        <View style={{ gap: theme.gap.m }}>
-          {/* Step 1 — Traçar rota */}
-          <View style={{ flexDirection: 'row', gap: 19, alignItems: 'flex-start' }}>
-            {stepCircle}
-            {lineSegment}
-            <View style={{ flex: 1, gap: 8, alignItems: 'flex-start' }}>
-              <Text variant="body.m" color={theme.content.dark}>
-                Desloque-se para o local de resgate
-              </Text>
-              <Button
-                variant="contained"
-                size="small"
-                backgroundColor={theme.surface.primary}
-                labelColor={theme.content.light}
-                label="Traçar rota"
-                iconRight={
-                  <Icon
-                    name="location_pin"
-                    width={20}
-                    height={25}
-                    color={theme.content.light}
-                  />
-                }
-                elevation="lg"
-                accessibilityLabel="Traçar rota de evacuação"
-                onPress={() => router.push('/(app)/evacuation')}
-              />
-            </View>
-          </View>
-
-          {/* Step 2 — Mantenha-se em abrigo */}
-          <View style={{ flexDirection: 'row', gap: 19, alignItems: 'flex-start' }}>
-            {stepCircle}
-            {lineSegment}
-            <Text
-              variant="body.m"
-              color={theme.content.dark}
-              style={{ flex: 1 }}
-            >
-              Mantenha se em um abrigo protegido do vento
-            </Text>
-          </View>
-
-          {/* Step 3 — Espere pelo veículo + chip */}
-          <View style={{ flexDirection: 'row', gap: 19, alignItems: 'flex-start' }}>
-            {stepCircle}
-            {lineSegment}
-            <View style={{ flex: 1, gap: 8, alignItems: 'flex-start' }}>
-              <Text variant="body.m" color={theme.content.dark}>
-                Espere pelo veículo de resgate
-              </Text>
-              <View
-                style={{
-                  borderWidth: 1,
-                  borderColor: theme.content.primary,
-                  borderRadius: theme.border.radius.m,
-                  paddingHorizontal: theme.padding.sm,
-                  paddingVertical: theme.padding.xs,
-                }}
-              >
-                <Text variant="body.s" color={theme.content.primary}>
-                  Aprox. 7 minutos
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Step 4 — Reportar acidente (último item, sem lineSegment). */}
-          <View style={{ flexDirection: 'row', gap: 19, alignItems: 'flex-start' }}>
-            {stepCircle}
-            <View style={{ flex: 1, gap: 12, alignItems: 'flex-start' }}>
-              <Text variant="body.m" color={theme.content.dark}>
-                Se você ou alguém estiver ferido, reporte imediatamente à central
-              </Text>
-              <Button
-                variant="contained"
-                size="small"
-                backgroundColor={theme.surface.accent}
-                labelColor={theme.content.light}
-                label="Reportar acidente"
-                elevation="lg"
-                accessibilityLabel="Reportar acidente"
-                onPress={() => router.push('/(app)/reports/new')}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Confirmation block */}
-        <View style={{ gap: 15 }}>
-          <Text
-            variant="body.m"
-            color={theme.content.dark}
-            style={{ textAlign: 'center' }}
-          >
-            Mantenha-se calmo. Estamos à caminho.
-          </Text>
-          <Button
-            variant="contained"
-            backgroundColor={theme.surface.primary}
-            labelColor={theme.content.light}
-            label="Entendi, estou seguindo as instruções"
-            fullWidth
-            elevation="lg"
-            accessibilityLabel="Confirmar instruções recebidas"
-            onPress={() => router.replace('/(app)/dashboard')}
-          />
-        </View>
-      </ScrollView>
-
-      <NavFABs />
-    </View>
-  );
-}
-
-function WeatherDataRow({
-  theme,
-  svg,
-  svgW,
-  svgH,
-  value,
-}: {
-  theme: ReturnType<typeof useTheme>;
-  svg: string;
-  svgW: number;
-  svgH: number;
-  value: string;
-}) {
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.gap.s,
-      }}
-    >
-      {/* Container 24x24 igual aos antigos ícones do DS pra manter
-          alinhamento vertical entre as 4 rows; ícone fica centralizado
-          dentro mas usa seu tamanho intrínseco do Figma. */}
-      <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
-        <SvgXml xml={svg} width={svgW} height={svgH} />
-      </View>
-      <Text variant="body.m" color={theme.content.dark}>
-        {value}
-      </Text>
     </View>
   );
 }

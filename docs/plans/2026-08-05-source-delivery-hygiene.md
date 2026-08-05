@@ -309,31 +309,59 @@ git commit -m "refactor: remove mobile legacy provider paths"
 
 ### Task 5: Decompor a tela mobile acima do limite sem alterar comportamento
 
+**Emenda de 2026-08-05 (aprovada pelo usuário):** a estrutura original desta task
+(`DashboardHeader`, `HealthSummary`, `RecentAlerts`, `useDashboardSnapshot`) foi
+escrita antes de o arquivo ser lido e não corresponde ao que ele tem. Não existe
+cabeçalho, não existe lista de alertas recentes, e quase não há estado a extrair
+para um hook: os dados vêm todos de providers já existentes.
+
+O que o `dashboard.tsx` tem de fato são **duas telas convivendo**, `Dashboard`
+(a normal) e `AlertActiveView` (o branch `?alert=active`), mais três componentes
+locais e um bloco de constantes de desenho. A decomposição segue essa divisão,
+que sozinha resolve o limite de 800 linhas sem recortes artificiais.
+
+A árvore também muda: o repo não tem `features/`, e sim `components/<domínio>/`
+(`chat`, `journey`, `modals`, `notifications`, `reports`, `vitals`) com as
+constantes de desenho em `lib/dashboard*.ts`. Seguir a convenção existente em vez
+de introduzir uma segunda.
+
 **Files:**
 - Modify: `mobile/app/(app)/dashboard.tsx`
-- Create: `mobile/features/dashboard/components/DashboardHeader.tsx`
-- Create: `mobile/features/dashboard/components/HealthSummary.tsx`
-- Create: `mobile/features/dashboard/components/RecentAlerts.tsx`
-- Create: `mobile/features/dashboard/hooks/useDashboardSnapshot.ts`
-- Create: `mobile/features/dashboard/types.ts`
+- Create: `mobile/components/dashboard/AlertActiveView.tsx`
+- Create: `mobile/components/dashboard/StatCol.tsx`
+- Create: `mobile/components/dashboard/StatDivider.tsx`
+- Create: `mobile/components/dashboard/BadgedButton.tsx`
+- Create: `mobile/lib/dashboardDecor.ts`
 - Test: `mobile/__tests__/app/(app)/dashboard.integration.test.tsx`
-- Test: `mobile/features/dashboard/hooks/useDashboardSnapshot.test.ts`
 
-**Step 1: Strengthen characterization tests**
+**Step 1: Write the characterization suite**
 
-Antes de mover JSX, cobrir loading, sucesso, falha de API, navegação por alerta e ausência honesta de vitais. Usar os mesmos adaptadores públicos usados pela tela.
+A suíte NÃO existe ainda; é preciso escrevê-la antes de mover qualquer JSX. Ela
+não afirma estrutura de arquivo nem hierarquia de componentes, só o que a tela
+mostra e para onde navega, que é o que precisa sobreviver à mudança.
+
+Cobrir, no `Dashboard`: as quatro fases dos vitais (carregando, vazio, erro,
+pronto), a origem real dos três números, o selo de coração escondido no estado
+`stale`, as contagens de pendências com concordância de número, e o destino de
+cada botão.
+
+Cobrir, no `AlertActiveView`: o título, os quatro passos, o fallback estático do
+clima, a precedência sobre a fase dos vitais e os três destinos de navegação. É
+tela de segurança e não pode regredir em silêncio.
 
 Run: `cd mobile && npm test -- dashboard.integration.test.tsx --runInBand`
 
-Expected: PASS no código atual; o teste registra o comportamento a preservar.
+Expected: PASS no código atual; a suíte registra o comportamento a preservar.
 
 **Step 2: Extract one cohesive unit at a time**
 
-Mover primeiro tipos, depois hook, depois cada seção visual. Cada extração deve receber dados e callbacks por props readonly; nenhuma seção importa backend diretamente. Não duplicar tokens ou componentes do design system.
+Ordem: constantes de desenho, depois os três componentes locais, depois a tela de
+evacuação. Nenhum extraído importa backend diretamente. Não duplicar tokens nem
+componentes do design system.
 
 Após cada arquivo:
 
-Run: `cd mobile && npm test -- dashboard.integration.test.tsx useDashboardSnapshot.test.ts --runInBand`
+Run: `cd mobile && npm test -- dashboard.integration.test.tsx --runInBand`
 
 Expected: PASS após cada extração.
 
@@ -341,7 +369,7 @@ Expected: PASS após cada extração.
 
 Run: `$n=(Get-Content -LiteralPath 'mobile/app/(app)/dashboard.tsx').Count; if ($n -ge 800) { throw "dashboard ainda tem $n linhas" }`
 
-Expected: menos de 800 linhas; idealmente 200–400 por arquivo extraído.
+Expected: menos de 800 linhas.
 
 Run: `cd mobile && npm run verify`
 
@@ -350,7 +378,7 @@ Expected: PASS.
 **Step 4: Commit**
 
 ```bash
-git add mobile/app mobile/features mobile/__tests__
+git add mobile/app mobile/components mobile/lib mobile/__tests__
 git commit -m "refactor: split mobile dashboard responsibilities"
 ```
 
