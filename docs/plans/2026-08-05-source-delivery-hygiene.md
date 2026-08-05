@@ -28,7 +28,7 @@
 |---|---|
 | G1 — Ferramentas | instalação limpa, lint, typecheck, testes e build reproduzíveis nos três projetos |
 | G2 — Configuração e segurança | nenhum segredo no snapshot; ambiente validado; auth, autorização, CORS, limites e uploads cobertos |
-| G3 — Produção real | API real por padrão; mocks, seeds e simuladores apenas por ativação explícita em dev/teste; nenhum caminho Amplify |
+| G3 — Produção real | API real por padrão; mocks, seeds e simuladores apenas por ativação explícita em dev/teste, exceto vitais de saúde, que permanecem simulados por decisão de produto; nenhum caminho Amplify |
 | G4 — Qualidade | zero erro/warning aceito pelos gates; arquivos de produção abaixo de 800 linhas; código morto e supressões injustificadas removidos |
 | G5 — Verificação | 80% de cobertura por projeto, E2E críticos, builds limpos, auditoria revisada e CI verde |
 | G6 — Entrega | commit final limpo e aprovado; BagIt validado; somente `.txt`; hashes e reconstrução de amostra corretos |
@@ -219,7 +219,7 @@ Expected: FAIL porque hoje os defaults são `mock` e `localhost`.
 - Honrar `mock` somente com `__DEV__`, `NODE_ENV=test` ou uma chave de demonstração explicitamente documentada e nunca presente nos perfis de produção.
 - Recusar valores desconhecidos em vez de fazer cast direto de `process.env`.
 - Exigir `EXPO_PUBLIC_API_URL` em produção e permitir localhost apenas em dev/teste.
-- Manter cenários de vitais, clima e evacuação fora da configuração de produção.
+- Manter cenários de clima e evacuação fora da configuração de produção; vitais são exceção deliberada e permanecem simulados em produção (decisão de produto de 2026-07-30, reafirmada em 2026-08-05).
 - Sanitizar `mobile/.env.example` apenas com placeholders públicos; nenhuma credencial.
 - Confirmar que todos os perfis de release em `mobile/eas.json` declaram API real e URL válida por ambiente.
 
@@ -244,14 +244,15 @@ git add mobile/lib mobile/services mobile/.env.example mobile/eas.json
 git commit -m "fix: make mobile api the production default"
 ```
 
-### Task 4: Remover Amplify do mobile e impedir saúde simulada em produção
+### Task 4: Remover Amplify do mobile preservando os vitais simulados
+
+**Exceção de produto:** os vitais de saúde (batimentos, temperatura) permanecem simulados em todos os ambientes, inclusive produção, até a integração do smartband real (decisão de 2026-07-30, reafirmada em 2026-08-05). Esta task remove apenas os providers Amplify legados; não introduz estado "hardware indisponível".
 
 **Files:**
 - Delete: `mobile/services/vitals/amplifyVitalsBackend.ts`
 - Delete: `mobile/services/telemetry/amplifyTelemetrySink.ts`
 - Modify: `mobile/services/vitals/getVitalsBackend.ts`
 - Modify: `mobile/services/vitals/getVitalsBackend.test.ts`
-- Create: `mobile/services/vitals/unavailableVitalsBackend.ts`
 - Modify: `mobile/services/telemetry/getTelemetrySink.ts`
 - Modify: `mobile/services/telemetry/getTelemetrySink.test.ts`
 - Create: `mobile/services/telemetry/noopTelemetrySink.ts`
@@ -259,31 +260,31 @@ git commit -m "fix: make mobile api the production default"
 - Modify: `mobile/package-lock.json`
 - Modify: comments containing the obsolete provider under `mobile/app/` and `mobile/services/`
 
-**Step 1: Write failing production tests**
+**Step 1: Write characterization and failing tests**
 
 ```ts
-it('não fabrica vitais fora de dev/teste', () => {
-  expect(getVitalsBackend({ isDev: false, isTest: false, mockEnabled: false }))
-    .toBe(unavailableVitalsBackend)
+it('mantém vitais simulados como padrão, inclusive em produção', () => {
+  expect(getVitalsBackend({ isDev: false, isTest: false }))
+    .toBe(mockVitalsBackend)
 })
 
-it('usa simulador somente com ativação explícita em dev', () => {
-  expect(getVitalsBackend({ isDev: true, isTest: false, mockEnabled: true }))
-    .toBe(mockVitalsBackend)
+it('nunca resolve para o provider legado', () => {
+  expect(() => getVitalsBackend({ isDev: false, isTest: false, backend: 'amplify' as never }))
+    .not.toBe(amplifyVitalsBackend)
 })
 ```
 
-Criar o teste equivalente para telemetria: produção sem hardware usa sink no-op claramente nomeado, nunca simulador ou provider legado.
+Para telemetria: produção sem hardware usa sink no-op claramente nomeado, nunca o provider legado.
 
 Run: `cd mobile && npm test -- getVitalsBackend.test.ts getTelemetrySink.test.ts --runInBand`
 
-Expected: FAIL com os seletores ainda fixos no mock.
+Expected: o teste de caracterização dos vitais PASS no código atual; os casos que referenciam o provider legado FAIL até a remoção.
 
-**Step 2: Implement honest unavailable states**
+**Step 2: Implement the cleanup**
 
-- `unavailableVitalsBackend` deve devolver o estado “hardware indisponível” já aceito pela UI, sem gerar valores aleatórios.
+- `getVitalsBackend` continua devolvendo `mockVitalsBackend` por padrão em todos os ambientes; apenas a rota Amplify é removida.
 - `noopTelemetrySink` deve descartar somente porque não há fonte real de hardware, sem fingir persistência.
-- Manter mocks para testes e revisão visual, sempre por ativação explícita.
+- Documentar no seletor de vitais, em comentário curto, que a simulação é decisão de produto até o smartband real.
 
 **Step 3: Remove the legacy dependency**
 
@@ -1332,7 +1333,7 @@ Entregar ao cliente somente após aprovação final. A pasta gerada é descartá
 - [ ] Admin: lint sem warnings, typecheck, unit/integration, coverage, build, Storybook e E2E PASS.
 - [ ] Backend: lint, typecheck, unit, coverage, build e todos os E2E PASS.
 - [ ] Cobertura global >= 80% nas quatro métricas por projeto.
-- [ ] API real é o padrão de produção; mocks/simuladores exigem ativação dev/teste.
+- [ ] API real é o padrão de produção; mocks/simuladores exigem ativação dev/teste, com exceção dos vitais de saúde, que permanecem simulados por decisão de produto.
 - [ ] Nenhuma referência ou diretório Amplify no snapshot final.
 - [ ] Nenhum segredo; achados de dependências revisados e tratados.
 - [ ] Arquivos de produção abaixo de 800 linhas e sem supressões injustificadas.

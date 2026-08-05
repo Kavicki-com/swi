@@ -39,7 +39,7 @@ Não entram no payload final:
 4. O snapshot incluirá apenas a identificação do commit final, sem histórico Git.
 5. Assets binários funcionais serão inventariados com caminho, tipo, tamanho, SHA-256 e motivo da exclusão; não serão convertidos para Base64.
 6. O design system será apenas referenciado como dependência externa, incluindo as versões utilizadas por mobile e admin.
-7. Admin e mobile usarão o backend real como padrão de produção. Mocks e simuladores existirão apenas sob configuração explícita de desenvolvimento ou teste.
+7. Admin e mobile usarão o backend real como padrão de produção. Mocks e simuladores existirão apenas sob configuração explícita de desenvolvimento ou teste, com uma exceção deliberada: os vitais de saúde (batimentos, temperatura) continuam simulados em todos os ambientes até a integração do smartband real, por decisão de produto de 2026-07-30 reafirmada em 2026-08-05.
 8. Nenhuma alteração será mesclada em `main` ou enviada ao remoto sem autorização expressa.
 
 ## Isolamento e reversibilidade
@@ -99,7 +99,7 @@ A worktree usa a branch `chore/repo-source-delivery`, iniciada no commit `42141f
 ### Portão 3 — Verdade de produção
 
 - tornar API real o padrão de produção em mobile e admin;
-- confinar mocks, seeds, clima simulado e posições simuladas a ambientes explícitos de desenvolvimento/teste;
+- confinar mocks, seeds, clima simulado e posições simuladas a ambientes explícitos de desenvolvimento/teste; vitais de saúde são exceção e permanecem simulados em produção até o smartband real;
 - remover referências Amplify que não façam parte da aplicação atual;
 - fazer o processo falhar cedo quando uma configuração obrigatória estiver ausente;
 - preservar o design system como dependência externa, sem substitutos locais.
