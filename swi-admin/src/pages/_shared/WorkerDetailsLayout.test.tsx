@@ -15,11 +15,11 @@ const BASE: WorkerDetailsData = {
   avatarUri: '',
 }
 
-const renderLayout = (
+const renderLayout = async (
   worker: Partial<WorkerDetailsData>,
   position: { lat: number; lng: number } | null = { lat: -23.55, lng: -46.63 },
 ) =>
-  renderPage(
+  await renderPage(
     <WorkerDetailsLayout
       worker={{ ...BASE, ...worker }}
       position={position}
@@ -35,34 +35,34 @@ const renderLayout = (
 describe('WorkerDetailsLayout', () => {
   // fatigueRate/effort vêm em 0-100 (simulatedVitalsFor). O formatPct antigo
   // multiplicava por 100 de novo e a tela exibia "8.900,0%".
-  it('formata fadiga/esforço na escala 0-100, sem multiplicar de novo', () => {
-    renderLayout({ fatigueRate: 89, effort: 92 })
+  it('formata fadiga/esforço na escala 0-100, sem multiplicar de novo', async () => {
+    await renderLayout({ fatigueRate: 89, effort: 92 })
     expect(screen.getByText('89,0%')).toBeInTheDocument()
     expect(screen.getByText('92,0%')).toBeInTheDocument()
     expect(screen.queryByText('8.900,0%')).not.toBeInTheDocument()
   })
 
   // Sem gênero cadastrado o ternário mandava TODO mundo pra "Feminino".
-  it('não inventa gênero quando o cadastro não tem o campo', () => {
-    renderLayout({})
+  it('não inventa gênero quando o cadastro não tem o campo', async () => {
+    await renderLayout({})
     expect(screen.getByText('Não informado')).toBeInTheDocument()
     expect(screen.queryByText('Feminino')).not.toBeInTheDocument()
   })
 
-  it('mostra o gênero real quando cadastrado', () => {
-    renderLayout({ gender: 'male' })
+  it('mostra o gênero real quando cadastrado', async () => {
+    await renderLayout({ gender: 'male' })
     expect(screen.getByText('Masculino')).toBeInTheDocument()
   })
 
   // Título sozinho lê como falha de carregamento; o estado vazio é informação.
-  it('declara os vazios de alergias e exames em vez de deixar a seção muda', () => {
-    renderLayout({})
+  it('declara os vazios de alergias e exames em vez de deixar a seção muda', async () => {
+    await renderLayout({})
     expect(screen.getByText('Nenhuma alergia registrada.')).toBeInTheDocument()
     expect(screen.getByText('Nenhum exame registrado.')).toBeInTheDocument()
   })
 
-  it('pinta uma chip por alergia quando existem', () => {
-    renderLayout({ allergies: ['Penicilina', 'Látex'] })
+  it('pinta uma chip por alergia quando existem', async () => {
+    await renderLayout({ allergies: ['Penicilina', 'Látex'] })
     expect(screen.getByText('Penicilina')).toBeInTheDocument()
     expect(screen.getByText('Látex')).toBeInTheDocument()
     expect(screen.queryByText('Nenhuma alergia registrada.')).not.toBeInTheDocument()
@@ -70,8 +70,8 @@ describe('WorkerDetailsLayout', () => {
 
   // Sem posição ao vivo o mini-mapa NÃO pina numa coordenada default (era a
   // mesma pra todo funcionário do quadro).
-  it('declara a ausência de posição em vez de pinar num ponto fixo', () => {
-    renderLayout({}, null)
+  it('declara a ausência de posição em vez de pinar num ponto fixo', async () => {
+    await renderLayout({}, null)
     expect(screen.getByText('Sem posição ao vivo')).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 // src/pages/dashboard/Dashboard.test.tsx
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
@@ -7,6 +7,7 @@ import { AuthProvider } from '@/hooks/useAuth'
 import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { dashboardApi, type DashboardSummary } from '@/services/dashboard'
 import { Dashboard } from './Dashboard'
+import { settled } from '@/test-utils/renderPage'
 
 // Posições live têm suite própria (useLivePositions.test); aqui devolvemos os
 // markers do fixture direto pra não abrir fetch/socket reais no jsdom.
@@ -140,8 +141,8 @@ afterEach(() => {
   window.localStorage.clear()
 })
 
-const renderAt = () =>
-  render(
+const renderAt = async () =>
+  settled(render(
     <SwiThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={['/']}>
@@ -149,7 +150,7 @@ const renderAt = () =>
         </MemoryRouter>
       </AuthProvider>
     </SwiThemeProvider>,
-  )
+  ))
 
 describe('Dashboard', () => {
   it('renders skeleton while loading', async () => {
@@ -160,11 +161,16 @@ describe('Dashboard', () => {
     vi.spyOn(dashboardApi, 'summary').mockReturnValue(
       pending as unknown as ReturnType<typeof dashboardApi.summary>,
     )
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-skeleton')).toBeInTheDocument()
     })
-    resolveFn({ data: FAKE_SUMMARY, error: null })
+    // Resolve dentro de act: solto, o setState que vem daqui cai DEPOIS do
+    // teste terminar, fora de qualquer escopo, e o aviso acaba atribuído ao
+    // teste seguinte.
+    await act(async () => {
+      resolveFn({ data: FAKE_SUMMARY, error: null })
+    })
   })
 
   it('renders the KPI row: 2x2 Funcionários grid + 3 donuts', async () => {
@@ -172,7 +178,7 @@ describe('Dashboard', () => {
       data: FAKE_SUMMARY,
       error: null,
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
     })
@@ -204,7 +210,7 @@ describe('Dashboard', () => {
       data: FAKE_SUMMARY,
       error: null,
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
     })
@@ -221,7 +227,7 @@ describe('Dashboard', () => {
       data: FAKE_SUMMARY,
       error: null,
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('activities-section')).toBeInTheDocument()
     })
@@ -238,7 +244,7 @@ describe('Dashboard', () => {
       data: FAKE_SUMMARY,
       error: null,
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('wear-alerts-section')).toBeInTheDocument()
     })
@@ -253,7 +259,7 @@ describe('Dashboard', () => {
       data: FAKE_SUMMARY,
       error: null,
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('wear-alerts-section')).toBeInTheDocument()
     })
@@ -271,7 +277,7 @@ describe('Dashboard', () => {
       data: FAKE_SUMMARY,
       error: null,
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('activities-section')).toBeInTheDocument()
     })
@@ -294,7 +300,7 @@ describe('Dashboard', () => {
       data: FAKE_SUMMARY,
       error: null,
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('weather-timeline')).toBeInTheDocument()
     })
@@ -321,7 +327,7 @@ describe('Dashboard', () => {
       },
       error: null,
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('weather-timeline')).toBeInTheDocument()
     })
@@ -335,7 +341,7 @@ describe('Dashboard', () => {
       data: null,
       error: { message: 'boom' },
     })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-error')).toBeInTheDocument()
     })
@@ -347,7 +353,7 @@ describe('Dashboard', () => {
       .spyOn(dashboardApi, 'summary')
       .mockResolvedValueOnce({ data: null, error: { message: 'transient' } })
       .mockResolvedValueOnce({ data: FAKE_SUMMARY, error: null })
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-error')).toBeInTheDocument()
     })
@@ -373,7 +379,11 @@ describe('Dashboard', () => {
         configurable: true,
         get: () => 900,
       })
-      window.dispatchEvent(new Event('resize'))
+      // O listener de Dimensions do react-native-web reage a este evento
+      // atualizando estado; fora de act o React acusa a atualização.
+      act(() => {
+        window.dispatchEvent(new Event('resize'))
+      })
     }
 
     afterEach(() => {
@@ -384,7 +394,7 @@ describe('Dashboard', () => {
     it('renders the tablet single-column top row when width < 1024', async () => {
       setViewportWidth(800)
       vi.spyOn(dashboardApi, 'summary').mockResolvedValue({ data: FAKE_SUMMARY, error: null })
-      renderAt()
+      await renderAt()
       await waitFor(() => {
         expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
       })
@@ -396,7 +406,7 @@ describe('Dashboard', () => {
     it('renders the existing desktop kpi-row when 1024 ≤ width < 1600', async () => {
       setViewportWidth(1366)
       vi.spyOn(dashboardApi, 'summary').mockResolvedValue({ data: FAKE_SUMMARY, error: null })
-      renderAt()
+      await renderAt()
       await waitFor(() => {
         expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
       })
@@ -408,7 +418,7 @@ describe('Dashboard', () => {
     it('renders the wide top-row (Map | Charts | KPIs) when width >= 1600', async () => {
       setViewportWidth(1920)
       vi.spyOn(dashboardApi, 'summary').mockResolvedValue({ data: FAKE_SUMMARY, error: null })
-      renderAt()
+      await renderAt()
       await waitFor(() => {
         expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
       })

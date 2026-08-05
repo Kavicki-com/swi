@@ -72,7 +72,7 @@ const POPULACAO = [
 ]
 
 const renderAt = async (route: string) => {
-  renderPage(<MonitoringLayout />, { route })
+  await renderPage(<MonitoringLayout />, { route })
   await act(async () => {})
 }
 
@@ -90,8 +90,8 @@ afterEach(() => {
 })
 
 describe('MonitoringLayout', () => {
-  it('renders without crashing', () => {
-    expect(() => renderPage(<MonitoringLayout />, { route: '/monitoring/alerts' })).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<MonitoringLayout />, { route: '/monitoring/alerts' })).resolves.toBeDefined()
   })
 
   it('/monitoring/alerts lista SÓ quem está em alerta de fadiga', async () => {

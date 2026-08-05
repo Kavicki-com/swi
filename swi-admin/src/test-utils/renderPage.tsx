@@ -5,7 +5,7 @@
 // useNavigate/useParams/useSearchParams calls) and seeds an authed
 // session in localStorage so RequireAuth guards don't redirect.
 import type { ReactElement } from 'react'
-import { render, type RenderResult } from '@testing-library/react'
+import { act, render, type RenderResult } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -32,6 +32,30 @@ export function clearSession() {
   window.localStorage.clear()
 }
 
+/**
+ * Drena o microtask em que `getSession()` do AuthProvider resolve, dentro de um
+ * escopo de `act`. Sem isso o React acusa "update not wrapped in act(...)": a
+ * promise resolve depois de `render()` retornar, fora de qualquer escopo.
+ *
+ * `renderPage` já faz isso sozinha. Este export é para as suítes que montam o
+ * AuthProvider por conta própria, porque precisam de uma árvore de rotas que o
+ * helper genérico não cobre.
+ */
+export async function settleAuth(): Promise<void> {
+  await act(async () => {})
+}
+
+/**
+ * Envolve o resultado de um `render()` próprio, drenando a sessão antes de
+ * devolvê-lo: `const renderAt = async () => settled(render(<X />))`.
+ * Existe para que helpers de arrow com retorno implícito não precisem virar
+ * bloco só para acomodar um await.
+ */
+export async function settled<T>(result: T): Promise<T> {
+  await settleAuth()
+  return result
+}
+
 type RenderPageOptions = {
   /** URL path to seed MemoryRouter with. Defaults to `/`. */
   route?: string
@@ -44,13 +68,21 @@ type RenderPageOptions = {
  * Render a page component with all the providers it needs at runtime. By
  * default mounts the page as the only route; pass `path` when the page
  * reads dynamic URL params and you want them resolved from `route`.
+ *
+ * Assíncrona de propósito: o AuthProvider chama `getSession()` ao montar, e
+ * essa promise resolve no primeiro microtask — depois de `render()` ter
+ * retornado, portanto fora de qualquer escopo de `act`. O `act` vazio abaixo
+ * drena esse microtask dentro do escopo certo, que é o que faz o React parar
+ * de acusar "update not wrapped in act(...)". Não há como drenar um microtask
+ * de forma síncrona: manter a assinatura antiga significaria silenciar o
+ * aviso em vez de resolver a corrida que ele denuncia.
  */
-export function renderPage(
+export async function renderPage(
   ui: ReactElement,
   { route = '/', path }: RenderPageOptions = {},
-): RenderResult {
+): Promise<RenderResult> {
   seedSession()
-  return render(
+  const result = render(
     <SwiThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={[route]}>
@@ -65,4 +97,6 @@ export function renderPage(
       </AuthProvider>
     </SwiThemeProvider>,
   )
+  await act(async () => {})
+  return result
 }

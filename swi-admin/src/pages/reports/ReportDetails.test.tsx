@@ -12,7 +12,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import type { ReactNode } from 'react'
 import { AuthProvider } from '@/hooks/useAuth'
-import { seedSession, clearSession } from '@/test-utils/renderPage'
+import { seedSession, clearSession, settled } from '@/test-utils/renderPage'
 import { ReportDetails } from './ReportDetails'
 
 const { getMock, addCommentMock, toastShow } = vi.hoisted(() => ({
@@ -56,10 +56,10 @@ const COMMENT_A = {
   createdAt: '22/07/2026',
 }
 
-function renderAt(comments = [] as Array<typeof COMMENT_A>) {
+async function renderAt(comments = [] as Array<typeof COMMENT_A>) {
   getMock.mockResolvedValue({ data: { ...BASE_REPORT, comments }, error: null })
   seedSession()
-  return render(
+  return settled(render(
     <SwiThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={['/reports/r_1']}>
@@ -71,7 +71,7 @@ function renderAt(comments = [] as Array<typeof COMMENT_A>) {
         </MemoryRouter>
       </AuthProvider>
     </SwiThemeProvider>,
-  )
+  ))
 }
 
 function typeComment(value: string) {
@@ -98,7 +98,7 @@ describe('ReportDetails — comentários', () => {
   })
 
   it('lista os comentários que o get traz (autor + corpo)', async () => {
-    renderAt([COMMENT_A])
+    await renderAt([COMMENT_A])
 
     await waitFor(() => {
       expect(screen.getByText('Mathias Campos')).toBeInTheDocument()
@@ -117,7 +117,7 @@ describe('ReportDetails — comentários', () => {
       },
       error: null,
     })
-    renderAt([COMMENT_A])
+    await renderAt([COMMENT_A])
 
     await waitFor(() => expect(screen.getByText('Mathias Campos')).toBeInTheDocument())
 
@@ -138,7 +138,7 @@ describe('ReportDetails — comentários', () => {
   })
 
   it('não chama o backend com comentário vazio/em branco', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(getMock).toHaveBeenCalled())
 
     typeComment('   ')
@@ -149,7 +149,7 @@ describe('ReportDetails — comentários', () => {
 
   it('toasta o erro do backend e mantém o texto digitado', async () => {
     addCommentMock.mockResolvedValue({ data: null, error: { message: 'Falha ao comentar' } })
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(getMock).toHaveBeenCalled())
 
     typeComment('Meu comentário')
@@ -166,7 +166,7 @@ describe('ReportDetails — comentários', () => {
 
 describe('ReportDetails — revisar', () => {
   it('"Revisar relatório" navega pra /reports/:id/edit', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(getMock).toHaveBeenCalled())
 
     fireEvent.click(screen.getByRole('button', { name: 'Revisar relatório' }))

@@ -13,7 +13,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { ApiError } from '@/services/api/http'
 import type { AssignableWorker, WorkOrderDetail } from '@/services/api/workOrders'
-import { seedSession, clearSession } from '@/test-utils/renderPage'
+import { seedSession, clearSession, settled } from '@/test-utils/renderPage'
 import { TaskForm } from './TaskForm'
 
 const { createMock, updateMock, getMock, assignableMock, uploadMock } = vi.hoisted(() => ({
@@ -96,9 +96,9 @@ function TaskDetailsProbe() {
   return <div data-testid="task-details-route">{id}</div>
 }
 
-function renderAt(route: string) {
+async function renderAt(route: string) {
   seedSession()
-  return render(
+  return settled(render(
     <SwiThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={[route]}>
@@ -111,7 +111,7 @@ function renderAt(route: string) {
         </MemoryRouter>
       </AuthProvider>
     </SwiThemeProvider>,
-  )
+  ))
 }
 
 function typeIn(testID: string, value: string) {
@@ -166,7 +166,7 @@ afterEach(clearSession)
 
 describe('TaskForm — criação', () => {
   it('exige o título antes de chamar o backend', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
     save()
@@ -178,7 +178,7 @@ describe('TaskForm — criação', () => {
   })
 
   it('exige ao menos 1 responsável antes de chamar o backend', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
 
     save()
@@ -190,7 +190,7 @@ describe('TaskForm — criação', () => {
   })
 
   it('com o Check List desligado, o payload NÃO traz a chave items', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     typeIn('task-summary', 'Resumo curto')
     await pickResponsible('Carlos Silva', 'Setor Leste')
@@ -209,7 +209,7 @@ describe('TaskForm — criação', () => {
   })
 
   it('com o Check List ligado, manda os itens preenchidos e sem id', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -229,7 +229,7 @@ describe('TaskForm — criação', () => {
 
   // Na criação nada está travado: o toggle liga e desliga a seção normalmente.
   it('o toggle liga e desliga a seção do Check List', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
 
     expect(screen.getByRole('switch', { name: 'Check List' })).not.toHaveAttribute(
       'aria-disabled',
@@ -246,7 +246,7 @@ describe('TaskForm — criação', () => {
   })
 
   it('o "+" acrescenta um card ao checklist e ambos vão no payload', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -265,7 +265,7 @@ describe('TaskForm — criação', () => {
   })
 
   it('remover um card tira o item do payload', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -286,7 +286,7 @@ describe('TaskForm — criação', () => {
   })
 
   it('navega pro detalhe da tarefa criada', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -303,7 +303,7 @@ describe('TaskForm — criação', () => {
   it('não navega pro detalhe quando o save resolve depois de o usuário sair', async () => {
     const pending = deferred<WorkOrderDetail>()
     createMock.mockReturnValue(pending.promise)
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -323,7 +323,7 @@ describe('TaskForm — criação', () => {
 
   it('mostra o erro do backend sem perder o formulário preenchido', async () => {
     createMock.mockRejectedValue(new ApiError('Já existe uma tarefa com esse título', 409))
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     typeIn('task-details-field', 'Detalhes digitados com esforço')
     await pickResponsible('Carlos Silva', 'Setor Leste')
@@ -341,7 +341,7 @@ describe('TaskForm — criação', () => {
   })
 
   it('converte a data digitada em dd/mm/aaaa para AAAA-MM-DD no payload', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     typeIn('task-start-date', '05/03/2026')
     typeIn('task-due-date', '19/12/2026')
@@ -358,7 +358,7 @@ describe('TaskForm — criação', () => {
   // A regex de formato aceita 31/02; quem barra é a validação de calendário.
   // Sem ela isso viraria '2026-02-31' e um 400 genérico do backend.
   it('barra data que não existe no calendário antes de chamar o backend', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     typeIn('task-due-date', '31/02/2026')
     await pickResponsible('Carlos Silva', 'Setor Leste')
@@ -372,7 +372,7 @@ describe('TaskForm — criação', () => {
   })
 
   it('converte o tempo estimado hh:mm em minutos', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     typeIn('task-estimated-time', '02:30')
     await pickResponsible('Carlos Silva', 'Setor Leste')
@@ -390,7 +390,7 @@ describe('TaskForm — criação', () => {
 // characters'), que o form exibia cru dentro do role="alert".
 describe('TaskForm — limites do DTO', () => {
   it('barra título acima de 200 caracteres com mensagem em pt', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'a'.repeat(201))
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -405,7 +405,7 @@ describe('TaskForm — limites do DTO', () => {
   })
 
   it('aceita título exatamente no limite de 200', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'a'.repeat(200))
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -415,7 +415,7 @@ describe('TaskForm — limites do DTO', () => {
   })
 
   it('barra resumo acima de 1000 caracteres', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     typeIn('task-summary', 'a'.repeat(1001))
     await pickResponsible('Carlos Silva', 'Setor Leste')
@@ -429,7 +429,7 @@ describe('TaskForm — limites do DTO', () => {
   })
 
   it('barra detalhes acima de 8000 caracteres', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     typeIn('task-details-field', 'a'.repeat(8001))
     await pickResponsible('Carlos Silva', 'Setor Leste')
@@ -459,7 +459,7 @@ describe('TaskForm — limites do DTO', () => {
         })),
       }),
     )
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => expect(screen.getByTestId('checklist-title-49')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar item ao checklist' }))
@@ -477,7 +477,7 @@ describe('TaskForm — limites do DTO', () => {
   })
 
   it('barra título de item do Check List acima de 200 caracteres', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -500,7 +500,7 @@ describe('TaskForm — acessibilidade', () => {
   // O `label` do Input do DS é visual puro: não associa nem serve de fallback.
   // Sem accessibilityLabel explícito, estes campos ficam sem nome nenhum.
   it('todo campo tem nome acessível', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
 
     for (const name of [
       'Título da tarefa',
@@ -515,7 +515,7 @@ describe('TaskForm — acessibilidade', () => {
   })
 
   it('a mensagem de erro é anunciada como alerta', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
 
     save()
 
@@ -527,7 +527,7 @@ describe('TaskForm — acessibilidade', () => {
 
 describe('TaskForm — anexos', () => {
   it('só sobe o arquivo no submit e manda a key em imageKeys', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -547,7 +547,7 @@ describe('TaskForm — anexos', () => {
 
   it('acumula os arquivos escolhidos em seleções separadas', async () => {
     uploadMock.mockResolvedValueOnce('order/a.jpg').mockResolvedValueOnce('order/b.png')
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -566,7 +566,7 @@ describe('TaskForm — anexos', () => {
     uploadMock.mockRejectedValue(
       new ApiError('O link de envio expirou. Selecione o arquivo novamente.', 403),
     )
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
     fireEvent.change(screen.getByTestId('task-file-input'), { target: { files: [jpeg()] } })
@@ -584,7 +584,7 @@ describe('TaskForm — anexos', () => {
   // — os 25 já tinham subido e viravam órfãos no bucket, sem tarefa nenhuma
   // referenciando as keys. Diferente da falha de rede (rara), isto é trivial.
   it('recusa mais de 20 anexos sem subir NENHUM arquivo', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -607,7 +607,7 @@ describe('TaskForm — anexos', () => {
   })
 
   it('recusa a seleção que ESTOURA o teto somada aos anexos já escolhidos', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     const input = screen.getByTestId('task-file-input')
 
     const first = Array.from({ length: 18 }, (_, i) => jpeg(`a_${i}.jpg`))
@@ -623,7 +623,7 @@ describe('TaskForm — anexos', () => {
 
   it('aceita exatamente 20 anexos', async () => {
     uploadMock.mockImplementation(async (f: File) => `order/${f.name}`)
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -640,7 +640,7 @@ describe('TaskForm — anexos', () => {
   })
 
   it('sem anexo, o payload não traz imageKeys', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -657,7 +657,7 @@ describe('TaskForm — responsáveis', () => {
   // seleção anterior. Com o picker reaproveitado (sem `key`), a semente ficaria
   // presa no valor da primeira montagem — [] — e Carlos sumiria do payload.
   it('reabrir o picker parte da seleção já confirmada em vez de zerá-la', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -677,7 +677,7 @@ describe('TaskForm — responsáveis', () => {
   })
 
   it('cancelar o picker preserva a seleção anterior', async () => {
-    renderAt('/tasks/new')
+    await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
     await pickResponsible('Carlos Silva', 'Setor Leste')
 
@@ -698,7 +698,7 @@ describe('TaskForm — anexos na edição (imageKeys no detail)', () => {
     getMock.mockResolvedValue(
       detail({ images: ['signed:order/a.jpg'], imageKeys: ['order/a.jpg'] }),
     )
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -720,7 +720,7 @@ describe('TaskForm — anexos na edição (imageKeys no detail)', () => {
         imageKeys: ['order/a.jpg', 'order/b.png'],
       }),
     )
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -735,7 +735,7 @@ describe('TaskForm — anexos na edição (imageKeys no detail)', () => {
   it('remover um arquivo recém-escolhido o tira do upload e do PATCH', async () => {
     uploadMock.mockImplementation(async (f: File) => `order/${f.name}`)
     getMock.mockResolvedValue(detail({ images: [], imageKeys: [] }))
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -754,7 +754,7 @@ describe('TaskForm — anexos na edição (imageKeys no detail)', () => {
     getMock.mockResolvedValue(
       detail({ images: ['signed:order/a.jpg'], imageKeys: ['order/a.jpg'] }),
     )
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -770,7 +770,7 @@ describe('TaskForm — anexos na edição (imageKeys no detail)', () => {
     getMock.mockResolvedValue(
       detail({ images: nineteen.map((k) => `signed:${k}`), imageKeys: nineteen }),
     )
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -788,7 +788,7 @@ describe('TaskForm — anexos na edição (imageKeys no detail)', () => {
 
 describe('TaskForm — edição', () => {
   it('pré-carrega a tarefa e manda os itens COM id no PATCH', async () => {
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
 
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
@@ -811,7 +811,7 @@ describe('TaskForm — edição', () => {
   })
 
   it('converte as datas ISO do detalhe para AAAA-MM-DD no PATCH', async () => {
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -831,7 +831,7 @@ describe('TaskForm — edição', () => {
   // toggle sumia com a seção, o usuário salvava e o Check List reaparecia
   // intacto no detalhe — a UI oferecia uma ação que o contrato não executa.
   it('numa tarefa que já tem itens, o toggle não desliga o Check List', async () => {
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => expect(screen.getByTestId('checklist-title-0')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('switch', { name: 'Check List' }))
@@ -847,7 +847,7 @@ describe('TaskForm — edição', () => {
   })
 
   it('explica por que o Check List não pode ser desligado na edição', async () => {
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => expect(screen.getByTestId('checklist-title-0')).toBeInTheDocument())
 
     expect(screen.getByTestId('checklist-locked-hint')).toHaveTextContent(
@@ -856,7 +856,7 @@ describe('TaskForm — edição', () => {
   })
 
   it('o PATCH continua mandando os itens quando o toggle está travado', async () => {
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => expect(screen.getByTestId('checklist-title-0')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('switch', { name: 'Check List' }))
@@ -872,7 +872,7 @@ describe('TaskForm — edição', () => {
   // itens o form não trava nada e o PATCH segue omitindo a chave `items`.
   it('tarefa sem itens não trava o toggle e o PATCH omite items', async () => {
     getMock.mockResolvedValue(detail({ items: [] }))
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -916,7 +916,7 @@ describe('TaskForm — edição', () => {
         ],
       }),
     )
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => expect(screen.getByTestId('checklist-title-1')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Remover item 1 do Check List' }))
@@ -932,7 +932,7 @@ describe('TaskForm — edição', () => {
 
   it('preserva um setor que não está na lista provisória', async () => {
     getMock.mockResolvedValue(detail({ sector: 'Setor Alfa' }))
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -944,7 +944,7 @@ describe('TaskForm — edição', () => {
   })
 
   it('navega pro detalhe depois de salvar a edição', async () => {
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
     await waitFor(() => {
       expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
     })
@@ -958,7 +958,7 @@ describe('TaskForm — edição', () => {
 
   it('mostra a mensagem do ApiError quando a carga inicial falha', async () => {
     getMock.mockRejectedValue(new ApiError('Tarefa não encontrada', 404))
-    renderAt('/tasks/wo_7/edit')
+    await renderAt('/tasks/wo_7/edit')
 
     await waitFor(() => {
       expect(screen.getByTestId('task-form-error')).toHaveTextContent('Tarefa não encontrada')

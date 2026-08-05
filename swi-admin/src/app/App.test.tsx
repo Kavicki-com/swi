@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { App } from './App'
+import { settleAuth } from '@/test-utils/renderPage'
 
 // Dublê marcável: o componente real só injeta CSS, que não deixa rastro
 // observável no jsdom (ver o teste do autofill abaixo).
@@ -9,12 +10,13 @@ vi.mock('./GlobalStyles', () => ({
 }))
 
 describe('App', () => {
-  it('renders inside SwiThemeProvider without crashing', () => {
+  it('renders inside SwiThemeProvider without crashing', async () => {
     render(
       <MemoryRouter>
         <App />
       </MemoryRouter>,
     )
+    await settleAuth()
     expect(screen.getByTestId('app-root')).toBeInTheDocument()
   })
 
@@ -28,12 +30,13 @@ describe('App', () => {
   //
   // O que este teste pega é o modo silencioso de perder a correção: alguém tira
   // <GlobalStyles /> do App e nada mais quebra.
-  it('monta o GlobalStyles, que neutraliza o autofill do Chrome', () => {
+  it('monta o GlobalStyles, que neutraliza o autofill do Chrome', async () => {
     render(
       <MemoryRouter>
         <App />
       </MemoryRouter>,
     )
+    await settleAuth()
     expect(screen.getByTestId('global-styles')).toBeInTheDocument()
   })
 })

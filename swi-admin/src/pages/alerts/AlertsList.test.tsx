@@ -26,7 +26,7 @@ vi.mock('@/hooks/useEvacuation', () => ({
 describe('AlertsList', () => {
   afterEach(clearSession)
 
-  it('renders without crashing', () => {
-    expect(() => renderPage(<AlertsList />, { route: '/alerts' })).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<AlertsList />, { route: '/alerts' })).resolves.toBeDefined()
   })
 })

@@ -109,7 +109,7 @@ const DTO = {
 }
 
 const renderSettings = async () => {
-  renderPage(<UserSettings />, { route: '/user/settings' })
+  await renderPage(<UserSettings />, { route: '/user/settings' })
   // Flush do getSession do AuthProvider + do profileApi.me do mount.
   await act(async () => {})
 }
@@ -130,7 +130,7 @@ afterEach(() => {
 describe('UserSettings', () => {
   it('renders without crashing', async () => {
     meMock.mockResolvedValue({ data: null, error: null })
-    expect(() => renderPage(<UserSettings />, { route: '/user/settings' })).not.toThrow()
+    await expect(renderPage(<UserSettings />, { route: '/user/settings' })).resolves.toBeDefined()
     await act(async () => {})
   })
 

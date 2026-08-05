@@ -3,7 +3,7 @@
 // assertions live in dedicated tests; this guard catches regressions
 // from DS bumps, route refactors, and import-graph changes.
 // vitest globals (describe/it/expect/afterEach) are available via globals: true
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { MapsGeneral } from './MapsGeneral'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 
@@ -79,8 +79,22 @@ describe('MapsGeneral', () => {
   beforeEach(() => flyToSpy.mockClear())
   afterEach(clearSession)
 
-  it('renders without crashing', () => {
-    expect(() => renderPage(<MapsGeneral />, { route: '/maps/general' })).not.toThrow()
+  it('renders without crashing', async () => {
+    const { unmount } = await renderPage(<MapsGeneral />, { route: '/maps/general' })
+    expect(screen.getByTestId('maps-general')).toBeInTheDocument()
+    // Desmonta DENTRO do teste: o efeito do radar externo resolve num
+    // microtask encadeado e, se a limpeza ficar para o afterEach, a
+    // atualização cai já durante o teste seguinte — que é onde o React acusa,
+    // apontando para o teste errado.
+    // Um turno de macrotask antes de desmontar: o efeito do radar externo
+    // encadeia .then, e drenar so microtask deixa a ultima etapa pendente,
+    // que entao resolve num root ja desmontado.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    await act(async () => {
+      unmount()
+    })
   })
 
   // QA Web #3 (30/07/2026): "ao clicar no ícone de localização para ver o
@@ -91,16 +105,35 @@ describe('MapsGeneral', () => {
   // O usuário caía num mapa vazio. Agora `?focus=<id>` liga a camada e
   // centraliza no funcionário.
   it('com ?focus liga a camada de operadores e voa até o funcionário (QA Web #3)', async () => {
-    renderPage(<MapsGeneral />, { route: '/maps/general?focus=w1' })
+    const { unmount } = await renderPage(<MapsGeneral />, {
+      route: '/maps/general?focus=w1',
+    })
 
     // O marcador de w1 vem do mock de useLivePositions no topo do arquivo.
     await waitFor(() => expect(flyToSpy).toHaveBeenCalled())
     expect(flyToSpy.mock.calls[0]?.[0]).toMatchObject({ center: [-46.63, -23.55] })
+
+    // A tela deixa trabalho pendente depois do voo (o radar externo encadeia
+    // .then, e o mapa agenda no tick seguinte). Drenar micro + macrotask e
+    // desmontar aqui mantém tudo no escopo deste teste; deixar para o
+    // afterEach faz a atualização cair num root já desmontado, e o React a
+    // reporta como "update to Root", sem pilha e atribuída a outro teste.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    await act(async () => {
+      unmount()
+    })
   })
 
   it('sem ?focus nao voa pra ninguem (comportamento antigo preservado)', async () => {
-    renderPage(<MapsGeneral />, { route: '/maps/general' })
-    await new Promise((r) => setTimeout(r, 0))
+    await renderPage(<MapsGeneral />, { route: '/maps/general' })
+    // Flush dentro de act: cru, qualquer efeito do mapa que caia neste tick
+    // atualiza estado fora de escopo, e o React atribui o aviso ao teste
+    // ANTERIOR, que foi onde ele apareceu.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
     expect(flyToSpy).not.toHaveBeenCalled()
   })
 
@@ -115,7 +148,7 @@ describe('MapsGeneral', () => {
   // Só reproduz com os filtros ligados porque, desligados, os efeitos saem
   // cedo e nem chegam a registrar cleanup. É o passo a passo do QA.
   it('não derruba a tela ao desmontar com o mapa de calor ligado (QA Web #8)', async () => {
-    const view = renderPage(<MapsGeneral />, { route: '/maps/general' })
+    const view = await renderPage(<MapsGeneral />, { route: '/maps/general' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Mapa de calor' }))
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Produtividade' }))

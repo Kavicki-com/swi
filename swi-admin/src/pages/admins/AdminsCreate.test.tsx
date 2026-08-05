@@ -22,9 +22,9 @@ function finalizar() {
 }
 
 describe('AdminsCreate — submit', () => {
-  it('sem obrigatórios não chama a api', () => {
+  it('sem obrigatórios não chama a api', async () => {
     const create = vi.spyOn(employeesApi, 'create')
-    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     finalizar()
 
@@ -35,7 +35,7 @@ describe('AdminsCreate — submit', () => {
     const create = vi
       .spyOn(employeesApi, 'create')
       .mockResolvedValue({ data: { id: 'n' } as never, error: null })
-    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
@@ -63,7 +63,7 @@ describe('AdminsCreate — submit', () => {
 
   it('e-mail inválido não chama create e mostra erro', async () => {
     const create = vi.spyOn(employeesApi, 'create')
-    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'abc')
@@ -77,7 +77,7 @@ describe('AdminsCreate — submit', () => {
 
   it('senha com menos de 8 caracteres não chama create', async () => {
     const create = vi.spyOn(employeesApi, 'create')
-    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
@@ -93,7 +93,7 @@ describe('AdminsCreate — submit', () => {
     const create = vi
       .spyOn(adminsApi, 'create')
       .mockResolvedValue({ data: { id: 'n' } as never, error: null })
-    renderPage(<AdminsCreate onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Ana Admin')
     typeIn('admins-create-email', 'ana@x.com')
@@ -110,7 +110,7 @@ describe('AdminsCreate — submit', () => {
       error: null,
     })
     const onBack = vi.fn()
-    renderPage(<AdminsCreate subject="funcionário" onBack={onBack} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={onBack} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')

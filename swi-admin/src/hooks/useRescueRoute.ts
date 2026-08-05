@@ -23,11 +23,23 @@ export function useRescueRoute(from: LngLat | null, to: LngLat | null): RescueRo
     error: false,
   })
 
+  // As pontas chegam num array NOVO a cada poll de posições, então depender das
+  // tuplas faria o efeito rodar a cada render. Os escalares saem daqui e as
+  // tuplas são remontadas dentro do efeito: a lista de dependências fica
+  // completa e checável pelo lint, sem suppression e sem busca espúria.
+  const fromLng = from?.[0]
+  const fromLat = from?.[1]
+  const toLng = to?.[0]
+  const toLat = to?.[1]
+
   useEffect(() => {
     let cancelled = false
     setState({ route: null, loading: true, error: false })
-    if (!from || !to) return
-    fetchRoute({ from, to })
+    // Comparação com undefined, não checagem de truthiness: 0 é longitude e
+    // latitude legítimas (Greenwich, Equador) e não pode contar como ausente.
+    if (fromLng === undefined || fromLat === undefined) return
+    if (toLng === undefined || toLat === undefined) return
+    fetchRoute({ from: [fromLng, fromLat], to: [toLng, toLat] })
       .then((route) => {
         if (cancelled) return
         if (route === null) {
@@ -43,8 +55,7 @@ export function useRescueRoute(from: LngLat | null, to: LngLat | null): RescueRo
     return () => {
       cancelled = true
     }
-    // Re-fetch on coordinate changes only (object identity may flap each render).
-  }, [from?.[0], from?.[1], to?.[0], to?.[1]])
+  }, [fromLng, fromLat, toLng, toLat])
 
   return state
 }

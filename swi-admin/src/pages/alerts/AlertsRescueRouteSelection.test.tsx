@@ -9,9 +9,7 @@ import { clearSession, renderPage } from '@/test-utils/renderPage'
 describe('AlertsRescueRouteSelection', () => {
   afterEach(clearSession)
 
-  it('renders without crashing', () => {
-    expect(() =>
-      renderPage(<AlertsRescueRouteSelection />, { route: '/alerts/e1/rescue', path: '/alerts/:employeeId/rescue' }),
-    ).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<AlertsRescueRouteSelection />, { route: '/alerts/e1/rescue', path: '/alerts/:employeeId/rescue' })).resolves.toBeDefined()
   })
 })

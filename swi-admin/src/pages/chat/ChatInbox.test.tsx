@@ -134,7 +134,7 @@ describe('ChatInbox', () => {
   // dependia do objeto inteiro. Nao era so visual: cada reconstrucao refazia o
   // fetch dos tiles de satelite da ESRI, uma requisicao por tecla.
   it('nao reconstroi o mini-mapa a cada tecla digitada no composer', async () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     await waitFor(() => expect(maplibre.MapCtor).toHaveBeenCalledTimes(1))
 
     const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
@@ -146,31 +146,31 @@ describe('ChatInbox', () => {
     expect(maplibre.MapCtor).toHaveBeenCalledTimes(1)
   })
 
-  it('renders without crashing', () => {
-    expect(() => renderPage(<ChatInbox />, { route: '/chat' })).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<ChatInbox />, { route: '/chat' })).resolves.toBeDefined()
   })
 
-  it('lists the real conversation by contact name', () => {
-    renderPage(<ChatInbox />, { route: '/chat' })
+  it('lists the real conversation by contact name', async () => {
+    await renderPage(<ChatInbox />, { route: '/chat' })
     // Name appears in the left contact list.
     expect(screen.getAllByText('Romulo Cardoso').length).toBeGreaterThan(0)
   })
 
   it('pins the default conversation into the URL when no param is present', async () => {
-    renderPage(<ChatInbox />, { route: '/chat' })
+    await renderPage(<ChatInbox />, { route: '/chat' })
     await waitFor(() => expect(nav.spy).toHaveBeenCalledWith('/chat/me%23w1', { replace: true }))
   })
 
-  it('does not pin (and stays empty) when the inbox is empty', () => {
+  it('does not pin (and stays empty) when the inbox is empty', async () => {
     setChat({ conversations: [], messagesByConv: {}, loadStatus: 'empty' })
-    renderPage(<ChatInbox />, { route: '/chat' })
+    await renderPage(<ChatInbox />, { route: '/chat' })
     expect(nav.spy).not.toHaveBeenCalled()
     expect(screen.getByText('Selecione uma conversa para visualizar as mensagens')).toBeTruthy()
   })
 
   it('shows an error surface (not empty) when the load failed', async () => {
     setChat({ conversations: [], messagesByConv: {}, loadStatus: 'error' })
-    renderPage(<ChatInbox />, { route: '/chat' })
+    await renderPage(<ChatInbox />, { route: '/chat' })
     expect(screen.getByText('Não foi possível carregar as conversas.')).toBeTruthy()
     await waitFor(() =>
       expect(toast.show).toHaveBeenCalledWith('Não foi possível carregar as conversas.'),
@@ -178,25 +178,25 @@ describe('ChatInbox', () => {
   })
 
   it('opens the selected conversation on mount', async () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     await waitFor(() => expect(openConversation).toHaveBeenCalledWith('me#w1'))
   })
 
-  it('closes the active conversation on unmount (frees openConvRef)', () => {
-    const { unmount } = renderPage(<ChatInbox />, CONV_ROUTE)
+  it('closes the active conversation on unmount (frees openConvRef)', async () => {
+    const { unmount } = await renderPage(<ChatInbox />, CONV_ROUTE)
     expect(closeConversation).not.toHaveBeenCalled()
     unmount()
     expect(closeConversation).toHaveBeenCalledTimes(1)
   })
 
-  it('selecting a conversation navigates with the %23-encoded id', () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+  it('selecting a conversation navigates with the %23-encoded id', async () => {
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     fireEvent.click(screen.getByLabelText('Conversar com Romulo Cardoso'))
     expect(nav.spy).toHaveBeenCalledWith('/chat/me%23w1')
   })
 
   it('sends the typed text via the provider without local append', async () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
     fireEvent.change(input, { target: { value: 'Nova mensagem de teste' } })
     fireEvent.click(screen.getByText('Enviar'))
@@ -211,7 +211,7 @@ describe('ChatInbox', () => {
 
   it('keeps the draft and toasts on a send error', async () => {
     send.mockResolvedValueOnce({ error: { message: 'falhou' } })
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
     fireEvent.change(input, { target: { value: 'Mensagem que falha' } })
     fireEvent.click(screen.getByText('Enviar'))
@@ -225,9 +225,9 @@ describe('ChatInbox', () => {
   // outro nao oferece editar.
   const MY_MSG: Message = { ...MSG, id: 'm-mine', senderId: 'me', body: 'Texto original' }
 
-  it('editar carrega a mensagem no campo e troca o CTA para salvar', () => {
+  it('editar carrega a mensagem no campo e troca o CTA para salvar', async () => {
     setChat({ messagesByConv: { 'me#w1': [MY_MSG] } })
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }))
@@ -239,7 +239,7 @@ describe('ChatInbox', () => {
 
   it('salvar a edicao chama editMessage e volta ao modo normal', async () => {
     setChat({ messagesByConv: { 'me#w1': [MY_MSG] } })
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }))
@@ -257,9 +257,9 @@ describe('ChatInbox', () => {
 
   // Sem saida explicita, quem entra na edicao por engano fica preso: o CTA nao
   // envia mais, e apagar o texto nao devolve o modo normal.
-  it('cancelar a edicao limpa o campo e devolve o CTA de enviar', () => {
+  it('cancelar a edicao limpa o campo e devolve o CTA de enviar', async () => {
     setChat({ messagesByConv: { 'me#w1': [MY_MSG] } })
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }))
@@ -274,8 +274,8 @@ describe('ChatInbox', () => {
   // QA Web #9: o form de denúncia abre num modal da página, como o
   // SupportModal — montado dentro da bolha ele seria recortado pelo
   // overflowX hidden do quadro de mensagens.
-  it('denunciar pela bolha abre o modal de denúncia', () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+  it('denunciar pela bolha abre o modal de denúncia', async () => {
+    await renderPage(<ChatInbox />, CONV_ROUTE)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Denunciar' }))
@@ -283,22 +283,22 @@ describe('ChatInbox', () => {
     expect(screen.getByText('Denunciar mensagem')).toBeTruthy()
   })
 
-  it('does not send when both the draft and the pending image are empty', () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+  it('does not send when both the draft and the pending image are empty', async () => {
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     fireEvent.click(screen.getByText('Enviar'))
     expect(send).not.toHaveBeenCalled()
   })
 
-  it('the attach button opens the hidden file picker', () => {
+  it('the attach button opens the hidden file picker', async () => {
     const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     fireEvent.click(screen.getByTestId('chat-attach'))
     expect(clickSpy).toHaveBeenCalled()
     clickSpy.mockRestore()
   })
 
-  it('shows the attachment preview + remove control after picking a file', () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+  it('shows the attachment preview + remove control after picking a file', async () => {
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     const fileInput = screen.getByTestId('chat-file-input') as HTMLInputElement
     const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
     fireEvent.change(fileInput, { target: { files: [file] } })
@@ -307,7 +307,7 @@ describe('ChatInbox', () => {
   })
 
   it('sends the picked image as the third arg to the provider', async () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     const input = screen.getByPlaceholderText('Digite aqui sua mensagem') as HTMLInputElement
     fireEvent.change(input, { target: { value: 'Com foto' } })
     const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
@@ -317,7 +317,7 @@ describe('ChatInbox', () => {
   })
 
   it('allows an image-only send (empty draft + a pending image)', async () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
     fireEvent.click(screen.getByText('Enviar'))
@@ -325,7 +325,7 @@ describe('ChatInbox', () => {
   })
 
   it('clears the pending image after a successful send', async () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
     fireEvent.click(screen.getByText('Enviar'))
@@ -334,7 +334,7 @@ describe('ChatInbox', () => {
 
   it('keeps the pending image on a send error', async () => {
     send.mockResolvedValueOnce({ error: { message: 'falhou' } })
-    renderPage(<ChatInbox />, CONV_ROUTE)
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
     fireEvent.click(screen.getByText('Enviar'))
@@ -342,8 +342,8 @@ describe('ChatInbox', () => {
     expect(screen.getByText('foto.jpg')).toBeTruthy()
   })
 
-  it('the remove control clears the pending image', () => {
-    renderPage(<ChatInbox />, CONV_ROUTE)
+  it('the remove control clears the pending image', async () => {
+    await renderPage(<ChatInbox />, CONV_ROUTE)
     const file = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByTestId('chat-file-input'), { target: { files: [file] } })
     expect(screen.getByText('foto.jpg')).toBeTruthy()
@@ -351,8 +351,8 @@ describe('ChatInbox', () => {
     expect(screen.queryByText('foto.jpg')).toBeNull()
   })
 
-  it('"Novo Chat" swaps the left list to the directory contacts', () => {
-    renderPage(<ChatInbox />, { route: '/chat' })
+  it('"Novo Chat" swaps the left list to the directory contacts', async () => {
+    await renderPage(<ChatInbox />, { route: '/chat' })
     expect(screen.queryByText('Beatriz Ramos')).toBeNull()
     fireEvent.click(screen.getByText('Novo Chat'))
     expect(screen.getByText('Beatriz Ramos')).toBeTruthy()
@@ -376,7 +376,7 @@ describe('ChatBubble', () => {
   })
   afterEach(clearSession)
 
-  it('renders the image attachment when the message has an imageUri', () => {
+  it('renders the image attachment when the message has an imageUri', async () => {
     const message: ChatMessage = {
       id: 'm-img',
       text: '',
@@ -384,7 +384,7 @@ describe('ChatBubble', () => {
       time: '10:30',
       imageUri: 'blob:some-attachment',
     }
-    renderPage(<ChatBubble message={message} contact={CONTACT} />)
+    await renderPage(<ChatBubble message={message} contact={CONTACT} />)
     expect(screen.getByTestId('chat-bubble-image')).toBeTruthy()
   })
 
@@ -405,8 +405,8 @@ describe('ChatBubble', () => {
     imageUri: 'blob:some-attachment',
   }
 
-  it('o anexo tem recorte proprio no raio', () => {
-    renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
+  it('o anexo tem recorte proprio no raio', async () => {
+    await renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
 
     const wrapper = screen.getByTestId('chat-bubble-image').parentElement as HTMLElement
     expect(wrapper.style.overflowX).toBe('hidden')
@@ -416,8 +416,8 @@ describe('ChatBubble', () => {
   // Copiar uma mensagem sem texto copiaria o que? Oferecer o item e recriar o
   // defeito que o QA reportou: controle que existe e nao faz nada. Editar cai
   // junto porque o backend recusa corpo vazio.
-  it('mensagem so com imagem nao oferece copiar nem editar', () => {
-    renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
+  it('mensagem so com imagem nao oferece copiar nem editar', async () => {
+    await renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
@@ -426,8 +426,8 @@ describe('ChatBubble', () => {
     expect(screen.getByRole('menuitem', { name: 'Excluir' })).toBeTruthy()
   })
 
-  it('a bolha nao recorta, senao o painel do popover sumiria', () => {
-    renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
+  it('a bolha nao recorta, senao o painel do popover sumiria', async () => {
+    await renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
 
     const bubble = screen.getByTestId('chat-bubble') as HTMLElement
     expect(bubble.style.borderRadius).not.toBe('')
@@ -435,19 +435,19 @@ describe('ChatBubble', () => {
     expect(bubble.style.overflow).toBe('')
   })
 
-  it('does not render an image box for a text-only message', () => {
+  it('does not render an image box for a text-only message', async () => {
     const message: ChatMessage = {
       id: 'm-text-only',
       text: 'Sem anexo aqui.',
       sender: 'them',
       time: '10:32',
     }
-    renderPage(<ChatBubble message={message} contact={CONTACT} />)
+    await renderPage(<ChatBubble message={message} contact={CONTACT} />)
     expect(screen.queryByTestId('chat-bubble-image')).toBeNull()
     expect(screen.getByText('Sem anexo aqui.')).toBeTruthy()
   })
 
-  it('renders both the image and the text when the message has both', () => {
+  it('renders both the image and the text when the message has both', async () => {
     const message: ChatMessage = {
       id: 'm-img-text',
       text: 'Segue a foto do sensor.',
@@ -455,7 +455,7 @@ describe('ChatBubble', () => {
       time: '10:31',
       imageUri: 'blob:some-attachment',
     }
-    renderPage(<ChatBubble message={message} contact={CONTACT} />)
+    await renderPage(<ChatBubble message={message} contact={CONTACT} />)
     expect(screen.getByTestId('chat-bubble-image')).toBeTruthy()
     expect(screen.getByText('Segue a foto do sensor.')).toBeTruthy()
   })
@@ -482,7 +482,7 @@ describe('ChatBubble', () => {
     const writeText = vi.fn(async () => {})
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 
-    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
+    await renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Copiar' }))
 
@@ -504,8 +504,8 @@ describe('ChatBubble', () => {
     time: '10:41',
   }
 
-  it('o menu da minha mensagem oferece editar, copiar e excluir, sem denunciar', () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} onReport={vi.fn()} />)
+  it('o menu da minha mensagem oferece editar, copiar e excluir, sem denunciar', async () => {
+    await renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} onReport={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
@@ -518,8 +518,8 @@ describe('ChatBubble', () => {
   // A confirmacao mora DENTRO do painel, por decisao do usuario: o menu troca
   // de conteudo em vez de abrir modal por cima. Excluir mensagem nao merece
   // segunda camada, e o modal roubaria o contexto de qual bolha e.
-  it('excluir pede confirmacao no proprio painel antes de chamar o backend', () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+  it('excluir pede confirmacao no proprio painel antes de chamar o backend', async () => {
+    await renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir' }))
@@ -529,7 +529,7 @@ describe('ChatBubble', () => {
   })
 
   it('confirmar exclusao chama deleteMessage com a conversa e a mensagem', async () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+    await renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir' }))
@@ -540,8 +540,8 @@ describe('ChatBubble', () => {
 
   // Reabrir o menu depois de desistir tem que voltar ao estado normal, senao a
   // proxima abertura ja comeca com o dedo em cima do botao destrutivo.
-  it('desistir volta o painel para as acoes normais', () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+  it('desistir volta o painel para as acoes normais', async () => {
+    await renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir' }))
@@ -563,25 +563,25 @@ describe('ChatBubble', () => {
     deleted: true,
   }
 
-  it('mensagem excluida vira lapide no lugar do texto', () => {
-    renderPage(<ChatBubble message={DELETED_MESSAGE} contact={CONTACT} />)
+  it('mensagem excluida vira lapide no lugar do texto', async () => {
+    await renderPage(<ChatBubble message={DELETED_MESSAGE} contact={CONTACT} />)
 
     expect(screen.getByText('Mensagem excluída')).toBeTruthy()
   })
 
   // Sem isso o menu abriria oferecendo editar e excluir uma mensagem que ja
   // nao existe, e a segunda exclusao bateria no backend a toa.
-  it('na mensagem excluida o menu nao abre', () => {
-    renderPage(<ChatBubble message={DELETED_MESSAGE} contact={CONTACT} />)
+  it('na mensagem excluida o menu nao abre', async () => {
+    await renderPage(<ChatBubble message={DELETED_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
     expect(screen.queryByRole('menuitem')).toBeNull()
   })
 
-  it('mensagem editada ganha a marca "editada"', () => {
+  it('mensagem editada ganha a marca "editada"', async () => {
     const edited: ChatMessage = { ...MY_MESSAGE, id: 'm-ed', edited: true }
-    renderPage(<ChatBubble message={edited} contact={CONTACT} />)
+    await renderPage(<ChatBubble message={edited} contact={CONTACT} />)
 
     expect(screen.getByText('editada')).toBeTruthy()
   })
@@ -592,8 +592,8 @@ describe('ChatBubble', () => {
   // icones de Copiar e Excluir ficavam tapados pela mensagem de baixo. O
   // z-index 100 que o painel tem por dentro nao resolve, porque so vale dentro
   // do contexto da propria bolha.
-  it('a bolha sobe na pilha enquanto o menu esta aberto', () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+  it('a bolha sobe na pilha enquanto o menu esta aberto', async () => {
+    await renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
     const linha = screen.getByTestId('chat-bubble-row') as HTMLElement
     expect(linha.style.zIndex).toBe('')
 
@@ -607,8 +607,8 @@ describe('ChatBubble', () => {
   // e a hora vem depois do gatilho na ordem do DOM, sao z-index 0 posicionados,
   // e pintavam por cima do painel de confirmacao. Visto no navegador em
   // 31/07/2026. Sao duas disputas distintas, entao dois testes.
-  it('o gatilho sobe dentro da linha enquanto o menu esta aberto', () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+  it('o gatilho sobe dentro da linha enquanto o menu esta aberto', async () => {
+    await renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
     const ancora = screen.getByTestId('chat-bubble-menu-anchor') as HTMLElement
     expect(ancora.style.zIndex).toBe('')
 
@@ -617,8 +617,8 @@ describe('ChatBubble', () => {
     expect(Number(ancora.style.zIndex)).toBeGreaterThan(0)
   })
 
-  it('a linha que hospeda o menu sobe acima do rodape', () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+  it('a linha que hospeda o menu sobe acima do rodape', async () => {
+    await renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
     const linha = screen.getByTestId('chat-bubble-line') as HTMLElement
     expect(linha.style.zIndex).toBe('')
 
@@ -631,8 +631,8 @@ describe('ChatBubble', () => {
   // onde os pontinhos moram. Minha mensagem cola na borda direita da caixa do
   // chat, que tem overflowX hidden: crescer para a direita corta o painel.
   // Foi exatamente o que apareceu no navegador em 31/07/2026.
-  it('na minha mensagem o painel cresce para a esquerda', () => {
-    renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
+  it('na minha mensagem o painel cresce para a esquerda', async () => {
+    await renderPage(<ChatBubble message={MY_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
@@ -641,8 +641,8 @@ describe('ChatBubble', () => {
     expect(panel.style.left).toBe('')
   })
 
-  it('na mensagem do outro o painel cresce para a direita', () => {
-    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
+  it('na mensagem do outro o painel cresce para a direita', async () => {
+    await renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
@@ -654,8 +654,8 @@ describe('ChatBubble', () => {
   // QA Web #9 (04/08/2026): na mensagem do OUTRO entra "Denunciar" ao lado de
   // copiar. Na minha não: o backend recusa denunciar a própria mensagem, e
   // oferecer o item seria recriar o controle morto do QA Web #4.
-  it('o menu da mensagem do outro oferece copiar e denunciar', () => {
-    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
+  it('o menu da mensagem do outro oferece copiar e denunciar', async () => {
+    await renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
@@ -667,9 +667,9 @@ describe('ChatBubble', () => {
 
   // O form mora num modal da página (mesmo padrão do onEdit): a bolha só avisa
   // QUAL mensagem está sendo denunciada e fecha o menu.
-  it('denunciar avisa a página com a mensagem e fecha o menu', () => {
+  it('denunciar avisa a página com a mensagem e fecha o menu', async () => {
     const onReport = vi.fn()
-    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} onReport={onReport} />)
+    await renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} onReport={onReport} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Denunciar' }))
@@ -680,9 +680,9 @@ describe('ChatBubble', () => {
 
   // Denunciar vale pra mensagem só de imagem também: o conteúdo ofensivo pode
   // ser a foto. Só texto é exigência do copiar, não do denunciar.
-  it('mensagem do outro so com imagem oferece denunciar', () => {
+  it('mensagem do outro so com imagem oferece denunciar', async () => {
     const theirImage: ChatMessage = { ...IMAGE_MESSAGE, id: 'm-img-them', sender: 'them' }
-    renderPage(<ChatBubble message={theirImage} contact={CONTACT} onReport={vi.fn()} />)
+    await renderPage(<ChatBubble message={theirImage} contact={CONTACT} onReport={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
 
@@ -691,10 +691,10 @@ describe('ChatBubble', () => {
 
   // Clipboard exige contexto seguro; em http:// simples o navegador nao expoe a
   // API. Cair calado aqui reintroduziria o bug original (clico, nada acontece).
-  it('sem clipboard disponivel, avisa em vez de nao fazer nada', () => {
+  it('sem clipboard disponivel, avisa em vez de nao fazer nada', async () => {
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
 
-    renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
+    await renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
     fireEvent.click(screen.getByRole('button', { name: 'Ações da mensagem' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Copiar' }))
 

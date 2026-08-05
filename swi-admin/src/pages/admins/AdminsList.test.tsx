@@ -37,15 +37,15 @@ describe('AdminsList', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders without crashing', () => {
-    expect(() => renderPage(<AdminsList />, { route: '/admins' })).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<AdminsList />, { route: '/admins' })).resolves.toBeDefined()
   })
 
   // QA Web #10: mesmo bug das outras listas — /chat sem destino abre sempre a
   // conversa mais recente, não a pessoa clicada.
   it('ícone de chat abre a conversa do admin clicado, não /chat solto', async () => {
     vi.spyOn(adminsApi, 'list').mockResolvedValue({ data: [ELISA], error: null })
-    renderPage(<AdminsList />, { route: '/admins' })
+    await renderPage(<AdminsList />, { route: '/admins' })
     await waitFor(() => screen.getByText('Elisa Jordão'))
 
     fireEvent.click(screen.getByRole('button', { name: /conversar com elisa jordão/i }))
@@ -59,7 +59,7 @@ describe('AdminsList', () => {
     const setActive = vi
       .spyOn(adminsApi, 'setActive')
       .mockResolvedValue({ data: { id: 'admin-01', active: false }, error: null })
-    renderPage(<AdminsList />, { route: '/admins' })
+    await renderPage(<AdminsList />, { route: '/admins' })
     await waitFor(() => screen.getByText('Elisa Jordão'))
 
     // Estava ativo → o toggle manda desativar (false).
@@ -73,7 +73,7 @@ describe('AdminsList', () => {
       data: null,
       error: { message: 'boom' },
     })
-    renderPage(<AdminsList />, { route: '/admins' })
+    await renderPage(<AdminsList />, { route: '/admins' })
     await waitFor(() => screen.getByText('Elisa Jordão'))
 
     // Esta versão do react-native-web não emite aria-checked: o estado on/off do
@@ -97,7 +97,7 @@ describe('AdminsList', () => {
   it('excluir: confirma → remove() e a linha some; cancelar mantém', async () => {
     vi.spyOn(adminsApi, 'list').mockResolvedValue({ data: [ELISA], error: null })
     const remove = vi.spyOn(adminsApi, 'remove').mockResolvedValue({ data: null, error: null })
-    renderPage(<AdminsList />, { route: '/admins' })
+    await renderPage(<AdminsList />, { route: '/admins' })
     await waitFor(() => screen.getByText('Elisa Jordão'))
 
     // Abre a confirmação e cancela: nada é removido, a linha continua.
@@ -123,7 +123,7 @@ describe('AdminsList', () => {
       data: null,
       error: { message: 'Usuário possui registros vinculados; desative-o em vez de excluir' },
     })
-    renderPage(<AdminsList />, { route: '/admins' })
+    await renderPage(<AdminsList />, { route: '/admins' })
     await waitFor(() => screen.getByText('Alfa Admin'))
 
     // Exclui o PRIMEIRO (Alfa, índice 0): abre a confirmação e confirma.
@@ -143,7 +143,7 @@ describe('AdminsList', () => {
     // próprio usuário logado → não pode oferecer auto-exclusão.
     const SELF: Admin = { ...ELISA, id: 'u_seed_1', name: 'Admin Seed' }
     vi.spyOn(adminsApi, 'list').mockResolvedValue({ data: [SELF, ELISA], error: null })
-    renderPage(<AdminsList />, { route: '/admins' })
+    await renderPage(<AdminsList />, { route: '/admins' })
     await waitFor(() => screen.getByText('Admin Seed'))
 
     expect(screen.queryByRole('button', { name: /excluir admin seed/i })).toBeNull()
