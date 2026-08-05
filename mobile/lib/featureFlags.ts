@@ -41,23 +41,97 @@ export function isFeatureEnabled(gate: FeatureGate): boolean {
   return FEATURE_GATES[gate];
 }
 
+// Contrato de ambiente resolvido em tempo de execução. As funções abaixo o
+// recebem por parâmetro em vez de ler globais, para serem puras e testáveis.
+export interface RuntimeEnv {
+  /** `__DEV__` do React Native: bundle de desenvolvimento. */
+  readonly isDev: boolean;
+  /** `NODE_ENV=test`: suíte Jest. */
+  readonly isTest: boolean;
+  /**
+   * Escotilha de demonstração. Permite dados simulados fora de dev, para
+   * apresentar o app sem backend no ar. Documentada em `.env.example` e ausente
+   * de todos os perfis de release do `eas.json`.
+   */
+  readonly allowDemoMocks: boolean;
+}
+
+/** Ambientes onde dados simulados e localhost são legítimos. */
+function isRelaxedEnv(env: RuntimeEnv): boolean {
+  return env.isDev || env.isTest || env.allowDemoMocks;
+}
+
+/** Trata variável ausente e variável em branco como a mesma coisa. */
+function readEnvFlag(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
+}
+
+function resolveBackendKind(
+  raw: string | undefined,
+  env: RuntimeEnv,
+  varName: string,
+): 'mock' | 'api' {
+  const value = readEnvFlag(raw);
+  if (value !== undefined && value !== 'mock' && value !== 'api') {
+    throw new Error(
+      `${varName} tem valor desconhecido "${value}". Use "api" ou "mock".`,
+    );
+  }
+  // Fora de dev, teste e demonstração explícita, a API real é a única fonte:
+  // nem a ausência da variável nem um "mock" herdado de um perfil antigo podem
+  // colocar dados fabricados na frente do usuário final.
+  if (!isRelaxedEnv(env)) return 'api';
+  return value ?? 'mock';
+}
+
 // Seleciona a fonte de dados dos domínios NÃO-SAÚDE (profile, reports, journey,
-// chat, notifications, weather, evacuation). 'mock' = demo in-memory (default).
-// 'api' = backend real conteinerizado (NestJS) — cada selector só honra 'api'
-// quando a fatia do seu domínio migra (até lá fica pinado em mock). Saúde
-// (vitals/telemetry) IGNORA esta flag até a smartband existir.
-// Setada no build/dev via EXPO_PUBLIC_DATA_BACKEND.
+// chat, notifications, weather, evacuation, positions). 'api' = backend real
+// conteinerizado (NestJS), padrão fora de dev e teste. 'mock' = demo in-memory,
+// honrado apenas em dev, teste ou com a escotilha de demonstração. Saúde
+// (vitals/telemetry) IGNORA esta flag até a smartband existir: os vitais seguem
+// simulados em todos os ambientes por decisão de produto (2026-07-30,
+// reafirmada em 2026-08-05). Setada no build/dev via EXPO_PUBLIC_DATA_BACKEND.
 export type DataBackendKind = 'mock' | 'api';
-export const DATA_BACKEND: DataBackendKind =
-  (process.env.EXPO_PUBLIC_DATA_BACKEND as DataBackendKind) ?? 'mock';
+
+export function resolveDataBackend(
+  raw: string | undefined,
+  env: RuntimeEnv,
+): DataBackendKind {
+  return resolveBackendKind(raw, env, 'EXPO_PUBLIC_DATA_BACKEND');
+}
 
 // Chave PRÓPRIA do auth, independente de DATA_BACKEND: permite o auth ir no
-// backend real (container) enquanto os outros 9 domínios seguem em mock.
-// 'api' seleciona apiAuthBackend; default 'mock'. Setada no build via
-// EXPO_PUBLIC_AUTH_BACKEND (ver eas.json perfil `qa`).
+// backend real (container) enquanto os outros domínios seguem em mock durante o
+// desenvolvimento. Fora de dev e teste vale a mesma regra: sempre 'api'.
+// Setada no build via EXPO_PUBLIC_AUTH_BACKEND (ver eas.json perfil `qa`).
 export type AuthBackendKind = 'mock' | 'api';
-export const AUTH_BACKEND: AuthBackendKind =
-  (process.env.EXPO_PUBLIC_AUTH_BACKEND as AuthBackendKind) ?? 'mock';
+
+export function resolveAuthBackend(
+  raw: string | undefined,
+  env: RuntimeEnv,
+): AuthBackendKind {
+  return resolveBackendKind(raw, env, 'EXPO_PUBLIC_AUTH_BACKEND');
+}
+
+// `process.env.EXPO_PUBLIC_*` precisa aparecer literalmente: o Babel do Expo
+// substitui a expressão inteira pelo valor no bundle, e um acesso dinâmico
+// resolveria para undefined em produção.
+export const RUNTIME_ENV: RuntimeEnv = {
+  isDev: typeof __DEV__ !== 'undefined' && __DEV__,
+  isTest: process.env.NODE_ENV === 'test',
+  allowDemoMocks: process.env.EXPO_PUBLIC_ALLOW_DEMO_MOCKS === '1',
+};
+
+export const DATA_BACKEND: DataBackendKind = resolveDataBackend(
+  process.env.EXPO_PUBLIC_DATA_BACKEND,
+  RUNTIME_ENV,
+);
+
+export const AUTH_BACKEND: AuthBackendKind = resolveAuthBackend(
+  process.env.EXPO_PUBLIC_AUTH_BACKEND,
+  RUNTIME_ENV,
+);
 
 // Dev-only: lets the mock vitals backend exercise the empty/loading/stale/error
 // UIs that production will hit. 'streaming' = normal simulated data.

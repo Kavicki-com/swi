@@ -1,7 +1,9 @@
 // Fatia Clima migrou: o seletor honra DATA_BACKEND (troca o antigo "pinned em mock").
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend, WEATHER_SCENARIO: 'alert' }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: dataBackend, WEATHER_SCENARIO: 'alert' }));
   const { getWeatherBackend } = require('./getWeatherBackend');
   const { apiWeatherBackend } = require('./apiWeatherBackend');
   const { mockWeatherBackend } = require('./mockWeatherBackend');

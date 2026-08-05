@@ -44,7 +44,9 @@ describe('listReportAssignees — modo mock', () => {
   it('cai no diretório de chat quando não há backend real', async () => {
     jest.resetModules();
     const listDirectory = jest.fn(async () => [CONTATO]);
-    jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
+    jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: 'mock' }));
     jest.doMock('../chat/getChatBackend', () => ({
       getChatBackend: () => ({ listDirectory }),
     }));

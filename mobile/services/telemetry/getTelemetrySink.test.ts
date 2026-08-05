@@ -4,7 +4,9 @@
 // getAuthBackend.test).
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: dataBackend }));
   const { getTelemetrySink } = require('./getTelemetrySink');
   const { mockTelemetrySink } = require('./mockTelemetrySink');
   return { getTelemetrySink, mockTelemetrySink };

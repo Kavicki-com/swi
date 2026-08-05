@@ -5,7 +5,9 @@ jest.mock('expo-secure-store', () => ({}));
 
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: dataBackend }));
   const { getProfileBackend } = require('./getProfileBackend');
   const { mockProfileBackend } = require('./mockProfileBackend');
   const { apiProfileBackend } = require('./apiProfileBackend');

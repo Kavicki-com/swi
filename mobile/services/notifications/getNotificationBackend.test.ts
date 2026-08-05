@@ -3,7 +3,9 @@ jest.mock('socket.io-client', () => ({ io: jest.fn() }));
 
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: dataBackend }));
   const { getNotificationBackend } = require('./getNotificationBackend');
   const { mockNotificationBackend } = require('./mockNotificationBackend');
   const { apiNotificationBackend } = require('./apiNotificationBackend');

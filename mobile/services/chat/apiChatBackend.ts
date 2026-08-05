@@ -4,7 +4,7 @@ import type { ChatBackend, Conversation, Message, Contact } from './types';
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 import { getUserId } from '../api/session';
-import { API_URL } from '../auth/apiConfig';
+import { getApiUrl } from '../auth/apiConfig';
 
 const TOKEN_KEY = 'swi.auth.token';
 // Ids de conversa contêm '#' (a#b): em URL isso é fragmento — precisa encodar.
@@ -39,7 +39,7 @@ export const apiChatBackend: ChatBackend = {
       // polling primeiro, com upgrade pra WS: o handshake WS puro falha em
       // proxies que nao repassam o upgrade, e cair pra polling mantem o
       // realtime funcionando em vez de morrer calado.
-      socket = io(API_URL, {
+      socket = io(getApiUrl(), {
         auth: { token },
         transports: ['polling', 'websocket'],
       });

@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { API_URL } from '../auth/apiConfig';
+import { getApiUrl } from '../auth/apiConfig';
 
 const TOKEN_KEY = 'swi.auth.token';
 
@@ -90,7 +90,7 @@ async function send<T>(path: string, opts: ApiRequestOptions, signal: AbortSigna
     const t = await SecureStore.getItemAsync(TOKEN_KEY);
     if (t) headers.Authorization = `Bearer ${t}`;
   }
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     method: method ?? (body ? 'POST' : 'GET'),
     headers,
     body: body ? JSON.stringify(body) : undefined,

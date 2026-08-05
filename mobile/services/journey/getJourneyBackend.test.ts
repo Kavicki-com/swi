@@ -1,7 +1,9 @@
 // getJourneyBackend honra a flag DATA_BACKEND (mock|api), igual getReportsBackend.
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: dataBackend }));
   const { getJourneyBackend } = require('./getJourneyBackend');
   const { mockJourneyBackend } = require('./mockJourneyBackend');
   const { apiJourneyBackend } = require('./apiJourneyBackend');

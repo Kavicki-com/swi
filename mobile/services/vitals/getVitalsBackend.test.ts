@@ -5,7 +5,9 @@
 // mockVitalsBackend lê essa flag.
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend, VITALS_SCENARIO: 'streaming' }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: dataBackend, VITALS_SCENARIO: 'streaming' }));
   const { getVitalsBackend } = require('./getVitalsBackend');
   const { mockVitalsBackend } = require('./mockVitalsBackend');
   return { getVitalsBackend, mockVitalsBackend };
