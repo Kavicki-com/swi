@@ -43,6 +43,9 @@ describe('resolveApiUrl', () => {
     expect(() => resolveApiUrl('http://10.0.2.2:3000', PROD)).toThrow(
       /localhost/,
     );
+    // URL.hostname devolve IPv6 com colchetes; regressão: '::1' sem eles
+    // nunca casava e o loopback IPv6 passava em release.
+    expect(() => resolveApiUrl('http://[::1]:3000', PROD)).toThrow(/localhost/);
   });
 
   it('aceita uma URL absoluta de produção', () => {

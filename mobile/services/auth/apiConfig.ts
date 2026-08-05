@@ -9,7 +9,8 @@ const DEV_FALLBACK = 'http://localhost:3000';
 const LOCAL_HOSTS = new Set([
   'localhost',
   '127.0.0.1',
-  '::1',
+  // URL.hostname preserva os colchetes de IPv6, então é '[::1]' que chega aqui.
+  '[::1]',
   // Alias do emulador Android para o host.
   '10.0.2.2',
   // Alias do emulador Genymotion para o host.
