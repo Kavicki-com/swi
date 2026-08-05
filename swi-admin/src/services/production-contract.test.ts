@@ -65,8 +65,12 @@ describe('contrato de produção do admin', () => {
       'a augmentação de dataSet voltou',
     ).toBe(false)
 
+    // O `=` seguido de chaves duplas prende o scan à forma de PROP JSX; sem
+    // isso, uma variável comum chamada `dataSet` acusaria falso positivo.
+    // (Este arquivo também entra no scan — daí o comentário não soletrar o
+    // padrão completo.)
     const marcados = sourceFiles(SRC)
-      .filter((file) => /\bdataSet\s*=/.test(fs.readFileSync(file, 'utf8')))
+      .filter((file) => /\bdataSet\s*=\s*\{\{/.test(fs.readFileSync(file, 'utf8')))
       .map((file) => path.relative(SRC, file).replace(/\\/g, '/'))
 
     expect(marcados, `ainda marcam alvos do overlay:\n${marcados.join('\n')}`).toEqual([])

@@ -142,15 +142,17 @@ afterEach(() => {
 })
 
 const renderAt = async () =>
-  settled(render(
-    <SwiThemeProvider>
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/']}>
-          <Dashboard />
-        </MemoryRouter>
-      </AuthProvider>
-    </SwiThemeProvider>,
-  ))
+  settled(
+    render(
+      <SwiThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/']}>
+            <Dashboard />
+          </MemoryRouter>
+        </AuthProvider>
+      </SwiThemeProvider>,
+    ),
+  )
 
 describe('Dashboard', () => {
   it('renders skeleton while loading', async () => {
