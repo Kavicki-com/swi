@@ -3,38 +3,34 @@
 // LEFT  → Dados do cadastro (name, dob, cpf, email, phone, UF, city,
 //         profissão, setor, função, gerente responsável)
 // RIGHT → Tipo sanguíneo + Gênero comboboxes, alergias + doenças crônicas
-//         textareas, Senha de acesso (current/new/confirm + alterar senha),
-//         Permissões toggles (notificações, localização, arquivos, ligações).
+//         textareas, Exames clínicos, Senha de acesso, Permissões.
 // Footer → Sair + Salvar Alterações buttons.
 // QA F (2026-07-24): a tela era 100% fake (prefill 'Carlos Sampaio', botões
 // com toasts simulados). Agora: GET /profile/me pré-preenche, Salvar faz PUT,
 // Alterar senha bate no /auth/password/change, foto/exames sobem via presign.
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+// Estado, efeitos e handlers moram em hooks/useUserSettings.
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
   Avatar,
   Button,
   Combobox,
-  ExamInfoCard,
   Icon,
   Input,
   Text,
   Title,
-  Toggle,
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
-import { useDemoToast } from '@/lib/demoToast'
 import { SupportModal } from '@/components/SupportModal'
 import { FormError } from '@/components/FormError'
-import { profileApi, type ProfileCatalog, type ProfilePatch } from '@/services/api/profile'
-import { authApi } from '@/services/api/auth'
-import { uploadImage } from '@/services/api/upload'
-import { examsApi, type Exam } from '@/services/api/exams'
-import { examCardParts, toCalendarDate } from '@/services/api/examCard'
-import { maskCpf, maskDate, maskPhone, onlyDigits } from '@/lib/masks'
+import { maskCpf, maskDate, maskPhone } from '@/lib/masks'
+import { ExamsSection } from './components/ExamsSection'
+import { PasswordSection } from './components/PasswordSection'
+import { PermissionsSection } from './components/PermissionsSection'
+import { PrivacyPolicyModal } from './components/PrivacyPolicyModal'
+import { GENDER_OPTIONS, useUserSettings } from './hooks/useUserSettings'
 
 const BLOOD_OPTIONS = [
   { label: 'A+', value: 'A+' },
@@ -47,201 +43,6 @@ const BLOOD_OPTIONS = [
   { label: 'O-', value: 'O-' },
 ]
 
-const GENDER_OPTIONS = [
-  { label: 'Masculino', value: 'male' },
-  { label: 'Feminino', value: 'female' },
-  { label: 'Outro', value: 'other' },
-]
-
-const GERENTE_OPTIONS = [
-  { label: 'João Soares Ribeiro', value: 'joao' },
-  { label: 'Mathias Campos', value: 'mathias' },
-]
-
-type Option = { label: string; value: string }
-
-// Profissão/Setor/Função vêm do catálogo REAL da org (GET /profile/catalog:
-// DISTINCT de jobTitle/sector/duty). As listas fixas anteriores eram
-// inventadas, divergiam do TaskForm e não continham os valores do banco
-// ('Administrador'/'Gestão') — o Combobox abria em "Selecione aqui" e uma
-// seleção qualquer sobrescrevia o cargo real (QA 2026-07-26). value === label
-// de propósito: o backend guarda o rótulo de exibição verbatim.
-const toOptions = (values: ReadonlyArray<string>): Option[] =>
-  values.map((v) => ({ label: v, value: v }))
-
-// Gerente segue lista fixa (pessoas, fonte diferente — fora do catálogo).
-const valueOf = (options: Option[], label: string | null): string =>
-  label ? (options.find((o) => o.label === label)?.value ?? label) : ''
-const labelOf = (options: Option[], value: string): string =>
-  options.find((o) => o.value === value)?.label ?? value
-
-// O Combobox do DS resolve o texto do trigger por `options.find(o => o.value
-// === value)` (Combobox.tsx:73) — um value fora da lista renderiza o
-// placeholder. Injeta o valor atual como opção para ele conseguir se exibir.
-const withCurrent = (options: Option[], value: string): Option[] =>
-  !value || options.some((o) => o.value === value) ? options : [...options, { label: value, value }]
-
-/**
- * Gênero persiste como CÓDIGO ('male'/'female'/'other'). O form gravava o
- * rótulo ('Masculino'), então quem lê o campo comparando com 'male' — detalhe
- * do funcionário, painel do chat — não achava nada e caía no default
- * (QA 2026-07-26). Tolera o rótulo legado na leitura.
- */
-export const readGender = (raw: string | null): string => {
-  if (!raw) return ''
-  const byValue = GENDER_OPTIONS.find((o) => o.value === raw)
-  if (byValue) return byValue.value
-  return GENDER_OPTIONS.find((o) => o.label === raw)?.value ?? ''
-}
-
-// birthDate ISO ↔ dd/mm/aaaa da UI. Partes UTC de propósito: @db.Date chega
-// como meia-noite UTC; getDate() local recuaria um dia a oeste de Greenwich.
-const toDob = (iso: string | null): string => {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const dd = String(d.getUTCDate()).padStart(2, '0')
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
-  return `${dd}/${mm}/${d.getUTCFullYear()}`
-}
-const fromDob = (dob: string): string | null => {
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dob.trim())
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : null
-}
-
-const PRIVACY_POLICY_TEXT = `Este contrato detalha os termos e condições que regem o uso do software de gestão de recursos humanos para o setor de mineração, integrando funcionalidades de smartband, desenvolvido pela renomada Mineração Excelsior. Ao acessar e utilizar este software, o usuário manifesta sua concordância integral e irrestrita com todos os termos e condições estipulados neste documento. Este acordo estabelece as bases para a utilização do software, delineando os direitos e responsabilidades tanto do usuário quanto da Mineração Excelsior. É imprescindível que o usuário leia atentamente e compreenda integralmente cada cláusula antes de prosseguir com a utilização do software. A Mineração Excelsior reserva-se o direito de modificar, complementar ou atualizar estes termos a qualquer momento, mediante notificação prévia aos usuários. O uso contínuo do software após a publicação de quaisquer alterações constituirá aceitação tácita das mesmas. O software de gestão de recursos humanos da Mineração Excelsior, em conjunto com a tecnologia smartband, oferece uma solução abrangente para o monitoramento e gestão eficiente dos funcionários no ambiente de mineração. As funcionalidades incluem, mas não se limitam a, rastreamento em tempo real da localização dos funcionários, monitoramento de sinais vitais, comunicação bidirecional, alertas de segurança e gestão de jornadas de trabalho. A Mineração Excelsior emprega medidas de segurança rigorosas para proteger os dados dos usuários e garantir a confidencialidade das informações. No entanto, o usuário reconhece que nenhum sistema de segurança é infalível e que a Mineração Excelsior não pode garantir a segurança absoluta dos dados. O usuário é responsável por manter a confidencialidade de suas credenciais de acesso e por notificar imediatamente a Mineração Excelsior em caso de qualquer uso não autorizado de sua conta. O software é fornecido 'no estado em que se encontra' e a Mineração Excelsior não oferece garantias de qualquer tipo, expressas ou implícitas, incluindo, mas não se limitando a, garantias de comercialização, adequação a um propósito específico e não violação. Em nenhuma circunstância a Mineração Excelsior será responsável por quaisquer danos diretos, indiretos, incidentais, especiais ou consequenciais decorrentes do uso ou da impossibilidade de uso do software, mesmo que tenha sido avisada da possibilidade de tais danos. Este contrato será regido e interpretado de acordo com as leis do Brasil, e qualquer disputa decorrente deste contrato será resolvida nos tribunais competentes da cidade de Belo Horizonte, Minas Gerais. Ao utilizar o software, o usuário concorda em cumprir todas as leis e regulamentos aplicáveis, incluindo, mas não se limitando a, leis de proteção de dados e privacidade. A Mineração Excelsior reserva-se o direito de suspender ou encerrar o acesso do usuário ao software em caso de violação destes termos e condições. Este contrato constitui o acordo integral entre o usuário e a Mineração Excelsior em relação ao uso do software e substitui todos os acordos anteriores ou contemporâneos, escritos ou orais. Caso alguma disposição deste contrato seja considerada inválida ou inexequível, as demais disposições permanecerão em pleno vigor e efeito. O usuário declara ter lido, compreendido e concordado com todos os termos e condições deste contrato antes de utilizar o software da Mineração Excelsior.`
-
-// Privacy policy modal. Title in primary green + close X,
-// long scrollable body text, footer title "Acordo de termos de uso e
-// privacidade". Trigger: "Política de privacidade e termos de uso" link.
-function PrivacyPolicyModal({ onClose }: { onClose: () => void }) {
-  const theme = useTheme()
-  return (
-    <View
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 100,
-      }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Fechar modal"
-        onPress={onClose}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      />
-      <View
-        style={{
-          width: 596,
-          maxHeight: 600,
-          backgroundColor: theme.background,
-          borderRadius: theme.border.radius.l,
-          padding: theme.padding.m,
-          gap: theme.gap.m,
-          overflow: 'hidden',
-        }}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
-          <View style={{ flex: 1 }}>
-            <Title variant="title.xs" color={theme.content.primary}>
-              Política de privacidade
-            </Title>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Fechar"
-            onPress={onClose}
-            style={{ padding: 4 }}
-          >
-            <Icon name="close" size={20} color={theme.content.dark} />
-          </Pressable>
-        </View>
-        <div
-          className="no-scrollbar"
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            minHeight: 0,
-          }}
-        >
-          <Text variant="body.m" color={theme.content.dark}>
-            {PRIVACY_POLICY_TEXT}
-          </Text>
-        </div>
-        <Title variant="title.xs" color={theme.content.dark}>
-          Acordo de termos de uso e privacidade
-        </Title>
-      </View>
-    </View>
-  )
-}
-
-// Password field with absolutely-positioned visibility toggle.
-// Workaround for a DS Input bug where iconRight overflows the text-area
-// horizontally when the input is narrow. We render the DS Input on its own
-// (no iconRight) and overlay a Pressable with the eye icon, anchored to the
-// right edge of the input box. Stays inside the column at any width.
-function PasswordInput({
-  label,
-  value,
-  onChangeText,
-  visible,
-  onToggleVisible,
-  testID,
-}: {
-  label: string
-  value: string
-  onChangeText: (next: string) => void
-  visible: boolean
-  onToggleVisible: () => void
-  testID?: string
-}) {
-  const theme = useTheme()
-  return (
-    <View style={{ position: 'relative' }}>
-      <Input
-        label={label}
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={!visible}
-        testID={testID}
-      />
-      {/* Anchored to the right edge of the visible text-area. Wrapper's
-          bottom matches the text-area bottom (DS Input renders label above
-          + text-area below, no description). The text-area is 41px tall and
-          the eye is 24px tall, so to vertically center the eye inside the
-          text-area we offset (41-24)/2 ≈ 8px from the wrapper bottom. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={visible ? 'Ocultar senha' : 'Mostrar senha'}
-        onPress={onToggleVisible}
-        style={{
-          position: 'absolute',
-          right: theme.padding.sm,
-          bottom: theme.padding.s,
-          width: 24,
-          height: 24,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Icon
-          name={visible ? 'visibility_off' : 'visibility'}
-          size={20}
-          color={theme.content.dark}
-        />
-      </Pressable>
-    </View>
-  )
-}
-
 export function UserSettings() {
   const theme = useTheme()
   const navigate = useNavigate()
@@ -249,265 +50,71 @@ export function UserSettings() {
   const isTablet = breakpoint === 'tablet'
   const isWide = breakpoint === 'wide'
   const { user, signOut } = useAuth()
-  const { show: showToast } = useDemoToast()
-
-  const [name, setName] = useState(user?.full_name ?? '')
-  const [dob, setDob] = useState('')
-  const [cpf, setCpf] = useState('')
-  // E-mail de login não muda por aqui (exigiria reverificação) — só exibe.
-  const [email] = useState(user?.email ?? '')
-  const [phone, setPhone] = useState('')
-  const [uf, setUf] = useState('')
-  const [city, setCity] = useState('')
-  const [profissao, setProfissao] = useState<string>('')
-  const [setor, setSetor] = useState<string>('')
-  const [funcao, setFuncao] = useState<string>('')
-  const [gerente, setGerente] = useState<string>('')
-  const [bloodType, setBloodType] = useState<string>('')
-  const [gender, setGender] = useState<string>('')
-  const [allergies, setAllergies] = useState('')
-  const [chronic, setChronic] = useState('')
-  const [currentPw, setCurrentPw] = useState('')
-  const [newPw, setNewPw] = useState('')
-  const [confirmPw, setConfirmPw] = useState('')
-  const [showCurrent, setShowCurrent] = useState(false)
-  const [showNew, setShowNew] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
-  const [permNotifications, setPermNotifications] = useState(true)
-  const [permLocation, setPermLocation] = useState(false)
-  const [permFiles, setPermFiles] = useState(true)
-  const [permCalls, setPermCalls] = useState(true)
-  const [showSupportModal, setShowSupportModal] = useState(false)
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false)
-
-  // Vocabulário real da org. null enquanto carrega (as listas ficam só com o
-  // valor atual via withCurrent — nada de opção inventada no meio-tempo).
-  const [catalog, setCatalog] = useState<ProfileCatalog | null>(null)
-
-  // Listas de exibição = catálogo + o valor atual, quando ele ainda não
-  // estiver no DISTINCT (ver withCurrent — cinto contra corrida com o load).
-  const profissaoOptions = useMemo(
-    () => withCurrent(toOptions(catalog?.jobTitles ?? []), profissao),
-    [catalog, profissao],
-  )
-  const setorOptions = useMemo(
-    () => withCurrent(toOptions(catalog?.sectors ?? []), setor),
-    [catalog, setor],
-  )
-  const funcaoOptions = useMemo(
-    () => withCurrent(toOptions(catalog?.duties ?? []), funcao),
-    [catalog, funcao],
-  )
-  const gerenteOptions = useMemo(() => withCurrent(GERENTE_OPTIONS, gerente), [gerente])
-
-  // Fonte única dos exames: tabela Exam, a mesma que o app e o detalhe do
-  // funcionário leem. Profile.examKeys continua existindo no backend mas não
-  // alimenta mais nada aqui — era ele que fazia o arquivo enviado sumir.
-  const [exams, setExams] = useState<Exam[]>([])
-  const [examName, setExamName] = useState('')
-  const [examDate, setExamDate] = useState('')
-  const [examError, setExamError] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [pwError, setPwError] = useState<string | null>(null)
-  const [changingPw, setChangingPw] = useState(false)
-  const [avatarBusy, setAvatarBusy] = useState(false)
-  const [examsBusy, setExamsBusy] = useState(false)
-  const avatarInputRef = useRef<HTMLInputElement | null>(null)
-  const examsInputRef = useRef<HTMLInputElement | null>(null)
-
-  // Catálogo em paralelo ao prefill: as opções chegam quando chegam; o valor
-  // atual aparece antes disso via withCurrent.
-  useEffect(() => {
-    let cancelled = false
-    profileApi.catalog().then(({ data }) => {
-      if (!cancelled && data) setCatalog(data)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // Prefill real: GET /profile/me (404 = perfil ainda não preenchido → form
-  // vazio, sem erro). Labels do backend viram values dos comboboxes.
-  useEffect(() => {
-    let cancelled = false
-    profileApi.me().then(({ data }) => {
-      if (cancelled || !data) return
-      setName(data.fullName ?? '')
-      setDob(toDob(data.birthDate))
-      // Mascara na leitura também: cadastros antigos guardaram dígitos crus, e
-      // as máscaras são idempotentes sobre valor já formatado.
-      setCpf(maskCpf(data.cpf ?? ''))
-      setPhone(maskPhone(data.phone ?? ''))
-      setUf(data.uf ?? '')
-      setCity(data.city ?? '')
-      // value === label nos campos de catálogo: o rótulo do banco É o value.
-      setProfissao(data.jobTitle ?? '')
-      setSetor(data.sector ?? '')
-      setFuncao(data.duty ?? '')
-      setGerente(valueOf(GERENTE_OPTIONS, data.managerName))
-      setBloodType(data.bloodType ?? '')
-      // gender é um CÓDIGO ('male'/'female'), não um rótulo: o resto do painel
-      // (detalhe do funcionário, painel do chat) compara com esses valores.
-      // Aceita também o rótulo legado ('Masculino') gravado antes da correção.
-      setGender(readGender(data.gender))
-      setAllergies(data.allergies ?? '')
-      setChronic(data.chronicConditions ?? '')
-      setAvatarUrl(data.avatarUrl)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // Exames em chamada própria: outro endpoint e outra tabela, e um 500 aqui não
-  // pode derrubar o prefill do cadastro inteiro.
-  useEffect(() => {
-    let cancelled = false
-    examsApi.list().then(({ data }) => {
-      if (!cancelled && data) setExams(data)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const save = async () => {
-    setSaveError(null)
-    const iso = fromDob(dob)
-    if (dob.trim() && !iso) {
-      setSaveError('Data de nascimento inválida — use dd/mm/aaaa.')
-      return
-    }
-    setSaving(true)
-    const patch: ProfilePatch = {
-      fullName: name.trim(),
-      // Só dígitos no banco (a máscara é apresentação) — ver lib/masks.
-      phone: onlyDigits(phone),
-      cpf: onlyDigits(cpf),
-      city: city.trim(),
-      allergies,
-      chronicConditions: chronic,
-      // Condicionais: o backend valida uf com 2 letras e os selects vazios
-      // não devem apagar o que já está salvo.
-      ...(uf.trim() ? { uf: uf.trim() } : {}),
-      ...(iso ? { birthDate: iso } : {}),
-      // Campos de catálogo: value === label, o estado JÁ é o rótulo final.
-      ...(profissao ? { jobTitle: profissao } : {}),
-      ...(setor ? { sector: setor } : {}),
-      ...(funcao ? { duty: funcao } : {}),
-      ...(gerente ? { managerName: labelOf(GERENTE_OPTIONS, gerente) } : {}),
-      // Grava o CÓDIGO, não o rótulo — ver readGender.
-      ...(gender ? { gender } : {}),
-      ...(bloodType ? { bloodType } : {}),
-    }
-    const { error } = await profileApi.update(patch)
-    setSaving(false)
-    if (error) {
-      setSaveError(error.message)
-      return
-    }
-    showToast('Alterações salvas', 'Cadastro atualizado com sucesso')
-  }
-
-  const changePassword = async () => {
-    if (!currentPw || !newPw || !confirmPw) {
-      setPwError('Preencha a senha atual, a nova e a repetição.')
-      return
-    }
-    if (newPw.length < 6) {
-      setPwError('A nova senha precisa de pelo menos 6 caracteres.')
-      return
-    }
-    if (newPw !== confirmPw) {
-      setPwError('A nova senha e a repetição não conferem.')
-      return
-    }
-    setPwError(null)
-    setChangingPw(true)
-    const { error } = await authApi.changePassword({
-      currentPassword: currentPw,
-      newPassword: newPw,
-    })
-    setChangingPw(false)
-    if (error) {
-      setPwError(error.message)
-      return
-    }
-    setCurrentPw('')
-    setNewPw('')
-    setConfirmPw('')
-    showToast('Senha alterada', 'Sua senha foi atualizada')
-  }
-
-  const onAvatarSelected = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    setAvatarBusy(true)
-    try {
-      const key = await uploadImage(file, 'avatars')
-      const { error } = await profileApi.update({ avatarKey: key })
-      if (error) {
-        showToast('Falha ao atualizar a foto', error.message)
-      } else {
-        // Preview imediato local; o presign de view chega no próximo load.
-        if (typeof URL.createObjectURL === 'function') setAvatarUrl(URL.createObjectURL(file))
-        showToast('Foto atualizada', 'Sua foto de perfil foi salva')
-      }
-    } catch (err) {
-      showToast('Falha ao enviar a foto', err instanceof Error ? err.message : '')
-    }
-    setAvatarBusy(false)
-  }
-
-  // Anexar é o ÚLTIMO passo: nome e validade primeiro, como no app. O botão
-  // fica habilitado e valida no clique em vez de nascer desabilitado — botão
-  // morto sem explicação deixa o operador sem saber o que falta.
-  const pickExamFile = () => {
-    if (!examName.trim()) {
-      setExamError('Informe o nome do exame.')
-      return
-    }
-    if (!toCalendarDate(examDate)) {
-      setExamError('Validade inválida — use dd/mm/aaaa.')
-      return
-    }
-    setExamError(null)
-    examsInputRef.current?.click()
-  }
-
-  const onExamSelected = async (e: ChangeEvent<HTMLInputElement>) => {
-    // Um por vez: nome e validade são de UM exame, e um chooser múltiplo os
-    // aplicaria igual a todos os arquivos.
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    const nome = examName.trim()
-    const date = toCalendarDate(examDate)
-    // Cinto: o seletor só abre pelo pickExamFile, que já validou. Se ainda
-    // assim chegar inválido, não cadastra exame sem nome nem com data furada.
-    if (!nome || !date) return
-    setExamsBusy(true)
-    try {
-      const fileKey = await uploadImage(file, 'exams')
-      const { data, error } = await examsApi.create({ name: nome, date, fileKey })
-      if (error || !data) {
-        showToast('Falha ao enviar exame', error?.message ?? '')
-      } else {
-        // Prepend: o mais recente primeiro, como o backend devolve na listagem.
-        setExams((prev) => [data, ...prev])
-        setExamName('')
-        setExamDate('')
-        showToast('Exame enviado', `${data.name} anexado ao seu perfil`)
-      }
-    } catch (err) {
-      showToast('Falha ao enviar exame', err instanceof Error ? err.message : '')
-    }
-    setExamsBusy(false)
-  }
+  const {
+    name,
+    setName,
+    dob,
+    setDob,
+    cpf,
+    setCpf,
+    email,
+    phone,
+    setPhone,
+    uf,
+    setUf,
+    city,
+    setCity,
+    profissao,
+    setProfissao,
+    profissaoOptions,
+    setor,
+    setSetor,
+    setorOptions,
+    funcao,
+    setFuncao,
+    funcaoOptions,
+    gerente,
+    setGerente,
+    gerenteOptions,
+    bloodType,
+    setBloodType,
+    gender,
+    setGender,
+    allergies,
+    setAllergies,
+    chronic,
+    setChronic,
+    currentPw,
+    setCurrentPw,
+    newPw,
+    setNewPw,
+    confirmPw,
+    setConfirmPw,
+    pwError,
+    changingPw,
+    changePassword,
+    showSupportModal,
+    setShowSupportModal,
+    showPrivacyModal,
+    setShowPrivacyModal,
+    exams,
+    examName,
+    setExamName,
+    examDate,
+    setExamDate,
+    examError,
+    examsBusy,
+    pickExamFile,
+    onExamSelected,
+    examsInputRef,
+    avatarUrl,
+    avatarBusy,
+    avatarInputRef,
+    onAvatarSelected,
+    saving,
+    saveError,
+    save,
+  } = useUserSettings()
 
   return (
     <View testID="user-settings" style={{ gap: theme.gap.l }}>
@@ -826,65 +433,16 @@ export function UserSettings() {
             />
           </View>
 
-          {/* Exames clínicos — mora com o resto do dado de saúde. Nome e
-              validade são o que o ExamInfoCard desenha; sem eles o arquivo
-              sobe e não vira card nenhum, que era o bug. */}
-          <View style={{ gap: theme.gap.s }}>
-            <Title variant="title.xs" color={theme.content.primary}>
-              Exames clínicos
-            </Title>
-            <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
-              <View style={{ flex: 1 }}>
-                <Input
-                  label="Nome do exame"
-                  value={examName}
-                  onChangeText={setExamName}
-                  testID="settings-exam-name"
-                />
-              </View>
-              <View style={{ width: 192 }}>
-                <Input
-                  label="Validade"
-                  placeholder="dd/mm/aaaa"
-                  value={examDate}
-                  onChangeText={(v) => setExamDate(maskDate(v))}
-                  testID="settings-exam-date"
-                />
-              </View>
-            </View>
-            <FormError message={examError} />
-            <Button
-              label={examsBusy ? 'Enviando…' : 'Enviar exame'}
-              variant="contained"
-              backgroundColor={theme.surface.secondary}
-              size="small"
-              disabled={examsBusy}
-              onPress={pickExamFile}
-            />
-            {exams.length === 0 ? (
-              <Text variant="body.s" color={theme.content.medium}>
-                Nenhum exame enviado.
-              </Text>
-            ) : (
-              exams.map((exam) => {
-                const parts = examCardParts(exam.date)
-                return (
-                  <ExamInfoCard
-                    key={exam.id}
-                    compact
-                    fullWidth
-                    year={parts.year}
-                    date={parts.date}
-                    examName={exam.name}
-                    actionLabel={`Baixar ${exam.name}`}
-                    // fileUrl é presignado e expira — abre na hora do clique,
-                    // nunca guardado em href renderizado antes.
-                    onActionPress={() => window.open(exam.fileUrl, '_blank', 'noopener,noreferrer')}
-                  />
-                )
-              })
-            )}
-          </View>
+          <ExamsSection
+            examName={examName}
+            onExamNameChange={setExamName}
+            examDate={examDate}
+            onExamDateChange={setExamDate}
+            examError={examError}
+            examsBusy={examsBusy}
+            onPickFile={pickExamFile}
+            exams={exams}
+          />
 
           {/* Password + Permissions row — stacks vertically at tablet so the
               Permissions toggles drop below the Password column instead of
@@ -896,83 +454,18 @@ export function UserSettings() {
               alignItems: isTablet ? 'stretch' : 'flex-start',
             }}
           >
-            {/* Password column.
-                NOTE: DS Input's iconRight overflows the text-area horizontally
-                when the input is narrow (≤245px) — flex:1 on the inner
-                TextInput pushes the iconRight out by ~32px.  Workaround:
-                pass `secureTextEntry` to the Input *without* iconRight, then
-                overlay the visibility Pressable absolutely so it stays inside
-                the input box no matter how narrow the column is. Bump DS
-                later to clip iconRight properly. */}
-            <View style={{ flex: 1, gap: theme.gap.s }}>
-              <Title variant="title.xs" color={theme.content.primary}>
-                Senha de acesso
-              </Title>
-              <PasswordInput
-                label="Senha atual"
-                value={currentPw}
-                onChangeText={setCurrentPw}
-                visible={showCurrent}
-                onToggleVisible={() => setShowCurrent((v) => !v)}
-                testID="settings-current-pw"
-              />
-              <PasswordInput
-                label="Nova senha"
-                value={newPw}
-                onChangeText={setNewPw}
-                visible={showNew}
-                onToggleVisible={() => setShowNew((v) => !v)}
-                testID="settings-new-pw"
-              />
-              <PasswordInput
-                label="Repetir nova senha"
-                value={confirmPw}
-                onChangeText={setConfirmPw}
-                visible={showConfirm}
-                onToggleVisible={() => setShowConfirm((v) => !v)}
-                testID="settings-confirm-pw"
-              />
-              <FormError message={pwError} />
-              <Button
-                label={changingPw ? 'Alterando…' : 'Alterar senha'}
-                variant="contained"
-                backgroundColor={theme.surface.secondary}
-                size="small"
-                disabled={changingPw}
-                onPress={changePassword}
-              />
-            </View>
-
-            {/* Permissions column */}
-            <View style={{ width: 224, gap: theme.gap.m }}>
-              <Title variant="title.xs" color={theme.content.primary}>
-                Permissões
-              </Title>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-                <Toggle value={permNotifications} onChange={setPermNotifications} />
-                <Text variant="body.m" color={theme.content.dark}>
-                  Notificações
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-                <Toggle value={permLocation} onChange={setPermLocation} />
-                <Text variant="body.m" color={theme.content.dark}>
-                  Localização
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-                <Toggle value={permFiles} onChange={setPermFiles} />
-                <Text variant="body.m" color={theme.content.dark}>
-                  Acessar pastas e arquivos
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-                <Toggle value={permCalls} onChange={setPermCalls} />
-                <Text variant="body.m" color={theme.content.dark}>
-                  Ligações telefônicas
-                </Text>
-              </View>
-            </View>
+            <PasswordSection
+              currentPw={currentPw}
+              onCurrentPwChange={setCurrentPw}
+              newPw={newPw}
+              onNewPwChange={setNewPw}
+              confirmPw={confirmPw}
+              onConfirmPwChange={setConfirmPw}
+              pwError={pwError}
+              changingPw={changingPw}
+              onChangePassword={changePassword}
+            />
+            <PermissionsSection />
           </View>
         </View>
       </View>
