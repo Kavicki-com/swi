@@ -1,6 +1,6 @@
-jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 import { apiRequest } from '../api/http';
 import { apiWeatherBackend } from './apiWeatherBackend';
+jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 
 describe('apiWeatherBackend', () => {
   it('getWeather → GET /weather autenticado, devolve o snapshot', async () => {

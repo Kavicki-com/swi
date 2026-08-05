@@ -17,13 +17,6 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system';
-
-// T4.6: memo wrap do StatusChart no nível de módulo. O componente é o mais
-// pesado da tree (3 feGaussianBlur filter chains + silhueta + ECG + dots).
-// Quando o Dashboard re-renderiza por modal state ou cameraActive, o
-// StatusChart skipa re-render desde que suas props sejam estáveis (handlers
-// useCallback'd, primitivas literais).
-const StatusChart = memo(DSStatusChart);
 import { NavFABs } from '../../components/NavFABs';
 import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
@@ -51,6 +44,13 @@ import type { WorkerStatus } from '../../services/vitals/types';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
 import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
+
+// T4.6: memo wrap do StatusChart no nível de módulo. O componente é o mais
+// pesado da tree (3 feGaussianBlur filter chains + silhueta + ECG + dots).
+// Quando o Dashboard re-renderiza por modal state ou cameraActive, o
+// StatusChart skipa re-render desde que suas props sejam estáveis (handlers
+// useCallback'd, primitivas literais).
+const StatusChart = memo(DSStatusChart);
 
 // Map the domain WorkerStatus to the DS StatusChart condition union
 // ('good' | 'alert' | 'low'). StatusChart has no neutral condition, so the
@@ -344,7 +344,7 @@ export default function Dashboard() {
               left: '39.42%',
               width: '21.38%',
               height: '70.14%',
-              // @ts-expect-error: mixBlendMode is web-only style (RN-web).
+              // mixBlendMode só tem efeito no RN-web; no native é ignorado.
               mixBlendMode: 'multiply',
             }}
           >

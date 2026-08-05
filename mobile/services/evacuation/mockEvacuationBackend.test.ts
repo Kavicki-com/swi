@@ -1,6 +1,6 @@
-jest.mock('../../lib/featureFlags', () => ({ EVACUATION_SCENARIO: 'normal' }));
 import { mockEvacuationBackend } from './mockEvacuationBackend';
 import { SITE_ROUTE } from './types';
+jest.mock('../../lib/featureFlags', () => ({ EVACUATION_SCENARIO: 'normal' }));
 
 describe('mockEvacuationBackend (scenario=normal)', () => {
   it('devolve a rota canned começando na origem e terminando no destino do site', async () => {

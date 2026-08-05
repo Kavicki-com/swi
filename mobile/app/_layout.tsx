@@ -1,4 +1,4 @@
-import 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
@@ -6,7 +6,6 @@ import { Stack } from 'expo-router';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 // Path-direct imports: o barrel `@expo-google-fonts/{inter,montserrat}`
@@ -104,7 +103,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (!IS_WEB) return;
     let cancelled = false;
-    const faces: Array<{ family: string; weight: string; url: unknown }> = [
+    const faces: { family: string; weight: string; url: unknown }[] = [
       { family: 'Inter', weight: '400', url: Inter_400Regular },
       { family: 'Inter', weight: '500', url: Inter_500Medium },
       { family: 'Inter', weight: '700', url: Inter_700Bold },

@@ -52,7 +52,7 @@ describe('listReportAssignees — modo mock', () => {
     jest.doMock('../api/http', () => ({ apiRequest: apiRequestMock }));
     // require, não import(): o preset roda em CJS e o import dinâmico exige
     // --experimental-vm-modules. É a forma de reimportar depois do resetModules.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const { listReportAssignees: comMock } = require('./assignees') as typeof import('./assignees');
 
     const out = await comMock();

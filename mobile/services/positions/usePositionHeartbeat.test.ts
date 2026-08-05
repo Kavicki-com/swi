@@ -1,16 +1,16 @@
 // getPositionsBackend cai no mock com DATA_BACKEND default — o hook exercita o
 // mockPositionsBackend (log em memória), sem rede. Espelha useTelemetrySampler.test.
 import { createElement, type ComponentType } from 'react';
+import { usePositionHeartbeat } from './usePositionHeartbeat';
+import { mockHeartbeatLog } from './mockPositionsBackend';
 // react-test-renderer ships no type declarations — tipa localmente (mesma nota
 // do useTelemetrySampler.test.ts).
 const TestRenderer: {
   create: (el: unknown) => { unmount: () => void };
   act: (cb: () => void | Promise<void>) => void | Promise<void>;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
 } = require('react-test-renderer');
 const act = TestRenderer.act;
-import { usePositionHeartbeat } from './usePositionHeartbeat';
-import { mockHeartbeatLog } from './mockPositionsBackend';
 
 function Harness({ getCoords }: { getCoords: () => [number, number] | null }) {
   usePositionHeartbeat(getCoords, { intervalMs: 1000 });

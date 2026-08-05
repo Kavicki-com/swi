@@ -19,7 +19,7 @@ const CONTATOS = [
   { workerId: 'w2', name: 'Carlos Santos', sector: 'Manutenção', role: 'Técnico', avatarUri: '', bloodType: 'A+', birthDate: null },
 ];
 
-const render = async (onConfirm?: (picks: Array<{ id: string; name: string }>) => void) => {
+const render = async (onConfirm?: (picks: { id: string; name: string }[]) => void) => {
   let tree!: ReturnType<typeof create>;
   await act(async () => {
     tree = create(

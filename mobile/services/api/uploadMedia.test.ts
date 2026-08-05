@@ -1,6 +1,9 @@
 // `withDeadline` fica REAL: é ele que dá prazo ao PUT direto no storage, e é
 // justamente esse comportamento que o teste do prazo verifica. Só o apiRequest
 // (a chamada de presign) vira dublê.
+import { apiRequest } from './http';
+import { File } from 'expo-file-system';
+import { contentTypeFor, uploadImage, UPLOAD_TIMEOUT_MS } from './uploadMedia';
 jest.mock('./http', () => ({
   ...jest.requireActual('./http'),
   apiRequest: jest.fn(),
@@ -12,9 +15,6 @@ jest.mock('expo-file-system', () => ({
     arrayBuffer: jest.fn(async () => new ArrayBuffer(32696)),
   })),
 }));
-import { apiRequest } from './http';
-import { File } from 'expo-file-system';
-import { contentTypeFor, uploadImage, UPLOAD_TIMEOUT_MS } from './uploadMedia';
 
 // O upload virou PUT presignado (2026-07-29). O R2 NÃO implementa presigned
 // POST: devolvia 501 "Presigned post requests are not yet implemented" na cara

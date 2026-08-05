@@ -1,7 +1,7 @@
-jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
-jest.mock('../api/session', () => ({ getUserId: jest.fn(() => 'me-id') }));
 import { apiRequest } from '../api/http';
 import { apiEvacuationBackend } from './apiEvacuationBackend';
+jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
+jest.mock('../api/session', () => ({ getUserId: jest.fn(() => 'me-id') }));
 
 afterEach(() => jest.clearAllMocks());
 

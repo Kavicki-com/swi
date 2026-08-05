@@ -1,8 +1,8 @@
-jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
-jest.mock('../api/uploadMedia', () => ({ uploadImage: jest.fn() }));
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 import { apiReportsBackend } from './apiReportsBackend';
+jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
+jest.mock('../api/uploadMedia', () => ({ uploadImage: jest.fn() }));
 
 describe('apiReportsBackend', () => {
   beforeEach(() => {

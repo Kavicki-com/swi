@@ -30,7 +30,7 @@ import type { Smartwatch3DProps } from './Smartwatch3D.types';
 const SW3D_DEBUG = false;
 const sw3dLog = (...args: unknown[]) => {
   if (SW3D_DEBUG) {
-    // eslint-disable-next-line no-console
+
     console.log('[SW3D]', `(${Platform.OS})`, ...args);
   }
 };

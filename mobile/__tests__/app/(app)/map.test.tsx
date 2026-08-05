@@ -91,7 +91,7 @@ describe('Mapa geral — aneis de distancia (QA Mobile #10)', () => {
     const anel = porTestID(tree, `line-${id}`);
 
     expect(anel).toBeDefined();
-    const vertices = anel.props.shape.geometry.coordinates as Array<[number, number]>;
+    const vertices = anel.props.shape.geometry.coordinates as [number, number][];
     expect(vertices.length).toBeGreaterThan(16);
     for (const v of vertices) {
       expect(metrosEntre(MINA, v)).toBeCloseTo(metros as number, 0);

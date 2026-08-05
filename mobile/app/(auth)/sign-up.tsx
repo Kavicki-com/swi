@@ -108,11 +108,12 @@ export default function SignUp() {
     }
   };
 
-  // Trava de reentrancia: `disabled={!canSubmit || enviando}` continua verdadeiro
-  // enquanto a requisicao esta no ar, entao um segundo toque disparava a
-  // acao de novo (QA 2026-07-27: no cadastro, o 2o toque levou 409 de
+  // Trava de reentrancia: o `useSubmitOnce` ignora chamadas enquanto a
+  // anterior esta no ar (QA 2026-07-27: no cadastro, o 2o toque levou 409 de
   // e-mail ja existente enquanto o 1o ja tinha criado a conta e navegado).
-  const { run: enviar, busy: enviando } = useSubmitOnce(handleSubmit);
+  // A trava vive no ref interno do hook, nao no `disabled` do botao; ver o
+  // comentario do proprio botao mais abaixo.
+  const { run: enviar } = useSubmitOnce(handleSubmit);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>

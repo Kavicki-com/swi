@@ -1,6 +1,6 @@
-jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 import { apiRequest } from '../api/http';
 import { apiPositionsBackend } from './apiPositionsBackend';
+jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 
 afterEach(() => jest.clearAllMocks());
 

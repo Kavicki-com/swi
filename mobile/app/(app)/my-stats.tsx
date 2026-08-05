@@ -6,7 +6,6 @@ import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg'
 import {
   Avatar,
   Button,
-  ChipGroup,
   Combobox,
   DonutChart,
   ExamInfoCard,
@@ -201,9 +200,12 @@ export default function MyStats() {
     () => [theme.surface.warning, theme.surface.warningLight],
     [theme.surface.warning, theme.surface.warningLight],
   );
-  const gradientFlame = useMemo<[string, string, string]>(
-    () => [theme.surface.error, theme.surface.warning, theme.surface.success],
-    [theme.surface.error, theme.surface.warning, theme.surface.success],
+  // Duas paradas, não três: o DonutArc da DS desestrutura `[arcFrom, arcTo]` e
+  // descarta o resto desde que trocou o gradiente por dois preenchimentos
+  // chapados. A terceira cor que ficava aqui nunca chegou a pintar nada.
+  const gradientFlame = useMemo<[string, string]>(
+    () => [theme.surface.error, theme.surface.warning],
+    [theme.surface.error, theme.surface.warning],
   );
 
   // State-driven takeovers (placed AFTER all hooks to respect Rules of Hooks).

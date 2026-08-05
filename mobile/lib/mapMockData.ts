@@ -32,7 +32,7 @@ export interface WorkerMarker {
 // pattern used across the mobile screens; see journey/task/[id].tsx).
 // require() must be statically analyzable per Metro, so we keep each
 // asset path as a literal inside its own expression.
-const WORKER_AVATARS: ReadonlyArray<string> = [
+const WORKER_AVATARS: readonly string[] = [
   Asset.fromModule(require('../assets/avatars/worker-1.png')).uri,
   Asset.fromModule(require('../assets/avatars/worker-2.png')).uri,
   Asset.fromModule(require('../assets/avatars/worker-3.png')).uri,
@@ -49,7 +49,7 @@ export const USER_AVATAR: string = Asset.fromModule(
   require('../assets/avatar-construction.png'),
 ).uri;
 
-export const WORKER_LOCATIONS: ReadonlyArray<WorkerMarker> = [
+export const WORKER_LOCATIONS: readonly WorkerMarker[] = [
   {
     id: 'wkr-01',
     lng: -46.638,
@@ -118,7 +118,7 @@ export interface CameraMarker {
   name: string;
 }
 
-export const CAMERA_LOCATIONS: ReadonlyArray<CameraMarker> = [
+export const CAMERA_LOCATIONS: readonly CameraMarker[] = [
   { id: 'cam-01', lng: -46.638, lat: -23.541, name: 'Câmera Norte 1' },
   { id: 'cam-02', lng: -46.625, lat: -23.544, name: 'Câmera Norte 2' },
   { id: 'cam-03', lng: -46.642, lat: -23.547, name: 'Câmera Centro Oeste' },
@@ -146,7 +146,7 @@ export interface WeatherAlertPin {
   status: PinStatus;
 }
 
-export const WEATHER_ALERT_PINS: ReadonlyArray<WeatherAlertPin> = [
+export const WEATHER_ALERT_PINS: readonly WeatherAlertPin[] = [
   { id: 'wx-01', lng: -46.64, lat: -23.542, status: 'good' },
   { id: 'wx-02', lng: -46.626, lat: -23.543, status: 'good' },
   { id: 'wx-03', lng: -46.618, lat: -23.547, status: 'good' },

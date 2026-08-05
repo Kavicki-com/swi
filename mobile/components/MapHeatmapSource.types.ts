@@ -41,3 +41,37 @@ export interface MapHeatmapSourceProps {
   /** Optional `beforeId` to insert the layer beneath an existing one. */
   beforeId?: string;
 }
+
+/**
+ * Expressão `heatmap-color` do MapLibre em forma de tupla.
+ *
+ * Deliberadamente descrita aqui em vez de importada como
+ * `ExpressionSpecification`: web e native resolvem versões diferentes de
+ * `@maplibre/maplibre-gl-style-spec` (a 20.x que vem com `maplibre-gl` e a
+ * 24.x aninhada em `@maplibre/maplibre-react-native`), e as duas uniões não
+ * são mutuamente atribuíveis. Uma tupla estreita satisfaz o membro
+ * `interpolate` das duas, o que dispensa cast em qualquer um dos renderers.
+ */
+export type HeatmapColorExpression = [
+  'interpolate',
+  ['linear'],
+  ['heatmap-density'],
+  ...(number | string)[],
+];
+
+/**
+ * Converte as paradas [densidade, cor] na expressão `heatmap-color`. Saída:
+ *   ['interpolate', ['linear'], ['heatmap-density'], 0, 'cyan', 1, 'red']
+ *
+ * Vive aqui, e não em cada renderer, para que web e native não possam
+ * divergir na conversão: um erro aqui apareceria nos dois mapas de uma vez.
+ */
+export function buildColorExpression(
+  stops: readonly HeatmapColorStop[],
+): HeatmapColorExpression {
+  const flat: (number | string)[] = [];
+  for (const [density, color] of stops) {
+    flat.push(density, color);
+  }
+  return ['interpolate', ['linear'], ['heatmap-density'], ...flat];
+}
