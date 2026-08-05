@@ -1,6 +1,7 @@
-// Local mirror do shape devolvido pela custom query getWeather do swi-backend.
-// Siblings isolados → NÃO importamos o Schema; após deploy, `ampx generate` pode
-// substituir. Mirrors services/<domínio>/types.ts. Datas ISO.
+// Local mirror do shape devolvido pelo endpoint de clima do swi-backend.
+// Siblings isolados → NÃO importamos os tipos do backend: este arquivo é a
+// fronteira do contrato REST e precisa ser conferido à mão quando ele mudar.
+// Mirrors services/<domínio>/types.ts. Datas ISO.
 
 export type WeatherCondition = 'clear' | 'clouds' | 'rain' | 'storm' | 'snow' | 'fog';
 

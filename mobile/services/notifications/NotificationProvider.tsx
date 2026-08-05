@@ -41,7 +41,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Feed ao vivo: o servidor (mock event-bus / AppSync no deploy) empurra novas
+  // Feed ao vivo: o servidor (event bus do mock, Socket.IO na API real) empurra novas
   // notificações; o reducer faz update-or-insert e re-ordena.
   useEffect(() => {
     const unsub = backend.subscribe((n) => {

@@ -7,8 +7,8 @@ import {
 // Backend demo in-memory pra slice Notificações. Mirrors mockChatBackend.ts: store
 // mutável module-level semeado no import, servido com um tiny async hop (`tick`) e
 // clone defensivo nas leituras. Um EVENT BUS de canal único (`subscribe(cb)`)
-// simula `client.models.Notification.onCreate` do AppSync. NÃO há gerador de push
-// sintético no app rodando — chegadas reais vêm do servidor (SNS/AppSync) no
+// espelha o canal de tempo real do adaptador de API. NÃO há gerador de push
+// sintético no app rodando: chegadas reais vêm do servidor por Socket.IO no
 // deploy; o bus é exercitado nos testes via `__pushForTest`. `myId = 'me'`.
 //
 // Seed migrado do array estático de app/(app)/notifications.tsx (12 itens): cada
@@ -54,7 +54,7 @@ let lastToken: string | null = null;
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-// ---- Event bus in-memory (simula AppSync onCreate, canal único por-usuário) ----
+// ---- Event bus in-memory (espelha o canal Socket.IO, único por usuário) ----
 type Listener = (n: AppNotification) => void;
 const listeners = new Set<Listener>();
 function emit(n: AppNotification) { listeners.forEach((cb) => cb(n)); }
@@ -79,7 +79,7 @@ export const mockNotificationBackend: NotificationBackend = {
 
   async registerPushToken(token) {
     await tick();
-    lastToken = token; // no-op de entrega; no deploy → SNS createPlatformEndpoint
+    lastToken = token; // no-op de entrega; no deploy o backend registra o token em FCM/APNs
   },
 
   subscribe(cb) {
@@ -89,7 +89,7 @@ export const mockNotificationBackend: NotificationBackend = {
 };
 
 // Test-only: simula um push do servidor (o app NUNCA chama isto — chegadas reais
-// vêm do AppSync/SNS no deploy). Empurra pro store + emite no bus.
+// vêm do servidor por Socket.IO no deploy). Empurra pro store + emite no bus.
 export function __pushForTest(n: AppNotification): void {
   notifications = applyNotification(notifications, n);
   emit(n);

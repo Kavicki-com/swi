@@ -1,18 +1,18 @@
 // Local mirror dos models Conversation/Message/Contact do swi-backend. Siblings
-// são isolados, então NÃO importamos o Schema do backend; após deploy, `ampx
-// generate graphql-client-code --out` pode substituir por tipos gerados.
+// são isolados, então NÃO importamos os tipos do backend: este arquivo é a
+// fronteira do contrato REST e precisa ser conferido à mão quando ele mudar.
 // Mirrors services/journey/types.ts.
 //
 // Arrays paralelos (`participants`/`participantNames`/...) mantêm a Conversation
 // auto-suficiente pro card do inbox sem um join no diretório. `avatars`/`imageUri`
-// são uris resolvidas (de keys do S3 no amplify). Datas são ISO strings; a
+// são uris já resolvidas pelo backend (presigned). Datas são ISO strings; a
 // ordenação por recência usa comparação lexicográfica (= cronológica).
 export interface Conversation {
   id: string;
-  participants: string[];           // [myId, contactId] (Cognito subs)
+  participants: string[];           // [myId, contactId] (ids do backend)
   participantNames: string[];       // paralelo a participants
   participantSubtitles: string[];   // "Setor Leste"
-  participantAvatars: string[];     // uris (resolvidas de keys no amplify)
+  participantAvatars: string[];     // uris presigned
   lastMessageBody: string;
   lastMessageAt: string | null;     // ISO datetime
   unreadBy: Record<string, number>; // sub -> count (de unreadByJson)
@@ -24,7 +24,7 @@ export interface Message {
   participants: string[];
   senderId: string;                 // === myId ⇒ bubble "me"
   body: string;
-  imageUri: string | null;          // anexo resolvido (de imageKey no amplify)
+  imageUri: string | null;          // anexo já resolvido (presigned)
   sentAt: string;                   // ISO datetime
 }
 
