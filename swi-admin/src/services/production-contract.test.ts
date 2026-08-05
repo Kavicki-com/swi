@@ -54,6 +54,24 @@ describe('contrato de produção do admin', () => {
     }
   })
 
+  // O overlay de fidelidade era ferramenta de autoria: comparava o painel vivo
+  // com uma captura do Figma. A rota era DEV-only, mas o import da captura é
+  // estático, então os 818 kB do PNG entravam no bundle de produção mesmo assim.
+  // `dataSet` acompanha porque só existia para marcar os alvos do overlay.
+  it('não tem mais o ferramental de fidelidade', () => {
+    expect(fs.existsSync(path.join(SRC, 'dev', 'fidelity')), 'o overlay voltou').toBe(false)
+    expect(
+      fs.existsSync(path.join(SRC, 'types', 'rn-web-augment.d.ts')),
+      'a augmentação de dataSet voltou',
+    ).toBe(false)
+
+    const marcados = sourceFiles(SRC)
+      .filter((file) => /\bdataSet\s*=/.test(fs.readFileSync(file, 'utf8')))
+      .map((file) => path.relative(SRC, file).replace(/\\/g, '/'))
+
+    expect(marcados, `ainda marcam alvos do overlay:\n${marcados.join('\n')}`).toEqual([])
+  })
+
   it('authApi não reaproveita nenhuma implementação simulada', async () => {
     const { authApi } = await import('./auth')
     const { authApi: mockAuthApi } = await import('./mockApi/auth')

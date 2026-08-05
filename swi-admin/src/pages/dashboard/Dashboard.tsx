@@ -309,7 +309,6 @@ function MapBanner({
   return (
     <View
       testID="dashboard-map-banner"
-      dataSet={{ fidelity: 'map-banner' }}
       style={{
         height,
         borderRadius: theme.border.radius.m,
@@ -430,7 +429,6 @@ function FuncionariosKpi({
     return (
       <View
         testID="kpi-funcionarios"
-        dataSet={{ fidelity: 'kpi-1x4' }}
         style={{
           flexDirection: 'row',
           gap: theme.gap.s,
@@ -540,7 +538,6 @@ function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
   return (
     <View
       testID="wear-alerts-section"
-      dataSet={{ fidelity: 'wear-alerts' }}
       style={{ gap: theme.gap.m }}
     >
       <View
@@ -708,7 +705,6 @@ function ActivitiesSection({ activities }: { activities: DashboardActivity[] }) 
   return (
     <View
       testID="activities-section"
-      dataSet={{ fidelity: 'activities' }}
       style={{ gap: theme.gap.m }}
     >
       <Title variant="title.s">Atividades em andamento</Title>
@@ -848,7 +844,6 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
 
   const weatherStrip = (
     <View
-      dataSet={{ fidelity: 'weather' }}
       style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.m }}
     >
       <Title>Previsão do tempo</Title>
@@ -881,7 +876,6 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         <MapBanner markers={summary.mapMarkers} />
         <View
           testID="dashboard-top-row-tablet"
-          dataSet={{ fidelity: 'top-row-tablet' }}
           style={{ flexDirection: 'column', gap: theme.gap.m }}
         >
           <FuncionariosKpi summary={summary} />
@@ -889,7 +883,6 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         </View>
         <View
           testID="dashboard-two-col-row"
-          dataSet={{ fidelity: 'two-col-tablet' }}
           style={{ flexDirection: 'column', gap: theme.gap.l }}
         >
           <ActivitiesSection activities={summary.activities} />
@@ -910,13 +903,12 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     return (
       <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
         {/* Row 1 — Map spans the full content width. */}
-        <View testID="dashboard-top-row-wide" dataSet={{ fidelity: 'top-row-wide' }}>
+        <View testID="dashboard-top-row-wide">
           <MapBanner markers={summary.mapMarkers} height={268} />
         </View>
         {/* Row 2 — Donuts (left, ~60 %) and 4 KPIs (right, ~40 %). */}
         <View
           testID="dashboard-kpi-row-wide"
-          dataSet={{ fidelity: 'kpi-row-wide' }}
           style={{
             flexDirection: 'row',
             gap: theme.gap.m,
@@ -948,7 +940,6 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         </View>
         <View
           testID="dashboard-two-col-row"
-          dataSet={{ fidelity: 'two-col-wide' }}
           style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'flex-start' }}
         >
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -972,7 +963,6 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
           Right-side donuts share a single dark container that extends to the edge of the right column. */}
       <View
         testID="kpi-row"
-        dataSet={{ fidelity: 'kpi-row' }}
         style={{
           flexDirection: 'row',
           gap: theme.gap.m,

@@ -499,7 +499,6 @@ export function MapsGeneral() {
   return (
     <View
       testID="maps-general"
-      dataSet={{ fidelity: 'maps-general' }}
       style={{
         // Full viewport — Maps lives OUTSIDE AppLayout (no parent gives size).
         // position:fixed + inset:0 anchors the root to the viewport directly,

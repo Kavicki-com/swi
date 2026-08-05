@@ -37,7 +37,6 @@ import { TaskForm } from '@/pages/tasks/TaskForm'
 import { TaskDetails } from '@/pages/tasks/TaskDetails'
 import { UserSettings } from '@/pages/user/UserSettings'
 import { UserProfile } from '@/pages/user/UserProfile'
-import { FidelityReview } from '@/dev/fidelity/FidelityReview'
 
 // Uma única instância do ChatProvider pra toda a subárvore autenticada: como
 // é uma rota de layout, o React Router a mantém montada ao navegar entre /chat
@@ -73,9 +72,6 @@ export function App() {
               </Route>
               <Route element={<RequireAuth />}>
                 <Route element={<ChatShell />}>
-                  {import.meta.env.DEV && (
-                    <Route path="/dev/fidelity" element={<FidelityReview />} />
-                  )}
                   {/* Full-bleed routes (no AppLayout sidebar/header) — Maps live here. */}
                   <Route path="/maps/general" element={<MapsGeneral />} />
                   <Route path="/chat" element={<ChatInbox />} />

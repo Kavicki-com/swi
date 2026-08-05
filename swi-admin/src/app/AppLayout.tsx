@@ -145,7 +145,6 @@ export function AppLayout() {
       >
         <View
           testID="app-topbar"
-          dataSet={{ fidelity: 'topbar' }}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -184,7 +183,6 @@ export function AppLayout() {
         {drawerOpen && (
           <View
             testID="app-drawer"
-            dataSet={{ fidelity: 'drawer' }}
             // Overlay panel: dim the page and dock the menu panel on the
             // left. Width 280 keeps Figma proportions for tablet portrait.
             style={{
@@ -286,7 +284,6 @@ export function AppLayout() {
     >
       <View
         testID="app-sidebar"
-        dataSet={{ fidelity: 'sidebar' }}
         style={{
           width: 228,
           flexDirection: 'column',
@@ -345,7 +342,6 @@ export function AppLayout() {
       <View style={{ flex: 1 }}>
         <View
           testID="app-header"
-          dataSet={{ fidelity: 'header' }}
           style={{
             flexDirection: 'row',
             justifyContent: 'flex-end',
