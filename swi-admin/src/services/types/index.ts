@@ -3,7 +3,6 @@ export type ISODateString = string
 
 export type User = {
   id: ID
-  org_id: ID
   email: string
   full_name: string
   role: 'admin' | 'super_admin'

@@ -13,14 +13,12 @@ vi.mock('@/services/auth', () => ({
   authApi: {
     signIn: signInMock,
     getSession: vi.fn(async () => ({ data: null, error: null })),
-    signUp: vi.fn(async () => ({ data: null, error: null })),
     signOut: vi.fn(async () => ({ data: null, error: null })),
   },
 }))
 
 const adminUser = {
   id: 'u1',
-  org_id: '',
   email: 'admin@swi.local',
   full_name: 'Admin Demo',
   role: 'admin',

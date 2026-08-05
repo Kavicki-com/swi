@@ -147,7 +147,7 @@ const TIER_TO_STATUS: Record<SimulatedTier, 'good' | 'alert' | 'low'> = {
 }
 
 export const dashboardApi = {
-  summary: async (_opts: { orgId: string }): Promise<MockResponse<DashboardSummary>> => {
+  summary: async (): Promise<MockResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
     // erro degrada só a própria seção — o summary nunca propaga erro total.
     const [admins, employees, reports, activities, weather] = await Promise.all([

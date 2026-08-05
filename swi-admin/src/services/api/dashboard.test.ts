@@ -81,7 +81,7 @@ beforeEach(() => {
 
 describe('dashboardApi.summary', () => {
   it('derives real KPI counts: admins / totalEmployees / newReports (pending filter)', async () => {
-    const { data, error } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    const { data, error } = await dashboardApi.summary()
     expect(error).toBeNull()
     expect(data!.kpis.admins).toBe(3)
     expect(data!.kpis.totalEmployees).toBe(5)
@@ -90,7 +90,7 @@ describe('dashboardApi.summary', () => {
   })
 
   it('maps work-orders → activities across the 3 statuses (no risk)', async () => {
-    const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    const { data } = await dashboardApi.summary()
     expect(data!.activities).toHaveLength(3)
     const [a1, a2, a3] = data!.activities
     expect(a1).toMatchObject({
@@ -114,7 +114,7 @@ describe('dashboardApi.summary', () => {
   })
 
   it('deriva desgaste/vitais dos funcionários REAIS com vitais simulados plausíveis', async () => {
-    const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    const { data } = await dashboardApi.summary()
     // Posições agora são reais: o Dashboard splica useLivePositions() sobre o
     // summary — o serviço não fabrica mais markers mock.
     expect(data!.mapMarkers).toEqual([])
@@ -146,13 +146,13 @@ describe('dashboardApi.summary', () => {
   })
 
   it('passes the real weather strip through', async () => {
-    const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    const { data } = await dashboardApi.summary()
     expect(data!.weather).toEqual([weatherSlot])
   })
 
   it('degrades weather to [] when the weather facade returns an error', async () => {
     vi.mocked(weatherApi.get).mockResolvedValue({ data: null, error: { message: 'boom' } } as never)
-    const { data, error } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    const { data, error } = await dashboardApi.summary()
     expect(error).toBeNull()
     expect(data!.weather).toEqual([])
     // the rest stays real
@@ -161,13 +161,13 @@ describe('dashboardApi.summary', () => {
 
   it('degrades newReports to 0 when the reports facade fails', async () => {
     vi.mocked(reportsApi.list).mockResolvedValue({ data: null, error: { message: 'x' } } as never)
-    const { data } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    const { data } = await dashboardApi.summary()
     expect(data!.kpis.newReports).toBe(0)
   })
 
   it('degrades activities to [] when the raw work-orders facade THROWS', async () => {
     vi.mocked(workOrdersApi.list).mockRejectedValue(new Error('ApiError 500'))
-    const { data, error } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    const { data, error } = await dashboardApi.summary()
     // summary must never reject — activities empty, everything else intact
     expect(error).toBeNull()
     expect(data!.activities).toEqual([])
@@ -180,7 +180,7 @@ describe('dashboardApi.summary', () => {
     vi.mocked(reportsApi.list).mockResolvedValue({ data: null, error: { message: 'e' } } as never)
     vi.mocked(workOrdersApi.list).mockRejectedValue(new Error('down'))
     vi.mocked(weatherApi.get).mockResolvedValue({ data: null, error: { message: 'e' } } as never)
-    const { data, error } = await dashboardApi.summary({ orgId: 'org_seed_1' })
+    const { data, error } = await dashboardApi.summary()
     expect(error).toBeNull()
     expect(data!.kpis.admins).toBe(0)
     expect(data!.kpis.totalEmployees).toBe(0)

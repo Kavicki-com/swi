@@ -1,4 +1,3 @@
-// src/services/mockApi/adminVitals.ts
 // Vitais + persona do admin logado pro menu fullscreen do header (QA cliente
 // §1.1, portado do demo em 2026-07-28).
 //
@@ -13,7 +12,7 @@
 // então não há número pra contradizer — e não há telemetria real até a
 // smartband existir.
 import { useAuth } from '@/hooks/useAuth'
-import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
+import { simulatedVitalsFor } from './simulatedVitals'
 
 export type AdminVitals = {
   role: string

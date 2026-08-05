@@ -1,9 +1,9 @@
 // Mapeadores DTO backend (Conversation/Message/Contact) → shapes da UI
-// (ChatContact/ChatMessage do mockApi/chats), pra reusar ChatInbox + DS
+// (ChatContact/ChatMessage de chat/types), pra reusar ChatInbox + DS
 // ChatSection sem alteração. Puros; datas ISO viram "HH:MM" via timeOf.
 import type { Conversation, Message, Contact } from './types'
 import { conversationKey, resolveContact, unreadFor } from './chatReducers'
-import type { ChatContact, ChatMessage } from '../mockApi/chats'
+import type { ChatContact, ChatMessage } from './types'
 
 export const timeOf = (iso: string): string =>
   new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })

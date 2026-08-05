@@ -4,20 +4,12 @@ import { authApi } from '@/services/auth'
 import { SESSION_CLEARED_EVENT, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import type { User } from '@/services/types'
 
-type SignUpInput = {
-  email: string
-  password: string
-  full_name: string
-  consent: boolean
-}
-
 type Result = { ok: boolean; message?: string }
 
 type AuthContextValue = {
   user: User | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<Result>
-  signUp: (input: SignUpInput) => Promise<Result>
   signOut: () => Promise<void>
 }
 
@@ -71,22 +63,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: false, message: error?.message }
   }
 
-  const signUp: AuthContextValue['signUp'] = async (input) => {
-    const { data, error } = await authApi.signUp(input)
-    if (data) {
-      setUser(data)
-      return { ok: true }
-    }
-    return { ok: false, message: error?.message }
-  }
-
   const signOut: AuthContextValue['signOut'] = async () => {
     await authApi.signOut()
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -70,7 +70,7 @@ export function Dashboard() {
     if (!user) return
     let cancelled = false
     setPhase('loading')
-    dashboardApi.summary({ orgId: user.org_id }).then(({ data, error: err }) => {
+    dashboardApi.summary().then(({ data, error: err }) => {
       if (cancelled) return
       if (data) {
         setSummary(data)

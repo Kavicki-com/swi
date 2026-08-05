@@ -1,7 +1,6 @@
 // describe/it/expect/afterEach vêm dos globals do Vitest (globals: true no config);
 // importar hooks de 'vitest' aqui duplica a instância (deps.inline) e quebra o runner.
 import { vi } from 'vitest'
-import { SEED_ORG_ID } from '@/services/mockApi/seed'
 import { authApi } from './auth'
 import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from './http'
 
@@ -43,18 +42,6 @@ describe('authApi.signIn (real)', () => {
     const [url, init] = f.mock.calls[0] as [string, RequestInit]
     expect(url).toContain('/auth/login')
     expect(init.method).toBe('POST')
-  })
-
-  it('grava a sessão com o org do seed — ponte pros domínios ainda mock', async () => {
-    // Dashboard/Employees/etc. seguem mock e filtram por org_id === SEED_ORG_ID;
-    // org_id vazio deixaria o painel inteiro zerado sem nenhum erro.
-    vi.stubGlobal('fetch', okLogin(jwt({ sub: 'u1', role: 'ADMIN' })))
-
-    const { data } = await authApi.signIn({ email: 'admin@swi.local', password: 'admin123' })
-
-    expect(data?.org_id).toBe(SEED_ORG_ID)
-    const stored = JSON.parse(window.localStorage.getItem(SESSION_STORAGE_KEY) ?? '{}')
-    expect(stored.org_id).toBe(SEED_ORG_ID)
   })
 
   it('200 com corpo nulo devolve erro amigável sem persistir nada', async () => {

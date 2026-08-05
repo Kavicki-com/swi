@@ -2,7 +2,6 @@
 // MockResponse pra que useAuth e as telas não precisem mudar na migração.
 import type { User } from '@/services/types'
 import type { MockResponse } from '@/services/mockApi/types'
-import { SEED_ORG_ID } from '@/services/mockApi/seed'
 import { ApiError, apiFetch, clearSession, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from './http'
 
 type LoginResponse = { accessToken: string; user: { id: string; email: string; name: string } }
@@ -20,15 +19,11 @@ const roleOf = (token: string): string => {
   }
 }
 
-// O backend devolve { id, email, name }; o painel consome o shape User dos
-// mocks. org_id é ponte de transição: os domínios ainda mock (Dashboard,
-// Employees, Alerts, …) filtram por org_id === SEED_ORG_ID — vazio deixaria o
-// painel inteiro zerado sem erro. Remover quando o último domínio migrar pro
-// backend real. created_at é sintético (timestamp do login, não da criação da
-// conta) — não usar pra exibir "membro desde".
+// O backend devolve { id, email, name }; o painel consome o shape User.
+// created_at é sintético (timestamp do login, não da criação da conta) — não
+// usar pra exibir "membro desde".
 const toAdminUser = (u: LoginResponse['user']): User => ({
   id: u.id,
-  org_id: SEED_ORG_ID,
   email: u.email,
   full_name: u.name,
   role: 'admin',

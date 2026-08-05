@@ -10,7 +10,6 @@ export const SEED_ORG_ID = 'org_seed_1'
 
 export const SEED_ADMIN: User = {
   id: 'u_seed_1',
-  org_id: SEED_ORG_ID,
   email: 'admin@swi.test',
   full_name: 'Admin Seed',
   role: 'super_admin',

@@ -18,7 +18,6 @@ const seedAuthed = () => {
     SESSION_STORAGE_KEY,
     JSON.stringify({
       id: 'u_seed_1',
-      org_id: 'org_seed_1',
       email: 'a',
       full_name: 'a',
       role: 'admin',
@@ -65,7 +64,6 @@ describe('RequireAuth', () => {
       SESSION_STORAGE_KEY,
       JSON.stringify({
         id: 'u_seed_1',
-        org_id: 'org_seed_1',
         email: 'a',
         full_name: 'a',
         role: 'admin',
@@ -131,7 +129,6 @@ describe('GuestOnly', () => {
       SESSION_STORAGE_KEY,
       JSON.stringify({
         id: 'u_seed_1',
-        org_id: 'org_seed_1',
         email: 'a',
         full_name: 'a',
         role: 'admin',

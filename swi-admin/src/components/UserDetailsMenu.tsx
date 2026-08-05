@@ -20,7 +20,7 @@ import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import { Avatar, Logo, ProgressBar, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
-import { useAdminVitals } from '@/services/mockApi/adminVitals'
+import { useAdminVitals } from '@/services/vitals/adminVitals'
 import { HeartPulseCanvas } from '@/components/HeartPulseCanvas'
 import workerA from '@/assets/avatars/worker-a.png'
 
