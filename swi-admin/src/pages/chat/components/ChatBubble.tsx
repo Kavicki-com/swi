@@ -1,7 +1,7 @@
 // src/pages/chat/components/ChatBubble.tsx
 // Bolha de conversa do inbox: enviada (direita) e recebida (esquerda), com o
-// menu de acoes (editar, copiar, denunciar, excluir) e a lapide de mensagem
-// excluida. Extraida de ChatInbox.tsx sem mudanca de comportamento.
+// menu de ações (editar, copiar, denunciar, excluir) e a lápide de mensagem
+// excluída. Extraída de ChatInbox.tsx sem mudança de comportamento.
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import {

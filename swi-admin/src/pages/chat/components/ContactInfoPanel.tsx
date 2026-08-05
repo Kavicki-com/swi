@@ -1,7 +1,8 @@
 // src/pages/chat/components/ContactInfoPanel.tsx
-// Painel da coluna da direita: identidade do contato, mini-mapa de satelite,
-// barra de tempo ate a fadiga total e cartao de dados (genero, idade, tipo
-// sanguineo, alergias). Extraido de ChatInbox.tsx sem mudanca de comportamento.
+// Painel da coluna da direita: identidade do contato, mini-mapa de satélite,
+// barra de tempo até a fadiga total e cartão de dados (gênero, idade, tipo
+// sanguíneo, alergias). Extraído de ChatInbox.tsx sem mudança de
+// comportamento.
 import { useEffect, useRef } from 'react'
 import { Pressable, View } from 'react-native'
 import { useMapLibre } from '@/lib/useMapLibre'
