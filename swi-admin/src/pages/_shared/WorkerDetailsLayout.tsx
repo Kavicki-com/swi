@@ -1,6 +1,6 @@
 // src/pages/_shared/WorkerDetailsLayout.tsx
-// Shared 3-column worker details layout — used by AdminDetails (Figma 53:6344)
-// and EmployeeDetails (Figma 54:6561). Pure presentational: takes a `worker`
+// Shared 3-column worker details layout — used by AdminDetails and
+// EmployeeDetails. Pure presentational: takes a `worker`
 // payload + a `topRightAction` slot for the page-specific CTA. The page owns
 // data fetching, loading/empty states, and back/CTA navigation.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -81,8 +81,8 @@ export type WorkerDetailsLayoutProps = {
 
 // O gasto calórico por período sai de simulatedCaloriesFor(seedId): era uma
 // constante única, então Worker Demo, o admin e o perfil próprio exibiam a
-// MESMA curva 41/57/62… nos mesmos horários (QA 2026-07-26). A forma do Figma
-// 105:12586 é preservada; a magnitude varia por pessoa.
+// MESMA curva 41/57/62… nos mesmos horários (QA 2026-07-26). A forma da
+// curva especificada é preservada; a magnitude varia por pessoa.
 
 // ESRI World Imagery — same satellite tile source the dashboard MapBanner
 // and /maps/general use. Reused here for the mini-map in the user profile.
@@ -139,7 +139,7 @@ function MiniMap({
       attributionControl: false,
     })
     mapRef.current = map
-    // Marker DOM — Figma 105:12554 LocationPin = circular avatar (with
+    // Marker DOM — LocationPin = circular avatar (with
     // blue ring) + small triangular tail pointing down (anchors at the
     // tip of the tail on the map lat/lng).
     const wrapper = document.createElement('div')
@@ -186,9 +186,9 @@ function MiniMap({
     <View
       style={{
         height: 132,
-        // Cap the map at the Figma 1366 width (LEFT col = 380). When the LEFT
+        // Cap the map at the 1366px reference width (LEFT col = 380). When the LEFT
         // column grows at wide (>=1500), the satellite tiles would stretch to
-        // ~5:1 aspect ratio — capping keeps the map at its Figma aspect (2.88:1)
+        // ~5:1 aspect ratio — capping keeps the map at its specified aspect (2.88:1)
         // and the other LEFT-col content (profile, exam history) absorbs the
         // extra width.
         maxWidth: 380,
@@ -221,7 +221,7 @@ function MiniMap({
           accessibilityLabel="Ver mapa completo"
         />
       </View>
-      {/* Camera affordance — Figma 105:12516 / 32:3363 ContainedButton
+      {/* Camera affordance — ContainedButton
           (variant surface): surface.high bg, padding.sm, radius.m, elevation.sm. */}
       <Pressable
         accessibilityRole="button"
@@ -247,7 +247,7 @@ function MiniMap({
 }
 
 // Inline stat — label + optional icon + value, all in one row.
-// Figma 159:14123 / 159:16092 right-column stats: label always body.m bold
+// Right-column stats: label always body.m bold
 // (14), value usually body.s medium (12) in content.dark, except blood type
 // which uses body.m regular (14) — passed via `valueVariant` to opt into that.
 function InlineStat({
@@ -322,8 +322,8 @@ export function WorkerDetailsLayout({
   return (
     <View testID={testID} style={{ gap: theme.gap.m }}>
       {/* Top bar — Voltar (left, ghost text + chevron) + page-specific CTA
-          (right, supplied via topRightAction slot). Per Figma 53:6344 /
-          54:6561 the right CTA differs: AdminDetails uses an "Editar perfil"
+          (right, supplied via topRightAction slot). The right CTA differs per
+          page: AdminDetails uses an "Editar perfil"
           text link, EmployeeDetails uses a contained "Solicitar Pausa" Button. */}
       <View
         style={{
@@ -363,7 +363,7 @@ export function WorkerDetailsLayout({
       {/* Three-column body — at tablet (<1024) stacks into a single column
           (LEFT → CENTER → RIGHT) so the 380+silhouette+459 layout fits below
           the collapsed sidebar. Desktop (1024-1499) and wide (>=1500) keep
-          the 380 / flex / 459 spec from Figma 53:6344 / 54:6561. */}
+          the 380 / flex / 459 spec. */}
       <View
         style={{
           flexDirection: isTablet ? 'column' : 'row',
@@ -373,7 +373,7 @@ export function WorkerDetailsLayout({
       >
         {/* LEFT column — profile + mini map + exam history.
             - Tablet (<1024): full-width (stacked).
-            - Desktop (1024-1499): hard width 380 to match Figma 53:6344 / 54:6561
+            - Desktop (1024-1499): hard width 380 to match the specified layout
               exactly. CENTER absorbs the slack at this width.
             - Wide (>=1500): flexBasis 380 + flexGrow 1 so the column grows to
               fill the screen alongside RIGHT (boss directive). CENTER stays
@@ -388,8 +388,8 @@ export function WorkerDetailsLayout({
             gap: theme.gap.s,
           }}
         >
-          {/* Profile — Figma 53:6344 / 54:6561 shows avatar proportionally
-              larger than DS size="l" (64). customSize=80 matches the Figma
+          {/* Profile — the design shows the avatar proportionally
+              larger than DS size="l" (64). customSize=80 matches the specified
               80px diameter circle. Vertical centering (alignItems: 'center')
               keeps the 3-line text block visually balanced against the taller
               avatar. */}
@@ -417,8 +417,7 @@ export function WorkerDetailsLayout({
           {/* Mini map with location */}
           <MiniMap worker={worker} position={position} onOpenFullMap={onOpenFullMap} />
 
-          {/* Exam history — Figma 159:14200 / 159:16070 specifies h-[176px]
-              scrollable area. Vertical-only scroll, no visible scrollbar
+          {/* Exam history — h-[176px] scrollable area. Vertical-only scroll, no visible scrollbar
               (class `no-scrollbar` declared in index.html hides webkit/firefox UI). */}
           <View style={{ gap: theme.gap.s }}>
             <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
@@ -470,7 +469,7 @@ export function WorkerDetailsLayout({
               centres horizontally in the stacked layout.
             - Desktop (1024-1499): flex:1 absorbs the slack between LEFT 380 and
               RIGHT 459 — gives the silhouette the same ~107px wide column the
-              Figma 1366 frame produces, preserving fidelity.
+              1366px reference frame produces, preserving fidelity.
             - Wide (>=1500): fixed 170 px so the silhouette doesn't blow up;
               LEFT and RIGHT absorb the extra wide-viewport space instead. */}
         <View
@@ -497,7 +496,7 @@ export function WorkerDetailsLayout({
 
         {/* RIGHT column — vitals card + fatigue + stats + allergies + donuts.
             - Tablet: full-width (stacked).
-            - Desktop (1024-1499): hard width 459 (Figma 159:14108 / 159:16078)
+            - Desktop (1024-1499): hard width 459
               so body stats stay inline and "Condições excelentes" never wraps.
             - Wide (>=1500): flexBasis 459 + flexGrow 1 — grows together with
               LEFT to fill the screen (boss directive). */}
@@ -511,7 +510,7 @@ export function WorkerDetailsLayout({
             gap: theme.gap.sm,
           }}
         >
-          {/* Combined vitals card — Figma 159:14109 / 159:16078. Linear gradient
+          {/* Combined vitals card. Linear gradient
               from surface.primary (green) to surface.secondary (blue). Web-only
               <div> wrapper because react-native-web View strips the
               `background` shorthand needed for linear-gradient. */}
@@ -558,7 +557,7 @@ export function WorkerDetailsLayout({
             <SimulatedDataBadge />
           </View>
 
-          {/* Fatigue total time — Figma 159:14118 / 159:16087. Pill-rounded
+          {/* Fatigue total time. Pill-rounded
               outer container (bg=background) with padding.xs inset and an
               inset drop shadow framing a 6px gradient bar (error→warning→success).
               Outer container is a <div> because react-native-web View does
@@ -593,10 +592,10 @@ export function WorkerDetailsLayout({
             </Text>
           </View>
 
-          {/* Divider — Figma 159:14122 / 159:16091 separates fatigue from stats. */}
+          {/* Divider separates fatigue from stats. */}
           <View style={{ height: 1, backgroundColor: theme.surface.high, width: '100%' }} />
 
-          {/* Body stats — Figma 159:14123 / 159:16092. Gênero, Idade, Tipo
+          {/* Body stats. Gênero, Idade, Tipo
               sanguíneo inline; blood type value uses body.m regular (14). */}
           <View
             style={{
@@ -619,10 +618,10 @@ export function WorkerDetailsLayout({
             />
           </View>
 
-          {/* Divider — Figma 159:14135 / 159:16104 separates stats from allergies. */}
+          {/* Divider separates stats from allergies. */}
           <View style={{ height: 1, backgroundColor: theme.surface.high, width: '100%' }} />
 
-          {/* Allergies — Figma 159:14136 / 159:16105. Title in Montserrat Bold
+          {/* Allergies. Title in Montserrat Bold
               16 (title.xs), then chips in surface.primary with content.light text. */}
           <View style={{ gap: theme.gap.m }}>
             <Title variant="title.xs" color={theme.content.dark}>
@@ -641,12 +640,11 @@ export function WorkerDetailsLayout({
             </View>
           </View>
 
-          {/* Donut charts side-by-side — Figma 159:14140 / 159:14142 (admin) and
-              159:16109 / 159:16110 (employee) use the flat appearance (no
-              bezel/well, thin arc). Gradients use surface tokens.
+          {/* Donut charts side-by-side — both admin and employee use the flat
+              appearance (no bezel/well, thin arc). Gradients use surface tokens.
               Each chart sizes intrinsically via size="small"; the row aligns
               them to the LEFT of the column so they line up with the vitals,
-              fatigue and allergies stack above (Figma column-edge alignment). */}
+              fatigue and allergies stack above (column-edge alignment). */}
           {/* Each donut sits at intrinsic size (size="small" → 156 wide).
               The row is at the LEFT of the right column, so the first donut
               card's left edge aligns with "Alergias"/"Tempo até atingir fadiga"
@@ -678,8 +676,8 @@ export function WorkerDetailsLayout({
         </View>
       </View>
 
-      {/* BOTTOM — Caloric expenditure timeline. Figma 105:12586 / 159:16111
-          places the section title + period combobox above the chart card as
+      {/* BOTTOM — Caloric expenditure timeline. The section title + period
+          combobox sit above the chart card as
           siblings, not wrapped in their own surface. The LineCaloriesChart
           already renders its own surface.medium + radius.l container. */}
       <View style={{ gap: theme.gap.m }}>

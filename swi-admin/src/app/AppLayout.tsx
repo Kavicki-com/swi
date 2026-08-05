@@ -184,7 +184,7 @@ export function AppLayout() {
           <View
             testID="app-drawer"
             // Overlay panel: dim the page and dock the menu panel on the
-            // left. Width 280 keeps Figma proportions for tablet portrait.
+            // left. Width 280 keeps the specified proportions for tablet portrait.
             style={{
               position: 'absolute' as unknown as never,
               top: 0,
@@ -274,7 +274,7 @@ export function AppLayout() {
       style={{
         flexDirection: 'row',
         minHeight: '100vh' as unknown as number,
-        // Figma frame 4:2 layout: 40px left margin + 228 sidebar + 16 gap +
+        // Reference 1366px layout: 40px left margin + 228 sidebar + 16 gap +
         // 1041 content + 41 right margin = 1366. Body gradient shows through
         // the outer paddings.
         paddingLeft: 40,

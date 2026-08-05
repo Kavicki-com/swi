@@ -1,10 +1,10 @@
 // src/services/mockApi/chats.ts
-// Mock chat contacts for the /chat inbox screen (Figma 103:9924 + 102:8997).
-// Names extracted from the Figma frame; avatars rotated from the existing
+// Mock chat contacts for the /chat inbox screen.
+// Names extracted from the design; avatars rotated from the existing
 // chat-* PNGs (we have 4 photos for 7 contacts so worker-* fills the gap).
 //
 // Each contact also carries demo conversation history + profile metadata so
-// that selecting a contact can render the "active" state (Figma 102:8997)
+// that selecting a contact can render the "active" state
 // without an extra API call.
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
@@ -17,7 +17,7 @@ import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'
 import workerC from '@/assets/avatars/worker-c.png'
 
-// Conversation extracted from Figma 102:8997 — five bubbles split by the
+// Conversation extracted from the spec — five bubbles split by the
 // "Hoje - 21/03/2026" date separator. Padded with extra back-and-forth so
 // the demo chat overflows the visible chat-box and the user can actually
 // scroll up to "older" messages. Reused for every contact in the demo.

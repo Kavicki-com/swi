@@ -1,9 +1,9 @@
 // src/pages/tasks/TaskForm.tsx
-// /tasks/new e /tasks/:id/edit — Figma 1611-9071 ("Nova tarefa"). O MESMO
-// componente serve as duas rotas: a de edição não existe no Figma, é reuso
+// /tasks/new e /tasks/:id/edit — "Nova tarefa". O MESMO
+// componente serve as duas rotas: a de edição não existe no desenho, é reuso
 // deste form pré-preenchido (decisão do usuário).
 //
-// Copy: o Figma herdou "relatório" das telas de Relatórios em dois lugares (o
+// Copy: o desenho herdou "relatório" das telas de Relatórios em dois lugares (o
 // CTA de salvar e o placeholder dos detalhes) e traz um label solto
 // "description" que é lixo de layout. Aqui vale "tarefa", conforme decidido.
 //
@@ -57,7 +57,7 @@ const SECTOR_FALLBACK_OPTIONS: ReadonlyArray<{ label: string; value: string }> =
   { label: 'Setor Centro', value: 'Setor Centro' },
 ]
 
-// Quantos quadros de anexo o Figma desenha na fileira. É layout, NÃO limite —
+// Quantos quadros de anexo a fileira mostra. É layout, NÃO limite —
 // quem limita quantos anexos cabem numa tarefa é LIMITS.imageKeys.
 const ATTACHMENT_SLOTS = 4
 
@@ -95,7 +95,7 @@ function toItemInput(draft: ChecklistDraft): WorkOrderItemInput {
   return draft.id ? { id: draft.id, ...base } : base
 }
 
-// Quadro vazio da fileira de anexos (Figma 105:12461). `onRemove` (com o
+// Quadro vazio da fileira de anexos. `onRemove` (com o
 // respectivo label acessível) põe o botão de remoção — mesmo padrão ghost +
 // delete_icon dos cards do checklist.
 function AttachmentSlot({
@@ -162,7 +162,7 @@ export function TaskForm() {
   // diz o porquê — itens se removem um a um, pelo botão que já existe no card.
   //
   // Travado (disabled) e não escondido: a seção "Adicionais" mantém o mesmo
-  // desenho do Figma nas duas rotas, e um controle que some não deixa onde
+  // desenho de referência nas duas rotas, e um controle que some não deixa onde
   // pendurar a explicação — o usuário procuraria o toggle em vez de entender.
   const [checklistLocked, setChecklistLocked] = useState(false)
   const [drafts, setDrafts] = useState<ReadonlyArray<ChecklistDraft>>([emptyDraft()])
@@ -589,7 +589,7 @@ export function TaskForm() {
           value={details}
           onChangeText={setDetails}
           accessibilityLabel="Detalhes da tarefa"
-          // Copy corrigida: o Figma diz "seu relatório" por resíduo das telas de
+          // Copy corrigida: o desenho diz "seu relatório" por resíduo das telas de
           // Relatórios, de onde este bloco foi copiado.
           placeholder="Digite aqui os detalhes da tarefa"
           multiline

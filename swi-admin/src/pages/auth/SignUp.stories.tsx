@@ -26,7 +26,7 @@ export const Default: StoryObj<typeof SignUp> = {
     docs: {
       description: {
         story:
-          'Cadastro B2B (Figma 22:2178). Três seções (empresa, endereço, responsável) + radio de função + ações Voltar/Finalizar Cadastro.',
+          'Cadastro B2B. Três seções (empresa, endereço, responsável) + radio de função + ações Voltar/Finalizar Cadastro.',
       },
     },
   },

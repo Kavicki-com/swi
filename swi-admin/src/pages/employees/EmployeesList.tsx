@@ -1,5 +1,5 @@
 // src/pages/employees/EmployeesList.tsx
-// Employees list page — Figma 53:5786. Same template as AdminsList but
+// Employees list page. Same template as AdminsList but
 // without the active toggle. Each row shows avatar + vitals status dot +
 // name/age/blood + role/specialization + sector + action icons (chat,
 // location) + expand chevron.
@@ -57,7 +57,7 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
         // ter melhor área de respiro (mesmo princípio aplicado a Admins).
         paddingVertical: theme.padding.sm,
         // Tablet: if the right cluster can't fit on the same line, allow it
-        // to wrap below. Desktop/wide keep the strict single-row Figma layout.
+        // to wrap below. Desktop/wide keep the strict single-row layout.
         ...(isTablet ? ({ flexWrap: 'wrap', rowGap: theme.gap.s } as const) : null),
       }}
     >
@@ -151,7 +151,7 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
   )
 }
 
-// Pagination — Figma 53:5786 footer. Compact numbered buttons centered
+// Pagination footer. Compact numbered buttons centered
 // below the list, plus a forward-arrow CTA in surface.primary. Local
 // implementation (no Pagination component in the DS yet); page state is
 // purely visual since the mock seed has only 10 entries.

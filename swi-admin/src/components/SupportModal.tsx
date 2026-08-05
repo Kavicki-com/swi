@@ -1,5 +1,5 @@
 // src/components/SupportModal.tsx
-// Support form modal — Figma 105:11612. Floats over the current page with
+// Support form modal. Floats over the current page with
 // a dark scrim. Consumers:
 //   - /user/settings → "Solicitar suporte" CTA
 //   - /login → "Suporte" button

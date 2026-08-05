@@ -5,7 +5,7 @@ import { vi } from 'vitest'
 // react-native-web's Dimensions polyfill reads `documentElement.clientWidth/Height`
 // (see node_modules/react-native-web/dist/cjs/exports/Dimensions/index.js),
 // which jsdom otherwise reports as 0 because it doesn't run CSS layout.
-// 1366×768 is the canonical Figma frame and falls inside the 'desktop'
+// 1366×768 is the canonical reference frame and falls inside the 'desktop'
 // breakpoint class, so existing AppLayout/Dashboard tests render the
 // desktop path by default. Per-test overrides go through vi.mock on the
 // useWindowDimensions export from 'react-native'.

@@ -96,7 +96,7 @@ export interface SimulatedCalories {
   month: SimulatedCaloriePoint[]
 }
 
-// Formato da curva por período — horários/rótulos do Figma 105:12586. Os kcal
+// Formato da curva por período — horários/rótulos especificados. Os kcal
 // aqui são a FORMA (turno começa forte, cai no fim); a magnitude por pessoa sai
 // de simulatedCaloriesFor.
 const CALORIE_SHAPE = {
@@ -134,7 +134,7 @@ const CALORIE_SHAPE = {
  * não é de ninguém" que o resto do painel já tinha eliminado (QA 2026-07-26).
  *
  * Determinístico pelo id (sem componente temporal): o gráfico não pode
- * redesenhar a cada render. Preserva a forma do Figma e escala a magnitude em
+ * redesenhar a cada render. Preserva a forma especificada e escala a magnitude em
  * ±30%, com jitter por ponto pra curva não virar a mesma silhueta multiplicada.
  */
 export function simulatedCaloriesFor(seed: string): SimulatedCalories {

@@ -1,7 +1,7 @@
 // src/pages/maps/MapsGeneral.tsx
 // Maps · General view — full-bleed satellite map with floating overlays:
 // compact left side-menu, three right-side MapControls (operators/heatmap/cameras),
-// and a "Voltar ao dashboard" CTA. Layout matches Figma frame 32:2488.
+// and a "Voltar ao dashboard" CTA.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder, Pressable, View } from 'react-native'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -91,7 +91,7 @@ export function MapsGeneral() {
   const mapRef = useRef<maplibregl.Map | null>(null)
   // Posições REAIS ao vivo (REST snapshot + WS). null = carregando.
   const mapMarkers = useLivePositions()
-  // Badge do menu compacto (Figma 165:21150): contagem REAL de relatórios
+  // Badge do menu compacto: contagem REAL de relatórios
   // pendentes. Sem pendências, sem badge — era "+9" fixo até o QA de 2026-07-24.
   // Alertas perdeu o badge: não existe entidade de alerta com estado de leitura
   // pra contar (voltar quando existir, via formatBadgeCount).
@@ -110,14 +110,14 @@ export function MapsGeneral() {
     [pendingReports],
   )
   const [mapReady, setMapReady] = useState(false)
-  // Figma neutral state hides employee pins (node 33:3917 opacity:0).
+  // The neutral state hides employee pins (opacity 0).
   // Pins appear when the user expands the "operators" map control.
   // QA Web #3: `?focus=<id>` chega do pin da lista de Funcionarios. Quando ele
   // existe, a camada de operadores JA nasce ligada, senao o usuario cai num
   // mapa vazio e precisa de um clique extra pra ver quem foi pedir pra ver.
   const focusId = new URLSearchParams(location.search).get('focus')
   const [showOperators, setShowOperators] = useState(focusId !== null)
-  // Heatmap state — Figma 33:3924 + Screenshot_41:
+  // Heatmap state:
   // - showHeatmap drives the MapControl expanded panel
   // - heatmapOptions per-checkbox: produtividade = thermal blob overlay
   //   (Sprint A); zonasAlerta = meteorologic alerts mode (Sprint posterior)
@@ -126,14 +126,14 @@ export function MapsGeneral() {
     produtividade: boolean
     zonasAlerta: boolean
   }>({ produtividade: false, zonasAlerta: false })
-  // Cameras state — Figma 33:4421. When the user expands the "Câmeras" map
+  // Cameras state. When the user expands the "Câmeras" map
   // control, the camera fleet pins appear over the satellite map (each pin
   // is a green square LocationPin variant='camera').
   const [showCameras, setShowCameras] = useState(false)
 
   // Voltar-button position via CSS right/bottom anchors.
   // Per user request: anchor to bottom margin of the viewport (small gap).
-  // Figma 32:2502 specs `bottom: 214` relative to a 1052h `map` parent, which
+  // Specs `bottom: 214` relative to a 1052h `map` parent, which
   // at 978h frame renders ~210px from frame bottom — but at our 1080h viewport
   // that proportional gap is visually too high. Use a small literal margin so
   // the button hugs the bottom edge regardless of viewport height.
@@ -359,7 +359,7 @@ export function MapsGeneral() {
   // Maplibre heatmap layer — replaces the previous CSS radial-gradient overlay.
   // Mock ~150 GeoJSON points clustered around the markers' centroid produce an
   // organic blob with real heatmap-density interpolation (cool blue edges → hot
-  // red center), matching Figma 33:3924 visualization shape.
+  // red center), matching the specified visualization shape.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady || !showHeatmap || !heatmapOptions.produtividade) return
@@ -372,7 +372,7 @@ export function MapsGeneral() {
           ]
         : (geolocOrigin ?? MOCK_ORIGIN)
 
-    // Figma 33:3924 shows ONE dense organic blob spanning ~half the visible map,
+    // Shows ONE dense organic blob spanning ~half the visible map,
     // with a hot magenta/red core fading to orange/yellow/green/cyan at edges.
     // To get that shape with maplibre we need (a) tightly clustered points so
     // their kernels fuse rather than producing many small blobs, (b) enough
@@ -529,7 +529,7 @@ export function MapsGeneral() {
       {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
       <MapAttribution />
 
-      {/* Top scrim — reproduces the dark fade baked into Figma's mockup
+      {/* Top scrim — reproduces the dark fade baked into the mockup
           satellite image (imgMapViewGeneral, node 32:2488). Real ESRI tiles
           lack this built-in contrast, so the Logo + HeaderUserInfo would
           float over bright urban imagery without legibility. pointer-events:
@@ -548,10 +548,10 @@ export function MapsGeneral() {
         }}
       />
 
-      {/* Intensity legend — Figma map-view-heat reference: a slim full-height
+      {/* Intensity legend — map-view-heat reference: a slim full-height
           vertical gradient bar pinned to the right edge with "Intensity /
           High Red" labels at the top. The "Low" label is intentionally
-          omitted to match Figma, where the bar fades into the screen edge.
+          omitted to match the reference, where the bar fades into the screen edge.
           No background panel; labels float directly over the satellite
           imagery, kept legible by a strong drop-shadow. The bar lives at
           right:6, width 16, so it occupies x range vp-22..vp-6. Map controls
@@ -646,7 +646,7 @@ export function MapsGeneral() {
         />
       </View>
 
-      {/* Compact SideMenu — Figma 165:21148 outer at left:24 + inner left:14 = absolute left:38 */}
+      {/* Compact SideMenu — outer at left:24 + inner left:14 = absolute left:38 */}
       <View
         testID="maps-side-menu"
         style={{
@@ -669,7 +669,7 @@ export function MapsGeneral() {
         />
       </View>
 
-      {/* Map controls — right. Figma 165:21931 calls for right:16 but we use
+      {/* Map controls — right. The spec calls for right:16 but we use
           right:56 so the 48px-wide control icons (x range vp-104..vp-56) stay
           clear of the heatmap intensity bar pinned at right:6 (x range
           vp-22..vp-6). Original right:16 made the bar pass behind the icons
@@ -780,7 +780,7 @@ export function MapsGeneral() {
       </Pressable>
 
       {/* Voltar ao dashboard — draggable DS Button (surface variant) with close icon.
-          Initial position per Figma 32:2502; can be dragged anywhere in the viewport.
+          Initial position per the spec; can be dragged anywhere in the viewport.
           PanResponder distinguishes tap (no movement past 3px → navigate) from drag. */}
       <View
         {...backBtnPanResponder.panHandlers}

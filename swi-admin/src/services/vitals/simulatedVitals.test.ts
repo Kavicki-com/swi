@@ -87,7 +87,7 @@ describe('simulatedCaloriesFor', () => {
     expect(distintas.size).toBeGreaterThan(IDS.length * 0.9)
   })
 
-  it('preserva os horários/rótulos do Figma e mantém os kcal plausíveis', () => {
+  it('preserva os horários/rótulos especificados e mantém os kcal plausíveis', () => {
     const c = simulatedCaloriesFor('w1')
     expect(c.today.map((p) => p.time)).toEqual([
       '07:15',

@@ -2,17 +2,17 @@
 // Mock data for /monitoring/* screens:
 //   - kpis(): the 7 big-number cards across the top of both screens.
 //   - alertUsers(): worker rows with optional expanded alert details
-//     (Figma 69:14731 /monitoring/alerts). Derives from the canonical
+//     (/monitoring/alerts). Derives from the canonical
 //     ROSTER so cross-page navigation lands on the same /employees/:id.
 //   - goodConditionsStats(): the second row of 4 stat cards exclusive to the
-//     /monitoring/good-conditions screen (Figma 77:16587).
+//     /monitoring/good-conditions screen.
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
 import type { IconName } from '@kavicki/swi-design-system'
 import type { SimulatedTier } from '@/services/vitals/simulatedVitals'
 import { ROSTER } from './roster'
 
-// One KPI card — Figma 69:14747 row of 7 BigNumbersCards.
+// One KPI card — row of 7 BigNumbersCards.
 export type MonitoringKpi = {
   id: string
   icon: IconName
@@ -20,7 +20,7 @@ export type MonitoringKpi = {
   label: string
 }
 
-// Single per-user alert detail — Figma 77:16204/16209/16214.
+// Single per-user alert detail.
 // `tone` colors the icon; the title/description text is always content.dark.
 export type MonitoringAlertDetail = {
   id: string
@@ -30,7 +30,7 @@ export type MonitoringAlertDetail = {
   tone?: 'error' | 'warning' | 'info'
 }
 
-// Second-row stat cards on /monitoring/good-conditions (Figma 77:16587).
+// Second-row stat cards on /monitoring/good-conditions.
 // 4 cards: two donut-chart cards + a heart-rate status card + an alerts
 // summary card. Kept loose so the page can render each card with its own
 // composition without forcing a single schema.
@@ -41,8 +41,8 @@ export type MonitoringGoodConditionsStats = {
   urgentAlerts: { value: number; label: string }
 }
 
-// Row in the alert users list — Figma 69:14774 (expanded) and 69:14775..14777
-// (collapsed). When `alerts` is empty the row renders as a collapsed card.
+// Row in the alert users list, expanded or collapsed. When `alerts` is
+// empty the row renders as a collapsed card.
 export type MonitoringUserAlert = {
   id: string
   name: string
@@ -179,7 +179,7 @@ const ALERT_USERS_SEED: ReadonlyArray<MonitoringUserAlert> = MONITORING_ROWS.map
   }
 })
 
-// Good-conditions row-2 seed — Figma 77:16587 values verbatim.
+// Good-conditions row-2 seed — spec values verbatim.
 const GOOD_CONDITIONS_STATS_SEED: MonitoringGoodConditionsStats = {
   vitals: { value: 512, label: 'Funcionários', progress: 100 },
   fatigueRate: { value: '20%', label: 'Desgaste baixo', progress: 20 },

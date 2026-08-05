@@ -55,7 +55,7 @@ describe('contrato de produção do admin', () => {
   })
 
   // O overlay de fidelidade era ferramenta de autoria: comparava o painel vivo
-  // com uma captura do Figma. A rota era DEV-only, mas o import da captura é
+  // com uma captura do desenho. A rota era DEV-only, mas o import da captura é
   // estático, então os 818 kB do PNG entravam no bundle de produção mesmo assim.
   // `dataSet` acompanha porque só existia para marcar os alvos do overlay.
   it('não tem mais o ferramental de fidelidade', () => {

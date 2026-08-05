@@ -49,7 +49,7 @@ type WeatherTimelineEvent = {
 const WEATHER_NOW_LABEL = 'AGORA'
 // surface/success (lime/700) -> surface/success-light (lime/200) — Sinais vitais.
 const VITAL_GRADIENT = ['#3EAB2E', '#B7E9A4'] as const
-// surface/info (blue/600) -> surface/info-light (blue/200) — Taxa de desgaste (Figma).
+// surface/info (blue/600) -> surface/info-light (blue/200) — Taxa de desgaste.
 const WEAR_GRADIENT = ['#3899BF', '#8AD2E2'] as const
 // content/error (red/400) -> surface/error-light (red/200) — Alertas urgentes.
 const URGENT_GRADIENT = ['#F5667A', '#FAB3BD'] as const
@@ -148,7 +148,7 @@ const WEATHER_CONDITION_MAP: Record<
 }
 
 const formatHourLabel = (iso: string): string => {
-  // Figma format: "09:00AM" — 12-hour with AM/PM, no space.
+  // Spec format: "09:00AM" — 12-hour with AM/PM, no space.
   const d = new Date(iso)
   const hours24 = d.getHours()
   const period = hours24 >= 12 ? 'PM' : 'AM'
@@ -212,7 +212,7 @@ function MapBanner({
   height = 172,
 }: {
   markers: DashboardMapMarker[]
-  // Figma frame 4:2 (1366) → 172. Figma frame 1060:7080 (1920 wide) → ~268.
+  // Reference frame at 1366 → 172; at 1920 wide → ~268.
   // Pass explicitly from the wide branch so the map keeps a sensible aspect
   // ratio when the content column grows past ~1041 CSS px.
   height?: number
@@ -412,7 +412,7 @@ function KpiTile({
 }
 
 // Wide-class variant lays the 4 KPI tiles in a single horizontal strip
-// (Figma 1060:7080). Desktop and tablet keep the 2×2 grid that fits next
+// on wide viewports. Desktop and tablet keep the 2×2 grid that fits next
 // to HealthDonuts.
 function FuncionariosKpi({
   summary,
@@ -425,7 +425,7 @@ function FuncionariosKpi({
   const { admins, totalEmployees, newReports, activeCameras } = summary.kpis
   if (layout === '1x4') {
     // Wide variant: no surface wrapper around the strip — tiles sit
-    // directly on the page background to match Figma 1060:7080.
+    // directly on the page background to match the spec.
     return (
       <View
         testID="kpi-funcionarios"
@@ -661,7 +661,7 @@ function ActivityCard({ activity }: { activity: DashboardActivity }) {
           <Text variant="body.s" color={theme.content.medium}>
             {activity.sector}
           </Text>
-          {/* Figma frame 4:2 ProgressBar is fixed 119px wide; DS ProgressBar
+          {/* The reference ProgressBar is fixed 119px wide; DS ProgressBar
               stretches by default, so wrap to constrain. Color comes from the
               activity's risk level (normal/warning/critical), not its status. */}
           <View style={{ width: 119 }}>
@@ -849,15 +849,15 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
       <Title>Previsão do tempo</Title>
       <WeatherTimeline
         events={weatherEvents}
-        // Figma flex: 280, 280, 280, 528 → ratios 1, 1, 1, 1.886.
-        // Colors per Figma: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
+        // Spec flex: 280, 280, 280, 528 → ratios 1, 1, 1, 1.886.
+        // Colors per spec: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
         intensitySegments={[
           { id: 'seg-0', flex: 1, color: '#3899bf' },
           { id: 'seg-1', flex: 1, color: theme.surface.warning },
           { id: 'seg-2', flex: 1, color: '#3899bf' },
           { id: 'seg-3', flex: 1.886, color: theme.surface.success },
         ]}
-        // Figma frame 21:1501 — scrubber: 148px thumb on 1037px track ≈ 14%.
+        // Scrubber: 148px thumb on 1037px track ≈ 14%.
         scrollbar={{ thumbPercent: 14, thumbStartPercent: 0 }}
         nowLabel={WEATHER_NOW_LABEL}
         fullWidth
@@ -894,9 +894,9 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
   }
 
   // Wide (>= 1600): top row puts Map | Donuts | KPIs side-by-side in one
-  // horizontal flow per the Figma 1920 frame. Two-column row below.
+  // horizontal flow per the 1920px reference frame. Two-column row below.
   if (breakpoint === 'wide') {
-    // Figma 1060:7080 wide dashboard layout:
+    // Wide dashboard layout:
     //   Row 1 — Map full-width
     //   Row 2 — HealthDonuts (3 charts) | FuncionariosKpi (1x4 horizontal strip)
     //   Row 3 — Atividades em andamento | Alertas de Desgaste
@@ -959,7 +959,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
       <MapBanner markers={summary.mapMarkers} />
 
-      {/* KPI row — Figma: Funcionários composite + Sinais vitais donut + Taxa desgaste donut + Alertas urgentes.
+      {/* KPI row — Funcionários composite + Sinais vitais donut + Taxa desgaste donut + Alertas urgentes.
           Right-side donuts share a single dark container that extends to the edge of the right column. */}
       <View
         testID="kpi-row"

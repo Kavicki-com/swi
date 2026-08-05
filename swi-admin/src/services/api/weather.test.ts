@@ -91,7 +91,7 @@ describe('toWeatherStrip', () => {
     expect(strip.map((s) => s.condition)).toEqual(['rain', 'cloudy', 'storm', 'cloudy'])
   })
 
-  it('derives the PT-BR label from the mapped condition (Figma parity)', () => {
+  it('derives the PT-BR label from the mapped condition (spec parity)', () => {
     const snap = snapshotWith([
       { at: hourAt(-4), tempC: 16, condition: 'rain' },
       { at: hourAt(0), tempC: 18, condition: 'clear' },

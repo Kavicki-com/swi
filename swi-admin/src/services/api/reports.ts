@@ -12,7 +12,7 @@ import { apiFetch } from './http'
 // (amarelo), 'canceled' (vermelho), 'info' (azul).
 export type ReportStatus = 'accept' | 'pending' | 'canceled' | 'info'
 
-// Uma linha de atividade em /reports/:id (Figma 98:4877 seção "Atividades").
+// Uma linha de atividade em /reports/:id (seção "Atividades").
 // A linha renderiza: ícone chave | divisor | título + setor + ProgressBar |
 // AvatarGroup (count) | ícone location_on. O tone colore a barra: success
 // (verde), warning (laranja), error (vermelho).
@@ -48,7 +48,7 @@ export type Report = {
   // Override opcional quando a demo quer que o badge "+N" indique mais pessoas
   // do que existem no array de avatares visíveis.
   responsibleTotalCount?: number
-  // Corpo dos detalhes exibido em /reports/:id (Figma 98:4877 "Detalhes do relatório").
+  // Corpo dos detalhes exibido em /reports/:id ("Detalhes do relatório").
   details?: string
   // Thumbnails de imagem da seção "Imagens".
   images?: ReadonlyArray<string>
@@ -95,7 +95,7 @@ export type ReportDetailDto = ReportDto & {
 
 // Atividade crua do backend (sem id garantido). responsibleNames/Avatars são a
 // equipe REAL da atividade — o backend resolve nome → foto presigned no
-// detalhe (decisão 2026-07-26: seguir o Figma com gente de verdade).
+// detalhe (decisão 2026-07-26: seguir o desenho com gente de verdade).
 type RawActivity = {
   id?: string
   title: string

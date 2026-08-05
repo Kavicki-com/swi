@@ -1,7 +1,7 @@
 // Clima do dashboard (GET /weather) contra o backend Nest. Mantém o envelope
 // MockResponse pra que a tela não mude de contrato. O backend devolve um
-// snapshot rico (current/daily/hourly/alerts); a tira do dashboard (Figma frame
-// 4:2 weather-section) só precisa de 4 slots ao redor de "agora", então o mapper
+// snapshot rico (current/daily/hourly/alerts); a tira do dashboard (a
+// weather-section do frame de referência) só precisa de 4 slots ao redor de "agora", então o mapper
 // puro `toWeatherStrip` colapsa o snapshot no shape que a UI já consome.
 import type { MockResponse } from '@/services/mockApi/types'
 import { apiFetch } from './http'
@@ -26,7 +26,7 @@ export type WeatherSnapshotDto = {
 
 type StripCondition = WeatherSlot['condition']
 
-// Condição rica do backend → buckets visuais da tira (Figma). sol vira "sun",
+// Condição rica do backend → buckets visuais da tira. sol vira "sun",
 // nuvem/névoa viram "cloudy" (parcialmente nublado), neve/chuva viram "rain",
 // tempestade fica distinta.
 const CONDITION_TO_STRIP: Record<WeatherConditionDto, StripCondition> = {
@@ -39,7 +39,7 @@ const CONDITION_TO_STRIP: Record<WeatherConditionDto, StripCondition> = {
 }
 
 // Labels PT-BR coerentes por bucket de condição (derivadas da condição real, não
-// decoração por slot do Figma). Estilo de duas linhas (\n) que a WeatherTimeline
+// decoração por slot do desenho). Estilo de duas linhas (\n) que a WeatherTimeline
 // espera; storm reflete tempestade, não "parcialmente nublado".
 const STRIP_LABEL: Record<StripCondition, string> = {
   sun: 'SOL\nINTENSO',

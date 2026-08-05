@@ -1,5 +1,5 @@
 // src/pages/alerts/AlertsRescueRouteSelection.tsx
-// /alerts/:employeeId/rescue — Figma 101:7484. Reached from /alerts/:id
+// /alerts/:employeeId/rescue. Reached from /alerts/:id
 // after pressing "Criar rota de socorro". Replaces the map with a list of
 // candidate rescuers (ranked, with one "Melhor opção de ajuda" highlight).
 // Header (search + chips) mirrors AlertsList so the screen feels continuous.

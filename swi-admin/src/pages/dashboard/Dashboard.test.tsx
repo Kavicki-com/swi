@@ -167,7 +167,7 @@ describe('Dashboard', () => {
     resolveFn({ data: FAKE_SUMMARY, error: null })
   })
 
-  it('renders the Figma KPI row: 2x2 Funcionários grid + 3 donuts', async () => {
+  it('renders the KPI row: 2x2 Funcionários grid + 3 donuts', async () => {
     vi.spyOn(dashboardApi, 'summary').mockResolvedValue({
       data: FAKE_SUMMARY,
       error: null,

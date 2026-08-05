@@ -29,7 +29,7 @@ export type Admin = {
   specialization: string
   avatarUri: string
   active: boolean
-  // Health fields used by the AdminDetails screen (Figma 53:6344).
+  // Health fields used by the AdminDetails screen.
   gender?: 'male' | 'female'
   height?: string
   weight?: string
@@ -45,9 +45,9 @@ export type Admin = {
   examHistory?: ReadonlyArray<ExamEntry>
 }
 
-// Mock data matches Figma 48:4943/4972/5001 verbatim — names, ages, roles
+// Mock data matches the spec verbatim — names, ages, roles
 // and active state were extracted directly from the design so the screen
-// reads like the spec. Avatars are local PNGs cropped from the Figma cards.
+// reads like the spec. Avatars are local PNGs cropped from the design cards.
 const ADMINS_SEED: ReadonlyArray<Admin> = [
   {
     id: 'admin-01',

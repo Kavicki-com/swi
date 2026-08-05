@@ -212,7 +212,7 @@ describe('TaskDetails', () => {
     expect(
       screen.getByText('Substituir o rolamento e reavaliar o alinhamento do eixo motor.'),
     ).toBeInTheDocument()
-    // Copy corrigida: o Figma diz "relatório" por resíduo das telas de Relatórios.
+    // Copy corrigida: o desenho diz "relatório" por resíduo das telas de Relatórios.
     expect(screen.getByText('Detalhes da tarefa:')).toBeInTheDocument()
     expect(screen.getByText('Setor Leste')).toBeInTheDocument()
   })
@@ -394,7 +394,7 @@ describe('TaskDetails', () => {
     getMock.mockResolvedValue(makeDetail({ responsibles: [ANA, BRUNO, CARLA] }))
     renderAt()
     await waitFor(() => expect(screen.getByTestId('responsible-card-w_1')).toBeInTheDocument())
-    // Prévia cortada no tamanho da grade do Figma (2 cards lado a lado).
+    // Prévia cortada no tamanho da grade especificada (2 cards lado a lado).
     expect(screen.queryByTestId('responsible-card-w_3')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Ver Todos' }))

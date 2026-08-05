@@ -1,5 +1,5 @@
 // src/pages/admins/AdminDetails.tsx
-// Admin details — Figma 53:6344. Three-column worker layout shared with
+// Admin details. Three-column worker layout shared with
 // EmployeeDetails via `WorkerDetailsLayout`. This page owns admin data
 // fetching and supplies the top-right "Editar perfil" CTA (text link, the
 // admin-specific variant of the slot).
@@ -18,7 +18,7 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
   const params = useParams<{ id: string }>()
   // Override hook: UserProfile mounts <AdminDetails adminId={user.id} />
   // to reuse this layout for the logged-in admin's own profile page
-  // (Figma 105:12516 user-profile).
+  // (/user/profile).
   const id = adminId ?? params.id
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [loading, setLoading] = useState(true)

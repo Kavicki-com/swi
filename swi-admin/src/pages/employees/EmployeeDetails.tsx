@@ -1,5 +1,5 @@
 // src/pages/employees/EmployeeDetails.tsx
-// Employee details — Figma 54:6561. Three-column worker layout shared with
+// Employee details. Three-column worker layout shared with
 // AdminDetails via `WorkerDetailsLayout`. This page owns employee data
 // fetching and supplies the top-right "Solicitar Pausa" CTA (contained
 // button in surface.accent, the employee-specific variant of the slot).

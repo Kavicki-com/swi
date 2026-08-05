@@ -1,6 +1,6 @@
 // src/pages/auth/Login.tsx
 //
-// Login screen — Figma frame 22:1585.
+// Login screen.
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { View } from 'react-native'

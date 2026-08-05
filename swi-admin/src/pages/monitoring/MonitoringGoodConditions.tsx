@@ -1,5 +1,5 @@
 // src/pages/monitoring/MonitoringGoodConditions.tsx
-// Child view for /monitoring/good-conditions (Figma 77:16587). The shared
+// Child view for /monitoring/good-conditions. The shared
 // chrome (KPIs, title, tabs, search, user list) lives in MonitoringLayout.
 // This view contributes only the row of 4 DonutCharts that sits between
 // the KPI row and the "Alertas de Desgaste" title.
@@ -13,7 +13,7 @@ export function MonitoringGoodConditions() {
   const theme = useTheme()
   const breakpoint = useBreakpoint()
   // At wide the donuts share the RIGHT half of the side-by-side layout with
-  // the BigNumbers panel on the LEFT (Figma 1263:7972). The narrower cells
+  // the BigNumbers panel on the LEFT. The narrower cells
   // need the small donut variant so titles don't overlap.
   const donutSize = breakpoint === 'wide' ? 'small' : 'default'
   const [stats, setStats] = useState<MonitoringGoodConditionsStats | null>(null)
@@ -31,7 +31,7 @@ export function MonitoringGoodConditions() {
   if (!stats) return null
 
   // Each card hosts one DS DonutChart at size="default" (182×182 outer /
-  // 160 arc / 138 inner well — matches Figma 77:16613). Cards sit flat on
+  // 160 arc / 138 inner well). Cards sit flat on
   // the page background (no individual card surface).
   const cardStyle = {
     paddingHorizontal: theme.padding.m,

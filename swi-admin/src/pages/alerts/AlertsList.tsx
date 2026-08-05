@@ -1,5 +1,5 @@
 // src/pages/alerts/AlertsList.tsx
-// /alerts — Figma 100:5611. Lives inside AppLayout. Real-tile maplibre map
+// /alerts. Lives inside AppLayout. Real-tile maplibre map
 // with three overlay modes:
 //   1. SearchInput "Pesquisar" + 4 filter chips (status filter).
 //   2. Maplibre map (ESRI World Imagery satellite tiles) covering the
@@ -408,7 +408,7 @@ export function AlertsList() {
         {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
         <MapAttribution />
 
-        {/* Floating mode toggles (Figma 100:5611, top-left over map). */}
+        {/* Floating mode toggles (top-left over map). */}
         <View
           style={{
             position: 'absolute',
@@ -456,7 +456,7 @@ export function AlertsList() {
           })}
         </View>
 
-        {/* Selected marker overlay (Figma 101:7209). Tracked to its pin via
+        {/* Selected marker overlay. Tracked to its pin via
             map.project() so it follows pan/zoom. Skipped when meteo basemap
             + red pin combo — that case shows the weather toast instead. */}
         {selectedMarker &&
@@ -493,7 +493,7 @@ export function AlertsList() {
           </View>
         ) : null}
 
-        {/* Meteo alert toast (Figma 103:10463 / 103:10746). Surfaces only
+        {/* Meteo alert toast. Surfaces only
             when the meteorologic basemap is active AND a RED pin (status
             'low' — pink/red badge) has been clicked. Re-clicking the same
             pin clears the selection, which dismisses this toast. */}

@@ -1,5 +1,5 @@
 // src/pages/chat/ChatInbox.tsx
-// Chat inbox — Figma 103:9924 (empty state) + 102:8997 (active state).
+// Chat inbox — empty state and active state.
 // Full-bleed page (no AppLayout sidebar). Three-column layout under a global
 // header:
 //   - LEFT  (358px): Voltar + SearchInput + scrollable contact list (selected
@@ -44,7 +44,7 @@ import { useMyVitals } from '@/hooks/useMyVitals'
 import { ReportMessageModal } from './ReportMessageModal'
 import workerA from '@/assets/avatars/worker-a.png'
 
-// Single contact row in the left list — Figma 103:9931 / 102:9571
+// Single contact row in the left list.
 // user-message-card. surface.standard 60h pill at radius.s with 8px padding;
 // avatar + name/sector stacked left, optional unread badge (surface.error
 // pill 28×28) right. When selected, gets a 2px primary-green border.
@@ -58,7 +58,7 @@ function ContactRow({
   onPress: () => void
 }) {
   const theme = useTheme()
-  // Figma renders +9 when count > 9, otherwise zero-padded ("02", "04", ...).
+  // The spec renders +9 when count > 9, otherwise zero-padded ("02", "04", ...).
   const badgeText =
     contact.unreadCount && contact.unreadCount > 9
       ? '+9'
@@ -80,7 +80,7 @@ function ContactRow({
         justifyContent: 'space-between',
         paddingHorizontal: theme.padding.s,
         paddingVertical: theme.padding.s,
-        // Selected state — Figma 102:9571 uses border.size.m (2px) +
+        // Selected state uses border.size.m (2px) +
         // content.primary green. We pre-reserve 2px when not selected with
         // a transparent border so the row height stays stable across states.
         borderWidth: 2,
@@ -124,8 +124,8 @@ function ContactRow({
 const CHAT_IMG_W = 220
 const CHAT_IMG_H = 160
 
-// Single conversation bubble — Figma 147:5929 (sent / right) and
-// 103:10230 (received / left). Both share the same structure but mirror
+// Single conversation bubble — sent (right) and received (left).
+// Both share the same structure but mirror
 // avatar + border color + horizontal padding.
 export function ChatBubble({
   message,
@@ -484,7 +484,7 @@ const ESRI_SATELLITE_STYLE = {
   ],
 }
 
-// Mini-map inside the right-column info panel — Figma 103:9840. Renders a
+// Mini-map inside the right-column info panel. Renders a
 // 177px-tall satellite tile with a centered LocationPin (avatar + tail),
 // camera affordance top-right, and a "Mapa completo" CTA bottom-left.
 function ContactMiniMap({
@@ -595,7 +595,7 @@ function ContactMiniMap({
   )
 }
 
-// Right-column profile panel — Figma 102:9672. Avatar + name + role/subtitle
+// Right-column profile panel. Avatar + name + role/subtitle
 // centered, mini-map, "Tempo até a fadiga total" with reversed gradient bar,
 // and a stats card with Gênero / Idade / Tipo sanguíneo / Alergias.
 function ContactInfoPanel({
@@ -615,7 +615,7 @@ function ContactInfoPanel({
     // space between the identity block and the fatigue/stats group instead of
     // hugging the user card.
     <View style={{ flex: 1, gap: theme.gap.sm, justifyContent: 'space-between' }}>
-      {/* User card — Figma 103:9835 — Avatar 56 + centered name + 2-line subtitle. */}
+      {/* User card — Avatar 56 + centered name + 2-line subtitle. */}
       <View style={{ alignItems: 'center', gap: theme.padding.m }}>
         <Avatar
           uri={contact.avatarUri}
@@ -640,9 +640,9 @@ function ContactInfoPanel({
       {/* Mini-map — floats in the middle vertical slot via space-between. */}
       <ContactMiniMap contact={contact} onOpenFullMap={onOpenFullMap} />
 
-      {/* right-collumn group — Figma 103:9867 — fadigue-bar + stats card. */}
+      {/* Right-collumn group — fadigue-bar + stats card. */}
       <View style={{ gap: theme.gap.m }}>
-        {/* Fatigue total — Figma 103:9868. Label, reversed gradient bar
+        {/* Fatigue total. Label, reversed gradient bar
             (success → warning → error), then remaining time below. */}
         <View style={{ gap: theme.gap.m }}>
           <Title variant="title.xs" color={theme.content.dark}>
@@ -664,7 +664,7 @@ function ContactInfoPanel({
           <SimulatedDataBadge />
         </View>
 
-        {/* Stats card — Figma 103:9876. Bumped from surface.standard to
+        {/* Stats card. Bumped from surface.standard to
           surface.medium because the outer RIGHT col now also uses
           surface.standard (chat-section bg directive 2026-05-19); without this
           bump the inner stats card would merge into the outer panel. */}
@@ -954,7 +954,7 @@ export function ChatInbox() {
       testID="chat-inbox"
       style={{
         // Chat grows to fill the available viewport space with a 52 px gutter
-        // at the bottom (user-approved spec). minHeight 728 = Figma 88 header
+        // at the bottom (user-approved spec). minHeight 728 = spec 88 header
         // + 640 row floors the chat at tall content height when the viewport
         // is short — the page scrolls in that case.
         // At 1366x768: minHeight kicks in, chat = 728, page scrolls ~65px.
@@ -1002,9 +1002,9 @@ export function ChatInbox() {
           // (see <View style={{ width: theme.padding.m }} /> between columns
           // below) — RN-Web ignored both `gap` and `marginLeft/Right` on the
           // flex children here, so a literal spacer is the only reliable
-          // fix matching Figma 102:8997 Sidebar gap-[16px].
+          // fix matching the Sidebar gap-[16px].
           paddingHorizontal: theme.padding.xxl,
-          // Figma 1366 spec: height 640. Switched to flex:1 + minHeight so
+          // 1366px spec: height 640. Switched to flex:1 + minHeight so
           // taller viewports (1080+) let the chat thread breathe and shorter
           // ones still respect 480 floor. At wide MIDDLE absorbs extra width
           // naturally via flex:1.
@@ -1017,10 +1017,10 @@ export function ChatInbox() {
         <View
           style={{
             width: 358,
-            // Container BG = theme.background (page bg ~#171717) per Figma
-            // 102:9091. The contact chips inside use surface.standard (~#1f1f1f),
+            // Container BG = theme.background (page bg ~#171717) per the
+            // spec. The contact chips inside use surface.standard (~#1f1f1f),
             // so they pop visually as cards on the darker container — same
-            // pattern Figma applies to all 3 columns (LEFT/MIDDLE/RIGHT).
+            // pattern the spec applies to all 3 columns (LEFT/MIDDLE/RIGHT).
             backgroundColor: theme.background,
             borderRadius: theme.border.radius.m,
             padding: theme.padding.s,
@@ -1108,14 +1108,14 @@ export function ChatInbox() {
           </Pressable>
         </View>
 
-        {/* Spacer — 16px between LEFT and MIDDLE per Figma 102:8997 */}
+        {/* Spacer — 16px between LEFT and MIDDLE per the spec */}
         <View style={{ width: theme.padding.m }} />
 
         {/* MIDDLE column */}
         <View
           style={{
             flex: 1,
-            // Container BG = theme.background per Figma 102:9619. Inner chat-box
+            // Container BG = theme.background per the spec. Inner chat-box
             // keeps surface.standard so it reads as a card on top of the
             // darker page-bg container (same pattern as LEFT column chips).
             backgroundColor: theme.background,
@@ -1134,7 +1134,7 @@ export function ChatInbox() {
             />
           </View>
 
-          {/* Chat Container — Figma 103:9689 specifies h-[564px] fixed height
+          {/* Chat Container — h-[564px] fixed height
               with two children (chat-box flex:1 + chat-input shrink:0).
               We use a plain <div> here instead of <View> so the flex chain
               propagates min-height correctly to the inner scroll container;
@@ -1154,7 +1154,7 @@ export function ChatInbox() {
           >
             {/* chat-box: empty placeholder when no selection, otherwise
                 scrollable bubble history with the date separator after
-                the first two received/sent pair (Figma 102:8997 placement).
+                the first two received/sent pair (spec placement).
                 ref drives auto-scroll-to-bottom on send / contact switch. */}
             <div
               ref={chatBoxRef}
@@ -1332,13 +1332,13 @@ export function ChatInbox() {
             list or a future drawer; at desktop/wide the panel is back. */}
         {!isTablet ? (
           <>
-            {/* Spacer — 16px between MIDDLE and RIGHT per Figma 102:8997 */}
+            {/* Spacer — 16px between MIDDLE and RIGHT per the spec */}
             <View style={{ width: theme.padding.m }} />
 
             <View
               style={{
                 width: 268,
-                // Container BG = theme.background per Figma 102:9672. Inner
+                // Container BG = theme.background per the spec. Inner
                 // user-card / map / stats card keep their own surface tokens
                 // (stats card uses surface.medium) so they pop on the darker
                 // container — matches the 3-column visual pattern.

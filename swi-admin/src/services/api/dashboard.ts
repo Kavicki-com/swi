@@ -17,7 +17,7 @@ export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
 
 /**
  * Activity risk level — drives the ProgressBar fill color independently of
- * status. Figma frame 4:2 mocks cards with mixed progress colors (green/orange/
+ * status. The reference frame mocks cards with mixed progress colors (green/orange/
  * red) reflecting urgency, not progress. Vitals-derived → omitido no fan-out
  * real (sem smartband não há sinal de risco), a barra cai na cor default.
  */
@@ -66,7 +66,7 @@ export type DashboardMapMarker = {
   avatarUri: string
 }
 
-// Slot da tira de clima (Figma frame 4:2 weather-section). api/weather.ts produz
+// Slot da tira de clima (weather-section). api/weather.ts produz
 // este shape a partir do snapshot do backend.
 export type WeatherSlot = {
   at: string

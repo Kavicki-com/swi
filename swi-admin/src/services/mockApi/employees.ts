@@ -1,6 +1,6 @@
 // src/services/mockApi/employees.ts
 // /employees list API — UI-shaped Employee records derived from the canonical
-// ROSTER (see roster.ts). Matches Figma 53:5786. The visible roster shares
+// ROSTER (see roster.ts). The visible roster shares
 // IDs and names with the dashboard map markers and alerts so cross-page
 // navigation (pin → details, alert → details) resolves to the same person.
 import { sleep } from './sleep'
@@ -20,7 +20,7 @@ export type Employee = {
   sector: string
   vitalsStatus: 'good' | 'warning' | 'critical'
   hasUnreadMessages?: boolean
-  // Health/details fields used by EmployeeDetails (Figma 54:6561) — mirror
+  // Health/details fields used by EmployeeDetails — mirror
   // the Admin shape so the screen renders without per-field optionality.
   gender?: 'male' | 'female'
   bpm?: number
@@ -62,7 +62,7 @@ function toEmployeeUi(p: WorkerProfile): Employee {
 
 const EMPLOYEES_SEED: ReadonlyArray<Employee> = ROSTER.map(toEmployeeUi)
 
-// Total registered (Figma "1205") — separated from the visible seed so the
+// Total registered ("1205" per spec) — separated from the visible seed so the
 // page header reads the same as the mock without depending on the list size.
 export const EMPLOYEES_TOTAL = 1205
 

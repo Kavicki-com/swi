@@ -1,5 +1,5 @@
 // src/pages/tasks/TaskDetails.tsx
-// /tasks/:id — detalhe da tarefa. Figma 1613-10013. Vive dentro do AppLayout.
+// /tasks/:id — detalhe da tarefa. Vive dentro do AppLayout.
 //
 // Seções (de cima pra baixo):
 //   1. Voltar.
@@ -11,14 +11,14 @@
 //   6. "Check List" — cards com radio marcado só no item concluído.
 //   7. "Imagens" — grade de fotos.
 //
-// DIVERGÊNCIAS CONHECIDAS DO FIGMA (pra fase de fidelidade):
-//   • Copy: o Figma diz "Detalhes do RELATÓRIO:" por resíduo das telas de
+// DIVERGÊNCIAS CONHECIDAS EM RELAÇÃO AO DESENHO:
+//   • Copy: o desenho diz "Detalhes do RELATÓRIO:" por resíduo das telas de
 //     Relatórios, de onde o bloco foi copiado. Aqui vale "tarefa" — mesma
 //     correção que o TaskForm já aplicou no placeholder equivalente.
 //   • Campo de busca no topo ("Pesquisar na tarefa"): OMITIDO. Ver NOTA abaixo.
 //   • "Ver Todos" dos responsáveis: expande in-place. Ver NOTA abaixo.
 //
-// NOTA — busca omitida: o Figma desenha um SearchInput no cabeçalho (herdado do
+// NOTA — busca omitida: o desenho traz um SearchInput no cabeçalho (herdado do
 // ReportDetails, que tem comentários e atividades pra varrer). Uma tarefa não
 // tem corpo pesquisável — título, resumo e detalhes cabem na tela sem rolagem —
 // e o backend não oferece busca dentro de uma work order. Um campo desabilitado
@@ -59,7 +59,7 @@ import {
 import { calcAge, isoToDisplayDate, minutesToDisplayTime } from './format'
 import { BLOOD_TYPE_PLACEHOLDER } from './ResponsiblePicker'
 
-// Rótulos do Figma. Tabela explícita (e não um `.replace('_',' ')`) porque
+// Rótulos do desenho. Tabela explícita (e não um `.replace('_',' ')`) porque
 // 'Concluída' concorda em gênero com "tarefa" — nenhuma regra mecânica produz
 // isso a partir de 'done'.
 const STATUS_LABEL: Record<WorkOrderStatus, string> = {
@@ -70,12 +70,12 @@ const STATUS_LABEL: Record<WorkOrderStatus, string> = {
 
 // Mapeia o status do backend pro status VISUAL do StatusTag do DS.
 //
-// Do Figma vem UM dado só: o chip de "Em andamento" é LARANJA — e laranja no DS
+// Do desenho vem UM dado só: o chip de "Em andamento" é LARANJA — e laranja no DS
 // é `StatusTag status="pending"` (surface.warning). O nome da variante do DS não
 // bate com o nome do status do backend, daí a tabela: `in_progress` → 'pending'
 // não é engano de digitação.
 //
-// Os outros dois o Figma NÃO desenha; a escolha é semântica do próprio DS, não
+// Os outros dois o desenho NÃO traz; a escolha é semântica do próprio DS, não
 // leitura de pixel: 'accept' (surface.success, verde) é a variante de concluído,
 // e 'info' (surface.secondary, azul) é a neutra que sobra pro que ainda não
 // começou. Se o design especificar cores pra esses dois, é aqui que muda.
@@ -85,7 +85,7 @@ const STATUS_TAG: Record<WorkOrderStatus, StatusTagStatus> = {
   done: 'accept',
 }
 
-// Quantos cards de responsável a grade do Figma mostra por padrão (2 lado a
+// Quantos cards de responsável a grade do desenho mostra por padrão (2 lado a
 // lado). Acima disso entra o "Ver Todos".
 const RESPONSIBLES_PREVIEW = 2
 
@@ -106,7 +106,7 @@ const IMAGE_HEIGHT = 180
 
 // Texto de data vazia: o backend permite startDate/dueDate nulos. Dizer o que
 // falta é mais honesto que exibir '--/--/----' ou sumir com a linha (o que
-// desalinharia a dupla de datas lado a lado do Figma).
+// desalinharia a dupla de datas lado a lado do desenho).
 const NO_DATE = 'Não definida'
 
 // Par rótulo-em-negrito + valor, repetido em todo o cartão principal.
@@ -157,7 +157,7 @@ function VerticalDivider() {
  * O `WorkersInfoCard` do DS tem exatamente estes campos (name/age/bloodType/
  * role/secondaryRole/avatarUri), mas renderiza SEMPRE um Toggle e um chevron de
  * expandir, sem prop pra suprimi-los. Nesta tela isso seriam dois controles
- * mortos por responsável — pioram a fidelidade (o Figma não desenha nenhum dos
+ * mortos por responsável — pioram a fidelidade (o desenho não traz nenhum dos
  * dois) e a acessibilidade. GAP DE DS registrado no relatório da task: falta uma
  * variante estática/somente-leitura do WorkersInfoCard; quando ela existir, este
  * card sai daqui e vira uso direto do componente.
@@ -211,7 +211,7 @@ function ResponsibleCard({ worker }: { worker: AssignableWorker }) {
         <Text variant="body.m" weight="bold" color={theme.content.dark}>
           {worker.jobTitle}
         </Text>
-        {/* O Figma mostra a FORMAÇÃO aqui, campo que não existe no backend
+        {/* O desenho mostra a FORMAÇÃO aqui, campo que não existe no backend
             (AssignableWorker só tem id/name/jobTitle/sector/birthDate/avatar).
             O setor ocupa o lugar — mesma decisão já tomada no ResponsiblePicker. */}
         <Text variant="body.m" color={theme.content.dark}>
@@ -318,11 +318,11 @@ export function TaskDetails() {
     [responsibles, showAllResponsibles],
   )
   // "Ver Todos" só existe quando há o que revelar. Com todos já na tela o botão
-  // seria um controle sem efeito — o Figma o desenha porque o mockup tem mais
+  // seria um controle sem efeito — o desenho o traz porque o mockup tem mais
   // responsáveis que a grade comporta.
   //
   // Expande NA PRÓPRIA TELA em vez de abrir "a tela de todos os responsáveis":
-  // essa tela não existe no Figma nem no roteador, e inventar uma rota nova pra
+  // essa tela não existe no desenho nem no roteador, e inventar uma rota nova pra
   // preencher a lacuna seria pior que a divergência.
   const canExpandResponsibles = responsibles.length > RESPONSIBLES_PREVIEW
 
@@ -409,7 +409,7 @@ export function TaskDetails() {
 
             <Field label="Resumo" value={detail.summary} />
 
-            {/* Datas lado a lado + tempo estimado. O tempo não está no Figma
+            {/* Datas lado a lado + tempo estimado. O tempo não está no desenho
                 deste nó, mas o dado existe no DTO e o formulário o coleta —
                 escondê-lo aqui obrigaria a abrir a edição pra consultá-lo. */}
             <View style={{ flexDirection: 'row', gap: theme.gap.l, flexWrap: 'wrap' }}>

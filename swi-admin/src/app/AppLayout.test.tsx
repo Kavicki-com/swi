@@ -119,7 +119,7 @@ describe('AppLayout', () => {
     })
   })
 
-  it('renders the 8 Figma navigation cards in order with icons', async () => {
+  it('renders the 8 navigation cards in order with icons', async () => {
     renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()

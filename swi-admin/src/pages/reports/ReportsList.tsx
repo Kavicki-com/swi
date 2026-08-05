@@ -1,9 +1,9 @@
 // src/pages/reports/ReportsList.tsx
-// Relatórios — Figma 96:4091. Lives inside AppLayout.
+// Relatórios. Lives inside AppLayout.
 //
 // Uses the DS `ReportCard` as-is. Card layout (status pill top + title in
 // content.primary + Resumo/Data de criação/Autor (with sector on the
-// right)/Responsáveis sections) matches the Figma reference. Width is
+// right)/Responsáveis sections) matches the reference. Width is
 // pinned at 246 + min-height so the 4×N grid is uniform.
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
@@ -129,7 +129,7 @@ export function ReportsList() {
   return (
     <View testID="reports-list" style={{ gap: theme.gap.m }}>
       {/* Row 1 — Pesquisar relatório (flex) + Novo relatório CTA right
-          (Figma 96:4091 puts search above filters, not below). */}
+          (puts search above filters, not below). */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
         <View style={{ flex: 1 }}>
           <SearchInput
