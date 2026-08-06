@@ -10,9 +10,28 @@ const prisma = () => ({
 const positions = () => ({ heartbeat: jest.fn().mockResolvedValue(undefined) }) as any
 const events = () => ({ ack: jest.fn().mockResolvedValue(undefined) }) as any
 
+const originalNodeEnv = process.env.NODE_ENV
+
 afterEach(() => {
   delete process.env.SIM_POSITIONS
+  process.env.NODE_ENV = originalNodeEnv
   jest.useRealTimers()
+})
+
+describe('PositionSimulatorService em produção', () => {
+  it('não inicia simulador em production mesmo com SIM_POSITIONS=1', async () => {
+    process.env.NODE_ENV = 'production'
+    process.env.SIM_POSITIONS = '1'
+    const db = prisma()
+    const svc = new PositionSimulatorService(db, positions(), events())
+
+    await svc.onModuleInit()
+
+    // Sem isto, uma flag esquecida no ambiente faria pinos falsos aparecerem
+    // no mapa de produção lado a lado com a posição real dos trabalhadores.
+    expect(db.user.findMany).not.toHaveBeenCalled()
+    svc.onModuleDestroy()
+  })
 })
 
 describe('PositionSimulatorService', () => {

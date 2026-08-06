@@ -45,7 +45,10 @@ export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    if (process.env.SIM_POSITIONS !== '1') return
+    // Duas condições, não uma: a flag liga o simulador, e o ambiente decide se
+    // ele pode existir. Uma flag esquecida no ambiente de produção colocaria
+    // pinos falsos no mapa junto com a posição real dos trabalhadores.
+    if (process.env.NODE_ENV === 'production' || process.env.SIM_POSITIONS !== '1') return
     const rows = await this.prisma.user.findMany({
       where: { role: 'WORKER', active: true },
       select: { id: true, companyId: true },

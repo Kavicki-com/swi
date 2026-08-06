@@ -56,6 +56,9 @@ export class WeatherService {
   // Alerta: dev via WEATHER_SCENARIO='alert'; prod → fonte real (ainda não
   // configurada = []). NUNCA fabrica alerta sem flag/fonte.
   private alerts(now: Date): WeatherAlert[] {
+    // O ambiente vem antes da flag: em produção, alerta só pode nascer de fonte
+    // real. Um alerta fabricado aqui mandaria gente evacuar sem tempestade.
+    if (process.env.NODE_ENV === 'production') return []
     return process.env.WEATHER_SCENARIO === 'alert' ? [stormAlert(now)] : []
   }
 }

@@ -14,10 +14,8 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    // Só artefato e código gerado. O `amplify/` é a tentativa abandonada de
-    // backend serverless: fica fora do tsconfig, então o linting com tipos nem
-    // conseguiria resolvê-lo. A remoção dele é assunto do passo de dead code.
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'amplify/**'],
+    // Só artefato e código gerado.
+    ignores: ['dist/**', 'coverage/**', 'node_modules/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
