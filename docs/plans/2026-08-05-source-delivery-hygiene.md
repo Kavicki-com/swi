@@ -517,26 +517,69 @@ git commit -m "test: eliminate admin async warnings"
 
 ### Task 8: Decompor os arquivos grandes do admin sob testes de caracterização
 
-**Files:**
+**Files** (reconciliado com a árvore depois da execução; a fronteira real de cada
+página só apareceu ao ler o arquivo inteiro, então vários nomes previstos deram
+lugar a outros, sempre nomeando o arquivo pelo componente que ele exporta):
+
+Chat, 1394 → 362 linhas:
 - Modify: `swi-admin/src/pages/chat/ChatInbox.tsx`
-- Split: `swi-admin/src/pages/chat/ChatInbox.test.tsx`
+- Modify: `swi-admin/src/pages/chat/ChatInbox.test.tsx`
+- Create: `swi-admin/src/pages/chat/components/ChatBubble.tsx`
+- Create: `swi-admin/src/pages/chat/components/ContactInfoPanel.tsx`
 - Create: `swi-admin/src/pages/chat/components/ConversationList.tsx`
 - Create: `swi-admin/src/pages/chat/components/MessageThread.tsx`
 - Create: `swi-admin/src/pages/chat/hooks/useChatInbox.ts`
+
+Dashboard, 992 → 232 linhas (seis seções visuais, cada uma com seu `testID` de
+topo, em vez dos dois arquivos previstos):
 - Modify: `swi-admin/src/pages/dashboard/Dashboard.tsx`
+- Create: `swi-admin/src/pages/dashboard/components/ActivitiesSection.tsx`
 - Create: `swi-admin/src/pages/dashboard/components/DashboardKpis.tsx`
-- Create: `swi-admin/src/pages/dashboard/components/DashboardCharts.tsx`
+- Create: `swi-admin/src/pages/dashboard/components/HealthDonuts.tsx`
+- Create: `swi-admin/src/pages/dashboard/components/MapBanner.tsx`
+- Create: `swi-admin/src/pages/dashboard/components/WearAlertsSection.tsx`
+- Create: `swi-admin/src/pages/dashboard/components/WeatherStrip.tsx`
+
+Configurações do usuário, 1001 → 494 linhas:
 - Modify: `swi-admin/src/pages/user/UserSettings.tsx`
-- Create: `swi-admin/src/pages/user/settings/ProfileSection.tsx`
-- Create: `swi-admin/src/pages/user/settings/SecuritySection.tsx`
+- Create: `swi-admin/src/pages/user/hooks/useUserSettings.ts`
+- Create: `swi-admin/src/pages/user/components/ExamsSection.tsx`
+- Create: `swi-admin/src/pages/user/components/PasswordInput.tsx`
+- Create: `swi-admin/src/pages/user/components/PasswordSection.tsx`
+- Create: `swi-admin/src/pages/user/components/PermissionsSection.tsx`
+- Create: `swi-admin/src/pages/user/components/PrivacyPolicyModal.tsx`
+
+Formulário de tarefa, 810 → 420 linhas, e a suíte de 967 dividida em três por
+tema (o bloco `vi.hoisted`/`vi.mock` se repete em cada uma porque o hoisting do
+Vitest é por arquivo):
 - Modify: `swi-admin/src/pages/tasks/TaskForm.tsx`
-- Split: `swi-admin/src/pages/tasks/TaskForm.test.tsx`
-- Create: `swi-admin/src/pages/tasks/components/TaskFields.tsx`
 - Create: `swi-admin/src/pages/tasks/hooks/useTaskForm.ts`
+- Create: `swi-admin/src/pages/tasks/components/AttachmentSlot.tsx`
+- Delete: `swi-admin/src/pages/tasks/TaskForm.test.tsx`
+- Create: `swi-admin/src/pages/tasks/TaskForm.testKit.tsx`
+- Create: `swi-admin/src/pages/tasks/TaskForm.create.test.tsx`
+- Create: `swi-admin/src/pages/tasks/TaskForm.attachments.test.tsx`
+- Create: `swi-admin/src/pages/tasks/TaskForm.edit.test.tsx`
+
+Mapas, 809 → 229 linhas, precedido de 11 testes novos (a única página cuja
+cobertura não sustentava a extração; ver Step 1):
 - Modify: `swi-admin/src/pages/maps/MapsGeneral.tsx`
-- Create: `swi-admin/src/pages/maps/components/MapControls.tsx`
-- Create: `swi-admin/src/pages/maps/hooks/useMapLayers.ts`
+- Modify: `swi-admin/src/pages/maps/MapsGeneral.test.tsx`
+- Create: `swi-admin/src/pages/maps/hooks/useMapsGeneral.ts`
+- Create: `swi-admin/src/pages/maps/pinBuilders.tsx`
+- Create: `swi-admin/src/pages/maps/components/HeatmapLegend.tsx`
+- Create: `swi-admin/src/pages/maps/components/BackToDashboardButton.tsx`
+
+Code splitting (Step 3) e gate de tamanho (Step 4):
 - Modify: `swi-admin/src/app/App.tsx`
+- Modify: `swi-admin/src/app/AppLayout.tsx`
+- Modify: `swi-admin/src/pages/monitoring/MonitoringLayout.tsx`
+- Create: `swi-admin/src/app/RouteFallback.tsx`
+- Create: `swi-admin/src/app/lazyRoutes.test.tsx`
+- Modify: `swi-admin/vite.config.ts`
+- Modify: `swi-admin/package.json`
+- Create: `scripts/quality/assert-file-size.mjs`
+- Create: `scripts/quality/assert-file-size.test.mjs`
 
 **Step 1: Lock current behavior**
 
@@ -568,18 +611,21 @@ Run: `cd swi-admin && npm run build`
 
 Expected: build PASS; MapLibre e páginas pesadas fora do chunk inicial. Não resolver alerta elevando `chunkSizeWarningLimit`.
 
+Medição feita antes de executar: dos 974 kB do chunk inicial, só 246 kB eram código da aplicação; os outros 728 kB eram vendor que toda rota usa, inclusive o `/login` (react-native-web 232, design system 210, react-dom 130, styled-components e resto ~156). Ou seja, `React.lazy` sozinho deixaria o índice em ~770 kB e o alerta continuaria, porque o peso não está nas páginas. Por isso o passo também separa o vendor em três grupos via `build.rollupOptions.output.manualChunks` (decidido com o usuário). Isso é code splitting, não elevar limite.
+
+Resultado: índice 93,6 kB; vendor-react 163,7; vendor-react-native 261,1; vendor-design-system 263,4; 22 chunks de página (0,06 a 22,2 kB). O alerta de 500 kB permanece **apenas** para `maplibre-gl` (1053,9 kB), que já carrega sob demanda por `lib/useMapLibre` e é uma biblioteca única, sem fronteira interna para dividir.
+
+Verificado em navegador, não só no build: `vite preview` mais Playwright, `/login` monta com zero erro de console e navegar para `/tasks` busca `TasksList-*.js` sob demanda com o chrome do AppLayout na tela. O teste de fronteira é `swi-admin/src/app/lazyRoutes.test.tsx`.
+
 **Step 4: Enforce file-size gate**
 
-Run:
-
-```powershell
-$bad = rg --files swi-admin/src -g '*.ts' -g '*.tsx' | ForEach-Object {
-  if ((Get-Content -LiteralPath $_).Count -ge 800) { $_ }
-}
-if ($bad) { throw "Arquivos >= 800 linhas: $($bad -join ', ')" }
-```
+Run: `cd swi-admin && npm run gate:file-size`
 
 Expected: nenhum arquivo listado, inclusive testes anteriormente grandes.
+
+O gate mora em `scripts/quality/assert-file-size.mjs`, ao lado do `assert-worktree.mjs`, com suíte própria em `assert-file-size.test.mjs` (`node --test "scripts/quality/*.test.mjs"`).
+
+A conferência que estava escrita aqui era um snippet PowerShell começando por `rg --files`. Foi substituída porque **falhava aberto**: onde o ripgrep não está no PATH, o comando erra, `$bad` fica vazio, o `if ($bad)` não dispara e a saída se lê exatamente como aprovação. Foi o que aconteceu ao executá-la. O script substituto não depende de ferramenta externa (varre com `node:fs`) e trata varredura vazia ou menor que `--min-scanned` como reprovação, não como sucesso.
 
 Run: `cd swi-admin && npm run typecheck && npm run lint && npm test && npm run build`
 
