@@ -89,6 +89,16 @@ export default mergeConfig(
           'src/test-setup.ts',
           'src/main.tsx',
         ],
+        // Portão travado: a cobertura só sobe daqui. Vale para as quatro
+        // métricas porque cada uma pega uma lacuna diferente — `functions`
+        // denuncia caminho de código nunca chamado, `branches` denuncia
+        // condição nunca exercitada, e nenhuma das duas aparece em `lines`.
+        thresholds: {
+          statements: 80,
+          branches: 80,
+          functions: 80,
+          lines: 80,
+        },
       },
       server: {
         deps: {

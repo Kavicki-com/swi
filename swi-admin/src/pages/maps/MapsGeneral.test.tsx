@@ -143,7 +143,9 @@ const maplibre = vi.hoisted(() => {
   }
 
   const lib = {
-    Map: vi.fn(() => makeMap()),
+    // As opções são declaradas mesmo sem uso no corpo: é por elas que os testes
+    // afirmam com que centro o mapa nasceu.
+    Map: vi.fn((_options: { center: [number, number] }) => makeMap()),
     Marker: vi.fn((opts?: { element?: HTMLElement; draggable?: boolean }) => makeMarker(opts)),
     LngLatBounds: vi.fn(() => ({ extend: () => {} })),
   }
@@ -528,6 +530,127 @@ describe('MapsGeneral', () => {
     expect(toast.show).toHaveBeenCalledWith('Não foi possível localizar', 'Permissão negada')
     expect(flyToSpy).not.toHaveBeenCalled()
     expect(contentPins()).toHaveLength(antes)
+    await act(async () => {
+      view.unmount()
+    })
+  })
+
+  it('browser sem geolocalização avisa em vez de falhar calado', async () => {
+    Object.defineProperty(window.navigator, 'geolocation', {
+      value: undefined,
+      configurable: true,
+    })
+    const view = await renderMaps()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Centralizar na minha localização' }))
+
+    expect(toast.show).toHaveBeenCalledWith(
+      'Geolocalização indisponível',
+      'Browser não suporta navigator.geolocation',
+    )
+    await drain()
+    await act(async () => {
+      view.unmount()
+    })
+  })
+
+  // O botão fica em espera por 5 s depois de localizar. Sem isso, socar o botão
+  // dispara várias permissões seguidas no browser.
+  it('clicar de novo dentro da janela de espera não repete o pedido', async () => {
+    geolocation.getCurrentPosition.mockImplementation((ok: PositionCallback) =>
+      ok({ coords: { longitude: -50, latitude: -10 } } as GeolocationPosition),
+    )
+    const view = await renderMaps()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Centralizar na minha localização' }))
+    await drain()
+    fireEvent.click(screen.getByRole('button', { name: 'Centralizar na minha localização' }))
+    await drain()
+
+    expect(geolocation.getCurrentPosition).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      view.unmount()
+    })
+  })
+
+  // O pino azul existe porque a geolocalização de desktop erra por quilômetros:
+  // arrastá-lo corrige a âncora e o dataset de demo acompanha.
+  it('arrastar o pino azul re-ancora o dataset na posição corrigida', async () => {
+    live.value = [{ ...W1, id: 'w2', lng: -46.6, lat: -23.5 }]
+    geolocation.getCurrentPosition.mockImplementation((ok: PositionCallback) =>
+      ok({ coords: { longitude: -50, latitude: -10 } } as GeolocationPosition),
+    )
+    const view = await renderMaps()
+    fireEvent.click(screen.getByRole('button', { name: 'Operador' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Centralizar na minha localização' }))
+    await drain()
+
+    const azul = maplibre.markers.find((m) => m.draggable)
+    expect(azul).toBeTruthy()
+    const antes = contentPins().length
+
+    // O elemento troca de cursor durante o arrasto — é o único retorno visual
+    // de que o pino está sendo movido.
+    await act(async () => {
+      azul?.handlers['dragstart']?.()
+    })
+    expect(azul?.element?.style.cursor).toBe('grabbing')
+
+    // A lib guarda a posição final do arrasto; o dublê a recebe por setLngLat.
+    azul?.lngLats.push([-40, -20])
+    await act(async () => {
+      azul?.handlers['dragend']?.()
+    })
+    await drain()
+
+    expect(azul?.element?.style.cursor).toBe('grab')
+    const novas = contentPins()
+      .slice(antes)
+      .flatMap((p) => p.lngLats)
+    // Operador re-ancorado: -40 + (-46.6 + 46.63) * 0.2 e -20 + (-23.5 + 23.55) * 0.2
+    expect(perto(novas, -39.994, -19.99)).toBe(true)
+    await act(async () => {
+      view.unmount()
+    })
+  })
+
+  // ------------------------------------------------------------ sem posições
+
+  it('sem nenhum operador, o mapa abre na âncora padrão e não enquadra nada', async () => {
+    live.value = []
+    const view = await renderMaps()
+
+    await waitFor(() => expect(maplibre.lib.Map).toHaveBeenCalledTimes(1))
+    expect(maplibre.lib.Map.mock.calls[0]?.[0]).toMatchObject({ center: [-46.63, -23.55] })
+    expect(maplibre.fitBounds).not.toHaveBeenCalled()
+    await drain()
+    await act(async () => {
+      view.unmount()
+    })
+  })
+
+  it('com um único operador, centraliza nele sem enquadrar', async () => {
+    live.value = [{ ...W1 }]
+    const view = await renderMaps()
+
+    await waitFor(() => expect(maplibre.lib.Map).toHaveBeenCalledTimes(1))
+    expect(maplibre.lib.Map.mock.calls[0]?.[0]).toMatchObject({ center: [-46.63, -23.55] })
+    expect(maplibre.fitBounds).not.toHaveBeenCalled()
+    await drain()
+    await act(async () => {
+      view.unmount()
+    })
+  })
+
+  it('radar indisponível não monta camada meteorológica nenhuma', async () => {
+    radar.value = null
+    const view = await renderMaps()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mapa de calor' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Zonas de alerta' }))
+    await drain()
+
+    expect(maplibre.addSource.mock.calls.some((c) => c[0] === 'meteo')).toBe(false)
     await act(async () => {
       view.unmount()
     })

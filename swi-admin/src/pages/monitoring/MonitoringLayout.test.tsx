@@ -91,7 +91,9 @@ afterEach(() => {
 
 describe('MonitoringLayout', () => {
   it('renders without crashing', async () => {
-    await expect(renderPage(<MonitoringLayout />, { route: '/monitoring/alerts' })).resolves.toBeDefined()
+    await expect(
+      renderPage(<MonitoringLayout />, { route: '/monitoring/alerts' }),
+    ).resolves.toBeDefined()
   })
 
   it('/monitoring/alerts lista SÓ quem está em alerta de fadiga', async () => {
@@ -137,5 +139,147 @@ describe('MonitoringLayout', () => {
     await act(async () => {})
 
     expect(nomesVisiveis()).toHaveLength(POPULACAO.length)
+  })
+
+  it('a busca filtra por nome dentro da aba, sem diferenciar maiúsculas', async () => {
+    await renderAt('/monitoring/alerts')
+
+    fireEvent.change(screen.getByPlaceholderText('Pesquisar funcionário'), {
+      target: { value: 'fadiga DOIS' },
+    })
+    await act(async () => {})
+
+    expect(nomesVisiveis()).toEqual(['Fadiga Dois'])
+  })
+
+  it('busca sem correspondência esvazia a lista', async () => {
+    await renderAt('/monitoring/alerts')
+
+    fireEvent.change(screen.getByPlaceholderText('Pesquisar funcionário'), {
+      target: { value: 'ninguém' },
+    })
+    await act(async () => {})
+
+    expect(nomesVisiveis()).toEqual([])
+  })
+
+  it('o badge conta quem está em fadiga agora, não um número fixo', async () => {
+    await renderAt('/monitoring/alerts')
+
+    expect(screen.getByLabelText('2 alertas de fadiga')).toBeTruthy()
+  })
+
+  it('sem ninguém em fadiga, o badge some em vez de mostrar zero', async () => {
+    alertUsersMock.mockResolvedValue({
+      data: [pessoa('u-exc-1', 'Excelente Um', 'excelente')],
+      error: null,
+    })
+    await renderAt('/monitoring/good-conditions')
+
+    expect(screen.queryByLabelText(/alertas de fadiga/)).toBeNull()
+  })
+
+  it('sem tier declarado, o tom do alerta decide em que aba a pessoa cai', async () => {
+    // O seed mock não simula vitais, então `tier` pode vir vazio: o tom do
+    // alerta é o que resta para classificar.
+    const semTier = (id: string, name: string, tone: 'error' | 'warning' | null) => ({
+      ...pessoa(id, name, 'excelente'),
+      tier: undefined,
+      alerts: tone
+        ? [
+            {
+              id: `${id}-a`,
+              icon: 'heart_filled' as const,
+              title: 'Sinal fora da faixa',
+              description: 'detalhe',
+              tone,
+            },
+          ]
+        : [],
+    })
+    alertUsersMock.mockResolvedValue({
+      data: [
+        semTier('u-1', 'Sem Tier Crítico', 'error'),
+        semTier('u-2', 'Sem Tier Alerta', 'warning'),
+        semTier('u-3', 'Sem Tier Limpo', null),
+      ],
+      error: null,
+    })
+
+    await renderAt('/monitoring/alerts')
+    expect(screen.getByText('Sem Tier Crítico')).toBeTruthy()
+    expect(screen.queryByText('Sem Tier Alerta')).toBeNull()
+    expect(screen.queryByText('Sem Tier Limpo')).toBeNull()
+  })
+
+  it('nenhum card abre sozinho fora da aba de fadiga', async () => {
+    await renderAt('/monitoring/desgastados')
+
+    expect(screen.queryByRole('button', { name: 'Ver histórico de exames clínicos' })).toBeNull()
+  })
+
+  it('recolher e reabrir o card alterna o detalhe do alerta', async () => {
+    await renderAt('/monitoring/alerts')
+    expect(screen.getAllByText('Frequência cardíaca crítica')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /recolher alertas de fadiga um/i }))
+    await act(async () => {})
+    expect(screen.queryByText('Frequência cardíaca crítica')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /expandir alertas de fadiga um/i }))
+    await act(async () => {})
+    expect(screen.getAllByText('Frequência cardíaca crítica')).toHaveLength(1)
+  })
+
+  it('expandir um card recolhe o que estava aberto', async () => {
+    await renderAt('/monitoring/alerts')
+
+    fireEvent.click(screen.getByRole('button', { name: /expandir alertas de fadiga dois/i }))
+    await act(async () => {})
+
+    expect(screen.getAllByText('Frequência cardíaca crítica')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /recolher alertas de fadiga um/i })).toBeNull()
+  })
+
+  it('o pino do card leva ao mapa geral e a lupa de exames ao funcionário', async () => {
+    await renderAt('/monitoring/alerts')
+
+    fireEvent.click(screen.getByRole('button', { name: /localização de fadiga um/i }))
+    expect(nav.spy).toHaveBeenCalledWith('/maps/general')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver histórico de exames clínicos' }))
+    expect(nav.spy).toHaveBeenCalledWith('/employees/u-fad-1')
+  })
+
+  it('trocar de aba pela régua navega para a rota correspondente', async () => {
+    await renderAt('/monitoring/alerts')
+
+    fireEvent.click(screen.getByText('Desgastados'))
+
+    expect(nav.spy).toHaveBeenCalledWith('/monitoring/desgastados')
+  })
+
+  it('clicar na aba já ativa não renavega', async () => {
+    await renderAt('/monitoring/alerts')
+
+    fireEvent.click(screen.getByText('Alertas de Fadiga'))
+
+    expect(nav.spy).not.toHaveBeenCalledWith('/monitoring/alerts')
+  })
+
+  it('rota desconhecida cai na aba de alertas', async () => {
+    await renderAt('/monitoring')
+
+    expect(nomesVisiveis()).toEqual(['Fadiga Um', 'Fadiga Dois'])
+  })
+
+  it('a lista sobrevive a um retorno vazio da API', async () => {
+    kpisMock.mockResolvedValue({ data: null, error: { message: 'falhou' } as never })
+    alertUsersMock.mockResolvedValue({ data: null, error: { message: 'falhou' } as never })
+
+    await renderAt('/monitoring/alerts')
+
+    expect(screen.getByTestId('monitoring-layout')).toBeTruthy()
+    expect(nomesVisiveis()).toEqual([])
   })
 })
