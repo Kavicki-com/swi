@@ -11,8 +11,12 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "lint": "eslint src test prisma --max-warnings=0",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:coverage": "jest --coverage --runInBand",
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "verify": "npm run lint && npm run typecheck && npm test -- --runInBand && npm run build"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
