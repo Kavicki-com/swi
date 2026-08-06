@@ -21,4 +21,25 @@ describe('requireJwtSecret', () => {
     process.env.JWT_SECRET = ''
     expect(() => requireJwtSecret()).toThrow('JWT_SECRET')
   })
+
+  // A força do segredo é a mesma regra do contrato de ambiente. Sem isto, um
+  // segredo curto passava aqui e só o boot reclamava, e um processo que
+  // recarregasse a estratégia sem passar pelo boot ficaria com o segredo fraco.
+  it('recusa segredo curto em produção e aceita em desenvolvimento', () => {
+    const originalNodeEnv = process.env.NODE_ENV
+    try {
+      process.env.JWT_SECRET = 'curto'
+      process.env.NODE_ENV = 'production'
+      expect(() => requireJwtSecret()).toThrow('JWT_SECRET')
+
+      process.env.NODE_ENV = 'development'
+      expect(requireJwtSecret()).toBe('curto')
+
+      process.env.JWT_SECRET = 'x'.repeat(32)
+      process.env.NODE_ENV = 'production'
+      expect(requireJwtSecret()).toBe('x'.repeat(32))
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv
+    }
+  })
 })

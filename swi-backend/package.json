@@ -74,6 +74,7 @@
       "ts"
     ],
     "rootDir": "src",
+    "coverageDirectory": "../coverage",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
