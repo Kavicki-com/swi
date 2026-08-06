@@ -17,7 +17,7 @@ export class EvacuationService {
       waypoints = real.waypoints; durationSec = real.durationSec; distanceM = real.distanceM
     } catch (err) {
       // fallback canned — tela de segurança nunca pode quebrar
-      this.logger.warn(`roteador indisponível, servindo rota canned: ${err}`)
+      this.logger.warn(`roteador indisponível, servindo rota canned: ${String(err)}`)
     }
     return { waypoints, durationSec, distanceM, fetchedAt: now.toISOString() }
   }

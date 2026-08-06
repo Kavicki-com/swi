@@ -464,7 +464,7 @@ async function main() {
     const authorContact = CONTACTS.find((c) => c.n === workerN)!
     // 2 responsáveis reais, os dois colegas seguintes na roda — nunca o autor.
     const responsibles = [1, 2].map(
-      (offset) => CONTACTS[(workerN - 1 + offset) % CONTACTS.length]!.name,
+      (offset) => CONTACTS[(workerN - 1 + offset) % CONTACTS.length].name,
     )
     const r = await prisma.report.create({
       data: {

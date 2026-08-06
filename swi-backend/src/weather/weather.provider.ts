@@ -21,9 +21,40 @@ const num = (v: unknown): number => {
   return n
 }
 
+// Recorte do payload do Open-Meteo que esta coerção lê. Os valores são
+// `unknown` de propósito: o contrato é de terceiro e pode chegar incompleto ou
+// com o tipo errado, e quem valida cada número em runtime é `num()`. Declará-los
+// como `number` seria uma promessa que a API não faz.
+type OpenMeteoRaw = {
+  current?: {
+    temperature_2m?: unknown
+    weather_code?: unknown
+    relative_humidity_2m?: unknown
+    wind_speed_10m?: unknown
+  }
+  daily?: {
+    temperature_2m_max?: unknown[]
+    temperature_2m_min?: unknown[]
+  }
+  hourly?: {
+    time?: string[]
+    temperature_2m?: unknown[]
+    weather_code?: unknown[]
+    is_day?: unknown[]
+  }
+}
+
 // Coerção PURA payload Open-Meteo → nosso shape. Lança em payload incompleto
 // (o WeatherService trata com fallback canned).
-export function coerceOpenMeteo(raw: any): { current: WeatherCurrent; daily: WeatherDaily; hourly: WeatherHourly[] } {
+export function coerceOpenMeteo(payload: unknown): {
+  current: WeatherCurrent
+  daily: WeatherDaily
+  hourly: WeatherHourly[]
+} {
+  // A assinatura pública é `unknown` porque é isso que chega de `res.json()`.
+  // A asserção fica num ponto só, e não promete nada além do recorte acima:
+  // todo campo é opcional e cada número ainda passa por `num()`.
+  const raw = payload as OpenMeteoRaw | null | undefined
   const c = raw?.current, d = raw?.daily
   if (!c || !d) throw new Error('open-meteo: payload sem current/daily')
   const current: WeatherCurrent = {
@@ -33,15 +64,18 @@ export function coerceOpenMeteo(raw: any): { current: WeatherCurrent; daily: Wea
     windKmh: Math.round(num(c.wind_speed_10m)),
   }
   const daily: WeatherDaily = { maxC: Math.round(num(d.temperature_2m_max?.[0])), minC: Math.round(num(d.temperature_2m_min?.[0])) }
+  // Os arrays saem para constantes antes do teste de existência: o estreitamento
+  // de uma propriedade não sobrevive dentro do callback do map, o de uma const sim.
   const h = raw?.hourly
+  const horas = h?.time, temps = h?.temperature_2m, codes = h?.weather_code, isDay = h?.is_day
   const hourly: WeatherHourly[] =
-    h?.time && h?.temperature_2m && h?.weather_code
-      ? h.time.map((at: string, i: number) => ({
+    horas && temps && codes
+      ? horas.map((at: string, i: number) => ({
           at,
-          tempC: Math.round(num(h.temperature_2m[i])),
-          condition: mapWeatherCode(num(h.weather_code[i])),
+          tempC: Math.round(num(temps[i])),
+          condition: mapWeatherCode(num(codes[i])),
           // is_day (0|1) é aditivo — payload sem o array segue válido, isDay omitido.
-          ...(Array.isArray(h.is_day) ? { isDay: num(h.is_day[i]) === 1 } : {}),
+          ...(Array.isArray(isDay) ? { isDay: num(isDay[i]) === 1 } : {}),
         }))
       : []
   return { current, daily, hourly }

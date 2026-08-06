@@ -34,7 +34,7 @@ export class WeatherService {
       hourly = real.hourly?.length ? real.hourly : this.cannedHourly(now)
     } catch (err) {
       // fallback canned — tela de segurança nunca pode quebrar
-      this.logger.warn(`open-meteo indisponível, servindo fallback canned: ${err}`)
+      this.logger.warn(`open-meteo indisponível, servindo fallback canned: ${String(err)}`)
     }
     return { current, daily, hourly, alerts: this.alerts(now), fetchedAt: now.toISOString() }
   }

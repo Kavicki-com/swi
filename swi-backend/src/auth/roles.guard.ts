@@ -8,7 +8,7 @@ export class RolesGuard implements CanActivate {
     // (users.controller) quanto @Roles na classe inteira (work-orders.controller).
     const roles = this.reflector.getAllAndOverride<string[]>('roles', [ctx.getHandler(), ctx.getClass()])
     if (!roles?.length) return true
-    const { user } = ctx.switchToHttp().getRequest()
-    return roles.includes(user?.role)
+    const { user } = ctx.switchToHttp().getRequest<{ user?: { role?: string } }>()
+    return roles.includes(user?.role ?? '')
   }
 }

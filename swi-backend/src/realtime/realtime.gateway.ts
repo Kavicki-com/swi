@@ -20,9 +20,11 @@ export class RealtimeGateway implements OnGatewayConnection {
   handleConnection(client: Socket): void {
     const token = this.extractToken(client)
     try {
-      const payload = this.jwt.verify(token, { secret: requireJwtSecret() }) as { sub: string }
-      client.data.userId = payload.sub
-      client.join(this.room(payload.sub))
+      const payload = this.jwt.verify<{ sub: string }>(token, { secret: requireJwtSecret() })
+      // `client.data` é `any` no tipo do socket.io (o payload por conexão é
+      // livre); a asserção estreita só o campo que este gateway grava.
+      ;(client.data as { userId?: string }).userId = payload.sub
+      void client.join(this.room(payload.sub))
     } catch {
       client.disconnect()
     }

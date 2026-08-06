@@ -68,7 +68,7 @@ describe('WorkOrdersService', () => {
       title: 'Ordem', summary: 'Resumo', estimatedMinutes: 100,
       responsibleIds: ['u1', 'u2'],
       items: [{ title: 'A' }, { title: 'B' }, { title: 'C' }],
-    } as any, 'org1')
+    }, 'org1')
     // validateResponsibles restrito à empresa do admin — worker de outra org é inválido.
     expect(db.user.findMany.mock.calls[0][0].where).toEqual({
       id: { in: ['u1', 'u2'] }, role: 'WORKER', approvalStatus: 'APPROVED', companyId: 'org1',
@@ -90,7 +90,7 @@ describe('WorkOrdersService', () => {
     db.workOrder.findUnique.mockResolvedValue(detailRow())
     await new WorkOrdersService(db, media(), notifications()).create('admin1', {
       title: 'Ordem X', summary: 'O resumo', estimatedMinutes: 60, responsibleIds: ['u1'],
-    } as any, 'org1')
+    }, 'org1')
     const items = db.workOrder.create.mock.calls[0][0].data.items.create
     expect(items).toHaveLength(1)
     expect(items[0].title).toBe('Ordem X')
@@ -117,7 +117,7 @@ describe('WorkOrdersService', () => {
     const notif = notifications()
     await new WorkOrdersService(db, media(), notif).create('admin1', {
       title: 'Ordem 9', responsibleIds: ['u1', 'u2'],
-    } as any, 'org1')
+    }, 'org1')
     expect(notif.enqueueForMany).toHaveBeenCalledWith(['u1', 'u2'], expect.objectContaining({
       domain: 'journey', title: 'Nova tarefa atribuída', body: 'Ordem 9', targetId: 'o9',
     }))
@@ -131,7 +131,7 @@ describe('WorkOrdersService', () => {
     const notif = notifications()
     await new WorkOrdersService(db, media(), notif).create('admin1', {
       title: 'Ordem', responsibleIds: ['u1', 'u1', 'u2'], // 'u1' duplicado no payload
-    } as any, 'org1')
+    }, 'org1')
     expect(notif.enqueueForMany).toHaveBeenCalledWith(['u1', 'u2'], expect.anything()) // deduplicado
   })
 
@@ -142,7 +142,7 @@ describe('WorkOrdersService', () => {
     db.workOrder.findUnique.mockResolvedValue(detailRow())
     const notif = notifications()
     notif.enqueueForMany.mockRejectedValue(new Error('boom'))
-    const out = await new WorkOrdersService(db, media(), notif).create('admin1', { title: 'Ordem', responsibleIds: ['u1'] } as any, 'org1')
+    const out = await new WorkOrdersService(db, media(), notif).create('admin1', { title: 'Ordem', responsibleIds: ['u1'] }, 'org1')
     expect(out.id).toBe('o1')
   })
 
@@ -239,7 +239,7 @@ describe('WorkOrdersService', () => {
         { id: 't1', title: 'Item 1 editado', description: 'd1x' },
         { title: 'Item novo' },
       ],
-    } as any, 'org1')
+    }, 'org1')
     expect(db.task.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['t2'] } } }) // t2 fora do payload
     const upd = db.task.update.mock.calls.find((c: any) => c[0].where.id === 't1')[0].data
     expect(upd.title).toBe('Item 1 editado')
@@ -307,7 +307,7 @@ describe('WorkOrdersService', () => {
       .mockResolvedValue(detailRow())
     db.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u3' }]) // novo conjunto (u2 sai, u3 entra)
     const notif = notifications()
-    await new WorkOrdersService(db, media(), notif).update('o1', { responsibleIds: ['u1', 'u3'] } as any, 'org1')
+    await new WorkOrdersService(db, media(), notif).update('o1', { responsibleIds: ['u1', 'u3'] }, 'org1')
     expect(notif.enqueueForMany).toHaveBeenCalledTimes(1)
     expect(notif.enqueueForMany).toHaveBeenCalledWith(['u3'], expect.objectContaining({ domain: 'journey', targetId: 'o1' }))
     expect(db.workOrder.update.mock.calls.some((c: any) => c[0].data.responsibles?.set)).toBe(true) // set aplicado no pai
@@ -320,7 +320,7 @@ describe('WorkOrdersService', () => {
       .mockResolvedValue(detailRow())
     await new WorkOrdersService(db, media(), notifications()).update('o1', {
       items: [{ id: 't1', title: 'I1' }, { title: 'I2' }, { title: 'I3' }],
-    } as any, 'org1')
+    }, 'org1')
     const t1 = db.task.update.mock.calls.find((c: any) => c[0].where.id === 't1')[0].data
     expect(t1.estimatedMinutes).toBe(30) // 90/3
     expect(db.task.create.mock.calls.map((c: any) => c[0].data.estimatedMinutes)).toEqual([30, 30])
@@ -331,7 +331,7 @@ describe('WorkOrdersService', () => {
     db.workOrder.findUnique.mockResolvedValueOnce(existingRow()).mockResolvedValue(detailRow())
     await new WorkOrdersService(db, media(), notifications()).update('o1', {
       items: [{ id: 't1', title: 'Novo título' }, { id: 't2', title: 'Item 2' }],
-    } as any, 'org1')
+    }, 'org1')
     for (const c of db.task.update.mock.calls) expect(c[0].data.estimatedMinutes).toBeUndefined()
     const t1 = db.task.update.mock.calls.find((c: any) => c[0].where.id === 't1')[0].data
     expect(t1.title).toBe('Novo título')
@@ -343,7 +343,7 @@ describe('WorkOrdersService', () => {
   it('update roda sob transação e trava o pai; edição SEM mudança de conjunto NÃO recomputa (Fix 4)', async () => {
     const db = prisma()
     db.workOrder.findUnique.mockResolvedValueOnce(existingRow()).mockResolvedValue(detailRow())
-    await new WorkOrdersService(db, media(), notifications()).update('o1', { title: 'Renomeada' } as any, 'org1')
+    await new WorkOrdersService(db, media(), notifications()).update('o1', { title: 'Renomeada' }, 'org1')
     expect(db.$transaction).toHaveBeenCalledTimes(1)
     expect(db.$queryRaw).toHaveBeenCalled() // lockOrder (SELECT ... FOR UPDATE)
     // gate do Fix 4: sem add/delete, o status derivado não muda → recompute é pulado.
@@ -362,7 +362,7 @@ describe('WorkOrdersService', () => {
     db.task.findMany.mockResolvedValue([{ status: 'done' }]) // sobra só t1 (done)
     await new WorkOrdersService(db, media(), notifications()).update('o1', {
       items: [{ id: 't1', title: 'I1' }], // t2 deletado → conjunto muda
-    } as any, 'org1')
+    }, 'org1')
     expect(db.task.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['t2'] } } })
     const statusCall = db.workOrder.update.mock.calls.find((c: any) => c[0].data.status)
     expect(statusCall[0].data.status).toBe('done') // recompute rodou e virou o pai

@@ -144,6 +144,7 @@ describe('MediaService sem storage configurado', () => {
     delete process.env.MINIO_ACCESS_KEY
     delete process.env.MINIO_SECRET_KEY
     jest.resetModules()
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- o require é proposital: vem depois de jest.resetModules() para reavaliar o módulo com o ambiente já alterado, coisa que um import estático (içado) não faz.
     const { MediaService } = require('./media.service')
     return new MediaService()
   }

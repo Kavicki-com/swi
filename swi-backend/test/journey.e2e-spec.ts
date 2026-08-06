@@ -18,7 +18,7 @@ describe('Journey e2e', () => {
   let aId = '', bId = ''
   // Ordem principal (responsável = A) com 2 itens; ordem alheia (responsável = B)
   // com 1 item — prova de ownership (item cujo pai não me lista → 404).
-  let orderId = '', item1Id = '', item2Id = '', foreignItemId = ''
+  let item1Id = '', item2Id = '', foreignItemId = ''
 
   const login = async (email: string) => {
     const { body } = await request(app.getHttpServer()).post('/auth/login').send({ email, password: 'test1234' }).expect(200)
@@ -57,7 +57,7 @@ describe('Journey e2e', () => {
       },
       include: { items: { orderBy: { position: 'asc' } } },
     })
-    item1Id = order.items[0].id; item2Id = order.items[1].id; orderId = order.id
+    item1Id = order.items[0].id; item2Id = order.items[1].id
 
     const foreign = await prisma.workOrder.create({
       data: {

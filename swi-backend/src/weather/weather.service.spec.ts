@@ -2,7 +2,7 @@ import { WeatherService } from './weather.service'
 import type { OpenMeteoProvider } from './weather.provider'
 import { CANNED_CURRENT, CANNED_DAILY, CANNED_HOURLY } from './weather.types'
 
-const provider = (fetch: OpenMeteoProvider['fetch']) => ({ fetch } as OpenMeteoProvider)
+const provider = (fetch: OpenMeteoProvider['fetch']) => ({ fetch })
 
 describe('WeatherService.getSnapshot', () => {
   const orig = process.env.WEATHER_SCENARIO

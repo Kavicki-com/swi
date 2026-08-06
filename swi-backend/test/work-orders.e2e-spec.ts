@@ -20,7 +20,7 @@ describe('WorkOrders e2e', () => {
   const aE = 'wo-a@ex.com', bE = 'wo-b@ex.com', cE = 'wo-c@ex.com'
   const pendingE = 'wo-pending@ex.com', rejectedE = 'wo-rejected@ex.com'
   const emails = [adminE, aE, bE, cE, pendingE, rejectedE]
-  let adminId = '', aId = '', bId = '', cId = '', pendingId = '', rejectedId = ''
+  let aId = '', bId = '', cId = '', pendingId = '', rejectedId = ''
   let adminAuth: { Authorization: string }, aAuth: { Authorization: string }, bAuth: { Authorization: string }, cAuth: { Authorization: string }
 
   const login = async (email: string) => {
@@ -57,7 +57,7 @@ describe('WorkOrders e2e', () => {
       if (withProfile) await prisma.profile.create({ data: { userId: u.id, fullName: name, jobTitle: 'Operador', sector: 'Mina' } })
       return u.id
     }
-    adminId = await mkAdmin(adminE, 'WO Admin')
+    await mkAdmin(adminE, 'WO Admin')
     aId = await mkWorker(aE, 'Worker A')
     bId = await mkWorker(bE, 'Worker B')
     cId = await mkWorker(cE, 'Worker C')
