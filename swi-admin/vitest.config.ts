@@ -69,6 +69,27 @@ export default mergeConfig(
       // Sequential single-fork is ~3× slower but stable.
       pool: 'forks',
       poolOptions: { forks: { singleFork: true } },
+      coverage: {
+        // istanbul, não v8: o provider v8 lê a cobertura pelo inspector do
+        // processo, e com `pool: 'forks'` + `singleFork` ele perde a sessão
+        // depois do primeiro arquivo ("Session is not connected",
+        // ERR_INSPECTOR_NOT_CONNECTED) e aborta o run inteiro. O istanbul
+        // instrumenta no transform e não depende do inspector.
+        provider: 'istanbul',
+        reporter: ['text', 'json-summary'],
+        // Toda a árvore de produção entra no denominador. Sem `include`, o v8
+        // só conta arquivo que algum teste importou, e o número sai inflado
+        // porque módulo sem teste nenhum simplesmente não aparece.
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: [
+          'src/**/*.d.ts',
+          'src/**/*.test.{ts,tsx}',
+          'src/**/*.stories.{ts,tsx}',
+          'src/**/*.testKit.tsx',
+          'src/test-setup.ts',
+          'src/main.tsx',
+        ],
+      },
       server: {
         deps: {
           // Force packages that depend on react-native/styled-components/native through
