@@ -22,6 +22,15 @@
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/$1"
     },
+    "collectCoverageFrom": [
+      "app/**/*.{ts,tsx}",
+      "components/**/*.{ts,tsx}",
+      "lib/**/*.ts",
+      "services/**/*.ts",
+      "!**/*.d.ts",
+      "!**/*.test.{ts,tsx}",
+      "!**/__tests__/**"
+    ],
     "transformIgnorePatterns": [
       "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|@kavicki))",
       "/node_modules/react-native-reanimated/plugin/"
