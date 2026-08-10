@@ -8,7 +8,7 @@ import type { Contact, Conversation, Message } from '../../../../services/chat/t
 //
 // O ponto mais delicado da tela é o estado de três valores: `messagesFor` não
 // distingue "ainda carregando" de "carregou e está vazia", e uma rejeição não
-// pode cair em 'ready' — renderizaria como conversa vazia e esconderia a falha.
+// pode cair em 'ready', renderizaria como conversa vazia e esconderia a falha.
 // Por isso o load usa .then(ok, err) e NÃO .finally.
 //
 // A outra: enviar durante o loading descartaria a mensagem em silêncio, porque
@@ -130,7 +130,7 @@ beforeEach(() => {
   mockShowPicker.mockResolvedValue(null);
 });
 
-describe('Thread do chat — estados de carregamento', () => {
+describe('Thread do chat: estados de carregamento', () => {
   it('mostra o carregando enquanto a conversa não abre', async () => {
     mockChat.openConversation.mockReturnValue(new Promise(() => {}));
     const tree = await render();
@@ -174,7 +174,7 @@ describe('Thread do chat — estados de carregamento', () => {
   });
 });
 
-describe('Thread do chat — mensagens', () => {
+describe('Thread do chat: mensagens', () => {
   it('minha mensagem e a do contato ficam em lados opostos', async () => {
     mockChat.messagesFor.mockReturnValue([
       mensagem({ id: 'm1', senderId: 'me', body: 'Bom dia' }),
@@ -229,7 +229,7 @@ describe('Thread do chat — mensagens', () => {
   });
 });
 
-describe('Thread do chat — cabeçalho do contato', () => {
+describe('Thread do chat: cabeçalho do contato', () => {
   it('conversa existente resolve o contato pelos participantes', async () => {
     mockChat.conversations = [conversa()];
     mockChat.messagesFor.mockReturnValue([mensagem()]);
@@ -279,7 +279,7 @@ describe('Thread do chat — cabeçalho do contato', () => {
   });
 });
 
-describe('Thread do chat — envio', () => {
+describe('Thread do chat: envio', () => {
   it('manda o texto para a conversa e limpa o campo', async () => {
     const tree = await render();
     await digitar(tree, 'Bom dia');
@@ -333,7 +333,7 @@ describe('Thread do chat — envio', () => {
   });
 });
 
-describe('Thread do chat — anexo', () => {
+describe('Thread do chat: anexo', () => {
   it('o arquivo escolhido aparece como prévia antes de enviar', async () => {
     mockShowPicker.mockResolvedValue('file:///foto.jpg');
     const tree = await render();

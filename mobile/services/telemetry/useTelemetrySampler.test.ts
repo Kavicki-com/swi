@@ -1,5 +1,5 @@
 // getTelemetrySink está pinado em mock (carve-out saúde), então o hook só
-// exercita o mockTelemetrySink aqui — sem stubs de featureFlags/aws.
+// exercita o mockTelemetrySink aqui, sem stubs de featureFlags/aws.
 import { createElement, type ComponentType } from 'react';
 import {
   useTelemetrySampler, buildVitalsSample, buildLocationSample, ttlEpochSec,
@@ -7,7 +7,7 @@ import {
 import { mockTelemetryLog } from './mockTelemetrySink';
 import type { Vitals } from '../vitals/types';
 // react-test-renderer ships no type declarations and @types/react-test-renderer
-// is not a project dep — type the two helpers we use locally to keep tsc clean
+// is not a project dep, type the two helpers we use locally to keep tsc clean
 // without adding a dependency just for the test.
 const TestRenderer: {
   create: (el: unknown) => { unmount: () => void };

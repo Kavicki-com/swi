@@ -92,10 +92,10 @@ beforeEach(() => {
   mockUseReports.mockReturnValue({ create: criarRelatorio });
 });
 
-describe('Novo relatório — anexos', () => {
+describe('Novo relatório: anexos', () => {
   // O relato: "quando anexar a imagem, tem que ir pros quadrados da parte de
   // cima onde tem 4 opções e não pra dentro do button que anexa". A tela tinha
-  // DOIS estados separados — a grade e o uploader — e o "Enviar arquivo" só
+  // DOIS estados separados, a grade e o uploader, e o "Enviar arquivo" só
   // alimentava o segundo, então a foto aparecia dentro do próprio botão.
   it('foto escolhida pelo "Enviar arquivo" vai pro primeiro quadrado', async () => {
     const tree = await render();
@@ -106,7 +106,7 @@ describe('Novo relatório — anexos', () => {
     expect(slotPreenchido(tree, 1)).toBe(true);
   });
 
-  it('o botão de anexar não guarda preview nenhuma — a foto vive na grade', async () => {
+  it('o botão de anexar não guarda preview nenhuma, a foto vive na grade', async () => {
     const tree = await render();
     await act(async () => { await uploader(tree).props.onPickFile(); });
     expect(uploader(tree).props.value).toBeNull();
@@ -122,7 +122,7 @@ describe('Novo relatório — anexos', () => {
     expect(slotPreenchido(tree, 2)).toBe(true);
   });
 
-  // Sem isso o 5º toque sobrescreveria silenciosamente o primeiro anexo — o
+  // Sem isso o 5º toque sobrescreveria silenciosamente o primeiro anexo, o
   // usuário perderia uma foto já escolhida sem nenhum aviso.
   it('com os 4 quadrados cheios não abre o seletor', async () => {
     const tree = await render();
@@ -226,7 +226,7 @@ describe('Novo relatório, remover anexo', () => {
 // `onPress={disabled ? undefined : onPress}` no Pressable interno, então
 // chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
 // com o bug de volta. Sem ela o teste não tem dente.
-describe('Novo relatório — Salvar com formulário incompleto', () => {
+describe('Novo relatório: Salvar com formulário incompleto', () => {
   it('mantém o botão habilitado para que o toque chegue à validação', async () => {
     const tree = await render();
     expect(botaoSalvar(tree).props.disabled).toBeFalsy();

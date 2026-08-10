@@ -143,7 +143,7 @@ beforeEach(() => {
 
 // --- Fases dos vitais --------------------------------------------------------
 
-describe('dashboard — fases dos vitais', () => {
+describe('dashboard: fases dos vitais', () => {
   it('carregando: mostra o aviso de carregamento e nenhum número de vital', async () => {
     mockVitalsState = { phase: 'loading', vitals: null, status: 'unknown' };
     const texto = textoDa(await render());
@@ -193,7 +193,7 @@ describe('dashboard — fases dos vitais', () => {
 
 // --- Badges de pendências ----------------------------------------------------
 
-describe('dashboard — badges de relatórios e notificações', () => {
+describe('dashboard: badges de relatórios e notificações', () => {
   it('dispara o carregamento dos relatórios no mount', async () => {
     await render();
     expect(mockLoadReports).toHaveBeenCalled();
@@ -228,7 +228,7 @@ describe('dashboard — badges de relatórios e notificações', () => {
 
 // --- Navegação ---------------------------------------------------------------
 
-describe('dashboard — navegação', () => {
+describe('dashboard: navegação', () => {
   it.each([
     ['Localização', '/(app)/map'],
     ['Trabalho', '/(app)/journey'],
@@ -260,7 +260,7 @@ describe('dashboard — navegação', () => {
 
 // --- Tela de evacuação (?alert=active) ---------------------------------------
 
-describe('dashboard — procedimento de evacuação (?alert=active)', () => {
+describe('dashboard: procedimento de evacuação (?alert=active)', () => {
   beforeEach(() => {
     mockSearchParams = { alert: 'active' };
   });

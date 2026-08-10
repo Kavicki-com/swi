@@ -111,7 +111,7 @@ const donut = (tree: ReturnType<typeof create>) =>
   )[0].props as { value: string; label: string };
 
 // Marcador da seção "Em andamento": o radio PREENCHIDO (bolinha teal de 10) só
-// existe no card destacado. Procurar o texto "Em andamento" não serve — é
+// existe no card destacado. Procurar o texto "Em andamento" não serve, é
 // também o rótulo do donut em qualquer estado ativo.
 const temCardDestacado = (tree: ReturnType<typeof create>) =>
   tree.root.findAll(
@@ -129,7 +129,7 @@ beforeEach(() => {
   mockProfile.profile = null;
 });
 
-describe('Jornada — estados de carregamento', () => {
+describe('Jornada: estados de carregamento', () => {
   it.each(['idle', 'loading'] as const)('%s mostra o carregando', async (s) => {
     mockJourney.loadStatus = s;
     const tree = await render();
@@ -160,7 +160,7 @@ describe('Jornada — estados de carregamento', () => {
   });
 });
 
-describe('Jornada — cabeçalho', () => {
+describe('Jornada: cabeçalho', () => {
   it('mostra a data de hoje, não uma data cravada', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-08-06T09:00:00'));
@@ -198,7 +198,7 @@ describe('Jornada — cabeçalho', () => {
   });
 });
 
-describe('Jornada — donut central', () => {
+describe('Jornada: donut central', () => {
   it('parada, soma as horas estimadas só das tarefas pendentes', async () => {
     mockJourney.tasks = [
       tarefa({ id: 'a', estimatedMinutes: 120 }),
@@ -245,7 +245,7 @@ describe('Jornada — donut central', () => {
   });
 });
 
-describe('Jornada — listas de tarefa', () => {
+describe('Jornada: listas de tarefa', () => {
   it('parada, lista todas as tarefas e nenhuma seção "Em andamento"', async () => {
     mockJourney.tasks = [
       tarefa({ id: 'a', title: 'Tarefa A' }),
@@ -314,7 +314,7 @@ describe('Jornada — listas de tarefa', () => {
   });
 });
 
-describe('Jornada — CTAs de sessão', () => {
+describe('Jornada: CTAs de sessão', () => {
   it('parada não oferece finalizar nem pausar', async () => {
     const tree = await render();
 

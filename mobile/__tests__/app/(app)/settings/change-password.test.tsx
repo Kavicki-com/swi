@@ -50,7 +50,7 @@ beforeEach(() => {
 // `onPress={disabled ? undefined : onPress}` no Pressable interno, então
 // chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
 // com o bug de volta. Sem ela o teste não tem dente.
-describe('alterar senha — Salvar com formulário incompleto', () => {
+describe('alterar senha: Salvar com formulário incompleto', () => {
   it('mantém o botão habilitado para que o toque chegue à validação', async () => {
     const tree = await render();
     expect(botao(tree, 'Salvar nova senha').props.disabled).toBeFalsy();

@@ -24,7 +24,7 @@ describe('pickExamDocument', () => {
       // Mesma lista do backend pro prefixo exams (allowed-content-types.ts).
       type: ['application/pdf', 'image/jpeg', 'image/png', 'text/plain'],
       // Sem a cópia o Android devolve content:// e o new File(uri) do
-      // expo-file-system não lida — o upload quebraria só lá.
+      // expo-file-system não lida, o upload quebraria só lá.
       copyToCacheDirectory: true,
       multiple: false,
     });
@@ -55,7 +55,7 @@ describe('pickExamDocument', () => {
   });
 
   // Mesmo contrato do useMediaPicker: quem chama faz `if (!uri) return;` e o
-  // picker roda FORA do try do envio — lançar aqui viraria rejeição sem dono.
+  // picker roda FORA do try do envio, lançar aqui viraria rejeição sem dono.
   it('erro do picker nativo: devolve null, não lança', async () => {
     (DocumentPicker.getDocumentAsync as jest.Mock).mockRejectedValue(
       new Error('boom nativo'),

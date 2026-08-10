@@ -89,7 +89,7 @@ beforeEach(() => {
   (apiRequest as jest.Mock).mockResolvedValue(WIRE_DETAIL);
 });
 
-describe('Detalhe do relatorio — QA Mobile #9', () => {
+describe('Detalhe do relatorio: QA Mobile #9', () => {
   it('abre um relatorio vindo do servidor sem derrubar a tela', async () => {
     const tree = await render();
 

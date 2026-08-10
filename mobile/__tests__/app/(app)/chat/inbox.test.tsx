@@ -75,7 +75,7 @@ beforeEach(() => {
   mockUseChat.mockReturnValue(chatState());
 });
 
-describe('ChatInbox — QA Mobile #7', () => {
+describe('ChatInbox: QA Mobile #7', () => {
   // Sem conversa alguma, a tela caia num estado terminal ("Nenhuma conversa")
   // que nao trazia o botao Novo Chat: o usuario ficava sem NENHUM caminho pro
   // diretorio, e o app parecia nao ter mais ninguem na plataforma.

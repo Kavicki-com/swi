@@ -7,12 +7,12 @@ import type { CompanyOption } from '../../../services/api/companies';
 
 // Cadastro (fluxo 1, reordenado em 2026-07-27): a conta nasce AQUI, com nome,
 // e-mail, senha e EMPRESA. O vínculo com a empresa é o que coloca o worker na
-// fila de aprovação org-scoped do painel — sem ele, ele fica invisível.
+// fila de aprovação org-scoped do painel, sem ele, ele fica invisível.
 //
 // Dois incidentes moldaram esta tela e estão travados aqui:
 //   - duplo toque no "Criar conta": o 2º toque levou 409 de e-mail já existente
 //     enquanto o 1º já tinha criado a conta e navegado. A trava vive no
-//     useSubmitOnce, NÃO no `disabled` do botão — botão desabilitado nunca
+//     useSubmitOnce, NÃO no `disabled` do botão, botão desabilitado nunca
 //     dispara onPress e os erros dos campos nunca apareceriam.
 //   - o motivo da falha vem do servidor ("E-mail já cadastrado"); engolir isso
 //     deixa a pessoa relendo o formulário sem achar o erro.
@@ -34,7 +34,7 @@ jest.mock('../../../services/api/companies', () => ({
 // AUTH_BACKEND é lido no MÓDULO da tela (NEEDS_COMPANY), não no render: o valor
 // é congelado no import e não há como trocá-lo depois dentro do mesmo arquivo.
 // Aqui fica o fluxo api (o de produção); o fluxo mock, onde o seletor de
-// empresa não existe, tem arquivo próprio (sign-up.mock-flow.test.tsx) —
+// empresa não existe, tem arquivo próprio (sign-up.mock-flow.test.tsx):
 // re-importar a tela com jest.isolateModules criaria uma SEGUNDA cópia do React
 // e o render morre em "Cannot read properties of null (reading 'useContext')".
 jest.mock('../../../lib/featureFlags', () => ({ AUTH_BACKEND: 'api' }));
@@ -122,7 +122,7 @@ afterEach(() => {
   alerta.mockRestore();
 });
 
-describe('Cadastro — seletor de empresa', () => {
+describe('Cadastro: seletor de empresa', () => {
   it('oferece as empresas do catálogo público', async () => {
     const tree = await render();
 
@@ -138,8 +138,12 @@ describe('Cadastro — seletor de empresa', () => {
     mockListCompanies.mockRejectedValue(new Error('API fora do ar'));
     const tree = await render();
 
+    // O traço (U+2014) vem da cópia da tela (sign-up.tsx). Montado por código
+    // porque o caractere não entra no fonte (regra de escrita do projeto); a
+    // comparação é com o texto exato que a pessoa lê.
+    const traco = String.fromCharCode(0x2014);
     expect(textos(tree)).toContain(
-      'Não foi possível carregar as empresas — verifique a conexão.',
+      `Não foi possível carregar as empresas ${traco} verifique a conexão.`,
     );
   });
 
@@ -157,7 +161,7 @@ describe('Cadastro — seletor de empresa', () => {
 
 });
 
-describe('Cadastro — validação antes de submeter', () => {
+describe('Cadastro: validação antes de submeter', () => {
   it('formulário vazio revela os erros em vez de ficar mudo', async () => {
     const tree = await render();
     await tocar(tree, 'Criar conta');
@@ -223,7 +227,7 @@ describe('Cadastro — validação antes de submeter', () => {
   });
 });
 
-describe('Cadastro — criação da conta', () => {
+describe('Cadastro: criação da conta', () => {
   it('manda nome, e-mail, senha e empresa, e segue pra confirmação de e-mail', async () => {
     const tree = await render();
     await preencher(tree);
@@ -295,7 +299,7 @@ describe('Cadastro — criação da conta', () => {
   });
 });
 
-describe('Cadastro — navegação auxiliar', () => {
+describe('Cadastro: navegação auxiliar', () => {
   it('abre a política de privacidade', async () => {
     const tree = await render();
     await tocar(tree, 'Política de privacidade & Termos de uso');

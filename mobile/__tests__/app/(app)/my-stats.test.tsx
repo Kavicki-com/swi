@@ -134,7 +134,7 @@ beforeEach(() => {
   mockListExams.mockResolvedValue([]);
 });
 
-describe('Meus dados — fases do provider', () => {
+describe('Meus dados: fases do provider', () => {
   it('carregando mostra só o estado de carregamento', async () => {
     mockVitals.phase = 'loading';
     const tree = await render();
@@ -193,7 +193,7 @@ describe('Meus dados — fases do provider', () => {
   });
 });
 
-describe('Meus dados — gráfico de status', () => {
+describe('Meus dados: gráfico de status', () => {
   it.each([
     ['good', 'good'],
     ['alert', 'alert'],
@@ -215,7 +215,7 @@ describe('Meus dados — gráfico de status', () => {
   });
 });
 
-describe('Meus dados — sinais vitais e fadiga', () => {
+describe('Meus dados: sinais vitais e fadiga', () => {
   it('mostra batimento, pressão e calorias medidos', async () => {
     mockVitals.vitals = sinais({
       heartRate: 118,
@@ -256,7 +256,7 @@ describe('Meus dados — sinais vitais e fadiga', () => {
   });
 });
 
-describe('Meus dados — gasto calórico', () => {
+describe('Meus dados: gasto calórico', () => {
   it('usa as três últimas amostras do histórico', async () => {
     mockVitals.history = [
       { caloriesPerHour: 100 },
@@ -291,7 +291,7 @@ describe('Meus dados — gasto calórico', () => {
   });
 });
 
-describe('Meus dados — alergias do cadastro', () => {
+describe('Meus dados: alergias do cadastro', () => {
   it('quebra o texto do cadastro em chips por vírgula, ponto e vírgula e linha', async () => {
     mockProfile.profile = { allergies: 'Dipirona, Camarão; Látex\nPólen' };
     const tree = await render();
@@ -329,7 +329,7 @@ describe('Meus dados — alergias do cadastro', () => {
   });
 });
 
-describe('Meus dados — histórico médico', () => {
+describe('Meus dados: histórico médico', () => {
   it('lista os exames do backend com ano e dia/mês separados', async () => {
     mockListExams.mockResolvedValue([
       exame({ id: 'e1', name: 'Audiometria', date: '2027-03-05' }),

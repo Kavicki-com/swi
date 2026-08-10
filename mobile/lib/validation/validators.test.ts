@@ -16,7 +16,7 @@ import {
 // datas do Figma são 2027, 2029…), enquanto nascimento no futuro é erro. Sem um
 // validador próprio, a tela de exames rejeitaria toda data válida.
 describe('validateExamDate', () => {
-  it('aceita validade futura — que o validador de nascimento recusa', () => {
+  it('aceita validade futura, que o validador de nascimento recusa', () => {
     const futura = `05/03/${new Date().getFullYear() + 1}`;
     expect(validateExamDate(futura).valid).toBe(true);
     expect(validateBirthDate(futura).valid).toBe(false);
@@ -48,7 +48,7 @@ describe('validateExamDate', () => {
 
 // O resto do módulo. Cada validador é a última barreira antes de um cadastro ir
 // pro backend, e a mensagem devolvida é literalmente o texto que a pessoa lê
-// embaixo do campo — por isso os testes conferem a mensagem, não só `valid`.
+// embaixo do campo, por isso os testes conferem a mensagem, não só `valid`.
 
 describe('validateRequired', () => {
   it('aceita qualquer conteúdo não vazio', () => {

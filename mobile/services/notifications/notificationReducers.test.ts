@@ -8,7 +8,7 @@ const n = (over: Partial<AppNotification> = {}): AppNotification => ({
   read: false, createdAt: '2026-06-23T10:00:00.000Z', ...over,
 });
 
-describe('notificationReducers — sortByRecent', () => {
+describe('notificationReducers: sortByRecent', () => {
   it('ordena desc por createdAt (recente primeiro)', () => {
     const a = n({ id: 'a', createdAt: '2026-06-23T09:00:00.000Z' });
     const b = n({ id: 'b', createdAt: '2026-06-23T12:00:00.000Z' });
@@ -17,7 +17,7 @@ describe('notificationReducers — sortByRecent', () => {
   });
 });
 
-describe('notificationReducers — applyNotification', () => {
+describe('notificationReducers: applyNotification', () => {
   it('insere uma notificação nova e mantém ordenado', () => {
     const a = n({ id: 'a', createdAt: '2026-06-23T09:00:00.000Z' });
     const fresh = n({ id: 'z', createdAt: '2026-06-23T13:00:00.000Z' });
@@ -32,7 +32,7 @@ describe('notificationReducers — applyNotification', () => {
   });
 });
 
-describe('notificationReducers — markRead / markAllRead / unreadCount', () => {
+describe('notificationReducers: markRead / markAllRead / unreadCount', () => {
   it('markRead marca só o id alvo', () => {
     const out = markRead([n({ id: 'a', read: false }), n({ id: 'b', read: false })], 'a');
     expect(out.find((x) => x.id === 'a')!.read).toBe(true);

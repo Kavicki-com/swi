@@ -119,7 +119,7 @@ beforeEach(() => {
   mockShowPicker.mockResolvedValue(null);
 });
 
-describe('Detalhe da tarefa — máquina de carregamento', () => {
+describe('Detalhe da tarefa: máquina de carregamento', () => {
   it('mostra o carregando enquanto a busca não resolve', async () => {
     mockJourney.getTask.mockReturnValue(new Promise(() => {}));
     const tree = await render();
@@ -170,7 +170,7 @@ describe('Detalhe da tarefa — máquina de carregamento', () => {
   });
 });
 
-describe('Detalhe da tarefa — conteúdo', () => {
+describe('Detalhe da tarefa: conteúdo', () => {
   it('mostra breadcrumb, resumo, objetivo e tempo estimado em horas', async () => {
     const tree = await render();
     const t = textos(tree);
@@ -228,7 +228,7 @@ describe('Detalhe da tarefa — conteúdo', () => {
   });
 });
 
-describe('Detalhe da tarefa — progresso', () => {
+describe('Detalhe da tarefa: progresso', () => {
   it('parada, mostra o snapshot persistido arredondado', async () => {
     mockJourney.getTask.mockResolvedValue(tarefa({ progressPct: 42.7 }));
     const tree = await render();
@@ -269,7 +269,7 @@ describe('Detalhe da tarefa — progresso', () => {
   });
 });
 
-describe('Detalhe da tarefa — fotos da solicitação', () => {
+describe('Detalhe da tarefa: fotos da solicitação', () => {
   it('rotula slot cheio como foto e slot vazio como adicionar', async () => {
     mockJourney.getTask.mockResolvedValue(
       tarefa({ images: ['https://example.test/f1.png', 'https://example.test/f2.png'] }),
@@ -314,7 +314,7 @@ describe('Detalhe da tarefa — fotos da solicitação', () => {
   });
 });
 
-describe('Detalhe da tarefa — CTA quando a tarefa não é a ativa', () => {
+describe('Detalhe da tarefa: CTA quando a tarefa não é a ativa', () => {
   it('oferece iniciar a jornada e começar a tarefa', async () => {
     const tree = await render();
     await tocar(tree, 'Iniciar Jornada e começar tarefa');
@@ -334,7 +334,7 @@ describe('Detalhe da tarefa — CTA quando a tarefa não é a ativa', () => {
   });
 });
 
-describe('Detalhe da tarefa — CTA da tarefa ativa', () => {
+describe('Detalhe da tarefa: CTA da tarefa ativa', () => {
   beforeEach(() => {
     mockJourney.state = 'ongoing';
     mockJourney.activeTaskId = 't1';

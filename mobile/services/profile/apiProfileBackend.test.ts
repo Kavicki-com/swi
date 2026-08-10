@@ -7,7 +7,7 @@ const mockApiRequest = apiRequest as jest.Mock;
 
 // Desde a reordenação do cadastro (2026-07-27) todo save roda AUTENTICADO: o
 // wizard de complimentary-data virou pós-login (fluxo 2), então o stash local
-// pré-conta (pendingProfile) morreu — e com ele o incidente do token alheio
+// pré-conta (pendingProfile) morreu, e com ele o incidente do token alheio
 // ("Teste Ricardo" × "Joao Tester": o wizard rodava sem conta e um token
 // esquecido de outro usuário recebia o PUT).
 describe('apiProfileBackend', () => {
@@ -29,7 +29,7 @@ describe('apiProfileBackend', () => {
     expect(await apiProfileBackend.get()).toBeNull();
   });
 
-  it('get propaga o erro quando não é 404 (ex. 500 — não engole como perfil vazio)', async () => {
+  it('get propaga o erro quando não é 404 (ex. 500, não engole como perfil vazio)', async () => {
     const err = new Error('Internal Server Error');
     (err as any).status = 500;
     mockApiRequest.mockRejectedValue(err);
@@ -49,8 +49,8 @@ describe('apiProfileBackend', () => {
 
   // A ficha do "Joao Tester" chegou ao painel SEM data de nascimento (e por
   // isso sem idade) enquanto telefone, CPF e endereço passaram (QA 2026-07-27).
-  // Causa: o corpo era montado como `{ ...patch, birthDate: brToIso(...) }` —
-  // a chave existia SEMPRE, valendo `undefined` quando o patch não a trazia, e
+  // Causa: o corpo era montado como `{ ...patch, birthDate: brToIso(...) }`, e
+  // a chave existia SEMPRE, valendo `undefined` quando o patch não a trazia,
   // apagava a data salva pelo passo anterior. A chave só pode entrar quando o
   // patch a traz.
   it('patch SEM birthDate não manda a chave (senão apaga a do passo anterior)', async () => {

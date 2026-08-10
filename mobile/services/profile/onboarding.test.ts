@@ -29,7 +29,7 @@ describe('onboardingPendente', () => {
     expect(onboardingPendente({ ...COMPLETO, [campo]: undefined })).toBe(true);
   });
 
-  // Só o nome vem do cadastro da conta — não conta como wizard feito.
+  // Só o nome vem do cadastro da conta, não conta como wizard feito.
   it('perfil só com fullName (veio do signup) → pendente', () => {
     expect(onboardingPendente({ fullName: 'Fulana Teste' })).toBe(true);
   });

@@ -8,7 +8,7 @@ import type { Exam } from '../../../../services/api/exams';
 // Dados de saúde (settings). Até 2026-07-26 esta tela era useState solto com
 // `Salvar` = router.back(): tudo que a pessoa editava era descartado. A lista de
 // exames era um array fixo de 4 exames inventados, duplicado com o my-stats, e o
-// botão de anexar tinha onPickFile={() => {}} — não fazia nada.
+// botão de anexar tinha onPickFile={() => {}}, não fazia nada.
 //
 // Esta suíte trava o caminho real: prefill do backend, salvar de verdade,
 // exame com nome e validade ANTES do arquivo (decisão do cliente, senão o card
@@ -64,7 +64,7 @@ const render = async () => {
   return tree;
 };
 
-// Campos e comboboxes do DS são achados pelo label visível — é assim que a
+// Campos e comboboxes do DS são achados pelo label visível, é assim que a
 // pessoa os encontra, e sobrevive a remanejo de layout.
 const campo = (tree: ReturnType<typeof create>, label: string) =>
   tree.root.findAll(
@@ -119,7 +119,7 @@ afterEach(() => {
   alerta.mockRestore();
 });
 
-describe('Dados de saúde — prefill do cadastro', () => {
+describe('Dados de saúde: prefill do cadastro', () => {
   it('carrega tipo sanguíneo, gênero, alergias e doenças do backend', async () => {
     mockLoadProfile.mockResolvedValue({
       bloodType: 'O+',
@@ -151,7 +151,7 @@ describe('Dados de saúde — prefill do cadastro', () => {
   });
 });
 
-describe('Dados de saúde — salvar', () => {
+describe('Dados de saúde: salvar', () => {
   it('manda ao backend o que foi editado e volta', async () => {
     const tree = await render();
     await escolher(tree, 'Tipo sanguíneo', 'AB-');
@@ -205,7 +205,7 @@ describe('Dados de saúde — salvar', () => {
   });
 });
 
-describe('Dados de saúde — histórico de exames', () => {
+describe('Dados de saúde: histórico de exames', () => {
   it('lista os exames reais do backend', async () => {
     mockListExams.mockResolvedValue([exame({ name: 'Audiometria', date: '2027-03-05' })]);
     const tree = await render();
@@ -242,7 +242,7 @@ describe('Dados de saúde — histórico de exames', () => {
   });
 });
 
-describe('Dados de saúde — enviar exame', () => {
+describe('Dados de saúde: enviar exame', () => {
   const preencherExame = async (tree: ReturnType<typeof create>) => {
     await digitar(tree, 'Nome do exame', 'Exame de reciclagem técnica');
     await digitar(tree, 'Validade', '05032027');

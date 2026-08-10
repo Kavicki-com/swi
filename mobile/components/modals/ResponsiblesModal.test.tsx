@@ -50,7 +50,7 @@ describe('ResponsiblesModal', () => {
   });
 
   // A regressão que motivou o teste: o modal usava useChat(), mas o
-  // ChatProvider só envolve a subárvore de CHAT — montar isto a partir de
+  // ChatProvider só envolve a subárvore de CHAT, montar isto a partir de
   // relatórios lançava "useChat must be used inside ChatProvider" e derrubava
   // a tela (review 2026-07-27). Renderizar SEM provider de chat é o guarda.
   it('monta fora da subárvore de chat, sem ChatProvider', async () => {
@@ -67,7 +67,7 @@ describe('ResponsiblesModal', () => {
     expect(mockListAssignees).toHaveBeenCalledTimes(1);
   });
 
-  it('lista indisponível não derruba a tela — só fica sem ninguém pra atribuir', async () => {
+  it('lista indisponível não derruba a tela, só fica sem ninguém pra atribuir', async () => {
     mockListAssignees.mockRejectedValue(new Error('rede caiu'));
     const tree = await render();
     expect(JSON.stringify(tree.toJSON())).toContain('Selecionar responsáveis');
@@ -119,14 +119,14 @@ describe('ResponsiblesModal, layout do bottom-sheet', () => {
 });
 
 describe('responsiblesSelection', () => {
-  // Guarda id E NOME: com só o id, quem exibe precisaria do diretório — que é
+  // Guarda id E NOME: com só o id, quem exibe precisaria do diretório, que é
   // exatamente a dependência que derrubava a tela de novo relatório.
   it('carrega o nome junto do id', () => {
     responsiblesSelection.set([{ id: 'w1', name: 'Jennifer Gomes' }]);
     expect(responsiblesSelection.get()).toEqual([{ id: 'w1', name: 'Jennifer Gomes' }]);
   });
 
-  it('devolve cópia — mutar o retorno não altera a seleção guardada', () => {
+  it('devolve cópia, mutar o retorno não altera a seleção guardada', () => {
     responsiblesSelection.set([{ id: 'w1', name: 'Jennifer Gomes' }]);
     responsiblesSelection.get().push({ id: 'x', name: 'Intruso' });
     expect(responsiblesSelection.get()).toHaveLength(1);

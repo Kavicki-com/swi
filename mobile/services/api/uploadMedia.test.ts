@@ -37,7 +37,7 @@ describe('uploadMedia', () => {
 
   // Exame aceita laudo em PDF/TXT (PR 3 da unificação dos exames). Sem estes
   // casos o PDF subiria assinado como image/jpeg e o presign recusaria com
-  // 400 — o arquivo certo, rejeitado por content-type errado.
+  // 400, o arquivo certo, rejeitado por content-type errado.
   it('contentTypeFor infere pdf/txt pela extensão', () => {
     expect(contentTypeFor('file:///a/laudo.pdf')).toBe('application/pdf');
     expect(contentTypeFor('file:///a/laudo.txt')).toBe('text/plain');
@@ -59,7 +59,7 @@ describe('uploadMedia', () => {
     const [url, init] = (global as any).fetch.mock.calls[0];
     expect(url).toBe('https://r2/bucket/k');
     expect(init.method).toBe('PUT');
-    // O header TEM que existir e casar com o content-type assinado — divergir
+    // O header TEM que existir e casar com o content-type assinado, divergir
     // dá 403 SignatureDoesNotMatch (verificado no R2 real).
     expect(init.headers['Content-Type']).toBe('image/jpeg');
     expect(init.body).toBeInstanceOf(ArrayBuffer);

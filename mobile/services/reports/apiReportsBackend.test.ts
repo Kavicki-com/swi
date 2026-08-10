@@ -17,7 +17,7 @@ describe('apiReportsBackend', () => {
     expect(out[0].id).toBe('r1');
   });
 
-  // QA Mobile #9 — o app fechava ao abrir QUALQUER relatorio.
+  // QA Mobile #9, o app fechava ao abrir QUALQUER relatorio.
   //
   // A atividade que o servidor manda NAO tem `avatars` nem `id`: tem
   // `responsibleNames` e `responsibleAvatars` (o backend resolve nome -> foto

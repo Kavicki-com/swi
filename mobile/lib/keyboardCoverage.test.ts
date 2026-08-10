@@ -2,12 +2,12 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Tela com campo de texto tem que tratar o teclado. Sem isso o teclado sobe
-// POR CIMA do que a pessoa está digitando — foi o que aconteceu na tela de
+// POR CIMA do que a pessoa está digitando, foi o que aconteceu na tela de
 // chat (QA no aparelho, 2026-07-27: o compositor sumia atrás do teclado).
 //
 // A cobertura era irregular: o fluxo de (auth) tinha tratamento, e settings,
 // chat e os modais não. Este teste lê os FONTES, e não o comportamento,
-// porque o que falhava não era a lógica — era a ausência do wrapper. Mesmo
+// porque o que falhava não era a lógica, era a ausência do wrapper. Mesmo
 // formato do web-bundler-compat do DS: travar um invariante que nenhum teste
 // de render alcança.
 //
@@ -60,9 +60,9 @@ describe('cobertura de teclado', () => {
   });
 
   // A lista de dispensados é uma decisão, não um depósito: se a tela deixar de
-  // ter campo de texto, a entrada sai junto — senão ela silenciosamente libera
+  // ter campo de texto, a entrada sai junto, senão ela silenciosamente libera
   // uma tela futura que reaproveite o arquivo.
-  it('todo dispensado ainda tem campo de texto — a lista não pode apodrecer', () => {
+  it('todo dispensado ainda tem campo de texto, a lista não pode apodrecer', () => {
     const obsoletos = [...DISPENSADOS].filter((caminho) => {
       const src = readFileSync(join(ROOT, caminho), 'utf8');
       return !ENTRADA_DE_TEXTO.test(src);

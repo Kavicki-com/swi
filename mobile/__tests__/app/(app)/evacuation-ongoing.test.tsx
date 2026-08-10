@@ -5,6 +5,11 @@ import EvacuationOngoing from '../../../app/(app)/evacuation-ongoing';
 import { SITE_ROUTE } from '../../../services/evacuation/types';
 import type { RouteSnapshot } from '../../../services/evacuation/types';
 
+// O traço (U+2014) é o que a chip mostra quando não há tempo pra exibir.
+// Montado por código porque o caractere não entra no fonte (regra de escrita
+// do projeto); a comparação é com ele de verdade.
+const TRACO = String.fromCharCode(0x2014);
+
 // Tela de evacuação EM ANDAMENTO (navegando). Difere da idle em três coisas que
 // este teste trava: a linha é roxa em vez de ciano, não há pino de origem (quem
 // caminha É a origem) e existe a seta de navegação girada na direção do próximo
@@ -104,7 +109,7 @@ beforeEach(() => {
   mockEvac.loadStatus = 'idle';
 });
 
-describe('Evacuação em andamento — gate e enquadramento', () => {
+describe('Evacuação em andamento: gate e enquadramento', () => {
   it('sem o gate "maps" mostra o placeholder e nenhum mapa', async () => {
     mockMapsEnabled = false;
     const tree = await render();
@@ -131,7 +136,7 @@ describe('Evacuação em andamento — gate e enquadramento', () => {
   });
 });
 
-describe('Evacuação em andamento — a linha da rota', () => {
+describe('Evacuação em andamento: a linha da rota', () => {
   it('desenha os waypoints reais em roxo, a cor do estado navegando', async () => {
     mockEvac.route = rota();
     mockEvac.loadStatus = 'ready';
@@ -165,7 +170,7 @@ describe('Evacuação em andamento — a linha da rota', () => {
   );
 });
 
-describe('Evacuação em andamento — seta de navegação', () => {
+describe('Evacuação em andamento: seta de navegação', () => {
   it('ancora a seta a 30% da rota e a gira para o próximo waypoint', async () => {
     mockEvac.route = rota();
     mockEvac.loadStatus = 'ready';
@@ -187,7 +192,7 @@ describe('Evacuação em andamento — seta de navegação', () => {
   });
 });
 
-describe('Evacuação em andamento — pinos e chips', () => {
+describe('Evacuação em andamento: pinos e chips', () => {
   // Quem caminha É a origem: um pino de partida aqui seria informação morta.
   it('mostra só o pino de destino, sem pino de origem', async () => {
     mockEvac.route = rota();
@@ -225,7 +230,7 @@ describe('Evacuação em andamento — pinos e chips', () => {
       const dentro = porTestID(tree, id)
         .findAll((n) => typeof n.props?.children === 'string')
         .map((n) => n.props.children as string);
-      expect(dentro).toContain('—');
+      expect(dentro).toContain(TRACO);
     }
   });
 });

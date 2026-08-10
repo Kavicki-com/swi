@@ -50,10 +50,10 @@ beforeEach(() => {
 });
 
 // Fluxo 2 (reordenação 2026-07-27): o wizard roda DEPOIS do primeiro login
-// pós-aprovação. O nome tem UMA fonte — a conta criada no fluxo 1 — então o
+// pós-aprovação. O nome tem UMA fonte, a conta criada no fluxo 1, então o
 // campo vem completo (QA 2026-07-27: "coloque o nome digitado completo como o
 // usuario fez no primeiro passo"), sem segunda digitação nem truncamento.
-describe('step-1 — pré-preenchimento do nome', () => {
+describe('step-1: pré-preenchimento do nome', () => {
   it('usa o nome completo da conta logada, não o primeiro nome', async () => {
     const tree = await render();
     expect(field(tree, 'Nome completo').props.value).toBe('Gabriel Fernandes Silva');
@@ -72,7 +72,7 @@ describe('step-1 — pré-preenchimento do nome', () => {
 
   it('saudação usa só o primeiro nome, como no Figma', async () => {
     const tree = await render();
-    // `{username}!` vira children em array — achata pra comparar o texto visível.
+    // `{username}!` vira children em array, achata pra comparar o texto visível.
     const textos = tree.root
       .findAll((n) => Array.isArray(n.props?.children) || typeof n.props?.children === 'string')
       .map((n) => [n.props.children].flat().filter((c) => typeof c === 'string').join(''));

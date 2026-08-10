@@ -71,7 +71,7 @@ beforeEach(() => {
   mockAck.mockResolvedValue(undefined);
 });
 
-describe('EvacuationAckBar — quando não deve aparecer', () => {
+describe('EvacuationAckBar: quando não deve aparecer', () => {
   it('sem evacuação ativa não renderiza nada', async () => {
     const tree = await render();
     expect(barra(tree)).toBeUndefined();
@@ -90,7 +90,7 @@ describe('EvacuationAckBar — quando não deve aparecer', () => {
   });
 });
 
-describe('EvacuationAckBar — confirmação de presença', () => {
+describe('EvacuationAckBar: confirmação de presença', () => {
   it('com evacuação ativa e sem meu ack, oferece o CTA de confirmação', async () => {
     mockGetActive.mockResolvedValue(ativa());
     const tree = await render();
@@ -141,7 +141,7 @@ describe('EvacuationAckBar — confirmação de presença', () => {
   });
 });
 
-describe('EvacuationAckBar — ack que não passa', () => {
+describe('EvacuationAckBar: ack que não passa', () => {
   it('mostra a mensagem do backend e mantém o CTA para tentar de novo', async () => {
     mockGetActive.mockResolvedValue(ativa());
     mockAck.mockRejectedValue(new Error('Evacuação já encerrada'));
@@ -170,7 +170,7 @@ describe('EvacuationAckBar — ack que não passa', () => {
   });
 
   // Comportamento nomeado, não corrigido: o fallback é `?? `, então uma mensagem
-  // VAZIA ('') não é nulla e passa — o resultado é um ack falho sem aviso
+  // VAZIA ('') não é nulla e passa, o resultado é um ack falho sem aviso
   // nenhum na tela, só o CTA de volta. Nenhum backend nosso rejeita com
   // Error(''), mas o dia em que rejeitar, é isto que a pessoa vai ver.
   it('mensagem vazia não vira aviso: só o CTA volta', async () => {

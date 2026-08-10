@@ -38,7 +38,7 @@ describe('listReportAssignees', () => {
   });
 });
 
-describe('listReportAssignees — modo mock', () => {
+describe('listReportAssignees: modo mock', () => {
   // O backend mock não tem quadro de staff; sem o fallback o dev local (onde
   // DATA_BACKEND é 'mock' por padrão) abriria o modal vazio.
   it('cai no diretório de chat quando não há backend real', async () => {

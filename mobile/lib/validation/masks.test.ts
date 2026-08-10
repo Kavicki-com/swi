@@ -2,8 +2,8 @@ import { maskBirthDate, maskCEP, maskCPF, maskPhone, maskUF } from './masks';
 
 // As máscaras rodam DENTRO do onChangeText, a cada tecla. Duas propriedades
 // importam mais que o formato final:
-//   1. progressividade — a máscara não pode "pular na frente" de quem digita;
-//   2. idempotência — reaplicar sobre o texto já formatado não pode corromper,
+//   1. progressividade, a máscara não pode "pular na frente" de quem digita;
+//   2. idempotência, reaplicar sobre o texto já formatado não pode corromper,
 //      senão colar um valor pronto quebra o campo.
 // Cada bloco abaixo testa os dois, além do teto de dígitos.
 

@@ -9,7 +9,7 @@ import { uploadImage } from '../../../../services/api/uploadMedia';
 
 jest.mock('../../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
 jest.mock('../../../../services/api/catalog', () => ({ fetchProfileCatalog: jest.fn() }));
-// A tela passou a ler o e-mail da CONTA (User), nao do Profile — o campo Email
+// A tela passou a ler o e-mail da CONTA (User), nao do Profile, o campo Email
 // antes nao carregava nem salvava nada.
 jest.mock('../../../../services/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'u1', email: 'fulano@empresa.com', name: 'Fulano' } }),
@@ -55,7 +55,7 @@ const render = async () => {
 };
 
 // A tela é montada de verdade; o alvo é o <Input> do DS identificado pelo
-// label visível — é assim que o usuário o encontra, e sobrevive a remanejo
+// label visível, é assim que o usuário o encontra, e sobrevive a remanejo
 // de layout.
 const field = (tree: ReturnType<typeof create>, label: string) =>
   tree.root.findAll(
@@ -88,7 +88,7 @@ beforeEach(() => {
   mockUploadImage.mockResolvedValue(AVATAR_KEY);
 });
 
-describe('Dados pessoais — máscara de entrada', () => {
+describe('Dados pessoais: máscara de entrada', () => {
   // O relato: digitando a data de nascimento as barras não apareciam, e o
   // campo aceitava 02011999 (print do QA no aparelho, 2026-07-27). As
   // máscaras já existiam em lib/validation/masks.ts e estavam ligadas só no
@@ -118,7 +118,7 @@ describe('Dados pessoais — máscara de entrada', () => {
   });
 });
 
-describe('Dados pessoais — validação', () => {
+describe('Dados pessoais: validação', () => {
   const preencherTudoValido = async (tree: ReturnType<typeof create>) => {
     await type(tree, 'Nome Completo', 'Fulano de Tal');
     await type(tree, 'Data de Nascimento', '02011999');
@@ -131,7 +131,7 @@ describe('Dados pessoais — validação', () => {
   it('não salva com CPF inválido', async () => {
     const tree = await render();
     await preencherTudoValido(tree);
-    await type(tree, 'CPF', '11111111111'); // 11 dígitos iguais — inválido
+    await type(tree, 'CPF', '11111111111'); // 11 dígitos iguais, inválido
     await press(tree, 'Salvar alterações');
     expect(saveProfile).not.toHaveBeenCalled();
   });
@@ -161,13 +161,13 @@ describe('Dados pessoais — validação', () => {
 });
 
 // Até 2026-07-27 NÃO EXISTIA caminho nenhum no app pra definir foto de perfil.
-// O seletor do passo 1 do cadastro guarda a uri num useState e a descarta — e
+// O seletor do passo 1 do cadastro guarda a uri num useState e a descarta, e
 // o backend sempre esteve pronto (/media/presign aceita prefix 'avatars', e o
 // PUT /profile/me valida avatarKey). Faltava só alguém ligar os dois.
 //
 // Sem foto, o Avatar cai nas iniciais em todas as telas: jornada, dashboard,
 // chat, mapa e no seletor de responsáveis.
-describe('Dados pessoais — foto de perfil', () => {
+describe('Dados pessoais: foto de perfil', () => {
   const uploader = (tree: ReturnType<typeof create>) =>
     tree.root.findAll((n) => typeof n.props?.onPickFile === 'function')[0];
 
@@ -280,7 +280,7 @@ describe('Dados pessoais — foto de perfil', () => {
 // A tela nasceu com os valores de exemplo do Figma ('Carlos Sampaio',
 // '00/00/0000') cravados: o cliente editava, "salvava" (era router.back()) e
 // perdia tudo. O prefill e o save reais são o que estes casos travam.
-describe('Dados pessoais — prefill do cadastro', () => {
+describe('Dados pessoais: prefill do cadastro', () => {
   const PERFIL = {
     fullName: 'Fulano de Tal',
     birthDate: '02011999',
@@ -326,7 +326,7 @@ describe('Dados pessoais — prefill do cadastro', () => {
   });
 });
 
-describe('Dados pessoais — e-mail da conta', () => {
+describe('Dados pessoais: e-mail da conta', () => {
   // Até 2026-07-27 este campo era editável e NUNCA era preenchido no load nem
   // enviado no save: digitar ali não fazia absolutamente nada. Trocar e-mail é
   // operação de autenticação e não cabe nesta tela.
@@ -353,7 +353,7 @@ describe('Dados pessoais — e-mail da conta', () => {
   });
 });
 
-describe('Dados pessoais — campos opcionais', () => {
+describe('Dados pessoais: campos opcionais', () => {
   const preencherObrigatorios = async (tree: ReturnType<typeof create>) => {
     await type(tree, 'Nome Completo', 'Fulano de Tal');
     await type(tree, 'Data de Nascimento', '02011999');
@@ -383,7 +383,7 @@ describe('Dados pessoais — campos opcionais', () => {
   });
 });
 
-describe('Dados pessoais — catálogo da org', () => {
+describe('Dados pessoais: catálogo da org', () => {
   it('oferece o vocabulário real vindo do backend', async () => {
     mockCatalog.mockResolvedValue({
       jobTitles: ['Operador de escavadeira'],
@@ -474,7 +474,7 @@ describe('Dados pessoais — catálogo da org', () => {
   });
 });
 
-describe('Dados pessoais — saída da tela', () => {
+describe('Dados pessoais: saída da tela', () => {
   const preencherObrigatorios = async (tree: ReturnType<typeof create>) => {
     await type(tree, 'Nome Completo', 'Fulano de Tal');
     await type(tree, 'Data de Nascimento', '02011999');

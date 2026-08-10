@@ -5,6 +5,11 @@ import EvacuationRoute from '../../../app/(app)/evacuation';
 import { SITE_ROUTE } from '../../../services/evacuation/types';
 import type { RouteSnapshot } from '../../../services/evacuation/types';
 
+// O traço (U+2014) é o que a chip mostra quando não há tempo pra exibir.
+// Montado por código porque o caractere não entra no fonte (regra de escrita
+// do projeto); a comparação é com ele de verdade.
+const TRACO = String.fromCharCode(0x2014);
+
 // Tela de evacuação (idle, "rota planejada"). É tela de SEGURANÇA: o que ela
 // manda pro mapa é a instrução que a pessoa vai seguir saindo do site, então o
 // teste mede os dados enviados ao mapa (linha, âncoras das chips, rótulos de
@@ -113,7 +118,7 @@ beforeEach(() => {
   mockEvac.loadStatus = 'idle';
 });
 
-describe('Tela de evacuação — gate de plataforma', () => {
+describe('Tela de evacuação: gate de plataforma', () => {
   it('sem o gate "maps" mostra o placeholder e nenhum mapa', async () => {
     mockMapsEnabled = false;
     const tree = await render();
@@ -131,7 +136,7 @@ describe('Tela de evacuação — gate de plataforma', () => {
   });
 });
 
-describe('Tela de evacuação — carregamento da rota', () => {
+describe('Tela de evacuação: carregamento da rota', () => {
   it('pede a rota ao provider no mount', async () => {
     await render();
     expect(mockEvac.load).toHaveBeenCalledTimes(1);
@@ -175,7 +180,7 @@ describe('Tela de evacuação — carregamento da rota', () => {
     expect(coords[coords.length - 1]).toEqual(SITE_ROUTE.destination);
   });
 
-  it('no fallback reto as chips não inventam tempo: mostram "—"', async () => {
+  it('no fallback reto as chips não inventam tempo: mostram o traço', async () => {
     mockEvac.loadStatus = 'error';
     const tree = await render();
 
@@ -186,13 +191,13 @@ describe('Tela de evacuação — carregamento da rota', () => {
       const dentro = chip
         .findAll((n) => typeof n.props?.children === 'string')
         .map((n) => n.props.children as string);
-      expect(dentro).toContain('—');
+      expect(dentro).toContain(TRACO);
       expect(dentro.some((s) => s.includes('minuto'))).toBe(false);
     }
   });
 });
 
-describe('Tela de evacuação — chips de tempo ancoradas na rota', () => {
+describe('Tela de evacuação: chips de tempo ancoradas na rota', () => {
   it('ancora as duas chips a 35% e 70% dos waypoints', async () => {
     mockEvac.route = rota();
     mockEvac.loadStatus = 'ready';
@@ -223,7 +228,7 @@ describe('Tela de evacuação — chips de tempo ancoradas na rota', () => {
   });
 });
 
-describe('Tela de evacuação — pinos e conteúdo do cartão', () => {
+describe('Tela de evacuação: pinos e conteúdo do cartão', () => {
   it('põe os pinos de início e destino nas coordenadas do site', async () => {
     const tree = await render();
 

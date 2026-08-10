@@ -102,7 +102,7 @@ beforeEach(() => {
 //
 // É a última porta antes do dashboard: quem esbarrava aqui não terminava o
 // cadastro.
-describe('step-3 — Concluir com formulário incompleto', () => {
+describe('step-3: Concluir com formulário incompleto', () => {
   // Esta asserção é o coração do teste, e é sutil: o DS faz
   // `onPress={disabled ? undefined : onPress}` no Pressable interno, então
   // chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
