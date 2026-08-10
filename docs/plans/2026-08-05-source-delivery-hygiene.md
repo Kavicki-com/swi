@@ -933,6 +933,16 @@ Para cada módulo: escrever um caso falho que cubra uma decisão real, executar 
 
 Configurar branches, functions, lines e statements em 80% global nos três projetos somente depois de fechar os gaps. Cada exclusão deve ser explícita e justificada no diff; não remover da inclusão um arquivo que apareceu vermelho no baseline.
 
+**Nota de execução (2026-08-09): o escopo do mobile exclui os providers `.tsx`.**
+
+O `collectCoverageFrom` do mobile lista `services/**/*.ts`, conforme escrito acima. O glob `.ts` não casa com os 10 providers React, que são `.tsx`: eles ficam fora do denominador, e 8 deles não têm teste algum (Auth, Chat, Evacuation, Location, Notification, Reports, Vitals, Weather; só Journey e Profile têm).
+
+Isso foi medido, não estimado. Com o escopo expandido para `services/**/*.{ts,tsx}` e `lib/**/*.{ts,tsx}`, o denominador ganha 128 funções e a cobertura cai de 84,51/81,62/80,56/85,50 para 76,65/77,56/72,00/78,27 (statements/branches/functions/lines). Voltar aos 80% com o escopo expandido custa cerca de 82 funções cobertas, ou seja, várias sessões.
+
+Decisão: manter `services/**/*.ts` para travar o portão agora, e registrar aqui que o número publicado NÃO cobre os providers. Não é uma exclusão nova (o glob nunca os incluiu, então nenhum arquivo vermelho no baseline foi removido), mas é uma limitação real do que "80%" significa neste projeto, e quem ler o relatório da entrega precisa saber disso.
+
+Pendência aberta: cobrir os 8 providers sem teste e expandir o glob. Enquanto não acontecer, o número do mobile mede a árvore de telas, componentes, libs e backends de serviço, não a camada de providers.
+
 **Step 4: Verify and commit per project**
 
 Run: `cd mobile && npm run test:coverage`

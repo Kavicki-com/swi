@@ -31,6 +31,14 @@
       "!**/*.test.{ts,tsx}",
       "!**/__tests__/**"
     ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
+    },
     "transformIgnorePatterns": [
       "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|@kavicki))",
       "/node_modules/react-native-reanimated/plugin/"
