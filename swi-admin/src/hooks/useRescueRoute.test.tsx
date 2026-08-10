@@ -118,6 +118,28 @@ describe('useRescueRoute', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  // Zero é longitude e latitude legítimas (Greenwich, Equador). O guard de
+  // ponta ausente compara com undefined de propósito; este caso prende essa
+  // escolha contra uma regressão pra truthiness, que trataria [0, 0] como
+  // ponta desconhecida e nunca pediria a rota.
+  it('busca rota quando uma coordenada é zero', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          { geometry: { type: 'LineString', coordinates: [[0, 0]] }, duration: 60, distance: 100 },
+        ],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useRescueRoute([0, 0], [3, 4]))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.current.route?.distance).toBe(100)
+    expect(result.current.error).toBe(false)
+  })
+
   it('sets error=true when fetch fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
 
