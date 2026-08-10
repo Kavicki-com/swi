@@ -4,8 +4,8 @@
 // Mirrors services/reports/types.ts.
 //
 // `startedAt` é ISO string no tipo de domínio; progress.ts trabalha em epoch ms
-// (converte na fronteira). `images`/`responsibleAvatars` são uris resolvidas (de
-// vêm presigned do backend).
+// (converte na fronteira). `images`/`responsibleAvatars` são uris já resolvidas
+// (vêm presigned do backend).
 //
 // Tasks agora vivem sob uma WorkOrder pai: `objective` = summary da ordem;
 // `images` = imageKeys da ordem (presigned); `responsible*` = responsáveis da

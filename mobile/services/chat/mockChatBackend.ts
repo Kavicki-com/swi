@@ -6,9 +6,9 @@ import { applyMessage, markRead as markReadReducer, sortByRecent, conversationKe
 // um store mutável module-level semeado no import, servido com um tiny async hop
 // (`tick`) pra os callers se comportarem como rede real, clonando nas leituras pra
 // os consumidores não mutarem os internos. A novidade aqui é um EVENT BUS em
-// memória: `subscribe(convId|null, cb)` espelha o canal de
-// tempo real que o adaptador de API abre por Socket.IO — `sendMessage` faz `emit(m)` e o ChatProvider re-renderiza em
-// real-time. Seed migrado das telas:
+// memória: `subscribe(convId|null, cb)` espelha o canal de tempo real que o
+// adaptador de API abre por Socket.IO: `sendMessage` faz `emit(m)` e o
+// ChatProvider re-renderiza em real-time. Seed migrado das telas:
 //   - DIRECTORY ← USERS array de app/(app)/chat/inbox.tsx (15 contatos).
 //   - histórico do Romulo ('1') ← MESSAGES de app/(app)/chat/[userId].tsx.
 // `sentAt` são ISO strings sintéticas crescentes (ordenação = lexicográfica).

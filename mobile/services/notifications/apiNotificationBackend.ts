@@ -9,7 +9,7 @@ const TOKEN_KEY = 'swi.auth.token';
 
 // Backend devolve o shape mobile pronto (ISO no createdAt). `subscribe` troca o
 // event-bus do mock por um socket.io real (evento 'notification'). `registerPushToken`
-// fica no-op seam — a entrega de push do SO é deploy-gated (FCM/APNs + expo-notifications).
+// fica no-op seam: a entrega de push do SO é deploy-gated (FCM/APNs + expo-notifications).
 export const apiNotificationBackend: NotificationBackend = {
   get myId() { return getUserId(); },
 
