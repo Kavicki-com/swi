@@ -1,10 +1,9 @@
-export type MockError = { message: string; code?: string }
+import type { ServiceError, ServiceResponse } from '@/services/types'
 
-export type MockResponse<T> = {
-  data: T | null
-  error: MockError | null
-  count?: number
-}
+// Aliases locais do envelope compartilhado (services/types): dentro deste
+// diretório os nomes Mock* deixam claro que o dado é simulado.
+export type MockError = ServiceError
+export type MockResponse<T> = ServiceResponse<T>
 
 export type MockRealtimeEvent = 'INSERT' | 'UPDATE' | 'DELETE'
 

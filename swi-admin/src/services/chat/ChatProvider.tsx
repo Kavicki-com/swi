@@ -28,7 +28,7 @@ import { subscribeMessages } from './chatSocket'
 import { chatsApi } from '../api/chats'
 import { uploadImage } from '../api/upload'
 import { useAuth } from '@/hooks/useAuth'
-import type { MockError } from '@/services/mockApi/types'
+import type { ServiceError } from '@/services/types'
 
 type LoadStatus = 'loading' | 'ready' | 'empty' | 'error'
 
@@ -41,13 +41,13 @@ interface ChatContextValue {
   load: () => Promise<void>
   openConversation: (conversationId: string) => Promise<void>
   closeConversation: () => void
-  send: (conversationId: string, body: string, file?: File) => Promise<{ error: MockError | null }>
+  send: (conversationId: string, body: string, file?: File) => Promise<{ error: ServiceError | null }>
   editMessage: (
     conversationId: string,
     messageId: string,
     body: string,
-  ) => Promise<{ error: MockError | null }>
-  deleteMessage: (conversationId: string, messageId: string) => Promise<{ error: MockError | null }>
+  ) => Promise<{ error: ServiceError | null }>
+  deleteMessage: (conversationId: string, messageId: string) => Promise<{ error: ServiceError | null }>
   keyFor: (workerId: string) => string
 }
 

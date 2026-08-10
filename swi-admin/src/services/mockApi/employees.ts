@@ -9,29 +9,11 @@ import { ROSTER, type WorkerProfile, type ExamEntry } from './roster'
 
 export type EmployeeExamEntry = ExamEntry
 
-export type Employee = {
-  id: string
-  name: string
-  age: number
-  bloodType: string
-  role: string
-  specialization: string
-  avatarUri: string
-  sector: string
-  vitalsStatus: 'good' | 'warning' | 'critical'
-  hasUnreadMessages?: boolean
-  // Health/details fields used by EmployeeDetails — mirror
-  // the Admin shape so the screen renders without per-field optionality.
-  gender?: 'male' | 'female'
-  bpm?: number
-  pressure?: string
-  fatigueRate?: number
-  effort?: number
-  fatigueMinutes?: number
-  statusLabel?: string
-  allergies?: ReadonlyArray<string>
-  examHistory?: ReadonlyArray<EmployeeExamEntry>
-}
+// Employee mora em services/types/directory, o contrato de view que o backend
+// real também produz; o re-export mantém os imports locais resolvendo.
+import type { Employee } from '@/services/types/directory'
+
+export type { Employee }
 
 // Adapter: roster Person → Employee (UI shape). Drops connectivity/location
 // (the /employees list doesn't render a map column) and serialises the

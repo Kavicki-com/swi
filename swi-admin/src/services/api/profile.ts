@@ -2,7 +2,7 @@
 // Client real do /profile/me: GET pré-preenche o form (404 = perfil ainda não
 // preenchido, estado válido); PUT persiste. O backend devolve as keys cruas
 // (o form mescla exames novos sobre elas) + URLs de view presignadas.
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { ApiError, apiFetch } from './http'
 
 export type ProfileDto = {
@@ -45,7 +45,7 @@ export type ProfileCatalog = {
 }
 
 export const profileApi = {
-  me: async (): Promise<MockResponse<ProfileDto | null>> => {
+  me: async (): Promise<ServiceResponse<ProfileDto | null>> => {
     try {
       const p = await apiFetch<ProfileDto>('/profile/me')
       return { data: p, error: null }
@@ -62,7 +62,7 @@ export const profileApi = {
   // Vocabulário REAL da org (DISTINCT de jobTitle/sector/duty do backend).
   // Alimenta os Comboboxes do settings e o setor do form de tarefas — fim das
   // listas fixas inventadas e divergentes entre telas (QA 2026-07-26).
-  catalog: async (): Promise<MockResponse<ProfileCatalog>> => {
+  catalog: async (): Promise<ServiceResponse<ProfileCatalog>> => {
     try {
       const c = await apiFetch<ProfileCatalog>('/profile/catalog')
       return { data: c, error: null }
@@ -74,7 +74,7 @@ export const profileApi = {
     }
   },
 
-  update: async (patch: ProfilePatch): Promise<MockResponse<ProfileDto>> => {
+  update: async (patch: ProfilePatch): Promise<ServiceResponse<ProfileDto>> => {
     try {
       const p = await apiFetch<ProfileDto>('/profile/me', {
         method: 'PUT',

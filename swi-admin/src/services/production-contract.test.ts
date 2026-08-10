@@ -3,9 +3,10 @@
 // O painel nasceu com um eixo de seleção de backend (mock in-memory vs provider
 // legado) que hoje não existe mais. Estas asserções travam o estado final: as
 // fachadas de serviço apontam para a API real, `authApi` não reaproveita nenhuma
-// implementação simulada, e nenhum módulo do caminho de produção importa VALOR
-// de `mockApi` — só tipo (contratos como MockResponse); os tipos de view que
-// as telas consomem vivem em módulos neutros (`services/chat/types`).
+// implementação simulada, e nenhum módulo do caminho de produção importa NADA
+// de `mockApi`: os contratos compartilhados (envelope ServiceResponse, tipos de
+// view) vivem em módulos neutros (`services/types*`, `services/chat/types`), e
+// é o mock que importa deles, nunca o contrário.
 //
 // Se alguém reintroduzir um seam de simulação, isto quebra no `npm test`, que é
 // o momento barato de descobrir. Descobrir em produção custa um incidente.
@@ -29,13 +30,10 @@ const sourceFiles = (dir: string): string[] =>
     return /\.[cm]?[jt]sx?$/.test(entry.name) ? [full] : []
   })
 
-// Casa a instrução inteira (import ou export, com ou sem quebra de linha) para
-// poder distinguir `import type { X } from '.../mockApi/x'` — que só existe em
-// tempo de compilação — de um import de valor, que vai para o bundle.
-//
+// Casa a instrução inteira (import ou export, com ou sem quebra de linha).
 // A cláusula de bindings não pode conter aspas: sem isso o `[\s\S]*?` preguiçoso
 // atravessa o `from '...'` da instrução ANTERIOR e atribui a este import o
-// cabeçalho do outro, perdendo o `type` e acusando falso positivo.
+// cabeçalho do outro.
 const MOCK_IMPORT =
   /(?:^|\n)\s*(import|export)\s+(type\s+)?([^'"]*?)from\s+['"]([^'"]*mockApi[^'"]*)['"]/g
 
@@ -86,7 +84,10 @@ describe('contrato de produção do admin', () => {
     }
   })
 
-  it('nenhum módulo do caminho de produção importa valor de mockApi', () => {
+  // Nem type-import passa: os contratos compartilhados vivem em services/types*
+  // justamente para o caminho de produção não depender do namespace de
+  // simulação nem em tempo de compilação.
+  it('nenhum módulo do caminho de produção importa de mockApi', () => {
     const infratores: string[] = []
 
     for (const file of sourceFiles(SRC)) {
@@ -94,21 +95,11 @@ describe('contrato de produção do admin', () => {
       const code = fs.readFileSync(file, 'utf8')
 
       for (const m of code.matchAll(MOCK_IMPORT)) {
-        const [, , typeKeyword, clause, spec] = m
-        // `import type {...}` e `export type {...}` somem na compilação.
-        if (typeKeyword) continue
-        // `import { type A, type B }` também: todo binding marcado como tipo.
-        const bindings = (clause ?? '')
-          .replace(/[{}]/g, '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-        if (bindings.length > 0 && bindings.every((b) => b.startsWith('type '))) continue
-
+        const spec = m[4]
         infratores.push(`${path.relative(SRC, file).replace(/\\/g, '/')} → ${spec}`)
       }
     }
 
-    expect(infratores, `imports de valor vindos de mockApi:\n${infratores.join('\n')}`).toEqual([])
+    expect(infratores, `imports vindos de mockApi:\n${infratores.join('\n')}`).toEqual([])
   })
 })

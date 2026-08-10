@@ -1,7 +1,7 @@
 // QA F (2026-07-24): o "Solicitar suporte" do settings descartava o form.
 // POST /support — rota PÚBLICA no backend (suporte precisa funcionar até
 // deslogado); logado, o modal manda o e-mail da sessão pra facilitar retorno.
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 
 export const supportApi = {
@@ -10,7 +10,7 @@ export const supportApi = {
     title: string
     message: string
     email?: string
-  }): Promise<MockResponse<{ sent: true }>> => {
+  }): Promise<ServiceResponse<{ sent: true }>> => {
     try {
       await apiFetch<unknown>('/support', {
         method: 'POST',

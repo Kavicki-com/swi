@@ -2,7 +2,7 @@
 // mesmo endpoint, mesmo contrato, backend único. O painel gravava em
 // Profile.examKeys, que só guarda a chave do arquivo — sem nome nem validade,
 // nenhuma tela conseguia desenhar o card, e o exame enviado sumia de vista.
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 
 export type Exam = {
@@ -17,7 +17,7 @@ export type Exam = {
 const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)
 
 export const examsApi = {
-  list: async (): Promise<MockResponse<Exam[]>> => {
+  list: async (): Promise<ServiceResponse<Exam[]>> => {
     try {
       return { data: await apiFetch<Exam[]>('/profile/exams'), error: null }
     } catch (e) {
@@ -31,7 +31,7 @@ export const examsApi = {
     name: string
     date: string
     fileKey: string
-  }): Promise<MockResponse<Exam>> => {
+  }): Promise<ServiceResponse<Exam>> => {
     try {
       const created = await apiFetch<Exam>('/profile/exams', {
         method: 'POST',

@@ -1,9 +1,9 @@
 // Clima do dashboard (GET /weather) contra o backend Nest. Mantém o envelope
-// MockResponse pra que a tela não mude de contrato. O backend devolve um
+// ServiceResponse pra que a tela não mude de contrato. O backend devolve um
 // snapshot rico (current/daily/hourly/alerts); a tira do dashboard (a
 // weather-section do frame de referência) só precisa de 4 slots ao redor de "agora", então o mapper
 // puro `toWeatherStrip` colapsa o snapshot no shape que a UI já consome.
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 // Slot da tira do dashboard — o tipo canônico vive em ./dashboard (um só símbolo).
 import type { WeatherSlot } from './dashboard'
@@ -98,7 +98,7 @@ export function toWeatherStrip(snap: WeatherSnapshotDto): WeatherSlot[] {
 const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)
 
 export const weatherApi = {
-  async get(): Promise<MockResponse<WeatherSlot[]>> {
+  async get(): Promise<ServiceResponse<WeatherSlot[]>> {
     try {
       const snap = await apiFetch<WeatherSnapshotDto>('/weather')
       return { data: toWeatherStrip(snap), error: null }

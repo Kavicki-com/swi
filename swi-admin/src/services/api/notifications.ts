@@ -1,11 +1,11 @@
 // QA F (2026-07-24): o "Solicitar Pausa" do detalhe do funcionário era toast
 // fake. POST /notifications/pause-request — o backend valida org + role e
 // enfileira a notificação de journey pro worker (aparece no app dele).
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 
 export const notificationsApi = {
-  requestPause: async (workerId: string): Promise<MockResponse<{ requested: true }>> => {
+  requestPause: async (workerId: string): Promise<ServiceResponse<{ requested: true }>> => {
     try {
       await apiFetch<unknown>('/notifications/pause-request', {
         method: 'POST',

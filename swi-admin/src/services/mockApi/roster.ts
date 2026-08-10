@@ -9,18 +9,11 @@ import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'
 import workerC from '@/assets/avatars/worker-c.png'
 
-export type ExamEntry = {
-  id: string
-  year: string
-  date: string
-  title: string
-  /**
-   * URL presignada do arquivo, quando o exame veio da tabela Exam real. As
-   * entradas de demo deste roster não têm arquivo, por isso é opcional: sem
-   * ela o card não oferece download em vez de oferecer um que não baixa nada.
-   */
-  fileUrl?: string
-}
+// ExamEntry mora em services/types/directory, o contrato de view que o
+// backend real também produz; o re-export mantém os imports locais resolvendo.
+import type { ExamEntry } from '@/services/types/directory'
+
+export type { ExamEntry }
 
 export type WorkerProfile = {
   // Identity

@@ -1,7 +1,7 @@
 // Auth real contra o backend Nest (POST /auth/login). Mantém o envelope
-// MockResponse pra que useAuth e as telas não precisem mudar na migração.
+// ServiceResponse pra que useAuth e as telas não precisem mudar na migração.
 import type { User } from '@/services/types'
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { ApiError, apiFetch, clearSession, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from './http'
 
 type LoginResponse = { accessToken: string; user: { id: string; email: string; name: string } }
@@ -38,7 +38,7 @@ export const authApi = {
   }: {
     email: string
     password: string
-  }): Promise<MockResponse<User>> => {
+  }): Promise<ServiceResponse<User>> => {
     try {
       const res = await apiFetch<LoginResponse>('/auth/login', {
         method: 'POST',
@@ -61,12 +61,12 @@ export const authApi = {
     }
   },
 
-  signOut: async (): Promise<MockResponse<null>> => {
+  signOut: async (): Promise<ServiceResponse<null>> => {
     clearSession()
     return { data: null, error: null }
   },
 
-  getSession: async (): Promise<MockResponse<User | null>> => {
+  getSession: async (): Promise<ServiceResponse<User | null>> => {
     const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
     // Sessão sem token é órfã (ex.: 401 do apiFetch derruba as duas chaves,
     // mas estado antigo pode ter só a sessão) — trata como deslogado pra não
@@ -94,7 +94,7 @@ export const authApi = {
       uf: string
     }
     responsible: { name: string; phone: string; email: string; role: string }
-  }): Promise<MockResponse<{ nextStep: 'CHECK_EMAIL' }>> => {
+  }): Promise<ServiceResponse<{ nextStep: 'CHECK_EMAIL' }>> => {
     try {
       await apiFetch<unknown>('/auth/signup-company', {
         method: 'POST',
@@ -116,7 +116,7 @@ export const authApi = {
     email,
   }: {
     email: string
-  }): Promise<MockResponse<{ sent: true }>> => {
+  }): Promise<ServiceResponse<{ sent: true }>> => {
     try {
       await apiFetch<unknown>('/auth/password/forgot-admin', {
         method: 'POST',
@@ -140,7 +140,7 @@ export const authApi = {
   }: {
     currentPassword: string
     newPassword: string
-  }): Promise<MockResponse<{ changed: true }>> => {
+  }): Promise<ServiceResponse<{ changed: true }>> => {
     try {
       await apiFetch<unknown>(
         '/auth/password/change',
@@ -174,7 +174,7 @@ export const authApi = {
     email: string
     code: string
     newPassword: string
-  }): Promise<MockResponse<{ reset: true }>> => {
+  }): Promise<ServiceResponse<{ reset: true }>> => {
     try {
       await apiFetch<unknown>('/auth/password/reset', {
         method: 'POST',

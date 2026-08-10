@@ -1,8 +1,8 @@
 // Client REST do chat do painel admin contra o backend Nest. Espelha o envelope
-// MockResponse dos outros módulos de api/ (ver api/users.ts) pra que as telas de
+// ServiceResponse dos outros módulos de api/ (ver api/users.ts) pra que as telas de
 // chat não mudem de contrato: todo retorno é { data, error } com error no shape
 // MockError ({ message }), nunca o ApiError cru — consistência com a camada api/.
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import type { Conversation, Message, Contact } from '@/services/chat/types'
 import { apiFetch } from './http'
 
@@ -12,9 +12,9 @@ const conv = (id: string) => `/chat/conversations/${encodeURIComponent(id)}`
 
 const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)
 
-// Envolve uma chamada apiFetch no envelope MockResponse: sucesso → { data, null },
+// Envolve uma chamada apiFetch no envelope ServiceResponse: sucesso → { data, null },
 // falha (qualquer ApiError: rede, 4xx, 5xx) → { null, { message } }.
-async function envelope<T>(p: Promise<T>, fallback = 'Falha na ação'): Promise<MockResponse<T>> {
+async function envelope<T>(p: Promise<T>, fallback = 'Falha na ação'): Promise<ServiceResponse<T>> {
   try {
     return { data: await p, error: null }
   } catch (e) {

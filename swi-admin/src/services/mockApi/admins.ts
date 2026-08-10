@@ -4,46 +4,11 @@ import adminElisa from '@/assets/avatars/admin-elisa.png'
 import adminMathias from '@/assets/avatars/admin-mathias.svg'
 import adminJoao from '@/assets/avatars/admin-joao.svg'
 
-export type ExamEntry = {
-  id: string
-  year: string
-  date: string
-  title: string
-  /**
-   * Campo morto: toda entrada de mock o preenche com '' e nenhuma tela o
-   * renderiza (o WorkerExamEntry do layout nem o declara). Opcional para que o
-   * exame REAL, vindo da tabela Exam, não precise inventar uma string vazia
-   * só para satisfazer o tipo.
-   */
-  subtitle?: string
-  /** URL presignada do arquivo. Ausente nas entradas de demo. */
-  fileUrl?: string
-}
+// Admin e ExamEntry moram em services/types/directory, o contrato de view que
+// o backend real também produz; o re-export mantém os imports locais resolvendo.
+import type { Admin, ExamEntry } from '@/services/types/directory'
 
-export type Admin = {
-  id: string
-  name: string
-  age: number
-  bloodType: string
-  role: string
-  specialization: string
-  avatarUri: string
-  active: boolean
-  // Health fields used by the AdminDetails screen.
-  gender?: 'male' | 'female'
-  height?: string
-  weight?: string
-  imc?: string
-  bpm?: number
-  pressure?: string
-  fatigueRate?: number
-  effort?: number
-  status?: 'accept' | 'pending' | 'canceled'
-  statusLabel?: string
-  fatigueMinutes?: number
-  allergies?: ReadonlyArray<string>
-  examHistory?: ReadonlyArray<ExamEntry>
-}
+export type { Admin, ExamEntry }
 
 // Mock data matches the spec verbatim — names, ages, roles
 // and active state were extracted directly from the design so the screen

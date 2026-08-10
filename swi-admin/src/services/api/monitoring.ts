@@ -2,13 +2,13 @@
 // (admins/funcionários/relatórios) com vitais SIMULADOS plausíveis por worker
 // (rotulados na UI via SimulatedDataBadge) — aposenta o roster fake. Contrato
 // (tipos) preservado do mock pra UI não mudar.
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import type {
   MonitoringAlertDetail,
   MonitoringGoodConditionsStats,
   MonitoringKpi,
   MonitoringUserAlert,
-} from '@/services/mockApi/monitoring'
+} from '@/services/types/monitoring'
 import type { IconName } from '@kavicki/swi-design-system'
 import { adminsApi, employeesApi, type Employee } from './users'
 import { reportsApi } from './reports'
@@ -20,7 +20,7 @@ export type {
   MonitoringGoodConditionsStats,
   MonitoringKpi,
   MonitoringUserAlert,
-} from '@/services/mockApi/monitoring'
+} from '@/services/types/monitoring'
 
 // Câmeras: conta a MESMA frota que o mapa desenha (services/cameras). Era '564'
 // fixo enquanto o mapa mostrava 12 pinos — o painel afirmava câmera inexistente.
@@ -90,7 +90,7 @@ function alertsFor(v: SimulatedVitals): ReadonlyArray<MonitoringAlertDetail> {
 }
 
 export const monitoringApi = {
-  async kpis(): Promise<MockResponse<ReadonlyArray<MonitoringKpi>>> {
+  async kpis(): Promise<ServiceResponse<ReadonlyArray<MonitoringKpi>>> {
     const [admins, reports, pop] = await Promise.all([
       adminsApi.list(),
       reportsApi.list(),
@@ -146,7 +146,7 @@ export const monitoringApi = {
     return { data: kpis, error: null }
   },
 
-  async alertUsers(): Promise<MockResponse<ReadonlyArray<MonitoringUserAlert>>> {
+  async alertUsers(): Promise<ServiceResponse<ReadonlyArray<MonitoringUserAlert>>> {
     const pop = await population()
     // Fadiga primeiro (cards expandidos no topo), depois desgaste, depois ok.
     const order = { 'alerta-fadiga': 0, desgastado: 1, excelente: 2 } as const
@@ -169,7 +169,7 @@ export const monitoringApi = {
     return { data: rows, error: null }
   },
 
-  async goodConditionsStats(): Promise<MockResponse<MonitoringGoodConditionsStats>> {
+  async goodConditionsStats(): Promise<ServiceResponse<MonitoringGoodConditionsStats>> {
     const pop = await population()
     const excellent = pop.filter(({ v }) => v.tier === 'excelente').length
     const avgFatigue =

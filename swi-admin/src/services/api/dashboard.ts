@@ -5,7 +5,7 @@
 // outras: cada chamada é isolada e degrada só a sua fatia (KPIs→0,
 // activities→[], weather→[]). Este é o lar canônico dos tipos do dashboard.
 import type { Alert, Employee } from '../types'
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi, type WorkOrderRow, type WorkOrderStatus } from './workOrders'
@@ -147,7 +147,7 @@ const TIER_TO_STATUS: Record<SimulatedTier, 'good' | 'alert' | 'low'> = {
 }
 
 export const dashboardApi = {
-  summary: async (): Promise<MockResponse<DashboardSummary>> => {
+  summary: async (): Promise<ServiceResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
     // erro degrada só a própria seção — o summary nunca propaga erro total.
     const [admins, employees, reports, activities, weather] = await Promise.all([
