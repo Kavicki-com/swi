@@ -633,12 +633,20 @@ Expected: PASS.
 
 ### Task 9: Padronizar lint, typecheck e cobertura do backend
 
-**Files:**
+**Reconciliação pós-execução (2026-08-10):** o config nasceu como
+`eslint.config.mjs`, não `.js`: o pacote é CommonJS e os presets do
+typescript-eslint são ESM, e a extensão explícita evita converter o pacote
+inteiro (motivo registrado no header do próprio arquivo). Os dois tsconfigs
+não precisaram de mudança: o `tsconfig.json` já era `strict: true` e, sem
+`include`, já cobre src, test e prisma. O `coverageThreshold` de 80 previsto
+no Step 2 entrou na Task 13, que é onde a cobertura foi de fato atingida e
+travada; ligar o threshold aqui reprovaria a suíte no mesmo commit que
+instala a ferramenta.
+
+**Files** (como executado):
 - Modify: `swi-backend/package.json`
 - Modify: `swi-backend/package-lock.json`
-- Create: `swi-backend/eslint.config.js`
-- Modify: `swi-backend/tsconfig.json`
-- Modify: `swi-backend/tsconfig.build.json`
+- Create: `swi-backend/eslint.config.mjs`
 
 **Step 1: Confirm missing gates**
 
