@@ -1082,6 +1082,14 @@ git add .github/workflows/ci.yml
 git commit -m "ci: enforce source delivery quality gates"
 ```
 
+**Nota de execução (2026-08-10): a CI cobre tudo que a HEAD sustenta; os passos Playwright entram com a Task 14.**
+
+- Os jobs Playwright do Step 1 (E2E do admin e smoke web do mobile) ficaram fora desta rodada, com o porquê comentado no próprio workflow: `mobile/e2e/` ainda não está na HEAD, e a sonda de prontidão do `run-test-stack.mjs` na HEAD é a versão que espera só a porta TCP (o fix `pg_isready` pertence à Task 14). Ligar o E2E na CI agora herdaria a corrida com o `migrate deploy` documentada na nota da Task 14.
+- A auditoria de dependências do job security roda visível mas não bloqueante: mobile e backend carregam achados transitivos sem correção publicada (metro/image-size; tar via node-pre-gyp), e um portão duro nasceria vermelho sem ação possível. Endurece quando a Task 16 zerar o que tem conserto.
+- O scanner de segredos bloqueia, com `.gitleaks.toml` novo na raiz allowlistando só falso-positivos verificados um a um: artefatos de auditoria do Figma em `docs/` (fora da entrega) e props `key` de JSX das telas de evacuação. Snapshot da HEAD: 76 achados antes da config, 0 depois, nenhum segredo real.
+- A favor da equivalência com os portões locais, o job do admin ganhou o `gate:file-size` e a matriz do backend roda `test:coverage` em vez de `test` seco, travando na CI os mesmos thresholds de 80.
+- O Step 2 pegou um portão local quebrado: o `test:coverage` do mobile saía exit 1 com os 868 testes verdes, porque árvores da suíte da jornada sobreviviam ao teardown com um interval de 1s armado. Consertado na própria suíte (afterEach desmonta o que o render montou) antes do commit da CI.
+
 ### Task 16: Auditar dependências, segredos e resíduos do snapshot
 
 **Files:**
