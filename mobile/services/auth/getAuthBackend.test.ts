@@ -4,7 +4,9 @@ function loadWith(authBackend: 'mock' | 'api') {
   jest.resetModules();
   jest.doMock('../../lib/featureFlags', () => ({
     ...jest.requireActual('../../lib/featureFlags'),
-    AUTH_BACKEND: authBackend, DATA_BACKEND: 'mock' }));
+    AUTH_BACKEND: authBackend,
+    DATA_BACKEND: 'mock',
+  }));
   const { getAuthBackend } = require('./getAuthBackend');
   const { mockAuthBackend } = require('./mockAuthBackend');
   const { apiAuthBackend } = require('./apiAuthBackend');

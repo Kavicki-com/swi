@@ -45,8 +45,9 @@ describe('listReportAssignees: modo mock', () => {
     jest.resetModules();
     const listDirectory = jest.fn(async () => [CONTATO]);
     jest.doMock('../../lib/featureFlags', () => ({
-    ...jest.requireActual('../../lib/featureFlags'),
-    DATA_BACKEND: 'mock' }));
+      ...jest.requireActual('../../lib/featureFlags'),
+      DATA_BACKEND: 'mock',
+    }));
     jest.doMock('../chat/getChatBackend', () => ({
       getChatBackend: () => ({ listDirectory }),
     }));
