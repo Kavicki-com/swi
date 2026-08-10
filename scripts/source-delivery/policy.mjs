@@ -42,18 +42,6 @@ const SEGMENTOS_BUILD = new Set([
   '.expo', '.cache', '.next', '.turbo', 'tmp', 'screenshots',
 ])
 
-/** Categorias devolvidas por classify(). */
-export const CATEGORIAS = [
-  'payload-text',
-  'binary-inventory',
-  'excluded-env',
-  'excluded-legacy',
-  'excluded-docs',
-  'excluded-build',
-  'excluded-vendor',
-  'excluded-scope',
-]
-
 function segmentosDe(caminho) {
   return caminho.split('/')
 }
@@ -94,18 +82,6 @@ function validaRelativo(caminho) {
 export function deliveryPath(original) {
   validaRelativo(original)
   return `data/${original}.txt`
-}
-
-/**
- * Percent-encode exigido pelo BagIt 1.0 nos caminhos de manifesto: apenas %,
- * CR e LF. O caminho físico e o file-map ficam com o nome real; quem lê o
- * manifesto decodifica antes de procurar o arquivo.
- */
-export function manifestPath(entregue) {
-  return entregue
-    .replaceAll('%', '%25')
-    .replaceAll('\r', '%0D')
-    .replaceAll('\n', '%0A')
 }
 
 /** Classifica um caminho do snapshot. A primeira regra que casar decide. */

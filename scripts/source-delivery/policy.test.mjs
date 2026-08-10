@@ -4,7 +4,6 @@ import {
   assertNoCollisions,
   classify,
   deliveryPath,
-  manifestPath,
   normalizeText,
 } from './policy.mjs'
 
@@ -81,17 +80,6 @@ test('inventaria binário funcional sem transformá-lo', () => {
 
 test('extensão desconhecida cai no inventário, nunca entra em silêncio', () => {
   assert.equal(classify('mobile/assets/misterio.bin'), 'binary-inventory')
-})
-
-// ---------------------------------------------------------------------------
-// Manifesto BagIt: percent-encode só no caminho do manifesto.
-// ---------------------------------------------------------------------------
-
-test('codifica caracteres reservados somente no caminho do manifesto', () => {
-  assert.equal(manifestPath('data/mobile/100%.ts.txt'), 'data/mobile/100%25.ts.txt')
-  assert.equal(manifestPath('data/mobile/a\nb.ts.txt'), 'data/mobile/a%0Ab.ts.txt')
-  assert.equal(manifestPath('data/mobile/a\rb.ts.txt'), 'data/mobile/a%0Db.ts.txt')
-  assert.equal(manifestPath('data/mobile/simples.ts.txt'), 'data/mobile/simples.ts.txt')
 })
 
 // ---------------------------------------------------------------------------
