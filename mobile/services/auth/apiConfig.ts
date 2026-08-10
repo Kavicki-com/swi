@@ -1,4 +1,8 @@
-import { RUNTIME_ENV, type RuntimeEnv } from '../../lib/featureFlags';
+import {
+  isRelaxedEnv,
+  RUNTIME_ENV,
+  type RuntimeEnv,
+} from '../../lib/featureFlags';
 
 const VAR_NAME = 'EXPO_PUBLIC_API_URL';
 
@@ -16,10 +20,6 @@ const LOCAL_HOSTS = new Set([
   // Alias do emulador Genymotion para o host.
   '10.0.3.2',
 ]);
-
-function isRelaxedEnv(env: RuntimeEnv): boolean {
-  return env.isDev || env.isTest || env.allowDemoMocks;
-}
 
 /**
  * Resolve a URL base da API a partir da variável de ambiente.

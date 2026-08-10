@@ -57,7 +57,7 @@ export interface RuntimeEnv {
 }
 
 /** Ambientes onde dados simulados e localhost são legítimos. */
-function isRelaxedEnv(env: RuntimeEnv): boolean {
+export function isRelaxedEnv(env: RuntimeEnv): boolean {
   return env.isDev || env.isTest || env.allowDemoMocks;
 }
 
