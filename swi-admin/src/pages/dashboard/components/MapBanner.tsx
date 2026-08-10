@@ -10,7 +10,7 @@ import { useMapLibre } from '@/lib/useMapLibre'
 import { Button, Text, useTheme } from '@kavicki/swi-design-system'
 import type { DashboardMapMarker } from '@/services/dashboard'
 
-// Esri World Imagery — free satellite tiles, no API key required (attribution required).
+// Esri World Imagery: free satellite tiles, no API key required (attribution required).
 // https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9
 const ESRI_SATELLITE_STYLE = {
   version: 8 as const,
@@ -55,7 +55,7 @@ function buildMarkerEl(marker: DashboardMapMarker, onClick: () => void): HTMLEle
   el.style.boxShadow = '0 2px 6px rgba(0,0,0,0.4)'
   el.style.cursor = 'pointer'
   el.title = marker.name
-  el.setAttribute('aria-label', `${marker.name} — ${marker.status}`)
+  el.setAttribute('aria-label', `${marker.name}: ${marker.status}`)
   el.addEventListener('click', onClick)
   return el
 }
@@ -76,18 +76,18 @@ export function MapBanner({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
-  // Enquadra a frota UMA vez, no primeiro lote de markers — depois disso o
+  // Enquadra a frota UMA vez, no primeiro lote de markers, depois disso o
   // usuário manda no pan/zoom e os heartbeats só movem os pinos. O simulador
   // MOVE gente depois do enquadramento inicial, então um pino pode sair da
   // moldura: o selo "N de M visíveis" avisa e o botão "Recentralizar"
-  // re-enquadra sob demanda (QA 2026-07-26 — decisão do usuário: botão +
+  // re-enquadra sob demanda (QA 2026-07-26, decisão do usuário: botão +
   // contador; nada de mapa se movendo sozinho).
   const didFitRef = useRef(false)
   const [visibleCount, setVisibleCount] = useState(0)
   // O handler de moveend precisa do lote ATUAL sem re-registrar listener.
   const markersRef = useRef<DashboardMapMarker[]>([])
 
-  // Enquadra o lote atual. Usada no fit inicial e no botão "Recentralizar" —
+  // Enquadra o lote atual. Usada no fit inicial e no botão "Recentralizar":
   // MESMA moldura nos dois caminhos, senão o botão "corrige" pra outro corte.
   const fitToMarkers = useCallback(() => {
     const map = mapRef.current
@@ -103,7 +103,7 @@ export function MapBanner({
   }, [lib])
 
   // Quantos do lote atual caem na moldura atual. Roda no moveend (pan/zoom do
-  // usuário ou fitBounds) e a cada heartbeat — é o que alimenta o selo.
+  // usuário ou fitBounds) e a cada heartbeat, é o que alimenta o selo.
   const recountVisible = useCallback(() => {
     const map = mapRef.current
     if (!map) return
@@ -151,7 +151,7 @@ export function MapBanner({
         .setLngLat([m.lng, m.lat])
         .addTo(map),
     )
-    // O heartbeat move pinos sem mexer na câmera — reconta a cada lote.
+    // O heartbeat move pinos sem mexer na câmera, reconta a cada lote.
     recountVisible()
 
     return () => {
@@ -175,7 +175,7 @@ export function MapBanner({
         style={{ width: '100%', height: '100%' }}
       />
       {/* Selo de honestidade: só aparece quando o simulador tirou alguém da
-          moldura — "9 de 9" o tempo todo seria ruído (mesmo princípio do
+          moldura: "9 de 9" o tempo todo seria ruído (mesmo princípio do
           badge de fadiga do monitoramento). */}
       {markers.length > 0 && visibleCount < markers.length ? (
         <View

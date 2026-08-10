@@ -48,7 +48,7 @@ beforeEach(() => {
 
 afterEach(clearSession)
 
-describe('TaskForm — anexos', () => {
+describe('TaskForm: anexos', () => {
   it('só sobe o arquivo no submit e manda a key em imageKeys', async () => {
     await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')
@@ -104,7 +104,7 @@ describe('TaskForm — anexos', () => {
 
   // ArrayMaxSize(20) em imageKeys. Sem teto no cliente, escolher 25 arquivos num
   // diálogo só fazia 25 uploads SEQUENCIAIS pro S3 e o backend rejeitava depois
-  // — os 25 já tinham subido e viravam órfãos no bucket, sem tarefa nenhuma
+  //: os 25 já tinham subido e viravam órfãos no bucket, sem tarefa nenhuma
   // referenciando as keys. Diferente da falha de rede (rara), isto é trivial.
   it('recusa mais de 20 anexos sem subir NENHUM arquivo', async () => {
     await renderAt('/tasks/new')
@@ -174,7 +174,7 @@ describe('TaskForm — anexos', () => {
   })
 })
 
-describe('TaskForm — anexos na edição (imageKeys no detail)', () => {
+describe('TaskForm: anexos na edição (imageKeys no detail)', () => {
   it('uploader ativo na edição: anexo novo vai no PATCH junto das keys existentes', async () => {
     getMock.mockResolvedValue(
       detail({ images: ['signed:order/a.jpg'], imageKeys: ['order/a.jpg'] }),

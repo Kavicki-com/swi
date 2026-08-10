@@ -48,7 +48,7 @@ beforeEach(() => {
 
 afterEach(clearSession)
 
-describe('TaskForm — edição', () => {
+describe('TaskForm: edição', () => {
   it('pré-carrega a tarefa e manda os itens COM id no PATCH', async () => {
     await renderAt('/tasks/wo_7/edit')
 
@@ -91,7 +91,7 @@ describe('TaskForm — edição', () => {
   // item') e omitir a chave deixa o checklist intocado. Ou seja: não existe
   // forma de esvaziar o checklist de uma tarefa que já tem itens. Antes o
   // toggle sumia com a seção, o usuário salvava e o Check List reaparecia
-  // intacto no detalhe — a UI oferecia uma ação que o contrato não executa.
+  // intacto no detalhe: a UI oferecia uma ação que o contrato não executa.
   it('numa tarefa que já tem itens, o toggle não desliga o Check List', async () => {
     await renderAt('/tasks/wo_7/edit')
     await waitFor(() => expect(screen.getByTestId('checklist-title-0')).toBeInTheDocument())

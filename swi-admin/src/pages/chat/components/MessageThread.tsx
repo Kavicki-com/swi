@@ -37,7 +37,7 @@ export function MessageThread({
       style={{
         flex: 1,
         // min-height: 0 unlocks overflow scroll on a flex column
-        // container — without it the browser refuses to shrink the
+        // container: without it the browser refuses to shrink the
         // box below its content height, so overflow:auto never fires.
         minHeight: 0,
         width: '100%',
@@ -54,7 +54,7 @@ export function MessageThread({
         overflowY: 'auto',
         overflowX: 'hidden',
         // justifyContent flex-start (not flex-end) so overflow extends
-        // BELOW the container — that's what scrollHeight measures and
+        // BELOW the container: that's what scrollHeight measures and
         // what `overflow: auto` can scroll. With flex-end, overflow
         // goes ABOVE the container and scrollHeight stays = clientHeight,
         // making the box appear unscrollable. Latest message visibility

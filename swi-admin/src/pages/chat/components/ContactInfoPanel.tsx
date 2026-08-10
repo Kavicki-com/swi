@@ -11,7 +11,7 @@ import { useDemoToast } from '@/lib/demoToast'
 import type { ChatContact } from '@/services/chats'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 
-// ESRI satellite tile — same source as AdminDetails / MapsGeneral so the
+// ESRI satellite tile: same source as AdminDetails / MapsGeneral so the
 // chat-inbox mini-map shares the canonical basemap.
 const ESRI_SATELLITE_STYLE = {
   version: 8 as const,
@@ -167,7 +167,7 @@ export function ContactInfoPanel({
     // space between the identity block and the fatigue/stats group instead of
     // hugging the user card.
     <View style={{ flex: 1, gap: theme.gap.sm, justifyContent: 'space-between' }}>
-      {/* User card — Avatar 56 + centered name + 2-line subtitle. */}
+      {/* User card: Avatar 56 + centered name + 2-line subtitle. */}
       <View style={{ alignItems: 'center', gap: theme.padding.m }}>
         <Avatar
           uri={contact.avatarUri}
@@ -189,10 +189,10 @@ export function ContactInfoPanel({
         </View>
       </View>
 
-      {/* Mini-map — floats in the middle vertical slot via space-between. */}
+      {/* Mini-map: floats in the middle vertical slot via space-between. */}
       <ContactMiniMap contact={contact} onOpenFullMap={onOpenFullMap} />
 
-      {/* Right-collumn group — fadigue-bar + stats card. */}
+      {/* Right-collumn group: fadigue-bar + stats card. */}
       <View style={{ gap: theme.gap.m }}>
         {/* Fatigue total. Label, reversed gradient bar
             (success → warning → error), then remaining time below. */}
@@ -212,7 +212,7 @@ export function ContactInfoPanel({
             {contact.fatigueRemaining ?? '—'}
           </Title>
           {/* Fadiga é o único número simulado que sobrou aqui (identidade e
-              tipo sanguíneo agora vêm do Profile) — selo igual ao resto do painel. */}
+              tipo sanguíneo agora vêm do Profile), selo igual ao resto do painel. */}
           <SimulatedDataBadge />
         </View>
 

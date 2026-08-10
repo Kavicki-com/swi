@@ -20,11 +20,11 @@ import { useChat } from '@/services/chat/ChatProvider'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // Inline attachment thumbnail layout box. The wrapper View clips the DS Image
-// to radius.m, so both must share the exact same dimensions — keep them here.
+// to radius.m, so both must share the exact same dimensions, keep them here.
 const CHAT_IMG_W = 220
 const CHAT_IMG_H = 160
 
-// Single conversation bubble — sent (right) and received (left).
+// Single conversation bubble: sent (right) and received (left).
 // Both share the same structure but mirror
 // avatar + border color + horizontal padding.
 export function ChatBubble({
@@ -39,7 +39,7 @@ export function ChatBubble({
   // avisa qual mensagem entrou em edição; quem guarda o modo (editingId) é o
   // hook da página, useChatInbox.
   onEdit?: (message: ChatMessage) => void
-  // QA Web #9 — denunciar segue o mesmo desenho: o form mora num modal da
+  // QA Web #9: denunciar segue o mesmo desenho, o form mora num modal da
   // página (dentro da bolha ele seria recortado pelo overflow do quadro de
   // mensagens), a bolha só avisa qual mensagem está sendo denunciada.
   onReport?: (message: ChatMessage) => void
@@ -163,7 +163,7 @@ export function ChatBubble({
                 }}
               />
             ) : null}
-            {/* QA Web #9: denunciar só a mensagem do OUTRO — o backend recusa
+            {/* QA Web #9: denunciar só a mensagem do OUTRO, o backend recusa
               denunciar a própria, e oferecer o item aqui seria recriar o
               controle morto do QA Web #4. Vale pra mensagem só de imagem
               também: o conteúdo ofensivo pode ser a foto. */}
@@ -191,7 +191,7 @@ export function ChatBubble({
       </Popover>
     </View>
   )
-  // Bubble pill — surface.standard with 1px border in the assigned color,
+  // Bubble pill: surface.standard with 1px border in the assigned color,
   // radius.l, content.dark text, drop shadow 12px y4 alpha 12%.
   const bubble = (
     <div
@@ -245,7 +245,7 @@ export function ChatBubble({
       ) : null}
       {!isDeleted && message.imageUri ? (
         // Inline attachment thumbnail. Fixed layout box clipped to radius.m via
-        // an overflow-hidden wrapper — the DS Image primitive renders the photo
+        // an overflow-hidden wrapper: the DS Image primitive renders the photo
         // (content image, not a DS "icon"). alignSelf mirrors the bubble side so
         // image-only messages hug the correct edge.
         //
@@ -345,7 +345,7 @@ export function ChatBubble({
         // Bubble sizes to message content (with internal flex:1 + minWidth:0
         // handling long-text wrapping). Cap the whole row at 70% of the
         // chat-box width so wide viewports don't produce edge-to-edge bubbles
-        // — matches WhatsApp/Telegram convention. alignSelf places sent
+        //: matches WhatsApp/Telegram convention. alignSelf places sent
         // messages on the right side of the chat and received on the left,
         // overriding the chat-box's alignItems:'center' (kept for the empty
         // state) per child.

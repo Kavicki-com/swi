@@ -24,7 +24,7 @@ import {
 } from '../format'
 
 // FALLBACK. A fonte primária virou o catálogo real da org (GET
-// /profile/catalog — DISTINCT dos setores gravados); esta lista só segura a
+// /profile/catalog: DISTINCT dos setores gravados); esta lista só segura a
 // UX de uma org SEM cadastro nenhum, onde o DISTINCT volta vazio e um
 // Combobox sem opções impediria de criar a primeira tarefa. `value` igual ao
 // `label` de propósito: o que for gravado é exatamente o texto que a
@@ -37,7 +37,7 @@ const SECTOR_FALLBACK_OPTIONS: ReadonlyArray<{ label: string; value: string }> =
   { label: 'Setor Centro', value: 'Setor Centro' },
 ]
 
-// Quantos quadros de anexo a fileira mostra. É layout, NÃO limite —
+// Quantos quadros de anexo a fileira mostra. É layout, NÃO limite:
 // quem limita quantos anexos cabem numa tarefa é LIMITS.imageKeys.
 const ATTACHMENT_SLOTS = 4
 
@@ -58,7 +58,7 @@ const LIMITS = {
   imageKeys: 20,
 } as const
 
-// Linha do checklist em edição. `id` só existe em item que veio do backend —
+// Linha do checklist em edição. `id` só existe em item que veio do backend:
 // a chave AUSENTE (e não '') é o que faz o PATCH criar em vez de atualizar.
 type ChecklistDraft = { key: string; id?: string; title: string; description: string }
 
@@ -94,16 +94,16 @@ export function useTaskForm() {
   // tarefa precisa de pelo menos 1 item') e a chave omitida deixa o checklist
   // intocado. Antes o toggle sumia com a seção, o usuário salvava e o Check
   // List reaparecia intacto no detalhe. Agora o toggle fica travado e um texto
-  // diz o porquê — itens se removem um a um, pelo botão que já existe no card.
+  // diz o porquê: itens se removem um a um, pelo botão que já existe no card.
   //
   // Travado (disabled) e não escondido: a seção "Adicionais" mantém o mesmo
   // desenho de referência nas duas rotas, e um controle que some não deixa onde
-  // pendurar a explicação — o usuário procuraria o toggle em vez de entender.
+  // pendurar a explicação: o usuário procuraria o toggle em vez de entender.
   const [checklistLocked, setChecklistLocked] = useState(false)
   const [drafts, setDrafts] = useState<ReadonlyArray<ChecklistDraft>>([emptyDraft()])
   const [files, setFiles] = useState<ReadonlyArray<File>>([])
   // Anexos já gravados: key crua (o que o PATCH aceita) + URL assinada (preview).
-  // `removedExisting` marca a fileira como suja — sem mudança, o PATCH omite
+  // `removedExisting` marca a fileira como suja, sem mudança, o PATCH omite
   // imageKeys e não reescreve o array à toa.
   const [existingAttachments, setExistingAttachments] = useState<
     ReadonlyArray<{ key: string; url: string }>
@@ -159,7 +159,7 @@ export function useTaskForm() {
         )
         // O backend garante ≥1 item (cria um espelhando título+resumo quando a
         // tarefa nasce sem checklist), então toda tarefa carregada tem lista.
-        // Os ids vêm junto — é o que faz o PATCH ATUALIZAR os itens existentes.
+        // Os ids vêm junto: é o que faz o PATCH ATUALIZAR os itens existentes.
         setDrafts(
           detail.items.length > 0
             ? detail.items.map((item) => ({
@@ -198,7 +198,7 @@ export function useTaskForm() {
 
   // Catálogo quando existe; fallback só pra org sem cadastro nenhum. Um setor
   // gravado fora da lista (string livre no backend) sumiria do Combobox e o
-  // save seguinte o apagaria — injetar a opção preserva o dado.
+  // save seguinte o apagaria: injetar a opção preserva o dado.
   const sectorOptions = useMemo(() => {
     const base =
       catalogSectors && catalogSectors.length > 0
@@ -222,7 +222,7 @@ export function useTaskForm() {
     if (picked.length === 0) return
     // Teto na SELEÇÃO, antes de qualquer upload. Sem ele, escolher 25 arquivos
     // num diálogo fazia os 25 subirem sequencialmente pro S3 no submit e só
-    // então o backend rejeitava imageKeys > 20 — os 25 já estavam no bucket,
+    // então o backend rejeitava imageKeys > 20, os 25 já estavam no bucket,
     // órfãos, sem tarefa nenhuma referenciando as keys. E ao contrário da falha
     // de rede (rara), este caminho é trivial de alcançar.
     if (existingAttachments.length + files.length + picked.length > LIMITS.imageKeys) {
@@ -248,7 +248,7 @@ export function useTaskForm() {
       return
     }
 
-    // Limites de tamanho do DTO. Barrados aqui pra que a mensagem saia em pt —
+    // Limites de tamanho do DTO. Barrados aqui pra que a mensagem saia em pt:
     // o class-validator responde em inglês e o texto ia cru pro role="alert".
     const tooLong = (
       [
@@ -296,7 +296,7 @@ export function useTaskForm() {
       return
     }
     // Limites do checklist: ArrayMaxSize(50) na lista e MaxLength nos campos do
-    // WorkOrderItemDto. Mesma razão dos de cima — mensagem em pt em vez do 400.
+    // WorkOrderItemDto. Mesma razão dos de cima, mensagem em pt em vez do 400.
     const itemError = (
       [
         [items.length > LIMITS.items, `O Check List deve ter no máximo ${LIMITS.items} itens.`],
@@ -328,11 +328,11 @@ export function useTaskForm() {
       setError(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.')
       setSaving(false)
       // Sem create/update: uma tarefa criada com anexo faltando seria pior que
-      // nenhuma tarefa — o usuário reenviaria e duplicaria.
+      // nenhuma tarefa: o usuário reenviaria e duplicaria.
       //
       // O outro lado do trade-off: os anexos que subiram ANTES da falha ficam
       // órfãos no bucket, sem tarefa nenhuma referenciando as keys. Não há
-      // rollback possível daqui — o backend não expõe delete de mídia — e
+      // rollback possível daqui: o backend não expõe delete de mídia, e
       // deixar o órfão é preferível a criar a tarefa com anexo faltando. A
       // limpeza é responsabilidade da infra (lifecycle rule no bucket).
       return
@@ -356,7 +356,7 @@ export function useTaskForm() {
     // intocado (no PATCH). Mandar [] em qualquer um dos dois dá 400.
     if (checklistOn) payload.items = items
     // O PATCH SUBSTITUI o array inteiro, então na edição o payload leva as keys
-    // existentes remanescentes + as novas — e SÓ quando a fileira mudou (anexo
+    // existentes remanescentes + as novas, e SÓ quando a fileira mudou (anexo
     // novo ou remoção); intocada, a chave é omitida e o backend não mexe.
     if (isEdit) {
       if (imageKeys.length > 0 || removedExisting) {

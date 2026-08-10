@@ -107,7 +107,7 @@ export function ConversationList({
         width: 358,
         // Container BG = theme.background (page bg ~#171717) per the
         // spec. The contact chips inside use surface.standard (~#1f1f1f),
-        // so they pop visually as cards on the darker container — same
+        // so they pop visually as cards on the darker container, same
         // pattern the spec applies to all 3 columns (LEFT/MIDDLE/RIGHT).
         backgroundColor: theme.background,
         borderRadius: theme.border.radius.m,

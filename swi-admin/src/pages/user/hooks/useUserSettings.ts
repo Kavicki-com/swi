@@ -35,28 +35,28 @@ type Option = { label: string; value: string }
 // Profissão/Setor/Função vêm do catálogo REAL da org (GET /profile/catalog:
 // DISTINCT de jobTitle/sector/duty). As listas fixas anteriores eram
 // inventadas, divergiam do TaskForm e não continham os valores do banco
-// ('Administrador'/'Gestão') — o Combobox abria em "Selecione aqui" e uma
+// ('Administrador'/'Gestão'): o Combobox abria em "Selecione aqui" e uma
 // seleção qualquer sobrescrevia o cargo real (QA 2026-07-26). value === label
 // de propósito: o backend guarda o rótulo de exibição verbatim.
 const toOptions = (values: ReadonlyArray<string>): Option[] =>
   values.map((v) => ({ label: v, value: v }))
 
-// Gerente segue lista fixa (pessoas, fonte diferente — fora do catálogo).
+// Gerente segue lista fixa (pessoas, fonte diferente, fora do catálogo).
 const valueOf = (options: Option[], label: string | null): string =>
   label ? (options.find((o) => o.label === label)?.value ?? label) : ''
 const labelOf = (options: Option[], value: string): string =>
   options.find((o) => o.value === value)?.label ?? value
 
 // O Combobox do DS resolve o texto do trigger por `options.find(o => o.value
-// === value)` (Combobox.tsx:73) — um value fora da lista renderiza o
+// === value)` (Combobox.tsx:73), um value fora da lista renderiza o
 // placeholder. Injeta o valor atual como opção para ele conseguir se exibir.
 const withCurrent = (options: Option[], value: string): Option[] =>
   !value || options.some((o) => o.value === value) ? options : [...options, { label: value, value }]
 
 /**
  * Gênero persiste como CÓDIGO ('male'/'female'/'other'). O form gravava o
- * rótulo ('Masculino'), então quem lê o campo comparando com 'male' — detalhe
- * do funcionário, painel do chat — não achava nada e caía no default
+ * rótulo ('Masculino'), então quem lê o campo comparando com 'male', detalhe
+ * do funcionário, painel do chat, não achava nada e caía no default
  * (QA 2026-07-26). Tolera o rótulo legado na leitura.
  */
 export const readGender = (raw: string | null): string => {
@@ -87,7 +87,7 @@ export function useUserSettings() {
   const [name, setName] = useState(user?.full_name ?? '')
   const [dob, setDob] = useState('')
   const [cpf, setCpf] = useState('')
-  // E-mail de login não muda por aqui (exigiria reverificação) — só exibe.
+  // E-mail de login não muda por aqui (exigiria reverificação), só exibe.
   const [email] = useState(user?.email ?? '')
   const [phone, setPhone] = useState('')
   const [uf, setUf] = useState('')
@@ -107,11 +107,11 @@ export function useUserSettings() {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false)
 
   // Vocabulário real da org. null enquanto carrega (as listas ficam só com o
-  // valor atual via withCurrent — nada de opção inventada no meio-tempo).
+  // valor atual via withCurrent: nada de opção inventada no meio-tempo).
   const [catalog, setCatalog] = useState<ProfileCatalog | null>(null)
 
   // Listas de exibição = catálogo + o valor atual, quando ele ainda não
-  // estiver no DISTINCT (ver withCurrent — cinto contra corrida com o load).
+  // estiver no DISTINCT (ver withCurrent, cinto contra corrida com o load).
   const profissaoOptions = useMemo(
     () => withCurrent(toOptions(catalog?.jobTitles ?? []), profissao),
     [catalog, profissao],
@@ -128,7 +128,7 @@ export function useUserSettings() {
 
   // Fonte única dos exames: tabela Exam, a mesma que o app e o detalhe do
   // funcionário leem. Profile.examKeys continua existindo no backend mas não
-  // alimenta mais nada aqui — era ele que fazia o arquivo enviado sumir.
+  // alimenta mais nada aqui: era ele que fazia o arquivo enviado sumir.
   const [exams, setExams] = useState<Exam[]>([])
   const [examName, setExamName] = useState('')
   const [examDate, setExamDate] = useState('')
@@ -204,13 +204,13 @@ export function useUserSettings() {
     setSaveError(null)
     const iso = fromDob(dob)
     if (dob.trim() && !iso) {
-      setSaveError('Data de nascimento inválida — use dd/mm/aaaa.')
+      setSaveError('Data de nascimento inválida: use dd/mm/aaaa.')
       return
     }
     setSaving(true)
     const patch: ProfilePatch = {
       fullName: name.trim(),
-      // Só dígitos no banco (a máscara é apresentação) — ver lib/masks.
+      // Só dígitos no banco (a máscara é apresentação), ver lib/masks.
       phone: onlyDigits(phone),
       cpf: onlyDigits(cpf),
       city: city.trim(),
@@ -225,7 +225,7 @@ export function useUserSettings() {
       ...(setor ? { sector: setor } : {}),
       ...(funcao ? { duty: funcao } : {}),
       ...(gerente ? { managerName: labelOf(GERENTE_OPTIONS, gerente) } : {}),
-      // Grava o CÓDIGO, não o rótulo — ver readGender.
+      // Grava o CÓDIGO, não o rótulo, ver readGender.
       ...(gender ? { gender } : {}),
       ...(bloodType ? { bloodType } : {}),
     }
@@ -290,7 +290,7 @@ export function useUserSettings() {
   }
 
   // Anexar é o ÚLTIMO passo: nome e validade primeiro, como no app. O botão
-  // fica habilitado e valida no clique em vez de nascer desabilitado — botão
+  // fica habilitado e valida no clique em vez de nascer desabilitado, botão
   // morto sem explicação deixa o operador sem saber o que falta.
   const pickExamFile = () => {
     if (!examName.trim()) {
@@ -298,7 +298,7 @@ export function useUserSettings() {
       return
     }
     if (!toCalendarDate(examDate)) {
-      setExamError('Validade inválida — use dd/mm/aaaa.')
+      setExamError('Validade inválida: use dd/mm/aaaa.')
       return
     }
     setExamError(null)

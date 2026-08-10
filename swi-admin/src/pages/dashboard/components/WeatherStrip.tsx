@@ -30,7 +30,7 @@ const WEATHER_CONDITION_MAP: Record<
 }
 
 const formatHourLabel = (iso: string): string => {
-  // Spec format: "09:00AM" — 12-hour with AM/PM, no space.
+  // Spec format: "09:00AM", 12-hour with AM/PM, no space.
   const d = new Date(iso)
   const hours24 = d.getHours()
   const period = hours24 >= 12 ? 'PM' : 'AM'

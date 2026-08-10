@@ -54,7 +54,7 @@ export function FuncionariosKpi({
   const theme = useTheme()
   const { admins, totalEmployees, newReports, activeCameras } = summary.kpis
   if (layout === '1x4') {
-    // Wide variant: no surface wrapper around the strip — tiles sit
+    // Wide variant: no surface wrapper around the strip, tiles sit
     // directly on the page background to match the spec.
     return (
       <View

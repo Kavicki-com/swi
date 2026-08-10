@@ -42,7 +42,7 @@ export function detail(overrides: Partial<WorkOrderDetail> = {}): WorkOrderDetai
     details: 'Detalhes existentes',
     sector: 'Setor Norte',
     estimatedMinutes: 90,
-    // ISO datetime, como o backend devolve — NÃO data de calendário.
+    // ISO datetime, como o backend devolve, NÃO data de calendário.
     startDate: '2026-07-20T00:00:00.000Z',
     dueDate: '2026-07-21T00:00:00.000Z',
     createdAt: '2026-07-01T00:00:00.000Z',
@@ -116,7 +116,7 @@ export function jpeg(name = 'foto.jpg') {
   return new File([new Uint8Array([1, 2, 3])], name, { type: 'image/jpeg' })
 }
 
-// Promise controlada pelo teste — pra segurar uma request em voo e escolher o
+// Promise controlada pelo teste: pra segurar uma request em voo e escolher o
 // instante exato em que ela resolve.
 export function deferred<T>() {
   let resolve!: (value: T) => void

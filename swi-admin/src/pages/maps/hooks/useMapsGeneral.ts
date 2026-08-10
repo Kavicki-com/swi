@@ -30,7 +30,7 @@ const MOCK_ORIGIN: [number, number] = [-46.63, -23.55]
 // The Bela Vista mock spans ~2km of São Paulo, which is realistic for a
 // neighborhood but reads as scattered at the building-level zoom we land on
 // after geolocation. We compress relative offsets by this factor so the whole
-// dataset fits inside ~400m around the user's pin — the scale of a real
+// dataset fits inside ~400m around the user's pin, the scale of a real
 // mining/industrial site. Drag the pin to test: workers/cameras stay clustered.
 const SHIFT_SCALE = 0.2
 
@@ -44,7 +44,7 @@ export function useMapsGeneral() {
   // Posições REAIS ao vivo (REST snapshot + WS). null = carregando.
   const mapMarkers = useLivePositions()
   // Badge do menu compacto: contagem REAL de relatórios
-  // pendentes. Sem pendências, sem badge — era "+9" fixo até o QA de 2026-07-24.
+  // pendentes. Sem pendências, sem badge, era "+9" fixo até o QA de 2026-07-24.
   // Alertas perdeu o badge: não existe entidade de alerta com estado de leitura
   // pra contar (voltar quando existir, via formatBadgeCount).
   const [pendingReports, setPendingReports] = useState(0)
@@ -86,7 +86,7 @@ export function useMapsGeneral() {
   // Voltar-button position via CSS right/bottom anchors.
   // Per user request: anchor to bottom margin of the viewport (small gap).
   // Specs `bottom: 214` relative to a 1052h `map` parent, which
-  // at 978h frame renders ~210px from frame bottom — but at our 1080h viewport
+  // at 978h frame renders ~210px from frame bottom, but at our 1080h viewport
   // that proportional gap is visually too high. Use a small literal margin so
   // the button hugs the bottom edge regardless of viewport height.
   const [backBtnAnchor, setBackBtnAnchor] = useState<{ right: number; bottom: number }>({
@@ -176,7 +176,7 @@ export function useMapsGeneral() {
       onPanResponderRelease: () => {
         const moved = dragStateRef.current?.moved
         dragStateRef.current = null
-        // Tap (no movement past threshold) — navigate back to dashboard.
+        // Tap (no movement past threshold), navigate back to dashboard.
         if (!moved) navigateRef.current('/')
       },
       onPanResponderTerminate: () => {
@@ -197,7 +197,7 @@ export function useMapsGeneral() {
   }, [])
 
   // O mapa nasce UMA vez, quando o primeiro snapshot chega. Depender de
-  // mapMarkers direto destruiria/recriaria o mapa a cada heartbeat WS (3s) —
+  // mapMarkers direto destruiria/recriaria o mapa a cada heartbeat WS (3s):
   // por isso o gate é o booleano "carregou" e o centro sai de um ref.
   const markersLoaded = mapMarkers !== null
   const initialMarkersRef = useRef<DashboardMapMarker[] | null>(null)
@@ -270,7 +270,7 @@ export function useMapsGeneral() {
       handles.forEach((h) => {
         h.marker.remove()
       })
-      // Defer React subtree unmount to a microtask — sync unmount during
+      // Defer React subtree unmount to a microtask, sync unmount during
       // render triggers a React 18 warning and can leave the route blank.
       queueMicrotask(() => {
         handles.forEach((h) => {
@@ -281,7 +281,7 @@ export function useMapsGeneral() {
     }
   }, [mapReady, shiftedMarkers, showOperators, lib, navigate])
 
-  // Camera pins — rendered when the "Câmeras" MapControl is expanded.
+  // Camera pins: rendered when the "Câmeras" MapControl is expanded.
   // Mirrors the operator-pin useEffect; uses the same PinHandle/cleanup
   // pattern. CAMERA_LOCATIONS is a module-level constant (no dependency
   // on summary), so the only triggers are mapReady + showCameras.
@@ -308,7 +308,7 @@ export function useMapsGeneral() {
     }
   }, [mapReady, showCameras, shiftedCameras, lib, showToast])
 
-  // Maplibre heatmap layer — replaces the previous CSS radial-gradient overlay.
+  // Maplibre heatmap layer: replaces the previous CSS radial-gradient overlay.
   // Mock ~150 GeoJSON points clustered around the markers' centroid produce an
   // organic blob with real heatmap-density interpolation (cool blue edges → hot
   // red center), matching the specified visualization shape.
@@ -374,7 +374,7 @@ export function useMapsGeneral() {
     }
   }, [mapReady, shiftedMarkers, geolocOrigin, showHeatmap, heatmapOptions.produtividade])
 
-  // "Você está aqui" dot — drawn at the coordinates returned by the browser's
+  // "Você está aqui" dot: drawn at the coordinates returned by the browser's
   // geolocation API (initial guess), then user-draggable to correct the API's
   // imprecision (desktop browsers without GPS typically resolve to IP-based
   // coords that can be km off). On dragend we update geolocOrigin, which
@@ -406,12 +406,12 @@ export function useMapsGeneral() {
     }
   }, [lib, mapReady, geolocOrigin])
 
-  // Meteorologic overlay (Zonas de alerta) — RainViewer real-time radar
+  // Meteorologic overlay (Zonas de alerta), RainViewer real-time radar
   // raster, same approach used on /alerts meteo mode. Replaces the previous
   // mock green ellipses placeholder. Free, no API key.
-  // - Use the manifest's `path` hash (not `time` number) — timestamp URLs
+  // - Use the manifest's `path` hash (not `time` number), timestamp URLs
   //   expire ~24h.
-  // - Cap source maxzoom at 7 — RainViewer docs claim z=12 but real tiles
+  // - Cap source maxzoom at 7, RainViewer docs claim z=12 but real tiles
   //   stop at z=7; beyond that the server returns a "Zoom Level Not
   //   Supported" placeholder PNG.
   useEffect(() => {
@@ -464,7 +464,7 @@ export function useMapsGeneral() {
         if (map) {
           const next: [number, number] = [pos.coords.longitude, pos.coords.latitude]
           setGeolocOrigin(next)
-          // zoom 16 ≈ ~500m viewport — buildings visible, mock cluster fits,
+          // zoom 16 ≈ ~500m viewport, buildings visible, mock cluster fits,
           // and ESRI World Imagery has z16 tiles globally (z17+ is patchy).
           map.flyTo({
             center: next,
@@ -473,7 +473,7 @@ export function useMapsGeneral() {
           })
           showToast(
             'Localização encontrada',
-            'Arraste o pin azul se a posição estiver imprecisa — dados de demo seguem.',
+            'Arraste o pin azul se a posição estiver imprecisa, dados de demo seguem.',
           )
         }
         locateTimeoutRef.current = setTimeout(() => {

@@ -82,7 +82,7 @@ export function ExamsSection({
               date={parts.date}
               examName={exam.name}
               actionLabel={`Baixar ${exam.name}`}
-              // fileUrl é presignado e expira — abre na hora do clique,
+              // fileUrl é presignado e expira, abre na hora do clique,
               // nunca guardado em href renderizado antes.
               onActionPress={() => window.open(exam.fileUrl, '_blank', 'noopener,noreferrer')}
             />

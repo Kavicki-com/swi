@@ -7,11 +7,11 @@ import type { useNavigate } from 'react-router-dom'
 import { DonutChart, type useTheme } from '@kavicki/swi-design-system'
 import type { DashboardSummary } from '@/services/dashboard'
 
-// surface/success (lime/700) -> surface/success-light (lime/200) — Sinais vitais.
+// surface/success (lime/700) -> surface/success-light (lime/200), Sinais vitais.
 const VITAL_GRADIENT = ['#3EAB2E', '#B7E9A4'] as const
-// surface/info (blue/600) -> surface/info-light (blue/200) — Taxa de desgaste.
+// surface/info (blue/600) -> surface/info-light (blue/200), Taxa de desgaste.
 const WEAR_GRADIENT = ['#3899BF', '#8AD2E2'] as const
-// content/error (red/400) -> surface/error-light (red/200) — Alertas urgentes.
+// content/error (red/400) -> surface/error-light (red/200), Alertas urgentes.
 const URGENT_GRADIENT = ['#F5667A', '#FAB3BD'] as const
 
 export function HealthDonuts({

@@ -4,7 +4,7 @@ import { View } from 'react-native'
 import { Button, Icon, Text, useTheme } from '@kavicki/swi-design-system'
 
 // Quadro vazio da fileira de anexos. `onRemove` (com o
-// respectivo label acessível) põe o botão de remoção — mesmo padrão ghost +
+// respectivo label acessível) põe o botão de remoção, mesmo padrão ghost +
 // delete_icon dos cards do checklist.
 export function AttachmentSlot({
   label,

@@ -34,21 +34,21 @@ export function useChatInbox() {
   // and hands it over. Cleared on a successful send, kept on error for retry.
   const [pendingImage, setPendingImage] = useState<File | null>(null)
   // Hidden native <input type="file"> we trigger via the attach button. Not a DS
-  // primitive — a browser control, so a raw ref-driven input is appropriate.
+  // primitive: a browser control, so a raw ref-driven input is appropriate.
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   // Guard against double-send: `handleSend` awaits before clearing `draft`, so
   // two fast clicks would both read the same draft and fire duplicate messages.
   const [sending, setSending] = useState(false)
   // "Novo Chat" mode: swaps the left list from active conversations to the full
   // directory so a fresh conversation can be started. Picking a directory
-  // contact navigates to its deterministic conversation id (keyFor) — the same
+  // contact navigates to its deterministic conversation id (keyFor), the same
   // id an existing conversation would already carry, so it just opens either way.
   const [newChatOpen, setNewChatOpen] = useState(false)
 
   // Selection is URL-driven via /chat/:contactId so deep-links (e.g. clicks
   // from the AppLayout chat sidebar) open the right conversation. Conversation
   // ids contain '#'; react-router DECODES the param, so `contactId` is already
-  // the raw id — use it directly (no re-decode). The URL param is the single
+  // the raw id: use it directly (no re-decode). The URL param is the single
   // source of truth for the selection.
   const { contactId } = useParams<{ contactId?: string }>()
   const selectedContactId = contactId
@@ -57,14 +57,14 @@ export function useChatInbox() {
   const contacts = conversations.map((c) =>
     conversationToContact(c, messagesByConv[c.id] ?? [], myId),
   )
-  // Directory contacts for the "Novo Chat" flow — no thread; carries `role`.
+  // Directory contacts for the "Novo Chat" flow, no thread; carries `role`.
   const directoryContacts = directory.map((d) => directoryToContact(d, myId))
 
   // Pin the default selection ONCE into the URL. `contacts` is sortByRecent-
   // ordered, so an incoming message on another thread can leapfrog it to index
   // 0; if the default tracked `contacts[0]` live it would flip the selected
   // thread AND markRead a conversation the admin never opened. Navigating
-  // (replace) pins it via the param — after which re-sorts can't re-drive it.
+  // (replace) pins it via the param, after which re-sorts can't re-drive it.
   const firstContactId = contacts[0]?.id
   useEffect(() => {
     if (!contactId && firstContactId) {
@@ -79,7 +79,7 @@ export function useChatInbox() {
   }, [selectedContactId, openConversation])
 
   // Ao desmontar o inbox (admin navega pra outra tela), libera a conversa ativa
-  // no provider — que permanece montado como ancestral de layout-route. Sem
+  // no provider: que permanece montado como ancestral de layout-route. Sem
   // isso, uma mensagem que chega depois seria marcada como lida sem ninguém ter
   // aberto a tela, zerando o badge de não-lidas da sidebar. closeConversation é
   // estável (useCallback deps vazias), então o cleanup roda só no unmount.
@@ -104,7 +104,7 @@ export function useChatInbox() {
   const messages = selectedContact?.messages ?? []
 
   // Identidade REAL do painel (nome/setor/avatar da conversa) + idade, tipo
-  // sanguíneo e alergias do DIRETÓRIO — antes vinham de um DEMO_VITALS fixo,
+  // sanguíneo e alergias do DIRETÓRIO, antes vinham de um DEMO_VITALS fixo,
   // então todo contato aparecia com "26 anos / O+", contradizendo as demais
   // telas do mesmo trabalhador (QA de volume 2026-07-26). Só a fadiga segue
   // simulada, com o mesmo gerador do resto do painel.
@@ -131,7 +131,7 @@ export function useChatInbox() {
   const openContact = (id: string) => {
     // Composing to a brand-new directory contact (no conversation yet) briefly
     // shows a blank middle/right until the first send's socket echo refetches
-    // the list into `conversations` — expected until the echo lands.
+    // the list into `conversations`: expected until the echo lands.
     navigate(`/chat/${encodeURIComponent(id)}`)
     setNewChatOpen(false)
   }
@@ -140,7 +140,7 @@ export function useChatInbox() {
 
   const handleSend = async () => {
     const text = draft.trim()
-    // An image-only message (empty text + a pending image) is valid — the
+    // An image-only message (empty text + a pending image) is valid, the
     // backend accepts body OR imageKey and only 400s when BOTH are empty.
     if ((!text && !pendingImage) || !selectedContactId || sending) return
     setSending(true)
@@ -158,14 +158,14 @@ export function useChatInbox() {
     }
   }
 
-  // QA Web #9 — mensagem em denúncia. O modal mora na PÁGINA (não na bolha)
+  // QA Web #9: mensagem em denúncia. O modal mora na PÁGINA (não na bolha)
   // pelo mesmo motivo do editingId: a bolha vive num container com overflow que
   // recortaria o modal, e o modo pertence à página.
   const [reportingMessage, setReportingMessage] = useState<ChatMessage | null>(null)
 
   // Modo edição. O compositor é o mesmo campo: entrar em edição carrega o texto
   // atual, e o CTA troca de "Enviar" para "Salvar". `editingId` é a única fonte
-  // do modo — vazio significa composição normal.
+  // do modo: vazio significa composição normal.
   const [editingId, setEditingId] = useState<string | null>(null)
   const startEdit = (message: ChatMessage) => {
     setEditingId(message.id)

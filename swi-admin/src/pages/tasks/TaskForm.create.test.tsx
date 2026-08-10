@@ -49,7 +49,7 @@ beforeEach(() => {
 
 afterEach(clearSession)
 
-describe('TaskForm — criação', () => {
+describe('TaskForm: criação', () => {
   it('exige o título antes de chamar o backend', async () => {
     await renderAt('/tasks/new')
     await pickResponsible('Carlos Silva', 'Setor Leste')
@@ -108,7 +108,7 @@ describe('TaskForm — criação', () => {
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
     const payload = createMock.mock.calls[0]?.[0]
     expect(payload.items).toEqual([{ title: 'Desligar a máquina', description: 'Chave geral' }])
-    // `id: ''` cairia silenciosamente em criação — a chave não pode existir.
+    // `id: ''` cairia silenciosamente em criação, a chave não pode existir.
     expect(payload.items[0]).not.toHaveProperty('id')
   })
 
@@ -184,7 +184,7 @@ describe('TaskForm — criação', () => {
 
   // O save fica em voo enquanto o usuário desiste e sai. Quando a resposta
   // chega, navegar pro detalhe arrastaria ele de volta pra uma tela que ele
-  // abandonou de propósito — e o clique dele no Cancelar viraria um piscar.
+  // abandonou de propósito: e o clique dele no Cancelar viraria um piscar.
   it('não navega pro detalhe quando o save resolve depois de o usuário sair', async () => {
     const pending = deferred<WorkOrderDetail>()
     createMock.mockReturnValue(pending.promise)
@@ -273,7 +273,7 @@ describe('TaskForm — criação', () => {
 // work-orders/dto.ts). Sem validação no cliente o class-validator respondia 400
 // com o texto em inglês ('title must be shorter than or equal to 200
 // characters'), que o form exibia cru dentro do role="alert".
-describe('TaskForm — limites do DTO', () => {
+describe('TaskForm: limites do DTO', () => {
   it('barra título acima de 200 caracteres com mensagem em pt', async () => {
     await renderAt('/tasks/new')
     typeIn('task-title', 'a'.repeat(201))
@@ -328,7 +328,7 @@ describe('TaskForm — limites do DTO', () => {
   })
 
   // Limite de ARRAY: ArrayMaxSize(50) em `items`. O caminho alcançável é editar
-  // uma tarefa que já está no teto e acrescentar mais um card — o backend nunca
+  // uma tarefa que já está no teto e acrescentar mais um card, o backend nunca
   // devolveria 51, mas 50 + o "+" chega lá.
   it('barra mais de 50 itens no Check List', async () => {
     getMock.mockResolvedValue(
@@ -381,7 +381,7 @@ describe('TaskForm — limites do DTO', () => {
   })
 })
 
-describe('TaskForm — acessibilidade', () => {
+describe('TaskForm: acessibilidade', () => {
   // O `label` do Input do DS é visual puro: não associa nem serve de fallback.
   // Sem accessibilityLabel explícito, estes campos ficam sem nome nenhum.
   it('todo campo tem nome acessível', async () => {
@@ -410,11 +410,11 @@ describe('TaskForm — acessibilidade', () => {
   })
 })
 
-describe('TaskForm — responsáveis', () => {
+describe('TaskForm: responsáveis', () => {
   // O react-native-web desta versão não emite aria-checked, então a remontagem
   // se prova pelo observável: reabrir e marcar MAIS alguém tem que somar à
   // seleção anterior. Com o picker reaproveitado (sem `key`), a semente ficaria
-  // presa no valor da primeira montagem — [] — e Carlos sumiria do payload.
+  // presa no valor da primeira montagem, [], e Carlos sumiria do payload.
   it('reabrir o picker parte da seleção já confirmada em vez de zerá-la', async () => {
     await renderAt('/tasks/new')
     typeIn('task-title', 'Trocar filtro')

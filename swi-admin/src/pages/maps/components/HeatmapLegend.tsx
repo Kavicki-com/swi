@@ -3,7 +3,7 @@
 // sem mudança de comportamento.
 import { useTheme } from '@kavicki/swi-design-system'
 
-/* Intensity legend — map-view-heat reference: a slim full-height
+/* Intensity legend (map-view-heat reference): a slim full-height
    vertical gradient bar pinned to the right edge with "Intensity /
    High Red" labels at the top. The "Low" label is intentionally
    omitted to match the reference, where the bar fades into the screen edge.
@@ -11,7 +11,7 @@ import { useTheme } from '@kavicki/swi-design-system'
    imagery, kept legible by a strong drop-shadow. The bar lives at
    right:6, width 16, so it occupies x range vp-22..vp-6. Map controls
    now use right:56 (instead of 16) to keep their 48px-wide icons from
-   overlapping the bar. The container stops at bottom:114 — just above
+   overlapping the bar. The container stops at bottom:114, just above
    the "Voltar ao dashboard" button (bottom:30 + height ~72 + 12 gap)
    so the gradient doesn't bleed behind it. */
 export function HeatmapLegend({ visible }: { visible: boolean }) {

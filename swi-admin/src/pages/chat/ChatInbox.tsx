@@ -2,7 +2,7 @@
 // Chat inbox: empty state and active state.
 // Full-bleed page (no AppLayout sidebar). Three-column layout under a global
 // header:
-//   - LEFT  (358px): ConversationList — Voltar + SearchInput + scrollable
+//   - LEFT  (358px): ConversationList, Voltar + SearchInput + scrollable
 //                    contact list + Novo Chat.
 //   - MID   (flex):  Pesquisar CTA top-right + MessageThread (empty
 //                    placeholder when no selection, conversation bubbles when

@@ -24,7 +24,7 @@ export function buildPin(
   return { marker, root, el }
 }
 
-// Frota de câmeras: importada de services/cameras — a MESMA lista que alimenta
+// Frota de câmeras: importada de services/cameras, a MESMA lista que alimenta
 // o KPI "Câmeras ativas" (antes o mapa desenhava 12 e o KPI cravava 564).
 
 export function buildCameraPin(
