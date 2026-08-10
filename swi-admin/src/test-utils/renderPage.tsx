@@ -70,7 +70,7 @@ type RenderPageOptions = {
  * reads dynamic URL params and you want them resolved from `route`.
  *
  * Assíncrona de propósito: o AuthProvider chama `getSession()` ao montar, e
- * essa promise resolve no primeiro microtask — depois de `render()` ter
+ * essa promise resolve no primeiro microtask, depois de `render()` ter
  * retornado, portanto fora de qualquer escopo de `act`. O `act` vazio abaixo
  * drena esse microtask dentro do escopo certo, que é o que faz o React parar
  * de acusar "update not wrapped in act(...)". Não há como drenar um microtask

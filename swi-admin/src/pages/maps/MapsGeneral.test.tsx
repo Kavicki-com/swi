@@ -247,7 +247,7 @@ describe('MapsGeneral', () => {
     expect(screen.getByTestId('maps-general')).toBeInTheDocument()
     // Desmonta DENTRO do teste: o efeito do radar externo resolve num
     // microtask encadeado e, se a limpeza ficar para o afterEach, a
-    // atualização cai já durante o teste seguinte — que é onde o React acusa,
+    // atualização cai já durante o teste seguinte, que é onde o React acusa,
     // apontando para o teste errado.
     // Um turno de macrotask antes de desmontar: o efeito do radar externo
     // encadeia .then, e drenar so microtask deixa a ultima etapa pendente,
