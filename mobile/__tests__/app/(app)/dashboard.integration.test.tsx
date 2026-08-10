@@ -120,6 +120,15 @@ function porRotulo(tree: ReactTestRenderer, label: string) {
   )[0];
 }
 
+/**
+ * Os selos de coração renderizados. O ícone não tem rótulo acessível; a
+ * impressão digital é o `size` que o Figma cravou (26.093, único na tela),
+ * mesmo seletor de dashboard.test.tsx.
+ */
+function selosDeCoracao(tree: ReactTestRenderer) {
+  return tree.root.findAll((n) => n.props?.size === 26.093);
+}
+
 /** Dispara o onPress do elemento com o rótulo acessível dado. */
 async function tocar(tree: ReactTestRenderer, label: string) {
   const alvo = tree.root.findAll(
@@ -180,14 +189,12 @@ describe('dashboard: fases dos vitais', () => {
   it('stale: esconde o selo de coração em vez de fingir um estado bom', async () => {
     mockVitalsState = { phase: 'stale', vitals: VITALS, status: 'unknown' };
     const tree = await render();
-    const selos = tree.root.findAll((n) => n.props?.size === 26.093);
-    expect(selos).toHaveLength(0);
+    expect(selosDeCoracao(tree)).toHaveLength(0);
   });
 
   it('pronto e bom: o selo de coração aparece', async () => {
     const tree = await render();
-    const selos = tree.root.findAll((n) => n.props?.size === 26.093);
-    expect(selos.length).toBeGreaterThan(0);
+    expect(selosDeCoracao(tree).length).toBeGreaterThan(0);
   });
 });
 
