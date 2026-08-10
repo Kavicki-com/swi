@@ -2,11 +2,13 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Higienizar mobile, painel administrativo e backend para um snapshot seguro e orientado a produção e, somente após todos os portões verdes, gerar uma entrega BagIt 1.0 composta exclusivamente por arquivos `.txt`.
+**Goal:** Higienizar mobile, painel administrativo e backend para um snapshot seguro e orientado a produção e, somente após todos os portões verdes, gerar uma entrega composta exclusivamente por arquivos `.txt`.
 
-**Architecture:** O trabalho ocorre apenas na worktree isolada e em commits pequenos por domínio. Primeiro tornam-se executáveis os portões de qualidade; depois são corrigidos contratos de configuração, caminhos de produção, legado e riscos de segurança; por fim, um exportador determinístico lê o commit aprovado, transforma cada fonte textual em `arquivo.ext.txt` e produz manifestos SHA-256 verificáveis. A geração final nunca lê arquivos não commitados e nunca altera o checkout principal.
+**Emenda de 2026-08-10 (decisão do responsável):** o formato BagIt 1.0 descrito abaixo foi abandonado. O contrato pede o código-fonte, e o cliente vai ler o material numa IA para avaliar qualidade, não auditar um pacote arquivístico. O pacote entregue é somente `data/<caminho original>.txt`, sem nenhum arquivo de controle: sem `bagit.txt`, sem manifestos, sem `file-map`, sem inventário de binários e sem metadados Git. A prova de integridade sai de dentro do pacote e passa a ser o próprio commit aprovado, que é o que o verificador da Task 19 confere. As Tasks 17, 18 e 19 foram executadas nesse formato; os textos originais delas seguem abaixo com as notas de execução que registram a diferença.
 
-**Tech Stack:** TypeScript, Expo/React Native/Jest, React/Vite/Vitest/Playwright, NestJS/Prisma/PostgreSQL/Jest, Node.js 22 com módulos nativos (`node:test`, `node:crypto`, `node:fs`, `node:child_process`), Git e BagIt 1.0.
+**Architecture:** O trabalho ocorre apenas na worktree isolada e em commits pequenos por domínio. Primeiro tornam-se executáveis os portões de qualidade; depois são corrigidos contratos de configuração, caminhos de produção, legado e riscos de segurança; por fim, um exportador determinístico lê o commit aprovado e transforma cada fonte textual em `arquivo.ext.txt`. A geração final nunca lê arquivos não commitados e nunca altera o checkout principal.
+
+**Tech Stack:** TypeScript, Expo/React Native/Jest, React/Vite/Vitest/Playwright, NestJS/Prisma/PostgreSQL/Jest, Node.js 22 com módulos nativos (`node:test`, `node:crypto`, `node:fs`, `node:child_process`) e Git.
 
 ---
 
@@ -31,7 +33,7 @@
 | G3: Produção real | API real por padrão; mocks, seeds e simuladores apenas por ativação explícita em dev/teste, exceto vitais de saúde, que permanecem simulados por decisão de produto; nenhum caminho Amplify |
 | G4: Qualidade | zero erro/warning aceito pelos gates; arquivos de produção abaixo de 800 linhas; código morto e supressões injustificadas removidos |
 | G5: Verificação | 80% de cobertura por projeto, E2E críticos, builds limpos, auditoria revisada e CI verde |
-| G6: Entrega | commit final limpo e aprovado; BagIt validado; somente `.txt`; hashes e reconstrução de amostra corretos |
+| G6: Entrega | commit final limpo e aprovado; pacote validado contra o commit; somente `.txt`; reconstrução de amostra correta |
 
 ### Task 1: Fechar o Gate 0 e os guardrails do trabalho isolado
 
@@ -1498,8 +1500,8 @@ Entregar ao cliente somente após aprovação final. A pasta gerada é descartá
 - [ ] Arquivos de produção abaixo de 800 linhas e sem supressões injustificadas.
 - [ ] CI representa os mesmos portões locais.
 - [ ] Commit final aprovado e worktree limpa.
-- [ ] BagIt 1.0 passa no verificador independente.
+- [ ] O pacote passa no verificador independente.
 - [ ] Todos os arquivos entregues terminam em `.txt`.
-- [ ] Manifestos SHA-256, mapa 1:1 e reconstrução de amostra conferidos.
+- [ ] Correspondência 1:1 com os payloads do commit e reconstrução de amostra conferidas.
 - [ ] Histórico Git, documentação, binários, artefatos de QA, builds, caches e design system ausentes do payload.
 - [ ] Autorização expressa obtida antes da entrega ao cliente.
