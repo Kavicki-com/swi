@@ -1373,6 +1373,22 @@ git add scripts/source-delivery/verify.mjs scripts/source-delivery/verify.test.m
 git commit -m "test: validate bagit source deliveries"
 ```
 
+**Nota de execução (2026-08-10): sem BagIt, a referência de integridade passa a ser o commit.**
+
+Os Steps 1 e 2 acima descrevem um verificador de BagIt: `bagit.txt`, os dois manifestos, `file-map.tsv.txt`, `binary-assets.txt`, percent-encoding e metadados Git. Nada disso existe no pacote. A decisão do responsável em 2026-08-10, registrada no cabeçalho do `export.mjs`, foi entregar somente o código: o contrato pede o código-fonte, e o cliente vai ler o material numa IA para avaliar qualidade, não auditar um pacote arquivístico. O exportador da Task 18 já foi escrito assim, e por isso o commit dela é `feat: export committed source as delivery text`, não `as bagit text`.
+
+Some o manifesto, some a prova de integridade que vivia dentro do pacote. A substituição é o próprio commit: o verificador relê cada blob do snapshot aprovado e compara com o payload. Na prática ele ficou mais forte que o manifesto, porque manifesto só prova que o pacote é consistente consigo mesmo, enquanto isto prova que ele é consistente com o código aprovado. O custo é a dependência do repositório, que é aceitável porque quem valida antes de entregar é quem tem o repositório.
+
+O que o verificador afirma, então: todo arquivo sob `data/` e terminando em `.txt`; nenhum caminho absoluto, com `..`, com `\` ou que colida sem distinção de caixa; todo payload em UTF-8 válido, sem BOM e sem CR; correspondência exata nos dois sentidos com os blobs que a política classifica como `payload-text`, o que cobre de uma vez as classes excluídas (um `.env` de valor ou um `.md` no pacote aparece como "sobrando"); conteúdo idêntico ao blob normalizado; e nenhum padrão de segredo de alto sinal.
+
+Duas decisões de desenho que o Step 2 original não previa:
+
+A independência é parcial, e de propósito. A normalização de texto é reimplementada no verificador, para que um erro nela apareça como divergência em vez de se cancelar dos dois lados. Já `classify` vem de `policy.mjs`: a política é a especificação do que a entrega contém, não um detalhe do exportador, e duplicá-la criaria duas listas para manter, com a cópia errada virando gabarito.
+
+A checagem de colisão é exercitada como função pura, não gravando o par no disco. Em NTFS e APFS o segundo arquivo não é criado, ele sobrescreve o primeiro, então o cenário que o verificador precisa pegar só existe depois que o pacote atravessa um sistema de arquivo sensível a caixa, que é justamente onde ele não seria produzido nesta máquina.
+
+Validado além do fixture: exportado o HEAD para um clone descartável e conferido o pacote real, 766 arquivos, exit 0. Adulterando `schema.prisma.txt` no pacote real, o verificador nomeia o arquivo e sai com exit 1.
+
 ### Task 20: Executar a verificação integral e revisão final do código
 
 **Files:**
