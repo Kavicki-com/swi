@@ -17,6 +17,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const EXTENSOES = ['.ts', '.tsx', '.mts', '.cts']
 const IGNORAR = new Set(['node_modules', 'dist', 'build', 'coverage', '.git', '.turbo'])
@@ -59,7 +60,7 @@ export function measureFiles(caminhos, { cwd = process.cwd() } = {}) {
 
 /**
  * Reprova se algum arquivo alcançar `max` linhas, e também se a varredura vier
- * vazia ou menor que `minScanned` — este segundo caso é o que impede o gate de
+ * vazia ou menor que `minScanned`, este segundo caso é o que impede o gate de
  * aprovar quando a busca simplesmente não rodou.
  */
 export function assertFileSizeGate(files, { max = 800, minScanned = 1 } = {}) {
@@ -96,8 +97,12 @@ function parseArgs(argv) {
   return { dirs, max, minScanned }
 }
 
-const invokedPath = process.argv[1]?.replaceAll('\\', '/')
-const isDirectRun = Boolean(invokedPath) && import.meta.url === new URL(`file:///${invokedPath}`).href
+// Mesmo endurecimento do assert-worktree: no Windows o caminho digitado pode
+// diferir do real em caixa (e `pathToFileURL` cuida de espaço e acento);
+// comparação crua faria o gate sair 0 em silêncio, que se lê como aprovação.
+const isDirectRun =
+  Boolean(process.argv[1]) &&
+  pathToFileURL(process.argv[1]).href.toLowerCase() === import.meta.url.toLowerCase()
 
 if (isDirectRun) {
   try {
