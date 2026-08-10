@@ -42,7 +42,7 @@ export const BadgedButton = memo(function BadgedButton({
         <View
           // pointerEvents="none" (QA Mobile #2): o contador é absoluto sobre o
           // quadrante superior direito do botão de 56×56. Sem isto ele CAPTURA
-          // o toque que cai nos seus 24×24 e não faz nada com ele — e o contador
+          // o toque que cai nos seus 24×24 e não faz nada com ele, e o contador
           // é justamente a parte mais chamativa, que o usuário tende a mirar.
           pointerEvents="none"
           style={{

@@ -33,13 +33,13 @@ export function AlertActiveView() {
   const router = useRouter();
 
   // Clima real (Unit 2) com fallback pro texto estático de hoje em
-  // loading/error/sem-alerta — esta é tela de segurança e nunca pode quebrar.
+  // loading/error/sem-alerta: esta é tela de segurança e nunca pode quebrar.
   const { snapshot, activeAlert } = useWeather();
   const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
 
   // Bolinhas da timeline (Figma 385:29807 etc.) usam `surface/secondary`
   // #50B3D2 (teal escuro). A linha vertical entre bolinhas usa um cyan
-  // mais claro `content/secondary` #8AD2E2 — cores DIFERENTES por design.
+  // mais claro `content/secondary` #8AD2E2, cores DIFERENTES por design.
   const stepCircle = (
     <View
       style={{
@@ -73,7 +73,7 @@ export function AlertActiveView() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Dot-grid (Figma 385:29751 "Repetição de grade 4") — 27 colunas,
+      {/* Dot-grid (Figma 385:29751 "Repetição de grade 4"): 27 colunas,
           opacity 9%, centrado no topo. Mesma camada do dashboard/my-stats. */}
       <JourneyTheme />
       <ScrollView
@@ -104,7 +104,7 @@ export function AlertActiveView() {
         >
           {/* Left: condition card (Figma 385:30119). Fixed 203×100. Content
               alinha bottom (justify-end) pra deixar espaço pro ícone de chuva
-              transbordar o topo do card. Padding só horizontal+bottom — top
+              transbordar o topo do card. Padding só horizontal+bottom; top
               fica zero pra não empurrar texto pra baixo do ícone. */}
           <View
             style={{
@@ -119,7 +119,7 @@ export function AlertActiveView() {
               gap: theme.gap.s,
             }}
           >
-            {/* Ícone de chuva (Figma 385:30122) — 72×72.76 posicionado
+            {/* Ícone de chuva (Figma 385:30122): 72×72.76 posicionado
                 top:-28.38 (transborda o topo do card, ~40% fica fora). DS
                 WeatherIcon 404 com asset path em node_modules; renderiza
                 direto via RNImage do mobile/assets/. */}
@@ -169,7 +169,7 @@ export function AlertActiveView() {
 
         {/* Instructions list */}
         <View style={{ gap: theme.gap.m }}>
-          {/* Step 1 — Traçar rota */}
+          {/* Step 1: Traçar rota */}
           <View style={{ flexDirection: 'row', gap: 19, alignItems: 'flex-start' }}>
             {stepCircle}
             {lineSegment}
@@ -198,7 +198,7 @@ export function AlertActiveView() {
             </View>
           </View>
 
-          {/* Step 2 — Mantenha-se em abrigo */}
+          {/* Step 2: Mantenha-se em abrigo */}
           <View style={{ flexDirection: 'row', gap: 19, alignItems: 'flex-start' }}>
             {stepCircle}
             {lineSegment}
@@ -211,7 +211,7 @@ export function AlertActiveView() {
             </Text>
           </View>
 
-          {/* Step 3 — Espere pelo veículo + chip */}
+          {/* Step 3: Espere pelo veículo + chip */}
           <View style={{ flexDirection: 'row', gap: 19, alignItems: 'flex-start' }}>
             {stepCircle}
             {lineSegment}
@@ -235,7 +235,7 @@ export function AlertActiveView() {
             </View>
           </View>
 
-          {/* Step 4 — Reportar acidente (último item, sem lineSegment). */}
+          {/* Step 4: Reportar acidente (último item, sem lineSegment). */}
           <View style={{ flexDirection: 'row', gap: 19, alignItems: 'flex-start' }}>
             {stepCircle}
             <View style={{ flex: 1, gap: 12, alignItems: 'flex-start' }}>

@@ -25,8 +25,7 @@ export const StatCol = memo(function StatCol({
       {/* numberOfLines=1 é OBRIGATÓRIO aqui: sem ele o valor quebra em duas
           linhas, a coluna cresce em altura e empurra os ícones do rodapé pra
           fora da margem (QA no aparelho, 2026-07-27: BPM 64 renderizou "6"
-          sobre "4"). O comentário no call site já afirmava que isto existia —
-          não existia. */}
+          sobre "4"). */}
       <Title variant="title.l" color={theme.content.dark} numberOfLines={1}>
         {value}
       </Title>
