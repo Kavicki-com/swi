@@ -1042,6 +1042,36 @@ git add scripts/e2e swi-backend/docker-compose.e2e.yml swi-backend/package.json 
 git commit -m "test: add critical browser smoke coverage"
 ```
 
+**Nota de execução (2026-08-10): o smoke web do mobile não passa do login, e a causa é de plataforma.**
+
+O Step 3 pede boot, login, redirecionamento autenticado e abertura das rotas principais. Os dois primeiros estão cobertos; os dois últimos são impossíveis no navegador, e isso foi medido, não presumido.
+
+O `expo-secure-store` não tem implementação web: `mobile/node_modules/expo-secure-store/build/ExpoSecureStore.web.js` é `export default {}`. O POST `/auth/login` volta 200 com o token (verificado na rede do navegador e por `curl`), mas o `SecureStore.setItemAsync` seguinte chama um método inexistente e estoura. O `catch` do login manda a mensagem pro `Alert.alert`, que no react-native-web é um método vazio, então a falha não aparece nem no console nem na tela. Sem token guardado não há sessão, e todo o `(app)/*` fica inalcançável.
+
+Nenhum truque de teste contorna isso; só um adaptador web de armazenamento no app, que é mudança de produto e não de higiene. Decisão: o smoke afirma o que o navegador prova de verdade (bundle de produção subindo sem erro de página, guards de rota, o login batendo na API real e sendo aceito, a senha errada sendo recusada com 401, ausência de 5xx) e declara a fronteira no cabeçalho do próprio spec. Quem cobre a fatia autenticada é `mobile/services/auth/apiAuthBackend.test.ts`, no nível do adaptador, mais o smoke manual em aparelho previsto no Step 4 deste plano.
+
+**Nota de execução (2026-08-10): defeito do painel encontrado pelo E2E de chat.**
+
+`openConversation` (`swi-admin/src/services/chat/ChatProvider.tsx`) desiste quando a conversa ainda não está em `conversationsRef`, e num carregamento frio de `/chat/<id>` o efeito de seleção roda antes de o `GET /chat/conversations` responder. Nada o redispara quando a lista chega, então abrir uma conversa por deep link, ou dar F5 dentro dela, mostra a thread vazia mesmo com as mensagens gravadas (confirmado no banco).
+
+Não foi corrigido aqui: é código de produção do painel, fora do escopo desta higienização, e a correção é decisão do usuário. Efeito no teste: o spec `swi-admin/e2e/chat-tasks.spec.ts` não afirma a releitura depois do F5, porque o defeito a torna dependente de timing (numa base com a conversa preexistente a thread às vezes se recupera; numa base limpa, não), e asserção instável num portão de entrega é pior que asserção estreita. No lugar dela, o teste afirma o `201` do `POST /chat/conversations/<id>/messages`, que é a prova de gravação, e deixa o diagnóstico no comentário. Corrigido o defeito, o refresh volta a ser afirmável.
+
+**Nota de execução (2026-08-10): a espera de saúde do runner não podia ser a porta.**
+
+A primeira versão do `run-test-stack.mjs` esperava a porta 55432 aceitar conexão. O Docker atende na porta publicada assim que o container sobe, antes de o Postgres inicializar, então a espera voltava na hora e o `prisma migrate deploy` seguinte morria com `P1001: Can't reach database server`. A sonda agora é `pg_isready` por TCP dentro do container (o mesmo comando do healthcheck do compose), com dois testes unitários cercando o caso.
+
+**Nota de execução (2026-08-10): o smoke do mobile precisa exportar com `--clear`, e o motivo não é zelo.**
+
+Na primeira execução completa da suíte, os três testes que dependem do login falharam em `waitForResponse` (timeout de 30s esperando o POST `/auth/login`) enquanto os três que não fazem login passaram, inclusive o que afirma bundle sem erro de console. A causa foi medida, não deduzida.
+
+O bundle exportado tinha `getApiUrl` reduzido a `return u??=s(void 0, o.RUNTIME_ENV)`: o acesso `process.env.EXPO_PUBLIC_API_URL` virou `void 0`. As três `EXPO_PUBLIC_*` do `webServer` sofreram o mesmo. Com a variável ausente, `resolveApiUrl` lança em produção, o `catch` do login manda a mensagem pro `Alert.alert` (vazio no react-native-web) e nenhuma requisição chega a sair, o que explica exatamente o timeout e o silêncio no console.
+
+Dois experimentos isolaram a causa. Exportar com a variável presente no ambiente do shell, sem `--clear`, continuou produzindo `void 0`, o que descarta falha de propagação do Playwright. O mesmo export com `--clear` embutiu a URL. Ou seja: as `EXPO_PUBLIC_*` são inlineadas em tempo de transformação e o cache do Metro não as considera parte da chave, então um `expo export` anterior sem elas (o `build:all` do `verify` é o candidato óbvio, e roda no mesmo portão) deixa `services/auth/apiConfig.ts` cacheado com o valor já reduzido a `undefined`.
+
+A ausência de `babel.config.js` no projeto apareceu no meio da investigação e é pista falsa: o SDK 54 resolve `babel-preset-expo` sozinho, e o inline funciona quando o cache está limpo. O que confirma é o próprio bundle, que preserva `process.env.NODE_ENV` e elimina só as `EXPO_PUBLIC_*`, ou seja, o inline seletivo está rodando.
+
+O risco que isso cria é pior que a falha: com o cache quente de uma execução ANTERIOR e correta, a suíte passaria medindo um bundle que não corresponde ao código atual. Por isso o `--clear` fica no comando do `webServer`, com o diagnóstico escrito ao lado dele. Custo: o export deixa de aproveitar cache e fica mais lento. Com o `--clear`, os 6 testes passam.
+
 ### Task 15: Tornar a CI equivalente aos portões locais
 
 **Files:**
