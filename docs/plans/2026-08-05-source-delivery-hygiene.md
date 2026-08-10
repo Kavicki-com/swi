@@ -26,12 +26,12 @@
 
 | Portão | Condição para avançar |
 |---|---|
-| G1 — Ferramentas | instalação limpa, lint, typecheck, testes e build reproduzíveis nos três projetos |
-| G2 — Configuração e segurança | nenhum segredo no snapshot; ambiente validado; auth, autorização, CORS, limites e uploads cobertos |
-| G3 — Produção real | API real por padrão; mocks, seeds e simuladores apenas por ativação explícita em dev/teste, exceto vitais de saúde, que permanecem simulados por decisão de produto; nenhum caminho Amplify |
-| G4 — Qualidade | zero erro/warning aceito pelos gates; arquivos de produção abaixo de 800 linhas; código morto e supressões injustificadas removidos |
-| G5 — Verificação | 80% de cobertura por projeto, E2E críticos, builds limpos, auditoria revisada e CI verde |
-| G6 — Entrega | commit final limpo e aprovado; BagIt validado; somente `.txt`; hashes e reconstrução de amostra corretos |
+| G1: Ferramentas | instalação limpa, lint, typecheck, testes e build reproduzíveis nos três projetos |
+| G2: Configuração e segurança | nenhum segredo no snapshot; ambiente validado; auth, autorização, CORS, limites e uploads cobertos |
+| G3: Produção real | API real por padrão; mocks, seeds e simuladores apenas por ativação explícita em dev/teste, exceto vitais de saúde, que permanecem simulados por decisão de produto; nenhum caminho Amplify |
+| G4: Qualidade | zero erro/warning aceito pelos gates; arquivos de produção abaixo de 800 linhas; código morto e supressões injustificadas removidos |
+| G5: Verificação | 80% de cobertura por projeto, E2E críticos, builds limpos, auditoria revisada e CI verde |
+| G6: Entrega | commit final limpo e aprovado; BagIt validado; somente `.txt`; hashes e reconstrução de amostra corretos |
 
 ### Task 1: Fechar o Gate 0 e os guardrails do trabalho isolado
 
@@ -1159,7 +1159,7 @@ Para correções patch/minor compatíveis, atualizar um grupo coeso, executar o 
 
 **Step 4: Review redistribution metadata**
 
-Gerar fora do repositório um inventário de dependências diretas/transitivas e identificadores de licença a partir dos três lockfiles/instalações. Marcar `UNKNOWN` onde o pacote não declarar licença; confirmar que nenhum pacote ou asset excluído será redistribuído. Obter aprovação do responsável sobre a entrega do código próprio e sobre a simples menção — sem conteúdo — do design system e dos binários.
+Gerar fora do repositório um inventário de dependências diretas/transitivas e identificadores de licença a partir dos três lockfiles/instalações. Marcar `UNKNOWN` onde o pacote não declarar licença; confirmar que nenhum pacote ou asset excluído será redistribuído. Obter aprovação do responsável sobre a entrega do código próprio e sobre a simples menção, sem conteúdo, do design system e dos binários.
 
 Expected: nenhuma dependência ou asset de terceiro copiado para o payload; nomes, versões, origem e licença declarada disponíveis para `external-dependencies.txt`.
 
