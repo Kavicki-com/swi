@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing'
-import { INestApplication, ValidationPipe } from '@nestjs/common'
+import { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { MailService } from '../src/mail/mail.service'
@@ -25,8 +25,10 @@ describe('Segurança e2e', () => {
       .overrideProvider(MailService)
       .useValue({ sendConfirmationCode: () => Promise.resolve(), sendResetCode: () => Promise.resolve() })
       .compile()
+    // Nenhum pipe local: a matriz exercita o app COMO WIREADO, com o APP_PIPE
+    // do AppModule. Um pipe readicionado aqui mascararia a remoção do global,
+    // e o caso do campo não declarado provaria o teste, não a produção.
     app = mod.createNestApplication()
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
     await app.init()
     prisma = app.get(PrismaService)
 
