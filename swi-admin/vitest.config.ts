@@ -63,6 +63,11 @@ export default mergeConfig(
       globals: true,
       setupFiles: ['./src/test-setup.ts'],
       css: false,
+      // Só a suíte de componente, que vive em src. Sem isto vale o padrão do
+      // Vitest (`**/*.{test,spec}.*`), que varre o projeto inteiro e arrasta
+      // `e2e/*.spec.ts` pra dentro do jsdom: os testes de navegador precisam de
+      // servidor e banco de pé, e quebram já na coleta.
+      include: ['src/**/*.test.{ts,tsx}'],
       // Single-fork execution. Each test file imports the DS bundle and a
       // jsdom instance; with 30+ test files the default worker pool exhausts
       // Node's heap on Windows (memory allocation failures + worker exits).

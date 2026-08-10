@@ -21,6 +21,9 @@ services:
   db:
     ports: !override ["55432:5432"]
     volumes: !override ["swi_e2e_pgdata:/var/lib/postgresql/data"]
+    # Banco de teste é descartável e recriado a cada execução: o `fsync` só
+    # existe pra sobreviver a queda de energia, e aqui não há nada a preservar.
+    command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
 
   mailhog:
     ports: !override ["51025:1025", "58025:8025"]
