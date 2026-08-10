@@ -71,6 +71,8 @@ const tarefa = (over: Partial<Task> = {}): Task => ({
   ...over,
 });
 
+const arvores: ReturnType<typeof create>[] = [];
+
 const render = async () => {
   let tree!: ReturnType<typeof create>;
   await act(async () => {
@@ -82,8 +84,21 @@ const render = async () => {
       </SafeAreaProvider>,
     );
   });
+  arvores.push(tree);
   return tree;
 };
+
+// A tela em andamento arma um interval de 1s. Árvore que sobrevive ao teste
+// segue tickando com timers reais, e um tick que cai depois do teardown do
+// Jest vira erro de execução da suíte inteira, mesmo com os testes verdes.
+// Desmontar tudo aqui corta o interval na fonte (desmontar de novo uma árvore
+// que o próprio teste já desmontou é inofensivo).
+afterEach(async () => {
+  while (arvores.length) {
+    const tree = arvores.pop()!;
+    await act(async () => { tree.unmount(); });
+  }
+});
 
 const textos = (tree: ReturnType<typeof create>) =>
   tree.root
