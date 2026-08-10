@@ -2,14 +2,18 @@
  * Guard de execução da higienização de entrega.
  *
  * O trabalho só pode acontecer na worktree isolada: o checkout principal é
- * tratado como somente leitura. Este guard existe para que qualquer script ou
- * sessão futura falhe alto ao rodar no lugar errado, em vez de sujar `main`.
+ * tratado como somente leitura. Checagem opt-in: rodar no início de cada
+ * sessão de higienização para falhar alto quando o comando estiver no
+ * checkout errado, em vez de sujar `main`. Não é chamada por outros scripts
+ * de propósito: runner de E2E e gates também rodam em CI, onde raiz e branch
+ * são as do runner.
  *
  * Uso:
  *   node scripts/quality/assert-worktree.mjs --expected-root <caminho> --expected-branch <branch>
  */
 
 import { execFileSync } from 'node:child_process'
+import { pathToFileURL } from 'node:url'
 
 /** Uniformiza separadores, barra final e caixa para comparar caminhos do Windows. */
 export function normalizeRoot(value) {
@@ -53,8 +57,12 @@ function parseArgs(argv) {
   return { root: read('--expected-root'), branch: read('--expected-branch') }
 }
 
-const invokedPath = process.argv[1]?.replaceAll('\\', '/')
-const isDirectRun = Boolean(invokedPath) && import.meta.url === new URL(`file:///${invokedPath}`).href
+// Comparação sem caixa: no Windows o import.meta.url usa a caixa canônica do
+// disco, e o argv[1] usa a digitada; diferença aqui fazia o guard sair 0 em
+// silêncio, que num guard se lê como aprovação.
+const isDirectRun =
+  Boolean(process.argv[1]) &&
+  pathToFileURL(process.argv[1]).href.toLowerCase() === import.meta.url.toLowerCase()
 
 if (isDirectRun) {
   try {
