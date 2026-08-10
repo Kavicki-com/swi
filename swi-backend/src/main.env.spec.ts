@@ -12,6 +12,11 @@ const parseRuntimeEnv = jest.fn<
 >(() => ({ port: 3000, listenSocket: undefined, nodeEnv: 'test' }))
 
 jest.mock('@nestjs/core', () => ({ NestFactory: { create } }))
+// O AppModule real puxa o grafo inteiro da aplicação (todos os módulos, Prisma,
+// AWS SDK). Sob instrumentação de coverage esse import custa ~5s e estoura o
+// timeout padrão do Jest. O contrato deste spec é a ORDEM do boot; o conteúdo
+// do módulo é irrelevante, então um stub vazio basta.
+jest.mock('./app.module', () => ({ AppModule: class {} }))
 jest.mock('./cors', () => ({
   applyCors: jest.fn(),
   corsOrigins: jest.fn(() => ['http://localhost:5173']),
