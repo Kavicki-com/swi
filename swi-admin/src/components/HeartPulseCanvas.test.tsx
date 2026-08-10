@@ -1,6 +1,6 @@
 // Comportamento do traçado de batimento do menu de usuário. O jsdom não
 // implementa canvas, então `getContext('2d')` é substituído por um dublê que
-// registra o que foi desenhado — é o único jeito de afirmar o FORMATO da onda
+// registra o que foi desenhado, é o único jeito de afirmar o FORMATO da onda
 // (linha de base longa, pico R alto, degraus de Q/S) em vez de só montar o
 // componente.
 //
@@ -51,7 +51,7 @@ function fakeContext() {
 }
 
 let contexto = fakeContext()
-// Devolver null simula um browser sem suporte a 2d — o componente tem que
+// Devolver null simula um browser sem suporte a 2d, o componente tem que
 // desistir sem quebrar.
 let contextoDisponivel = true
 
@@ -104,7 +104,7 @@ function desenharEm(fase: number, props: Partial<Parameters<typeof HeartPulseCan
 /** Ponto recém-plotado: entra em x = width e recua um passo antes do traçado. */
 const ultimoY = () => desenho.pontos[desenho.pontos.length - 1]?.y
 
-describe('HeartPulseCanvas — formato da onda', () => {
+describe('HeartPulseCanvas: formato da onda', () => {
   it('fora dos complexos, a linha fica na altura de repouso', () => {
     desenharEm(0.6)
 
@@ -159,7 +159,7 @@ describe('HeartPulseCanvas — formato da onda', () => {
   })
 })
 
-describe('HeartPulseCanvas — desenho e ciclo de vida', () => {
+describe('HeartPulseCanvas: desenho e ciclo de vida', () => {
   it('cada quadro limpa a tela antes de traçar', () => {
     desenharEm(0.6)
 

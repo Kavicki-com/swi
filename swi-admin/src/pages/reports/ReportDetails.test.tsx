@@ -173,7 +173,7 @@ describe('ReportDetails — comentários', () => {
   })
 })
 
-describe('ReportDetails — carga', () => {
+describe('ReportDetails: carga', () => {
   it('enquanto o get não resolve, mostra o estado de carregamento', async () => {
     getMock.mockReturnValue(new Promise(() => {}))
     seedSession()
@@ -211,7 +211,7 @@ describe('ReportDetails — carga', () => {
   })
 })
 
-describe('ReportDetails — responsáveis', () => {
+describe('ReportDetails: responsáveis', () => {
   it('sem avatares de responsável, o grupo não é renderizado', async () => {
     await renderAt()
     await screen.findByTestId('report-details')
@@ -246,7 +246,7 @@ describe('ReportDetails — responsáveis', () => {
   })
 })
 
-describe('ReportDetails — imagens e atividades', () => {
+describe('ReportDetails: imagens e atividades', () => {
   const activity = (over: Partial<ReportActivity> = {}): ReportActivity => ({
     id: 'a_1',
     title: 'Troca de rolamento',
@@ -335,7 +335,7 @@ describe('ReportDetails — imagens e atividades', () => {
   })
 })
 
-describe('ReportDetails — barra de topo', () => {
+describe('ReportDetails: barra de topo', () => {
   it('"Voltar" retorna para a lista de relatórios', async () => {
     await renderAt()
     await screen.findByTestId('report-details')

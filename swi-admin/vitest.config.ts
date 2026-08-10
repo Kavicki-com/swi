@@ -95,7 +95,7 @@ export default mergeConfig(
           'src/main.tsx',
         ],
         // Portão travado: a cobertura só sobe daqui. Vale para as quatro
-        // métricas porque cada uma pega uma lacuna diferente — `functions`
+        // métricas porque cada uma pega uma lacuna diferente: `functions`
         // denuncia caminho de código nunca chamado, `branches` denuncia
         // condição nunca exercitada, e nenhuma das duas aparece em `lines`.
         thresholds: {

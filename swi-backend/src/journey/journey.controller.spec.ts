@@ -4,7 +4,7 @@ import type { JourneyService } from './journey.service'
 
 // Toda rota da jornada é do próprio trabalhador: o id vem do token e nunca de
 // parâmetro. O controller ainda traduz "tarefa que não é sua" em 404, e não em
-// corpo nulo — o serviço devolve null tanto para inexistente quanto para alheia,
+// corpo nulo: o serviço devolve null tanto para inexistente quanto para alheia,
 // e é aqui que isso vira resposta.
 
 const service = () =>

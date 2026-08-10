@@ -38,7 +38,7 @@ vi.mock('@/hooks/useRescueRoute', () => ({
 }))
 // O `show` precisa ser estável entre renders, como o real: ele entra nas deps
 // do efeito que avisa da falha, e uma função nova a cada render faria o aviso
-// se repetir sozinho — a suíte mediria o dublê, não a tela.
+// se repetir sozinho, e a suíte mediria o dublê, não a tela.
 vi.mock('@/lib/demoToast', () => {
   const show = (title: string, body: string) => {
     h.toasts.push([title, body])

@@ -589,7 +589,7 @@ describe('MapsGeneral', () => {
     expect(azul).toBeTruthy()
     const antes = contentPins().length
 
-    // O elemento troca de cursor durante o arrasto — é o único retorno visual
+    // O elemento troca de cursor durante o arrasto, é o único retorno visual
     // de que o pino está sendo movido.
     await act(async () => {
       azul?.handlers['dragstart']?.()

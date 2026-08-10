@@ -5,7 +5,7 @@ import type { UsersService } from '../users/users.service'
 // O que estes casos protegem não é o roteamento (isso é E2E), e sim a ligação
 // entre entrada e serviço: qual método é chamado e com quais argumentos. A regra
 // que mais importa aqui é a identidade vir do token (@CurrentUserId) e nunca do
-// corpo — trocar isso deixaria um usuário mudar a senha de outro sem que nenhum
+// corpo: trocar isso deixaria um usuário mudar a senha de outro sem que nenhum
 // teste de serviço percebesse.
 
 const authService = () =>

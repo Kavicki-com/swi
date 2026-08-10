@@ -140,7 +140,7 @@ describe('AdminsCreate — submit', () => {
   })
 })
 
-describe('AdminsCreate — data de nascimento e CPF', () => {
+describe('AdminsCreate: data de nascimento e CPF', () => {
   // O campo de data não tem testID próprio; o placeholder é o que o usuário vê.
   const preencherObrigatorios = () => {
     typeIn('admins-create-nome', 'Zé da Silva')
@@ -212,9 +212,9 @@ describe('AdminsCreate — data de nascimento e CPF', () => {
   })
 })
 
-describe('AdminsCreate — campos de saúde e rodapé', () => {
+describe('AdminsCreate: campos de saúde e rodapé', () => {
   // O Input do DS bloqueia via `editable={false}`, que o react-native-web
-  // traduz para `readonly` no DOM — não para o atributo `disabled`.
+  // traduz para `readonly` no DOM, não para o atributo `disabled`.
   const descricaoAlergias = () => screen.getAllByPlaceholderText('Descrever aqui')[0]!
 
   it('"Quais?" só aceita texto depois de marcar Sim', async () => {
