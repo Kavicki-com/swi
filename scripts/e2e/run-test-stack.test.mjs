@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { E2E_PORTS, E2E_PROJECT, runTestStack, stackArgs } from './run-test-stack.mjs'
+import { E2E_PORTS, E2E_PROJECT, runTestStack, stackArgs, waitForPostgres } from './run-test-stack.mjs'
 
 // O runner sobe a infraestrutura de teste, roda o Playwright do alvo e derruba
 // tudo. O que estes testes cercam não é o caminho feliz: é o teardown, porque
@@ -125,8 +125,27 @@ test('erro do teardown nao encobre a falha original', async () => {
 
 // Project name fixo isola rede, containers e volumes da stack de trabalho. Se
 // ele variar, um `down -v` de teste pode apagar o banco de desenvolvimento.
+// O backend nao tem navegador: a suite dele e a do proprio Nest. Chamar o
+// playwright ali encontraria zero spec e passaria VERDE sem testar nada, que e
+// o pior desfecho possivel pra um portao.
+test('o alvo backend roda a suite do nest, nao o playwright', async () => {
+  const { calls, erro } = await rodar({ target: 'backend' })
+  assert.equal(erro, null)
+  assert.ok(calls.some((c) => c.includes('run test:e2e')), 'nao chamou a suite do backend')
+  assert.ok(!calls.some((c) => c.includes('playwright')), 'chamou playwright no alvo backend')
+  // Sem --forceExit o processo do Nest nao encerra (handles abertos) e o
+  // teardown nunca chega: a stack ficaria de pe depois de uma suite verde.
+  assert.ok(calls.some((c) => c.includes('--forceExit')), 'faltou --forceExit')
+})
+
+test('derruba a stack mesmo quando a suite do backend falha', async () => {
+  const { calls, erro } = await rodar({ target: 'backend', failOn: 'run test:e2e' })
+  assert.match(erro.message, /test:e2e/)
+  assert.ok(derrubou(calls), 'teardown nao rodou apos falha da suite do backend')
+})
+
 test('usa sempre o mesmo project name, isolado da stack de desenvolvimento', async () => {
-  for (const target of ['admin', 'mobile']) {
+  for (const target of ['admin', 'mobile', 'backend']) {
     const { calls } = await rodar({ target })
     const doDocker = calls.filter((c) => c.startsWith('docker'))
     assert.ok(doDocker.length > 0)
@@ -173,6 +192,46 @@ test('as portas de teste nao colidem com as de desenvolvimento', () => {
   }
   const usadas = Object.values(E2E_PORTS)
   assert.equal(new Set(usadas).size, usadas.length, 'ha porta repetida entre servicos')
+})
+
+// As portas vivem em E2E_PORTS aqui e sao lidas nos playwright.config.ts dos
+// alvos. Sem a passagem por env, mudar uma delas deixaria o config na porta
+// antiga e o teste conversaria com a stack errada em silencio.
+test('as portas da stack descem do runner pro config do alvo', async () => {
+  const chamadas = []
+  const exec = async (command, args, options = {}) => {
+    chamadas.push({ linha: [command, ...args].join(' '), env: options.env })
+    return { code: 0 }
+  }
+  await runTestStack({ target: 'mobile', exec, waitForHealth: async () => {} })
+
+  const doTeste = chamadas.find((c) => c.linha.includes('playwright test'))
+  assert.equal(doTeste.env.E2E_MOBILE_PORT, String(E2E_PORTS.mobile))
+  assert.equal(doTeste.env.E2E_ADMIN_PORT, String(E2E_PORTS.admin))
+  assert.equal(doTeste.env.E2E_API_PORT, String(E2E_PORTS.api))
+})
+
+// Este par existe por causa de uma falha real: a espera anterior so verificava
+// se a PORTA aceitava conexao, e o Docker aceita assim que o container sobe.
+// A espera voltava na hora e o `prisma migrate deploy` seguinte morria com
+// P1001. A sonda precisa insistir ate o banco responder, nao ate a porta abrir.
+test('espera o postgres responder antes de seguir', async () => {
+  let tentativas = 0
+  await waitForPostgres({
+    probe: async () => ++tentativas >= 3,
+    intervalMs: 1,
+  })
+  assert.equal(tentativas, 3, 'desistiu antes de o banco responder')
+})
+
+test('desiste com erro quando o postgres nunca responde', async () => {
+  const erro = await waitForPostgres({
+    probe: async () => false,
+    timeoutMs: 5,
+    intervalMs: 1,
+  }).then(() => null, (e) => e)
+
+  assert.match(erro.message, /nao ficou pronto|não ficou pronto/)
 })
 
 test('stackArgs sempre carrega os dois compose, na ordem que faz a sobreposicao valer', () => {

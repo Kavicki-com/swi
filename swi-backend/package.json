@@ -16,6 +16,7 @@
     "test": "jest",
     "test:coverage": "jest --coverage --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e:managed": "node ../scripts/e2e/run-test-stack.mjs --target backend",
     "verify": "npm run lint && npm run typecheck && npm test -- --runInBand && npm run build"
   },
   "prisma": {

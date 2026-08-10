@@ -1,20 +1,12 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import { ADMIN, entrar } from './session'
 
 // Fluxo de entrada do painel contra backend e banco de TESTE reais. O que este
 // arquivo cobre é justamente o que os 89 testes de componente não alcançam: a
 // sessão de verdade, a requisição de verdade e a navegação de verdade.
 //
-// As credenciais vêm do seed de E2E (scripts/e2e/seed-e2e.mjs), que existe só
-// nesta stack descartável. Nenhum dado real de cliente entra aqui.
-
-const ADMIN = { email: 'admin-e2e@teste.local', password: 'e2e-admin-pass' }
-
-const entrar = async (page: Page, credenciais = ADMIN) => {
-  await page.goto('/login')
-  await page.getByLabel('Login', { exact: true }).fill(credenciais.email)
-  await page.getByLabel('Senha', { exact: true }).fill(credenciais.password)
-  await page.getByRole('button', { name: 'Entrar' }).click()
-}
+// As credenciais e o helper de entrada moram em `./session`, compartilhados
+// com as outras suítes de navegador do painel.
 
 test('a raiz protegida manda pro login quem não tem sessão', async ({ page }) => {
   await page.goto('/')

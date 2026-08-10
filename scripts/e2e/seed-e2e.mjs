@@ -89,9 +89,24 @@ export async function seedE2E(prisma) {
 
   // O painel resolve setor e cargo pelo profile; sem ele o worker aparece sem
   // identificação nas listas e o teste de chat não tem por quem procurar.
+  //
+  // CPF, CEP e tipo sanguíneo são os três marcadores que `onboardingPendente`
+  // (mobile/services/profile/onboarding.ts) lê para decidir, no login, entre o
+  // dashboard e o wizard de complimentary-data. Sem eles o app entenderia o
+  // worker como cadastro pela metade e o smoke web nunca sairia do wizard.
+  // Vão também no `update` porque o marcador precisa valer mesmo num banco
+  // reaproveitado de uma execução anterior: com `update: {}` o login iria pro
+  // wizard sem nenhuma pista do motivo.
+  const onboardingConcluido = {
+    // Placeholder de exemplo, não é o CPF de ninguém.
+    cpf: '00000000000',
+    cep: '30130000',
+    bloodType: 'O+',
+  }
+
   await prisma.profile.upsert({
     where: { userId: worker.id },
-    update: {},
+    update: onboardingConcluido,
     create: {
       userId: worker.id,
       fullName: 'Worker E2E',
@@ -100,6 +115,7 @@ export async function seedE2E(prisma) {
       uf: 'MG',
       sector: 'Operações',
       jobTitle: 'Operador',
+      ...onboardingConcluido,
     },
   })
 
