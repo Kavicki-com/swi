@@ -10,7 +10,7 @@ import type { Admin, ExamEntry } from '@/services/types/directory'
 
 export type { Admin, ExamEntry }
 
-// Mock data matches the spec verbatim — names, ages, roles
+// Mock data matches the spec verbatim, names, ages, roles
 // and active state were extracted directly from the design so the screen
 // reads like the spec. Avatars are local PNGs cropped from the design cards.
 const ADMINS_SEED: ReadonlyArray<Admin> = [

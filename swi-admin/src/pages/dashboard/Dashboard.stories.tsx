@@ -42,7 +42,7 @@ export const Loading: StoryObj<typeof Dashboard> = {
   parameters: {
     docs: {
       description: {
-        story: 'Initial render — skeleton placeholders enquanto dashboardApi.summary não resolve.',
+        story: 'Initial render: skeleton placeholders enquanto dashboardApi.summary não resolve.',
       },
     },
   },

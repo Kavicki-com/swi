@@ -80,7 +80,7 @@ export function MapsGeneral() {
       {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
       <MapAttribution />
 
-      {/* Top scrim — reproduces the dark fade baked into the mockup
+      {/* Top scrim: reproduces the dark fade baked into the mockup
           satellite image (imgMapViewGeneral, node 32:2488). Real ESRI tiles
           lack this built-in contrast, so the Logo + HeaderUserInfo would
           float over bright urban imagery without legibility. pointer-events:
@@ -132,7 +132,7 @@ export function MapsGeneral() {
         />
       </View>
 
-      {/* Compact SideMenu — outer at left:24 + inner left:14 = absolute left:38 */}
+      {/* Compact SideMenu: outer at left:24 + inner left:14 = absolute left:38 */}
       <View
         testID="maps-side-menu"
         style={{
@@ -155,7 +155,7 @@ export function MapsGeneral() {
         />
       </View>
 
-      {/* Map controls — right. The spec calls for right:16 but we use
+      {/* Map controls: right. The spec calls for right:16 but we use
           right:56 so the 48px-wide control icons (x range vp-104..vp-56) stay
           clear of the heatmap intensity bar pinned at right:6 (x range
           vp-22..vp-6). Original right:16 made the bar pass behind the icons

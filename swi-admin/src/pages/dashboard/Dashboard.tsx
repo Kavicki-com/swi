@@ -199,7 +199,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
       <MapBanner markers={summary.mapMarkers} />
 
-      {/* KPI row — Funcionários composite + Sinais vitais donut + Taxa desgaste donut + Alertas urgentes.
+      {/* KPI row: Funcionários composite + Sinais vitais donut + Taxa desgaste donut + Alertas urgentes.
           Right-side donuts share a single dark container that extends to the edge of the right column. */}
       <View
         testID="kpi-row"

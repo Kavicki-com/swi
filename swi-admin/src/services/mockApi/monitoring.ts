@@ -147,7 +147,7 @@ const ALERT_USERS_SEED: ReadonlyArray<MonitoringUserAlert> = MONITORING_ROWS.map
   }
 })
 
-// Good-conditions row-2 seed — spec values verbatim.
+// Good-conditions row-2 seed: spec values verbatim.
 const GOOD_CONDITIONS_STATS_SEED: MonitoringGoodConditionsStats = {
   vitals: { value: 512, label: 'Funcionários', progress: 100 },
   fatigueRate: { value: '20%', label: 'Desgaste baixo', progress: 20 },

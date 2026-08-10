@@ -17,7 +17,7 @@ import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'
 import workerC from '@/assets/avatars/worker-c.png'
 
-// Conversation extracted from the spec — five bubbles split by the
+// Conversation extracted from the spec, five bubbles split by the
 // "Hoje - 21/03/2026" date separator. Padded with extra back-and-forth so
 // the demo chat overflows the visible chat-box and the user can actually
 // scroll up to "older" messages. Reused for every contact in the demo.

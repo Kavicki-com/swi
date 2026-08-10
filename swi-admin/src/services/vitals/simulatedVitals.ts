@@ -96,7 +96,7 @@ export interface SimulatedCalories {
   month: SimulatedCaloriePoint[]
 }
 
-// Formato da curva por período — horários/rótulos especificados. Os kcal
+// Formato da curva por período, horários/rótulos especificados. Os kcal
 // aqui são a FORMA (turno começa forte, cai no fim); a magnitude por pessoa sai
 // de simulatedCaloriesFor.
 const CALORIE_SHAPE = {

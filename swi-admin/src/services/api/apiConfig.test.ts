@@ -17,7 +17,7 @@ describe('resolveApiUrl', () => {
   })
 
   // URL.hostname devolve '[::1]' COM colchetes. Comparar contra '::1' cru nunca
-  // casa, e o loopback IPv6 passa direto — foi assim que o mobile vazou.
+  // casa, e o loopback IPv6 passa direto: foi assim que o mobile vazou.
   it('recusa o loopback IPv6 com colchetes', () => {
     expect(() => resolveApiUrl('http://[::1]:3000', PROD)).toThrow(/produção/)
   })

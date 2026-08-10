@@ -47,7 +47,7 @@ export type WorkerProfile = {
   examHistory: ReadonlyArray<ExamEntry>
 }
 
-// Shared exam history fixture — the spec shows the same 7-entry list
+// Shared exam history fixture: the spec shows the same 7-entry list
 // for every worker in the demo, so any profile opens fully populated.
 const SHARED_EXAM_HISTORY: ReadonlyArray<ExamEntry> = [
   { id: 'exam-01', year: '2027', date: '05 Mar', title: 'Exame de reciclagem técnica' },
@@ -59,7 +59,7 @@ const SHARED_EXAM_HISTORY: ReadonlyArray<ExamEntry> = [
   { id: 'exam-07', year: '2039', date: '21 Out', title: 'Audiometria ocupacional' },
 ]
 
-// Default vitals snapshot — reference values. Workers with vitalsStatus
+// Default vitals snapshot: reference values. Workers with vitalsStatus
 // 'warning' or 'critical' override these inline below.
 const VITALS_BASE = {
   bpm: 99,
@@ -70,7 +70,7 @@ const VITALS_BASE = {
   statusLabel: 'Condições excelentes',
 } as const
 
-// Location grid — São Paulo Bela Vista (per reference). Spread across
+// Location grid: São Paulo Bela Vista (per reference). Spread across
 // sectors so the dashboard map shows real geographic dispersion.
 const LOC = {
   leste1: { lat: -23.55, lng: -46.63 },

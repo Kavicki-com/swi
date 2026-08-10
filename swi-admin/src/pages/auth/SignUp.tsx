@@ -148,7 +148,7 @@ export function SignUp() {
         overflow: 'hidden',
       }}
     >
-      {/* L0 — full-screen backdrop (covers viewport with cover/bleed). */}
+      {/* L0: full-screen backdrop (covers viewport with cover/bleed). */}
       <Image
         source={{ uri: signupBg }}
         accessible={false}

@@ -1,5 +1,5 @@
 // src/pages/_shared/WorkerDetailsLayout.tsx
-// Shared 3-column worker details layout — used by AdminDetails and
+// Shared 3-column worker details layout, used by AdminDetails and
 // EmployeeDetails. Pure presentational: takes a `worker`
 // payload + a `topRightAction` slot for the page-specific CTA. The page owns
 // data fetching, loading/empty states, and back/CTA navigation.
@@ -139,7 +139,7 @@ function MiniMap({
       attributionControl: false,
     })
     mapRef.current = map
-    // Marker DOM — LocationPin = circular avatar (with
+    // Marker DOM: LocationPin = circular avatar (with
     // blue ring) + small triangular tail pointing down (anchors at the
     // tip of the tail on the map lat/lng).
     const wrapper = document.createElement('div')
@@ -188,7 +188,7 @@ function MiniMap({
         height: 132,
         // Cap the map at the 1366px reference width (LEFT col = 380). When the LEFT
         // column grows at wide (>=1500), the satellite tiles would stretch to
-        // ~5:1 aspect ratio — capping keeps the map at its specified aspect (2.88:1)
+        // ~5:1 aspect ratio, capping keeps the map at its specified aspect (2.88:1)
         // and the other LEFT-col content (profile, exam history) absorbs the
         // extra width.
         maxWidth: 380,
@@ -221,7 +221,7 @@ function MiniMap({
           accessibilityLabel="Ver mapa completo"
         />
       </View>
-      {/* Camera affordance — ContainedButton
+      {/* Camera affordance: ContainedButton
           (variant surface): surface.high bg, padding.sm, radius.m, elevation.sm. */}
       <Pressable
         accessibilityRole="button"
@@ -388,7 +388,7 @@ export function WorkerDetailsLayout({
             gap: theme.gap.s,
           }}
         >
-          {/* Profile — the design shows the avatar proportionally
+          {/* Profile: the design shows the avatar proportionally
               larger than DS size="l" (64). customSize=80 matches the specified
               80px diameter circle. Vertical centering (alignItems: 'center')
               keeps the 3-line text block visually balanced against the taller
@@ -417,7 +417,7 @@ export function WorkerDetailsLayout({
           {/* Mini map with location */}
           <MiniMap worker={worker} position={position} onOpenFullMap={onOpenFullMap} />
 
-          {/* Exam history — h-[176px] scrollable area. Vertical-only scroll, no visible scrollbar
+          {/* Exam history: h-[176px] scrollable area. Vertical-only scroll, no visible scrollbar
               (class `no-scrollbar` declared in index.html hides webkit/firefox UI). */}
           <View style={{ gap: theme.gap.s }}>
             <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
@@ -640,7 +640,7 @@ export function WorkerDetailsLayout({
             </View>
           </View>
 
-          {/* Donut charts side-by-side — both admin and employee use the flat
+          {/* Donut charts side-by-side: both admin and employee use the flat
               appearance (no bezel/well, thin arc). Gradients use surface tokens.
               Each chart sizes intrinsically via size="small"; the row aligns
               them to the LEFT of the column so they line up with the vitals,
@@ -676,7 +676,7 @@ export function WorkerDetailsLayout({
         </View>
       </View>
 
-      {/* BOTTOM — Caloric expenditure timeline. The section title + period
+      {/* BOTTOM: Caloric expenditure timeline. The section title + period
           combobox sit above the chart card as
           siblings, not wrapped in their own surface. The LineCaloriesChart
           already renders its own surface.medium + radius.l container. */}

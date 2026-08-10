@@ -44,7 +44,7 @@ function toEmployeeUi(p: WorkerProfile): Employee {
 
 const EMPLOYEES_SEED: ReadonlyArray<Employee> = ROSTER.map(toEmployeeUi)
 
-// Total registered ("1205" per spec) — separated from the visible seed so the
+// Total registered ("1205" per spec), separated from the visible seed so the
 // page header reads the same as the mock without depending on the list size.
 export const EMPLOYEES_TOTAL = 1205
 

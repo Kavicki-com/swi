@@ -1,5 +1,5 @@
 // src/pages/tasks/TaskDetails.tsx
-// /tasks/:id — detalhe da tarefa. Vive dentro do AppLayout.
+// /tasks/:id, detalhe da tarefa. Vive dentro do AppLayout.
 //
 // Seções (de cima pra baixo):
 //   1. Voltar.
@@ -18,7 +18,7 @@
 //   • Campo de busca no topo ("Pesquisar na tarefa"): OMITIDO. Ver NOTA abaixo.
 //   • "Ver Todos" dos responsáveis: expande in-place. Ver NOTA abaixo.
 //
-// NOTA — busca omitida: o desenho traz um SearchInput no cabeçalho (herdado do
+// NOTA: busca omitida. O desenho traz um SearchInput no cabeçalho (herdado do
 // ReportDetails, que tem comentários e atividades pra varrer). Uma tarefa não
 // tem corpo pesquisável — título, resumo e detalhes cabem na tela sem rolagem —
 // e o backend não oferece busca dentro de uma work order. Um campo desabilitado
@@ -70,7 +70,7 @@ const STATUS_LABEL: Record<WorkOrderStatus, string> = {
 
 // Mapeia o status do backend pro status VISUAL do StatusTag do DS.
 //
-// Do desenho vem UM dado só: o chip de "Em andamento" é LARANJA — e laranja no DS
+// Do desenho vem UM dado só: o chip de "Em andamento" é LARANJA, e laranja no DS
 // é `StatusTag status="pending"` (surface.warning). O nome da variante do DS não
 // bate com o nome do status do backend, daí a tabela: `in_progress` → 'pending'
 // não é engano de digitação.
@@ -157,7 +157,7 @@ function VerticalDivider() {
  * O `WorkersInfoCard` do DS tem exatamente estes campos (name/age/bloodType/
  * role/secondaryRole/avatarUri), mas renderiza SEMPRE um Toggle e um chevron de
  * expandir, sem prop pra suprimi-los. Nesta tela isso seriam dois controles
- * mortos por responsável — pioram a fidelidade (o desenho não traz nenhum dos
+ * mortos por responsável: pioram a fidelidade (o desenho não traz nenhum dos
  * dois) e a acessibilidade. GAP DE DS registrado no relatório da task: falta uma
  * variante estática/somente-leitura do WorkersInfoCard; quando ela existir, este
  * card sai daqui e vira uso direto do componente.
@@ -318,7 +318,7 @@ export function TaskDetails() {
     [responsibles, showAllResponsibles],
   )
   // "Ver Todos" só existe quando há o que revelar. Com todos já na tela o botão
-  // seria um controle sem efeito — o desenho o traz porque o mockup tem mais
+  // seria um controle sem efeito: o desenho o traz porque o mockup tem mais
   // responsáveis que a grade comporta.
   //
   // Expande NA PRÓPRIA TELA em vez de abrir "a tela de todos os responsáveis":

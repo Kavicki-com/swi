@@ -33,7 +33,7 @@ function VerticalDivider() {
   return <View style={{ width: 2, height: 56, backgroundColor: theme.content.lightGrey }} />
 }
 
-// One row of the modal — Admin Card.
+// One row of the modal: Admin Card.
 function AdminPickRow({
   admin,
   selected,

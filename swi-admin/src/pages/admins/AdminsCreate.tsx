@@ -329,7 +329,7 @@ export function AdminsCreate({
           </View>
 
           {/* Two yes/no questions stacked vertically. The describe Input next
-            to each is disabled until the user picks "Sim" — the spec shows
+            to each is disabled until the user picks "Sim"; the spec shows
             the "Quais?" field in the DS
             disabled state (outlined, faded placeholder) when answer is "Não". */}
           <View style={{ gap: theme.gap.s }}>

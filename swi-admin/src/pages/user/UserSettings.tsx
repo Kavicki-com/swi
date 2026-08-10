@@ -256,7 +256,7 @@ export function UserSettings() {
 
       {/* Two-column body
           - Tablet (<1024): stack to single column.
-          - Desktop (1024-1499): LEFT 502 + RIGHT flex:1 — exato conforme o desenho.
+          - Desktop (1024-1499): LEFT 502 + RIGHT flex:1, exato conforme o desenho.
           - Wide (>=1500): LEFT and RIGHT both flexBasis + flexGrow:1, so they
             grow proportionally to fill the viewport (boss directive).
           position:relative + zIndex lift the body row above the Sair/Salvar

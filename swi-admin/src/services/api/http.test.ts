@@ -202,7 +202,7 @@ describe('apiFetch', () => {
 
   // Antes, um build de produção sem a variável apontava em silêncio para a
   // máquina de quem abriu o navegador e falhava como se o backend estivesse
-  // fora do ar. Agora o erro diz o que está errado — e NÃO passa pelo catch de
+  // fora do ar. Agora o erro diz o que está errado, e NÃO passa pelo catch de
   // rede do apiFetch, que o converteria em "não foi possível conectar".
   it('falha com a mensagem da variável em build de produção sem VITE_API_URL', async () => {
     vi.stubEnv('PROD', true)

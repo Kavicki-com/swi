@@ -1,4 +1,4 @@
-// Fachada de autenticação — todas as operações são reais (backend Nest).
+// Fachada de autenticação: todas as operações são reais (backend Nest).
 //
 // Chaves explícitas em vez de `...realAuthApi`: se o módulo real renomear um
 // método, o tsc quebra AQUI, no ponto onde o contrato é declarado, em vez de

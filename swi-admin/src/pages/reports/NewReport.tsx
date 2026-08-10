@@ -35,7 +35,7 @@ import { reportsApi, type ReportStatus } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
 import { ResponsablesModal } from '@/pages/modals/ResponsablesModal'
 
-// Quantos quadros de anexo a fileira mostra. É layout, NÃO limite —
+// Quantos quadros de anexo a fileira mostra. É layout, NÃO limite:
 // quem limita a contagem é LIMIT_IMAGE_KEYS (o ArrayMaxSize(20) do backend).
 const ATTACHMENT_SLOTS = 4
 

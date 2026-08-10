@@ -22,7 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { value: '/user/settings', label: 'Configurações', icon: 'settings_filled' },
   // Tarefas é o ÚLTIMO item, depois de Configurações e logo acima da seção de
   // chat. `assignment_filled` entrou no DS 0.1.117
-  // (clipboard preenchido) — decisão do designer 2026-07-24,
+  // (clipboard preenchido): decisão do designer 2026-07-24,
   // encerrando a exceção de outline na sidebar.
   { value: '/tasks', label: 'Tarefas', icon: 'assignment_filled' },
 ]

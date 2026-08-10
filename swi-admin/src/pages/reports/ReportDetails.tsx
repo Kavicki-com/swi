@@ -67,7 +67,7 @@ function CommentRow({ comment }: { comment: ReportComment }) {
   )
 }
 
-// Avatar group (small overlapping circles) — "Avatar Group" no topo do
+// Avatar group (small overlapping circles), "Avatar Group" no topo do
 // card. As faces são os RESPONSÁVEIS do relatório.
 //
 // Era fixo: 4 PNGs decorativos + a pílula literal "+13" — o card afirmava 17
@@ -201,7 +201,7 @@ function ActivityAvatars({
   )
 }
 
-// One activity row — "Atividades" list. Layout per the reference:
+// One activity row: "Atividades" list. Layout per the reference:
 // wrench icon | vertical divider | title + sector + progress bar | avatar
 // group (overlapping) | location_on icon button (right).
 function ActivityRow({
@@ -230,7 +230,7 @@ function ActivityRow({
         gap: theme.gap.m,
       }}
     >
-      {/* Wrench icon — The spec uses `build` (outlined), not `build_filled`. */}
+      {/* Wrench icon: The spec uses `build` (outlined), not `build_filled`. */}
       <Icon name="build" size={24} color={theme.content.dark} />
 
       {/* Vertical divider — content.lightGrey, ~32 tall. */}
@@ -273,7 +273,7 @@ function ActivityRow({
         overflowCount={activity.overflowCount}
       />
 
-      {/* Location pin button — The spec renders a flat icon on the far right. */}
+      {/* Location pin button: The spec renders a flat icon on the far right. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Localização: ${activity.title}`}
@@ -400,7 +400,7 @@ export function ReportDetails() {
           gap: theme.gap.m,
         }}
       >
-        {/* Top row — current status + avatar group. The reference
+        {/* Top row: current status + avatar group. The reference
             (98:4877) shows a duplicate "Concluído" chip on the right because
             the demo frame illustrates an accepted report. In our demo the
             same view renders reports across all four statuses (Em Andamento,

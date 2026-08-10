@@ -1,5 +1,5 @@
 // src/pages/tasks/TasksList.tsx
-// /tasks — lista de tarefas (work orders). Vive dentro do
+// /tasks: lista de tarefas (work orders). Vive dentro do
 // AppLayout.
 //
 // Cada linha é o DS `ActivitiesOverviewCard` as-is: ele já traz ícone +

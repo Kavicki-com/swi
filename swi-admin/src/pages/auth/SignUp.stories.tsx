@@ -48,7 +48,7 @@ export const Error: StoryObj<typeof SignUp> = {
     docs: {
       description: {
         story:
-          'Erro do signUpCompany — usar e-mail já registrado (admin@swi.test) no campo "Email" do responsável.',
+          'Erro do signUpCompany: usar e-mail já registrado (admin@swi.test) no campo "Email" do responsável.',
       },
     },
   },

@@ -20,7 +20,7 @@ const roleOf = (token: string): string => {
 }
 
 // O backend devolve { id, email, name }; o painel consome o shape User.
-// created_at é sintético (timestamp do login, não da criação da conta) — não
+// created_at é sintético (timestamp do login, não da criação da conta): não
 // usar pra exibir "membro desde".
 const toAdminUser = (u: LoginResponse['user']): User => ({
   id: u.id,

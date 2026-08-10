@@ -1,5 +1,5 @@
 // src/pages/chat/ChatInbox.tsx
-// Chat inbox — empty state and active state.
+// Chat inbox: empty state and active state.
 // Full-bleed page (no AppLayout sidebar). Three-column layout under a global
 // header:
 //   - LEFT  (358px): ConversationList — Voltar + SearchInput + scrollable
@@ -145,7 +145,7 @@ export function ChatInbox() {
           onBack={() => navigate(-1)}
         />
 
-        {/* Spacer — 16px between LEFT and MIDDLE per the spec */}
+        {/* Spacer: 16px between LEFT and MIDDLE per the spec */}
         <View style={{ width: theme.padding.m }} />
 
         {/* MIDDLE column */}
@@ -171,7 +171,7 @@ export function ChatInbox() {
             />
           </View>
 
-          {/* Chat Container — h-[564px] fixed height
+          {/* Chat Container: h-[564px] fixed height
               with two children (chat-box flex:1 + chat-input shrink:0).
               We use a plain <div> here instead of <View> so the flex chain
               propagates min-height correctly to the inner scroll container;
@@ -300,7 +300,7 @@ export function ChatInbox() {
             list or a future drawer; at desktop/wide the panel is back. */}
         {!isTablet ? (
           <>
-            {/* Spacer — 16px between MIDDLE and RIGHT per the spec */}
+            {/* Spacer: 16px between MIDDLE and RIGHT per the spec */}
             <View style={{ width: theme.padding.m }} />
 
             <View
