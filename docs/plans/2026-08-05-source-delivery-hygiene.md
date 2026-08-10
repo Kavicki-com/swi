@@ -692,16 +692,29 @@ git commit -m "chore: add backend quality gates"
 
 ### Task 10: Centralizar e validar o contrato de ambiente do backend
 
-**Files:**
+**Reconciliação pós-execução (2026-08-10):** a centralização escolhida é a de
+VALIDAÇÃO, não a de consumo. `parseRuntimeEnv` valida o ambiente inteiro no
+boot, antes do `NestFactory.create` (ordem provada em `main.env.spec.ts`), e
+uma produção incompleta derruba a inicialização, que é o objetivo de segurança
+da task. `cors.ts`, `mail.service.ts` e `media.service.ts` seguem lendo
+`process.env` localmente: depois do boot validado essas leituras são seguras,
+e convertê-las pra injeção do config mexeria na construção dos módulos sem
+ganho de comportamento. A única regra duplicada, a força do JWT em produção,
+compartilha a constante `MIN_JWT_SECRET_LENGTH` do contrato e o comentário em
+`jwt-secret.ts` faz a referência cruzada. Entraram também
+`src/main.env.spec.ts` e `src/auth/jwt-secret.spec.ts`, que não estavam na
+lista.
+
+**Files** (como executado):
 - Create: `swi-backend/src/config/runtime-env.ts`
 - Create: `swi-backend/src/config/runtime-env.spec.ts`
+- Create: `swi-backend/src/main.env.spec.ts`
+- Create: `swi-backend/src/auth/jwt-secret.spec.ts`
 - Modify: `swi-backend/src/main.ts`
 - Modify: `swi-backend/src/auth/jwt-secret.ts`
-- Modify: `swi-backend/src/cors.ts`
-- Modify: `swi-backend/src/mail/mail.service.ts`
-- Modify: `swi-backend/src/media/media.service.ts`
 - Modify: `swi-backend/.env.example`
 - Modify: `swi-backend/docker-compose.yml`
+- Modify: `swi-backend/package.json`
 
 **Step 1: Write failing environment tests**
 
