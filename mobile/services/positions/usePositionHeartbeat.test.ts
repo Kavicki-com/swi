@@ -8,7 +8,6 @@ import { mockHeartbeatLog } from './mockPositionsBackend';
 const TestRenderer: {
   create: (el: unknown) => { unmount: () => void };
   act: (cb: () => void | Promise<void>) => void | Promise<void>;
-
 } = require('react-test-renderer');
 const act = TestRenderer.act;
 

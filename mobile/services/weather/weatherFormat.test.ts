@@ -1,4 +1,4 @@
-import { formatTempC, formatHumidity, formatWind, conditionLabel, activeAlert , weatherDisplay } from './weatherFormat';
+import { formatTempC, formatHumidity, formatWind, conditionLabel, activeAlert, weatherDisplay } from './weatherFormat';
 import type { WeatherSnapshot, WeatherAlert } from './types';
 
 const snap = (over: Partial<WeatherSnapshot> = {}): WeatherSnapshot => ({
