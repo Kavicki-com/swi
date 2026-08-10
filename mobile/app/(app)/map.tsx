@@ -364,7 +364,7 @@ function MapToggleButton({
         backgroundColor: active ? activeColor : theme.surface.high,
         padding: theme.padding.sm,
         borderRadius: theme.border.radius.m,
-        // boxShadow só tem efeito no RN-web; no native a sombra vem de elevation.
+        // boxShadow vale no web e, desde a new arch (RN 0.76+), também no native.
         boxShadow: '0px 4px 8px rgba(29, 29, 29, 0.16)',
       }}
     >

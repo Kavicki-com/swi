@@ -306,10 +306,9 @@ export default function Dashboard() {
             SILHOUETTE_X=141.9, SILHOUETTE_Y=87.47, w=76.967, h=262.318 do
             DS canvas 360×374 → percentuais 39.42% / 23.39% / 21.38% / 70.14%. */}
         {Platform.OS === 'web' ? (
-          // mixBlendMode é web-only; em iOS/Android o overlay vira só uma
-          // cópia opaca da silhueta (layer desperdiçada) sem produzir o
-          // efeito de multiply. Gate evita parse de SVG + render extra
-          // em native.
+          // Overlay web-only de propósito: poupa parse de SVG e uma camada
+          // extra no native. Com a new arch (RN 0.76+) o native até suporta
+          // mixBlendMode, mas o efeito só foi validado visualmente no web.
           <View
             pointerEvents="none"
             style={{
@@ -318,7 +317,6 @@ export default function Dashboard() {
               left: '39.42%',
               width: '21.38%',
               height: '70.14%',
-              // mixBlendMode só tem efeito no RN-web; no native é ignorado.
               mixBlendMode: 'multiply',
             }}
           >
