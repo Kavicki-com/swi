@@ -1,5 +1,5 @@
 // src/pages/tasks/ResponsiblePicker.tsx
-// Overlay de seleção de responsáveis — Figma 1614-13773. É um COMPONENTE, não
+// Overlay de seleção de responsáveis. É um COMPONENTE, não
 // uma rota: quem monta/desmonta é o formulário de tarefa (Task 8), que recebe
 // os ids no onConfirm. Layout espelha o `modals/ResponsablesModal` (mesmas
 // medidas, divisor vertical, anatomia da linha), mas aquele é rota, escolhe
@@ -21,7 +21,7 @@ import { workOrdersApi, type AssignableWorker } from '@/services/api/workOrders'
 import { calcAge } from './format'
 
 // DECORATIVO. Dado de saúde só existe quando a smartband existir; o backend
-// NÃO devolve bloodType em AssignableWorker. O Figma desenha a gota + tipo na
+// NÃO devolve bloodType em AssignableWorker. O desenho traz a gota + tipo na
 // linha, então exibimos um valor constante pra não quebrar o layout — não veio
 // de lugar nenhum e não deve ser lido como informação real. Mesmo padrão do
 // `ResponsablesModal`, que roda em cima de mocks.
@@ -106,7 +106,7 @@ function WorkerPickRow({
           <Text variant="body.m" weight="bold" color={theme.content.dark}>
             {worker.jobTitle}
           </Text>
-          {/* O Figma mostra a FORMAÇÃO aqui, campo que não existe no backend
+          {/* O desenho mostra a FORMAÇÃO aqui, campo que não existe no backend
               (AssignableWorker só tem id/name/jobTitle/sector/birthDate/avatar).
               O setor ocupa o lugar: é o dado real mais próximo e o que ajuda a
               escolher quem executa a tarefa. */}

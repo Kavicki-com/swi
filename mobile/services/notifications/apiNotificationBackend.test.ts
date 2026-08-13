@@ -1,12 +1,12 @@
+import { apiRequest } from '../api/http'
+import { apiNotificationBackend } from './apiNotificationBackend'
+
 jest.mock('../api/http', () => ({ apiRequest: jest.fn() }))
 jest.mock('../api/session', () => ({ getUserId: jest.fn(() => 'me') }))
 jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(async () => 'tok') }))
 const on = jest.fn(); const close = jest.fn()
 const mockIo = jest.fn((..._a: any[]) => ({ on, close }))
 jest.mock('socket.io-client', () => ({ io: (...a: any[]) => mockIo(...a) }))
-
-import { apiRequest } from '../api/http'
-import { apiNotificationBackend } from './apiNotificationBackend'
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 

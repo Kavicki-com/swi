@@ -1,6 +1,6 @@
 // src/pages/auth/SignUp.tsx
 //
-// B2B company sign-up — Figma frame 22:2178.
+// B2B company sign-up.
 // Layout: 2-column (form on the left, Logo top-right) on wider viewports;
 // stacks naturally on narrow viewports thanks to flex-wrap on the form rows.
 import { useState } from 'react'
@@ -148,7 +148,7 @@ export function SignUp() {
         overflow: 'hidden',
       }}
     >
-      {/* L0 — full-screen Figma backdrop (covers viewport with cover/bleed). */}
+      {/* L0: full-screen backdrop (covers viewport with cover/bleed). */}
       <Image
         source={{ uri: signupBg }}
         accessible={false}
@@ -157,7 +157,7 @@ export function SignUp() {
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
       {/* L1 — dark panel (#171717) with diagonal cut at bottom-right.
-          SVG path from Figma 22:2432 is `M0 0H1066L818 829H0V0Z`; converting
+          SVG path from the design is `M0 0H1066L818 829H0V0Z`; converting
           to percent inside a 1066×829 box gives the polygon below. The cut
           exposes the L0 backdrop (creating the blue corner glow). */}
       <View

@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
-import { Pressable, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { createSupportRequest } from '../../services/api/support';

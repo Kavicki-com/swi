@@ -29,7 +29,6 @@ import {
 import {
   validateBirthDate,
   validateCPF,
-  validateEmail,
   validateFullName,
   validatePhone,
   validateRequired,

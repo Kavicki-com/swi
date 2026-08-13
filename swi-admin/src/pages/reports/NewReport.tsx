@@ -1,7 +1,7 @@
 // src/pages/reports/NewReport.tsx
-// /reports/new (criação) e /reports/:id/edit (revisão) — Figma 105:11725. Lives
+// /reports/new (criação) e /reports/:id/edit (revisão). Lives
 // inside AppLayout. O MESMO componente serve as duas rotas: a de edição não
-// existe no Figma, é reuso deste form pré-preenchido (mesma decisão do TaskForm).
+// existe no desenho, é reuso deste form pré-preenchido (mesma decisão do TaskForm).
 // Form com:
 //   1. Voltar GhostButton.
 //   2. Title row: "Novo relatório"/"Editar relatório" verde + "Atribuir
@@ -35,7 +35,7 @@ import { reportsApi, type ReportStatus } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
 import { ResponsablesModal } from '@/pages/modals/ResponsablesModal'
 
-// Quantos quadros de anexo o Figma desenha na fileira. É layout, NÃO limite —
+// Quantos quadros de anexo a fileira mostra. É layout, NÃO limite:
 // quem limita a contagem é LIMIT_IMAGE_KEYS (o ArrayMaxSize(20) do backend).
 const ATTACHMENT_SLOTS = 4
 
@@ -69,7 +69,7 @@ const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.l
 // REAPROVEITE a key em vez de subir o arquivo de novo (e mintar key órfã).
 type PickedImage = { file: File; preview?: string; uploadedKey?: string }
 
-// Quadro da fileira de anexos (Figma 105:12461). Vazio = glifo de foto; com
+// Quadro da fileira de anexos. Vazio = glifo de foto; com
 // anexo escolhido = thumbnail (ou nome do arquivo quando não há preview); com
 // `uri` = anexo já gravado (edição), exibido como thumbnail read-only.
 function AttachmentSlot({ entry, uri }: { entry?: PickedImage; uri?: string }) {

@@ -30,7 +30,7 @@ describe('MediaController.presign — prefixo order é ADMIN-only', () => {
   it('ADMIN pedindo prefix order → presign normal', async () => {
     const svc = media()
     const ctrl = new MediaController(svc)
-    await ctrl.presign({ contentType: 'image/jpeg', contentLength: 100, prefix: 'order' } as any, reqWithRole('ADMIN'))
+    await ctrl.presign({ contentType: 'image/jpeg', contentLength: 100, prefix: 'order' }, reqWithRole('ADMIN'))
     expect(svc.presignPut).toHaveBeenCalledWith('image/jpeg', 100, 'order')
   })
 
@@ -38,14 +38,14 @@ describe('MediaController.presign — prefixo order é ADMIN-only', () => {
     // exams/avatars (QA F): upload do próprio perfil — qualquer autenticado.
     const svc = media()
     const ctrl = new MediaController(svc)
-    await ctrl.presign({ contentType: 'image/png', contentLength: 100, prefix } as any, reqWithRole('WORKER'))
+    await ctrl.presign({ contentType: 'image/png', contentLength: 100, prefix }, reqWithRole('WORKER'))
     expect(svc.presignPut).toHaveBeenCalledWith('image/png', 100, prefix)
   })
 
   it('prefix omitido cai no default reports (liberado pra WORKER)', async () => {
     const svc = media()
     const ctrl = new MediaController(svc)
-    await ctrl.presign({ contentType: 'image/jpeg', contentLength: 100 } as any, reqWithRole('WORKER'))
+    await ctrl.presign({ contentType: 'image/jpeg', contentLength: 100 }, reqWithRole('WORKER'))
     expect(svc.presignPut).toHaveBeenCalledWith('image/jpeg', 100, 'reports')
   })
 })

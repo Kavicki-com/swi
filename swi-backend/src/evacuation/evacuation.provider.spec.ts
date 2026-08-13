@@ -32,7 +32,7 @@ describe('RouteProvider.fetch (seleção de URL + fetch mockado)', () => {
     const spy = jest.spyOn(httpGet, 'httpGetJson').mockResolvedValue({ ok: true, json: async () => geojson([[-46.632, -23.552], [-46.62, -23.544]]) } as any)
     const out = await new RouteProvider().fetch()
     expect(out.waypoints.length).toBe(2)
-    const url = spy.mock.calls[0][0] as string
+    const url = spy.mock.calls[0][0]
     expect(url).toContain('router.project-osrm.org')
     expect(url).toContain('-46.632,-23.552;-46.62,-23.544')
     expect(url).toContain('geometries=geojson')
@@ -41,7 +41,7 @@ describe('RouteProvider.fetch (seleção de URL + fetch mockado)', () => {
     process.env.MAPBOX_TOKEN = 'pk.test'
     const spy = jest.spyOn(httpGet, 'httpGetJson').mockResolvedValue({ ok: true, json: async () => geojson([[-46.632, -23.552], [-46.62, -23.544]]) } as any)
     await new RouteProvider().fetch()
-    const url = spy.mock.calls[0][0] as string
+    const url = spy.mock.calls[0][0]
     expect(url).toContain('api.mapbox.com/directions/v5/mapbox/walking')
     expect(url).toContain('access_token=pk.test')
   })

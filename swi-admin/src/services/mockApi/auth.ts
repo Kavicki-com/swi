@@ -1,6 +1,6 @@
 // src/services/mockApi/auth.ts
 import type { User } from '../types'
-import { SEED_ADMIN, SEED_ORG_ID } from './seed'
+import { SEED_ADMIN } from './seed'
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
 
@@ -77,7 +77,6 @@ export const authApi = {
     }
     const user: User = {
       id: `u_${Math.random().toString(36).slice(2, 10)}`,
-      org_id: SEED_ORG_ID,
       email,
       full_name,
       role: 'admin',

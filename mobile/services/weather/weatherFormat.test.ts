@@ -1,5 +1,4 @@
-import { formatTempC, formatHumidity, formatWind, conditionLabel, activeAlert } from './weatherFormat';
-import { weatherDisplay } from './weatherFormat';
+import { formatTempC, formatHumidity, formatWind, conditionLabel, activeAlert, weatherDisplay } from './weatherFormat';
 import type { WeatherSnapshot, WeatherAlert } from './types';
 
 const snap = (over: Partial<WeatherSnapshot> = {}): WeatherSnapshot => ({
@@ -14,7 +13,7 @@ const alert = (over: Partial<WeatherAlert> = {}): WeatherAlert => ({
   startsAt: '2026-06-23T10:00:00.000Z', endsAt: '2026-06-23T18:00:00.000Z', ...over,
 });
 
-describe('weatherFormat — formatters', () => {
+describe('weatherFormat: formatters', () => {
   it('formata temp/umidade/vento com unidades', () => {
     expect(formatTempC(17)).toBe('17ºC');
     expect(formatTempC(17.6)).toBe('18ºC');      // arredonda
@@ -27,7 +26,7 @@ describe('weatherFormat — formatters', () => {
   });
 });
 
-describe('weatherFormat — activeAlert', () => {
+describe('weatherFormat: activeAlert', () => {
   const now = new Date('2026-06-23T12:00:00.000Z');
   it('devolve o alerta vigente', () => {
     expect(activeAlert(snap({ alerts: [alert()] }), now)?.event).toBe('Tempestade');
@@ -40,7 +39,7 @@ describe('weatherFormat — activeAlert', () => {
   });
 });
 
-describe('weatherFormat — weatherDisplay', () => {
+describe('weatherFormat: weatherDisplay', () => {
   it('formata a partir do snapshot + alerta quando presentes', () => {
     const d = weatherDisplay(snap({ alerts: [alert()] }), alert());
     expect(d).toEqual({

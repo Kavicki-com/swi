@@ -9,9 +9,7 @@ import { clearSession, renderPage } from '@/test-utils/renderPage'
 describe('AdminDetails', () => {
   afterEach(clearSession)
 
-  it('renders without crashing', () => {
-    expect(() =>
-      renderPage(<AdminDetails />, { route: '/admins/seed_id', path: '/admins/:id' }),
-    ).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<AdminDetails />, { route: '/admins/seed_id', path: '/admins/:id' })).resolves.toBeDefined()
   })
 })

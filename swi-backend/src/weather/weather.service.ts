@@ -34,7 +34,7 @@ export class WeatherService {
       hourly = real.hourly?.length ? real.hourly : this.cannedHourly(now)
     } catch (err) {
       // fallback canned — tela de segurança nunca pode quebrar
-      this.logger.warn(`open-meteo indisponível, servindo fallback canned: ${err}`)
+      this.logger.warn(`open-meteo indisponível, servindo fallback canned: ${String(err)}`)
     }
     return { current, daily, hourly, alerts: this.alerts(now), fetchedAt: now.toISOString() }
   }
@@ -56,6 +56,9 @@ export class WeatherService {
   // Alerta: dev via WEATHER_SCENARIO='alert'; prod → fonte real (ainda não
   // configurada = []). NUNCA fabrica alerta sem flag/fonte.
   private alerts(now: Date): WeatherAlert[] {
+    // O ambiente vem antes da flag: em produção, alerta só pode nascer de fonte
+    // real. Um alerta fabricado aqui mandaria gente evacuar sem tempestade.
+    if (process.env.NODE_ENV === 'production') return []
     return process.env.WEATHER_SCENARIO === 'alert' ? [stormAlert(now)] : []
   }
 }

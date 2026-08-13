@@ -45,8 +45,8 @@ describe('EmployeesList', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders without crashing', () => {
-    expect(() => renderPage(<EmployeesList />, { route: '/employees' })).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<EmployeesList />, { route: '/employees' })).resolves.toBeDefined()
   })
 
   // QA Web #10: o ícone de chat mandava pra /chat sem dizer QUEM, e o inbox
@@ -65,7 +65,7 @@ describe('EmployeesList', () => {
       vitalsStatus: 'good',
     }
     vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [ALLAN], error: null })
-    renderPage(<EmployeesList />, { route: '/employees' })
+    await renderPage(<EmployeesList />, { route: '/employees' })
     await waitFor(() => screen.getByText('Allan Souza'))
 
     fireEvent.click(screen.getByRole('button', { name: /conversar com allan souza/i }))
@@ -79,7 +79,7 @@ describe('EmployeesList', () => {
       data: [NOVO],
       error: null,
     })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => expect(screen.getByText('Novo Worker')).toBeTruthy())
     expect(screen.getByText('novo@x.com')).toBeTruthy()
   })
@@ -100,7 +100,7 @@ describe('EmployeesList', () => {
       ],
       error: null,
     })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => expect(screen.getByTestId('pending-doc-p1')).toBeTruthy())
     expect(screen.getByTestId('pending-doc-p1')).toHaveTextContent('CPF 000.000.000-00')
     expect(screen.getByTestId('pending-doc-p1')).toHaveTextContent('(41) 90000-0000')
@@ -110,7 +110,7 @@ describe('EmployeesList', () => {
 
   it('cadastro sem perfil diz o que falta em vez de fingir que carregou', async () => {
     vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({ data: [NOVO], error: null })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => expect(screen.getByTestId('pending-doc-p1')).toBeTruthy())
     expect(screen.getByTestId('pending-doc-p1')).toHaveTextContent('não informado')
     expect(screen.getByTestId('pending-health-p1')).toHaveTextContent('não informado')
@@ -121,7 +121,7 @@ describe('EmployeesList', () => {
     const approve = vi
       .spyOn(approvalsApi, 'approve')
       .mockResolvedValue({ data: { id: 'p1', approvalStatus: 'APPROVED' }, error: null })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => screen.getByText('Novo Worker'))
 
     fireEvent.click(screen.getByRole('button', { name: /aprovar novo worker/i }))
@@ -135,7 +135,7 @@ describe('EmployeesList', () => {
     const reject = vi
       .spyOn(approvalsApi, 'reject')
       .mockResolvedValue({ data: { id: 'p1', approvalStatus: 'REJECTED' }, error: null })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => screen.getByText('Novo Worker'))
 
     // Abre a confirmação e cancela: nada é rejeitado, o item continua na lista.
@@ -159,7 +159,7 @@ describe('EmployeesList', () => {
       data: null,
       error: { message: 'boom' },
     })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => screen.getByText('Novo Worker'))
 
     fireEvent.click(screen.getByRole('button', { name: /aprovar novo worker/i }))
@@ -174,7 +174,7 @@ describe('EmployeesList', () => {
       data: null,
       error: { message: 'boom' },
     })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => screen.getByText('Novo Worker'))
 
     fireEvent.click(screen.getByRole('button', { name: /rejeitar novo worker/i }))
@@ -206,7 +206,7 @@ describe('EmployeesList', () => {
       data: null,
       error: { message: 'boom' },
     })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => screen.getByText('Alfa'))
 
     fireEvent.click(screen.getByRole('button', { name: /aprovar alfa/i }))
@@ -223,7 +223,7 @@ describe('EmployeesList', () => {
     const reject = vi
       .spyOn(approvalsApi, 'reject')
       .mockResolvedValue({ data: { id: 'p1', approvalStatus: 'REJECTED' }, error: null })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => screen.getByText('Novo Worker'))
 
     fireEvent.click(screen.getByRole('button', { name: /rejeitar novo worker/i }))
@@ -241,7 +241,7 @@ describe('EmployeesList', () => {
     const reject = vi
       .spyOn(approvalsApi, 'reject')
       .mockResolvedValue({ data: { id: 'p1', approvalStatus: 'REJECTED' }, error: null })
-    renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
+    await renderPage(<EmployeesList initialTab="pendentes" />, { route: '/employees' })
     await waitFor(() => screen.getByText('Novo Worker'))
 
     fireEvent.click(screen.getByRole('button', { name: /rejeitar novo worker/i }))

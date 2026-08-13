@@ -1,7 +1,7 @@
 import { mockNotificationBackend, __pushForTest, __lastTokenForTest } from './mockNotificationBackend';
 import type { AppNotification } from './types';
 
-describe('mockNotificationBackend — seed + list', () => {
+describe('mockNotificationBackend: seed + list', () => {
   it('lista as 12 notificações semeadas, ordenadas recente-primeiro', async () => {
     const list = await mockNotificationBackend.listNotifications();
     expect(list).toHaveLength(12);
@@ -17,7 +17,7 @@ describe('mockNotificationBackend — seed + list', () => {
   });
 });
 
-describe('mockNotificationBackend — markRead / markAllRead persistem', () => {
+describe('mockNotificationBackend: markRead / markAllRead persistem', () => {
   it('markRead persiste no store', async () => {
     await mockNotificationBackend.markRead('alerta-meteorologico');
     const list = await mockNotificationBackend.listNotifications();
@@ -30,7 +30,7 @@ describe('mockNotificationBackend — markRead / markAllRead persistem', () => {
   });
 });
 
-describe('mockNotificationBackend — subscribe (event bus) + push token', () => {
+describe('mockNotificationBackend: subscribe (event bus) + push token', () => {
   it('subscribe recebe um push simulado e unsubscribe para de receber', () => {
     const received: AppNotification[] = [];
     const unsub = mockNotificationBackend.subscribe((n) => received.push(n));

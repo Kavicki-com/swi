@@ -1,18 +1,13 @@
 // Client HTTP único do swi-admin contra o backend Nest. Todos os domínios que
 // migrarem do mock pro backend real passam por aqui — política de token e de
 // erro fica em um lugar só.
+import { getApiUrl } from './apiConfig'
+
 export const TOKEN_STORAGE_KEY = 'swi.admin.token'
 // Mesmo valor do mock (mockApi/auth.ts): a sessão do usuário continua na chave
 // existente; só o token JWT é chave nova.
 export const SESSION_STORAGE_KEY = 'swi.admin.session'
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000'
-
-if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
-  console.warn(
-    '[api] VITE_API_URL ausente no build de produção — toda chamada vai pra http://localhost:3000. Configure no .env (ver .env.example).',
-  )
-}
 
 export class ApiError extends Error {
   constructor(
@@ -68,10 +63,11 @@ export async function apiFetch<T>(
   // coleção em `X-Total-Count` enquanto o corpo continua sendo só o array.
   opts: { keepSessionOn401?: boolean; onResponse?: (res: Response) => void } = {},
 ): Promise<T> {
+  const baseUrl = getApiUrl()
   const token = readToken()
   let res: Response
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetch(`${baseUrl}${path}`, {
       ...init,
       headers: mergeHeaders(
         {

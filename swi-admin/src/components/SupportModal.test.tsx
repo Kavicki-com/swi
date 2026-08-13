@@ -3,9 +3,9 @@
 // (POST /support via supportApi) + validação pt-BR antes de qualquer rede.
 // vitest globals (describe/it/expect/afterEach) via globals: true.
 import { vi } from 'vitest'
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { SupportModal } from './SupportModal'
-import { clearSession, renderPage } from '@/test-utils/renderPage'
+import { clearSession, renderPage, settleAuth } from '@/test-utils/renderPage'
 import { supportApi } from '@/services/api/support'
 
 vi.mock('@/services/api/support', () => ({
@@ -48,10 +48,8 @@ afterEach(() => {
 })
 
 const fillAndSubmit = async () => {
-  // Flush do getSession async do AuthProvider — em prod o RequireAuth já
-  // garante user carregado antes do settings montar; aqui o clique viria antes.
-  await act(async () => {})
   // Combobox mockado acima: cada opção vira um botão direto.
+  // (o getSession do AuthProvider já foi drenado pelo renderPage)
   fireEvent.click(screen.getByRole('button', { name: 'Problema técnico' }))
   fireEvent.change(screen.getByPlaceholderText('Digite aqui'), {
     target: { value: 'Mapa não carrega' },
@@ -60,6 +58,10 @@ const fillAndSubmit = async () => {
     target: { value: 'A aba Mapas fica em branco.' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitação' }))
+  // O envio é assíncrono: sem drenar aqui, a resolução cai fora do act e o
+  // React acusa. Nenhum teste desta suíte afirma o estado intermediário de
+  // envio, então drenar não esconde nada que esteja sendo verificado.
+  await settleAuth()
 }
 
 // O react-native-web escreve tipografia como style inline, mas manda o resto
@@ -85,7 +87,7 @@ const px = (value: string) => Number.parseFloat(value)
 describe('SupportModal', () => {
   it('submit válido → supportApi.send com o LABEL do motivo + e-mail da sessão, e mostra sucesso', async () => {
     sendMock.mockResolvedValue({ data: { sent: true }, error: null })
-    renderPage(<SupportModal onClose={() => {}} />)
+    await renderPage(<SupportModal onClose={() => {}} />)
 
     await fillAndSubmit()
 
@@ -101,7 +103,7 @@ describe('SupportModal', () => {
   })
 
   it('campos vazios → erro de validação pt-BR e NENHUMA chamada de rede', async () => {
-    renderPage(<SupportModal onClose={() => {}} />)
+    await renderPage(<SupportModal onClose={() => {}} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitação' }))
 
@@ -111,7 +113,7 @@ describe('SupportModal', () => {
 
   it('falha do backend → mostra o erro e mantém o form preenchido', async () => {
     sendMock.mockResolvedValue({ data: null, error: { message: 'Falha ao enviar solicitação' } })
-    renderPage(<SupportModal onClose={() => {}} />)
+    await renderPage(<SupportModal onClose={() => {}} />)
 
     await fillAndSubmit()
 
@@ -132,7 +134,7 @@ describe('SupportModal', () => {
 describe('SupportModal, hierarquia da confirmação (QA Web #7)', () => {
   const renderSent = async () => {
     sendMock.mockResolvedValue({ data: { sent: true }, error: null })
-    renderPage(<SupportModal onClose={() => {}} />)
+    await renderPage(<SupportModal onClose={() => {}} />)
     await fillAndSubmit()
     await screen.findByText('Solicitação enviada')
   }

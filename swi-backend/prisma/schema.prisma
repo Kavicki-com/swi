@@ -97,10 +97,10 @@ model Company {
 }
 
 // ---------------------------------------------------------------------------
-// Domínios não-saúde (fundação) — shape-fonte: amplify/data/resource.ts,
-// adaptado a SQL relacional (FKs para User no lugar de Cognito subs).
-// O model Contact do Amplify morre: o diretório de contatos vira query sobre
-// Users, com os campos de exibição (sector/jobTitle/avatarKey) no Profile.
+// Domínios não-saúde (fundação), modelados em SQL relacional: identidade é o
+// User local, referenciado por FK, e não um identificador de provedor externo.
+// Não existe model Contact: o diretório de contatos é query sobre Users, com
+// os campos de exibição (sector/jobTitle/avatarKey) no Profile.
 // ---------------------------------------------------------------------------
 
 // Enums em lowercase de propósito: paridade de wire com os types do seam
@@ -264,7 +264,7 @@ model Report {
   statusLabel     String?
   authorName      String? // snapshot denorm — card do inbox sem join (paridade com o mock)
   authorAvatarKey String?
-  creationDate    DateTime     @default(now()) // paridade Amplify — campo de display, distinto do createdAt de sistema
+  creationDate    DateTime     @default(now()) // data que a tela exibe, distinta do createdAt de sistema
   sector          String?
   responsibles    String[]
   details         String?
@@ -293,7 +293,7 @@ model Journey {
   worker             User         @relation(fields: [workerId], references: [id])
   date               DateTime     @db.Date
   state              JourneyState @default(idle)
-  activeTaskId       String? // ponteiro soft de propósito (paridade Amplify; sem FK — a fatia Jornada gerencia a consistência)
+  activeTaskId       String? // ponteiro soft de propósito, sem FK: a consistência é responsabilidade da Jornada
   startedAt          DateTime?
   accumulatedSeconds Int          @default(0)
   createdAt          DateTime     @default(now())
@@ -361,9 +361,9 @@ model Conversation {
   updatedAt             DateTime  @updatedAt
 }
 
-// Message.participants do Amplify morre — num DB relacional o servidor checa
-// membership via conversation.participants (era denorm exigida pelo
-// ownersDefinedIn do AppSync).
+// Message não guarda lista própria de participantes: o servidor checa
+// membership via conversation.participants. Duplicar a lista por mensagem
+// seria desnormalização sem leitor.
 model Message {
   id             String       @id @default(uuid())
   conversationId String

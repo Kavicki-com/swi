@@ -2,7 +2,9 @@
 // cobre os dois valores da flag (mesmo shape do getProfileBackend.test).
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: dataBackend }));
   const { getReportsBackend } = require('./getReportsBackend');
   const { mockReportsBackend } = require('./mockReportsBackend');
   const { apiReportsBackend } = require('./apiReportsBackend');

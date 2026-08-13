@@ -1,5 +1,5 @@
 // src/pages/admins/AdminsCreate.tsx
-// Admin registration form — Figma 48:5151. Three sections (Dados do cadastro,
+// Admin registration form. Three sections (Dados do cadastro,
 // Dados de saúde, Exames clínicos) followed by Voltar / Finalizar Cadastro
 // footer. Rendered by AdminsList when tab='cadastrar'.
 import { useState } from 'react'
@@ -109,7 +109,7 @@ function YesNoField({ label, value, onChange }: YesNoFieldProps) {
   const theme = useTheme()
   return (
     <View style={{ gap: theme.gap.xs }}>
-      {/* Matches the Figma body/m bold spec used by the DS Input.Label
+      {/* Matches the body/m bold spec used by the DS Input.Label
           (14px Inter, weight 700). DS Text has body.m at 14px regular and
           no built-in bold variant, so we override only weight inline — all
           other tokens (family, size, color) flow from the variant. */}
@@ -143,7 +143,7 @@ export function AdminsCreate({
   // Customizes the "Nome Completo" placeholder so this form can be reused
   // for /employees cadastro (subject="funcionário") without duplicating 250
   // lines of fields/validation/upload wiring. Both admin and employee
-  // registration use the same Figma template (48:5151 / 53:5816).
+  // registration use the same template.
   subject?: 'administrador' | 'funcionário'
 }) {
   const theme = useTheme()
@@ -329,8 +329,8 @@ export function AdminsCreate({
           </View>
 
           {/* Two yes/no questions stacked vertically. The describe Input next
-            to each is disabled until the user picks "Sim" — matches Figma
-            48:5151 / 53:5816 where the "Quais?" field is shown in the DS
+            to each is disabled until the user picks "Sim"; the spec shows
+            the "Quais?" field in the DS
             disabled state (outlined, faded placeholder) when answer is "Não". */}
           <View style={{ gap: theme.gap.s }}>
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.gap.m }}>
@@ -375,7 +375,7 @@ export function AdminsCreate({
 
       <Section title="Exames clínicos">
         {/* Use DS defaults for helperText / pickFileLabel — the DS ships the
-            exact Figma copy ("Selecione arquivos do tipo: JPG ou PNG",
+            exact copy from the spec ("Selecione arquivos do tipo: JPG ou PNG",
             "Enviar arquivo" singular). Earlier this screen overrode both
             with subtly different strings (".JPG/.PNG" + plural) which is
             why the section diverged from the design. */}
@@ -391,7 +391,7 @@ export function AdminsCreate({
       ) : null}
 
       {/* Footer: two buttons sharing the section width 50/50 (full-width
-          split) per Figma 48:5151. Voltar uses outline; Finalizar Cadastro
+          split) per the spec. Voltar uses outline; Finalizar Cadastro
           is the primary green CTA (surface.primary), not the blue used
           elsewhere — matches the green action accent of this flow. */}
       <View

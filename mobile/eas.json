@@ -29,6 +29,11 @@
       },
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_AUTH_BACKEND": "api",
+        "EXPO_PUBLIC_DATA_BACKEND": "api",
+        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com"
       }
     },
     "qa": {

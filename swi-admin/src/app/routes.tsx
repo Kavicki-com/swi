@@ -17,7 +17,7 @@ export const ADMIN_ROUTES = [
   { path: '/employees/:id', label: 'employee-details' },
   // maps — cameras/heat/meteorologic are toggle states inside /maps/general,
   // not separate routes. Heatmap drives both the "Produtividade" thermal blob
-  // and the "Zonas de alerta" overlay (meteorologic alerts mode, Figma 165:22035).
+  // and the "Zonas de alerta" overlay (meteorologic alerts mode).
   { path: '/maps/general', label: 'map-view-general' },
   // alerts (heatmap and meteorologic are toggle states of /alerts, not routes)
   { path: '/alerts', label: 'alerts' },

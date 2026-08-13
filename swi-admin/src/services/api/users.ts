@@ -1,13 +1,11 @@
 // Diretório do painel (Colaboradores = WORKER, Admins = ADMIN) contra o backend
-// Nest (GET /users, GET /users/:id). Mantém o envelope MockResponse pra que as
+// Nest (GET /users, GET /users/:id). Mantém o envelope ServiceResponse pra que as
 // telas de employees/admins não mudem de contrato na migração (mesmo padrão do
 // services/api/auth.ts). Só campos de IDENTIDADE vêm do backend — vitais/tipo
 // sanguíneo/exames dependem da smartband e ficam como placeholder no mapeamento
 // até o hardware existir (decisão do roadmap: saúde fica mock até a smartband).
-import type { MockResponse } from '@/services/mockApi/types'
-import type { Employee } from '@/services/mockApi/employees'
-import type { Admin } from '@/services/mockApi/admins'
-import type { ExamEntry } from '@/services/mockApi/roster'
+import type { ServiceResponse } from '@/services/types'
+import type { Admin, Employee, ExamEntry } from '@/services/types/directory'
 import { examCardParts } from './examCard'
 import { apiFetch } from './http'
 
@@ -148,7 +146,7 @@ const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.m
 async function listMapped<T>(
   role: 'WORKER' | 'ADMIN',
   map: (u: UserSummaryDto) => T,
-): Promise<MockResponse<T[]>> {
+): Promise<ServiceResponse<T[]>> {
   try {
     // approvalStatus=APPROVED: sem ele, um cadastro AINDA PENDENTE (ou até
     // rejeitado) já entrava na lista, nos KPIs e nos vitais do monitoramento —
@@ -164,7 +162,7 @@ async function listMapped<T>(
 async function getMapped<T>(
   id: string,
   map: (u: UserSummaryDto) => T,
-): Promise<MockResponse<T | null>> {
+): Promise<ServiceResponse<T | null>> {
   try {
     const user = await apiFetch<UserDetailDto>(`/users/${id}`)
     return { data: map(user), error: null }
@@ -190,7 +188,7 @@ export type CreateUserInput = {
 async function createUser(
   role: 'WORKER' | 'ADMIN',
   input: CreateUserInput,
-): Promise<MockResponse<UserSummaryDto>> {
+): Promise<ServiceResponse<UserSummaryDto>> {
   try {
     const created = await apiFetch<UserSummaryDto>('/users', {
       method: 'POST',
@@ -214,7 +212,7 @@ export const employeesApi = {
 const setAdminActive = async (
   id: string,
   active: boolean,
-): Promise<MockResponse<{ id: string; active: boolean }>> => {
+): Promise<ServiceResponse<{ id: string; active: boolean }>> => {
   try {
     const r = await apiFetch<{ id: string; active: boolean }>(`/users/${id}`, {
       method: 'PATCH',
@@ -229,7 +227,7 @@ const setAdminActive = async (
 // Excluir um admin (DELETE /users/:id) — 204 sem corpo (apiFetch resolve null).
 // O backend recusa com 409 quando o usuário tem registros vinculados ("desative-o
 // em vez de excluir"); a mensagem vaza pro toast via envelope de erro.
-const removeAdmin = async (id: string): Promise<MockResponse<null>> => {
+const removeAdmin = async (id: string): Promise<ServiceResponse<null>> => {
   try {
     await apiFetch<null>(`/users/${id}`, { method: 'DELETE' })
     return { data: null, error: null }
@@ -287,7 +285,7 @@ type ApprovalResult = { id: string; approvalStatus: 'PENDING' | 'APPROVED' | 'RE
 const postAction = async (
   id: string,
   action: 'approve' | 'reject',
-): Promise<MockResponse<ApprovalResult>> => {
+): Promise<ServiceResponse<ApprovalResult>> => {
   try {
     const r = await apiFetch<ApprovalResult>(`/users/${id}/${action}`, { method: 'POST' })
     return { data: r, error: null }
@@ -297,7 +295,7 @@ const postAction = async (
 }
 
 export const approvalsApi = {
-  listPendingWorkers: async (): Promise<MockResponse<PendingUser[]>> => {
+  listPendingWorkers: async (): Promise<ServiceResponse<PendingUser[]>> => {
     try {
       const users = await apiFetch<UserSummaryDto[]>('/users?role=WORKER&approvalStatus=PENDING')
       return { data: users.map(toPending), error: null }

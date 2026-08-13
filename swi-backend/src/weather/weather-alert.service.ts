@@ -40,7 +40,7 @@ export class WeatherAlertService {
     } catch (err) {
       // best-effort: falha de poll nunca derruba o app — mas não silenciosa
       // (é o único ponto sem request/response pra superficializar o erro).
-      this.logger.warn(`clima→notif falhou: ${err}`)
+      this.logger.warn(`clima→notif falhou: ${String(err)}`)
     }
   }
 }

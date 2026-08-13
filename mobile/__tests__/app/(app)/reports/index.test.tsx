@@ -8,7 +8,7 @@ import type { Report } from '../../../../services/reports/types';
 
 // QA Mobile #8: a lista vivia numa janela de altura fixa (maxHeight 540,
 // calibrada em maio pro frame de 800dp do Figma) e a Pagination morava DENTRO
-// do scroll — com poucos relatórios ela afundava junto e sobrava um vão de
+// do scroll, com poucos relatórios ela afundava junto e sobrava um vão de
 // ~25% da tela até os FABs. Estes testes travam a estrutura da correção:
 // lista elástica, paginação como irmã do scroll e rodapé que fecha a tela
 // acima dos FABs.

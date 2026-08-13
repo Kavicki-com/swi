@@ -25,8 +25,8 @@ import { useReports } from '../../../services/reports/ReportsProvider';
 // 3 inputs (Título / Resumo / Detalhes multiline) + Atribuir
 // responsáveis OutlineButton + Anexos section (4 placeholders +
 // ImageUploader) + CTAs Salvar / Cancelar.
-// Backend slice: salvar vai pelo provider via useReports().create() (mock
-// persiste in-memory na sessão; amplify é deploy-gated). Seleção de
+// Backend slice: salvar vai pelo provider via useReports().create() (o mock
+// persiste in-memory na sessão). Seleção de
 // responsáveis volta do modal via singleton `responsiblesSelection`.
 
 export default function NewReport() {

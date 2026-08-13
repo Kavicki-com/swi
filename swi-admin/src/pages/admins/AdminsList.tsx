@@ -1,5 +1,5 @@
 // src/pages/admins/AdminsList.tsx
-// Admins list page — Figma 48:3923. Renders the header title, a tabs/search
+// Admins list page. Renders the header title, a tabs/search
 // row, and one AdminRow per admin in the seed. Composed inside AppLayout
 // (the sidebar + header are owned by AppLayout, this page provides the
 // main content slot only).
@@ -73,7 +73,7 @@ function AdminRow({
       }}
     >
       {/* Left cluster: user-info + divider + role + divider + toggle.
-          Figma uses gap.2xl=32px between these. The DS theme tops out at
+          The spec uses gap.2xl=32px between these. The DS theme tops out at
           gap.xl (also 32), so we hardcode 32 to be explicit. At tablet we
           wrap and shrink the inter-cluster gap because 32 px between every
           item plus the inner column widths overflows narrow viewports. */}
@@ -88,7 +88,7 @@ function AdminRow({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
           <Avatar uri={admin.avatarUri} customSize={64} accessibilityLabel={admin.name} />
           <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 145 }}>
-            {/* Name is Inter Bold 14 per Figma 48:4889 (not in the DS Text
+            {/* Name is Inter Bold 14 per the spec (not in the DS Text
                 variant table, so override fontWeight inline). Pressable so a
                 click on the name itself opens the admin detail page. */}
             <Pressable
@@ -104,7 +104,7 @@ function AdminRow({
               {formatAge(admin.age)}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              {/* Figma uses a humidity-drop glyph (humidity_mid) for the
+              {/* The spec uses a humidity-drop glyph (humidity_mid) for the
                   blood-type indicator, tinted error/red. */}
               <Icon name="humidity_mid" size={20} color={theme.content.error} />
               <Text
@@ -119,7 +119,7 @@ function AdminRow({
         </View>
         {/* Vertical divider */}
         <View style={{ width: 1, height: 56, backgroundColor: theme.surface.high }} />
-        {/* Role + specialization. Figma I48:4943;48:4901 spec: role is bold
+        {/* Role + specialization. Spec: role is bold
             14 + specialization is regular 14, container width 186. */}
         <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 186 }}>
           <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
@@ -140,9 +140,9 @@ function AdminRow({
         />
       </View>
       {/* Right cluster: action icons (bin / chat / location) + chevron.
-          Figma I48:4943;48:4941 actions order: delete (bin) → chat → location,
+          Actions order: delete (bin) → chat → location,
           followed by a chevron-down affordance (the whole row is clickable
-          per Figma but the chevron makes the affordance discoverable). */}
+          per the spec but the chevron makes the affordance discoverable). */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
         {!isSelf ? (
           <ActionIcon

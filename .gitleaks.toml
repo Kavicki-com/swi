@@ -1,0 +1,26 @@
+# Config do scanner de segredos da CI (job security). Parte das regras padrão
+# do gitleaks e allowlista somente falso-positivos verificados um a um:
+#
+# - docs/: artefatos de auditoria do Figma (fileKey público de arquivo e JSONs
+#   de árvore de nós) que a regra generic-api-key confunde com credencial.
+#   A pasta não faz parte da entrega de código-fonte.
+# - key="evacuation-...": props `key` de listas JSX nas telas de evacuação do
+#   mobile, texto fixo de baixa entropia, não credencial.
+#
+# Achado novo fora dessas duas formas DEVE deixar a CI vermelha até alguém
+# classificar: ou é segredo real (revogar e remover), ou entra aqui com o
+# porquê escrito.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Artefatos de auditoria do Figma em docs/, fora da entrega"
+paths = ['''docs/.*''']
+
+[[allowlists]]
+description = "Props key de JSX das telas de evacuação"
+# O alvo é o trecho casado inteiro (key="..."), não só o valor capturado:
+# assim o allowlist exige o contexto de prop JSX, não qualquer string parecida.
+regexTarget = "match"
+regexes = ['''key="evacuation-[a-z0-9-]+"''']

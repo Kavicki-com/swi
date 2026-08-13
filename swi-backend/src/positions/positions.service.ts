@@ -36,7 +36,7 @@ export class PositionsService {
     const worker = (await this.prisma.user.findUnique({
       where: { id: workerId },
       include: { profile: true },
-    })) as WorkerWithProfile | null
+    }))
     if (!worker || worker.role !== 'WORKER') throw new NotFoundException('Worker não encontrado')
 
     const pos = await this.prisma.workerPosition.upsert({

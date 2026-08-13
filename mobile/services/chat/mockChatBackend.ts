@@ -6,13 +6,13 @@ import { applyMessage, markRead as markReadReducer, sortByRecent, conversationKe
 // um store mutável module-level semeado no import, servido com um tiny async hop
 // (`tick`) pra os callers se comportarem como rede real, clonando nas leituras pra
 // os consumidores não mutarem os internos. A novidade aqui é um EVENT BUS em
-// memória: `subscribe(convId|null, cb)` simula o `client.models.Message.onCreate`
-// do AppSync — `sendMessage` faz `emit(m)` e o ChatProvider re-renderiza em
-// real-time. Seed migrado das telas:
+// memória: `subscribe(convId|null, cb)` espelha o canal de tempo real que o
+// adaptador de API abre por Socket.IO: `sendMessage` faz `emit(m)` e o
+// ChatProvider re-renderiza em real-time. Seed migrado das telas:
 //   - DIRECTORY ← USERS array de app/(app)/chat/inbox.tsx (15 contatos).
 //   - histórico do Romulo ('1') ← MESSAGES de app/(app)/chat/[userId].tsx.
 // `sentAt` são ISO strings sintéticas crescentes (ordenação = lexicográfica).
-// `myId = 'me'` (no amplify virá do Cognito sub da sessão).
+// `myId = 'me'` (com a API real vem do id do usuário da sessão).
 
 // 8 avatares demo de /assets/avatars/worker-{1..8}.png. Asset.fromModule resolve
 // cada require() pra uma uri servida pelo Metro (DS Avatar/ChatUserCard só aceita
@@ -211,7 +211,7 @@ const messages: Message[] = seed.messages;
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-// ---- Event bus in-memory (simula AppSync onCreate) ----
+// ---- Event bus in-memory (espelha o canal Socket.IO do adaptador de API) ----
 type Listener = (m: Message) => void;
 const listeners = new Map<string, Set<Listener>>(); // key = convId | '*'
 

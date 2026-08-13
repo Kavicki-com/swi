@@ -80,7 +80,7 @@ describe('OpenMeteoProvider.fetch', () => {
       expect.stringContaining('latitude=-23.55&longitude=-46.63'),
       5000,
     )
-    const calledUrl = spy.mock.calls[0][0] as string
+    const calledUrl = spy.mock.calls[0][0]
     expect(calledUrl).toContain('current=temperature_2m')
     expect(calledUrl).toContain('daily=temperature_2m_max')
     expect(calledUrl).toContain('hourly=temperature_2m,weather_code,is_day')

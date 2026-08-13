@@ -48,17 +48,23 @@ describe('Reports e2e', () => {
 
   it('reports sem token → 401', () => request(app.getHttpServer()).get('/reports').expect(401))
 
-  it('media presign devolve url + fields + key namespaced', async () => {
+  // Este teste ficou na API antiga. O presign migrou de POST para PUT em
+  // 2026-07-29 (o R2 não implementa presigned POST), e com isso `fields`, que
+  // era a policy do form POST, deixou de existir: a resposta agora é url+key.
+  // O contentLength passou a ser obrigatório porque entra na ASSINATURA, então
+  // o upload só passa com exatamente aqueles bytes; omiti-lo dá 400 no
+  // ValidationPipe, que era o 400 que este teste vinha recebendo.
+  it('media presign devolve url + key namespaced', async () => {
     const auth = await login()
-    const { body } = await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType: 'image/jpeg' }).expect(201)
+    const { body } = await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType: 'image/jpeg', contentLength: 1024 }).expect(201)
     expect(typeof body.url).toBe('string')
-    expect(body.fields).toBeDefined()
+    expect(body.fields).toBeUndefined()
     expect(body.key).toMatch(/^reports\/[0-9a-f-]{36}\.jpg$/)
   })
 
   it('presign rejeita content-type inválido → 400', async () => {
     const auth = await login()
-    await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType: 'application/pdf' }).expect(400)
+    await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType: 'application/pdf', contentLength: 1024 }).expect(400)
   })
 
   it('create → list newest-first + get by id', async () => {

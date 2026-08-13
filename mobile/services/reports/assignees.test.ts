@@ -38,13 +38,16 @@ describe('listReportAssignees', () => {
   });
 });
 
-describe('listReportAssignees — modo mock', () => {
+describe('listReportAssignees: modo mock', () => {
   // O backend mock não tem quadro de staff; sem o fallback o dev local (onde
   // DATA_BACKEND é 'mock' por padrão) abriria o modal vazio.
   it('cai no diretório de chat quando não há backend real', async () => {
     jest.resetModules();
     const listDirectory = jest.fn(async () => [CONTATO]);
-    jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: 'mock' }));
+    jest.doMock('../../lib/featureFlags', () => ({
+      ...jest.requireActual('../../lib/featureFlags'),
+      DATA_BACKEND: 'mock',
+    }));
     jest.doMock('../chat/getChatBackend', () => ({
       getChatBackend: () => ({ listDirectory }),
     }));
@@ -52,7 +55,7 @@ describe('listReportAssignees — modo mock', () => {
     jest.doMock('../api/http', () => ({ apiRequest: apiRequestMock }));
     // require, não import(): o preset roda em CJS e o import dinâmico exige
     // --experimental-vm-modules. É a forma de reimportar depois do resetModules.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const { listReportAssignees: comMock } = require('./assignees') as typeof import('./assignees');
 
     const out = await comMock();

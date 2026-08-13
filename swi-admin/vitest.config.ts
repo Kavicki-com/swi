@@ -63,12 +63,48 @@ export default mergeConfig(
       globals: true,
       setupFiles: ['./src/test-setup.ts'],
       css: false,
+      // Só a suíte de componente, que vive em src. Sem isto vale o padrão do
+      // Vitest (`**/*.{test,spec}.*`), que varre o projeto inteiro e arrasta
+      // `e2e/*.spec.ts` pra dentro do jsdom: os testes de navegador precisam de
+      // servidor e banco de pé, e quebram já na coleta.
+      include: ['src/**/*.test.{ts,tsx}'],
       // Single-fork execution. Each test file imports the DS bundle and a
       // jsdom instance; with 30+ test files the default worker pool exhausts
       // Node's heap on Windows (memory allocation failures + worker exits).
       // Sequential single-fork is ~3× slower but stable.
       pool: 'forks',
       poolOptions: { forks: { singleFork: true } },
+      coverage: {
+        // istanbul, não v8: o provider v8 lê a cobertura pelo inspector do
+        // processo, e com `pool: 'forks'` + `singleFork` ele perde a sessão
+        // depois do primeiro arquivo ("Session is not connected",
+        // ERR_INSPECTOR_NOT_CONNECTED) e aborta o run inteiro. O istanbul
+        // instrumenta no transform e não depende do inspector.
+        provider: 'istanbul',
+        reporter: ['text', 'json-summary'],
+        // Toda a árvore de produção entra no denominador. Sem `include`, o v8
+        // só conta arquivo que algum teste importou, e o número sai inflado
+        // porque módulo sem teste nenhum simplesmente não aparece.
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: [
+          'src/**/*.d.ts',
+          'src/**/*.test.{ts,tsx}',
+          'src/**/*.stories.{ts,tsx}',
+          'src/**/*.testKit.tsx',
+          'src/test-setup.ts',
+          'src/main.tsx',
+        ],
+        // Portão travado: a cobertura só sobe daqui. Vale para as quatro
+        // métricas porque cada uma pega uma lacuna diferente: `functions`
+        // denuncia caminho de código nunca chamado, `branches` denuncia
+        // condição nunca exercitada, e nenhuma das duas aparece em `lines`.
+        thresholds: {
+          statements: 80,
+          branches: 80,
+          functions: 80,
+          lines: 80,
+        },
+      },
       server: {
         deps: {
           // Force packages that depend on react-native/styled-components/native through

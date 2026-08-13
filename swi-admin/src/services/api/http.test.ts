@@ -200,16 +200,18 @@ describe('apiFetch', () => {
     expect(data).toEqual([{ id: 'r1' }])
   })
 
-  it('avisa no console em build de produção sem VITE_API_URL', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  // Antes, um build de produção sem a variável apontava em silêncio para a
+  // máquina de quem abriu o navegador e falhava como se o backend estivesse
+  // fora do ar. Agora o erro diz o que está errado, e NÃO passa pelo catch de
+  // rede do apiFetch, que o converteria em "não foi possível conectar".
+  it('falha com a mensagem da variável em build de produção sem VITE_API_URL', async () => {
     vi.stubEnv('PROD', true)
     vi.stubEnv('VITE_API_URL', '')
     vi.resetModules()
 
-    await import('./http')
+    const { apiFetch } = await import('./http')
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('VITE_API_URL'))
-    warn.mockRestore()
+    await expect(apiFetch('/qualquer')).rejects.toThrow(/VITE_API_URL/)
     vi.unstubAllEnvs()
   })
 })

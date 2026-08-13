@@ -5,29 +5,12 @@ on:
     branches: [main]
   pull_request:
 
-jobs:
-  admin:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: swi-admin
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: swi-admin/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
-      - run: npm run storybook:build
+# Nada além de ler o repositório: nenhum job comenta em PR, publica artefato
+# ou usa credencial de produção.
+permissions:
+  contents: read
 
-  # Até 2026-07-30 o CI tinha só o job acima. mobile/ e swi-backend/ passavam
-  # por PR sem verificação nenhuma, incluindo o PR #92, que era quase todo
-  # backend e mobile.
+jobs:
   mobile:
     runs-on: ubuntu-latest
     defaults:
@@ -41,11 +24,43 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
-      - run: npm test
-      # Sem typecheck de propósito: o baseline tem 7 erros pré-existentes
-      # (tipos de expressão do mapbox em MapHeatmapSource.web.tsx e @types/three
-      # ausente em Smartwatch3D.native.tsx). Entrar como gate deixaria o CI
-      # vermelho no primeiro run. Zerar esses 7 é pré-requisito pra ligar aqui.
+      # Coerência do projeto Expo: versões de pacote compatíveis com o SDK,
+      # config válida. Pega drift de dependência que os testes não veem.
+      - run: npx expo-doctor
+      - run: npm run lint
+      - run: npm run typecheck
+      # Com o coverageThreshold de 80 do jest.config aplicado.
+      - run: npm run test:coverage
+      # Exporta Android, iOS e web num passo só. É o smoke de build: bundle
+      # que não fecha derruba o job aqui, antes de chegar em aparelho.
+      - run: npm run build:all
+      # O smoke web de navegador (mobile/e2e) entra quando a Task 14 do plano
+      # de higienização for commitada; o spec ainda não existe na HEAD.
+
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: swi-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: swi-admin/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      # --coverage liga os thresholds de 80 do vitest.config.
+      - run: npm test -- --coverage
+      # Nenhum arquivo de src acima de 800 linhas (portão da decomposição).
+      - run: npm run gate:file-size
+      - run: npm run build
+      - run: npm run storybook:build
+      # O E2E de navegador (test:e2e:managed) entra junto com a Task 14: a
+      # sonda de prontidão do runner da stack na HEAD ainda espera só a porta
+      # TCP e correria contra o migrate deploy num runner limpo.
 
   backend:
     runs-on: ubuntu-latest
@@ -68,11 +83,85 @@ jobs:
           cache: 'npm'
           cache-dependency-path: swi-backend/package-lock.json
       - run: npm ci
-      # O client do Prisma é gerado, não versionado: sem isto o build não acha
-      # os tipos de @prisma/client.
+      # O client do Prisma é gerado, não versionado: sem isto nem o typecheck
+      # nem o build acham os tipos de @prisma/client.
       - run: npx prisma generate
+      - run: npm run lint
+      - run: npm run typecheck
+      # Só os unitários, com o coverageThreshold de 80 do jest.config. Os E2E
+      # falam com Postgres de verdade e vivem no job backend-integration.
+      - run: npm run test:coverage
       - run: npm run build
-      # Só os testes unitários. Os 10 e2e falam com Postgres de verdade e
-      # precisariam de service container + migrate deploy; ficam de fora até
-      # serem validados localmente contra o compose.
-      - run: npm test
+
+  backend-integration:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: swi-backend
+    services:
+      postgres:
+        # Mesma imagem e mesmas credenciais descartáveis do docker-compose de
+        # teste; nada aqui alcança dado real.
+        image: postgres:16
+        env:
+          POSTGRES_USER: swi
+          POSTGRES_PASSWORD: swi
+          POSTGRES_DB: swi
+        ports:
+          - 5432:5432
+        # O job só começa com o Postgres respondendo de verdade: a porta
+        # publicada aceita conexão antes de o servidor terminar de subir, e
+        # sem o health check o migrate deploy correria contra a inicialização.
+        options: >-
+          --health-cmd "pg_isready -U swi -d swi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://swi:swi@localhost:5432/swi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: swi-backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      # As suítes E2E instanciam o AppModule em processo (NODE_ENV=test vem do
+      # jest) e setam MINIO_* dummy sozinhas; a única infraestrutura real que
+      # elas pedem é o banco.
+      - run: npm run test:e2e
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Inventário de vulnerabilidades das dependências de runtime, um npm
+      # audit por projeto. Ainda não bloqueia: o snapshot atual carrega
+      # achados transitivos sem correção publicada (metro/image-size no
+      # mobile, tar via node-pre-gyp no backend), e um portão duro nasceria
+      # vermelho sem ação possível. Endurece quando a auditoria da entrega
+      # zerar o que tem conserto.
+      - run: npm audit --omit=dev
+        working-directory: mobile
+        continue-on-error: true
+      - run: npm audit --omit=dev
+        working-directory: swi-admin
+        continue-on-error: true
+      - run: npm audit --omit=dev
+        working-directory: swi-backend
+        continue-on-error: true
+      # Scanner de segredos do snapshot, versão fixada e saída mascarada
+      # (--redact). Este bloqueia: segredo em árvore de entrega para tudo.
+      # O .gitleaks.toml da raiz allowlista só falso-positivos verificados
+      # (artefatos Figma em docs/ e props key de JSX).
+      - run: >-
+          docker run --rm
+          -v "$PWD:/repo:ro"
+          zricethezav/gitleaks:v8.28.0
+          dir /repo --config /repo/.gitleaks.toml --redact --no-banner

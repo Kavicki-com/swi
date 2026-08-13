@@ -1,6 +1,7 @@
-// Local mirror do shape devolvido pela custom query getEvacuationRoute do swi-backend.
-// Siblings isolados → NÃO importamos o Schema; após deploy, `ampx generate` pode
-// substituir. Mirrors services/<domínio>/types.ts. Datas ISO.
+// Local mirror do shape devolvido pelo endpoint de rota de evacuação do
+// swi-backend. Siblings isolados → NÃO importamos os tipos do backend: este
+// arquivo é a fronteira do contrato REST e precisa ser conferido à mão quando
+// ele mudar. Mirrors services/<domínio>/types.ts. Datas ISO.
 
 export interface RouteSnapshot {
   waypoints: [number, number][];   // [lng, lat] (convenção maplibre/GeoJSON)

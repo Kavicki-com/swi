@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { RouteFallback } from './RouteFallback'
 import { Pressable, View } from 'react-native'
 import { flushSync } from 'react-dom'
 
@@ -145,7 +146,6 @@ export function AppLayout() {
       >
         <View
           testID="app-topbar"
-          dataSet={{ fidelity: 'topbar' }}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -179,14 +179,18 @@ export function AppLayout() {
           {headerUserInfo}
         </View>
         <View style={{ flex: 1, paddingHorizontal: 24, paddingVertical: 24 }}>
-          <Outlet />
+          {/* As páginas chegam por React.lazy (ver App.tsx). A fronteira fica
+              AQUI, e não em volta das rotas, pra que o topbar continue na tela
+              enquanto o chunk da próxima página carrega. */}
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </View>
         {drawerOpen && (
           <View
             testID="app-drawer"
-            dataSet={{ fidelity: 'drawer' }}
             // Overlay panel: dim the page and dock the menu panel on the
-            // left. Width 280 keeps Figma proportions for tablet portrait.
+            // left. Width 280 keeps the specified proportions for tablet portrait.
             style={{
               position: 'absolute' as unknown as never,
               top: 0,
@@ -276,7 +280,7 @@ export function AppLayout() {
       style={{
         flexDirection: 'row',
         minHeight: '100vh' as unknown as number,
-        // Figma frame 4:2 layout: 40px left margin + 228 sidebar + 16 gap +
+        // Reference 1366px layout: 40px left margin + 228 sidebar + 16 gap +
         // 1041 content + 41 right margin = 1366. Body gradient shows through
         // the outer paddings.
         paddingLeft: 40,
@@ -286,7 +290,6 @@ export function AppLayout() {
     >
       <View
         testID="app-sidebar"
-        dataSet={{ fidelity: 'sidebar' }}
         style={{
           width: 228,
           flexDirection: 'column',
@@ -345,7 +348,6 @@ export function AppLayout() {
       <View style={{ flex: 1 }}>
         <View
           testID="app-header"
-          dataSet={{ fidelity: 'header' }}
           style={{
             flexDirection: 'row',
             justifyContent: 'flex-end',
@@ -356,7 +358,11 @@ export function AppLayout() {
           {headerUserInfo}
         </View>
         <View style={{ flex: 1, padding: 24 }}>
-          <Outlet />
+          {/* Mesma fronteira do layout mobile, pelo mesmo motivo: a sidebar e o
+              header ficam montados enquanto o chunk da página carrega. */}
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </View>
       </View>
       <UserDetailsMenu open={userMenuOpen} onClose={() => setUserMenuOpen(false)} />

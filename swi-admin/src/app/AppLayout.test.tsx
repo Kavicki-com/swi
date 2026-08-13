@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi } from 'vitest'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
@@ -41,6 +41,7 @@ vi.mock('@/services/chat/ChatProvider', () => ({
 }))
 
 import { AppLayout, resolveActiveNavValue } from './AppLayout'
+import { settled } from '@/test-utils/renderPage'
 
 beforeEach(() => {
   // getSession real exige token + sessão.
@@ -49,7 +50,6 @@ beforeEach(() => {
     SESSION_STORAGE_KEY,
     JSON.stringify({
       id: 'u_seed_1',
-      org_id: 'org_seed_1',
       email: 'admin@swi.test',
       full_name: 'Admin Seed',
       role: 'super_admin',
@@ -72,8 +72,8 @@ function LocationProbe() {
   return <div data-testid="location-pathname">{location.pathname}</div>
 }
 
-const renderTree = () =>
-  render(
+const renderTree = async () =>
+  settled(render(
     <SwiThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={['/page']}>
@@ -90,11 +90,11 @@ const renderTree = () =>
         </MemoryRouter>
       </AuthProvider>
     </SwiThemeProvider>,
-  )
+  ))
 
 describe('AppLayout', () => {
   it('renders outlet content for authenticated user', async () => {
-    renderTree()
+    await renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()
     })
@@ -104,7 +104,7 @@ describe('AppLayout', () => {
   // antes cada tela caía num literal ("99 bpm", "12/8"), então o header
   // contradizia o detalhe do próprio admin (QA de volume 2026-07-26).
   it('mostra os vitais do usuário logado, derivados do gerador (não um literal)', async () => {
-    renderTree()
+    await renderTree()
     const esperado = simulatedVitalsFor('u_seed_1', Date.now())
     await waitFor(() => {
       expect(screen.getByTestId('app-header-user-info')).toBeInTheDocument()
@@ -114,14 +114,14 @@ describe('AppLayout', () => {
   })
 
   it('renders Logo at the top of the sidebar (not in the header)', async () => {
-    renderTree()
+    await renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-sidebar-logo')).toBeInTheDocument()
     })
   })
 
-  it('renders the 8 Figma navigation cards in order with icons', async () => {
-    renderTree()
+  it('renders the 8 navigation cards in order with icons', async () => {
+    await renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('page-content')).toBeInTheDocument()
     })
@@ -145,7 +145,7 @@ describe('AppLayout', () => {
   // fullscreen com vídeo + vitais, não navega mais direto. A página de perfil
   // continua alcançável — pelo avatar grande DENTRO do menu.
   it('opens the fullscreen user menu when the header user-info widget is pressed', async () => {
-    renderTree()
+    await renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-header-user-info-pressable')).toBeInTheDocument()
     })
@@ -156,7 +156,7 @@ describe('AppLayout', () => {
   })
 
   it('navigates to /user/profile from the big avatar inside the user menu', async () => {
-    renderTree()
+    await renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-header-user-info-pressable')).toBeInTheDocument()
     })
@@ -171,7 +171,7 @@ describe('AppLayout', () => {
   })
 
   it('renders the ChatSection fed by the ChatProvider conversations', async () => {
-    renderTree()
+    await renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-sidebar-chat')).toBeInTheDocument()
     })
@@ -183,7 +183,7 @@ describe('AppLayout', () => {
   })
 
   it('navega pro chat com o id da conversa percent-encodado (# → %23)', async () => {
-    renderTree()
+    await renderTree()
     await waitFor(() => {
       expect(screen.getByTestId('app-sidebar-chat')).toBeInTheDocument()
     })
@@ -198,7 +198,7 @@ describe('AppLayout', () => {
   })
 
   it('não pinta badge quando a conversa não tem não-lidas (0 → sem badge)', async () => {
-    renderTree()
+    await renderTree()
     await waitFor(() => {
       expect(screen.getByText('Silvana Sem Badge')).toBeInTheDocument()
     })
@@ -249,7 +249,11 @@ describe('AppLayout', () => {
         configurable: true,
         get: () => 900,
       })
-      window.dispatchEvent(new Event('resize'))
+      // O listener de Dimensions do react-native-web reage a este evento
+      // atualizando estado; fora de act o React acusa a atualização.
+      act(() => {
+        window.dispatchEvent(new Event('resize'))
+      })
     }
 
     afterEach(() => {
@@ -259,7 +263,7 @@ describe('AppLayout', () => {
 
     it('renders the tablet top-bar (no sidebar) when width < 1024', async () => {
       setViewportWidth(800)
-      renderTree()
+      await renderTree()
       await waitFor(() => {
         expect(screen.getByTestId('app-layout-tablet')).toBeInTheDocument()
       })
@@ -277,7 +281,7 @@ describe('AppLayout', () => {
 
     it('renders the desktop sidebar when 1024 ≤ width < 1500', async () => {
       setViewportWidth(1366)
-      renderTree()
+      await renderTree()
       await waitFor(() => {
         expect(screen.getByTestId('app-sidebar')).toBeInTheDocument()
       })
@@ -287,7 +291,7 @@ describe('AppLayout', () => {
 
     it('renders the desktop sidebar (no top-bar) when width >= 1500 (wide)', async () => {
       setViewportWidth(1920)
-      renderTree()
+      await renderTree()
       await waitFor(() => {
         expect(screen.getByTestId('app-sidebar')).toBeInTheDocument()
       })

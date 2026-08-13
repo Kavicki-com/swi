@@ -1,0 +1,37 @@
+# Sobreposição da stack de teste automatizado.
+#
+# Existe para que rodar E2E nunca toque a stack de desenvolvimento: portas de
+# host exclusivas e volume nomeado à parte. Sem isso, um `down -v` de teste
+# apagaria o banco de trabalho, e uma porta ocupada faria o teste conversar
+# silenciosamente com o banco errado.
+#
+# Uso (sempre com project name próprio, que isola rede e containers):
+#   docker compose -p swi-source-delivery-security \
+#     -f docker-compose.yml -f docker-compose.e2e.yml up -d db mailhog minio minio-init
+#   docker compose -p swi-source-delivery-security \
+#     -f docker-compose.yml -f docker-compose.e2e.yml down -v --remove-orphans
+#
+# O serviço `api` não sobe aqui: as suítes E2E instanciam o AppModule em
+# processo, então só a infraestrutura precisa de container.
+# `!override` é obrigatório em `ports` e `volumes`: o merge padrão do Compose
+# CONCATENA listas, então sem a tag os mapeamentos originais (5432, 9000, ...)
+# continuariam valendo e a stack de teste brigaria por porta com a de trabalho,
+# ou pior, montaria o volume de desenvolvimento junto.
+services:
+  db:
+    ports: !override ["55432:5432"]
+    volumes: !override ["swi_e2e_pgdata:/var/lib/postgresql/data"]
+    # Banco de teste é descartável e recriado a cada execução: o `fsync` só
+    # existe pra sobreviver a queda de energia, e aqui não há nada a preservar.
+    command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+
+  mailhog:
+    ports: !override ["51025:1025", "58025:8025"]
+
+  minio:
+    ports: !override ["59000:9000", "59001:9001"]
+    volumes: !override ["swi_e2e_minio:/data"]
+
+volumes:
+  swi_e2e_pgdata:
+  swi_e2e_minio:

@@ -9,18 +9,11 @@ import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'
 import workerC from '@/assets/avatars/worker-c.png'
 
-export type ExamEntry = {
-  id: string
-  year: string
-  date: string
-  title: string
-  /**
-   * URL presignada do arquivo, quando o exame veio da tabela Exam real. As
-   * entradas de demo deste roster não têm arquivo, por isso é opcional: sem
-   * ela o card não oferece download em vez de oferecer um que não baixa nada.
-   */
-  fileUrl?: string
-}
+// ExamEntry mora em services/types/directory, o contrato de view que o
+// backend real também produz; o re-export mantém os imports locais resolvendo.
+import type { ExamEntry } from '@/services/types/directory'
+
+export type { ExamEntry }
 
 export type WorkerProfile = {
   // Identity
@@ -54,7 +47,7 @@ export type WorkerProfile = {
   examHistory: ReadonlyArray<ExamEntry>
 }
 
-// Shared exam history fixture — Figma 54:6561 shows the same 7-entry list
+// Shared exam history fixture: the spec shows the same 7-entry list
 // for every worker in the demo, so any profile opens fully populated.
 const SHARED_EXAM_HISTORY: ReadonlyArray<ExamEntry> = [
   { id: 'exam-01', year: '2027', date: '05 Mar', title: 'Exame de reciclagem técnica' },
@@ -66,7 +59,7 @@ const SHARED_EXAM_HISTORY: ReadonlyArray<ExamEntry> = [
   { id: 'exam-07', year: '2039', date: '21 Out', title: 'Audiometria ocupacional' },
 ]
 
-// Default vitals snapshot — Figma reference values. Workers with vitalsStatus
+// Default vitals snapshot: reference values. Workers with vitalsStatus
 // 'warning' or 'critical' override these inline below.
 const VITALS_BASE = {
   bpm: 99,
@@ -77,7 +70,7 @@ const VITALS_BASE = {
   statusLabel: 'Condições excelentes',
 } as const
 
-// Location grid — São Paulo Bela Vista (Figma reference). Spread across
+// Location grid: São Paulo Bela Vista (per reference). Spread across
 // sectors so the dashboard map shows real geographic dispersion.
 const LOC = {
   leste1: { lat: -23.55, lng: -46.63 },

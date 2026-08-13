@@ -69,8 +69,8 @@ export function advance(
   // Percorre segmentos até gastar a distância do passo (com wrap no loop).
   // Guarda de laço: cada iteração ou zera o budget ou avança um segmento.
   for (let guard = 0; guard < 10_000 && budget > 0; guard++) {
-    const a = route[seg % route.length]!
-    const b = route[(seg + 1) % route.length]!
+    const a = route[seg % route.length]
+    const b = route[(seg + 1) % route.length]
     const len = segmentMeters(a, b)
     const remaining = (1 - t) * len
     if (budget < remaining) {
@@ -82,8 +82,8 @@ export function advance(
       t = 0
     }
   }
-  const a = route[seg % route.length]!
-  const b = route[(seg + 1) % route.length]!
+  const a = route[seg % route.length]
+  const b = route[(seg + 1) % route.length]
   const pos: LngLat = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
   return { state: { seg, t }, pos }
 }

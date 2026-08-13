@@ -54,13 +54,13 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const render = (onClose = () => {}) =>
-  renderPage(<ReportMessageModal conversationId="me#w1" message={MESSAGE} onClose={onClose} />)
+const render = async (onClose = () => {}) =>
+  await renderPage(<ReportMessageModal conversationId="me#w1" message={MESSAGE} onClose={onClose} />)
 
 describe('ReportMessageModal', () => {
   it('submit válido → reportMessage com o LABEL do motivo + detalhe, e mostra sucesso', async () => {
     reportMock.mockResolvedValue({ data: null, error: null })
-    render()
+    await render()
 
     fireEvent.click(screen.getByRole('button', { name: 'Assédio ou intimidação' }))
     fireEvent.change(screen.getByPlaceholderText('Descreva o que aconteceu'), {
@@ -81,7 +81,7 @@ describe('ReportMessageModal', () => {
   // opcional. Só o motivo é obrigatório.
   it('motivo sem detalhe é válido, e o dto sai sem text', async () => {
     reportMock.mockResolvedValue({ data: null, error: null })
-    render()
+    await render()
 
     fireEvent.click(screen.getByRole('button', { name: 'Spam' }))
     fireEvent.click(screen.getByRole('button', { name: 'Enviar denúncia' }))
@@ -90,7 +90,7 @@ describe('ReportMessageModal', () => {
   })
 
   it('sem motivo → erro de validação pt-BR e NENHUMA chamada de rede', async () => {
-    render()
+    await render()
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar denúncia' }))
 
@@ -100,7 +100,7 @@ describe('ReportMessageModal', () => {
 
   it('falha do backend → mostra o erro e mantém o form preenchido', async () => {
     reportMock.mockResolvedValue({ data: null, error: { message: 'Falha ao enviar denúncia' } })
-    render()
+    await render()
 
     fireEvent.click(screen.getByRole('button', { name: 'Spam' }))
     fireEvent.change(screen.getByPlaceholderText('Descreva o que aconteceu'), {
@@ -116,8 +116,8 @@ describe('ReportMessageModal', () => {
 
   // O limite de ~240 vem do DS 0.1.132: maxLength corta no campo e o contador
   // mostra quanto falta. Sem o contador o corte seria uma parede muda.
-  it('o campo de detalhe expõe o contador 0/240 do DS', () => {
-    render()
+  it('o campo de detalhe expõe o contador 0/240 do DS', async () => {
+    await render()
 
     expect(screen.getByText('0/240')).toBeTruthy()
   })
@@ -128,7 +128,7 @@ describe('ReportMessageModal', () => {
   // separa os dois é a cor, não o tamanho.
   it('o título da confirmação sai em branco, não no verde do cabeçalho', async () => {
     reportMock.mockResolvedValue({ data: null, error: null })
-    render()
+    await render()
 
     fireEvent.click(screen.getByRole('button', { name: 'Spam' }))
     fireEvent.click(screen.getByRole('button', { name: 'Enviar denúncia' }))

@@ -22,9 +22,9 @@ function finalizar() {
 }
 
 describe('AdminsCreate — submit', () => {
-  it('sem obrigatórios não chama a api', () => {
+  it('sem obrigatórios não chama a api', async () => {
     const create = vi.spyOn(employeesApi, 'create')
-    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     finalizar()
 
@@ -35,7 +35,7 @@ describe('AdminsCreate — submit', () => {
     const create = vi
       .spyOn(employeesApi, 'create')
       .mockResolvedValue({ data: { id: 'n' } as never, error: null })
-    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
@@ -63,7 +63,7 @@ describe('AdminsCreate — submit', () => {
 
   it('e-mail inválido não chama create e mostra erro', async () => {
     const create = vi.spyOn(employeesApi, 'create')
-    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'abc')
@@ -77,7 +77,7 @@ describe('AdminsCreate — submit', () => {
 
   it('senha com menos de 8 caracteres não chama create', async () => {
     const create = vi.spyOn(employeesApi, 'create')
-    renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
@@ -93,7 +93,7 @@ describe('AdminsCreate — submit', () => {
     const create = vi
       .spyOn(adminsApi, 'create')
       .mockResolvedValue({ data: { id: 'n' } as never, error: null })
-    renderPage(<AdminsCreate onBack={vi.fn()} />)
+    await renderPage(<AdminsCreate onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Ana Admin')
     typeIn('admins-create-email', 'ana@x.com')
@@ -104,13 +104,31 @@ describe('AdminsCreate — submit', () => {
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
   })
 
+  it('erro do backend vira alerta na tela e não fecha o formulário', async () => {
+    vi.spyOn(employeesApi, 'create').mockResolvedValue({
+      data: null as never,
+      error: { message: 'E-mail já cadastrado' } as never,
+    })
+    const onBack = vi.fn()
+    await renderPage(<AdminsCreate subject="funcionário" onBack={onBack} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+
+    finalizar()
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('E-mail já cadastrado'))
+    expect(onBack).not.toHaveBeenCalled()
+  })
+
   it('sucesso chama onBack', async () => {
     vi.spyOn(employeesApi, 'create').mockResolvedValue({
       data: { id: 'n' } as never,
       error: null,
     })
     const onBack = vi.fn()
-    renderPage(<AdminsCreate subject="funcionário" onBack={onBack} />)
+    await renderPage(<AdminsCreate subject="funcionário" onBack={onBack} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
@@ -119,5 +137,120 @@ describe('AdminsCreate — submit', () => {
     finalizar()
 
     await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1))
+  })
+})
+
+describe('AdminsCreate: data de nascimento e CPF', () => {
+  // O campo de data não tem testID próprio; o placeholder é o que o usuário vê.
+  const preencherObrigatorios = () => {
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+  }
+
+  const digitar = (placeholder: string, value: string) => {
+    fireEvent.change(screen.getByPlaceholderText(placeholder), { target: { value } })
+  }
+
+  const submeterCom = async (campo: string, valor: string) => {
+    const create = vi
+      .spyOn(employeesApi, 'create')
+      .mockResolvedValue({ data: { id: 'n' } as never, error: null })
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    preencherObrigatorios()
+    digitar(campo, valor)
+    finalizar()
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    return create.mock.calls[0]?.[0]
+  }
+
+  it('data válida sobe como data pura, sem hora nem fuso', async () => {
+    const payload = await submeterCom('DD/MM/AAAA', '05041990')
+
+    expect(payload).toHaveProperty('birthDate', '1990-04-05')
+  })
+
+  it('a máscara formata a data enquanto se digita', async () => {
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    digitar('DD/MM/AAAA', '05041990')
+
+    expect(screen.getByPlaceholderText('DD/MM/AAAA')).toHaveValue('05/04/1990')
+  })
+
+  it('data que não existe no calendário não sobe', async () => {
+    // 31 de fevereiro: o Date normalizaria para 02/03 e o cadastro guardaria
+    // uma data que ninguém digitou.
+    const payload = await submeterCom('DD/MM/AAAA', '31022020')
+
+    expect(payload).not.toHaveProperty('birthDate')
+  })
+
+  it('mês fora da faixa não sobe', async () => {
+    const payload = await submeterCom('DD/MM/AAAA', '01132020')
+
+    expect(payload).not.toHaveProperty('birthDate')
+  })
+
+  it('data incompleta não sobe', async () => {
+    const payload = await submeterCom('DD/MM/AAAA', '0504')
+
+    expect(payload).not.toHaveProperty('birthDate')
+  })
+
+  it('ano com menos de quatro dígitos não sobe', async () => {
+    const payload = await submeterCom('DD/MM/AAAA', '050490')
+
+    expect(payload).not.toHaveProperty('birthDate')
+  })
+
+  it('CPF sobe só com dígitos, sem a pontuação da máscara', async () => {
+    const payload = await submeterCom('000.000.000-00', '12345678901')
+
+    expect(payload).toHaveProperty('cpf', '12345678901')
+    expect(screen.getByPlaceholderText('000.000.000-00')).toHaveValue('123.456.789-01')
+  })
+})
+
+describe('AdminsCreate: campos de saúde e rodapé', () => {
+  // O Input do DS bloqueia via `editable={false}`, que o react-native-web
+  // traduz para `readonly` no DOM, não para o atributo `disabled`.
+  const descricaoAlergias = () => screen.getAllByPlaceholderText('Descrever aqui')[0]!
+
+  it('"Quais?" só aceita texto depois de marcar Sim', async () => {
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+    expect(descricaoAlergias()).toHaveAttribute('readonly')
+
+    fireEvent.click(screen.getAllByText('Sim')[0]!)
+
+    await waitFor(() => expect(descricaoAlergias()).not.toHaveAttribute('readonly'))
+  })
+
+  it('marcar Não mantém o campo de descrição bloqueado', async () => {
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    fireEvent.click(screen.getAllByText('Não')[0]!)
+
+    expect(descricaoAlergias()).toHaveAttribute('readonly')
+  })
+
+  it('"Voltar" devolve para a lista sem cadastrar', async () => {
+    const create = vi.spyOn(employeesApi, 'create')
+    const onBack = vi.fn()
+    await renderPage(<AdminsCreate subject="funcionário" onBack={onBack} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar para a lista de funcionários' }))
+
+    expect(onBack).toHaveBeenCalledTimes(1)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('o rodapé nomeia administradores quando o formulário é de admin', async () => {
+    await renderPage(<AdminsCreate onBack={vi.fn()} />)
+
+    expect(
+      screen.getByRole('button', { name: 'Voltar para a lista de administradores' }),
+    ).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Nome completo do novo administrador')).toBeInTheDocument()
   })
 })

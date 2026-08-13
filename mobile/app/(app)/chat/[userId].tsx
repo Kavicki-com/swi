@@ -106,7 +106,7 @@ export default function ChatThread() {
   const messages = messagesFor(convId);
 
   // Anexo selecionado via attach_file no input — agora enviado de verdade via
-  // send(...) como imageUri (mock = uri local; amplify faria upload pro S3).
+  // send(...) como imageUri (mock = uri local; a API real sobe o arquivo e devolve a uri).
   const [pendingAttachment, setPendingAttachment] = useState<string | null>(null);
   const [text, setText] = useState('');
 

@@ -1,10 +1,10 @@
 // src/pages/tasks/TasksList.tsx
-// /tasks — lista de tarefas (work orders). Figma 1606-11583. Vive dentro do
+// /tasks: lista de tarefas (work orders). Vive dentro do
 // AppLayout.
 //
 // Cada linha é o DS `ActivitiesOverviewCard` as-is: ele já traz ícone +
 // divisor + título/subtítulo + ProgressBar + AvatarGroup ("+N") + pino de
-// localização, que é exatamente a anatomia da linha no Figma.
+// localização, que é exatamente a anatomia da linha no desenho.
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
@@ -115,7 +115,7 @@ export function TasksList() {
         Atividades em andamento
       </Title>
 
-      {/* As abas ocupam ~metade da largura no Figma; fullWidth dentro de um
+      {/* As abas ocupam ~metade da largura no desenho; fullWidth dentro de um
           wrapper de 50% dá as 3 abas iguais sem esticar até a borda. */}
       <View style={{ width: '50%' }}>
         <Tabs
@@ -160,7 +160,7 @@ export function TasksList() {
               title={row.title}
               subtitle={row.sector}
               progress={row.progressPct}
-              // Sem progressColor de propósito: no Figma a cor da barra varia
+              // Sem progressColor de propósito: no desenho a cor da barra varia
               // por linha, mas não deriva do percentual (duas linhas em ~50%
               // aparecem em verde e laranja). O atributo que define a cor não
               // existe no WorkOrderRow — pendência de backend/design. Até lá,

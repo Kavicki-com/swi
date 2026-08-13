@@ -1,4 +1,4 @@
-// Overlay de seleção de responsáveis (Figma 1614-13773). describe/it/expect
+// Overlay de seleção de responsáveis. describe/it/expect
 // vêm dos globals do Vitest.
 //
 // O client de work orders é mockado inteiro: o contrato já é coberto em

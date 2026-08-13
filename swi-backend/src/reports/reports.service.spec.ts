@@ -198,7 +198,7 @@ describe('ReportsService', () => {
       title: 'T',
       responsibles: [],
       imageKeys: ['reports/x.jpg'],
-    } as any)
+    })
     const arg = db.report.create.mock.calls[0][0].data
     expect(arg.authorId).toBe('u1')
     expect(arg.authorName).toBe('Ana Perfil')
@@ -213,7 +213,7 @@ describe('ReportsService', () => {
     db.user.findUnique.mockResolvedValue({ name: 'Fallback', companyId: 'org1', profile: null })
     db.report.create.mockResolvedValue(row())
     db.user.findMany.mockResolvedValue([])
-    await new ReportsService(db, media(), notifications()).create('u1', { title: 'T' } as any)
+    await new ReportsService(db, media(), notifications()).create('u1', { title: 'T' })
     expect(db.report.create.mock.calls[0][0].data.authorName).toBe('Fallback')
   })
 
@@ -223,7 +223,7 @@ describe('ReportsService', () => {
     db.report.create.mockResolvedValue(row({ id: 'r9', title: 'R9' }))
     db.user.findMany.mockResolvedValue([{ id: 'w2' }, { id: 'w3' }])
     const notif = notifications()
-    await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' } as any)
+    await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' })
     expect(db.user.findMany).toHaveBeenCalledWith({
       where: { role: 'WORKER', approvalStatus: 'APPROVED', id: { not: 'author-1' }, companyId: 'org1' },
       select: { id: true },
@@ -238,7 +238,7 @@ describe('ReportsService', () => {
     db.user.findMany.mockResolvedValue([{ id: 'w2' }])
     const notif = notifications()
     notif.enqueueForMany.mockRejectedValue(new Error('boom'))
-    const out = await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' } as any)
+    const out = await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' })
     expect(out.id).toBe('r9')
   })
 
@@ -250,7 +250,7 @@ describe('ReportsService', () => {
       title: 'Novo',
       status: 'accept',
       statusLabel: 'Aceito',
-    } as any, 'org1')
+    }, 'org1')
     const arg = db.report.update.mock.calls[0][0]
     expect(arg.where).toEqual({ id: 'r1' })
     expect(arg.data).toEqual({ title: 'Novo', status: 'accept', statusLabel: 'Aceito' })
@@ -291,7 +291,7 @@ describe('ReportsService', () => {
       body: 'Comentário',
       createdAt: new Date('2026-01-02T00:00:00Z'),
     })
-    const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Comentário' } as any)
+    const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Comentário' })
     expect(db.report.findUnique).toHaveBeenCalledWith({
       where: { id: 'r1' },
       select: { id: true, author: { select: { companyId: true } } },
@@ -317,7 +317,7 @@ describe('ReportsService', () => {
       body: 'Oi',
       createdAt: new Date('2026-01-02T00:00:00Z'),
     })
-    const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Oi' } as any)
+    const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Oi' })
     expect(out.authorName).toBe('Fallback')
     expect(out.authorAvatarUri).toBe('')
   })

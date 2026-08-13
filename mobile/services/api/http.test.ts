@@ -1,5 +1,5 @@
 import { apiRequest, REQUEST_TIMEOUT_MS } from './http';
-import { API_URL } from '../auth/apiConfig';
+import { getApiUrl } from '../auth/apiConfig';
 import * as SecureStore from 'expo-secure-store';
 
 jest.mock('expo-secure-store', () => {
@@ -20,11 +20,11 @@ describe('apiRequest', () => {
     await SecureStore.deleteItemAsync('swi.auth.token');
   });
 
-  it('monta a URL com API_URL e respeita o método explícito e o body', async () => {
+  it('monta a URL com a base da API e respeita o método explícito e o body', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(okJson({ ok: 1 }));
     await apiRequest('/profile/me', { method: 'PUT', body: { city: 'SP' } });
     expect(global.fetch).toHaveBeenCalledWith(
-      `${API_URL}/profile/me`,
+      `${getApiUrl()}/profile/me`,
       expect.objectContaining({ method: 'PUT', body: JSON.stringify({ city: 'SP' }) }),
     );
   });

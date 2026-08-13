@@ -5,7 +5,10 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 // (inline seam) — mantém os e2e/unit determinísticos sob jest (CommonJS).
 import type { PgBoss as PgBossType } from 'pg-boss'
 
-type Handler = (data: any) => Promise<void>
+// Genérico no formato do payload: quem registra o worker é quem sabe o que a
+// fila carrega naquele nome. O mapa interno guarda a forma apagada (`unknown`),
+// porque a fila em si não tem tipo: o dado volta do pg-boss como JSON.
+type Handler<T = unknown> = (data: T) => Promise<void>
 
 @Injectable()
 export class QueueService implements OnModuleInit, OnModuleDestroy {
@@ -20,6 +23,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     // transpilaria pra require(), que explode com ERR_REQUIRE_ESM no Node <22
     // (pg-boss v12 é ESM-only). O Docker local roda Node 22 e mascarava isso;
     // a hospedagem Cloudez roda Node 18 e revelou (deploy 2026-07-29).
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call -- o `new Function` abaixo não é dinamismo gratuito: é o que esconde o import() do tsc. Trocar por import() direto o faz virar require() sob module=commonjs, que estoura ERR_REQUIRE_ESM no Node 18 da hospedagem (incidente de 2026-07-29).
     const { PgBoss } = await (new Function("return import('pg-boss')")() as Promise<
       typeof import('pg-boss')
     >)
@@ -35,22 +39,25 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     if (this.boss) await this.boss.stop({ graceful: true })
   }
 
-  async registerWorker(name: string, handler: Handler) {
+  async registerWorker<T>(name: string, handler: Handler<T>) {
     const isNew = !this.handlers.has(name)
-    this.handlers.set(name, handler)
-    if (this.boss && isNew) await this.wire(name, handler) // idempotente: 1 poller por nome
+    // A asserção é a fronteira: daqui pra dentro o payload é JSON sem tipo, e
+    // quem declarou `T` no registro é quem responde pelo formato.
+    const apagado = handler as Handler
+    this.handlers.set(name, apagado)
+    if (this.boss && isNew) await this.wire(name, apagado) // idempotente: 1 poller por nome
   }
 
   private async wire(name: string, handler: Handler) {
     await this.boss!.createQueue(name)
     // Entrega at-least-once: retryLimit + batch podem re-rodar um job (crash mid-lote) →
     // o handler DEVE ser idempotente ou aceitar duplicatas (as notifs são best-effort).
-    await this.boss!.work(name, async (jobs: any[]) => {
+    await this.boss!.work(name, async (jobs) => {
       for (const job of jobs) await handler(job.data)
     })
   }
 
-  async enqueue(name: string, data: any): Promise<void> {
+  async enqueue(name: string, data: object): Promise<void> {
     if (this.inline || !this.boss) {
       // Inline (test-env): roda o handler registrado. NB: o pg-boss real LANÇA se o nome
       // não foi createQueue'd — aqui é no-op p/ nome desconhecido (nomes vêm de constantes).

@@ -45,6 +45,14 @@ services:
       mailhog: { condition: service_started }
       minio-init: { condition: service_completed_successfully }   # bucket pronto antes do 1º upload
     environment:
+      # Este compose é a stack de desenvolvimento. Declarar explícito evita que
+      # o contrato de ambiente (src/config/runtime-env.ts) caia no default e
+      # também deixa claro que as flags de simulação abaixo só valem aqui.
+      NODE_ENV: development
+      # Conveniência de desenvolvimento: o banco deste compose é descartável,
+      # então `npm run prisma:seed` dentro do container é liberado. Nenhum
+      # ambiente real herda isto, porque nenhum ambiente real usa este arquivo.
+      ALLOW_DEV_SEED: "1"
       DATABASE_URL: postgresql://swi:swi@db:5432/swi
       JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
       # Default = MailHog (dev). Pra e-mail REAL (teste com cliente), defina no

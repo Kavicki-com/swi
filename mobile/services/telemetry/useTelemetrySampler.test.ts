@@ -1,20 +1,19 @@
 // getTelemetrySink está pinado em mock (carve-out saúde), então o hook só
-// exercita o mockTelemetrySink aqui — sem stubs de featureFlags/aws.
+// exercita o mockTelemetrySink aqui, sem stubs de featureFlags/aws.
 import { createElement, type ComponentType } from 'react';
-// react-test-renderer ships no type declarations and @types/react-test-renderer
-// is not a project dep — type the two helpers we use locally to keep tsc clean
-// without adding a dependency just for the test.
-const TestRenderer: {
-  create: (el: unknown) => { unmount: () => void };
-  act: (cb: () => void | Promise<void>) => void | Promise<void>;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require('react-test-renderer');
-const act = TestRenderer.act;
 import {
   useTelemetrySampler, buildVitalsSample, buildLocationSample, ttlEpochSec,
 } from './useTelemetrySampler';
 import { mockTelemetryLog } from './mockTelemetrySink';
 import type { Vitals } from '../vitals/types';
+// react-test-renderer ships no type declarations and @types/react-test-renderer
+// is not a project dep, type the two helpers we use locally to keep tsc clean
+// without adding a dependency just for the test.
+const TestRenderer: {
+  create: (el: unknown) => { unmount: () => void };
+  act: (cb: () => void | Promise<void>) => void | Promise<void>;
+} = require('react-test-renderer');
+const act = TestRenderer.act;
 
 const VITALS: Vitals = {
   heartRate: 80, bloodPressureSys: 120, bloodPressureDia: 80, oxygenation: 98,

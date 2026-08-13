@@ -34,7 +34,7 @@ export const Loading: StoryObj<typeof Login> = {
 export const Error: StoryObj<typeof Login> = {
   parameters: {
     docs: {
-      description: { story: 'Erro do mockApi.signIn — usar credenciais inválidas.' },
+      description: { story: 'Erro do authApi.signIn: usar credenciais inválidas.' },
     },
   },
 }

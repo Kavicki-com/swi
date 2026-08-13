@@ -12,7 +12,7 @@ export class SendMessageDto {
 // disfarçada, sem lápide e sem trilha. O trim vem antes da validação para que
 // "   " caia no IsNotEmpty em vez de passar como texto válido.
 export class EditMessageDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty({ message: 'Mensagem vazia' })
   @MaxLength(4000)
@@ -25,13 +25,13 @@ export class EditMessageDto {
 // "caixa de ~240 caracteres" da planilha — opcional, e trim antes da validação
 // pra "   " não passar como detalhe.
 export class ReportMessageDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty({ message: 'Motivo obrigatório' })
   @MaxLength(80)
   reason!: string
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   @MaxLength(240)

@@ -3,6 +3,12 @@
 import { vi } from 'vitest'
 import { ApiError } from './http'
 import { MAX_UPLOAD_BYTES, uploadImage, uploadOrderImage } from './upload'
+import { permitirConsoleError } from '@/test-setup'
+
+// O caminho de erro do upload registra o status recusado pelo storage de
+// propósito: é o que suporte lê quando um presign vence. Estes dois testes
+// exercitam exatamente esse caminho, então o log é esperado, não ruído.
+const LOG_DO_UPLOAD = /\[upload\] storage recusou o PUT/
 
 afterEach(() => {
   window.localStorage.clear()
@@ -132,6 +138,7 @@ describe('uploadOrderImage', () => {
   })
 
   it('403 do S3 vira ApiError com mensagem acionável de link expirado', async () => {
+    permitirConsoleError(LOG_DO_UPLOAD)
     stubUpload({ ok: false, status: 403 })
     const err = await uploadOrderImage(jpeg()).catch((e: unknown) => e)
 
@@ -147,6 +154,7 @@ describe('uploadOrderImage', () => {
   })
 
   it('outros erros do S3 viram mensagem genérica com o status preservado', async () => {
+    permitirConsoleError(LOG_DO_UPLOAD)
     stubUpload({ ok: false, status: 500 })
     const err = await uploadOrderImage(jpeg()).catch((e: unknown) => e)
 

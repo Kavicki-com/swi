@@ -1,10 +1,10 @@
 import * as SecureStore from 'expo-secure-store';
-import { API_URL } from '../auth/apiConfig';
+import { getApiUrl } from '../auth/apiConfig';
 
 const TOKEN_KEY = 'swi.auth.token';
 
 // Há sessão api? Usado pelo apiProfileBackend pra decidir entre PUT imediato
-// e stash local (o wizard de onboarding roda ANTES do primeiro login — o
+// e stash local (o wizard de onboarding roda ANTES do primeiro login: o
 // cadastro só destrava depois da aprovação do admin no painel).
 export async function hasToken(): Promise<boolean> {
   return Boolean(await SecureStore.getItemAsync(TOKEN_KEY));
@@ -90,7 +90,7 @@ async function send<T>(path: string, opts: ApiRequestOptions, signal: AbortSigna
     const t = await SecureStore.getItemAsync(TOKEN_KEY);
     if (t) headers.Authorization = `Bearer ${t}`;
   }
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     method: method ?? (body ? 'POST' : 'GET'),
     headers,
     body: body ? JSON.stringify(body) : undefined,

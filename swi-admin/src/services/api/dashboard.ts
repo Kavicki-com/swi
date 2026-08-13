@@ -5,7 +5,7 @@
 // outras: cada chamada é isolada e degrada só a sua fatia (KPIs→0,
 // activities→[], weather→[]). Este é o lar canônico dos tipos do dashboard.
 import type { Alert, Employee } from '../types'
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi, type WorkOrderRow, type WorkOrderStatus } from './workOrders'
@@ -17,7 +17,7 @@ export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
 
 /**
  * Activity risk level — drives the ProgressBar fill color independently of
- * status. Figma frame 4:2 mocks cards with mixed progress colors (green/orange/
+ * status. The reference frame mocks cards with mixed progress colors (green/orange/
  * red) reflecting urgency, not progress. Vitals-derived → omitido no fan-out
  * real (sem smartband não há sinal de risco), a barra cai na cor default.
  */
@@ -66,7 +66,7 @@ export type DashboardMapMarker = {
   avatarUri: string
 }
 
-// Slot da tira de clima (Figma frame 4:2 weather-section). api/weather.ts produz
+// Slot da tira de clima (weather-section). api/weather.ts produz
 // este shape a partir do snapshot do backend.
 export type WeatherSlot = {
   at: string
@@ -147,7 +147,7 @@ const TIER_TO_STATUS: Record<SimulatedTier, 'good' | 'alert' | 'low'> = {
 }
 
 export const dashboardApi = {
-  summary: async (_opts: { orgId: string }): Promise<MockResponse<DashboardSummary>> => {
+  summary: async (): Promise<ServiceResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
     // erro degrada só a própria seção — o summary nunca propaga erro total.
     const [admins, employees, reports, activities, weather] = await Promise.all([

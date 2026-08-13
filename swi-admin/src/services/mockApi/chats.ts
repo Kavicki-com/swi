@@ -1,13 +1,14 @@
 // src/services/mockApi/chats.ts
-// Mock chat contacts for the /chat inbox screen (Figma 103:9924 + 102:8997).
-// Names extracted from the Figma frame; avatars rotated from the existing
+// Mock chat contacts for the /chat inbox screen.
+// Names extracted from the design; avatars rotated from the existing
 // chat-* PNGs (we have 4 photos for 7 contacts so worker-* fills the gap).
 //
 // Each contact also carries demo conversation history + profile metadata so
-// that selecting a contact can render the "active" state (Figma 102:8997)
+// that selecting a contact can render the "active" state
 // without an extra API call.
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
+import type { ChatContact, ChatMessage } from '../chat/types'
 import chatEzequiel from '@/assets/avatars/chat-ezequiel.png'
 import chatRomulo from '@/assets/avatars/chat-romulo.png'
 import chatJulio from '@/assets/avatars/chat-julio.png'
@@ -16,42 +17,7 @@ import workerA from '@/assets/avatars/worker-a.png'
 import workerB from '@/assets/avatars/worker-b.png'
 import workerC from '@/assets/avatars/worker-c.png'
 
-export type ChatMessage = {
-  id: string
-  text: string
-  // 'them' = received bubble (left, primary-light border, avatar on left).
-  // 'me'   = sent bubble (right, secondary-light border, avatar on right).
-  sender: 'me' | 'them'
-  time: string
-  // anexo resolvido (presigned); quando presente, a bolha mostra a imagem (render na B1)
-  imageUri?: string
-  // Marcas de revisão (QA Web #4). Booleanas de propósito: a bolha só precisa
-  // saber SE, não quando, e o par undefined/null do backend já custou caro.
-  edited?: boolean
-  deleted?: boolean
-}
-
-export type ChatContact = {
-  id: string
-  name: string
-  sector: string
-  avatarUri: string
-  unreadCount?: number
-  // Profile fields used by the right-column info panel when this contact is
-  // the active chat (Figma 102:8997 right column 102:9672).
-  role?: string
-  subtitle?: string
-  gender?: 'male' | 'female'
-  age?: number
-  bloodType?: string
-  allergies?: string
-  fatigueRemaining?: string
-  // Pre-baked conversation history. The same DEMO_MESSAGES array is reused
-  // across contacts in the demo seed — production would fetch per contact.
-  messages?: ReadonlyArray<ChatMessage>
-}
-
-// Conversation extracted from Figma 102:8997 — five bubbles split by the
+// Conversation extracted from the spec, five bubbles split by the
 // "Hoje - 21/03/2026" date separator. Padded with extra back-and-forth so
 // the demo chat overflows the visible chat-box and the user can actually
 // scroll up to "older" messages. Reused for every contact in the demo.

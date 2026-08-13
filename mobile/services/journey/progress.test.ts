@@ -6,7 +6,7 @@ import {
 
 const T0 = 1_000_000_000_000; // epoch ms fixo (determinístico)
 
-describe('progress — elapsedSeconds', () => {
+describe('progress: elapsedSeconds', () => {
   it('parado retorna accumulatedSeconds', () => {
     const a: Anchors = { startedAt: null, accumulatedSeconds: 120, running: false };
     expect(elapsedSeconds(a, T0)).toBe(120);
@@ -21,7 +21,7 @@ describe('progress — elapsedSeconds', () => {
   });
 });
 
-describe('progress — progressPct', () => {
+describe('progress: progressPct', () => {
   it('proporcional ao estimado, cap 100', () => {
     expect(progressPct(90 * 60, 180)).toBe(50);   // 90min de 180min
     expect(progressPct(999 * 60, 180)).toBe(100); // cap
@@ -31,14 +31,14 @@ describe('progress — progressPct', () => {
   });
 });
 
-describe('progress — formatDuration', () => {
+describe('progress: formatDuration', () => {
   it('formata h:mm:ss', () => {
     expect(formatDuration(7 * 3600 + 55 * 60 + 12)).toBe('7:55:12');
     expect(formatDuration(0)).toBe('0:00:00');
   });
 });
 
-describe('progress — transições (reducers puros)', () => {
+describe('progress: transições (reducers puros)', () => {
   it('start começa um segmento rodando', () => {
     const a = startAnchors({ startedAt: null, accumulatedSeconds: 0, running: false }, T0);
     expect(a).toEqual({ startedAt: T0, accumulatedSeconds: 0, running: true });

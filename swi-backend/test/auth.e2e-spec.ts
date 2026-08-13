@@ -9,6 +9,19 @@ describe('Auth e2e', () => {
   let app: INestApplication, prisma: PrismaService
   const codes: Record<string, string> = {}
 
+  const EMAILS = ['e2e@ex.com', 'admin-e2e@ex.com', 'reject-e2e@ex.com', 'resend-e2e@ex.com']
+
+  // Profile ANTES de User: a relação não declara onDelete Cascade
+  // (schema.prisma, model Profile), então apagar o usuário direto viola
+  // Profile_userId_fkey. O signup cria o profile, então a suíte sempre deixava
+  // um pra trás: o afterAll estourava e o resíduo derrubava o beforeAll da
+  // execução seguinte, no mesmo ponto. Rodar duas vezes seguidas era o
+  // suficiente pra ver, e é isso que esta ordem conserta.
+  const limpar = async () => {
+    await prisma.profile.deleteMany({ where: { user: { email: { in: EMAILS } } } })
+    await prisma.user.deleteMany({ where: { email: { in: EMAILS } } })
+  }
+
   beforeAll(async () => {
     const mod = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(MailService).useValue({
@@ -19,12 +32,12 @@ describe('Auth e2e', () => {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
     await app.init()
     prisma = app.get(PrismaService)
-    await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com','reject-e2e@ex.com','resend-e2e@ex.com'] } } })
+    await limpar()
     const bcrypt = await import('bcrypt')
     await prisma.user.create({ data: { email: 'admin-e2e@ex.com', name: 'A', passwordHash: await bcrypt.hash('admin123', 10),
         role: 'ADMIN', emailVerified: true, approvalStatus: 'APPROVED' } })
   })
-  afterAll(async () => { await prisma.user.deleteMany({ where: { email: { in: ['e2e@ex.com','admin-e2e@ex.com','reject-e2e@ex.com','resend-e2e@ex.com'] } } }); await app.close() })
+  afterAll(async () => { await limpar(); await app.close() })
 
   it('fluxo completo até /me', async () => {
     const http = app.getHttpServer()

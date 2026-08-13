@@ -2,7 +2,7 @@ import { WeatherService } from './weather.service'
 import type { OpenMeteoProvider } from './weather.provider'
 import { CANNED_CURRENT, CANNED_DAILY, CANNED_HOURLY } from './weather.types'
 
-const provider = (fetch: OpenMeteoProvider['fetch']) => ({ fetch } as OpenMeteoProvider)
+const provider = (fetch: OpenMeteoProvider['fetch']) => ({ fetch })
 
 describe('WeatherService.getSnapshot', () => {
   const orig = process.env.WEATHER_SCENARIO
@@ -41,6 +41,19 @@ describe('WeatherService.getSnapshot', () => {
   it('getSnapshot serve CANNED_HOURLY quando o provider retorna série vazia', async () => {
     const svc = new WeatherService(provider(async () => ({ current: CANNED_CURRENT, daily: CANNED_DAILY, hourly: [] })))
     expect((await svc.getSnapshot()).hourly).toHaveLength(CANNED_HOURLY.length)
+  })
+  it('não fabrica alerta em production mesmo com WEATHER_SCENARIO=alert', async () => {
+    const origNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    process.env.WEATHER_SCENARIO = 'alert'
+    try {
+      // Alerta fabricado em produção manda gente evacuar sem tempestade
+      // nenhuma. A flag é de demonstração e não pode sobreviver ao ambiente.
+      const s = await new WeatherService(provider(async () => { throw new Error('x') })).getSnapshot()
+      expect(s.alerts).toEqual([])
+    } finally {
+      process.env.NODE_ENV = origNodeEnv
+    }
   })
   it('WEATHER_SCENARIO=alert → 1 alerta vigente (endsAt no futuro)', async () => {
     process.env.WEATHER_SCENARIO = 'alert'

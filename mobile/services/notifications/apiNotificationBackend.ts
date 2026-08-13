@@ -3,13 +3,13 @@ import { io, type Socket } from 'socket.io-client';
 import type { AppNotification, NotificationBackend } from './types';
 import { apiRequest } from '../api/http';
 import { getUserId } from '../api/session';
-import { API_URL } from '../auth/apiConfig';
+import { getApiUrl } from '../auth/apiConfig';
 
 const TOKEN_KEY = 'swi.auth.token';
 
 // Backend devolve o shape mobile pronto (ISO no createdAt). `subscribe` troca o
 // event-bus do mock por um socket.io real (evento 'notification'). `registerPushToken`
-// fica no-op seam — a entrega de push do SO é deploy-gated (SNS/FCM/APNs + expo-notifications).
+// fica no-op seam: a entrega de push do SO é deploy-gated (FCM/APNs + expo-notifications).
 export const apiNotificationBackend: NotificationBackend = {
   get myId() { return getUserId(); },
 
@@ -24,7 +24,7 @@ export const apiNotificationBackend: NotificationBackend = {
   },
 
   async registerPushToken() {
-    // no-op seam: entrega de push do SO é deploy-gated (SNS/FCM/APNs + device token).
+    // no-op seam: entrega de push do SO é deploy-gated (FCM/APNs + device token).
   },
 
   subscribe(cb) {
@@ -37,7 +37,7 @@ export const apiNotificationBackend: NotificationBackend = {
       // handshake WS puro falha em proxies que não repassam o upgrade, e sem
       // o fallback NENHUMA notificação ao vivo chegava, inclusive "nova
       // tarefa atribuída".
-      socket = io(API_URL, {
+      socket = io(getApiUrl(), {
         auth: { token },
         transports: ['polling', 'websocket'],
       });

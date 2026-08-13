@@ -1,6 +1,9 @@
 // `withDeadline` fica REAL: é ele que dá prazo ao PUT direto no storage, e é
 // justamente esse comportamento que o teste do prazo verifica. Só o apiRequest
 // (a chamada de presign) vira dublê.
+import { apiRequest } from './http';
+import { File } from 'expo-file-system';
+import { contentTypeFor, uploadImage, UPLOAD_TIMEOUT_MS } from './uploadMedia';
 jest.mock('./http', () => ({
   ...jest.requireActual('./http'),
   apiRequest: jest.fn(),
@@ -12,9 +15,6 @@ jest.mock('expo-file-system', () => ({
     arrayBuffer: jest.fn(async () => new ArrayBuffer(32696)),
   })),
 }));
-import { apiRequest } from './http';
-import { File } from 'expo-file-system';
-import { contentTypeFor, uploadImage, UPLOAD_TIMEOUT_MS } from './uploadMedia';
 
 // O upload virou PUT presignado (2026-07-29). O R2 NÃO implementa presigned
 // POST: devolvia 501 "Presigned post requests are not yet implemented" na cara
@@ -37,7 +37,7 @@ describe('uploadMedia', () => {
 
   // Exame aceita laudo em PDF/TXT (PR 3 da unificação dos exames). Sem estes
   // casos o PDF subiria assinado como image/jpeg e o presign recusaria com
-  // 400 — o arquivo certo, rejeitado por content-type errado.
+  // 400, o arquivo certo, rejeitado por content-type errado.
   it('contentTypeFor infere pdf/txt pela extensão', () => {
     expect(contentTypeFor('file:///a/laudo.pdf')).toBe('application/pdf');
     expect(contentTypeFor('file:///a/laudo.txt')).toBe('text/plain');
@@ -59,7 +59,7 @@ describe('uploadMedia', () => {
     const [url, init] = (global as any).fetch.mock.calls[0];
     expect(url).toBe('https://r2/bucket/k');
     expect(init.method).toBe('PUT');
-    // O header TEM que existir e casar com o content-type assinado — divergir
+    // O header TEM que existir e casar com o content-type assinado, divergir
     // dá 403 SignatureDoesNotMatch (verificado no R2 real).
     expect(init.headers['Content-Type']).toBe('image/jpeg');
     expect(init.body).toBeInstanceOf(ArrayBuffer);

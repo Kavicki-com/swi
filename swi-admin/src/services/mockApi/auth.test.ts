@@ -76,7 +76,6 @@ describe('authApi.signUp', () => {
     })
     expect(result.error).toBeNull()
     expect(result.data?.email).toBe('novo@swi.test')
-    expect(result.data?.org_id).toBe('org_seed_1')
     expect(result.data?.role).toBe('admin')
     expect(result.data?.consent_given_at).not.toBeNull()
     expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).not.toBeNull()

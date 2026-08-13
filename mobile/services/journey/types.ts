@@ -1,11 +1,11 @@
 // Local mirror dos models Journey/Task do swi-backend. Siblings são isolados,
-// então NÃO importamos o Schema do backend; após deploy, `ampx generate
-// graphql-client-code --out` pode substituir por tipos gerados (Phase 6).
+// então NÃO importamos os tipos do backend: este arquivo é a fronteira do
+// contrato REST e precisa ser conferido à mão quando ele mudar.
 // Mirrors services/reports/types.ts.
 //
 // `startedAt` é ISO string no tipo de domínio; progress.ts trabalha em epoch ms
-// (converte na fronteira). `images`/`responsibleAvatars` são uris resolvidas (de
-// keys do S3 no amplify).
+// (converte na fronteira). `images`/`responsibleAvatars` são uris já resolvidas
+// (vêm presigned do backend).
 //
 // Tasks agora vivem sob uma WorkOrder pai: `objective` = summary da ordem;
 // `images` = imageKeys da ordem (presigned); `responsible*` = responsáveis da
@@ -23,7 +23,7 @@ export interface Task {
   startedAt: string | null;       // ISO datetime
   accumulatedSeconds: number;
   progressPct: number;            // último snapshot persistido
-  images: string[];               // uris da ORDEM pai (resolvidas de keys no amplify)
+  images: string[];               // uris da ORDEM pai (presigned)
   responsibleCount: number;
   responsibleNames: string[];
   responsibleAvatars: string[];   // uris (presigned)

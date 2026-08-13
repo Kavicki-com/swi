@@ -2,7 +2,7 @@ import { EvacuationService } from './evacuation.service'
 import type { RouteProvider } from './evacuation.provider'
 import { CANNED_ROUTE } from './evacuation.types'
 
-const provider = (fetch: RouteProvider['fetch']) => ({ fetch } as RouteProvider)
+const provider = (fetch: RouteProvider['fetch']) => ({ fetch })
 
 describe('EvacuationService.getRoute', () => {
   it('provider ok → usa rota real + fetchedAt ISO', async () => {

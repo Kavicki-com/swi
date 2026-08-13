@@ -2,7 +2,7 @@ import { act, create } from 'react-test-renderer';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import MapaGeral from '../../../app/(app)/map';
 
-// QA Mobile #10 — os aneis de distancia do mapa.
+// QA Mobile #10, os aneis de distancia do mapa.
 //
 // A tela desenhava dois <View> de 395 e 647 PIXELS grudados no centro da tela,
 // com "5KM"/"10KM" digitado ao lado. Pixel nao e distancia: em qualquer zoom
@@ -82,7 +82,7 @@ const render = async () => {
 const porTestID = (tree: ReturnType<typeof create>, id: string) =>
   tree.root.findAll((n) => n.props?.testID === id)[0];
 
-describe('Mapa geral — aneis de distancia (QA Mobile #10)', () => {
+describe('Mapa geral: aneis de distancia (QA Mobile #10)', () => {
   it.each([
     ['radius-5000', 5000],
     ['radius-10000', 10000],
@@ -91,7 +91,7 @@ describe('Mapa geral — aneis de distancia (QA Mobile #10)', () => {
     const anel = porTestID(tree, `line-${id}`);
 
     expect(anel).toBeDefined();
-    const vertices = anel.props.shape.geometry.coordinates as Array<[number, number]>;
+    const vertices = anel.props.shape.geometry.coordinates as [number, number][];
     expect(vertices.length).toBeGreaterThan(16);
     for (const v of vertices) {
       expect(metrosEntre(MINA, v)).toBeCloseTo(metros as number, 0);

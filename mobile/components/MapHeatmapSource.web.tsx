@@ -8,6 +8,7 @@
 // Renders nothing; the heatmap lives in maplibre's own canvas above the tiles.
 import { useContext, useEffect, useMemo } from 'react';
 import { MapInstanceContext } from './MapView.web';
+import { buildColorExpression } from './MapHeatmapSource.types';
 import type {
   HeatmapColorStop,
   HeatmapShape,
@@ -21,17 +22,6 @@ export type {
   MapHeatmapPaint,
   MapHeatmapSourceProps,
 };
-
-// Build the maplibre `heatmap-color` interpolation expression from a list
-// of [density, color] tuples. Output shape:
-//   ['interpolate', ['linear'], ['heatmap-density'], 0, 'cyan', 1, 'red']
-function buildColorExpression(stops: HeatmapColorStop[]): unknown[] {
-  const flat: unknown[] = [];
-  for (const [density, color] of stops) {
-    flat.push(density, color);
-  }
-  return ['interpolate', ['linear'], ['heatmap-density'], ...flat];
-}
 
 export function MapHeatmapSource({
   id,
@@ -65,15 +55,11 @@ export function MapHeatmapSource({
         type: 'heatmap',
         source: id,
         paint: {
-          'heatmap-weight': paint.weightProperty
-            ? (['get', paint.weightProperty] as unknown as number)
-            : 1,
+          'heatmap-weight': paint.weightProperty ? ['get', paint.weightProperty] : 1,
           'heatmap-intensity': paint.intensity ?? 1,
           'heatmap-radius': paint.radius ?? 30,
           'heatmap-opacity': paint.opacity ?? 1,
-          // maplibre-gl types are looser than the strict ExpressionSpec; the
-          // expression array is valid at runtime per the spec.
-          'heatmap-color': colorExpression as unknown as string,
+          'heatmap-color': colorExpression,
         },
       },
       beforeId,

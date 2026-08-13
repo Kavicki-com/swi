@@ -1,6 +1,6 @@
 // Formata duration (segundos) e distance (metros) vindos da Mapbox
 // Directions API pros labels visiveis na tela de rescue. Replica o
-// estilo dos labels Figma hardcoded ("6 minutos", "16 Km", "17 minutos").
+// estilo dos labels de referencia hardcoded ("6 minutos", "16 Km", "17 minutos").
 
 export function formatDuration(seconds: number): string {
   const total = Math.round(seconds)

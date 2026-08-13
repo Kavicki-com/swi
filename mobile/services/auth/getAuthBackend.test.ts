@@ -2,7 +2,11 @@ jest.mock('expo-secure-store', () => ({}));
 
 function loadWith(authBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ AUTH_BACKEND: authBackend, DATA_BACKEND: 'mock' }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    AUTH_BACKEND: authBackend,
+    DATA_BACKEND: 'mock',
+  }));
   const { getAuthBackend } = require('./getAuthBackend');
   const { mockAuthBackend } = require('./mockAuthBackend');
   const { apiAuthBackend } = require('./apiAuthBackend');

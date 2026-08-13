@@ -9,9 +9,7 @@ import { clearSession, renderPage } from '@/test-utils/renderPage'
 describe('ReportsList', () => {
   afterEach(clearSession)
 
-  it('renders without crashing', () => {
-    expect(() =>
-      renderPage(<ReportsList />, { route: '/reports' }),
-    ).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<ReportsList />, { route: '/reports' })).resolves.toBeDefined()
   })
 })

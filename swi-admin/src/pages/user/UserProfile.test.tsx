@@ -15,15 +15,15 @@ describe('UserProfile', () => {
     clearSession()
   })
 
-  it('renders without crashing', () => {
-    expect(() => renderPage(<UserProfile />, { route: '/user/profile' })).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<UserProfile />, { route: '/user/profile' })).resolves.toBeDefined()
   })
 
   // QA C3 (2026-07-24): o perfil era hardcoded em 'admin-01' (era mock) — 404
   // pra todo usuário real. Deve buscar o id do usuário LOGADO (sessão).
   it('busca o perfil do usuário da sessão, não o id mock admin-01', async () => {
     const spy = vi.spyOn(adminsApi, 'get').mockResolvedValue({ data: null, error: null })
-    renderPage(<UserProfile />, { route: '/user/profile' })
+    await renderPage(<UserProfile />, { route: '/user/profile' })
     await waitFor(() => expect(spy).toHaveBeenCalled())
     expect(spy).toHaveBeenCalledWith('u_seed_1') // id do seedSession
     expect(spy).not.toHaveBeenCalledWith('admin-01')

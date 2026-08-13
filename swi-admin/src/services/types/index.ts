@@ -1,9 +1,20 @@
 export type ID = string
 export type ISODateString = string
 
+// Envelope compartilhado da camada de serviço: a API REST e as simulações
+// devolvem o mesmo formato { data, error } para as telas não distinguirem a
+// origem. Vive aqui, num módulo neutro, para o caminho de produção não
+// importar nada do namespace de simulação.
+export type ServiceError = { message: string; code?: string }
+
+export type ServiceResponse<T> = {
+  data: T | null
+  error: ServiceError | null
+  count?: number
+}
+
 export type User = {
   id: ID
-  org_id: ID
   email: string
   full_name: string
   role: 'admin' | 'super_admin'

@@ -11,7 +11,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { ApiError } from '@/services/api/http'
 import type { WorkOrderRow, WorkOrderStatus } from '@/services/api/workOrders'
-import { seedSession, clearSession } from '@/test-utils/renderPage'
+import { seedSession, clearSession, settled } from '@/test-utils/renderPage'
 import { TasksList } from './TasksList'
 
 const { listMock } = vi.hoisted(() => ({ listMock: vi.fn() }))
@@ -90,9 +90,9 @@ function TaskDetailsProbe() {
   return <div data-testid="task-details-route">{id}</div>
 }
 
-function renderAt(route = '/tasks') {
+async function renderAt(route = '/tasks') {
   seedSession()
-  return render(
+  return settled(render(
     <SwiThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={[route]}>
@@ -106,7 +106,7 @@ function renderAt(route = '/tasks') {
         </MemoryRouter>
       </AuthProvider>
     </SwiThemeProvider>,
-  )
+  ))
 }
 
 beforeEach(() => {
@@ -121,7 +121,7 @@ describe('TasksList — Voltar', () => {
   // histórico: entrando por deep-link em /tasks deslogado, RequireAuth e Login
   // redirecionam os dois com `replace`, então a pilha pode começar aqui.
   it('vai pro dashboard em vez de andar no histórico', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
@@ -131,7 +131,7 @@ describe('TasksList — Voltar', () => {
 
   // O caso que o navigate(-1) quebrava: /tasks é a ÚNICA entrada do histórico.
   it('vai pro dashboard mesmo sendo a primeira entrada do histórico', async () => {
-    renderAt('/tasks')
+    await renderAt('/tasks')
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
@@ -143,7 +143,7 @@ describe('TasksList — Voltar', () => {
 
 describe('TasksList', () => {
   it('busca a aba inicial (in_progress) ao montar e renderiza a tarefa', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByText('Reparo')).toBeInTheDocument()
     })
@@ -153,7 +153,7 @@ describe('TasksList', () => {
   // DS 0.1.118: locationAccessibilityLabel — o pino saía com 'Open location'
   // fixo em inglês; a lista passa o label pt-BR por tarefa.
   it('o pino de localização tem label pt-BR com o título da tarefa', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByText('Inspeção')).toBeInTheDocument()
     })
@@ -162,7 +162,7 @@ describe('TasksList', () => {
   })
 
   it('trocar pra "Concluídas" refaz a busca com done', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('tab', { name: 'Concluídas' }))
@@ -173,7 +173,7 @@ describe('TasksList', () => {
   })
 
   it('a aba "A Fazer" busca pending', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('tab', { name: 'A Fazer' }))
@@ -184,7 +184,7 @@ describe('TasksList', () => {
   })
 
   it('a busca filtra por título no cliente, sem nova chamada ao backend', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
     expect(listMock).toHaveBeenCalledTimes(1)
 
@@ -200,7 +200,7 @@ describe('TasksList', () => {
   })
 
   it('a busca também filtra por setor', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
 
     fireEvent.change(screen.getByPlaceholderText('Pesquisar tarefa'), {
@@ -215,7 +215,7 @@ describe('TasksList', () => {
 
   it('mostra o estado vazio quando a aba não tem tarefas', async () => {
     listMock.mockResolvedValue([])
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('tasks-empty')).toHaveTextContent(/nenhuma tarefa/i)
     })
@@ -223,7 +223,7 @@ describe('TasksList', () => {
 
   it('mostra a mensagem do ApiError quando a busca falha', async () => {
     listMock.mockRejectedValue(new ApiError('Não foi possível conectar ao servidor', 0))
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('tasks-error')).toHaveTextContent(
         'Não foi possível conectar ao servidor',
@@ -234,7 +234,7 @@ describe('TasksList', () => {
   it('"Tentar novamente" refaz a busca da aba atual depois de um erro', async () => {
     listMock.mockRejectedValueOnce(new ApiError('Erro 500', 500))
     listMock.mockResolvedValueOnce([REPARO, INSPECAO])
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('tasks-error')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
@@ -246,14 +246,14 @@ describe('TasksList', () => {
     expect(listMock).toHaveBeenNthCalledWith(2, 'in_progress')
   })
 
-  it('mostra o estado de carregando enquanto a busca não resolve', () => {
+  it('mostra o estado de carregando enquanto a busca não resolve', async () => {
     listMock.mockReturnValue(new Promise(() => {}))
-    renderAt()
+    await renderAt()
     expect(screen.getByTestId('tasks-loading')).toBeInTheDocument()
   })
 
   it('clicar na linha navega pro detalhe /tasks/:id', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Reparo, Setor Leste' }))
@@ -265,7 +265,7 @@ describe('TasksList', () => {
 
   it('distingue duas tarefas de mesmo título por setor no nome acessível', async () => {
     listMock.mockResolvedValue([REPARO, REPARO_NORTE])
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getAllByText('Reparo')).toHaveLength(2))
 
     expect(screen.getByRole('button', { name: 'Reparo, Setor Leste' })).toBeInTheDocument()
@@ -279,7 +279,7 @@ describe('TasksList', () => {
   })
 
   it('"Nova Tarefa" navega pro formulário', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Nova Tarefa' }))
@@ -290,7 +290,7 @@ describe('TasksList', () => {
   })
 
   it('o pino navega pro mapa e NÃO dispara a navegação da linha', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
 
     // Pressables aninhados: o pino vive dentro do card clicável. Só o interno
@@ -307,7 +307,7 @@ describe('TasksList', () => {
   })
 
   it('o cluster de avatares mostra +N quando há mais responsáveis que avatares exibidos', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
     // 18 responsáveis, 5 visíveis → +13.
     expect(screen.getByText('+13')).toBeInTheDocument()
@@ -320,7 +320,7 @@ describe('TasksList', () => {
       status === 'done' ? done.promise : inProgress.promise,
     )
 
-    renderAt()
+    await renderAt()
     // Troca de aba com a busca de in_progress ainda pendente.
     fireEvent.click(screen.getByRole('tab', { name: 'Concluídas' }))
 

@@ -1,7 +1,7 @@
 // Posições ao vivo dos workers (GET /positions, ADMIN org-scoped no backend).
 // Fonte REAL: heartbeat do app mobile (em dev, o simulador SIM_POSITIONS anda
 // pelos mesmos endpoints). Substitui o buildMockMapMarkers dos mapas.
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import type { DashboardMapMarker } from './dashboard'
 import { simulatedVitalsFor, type SimulatedTier } from '@/services/vitals/simulatedVitals'
 import { apiFetch, ApiError } from './http'
@@ -51,7 +51,7 @@ export function toDashboardMarker(dto: PositionMarkerDto): DashboardMapMarker {
 export const positionsApi = {
   // Envelope (nunca lança): falha de posições degrada o mapa pra vazio sem
   // derrubar a página — mesmo contrato das outras fachadas envelope.
-  list: async (): Promise<MockResponse<DashboardMapMarker[]>> => {
+  list: async (): Promise<ServiceResponse<DashboardMapMarker[]>> => {
     try {
       const rows = await apiFetch<PositionMarkerDto[]>('/positions')
       return { data: rows.map(toDashboardMarker), error: null }

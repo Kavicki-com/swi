@@ -4,9 +4,10 @@ import { vi } from 'vitest'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SignUp } from './SignUp'
+import { settled } from '@/test-utils/renderPage'
 
-const renderAt = () =>
-  render(
+const renderAt = async () =>
+  settled(render(
     <SwiThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={['/sign-up']}>
@@ -18,7 +19,7 @@ const renderAt = () =>
         </MemoryRouter>
       </AuthProvider>
     </SwiThemeProvider>,
-  )
+  ))
 
 beforeEach(() => window.localStorage.clear())
 afterEach(() => vi.unstubAllGlobals())
@@ -74,8 +75,8 @@ const fillValid = (overrides: Partial<FillData> = {}) => {
 }
 
 describe('SignUp', () => {
-  it('renders all 3 sections, 11 inputs, 4 role radios and 2 action buttons', () => {
-    renderAt()
+  it('renders all 3 sections, 11 inputs, 4 role radios and 2 action buttons', async () => {
+    await renderAt()
     // Section headers
     expect(screen.getByText(/dados da empresa/i)).toBeInTheDocument()
     expect(screen.getByText(/dados do endereço/i)).toBeInTheDocument()
@@ -106,7 +107,7 @@ describe('SignUp', () => {
   })
 
   it('blocks submit with empty company name', async () => {
-    renderAt()
+    await renderAt()
     fillValid({ companyName: '' })
     fireEvent.click(screen.getByRole('button', { name: /finalizar/i }))
     await waitFor(() => {
@@ -115,7 +116,7 @@ describe('SignUp', () => {
   })
 
   it('blocks submit with invalid responsible email', async () => {
-    renderAt()
+    await renderAt()
     fillValid({ email: 'not-an-email' })
     fireEvent.click(screen.getByRole('button', { name: /finalizar/i }))
     await waitFor(() => {
@@ -124,7 +125,7 @@ describe('SignUp', () => {
   })
 
   it('blocks submit when no role is selected', async () => {
-    renderAt()
+    await renderAt()
     fillValid({ role: '' })
     fireEvent.click(screen.getByRole('button', { name: /finalizar/i }))
     await waitFor(() => {
@@ -140,7 +141,7 @@ describe('SignUp', () => {
     } as Response)
     vi.stubGlobal('fetch', f)
 
-    renderAt()
+    await renderAt()
     fillValid({ email: 'maria@acme.com' })
     fireEvent.click(screen.getByRole('button', { name: /finalizar/i }))
     await waitFor(() => {
@@ -172,7 +173,7 @@ describe('SignUp', () => {
       } as Response),
     )
 
-    renderAt()
+    await renderAt()
     fillValid({ email: 'maria@acme.com' })
     fireEvent.click(screen.getByRole('button', { name: /finalizar/i }))
     await waitFor(() => {

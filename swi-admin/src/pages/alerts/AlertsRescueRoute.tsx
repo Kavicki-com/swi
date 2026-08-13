@@ -1,8 +1,8 @@
 // src/pages/alerts/AlertsRescueRoute.tsx
-// /alerts/:employeeId/rescue/:rescuerId — Figma 101:7936. Maplibre map with
+// /alerts/:employeeId/rescue/:rescuerId. Maplibre map with
 // real ESRI satellite tiles + 2 pins (rescuer + injured) + a GeoJSON
 // LineString route + 3 inline distance/time labels tracked to fractional
-// route waypoints + a centered confirmation modal (Figma 101:8167).
+// route waypoints + a centered confirmation modal.
 //
 // Dispatched state (URL `?dispatched=true`):
 //   - Pre-dispatch: cyan route, green rescuer pin, modal visible.
@@ -80,8 +80,8 @@ export function AlertsRescueRoute() {
   const { employeeId, rescuerId } = useParams<{ employeeId?: string; rescuerId?: string }>()
   // Dispatched state is persisted in the URL (`?dispatched=true`) so a
   // refresh of /alerts/:employeeId/rescue/:rescuerId?dispatched=true
-  // returns the user to the post-Continuar view (Figma 101:8359
-  // alerts-rescue-ongoing). The modal opens on the pre-dispatch view
+  // returns the user to the post-Continuar view
+  // (alerts-rescue-ongoing). The modal opens on the pre-dispatch view
   // only.
   const [searchParams, setSearchParams] = useSearchParams()
   const dispatched = searchParams.get('dispatched') === 'true'

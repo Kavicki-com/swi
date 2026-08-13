@@ -83,7 +83,6 @@ describe('useAuth (hydration)', () => {
       SESSION_STORAGE_KEY,
       JSON.stringify({
         id: 'u_seed_1',
-        org_id: 'org_seed_1',
         email: 'admin@swi.test',
         full_name: 'Admin Seed',
         role: 'super_admin',
@@ -112,20 +111,6 @@ describe('useAuth (hydration)', () => {
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })
-  })
-
-  it('signUp signs in the new user', async () => {
-    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
-    await waitFor(() => expect(result.current.loading).toBe(false))
-    await act(async () => {
-      await result.current.signUp({
-        email: 'novo@swi.test',
-        password: 'novo1234',
-        full_name: 'Novo',
-        consent: true,
-      })
-    })
-    expect(result.current.user?.email).toBe('novo@swi.test')
   })
 
   // O 401 do apiFetch apaga o localStorage, mas isso sozinho não avisa o React:

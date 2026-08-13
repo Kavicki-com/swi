@@ -153,7 +153,7 @@ describe('NotificationService', () => {
     await svc.onModuleInit()
     const [name, handler] = q.registerWorker.mock.calls[0]
     expect(name).toBe('notifications.fanout')
-    const spy = jest.spyOn(svc, 'createForMany').mockResolvedValue([] as any)
+    const spy = jest.spyOn(svc, 'createForMany').mockResolvedValue([])
     await handler({ workerIds: ['a', 'b'], payload: { domain: 'reports', title: 'X' } })
     expect(spy).toHaveBeenCalledWith(['a', 'b'], { domain: 'reports', title: 'X' })
   })

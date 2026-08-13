@@ -2,7 +2,9 @@
 // EVACUATION_SCENARIO entra no factory porque mockEvacuationBackend lê essa flag.
 function loadWith(dataBackend: 'mock' | 'api') {
   jest.resetModules();
-  jest.doMock('../../lib/featureFlags', () => ({ DATA_BACKEND: dataBackend, EVACUATION_SCENARIO: 'normal' }));
+  jest.doMock('../../lib/featureFlags', () => ({
+    ...jest.requireActual('../../lib/featureFlags'),
+    DATA_BACKEND: dataBackend, EVACUATION_SCENARIO: 'normal' }));
   const { getEvacuationBackend } = require('./getEvacuationBackend');
   const { apiEvacuationBackend } = require('./apiEvacuationBackend');
   const { mockEvacuationBackend } = require('./mockEvacuationBackend');

@@ -39,11 +39,9 @@ afterEach(() => {
 })
 
 describe('EmployeeDetails', () => {
-  it('renders without crashing', () => {
+  it('renders without crashing', async () => {
     getMock.mockResolvedValue({ data: null, error: null } as never)
-    expect(() =>
-      renderPage(<EmployeeDetails />, { route: '/employees/seed_id', path: '/employees/:id' }),
-    ).not.toThrow()
+    await expect(renderPage(<EmployeeDetails />, { route: '/employees/seed_id', path: '/employees/:id' })).resolves.toBeDefined()
   })
 
   // QA F (2026-07-24): o "Solicitar Pausa" era toast fake. Agora dispara o
@@ -51,7 +49,7 @@ describe('EmployeeDetails', () => {
   it('Solicitar Pausa → notificationsApi.requestPause com o id do funcionário', async () => {
     getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
     pauseMock.mockResolvedValue({ data: { requested: true }, error: null })
-    renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Solicitar pausa para o funcionário' }),

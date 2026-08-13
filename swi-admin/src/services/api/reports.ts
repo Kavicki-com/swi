@@ -1,10 +1,10 @@
 // Relatórios do painel (GET /reports, GET /reports/:id, POST/PATCH) contra o
-// backend Nest. Mantém o envelope MockResponse pra que as telas de Reports não
+// backend Nest. Mantém o envelope ServiceResponse pra que as telas de Reports não
 // mudem de contrato na migração (mesmo padrão do services/api/users.ts). Os
 // avatares dos responsáveis e das atividades são DECORATIVOS — o backend guarda
 // responsáveis só como nomes, sem avatar; injetamos avatares fixos no mapeamento
 // pra preservar o visual do redesign (AvatarGroup) até o hardware/upload existir.
-import type { MockResponse } from '@/services/mockApi/types'
+import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 
 // Tipos canônicos dos Relatórios (antes moravam em mockApi/reports.ts, hoje morto).
@@ -12,7 +12,7 @@ import { apiFetch } from './http'
 // (amarelo), 'canceled' (vermelho), 'info' (azul).
 export type ReportStatus = 'accept' | 'pending' | 'canceled' | 'info'
 
-// Uma linha de atividade em /reports/:id (Figma 98:4877 seção "Atividades").
+// Uma linha de atividade em /reports/:id (seção "Atividades").
 // A linha renderiza: ícone chave | divisor | título + setor + ProgressBar |
 // AvatarGroup (count) | ícone location_on. O tone colore a barra: success
 // (verde), warning (laranja), error (vermelho).
@@ -48,7 +48,7 @@ export type Report = {
   // Override opcional quando a demo quer que o badge "+N" indique mais pessoas
   // do que existem no array de avatares visíveis.
   responsibleTotalCount?: number
-  // Corpo dos detalhes exibido em /reports/:id (Figma 98:4877 "Detalhes do relatório").
+  // Corpo dos detalhes exibido em /reports/:id ("Detalhes do relatório").
   details?: string
   // Thumbnails de imagem da seção "Imagens".
   images?: ReadonlyArray<string>
@@ -95,7 +95,7 @@ export type ReportDetailDto = ReportDto & {
 
 // Atividade crua do backend (sem id garantido). responsibleNames/Avatars são a
 // equipe REAL da atividade — o backend resolve nome → foto presigned no
-// detalhe (decisão 2026-07-26: seguir o Figma com gente de verdade).
+// detalhe (decisão 2026-07-26: seguir o desenho com gente de verdade).
 type RawActivity = {
   id?: string
   title: string
@@ -173,7 +173,7 @@ export const reportsApi = {
   // é o que deixa a tela avisar "mostrando 200 de 262" em vez de esconder 62
   // relatórios em silêncio (QA de volume 2026-07-26). Sem paginação explícita,
   // o backend devolve os 200 mais recentes, como antes.
-  async list(page?: { limit?: number; offset?: number }): Promise<MockResponse<Report[]>> {
+  async list(page?: { limit?: number; offset?: number }): Promise<ServiceResponse<Report[]>> {
     try {
       const qs = new URLSearchParams()
       if (page?.limit != null) qs.set('limit', String(page.limit))
@@ -200,7 +200,7 @@ export const reportsApi = {
   async get(
     id: string,
   ): Promise<
-    MockResponse<
+    ServiceResponse<
       | (Report & { comments: ReportComment[]; imageKeys: string[]; responsibleNames: string[] })
       | null
     >
@@ -226,7 +226,7 @@ export const reportsApi = {
     }
   },
 
-  async create(input: CreateReportInput): Promise<MockResponse<Report>> {
+  async create(input: CreateReportInput): Promise<ServiceResponse<Report>> {
     try {
       const created = await apiFetch<ReportDto>('/reports', {
         method: 'POST',
@@ -238,7 +238,7 @@ export const reportsApi = {
     }
   },
 
-  async update(id: string, patch: UpdateReportInput): Promise<MockResponse<Report>> {
+  async update(id: string, patch: UpdateReportInput): Promise<ServiceResponse<Report>> {
     try {
       const updated = await apiFetch<ReportDto>(`/reports/${id}`, {
         method: 'PATCH',
@@ -250,7 +250,7 @@ export const reportsApi = {
     }
   },
 
-  async addComment(id: string, body: string): Promise<MockResponse<ReportComment>> {
+  async addComment(id: string, body: string): Promise<ServiceResponse<ReportComment>> {
     try {
       const comment = await apiFetch<ReportComment>(`/reports/${id}/comments`, {
         method: 'POST',

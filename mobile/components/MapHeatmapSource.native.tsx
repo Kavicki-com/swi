@@ -10,6 +10,7 @@
 // entirely inside this file and its .web sibling.
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { MAP_CHILD_FLAG, type MapChildComponent } from './MapView.native';
+import { buildColorExpression } from './MapHeatmapSource.types';
 import type {
   HeatmapColorStop,
   HeatmapShape,
@@ -23,17 +24,6 @@ export type {
   MapHeatmapPaint,
   MapHeatmapSourceProps,
 };
-
-// Build the maplibre `heatmap-color` interpolation expression from a list
-// of [density, color] tuples. Output shape:
-//   ['interpolate', ['linear'], ['heatmap-density'], 0, 'cyan', 1, 'red']
-function buildColorExpression(stops: HeatmapColorStop[]): unknown[] {
-  const flat: unknown[] = [];
-  for (const [density, color] of stops) {
-    flat.push(density, color);
-  }
-  return ['interpolate', ['linear'], ['heatmap-density'], ...flat];
-}
 
 export function MapHeatmapSource({ id, shape, paint, beforeId }: MapHeatmapSourceProps) {
   const heatmapColor = buildColorExpression(paint.colorStops);

@@ -8,8 +8,11 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
+    "gate:file-size": "node ../scripts/quality/assert-file-size.mjs --dir src --min-scanned 100",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:managed": "node ../scripts/e2e/run-test-stack.mjs --target admin",
     "test:watch": "vitest",
     "storybook": "storybook dev -p 6007",
     "storybook:build": "storybook build"
@@ -29,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.62.1",
     "@storybook/addon-a11y": "^9.0.0",
     "@storybook/addon-docs": "^9.0.0",
     "@storybook/react-vite": "^9.0.0",
@@ -42,6 +46,7 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-istanbul": "^2.1.9",
     "eslint": "^9.0.0",
     "eslint-plugin-react": "^7.35.0",
     "eslint-plugin-react-hooks": "^5.0.0",

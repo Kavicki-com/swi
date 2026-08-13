@@ -20,7 +20,7 @@ describe('WorkOrders e2e', () => {
   const aE = 'wo-a@ex.com', bE = 'wo-b@ex.com', cE = 'wo-c@ex.com'
   const pendingE = 'wo-pending@ex.com', rejectedE = 'wo-rejected@ex.com'
   const emails = [adminE, aE, bE, cE, pendingE, rejectedE]
-  let adminId = '', aId = '', bId = '', cId = '', pendingId = '', rejectedId = ''
+  let aId = '', bId = '', cId = '', pendingId = '', rejectedId = ''
   let adminAuth: { Authorization: string }, aAuth: { Authorization: string }, bAuth: { Authorization: string }, cAuth: { Authorization: string }
 
   const login = async (email: string) => {
@@ -57,7 +57,7 @@ describe('WorkOrders e2e', () => {
       if (withProfile) await prisma.profile.create({ data: { userId: u.id, fullName: name, jobTitle: 'Operador', sector: 'Mina' } })
       return u.id
     }
-    adminId = await mkAdmin(adminE, 'WO Admin')
+    await mkAdmin(adminE, 'WO Admin')
     aId = await mkWorker(aE, 'Worker A')
     bId = await mkWorker(bE, 'Worker B')
     cId = await mkWorker(cE, 'Worker C')
@@ -126,7 +126,15 @@ describe('WorkOrders e2e', () => {
     const { body: inProg } = await request(app.getHttpServer()).get('/work-orders?status=in_progress').set(adminAuth).expect(200)
     const row = inProg.find((o: any) => o.id === order1Id)
     expect(row).toBeTruthy()
-    expect(row.progressPct).toBe(50)
+    // Este teste esperava 50 aqui, a conta antiga: itens concluídos ÷ total.
+    // A listagem passou a medir progresso por TEMPO (decorrido ÷ estimado) em
+    // 2026-07-26, a pedido do cliente, porque uma ordem de um item só ficava em
+    // 0% a execução inteira e saltava pra 100%. Esta ordem é criada SEM
+    // estimatedMinutes, e sem estimativa não existe percentual honesto, então o
+    // valor é 0 por definição, não por arredondamento de relógio. O que o caso
+    // realmente guarda continua valendo: com 1 de 2 itens concluídos a ordem
+    // segue in_progress e aparece na lista filtrada.
+    expect(row.progressPct).toBe(0)
 
     // B conclui item2 → pai done
     await request(app.getHttpServer()).post(`/journey/tasks/${item2Id}/complete`).set(bAuth).expect(201)
@@ -157,7 +165,11 @@ describe('WorkOrders e2e', () => {
       expect(r2.status).toBeGreaterThanOrEqual(200); expect(r2.status).toBeLessThan(300)
       const { body: d } = await request(app.getHttpServer()).get(`/work-orders/${o.id}`).set(adminAuth).expect(200)
       expect(d.status).toBe('done')
-      expect(d.progressPct).toBe(100)
+      // 0, não 100, e pelo mesmo motivo do caso anterior: progresso é por tempo
+      // desde 2026-07-26 e esta ordem não tem estimativa. O que este caso guarda
+      // é a trava pessimista, ou seja, `status` fechar em done sob dois completes
+      // simultâneos, e isso segue afirmado acima.
+      expect(d.progressPct).toBe(0)
     }
   })
 

@@ -1,6 +1,6 @@
 // src/pages/user/UserProfile.tsx
-// /user/profile — Figma 105:12516. The logged-in admin's own profile, rendered
-// with the same three-column layout as /admins/:id (Figma 53:6344). Reuses
+// /user/profile. The logged-in admin's own profile, rendered
+// with the same three-column layout as /admins/:id. Reuses
 // AdminDetails directly so a future polish on either page flows to both.
 //
 // QA C3 (2026-07-24): o id era hardcoded em 'admin-01' (era mock) — todo

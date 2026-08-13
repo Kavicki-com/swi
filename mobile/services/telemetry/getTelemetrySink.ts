@@ -1,8 +1,17 @@
+import { RUNTIME_ENV } from '../../lib/featureFlags';
 import type { TelemetrySink } from './types';
 import { mockTelemetrySink } from './mockTelemetrySink';
+import { noopTelemetrySink } from './noopTelemetrySink';
 
-// SAÚDE: pinado em mock ATÉ A SMARTBAND EXISTIR (decisão 2026-06-22/2026-07-02);
-// ignora DATA_BACKEND de propósito — não ligar na rodada não-saúde.
+// SAÚDE: não há destino real para a telemetria enquanto a smartband não for
+// integrada (decisão de produto de 2026-07-30, reafirmada em 2026-08-05).
+// Ignora DATA_BACKEND de propósito: a flag não liga um provedor que não existe.
+//
+// Em dev e teste as amostras vão para um log inspecionável, que é o que permite
+// exercitar o amostrador. Fora deles seriam lixo acumulando na memória, então
+// são descartadas explicitamente.
 export function getTelemetrySink(): TelemetrySink {
-  return mockTelemetrySink;
+  return RUNTIME_ENV.isDev || RUNTIME_ENV.isTest
+    ? mockTelemetrySink
+    : noopTelemetrySink;
 }

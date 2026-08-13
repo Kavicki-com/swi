@@ -213,14 +213,14 @@ describe('AuthService.signup rollback', () => {
     const { svc, users, prisma, mail } = deps()
     users.findByEmail.mockResolvedValue(null)
     prisma.user.create.mockResolvedValue({ id: 'u9' })
-    ;(mail.sendConfirmationCode as jest.Mock).mockRejectedValue(new Error('smtp down'))
+    ;(mail.sendConfirmationCode).mockRejectedValue(new Error('smtp down'))
     await expect(svc.signup({ email: 'j@ex.com', password: 'p', name: 'J' })).rejects.toThrow('smtp down')
     // Profile ANTES do user: a FK Profile→User sem cascade estourava o delete e
     // deixava os dois órfãos (visto ao vivo no 550 do Resend, 2026-07-26).
     expect(prisma.profile.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u9' } })
     expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'u9' } })
-    const profileOrder = (prisma.profile.deleteMany as jest.Mock).mock.invocationCallOrder[0]
-    const userOrder = (prisma.user.delete as jest.Mock).mock.invocationCallOrder[0]
+    const profileOrder = (prisma.profile.deleteMany).mock.invocationCallOrder[0]
+    const userOrder = (prisma.user.delete).mock.invocationCallOrder[0]
     expect(profileOrder).toBeLessThan(userOrder)
   })
 })
@@ -397,7 +397,7 @@ describe('AuthService.signupCompany', () => {
     users.findByEmail.mockResolvedValue(null)
     prisma.company.create.mockResolvedValue({ id: 'c9' })
     prisma.user.create.mockResolvedValue({ id: 'u9' })
-    ;(mail.sendAdminPasswordLink as jest.Mock).mockRejectedValue(new Error('smtp down'))
+    ;(mail.sendAdminPasswordLink).mockRejectedValue(new Error('smtp down'))
     await expect(svc.signupCompany(payload())).rejects.toThrow('smtp down')
     // Profile PRIMEIRO: a FK Profile→User não tem cascade, então deletar o
     // user com o profile vivo estouraria e deixaria os dois órfãos.

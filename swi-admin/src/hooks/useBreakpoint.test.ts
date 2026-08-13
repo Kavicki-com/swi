@@ -29,7 +29,7 @@ describe('useBreakpoint', () => {
     expect(result.current).toBe('tablet')
   })
 
-  it('returns "desktop" for the canonical Figma viewport (1024 ≤ w < 1500)', () => {
+  it('returns "desktop" for the canonical reference viewport (1024 ≤ w < 1500)', () => {
     useWindowDimensionsMock.mockReturnValue(dims(1366))
     const { result } = renderHook(() => useBreakpoint())
     expect(result.current).toBe('desktop')

@@ -57,7 +57,6 @@ vi.mock('@/services/api/workOrders', () => ({
 
 const SEED_SESSION = JSON.stringify({
   id: 'u_seed_1',
-  org_id: 'org_seed_1',
   email: 'admin@swi.test',
   full_name: 'Admin Seed',
   role: 'super_admin',

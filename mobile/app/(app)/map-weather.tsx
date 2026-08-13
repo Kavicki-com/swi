@@ -42,8 +42,8 @@ function buildHeatmapPoints(
   center: [number, number],
   count: number,
   spread: number,
-): Array<{ lng: number; lat: number; weight: number }> {
-  const pts: Array<{ lng: number; lat: number; weight: number }> = [];
+): { lng: number; lat: number; weight: number }[] {
+  const pts: { lng: number; lat: number; weight: number }[] = [];
   for (let i = 0; i < count; i++) {
     const u = 1 - Math.random();
     const v = Math.random();
@@ -61,7 +61,7 @@ function buildHeatmapPoints(
 // Storm intensity color ramp — cyan → green → yellow → orange → red →
 // magenta (verbatim port of admin MapsGeneral.tsx:393-411). Magenta core
 // when the density curve peaks.
-const STORM_COLOR_STOPS: Array<[number, string]> = [
+const STORM_COLOR_STOPS: [number, string][] = [
   [0, 'rgba(34,211,238,0)'],
   [0.08, 'rgb(34,211,238)'],
   [0.24, 'rgb(34,197,94)'],
@@ -73,7 +73,7 @@ const STORM_COLOR_STOPS: Array<[number, string]> = [
 
 // Flood color ramp — narrower spectrum (orange → red → magenta). Reads as
 // a more localized hot zone vs the broader storm cloud.
-const FLOOD_COLOR_STOPS: Array<[number, string]> = [
+const FLOOD_COLOR_STOPS: [number, string][] = [
   [0, 'rgba(249,115,22,0)'],
   [0.2, 'rgb(249,115,22)'],
   [0.55, 'rgb(234,88,12)'],
@@ -334,7 +334,7 @@ function MapToggleButton({
         backgroundColor: active ? activeColor : theme.surface.high,
         padding: theme.padding.sm,
         borderRadius: theme.border.radius.m,
-        // @ts-expect-error: boxShadow é web-only (RN-web).
+        // boxShadow vale no web e, desde a new arch (RN 0.76+), também no native.
         boxShadow: '0px 4px 8px rgba(29, 29, 29, 0.16)',
       }}
     >

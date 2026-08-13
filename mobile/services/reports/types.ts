@@ -1,6 +1,6 @@
 // Local mirror of the swi-backend Report model. Siblings are isolated, so we do
-// NOT import the backend Schema type; after deploy, `ampx generate
-// graphql-client-code --out` can replace this with generated types (Phase 6).
+// NOT import the backend types: this file is the REST contract boundary and has
+// to be checked by hand whenever that contract changes.
 // Mirrors services/profile/types.ts.
 export type ReportStatus = 'accept' | 'pending' | 'canceled' | 'info';
 export type ActivityTone = 'success' | 'warning' | 'error';

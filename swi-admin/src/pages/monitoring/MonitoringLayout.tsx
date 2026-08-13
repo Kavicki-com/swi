@@ -1,14 +1,15 @@
 // src/pages/monitoring/MonitoringLayout.tsx
-// Shared chrome for the /monitoring/* screens (Figma 69:14731 alerts /
+// Shared chrome for the /monitoring/* screens (alerts /
 // 77:16587 good-conditions). Owns the KPI row, the "Alertas de Desgaste"
 // title, the tabs, the search input and the user list — everything that
 // stays identical when the user switches sub-routes.
 //
 // The Outlet slot sits between the KPI row and the title so child routes
 // can inject a unique row (e.g. good-conditions adds 4 DonutCharts).
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, Suspense, useEffect, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { RouteFallback } from '@/app/RouteFallback'
 import {
   Avatar,
   BigNumbersCard,
@@ -75,7 +76,7 @@ function VerticalDivider() {
 
 function AlertRow({ alert }: { alert: MonitoringAlertDetail }) {
   const theme = useTheme()
-  // Per Figma: all alert row icons render in content.dark (white) regardless
+  // Per the spec: all alert row icons render in content.dark (white) regardless
   // of tone — tone-based colouring (error red / warning orange) didn't match
   // the design.
   return (
@@ -206,7 +207,7 @@ function AlertUserCard({
           {/* Expanded details row — padding bumped to 12 (theme.padding.sm)
               and vertical gap between alerts raised to 18 per QA cliente §3.2
               (client tested 12px / 18px and approved). 51 px column gap stays
-              as is (matches Figma horizontal rhythm between alerts and CTAs). */}
+              as is (matches the horizontal rhythm between alerts and CTAs). */}
           <View
             style={{
               flexDirection: 'row',
@@ -257,7 +258,7 @@ function AlertUserCard({
 
 // --- KPI two-row grid (wide breakpoint) ---
 
-// Per Figma 1263:7972: row 1 = 4 BigNumbersCard in a 4-col grid; row 2 = 3
+// Per the spec: row 1 = 4 BigNumbersCard in a 4-col grid; row 2 = 3
 // transparent cells (no card BG) separated by 1px vertical dividers. Used at
 // wide on every /monitoring/* tab — half-width on good-conditions (paired
 // with the donut Outlet), full-width on alerts/desgastados. The grid-based
@@ -442,7 +443,7 @@ export function MonitoringLayout() {
     return search.trim() ? u.name.toLowerCase().includes(search.toLowerCase()) : true
   })
 
-  // Abre o primeiro card da aba de fadiga (Figma 69:14774 desenha a tela com o
+  // Abre o primeiro card da aba de fadiga (o desenho mostra a tela com o
   // detalhe visível). Era comparado com 'emp-04', id do roster mock — com ids
   // reais (UUID) nenhum card abria.
   useEffect(() => {
@@ -457,7 +458,7 @@ export function MonitoringLayout() {
       testID="monitoring-layout"
       style={{
         gap: theme.gap.xl,
-        // Cap content at Figma 1366 content-area (1041) only at the desktop
+        // Cap content at the 1366px content-area (1041) only at the desktop
         // breakpoint. Tablet and wide both drop the cap so the page uses the
         // full viewport — at wide every /monitoring/* tab shares the stretched
         // layout (KPI two-row grid + side-by-side donuts for good-conditions,
@@ -468,7 +469,7 @@ export function MonitoringLayout() {
       }}
     >
       {useWideSideBySide ? (
-        // Wide + good-conditions side-by-side per Figma 1263:7972:
+        // Wide + good-conditions side-by-side per the spec:
         //   LEFT  → BigNumbers 2-row grid (4 cards + 3 transparent w/ dividers)
         //   RIGHT → Donuts (single horizontal row, rendered by the Outlet)
         <View style={{ flexDirection: 'row', gap: theme.gap.l, alignItems: 'stretch' }}>
@@ -476,7 +477,13 @@ export function MonitoringLayout() {
             <KpiTwoRowGrid kpis={kpis} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Outlet />
+            {/* As sub-rotas chegam por React.lazy (ver App.tsx). A fronteira
+                fica AQUI, e não só no AppLayout, pra que trocar de tab não
+                substitua os KPIs, o título e a lista pelo fallback enquanto o
+                chunk da tab carrega. Vale para os três branches de layout. */}
+            <Suspense fallback={<RouteFallback />}>
+              <Outlet />
+            </Suspense>
           </View>
         </View>
       ) : isWide ? (
@@ -498,7 +505,9 @@ export function MonitoringLayout() {
               <BigNumbersCard key={k.id} value={k.value} label={k.label} icon={k.icon} />
             ))}
           </div>
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </>
       ) : (
         <>
@@ -517,7 +526,9 @@ export function MonitoringLayout() {
           </View>
 
           {/* Child-route unique content (e.g. good-conditions stats row). */}
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </>
       )}
 

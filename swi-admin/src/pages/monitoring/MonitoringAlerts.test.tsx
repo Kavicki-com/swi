@@ -9,9 +9,7 @@ import { clearSession, renderPage } from '@/test-utils/renderPage'
 describe('MonitoringAlerts', () => {
   afterEach(clearSession)
 
-  it('renders without crashing', () => {
-    expect(() =>
-      renderPage(<MonitoringAlerts />, { route: '/monitoring/alerts' }),
-    ).not.toThrow()
+  it('renders without crashing', async () => {
+    await expect(renderPage(<MonitoringAlerts />, { route: '/monitoring/alerts' })).resolves.toBeDefined()
   })
 })

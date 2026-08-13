@@ -43,6 +43,16 @@ docs/audits/health-check-*.md
 # contrato do projeto. Ignorado pra parar de aparecer como untracked.
 swi-backend/docker-compose.ports-alt.yml
 
+# Artefatos dos portões de qualidade e da entrega de código-fonte.
+# Coverage, builds e relatórios de teste são reproduzíveis a partir do commit e
+# nunca entram no repositório nem no pacote entregue ao cliente.
+**/coverage/
+**/dist/
+**/test-results/
+**/playwright-report/
+.audit/
+SWI-source-delivery-*/
+
 # Amplify Gen 2 generated / per-environment (swi-backend)
 swi-backend/.amplify/
 swi-backend/amplify_outputs*.json

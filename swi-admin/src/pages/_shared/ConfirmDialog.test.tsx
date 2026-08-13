@@ -9,8 +9,8 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { renderPage } from '@/test-utils/renderPage'
 
 describe('ConfirmDialog', () => {
-  it('renderiza título e mensagem', () => {
-    renderPage(
+  it('renderiza título e mensagem', async () => {
+    await renderPage(
       <ConfirmDialog
         title="Excluir administrador?"
         message="Fulano será removido do sistema."
@@ -23,9 +23,9 @@ describe('ConfirmDialog', () => {
     expect(screen.getByText('Fulano será removido do sistema.')).toBeTruthy()
   })
 
-  it('botão de confirmar chama onConfirm', () => {
+  it('botão de confirmar chama onConfirm', async () => {
     const onConfirm = vi.fn()
-    renderPage(
+    await renderPage(
       <ConfirmDialog
         title="Excluir administrador?"
         message="Fulano será removido do sistema."
@@ -38,9 +38,9 @@ describe('ConfirmDialog', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1)
   })
 
-  it('botão Cancelar chama onCancel', () => {
+  it('botão Cancelar chama onCancel', async () => {
     const onCancel = vi.fn()
-    renderPage(
+    await renderPage(
       <ConfirmDialog
         title="Excluir administrador?"
         message="Fulano será removido do sistema."
@@ -53,9 +53,9 @@ describe('ConfirmDialog', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
-  it('clicar no scrim chama onCancel', () => {
+  it('clicar no scrim chama onCancel', async () => {
     const onCancel = vi.fn()
-    renderPage(
+    await renderPage(
       <ConfirmDialog
         title="Excluir administrador?"
         message="Fulano será removido do sistema."
@@ -68,9 +68,9 @@ describe('ConfirmDialog', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
-  it('clicar dentro do card NÃO chama onCancel', () => {
+  it('clicar dentro do card NÃO chama onCancel', async () => {
     const onCancel = vi.fn()
-    renderPage(
+    await renderPage(
       <ConfirmDialog
         title="Excluir administrador?"
         message="Fulano será removido do sistema."
@@ -85,9 +85,9 @@ describe('ConfirmDialog', () => {
     expect(onCancel).not.toHaveBeenCalled()
   })
 
-  it('Escape chama onCancel', () => {
+  it('Escape chama onCancel', async () => {
     const onCancel = vi.fn()
-    renderPage(
+    await renderPage(
       <ConfirmDialog
         title="Excluir administrador?"
         message="Fulano será removido do sistema."

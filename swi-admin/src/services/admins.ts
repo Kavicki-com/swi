@@ -1,5 +1,6 @@
-import { DATA_BACKEND } from './dataBackend'
-import { adminsApi as mockAdminsApi } from './mockApi/admins'
-import { adminsApi as amplifyAdminsApi } from './amplifyApi/admins'
-export * from './mockApi/admins'
-export const adminsApi = DATA_BACKEND === 'amplify' ? amplifyAdminsApi : mockAdminsApi
+// Fachada dos administradores, 100% real: `api/users.ts` lista o diretório do
+// backend Nest filtrando role ADMIN. O eixo de seleção de backend (simulação vs
+// provider legado) morreu; este re-export fino existe só para os consumidores
+// que já importavam de '@/services/admins' continuarem resolvendo.
+export { adminsApi } from './api/users'
+export type { Admin } from './api/users'

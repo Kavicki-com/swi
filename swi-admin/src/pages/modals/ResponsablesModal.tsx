@@ -1,5 +1,5 @@
 // src/pages/modals/ResponsablesModal.tsx
-// Figma 165:24210. Centered modal that lets an author pick 1+ admins to review
+// Centered modal that lets an author pick 1+ admins to review
 // the report being created.
 //
 // Dois modos:
@@ -33,7 +33,7 @@ function VerticalDivider() {
   return <View style={{ width: 2, height: 56, backgroundColor: theme.content.lightGrey }} />
 }
 
-// One row of the modal — Figma 165:23941 Admin Card.
+// One row of the modal: Admin Card.
 function AdminPickRow({
   admin,
   selected,

@@ -61,7 +61,7 @@ beforeEach(() => {
 // marcando todos os campos como tocados pra revelar o erro de cada um. O que
 // matava era `disabled={!canSubmit}` no botão. Botão desabilitado não dispara
 // onPress, então aquele bloco era código morto e o toque sumia no vazio.
-describe('step-2 — Avançar com formulário incompleto', () => {
+describe('step-2: Avançar com formulário incompleto', () => {
   // Esta asserção é o coração do teste, e é sutil: o DS faz
   // `onPress={disabled ? undefined : onPress}` no Pressable interno. Chamar
   // `onPress()` do elemento externo (como o teste abaixo faz) CONTORNA o

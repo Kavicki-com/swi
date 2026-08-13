@@ -21,14 +21,14 @@ const msg = (over: Partial<Message> = {}): Message => ({
   ...over,
 });
 
-describe('chatReducers — conversationKey', () => {
+describe('chatReducers: conversationKey', () => {
   it('é determinístico e independe da ordem', () => {
     expect(conversationKey('me', '1')).toBe('1#me');
     expect(conversationKey('1', 'me')).toBe('1#me');
   });
 });
 
-describe('chatReducers — unreadFor / resolveContact', () => {
+describe('chatReducers: unreadFor / resolveContact', () => {
   it('unreadFor lê o contador do viewer (0 default)', () => {
     expect(unreadFor(conv(), 'me')).toBe(2);
     expect(unreadFor(conv({ unreadBy: {} }), 'me')).toBe(0);
@@ -41,7 +41,7 @@ describe('chatReducers — unreadFor / resolveContact', () => {
   });
 });
 
-describe('chatReducers — applyMessage', () => {
+describe('chatReducers: applyMessage', () => {
   it('bump lastMessage, incrementa unread só de quem não enviou, re-ordena', () => {
     const a = conv({ id: 'me#1', lastMessageAt: '2026-06-23T09:00:00.000Z', unreadBy: { me: 0 } });
     const b = conv({ id: 'me#2', participants: ['me', '2'], lastMessageAt: '2026-06-23T10:00:00.000Z' });
@@ -61,7 +61,7 @@ describe('chatReducers — applyMessage', () => {
   });
 });
 
-describe('chatReducers — markRead / sortByRecent', () => {
+describe('chatReducers: markRead / sortByRecent', () => {
   it('markRead zera só o viewer', () => {
     const out = markRead([conv({ unreadBy: { me: 5, '1': 3 } })], 'me#1', 'me');
     expect(out[0].unreadBy.me).toBe(0);

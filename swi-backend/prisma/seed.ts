@@ -6,9 +6,14 @@ import { randomUUID } from 'crypto'
 import { DEMO_STORM_ALERT_ID } from '../src/weather/weather.types'
 import { hash } from '../src/auth/codes'
 import { distributeMinutes } from '../src/work-orders/order-status'
+import { assertSeedAllowed } from '../src/config/seed-guard'
 const prisma = new PrismaClient()
 
 async function main() {
+  // Primeira linha, antes de qualquer escrita: este seed cria conta
+  // administrativa com senha de demonstração. Contra um banco que não seja
+  // descartável, isso é uma credencial pública, não dado de teste.
+  assertSeedAllowed(process.env)
   // Org-scoping (QA C1): TODO usuário seed pertence à empresa demo — sem isto,
   // ficam com companyId null (balde legado) e as listas escopadas vêm vazias.
   // id fixo → upsert idempotente; o `update` dos upserts abaixo re-vincula
@@ -464,7 +469,7 @@ async function main() {
     const authorContact = CONTACTS.find((c) => c.n === workerN)!
     // 2 responsáveis reais, os dois colegas seguintes na roda — nunca o autor.
     const responsibles = [1, 2].map(
-      (offset) => CONTACTS[(workerN - 1 + offset) % CONTACTS.length]!.name,
+      (offset) => CONTACTS[(workerN - 1 + offset) % CONTACTS.length].name,
     )
     const r = await prisma.report.create({
       data: {

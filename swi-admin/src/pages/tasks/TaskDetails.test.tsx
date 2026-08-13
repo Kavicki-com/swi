@@ -17,7 +17,7 @@ import type {
   WorkOrderItem,
   WorkOrderStatus,
 } from '@/services/api/workOrders'
-import { seedSession, clearSession } from '@/test-utils/renderPage'
+import { seedSession, clearSession, settled } from '@/test-utils/renderPage'
 import { TaskDetails } from './TaskDetails'
 
 const { getMock } = vi.hoisted(() => ({ getMock: vi.fn() }))
@@ -163,9 +163,9 @@ function isFilled(radio: { firstElementChild: { childElementCount: number } | nu
   return ring.childElementCount > 0
 }
 
-function renderAt(id = 'wo_1') {
+async function renderAt(id = 'wo_1') {
   seedSession()
-  return render(
+  return settled(render(
     <SwiThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={[`/tasks/${id}`]}>
@@ -177,7 +177,7 @@ function renderAt(id = 'wo_1') {
         </MemoryRouter>
       </AuthProvider>
     </SwiThemeProvider>,
-  )
+  ))
 }
 
 beforeEach(() => {
@@ -189,12 +189,12 @@ afterEach(clearSession)
 
 describe('TaskDetails', () => {
   it('busca o detalhe do :id da rota', async () => {
-    renderAt('wo_77')
+    await renderAt('wo_77')
     await waitFor(() => expect(getMock).toHaveBeenCalledWith('wo_77'))
   })
 
   it('mostra título, autor e responsáveis', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByText('Reparo da esteira 3')).toBeInTheDocument()
     })
@@ -205,14 +205,14 @@ describe('TaskDetails', () => {
   })
 
   it('mostra resumo, detalhes e setor', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByText('Esteira parada desde a madrugada.')).toBeInTheDocument()
     })
     expect(
       screen.getByText('Substituir o rolamento e reavaliar o alinhamento do eixo motor.'),
     ).toBeInTheDocument()
-    // Copy corrigida: o Figma diz "relatório" por resíduo das telas de Relatórios.
+    // Copy corrigida: o desenho diz "relatório" por resíduo das telas de Relatórios.
     expect(screen.getByText('Detalhes da tarefa:')).toBeInTheDocument()
     expect(screen.getByText('Setor Leste')).toBeInTheDocument()
   })
@@ -223,14 +223,14 @@ describe('TaskDetails', () => {
     ['done', 'Concluída'],
   ])('traduz o status %s pro rótulo "%s"', async (status, label) => {
     getMock.mockResolvedValue(makeDetail({ status }))
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('task-details-status')).toHaveTextContent(label)
     })
   })
 
   it('marca no checklist só os itens concluídos', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Isolar o painel')).toBeInTheDocument())
 
     const radios = screen.getAllByRole('radio')
@@ -256,7 +256,7 @@ describe('TaskDetails', () => {
   })
 
   it('renderiza as imagens da tarefa', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('task-image-0')).toBeInTheDocument())
     expect(screen.getByTestId('task-image-1')).toBeInTheDocument()
     expect(screen.queryByTestId('task-image-2')).not.toBeInTheDocument()
@@ -264,7 +264,7 @@ describe('TaskDetails', () => {
 
   it('omite a seção de imagens quando a tarefa não tem anexo', async () => {
     getMock.mockResolvedValue(makeDetail({ images: [] }))
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo da esteira 3')).toBeInTheDocument())
     expect(screen.queryByText('Imagens')).not.toBeInTheDocument()
   })
@@ -274,14 +274,14 @@ describe('TaskDetails', () => {
     // backend costuma gerar 1 item espelhando título+resumo, mas o DTO não
     // garante isso — a tela não pode renderizar um "Check List" vazio.
     getMock.mockResolvedValue(makeDetail({ items: [] }))
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByText('Reparo da esteira 3')).toBeInTheDocument())
     expect(screen.queryByText('Check List')).not.toBeInTheDocument()
     expect(screen.queryAllByRole('radio')).toHaveLength(0)
   })
 
   it('mostra datas em formato brasileiro', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() =>
       expect(screen.getByTestId('task-created-at')).toHaveTextContent('05/03/2026'),
     )
@@ -290,7 +290,7 @@ describe('TaskDetails', () => {
   })
 
   it('mostra o tempo estimado em hh:mm', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() =>
       expect(screen.getByTestId('task-estimated-time')).toHaveTextContent('01:30'),
     )
@@ -298,14 +298,14 @@ describe('TaskDetails', () => {
 
   it('diz que a data não foi definida quando o backend devolve null', async () => {
     getMock.mockResolvedValue(makeDetail({ startDate: null, dueDate: null }))
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('task-start-date')).toBeInTheDocument())
     expect(screen.getByTestId('task-start-date')).toHaveTextContent('Não definida')
     expect(screen.getByTestId('task-due-date')).toHaveTextContent('Não definida')
   })
 
   it('mostra o progresso da tarefa', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('task-details-progress')).toBeInTheDocument())
     expect(screen.getByText('Progresso da tarefa')).toBeInTheDocument()
   })
@@ -319,7 +319,7 @@ describe('TaskDetails', () => {
         items: [{ ...ITEM_BASE, accumulatedSeconds: 926 }],
       }),
     )
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('task-details-elapsed')).toBeInTheDocument())
     expect(screen.getByTestId('task-details-elapsed')).toHaveTextContent(
       'Tempo decorrido: 0:15:26 de 1:00:00',
@@ -333,16 +333,16 @@ describe('TaskDetails', () => {
         items: [{ ...ITEM_BASE, accumulatedSeconds: 90 }],
       }),
     )
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('task-details-elapsed')).toBeInTheDocument())
     expect(screen.getByTestId('task-details-elapsed')).toHaveTextContent(
       'Tempo decorrido: 0:01:30 (sem estimativa cadastrada)',
     )
   })
 
-  it('mostra o estado de carregando enquanto a busca não resolve', () => {
+  it('mostra o estado de carregando enquanto a busca não resolve', async () => {
     getMock.mockReturnValue(new Promise(() => {}))
-    renderAt()
+    await renderAt()
     expect(screen.getByTestId('task-details-loading')).toBeInTheDocument()
     // O testID da raiz sobrevive a todos os estados — as rotas dependem dele.
     expect(screen.getByTestId('task-details')).toBeInTheDocument()
@@ -351,7 +351,7 @@ describe('TaskDetails', () => {
   it('mostra a mensagem do ApiError de tarefa inexistente e refaz a busca no retry', async () => {
     getMock.mockRejectedValueOnce(new ApiError('Tarefa não encontrada', 404))
     getMock.mockResolvedValueOnce(makeDetail())
-    renderAt()
+    await renderAt()
     await waitFor(() => {
       expect(screen.getByTestId('task-details-error')).toHaveTextContent('Tarefa não encontrada')
     })
@@ -366,7 +366,7 @@ describe('TaskDetails', () => {
   })
 
   it('"Editar" navega pro formulário de edição', async () => {
-    renderAt('wo_42')
+    await renderAt('wo_42')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
@@ -375,7 +375,7 @@ describe('TaskDetails', () => {
   })
 
   it('"Voltar" volta pra lista de tarefas', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Voltar' })).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
@@ -384,7 +384,7 @@ describe('TaskDetails', () => {
   })
 
   it('não mostra "Ver Todos" quando todos os responsáveis já cabem na prévia', async () => {
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('responsible-card-w_1')).toBeInTheDocument())
     expect(screen.getByTestId('responsible-card-w_2')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Ver Todos' })).not.toBeInTheDocument()
@@ -392,9 +392,9 @@ describe('TaskDetails', () => {
 
   it('"Ver Todos" expande a lista de responsáveis na própria tela', async () => {
     getMock.mockResolvedValue(makeDetail({ responsibles: [ANA, BRUNO, CARLA] }))
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('responsible-card-w_1')).toBeInTheDocument())
-    // Prévia cortada no tamanho da grade do Figma (2 cards lado a lado).
+    // Prévia cortada no tamanho da grade especificada (2 cards lado a lado).
     expect(screen.queryByTestId('responsible-card-w_3')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Ver Todos' }))
@@ -406,7 +406,7 @@ describe('TaskDetails', () => {
 
   it('"Ver menos" recolhe a lista de volta pra prévia', async () => {
     getMock.mockResolvedValue(makeDetail({ responsibles: [ANA, BRUNO, CARLA] }))
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('responsible-card-w_1')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Ver Todos' }))
@@ -422,14 +422,14 @@ describe('TaskDetails', () => {
 
   it('diz que a idade não foi informada quando o responsável não tem data de nascimento', async () => {
     getMock.mockResolvedValue(makeDetail({ responsibles: [CARLA] }))
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('responsible-card-w_3')).toBeInTheDocument())
     expect(screen.getByText('Idade não informada')).toBeInTheDocument()
   })
 
   it('mostra cargo e setor do responsável no card', async () => {
     getMock.mockResolvedValue(makeDetail({ responsibles: [CARLA] }))
-    renderAt()
+    await renderAt()
     await waitFor(() => expect(screen.getByTestId('responsible-card-w_3')).toBeInTheDocument())
     expect(screen.getByText('Supervisora')).toBeInTheDocument()
     expect(screen.getByText('Setor Sul')).toBeInTheDocument()

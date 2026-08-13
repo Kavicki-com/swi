@@ -1,6 +1,6 @@
 // Local mirror do model Notification do swi-backend. Siblings isolados → NÃO
-// importamos o Schema; após deploy, `ampx generate graphql-client-code` pode
-// substituir por tipos gerados. Mirrors services/chat/types.ts. Datas ISO;
+// importamos os tipos do backend: este arquivo é a fronteira do contrato REST
+// e precisa ser conferido à mão quando ele mudar. Mirrors services/chat/types.ts. Datas ISO;
 // ordenação por comparação lexicográfica (= cronológica).
 
 export type NotificationDomain = 'weather' | 'chat' | 'reports' | 'journey' | 'faq' | 'evacuation';
@@ -21,6 +21,6 @@ export interface NotificationBackend {
   listNotifications(): Promise<AppNotification[]>;    // ordenado recente-primeiro
   markRead(id: string): Promise<void>;
   markAllRead(): Promise<void>;
-  registerPushToken(token: string): Promise<void>;   // seam deploy-gated (SNS)
+  registerPushToken(token: string): Promise<void>;   // seam deploy-gated (FCM/APNs)
   subscribe(cb: (n: AppNotification) => void): () => void; // feed ao vivo (event bus no mock)
 }

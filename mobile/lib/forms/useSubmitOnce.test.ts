@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { useSubmitOnce } from './useSubmitOnce';
 
 // O relato do QA (2026-07-27): no fim do cadastro apareceu "E-mail já
-// cadastrado" E, ao mesmo tempo, a tela do código abriu — com o código
+// cadastrado" E, ao mesmo tempo, a tela do código abriu, com o código
 // chegando por e-mail e funcionando.
 //
 // Não eram dois bugs: era UM toque a mais. `disabled={!canSubmit}` é a única
@@ -15,7 +15,7 @@ import { useSubmitOnce } from './useSubmitOnce';
 // A trava vive aqui, e não em cada tela, porque a lacuna é sistêmica: nenhuma
 // das telas de (auth) tinha guarda de reentrância.
 
-// Monta o hook num componente de verdade — o comportamento depende de estado
+// Monta o hook num componente de verdade, o comportamento depende de estado
 // do React, então testar a função isolada não provaria nada.
 function montar(fn: () => Promise<void>) {
   const capturado: { run?: () => Promise<void>; busy?: boolean } = {};
@@ -37,7 +37,7 @@ describe('useSubmitOnce', () => {
     const fn = jest.fn(() => emVoo);
     const { capturado } = montar(fn);
 
-    // Dois toques antes de a primeira chamada terminar — exatamente o caso do
+    // Dois toques antes de a primeira chamada terminar, exatamente o caso do
     // cadastro, onde o 2º recebia 409 de e-mail já existente.
     await act(async () => {
       void capturado.run!();
@@ -59,7 +59,7 @@ describe('useSubmitOnce', () => {
   });
 
   // Se a falha travasse o botão, o cadastro morreria de vez no primeiro erro
-  // de rede — a pessoa ficaria sem como tentar de novo.
+  // de rede, a pessoa ficaria sem como tentar de novo.
   it('libera também quando a chamada falha', async () => {
     const fn = jest.fn(async () => { throw new Error('rede caiu'); });
     const { capturado } = montar(fn);

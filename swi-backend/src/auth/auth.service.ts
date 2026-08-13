@@ -98,7 +98,7 @@ export class AuthService {
         await this.prisma.profile.deleteMany({ where: { userId: user.id } })
         await this.prisma.user.delete({ where: { id: user.id } })   // sem órfão
       } catch (delErr) {
-        this.logger.error(`falha ao reverter usuário órfão ${user.id}: ${delErr}`)
+        this.logger.error(`falha ao reverter usuário órfão ${user.id}: ${String(delErr)}`)
       }
       throw err
     }
@@ -230,12 +230,12 @@ export class AuthService {
         await this.prisma.profile.deleteMany({ where: { userId: user.id } })
         await this.prisma.user.delete({ where: { id: user.id } })
       } catch (delErr) {
-        this.logger.error(`falha ao reverter admin órfão ${user.id}: ${delErr}`)
+        this.logger.error(`falha ao reverter admin órfão ${user.id}: ${String(delErr)}`)
       }
       try {
         await this.prisma.company.delete({ where: { id: company.id } })
       } catch (delErr) {
-        this.logger.error(`falha ao reverter Company órfã ${company.id}: ${delErr}`)
+        this.logger.error(`falha ao reverter Company órfã ${company.id}: ${String(delErr)}`)
       }
       throw err
     }

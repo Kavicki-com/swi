@@ -1,5 +1,5 @@
-jest.mock('../../lib/featureFlags', () => ({ WEATHER_SCENARIO: 'alert' }));
 import { mockWeatherBackend } from './mockWeatherBackend';
+jest.mock('../../lib/featureFlags', () => ({ WEATHER_SCENARIO: 'alert' }));
 
 describe('mockWeatherBackend (scenario=alert)', () => {
   it('devolve o snapshot canned com os valores do dashboard + 1 alerta', async () => {

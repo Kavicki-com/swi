@@ -1,16 +1,15 @@
-// getPositionsBackend cai no mock com DATA_BACKEND default — o hook exercita o
+// getPositionsBackend cai no mock com DATA_BACKEND default, o hook exercita o
 // mockPositionsBackend (log em memória), sem rede. Espelha useTelemetrySampler.test.
 import { createElement, type ComponentType } from 'react';
-// react-test-renderer ships no type declarations — tipa localmente (mesma nota
+import { usePositionHeartbeat } from './usePositionHeartbeat';
+import { mockHeartbeatLog } from './mockPositionsBackend';
+// react-test-renderer ships no type declarations, tipa localmente (mesma nota
 // do useTelemetrySampler.test.ts).
 const TestRenderer: {
   create: (el: unknown) => { unmount: () => void };
   act: (cb: () => void | Promise<void>) => void | Promise<void>;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require('react-test-renderer');
 const act = TestRenderer.act;
-import { usePositionHeartbeat } from './usePositionHeartbeat';
-import { mockHeartbeatLog } from './mockPositionsBackend';
 
 function Harness({ getCoords }: { getCoords: () => [number, number] | null }) {
   usePositionHeartbeat(getCoords, { intervalMs: 1000 });
@@ -26,7 +25,7 @@ afterEach(() => {
 });
 
 describe('usePositionHeartbeat', () => {
-  it('posta lat/lng do getter a cada intervalo (ordem lat,lng — nunca trocada)', async () => {
+  it('posta lat/lng do getter a cada intervalo (ordem lat,lng, nunca trocada)', async () => {
     const el = createElement(Harness as ComponentType<any>, { getCoords: () => [-46.63, -23.55] });
     let root!: { unmount: () => void };
     await act(async () => { root = TestRenderer.create(el); });

@@ -2,64 +2,32 @@
 // Mock data for /monitoring/* screens:
 //   - kpis(): the 7 big-number cards across the top of both screens.
 //   - alertUsers(): worker rows with optional expanded alert details
-//     (Figma 69:14731 /monitoring/alerts). Derives from the canonical
+//     (/monitoring/alerts). Derives from the canonical
 //     ROSTER so cross-page navigation lands on the same /employees/:id.
 //   - goodConditionsStats(): the second row of 4 stat cards exclusive to the
-//     /monitoring/good-conditions screen (Figma 77:16587).
+//     /monitoring/good-conditions screen.
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
+// Os seeds fazem cast de 'cognition_filled' pra IconName (ícone que ainda não
+// existe na versão pinada do DS).
 import type { IconName } from '@kavicki/swi-design-system'
-import type { SimulatedTier } from '@/services/vitals/simulatedVitals'
 import { ROSTER } from './roster'
 
-// One KPI card — Figma 69:14747 row of 7 BigNumbersCards.
-export type MonitoringKpi = {
-  id: string
-  icon: IconName
-  value: string
-  label: string
-}
+// Os contratos de view (MonitoringKpi etc.) moram em services/types/monitoring,
+// produzidos também pelo api/monitoring real; o re-export mantém os imports
+// locais resolvendo.
+import type {
+  MonitoringAlertDetail,
+  MonitoringGoodConditionsStats,
+  MonitoringKpi,
+  MonitoringUserAlert,
+} from '@/services/types/monitoring'
 
-// Single per-user alert detail — Figma 77:16204/16209/16214.
-// `tone` colors the icon; the title/description text is always content.dark.
-export type MonitoringAlertDetail = {
-  id: string
-  icon: IconName
-  title: string
-  description: string
-  tone?: 'error' | 'warning' | 'info'
-}
-
-// Second-row stat cards on /monitoring/good-conditions (Figma 77:16587).
-// 4 cards: two donut-chart cards + a heart-rate status card + an alerts
-// summary card. Kept loose so the page can render each card with its own
-// composition without forcing a single schema.
-export type MonitoringGoodConditionsStats = {
-  vitals: { value: number; label: string; progress: number }
-  fatigueRate: { value: string; label: string; progress: number }
-  heartrate: { value: number; unit: string; label: string }
-  urgentAlerts: { value: number; label: string }
-}
-
-// Row in the alert users list — Figma 69:14774 (expanded) and 69:14775..14777
-// (collapsed). When `alerts` is empty the row renders as a collapsed card.
-export type MonitoringUserAlert = {
-  id: string
-  name: string
-  age: number
-  bloodType: string
-  role: string
-  specialization: string
-  avatarUri: string
-  active: boolean
-  /**
-   * Tier de vitais da pessoa. Existe pra régua "Excelentes / Desgastados /
-   * Alertas de Fadiga" poder filtrar de verdade — antes as 3 abas listavam a
-   * população inteira enquanto o badge anunciava "2" (QA 2026-07-26).
-   * Opcional porque o seed mock não simula vitais.
-   */
-  tier?: SimulatedTier
-  alerts: ReadonlyArray<MonitoringAlertDetail>
+export type {
+  MonitoringAlertDetail,
+  MonitoringGoodConditionsStats,
+  MonitoringKpi,
+  MonitoringUserAlert,
 }
 
 const KPIS_SEED: ReadonlyArray<MonitoringKpi> = [
@@ -179,7 +147,7 @@ const ALERT_USERS_SEED: ReadonlyArray<MonitoringUserAlert> = MONITORING_ROWS.map
   }
 })
 
-// Good-conditions row-2 seed — Figma 77:16587 values verbatim.
+// Good-conditions row-2 seed: spec values verbatim.
 const GOOD_CONDITIONS_STATS_SEED: MonitoringGoodConditionsStats = {
   vitals: { value: 512, label: 'Funcionários', progress: 100 },
   fatigueRate: { value: '20%', label: 'Desgaste baixo', progress: 20 },

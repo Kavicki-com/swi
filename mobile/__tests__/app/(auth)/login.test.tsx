@@ -68,7 +68,7 @@ beforeEach(() => {
 // Fluxo 2 do cadastro (reordenação 2026-07-27): o primeiro login depois da
 // aprovação do admin desvia pro wizard de complimentary-data. Perfil completo
 // vai direto pro dashboard.
-describe('login — desvio pós-aprovação', () => {
+describe('login: desvio pós-aprovação', () => {
   it('perfil sem os dados do wizard → complimentary-data', async () => {
     loadProfile.mockResolvedValue({ fullName: 'Fulana Teste' });
     const tree = await render();
@@ -89,7 +89,7 @@ describe('login — desvio pós-aprovação', () => {
   });
 
   // O desvio é conveniência, não gate: se a leitura do perfil falhar (rede),
-  // o login não pode travar — dashboard é o destino seguro.
+  // o login não pode travar, dashboard é o destino seguro.
   it('leitura do perfil falhou → dashboard mesmo assim', async () => {
     loadProfile.mockRejectedValue(new TypeError('Network request failed'));
     const tree = await render();
@@ -114,7 +114,7 @@ describe('login — desvio pós-aprovação', () => {
 // `onPress={disabled ? undefined : onPress}` no Pressable interno, então
 // chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
 // com o bug de volta. Sem ela o teste não tem dente.
-describe('login — Entrar com formulário incompleto', () => {
+describe('login: Entrar com formulário incompleto', () => {
   it('mantém o botão habilitado para que o toque chegue à validação', async () => {
     const tree = await render();
     expect(botao(tree, 'Entrar').props.disabled).toBeFalsy();

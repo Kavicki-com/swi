@@ -199,7 +199,7 @@ export class ChatService {
       where: { id: { in: [userId, msg.senderId] } },
       include: { profile: true },
     })
-    const byId = new Map(users.map((u) => [u.id, u as UserWithProfile]))
+    const byId = new Map(users.map((u) => [u.id, u]))
     const name = (id: string) => byId.get(id)?.profile?.fullName || byId.get(id)?.name || id
     const email = (id: string) => byId.get(id)?.email ?? ''
 
@@ -262,7 +262,7 @@ export class ChatService {
   private async createConversation(convId: string, parts: string[]): Promise<Conversation> {
     const users = await this.prisma.user.findMany({ where: { id: { in: parts } }, include: { profile: true } })
     if (users.length !== parts.length) throw new NotFoundException('Conversa não encontrada')
-    const byId = new Map(users.map((u) => [u.id, u as UserWithProfile]))
+    const byId = new Map(users.map((u) => [u.id, u]))
     return this.prisma.conversation.create({
       data: {
         id: convId,

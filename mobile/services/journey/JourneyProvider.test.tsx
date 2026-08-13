@@ -26,7 +26,7 @@ function Probe() {
   return <Text>{`${loadStatus}|${tasks.map((t) => t.title).join(',')}`}</Text>;
 }
 
-describe('JourneyProvider — tarefa nova sem deslogar', () => {
+describe('JourneyProvider: tarefa nova sem deslogar', () => {
   let listTasks: jest.Mock;
   let notify: ((n: any) => void) | null;
 
@@ -89,7 +89,7 @@ describe('JourneyProvider — tarefa nova sem deslogar', () => {
       notify?.({ id: 'n3', domain: 'journey', targetId: 'order-1' });
     });
 
-    // Continua 'ready' com a tarefa — perder a lista por falha momentânea de
+    // Continua 'ready' com a tarefa, perder a lista por falha momentânea de
     // rede seria pior que mostrar dado de um segundo atrás.
     expect(JSON.stringify(tree.toJSON())).toContain('ready|teste');
   });

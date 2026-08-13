@@ -1,6 +1,6 @@
 // src/pages/auth/RecoveryEmail.tsx
 //
-// Password recovery — step 1 (email request) — Figma frame 105:12835.
+// Password recovery: step 1 (email request).
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { View } from 'react-native'
