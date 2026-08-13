@@ -122,6 +122,22 @@ describe('Novo relatório — anexos', () => {
     expect(slotPreenchido(tree, 2)).toBe(true);
   });
 
+  // Figma 372:21297: a barra fina enche conforme arquivos são adicionados.
+  // Estava congelada em 60% desde a fase demo, mentindo o estado da grade.
+  it('a barra de progresso enche na proporção dos quadrados preenchidos', async () => {
+    const tree = await render();
+    const barra = () =>
+      tree.root.findAll((n) => n.props?.testID === 'progresso-anexos')[0];
+    expect(barra().props.style.width).toBe('0%');
+
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+    expect(barra().props.style.width).toBe('25%');
+
+    pickFromGallery.mockResolvedValue('file:///tmp/foto-2.jpg');
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+    expect(barra().props.style.width).toBe('50%');
+  });
+
   // Sem isso o 5º toque sobrescreveria silenciosamente o primeiro anexo — o
   // usuário perderia uma foto já escolhida sem nenhum aviso.
   it('com os 4 quadrados cheios não abre o seletor', async () => {

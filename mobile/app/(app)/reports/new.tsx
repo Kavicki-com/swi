@@ -46,8 +46,9 @@ export default function NewReport() {
     responsiblesSelection.get(),
   );
 
-  // Anexos — 4 placeholders + 1 "Enviar arquivo" via ImageUploader.
-  // Demo phase: useState efêmero, sem persistência.
+  // Anexos — 4 placeholders + 1 "Enviar arquivo" via ImageUploader. As URIs
+  // escolhidas entram no submit como `imageUris` e sobem no create do
+  // ReportsProvider; o estado local é só a grade em edição.
   const [attachments, setAttachments] = useState<(string | undefined)[]>(
     [undefined, undefined, undefined, undefined],
   );
@@ -283,8 +284,8 @@ export default function NewReport() {
         </View>
 
         {/* Upload progress bar — Figma 372:21297 mostra um bar fino branco
-            acima da dashed area que enche conforme arquivos são adicionados.
-            Demo phase: hardcoded em 60% (sem upload real). Fix LOCAL nesta
+            acima da dashed area que enche conforme arquivos são adicionados:
+            largura = fração dos 4 quadrados preenchidos. Fix LOCAL nesta
             tela — não foi adicionado ao DS ImageUploader pra não afetar
             outras telas (instrução explícita do designer). */}
         <View
@@ -297,8 +298,9 @@ export default function NewReport() {
           }}
         >
           <View
+            testID="progresso-anexos"
             style={{
-              width: '60%',
+              width: `${(attachments.filter(Boolean).length / attachments.length) * 100}%`,
               height: '100%',
               backgroundColor: theme.content.light,
             }}

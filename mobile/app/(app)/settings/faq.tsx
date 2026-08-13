@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Image as RNImage, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,8 +13,9 @@ import {
 import { HomeFAB } from '../../../components/HomeFAB';
 
 // Figma 361:12425 — settings sub-screen FAQ. Hero title + SearchInput +
-// 12 Accordions (todas collapsed por default) + Pagination + Home FAB.
-// Demo phase: search e pagination não filtram nada.
+// Accordions (collapsed por default) + Pagination + Home FAB. A busca filtra
+// pergunta E resposta sem exigir acento, e a paginação fatia a lista
+// filtrada em páginas de 6 (pageCount real; mudar a busca volta pra 1).
 // Figma só define as perguntas; respostas autoradas pra fase de demo
 // para que o estado "expandido" do Accordion mostre conteúdo coerente.
 const FAQS: { q: string; a: string }[] = [
@@ -68,12 +69,36 @@ const FAQS: { q: string; a: string }[] = [
   },
 ];
 
+const PAGE_SIZE = 6;
+
+// Busca tolerante: sem caixa e sem acento dos dois lados, senão "notificacoes"
+// digitado num teclado apressado não acha "notificações".
+const normaliza = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 export default function SettingsFAQ() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+
+  const filtradas = useMemo(() => {
+    const q = normaliza(search.trim());
+    if (!q) return FAQS;
+    return FAQS.filter((f) => normaliza(`${f.q} ${f.a}`).includes(q));
+  }, [search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
+  // Clamp em vez de efeito: uma busca que encolhe a lista não pode deixar a
+  // página apontando pro vazio.
+  const pagina = Math.min(currentPage, pageCount);
+  const visiveis = filtradas.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
+
+  const aoBuscar = (texto: string) => {
+    setSearch(texto);
+    setCurrentPage(1);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -113,12 +138,12 @@ export default function SettingsFAQ() {
 
           <SearchInput
             value={search}
-            onChangeText={setSearch}
+            onChangeText={aoBuscar}
             placeholder="Pesquisar"
           />
 
           <View style={{ gap: theme.gap.sm }}>
-            {FAQS.map(({ q, a }) => (
+            {visiveis.map(({ q, a }) => (
               <Accordion
                 key={q}
                 title={q}
@@ -131,7 +156,8 @@ export default function SettingsFAQ() {
 
             {/* Pagination — Figma 361:12705 (shared with reports/index.tsx) */}
             <Pagination
-              currentPage={currentPage}
+              currentPage={pagina}
+              pageCount={pageCount}
               onPageChange={setCurrentPage}
             />
           </View>
