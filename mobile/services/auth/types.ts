@@ -19,6 +19,8 @@ export interface ConfirmSignUpParams { email: string; code: string; }
 export interface ResendConfirmationParams { email: string; }
 export interface ResetPasswordParams { email: string; }
 export interface ConfirmResetParams { email: string; code: string; newPassword: string; }
+// Nomes espelham o ChangePasswordDto do backend (currentPassword/newPassword).
+export interface ChangePasswordParams { currentPassword: string; newPassword: string; }
 
 export interface SignUpResult {
   /** 'CONFIRM' → a verification code was emailed; 'DONE' → already usable. */
@@ -33,5 +35,6 @@ export interface AuthBackend {
   signOut(): Promise<void>;
   resetPassword(p: ResetPasswordParams): Promise<void>;
   confirmReset(p: ConfirmResetParams): Promise<void>;
+  changePassword(p: ChangePasswordParams): Promise<void>;
   getCurrentUser(): Promise<User | null>;
 }

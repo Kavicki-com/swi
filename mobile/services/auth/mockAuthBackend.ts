@@ -12,5 +12,6 @@ export const mockAuthBackend: AuthBackend = {
   async signOut() {},
   async resetPassword() {},
   async confirmReset() {},
+  async changePassword() {},
   async getCurrentUser() { return null; },
 };

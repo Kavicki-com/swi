@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Image as RNImage, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
@@ -11,6 +12,7 @@ import {
 } from '@kavicki/swi-design-system';
 import { PasswordInput } from '../../../components/PasswordInput';
 import { HomeFAB } from '../../../components/HomeFAB';
+import { useAuth } from '../../../services/auth/AuthProvider';
 import { useField } from '../../../lib/forms/useField';
 import {
   validatePasswordField,
@@ -19,12 +21,16 @@ import {
 } from '../../../lib/validation/validators';
 
 // Figma 353:12228 — settings sub-screen "Alterar senha". Form com 3
-// password inputs + Toast informativo + Salvar + Home FAB. Demo
-// phase: useState efêmero, sem persistência (Salvar → router.back()).
+// password inputs + Toast informativo + Salvar + Home FAB. Salvar troca a
+// senha de verdade (POST /auth/password/change via useAuth); a mensagem de
+// erro da API (ex.: senha atual incorreta) aparece num Toast de erro e a
+// tela só fecha no sucesso.
 export default function SettingsChangePassword() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { changePassword } = useAuth();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const currentPassword = useField({
     validator: (v) => validateRequired(v, 'Senha atual'),
@@ -39,14 +45,27 @@ export default function SettingsChangePassword() {
   const canSubmit =
     currentPassword.isValid && newPassword.isValid && repeatPassword.isValid;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!canSubmit) {
       currentPassword.setTouched(true);
       newPassword.setTouched(true);
       repeatPassword.setTouched(true);
       return;
     }
-    router.back();
+    setSaveError(null);
+    try {
+      await changePassword({
+        currentPassword: currentPassword.value,
+        newPassword: newPassword.value,
+      });
+      router.back();
+    } catch (e) {
+      setSaveError(
+        e instanceof Error && e.message
+          ? e.message
+          : 'Não foi possível alterar a senha. Tente novamente.',
+      );
+    }
   };
 
   return (
@@ -121,6 +140,8 @@ export default function SettingsChangePassword() {
               'Sua senha precisa ter 8 caracteres incluindo letras e números\n1 símbolo @#$%ˆ\n1 Letras maiúscula'
             }
           />
+
+          {saveError ? <Toast variant="error" title={saveError} /> : null}
         </View>
       </KeyboardAwareScrollView>
 

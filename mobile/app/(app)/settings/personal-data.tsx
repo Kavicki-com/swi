@@ -47,8 +47,8 @@ const optional =
 
 // Figma 353:11560 — settings sub-screen "Dados pessoais". Form-based.
 // TopBar (DS v0.1.38) + section title + 11 fields + Salvar button +
-// Home FAB. Pre-populated com Figma example values; demo phase,
-// sem persistência (Salvar = router.back()).
+// Home FAB. Prefill real via GET /profile/me e Salvar via saveProfile
+// (upload de avatar por URL assinada ANTES do PUT); ver handleSave.
 export default function SettingsPersonalData() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
