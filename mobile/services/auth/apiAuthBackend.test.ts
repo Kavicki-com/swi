@@ -28,6 +28,20 @@ describe('apiAuthBackend', () => {
       .rejects.toThrow(/aguardando aprovação/)
   })
 
+  it('changePassword manda senha atual e nova pro endpoint autenticado', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({ accessToken: 't1', user: { id: 'u1', email: 'j@ex.com', name: 'J' } }))
+    await apiAuthBackend.signIn({ email: 'j@ex.com', password: 'senha123' })
+    ;(global.fetch as jest.Mock).mockResolvedValue(okJson({ ok: true }))
+
+    await apiAuthBackend.changePassword({ currentPassword: 'velha123', newPassword: 'Nova@1234' })
+
+    const [url, init] = (global.fetch as jest.Mock).mock.calls.at(-1)!
+    expect(String(url)).toMatch(/\/auth\/password\/change$/)
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({ currentPassword: 'velha123', newPassword: 'Nova@1234' })
+    expect(init.headers.Authorization).toBe('Bearer t1')
+  })
+
   it('signOut limpa o userId da sessão', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(okJson({ accessToken: 't1', user: { id: 'u1', email: 'j@ex.com', name: 'J' } }))
     await apiAuthBackend.signIn({ email: 'j@ex.com', password: 'senha123' })

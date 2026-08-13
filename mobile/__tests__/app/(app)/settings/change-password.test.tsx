@@ -8,6 +8,11 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack, push: jest.fn(), replace: jest.fn() }),
 }));
 
+const mockChangePassword = jest.fn();
+jest.mock('../../../../services/auth/AuthProvider', () => ({
+  useAuth: () => ({ changePassword: mockChangePassword }),
+}));
+
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
@@ -39,6 +44,49 @@ const botao = (tree: ReturnType<typeof create>, label: string) =>
 
 beforeEach(() => {
   mockBack.mockClear();
+  mockChangePassword.mockReset();
+});
+
+describe('alterar senha — submissão real', () => {
+  const preenche = async (tree: ReturnType<typeof create>) => {
+    await act(async () => {
+      field(tree, 'Senha atual').props.onChangeText('velha123');
+      field(tree, 'Nova senha').props.onChangeText('Nova@1234');
+      field(tree, 'Repetir nova senha').props.onChangeText('Nova@1234');
+    });
+  };
+
+  it('envia senha atual e nova pro backend e volta no sucesso', async () => {
+    mockChangePassword.mockResolvedValue(undefined);
+    const tree = await render();
+    await preenche(tree);
+
+    await act(async () => {
+      await botao(tree, 'Salvar nova senha').props.onPress();
+    });
+
+    expect(mockChangePassword).toHaveBeenCalledWith({
+      currentPassword: 'velha123',
+      newPassword: 'Nova@1234',
+    });
+    expect(mockBack).toHaveBeenCalled();
+  });
+
+  it('mostra o erro do backend e não sai da tela quando a troca falha', async () => {
+    mockChangePassword.mockRejectedValue(new Error('Senha atual incorreta'));
+    const tree = await render();
+    await preenche(tree);
+
+    await act(async () => {
+      await botao(tree, 'Salvar nova senha').props.onPress();
+    });
+
+    expect(mockBack).not.toHaveBeenCalled();
+    const erro = tree.root.findAll(
+      (n) => n.props?.variant === 'error' && n.props?.title === 'Senha atual incorreta',
+    );
+    expect(erro.length).toBeGreaterThan(0);
+  });
 });
 
 // Mesma classe de defeito do QA Mobile #1 (corrigido no step-2 em 6ff9c1f e

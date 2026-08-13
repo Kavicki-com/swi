@@ -20,6 +20,7 @@ export const apiAuthBackend: AuthBackend = {
   async signOut() { await SecureStore.deleteItemAsync(TOKEN_KEY); clearUserId() },
   async resetPassword({ email }) { await apiRequest('/auth/password/forgot', { method: 'POST', body: { email } }) },
   async confirmReset({ email, code, newPassword }) { await apiRequest('/auth/password/reset', { method: 'POST', body: { email, code, newPassword } }) },
+  async changePassword({ currentPassword, newPassword }) { await apiRequest('/auth/password/change', { method: 'POST', body: { currentPassword, newPassword }, auth: true }) },
   async getCurrentUser(): Promise<User | null> {
     const t = await SecureStore.getItemAsync(TOKEN_KEY)
     if (!t) return null
