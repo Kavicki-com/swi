@@ -4,14 +4,17 @@ import { JourneyProvider } from '../../services/journey/JourneyProvider';
 import { EvacuationProvider } from '../../services/evacuation/EvacuationProvider';
 import { NotificationProvider } from '../../services/notifications/NotificationProvider';
 
-// Auth gate: rotas em `(app)/*` exigem usuário autenticado.
-// Demo phase: estado em memória (sem AsyncStorage), então um cold
-// start sem login derruba qualquer deep-link `(app)/*` para /login.
+// Auth gate: rotas em `(app)/*` exigem usuário autenticado. Enquanto o
+// AuthProvider restaura a sessão guardada, segura o julgamento: redirecionar
+// nesse intervalo derrubaria deep-link válido pro login antes de o /auth/me
+// responder.
 //
 // JourneyProvider envolve só o tree autenticado — shared state vive
 // durante a sessão e reseta naturalmente no logout (provider remonta).
 export default function AppLayout() {
-  const { user } = useAuth();
+  const { user, restoring } = useAuth();
+
+  if (restoring) return null;
 
   if (!user) {
     return <Redirect href="/(auth)/login" />;
