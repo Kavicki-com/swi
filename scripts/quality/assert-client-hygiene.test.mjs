@@ -333,6 +333,7 @@ test('data de exemplo entre aspas e sequencia invalida nao viram data historica'
     {
       'src/contract.ts': [
         "// validUntil chega em ISO-8601, exemplo: '2026-01-31'",
+        "// o backend serializa meia-noite UTC ('2000-07-27T00:00:00.000Z')",
         '// ids legados vinham no formato 1234-56-78 e nao sao datas',
         '// as boundaries estao em docs/plans/2026-05-15-breakpoints.md',
         'export const contract = true',

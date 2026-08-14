@@ -144,7 +144,9 @@ function hasMaintenanceDate(text) {
     const before = text[match.index - 1] ?? ''
     const after = text[match.index + match[0].length] ?? ''
     if (before === '/' || after === '/' || after === '-') continue
-    if (QUOTES.has(before) && after === before) continue
+    // Valor citado é documentação do formato, não registro de manutenção. O
+    // fechamento pode vir bem depois da data, como no meio de um timestamp.
+    if (QUOTES.has(before) && text.includes(before, match.index + match[0].length)) continue
     return true
   }
   return false
