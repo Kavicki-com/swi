@@ -1,4 +1,5 @@
 import {
+  deveMostrarAvisoWeb,
   resolveAuthBackend,
   resolveDataBackend,
   type RuntimeEnv,
@@ -108,5 +109,39 @@ describe('DATA_BACKEND e AUTH_BACKEND no ambiente de teste', () => {
     const flags = loadFeatureFlags({ [DATA_KEY]: 'api', [AUTH_KEY]: 'api' });
     expect(flags.DATA_BACKEND).toBe('api');
     expect(flags.AUTH_BACKEND).toBe('api');
+  });
+});
+
+// O produto web suportado na entrega é o painel administrativo. O Expo web
+// existia como ferramenta de desenvolvimento e de QA, e nunca foi uma versão
+// do app para o usuário final: entregá-lo funcionando prometeria um segundo
+// produto que ninguém mantém.
+//
+// O corte é só no build de release. Em dev, teste e na escotilha de
+// demonstração o app web segue inteiro, senão o smoke E2E de navegador
+// (mobile/e2e/web-smoke.spec.ts), que é o que valida o mobile fora do Jest,
+// morreria junto.
+describe('aviso de acesso pelo painel no Expo web', () => {
+  const release: RuntimeEnv = { isDev: false, isTest: false, allowDemoMocks: false };
+
+  it('aparece no web de release', () => {
+    expect(deveMostrarAvisoWeb('web', release)).toBe(true);
+  });
+
+  it('não aparece em dev, que é onde se desenvolve a tela', () => {
+    expect(deveMostrarAvisoWeb('web', { ...release, isDev: true })).toBe(false);
+  });
+
+  it('não aparece sob a suíte, que é o que mantém o smoke de navegador vivo', () => {
+    expect(deveMostrarAvisoWeb('web', { ...release, isTest: true })).toBe(false);
+  });
+
+  it('não aparece com a escotilha de demonstração ligada', () => {
+    expect(deveMostrarAvisoWeb('web', { ...release, allowDemoMocks: true })).toBe(false);
+  });
+
+  it('nunca aparece no aplicativo nativo, que é o produto entregue', () => {
+    expect(deveMostrarAvisoWeb('android', release)).toBe(false);
+    expect(deveMostrarAvisoWeb('ios', release)).toBe(false);
   });
 });

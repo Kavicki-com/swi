@@ -19,6 +19,8 @@ import { Montserrat_400Regular } from '@expo-google-fonts/montserrat/400Regular'
 import { Montserrat_500Medium } from '@expo-google-fonts/montserrat/500Medium';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat/700Bold';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
+import { WebPanelNotice } from '../components/WebPanelNotice';
+import { deveMostrarAvisoWeb, RUNTIME_ENV } from '../lib/featureFlags';
 import { AuthProvider, useAuth } from '../services/auth/AuthProvider';
 import { ProfileProvider } from '../services/profile/ProfileProvider';
 import { ReportsProvider } from '../services/reports/ReportsProvider';
@@ -37,6 +39,12 @@ SplashScreen.preventAutoHideAsync();
 // onde o form ficava à esquerda e o fundo do gradient esticava em landscape.
 // 2026-05-18.
 const IS_WEB = Platform.OS === 'web';
+
+// Constante de módulo, decidida uma vez na carga: no build web de release o
+// app não é montado, e o endereço serve só o aviso de que o acesso web é pelo
+// painel. Em dev, sob a suíte e com a escotilha de demonstração o app web
+// segue inteiro (ver deveMostrarAvisoWeb em lib/featureFlags.ts).
+const MOSTRAR_AVISO_WEB = deveMostrarAvisoWeb(Platform.OS, RUNTIME_ENV);
 const rootContainerStyle = IS_WEB
   ? { flex: 1, backgroundColor: '#000' }
   : { flex: 1 };
@@ -75,7 +83,21 @@ function PositionsRoot() {
   return null;
 }
 
+// Despacho em vez de `if` dentro do AppRoot: um retorno antecipado antes dos
+// hooks abaixo faria o eslint de hooks reclamar com razão, e o ganho real é
+// que os providers só existem em um dos ramos.
 export default function RootLayout() {
+  if (MOSTRAR_AVISO_WEB) {
+    return (
+      <SwiThemeProvider>
+        <WebPanelNotice />
+      </SwiThemeProvider>
+    );
+  }
+  return <AppRoot />;
+}
+
+function AppRoot() {
   // DS theme.fontFamily.body = 'Inter', theme.fontFamily.title = 'Montserrat'.
   // Native: useFonts mapeia nome -> arquivo. RN não consulta weight descriptor;
   // basta carregar o arquivo certo sob o nome que o DS pede.

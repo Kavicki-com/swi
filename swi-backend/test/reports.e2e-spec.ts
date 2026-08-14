@@ -1,12 +1,3 @@
-// S3Client é construído na instanciação do MediaService (no app.init); presign
-// é puro (não faz rede): POST via createPresignedPost, GET via getSignedUrl.
-// Setar MINIO_* dummy ANTES de montar o app deixa a assinatura determinística
-// e sem depender de MinIO up.
-process.env.MINIO_PUBLIC_URL ??= 'http://localhost:9000'
-process.env.MINIO_ACCESS_KEY ??= 'minioadmin'
-process.env.MINIO_SECRET_KEY ??= 'minioadmin'
-process.env.MINIO_BUCKET ??= 'swi-media'
-
 import { Test } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
 import request from 'supertest'

@@ -1,6 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { E2E_PORTS, E2E_PROJECT, runTestStack, stackArgs, waitForPostgres } from './run-test-stack.mjs'
+import { fileURLToPath } from 'node:url'
+import {
+  E2E_PORTS,
+  E2E_PROJECT,
+  ehExecucaoDireta,
+  runTestStack,
+  stackArgs,
+  waitForPostgres,
+} from './run-test-stack.mjs'
 
 // O runner sobe a infraestrutura de teste, roda o Playwright do alvo e derruba
 // tudo. O que estes testes cercam não é o caminho feliz: é o teardown, porque
@@ -240,4 +248,83 @@ test('stackArgs sempre carrega os dois compose, na ordem que faz a sobreposicao 
   const over = args.indexOf('docker-compose.e2e.yml')
   assert.ok(base !== -1 && over !== -1)
   assert.ok(base < over, 'a sobreposicao e2e precisa vir depois da base')
+})
+
+// Executor falso que tambem guarda as options, para as asserções de ambiente.
+const execComOptions = () => {
+  const calls = []
+  const exec = async (command, args, options = {}) => {
+    calls.push({ linha: [command, ...args].join(' '), options })
+    return { code: 0 }
+  }
+  return { calls, exec }
+}
+
+const rodarComOptions = async (target = 'admin') => {
+  const { calls, exec } = execComOptions()
+  await runTestStack({ target, exec, waitForHealth: async () => {} })
+  return calls
+}
+
+// O docker-compose.yml declara JWT_SECRET como `${JWT_SECRET:?...}`. O Compose
+// interpola o arquivo INTEIRO ao ser lido, mesmo quando so subimos db, mailhog
+// e minio: sem a variavel definida, `docker compose up` morre em
+// "required variable JWT_SECRET is missing a value" antes de criar container
+// nenhum. Ou seja, rodar E2E dependia de existir um .env na maquina, e num
+// checkout limpo de CI nao existe.
+test('injeta um JWT descartavel proprio nas chamadas de compose', async () => {
+  const calls = await rodarComOptions()
+  const compose = calls.filter((c) => c.linha.startsWith('docker compose'))
+  assert.ok(compose.length >= 2, 'esperado ao menos o up e o down')
+  for (const c of compose) {
+    assert.ok(c.options.env, `sem env em: ${c.linha}`)
+    assert.ok(c.options.env.JWT_SECRET, `sem JWT_SECRET em: ${c.linha}`)
+  }
+})
+
+// Segredo curto seria aceito aqui e recusado pelo contrato de ambiente do
+// backend em producao (MIN_JWT_SECRET_LENGTH = 32). Gerar ja no tamanho certo
+// evita que a stack de teste valide algo que a real recusaria.
+test('o segredo descartavel tem tamanho utilizavel', async () => {
+  const calls = await rodarComOptions()
+  const up = calls.find((c) => c.linha.includes(' up '))
+  assert.ok(up.options.env.JWT_SECRET.length >= 32)
+})
+
+// Fixo no fonte, viraria credencial de verdade no dia em que alguem apontasse a
+// stack de teste para um banco que nao e descartavel.
+test('gera um segredo diferente a cada execucao', async () => {
+  const [a, b] = await Promise.all([rodarComOptions(), rodarComOptions()])
+  const pega = (calls) => calls.find((c) => c.linha.includes(' up ')).options.env.JWT_SECRET
+  assert.notEqual(pega(a), pega(b))
+})
+
+// O webServer do Playwright (swi-admin/playwright.config.ts) sobe a API do teste
+// lendo E2E_JWT_SECRET. Com valores diferentes dos dois lados, o token emitido
+// pela API nao valida no proximo processo que subir com o outro segredo.
+test('a suite recebe o mesmo segredo que o compose', async () => {
+  const calls = await rodarComOptions()
+  const up = calls.find((c) => c.linha.includes(' up '))
+  const suite = calls.find((c) => c.linha.includes('playwright test'))
+  assert.equal(suite.options.env.E2E_JWT_SECRET, up.options.env.JWT_SECRET)
+})
+
+// Este era um no-op silencioso fora do Windows. `new URL('file:///' + p)` com um
+// caminho POSIX produz `file:////home/...`, quatro barras, que nunca bate com o
+// `file:///home/...` de import.meta.url. Resultado: rodado direto no Linux, o
+// script terminava com codigo 0 sem subir stack nem rodar teste. Um job de CI
+// com ele passaria verde tendo executado nada.
+// Asserção de ida e volta em vez de caminho fixo: `pathToFileURL` depende da
+// plataforma, então um caminho POSIX escrito à mão daria `file:///C:/home/...`
+// quando este teste roda no Windows, e estaria afirmando o comportamento de
+// outro sistema. Do jeito abaixo, cada plataforma exercita a própria conversão,
+// e no CI (Linux) é exatamente o caminho que o `file:///` + path quebrava.
+test('reconhece execucao direta com o caminho que a plataforma produz', () => {
+  const url = new URL('./run-test-stack.mjs', import.meta.url).href
+  assert.equal(ehExecucaoDireta(fileURLToPath(url), url), true)
+})
+
+test('nao confunde importacao com execucao direta', () => {
+  assert.equal(ehExecucaoDireta('/home/runner/outro.mjs', 'file:///home/runner/work/run-test-stack.mjs'), false)
+  assert.equal(ehExecucaoDireta(undefined, 'file:///home/runner/work/run-test-stack.mjs'), false)
 })

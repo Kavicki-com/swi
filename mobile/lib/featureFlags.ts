@@ -61,6 +61,26 @@ export function isRelaxedEnv(env: RuntimeEnv): boolean {
   return env.isDev || env.isTest || env.allowDemoMocks;
 }
 
+/**
+ * "Este web é o build entregue, ou uma ferramenta de trabalho?"
+ *
+ * O produto web suportado na entrega é o painel administrativo. O Expo web
+ * sempre foi ferramenta de desenvolvimento e de QA, nunca uma versão do app
+ * para o usuário final, e entregá-lo funcionando prometeria um segundo produto
+ * que ninguém mantém.
+ *
+ * O corte vale só no build de release, e por isso reusa `isRelaxedEnv`: em dev,
+ * sob a suíte e com a escotilha de demonstração, o app web continua inteiro.
+ * Sem essa ressalva o smoke E2E de navegador (mobile/e2e/web-smoke.spec.ts),
+ * que é o que exercita o app fora do Jest, passaria a testar a página de aviso.
+ *
+ * Recebe a plataforma por parâmetro em vez de ler `Platform.OS` para continuar
+ * pura, como as demais funções deste arquivo.
+ */
+export function deveMostrarAvisoWeb(platformOS: string, env: RuntimeEnv): boolean {
+  return platformOS === 'web' && !isRelaxedEnv(env);
+}
+
 /** Trata variável ausente e variável em branco como a mesma coisa. */
 function readEnvFlag(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim();

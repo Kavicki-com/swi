@@ -1,8 +1,3 @@
-process.env.MINIO_PUBLIC_URL ??= 'http://localhost:9000'
-process.env.MINIO_ACCESS_KEY ??= 'minioadmin'
-process.env.MINIO_SECRET_KEY ??= 'minioadmin'
-process.env.MINIO_BUCKET ??= 'swi-media'
-
 import { Test } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
 import request from 'supertest'

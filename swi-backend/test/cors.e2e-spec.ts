@@ -1,10 +1,3 @@
-// Idêntico aos siblings: MINIO_* setados ANTES do AppModule pra o MediaService
-// montar o S3Client sem depender de MinIO up.
-process.env.MINIO_PUBLIC_URL ??= 'http://localhost:9000'
-process.env.MINIO_ACCESS_KEY ??= 'minioadmin'
-process.env.MINIO_SECRET_KEY ??= 'minioadmin'
-process.env.MINIO_BUCKET ??= 'swi-media'
-
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -18,10 +11,10 @@ describe('CORS (e2e)', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = moduleRef.createNestApplication()
-    // Atribuição direta, NÃO `??=` como os MINIO_* acima: lá qualquer valor
-    // serve, aqui as asserções dependem desta lista exata — herdar o .env faria
-    // o teste mentir. Restaurado no afterAll porque maxWorkers=1 compartilha o
-    // process.env com os specs seguintes.
+    // Atribuição direta, NÃO `??=` como o setup-e2e.ts faz com os MINIO_*: lá
+    // qualquer valor serve, aqui as asserções dependem desta lista exata, e
+    // herdar o .env faria o teste mentir. Restaurado no afterAll porque
+    // maxWorkers=1 compartilha o process.env com os specs seguintes.
     process.env.CORS_ORIGINS = 'http://localhost:5173'
     // MESMA função que o main.ts chama (src/main.spec.ts prova a chamada), então
     // o que passa aqui é o CORS que a API real serve.

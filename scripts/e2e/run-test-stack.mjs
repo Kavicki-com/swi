@@ -17,8 +17,9 @@
  */
 
 import { spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const RAIZ = join(AQUI, '..', '..')
@@ -92,6 +93,25 @@ export function stackArgs(extra) {
   ]
 }
 
+/**
+ * Segredo desta execução e só dela.
+ *
+ * O docker-compose.yml declara `JWT_SECRET: ${JWT_SECRET:?...}` no serviço
+ * `api`, e o Compose interpola o arquivo inteiro ao lê-lo, mesmo quando só
+ * subimos db, mailhog e minio. Sem a variável, o `up` morre em "required
+ * variable JWT_SECRET is missing a value" antes de criar container nenhum, ou
+ * seja, rodar E2E dependia de existir um .env na máquina. Num checkout limpo de
+ * CI não existe.
+ *
+ * Gerado em vez de fixo no fonte porque valor fixo em arquivo versionado vira
+ * credencial de verdade no dia em que alguém apontar a stack de teste para um
+ * banco que não é descartável. E ele nunca é impresso: nada aqui loga o env, e
+ * as etapas só herdam stdio do docker e da suíte.
+ */
+export function gerarSegredoDescartavel() {
+  return `e2e-${randomBytes(24).toString('hex')}`
+}
+
 /** Executor real. Herda stdio para o log do CI mostrar a saída de cada etapa. */
 export function spawnExec(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -121,12 +141,14 @@ export function spawnExec(command, args, options = {}) {
  *
  * É o mesmo comando do healthcheck do serviço `db` no docker-compose.yml.
  */
-export function pgIsReady() {
+export function pgIsReady(env = process.env) {
   return new Promise((resolve) => {
     const filho = spawn(
       'docker',
       stackArgs(['exec', '-T', 'db', 'pg_isready', '-h', '127.0.0.1', '-p', '5432', '-U', 'swi', '-d', 'swi']),
-      { cwd: BACKEND, stdio: 'ignore', shell: process.platform === 'win32' },
+      // O env vai junto pelo mesmo motivo do `up`: `compose exec` também lê os
+      // dois arquivos e também morre na interpolação sem JWT_SECRET.
+      { cwd: BACKEND, stdio: 'ignore', shell: process.platform === 'win32', env },
     )
     filho.on('error', () => resolve(false))
     filho.on('close', (code) => resolve(code === 0))
@@ -134,7 +156,8 @@ export function pgIsReady() {
 }
 
 /** Repete a sonda até o banco responder, ou desiste com erro. */
-export async function waitForPostgres({ probe = pgIsReady, timeoutMs = 120_000, intervalMs = 1_000 } = {}) {
+export async function waitForPostgres({ probe, timeoutMs = 120_000, intervalMs = 1_000, env } = {}) {
+  probe ??= () => pgIsReady(env)
   const limite = Date.now() + timeoutMs
   for (;;) {
     if (await probe()) return
@@ -155,7 +178,7 @@ export async function waitForPostgres({ probe = pgIsReady, timeoutMs = 120_000, 
 export async function runTestStack({
   target,
   exec = spawnExec,
-  waitForHealth = () => waitForPostgres(),
+  waitForHealth,
   testArgs = [],
 } = {}) {
   const alvo = ALVOS[target]
@@ -167,19 +190,27 @@ export async function runTestStack({
   // declaradas aqui e lidas lá; sem esta passagem, mudar `E2E_PORTS` deixaria
   // o config apontando para a porta antiga, e o teste conversaria com a stack
   // errada sem reclamar de nada.
+  // O mesmo segredo desce para os dois lados: o Compose precisa dele só para
+  // interpolar o arquivo, e o webServer do Playwright (E2E_JWT_SECRET) sobe a
+  // API do teste com ele. Valores diferentes fariam o token emitido por um
+  // processo não validar no outro.
+  const jwtSecret = gerarSegredoDescartavel()
   const env = {
     ...process.env,
     DATABASE_URL,
+    JWT_SECRET: jwtSecret,
+    E2E_JWT_SECRET: jwtSecret,
     E2E_TARGET: target,
     E2E_API_PORT: String(E2E_PORTS.api),
     E2E_ADMIN_PORT: String(E2E_PORTS.admin),
     E2E_MOBILE_PORT: String(E2E_PORTS.mobile),
   }
+  const esperarSaude = waitForHealth ?? (() => waitForPostgres({ env }))
   let original = null
 
   try {
-    await exec('docker', stackArgs(['up', '-d', 'db', 'mailhog', 'minio', 'minio-init']), { cwd: BACKEND })
-    await waitForHealth()
+    await exec('docker', stackArgs(['up', '-d', 'db', 'mailhog', 'minio', 'minio-init']), { cwd: BACKEND, env })
+    await esperarSaude()
     await exec('npx', ['prisma', 'migrate', 'deploy'], { cwd: BACKEND, env })
     // Roda com cwd em swi-backend: é lá que vivem o @prisma/client gerado e o
     // bcrypt que o seed usa.
@@ -190,7 +221,7 @@ export async function runTestStack({
     original = erro
   } finally {
     try {
-      await exec('docker', stackArgs(['down', '-v', '--remove-orphans']), { cwd: BACKEND })
+      await exec('docker', stackArgs(['down', '-v', '--remove-orphans']), { cwd: BACKEND, env })
     } catch (erroDoTeardown) {
       // Só vira a falha reportada se nada tiver falhado antes.
       if (!original) original = erroDoTeardown
@@ -206,10 +237,24 @@ function parseArgs(argv) {
   return { target: i === -1 ? undefined : argv[i + 1], rest }
 }
 
-const invokedPath = process.argv[1]?.replaceAll('\\', '/')
-const isDirectRun = Boolean(invokedPath) && import.meta.url === new URL(`file:///${invokedPath}`).href
+/**
+ * "Fui executado direto, ou só importado?"
+ *
+ * A versão anterior montava a URL com `new URL('file:///' + caminho)`. Isso só
+ * funciona no Windows, onde o caminho começa em `C:`. Com um caminho POSIX o
+ * resultado é `file:////home/...`, quatro barras, que nunca bate com o
+ * `file:///home/...` de import.meta.url. O efeito era pior que um erro: rodado
+ * direto no Linux, o script terminava com código 0 sem subir stack nem rodar
+ * teste, e um job de CI passaria verde tendo executado nada.
+ *
+ * `pathToFileURL` é a conversão da própria plataforma e resolve os dois casos.
+ */
+export function ehExecucaoDireta(caminhoInvocado, urlDoModulo) {
+  if (!caminhoInvocado) return false
+  return pathToFileURL(caminhoInvocado).href === urlDoModulo
+}
 
-if (isDirectRun) {
+if (ehExecucaoDireta(process.argv[1], import.meta.url)) {
   const { target, rest } = parseArgs(process.argv.slice(2))
   runTestStack({ target, testArgs: rest }).catch((error) => {
     console.error(error.message)

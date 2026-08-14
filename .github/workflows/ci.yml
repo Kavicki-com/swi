@@ -34,8 +34,10 @@ jobs:
       # Exporta Android, iOS e web num passo só. É o smoke de build: bundle
       # que não fecha derruba o job aqui, antes de chegar em aparelho.
       - run: npm run build:all
-      # O smoke web de navegador (mobile/e2e) entra quando a Task 14 do plano
-      # de higienização for commitada; o spec ainda não existe na HEAD.
+      # mobile/e2e/web-smoke.spec.ts existe e passa, mas fica fora do CI de
+      # propósito: o bundle web do Expo com --clear domina o tempo do job, e o
+      # único produto web suportado na entrega é o painel. Roda localmente com
+      # `npm run test:e2e:managed`.
 
   admin:
     runs-on: ubuntu-latest
@@ -58,9 +60,9 @@ jobs:
       - run: npm run gate:file-size
       - run: npm run build
       - run: npm run storybook:build
-      # O E2E de navegador (test:e2e:managed) entra junto com a Task 14: a
-      # sonda de prontidão do runner da stack na HEAD ainda espera só a porta
-      # TCP e correria contra o migrate deploy num runner limpo.
+      # O E2E de navegador vive no job admin-e2e, separado: ele sobe Docker e
+      # compila o backend, e misturar isso aqui faria o job de lint e teste
+      # esperar pela stack inteira.
 
   backend:
     runs-on: ubuntu-latest
@@ -131,10 +133,46 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
-      # As suítes E2E instanciam o AppModule em processo (NODE_ENV=test vem do
-      # jest) e setam MINIO_* dummy sozinhas; a única infraestrutura real que
-      # elas pedem é o banco.
+      # As suítes E2E instanciam o AppModule em processo, então a única
+      # infraestrutura real que elas pedem é o banco. NODE_ENV, o JWT
+      # descartável e os MINIO_* vêm de test/setup-e2e.ts, carregado como
+      # setupFiles antes de qualquer spec: por isso este job não precisa
+      # declarar nenhuma dessas variáveis, e um spec novo não precisa lembrar
+      # de repetir o preâmbulo.
       - run: npm run test:e2e
+
+  # E2E de navegador do painel, o único produto web suportado na entrega.
+  # Separado dos jobs de lint e teste porque sobe Docker e compila o backend.
+  #
+  # O runner (scripts/e2e/run-test-stack.mjs) sobe a infraestrutura descartável
+  # em portas próprias, aplica migrations, roda o seed e derruba tudo num
+  # finally. Ele injeta o próprio JWT descartável, então este job não precisa
+  # de segredo nenhum: sem isso o `docker compose` morreria na interpolação de
+  # `${JWT_SECRET:?...}` num checkout limpo, que é exatamente o caso do CI.
+  admin-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: 'npm'
+          cache-dependency-path: swi-admin/package-lock.json
+      - run: npm ci
+        working-directory: swi-admin
+      # O webServer do Playwright sobe a API de verdade (`npm run build &&
+      # start:prod` em ../swi-backend) e o runner roda migrate e seed com cwd
+      # lá, então o backend precisa das dependências e do client do Prisma.
+      - run: npm ci
+        working-directory: swi-backend
+      - run: npx prisma generate
+        working-directory: swi-backend
+      # Só o Chromium: a suíte roda em um projeto só, e baixar os três
+      # navegadores triplicaria o tempo do job sem cobrir mais nada.
+      - run: npx playwright install --with-deps chromium
+        working-directory: swi-admin
+      - run: npm run test:e2e:managed
+        working-directory: swi-admin
 
   security:
     runs-on: ubuntu-latest
