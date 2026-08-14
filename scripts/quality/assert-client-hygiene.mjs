@@ -2,17 +2,18 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, extname, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+// Só entram aqui diretórios de artefato, dependência e documentação. Pastas de
+// conteúdo do produto ficam de fora da lista: o filtro de extensão já descarta
+// imagem e fonte, e nomes genéricos como `media` também batem em módulos.
 const SKIPPED_DIRECTORIES = new Set([
   '.git',
   '.next',
   '.expo',
   '.turbo',
-  'assets',
   'build',
   'coverage',
   'dist',
   'docs',
-  'media',
   'node_modules',
   'storybook-static',
   'web-build',
@@ -117,21 +118,70 @@ const GENERATIVE_TOOL_PATTERN = new RegExp(
   'iu',
 )
 
+// `\b` do JavaScript é ASCII: em texto acentuado ele abre fronteira no meio da
+// palavra, e uma palavra maiúscula como `MÉTODO` passa a conter um marcador que
+// ninguém escreveu. Estas duas âncoras contam letra e dígito de qualquer
+// alfabeto, então a regra só casa com a palavra inteira.
+const OPEN = '(?<![\\p{L}\\p{N}_])'
+const CLOSE = '(?![\\p{L}\\p{N}_])'
+
+function word(source, flags = 'u') {
+  return new RegExp(`${OPEN}(?:${source})${CLOSE}`, flags)
+}
+
+const DATE_CANDIDATE = /(\d{4})-(\d{2})-(\d{2})/gu
+const QUOTES = new Set(["'", '"', '`'])
+
+// Data em comentário só conta como registro de manutenção quando é uma data de
+// calendário solta. Fica de fora o que documenta o código em vez de datar uma
+// correção: valor de exemplo entre aspas, trecho de caminho de arquivo e
+// sequência numérica que nem data é.
+function hasMaintenanceDate(text) {
+  for (const match of text.matchAll(DATE_CANDIDATE)) {
+    const month = Number(match[2])
+    const day = Number(match[3])
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue
+    const before = text[match.index - 1] ?? ''
+    const after = text[match.index + match[0].length] ?? ''
+    if (before === '/' || after === '/' || after === '-') continue
+    if (QUOTES.has(before) && after === before) continue
+    return true
+  }
+  return false
+}
+
+// A ferramenta de design é fonte canônica declarada no projeto, então citá-la é
+// legítimo. O que não pode sair do time é a coordenada interna do arquivo, o
+// identificador de nó no formato `342:9907`.
+const DESIGN_TOOL = word('Figma', 'iu')
+const DESIGN_NODE = /\d+:\d+/u
+
 const COMMENT_RULES = [
-  { kind: 'referencia de QA', pattern: /\bQA\b/u },
-  { kind: 'referencia de design', pattern: /\bFigma\b/iu },
-  { kind: 'data historica', pattern: /\b\d{4}-\d{2}-\d{2}\b/u, date: true },
+  { kind: 'referencia de QA', test: (text) => word('QA').test(text) },
+  {
+    kind: 'referencia de node do design',
+    test: (text) => DESIGN_TOOL.test(text) && DESIGN_NODE.test(text),
+  },
+  { kind: 'data historica', test: hasMaintenanceDate, date: true },
   {
     kind: 'narrativa historica',
-    pattern: /\b(?:bug|defeito|incidente|workarounds?)\b|\bvers[aã]o\s+anterior\b/iu,
+    test: (text) =>
+      word('bug|defeito|incidente|workarounds?', 'iu').test(text) ||
+      word('vers[aã]o\\s+anterior', 'iu').test(text),
   },
-  { kind: 'referencia de tarefa', pattern: /\bTask\s*#?\s*\d+\b/iu },
-  { kind: 'referencia de fase', pattern: /\bFase\s*#?\s*\d+\b/iu },
+  { kind: 'referencia de tarefa', test: (text) => word('Task\\s*#?\\s*\\d+', 'iu').test(text) },
+  { kind: 'referencia de fase', test: (text) => word('Fase\\s*#?\\s*\\d+', 'iu').test(text) },
   {
     kind: 'referencia de auditoria',
-    pattern: /\bauditor(?:ia|y)?\s+(?:intern[ao]|de\s+QA|#?\s*\d+)/iu,
+    test: (text) => new RegExp(`${OPEN}auditor(?:ia|y)?\\s+(?:intern[ao]|de\\s+QA|#?\\s*\\d+)`, 'iu').test(text),
   },
-  { kind: 'marcador pendente', pattern: /\b(?:TODO|FIXME|HACK|XXX)\b/u },
+  {
+    // Em português "todo" é determinante e aparece em maiúscula por ênfase, o
+    // que tornava a regra quase toda falso-positivo. Marcador de pendência
+    // agora precisa vir declarado, com dois-pontos ou parênteses.
+    kind: 'marcador pendente',
+    test: (text) => new RegExp(`${OPEN}(?:TODO\\s*[:(]|(?:FIXME|HACK|XXX)${CLOSE})`, 'u').test(text),
+  },
 ]
 
 const SLASH_COMMENT_EXTENSIONS = new Set([
@@ -160,6 +210,11 @@ const SLASH_COMMENT_EXTENSIONS = new Set([
   '.tsx',
 ])
 
+// Crase só delimita texto em JavaScript e TypeScript. No PowerShell ela é
+// caractere de escape, e tratá-la como aspas fazia o varredor perder o resto
+// do arquivo em silêncio.
+const TEMPLATE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
+
 const HASH_COMMENT_EXTENSIONS = new Set([
   '.bash',
   '.conf',
@@ -180,9 +235,17 @@ function isReadme(name) {
   return /^readme(?:\..*)?$/iu.test(name)
 }
 
+// Migration aplicada é imutável: o Prisma guarda o checksum de cada uma, e
+// reescrever o arquivo faz `migrate deploy` falhar em todo banco que já rodou.
+// Elas ficam fora da varredura inteira, não só da regra de data.
+function isAppliedMigration(path) {
+  return /(?:^|[\\/])migrations[\\/]/u.test(path)
+}
+
 function isExecutableFile(path) {
   const name = basename(path).toLowerCase()
   if (isReadme(name) || LOCKFILES.has(name)) return false
+  if (isAppliedMigration(path)) return false
   return EXECUTABLE_EXTENSIONS.has(extname(name)) || EXECUTABLE_NAMES.has(name)
 }
 
@@ -207,6 +270,7 @@ function commentSyntax(path) {
   const slash = SLASH_COMMENT_EXTENSIONS.has(extension)
   return {
     slash,
+    template: TEMPLATE_EXTENSIONS.has(extension),
     block: slash || extension === '.sql',
     hash:
       HASH_COMMENT_EXTENSIONS.has(extension) ||
@@ -289,12 +353,18 @@ export function extractComments(text, path) {
         continue
       }
       if (char === quote) quote = null
-      if (char === '\n') line += 1
+      if (char === '\n') {
+        line += 1
+        // Aspas simples e duplas não atravessam linha. Fechar aqui mantém o
+        // estrago de um apóstrofo solto (texto JSX, prosa em português) preso
+        // à própria linha em vez de cegar o resto do arquivo.
+        if (quote !== '`') quote = null
+      }
       index += 1
       continue
     }
 
-    if (char === '"' || char === "'" || char === '`') {
+    if (char === '"' || char === "'" || (syntax.template && char === '`')) {
       quote = char
       index += 1
       continue
@@ -330,8 +400,13 @@ export function extractComments(text, path) {
       continue
     }
 
+    // `https://` sem aspas, como dentro de `url(...)` no CSS, não abre
+    // comentário: as duas barras vêm coladas no esquema da URL.
+    const isSchemeSlashes =
+      char === '/' && next === '/' && text[index - 1] === ':' && /[\p{L}\p{N}]/u.test(text[index - 2] ?? '')
+
     const isLineComment =
-      (syntax.slash && char === '/' && next === '/') ||
+      (syntax.slash && char === '/' && next === '/' && !isSchemeSlashes) ||
       (syntax.hash && char === '#') ||
       (syntax.dash && char === '-' && next === '-')
     if (isLineComment) {
@@ -347,6 +422,13 @@ export function extractComments(text, path) {
 
     if (char === '\n') line += 1
     index += 1
+  }
+
+  // Chegar ao fim ainda dentro de um literal significa que o varredor perdeu a
+  // sincronia e possivelmente engoliu comentários. Portão que erra calado é
+  // pior que portão barulhento, então isso interrompe a execução.
+  if (quote === '`') {
+    throw new Error('estado inconsistente do varredor: literal de template aberto ate o fim do arquivo')
   }
 
   return comments
@@ -378,10 +460,17 @@ export function scanFile(path, { cwd = process.cwd() } = {}) {
     }
   }
 
-  for (const comment of extractComments(text, path)) {
+  let comments
+  try {
+    comments = extractComments(text, path)
+  } catch (error) {
+    throw new Error(`${displayPath}: ${error.message}`)
+  }
+
+  for (const comment of comments) {
     for (const rule of COMMENT_RULES) {
       if (rule.date && !pathAllowsCommentDate(displayPath)) continue
-      if (rule.pattern.test(comment.text)) {
+      if (rule.test(comment.text)) {
         findings.push(finding(displayPath, comment.line, rule.kind))
       }
     }

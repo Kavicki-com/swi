@@ -73,18 +73,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          # A matriz 18+22 caiu quando o Node 22 virou runtime oficial único
-          # (.nvmrc, engines dos três projetos, Dockerfile). O 18 estava aqui
-          # porque ERA a versão da hospedagem, e a matriz nasceu de um defeito
-          # real: pg-boss v12 é ESM-only e estourava ERR_REQUIRE_ESM só no 18, o
-          # Docker local (22) mascarou, e a quebra apareceu direto em produção
-          # no deploy de 2026-07-29.
+          # Node 22 é o runtime oficial único do repositório, o mesmo declarado
+          # em .nvmrc, no `engines` dos três projetos e no Dockerfile. Manter a
+          # CI em uma linha só é deliberado: pg-boss v12 é ESM-only e estoura
+          # ERR_REQUIRE_ESM em runtime anterior, que o Docker local não
+          # reproduz, então a divergência só apareceria depois do deploy.
           #
-          # Verificado em 2026-08-14 no painel da hospedagem: a API de produção
-          # roda Node 22.11.0, mesma linha LTS deste pin. Por isso o `engines`
-          # dos três projetos declara a FAIXA >=22.11.0 <23, e não a versão
-          # exata: com o pin exato mais engine-strict, o deploy quebraria na
-          # instalação por causa da diferença de patch.
+          # A hospedagem da API roda 22.11.0, da mesma linha LTS deste pin. Por
+          # isso o `engines` dos três projetos declara a FAIXA >=22.11.0 <23 e
+          # não a versão exata: pin exato somado a engine-strict faz a
+          # instalação falhar no deploy por diferença de patch.
           node-version: '22.23.2'
           cache: 'npm'
           cache-dependency-path: swi-backend/package-lock.json
@@ -184,7 +182,15 @@ jobs:
         with:
           node-version: '22.23.2'
       - run: node --test scripts/quality/assert-client-hygiene.test.mjs
-      - run: node scripts/quality/assert-client-hygiene.mjs
+      # Portão de higiene do código entregue ao cliente. Cobre por enquanto as
+      # áreas já revisadas, e cada lote de limpeza acrescenta a sua aqui até a
+      # lista sumir e a varredura passar a valer para o repositório inteiro.
+      # Ligá-lo de uma vez faria a CI nascer vermelha por meses, que é o mesmo
+      # erro descrito logo abaixo no portão de vulnerabilidades.
+      - run: >
+          node scripts/quality/assert-client-hygiene.mjs
+          --dir .github
+          --dir scripts
       # Portão de vulnerabilidades. Bloqueia de verdade, sem continue-on-error.
       #
       # O `npm audit` cru não servia como portão: ele mistura o que tem conserto
