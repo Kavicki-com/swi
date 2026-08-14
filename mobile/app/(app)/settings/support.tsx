@@ -3,7 +3,6 @@ import { Stack, useRouter } from 'expo-router';
 import { useTheme } from '@kavicki/swi-design-system';
 import { SupportFormModal } from '../../../components/modals/SupportFormModal';
 
-// Figma 348:10426 — bottom-sheet "Solicitação de suporte" (authenticated).
 // Route wrapper: aplica envelope `transparentModal` + backdrop pressable.
 // Conteúdo real vive em `components/modals/SupportFormModal.tsx`.
 export default function SettingsSupport() {

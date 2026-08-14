@@ -1,7 +1,6 @@
 import { Pressable } from 'react-native';
 import Svg, { Circle, ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 
-// Home FAB — fiel ao Figma 348:10334 (ContainedButton/home).
 //
 // Arquitetura limpa:
 // - Pressable: background `#303030` (cor do anel) + borderRadius circular.
@@ -15,12 +14,10 @@ import Svg, { Circle, ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 // fina linha branca contornando o anel ("borda cortada" reportada pelo
 // usuário). Movendo o dark pro Pressable bg, eliminamos o sandwich.
 //
-// Cores hardcoded conforme variable defs do Figma:
 //   #F5F5F5 = content/dark (miolo branco)
 //   #303030 = content/disable (anel cinza escuro)
 //   #222222 = content/light (ícone home preto)
 //
-// Sombra: shadow* (iOS) + elevation (Android). Drop-shadow Figma:
 // offset (0, 4), blur 8, rgba(29,29,29,0.16).
 
 const CIRCLE_DIAMETER = 71.4286;
@@ -56,7 +53,6 @@ export function HomeFAB({
         alignItems: 'center',
         justifyContent: 'center',
         opacity: pressed ? 0.9 : 1,
-        // Drop-shadow Figma 348:10334 (offset 0/4, blur 8, #1D1D1D 16%).
         shadowColor: '#1D1D1D',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.16,

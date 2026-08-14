@@ -23,7 +23,6 @@ import { useSubmitOnce } from '../../../lib/forms/useSubmitOnce';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 import type { Report } from '../../../services/reports/types';
 
-// Figma 364:20304 — report-details. Voltar + actions row (search +
 // Fazer comentário + Revisar) + ReportCard + Detalhes + Imagens
 // horizontal scroll + Atividades cards + Add comment input + CTA.
 // Backend slice: report data via useReports().loadOne(id) (Unit A/B); sem
@@ -74,7 +73,6 @@ export default function ReportDetails() {
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  // Ate 2026-07-27 este botao era `onPress={() => setComment('')}`: limpava o
   // campo e DESCARTAVA o texto. O comentario do worker nunca saia do aparelho,
   // e por isso tambem nunca aparecia no painel — o backend
   // (POST /reports/:id/comments) sempre funcionou, verificado ao vivo.
@@ -93,7 +91,6 @@ export default function ReportDetails() {
     }
   };
   // ESTE HOOK FICA ACIMA DO RETURN ANTECIPADO, e nao junto do botao que ele
-  // serve (QA Mobile #9). Quando nasceu, em 2026-07-27, foi parar la embaixo:
   // o primeiro render e 'loading' e sai pelo return, o segundo e 'ready' e
   // chega ate aqui, entao a contagem de hooks mudava de um render pro outro e
   // o React lancava "Rendered more hooks than during the previous render". Em
@@ -143,13 +140,6 @@ export default function ReportDetails() {
         // Gap entre input focado e topo do teclado (incluindo QuickType bar).
         bottomOffset={60}
       >
-        {/* Voltar — ghost button com chevron-left.
-            Figma 364:20304 mostra "< Voltar" left-aligned no topo com
-            largura natural (não full-width). marginLeft:-18 compensa:
-            (a) padding-left do ghost Button (theme.padding.sm = 12pt) +
-            (b) inset visual do glyph keyboard_arrow_left dentro do bounding
-            box 24x24 (~6pt). Settings TopBar precisa só -6 porque seu
-            BackSlot tem padding-left:0. */}
         <View style={{ alignSelf: 'flex-start', marginLeft: -18 }}>
           <Button
             variant="ghost"
@@ -232,11 +222,6 @@ export default function ReportDetails() {
           {report.details}
         </Text>
 
-        {/* Imagens — horizontal scroll com fotos reais (Figma 364:20304
-            mostra imagens de campo / equipamento). Backend slice: URIs vêm
-            de report.images (seed espelha as 2 imagens estáticas). Relatório
-            recém-criado pode vir sem imagens — esconde a seção inteira pra não
-            renderizar um título solto sem conteúdo. */}
         {report.images.length > 0 && (
           <>
             <Title variant="title.xs" color={theme.content.dark}>
@@ -293,8 +278,6 @@ export default function ReportDetails() {
                       gap: theme.gap.l,
                     }}
                   >
-                    {/* Coluna esquerda — width capada pra forçar wrap nos
-                        títulos como Figma (cada palavra grande em sua linha). */}
                     <View style={{ gap: theme.gap.xs, width: 140 }}>
                       <Text variant="label.m" color={theme.content.dark}>
                         {activity.title}
@@ -355,8 +338,6 @@ export default function ReportDetails() {
           </View>
         ) : null}
 
-        {/* Add comment — multiline input + Fazer comentário CTA.
-            Figma 364:20304 mostra textarea ~120h, ~6 linhas de altura. */}
         <Input
           label="Adicionar comentário"
           placeholder="Digite aqui o seu comentário"

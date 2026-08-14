@@ -39,7 +39,6 @@ export function NavFABs({
   // navigate() é "smart": se /(app)/dashboard já está no stack (caso normal —
   // dashboard é a root do (app)), faz pop até ela em vez de mount uma nova
   // instância. Resolve o delay percebido ao tocar HomeFAB de outras telas
-  // (bug Fix 5): com push, o Dashboard pesado (StatusChart + multiple SVGs +
   // expo-image bg) re-montava toda vez (~600-800ms). Com navigate, é
   // instantâneo no caso comum.
   const handleHome = onHomePress ?? (() => router.navigate('/(app)/dashboard'));
@@ -51,7 +50,6 @@ export function NavFABs({
           pointerEvents="box-none"
           style={{
             position: 'absolute',
-            // Figma 364:16378 — chat FAB top=669 em frame 800 → bottom ~71;
             // right edge a 36 do viewport (frame 360, left=264, width 60).
             bottom: insets.bottom + 71,
             right: 36,
@@ -60,7 +58,6 @@ export function NavFABs({
           <Button
             variant="contained"
             shape="pill"
-            // Figma standalone (364:16775): padding 16 + icon container 24
             // → 56×56 total. Antes "xlarge" (padding ml=20) gerava 68×68.
             size="large"
             backgroundColor={theme.surface.success}
@@ -68,7 +65,6 @@ export function NavFABs({
             iconLeft={
               <Icon
                 name="chat_bubble"
-                // Figma 364:16378 journey-context: 25.714×25.714.
                 width={25.714}
                 height={25.714}
                 // content.dark = #F5F5F5 (white). content.light resolvia
@@ -87,18 +83,12 @@ export function NavFABs({
           pointerEvents="box-none"
           style={{
             position: 'absolute',
-            // Figma 364:16378 — home FAB bottom 23.57px (Figma) → 24.
             bottom: insets.bottom + 24,
             left: 0,
             right: 0,
             alignItems: 'center',
           }}
         >
-          {/* HomeFAB renderiza o SVG fiel ao Figma 348:10334 (círculo
-              71.43×71.43 com anel interno 10.286pt). Antes usávamos
-              <Button variant="contained" shape="pill" border 10pt> do DS,
-              que gerava ~92×92 com borda EXTERNA — usuário reportou
-              divergência visual ("feio, não segue o Figma"). */}
           <HomeFAB onPress={handleHome} />
         </View>
       ) : null}

@@ -49,7 +49,6 @@ export default function PasswordRecoveryNewPassword() {
 
   // Trava de reentrancia: `disabled` so cobria o formulario incompleto,
   // nao o periodo da requisicao — um segundo toque disparava de novo
-  // (QA 2026-07-27, no fim do cadastro).
   const { run: enviar } = useSubmitOnce(handleSubmit);
 
   return (
@@ -119,17 +118,6 @@ export default function PasswordRecoveryNewPassword() {
             }
           />
 
-          {/* SEM `disabled={!canSubmit}` (QA Mobile #1): o handleSubmit já
-              marca os campos como tocados pra revelar o erro, e botão
-              desabilitado nunca dispara onPress — aquele bloco era código
-              morto e o toque sumia no vazio.
-
-              Aqui o silêncio custava mais que no step-2: as regras de senha
-              (8+ caracteres, maiúscula, número, símbolo) não estão escritas
-              na tela, então sem a mensagem não há como adivinhar qual falhou.
-
-              A trava de duplo envio não cai junto: vive no useSubmitOnce
-              (`enviar`). */}
           <Button
             variant="contained"
             label="Alterar senha"

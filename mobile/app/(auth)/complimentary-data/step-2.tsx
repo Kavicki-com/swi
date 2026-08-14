@@ -23,7 +23,6 @@ export default function ComplimentaryDataStep2() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   // Saudação: primeiro nome da conta logada (o wizard roda pós-login desde a
-  // reordenação 2026-07-27 — não há mais param vindo do cadastro).
   const username = user?.name?.trim().split(/\s+/)[0] || undefined;
 
   const cep = useField({ validator: validateCEP, mask: maskCEP });
@@ -38,7 +37,6 @@ export default function ComplimentaryDataStep2() {
   });
   const uf = useField({ validator: validateUF, mask: maskUF });
   const [cepNotFound, setCepNotFound] = useState(false);
-  // City has no visible Input on this screen (matches Figma), but the CEP
   // lookup resolves it — capture it here so it persists to Profile.city.
   const [city, setCity] = useState('');
   const { saveProfile } = useProfile();
@@ -165,18 +163,6 @@ export default function ComplimentaryDataStep2() {
             possibilidade de overlap; user scrolla naturalmente até os
             botões no fim do form. */}
         <View style={{ gap: theme.gap.sm }}>
-          {/* SEM `disabled={!canSubmit}` (QA Mobile #1, 30/07/2026: "ao tocar
-              em Avançar, o cadastro não avança e não avisa quais campos estão
-              faltando").
-
-              O `goNext` JÁ trata o caso inválido: marca todos os campos como
-              tocados, o que revela a mensagem de erro de cada um. Só que botão
-              desabilitado não dispara onPress, então esse bloco era código
-              morto e o toque sumia no vazio.
-
-              Deixar habilitado transforma o toque em explicação. A validação
-              não afrouxa: o `if (!canSubmit)` do goNext continua sendo quem
-              decide se avança. */}
           <Button variant="contained" label="Avançar" fullWidth onPress={goNext} />
           <Button variant="outline" label="Voltar" fullWidth onPress={() => router.back()} />
         </View>

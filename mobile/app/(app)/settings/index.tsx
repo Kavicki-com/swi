@@ -13,7 +13,6 @@ import { useAuth } from '../../../services/auth/AuthProvider';
 import { HomeFAB } from '../../../components/HomeFAB';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 
-// Figma 348:10615 — settings hub. Container left=16, top=40, w=328, gap.l=24,
 // items-center. ScrollView pattern matches my-stats; Home FAB sits absolute
 // over the safe-area bottom (matches my-stats home FAB).
 
@@ -33,10 +32,6 @@ export default function Settings() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Background decorative overlay — Figma imgSettings.
-          Same pattern as dashboard-bg.png. pointerEvents on wrapper View
-          (not on RNImage) because RN ImageProps typing omits pointerEvents
-          even though runtime accepts it. */}
       <View
         pointerEvents="none"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
@@ -61,12 +56,6 @@ export default function Settings() {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ gap: theme.gap.l, alignItems: 'center' }}>
-          {/* Avatar + Edit float — Figma 348:10371 wrapper 106×91.
-              alignItems:'center' centraliza o Avatar (80pt) dentro do wrapper
-              (106pt). Sem isso, o Avatar ficava no left-start do wrapper,
-              causando off-set visual ~13pt à esquerda. O Edit icon (right:0,
-              top:0 absolute) continua no canto top-right do wrapper,
-              overlapando o avatar no canto sup-dir (Figma intent). */}
           <View style={{ width: 106, height: 91, justifyContent: 'flex-end', alignItems: 'center' }}>
             <Avatar customSize={80} uri={profile?.avatarUrl} name={profile?.fullName} />
             <View style={{ position: 'absolute', right: 0, top: 0 }}>
@@ -100,8 +89,6 @@ export default function Settings() {
             <HorizontalCard label="FAQ"             onPress={go('/(app)/settings/faq')} />
           </View>
 
-          {/* Ghost links — Montserrat Bold 14, color per role. Materialized
-              as `link.m` variant (DS v0.1.80, Figma 348:10615 "GhostButton"). */}
           <Pressable
             onPress={go('/(app)/settings/privacy')}
             style={{
@@ -143,9 +130,6 @@ export default function Settings() {
         </View>
       </ScrollView>
 
-      {/* Home FAB — fiel ao Figma 348:10334 via HomeFAB component
-          (substituiu o DS Button que renderizava ~84×84 com borda externa;
-          o Figma é 71.43×71.43 com anel interno 10.286pt). */}
       <View
         pointerEvents="box-none"
         style={{

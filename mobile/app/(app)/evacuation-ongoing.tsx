@@ -17,7 +17,6 @@ import { chipAnchors, chipEtaLabel, lineFeature, navArrow, straightLine } from '
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 
-// Figma 385:30336 — evacuation-route-ongoing (in-progress / "navegando").
 //
 // Migrated off the legacy maplibre-gl imperative wrapper onto the
 // declarative MapView API (matches evacuation.tsx). Works on both web
@@ -31,7 +30,6 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 //     rotated to match bearing toward next waypoint
 //   - 2 time chips ("6 minutos" / "17 minutos") at 35% / 70%
 //
-// No instruction card — Figma shows the map fullscreen.
 
 const NAV_ARROW_PATH_D =
   'M1.66667 31.6667L0 30L13.3333 0L26.6667 30L25 31.6667L13.3333 26.6667L1.66667 31.6667Z';
@@ -135,7 +133,6 @@ function EvacuationOngoingScreen() {
         <NavFABs />
       </MapView>
 
-      {/* Evacuação REAL ativa (Fase 2): CTA de confirmação de presença. */}
       <EvacuationAckBar />
     </View>
   );

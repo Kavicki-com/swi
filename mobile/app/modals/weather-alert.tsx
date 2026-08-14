@@ -3,10 +3,8 @@ import { Stack, useRouter } from 'expo-router';
 import { useTheme } from '@kavicki/swi-design-system';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
 
-// Figma 385:29371 — alert-modal route wrapper. Provides the transparent
 // backdrop + fade animation; delegates the modal body to
 // `components/modals/WeatherAlertModal.tsx`. Pattern matches
-// `app/modals/privacy-policy.tsx` (R-6 in 2026-05-17-mobile-routes-audit.md).
 export default function WeatherAlertModalRoute() {
   const theme = useTheme();
   const router = useRouter();

@@ -45,7 +45,6 @@ export default function SignUp() {
   const [agreed, setAgreed] = useState(false);
 
   // Empresa do cadastro: o vínculo é o que coloca o worker na fila de
-  // aprovação org-scoped do painel (QA 2026-07-26).
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [companyId, setCompanyId] = useState('');
   const [companiesError, setCompaniesError] = useState(false);
@@ -84,13 +83,10 @@ export default function SignUp() {
       confirmPassword.setTouched(true);
       return;
     }
-    // Fluxo 1 (reordenado 2026-07-27): a conta nasce AQUI, com nome, e-mail,
     // senha e empresa. Segue pra confirmação de e-mail e daí pra fila de
     // aprovação do painel. O wizard de perfil (complimentary-data) virou o
     // fluxo 2: roda DEPOIS do primeiro login pós-aprovação, autenticado com o
     // token do próprio worker — a ordem antiga rodava o wizard sem conta, e um
-    // token alheio esquecido gravava o perfil na conta errada (incidente
-    // 2026-07-27, "Teste Ricardo" × "Joao Tester").
     const params = {
       email: email.value,
       password: password.value,
@@ -109,7 +105,6 @@ export default function SignUp() {
   };
 
   // Trava de reentrancia: o `useSubmitOnce` ignora chamadas enquanto a
-  // anterior esta no ar (QA 2026-07-27: no cadastro, o 2o toque levou 409 de
   // e-mail ja existente enquanto o 1o ja tinha criado a conta e navegado).
   // A trava vive no ref interno do hook, nao no `disabled` do botao; ver o
   // comentario do proprio botao mais abaixo.
@@ -218,13 +213,6 @@ export default function SignUp() {
           />
 
           <View style={{ gap: theme.gap.sm }}>
-            {/* SEM `disabled={!canSubmit}`, mesmo motivo do wizard (QA Mobile
-                #1): o handleSubmit já marca os campos como tocados pra revelar
-                os erros, e botão desabilitado nunca dispara onPress.
-
-                Isto NÃO afrouxa a trava de duplo envio: ela vive no
-                useSubmitOnce (`enviar`), não no disabled. Foi justamente por o
-                disabled ser insuficiente que o useSubmitOnce nasceu. */}
             <Button variant="contained" label="Criar conta" fullWidth onPress={enviar} />
             <Button
               variant="outline"

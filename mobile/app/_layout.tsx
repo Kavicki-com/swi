@@ -33,11 +33,9 @@ import { usePositionHeartbeat } from '../services/positions/usePositionHeartbeat
 SplashScreen.preventAutoHideAsync();
 
 // Mobile-frame constraint na web: força o app a 360px de largura (a mesma
-// largura do design Figma) centralizado horizontalmente. Em native (iOS /
 // Android prod build) o `Platform.OS === 'web'` é false e o app renderiza
 // full-screen como esperado. Resolve o caso de browsers desktop largos
 // onde o form ficava à esquerda e o fundo do gradient esticava em landscape.
-// 2026-05-18.
 const IS_WEB = Platform.OS === 'web';
 
 // Constante de módulo, decidida uma vez na carga: no build web de release o
@@ -71,7 +69,6 @@ function TelemetryRoot() {
   return null;
 }
 
-// Fase 1/2 do realtime: em produção o APP é a fonte das posições — heartbeat
 // GPS pro backend (upsert + WS pros admins). Null-render; gated no login
 // (sem token o POST só viraria 401 a cada batida).
 function PositionsRoot() {
@@ -190,11 +187,6 @@ function AppRoot() {
   return (
     <GestureHandlerRootView style={rootContainerStyle}>
       <SafeAreaProvider>
-        {/* KeyboardProvider alimenta os componentes de teclado do
-            react-native-keyboard-controller (o teclado cobria o compositor do
-            chat — QA no aparelho, 2026-07-27). Acima do tema porque precisa
-            envolver TODAS as telas, incluindo os modais apresentados por cima
-            do Stack. */}
         <KeyboardProvider>
         <SwiThemeProvider>
           <AuthProvider>

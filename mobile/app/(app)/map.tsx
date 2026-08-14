@@ -1,4 +1,3 @@
-// Figma 385:28757 — map-view-general. Sprint 6 Wave 2 / B.1:
 // migrates from a static basemap.png + 2 concentric SVG rings to real
 // MapLibre satellite tiles (ESRI World Imagery) with 3 toggleable
 // overlays (operators / heatmap / cameras). Port of the swi-admin
@@ -83,11 +82,9 @@ function toPinStatus(status: WorkerStatus): LocationPinStatus {
   return status === 'unknown' ? 'offline' : status;
 }
 
-// Anéis de distância em volta de quem está usando o app (Figma 385:29130).
 // A distância é o dado, e o desenho é consequência: `meters` alimenta tanto a
 // geometria quanto o rótulo, então os dois não têm como divergir. Antes o par
 // era `width: 395`/`647` px com o texto "5KM"/"10KM" digitado à mão do lado —
-// duas verdades separadas, e a do texto quebrava em todo zoom (QA Mobile #10).
 const RADIUS_RINGS = [
   { meters: 5000, label: '5KM', opacity: 0.9 },
   { meters: 10000, label: '10KM', opacity: 0.75 },
@@ -108,7 +105,6 @@ function MapViewGeneralScreen() {
   const { profile } = useProfile();
   const { status } = useVitals();
 
-  // Overlay toggles — 3 botões icon-only independentes (Figma 385:28853).
   // Cada botão é um simple toggle: tap liga, tap de novo desliga.
   // O botão heatmap controla AMBAS sub-layers (produtividade + zonas-alerta)
   // simultaneamente — não há expand-panel admin-style no mobile.
@@ -149,7 +145,6 @@ function MapViewGeneralScreen() {
       RADIUS_RINGS.map((r) => ({
         ...r,
         ring: circleFeature(coords, r.meters),
-        // Rumo 180 = sul. O rótulo pousa na borda sul do anel, como no Figma,
         // e agora anda junto com ela em qualquer zoom.
         labelAt: destinationPoint(coords, 180, r.meters),
       })),
@@ -159,8 +154,6 @@ function MapViewGeneralScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <MapView center={coords} zoom={14}>
-        {/* Productivity heatmap layer — driven by `showHeatmap` toggle.
-            Color ramp matches admin spec verbatim (Figma 385:28757). */}
         {/* Keys explícitos pra reconciliação estável: showHeatmap toggle
             muda composição do array de children, shifta as posições e sem
             keys o maplibre useFrozenId throws "id cannot be changed".
@@ -180,12 +173,6 @@ function MapViewGeneralScreen() {
           />
         )}
 
-        {/* Anéis de 5 e 10 km (Figma 385:29130) — geometria de mapa, não
-            overlay de tela: o MapLibre projeta o anel em cada frame, então
-            ele acompanha zoom e arrasto e o rótulo continua verdadeiro.
-            `width` fica em pixels de propósito (a espessura do traço não
-            deve engordar com o zoom; só o raio é que é distância).
-            Vêm ANTES dos pinos pra ficarem por baixo deles. */}
         {radiusRings.map((r) => (
           <MapLineSource
             key={`radius-${r.meters}`}
@@ -204,14 +191,11 @@ function MapViewGeneralScreen() {
           </MapMarker>
         ))}
 
-        {/* User pin (Figma 385:29023) — real GPS coords + live worker status
-            (unknown → 'offline'). Other pins stay mock. */}
         <MapMarker key="user-pin" coordinate={coords} id="user-pin">
             <LocationPin
               variant="avatar"
               // Foto real do perfil. As coordenadas sempre foram reais (GPS do
               // aparelho), mas o rosto era um PNG de estoque — o pino mostrava
-              // outra pessoa na posição do usuário (QA 2026-07-26).
               avatarUri={profile?.avatarUrl ?? ''}
               status={toPinStatus(status)}
               name="Você"
@@ -247,10 +231,6 @@ function MapViewGeneralScreen() {
             </MapMarker>
           ))}
 
-        {/* Right-side stack de 3 toggle buttons (Figma 385:28853) —
-            right:20, vert-centered ~296px acima do centro. Cada botão é
-            icon-only: default bg `surface.high`; ON muda pra cor de
-            destaque (verde pros pins, laranja pro heat). */}
         <View
           style={{
             position: 'absolute',
@@ -303,13 +283,11 @@ function MapViewGeneralScreen() {
   );
 }
 
-// Pill verde (Figma 385:29133 / 385:29134) — chip estreito com o label
 // "5KM"/"10KM". Ancorado pelo <MapMarker> no ponto geográfico da borda sul
 // do anel, então não posiciona a si mesmo: some o `offsetY` que media a
 // distância até o centro da tela.
 //
 // O translateX de -28 sobrevive porque é outra coisa: deslocamento de RÓTULO
-// em espaço de tela, o mesmo que o Figma desenha (o pill fica um pouco a
 // oeste da vertical do centro). Ficar constante em qualquer zoom é o
 // comportamento certo pra um rótulo — quem tem que ser distância é o raio.
 function RadiusPill({ label, theme }: { label: string; theme: ReturnType<typeof useTheme> }) {
@@ -331,10 +309,8 @@ function RadiusPill({ label, theme }: { label: string; theme: ReturnType<typeof 
   );
 }
 
-// MapToggleButton (Figma 385:28854/28855/28856 + 165:21575) — icon-only
 // button quadrado 48×48. Background muda de `surface.high` (off) pra cor
 // de destaque (`activeColor`) quando ligado. Drop-shadow `elevation-lg`
-// igual ao Figma. Sem expand panel admin-style; só toggle simples.
 function MapToggleButton({
   iconName,
   iconWidth,

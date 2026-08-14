@@ -30,7 +30,6 @@ export default function ChatInbox() {
   // um contato do roster pra abrir/iniciar uma conversa.
   const [mode, setMode] = useState<'inbox' | 'directory'>('inbox');
 
-  // Custom scrollbar geometry — Figma 332:8765 / 332:8766
   // Track: surface.medium bg, width 8, full height of scroll container.
   // Thumb: surface.high bg, height proporcional ao viewport/content ratio;
   // posição via translateY interpolado de Animated.Value (em vez de
@@ -68,7 +67,6 @@ export default function ChatInbox() {
     [directory, search],
   );
 
-  // Topbar — Figma 337:9173. Fatorada num elemento local pra reusar idêntica nos
   // state-views (loading/empty/error) e no conteúdo, mantendo o chrome consistente.
   const topbar = (
     <View
@@ -113,7 +111,6 @@ export default function ChatInbox() {
       </View>
     );
   }
-  // 'empty' NÃO tem early return (QA Mobile #7): a tela terminava aqui, sem
   // busca e sem "Novo Chat", então quem ainda não tinha conversa nenhuma ficava
   // sem NENHUM caminho até o diretório e o app parecia vazio de gente. O aviso
   // de caixa vazia continua, agora dentro do layout normal.
@@ -130,11 +127,6 @@ export default function ChatInbox() {
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       {topbar}
 
-      {/* Chat list — Figma 332:8740. Manual layout (vs DS ChatSection wrapper)
-          so the "Novo Chat" button can stick to the viewport bottom. Uses DS
-          primitives (SearchInput, ChatUserCard, Button) — still DS-only.
-          paddingHorizontal:theme.padding.m faz o conteúdo chegar próximo às
-          margens (match Journey pattern) ao invés de capado em 328 centrado. */}
       <View style={{ flex: 1, paddingTop: 16, paddingHorizontal: theme.padding.m }}>
         <View style={{ flex: 1 }}>
           <SearchInput
@@ -195,7 +187,6 @@ export default function ChatInbox() {
                       />
                     ))}
               </ScrollView>
-              {/* Custom scrollbar — Figma 332:8765 (track) + 332:8766 (thumb) */}
               {hasScroll ? (
                 <View
                   pointerEvents="none"

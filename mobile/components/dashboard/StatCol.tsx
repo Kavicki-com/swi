@@ -22,10 +22,7 @@ export const StatCol = memo(function StatCol({
       <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
         {iconNode}
       </View>
-      {/* numberOfLines=1 é OBRIGATÓRIO aqui: sem ele o valor quebra em duas
-          linhas, a coluna cresce em altura e empurra os ícones do rodapé pra
-          fora da margem (QA no aparelho, 2026-07-27: BPM 64 renderizou "6"
-          sobre "4"). */}
+      {/* Mantém a altura da coluna estável para não deslocar os controles do rodapé. */}
       <Title variant="title.l" color={theme.content.dark} numberOfLines={1}>
         {value}
       </Title>

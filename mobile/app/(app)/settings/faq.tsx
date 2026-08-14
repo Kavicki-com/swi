@@ -12,11 +12,9 @@ import {
 } from '@kavicki/swi-design-system';
 import { HomeFAB } from '../../../components/HomeFAB';
 
-// Figma 361:12425 — settings sub-screen FAQ. Hero title + SearchInput +
 // Accordions (collapsed por default) + Pagination + Home FAB. A busca filtra
 // pergunta E resposta sem exigir acento, e a paginação fatia a lista
 // filtrada em páginas de 6 (pageCount real; mudar a busca volta pra 1).
-// Figma só define as perguntas; respostas autoradas pra fase de demo
 // para que o estado "expandido" do Accordion mostre conteúdo coerente.
 const FAQS: { q: string; a: string }[] = [
   {
@@ -131,7 +129,6 @@ export default function SettingsFAQ() {
             gap: 38,
           }}
         >
-          {/* Hero title — Figma 361:12703 Montserrat Bold 16 content.dark */}
           <Title variant="title.xs" color={theme.content.dark}>
             Tire suas dúvidas com a nossa central de perguntas frequentes
           </Title>
@@ -154,7 +151,6 @@ export default function SettingsFAQ() {
               </Accordion>
             ))}
 
-            {/* Pagination — Figma 361:12705 (shared with reports/index.tsx) */}
             <Pagination
               currentPage={pagina}
               pageCount={pageCount}
@@ -174,7 +170,6 @@ export default function SettingsFAQ() {
           alignItems: 'center',
         }}
       >
-        {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
         <HomeFAB onPress={() => router.push('/(app)/dashboard')} />
       </View>
     </View>

@@ -35,7 +35,6 @@ export default function Login() {
     }
     try {
       await signIn({ email: email.value, password: password.value });
-      // Fluxo 2 do cadastro (reordenação 2026-07-27): o primeiro login depois
       // da aprovação do admin desvia pro wizard de complimentary-data, agora
       // autenticado com o token do próprio worker. Perfil completo (ou wizard
       // já feito) segue direto pro dashboard. Abandonou no meio? O próximo
@@ -52,19 +51,16 @@ export default function Login() {
       // Backend real (AUTH_BACKEND='api') lança com mensagem pronta do servidor
       // — ex.: gate de aprovação ("aguardando aprovação do administrador") ou
       // e-mail não verificado. Mostra essa mensagem quando houver (é o sinal que
-      // o QA precisa distinguir); no mock nunca cai aqui.
       Alert.alert('Erro', errorMessage(e, 'Email ou senha inválidos.'));
     }
   };
 
   // Trava de reentrancia: chamadas enquanto a anterior esta no ar sao
-  // ignoradas pelo ref interno (QA 2026-07-27: no cadastro, o 2o toque levou
   // 409 de e-mail ja existente enquanto o 1o ja tinha criado a conta e
   // navegado). O `disabled` do botao nunca fez parte desta trava.
   const { run: enviar } = useSubmitOnce(handleLogin);
 
   return (
-    // Bg: base sólida theme.background + overlay PNG em object-cover (espelha Figma node 138:7937 — `object-cover`, sem opacity).
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Image
         source={require('../../assets/login-bg.png')}
@@ -73,7 +69,6 @@ export default function Login() {
         // dimensões 100% automaticamente em <Image> com position:absolute +
         // top/left/right/bottom 0 — sem isso, o div/img é renderizado nas
         // dimensões NATURAIS do PNG (1920×1080) e só o canto superior-esquerdo
-        // 360×800 fica visível, deslocando o gradiente vs Figma. 2026-05-18.
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }}
       />
       {/* KeyboardAvoidingView behavior='padding' comprime a view inteira
@@ -150,14 +145,6 @@ export default function Login() {
           </View>
 
           <View style={{ gap: theme.gap.sm }}>
-            {/* SEM `disabled={!canSubmit}`, mesmo motivo do wizard (QA Mobile
-                #1): o handleLogin já marca os campos como tocados pra revelar
-                os erros, e botão desabilitado nunca dispara onPress — aquele
-                bloco era código morto e o toque sumia no vazio.
-
-                A validação não afrouxa: quem decide autenticar continua sendo
-                o `if (!canSubmit)` do handleLogin. E a trava de duplo envio
-                não depende disto: ela vive no useSubmitOnce (`enviar`). */}
             <Button
               variant="contained"
               label="Entrar"

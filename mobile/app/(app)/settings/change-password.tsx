@@ -20,7 +20,6 @@ import {
   validateRequired,
 } from '../../../lib/validation/validators';
 
-// Figma 353:12228 — settings sub-screen "Alterar senha". Form com 3
 // password inputs + Toast informativo + Salvar + Home FAB. Salvar troca a
 // senha de verdade (POST /auth/password/change via useAuth); a mensagem de
 // erro da API (ex.: senha atual incorreta) aparece num Toast de erro e a
@@ -145,9 +144,6 @@ export default function SettingsChangePassword() {
         </View>
       </KeyboardAwareScrollView>
 
-      {/* Salvar — absolute acima do Home FAB (Figma 353:12292 top:628 numa
-          tela de 800; ~85px de gap antes do FAB no top:714). Fora do
-          ScrollView pra preservar o spacing constante mesmo com teclado. */}
       <View
         pointerEvents="box-none"
         style={{
@@ -159,13 +155,6 @@ export default function SettingsChangePassword() {
         }}
       >
         <View>
-          {/* SEM `disabled={!canSubmit}` (QA Mobile #1): o handleSave já marca
-              os campos como tocados pra revelar o erro de cada um, e botão
-              desabilitado nunca dispara onPress — aquele bloco era código
-              morto e o toque sumia no vazio.
-
-              A validação não afrouxa: quem decide salvar continua sendo o
-              `if (!canSubmit)` do handleSave. */}
           <Button
             variant="contained"
             backgroundColor={theme.surface.primary}
@@ -188,7 +177,6 @@ export default function SettingsChangePassword() {
           alignItems: 'center',
         }}
       >
-        {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
         <HomeFAB onPress={() => router.push('/(app)/dashboard')} />
       </View>
     </View>

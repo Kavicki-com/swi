@@ -30,7 +30,6 @@ import { ESRI_SATELLITE_STYLE } from '@/lib/mapStyle';
 // callers can only mark a component as a map child by importing this symbol,
 // which makes the dependency visible AND prevents a third-party component
 // from accidentally setting the same string-keyed property and ending up
-// rendered inside the native <Map> reconciler. Audit fix 2026-05-17.
 export const MAP_CHILD_FLAG: unique symbol = Symbol('MapChild');
 export type MapChildComponent = React.FC<unknown> & { [MAP_CHILD_FLAG]?: true };
 

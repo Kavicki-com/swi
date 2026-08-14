@@ -2,7 +2,6 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system';
 
-// Figma 348:10434 — bottom-sheet "Política de privacidade".
 // Body compartilhado entre `(app)/settings/privacy.tsx` (authenticated)
 // e `modals/privacy-policy.tsx` (acessível da tela de sign-up).
 // Wrappers de rota cuidam do backdrop transparent + Stack.Screen.

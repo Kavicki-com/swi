@@ -37,7 +37,6 @@ const GENDER_OPTIONS = [
   { label: 'Outro', value: 'other' },
 ];
 
-// Figma 353:12057 — settings sub-screen "Dados de saúde". Form-based.
 // TopBar + section title + 2 comboboxes + 2 multiline inputs +
 // 4 ExamInfoCards + ImageUploader + Salvar + Home FAB.
 // Demo phase: useState only, sem persistência, sem upload real.
@@ -47,7 +46,6 @@ export default function SettingsHealthData() {
   const router = useRouter();
 
   // Prefill REAL + salvar de verdade — a tela era useState solto e o Salvar
-  // um router.back(): edição de saúde era descartada (QA 2026-07-26).
   const { loadProfile, saveProfile } = useProfile();
   const [tipoSanguineo, setTipoSanguineo] = useState('');
   const [genero, setGenero] = useState('');
@@ -57,7 +55,6 @@ export default function SettingsHealthData() {
 
   // Exames REAIS. A lista era um array fixo de 4 exames inventados, duplicado
   // com o my-stats, e o botão de enviar tinha `onPickFile={() => {}}` — não
-  // fazia absolutamente nada (QA 2026-07-26).
   const [exams, setExams] = useState<Exam[]>([]);
   const [sendingExam, setSendingExam] = useState(false);
   const examName = useField({ validator: (v) => validateRequired(v, 'Nome do exame') });
@@ -284,7 +281,6 @@ export default function SettingsHealthData() {
           alignItems: 'center',
         }}
       >
-        {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
         <HomeFAB onPress={() => router.push('/(app)/dashboard')} />
       </View>
     </View>

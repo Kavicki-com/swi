@@ -30,7 +30,6 @@ export function MapMarker({ coordinate, children }: MapMarkerProps): null {
   // Effect 1: create + tear down the marker. Reuses the root across child
   // updates by capturing it in `rootRef`. Re-runs only when the map instance
   // or the coordinate changes — re-creating the marker on every children
-  // mutation would thrash. Pre-R-3 (2026-05-17) this effect also called
   // `root.render(children)` once on mount, so visual updates of children
   // (e.g., a status change from `good` → `alert`) were silently lost on web
   // while still working on native. Split out below to fix that asymmetry.

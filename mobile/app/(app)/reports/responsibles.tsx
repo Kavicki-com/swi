@@ -6,7 +6,6 @@ import {
   responsiblesSelection,
 } from '../../../components/modals/ResponsiblesModal';
 
-// Figma 364:18017 — bottom-sheet "Selecionar responsáveis".
 // Route wrapper: backdrop pressable + ResponsiblesModal anchored bottom.
 // `presentation: 'transparentModal'` + `animation: 'slide_from_bottom'`
 // estão registrados no parent `reports/_layout.tsx` (precisam ser

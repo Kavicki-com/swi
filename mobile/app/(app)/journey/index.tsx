@@ -18,7 +18,6 @@ import { useJourney } from '../../../services/journey/JourneyProvider';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { elapsedSeconds, formatDuration } from '../../../services/journey/progress';
 
-// Figma 364:16378 (idle) / 364:17609 (ongoing) / 364:17766 (paused).
 // Journey planner com 3 layouts conditional via JourneyProvider state:
 //   - idle:    DonutChart "8h / Não iniciadas" + 4 task cards
 //   - ongoing: DonutChart "<tempo real>/ Em andamento" + "Em andamento" task
@@ -33,7 +32,6 @@ import { elapsedSeconds, formatDuration } from '../../../services/journey/progre
 // O donut deriva o tempo real via progress.ts (âncoras epoch ms da sessão).
 
 // "Hoje" é hoje de verdade. Antes era a string '27/04/2026' cravada do mockup:
-// o app afirmava uma data errada logo abaixo do título (QA 2026-07-26).
 const formatToday = (d: Date): string =>
   `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
@@ -137,9 +135,6 @@ export default function Journey() {
       ) : loadStatus === 'error' ? (
         <JourneyListState kind="error" onRetry={load} />
       ) : (
-        /* Figma 364:16378: header + section title fixos, lista de chips
-           scrollável internamente (overflow-y-auto no container 364:17112),
-           CTA "Iniciar Jornada" fixo logo acima das NavFABs. */
         <View
           style={{
             flex: 1,
@@ -181,7 +176,6 @@ export default function Journey() {
               value={donutValue}
               label={donutLabel}
               size="small"
-              // Ring decorativo full (Figma 364:16900) — anel gradient contínuo
               // (#3899BF → #3EAB2E) cercando os contadores estáticos. Overrides
               // de iconWidth/Height (18×18) e labelSize/Weight (8/bold) replicam
               // o conteúdo central do design: nest_clock 18px + value 20px Bold +
@@ -234,7 +228,6 @@ export default function Journey() {
                     justifyContent: 'center',
                   }}
                 >
-                  {/* Figma filled radio fill #8AD2E2 (teal). */}
                   <View
                     style={{
                       width: 10,
@@ -264,8 +257,6 @@ export default function Journey() {
             Próximas tarefas
           </Title>
 
-          {/* Task cards — Figma 364:17112 overflow-y-auto. ScrollView interno
-              só com a lista de upcoming (exclui a ativa em ongoing/paused). */}
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ gap: theme.gap.s }}
@@ -286,7 +277,6 @@ export default function Journey() {
                   borderRadius: theme.border.radius.m,
                 }}
               >
-                {/* Radio circle — Figma 364:17045 stroke #8AD2E2 (teal). */}
                 <View
                   style={{
                     width: 16,
@@ -315,10 +305,6 @@ export default function Journey() {
             ))}
           </ScrollView>
 
-          {/* CTAs ongoing/paused — Figma 364:17609 (ongoing) / 364:17766 (pause).
-              Finalizar disabled em pause (precisa retomar primeiro). Fazer
-              pausa vira "Retomar" em pause. Finalizar chama endJourney()
-              (zera context state + activeTaskId). */}
           {isActive ? (
             <View style={{ gap: theme.gap.m }}>
               <Button
