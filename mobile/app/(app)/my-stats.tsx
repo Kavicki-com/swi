@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Linking, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
@@ -24,6 +24,7 @@ import { useVitals } from '../../services/vitals/VitalsProvider';
 import type { WorkerStatus } from '../../services/vitals/types';
 import { formatEta } from '../../services/vitals/formatEta';
 import { listExams, type Exam } from '../../services/api/exams';
+import { abrirMidiaOuAvisar } from '../../lib/media/trustedMediaUrl';
 import { examCardParts } from '../../services/api/examCard';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
 import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
@@ -700,7 +701,7 @@ export default function MyStats() {
                 compact
                 fullWidth
                 future={parts.future}
-                onActionPress={() => Linking.openURL(exam.fileUrl)}
+                onActionPress={() => { void abrirMidiaOuAvisar(exam.fileUrl, exam.name); }}
                 accessibilityLabel={`Baixar ${exam.name}`}
               />
             );

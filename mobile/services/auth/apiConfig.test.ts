@@ -82,3 +82,28 @@ describe('getApiUrl', () => {
     expect(getApiUrl()).toBe(getApiUrl());
   });
 });
+
+// Em release o app fala com a API pública pela internet carregando o token de
+// sessão em todo pedido. Aceitar http:// ali entrega o token a quem estiver no
+// caminho, e o host nem precisa parecer suspeito: 'http://api.kavicki.com'
+// passava na checagem de host local e seguia em texto claro.
+//
+// Em desenvolvimento http continua valendo, senão a stack local, que não tem
+// certificado, deixaria de ser alcançável.
+describe('resolveApiUrl exige HTTPS em release', () => {
+  it('recusa http em release, mesmo com host público', () => {
+    expect(() => resolveApiUrl('http://api.exemplo.test', PROD)).toThrow(/https/i);
+  });
+
+  it('aceita https em release', () => {
+    expect(resolveApiUrl('https://api.exemplo.test', PROD)).toBe('https://api.exemplo.test');
+  });
+
+  it('continua aceitando http em desenvolvimento, onde a stack local não tem certificado', () => {
+    expect(resolveApiUrl('http://192.168.0.10:3000', DEV)).toBe('http://192.168.0.10:3000');
+  });
+
+  it('continua aceitando http sob a suíte', () => {
+    expect(resolveApiUrl('http://localhost:3000', TEST)).toBe('http://localhost:3000');
+  });
+});

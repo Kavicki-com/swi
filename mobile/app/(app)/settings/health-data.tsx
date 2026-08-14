@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Image as RNImage, Linking, View } from 'react-native';
+import { Alert, Image as RNImage, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import {
 import { HomeFAB } from '../../../components/HomeFAB';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { errorMessage } from '../../../lib/errors/errorMessage';
+import { abrirMidiaOuAvisar } from '../../../lib/media/trustedMediaUrl';
 import { createExam, listExams, type Exam } from '../../../services/api/exams';
 import { examCardParts } from '../../../services/api/examCard';
 import { pickExamDocument } from '../../../lib/media/pickDocument';
@@ -231,7 +232,7 @@ export default function SettingsHealthData() {
                   mobile
                   fullWidth
                   future={parts.future}
-                  onActionPress={() => Linking.openURL(exam.fileUrl)}
+                  onActionPress={() => { void abrirMidiaOuAvisar(exam.fileUrl, exam.name); }}
                 />
               );
             })}

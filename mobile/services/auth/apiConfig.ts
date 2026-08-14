@@ -62,6 +62,21 @@ export function resolveApiUrl(
     );
   }
 
+  // Depois do host local de propósito: um `http://127.0.0.1` em release viola as
+  // duas regras, e "aponta para a máquina local" é o diagnóstico acionável, já
+  // que diz o que a pessoa esqueceu de configurar.
+  //
+  // Em release o token de sessão viaja em todo pedido, e sobre http ele vai em
+  // texto claro para quem estiver no caminho. O host nem precisa parecer
+  // suspeito: "http://api.kavicki.com" passava na checagem acima e seguia sem
+  // cifra. Em dev e sob a suíte http continua valendo, senão a stack local, que
+  // não tem certificado, deixaria de ser alcançável.
+  if (!isRelaxedEnv(env) && parsed.protocol !== 'https:') {
+    throw new Error(
+      `${VAR_NAME} precisa usar HTTPS num build de release ("${value}" usa ${parsed.protocol.replace(':', '')}). Em desenvolvimento, http segue permitido.`,
+    );
+  }
+
   // Sem barra final: os chamadores concatenam caminhos que já começam com '/'.
   return value.replace(/\/+$/, '');
 }

@@ -55,6 +55,19 @@ describe('Auth e2e', () => {
     expect(me.body.email).toBe('e2e@ex.com')
   })
 
+  // Orçamento explícito porque a duração deste teste é dominada por trabalho
+  // criptográfico DELIBERADO, não por lentidão: o login roda um bcrypt compare
+  // mesmo com e-mail inexistente (DUMMY_HASH, anti-enumeração em
+  // auth.service.ts), e a custo 10 cada compare leva ~110ms. Doze pedidos
+  // sequenciais têm piso de ~4s, contra o padrão de 5s do jest. Medido: 3800ms
+  // numa máquina ociosa, ou seja, 1,2s de margem, que evapora sob a carga de
+  // uma suíte inteira ou de um runner de CI compartilhado.
+  //
+  // Baixar o custo do bcrypt no ambiente de teste resolveria o relógio e
+  // estragaria o teste: ele deixaria de exercitar o mesmo trabalho que a
+  // produção faz.
+  const ORCAMENTO_DOZE_LOGINS_MS = 30_000
+
   it('throttle desligado em test-env: 12× /auth/login errado → sempre 401, nunca 429', async () => {
     const http = app.getHttpServer()
     // /auth/login tem @Throttle 10/min: sem o skipIf de test-env, os pedidos #11 e #12 seriam 429.
@@ -63,7 +76,7 @@ describe('Auth e2e', () => {
       const r = await request(http).post('/auth/login').send({ email: 'nobody@swi.local', password: 'wrong' })
       expect(r.status).toBe(401)
     }
-  })
+  }, ORCAMENTO_DOZE_LOGINS_MS)
 
   it('admin lista pendentes e rejeita', async () => {
     const http = app.getHttpServer()

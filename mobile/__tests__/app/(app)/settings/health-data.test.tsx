@@ -228,16 +228,37 @@ describe('Dados de saúde: histórico de exames', () => {
     expect(textos(tree)).toContain('Nenhum exame enviado.');
   });
 
+  // A URL vem do JSON da API e ia direto pro navegador do aparelho. Agora passa
+  // por resolveTrustedMediaUrl, que só libera a origem da própria API ou uma de
+  // EXPO_PUBLIC_MEDIA_ORIGINS. Sob a suíte a API é http://localhost:3000.
   it('baixar o exame abre a url do arquivo', async () => {
     const abrir = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
-    mockListExams.mockResolvedValue([exame({ fileUrl: 'https://example.test/e1.pdf' })]);
+    const url = 'http://localhost:3000/media/e1.pdf';
+    mockListExams.mockResolvedValue([exame({ fileUrl: url })]);
     const tree = await render();
 
     await act(async () => {
       tree.root.findAll((n) => n.props?.examName === 'Audiometria')[0].props.onActionPress();
     });
 
-    expect(abrir).toHaveBeenCalledWith('https://example.test/e1.pdf');
+    expect(abrir).toHaveBeenCalledWith(url);
+    abrir.mockRestore();
+  });
+
+  // Um registro adulterado no banco, ou uma resposta forjada, faria o app abrir
+  // o endereço de quem atacou. Recusar calado seria quase tão ruim: o usuário
+  // tocaria no card e nada aconteceria, sem explicação.
+  it('exame de origem não autorizada não abre, e o usuário fica sabendo', async () => {
+    const abrir = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    mockListExams.mockResolvedValue([exame({ fileUrl: 'https://invasor.test/e1.pdf' })]);
+    const tree = await render();
+
+    await act(async () => {
+      tree.root.findAll((n) => n.props?.examName === 'Audiometria')[0].props.onActionPress();
+    });
+
+    expect(abrir).not.toHaveBeenCalled();
+    expect(alerta).toHaveBeenCalled();
     abrir.mockRestore();
   });
 });
