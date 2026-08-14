@@ -187,6 +187,14 @@ jobs:
       # execução direta dos dois: sem ela o seed termina com código 0 sem
       # escrever nada, e o E2E quebra bem depois, no login.
       - run: node --test scripts/e2e/run-test-stack.test.mjs scripts/e2e/seed-e2e.test.mjs
+      # O exportador da entrega decide o que chega ao cliente. Um engano na
+      # política embarca documentação interna ou deixa de fora algo sem o qual
+      # o pacote não sobe, e nos dois casos só se descobre do outro lado.
+      - run: >
+          node --test
+          scripts/client-delivery/policy.test.mjs
+          scripts/client-delivery/zip.test.mjs
+          scripts/client-delivery/export.test.mjs
       # Portão de higiene do código entregue ao cliente, agora sobre o
       # repositório inteiro. Migrations aplicadas ficam fora da varredura, e a
       # razão está no próprio script.
