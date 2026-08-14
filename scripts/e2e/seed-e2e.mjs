@@ -19,14 +19,16 @@
 
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 // O ESM resolve dependência pelo caminho do ARQUIVO, não pelo cwd: um `import`
 // estático daqui procuraria node_modules subindo a partir de scripts/, onde não
 // existe @prisma/client. O createRequire ancorado no cwd (swi-backend) resolve
 // no lugar certo e mantém o script fora do projeto que ele semeia.
-const requireDoBackend = createRequire(join(process.cwd(), 'package.json'))
-const { PrismaClient } = requireDoBackend('@prisma/client')
-const bcrypt = requireDoBackend('bcrypt')
+// A resolução acontece na CHAMADA, não na importação: assim o módulo pode ser
+// importado de fora do backend (por exemplo pelos testes deste diretório) sem
+// exigir as dependências que só o ato de semear precisa.
+const requireDoBackend = () => createRequire(join(process.cwd(), 'package.json'))
 
 // Mesmo algoritmo e custo do backend (src/auth/codes.ts): o login compara com
 // bcrypt, então gerar o hash de outro jeito faria a senha certa ser recusada.
@@ -54,6 +56,7 @@ export async function seedE2E(prisma) {
     },
   })
 
+  const bcrypt = requireDoBackend()('bcrypt')
   const [adminHash, workerHash] = await Promise.all([
     bcrypt.hash(E2E_ADMIN.password, BCRYPT_COST),
     bcrypt.hash(E2E_WORKER.password, BCRYPT_COST),
@@ -122,10 +125,27 @@ export async function seedE2E(prisma) {
   return { companyId: company.id, adminId: admin.id, workerId: worker.id }
 }
 
-const invokedPath = process.argv[1]?.replaceAll('\\', '/')
-const isDirectRun = Boolean(invokedPath) && import.meta.url === new URL(`file:///${invokedPath}`).href
+/**
+ * "Fui executado direto, ou só importado?"
+ *
+ * A URL vem de `pathToFileURL`, nunca de concatenar `'file:///'` com o
+ * caminho. A concatenação só funciona no Windows, onde o caminho começa em
+ * `C:`; com um caminho POSIX o resultado é `file:////home/...`, quatro barras,
+ * que nunca bate com o `file:///home/...` de import.meta.url. A consequência
+ * seria pior que um erro: rodado direto no Linux, o seed terminaria com código
+ * 0 sem escrever nada, e a suíte seguiria até quebrar no login contra um banco
+ * vazio.
+ *
+ * `pathToFileURL` é a conversão da própria plataforma e resolve os dois casos.
+ * Mesma função de run-test-stack.mjs, que cerca o mesmo ponto.
+ */
+export function ehExecucaoDireta(caminhoInvocado, urlDoModulo) {
+  if (!caminhoInvocado) return false
+  return pathToFileURL(caminhoInvocado).href === urlDoModulo
+}
 
-if (isDirectRun) {
+if (ehExecucaoDireta(process.argv[1], import.meta.url)) {
+  const { PrismaClient } = requireDoBackend()('@prisma/client')
   const prisma = new PrismaClient()
   seedE2E(prisma)
     .then((ids) => console.log(`Seed E2E pronto: ${JSON.stringify(ids)}`))
