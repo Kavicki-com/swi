@@ -183,6 +183,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.23.2'
+      - run: node --test scripts/quality/assert-client-hygiene.test.mjs
+      - run: node scripts/quality/assert-client-hygiene.mjs
       # Portão de vulnerabilidades. Bloqueia de verdade, sem continue-on-error.
       #
       # O `npm audit` cru não servia como portão: ele mistura o que tem conserto
