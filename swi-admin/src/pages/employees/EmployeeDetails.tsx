@@ -22,13 +22,13 @@ export function EmployeeDetails() {
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [loading, setLoading] = useState(true)
   const [pausing, setPausing] = useState(false)
-  // Mini-mapa: posição REAL deste funcionário (o layout pinava todo mundo na
-  // mesma coordenada fixa — QA 2026-07-26).
+  // Mini-mapa: posição REAL deste funcionário. Coordenada fixa aqui colocaria
+  // todo mundo no mesmo ponto.
   const positions = useLivePositions()
   const position = positions?.find((p) => p.id === id) ?? null
 
-  // QA F (2026-07-24): era toast fake. POST real — o worker recebe a
-  // notificação de journey no app; erro do backend aparece no toast.
+  // POST real: o worker recebe a notificação de journey no app, e erro do
+  // backend aparece no toast.
   const requestPause = async (target: Employee) => {
     setPausing(true)
     const { error } = await notificationsApi.requestPause(target.id)
@@ -73,16 +73,16 @@ export function EmployeeDetails() {
     )
   }
 
-  // Fase 3 (monitoramento honesto): vitais SIMULADOS plausíveis (o layout
-  // exibe o selo "Dados simulados") — fim do 0 bpm + "excelentes" default.
+  // Vitais SIMULADOS plausíveis, e o layout exibe o selo "Dados simulados".
+  // Valor fixo aqui mostraria 0 bpm e "excelentes" para todo mundo.
   const vitals = simulatedVitalsFor(employee.id, Date.now())
 
   return (
     <WorkerDetailsLayout
       worker={{
         ...employee,
-        // Semente da curva de gasto calórico — sem ela todo mundo compartilha
-        // a mesma série de kcal (QA 2026-07-26).
+        // Semente da curva de gasto calórico: sem ela todo mundo compartilha a
+        // mesma série de kcal.
         seedId: employee.id,
         bpm: vitals.bpm,
         pressure: vitals.pressure,

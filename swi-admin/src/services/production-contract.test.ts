@@ -9,7 +9,7 @@
 // é o mock que importa deles, nunca o contrário.
 //
 // Se alguém reintroduzir um seam de simulação, isto quebra no `npm test`, que é
-// o momento barato de descobrir. Descobrir em produção custa um incidente.
+// o momento barato de descobrir. Em produção o preço é bem outro.
 import fs from 'node:fs'
 import path from 'node:path'
 

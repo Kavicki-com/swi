@@ -9,9 +9,9 @@ export function conversationKey(a: string, b: string): string {
 }
 
 /**
- * Rota do inbox já aberto na conversa com `otherId` (QA Web #10: as listas
- * navegavam pra /chat sem destino e o inbox fixava a conversa MAIS RECENTE,
- * abrindo sempre a mesma pessoa). O '#' da key precisa ser encodado, senão a
+ * Rota do inbox já aberto na conversa com `otherId`. Sem destino na rota, o
+ * inbox abre a conversa MAIS RECENTE, ou seja, sempre a mesma pessoa. O '#' da
+ * key precisa ser encodado, senão a
  * URL o trata como fragmento. Sem `myId` (sessão ainda não resolvida) cai no
  * inbox puro, nunca numa key quebrada tipo '#w9'.
  */
@@ -72,9 +72,9 @@ export function upsertMessage(list: Message[], msg: Message): Message[] {
 }
 
 export function applyMessage(cs: Conversation[], msg: Message): Conversation[] {
-  // Revisão não toca na caixa de entrada, e as duas razões dão bug: o contador
-  // de não lidas já foi incrementado quando a mensagem estreou, e usar o sentAt
-  // de uma mensagem antiga como lastMessageAt rebaixaria a conversa na lista,
+  // Revisão não toca na caixa de entrada, por duas razões: o contador de não
+  // lidas já foi incrementado quando a mensagem estreou, e usar o sentAt de uma
+  // mensagem antiga como lastMessageAt rebaixaria a conversa na lista,
   // exibindo preview de mensagem que não é a última. O preview correto o
   // servidor já gravou, e ele chega no próximo carregamento.
   if (isRevision(msg)) return cs

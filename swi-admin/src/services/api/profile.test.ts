@@ -1,8 +1,8 @@
-// QA F (2026-07-24): o settings prefill/salvamento eram mock. Client real do
-// /profile/me (GET pré-preenche o form; PUT persiste — 404 no GET = perfil
-// ainda não preenchido, estado válido e não erro).
-// vitest globals (describe/it/expect/afterEach) via globals: true — importar de
-// 'vitest' duplicaria a instância (ver nota no auth.test.ts).
+// Client do /profile/me: GET pré-preenche o form, PUT persiste. 404 no GET =
+// perfil ainda não preenchido, estado válido e não erro.
+// describe/it/expect/afterEach vêm dos globals do Vitest (globals: true no
+// config); importar hooks de 'vitest' aqui duplica a instância (deps.inline) e
+// quebra o runner.
 import { vi } from 'vitest'
 import { profileApi } from './profile'
 

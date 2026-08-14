@@ -1,5 +1,5 @@
-// QA C4 (2026-07-24): sem VITE_MAPBOX_TOKEN os tiles do Mapbox falham e
-// /alerts + /maps/general viram um vazio preto com pins flutuando. O Mapbox
+// Sem VITE_MAPBOX_TOKEN os tiles do Mapbox falham e /alerts e /maps/general
+// viram um vazio preto com pins flutuando. O Mapbox
 // segue sendo o provider preferido (decisão documentada: cobertura z17+ no
 // interior do BR), mas a AUSÊNCIA do token cai no Esri World Imagery (sem
 // chave) — mapa funcional em vez de tela quebrada.

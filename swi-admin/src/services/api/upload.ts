@@ -2,9 +2,9 @@
 // o módulo tem uma operação só e um objeto de um membro seria cerimônia vazia.
 import { ApiError, apiFetch } from './http'
 
-// Sem `fields`: o upload é PUT presignado desde 2026-07-29 — o Cloudflare R2
-// não implementa presigned POST (respondia 501 "Presigned post requests are not
-// yet implemented"). Ver swi-backend/src/media/media.service.ts.
+// Sem `fields`: o upload é PUT presignado porque o Cloudflare R2 não implementa
+// presigned POST (responde 501 "Presigned post requests are not yet
+// implemented"). Ver swi-backend/src/media/media.service.ts.
 type Presign = { url: string; key: string }
 
 // Espelha swi-backend/src/media/allowed-content-types.ts, que valida POR
@@ -42,7 +42,7 @@ export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
  */
 export async function uploadImage(
   file: File,
-  // 'avatars'/'exams' — foto de perfil e exames clínicos do settings (QA F).
+  // 'avatars'/'exams': foto de perfil e exames clínicos do settings.
   prefix: 'order' | 'chat' | 'reports' | 'avatars' | 'exams',
 ): Promise<string> {
   // A mensagem sai da mesma decisão que o allow/deny: em 'exams' ela precisa

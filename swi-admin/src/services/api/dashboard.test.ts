@@ -140,8 +140,8 @@ describe('dashboardApi.summary', () => {
     expect(
       data!.employees.byStatus.good + data!.employees.byStatus.alert + data!.employees.byStatus.low,
     ).toBe(5)
-    // Câmeras: conta a MESMA frota que o mapa desenha (services/cameras) — era
-    // 564 fixo contra 12 pinos no mapa (QA de volume 2026-07-26).
+    // Câmeras: o KPI conta a MESMA frota que o mapa desenha (services/cameras),
+    // senão o número da tela diverge da quantidade de pinos.
     expect(data!.kpis.activeCameras).toBe(ACTIVE_CAMERAS)
   })
 

@@ -7,9 +7,9 @@
 // Scrim is absolute-positioned and pressable — clicking outside the form
 // closes the modal. Z-index 100 puts it above all in-page content.
 //
-// QA F (2026-07-24): o submit era onPress={onClose} — descartava o form.
-// Agora envia de verdade (POST /support via supportApi); logado, anexa o
-// e-mail da sessão pro suporte responder.
+// O submit envia de verdade (POST /support via supportApi) e, com sessão,
+// anexa o e-mail dela pro suporte responder. Um onPress={onClose} aqui
+// descartaria o form em silêncio.
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { Button, Combobox, Icon, Input, Text, Title, useTheme } from '@kavicki/swi-design-system'

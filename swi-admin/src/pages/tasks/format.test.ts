@@ -2,9 +2,9 @@
 // Vitest.
 //
 // Ficam num arquivo próprio (e não nos testes das telas) porque não precisam de
-// DOM, provider nem router: é parsing de string e aritmética de data, onde o
-// bug se esconde nos cantos que a UI nunca exercita — ano de 2 dígitos, 31/02,
-// '   ', 99:99, aniversário hoje, virada de ano. O caminho feliz destes mesmos
+// DOM, provider nem router: é parsing de string e aritmética de data, onde a
+// falha se esconde nos cantos que a UI nunca exercita, como ano de 2 dígitos,
+// 31/02, '   ', 99:99, aniversário hoje e virada de ano. O caminho feliz destes mesmos
 // helpers já é coberto pelas telas; aqui é o resto.
 import {
   calcAge,

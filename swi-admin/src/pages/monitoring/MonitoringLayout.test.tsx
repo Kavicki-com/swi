@@ -1,11 +1,10 @@
 // Smoke test — verifies the page mounts without throwing under the
 // providers it expects at runtime (theme + auth + router).
 //
-// QA de volume (2026-07-26): a régua "Filtro de status" navegava entre as 3
-// rotas mas a lista NUNCA era filtrada — as três abas mostravam a população
-// inteira enquanto o badge vermelho anunciava a contagem de fadiga. Os testes
-// abaixo travam o filtro, a expansão inicial (que comparava com o id mock
-// 'emp-04' e morreu quando os ids viraram UUID) e o "Ver Todos".
+// A régua "Filtro de status" navega entre as 3 rotas e a lista TEM que ser
+// filtrada, senão as três abas mostram a população inteira enquanto o badge
+// vermelho anuncia a contagem de fadiga. Os testes abaixo travam o filtro, a
+// expansão inicial (que não pode depender do formato do id) e o "Ver Todos".
 // vitest globals (describe/it/expect/afterEach) are available via globals: true
 import { vi } from 'vitest'
 import { act, fireEvent, screen } from '@testing-library/react'
@@ -120,8 +119,8 @@ describe('MonitoringLayout', () => {
     expect(screen.getByRole('button', { name: 'Ver histórico de exames clínicos' })).toBeTruthy()
   })
 
-  // QA Web #10: mesmo bug das listas de funcionários/admins — /chat sem destino
-  // abre sempre a conversa mais recente, não a pessoa do card clicado.
+  // Mesma regra das listas de funcionários e admins: /chat sem destino abre
+  // sempre a conversa mais recente, não a pessoa do card clicado.
   it('ícone de chat abre a conversa da pessoa do card, não /chat solto', async () => {
     await renderAt('/monitoring/alerts')
 

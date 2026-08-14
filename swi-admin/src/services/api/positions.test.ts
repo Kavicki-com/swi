@@ -35,9 +35,9 @@ describe('toDashboardMarker', () => {
     })
   })
 
-  // Era 'good' fixo: o mapa de alertas pintava todo mundo de verde enquanto o
-  // dashboard, ao lado, contava desgastados e alertas de fadiga (QA 2026-07-26).
-  it('reflete o tier do worker no pino — não é verde pra todo mundo', () => {
+  // Com status fixo em 'good' o mapa de alertas pintaria todo mundo de verde
+  // enquanto o dashboard, ao lado, conta desgastados e alertas de fadiga.
+  it('reflete o tier do worker no pino, não é verde pra todo mundo', () => {
     const ids = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8', 'w9', 'w10']
     const statuses = ids.map((id) => toDashboardMarker(dto({ id })).status)
     // Cada pino concorda com o tier do gerador…

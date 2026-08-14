@@ -57,8 +57,7 @@ describe('useRescueRoute', () => {
 
   // As pontas do socorro vêm das posições AO VIVO, que só chegam depois do
   // primeiro render. Enquanto uma delas for null o hook NÃO pode pedir rota:
-  // qualquer coordenada default desenharia um trajeto que não é de ninguém
-  // (era o bug das constantes fixas — QA 2026-07-26).
+  // qualquer coordenada default desenharia um trajeto que não é de ninguém.
   it('não busca rota enquanto uma das pontas for desconhecida', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

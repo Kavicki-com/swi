@@ -55,7 +55,7 @@ export function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) 
         }}
       >
         <Title variant="title.s">Alertas de Desgaste</Title>
-        {/* Fase 3: desgaste deriva de vitais SIMULADOS (funcionários reais). */}
+        {/* O desgaste deriva de vitais SIMULADOS sobre funcionários reais. */}
         <SimulatedDataBadge />
       </View>
       <View

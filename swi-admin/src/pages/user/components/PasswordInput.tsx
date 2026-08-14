@@ -5,7 +5,7 @@ import { Pressable, View } from 'react-native'
 import { Icon, Input, useTheme } from '@kavicki/swi-design-system'
 
 // Password field with absolutely-positioned visibility toggle.
-// Workaround for a DS Input bug where iconRight overflows the text-area
+// Works around a DS Input limitation: iconRight overflows the text-area
 // horizontally when the input is narrow. We render the DS Input on its own
 // (no iconRight) and overlay a Pressable with the eye icon, anchored to the
 // right edge of the input box. Stays inside the column at any width.

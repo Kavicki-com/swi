@@ -21,15 +21,13 @@ export const NAV_ITEMS: NavItem[] = [
   { value: '/alerts', label: 'Alertas', icon: 'bell_filled' },
   { value: '/user/settings', label: 'Configurações', icon: 'settings_filled' },
   // Tarefas é o ÚLTIMO item, depois de Configurações e logo acima da seção de
-  // chat. `assignment_filled` entrou no DS 0.1.117
-  // (clipboard preenchido): decisão do designer 2026-07-24,
-  // encerrando a exceção de outline na sidebar.
+  // chat. O ícone é `assignment_filled` (clipboard preenchido, do DS 0.1.117):
+  // a sidebar inteira usa a variante preenchida.
   { value: '/tasks', label: 'Tarefas', icon: 'assignment_filled' },
 ]
 
 // Contagem REAL → texto do badge. `undefined` (zero/negativo/NaN) some com o
-// badge: um número inventado num console de emergência é pior que nenhum
-// (era daí que vinha o "+9" fixo do QA 2026-07-24).
+// badge: um número inventado num console de emergência é pior que nenhum.
 export function formatBadgeCount(count: number): string | undefined {
   if (!Number.isFinite(count) || count <= 0) return undefined
   return count > 9 ? '+9' : String(count)

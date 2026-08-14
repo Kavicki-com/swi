@@ -100,9 +100,9 @@ describe('AppLayout', () => {
     })
   })
 
-  // Os vitais do header saem do MESMO gerador das outras telas (useMyVitals):
-  // antes cada tela caía num literal ("99 bpm", "12/8"), então o header
-  // contradizia o detalhe do próprio admin (QA de volume 2026-07-26).
+  // Os vitais do header saem do MESMO gerador das outras telas (useMyVitals).
+  // Com um literal no header ("99 bpm", "12/8"), ele contradiria o detalhe do
+  // próprio admin.
   it('mostra os vitais do usuário logado, derivados do gerador (não um literal)', async () => {
     await renderTree()
     const esperado = simulatedVitalsFor('u_seed_1', Date.now())
@@ -141,9 +141,9 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
   })
 
-  // Porte do QA cliente §1.1 (2026-07-28): o avatar do header abre o menu
-  // fullscreen com vídeo + vitais, não navega mais direto. A página de perfil
-  // continua alcançável — pelo avatar grande DENTRO do menu.
+  // O avatar do header abre o menu fullscreen com vídeo e vitais, em vez de
+  // navegar direto. A página de perfil continua alcançável pelo avatar grande
+  // DENTRO do menu.
   it('opens the fullscreen user menu when the header user-info widget is pressed', async () => {
     await renderTree()
     await waitFor(() => {

@@ -1,7 +1,8 @@
-// QA F (2026-07-24): o modal "Solicitar suporte" descartava o form no submit.
-// Client real: POST /support (rota pública — logado manda o e-mail da sessão).
-// vitest globals (describe/it/expect/afterEach) via globals: true — importar de
-// 'vitest' duplicaria a instância (ver nota no auth.test.ts).
+// Client do modal "Solicitar suporte": POST /support, rota pública (logado
+// manda o e-mail da sessão).
+// describe/it/expect/afterEach vêm dos globals do Vitest (globals: true no
+// config); importar hooks de 'vitest' aqui duplica a instância (deps.inline) e
+// quebra o runner.
 import { vi } from 'vitest'
 import { supportApi } from './support'
 

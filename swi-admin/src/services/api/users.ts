@@ -148,10 +148,10 @@ async function listMapped<T>(
   map: (u: UserSummaryDto) => T,
 ): Promise<ServiceResponse<T[]>> {
   try {
-    // approvalStatus=APPROVED: sem ele, um cadastro AINDA PENDENTE (ou até
-    // rejeitado) já entrava na lista, nos KPIs e nos vitais do monitoramento —
-    // o número subia no cadastro, e aprovar não mudava nada visível
-    // (QA 2026-07-26). Aprovação é o que promove o usuário pras listas.
+    // approvalStatus=APPROVED: sem ele um cadastro AINDA PENDENTE, ou até
+    // rejeitado, entra na lista, nos KPIs e nos vitais do monitoramento. O
+    // número subiria já no cadastro e aprovar não mudaria nada visível. É a
+    // aprovação que promove o usuário pras listas.
     const users = await apiFetch<UserSummaryDto[]>(`/users?role=${role}&approvalStatus=APPROVED`)
     return { data: users.map(map), error: null }
   } catch (e) {
@@ -246,9 +246,9 @@ export const adminsApi = {
 
 // Fila de aprovação: WORKERs pendentes. createdAt (quando o cadastro entrou) vira
 // requestedAt na UI da fila.
-// O perfil vem JUNTO do cadastro desde 2026-07-26 (o app coleta o wizard antes
-// de criar a conta), então a fila pode mostrar em cima de que o admin está
-// decidindo. null = o worker não preencheu — a tela escreve "Não informado",
+// O perfil vem JUNTO do cadastro, porque o app coleta o wizard antes de criar
+// a conta, então a fila mostra em cima de que o admin está decidindo.
+// null significa que o worker não preencheu, e a tela escreve "Não informado",
 // nunca um valor de fachada.
 export type PendingUser = {
   id: string

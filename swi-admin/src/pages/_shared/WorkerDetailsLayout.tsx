@@ -68,8 +68,8 @@ export type WorkerDetailsData = {
 export type WorkerDetailsLayoutProps = {
   worker: WorkerDetailsData
   /**
-   * Posição AO VIVO da pessoa, pro mini-mapa. Sem ela o mapa não finge saber
-   * onde ela está — antes todo mundo era pinado na MESMA coordenada fixa.
+   * Posição AO VIVO da pessoa, pro mini-mapa. Quando vem nula o mini-mapa
+   * declara "Sem posição ao vivo" em vez de pinar numa coordenada default.
    */
   position?: { lat: number; lng: number } | null
   testID: string
@@ -79,10 +79,9 @@ export type WorkerDetailsLayoutProps = {
   topRightAction: ReactNode
 }
 
-// O gasto calórico por período sai de simulatedCaloriesFor(seedId): era uma
-// constante única, então Worker Demo, o admin e o perfil próprio exibiam a
-// MESMA curva 41/57/62… nos mesmos horários (QA 2026-07-26). A forma da
-// curva especificada é preservada; a magnitude varia por pessoa.
+// O gasto calórico por período sai de simulatedCaloriesFor(seedId), e não de
+// uma constante compartilhada: a forma da curva especificada é preservada, a
+// magnitude varia por pessoa. Assim cada perfil mostra a própria curva.
 
 // ESRI World Imagery — same satellite tile source the dashboard MapBanner
 // and /maps/general use. Reused here for the mini-map in the user profile.
@@ -292,8 +291,8 @@ export function WorkerDetailsLayout({
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const isWide = breakpoint === 'wide'
-  // Sem gênero no cadastro NÃO se inventa um: antes o ternário mandava todo
-  // funcionário sem o campo pra "Feminino" (QA 2026-07-26).
+  // Sem gênero no cadastro NÃO se inventa um: o campo ausente cai em
+  // "Não informado", nunca num dos dois valores reais.
   const genderLabel =
     worker.gender === 'male'
       ? 'Masculino'
@@ -301,8 +300,8 @@ export function WorkerDetailsLayout({
         ? 'Feminino'
         : 'Não informado'
   const genderIcon: IconName = worker.gender === 'female' ? 'humidity_mid' : 'admin_filled'
-  // fatigueRate/effort já vêm em 0-100. O formatPct antigo multiplicava por 100
-  // de novo (herança das fixtures em fração 0-1) e a tela exibia "8.900,0%".
+  // fatigueRate/effort já chegam na escala 0-100, não em fração 0-1. formatPct
+  // só limita e arredonda: multiplicar por 100 aqui exibiria "8.900,0%".
   const formatPct = (n: number) =>
     new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(
       Math.round(Math.min(100, Math.max(0, n)) * 10) / 10,
@@ -551,8 +550,8 @@ export function WorkerDetailsLayout({
             </Title>
           </div>
 
-          {/* Fase 3 (monitoramento honesto): biometria é SIMULADA até a
-              smartband — o selo deixa isso explícito pro operador. */}
+          {/* A biometria é SIMULADA enquanto a smartband não existe, e o selo
+              deixa isso explícito pro operador. */}
           <View style={{ alignItems: 'flex-end' }}>
             <SimulatedDataBadge />
           </View>
@@ -653,8 +652,8 @@ export function WorkerDetailsLayout({
             <DonutChart
               title="Taxa de fadiga"
               value={`${fatiguePct}%`}
-              // Era "Funcionários" — legenda de KPI de equipe colada num donut
-              // que mede UMA pessoa (QA 2026-07-26).
+              // O donut mede UMA pessoa, então a legenda fala do estado dela e
+              // não de um KPI de equipe.
               label="Fadiga atual"
               progress={Math.min(100, Math.max(0, worker.fatigueRate ?? 0))}
               size="small"

@@ -1,6 +1,6 @@
-// Evacuação real (Fase 2 do realtime): dispatch/progresso/encerramento contra
-// o backend Nest (/evacuations, ADMIN org-scoped). O ack é do worker (app
-// mobile ou simulador dev) — o admin só observa o X/N subir.
+// Evacuação: dispatch/progresso/encerramento contra o backend Nest
+// (/evacuations, ADMIN org-scoped). O ack é do worker (app mobile ou simulador
+// dev), o admin só observa o X/N subir.
 import type { ServiceResponse } from '@/services/types'
 import { apiFetch, ApiError } from './http'
 

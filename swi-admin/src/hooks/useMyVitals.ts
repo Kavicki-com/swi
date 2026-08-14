@@ -4,11 +4,10 @@ import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 /**
  * Vitais do usuário LOGADO pro widget do header.
  *
- * Antes cada tela caía num literal diferente (`user?.bpm ?? 99`, `'12/8'`), então
- * o header afirmava 99 bpm pra qualquer admin — inclusive contradizendo o que a
- * página de detalhe do MESMO admin mostrava. Agora sai do mesmo gerador
- * determinístico das demais superfícies: mesma pessoa, mesmo número, em todo
- * lugar (QA de volume 2026-07-26).
+ * Com um literal por tela (`user?.bpm ?? 99`, `'12/8'`), o header afirma o mesmo
+ * bpm para qualquer admin e contradiz a página de detalhe do MESMO admin. Aqui
+ * o valor sai do mesmo gerador determinístico das demais superfícies: mesma
+ * pessoa, mesmo número, em todo lugar.
  */
 export function useMyVitals(): { bpm: number; pressure: string; progress: number } {
   const { user } = useAuth()

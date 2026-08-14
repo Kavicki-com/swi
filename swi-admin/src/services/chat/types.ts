@@ -24,9 +24,9 @@ export interface Message {
   body: string
   imageUri: string | null // anexo já resolvido pelo backend
   sentAt: string // ISO datetime
-  // QA Web #4. Opcionais de propósito: mensagem vinda de um backend anterior
-  // (ou de fixture antiga) simplesmente não é editada nem excluída, em vez de
-  // quebrar a compilação dos 6 arquivos de mockApi/ que montam Message à mão.
+  // Opcionais de propósito: mensagem vinda de um backend anterior, ou de
+  // fixture antiga, simplesmente não é editada nem excluída, em vez de quebrar
+  // a compilação dos arquivos de mockApi/ que montam Message à mão.
   editedAt?: string | null // ISO datetime — presente ⇒ a bolha mostra "editada"
   deletedAt?: string | null // ISO datetime — presente ⇒ lápide, sem texto nem anexo
 }
@@ -46,8 +46,8 @@ export type ChatMessage = {
   time: string
   // anexo resolvido (presigned); quando presente, a bolha mostra a imagem
   imageUri?: string
-  // Marcas de revisão (QA Web #4). Booleanas de propósito: a bolha só precisa
-  // saber SE, não quando, e o par undefined/null do backend já custou caro.
+  // Marcas de revisão. Booleanas de propósito: a bolha só precisa saber SE, não
+  // quando, e assim não depende do par undefined/null que o backend devolve.
   edited?: boolean
   deleted?: boolean
 }

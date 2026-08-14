@@ -28,11 +28,11 @@ export default defineConfig({
     fs: {
       allow: [path.resolve(__dirname)],
     },
-    // QA remoto (cliente/QA acessando o painel de fora): o dev server do Vite
-    // recusa Host desconhecido com "Blocked request. This host is not
-    // allowed." — proteção contra DNS rebinding. Liberamos os SUFIXOS dos
-    // provedores de túnel em vez das URLs, que mudam a cada sessão do agente.
-    // Só afeta `vite dev`; o build de produção não tem host check.
+    // Acesso remoto ao painel (alguém abrindo o dev server de fora da máquina):
+    // o Vite recusa Host desconhecido com "Blocked request. This host is not
+    // allowed.", que é a proteção contra DNS rebinding. Liberamos os SUFIXOS
+    // dos provedores de túnel em vez das URLs, que mudam a cada sessão do
+    // túnel. Só afeta `vite dev`; o build de produção não tem host check.
     allowedHosts: ['.trycloudflare.com', '.ngrok-free.dev', '.ngrok-free.app'],
   },
   optimizeDeps: {
@@ -40,7 +40,7 @@ export default defineConfig({
   },
   build: {
     // styled-components/native ships ESM files containing literal
-    // require("react-native") calls (mixed-module bug). Without this flag,
+    // require("react-native") calls (mixed modules). Without this flag,
     // Rollup leaves those requires in the output and the browser throws
     // "require is not defined". Setting it true forces the commonjs plugin
     // to also process require() inside ESM files so the alias above can

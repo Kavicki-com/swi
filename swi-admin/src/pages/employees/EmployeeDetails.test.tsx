@@ -44,8 +44,8 @@ describe('EmployeeDetails', () => {
     await expect(renderPage(<EmployeeDetails />, { route: '/employees/seed_id', path: '/employees/:id' })).resolves.toBeDefined()
   })
 
-  // QA F (2026-07-24): o "Solicitar Pausa" era toast fake. Agora dispara o
-  // POST real (notificação de journey pro worker) com o id da rota.
+  // O "Solicitar Pausa" dispara o POST real, que é a notificação de journey pro
+  // worker, com o id da rota.
   it('Solicitar Pausa → notificationsApi.requestPause com o id do funcionário', async () => {
     getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
     pauseMock.mockResolvedValue({ data: { requested: true }, error: null })

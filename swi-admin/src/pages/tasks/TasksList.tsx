@@ -55,7 +55,7 @@ export function TasksList() {
       .catch((e: unknown) => {
         if (cancelled) return
         // apiFetch garante ApiError em todo caminho de erro; o fallback cobre
-        // só um bug de programação nosso, não um cenário de rede.
+        // só uma falha de programação nossa, não um cenário de rede.
         setError(e instanceof ApiError ? e.message : 'Erro ao carregar as tarefas')
         setRows([])
         setLoading(false)

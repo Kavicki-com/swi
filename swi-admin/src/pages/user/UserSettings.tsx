@@ -5,9 +5,8 @@
 // RIGHT → Tipo sanguíneo + Gênero comboboxes, alergias + doenças crônicas
 //         textareas, Exames clínicos, Senha de acesso, Permissões.
 // Footer → Sair + Salvar Alterações buttons.
-// QA F (2026-07-24): a tela era 100% fake (prefill 'Carlos Sampaio', botões
-// com toasts simulados). Agora: GET /profile/me pré-preenche, Salvar faz PUT,
-// Alterar senha bate no /auth/password/change, foto/exames sobem via presign.
+// Fiação real da tela: GET /profile/me pré-preenche, Salvar faz PUT, Alterar
+// senha bate no /auth/password/change, e foto e exames sobem via presign.
 // Estado, efeitos e handlers moram em hooks/useUserSettings.
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'

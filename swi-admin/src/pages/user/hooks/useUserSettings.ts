@@ -32,12 +32,12 @@ const GERENTE_OPTIONS = [
 
 type Option = { label: string; value: string }
 
-// Profissão/Setor/Função vêm do catálogo REAL da org (GET /profile/catalog:
-// DISTINCT de jobTitle/sector/duty). As listas fixas anteriores eram
-// inventadas, divergiam do TaskForm e não continham os valores do banco
-// ('Administrador'/'Gestão'): o Combobox abria em "Selecione aqui" e uma
-// seleção qualquer sobrescrevia o cargo real (QA 2026-07-26). value === label
-// de propósito: o backend guarda o rótulo de exibição verbatim.
+// Profissão, Setor e Função vêm do catálogo REAL da organização (GET
+// /profile/catalog, com DISTINCT de jobTitle, sector e duty). Lista fixa no
+// código diverge do TaskForm e não contém os valores que estão no banco, então
+// o Combobox abre em "Selecione aqui" e qualquer seleção sobrescreve o cargo
+// real. value === label de propósito: o backend guarda o rótulo de exibição
+// verbatim.
 const toOptions = (values: ReadonlyArray<string>): Option[] =>
   values.map((v) => ({ label: v, value: v }))
 
@@ -54,10 +54,10 @@ const withCurrent = (options: Option[], value: string): Option[] =>
   !value || options.some((o) => o.value === value) ? options : [...options, { label: value, value }]
 
 /**
- * Gênero persiste como CÓDIGO ('male'/'female'/'other'). O form gravava o
- * rótulo ('Masculino'), então quem lê o campo comparando com 'male', detalhe
- * do funcionário, painel do chat, não achava nada e caía no default
- * (QA 2026-07-26). Tolera o rótulo legado na leitura.
+ * Gênero persiste como CÓDIGO ('male'/'female'/'other'). Gravar o rótulo
+ * ('Masculino') faz quem lê o campo comparando com 'male', como o detalhe do
+ * funcionário e o painel do chat, não achar nada e cair no default. A leitura
+ * tolera o rótulo legado.
  */
 export const readGender = (raw: string | null): string => {
   if (!raw) return ''

@@ -49,9 +49,9 @@ describe('EmployeesList', () => {
     await expect(renderPage(<EmployeesList />, { route: '/employees' })).resolves.toBeDefined()
   })
 
-  // QA Web #10: o ícone de chat mandava pra /chat sem dizer QUEM, e o inbox
-  // fixava a conversa mais recente — clicasse em quem clicasse, abria sempre a
-  // mesma pessoa. O destino certo é a conversa determinística com o clicado.
+  // O ícone de chat precisa dizer QUEM. Mandar pra /chat sem destino faz o
+  // inbox abrir a conversa mais recente, a mesma pessoa em qualquer clique. O
+  // destino certo é a conversa determinística com o clicado.
   it('ícone de chat abre a conversa do funcionário clicado, não /chat solto', async () => {
     const ALLAN: Employee = {
       id: 'w9',
@@ -84,8 +84,8 @@ describe('EmployeesList', () => {
     expect(screen.getByText('novo@x.com')).toBeTruthy()
   })
 
-  // O admin decide aprovar em cima destes campos — a fila mostrava só nome e
-  // e-mail e ele aprovava às cegas (QA 2026-07-26).
+  // O admin decide aprovar em cima destes campos. Uma fila com só nome e
+  // e-mail faz a aprovação acontecer às cegas.
   it('mostra CPF, telefone, tipo sanguíneo e cidade do cadastro', async () => {
     vi.spyOn(approvalsApi, 'listPendingWorkers').mockResolvedValue({
       data: [

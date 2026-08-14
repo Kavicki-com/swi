@@ -1,6 +1,6 @@
 // src/pages/tasks/ResponsiblePicker.tsx
 // Overlay de seleção de responsáveis. É um COMPONENTE, não
-// uma rota: quem monta/desmonta é o formulário de tarefa (Task 8), que recebe
+// uma rota: quem monta e desmonta é o formulário de tarefa, que recebe
 // os ids no onConfirm. Layout espelha o `modals/ResponsablesModal` (mesmas
 // medidas, divisor vertical, anatomia da linha), mas aquele é rota, escolhe
 // admins e não devolve nada — daí um componente novo em vez de reuso.
@@ -174,7 +174,7 @@ export function ResponsiblePicker({ selectedIds, onConfirm, onCancel }: Responsi
       .catch((e: unknown) => {
         if (cancelled) return
         // apiFetch garante ApiError em todo caminho de erro; o fallback cobre
-        // só um bug nosso, não um cenário de rede.
+        // só uma falha nossa, não um cenário de rede.
         setError(e instanceof ApiError ? e.message : 'Erro ao carregar os responsáveis')
         setWorkers([])
         setLoading(false)
@@ -221,8 +221,8 @@ export function ResponsiblePicker({ selectedIds, onConfirm, onCancel }: Responsi
         borderRadius: theme.border.radius.m,
         padding: theme.padding.m,
         gap: theme.gap.l,
-        // QA C2: sem teto, a lista estourava o viewport em 1366×900 e o rodapé
-        // Cancelar/Continuar ficava inalcançável. O backdrop (flex:1 + padding)
+        // Sem teto, a lista estoura o viewport em 1366×900 e o rodapé
+        // Cancelar/Continuar fica inalcançável. O backdrop (flex:1 + padding)
         // dá a altura definida; a lista rola internamente (ScrollView abaixo).
         maxHeight: '100%',
       }}

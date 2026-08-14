@@ -40,9 +40,10 @@ describe('conversationKey', () => {
   })
 })
 
-// QA Web #10: os ícones de chat das listas navegavam pra /chat sem destino, e o
-// inbox fixava a conversa MAIS RECENTE (sempre a mesma pessoa). O caminho certo
-// leva o id determinístico da conversa, com o '#' encodado (senão vira fragmento
+// Os ícones de chat das listas precisam levar a conversa certa. Navegar pra
+// /chat sem destino faz o inbox abrir a conversa MAIS RECENTE, sempre a mesma
+// pessoa. O caminho certo leva o id determinístico da conversa, com o '#'
+// encodado (senão vira fragmento
 // de URL).
 describe('chatPathTo', () => {
   it('monta /chat/<key> com o # encodado', () => {
@@ -106,7 +107,7 @@ describe('sortByRecent', () => {
   })
 })
 
-// QA Web #4: editar e excluir mensagem. O backend emite o MESMO evento
+// Editar e excluir mensagem. O backend emite o MESMO evento
 // 'message' com o estado atual, porque um evento novo faria cliente antigo
 // ignorar a edição em silêncio. Isso obriga duas regras aqui.
 describe('revisão de mensagem (editada ou excluída)', () => {

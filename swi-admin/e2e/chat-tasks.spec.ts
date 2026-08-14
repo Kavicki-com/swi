@@ -136,6 +136,6 @@ test('envia uma mensagem no chat e o servidor a aceita', async ({ page }) => {
   // carregamento frio de /chat/<id> o efeito de seleção roda antes de o GET
   // /chat/conversations responder. Às vezes a thread se recupera, às vezes
   // fica vazia, e asserção instável num portão de entrega é pior que asserção
-  // estreita. O defeito está registrado na nota de execução da Task 14 do
-  // plano; quando for corrigido, o refresh vira uma afirmação legítima aqui.
+  // estreita. Quando o carregamento frio passar a esperar a lista de conversas
+  // antes de selecionar, o refresh vira uma afirmação legítima aqui.
 })

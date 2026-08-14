@@ -20,7 +20,7 @@ describe('App', () => {
     expect(screen.getByTestId('app-root')).toBeInTheDocument()
   })
 
-  // QA Web #5: sem o GlobalStyles o Chrome pinta de amarelo todo campo que ele
+  // Sem o GlobalStyles o Chrome pinta de amarelo todo campo que ele
   // autopreenche, furando o tema escuro.
   //
   // O teste guarda a MONTAGEM, não o CSS. Verificar o CSS aqui é impossível: o

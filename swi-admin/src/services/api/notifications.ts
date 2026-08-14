@@ -1,6 +1,6 @@
-// QA F (2026-07-24): o "Solicitar Pausa" do detalhe do funcionário era toast
-// fake. POST /notifications/pause-request — o backend valida org + role e
-// enfileira a notificação de journey pro worker (aparece no app dele).
+// O "Solicitar Pausa" do detalhe do funcionário fala com POST
+// /notifications/pause-request: o backend valida org + role e enfileira a
+// notificação de journey pro worker (aparece no app dele).
 import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 

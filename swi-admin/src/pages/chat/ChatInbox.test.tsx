@@ -33,8 +33,8 @@ vi.mock('@/lib/demoToast', () => ({
 }))
 
 // Stub do maplibre. Sem ele o `lib` fica null em jsdom e o efeito do mini-mapa
-// sai cedo, entao o mapa NUNCA e construido e o bug do QA Web #2 fica invisivel
-// no teste.
+// sai cedo, entao o mapa NUNCA e construido e o teste de reconstrucao do
+// mini-mapa passa sem medir nada.
 //
 // `lib` e uma referencia ESTAVEL de proposito: devolver um objeto novo a cada
 // chamada faria o proprio stub invalidar o efeito, e o teste passaria a medir o
@@ -126,14 +126,11 @@ describe('ChatInbox', () => {
   })
   afterEach(clearSession)
 
-  // QA Web #2 (30/07/2026): "ao digitar no campo de mensagem, o painel do mapa
-  // fica piscando repetidamente".
-  //
-  // O piscar era o mini-mapa sendo DESTRUIDO e RECONSTRUIDO a cada tecla:
   // `contacts` e recalculado inline no render de ChatInbox, entao cada
-  // setDraft produzia objetos ChatContact novos, e o efeito do ContactMiniMap
-  // dependia do objeto inteiro. Nao era so visual: cada reconstrucao refazia o
-  // fetch dos tiles de satelite da ESRI, uma requisicao por tecla.
+  // setDraft do composer produz objetos ChatContact novos. Se o efeito do
+  // mini-mapa depender do objeto inteiro, o mapa e DESTRUIDO e RECONSTRUIDO a
+  // cada tecla: o painel pisca e cada reconstrucao refaz o fetch dos tiles de
+  // satelite da ESRI, uma requisicao por tecla.
   it('nao reconstroi o mini-mapa a cada tecla digitada no composer', async () => {
     await renderPage(<ChatInbox />, CONV_ROUTE)
     await waitFor(() => expect(maplibre.MapCtor).toHaveBeenCalledTimes(1))
@@ -272,9 +269,9 @@ describe('ChatInbox', () => {
     expect(editMessage).not.toHaveBeenCalled()
   })
 
-  // QA Web #9: o form de denúncia abre num modal da página, como o
-  // SupportModal — montado dentro da bolha ele seria recortado pelo
-  // overflowX hidden do quadro de mensagens.
+  // O form de denúncia abre num modal da página, como o SupportModal. Montado
+  // dentro da bolha ele seria recortado pelo overflowX hidden do quadro de
+  // mensagens.
   it('denunciar pela bolha abre o modal de denúncia', async () => {
     await renderPage(<ChatInbox />, CONV_ROUTE)
 
@@ -414,9 +411,9 @@ describe('ChatBubble', () => {
     expect(wrapper.style.borderTopLeftRadius).not.toBe('')
   })
 
-  // Copiar uma mensagem sem texto copiaria o que? Oferecer o item e recriar o
-  // defeito que o QA reportou: controle que existe e nao faz nada. Editar cai
-  // junto porque o backend recusa corpo vazio.
+  // Copiar uma mensagem sem texto copiaria o que? Oferecer o item seria expor
+  // um controle que existe e nao faz nada. Editar cai junto porque o backend
+  // recusa corpo vazio.
   it('mensagem so com imagem nao oferece copiar nem editar', async () => {
     await renderPage(<ChatBubble message={IMAGE_MESSAGE} contact={CONTACT} />)
 
@@ -461,12 +458,6 @@ describe('ChatBubble', () => {
     expect(screen.getByText('Segue a foto do sensor.')).toBeTruthy()
   })
 
-  // QA Web #4 (30/07/2026): o more_vert do balao nao abria nada. Era um <Icon>
-  // solto, sem Pressable e sem onPress.
-  //
-  // Nao virou "menu de acoes" porque nao ha acoes: o backend so tem listar,
-  // enviar e marcar como lida. Copiar e a unica real, e agora e o que o
-  // controle faz, com rotulo acessivel dizendo isso.
   const TEXT_MESSAGE: ChatMessage = {
     id: 'm-copy',
     text: 'Copie esta mensagem.',
@@ -491,13 +482,10 @@ describe('ChatBubble', () => {
     await waitFor(() => expect(toast.show).toHaveBeenCalledWith('Mensagem copiada'))
   })
 
-  // QA Web #4, segunda metade (31/07/2026): o controle deixa de ser so copiar e
-  // vira menu de acoes. Editar e excluir agora existem de ponta a ponta (rotas
-  // PATCH/DELETE no backend, editMessage/deleteMessage no ChatProvider), entao
-  // o que era "acao inexistente" passou a ser acao real.
-  //
-  // Quem pode o que: so o autor edita e exclui. Na mensagem do outro sobra
-  // copiar, e por isso o menu dela e menor, nao desabilitado.
+  // Editar e excluir existem de ponta a ponta (rotas PATCH/DELETE no backend,
+  // editMessage/deleteMessage no ChatProvider), mas so o autor pode usa-las.
+  // Na mensagem do outro sobra copiar, e por isso o menu dela e menor, nao
+  // desabilitado.
   const MY_MESSAGE: ChatMessage = {
     id: 'm-mine',
     text: 'Minha mensagem.',
@@ -652,9 +640,9 @@ describe('ChatBubble', () => {
     expect(panel.style.right).toBe('')
   })
 
-  // QA Web #9 (04/08/2026): na mensagem do OUTRO entra "Denunciar" ao lado de
-  // copiar. Na minha não: o backend recusa denunciar a própria mensagem, e
-  // oferecer o item seria recriar o controle morto do QA Web #4.
+  // Na mensagem do OUTRO entra "Denunciar" ao lado de copiar. Na minha não: o
+  // backend recusa denunciar a própria mensagem, e oferecer o item deixaria no
+  // menu um controle que não faz nada.
   it('o menu da mensagem do outro oferece copiar e denunciar', async () => {
     await renderPage(<ChatBubble message={TEXT_MESSAGE} contact={CONTACT} />)
 
@@ -691,7 +679,7 @@ describe('ChatBubble', () => {
   })
 
   // Clipboard exige contexto seguro; em http:// simples o navegador nao expoe a
-  // API. Cair calado aqui reintroduziria o bug original (clico, nada acontece).
+  // API. Cair calado aqui deixaria o clique sem resposta nenhuma.
   it('sem clipboard disponivel, avisa em vez de nao fazer nada', async () => {
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
 

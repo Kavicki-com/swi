@@ -22,9 +22,9 @@ export interface EvacuationHandlers {
 export function subscribeEvacuationEvents(handlers: EvacuationHandlers): () => void {
   const socket: Socket = io(getApiUrl(), {
     auth: { token: readToken() },
-    // Espelho do chatSocket: polling primeiro pra atravessar a interstitial do
-    // ngrok no QA remoto (WS puro morre no handshake; polling é XHR e carrega
-    // o header). Upgrade pra WS quando o caminho deixa.
+    // Espelho do chatSocket: polling primeiro pra atravessar página
+    // interstitial de túnel, onde o WS puro morre no handshake. Polling é XHR e
+    // carrega o header, e o upgrade pra WS acontece quando o caminho deixa.
     transports: ['polling', 'websocket'],
   })
   socket.on('evacuation', handlers.onStarted)

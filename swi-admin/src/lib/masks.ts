@@ -1,6 +1,6 @@
-// Máscaras de digitação dos campos brasileiros (QA 2026-07-24: os inputs
-// aceitavam qualquer coisa, então CPF/telefone entravam no banco em formatos
-// diferentes a cada cadastro).
+// Máscaras de digitação dos campos brasileiros. Sem elas o input aceita
+// qualquer coisa, e CPF e telefone entram no banco em formatos diferentes a
+// cada cadastro.
 //
 // Todas normalizam pelos DÍGITOS antes de formatar: passar um valor já
 // mascarado devolve ele mesmo (idempotente), o que deixa seguro aplicar tanto

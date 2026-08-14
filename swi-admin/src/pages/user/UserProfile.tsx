@@ -3,9 +3,8 @@
 // with the same three-column layout as /admins/:id. Reuses
 // AdminDetails directly so a future polish on either page flows to both.
 //
-// QA C3 (2026-07-24): o id era hardcoded em 'admin-01' (era mock) — todo
-// usuário real caía em "Administrador não encontrado". Agora o perfil é o do
-// usuário DA SESSÃO (useAuth), como o AdminDetails sempre previu.
+// O perfil é o do usuário DA SESSÃO (useAuth), como o AdminDetails prevê. Um
+// id fixo no código levaria todo usuário real a "Administrador não encontrado".
 import { AdminDetails } from '@/pages/admins/AdminDetails'
 import { useAuth } from '@/hooks/useAuth'
 

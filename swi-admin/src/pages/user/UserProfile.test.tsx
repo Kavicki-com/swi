@@ -19,8 +19,8 @@ describe('UserProfile', () => {
     await expect(renderPage(<UserProfile />, { route: '/user/profile' })).resolves.toBeDefined()
   })
 
-  // QA C3 (2026-07-24): o perfil era hardcoded em 'admin-01' (era mock) — 404
-  // pra todo usuário real. Deve buscar o id do usuário LOGADO (sessão).
+  // O perfil tem que sair do id do usuário LOGADO, vindo da sessão. Um id
+  // fixo no código responde 404 para todo usuário real.
   it('busca o perfil do usuário da sessão, não o id mock admin-01', async () => {
     const spy = vi.spyOn(adminsApi, 'get').mockResolvedValue({ data: null, error: null })
     await renderPage(<UserProfile />, { route: '/user/profile' })

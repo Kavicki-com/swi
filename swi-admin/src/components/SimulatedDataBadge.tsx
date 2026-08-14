@@ -2,9 +2,9 @@ import { View } from 'react-native'
 import { Icon, Text, useTheme } from '@kavicki/swi-design-system'
 import { SIMULATED_DATA_LABEL } from '@/services/vitals/simulatedVitals'
 
-// Selo discreto "Dados simulados" (Fase 3 — monitoramento honesto). Vai ao lado
-// de QUALQUER superfície que exiba vitais simulados: o operador nunca confunde
-// biometria fabricada com sinal da smartband. Composição DS (Icon + Text).
+// Selo discreto "Dados simulados". Vai ao lado de QUALQUER superfície que
+// exiba vitais simulados: o operador nunca confunde biometria fabricada com
+// sinal da smartband. Composição DS (Icon + Text).
 export function SimulatedDataBadge() {
   const theme = useTheme()
   return (

@@ -80,10 +80,10 @@ export function RecoveryNewPassword() {
             </Text>
             {/* A regra anunciada tem que ser a regra APLICADA: o backend valida
                 @MinLength(6) em signup/reset/troca (swi-backend/src/auth/dto.ts)
-                e não exige letra+número nem símbolo. O texto antigo prometia
-                "8 caracteres, 1 símbolo e 1 maiúscula" e o servidor aceitava
-                "abcdef" (QA 2026-07-24). Se o produto quiser a regra forte, ela
-                sobe no DTO primeiro — e aí esta copy volta a crescer. */}
+                e não exige letra+número nem símbolo. Anunciar aqui uma regra
+                mais forte que a do servidor promete uma proteção que não
+                existe. Se o produto quiser a regra forte, ela sobe no DTO
+                primeiro, e só então esta copy cresce junto. */}
             <Toast
               variant="info"
               title="Sua senha precisa ter no mínimo 6 caracteres"

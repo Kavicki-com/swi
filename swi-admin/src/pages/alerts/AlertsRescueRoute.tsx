@@ -89,9 +89,9 @@ export function AlertsRescueRoute() {
   const routeStroke = dispatched ? '#8B5CF6' : '#2BA8C9'
 
   // Pontas REAIS do socorro: as posições ao vivo do ferido (:employeeId) e do
-  // socorrista escolhido (:rescuerId). Antes eram duas constantes fixas — o
-  // mapa desenhava sempre a MESMA rota de 2,5 km enquanto a tela anterior
-  // dizia "0,02 Km / 1 minuto" pro mesmo par (QA 2026-07-26).
+  // socorrista escolhido (:rescuerId), nunca coordenadas fixas. É o que mantém
+  // a rota desenhada aqui coerente com a distância que a tela anterior mostra
+  // pro mesmo par.
   //
   // Congelamos no primeiro instante em que as duas posições são conhecidas: o
   // simulador move os pinos a cada 3 s e re-pedir a rota a cada tick faria a

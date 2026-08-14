@@ -15,9 +15,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-// Resposta do presign. Sem `fields`: desde 2026-07-29 o upload é PUT
-// presignado (o R2 nao implementa presigned POST — devolvia 501), e o contrato
-// virou { url, key }.
+// Resposta do presign. Sem `fields`: o upload é PUT presignado (o R2 nao
+// implementa presigned POST, responde 501), e o contrato é { url, key }.
 const presignOk = () =>
   ({
     ok: true,

@@ -1,6 +1,6 @@
-// QA F (2026-07-24): o "Solicitar suporte" do settings descartava o form.
-// POST /support — rota PÚBLICA no backend (suporte precisa funcionar até
-// deslogado); logado, o modal manda o e-mail da sessão pra facilitar retorno.
+// O "Solicitar suporte" do settings fala com POST /support, rota PÚBLICA no
+// backend (suporte precisa funcionar até deslogado). Logado, o modal manda o
+// e-mail da sessão pra facilitar retorno.
 import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 

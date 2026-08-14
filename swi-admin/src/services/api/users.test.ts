@@ -202,8 +202,8 @@ describe('approvalsApi.listPendingWorkers (real)', () => {
     expect(url).toContain('/users?role=WORKER&approvalStatus=PENDING')
   })
 
-  // O app manda o perfil junto do cadastro; a fila precisa repassar pra tela,
-  // senão o admin continua aprovando às cegas (QA 2026-07-26).
+  // O app manda o perfil junto do cadastro, e a fila precisa repassar pra tela,
+  // senão o admin aprova às cegas.
   it('repassa o perfil que veio no cadastro', async () => {
     const base = summary({ approvalStatus: 'PENDING', createdAt: '2026-07-10T00:00:00.000Z' })
     vi.stubGlobal(
@@ -292,10 +292,10 @@ describe('create (real)', () => {
   })
 })
 
-// O detalhe já tinha a seção "Histórico de exames", mas o mapper nunca
-// preenchia examHistory: quem TINHA exame via "Nenhum exame registrado".
-// Mesma família das alergias fixas e do tipo sanguíneo com default universal
-// que o repo já corrigiu — defeito que parece certo quando está errado.
+// O mapper tem que preencher examHistory, senão a seção "Histórico de exames"
+// mostra "Nenhum exame registrado" para quem TEM exame. É a mesma família das
+// alergias fixas e do tipo sanguíneo com default universal: uma tela que parece
+// certa estando errada.
 describe('exames reais no detalhe do usuário', () => {
   const EXAME = {
     id: 'e1',

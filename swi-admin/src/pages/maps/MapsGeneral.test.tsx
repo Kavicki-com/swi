@@ -27,8 +27,9 @@ const live = vi.hoisted(() => ({
 vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => live.value }))
 
 // Radar externo: por padrão resolve null pra não abrir rede. O efeito de "Zonas
-// de alerta" sai cedo do .then, MAS ainda registra o cleanup, que é onde mora o
-// bug do Web #8. Os testes do caminho feliz trocam `radar.value`.
+// de alerta" sai cedo do .then, MAS ainda registra o cleanup, que é onde mora a
+// ordem de desmontagem testada abaixo. Os testes do caminho feliz trocam
+// `radar.value`.
 const radar = vi.hoisted(() => ({ value: null as { host: string; path: string } | null }))
 vi.mock('@/lib/rainViewer', () => ({ getRainViewerLatestRadar: async () => radar.value }))
 
@@ -260,10 +261,10 @@ describe('MapsGeneral', () => {
     })
   })
 
-  // QA Web #3 (30/07/2026): "ao clicar no ícone de localização para ver o
-  // funcionário no mapa, é preciso um clique adicional para exibi-lo".
+  // Clicar no ícone de localização de um funcionário tem que exibi-lo no mapa
+  // sem clique adicional.
   //
-  // Eram duas causas somadas: o pin da lista navegava para /maps/general sem
+  // São duas causas somadas: o pin da lista navegando para /maps/general sem
   // dizer de QUEM era, e esta tela abre com a camada de operadores desligada.
   // O usuário caía num mapa vazio. Agora `?focus=<id>` liga a camada e
   // centraliza no funcionário.
@@ -300,17 +301,17 @@ describe('MapsGeneral', () => {
     expect(flyToSpy).not.toHaveBeenCalled()
   })
 
-  // QA Web #8 (30/07/2026), BLOQUEADOR: "após habilitar os filtros do Mapa de
-  // calor e clicar em um item do menu lateral, a tela fica preta".
+  // Sair da tela com os filtros do mapa de calor ligados não pode derrubar a
+  // árvore.
   //
-  // Causa: o React roda cleanups na ORDEM DE DECLARAÇÃO. O efeito que cria o
-  // mapa é declarado antes dos que adicionam camadas, então no unmount
-  // map.remove() rodava PRIMEIRO e os cleanups de heatmap e meteo chamavam
-  // getLayer() num mapa já destruído. Exceção em cleanup derruba a árvore.
+  // O React roda cleanups na ORDEM DE DECLARAÇÃO. O efeito que cria o mapa é
+  // declarado antes dos que adicionam camadas, então no unmount o map.remove()
+  // roda PRIMEIRO e os cleanups de heatmap e meteo chamariam getLayer() num
+  // mapa já destruído. Exceção em cleanup derruba a árvore inteira.
   //
-  // Só reproduz com os filtros ligados porque, desligados, os efeitos saem
-  // cedo e nem chegam a registrar cleanup. É o passo a passo do QA.
-  it('não derruba a tela ao desmontar com o mapa de calor ligado (QA Web #8)', async () => {
+  // Só aparece com os filtros ligados: desligados, os efeitos saem cedo e nem
+  // chegam a registrar cleanup.
+  it('não derruba a tela ao desmontar com o mapa de calor ligado', async () => {
     const view = await renderPage(<MapsGeneral />, { route: '/maps/general' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Mapa de calor' }))
@@ -364,7 +365,7 @@ describe('MapsGeneral', () => {
   it('ligar Operador desenha um pino por posição e recolher os remove', async () => {
     live.value = [{ ...W1 }, { ...W1, id: 'w2', lng: -46.6, lat: -23.5 }]
     const view = await renderMaps()
-    // A tela abre com a camada desligada (é o que o QA Web #3 corrigiu via ?focus).
+    // A tela abre com a camada desligada, e é o `?focus` que a liga.
     expect(contentPins()).toHaveLength(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Operador' }))
@@ -454,9 +455,9 @@ describe('MapsGeneral', () => {
 
   // ----------------------------------------------------------------- meteo
 
-  // As duas decisões que já custaram bug: usar o `path` (hash) do manifesto em
-  // vez do `time` (URL expira em ~24 h) e limitar maxzoom em 7 (acima disso o
-  // RainViewer devolve um PNG de "zoom não suportado").
+  // Duas decisões que este teste tranca: usar o `path` (hash) do manifesto em
+  // vez do `time`, cuja URL expira em cerca de 24 h, e limitar maxzoom em 7,
+  // porque acima disso o RainViewer devolve um PNG de "zoom não suportado".
   it('com radar disponível, monta o raster pelo hash do manifesto e limita o zoom em 7', async () => {
     radar.value = { host: 'https://tiles.example', path: '/v2/radar/abc123' }
     const view = await renderMaps()

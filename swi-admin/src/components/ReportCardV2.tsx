@@ -1,8 +1,8 @@
 // src/components/ReportCardV2.tsx
-// Report card redesign — QA cliente §4. Full-width colored status band on
-// top + airy body (date, title, summary) + Responsável (AvatarGroup) and
-// Criado por (avatar + name + sector) sections. Replaces the DS ReportCard
-// usage in /reports.
+// Report card for /reports: full-width colored status band on top, airy body
+// (date, title, summary), plus Responsável (AvatarGroup) and Criado por
+// (avatar + name + sector) sections. Composed from DS primitives, and it
+// replaces the DS ReportCard usage in /reports.
 import { Pressable, View } from 'react-native'
 import { Avatar, AvatarGroup, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import type { StatusTagStatus } from '@kavicki/swi-design-system'
@@ -96,10 +96,10 @@ export function ReportCardV2({
         </Text>
       </View>
 
-      {/* Body. QA mockup (§4): the colored side accent is SHORT — only
-          flanks the date + title sub-block, forming a small "l" together
-          with the top band. Summary, Responsáveis and Criado por sit
-          neutral below, separated by thin hairlines.
+      {/* Body. The colored side accent is SHORT: it only flanks the date +
+          title sub-block, forming a small "l" together with the top band.
+          Summary, Responsáveis and Criado por sit neutral below, separated
+          by thin hairlines.
           NOTE on color tokens: this DS names ink by the SURFACE it targets,
           not the ink shade itself. content.dark = ink for dark surfaces
           (near-white #F5F5F5); content.light = ink for light surfaces
@@ -123,9 +123,9 @@ export function ReportCardV2({
             </Text>
             {/* Title reserved to 3 lines so the date+title block has the
                 same height on every card, anchoring the description start Y
-                across the grid (QA cliente — alinhamento). Longer titles
-                truncate with an ellipsis; shorter titles keep the reserved
-                empty space for visual breathing room. */}
+                across the grid. Longer titles truncate with an ellipsis;
+                shorter titles keep the reserved empty space for visual
+                breathing room. */}
             <Title
               variant="title.xs"
               color={theme.content.dark}
@@ -138,7 +138,7 @@ export function ReportCardV2({
         </View>
 
         {/* Description also reserved to 3 lines so its end Y is consistent
-            across cards (QA cliente — alinhamento da descrição). */}
+            across cards. */}
         <Text
           variant="body.m"
           color={theme.content.dark}

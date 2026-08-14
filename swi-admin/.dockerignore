@@ -16,7 +16,7 @@ tsconfig.tsbuildinfo
 #
 # Isto não é higiene, é correção: o Vite carrega `.env.local` no build e o
 # painel do cliente sairia assado com a URL de API que estivesse na máquina de
-# quem gerou a imagem (túnel de QA, localhost de outra porta). O `.env.production`
+# quem gerou a imagem (túnel remoto, localhost de outra porta). O `.env.production`
 # versionado NÃO é excluído: ele é o contrato do build público, e no pacote do
 # cliente é sobreposto pela variável de ambiente, que o Vite prioriza.
 .env

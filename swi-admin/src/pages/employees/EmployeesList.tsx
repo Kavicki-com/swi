@@ -53,8 +53,8 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
         backgroundColor: theme.surface.standard,
         borderRadius: theme.border.radius.m,
         paddingHorizontal: theme.padding.m,
-        // QA cliente §2: padding vertical um pouco maior (8→12) pra cada card
-        // ter melhor área de respiro (mesmo princípio aplicado a Admins).
+        // Padding vertical maior para cada card ter área de respiro, o mesmo
+        // princípio aplicado em Admins.
         paddingVertical: theme.padding.sm,
         // Tablet: if the right cluster can't fit on the same line, allow it
         // to wrap below. Desktop/wide keep the strict single-row layout.
@@ -324,10 +324,9 @@ function PendingRow({
           <Text variant="body.m" color={theme.content.dark}>
             {pending.email}
           </Text>
-          {/* O worker preenche isto no cadastro (o app manda junto). Aprovar
+          {/* O worker preenche isto no cadastro e o app manda junto. Aprovar
               sem ver CPF, contato e tipo sanguíneo é decidir às cegas numa
-              ferramenta de segurança do trabalho — era o que a fila obrigava
-              até 2026-07-26. */}
+              ferramenta de segurança do trabalho. */}
           <Text testID={`pending-doc-${pending.id}`} variant="body.s" color={theme.content.medium}>
             {`CPF ${pending.cpf ?? NAO_INFORMADO} · ${pending.phone ?? NAO_INFORMADO}`}
           </Text>
@@ -374,7 +373,7 @@ export function EmployeesList({
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const { show: showToast } = useDemoToast()
-  // Pro destino do chat (QA Web #10): a conversa determinística eu↔clicado.
+  // Pro destino do chat: a conversa determinística entre eu e o clicado.
   const { user } = useAuth()
   const myId = user?.id ?? ''
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -556,22 +555,21 @@ export function EmployeesList({
         </View>
       ) : (
         <>
-          {/* QA cliente §2: gap entre cards de 8→16 (theme.gap.m). */}
+          {/* Gap entre cards em theme.gap.m. */}
           <View style={{ gap: theme.gap.m }}>
             {filtered.map((employee) => (
               <EmployeeRow
                 key={employee.id}
                 employee={employee}
                 onOpen={(id) => navigate(`/employees/${id}`)}
-                // QA Web #10: /chat sem destino fazia o inbox fixar a conversa
-                // mais recente — clicasse em quem clicasse, abria a mesma
-                // pessoa. O destino é a conversa determinística com o clicado.
+                // /chat sem destino faz o inbox abrir a conversa mais recente,
+                // a mesma pessoa em qualquer clique. O destino é a conversa
+                // determinística com o clicado.
                 onChat={(e) => navigate(chatPathTo(myId, e.id))}
-                // QA Web #3 (30/07/2026): o pin levava ao mapa geral SEM dizer
-                // de quem era, e o mapa abre com a camada de operadores
-                // desligada. O usuario caia num mapa vazio e precisava de um
-                // clique extra em "Operadores". O `focus` resolve os dois:
-                // liga a camada e centraliza neste funcionario.
+                // O mapa geral abre com a camada de operadores desligada, entao
+                // um pin sem destino cai num mapa vazio e exige um clique extra
+                // em "Operadores". O `focus` resolve os dois: liga a camada e
+                // centraliza neste funcionario.
                 onLocation={() =>
                   navigate(`/maps/general?focus=${encodeURIComponent(employee.id)}`)
                 }

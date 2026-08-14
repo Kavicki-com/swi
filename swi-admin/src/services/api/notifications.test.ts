@@ -1,7 +1,8 @@
-// QA F (2026-07-24): "Solicitar Pausa" era toast fake. Client real:
-// POST /notifications/pause-request (ADMIN → notificação de journey pro worker).
-// vitest globals (describe/it/expect/afterEach) via globals: true — importar de
-// 'vitest' duplicaria a instância (ver nota no auth.test.ts).
+// "Solicitar Pausa" fala com POST /notifications/pause-request
+// (ADMIN → notificação de journey pro worker).
+// describe/it/expect/afterEach vêm dos globals do Vitest (globals: true no
+// config); importar hooks de 'vitest' aqui duplica a instância (deps.inline) e
+// quebra o runner.
 import { vi } from 'vitest'
 import { notificationsApi } from './notifications'
 

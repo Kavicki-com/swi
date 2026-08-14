@@ -25,8 +25,8 @@ export function AlertsRescueRouteSelection() {
   const { employeeId } = useParams<{ employeeId?: string }>()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
-  // Socorristas REAIS: posições ao vivo + diretório da empresa. Antes era uma
-  // fixture com 4 pessoas que nem existiam no quadro (QA de volume).
+  // Socorristas REAIS: posições ao vivo cruzadas com o diretório da empresa,
+  // pra que a lista só ofereça gente que existe no quadro.
   const positions = useLivePositions()
   const [directory, setDirectory] = useState<ReadonlyArray<Employee>>([])
 

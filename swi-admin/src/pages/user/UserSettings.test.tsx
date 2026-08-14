@@ -1,6 +1,4 @@
-// QA F (2026-07-24): o settings inteiro era fake — prefill mock ('Carlos
-// Sampaio'), Salvar/Alterar senha/Editar foto/Enviar exames eram toasts
-// simulados. Estes testes travam a fiação REAL: GET /profile/me pré-preenche,
+// Estes testes travam a fiação REAL do settings: GET /profile/me pré-preenche,
 // PUT persiste, senha via /auth/password/change, uploads via presign.
 // vitest globals (describe/it/expect/afterEach) via globals: true.
 import { vi } from 'vitest'
@@ -59,8 +57,8 @@ const meMock = vi.mocked(profileApi.me)
 const updateMock = vi.mocked(profileApi.update)
 const catalogMock = vi.mocked(profileApi.catalog)
 
-// Catálogo REAL da org (DISTINCT do backend) — fonte dos selects de
-// Profissão/Setor/Função desde o QA 2026-07-26. value === label.
+// Catálogo REAL da organização (DISTINCT do backend), que é a fonte dos selects
+// de Profissão, Setor e Função. value === label.
 const CATALOG = {
   jobTitles: ['Operador de caminhão', 'Operador de escavadeira'],
   sectors: ['Setor Leste', 'Setor Norte'],
@@ -165,10 +163,10 @@ describe('UserSettings', () => {
     expect(patch.jobTitle).toBe('Operador de caminhão')
     expect(patch.sector).toBe('Setor Leste')
     expect(patch.managerName).toBe('João Soares Ribeiro')
-    // gender é CÓDIGO, não rótulo: o form gravava 'Feminino' e quem lê o campo
-    // comparando com 'female' (detalhe do funcionário, painel do chat) caía no
-    // default. O fixture ainda traz o rótulo legado — readGender o aceita na
-    // leitura e o patch volta normalizado (QA 2026-07-26).
+    // gender é CÓDIGO, não rótulo: gravar 'Feminino' faz quem lê o campo
+    // comparando com 'female' (detalhe do funcionário, painel do chat) cair no
+    // default. O fixture traz o rótulo legado de propósito, o readGender o
+    // aceita na leitura, e o patch volta normalizado.
     expect(patch.gender).toBe('female')
     expect(patch.bloodType).toBe('O+')
   })
@@ -259,10 +257,10 @@ describe('UserSettings', () => {
   })
 })
 
-// O exame enviado pelo painel ia pra Profile.examKeys, que guarda só a chave do
-// arquivo. Sem nome nem validade nenhuma tela conseguia desenhar o card, então
-// o usuário mandava o arquivo e ele sumia de vista — o bug reportado. Agora
-// grava na tabela Exam, a MESMA que o app e o detalhe do funcionário leem.
+// O exame enviado pelo painel grava na tabela Exam, a MESMA que o app e o
+// detalhe do funcionário leem. Gravar em Profile.examKeys guardaria só a chave
+// do arquivo, e sem nome nem validade nenhuma tela consegue desenhar o card: o
+// usuário manda o arquivo e ele some de vista.
 describe('UserSettings — exames clínicos', () => {
   it('lista os exames existentes como card, com nome e validade', async () => {
     meMock.mockResolvedValue({ data: DTO, error: null })

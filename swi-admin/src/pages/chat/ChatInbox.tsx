@@ -348,8 +348,8 @@ export function ChatInbox() {
           </>
         ) : null}
       </View>
-      {/* QA Web #9 — modal de denúncia por cima da página inteira, como o
-          SupportModal. selectedContactId é o id da conversa (contact.id). */}
+      {/* Modal de denúncia por cima da página inteira, como o SupportModal.
+          selectedContactId é o id da conversa (contact.id). */}
       {reportingMessage && selectedContactId ? (
         <ReportMessageModal
           conversationId={selectedContactId}

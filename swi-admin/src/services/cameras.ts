@@ -1,9 +1,9 @@
 // Frota de câmeras do site — FONTE ÚNICA.
 //
-// Antes a lista vivia dentro do MapsGeneral (12 pinos) enquanto os KPIs de
-// dashboard e monitoramento cravavam "564 câmeras ativas": o mapa mostrava 12,
-// o número dizia 564 (QA de volume 2026-07-26). Agora quem desenha e quem conta
-// leem a MESMA lista, então o painel nunca afirma câmera que não existe.
+// Quem desenha os pinos no mapa e quem conta nos KPIs de dashboard e
+// monitoramento leem a MESMA lista. Com a lista dentro de uma tela e o número
+// fixo em outra, o mapa mostra uma quantidade e o KPI afirma outra, e o painel
+// passa a alegar câmera que não existe.
 //
 // Continua sendo fixture: não há integração de CFTV no piloto. Quando existir,
 // isto vira uma chamada ao backend e os dois consumidores acompanham de graça.

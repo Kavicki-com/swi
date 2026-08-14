@@ -44,8 +44,8 @@ describe('chatsApi.sendMessage', () => {
     expect(JSON.parse(init.body as string)).toEqual({ body: 'oi', imageKey: 'chat/x.jpg' })
   })
 })
-// QA Web #9 — denunciar mensagem. O que vale trancar aqui é o path aninhado
-// com os DOIS encodes (o # da conversa e o id da mensagem) e o dto cru.
+// Denunciar mensagem. O que vale trancar aqui é o path aninhado com os DOIS
+// encodes (o # da conversa e o id da mensagem) e o dto cru.
 describe('chatsApi.reportMessage', () => {
   it('POST /report com o path encodado e o dto {reason,text}', async () => {
     const f = vi

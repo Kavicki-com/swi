@@ -65,10 +65,11 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
     <WorkerDetailsLayout
       worker={{
         ...admin,
-        // Semente da curva de gasto calórico — sem ela todo mundo compartilha
-        // a mesma série de kcal (QA 2026-07-26).
+        // Semente da curva de gasto calórico. Sem ela todo mundo compartilha
+        // a mesma série de kcal.
         seedId: admin.id,
-        // Fase 3: vitais simulados plausíveis + selo no layout (fim do 0 bpm).
+        // Biometria é simulada enquanto a smartband não existe: valores
+        // plausíveis e determinísticos, com o selo "Dados simulados" no layout.
         ...(() => {
           const v = simulatedVitalsFor(admin.id, Date.now())
           return {

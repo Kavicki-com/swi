@@ -42,9 +42,9 @@ describe('reportsApi.list (real)', () => {
     expect(r.id).toBe('r1')
     expect(r.title).toBe('Inspeção Técnica')
     expect(r.responsibles).toBe('Ana, Bea') // array de nomes → string separada por vírgula
-    // Contagem e faces = responsáveis REAIS. As faces eram uma rotação fixa de
-    // PNGs decorativos: o card mostrava caras que não eram das pessoas
-    // nomeadas logo abaixo (QA 2026-07-26).
+    // Contagem e faces = responsáveis REAIS. Uma rotação fixa de PNGs
+    // decorativos mostraria no card caras que não são das pessoas nomeadas
+    // logo abaixo.
     expect(r.responsibleTotalCount).toBe(2)
     expect(r.responsibleAvatars).toEqual(['signed:ana', 'signed:bea'])
     expect(r.status).toBe('pending')

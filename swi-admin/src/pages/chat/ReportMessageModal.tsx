@@ -1,13 +1,13 @@
 // src/pages/chat/ReportMessageModal.tsx
-// QA Web #9 — form de denúncia da mensagem do chat (mensagem de outra pessoa).
-// Segue o molde do SupportModal: scrim absoluto pressável, card centralizado,
-// Combobox de motivo + texto opcional, estados idle/sending/sent com sucesso
-// in-place. Mora na PÁGINA (não na bolha): dentro da ChatBubble o modal seria
-// recortado pelo overflowX hidden do quadro de mensagens.
+// Form de denúncia da mensagem do chat (mensagem de outra pessoa). Segue o
+// molde do SupportModal: scrim absoluto pressável, card centralizado, Combobox
+// de motivo + texto opcional, estados idle/sending/sent com sucesso in-place.
+// Mora na PÁGINA (não na bolha): dentro da ChatBubble o modal seria recortado
+// pelo overflowX hidden do quadro de mensagens.
 //
 // O envio vai pro endpoint de denúncia do chat, que dispara o e-mail no
 // backend (REPORT_TO_EMAIL). Não altera estado do chat, então não passa pelo
-// ChatProvider — chama a chatsApi direto, como o SupportModal faz com a
+// ChatProvider: chama a chatsApi direto, como o SupportModal faz com a
 // supportApi.
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
@@ -112,7 +112,7 @@ export function ReportMessageModal({
         </View>
         {status === 'sent' ? (
           <View testID="report-sent" style={{ gap: theme.gap.l, alignItems: 'center' }}>
-            {/* Hierarquia herdada do SupportModal pós QA Web #7 (corpo recua,
+            {/* Hierarquia herdada do SupportModal (corpo recua,
                 Fechar desce pra outline), com uma diferença: aqui o título da
                 confirmação sai em branco e um degrau abaixo, não no verde do
                 cabeçalho. Dois títulos verdes empilhados no mesmo card

@@ -20,13 +20,13 @@ const STATUS_OPTIONS = [
   { label: 'Cancelado', value: 'canceled' },
 ]
 
-// Setor e Autor saem dos relatórios CARREGADOS (QA 2026-07-24): a lista fixa
-// oferecia gente que não existe no backend ("Ana Clara Mendonça"…) e filtrar
-// por ela devolvia vazio. Opção só existe se há relatório correspondente.
+// Setor e Autor saem dos relatórios CARREGADOS. Uma lista fixa ofereceria gente
+// que não existe no backend, e filtrar por ela devolve vazio. Opção só existe
+// se há relatório correspondente.
 const ALL = 'all'
 
-// Cards desenhados por vez. 24 = 6 linhas na grade de 4 colunas do admin —
-// enche a tela sem transformar a página num scroll infinito (QA de volume).
+// Cards desenhados por vez. 24 são 6 linhas na grade de 4 colunas do admin, o
+// que enche a tela sem transformar a página num scroll infinito.
 const PAGE_SIZE = 24
 
 function optionsFrom(
@@ -66,9 +66,9 @@ export function ReportsList() {
   const [author, setAuthor] = useState(ALL)
   const [period, setPeriod] = useState(ALL)
 
-  // Total da empresa (header do backend). Enquanto `reports.length < total` há
-  // relatório que a tela AINDA não tem — antes isso era silencioso (QA de
-  // volume: 262 no banco, 200 na resposta, nenhum aviso).
+  // Total da empresa, vindo do header do backend. Enquanto
+  // `reports.length < total` há relatório que a tela AINDA não tem, e sem este
+  // número o excedente ficaria de fora sem nenhum aviso.
   const [total, setTotal] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
   // Quantos cards desenhar. Sem isto a página virava um scroll de 14.000 px.
@@ -115,8 +115,8 @@ export function ReportsList() {
         if (sector !== ALL && r.sector !== sector) return false
         if (author !== ALL && r.authorName !== author) return false
         if (period !== ALL) {
-          // Janela contada do dia de HOJE (era uma âncora fixa em 2026-05-01,
-          // que com dados reais recortava o período errado).
+          // Janela contada do dia de HOJE. Âncora fixa numa data recortaria o
+          // período errado assim que os dados avançassem.
           const days = period === '30d' ? 30 : 90
           const cutoff = new Date(Date.now() - days * 86_400_000)
           if (parseBRDate(r.creationDate) < cutoff) return false
@@ -199,9 +199,10 @@ export function ReportsList() {
         </View>
       </View>
 
-      {/* Card grid — auto-fill cells. 220 minimum keeps the 4-column density
-          the QA mockup (§4) shows at the admin viewport; theme.gap.l between
-          cells provides the breathing space the client asked for. */}
+      {/* Card grid with auto-fill cells. The 220 px minimum keeps the
+          4-column density the design calls for at the admin viewport, and
+          theme.gap.l between cells provides the breathing space the client
+          asked for. */}
       <div
         style={{
           display: 'grid',
@@ -229,7 +230,7 @@ export function ReportsList() {
       </div>
 
       {/* Rodapé honesto: quantos estão à vista, quantos existem, e como ver o
-          resto. Nada de esconder registro em silêncio (QA de volume). */}
+          resto. Nada de esconder registro em silêncio. */}
       <View
         testID="reports-footer"
         style={{

@@ -5,7 +5,8 @@ import { expect, type Page } from '@playwright/test'
 // As credenciais e os nomes vêm do seed de E2E (scripts/e2e/seed-e2e.mjs), que
 // existe só nesta stack descartável. Nenhum dado real de cliente entra aqui.
 // Ficam num arquivo só de propósito: espalhados por spec, o dia em que o seed
-// mudar deixa metade das suítes vermelhas por um motivo que não é o defeito.
+// mudar deixa metade das suítes vermelhas por um motivo que não é o que elas
+// afirmam.
 //
 // Não é um spec: o `testMatch` padrão do Playwright só coleta `*.spec.ts` e
 // `*.test.ts`, então este arquivo é importado, nunca executado como suíte.

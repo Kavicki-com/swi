@@ -1,7 +1,6 @@
 // src/lib/formatDateShort.ts
 // Convert BR-format `dd/mm/yyyy` (used in mock seeds and filters) into the
-// short PT-BR display "dd mmm yyyy" used by the redesigned report cards
-// (QA cliente §4 mockup).
+// short PT-BR display "dd mmm yyyy" used by the report cards.
 const MONTHS_PT_BR_SHORT = [
   'jan',
   'fev',

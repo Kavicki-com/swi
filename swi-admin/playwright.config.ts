@@ -6,9 +6,9 @@ import { defineConfig, devices } from '@playwright/test'
 // a ponta que nenhum teste de componente alcança: sessão real, requisição real,
 // navegação real.
 //
-// Artefatos ficam DESLIGADOS por padrão (plano, Task 14): screenshot, vídeo e
-// trace pesam, viram lixo no working tree e não entram na entrega. Para
-// investigar uma falha local, ligue por execução:
+// Artefatos ficam DESLIGADOS por padrão: screenshot, vídeo e trace pesam,
+// viram lixo no working tree e não entram na entrega. Para investigar uma
+// falha local, ligue por execução:
 //   npx playwright test --trace on
 
 const PORTA = Number(process.env.E2E_ADMIN_PORT ?? 4173)
@@ -32,8 +32,7 @@ const API = process.env.E2E_API_URL ?? `http://${HOST_API}:${PORTA_API}`
 export default defineConfig({
   testDir: './e2e',
   // Sem paralelismo: as suítes falam com o MESMO banco de teste, e workers
-  // concorrentes criariam interferência entre elas (foi exatamente esse tipo de
-  // estado compartilhado que fez as suítes do backend parecerem instáveis).
+  // concorrentes interferem no estado umas das outras.
   workers: 1,
   fullyParallel: false,
   // Em CI, um `test.only` esquecido esconderia o resto da suíte.

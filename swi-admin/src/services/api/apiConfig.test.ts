@@ -5,7 +5,7 @@ const PROD = true
 const DEV = false
 
 // De onde a PÁGINA foi servida. É o que separa um deploy público apontando para
-// a máquina do visitante (defeito) de um stack rodando inteiro na máquina de
+// a máquina do visitante (recusado) de um stack rodando inteiro na máquina de
 // quem abriu o navegador (o pacote de duplo clique entregue ao cliente).
 const PAGINA_PUBLICA = 'painel.kavicki.com'
 const PAGINA_LOCAL = 'localhost'
@@ -23,7 +23,7 @@ describe('resolveApiUrl', () => {
   })
 
   // URL.hostname devolve '[::1]' COM colchetes. Comparar contra '::1' cru nunca
-  // casa, e o loopback IPv6 passa direto: foi assim que o mobile vazou.
+  // casa, e o loopback IPv6 passaria direto pelo guard.
   it('recusa o loopback IPv6 com colchetes', () => {
     expect(() => resolveApiUrl('http://[::1]:3000', PROD, PAGINA_PUBLICA)).toThrow(/produção/)
   })
@@ -39,7 +39,7 @@ describe('resolveApiUrl', () => {
     expect(resolveApiUrl('http://[::1]:3000', PROD, '[::1]')).toBe('http://[::1]:3000')
   })
 
-  // A recíproca não vale: página local apontando para a API pública é o QA
+  // A recíproca não vale: página local apontando para a API pública é alguém
   // rodando o painel na própria máquina contra api.kavicki.com. Legítimo.
   it('aceita API pública mesmo com a página servida de local', () => {
     expect(resolveApiUrl('https://api.kavicki.com', PROD, PAGINA_LOCAL)).toBe('https://api.kavicki.com')

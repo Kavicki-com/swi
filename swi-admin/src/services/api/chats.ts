@@ -34,9 +34,8 @@ export const chatsApi = {
       apiFetch<Message>(`${conv(id)}/messages`, { method: 'POST', body: JSON.stringify(dto) }),
       'Falha ao enviar mensagem',
     ),
-  // QA Web #4 — editar e excluir mensagem. Os dois devolvem a mensagem no
-  // estado novo, e não 204: quem chamou aplica o retorno na hora, sem depender
-  // de o socket chegar.
+  // Editar e excluir mensagem devolvem a mensagem no estado novo, e não 204:
+  // quem chamou aplica o retorno na hora, sem depender de o socket chegar.
   editMessage: (id: string, messageId: string, body: string) =>
     envelope(
       apiFetch<Message>(`${conv(id)}/messages/${encodeURIComponent(messageId)}`, {
@@ -52,8 +51,8 @@ export const chatsApi = {
       }),
       'Falha ao excluir mensagem',
     ),
-  // QA Web #9 — denunciar mensagem de outra pessoa. 204 sem corpo: não há
-  // estado novo a aplicar no chat, o efeito é o e-mail que sai no backend.
+  // Denunciar mensagem de outra pessoa responde 204 sem corpo: não há estado
+  // novo a aplicar no chat, o efeito é o e-mail que sai no backend.
   reportMessage: (id: string, messageId: string, dto: { reason: string; text?: string }) =>
     envelope(
       apiFetch<null>(`${conv(id)}/messages/${encodeURIComponent(messageId)}/report`, {

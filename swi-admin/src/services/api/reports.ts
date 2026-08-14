@@ -41,9 +41,8 @@ export type Report = {
   // Lista separada por vírgula de responsáveis — renderizada na seção
   // "Responsáveis" do ReportDetails (footer legado do DS ReportCard).
   responsibles: string
-  // Grupo de avatares sobrepostos no card redesenhado da ReportsList
-  // ("Responsável:", mockup QA cliente §4). As primeiras N faces sobrepõem;
-  // as restantes viram um badge "+N".
+  // Grupo de avatares sobrepostos no card da ReportsList ("Responsável:").
+  // As primeiras N faces sobrepõem; as restantes viram um badge "+N".
   responsibleAvatars: ReadonlyArray<string>
   // Override opcional quando a demo quer que o badge "+N" indique mais pessoas
   // do que existem no array de avatares visíveis.
@@ -94,8 +93,7 @@ export type ReportDetailDto = ReportDto & {
 }
 
 // Atividade crua do backend (sem id garantido). responsibleNames/Avatars são a
-// equipe REAL da atividade — o backend resolve nome → foto presigned no
-// detalhe (decisão 2026-07-26: seguir o desenho com gente de verdade).
+// equipe REAL da atividade: o backend resolve nome → foto presigned no detalhe.
 type RawActivity = {
   id?: string
   title: string
@@ -157,9 +155,8 @@ function toReport(dto: ReportDto): Report {
     sector: dto.sector,
     responsibles: (dto.responsibles ?? []).join(', '),
     // Faces REAIS dos responsáveis (o backend resolve nome → foto do Profile).
-    // Antes era uma rotação de 3 PNGs decorativos: o card mostrava caras que
-    // não eram das pessoas nomeadas logo abaixo (QA 2026-07-26). Backend sem o
-    // campo → nenhuma face, nunca uma face errada.
+    // Backend sem o campo → nenhuma face, nunca uma face errada: avatar
+    // decorativo aqui mostra uma cara que não é da pessoa nomeada logo abaixo.
     responsibleAvatars: dto.responsibleAvatars ?? [],
     responsibleTotalCount: (dto.responsibles ?? []).length,
     details: dto.details,
@@ -171,8 +168,8 @@ function toReport(dto: ReportDto): Report {
 export const reportsApi = {
   // `count` = total da EMPRESA (header X-Total-Count), não o tamanho da página:
   // é o que deixa a tela avisar "mostrando 200 de 262" em vez de esconder 62
-  // relatórios em silêncio (QA de volume 2026-07-26). Sem paginação explícita,
-  // o backend devolve os 200 mais recentes, como antes.
+  // relatórios em silêncio. Sem paginação explícita, o backend devolve os 200
+  // mais recentes.
   async list(page?: { limit?: number; offset?: number }): Promise<ServiceResponse<Report[]>> {
     try {
       const qs = new URLSearchParams()

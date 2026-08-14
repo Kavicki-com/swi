@@ -182,17 +182,10 @@ jobs:
         with:
           node-version: '22.23.2'
       - run: node --test scripts/quality/assert-client-hygiene.test.mjs
-      # Portão de higiene do código entregue ao cliente. Cobre por enquanto as
-      # áreas já revisadas, e cada lote de limpeza acrescenta a sua aqui até a
-      # lista sumir e a varredura passar a valer para o repositório inteiro.
-      # Ligá-lo de uma vez faria a CI nascer vermelha por meses, que é o mesmo
-      # erro descrito logo abaixo no portão de vulnerabilidades.
-      - run: >
-          node scripts/quality/assert-client-hygiene.mjs
-          --dir .github
-          --dir scripts
-          --dir mobile
-          --dir swi-backend
+      # Portão de higiene do código entregue ao cliente, agora sobre o
+      # repositório inteiro. Migrations aplicadas ficam fora da varredura, e a
+      # razão está no próprio script.
+      - run: node scripts/quality/assert-client-hygiene.mjs
       # Portão de vulnerabilidades. Bloqueia de verdade, sem continue-on-error.
       #
       # O `npm audit` cru não servia como portão: ele mistura o que tem conserto

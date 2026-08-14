@@ -1,6 +1,6 @@
-// Regressões do QA de volume 2026-07-26 no detalhe de funcionário/admin.
-// Os bugs aqui tinham a mesma assinatura: a tela mostrava um número ou rótulo
-// CONFIANTE que não correspondia a nenhum dado real.
+// Estes testes protegem uma invariante do detalhe de funcionário/admin: a tela
+// nunca mostra número ou rótulo CONFIANTE que não corresponda a dado real.
+// Onde o dado falta, ela declara a ausência em vez de preencher com um default.
 // vitest globals (describe/it/expect) via globals: true.
 import { screen } from '@testing-library/react'
 import { renderPage } from '@/test-utils/renderPage'
@@ -33,8 +33,8 @@ const renderLayout = async (
   )
 
 describe('WorkerDetailsLayout', () => {
-  // fatigueRate/effort vêm em 0-100 (simulatedVitalsFor). O formatPct antigo
-  // multiplicava por 100 de novo e a tela exibia "8.900,0%".
+  // fatigueRate/effort vêm em 0-100 (simulatedVitalsFor). Multiplicar por 100
+  // de novo na formatação exibiria "8.900,0%".
   it('formata fadiga/esforço na escala 0-100, sem multiplicar de novo', async () => {
     await renderLayout({ fatigueRate: 89, effort: 92 })
     expect(screen.getByText('89,0%')).toBeInTheDocument()
@@ -42,7 +42,7 @@ describe('WorkerDetailsLayout', () => {
     expect(screen.queryByText('8.900,0%')).not.toBeInTheDocument()
   })
 
-  // Sem gênero cadastrado o ternário mandava TODO mundo pra "Feminino".
+  // Sem gênero cadastrado a tela não pode eleger "Feminino" como default.
   it('não inventa gênero quando o cadastro não tem o campo', async () => {
     await renderLayout({})
     expect(screen.getByText('Não informado')).toBeInTheDocument()
@@ -68,8 +68,8 @@ describe('WorkerDetailsLayout', () => {
     expect(screen.queryByText('Nenhuma alergia registrada.')).not.toBeInTheDocument()
   })
 
-  // Sem posição ao vivo o mini-mapa NÃO pina numa coordenada default (era a
-  // mesma pra todo funcionário do quadro).
+  // Sem posição ao vivo o mini-mapa NÃO pina numa coordenada default, que
+  // seria a mesma pra todo funcionário do quadro.
   it('declara a ausência de posição em vez de pinar num ponto fixo', async () => {
     await renderLayout({}, null)
     expect(screen.getByText('Sem posição ao vivo')).toBeInTheDocument()

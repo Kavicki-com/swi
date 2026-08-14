@@ -1,11 +1,10 @@
-// Vitais + persona do admin logado pro menu fullscreen do header (QA cliente
-// §1.1, portado do demo em 2026-07-28).
+// Vitais e persona do admin logado, para o menu fullscreen do header.
 //
 // BPM, status e fadiga NÃO são estáticos: saem do MESMO gerador determinístico
-// que alimenta o widget do header (useMyVitals → simulatedVitalsFor). O menu
-// abre por cima do header — os dois mostrando bpm diferente pro mesmo admin
-// seria exatamente a classe de contradição que o QA de volume 2026-07-26
-// eliminou. Mesma pessoa, mesmo número, em toda superfície.
+// que alimenta o widget do header (useMyVitals com simulatedVitalsFor). O menu
+// abre por cima do header, e os dois mostrando bpm diferente para o mesmo admin
+// seria uma contradição visível na mesma tela. Mesma pessoa, mesmo número, em
+// toda superfície.
 //
 // mpm, temperatura, bateria, cargo e setor ficam pinados na referência do
 // cliente (FRONT-END -SWI.pdf §1.1): nenhuma outra tela exibe esses campos,

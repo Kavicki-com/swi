@@ -32,8 +32,7 @@ export function ExamsSection({
   const theme = useTheme()
   return (
     // Mora com o resto do dado de saúde. Nome e validade são o que o
-    // ExamInfoCard desenha; sem eles o arquivo sobe e não vira card nenhum,
-    // que era o bug.
+    // ExamInfoCard desenha; sem eles o arquivo sobe e não vira card nenhum.
     <View style={{ gap: theme.gap.s }}>
       <Title variant="title.xs" color={theme.content.primary}>
         Exames clínicos

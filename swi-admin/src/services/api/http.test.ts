@@ -175,9 +175,9 @@ describe('apiFetch', () => {
     await expect(apiFetch('/work-orders/999')).rejects.toMatchObject({ status: 404 })
   })
 
-  // Paginação (QA de volume 2026-07-26): o total da coleção vem em header
-  // (X-Total-Count), e o corpo segue sendo só o array — o caller precisa de um
-  // gancho pra ler a resposta crua sem duplicar token/erro do apiFetch.
+  // Paginação: o total da coleção vem em header (X-Total-Count) e o corpo segue
+  // sendo só o array, então o caller precisa de um gancho pra ler a resposta
+  // crua sem duplicar token/erro do apiFetch.
   it('onResponse recebe a Response crua (headers legíveis) antes do parse', async () => {
     const headers = new Headers({ 'X-Total-Count': '262' })
     vi.stubGlobal(

@@ -1,18 +1,18 @@
 // src/components/HeartPulseCanvas.tsx
-// Continuous ECG-style heart pulse line for the header user-details menu
-// (QA cliente §1.1). Direct port of the client reference
-// software/dashboard.html (lines 889-988) — same time-based sampling and
-// step values for P/Q/R/S/T so the visual shape (long flat baseline + tall
-// R spike + small rectangular S/T plateau) matches Screenshot_31 exactly.
+// Continuous ECG-style heart pulse line for the header user-details menu.
+// Direct port of the client reference software/dashboard.html (lines 889-988):
+// same time-based sampling and step values for P/Q/R/S/T, so the visual shape
+// (long flat baseline, tall R spike, small rectangular S/T plateau) matches the
+// reference rendering.
 import { useEffect, useRef } from 'react'
 
 export interface HeartPulseCanvasProps {
   width?: number
   height?: number
   // Cor do traço. OBRIGATÓRIA e sem default de propósito: um default em hex
-  // aqui era um token burlado, e o call site ainda passava outro hex por cima
-  // (`#084614`), então existiam dois verdes cravados para uma linha só.
-  // Exigir a prop força quem usa a tirar do `useTheme()`.
+  // aqui é um token burlado, e ainda deixa o call site cravar outro hex por
+  // cima, ou seja, dois verdes fixos para uma linha só. Exigir a prop força
+  // quem usa a tirar do `useTheme()`.
   color: string
   // Glow shadow color (matches stroke by default).
   glowColor?: string

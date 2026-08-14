@@ -39,9 +39,9 @@ export function ChatBubble({
   // avisa qual mensagem entrou em edição; quem guarda o modo (editingId) é o
   // hook da página, useChatInbox.
   onEdit?: (message: ChatMessage) => void
-  // QA Web #9: denunciar segue o mesmo desenho, o form mora num modal da
-  // página (dentro da bolha ele seria recortado pelo overflow do quadro de
-  // mensagens), a bolha só avisa qual mensagem está sendo denunciada.
+  // Denunciar segue o mesmo desenho, o form mora num modal da página (dentro
+  // da bolha ele seria recortado pelo overflow do quadro de mensagens), a
+  // bolha só avisa qual mensagem está sendo denunciada.
   onReport?: (message: ChatMessage) => void
 }) {
   const theme = useTheme()
@@ -68,14 +68,9 @@ export function ChatBubble({
   const avatar = (
     <Avatar uri={avatarUri} customSize={40} accessibilityLabel={isMe ? 'Você' : contact.name} />
   )
-  // QA Web #4 (30/07/2026): o more_vert era um <Icon> solto, sem Pressable e
-  // sem onPress. Controle morto: o usuário clicava e nada acontecia.
-  //
-  // A primeira correção só fez o ícone copiar, porque editar e excluir não
-  // existiam em lugar nenhum. Em 31/07/2026 o usuário decidiu implementá-las de
-  // verdade: PATCH e DELETE no backend, editMessage/deleteMessage no
-  // ChatProvider, e Popover no DS (v0.1.129, com abertura para cima na 0.1.130).
-  // Por isso o controle virou menu, e não um botão de copiar.
+  // O more_vert abre um menu, não um botão único de copiar: editar e excluir
+  // existem de ponta a ponta (PATCH e DELETE no backend,
+  // editMessage/deleteMessage no ChatProvider, Popover do DS na bolha).
   //
   // Quem pode o quê: só o autor edita e exclui. Sem texto não há o que editar
   // nem copiar. Mensagem excluída não tem ação nenhuma.
@@ -141,8 +136,8 @@ export function ChatBubble({
         ) : (
           <>
             {/* Sem texto não há o que editar nem o que copiar: o backend recusa
-              corpo vazio, e copiar copiaria nada. Oferecer os dois seria
-              recriar o controle morto que o QA reportou. */}
+              corpo vazio, e copiar copiaria nada. Oferecer os dois deixaria no
+              menu controles que não fazem nada. */}
             {isMe && message.text ? (
               <PopoverItem
                 label="Editar"
@@ -163,10 +158,10 @@ export function ChatBubble({
                 }}
               />
             ) : null}
-            {/* QA Web #9: denunciar só a mensagem do OUTRO, o backend recusa
-              denunciar a própria, e oferecer o item aqui seria recriar o
-              controle morto do QA Web #4. Vale pra mensagem só de imagem
-              também: o conteúdo ofensivo pode ser a foto. */}
+            {/* Denunciar só a mensagem do OUTRO: o backend recusa denunciar a
+              própria, e oferecer o item aqui deixaria no menu um controle que
+              não faz nada. Vale pra mensagem só de imagem também: o conteúdo
+              ofensivo pode ser a foto. */}
             {!isMe ? (
               <PopoverItem
                 label="Denunciar"

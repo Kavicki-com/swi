@@ -86,14 +86,13 @@ function ContactMiniMap({
     return () => {
       map.remove()
     }
-    // Depende de `contact.avatarUri`, NAO do objeto `contact` (QA Web #2,
-    // 30/07/2026: "o painel do mapa fica piscando repetidamente" ao digitar).
+    // Depende de `contact.avatarUri`, NAO do objeto `contact`.
     //
     // `contacts` e recalculado a cada render em useChatInbox, entao cada
-    // setDraft do composer produzia objetos ChatContact com identidade nova.
-    // Com o objeto nas deps, o efeito rodava a cada tecla: map.remove() seguido
-    // de new Map(), o que piscava E refazia o fetch dos tiles de satelite da
-    // ESRI, uma requisicao por caractere digitado.
+    // setDraft do composer produz objetos ChatContact com identidade nova. Com
+    // o objeto nas deps, o efeito rodaria a cada tecla: map.remove() seguido de
+    // new Map(), o que faz o painel piscar E refaz o fetch dos tiles de
+    // satelite da ESRI, uma requisicao por caractere digitado.
     //
     // avatarUri e o UNICO valor de `contact` que este efeito consome (o centro
     // do mapa e fixo), e e uma string, entao a comparacao passa a ser por valor
@@ -216,10 +215,9 @@ export function ContactInfoPanel({
           <SimulatedDataBadge />
         </View>
 
-        {/* Stats card. Bumped from surface.standard to
-          surface.medium because the outer RIGHT col now also uses
-          surface.standard (chat-section bg directive 2026-05-19); without this
-          bump the inner stats card would merge into the outer panel. */}
+        {/* Stats card sits on surface.medium because the outer RIGHT column
+          already uses surface.standard; without the contrast the inner stats
+          card would merge into the outer panel. */}
         <View
           style={{
             backgroundColor: theme.surface.medium,

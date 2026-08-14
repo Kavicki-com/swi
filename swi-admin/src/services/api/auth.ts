@@ -131,9 +131,9 @@ export const authApi = {
     }
   },
 
-  // QA F (2026-07-24): troca de senha autenticada do settings (POST
-  // /auth/password/change) — exige a senha atual. O backend responde 401
-  // genérico quando ela não confere; traduzimos pro erro específico da tela.
+  // Troca de senha autenticada do settings (POST /auth/password/change): exige
+  // a senha atual. O backend responde 401 genérico quando ela não confere, e
+  // aqui isso vira o erro específico da tela.
   changePassword: async ({
     currentPassword,
     newPassword,
@@ -148,7 +148,7 @@ export const authApi = {
           method: 'POST',
           body: JSON.stringify({ currentPassword, newPassword }),
         },
-        // 401 aqui = senha atual errada (resposta de negócio) — não derruba a sessão.
+        // 401 aqui = senha atual errada (resposta de negócio), não derruba a sessão.
         { keepSessionOn401: true },
       )
       return { data: { changed: true }, error: null }

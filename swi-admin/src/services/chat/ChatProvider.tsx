@@ -150,7 +150,10 @@ export function ChatProvider({ children }: PropsWithChildren) {
         return
       }
       // last-write-wins: server snapshot is source of truth; a concurrent socket msg may be re-fetched on next open
-      // TODO(followup): listMessages error currently shows as empty thread; no per-thread error surface yet
+      //
+      // Limitação conhecida: uma falha do listMessages chega à tela como thread
+      // vazia. Não existe superfície de erro por conversa, então o leitor não
+      // distingue "sem mensagens" de "não deu para carregar".
       const { data } = await chatsApi.listMessages(conversationId)
       setMessagesByConv((prev) => ({ ...prev, [conversationId]: data ?? [] }))
       await chatsApi.markRead(conversationId)
@@ -191,9 +194,9 @@ export function ChatProvider({ children }: PropsWithChildren) {
     return { error }
   }, [])
 
-  // QA Web #4 — editar e excluir. Os dois aplicam o retorno do servidor no
-  // state na hora, em vez de esperar o eco do socket: o menu fecha e a bolha já
-  // mostra o resultado, e se o socket chegar depois o upsert por id é idempotente.
+  // Editar e excluir aplicam o retorno do servidor no state na hora, em vez de
+  // esperar o eco do socket: o menu fecha e a bolha já mostra o resultado, e se
+  // o socket chegar depois o upsert por id é idempotente.
   const applyRevision = useCallback((msg: Message) => {
     setMessagesByConv((prev) => {
       const existing = prev[msg.conversationId]

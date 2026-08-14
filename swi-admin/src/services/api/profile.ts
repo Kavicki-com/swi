@@ -1,5 +1,4 @@
-// QA F (2026-07-24): o settings pré-preenchia mock e "salvava" via toast.
-// Client real do /profile/me: GET pré-preenche o form (404 = perfil ainda não
+// Client do /profile/me: GET pré-preenche o form (404 = perfil ainda não
 // preenchido, estado válido); PUT persiste. O backend devolve as keys cruas
 // (o form mescla exames novos sobre elas) + URLs de view presignadas.
 import type { ServiceResponse } from '@/services/types'
@@ -60,8 +59,8 @@ export const profileApi = {
   },
 
   // Vocabulário REAL da org (DISTINCT de jobTitle/sector/duty do backend).
-  // Alimenta os Comboboxes do settings e o setor do form de tarefas — fim das
-  // listas fixas inventadas e divergentes entre telas (QA 2026-07-26).
+  // Alimenta os Comboboxes do settings e o setor do form de tarefas, para as
+  // telas não caírem em listas fixas divergentes entre si.
   catalog: async (): Promise<ServiceResponse<ProfileCatalog>> => {
     try {
       const c = await apiFetch<ProfileCatalog>('/profile/catalog')

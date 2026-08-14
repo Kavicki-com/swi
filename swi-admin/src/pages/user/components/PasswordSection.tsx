@@ -40,7 +40,7 @@ export function PasswordSection({
   return (
     // NOTE: DS Input's iconRight overflows the text-area horizontally
     // when the input is narrow (≤245px), flex:1 on the inner
-    // TextInput pushes the iconRight out by ~32px.  Workaround:
+    // TextInput pushes the iconRight out by ~32px. Work around it by:
     // pass `secureTextEntry` to the Input *without* iconRight, then
     // overlay the visibility Pressable absolutely so it stays inside
     // the input box no matter how narrow the column is. Bump DS

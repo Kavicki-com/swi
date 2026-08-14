@@ -70,10 +70,9 @@ function CommentRow({ comment }: { comment: ReportComment }) {
 // Avatar group (small overlapping circles), "Avatar Group" no topo do
 // card. As faces são os RESPONSÁVEIS do relatório.
 //
-// Era fixo: 4 PNGs decorativos + a pílula literal "+13" — o card afirmava 17
-// envolvidos num relatório de 2 responsáveis, numa empresa de 10 pessoas no
-// total (QA 2026-07-26). Agora mostra até 4 faces reais e só conta excedente
-// quando ele existe.
+// Mostra até 4 faces reais e só conta excedente quando ele existe. Faces
+// decorativas com uma pílula fixa fariam o card afirmar mais envolvidos do que
+// o relatório tem, e às vezes mais do que a empresa inteira.
 const MAX_FACES = 4
 
 function AvatarGroup({
@@ -167,9 +166,9 @@ function ActivityAvatars({
             borderColor: theme.surface.standard,
           }}
         >
-          {/* Nome real quando o backend o manda (equipe da atividade —
-              decisão 2026-07-26: seguir o desenho com gente de verdade); sem
-              nome, '' suprime a inicial e fica a moldura neutra. */}
+          {/* Nome real quando o backend o manda, porque a equipe da atividade
+              segue o desenho com gente de verdade. Sem nome, '' suprime a
+              inicial e fica a moldura neutra. */}
           <Avatar
             uri={uri}
             name={names[i] ?? ''}
@@ -484,9 +483,9 @@ export function ReportDetails() {
         </View>
       </View>
 
-      {/* Section 3 — Detalhes do relatório. QA cliente §4.1: bump lineHeight
-          from the DS default to 26 px so the long paragraph breathes between
-          lines and is easier to read. */}
+      {/* Section 3, report details. lineHeight is raised from the DS default
+          to 26 px so the long paragraph breathes between lines and is easier
+          to read. */}
       <View style={{ gap: theme.gap.s }}>
         <Title variant="title.s" color={theme.content.primary}>
           Detalhes do relatório:

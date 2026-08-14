@@ -1,5 +1,5 @@
 // Comportamento da lista de relatórios. O smoke vizinho só monta a página;
-// aqui ficam as regras que o QA de volume trouxe: filtros derivados do que
+// aqui ficam as regras que aparecem com volume: filtros derivados do que
 // existe (nunca uma opção que devolve vazio), paginação local antes de bater no
 // servidor, e um rodapé que conta a verdade sobre quantos registros ficaram
 // fora da tela.

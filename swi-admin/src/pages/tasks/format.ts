@@ -110,7 +110,7 @@ export function displayTimeToMinutes(display: string): number | null | undefined
 // nascimento com a data-calendário de quem está OLHANDO a tela. Consequência
 // esperada: no mesmo instante, quem nasceu em 22/07 aparece com 32 anos pra um
 // admin em Tóquio (lá já é dia 22, aniversário feito) e 31 pra um em São Paulo
-// (lá ainda é 21). Isso não é bug — é como aniversário funciona; qualquer
+// (lá ainda é 21). É assim que aniversário funciona, e qualquer
 // variante "globalmente consistente" (fixar UTC, fixar o fuso do servidor)
 // erraria a idade pra alguém, e erraria justamente pra quem está mais perto do
 // dado. Ver os testes unitários de calcAge.

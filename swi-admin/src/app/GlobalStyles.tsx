@@ -2,9 +2,9 @@ import { createGlobalStyle } from 'styled-components'
 import { useTheme } from '@kavicki/swi-design-system'
 
 /**
- * QA Web #5: "Cidade" e "Senha atual" apareciam com fundo amarelo em Dados do
- * cadastro, fugindo do tema escuro. É o autofill do Chrome: ao preencher um
- * campo, o user-agent pinta o fundo de amarelo.
+ * Sem esta regra, campos como "Cidade" e "Senha atual" em Dados do cadastro
+ * aparecem com fundo amarelo, fugindo do tema escuro. É o autofill do Chrome:
+ * ao preencher um campo, o user-agent pinta o fundo de amarelo.
  *
  * Por que a regra mora AQUI e não no DS, apesar do Input ser componente do DS:
  * o DS é React Native first e todo styled-components dele vem de

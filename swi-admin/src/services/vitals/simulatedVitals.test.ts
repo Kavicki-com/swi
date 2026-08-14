@@ -74,8 +74,8 @@ describe('simulatedCaloriesFor', () => {
   })
 
   it('pessoas diferentes têm curvas diferentes', () => {
-    // A curva era uma constante única: o detalhe do funcionário, o do admin e o
-    // perfil próprio exibiam os mesmos 41/57/62… kcal (QA 2026-07-26).
+    // Com uma curva constante, o detalhe do funcionário, o do admin e o perfil
+    // próprio exibiriam exatamente os mesmos valores de kcal.
     const series = IDS.map((id) =>
       simulatedCaloriesFor(id)
         .today.map((p) => p.kcal)

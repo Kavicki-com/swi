@@ -62,11 +62,12 @@ describe('workOrdersApi', () => {
     expect(f.mock.calls[0]?.[0]).toMatch(/\/work-orders\/assignable$/)
   })
 
-  // A reconciliação do PATCH lê `if (item.id)` — truthy. Um id resolvido pra ''
-  // (ex.: `id: item.id ?? ''`) é falsy e cairia no ramo de CRIAÇÃO em silêncio:
-  // o item certo seria criado e o bug de serialização passaria despercebido até
-  // alguém tentar editar um item existente. Pinar a ausência da chave faz o
-  // contrato de wire falhar alto aqui, e não em produção.
+  // A reconciliação do PATCH lê `if (item.id)`, ou seja, testa truthy. Um id
+  // resolvido pra '' (como em `id: item.id ?? ''`) é falsy e cai no ramo de
+  // CRIAÇÃO em silêncio: o item seria recriado e a falha de serialização
+  // passaria despercebida até alguém tentar editar um item existente. Pinar a
+  // ausência da chave faz o contrato de wire falhar alto aqui, e não em
+  // produção.
   it('update serializa item novo sem a chave id', async () => {
     const f = stub({ id: 'o1' })
     await workOrdersApi.update('o1', { items: [{ title: 'Novo passo' }] })

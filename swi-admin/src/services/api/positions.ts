@@ -26,13 +26,13 @@ const TIER_TO_STATUS: Record<SimulatedTier, DashboardMapMarker['status']> = {
 }
 
 /**
- * Posição é REAL (heartbeat); a borda de saúde vem do gerador SIMULADO comum
- * (Fase 3) — o mesmo que alimenta KPIs, monitoramento e triagem de socorro.
+ * Posição é REAL (heartbeat); a borda de saúde vem do gerador SIMULADO comum,
+ * o mesmo que alimenta KPIs, monitoramento e triagem de socorro.
  *
- * Antes o status era `'good'` fixo: o mapa de alertas pintava os 9 pinos de
- * verde enquanto o dashboard, na mesma tela, dizia "5 desgastados / 2 em alerta
- * de fadiga" (QA 2026-07-26). Um pino verde sobre alguém em alerta é pior que
- * um pino neutro — é uma afirmação errada.
+ * O status não pode ser fixo em `'good'`: o mapa de alertas pintaria todos os
+ * pinos de verde enquanto o dashboard, na mesma tela, conta desgastados e
+ * alertas de fadiga. Um pino verde sobre alguém em alerta é pior que um pino
+ * neutro, é uma afirmação errada.
  *
  * O tier é estável por worker (hash do id, sem componente temporal), então o
  * pino não pisca de cor a cada tick do heartbeat.

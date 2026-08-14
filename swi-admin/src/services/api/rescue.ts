@@ -1,13 +1,11 @@
-// Candidatos a socorro — derivados de QUEM EXISTE e de ONDE ESTÁ.
+// Candidatos a socorro, derivados de QUEM EXISTE e de ONDE ESTÁ.
 //
-// Antes: fixture com 4 pessoas fixas ("Lúcio Ferreira", "Ana Clara Silva"…) que
-// não constavam no diretório da empresa, com distância e ETA inventados. Num
-// console de emergência isso é pior que inútil: manda socorro pra quem não
-// existe (QA de volume 2026-07-26).
+// A lista cruza as POSIÇÕES ao vivo (GET /positions) com o diretório real da
+// empresa. Nenhum nome fixo entra aqui: num console de emergência uma pessoa
+// que não está no diretório manda socorro pra quem não existe.
 //
-// Agora: cruza as POSIÇÕES ao vivo (GET /positions) com o diretório real. Quem
-// não tem posição conhecida não é candidato — não dá pra prometer ETA de quem
-// o sistema não sabe onde está.
+// Quem não tem posição conhecida não é candidato. Não dá pra prometer distância
+// nem ETA de quem o sistema não sabe onde está.
 import type { DashboardMapMarker } from './dashboard'
 import type { Employee } from './users'
 import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'

@@ -1,11 +1,9 @@
 // src/components/UserDetailsMenu.tsx
-// Fullscreen modal triggered by the topbar avatar (QA cliente §1.1).
+// Fullscreen modal triggered by the topbar avatar.
 // Two-column layout: profile + heart pulse on the left, vitals + animated
 // progress bars on the right, sitting over a looping video backdrop. Port
 // of the client reference software/dashboard.html (`row-menu` + overlay).
 //
-// Portado do demo (branch feat/admin-real-maps-and-fixes) em 2026-07-28: a
-// feature ficou órfã naquele branch quando o painel migrou pro backend real.
 // Diferenças do original: o avatar grande navega pra /user/profile (rota
 // deste painel; /user/settings era do demo) e os vitais vêm do gerador
 // determinístico compartilhado com o header (ver adminVitals.ts).
@@ -99,9 +97,9 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
         onPress={onClose}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       >
-        {/* QA cliente: video plays ONCE (no `loop`) and freezes on the
-            final frame — onEnded explicitly pauses so the static smartband
-            stays as a still backdrop. */}
+        {/* The video plays ONCE (no `loop`) and freezes on the final frame:
+            onEnded explicitly pauses so the static smartband stays as a still
+            backdrop. */}
         <video
           ref={videoRef}
           src="/user-menu-bg.mp4"
@@ -208,8 +206,8 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
               overflow: 'hidden',
             }}
           >
-            {/* Mesmo fallback do widget do header: sem ele o círculo abria
-                vazio quando a sessão não traz avatarUri (QA 2026-07-29). */}
+            {/* Mesmo fallback do widget do header: sem ele o círculo abre
+                vazio quando a sessão não traz avatarUri. */}
             <Avatar uri={user?.avatarUri ?? workerA} customSize={140} />
           </Pressable>
 

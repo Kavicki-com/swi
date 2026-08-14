@@ -1,9 +1,9 @@
 // Fachada-cliente do dashboard. summary() faz fan-out sobre endpoints reais
 // (admins/funcionários/relatórios/tarefas/clima); desgaste/vitais derivam dos
 // funcionários REAIS com vitais SIMULADOS plausíveis (simulatedVitalsFor,
-// rotulados na UI) — Fase 3, fim do roster fake. Nenhuma seção real derruba as
-// outras: cada chamada é isolada e degrada só a sua fatia (KPIs→0,
-// activities→[], weather→[]). Este é o lar canônico dos tipos do dashboard.
+// rotulados na UI). Nenhuma seção real derruba as outras: cada chamada é
+// isolada e degrada só a sua fatia (KPIs→0, activities→[], weather→[]). Este é
+// o lar canônico dos tipos do dashboard.
 import type { Alert, Employee } from '../types'
 import type { ServiceResponse } from '@/services/types'
 import { adminsApi, employeesApi } from './users'
@@ -149,7 +149,7 @@ const TIER_TO_STATUS: Record<SimulatedTier, 'good' | 'alert' | 'low'> = {
 export const dashboardApi = {
   summary: async (): Promise<ServiceResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
-    // erro degrada só a própria seção — o summary nunca propaga erro total.
+    // erro degrada só a própria seção: o summary nunca propaga erro total.
     const [admins, employees, reports, activities, weather] = await Promise.all([
       adminsApi.list(),
       employeesApi.list(),
@@ -158,9 +158,9 @@ export const dashboardApi = {
       weatherApi.get(),
     ])
 
-    // Fase 3 (monitoramento honesto): desgaste/vitais derivam dos funcionários
-    // REAIS da org com vitais SIMULADOS plausíveis (rotulados na UI) — nada de
-    // roster fake com nomes que não existem no diretório.
+    // Desgaste e vitais derivam dos funcionários REAIS da org, com vitais
+    // SIMULADOS plausíveis (rotulados na UI). Nada de roster fixo com nomes que
+    // não existem no diretório.
     const now = Date.now()
     const workers = employees.data ?? []
     const withVitals = workers.map((w) => ({ w, v: simulatedVitalsFor(w.id, now) }))

@@ -6,10 +6,9 @@ describe('NAV_ITEMS', () => {
     expect(tarefas?.value).toBe('/tasks')
   })
 
-  // A sidebar inteira usa variante _filled; Tarefas era a exceção (outline)
-  // porque o DS não tinha assignment_filled — entrou no 0.1.117 (decisão do
-  // designer 2026-07-24: clipboard preenchido).
-  it('todo item usa variante _filled (fim da exceção do Tarefas)', () => {
+  // A sidebar inteira usa a variante _filled, sem exceção. Tarefas depende de
+  // `assignment_filled`, que existe a partir do DS 0.1.117.
+  it('todo item da sidebar usa a variante _filled', () => {
     for (const item of NAV_ITEMS) {
       expect(item.icon, `${item.label} usa ${item.icon}`).toMatch(/_filled$/)
     }

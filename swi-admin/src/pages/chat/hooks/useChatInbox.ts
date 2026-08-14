@@ -103,11 +103,11 @@ export function useChatInbox() {
   const selectedContact = contacts.find((c) => c.id === selectedContactId) ?? null
   const messages = selectedContact?.messages ?? []
 
-  // Identidade REAL do painel (nome/setor/avatar da conversa) + idade, tipo
-  // sanguíneo e alergias do DIRETÓRIO, antes vinham de um DEMO_VITALS fixo,
-  // então todo contato aparecia com "26 anos / O+", contradizendo as demais
-  // telas do mesmo trabalhador (QA de volume 2026-07-26). Só a fadiga segue
-  // simulada, com o mesmo gerador do resto do painel.
+  // Identidade REAL do painel: nome, setor e avatar vêm da conversa; idade,
+  // tipo sanguíneo e alergias vêm do DIRETÓRIO. Servir esses campos de um
+  // conjunto fixo faria o painel contradizer as demais telas do mesmo
+  // trabalhador. Só a fadiga segue simulada, com o mesmo gerador do resto do
+  // painel.
   const panelContact: ChatContact | null = selectedContact
     ? (() => {
         const entry = directory.find((d) => keyFor(d.workerId) === selectedContact.id)
@@ -115,8 +115,8 @@ export function useChatInbox() {
         return {
           ...selectedContact,
           role: entry?.role ?? '',
-          // Gênero REAL do cadastro; era `'male'` fixo, então as colaboradoras
-          // do quadro apareciam como "Masculino" (QA 2026-07-26).
+          // Gênero REAL do cadastro. Fixar `'male'` faria toda colaboradora do
+          // quadro aparecer como "Masculino".
           gender: entry?.gender === 'female' ? ('female' as const) : ('male' as const),
           age: entry?.birthDate ? ageFrom(entry.birthDate, new Date()) : undefined,
           bloodType: entry?.bloodType ?? undefined,
@@ -158,8 +158,8 @@ export function useChatInbox() {
     }
   }
 
-  // QA Web #9: mensagem em denúncia. O modal mora na PÁGINA (não na bolha)
-  // pelo mesmo motivo do editingId: a bolha vive num container com overflow que
+  // Mensagem em denúncia. O modal mora na PÁGINA (não na bolha) pelo mesmo
+  // motivo do editingId: a bolha vive num container com overflow que
   // recortaria o modal, e o modo pertence à página.
   const [reportingMessage, setReportingMessage] = useState<ChatMessage | null>(null)
 

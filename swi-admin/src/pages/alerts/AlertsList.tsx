@@ -80,7 +80,7 @@ export function AlertsList() {
   // Posições REAIS ao vivo (REST snapshot + WS). null (carregando) → [].
   const liveMarkers = useLivePositions()
   const markers = useMemo<DashboardMapMarker[]>(() => liveMarkers ?? [], [liveMarkers])
-  // Evacuação real (Fase 2): dispatch/encerramento + progresso X/N ao vivo.
+  // Evacuação real: dispatch/encerramento + progresso X/N ao vivo.
   const {
     evacuation,
     error: evacError,
@@ -241,12 +241,10 @@ export function AlertsList() {
       },
     })
     return () => {
-      // Mesma guarda do MapsGeneral (QA Web #8). Cleanups rodam na ordem de
-      // declaração, então no unmount o `map.remove()` do efeito de init já
-      // destruiu o style, e getLayer() aqui lançaria, derrubando a árvore.
-      // Esta tela é o destino que o QA usou no passo a passo ("clicar em um
-      // item do menu lateral, ex.: Alertas"), logo tinha o mesmo defeito na
-      // saída dela.
+      // Cleanups rodam na ordem de declaração: ao sair da tela o `map.remove()`
+      // do efeito de init já destruiu o style, e chamar getLayer() sobre ele
+      // lançaria, derrubando a árvore. A guarda abaixo só mexe nas camadas
+      // quando o mapa deste efeito ainda é o mapa vigente.
       if (mapRef.current !== map) return
       if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
       if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
@@ -344,12 +342,12 @@ export function AlertsList() {
             />
           ))}
           {/* A posição do pino é real (heartbeat); a COR dele sai do gerador
-              simulado de vitais. Regra da Fase 3: toda superfície que mostra
+              simulado de vitais. Regra do projeto: toda superfície que mostra
               valor simulado carrega o selo. */}
           <SimulatedDataBadge />
         </View>
 
-        {/* Evacuação real (Fase 2): sem ativa → dispatch; ativa → progresso
+        {/* Evacuação real: sem ativa → dispatch; ativa → progresso
             X/N ao vivo (WS evacuation-ack) + encerramento. */}
         {evacuation ? (
           <View
@@ -530,8 +528,8 @@ export function AlertsList() {
             <Button
               label="Evacuar área"
               backgroundColor={theme.surface.error}
-              // Dispatch REAL (Fase 2): notifica os workers da org e liga o
-              // progresso X/N — o banner acima é o feedback, não um toast fake.
+              // Dispatch REAL: notifica os workers da org e liga o progresso
+              // X/N. O banner acima é o feedback, não um toast simulado.
               onPress={() => void startEvacuation()}
             />
           </View>

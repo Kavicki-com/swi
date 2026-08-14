@@ -47,8 +47,8 @@ export type MonitoringUserAlert = {
   active: boolean
   /**
    * Tier de vitais da pessoa. Existe pra régua "Excelentes / Desgastados /
-   * Alertas de Fadiga" poder filtrar de verdade: antes as 3 abas listavam a
-   * população inteira enquanto o badge anunciava "2" (QA 2026-07-26).
+   * Alertas de Fadiga" poder filtrar de verdade. Sem ele as três abas listam a
+   * população inteira enquanto o badge anuncia outro número.
    * Opcional porque o seed mock não simula vitais.
    */
   tier?: SimulatedTier

@@ -1,6 +1,7 @@
-// QA F (2026-07-24): o "Enviar solicitação" do modal de suporte era
-// onPress={onClose} — descartava o form. Estes testes travam o envio REAL
-// (POST /support via supportApi) + validação pt-BR antes de qualquer rede.
+// O "Enviar solicitação" do modal de suporte tem que enviar. Um
+// onPress={onClose} descartaria o form em silêncio. Estes testes travam o envio
+// REAL (POST /support via supportApi) e a validação pt-BR antes de qualquer
+// rede.
 // vitest globals (describe/it/expect/afterEach) via globals: true.
 import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
@@ -125,8 +126,8 @@ describe('SupportModal', () => {
   })
 })
 
-// QA Web #7: o pop-up de confirmação tinha título, mensagem e botão no mesmo
-// peso. O cabeçalho e o título do sucesso saíam idênticos (Montserrat 700/16
+// O pop-up de confirmação precisa de hierarquia. Com título, mensagem e botão
+// no mesmo peso, o cabeçalho e o título do sucesso saem idênticos (Montserrat 700/16
 // em content.primary), o e-mail de retorno se perdia no meio do parágrafo e o
 // "Fechar" era o mesmo CTA verde de largura cheia do "Enviar solicitação".
 // Estes testes travam RELAÇÕES de hierarquia, não pixels: quem é maior que

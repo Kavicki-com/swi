@@ -41,8 +41,8 @@ describe('AdminsList', () => {
     await expect(renderPage(<AdminsList />, { route: '/admins' })).resolves.toBeDefined()
   })
 
-  // QA Web #10: mesmo bug das outras listas — /chat sem destino abre sempre a
-  // conversa mais recente, não a pessoa clicada.
+  // O ícone precisa navegar para a conversa daquele admin: `/chat` sem destino
+  // abre sempre a conversa mais recente, não a pessoa clicada.
   it('ícone de chat abre a conversa do admin clicado, não /chat solto', async () => {
     vi.spyOn(adminsApi, 'list').mockResolvedValue({ data: [ELISA], error: null })
     await renderPage(<AdminsList />, { route: '/admins' })

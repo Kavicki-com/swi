@@ -77,11 +77,10 @@ export function MapBanner({
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
   // Enquadra a frota UMA vez, no primeiro lote de markers, depois disso o
-  // usuário manda no pan/zoom e os heartbeats só movem os pinos. O simulador
-  // MOVE gente depois do enquadramento inicial, então um pino pode sair da
+  // usuário manda no pan/zoom e os heartbeats só movem os pinos. Como as
+  // pessoas se movem depois do enquadramento inicial, um pino pode sair da
   // moldura: o selo "N de M visíveis" avisa e o botão "Recentralizar"
-  // re-enquadra sob demanda (QA 2026-07-26, decisão do usuário: botão +
-  // contador; nada de mapa se movendo sozinho).
+  // re-enquadra sob demanda. O mapa nunca se reposiciona sozinho.
   const didFitRef = useRef(false)
   const [visibleCount, setVisibleCount] = useState(0)
   // O handler de moveend precisa do lote ATUAL sem re-registrar listener.

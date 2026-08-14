@@ -1,7 +1,7 @@
-// Monitoramento HONESTO (Fase 3): os cards derivam do diretório REAL da org
-// (admins/funcionários/relatórios) com vitais SIMULADOS plausíveis por worker
-// (rotulados na UI via SimulatedDataBadge) — aposenta o roster fake. Contrato
-// (tipos) preservado do mock pra UI não mudar.
+// Monitoramento: os cards derivam do diretório REAL da org
+// (admins/funcionários/relatórios) com vitais SIMULADOS plausíveis por worker,
+// rotulados na UI via SimulatedDataBadge. Os tipos são o contrato que a UI
+// consome, então mudá-los aqui obriga a mexer nas telas.
 import type { ServiceResponse } from '@/services/types'
 import type {
   MonitoringAlertDetail,
@@ -22,11 +22,11 @@ export type {
   MonitoringUserAlert,
 } from '@/services/types/monitoring'
 
-// Câmeras: conta a MESMA frota que o mapa desenha (services/cameras). Era '564'
-// fixo enquanto o mapa mostrava 12 pinos — o painel afirmava câmera inexistente.
+// Câmeras: conta a MESMA frota que o mapa desenha (services/cameras). Um número
+// fixo aqui faria o painel afirmar câmera que não existe no mapa.
 
 // Milhar em pt-BR: com a operação cheia os agregados passam de 6 dígitos e
-// "437715" fica ilegível num card (QA de volume 2026-07-26).
+// "437715" fica ilegível num card.
 const num = (n: number): string => n.toLocaleString('pt-BR')
 
 type WithVitals = { w: Employee; v: SimulatedVitals }

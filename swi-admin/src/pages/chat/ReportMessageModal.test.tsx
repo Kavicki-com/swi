@@ -1,7 +1,7 @@
-// QA Web #9 — "Denunciar" no menu da mensagem do chat. O modal segue o molde
-// do SupportModal (Combobox de motivo + texto + estados idle/sending/sent),
-// mas o envio vai pro endpoint de denúncia do chat, que dispara o e-mail no
-// backend. vitest globals via globals: true.
+// "Denunciar" no menu da mensagem do chat. O modal segue o molde do
+// SupportModal (Combobox de motivo + texto + estados idle/sending/sent), mas o
+// envio vai pro endpoint de denúncia do chat, que dispara o e-mail no backend.
+// vitest globals via globals: true.
 import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { ReportMessageModal } from './ReportMessageModal'

@@ -204,10 +204,10 @@ function AlertUserCard({
       {expanded && hasAlerts ? (
         <>
           <View style={{ height: 2, backgroundColor: theme.content.lightGrey, width: '100%' }} />
-          {/* Expanded details row — padding bumped to 12 (theme.padding.sm)
-              and vertical gap between alerts raised to 18 per QA cliente §3.2
-              (client tested 12px / 18px and approved). 51 px column gap stays
-              as is (matches the horizontal rhythm between alerts and CTAs). */}
+          {/* Expanded details row: padding at theme.padding.sm and 18 px of
+              vertical gap between alerts, both approved by the client. The
+              51 px column gap stays as is, matching the horizontal rhythm
+              between alerts and CTAs. */}
           <View
             style={{
               flexDirection: 'row',
@@ -376,8 +376,8 @@ function activeTabFromPath(pathname: string): string {
 }
 
 // Que tier cada aba mostra. A régua se anuncia "Filtro de status" e o badge
-// vermelho conta os em fadiga, mas as 3 rotas listavam a população inteira —
-// o número e a lista se contradiziam na mesma tela (QA 2026-07-26).
+// vermelho conta os em fadiga, então listar a população inteira nas 3 rotas
+// faria o número e a lista se contradizerem na mesma tela.
 const TIER_BY_TAB: Record<string, SimulatedTier> = {
   excelentes: 'excelente',
   desgastados: 'desgastado',
@@ -396,7 +396,7 @@ export function MonitoringLayout() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
-  // Pro destino do chat (QA Web #10): a conversa determinística eu↔clicado.
+  // Pro destino do chat: a conversa determinística entre eu e o clicado.
   const { user } = useAuth()
   const myId = user?.id ?? ''
   const breakpoint = useBreakpoint()
@@ -545,7 +545,7 @@ export function MonitoringLayout() {
           <Title variant="title.s" color={theme.content.dark}>
             Alertas de Desgaste
           </Title>
-          {/* Fase 3: vitais/alertas derivam de dados SIMULADOS (funcionários reais). */}
+          {/* Vitais e alertas derivam de dados SIMULADOS sobre funcionários reais. */}
           <SimulatedDataBadge />
         </View>
 
@@ -570,9 +570,9 @@ export function MonitoringLayout() {
               fullWidth
               accessibilityLabel="Filtro de status"
             />
-            {/* Contagem REAL de quem está no tier de fadiga (era "+3" fixo,
-                contra um KPI que dizia 12 — QA de volume 2026-07-26). Some
-                quando não há ninguém: badge zerado é ruído. */}
+            {/* Contagem REAL de quem está no tier de fadiga. Valor fixo aqui
+                contradiria o KPI da mesma tela. Some quando não há ninguém:
+                badge zerado é ruído. */}
             {fatigueBadge ? (
               <View
                 accessibilityLabel={`${fatigueCount} alertas de fadiga`}
@@ -614,8 +614,7 @@ export function MonitoringLayout() {
           onClear={() => setSearch('')}
         />
 
-        {/* Gap bumped from gap.s (8) to gap.m (16) per QA cliente §3.1 —
-            cards de alerta com mais respiro entre si. */}
+        {/* Gap em theme.gap.m: cards de alerta com respiro entre si. */}
         <View style={{ gap: theme.gap.m }}>
           {filteredUsers.map((u) => (
             <AlertUserCard
@@ -626,7 +625,7 @@ export function MonitoringLayout() {
               onDelete={() =>
                 showToast('Funcionário removido', `${u.name} foi removido do monitoramento`)
               }
-              // QA Web #10: /chat sem destino fixava a conversa mais recente.
+              // /chat sem destino abre sempre a conversa mais recente.
               onChat={() => navigate(chatPathTo(myId, u.id))}
               onLocation={() => navigate('/maps/general')}
               onViewExams={() => navigate(`/employees/${u.id}`)}

@@ -4,7 +4,7 @@
 //
 // A ordem de declaração dos efeitos é significativa: o React roda cleanups
 // nessa ordem, e é disso que dependem as guardas `mapRef.current !== map`
-// nos cleanups de heatmap e meteo (QA Web #8). Não reordene.
+// nos cleanups de heatmap e meteo. Não reordene.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder } from 'react-native'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -43,9 +43,9 @@ export function useMapsGeneral() {
   const mapRef = useRef<maplibregl.Map | null>(null)
   // Posições REAIS ao vivo (REST snapshot + WS). null = carregando.
   const mapMarkers = useLivePositions()
-  // Badge do menu compacto: contagem REAL de relatórios
-  // pendentes. Sem pendências, sem badge, era "+9" fixo até o QA de 2026-07-24.
-  // Alertas perdeu o badge: não existe entidade de alerta com estado de leitura
+  // Badge do menu compacto: contagem REAL de relatórios pendentes. Sem
+  // pendências, sem badge, nunca um número fixo.
+  // Alertas não tem badge: não existe entidade de alerta com estado de leitura
   // pra contar (voltar quando existir, via formatBadgeCount).
   const [pendingReports, setPendingReports] = useState(0)
   useEffect(() => {
@@ -64,9 +64,9 @@ export function useMapsGeneral() {
   const [mapReady, setMapReady] = useState(false)
   // The neutral state hides employee pins (opacity 0).
   // Pins appear when the user expands the "operators" map control.
-  // QA Web #3: `?focus=<id>` chega do pin da lista de Funcionarios. Quando ele
-  // existe, a camada de operadores JA nasce ligada, senao o usuario cai num
-  // mapa vazio e precisa de um clique extra pra ver quem foi pedir pra ver.
+  // `?focus=<id>` chega do pin da lista de Funcionarios. Quando ele existe, a
+  // camada de operadores JA nasce ligada, senao o usuario cai num mapa vazio e
+  // precisa de um clique extra pra ver quem foi pedir pra ver.
   const focusId = new URLSearchParams(location.search).get('focus')
   const [showOperators, setShowOperators] = useState(focusId !== null)
   // Heatmap state:
@@ -242,10 +242,10 @@ export function useMapsGeneral() {
     }
   }, [markersLoaded, lib])
 
-  // QA Web #3: centraliza no funcionario que veio no `?focus`, uma unica vez.
-  // O ref e necessario porque `shiftedMarkers` muda a cada atualizacao de
-  // posicao ao vivo (WebSocket); sem ele a camera seria reescrita embaixo do
-  // operador toda vez que uma posicao chegasse, o que e pior que o bug.
+  // Centraliza no funcionario que veio no `?focus`, uma unica vez. O ref e
+  // necessario porque `shiftedMarkers` muda a cada atualizacao de posicao ao
+  // vivo (WebSocket); sem ele a camera seria reescrita embaixo do operador
+  // toda vez que uma posicao chegasse.
   const focusedRef = useRef(false)
   useEffect(() => {
     const map = mapRef.current
@@ -356,14 +356,13 @@ export function useMapsGeneral() {
     })
 
     return () => {
-      // Guarda de unmount (QA Web #8, BLOQUEADOR: "a tela fica preta" ao sair
-      // da página com o mapa de calor ligado).
+      // Guarda de unmount: sem ela, sair da página com o mapa de calor ligado
+      // deixa a tela preta.
       //
       // O React roda cleanups na ORDEM DE DECLARAÇÃO, e o efeito que cria o
       // mapa é declarado ANTES deste. No unmount, `map.remove()` roda primeiro
-      // e destrói o style; então este cleanup chamava getLayer() num mapa morto
-      // e lançava. Exceção em cleanup derruba a árvore inteira, e era isso que
-      // o usuário via como tela preta.
+      // e destrói o style; chamar getLayer() num mapa morto lança, e exceção
+      // em cleanup derruba a árvore inteira.
       //
       // `mapRef.current` já foi zerado pelo cleanup do mapa, então a comparação
       // distingue os dois casos: re-run normal (mesma instância, limpa) e
@@ -438,10 +437,9 @@ export function useMapsGeneral() {
     })
     return () => {
       cancelled = true
-      // Mesma guarda do cleanup do heatmap, e pelo mesmo motivo: "Zonas de
-      // alerta" era o SEGUNDO filtro que o QA ligava antes da tela preta
-      // (Web #8). `cancelled` só protege o .then; não protege este cleanup de
-      // rodar depois do map.remove().
+      // Mesma guarda do cleanup do heatmap, e pelo mesmo motivo: sair da
+      // página com "Zonas de alerta" ligado roda este cleanup depois do
+      // `map.remove()`. `cancelled` só protege o .then, não protege daqui.
       if (mapRef.current !== map) return
       if (map.getLayer('meteo-layer')) map.removeLayer('meteo-layer')
       if (map.getSource('meteo')) map.removeSource('meteo')

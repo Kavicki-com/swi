@@ -300,7 +300,7 @@ export function TaskDetails() {
       .catch((e: unknown) => {
         if (cancelled) return
         // apiFetch garante ApiError em todo caminho de erro (inclusive o 404
-        // 'Tarefa não encontrada'); o fallback cobre só um bug nosso.
+        // 'Tarefa não encontrada'); o fallback cobre só uma falha nossa.
         setError(e instanceof ApiError ? e.message : 'Erro ao carregar a tarefa')
         setDetail(null)
         setLoading(false)
@@ -520,7 +520,7 @@ export function TaskDetails() {
                 vermelho da direita pra esquerda. Lá ela mede fadiga; aqui só o
                 visual foi reaproveitado — o que ela mede é o TEMPO decorrido
                 sobre o estimado. No modo liso do DS o trilho vazio é claro e
-                lia como barra cheia mesmo a 0% (QA 2026-07-26). */}
+                lê como barra cheia mesmo a 0%. */}
             <ProgressBar
               testID="task-details-progress"
               value={progressPct}

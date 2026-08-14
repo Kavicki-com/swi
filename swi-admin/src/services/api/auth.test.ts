@@ -306,8 +306,8 @@ describe('authApi.resetPassword (real, email + code)', () => {
   })
 })
 
-// QA F (2026-07-24): "Alterar senha" do settings era toast fake. Client real:
-// POST /auth/password/change (autenticado; exige a senha atual).
+// "Alterar senha" do settings fala com POST /auth/password/change
+// (autenticado; exige a senha atual).
 describe('authApi.changePassword', () => {
   it('POST /auth/password/change com current/new → { changed: true }', async () => {
     const f = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ changed: true }) } as Response)
@@ -337,9 +337,9 @@ describe('authApi.changePassword', () => {
   })
 })
 
-  // Achado no E2E (2026-07-24): o 401 de senha-atual-errada disparava o
-  // logout global do apiFetch — errar a senha DESLOGAVA o admin. O 401 aqui
-  // é resposta de negócio, não sessão morta: a sessão local deve sobreviver.
+  // O 401 de senha-atual-errada é resposta de negócio, não sessão morta. Se o
+  // logout global do apiFetch disparasse aqui, errar a senha DESLOGARIA o
+  // admin: a sessão local tem que sobreviver.
   it('401 de senha errada NÃO derruba a sessão local', async () => {
     window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-vivo')
     window.localStorage.setItem(SESSION_STORAGE_KEY, '{"id":"u1"}')

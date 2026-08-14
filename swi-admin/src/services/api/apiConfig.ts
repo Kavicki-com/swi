@@ -1,10 +1,10 @@
 // Contrato de ambiente da API do painel.
 //
-// Antes disto, quatro módulos (o cliente HTTP e os três sockets) repetiam
-// `?? 'http://localhost:3000'`. Num build de produção sem a variável, o painel
-// não quebrava: ele apontava para a máquina de quem abriu o navegador e falhava
-// como se o backend estivesse fora do ar. O fallback escondia o erro de
-// configuração exatamente onde ele custa mais caro.
+// A URL base é resolvida aqui, num lugar só, e os consumidores (o cliente HTTP
+// e os três sockets) não repetem um fallback próprio. Um `?? 'http://localhost:3000'`
+// espalhado faria o build de produção sem a variável apontar para a máquina de
+// quem abriu o navegador e falhar como se o backend estivesse fora do ar,
+// escondendo o erro de configuração exatamente onde ele custa mais caro.
 //
 // A resolução é PREGUIÇOSA e memoizada, não feita na carga do módulo. Um throw
 // no topo derrubaria o bundle antes de qualquer error boundary, e a tela branca
@@ -63,8 +63,8 @@ export function resolveApiUrl(
     )
   }
 
-  // O defeito que este guard existe para pegar é o deploy PÚBLICO cujo bundle
-  // aponta para a máquina de quem abriu o navegador. Quando a própria página
+  // O que este guard recusa é o deploy PÚBLICO cujo bundle aponta para a
+  // máquina de quem abriu o navegador. Quando a própria página
   // veio de local, essa máquina É o servidor: é o caso do pacote de duplo
   // clique, em que Nginx serve o painel em http://localhost:5173 e a API sobe
   // em http://localhost:3000, no mesmo Docker. Recusar ali derrubaria o painel

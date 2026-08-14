@@ -57,7 +57,7 @@ export async function apiFetch<T>(
   init: RequestInit = {},
   // keepSessionOn401: pra rotas onde 401 é resposta de NEGÓCIO e não sessão
   // morta (ex.: /auth/password/change com a senha atual errada). Sem isso,
-  // errar a senha atual deslogava o admin (achado no E2E de 2026-07-24).
+  // errar a senha atual desloga o admin.
   // onResponse: gancho pra ler a Response crua (headers) sem duplicar a
   // política de token/erro daqui. Usado pela paginação, que traz o total da
   // coleção em `X-Total-Count` enquanto o corpo continua sendo só o array.

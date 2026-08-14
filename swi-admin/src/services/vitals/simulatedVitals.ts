@@ -1,4 +1,4 @@
-// VITAIS SIMULADOS — plausíveis e ROTULADOS (Fase 3: monitoramento honesto).
+// VITAIS SIMULADOS: plausíveis e ROTULADOS como simulados.
 //
 // Até a smartband existir, biometria não tem fonte real. Em vez de fixtures
 // quebradas (0 bpm + "excelente", O+ universal), cada worker REAL ganha vitais
@@ -128,10 +128,10 @@ const CALORIE_SHAPE = {
 } as const satisfies Record<string, ReadonlyArray<readonly [string, number]>>
 
 /**
- * Gasto calórico simulado POR PESSOA. A curva era uma constante única, então o
- * detalhe do Worker Demo, o do admin e o perfil próprio exibiam os mesmos
- * 41/57/62… kcal nos mesmos horários — o mesmo tipo de "número confiante que
- * não é de ninguém" que o resto do painel já tinha eliminado (QA 2026-07-26).
+ * Gasto calórico simulado POR PESSOA. Com uma curva constante, o detalhe do
+ * worker, o do admin e o perfil próprio exibiriam os mesmos valores nos mesmos
+ * horários, que é o tipo de "número confiante que não é de ninguém" que o
+ * painel evita em toda superfície.
  *
  * Determinístico pelo id (sem componente temporal): o gráfico não pode
  * redesenhar a cada render. Preserva a forma especificada e escala a magnitude em

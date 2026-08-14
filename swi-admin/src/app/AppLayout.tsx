@@ -112,9 +112,8 @@ export function AppLayout() {
     setDrawerOpen(false)
   }, [location.pathname])
 
-  // QA cliente §1.1 (portado do demo em 2026-07-28): o avatar do header abre o
-  // menu fullscreen com vídeo + vitais. A página /user/profile continua
-  // alcançável pelo avatar grande DENTRO do menu.
+  // O avatar do header abre o menu fullscreen com vídeo e vitais. A página
+  // /user/profile continua alcançável pelo avatar grande DENTRO do menu.
   const headerUserInfo = (
     <Pressable
       onPress={() => setUserMenuOpen(true)}

@@ -14,9 +14,9 @@
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
 
 if (!MAPBOX_TOKEN && typeof window !== 'undefined') {
-  // QA C4: sem token os tiles do Mapbox falhavam com centenas de 401 e o mapa
-  // virava um vazio preto. Agora a ausência cai no Esri (aviso segue útil:
-  // Mapbox tem cobertura z17+ melhor no interior do BR).
+  // Sem token os tiles do Mapbox falham com centenas de 401 e o mapa vira um
+  // vazio preto, então a ausência cai no Esri. O aviso continua útil porque o
+  // Mapbox tem cobertura z17+ melhor no interior do BR.
   console.warn(
     '[mapStyles] VITE_MAPBOX_TOKEN ausente — usando fallback Esri World Imagery (cobertura z17+ inferior). Copie .env.example para .env.local para usar Mapbox.',
   )

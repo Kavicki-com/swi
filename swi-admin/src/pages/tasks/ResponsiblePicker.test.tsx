@@ -117,9 +117,9 @@ describe('ResponsiblePicker', () => {
     expect(screen.getByText('Engenharia Civil')).toBeInTheDocument()
   })
 
-  // QA C2 (2026-07-24): em 1366×900 a lista estourava o viewport e o rodapé
-  // Cancelar/Continuar ficava inalcançável (overlay sem scroll interno). A
-  // lista vive num container ROLÁVEL próprio; header/busca/rodapé ficam fixos.
+  // Em 1366×900, um overlay sem scroll interno faz a lista estourar o viewport
+  // e o rodapé Cancelar/Continuar ficar inalcançável. A lista vive num
+  // container ROLÁVEL próprio, e header, busca e rodapé ficam fixos.
   it('as linhas ficam dentro do container rolável da lista (rodapé fora dele)', async () => {
     renderPicker()
     await waitFor(() => expect(screen.getByText('Ana Souza')).toBeInTheDocument())
