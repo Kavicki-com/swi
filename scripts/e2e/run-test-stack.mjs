@@ -240,12 +240,13 @@ function parseArgs(argv) {
 /**
  * "Fui executado direto, ou só importado?"
  *
- * A versão anterior montava a URL com `new URL('file:///' + caminho)`. Isso só
- * funciona no Windows, onde o caminho começa em `C:`. Com um caminho POSIX o
- * resultado é `file:////home/...`, quatro barras, que nunca bate com o
- * `file:///home/...` de import.meta.url. O efeito era pior que um erro: rodado
- * direto no Linux, o script terminava com código 0 sem subir stack nem rodar
- * teste, e um job de CI passaria verde tendo executado nada.
+ * A URL vem de `pathToFileURL`, nunca de concatenar `'file:///'` com o
+ * caminho. A concatenação só funciona no Windows, onde o caminho começa em
+ * `C:`; com um caminho POSIX o resultado é `file:////home/...`, quatro barras,
+ * que nunca bate com o `file:///home/...` de import.meta.url. A consequência
+ * seria pior que um erro: rodado direto no Linux, o script terminaria com
+ * código 0 sem subir stack nem rodar teste, e a CI passaria verde tendo
+ * executado nada.
  *
  * `pathToFileURL` é a conversão da própria plataforma e resolve os dois casos.
  */

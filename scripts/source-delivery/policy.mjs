@@ -35,7 +35,7 @@ const NOMES_TEXTO = new Set([
   'Dockerfile',
 ])
 
-/** Diretórios de artefato: build, cache, cobertura, QA local, temporários. */
+/** Diretórios de artefato: build, cache, cobertura, resultado de teste, temporários. */
 const SEGMENTOS_BUILD = new Set([
   '.git', 'node_modules', 'dist', 'build', 'out',
   'coverage', 'test-results', 'playwright-report', 'storybook-static',

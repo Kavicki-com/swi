@@ -2,7 +2,7 @@
  * Gate de tamanho de arquivo da higienização de entrega.
  *
  * O código vai ser LIDO pelo cliente, e arquivo gigante é o que torna a leitura
- * inviável. A Task 8 decompôs os que passavam de 800 linhas; este gate existe
+ * inviável. Os que passavam do limite já foram decompostos; este gate existe
  * para que o próximo não entre sem alguém perceber.
  *
  * Falha FECHADO de propósito. A conferência original do plano começava com

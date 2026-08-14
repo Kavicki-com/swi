@@ -80,8 +80,8 @@ test('aceita o pacote recém-exportado do commit', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Integridade do conteúdo. Sem manifesto dentro do pacote (decisão de
-// 2026-08-10), a referência é o próprio commit: o verificador relê o blob.
+// Integridade do conteúdo. Sem manifesto dentro do pacote, a referência é o
+// próprio commit: o verificador relê o blob.
 // ---------------------------------------------------------------------------
 
 test('detecta payload alterado', () => {

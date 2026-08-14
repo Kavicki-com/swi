@@ -4,8 +4,8 @@
  * data/ com cada arquivo de payload convertido em .txt, na forma da política
  * de policy.mjs.
  *
- * Por decisão do responsável (2026-08-10), o pacote não carrega arquivo de
- * controle nenhum: o contrato pede o código-fonte, e a prova de integridade
+ * Por decisão do responsável, o pacote não carrega arquivo de controle
+ * nenhum: o contrato pede o código-fonte, e a prova de integridade
  * fica fora da entrega (tag no commit aprovado + hash do pacote gerado).
  * Como a exportação é determinística, qualquer manifesto pode ser
  * recomputado a partir do mesmo commit quando for preciso.

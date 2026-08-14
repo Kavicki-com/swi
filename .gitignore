@@ -44,9 +44,9 @@ docs/audits/health-check-*.md
 # Local Windows build/sync helpers (machine-specific paths: WSL distro, $HOME, Desktop)
 *.bat
 
-# Override de portas pra rodar o SWI ao lado do Ybá na mesma máquina.
-# Decisão do usuário em 2026-07-30: fica local, é conveniência de dev e não
-# contrato do projeto. Ignorado pra parar de aparecer como untracked.
+# Override de portas para rodar o SWI ao lado de outro stack na mesma máquina.
+# Fica local por decisão: é conveniência de desenvolvimento, não contrato do
+# projeto. Ignorado para parar de aparecer como untracked.
 swi-backend/docker-compose.ports-alt.yml
 
 # Artefatos dos portões de qualidade e da entrega de código-fonte.

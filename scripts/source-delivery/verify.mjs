@@ -8,7 +8,7 @@
  * Por que ele existe mesmo sendo o exportador determinístico: o pacote é
  * copiado, compactado, mandado adiante e aberto em outra máquina, e é entre a
  * geração e a entrega que um arquivo se perde, um editor grava CRLF de volta,
- * ou alguém acrescenta "só um README" na pasta. Nada disso é bug do
+ * ou alguém acrescenta "só um README" na pasta. Nada disso é falha do
  * exportador, e tudo isso muda o que o cliente recebe.
  *
  * INDEPENDÊNCIA, e onde ela para: a normalização de texto é reimplementada
@@ -18,8 +18,8 @@
  * não um detalhe do exportador. Duplicá-la criaria duas listas para manter, e
  * a cópia errada acabaria virando o gabarito.
  *
- * Sem manifesto dentro do pacote (decisão do responsável em 2026-08-10: o
- * contrato pede o código, e nada mais), a referência de integridade é o
+ * Sem manifesto dentro do pacote (decisão do responsável: o contrato pede o
+ * código, e nada mais), a referência de integridade é o
  * próprio commit. Por isso o verificador exige o repositório.
  *
  * Uso:
