@@ -33,6 +33,7 @@ import { useChat } from '@/services/chat/ChatProvider'
 import { resolveContact, unreadFor } from '@/services/chat/chatReducers'
 import { useMyVitals } from '@/hooks/useMyVitals'
 import { UserDetailsMenu } from '@/components/UserDetailsMenu'
+import { ApiTargetBadge } from '@/components/ApiTargetBadge'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // DS module is shimmed to `any`; mirror the types we need locally.
@@ -213,6 +214,7 @@ export function AppLayout() {
                 style={{
                   paddingHorizontal: theme.padding.s,
                   paddingVertical: theme.padding.m,
+                  gap: theme.gap.xs,
                 }}
               >
                 <Pressable
@@ -222,6 +224,7 @@ export function AppLayout() {
                 >
                   <Logo type="complete" size="m" />
                 </Pressable>
+                <ApiTargetBadge />
               </View>
               <SideMenu
                 testID="app-drawer-nav"
@@ -301,6 +304,7 @@ export function AppLayout() {
           style={{
             paddingHorizontal: theme.padding.s,
             paddingVertical: theme.padding.m,
+            gap: theme.gap.xs,
           }}
         >
           <Pressable
@@ -310,6 +314,7 @@ export function AppLayout() {
           >
             <Logo type="complete" size="m" />
           </Pressable>
+          <ApiTargetBadge />
         </View>
         <SideMenu
           testID="app-sidebar-nav"

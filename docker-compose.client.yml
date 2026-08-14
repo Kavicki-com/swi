@@ -162,10 +162,15 @@ services:
     build:
       context: ./swi-admin
       args:
-        # Assado no bundle em tempo de build. O painel é servido de localhost e
-        # conversa com a API em localhost: `resolveApiUrl` permite o par porque
-        # a página veio da mesma máquina (src/services/api/apiConfig.ts).
-        VITE_API_URL: http://localhost:3000
+        # Assado no bundle em tempo de build. Por padrão o painel é servido de
+        # localhost e conversa com a API em localhost: `resolveApiUrl` permite o
+        # par porque a página veio da mesma máquina (src/services/api/apiConfig.ts).
+        #
+        # Trocar VITE_API_URL em swi-client.env aponta o painel para a API
+        # pública, que é a mesma que o aplicativo Android usa. É assim que os
+        # dois passam a mostrar os MESMOS dados. O painel exibe de qual backend
+        # está lendo, então o ambiente nunca fica implícito.
+        VITE_API_URL: "${VITE_API_URL:-http://localhost:3000}"
     depends_on:
       api: { condition: service_healthy }
     ports: ["127.0.0.1:5173:80"]

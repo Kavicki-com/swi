@@ -115,6 +115,18 @@ Se o Docker Desktop nao estiver instalado, baixe em:
 # Gerado automaticamente pelo START-SWI na primeira execucao.
 # Vale SO para a stack local desta maquina. Nao versione, nao compartilhe.
 JWT_SECRET=$segredo
+
+# Backend que o PAINEL le.
+#
+# O padrao abaixo e a API que sobe aqui nesta maquina, isolada de tudo. O
+# aplicativo Android fala com a API publica, entao NESTE modo os dois nao
+# mostram os mesmos dados: sao dois ambientes separados de proposito.
+#
+# Para o painel ler a mesma API do aplicativo, troque a linha por:
+#   VITE_API_URL=https://api.kavicki.com
+# e rode o START-SWI de novo. O painel e reconstruido apontando pra la, e passa
+# a exibir "api.kavicki.com" ao lado do logo.
+VITE_API_URL=http://localhost:3000
 "@
         # ASCII de propósito: o Compose lê este arquivo como texto puro, e um BOM
         # de UTF-8 no começo faria a primeira chave virar "?JWT_SECRET", que não

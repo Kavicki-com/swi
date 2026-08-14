@@ -82,6 +82,36 @@ export function resolveApiUrl(
   return value.replace(/\/+$/, '')
 }
 
+/** Rótulo de um alvo local: o host em si não diz nada a quem está olhando. */
+const ROTULO_LOCAL = 'Ambiente local'
+
+/** Rótulo de quando a URL não é interpretável. Não trava a tela por isso. */
+const ROTULO_DESCONHECIDO = 'API desconhecida'
+
+/**
+ * Descreve para QUAL backend o painel está falando.
+ *
+ * O painel pode estar lendo do stack local que o pacote sobe ou da API pública,
+ * e o aplicativo pode estar no outro. Quando isso acontece um não mostra o dado
+ * do outro, e sem nada na tela dizendo de onde o dado vem a leitura natural é
+ * que o sistema está quebrado. O rótulo usa o HOST, e não a URL inteira, porque
+ * porta e caminho não distinguem um ambiente do outro.
+ */
+export function describeApiTarget(url: string): { host: string; isLocal: boolean; label: string } {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return { host: '', isLocal: false, label: ROTULO_DESCONHECIDO }
+  }
+  const isLocal = LOCAL_HOSTS.has(parsed.hostname)
+  return {
+    host: parsed.hostname,
+    isLocal,
+    label: isLocal ? ROTULO_LOCAL : parsed.hostname,
+  }
+}
+
 let cached: string | undefined
 
 /** URL base da API, resolvida na primeira chamada e memoizada. */

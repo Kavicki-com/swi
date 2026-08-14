@@ -1,4 +1,4 @@
-import { resolveApiUrl } from './apiConfig'
+import { describeApiTarget, resolveApiUrl } from './apiConfig'
 
 // `true` = build de produção; `false` = dev/teste, onde localhost é legítimo.
 const PROD = true
@@ -65,5 +65,35 @@ describe('resolveApiUrl', () => {
   it('em dev aceita localhost e cai no default quando a variável falta', () => {
     expect(resolveApiUrl('http://localhost:3000', DEV, PAGINA_PUBLICA)).toBe('http://localhost:3000')
     expect(resolveApiUrl(undefined, DEV, PAGINA_PUBLICA)).toBe('http://localhost:3000')
+  })
+})
+
+// O painel e o aplicativo podem estar apontando para backends DIFERENTES: o
+// stack local que o pacote sobe e a API pública. Quando isso acontece, um não
+// mostra o dado do outro, e sem nada na tela dizendo de onde o dado vem a
+// conclusão natural é que o sistema está quebrado. Esta função é o que alimenta
+// o selo que responde essa pergunta.
+describe('describeApiTarget', () => {
+  it('chama de ambiente local o que roda na máquina de quem abriu', () => {
+    for (const url of ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://[::1]:3000']) {
+      expect(describeApiTarget(url).isLocal).toBe(true)
+      expect(describeApiTarget(url).label).toBe('Ambiente local')
+    }
+  })
+
+  it('nomeia o host quando a API é remota, porque é o que distingue um ambiente do outro', () => {
+    const alvo = describeApiTarget('https://api.kavicki.com')
+    expect(alvo.isLocal).toBe(false)
+    expect(alvo.host).toBe('api.kavicki.com')
+    expect(alvo.label).toBe('api.kavicki.com')
+  })
+
+  it('ignora porta e caminho no rótulo: o que identifica o ambiente é o host', () => {
+    expect(describeApiTarget('https://api.kavicki.com:8443/v1').label).toBe('api.kavicki.com')
+  })
+
+  it('URL inválida não derruba a tela, e o rótulo diz que o alvo é desconhecido', () => {
+    expect(describeApiTarget('nao-e-url').label).toBe('API desconhecida')
+    expect(describeApiTarget('').isLocal).toBe(false)
   })
 })
