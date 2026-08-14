@@ -16,15 +16,16 @@ const PORTA_API = Number(process.env.E2E_API_PORT ?? 3300)
 
 // O host da API é o NOME DA MÁQUINA, não localhost, e isso é deliberado.
 //
-// `resolveApiUrl` (src/services/api/apiConfig.ts) recusa localhost, 127.0.0.1 e
-// [::1] em build de produção, porque um painel publicado apontando pra máquina
-// de quem abriu o navegador falha como se o backend estivesse fora do ar. A
-// proteção está certa e não vai ser afrouxada pra um teste passar.
+// `resolveApiUrl` (src/services/api/apiConfig.ts) recusa API local em build de
+// produção QUANDO A PÁGINA veio de origem não local, porque um painel publicado
+// apontando pra máquina de quem abriu o navegador falha como se o backend
+// estivesse fora do ar. Desde o pacote de duplo clique, o par
+// "página local + API local" é permitido, então localhost aqui também passaria.
 //
-// A saída é servir o BUILD DE PRODUÇÃO de verdade e alcançar a API por um nome
-// que não seja local: o hostname resolve pra própria máquina em Windows, Linux
-// e nos runners de CI. O browser continua abrindo o painel por localhost; quem
-// precisa do nome é a URL embutida no bundle.
+// O nome da máquina fica assim mesmo: ele é o que roda verde em Windows, Linux
+// e nos runners de CI, e trocar por localhost seria mexer no que já funciona
+// para não ganhar nada. O browser continua abrindo o painel por localhost; quem
+// usa o nome é a URL embutida no bundle.
 const HOST_API = process.env.E2E_API_HOST ?? hostname()
 const API = process.env.E2E_API_URL ?? `http://${HOST_API}:${PORTA_API}`
 

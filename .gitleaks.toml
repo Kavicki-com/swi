@@ -6,8 +6,10 @@
 #   A pasta não faz parte da entrega de código-fonte.
 # - key="evacuation-...": props `key` de listas JSX nas telas de evacuação do
 #   mobile, texto fixo de baixa entropia, não credencial.
+# - swi-client.env: configuração gerada em runtime pelo START-SWI na máquina de
+#   quem roda a stack local. Ignorada pelo git e ausente do ZIP entregue.
 #
-# Achado novo fora dessas duas formas DEVE deixar a CI vermelha até alguém
+# Achado novo fora dessas formas DEVE deixar a CI vermelha até alguém
 # classificar: ou é segredo real (revogar e remover), ou entra aqui com o
 # porquê escrito.
 
@@ -26,6 +28,17 @@ paths = ['''docs/.*''']
 # com credencial. O fonte de onde ele sai continua sendo varrido normalmente.
 description = "Saída de build do Storybook, ignorada pelo git e fora da entrega"
 paths = ['''swi-admin/storybook-static/.*''']
+
+[[allowlists]]
+# swi-client.env é gerado pelo START-SWI.cmd na PRIMEIRA execução, na máquina de
+# quem roda a stack local, e contém o JWT_SECRET daquela máquina. É segredo de
+# verdade, e é por isso que ele está no .gitignore e fica de fora do `git
+# archive` que produz o ZIP: ele nunca é commitado nem entregue. O allowlist
+# existe para a varredura LOCAL não ficar vermelha depois de alguém rodar a
+# stack, do mesmo jeito que a do Storybook acima. Como o caminho é ignorado pelo
+# git, isto não abre brecha: não há como um segredo commitado se esconder aqui.
+description = "Configuração local gerada pelo START-SWI, ignorada pelo git e fora da entrega"
+paths = ['''swi-client\.env''']
 
 [[allowlists]]
 description = "Props key de JSX das telas de evacuação"

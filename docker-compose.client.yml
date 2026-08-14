@@ -1,0 +1,177 @@
+# Stack de demonstração local do SWI, o que o duplo clique sobe.
+#
+# É um arquivo COMPLETO e independente, e não uma sobreposição do
+# swi-backend/docker-compose.yml, por um motivo mecânico: o Compose CONCATENA a
+# lista `ports` entre arquivos, nunca a substitui. Sobrepondo, as publicações
+# `5432:5432` e `9000:9000` do arquivo de desenvolvimento, que escutam em todas
+# as interfaces da máquina, continuariam valendo, e a exigência de prender tudo
+# a 127.0.0.1 seria impossível de cumprir.
+#
+# Nome do projeto fixado aqui: sem ele o Compose usa o nome da PASTA, que na
+# máquina do cliente é a que ele escolheu ao descompactar o ZIP. Os scripts
+# START/STOP precisam achar a mesma stack em qualquer caminho.
+name: swi-cliente
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: swi
+      POSTGRES_PASSWORD: swi
+      POSTGRES_DB: swi
+    # Sem publicação no host DE PROPÓSITO: só a API fala com o banco, e pela
+    # rede interna do Compose. Publicar 5432 brigaria com qualquer Postgres já
+    # instalado na máquina do cliente sem entregar nada em troca.
+    volumes: ["swi_cliente_pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U swi -d swi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailhog:
+    image: mailhog/mailhog
+    # 1025 (SMTP) fica interna: quem envia é a API, de dentro da rede. Só a
+    # interface web é publicada, e ela é essencial — é onde o cliente lê os
+    # códigos de verificação de cadastro, que nesta stack não saem para
+    # e-mail de verdade.
+    ports: ["127.0.0.1:8025:8025"]
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    # 9000 PRECISA ser publicada: as URLs de upload e download são assinadas
+    # para o host de MINIO_PUBLIC_URL e quem as busca é o NAVEGADOR, de fora da
+    # rede do Compose. Sem esta porta, anexo de chat e foto de relatório quebram.
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
+    volumes: ["swi_cliente_minio:/data"]
+
+  # Cria o bucket uma vez e sai. Mantém a API sem depender do MinIO no boot.
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio: { condition: service_started }
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do echo aguardando-minio; sleep 1; done;
+      mc mb --ignore-existing local/swi-media;
+      echo bucket-pronto; exit 0;
+      "
+
+  api:
+    build:
+      context: ./swi-backend
+    depends_on:
+      db: { condition: service_healthy }
+      mailhog: { condition: service_started }
+      minio-init: { condition: service_completed_successfully }
+    environment:
+      # NODE_ENV=development não é descuido, é exigência de duas peças:
+      #
+      # 1. `assertSeedAllowed` (src/config/seed-guard.ts) RECUSA semear fora de
+      #    development/test, e esta stack precisa do seed de demonstração;
+      # 2. `parseRuntimeEnv` proíbe origin de loopback e exige https no CORS
+      #    quando NODE_ENV=production, e aqui o painel é http://localhost:5173.
+      #
+      # É coerente com o que a stack é: uma demonstração que roda inteira na
+      # máquina do cliente. A API pública (api.kavicki.com) não usa este arquivo.
+      NODE_ENV: development
+      ALLOW_DEV_SEED: "1"
+      DATABASE_URL: postgresql://swi:swi@db:5432/swi
+      # Gerado pelo START-SWI na primeira execução e guardado em swi-client.env.
+      # Sem default de propósito: um segredo fixo em arquivo versionado é uma
+      # credencial de verdade no dia em que alguém apontar isto para um banco
+      # que não é descartável.
+      JWT_SECRET: ${JWT_SECRET:?rode START-SWI.cmd, que gera este valor em swi-client.env}
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      MAIL_FROM: no-reply@swi.local
+      # Destinatário das denúncias de mensagem. Aponta para o próprio MailHog:
+      # vazio, a rota responde 503 e o fluxo de denúncia não teria como ser
+      # demonstrado.
+      REPORT_TO_EMAIL: moderacao@swi.local
+      PORT: 3000
+      # Onde o painel é servido. Vale para o CORS HTTP e para o WebSocket, que
+      # leem a mesma variável (src/cors.ts).
+      CORS_ORIGINS: http://localhost:5173
+      # Host que as URLs assinadas carregam. É o endereço visto pelo NAVEGADOR,
+      # não pela rede interna: assinado com http://minio:9000, o download
+      # falharia na máquina do cliente, onde esse nome não resolve.
+      MINIO_PUBLIC_URL: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: swi-media
+      MINIO_REGION: us-east-1
+      # Simulações da demonstração, declaradas como limitação conhecida na
+      # documentação do cliente: alerta de tempestade e movimentação dos
+      # trabalhadores do seed. A API pública não liga nenhuma das duas.
+      WEATHER_SCENARIO: alert
+      SIM_POSITIONS: "1"
+      # Vazio: o cálculo de rota cai no OSRM público, que não pede chave. O
+      # token Mapbox do cliente entraria aqui, se houvesse um.
+      MAPBOX_TOKEN: ""
+    ports: ["127.0.0.1:3000:3000"]
+    command: sh -c "npx prisma migrate deploy && node dist/main"
+    healthcheck:
+      # Passa a valer só depois que o `migrate deploy` termina e o Nest escuta,
+      # que é exatamente a condição que o seed precisa esperar.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  # Seed de demonstração, execução única.
+  #
+  # Roda no estágio `build` da imagem do backend, e não no de runtime: o de
+  # runtime instala com `--omit=dev` e não tem ts-node, então
+  # `ts-node prisma/seed.ts` não existiria lá. O estágio de build já foi
+  # construído de qualquer forma para produzir o dist/, então isto não custa
+  # download nem compilação a mais.
+  #
+  # Fica atrás de um profile para o `up` normal não tentar executá-lo: quem o
+  # chama é o START-SWI, depois que a API responde saudável.
+  seed:
+    profiles: ["seed"]
+    build:
+      context: ./swi-backend
+      target: build
+    depends_on:
+      api: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    environment:
+      NODE_ENV: development
+      ALLOW_DEV_SEED: "1"
+      DATABASE_URL: postgresql://swi:swi@db:5432/swi
+      # Aqui, ao contrário da API, o endereço do MinIO é o INTERNO: este
+      # container sobe os avatares e as fotos de inspeção de dentro da rede do
+      # Compose, onde localhost seria ele mesmo. O seed guarda a chave do
+      # objeto, nunca a URL, então isto não vaza para o banco.
+      MINIO_PUBLIC_URL: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: swi-media
+      MINIO_REGION: us-east-1
+    command: npx ts-node prisma/seed.ts
+    restart: "no"
+
+  admin:
+    build:
+      context: ./swi-admin
+      args:
+        # Assado no bundle em tempo de build. O painel é servido de localhost e
+        # conversa com a API em localhost: `resolveApiUrl` permite o par porque
+        # a página veio da mesma máquina (src/services/api/apiConfig.ts).
+        VITE_API_URL: http://localhost:3000
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ["127.0.0.1:5173:80"]
+
+volumes:
+  # Prefixados com o nome do projeto pelo próprio Compose (swi-cliente_*), então
+  # não há como o STOP desta stack tocar nos volumes da stack de desenvolvimento.
+  swi_cliente_pgdata:
+  swi_cliente_minio:

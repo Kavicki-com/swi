@@ -1,0 +1,24 @@
+# node_modules do host nunca entra: a imagem instala o seu com `npm ci`, e o do
+# host pode ter sido resolvido em outro sistema operacional (binários nativos).
+node_modules
+
+# Saídas de build e de teste. São reproduzíveis a partir do fonte e só engordam
+# o contexto enviado ao daemon.
+dist
+coverage
+storybook-static
+test-results
+playwright-report
+.tsbuild
+tsconfig.tsbuildinfo
+
+# Arquivos de ambiente LOCAIS da máquina de quem builda.
+#
+# Isto não é higiene, é correção: o Vite carrega `.env.local` no build e o
+# painel do cliente sairia assado com a URL de API que estivesse na máquina de
+# quem gerou a imagem (túnel de QA, localhost de outra porta). O `.env.production`
+# versionado NÃO é excluído: ele é o contrato do build público, e no pacote do
+# cliente é sobreposto pela variável de ambiente, que o Vite prioriza.
+.env
+.env.local
+.env.*.local

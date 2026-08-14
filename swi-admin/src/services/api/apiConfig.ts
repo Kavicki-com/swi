@@ -30,10 +30,17 @@ const LOCAL_HOSTS = new Set([
  * Pura e com o ambiente injetado para poder ser testada nos dois modos sem
  * mexer em `import.meta.env`.
  *
- * @param raw    valor cru da variável de ambiente
- * @param isProd `true` num build de produção; `false` em dev e em teste
+ * @param raw          valor cru da variável de ambiente
+ * @param isProd       `true` num build de produção; `false` em dev e em teste
+ * @param pageHostname host de onde a PÁGINA foi servida (`location.hostname`);
+ *                     string vazia quando não há navegador, o que é tratado
+ *                     como origem pública
  */
-export function resolveApiUrl(raw: string | undefined, isProd: boolean): string {
+export function resolveApiUrl(
+  raw: string | undefined,
+  isProd: boolean,
+  pageHostname: string,
+): string {
   const value = raw?.trim()
 
   if (value === undefined || value === '') {
@@ -56,9 +63,18 @@ export function resolveApiUrl(raw: string | undefined, isProd: boolean): string 
     )
   }
 
-  if (isProd && LOCAL_HOSTS.has(parsed.hostname)) {
+  // O defeito que este guard existe para pegar é o deploy PÚBLICO cujo bundle
+  // aponta para a máquina de quem abriu o navegador. Quando a própria página
+  // veio de local, essa máquina É o servidor: é o caso do pacote de duplo
+  // clique, em que Nginx serve o painel em http://localhost:5173 e a API sobe
+  // em http://localhost:3000, no mesmo Docker. Recusar ali derrubaria o painel
+  // do cliente sem haver nada a proteger.
+  //
+  // Origem desconhecida (sem `window`) chega como string vazia e cai no lado
+  // estrito, porque o desconhecido não pode virar permissão.
+  if (isProd && LOCAL_HOSTS.has(parsed.hostname) && !LOCAL_HOSTS.has(pageHostname)) {
     throw new Error(
-      `${VAR_NAME} aponta para a máquina local ("${parsed.hostname}"), o que não funciona num build de produção. Use o endereço público da API. Em desenvolvimento, localhost segue permitido.`,
+      `${VAR_NAME} aponta para a máquina local ("${parsed.hostname}") num build de produção servido de "${pageHostname || 'origem desconhecida'}". Use o endereço público da API. Em desenvolvimento, e quando o próprio painel é servido de localhost, localhost segue permitido.`,
     )
   }
 
@@ -70,6 +86,10 @@ let cached: string | undefined
 
 /** URL base da API, resolvida na primeira chamada e memoizada. */
 export function getApiUrl(): string {
-  cached ??= resolveApiUrl(import.meta.env.VITE_API_URL as string | undefined, import.meta.env.PROD)
+  cached ??= resolveApiUrl(
+    import.meta.env.VITE_API_URL as string | undefined,
+    import.meta.env.PROD,
+    typeof window === 'undefined' ? '' : window.location.hostname,
+  )
   return cached
 }

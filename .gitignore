@@ -8,6 +8,12 @@ coverage/
 # Backups de env (.env.local.bak-tunnel e afins): o sufixo escapa dos padrões
 # acima, e um deles já ficou rastreável por engano. Costumam ter credencial.
 .env*.bak*
+
+# Configuração local do pacote de duplo clique. O START-SWI.cmd gera este
+# arquivo na primeira execução com o segredo de assinatura JWT daquela máquina.
+# O nome não termina em `.env`, então nenhum dos padrões acima o pegaria, e ele
+# é credencial de verdade do stack local.
+/swi-client.env
 .DS_Store
 *.log
 *.tsbuildinfo
