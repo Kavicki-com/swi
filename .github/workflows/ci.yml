@@ -181,21 +181,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.23.2'
-      # Inventário de vulnerabilidades das dependências de runtime, um npm
-      # audit por projeto. Ainda não bloqueia: o snapshot atual carrega
-      # achados transitivos sem correção publicada (metro/image-size no
-      # mobile, tar via node-pre-gyp no backend), e um portão duro nasceria
-      # vermelho sem ação possível. Endurece quando a auditoria da entrega
-      # zerar o que tem conserto.
-      - run: npm audit --omit=dev
+      # Portão de vulnerabilidades. Bloqueia de verdade, sem continue-on-error.
+      #
+      # O `npm audit` cru não servia como portão: ele mistura o que tem conserto
+      # com o que não tem, e conta como achado do projeto todo pacote que apenas
+      # DEPENDE de um vulnerável. Rodá-lo direto nascia vermelho sem ação
+      # possível, e portão que nasce vermelho é portão que se aprende a ignorar.
+      #
+      # check-audit.mjs confronta os achados com scripts/security/audit-policy.json,
+      # onde cada tolerância tem pacote, advisory, justificativa, responsável e
+      # prazo de no máximo 90 dias. Exceção vencida BLOQUEIA, então a lista não
+      # apodrece em silêncio.
+      #
+      # Precisa das dependências instaladas: `npm audit` lê a árvore resolvida,
+      # não o package.json.
+      - run: npm ci
         working-directory: mobile
-        continue-on-error: true
-      - run: npm audit --omit=dev
+      - run: npm ci
         working-directory: swi-admin
-        continue-on-error: true
-      - run: npm audit --omit=dev
+      - run: npm ci
         working-directory: swi-backend
-        continue-on-error: true
+      - run: node scripts/security/check-audit.mjs
+      # Os testes do portão. Rodam aqui porque é onde a falha importa: um
+      # portão quebrado passa tudo.
+      - run: node --test scripts/security/check-audit.test.mjs
       # Scanner de segredos do snapshot, versão fixada e saída mascarada
       # (--redact). Este bloqueia: segredo em árvore de entrega para tudo.
       # O .gitleaks.toml da raiz allowlista só falso-positivos verificados

@@ -1,0 +1,169 @@
+{
+  "versao": 1,
+  "_leiaMe": "Exceções ao portão de vulnerabilidades (scripts/security/check-audit.mjs). Uma exceção só é legítima quando NÃO existe correção publicada E o caminho não é alcançável no produto entregue. Ela expira: o vencimento bloqueia a entrega, não avisa. Prazo máximo de 90 dias, contado de declaradaEm. Ao renovar, reveja se a correção saiu, em vez de só empurrar a data.",
+  "_comoRodar": "node scripts/security/check-audit.mjs",
+  "excecoes": [
+    {
+      "projeto": "swi-backend",
+      "pacote": "multer",
+      "advisories": ["Multer vulnerable to Denial of Service via incomplete cleanup"],
+      "justificativa": "multer não aparece em nenhum arquivo de swi-backend/src: ele entra só como dependência transitiva de @nestjs/platform-express. Os uploads do produto vão por POST pré-assinado direto ao storage, então a API nunca faz parsing multipart e o caminho vulnerável não é alcançado. A correção publicada exige o Nest 11 inteiro, um major em toda a camada HTTP, desproporcional para um caminho morto.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "swi-backend",
+      "pacote": "@nestjs/platform-express",
+      "advisories": ["depende de multer vulnerável"],
+      "justificativa": "Marcado apenas por depender do multer, não por defeito próprio. Vale a mesma análise: o produto não faz parsing multipart, e a correção seria o major do Nest 11 na camada HTTP inteira. Sai da lista junto com o multer.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+
+    {
+      "projeto": "mobile",
+      "pacote": "image-size",
+      "advisories": [
+        "image-size: ICNS parser allows denial of service through an infinite loop",
+        "image-size: JXL and HEIF parsers allow denial of service"
+      ],
+      "justificativa": "Sem correção publicada. Vive dentro do metro, o empacotador, que roda na máquina de quem desenvolve e no CI, nunca no APK entregue. As imagens que ele lê são os assets do próprio repositório, não entrada de usuário, então não há por onde alguém fornecer o arquivo malformado que dispara a negação de serviço.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "postcss",
+      "advisories": [
+        "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+        "PostCSS: Arbitrary file read and information disclosure",
+        "PostCSS: Path Traversal in Previous Source Map"
+      ],
+      "justificativa": "A correção exige o major expo@57. Vive no @expo/metro-config, ou seja, no caminho de build do bundle web, que roda na máquina de quem desenvolve. O CSS processado é o do próprio projeto, e a entrega não inclui aplicação Expo web: em release o endereço web serve apenas o aviso de acesso pelo painel.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+
+    {
+      "projeto": "mobile",
+      "pacote": "metro",
+      "advisories": ["depende de image-size vulnerável"],
+      "justificativa": "Empacotador, ferramenta de build. Marcado por depender do image-size, sem defeito próprio e sem correção publicada. Não vai no APK.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "metro-config",
+      "advisories": ["depende de metro vulnerável"],
+      "justificativa": "Configuração do empacotador, ferramenta de build. Marcado em cascata a partir do image-size, sem defeito próprio. Não vai no APK.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "metro-transform-worker",
+      "advisories": ["depende de metro vulnerável"],
+      "justificativa": "Transformador do empacotador, ferramenta de build. Marcado em cascata a partir do image-size, sem defeito próprio. Não vai no APK.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@react-native/community-cli-plugin",
+      "advisories": ["depende de metro vulnerável"],
+      "justificativa": "Plugin de linha de comando do React Native, usado para subir o servidor de desenvolvimento. Marcado em cascata a partir do image-size, e sem correção publicada. Não vai no APK.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "react-native",
+      "advisories": ["depende de @react-native/community-cli-plugin vulnerável"],
+      "justificativa": "O React Native em si não tem defeito aqui: ele é marcado por trazer o plugin de linha de comando, que traz o metro, que traz o image-size. O código que roda no aparelho não inclui nada dessa corrente, e não existe versão corrigida para adotar.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "expo",
+      "advisories": ["depende de @expo/cli e @expo/metro vulneráveis"],
+      "justificativa": "Marcado por trazer a linha de comando e o empacotador do Expo. Subir para expo@57 é um major de plataforma que o plano de entrega descarta sem necessidade comprovada, e o que ele corrigiria é ferramenta de build, não o APK.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@expo/cli",
+      "advisories": ["depende de @expo/config, @expo/metro e @expo/metro-config vulneráveis"],
+      "justificativa": "Linha de comando do Expo, ferramenta de build por definição. Nunca é executada no aparelho do usuário.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@expo/metro",
+      "advisories": ["depende de metro vulnerável"],
+      "justificativa": "Integração do Expo com o empacotador, ferramenta de build. Marcada em cascata a partir do image-size.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@expo/metro-config",
+      "advisories": ["depende de postcss vulnerável"],
+      "justificativa": "Configuração do empacotador para web, ferramenta de build. O CSS que passa por ali é o do próprio projeto, e a entrega não inclui aplicação Expo web.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@kavicki/swi-design-system",
+      "advisories": ["depende de react-native vulnerável"],
+      "justificativa": "O sistema de design é marcado só por declarar react-native como dependência, e não existe versão dele que aponte para um React Native corrigido, porque essa versão não existe. Sai da lista quando a corrente do image-size for corrigida a montante.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@maplibre/maplibre-react-native",
+      "advisories": ["depende de react-native vulnerável"],
+      "justificativa": "Marcado por depender do React Native. Atualizar o pacote não resolve, porque a corrente termina no image-size do empacotador, que não tem correção publicada.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "react-native-reanimated",
+      "advisories": ["depende de react-native vulnerável"],
+      "justificativa": "Marcado por depender do React Native. Mesma corrente terminando no image-size do empacotador, sem correção publicada a adotar.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@react-three/fiber",
+      "advisories": ["depende de react-native vulnerável"],
+      "justificativa": "Renderizador do relógio em três dimensões, marcado por depender do React Native. A correção sugerida é um major do próprio pacote que continuaria apontando para o mesmo React Native, então não muda nada na corrente.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-08-14",
+      "expiraEm": "2026-11-12"
+    }
+  ]
+}

@@ -19,6 +19,15 @@ description = "Artefatos de auditoria do Figma em docs/, fora da entrega"
 paths = ['''docs/.*''']
 
 [[allowlists]]
+# storybook-static/ é saída de `npm run storybook:build`, ignorada pelo git e
+# ausente de qualquer checkout limpo, então isto não afeta o resultado na CI.
+# Existe para a varredura LOCAL não ficar vermelha depois de um build: o bundle
+# minificado tem trechos de alta entropia que a regra generic-api-key confunde
+# com credencial. O fonte de onde ele sai continua sendo varrido normalmente.
+description = "Saída de build do Storybook, ignorada pelo git e fora da entrega"
+paths = ['''swi-admin/storybook-static/.*''']
+
+[[allowlists]]
 description = "Props key de JSX das telas de evacuação"
 # O alvo é o trecho casado inteiro (key="..."), não só o valor capturado:
 # assim o allowlist exige o contexto de prop JSX, não qualquer string parecida.
