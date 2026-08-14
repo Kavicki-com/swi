@@ -69,7 +69,6 @@ function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' {
 
 // Map WorkerStatus to the DS HeartStatus condition ('check' | 'alert' | 'low').
 // Returns null for 'unknown' — the caller HIDES the badge in that case.
-// DS bump TODO (deferred): neutral heart-status condition; using hide-badge
 // fallback for the unknown status.
 function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | null {
   if (status === 'good') return 'check';
@@ -81,24 +80,19 @@ function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | nul
 // As constantes de desenho da moldura de fundo e do divisor moram em
 // lib/dashboardDecor.ts, ao lado de dashboardStatIcons e dashboardKnobSvgs.
 
-// Layout reference (Figma 245:23280, viewport 360×≈800):
 //   - Chart zone: 0,0 → 360×374. Now rendered as edge-to-edge banner with
 //     aspectRatio 360/374; children positioned via percentage of that zone.
 //   - Bottom container: was left=48 / top=271 / w=266 inside the canvas;
 //     now flex column with paddingHorizontal=theme.padding.m and a fixed
 //     overlap (marginTop) into the chart zone.
 //
-// Figma spec is gap.xl=28, but the DS Button DS renders shape="pill" buttons
-// ~4px taller than the Figma 56 spec (60h measured) — accumulating ~11px of
 // extra height across the 5 container items. Reducing the gap to 24 absorbs
 // that overflow so the bottom action row sits within the frame curve as the
-// Figma layout shows (was: bell button touching the BG_DECOR bottom edge).
 const CONTAINER_GAP_XL = 24;
 
 export default function Dashboard() {
   const { phase, vitals, status } = useVitals();
   const { profile } = useProfile();
-  // QA Mobile #2 (30/07/2026): os badges de Relatórios e Notificações eram o
   // literal "4". O contador não vinha de lugar nenhum, então prometia conteúdo
   // que a lista não tinha. Agora saem da contagem real, e somem quando é zero.
   const { unreadCount } = useNotifications();
@@ -115,7 +109,6 @@ export default function Dashboard() {
   // SVGs com <defs> precisam de IDs únicos por instância — caso contrário
   // colidem com cópias renderizadas em outras telas montadas em background.
   const gaugeXml = useUniqueSvg(GAUGE_ICON_SVG);
-  // Silhouette multiply overlay (Figma Caminho 4123) — stacked on top of the
   // DS StatusChart silhouette with mix-blend-mode:multiply pra match my-stats:
   // dois layers iguais multiplicam o gradient produzindo um verde mais rico/
   // saturado. Sem esse overlay, a silhueta do dashboard parecia mais clara
@@ -139,15 +132,11 @@ export default function Dashboard() {
 
   // Dashboard tem 3 estados:
   // - sem param: normal (silhouette verde + stats).
-  // - ?alert=modal (Figma 385:29138 + 385:29371): dashboard com bg/silhueta
   //   em RED (`surface.danger` tint), e modal "Local em Alerta!" aparece
-  //   sobreposto após 800ms com dissolve animation (Figma interaction spec).
-  // - ?alert=active (Figma 385:29591): painel "Procedimento de evacuação"
   //   com timeline cyan + botão "Traçar rota" verde.
   const { alert } = useLocalSearchParams<{ alert?: string }>();
   const isAlertModal = alert === 'modal';
   // Modal opens 800ms após mount, com dissolve fade-in 240ms ease-in-out
-  // (Figma interaction spec: After delay 800ms → Open overlay alert-modal,
   // Animate Dissolve, Easing Ease in and out, Duration 240ms).
   const [modalVisible, setModalVisible] = useState(false);
   useEffect(() => {
@@ -185,10 +174,6 @@ export default function Dashboard() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* A2 — Bottom decoration (Figma 304:2430 background-element). Sibling
-          do content stack: estica full-viewport pra moldura verde tocar a
-          borda da tela em qualquer iPhone. preserveAspectRatio="none" permite
-          stretch horizontal não-uniforme. */}
       <View
         pointerEvents="none"
         style={{
@@ -280,14 +265,6 @@ export default function Dashboard() {
             aspectRatio: 360 / 374,
           }}
         >
-        {/* StatusChart (DS v0.1.86+) — substitui knob bezel + dot-grid +
-             silhueta + heart status + heart-rate button + Elipse 34 + ECG +
-             settings gear + Caminho 4122 disc. Canvas 360×374. extrapolate=true
-             remove o overflow:hidden e backgroundColor pra permitir o disc
-             (background-circle 456.714 dia) sangrar 25.7 acima, 57 abaixo
-             e 48 nas laterais do canvas (conforme Figma data). Inner shadows
-             nos 4 elipses concêntricos (Figma spec Y=2.08, blur=4.16, #000
-             98.82%) também vêm do DS bump 0.1.86. */}
         <StatusChart
           condition={toChartCondition(status)}
           progress={1}
@@ -300,11 +277,6 @@ export default function Dashboard() {
           accessibilityLabel="Status de saúde"
         />
 
-        {/* Silhouette multiply overlay (Figma Caminho 4123) — stacked on top
-            do StatusChart silhouette com mix-blend-mode:multiply pra match
-            visual com my-stats.tsx (mesmo padrão lá). Geometria casa com
-            SILHOUETTE_X=141.9, SILHOUETTE_Y=87.47, w=76.967, h=262.318 do
-            DS canvas 360×374 → percentuais 39.42% / 23.39% / 21.38% / 70.14%. */}
         {Platform.OS === 'web' ? (
           // Overlay web-only de propósito: poupa parse de SVG e uma camada
           // extra no native. Com a new arch (RN 0.76+) o native até suporta
@@ -324,18 +296,6 @@ export default function Dashboard() {
           </View>
         ) : null}
 
-        {/* Heart-status badge — extraído do StatusChart (DS v0.1.105+) via
-            renderHeartStatus={false} pra ser renderizado MANUALMENTE aqui,
-            APÓS o multiply overlay acima. Sem isso, o multiply colorizaria
-            o badge (heart + check icon ficavam verdes em vez de manter o
-            contraste branco/verde original do design). Coords convertidas
-            do HEART_STATUS_OFFSET (canvas 360×374) pra percentuais:
-            left 169.2/360 = 47%, top 139.327/374 = 37.25%, size 26.093/374
-            ≈ 6.978% (badge é quadrado, então width=height nas %).
-            DS bump TODO (deferred): neutral heart-status condition; using
-            hide-badge fallback — heartCondition is null for the 'unknown' status
-            (here only reachable via 'stale', since loading/empty/error take over
-            above), so we hide the badge instead of faking a 'check'. */}
         {heartCondition ? (
           <View
             pointerEvents="none"
@@ -349,10 +309,6 @@ export default function Dashboard() {
           </View>
         ) : null}
 
-        {/* 5. Avatar — absolute top-right, overlays the chart.
-            Pressable wraps the avatar so tapping it opens /(app)/settings.
-            Before R-4 (2026-05-17), settings was unreachable from the (app)
-            graph — avatar is the canonical iOS/Android profile-entry idiom. */}
         <Pressable
           onPress={() => router.push('/(app)/settings')}
           accessibilityRole="button"
@@ -368,9 +324,6 @@ export default function Dashboard() {
           />
         </Pressable>
 
-        {/* 6. Location pin button — Figma places this directly below the
-             heart-rate button (right edge aligned), inside the chart zone.
-             Top:69% sits just under the 41.98%→66% heart-rate band. */}
         <View style={{ position: 'absolute', top: '72.5%', right: '13.33%' }}>
           <Button
             variant="contained"
@@ -393,12 +346,6 @@ export default function Dashboard() {
         </View>
         </View>
 
-        {/* 7. Camera button — Figma 245:23280 main-actions row.
-             No Figma o button center está em dashboard y=383 (button bottom
-             y=411), e a curva inferior do disco no button x está em y=405.93,
-             deixando 5px do button bottom EXPOSTO abaixo da curva (espaço
-             visível sem disco). bottom:20 = 431-411, posicionando button
-             bottom exatamente em chart-zone y=411 conforme Figma. */}
         <View style={{ position: 'absolute', bottom: 20, left: 48 }}>
           <Button
             variant="outline"
@@ -437,9 +384,6 @@ export default function Dashboard() {
           ) : null}
         </View>
 
-        {/* 8. Briefcase button — Mesma posição vertical do camera button
-             (Figma 245:23280 main-actions row), espelhada horizontalmente.
-             5px do button bottom exposto abaixo da curva inferior do disco. */}
         <View style={{ position: 'absolute', bottom: 20, right: 48 }}>
           <Button
             variant="outline"
@@ -463,10 +407,6 @@ export default function Dashboard() {
         </View>
       </View>
 
-      {/* Bottom container — Figma 304:2858 ancora em left:48 do viewport 360
-          (container w:266 + right:46). paddingHorizontal:48 alinha com a
-          parede interna do BG_DECOR; theme.padding.l (24) deixava badges
-          colados na parede esquerda no Android. */}
       <View
         style={{
           width: '100%',
@@ -477,10 +417,6 @@ export default function Dashboard() {
           alignItems: 'flex-end',
         }}
       >
-        {/* User stats: 3 cols + dividers (Figma 304:2456 → justify-between).
-            cols 41/65/55, dividers 1×106.146. Wrap do "12/8" no Android é
-            resolvido via numberOfLines=1 no Title (StatCol abaixo), não
-            aumentando width — preserva fidelidade Figma. */}
         <View
           style={{
             flexDirection: 'row',
@@ -500,10 +436,8 @@ export default function Dashboard() {
             }
             value={String(v.heartRate)}
             label="BPM"
-            // 41 (Figma) só comportava 2 dígitos, e mal: o simulador vai de 40
             // a 140 BPM, então 3 dígitos são esperados, não exceção. 70 é a
             // mesma largura da coluna de Kcal, que já segura "184" — e segue o
-            // precedente das outras duas, que também subiram do valor do Figma
             // quando o texto quebrava (65→80 e 55→70).
             width={70}
             theme={theme}
@@ -540,13 +474,6 @@ export default function Dashboard() {
           />
         </View>
 
-        {/* 4. Fatigue progress — Figma 304:2433. DS v0.1.32+ bordered prop
-            renders the 22px-tall pill frame natively; gradient direction
-            rtl + custom stops [43.75, 79.253, 100] match the Figma fill
-            (red on the left → green on the right). Fill value 74 mirrors
-            the Figma snapshot (pr-76 on a 328-wide track) — original 74.4
-            triggered Fabric HostFunction precision error in DS v0.1.34
-            ProgressBar (accessibilityValue.now expects int64; see Gap H). */}
         <View style={{ gap: theme.gap.s, width: '100%' }}>
           <ProgressBar
             value={Math.round(v.fatiguePct)}
@@ -580,9 +507,6 @@ export default function Dashboard() {
           }}
         >
           <View style={{ gap: theme.gap.s }}>
-            {/* Contagens REAIS, não mais o literal "4" (QA Mobile #2). Sem
-                pendências, o badge some em vez de anunciar conteúdo que a
-                lista não tem. O rótulo acessível acompanha o número. */}
             <BadgedButton
               icon="reports_filled"
               badge={pendingReports > 0 ? String(pendingReports) : undefined}
@@ -616,11 +540,6 @@ export default function Dashboard() {
             accessibilityLabel="Chat"
             onPress={() => router.push('/(app)/chat/inbox')}
           />
-          {/* Wrap 56×56 força dimensões iguais → shape="pill" vira circular.
-              Sem o wrap, DS Button size="large" + ícone 18×22 (narrow/tall)
-              calculava paddings horizontal/vertical diferentes e o pill
-              ficava OVAL (bug Fix 6 reportado pelo cliente). Mesmo pattern
-              do BadgedButton (linha ~810) que já estava enforcando 56×56. */}
           <View style={{ width: 56, height: 56 }}>
             <Button
               variant="contained"
@@ -644,9 +563,6 @@ export default function Dashboard() {
       </View>
       </View>
 
-      {/* Alert modal overlay (Figma 385:29371 alert-modal) — renderiza
-          inline quando ?alert=modal, com delay 800ms + dissolve fade-in
-          240ms ease-in-out. CTA navega pra ?alert=active (timeline). */}
       {isAlertModal ? (
         <View
           pointerEvents={modalVisible ? 'auto' : 'none'}

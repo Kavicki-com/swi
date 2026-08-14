@@ -3,7 +3,6 @@ import { Stack, useRouter } from 'expo-router';
 import { useTheme } from '@kavicki/swi-design-system';
 import { PrivacyPolicyModal } from '../../../components/modals/PrivacyPolicyModal';
 
-// Figma 348:10434 — bottom-sheet "Política de privacidade" (authenticated).
 // Route wrapper: aplica envelope `transparentModal` + backdrop pressable.
 // Conteúdo real vive em `components/modals/PrivacyPolicyModal.tsx`.
 export default function SettingsPrivacy() {

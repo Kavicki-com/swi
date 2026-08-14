@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
 
-// Auto-redirect timer per Figma description "Você será redirecionado para a
 // tela inicial". 2.5s gives the user time to register the success state and
 // matches the "feels intentional, not too snappy" rhythm of similar flows.
 const REDIRECT_MS = 2500;
@@ -16,7 +15,6 @@ export default function AccountConfirmation() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      // Fim do fluxo 1 (reordenação 2026-07-27): a conta existe e o cadastro
       // está na fila de aprovação do painel. Ninguém está autenticado aqui —
       // o worker volta pro login e, quando o admin aprovar, o primeiro login
       // o desvia pro wizard de perfil (complimentary-data).

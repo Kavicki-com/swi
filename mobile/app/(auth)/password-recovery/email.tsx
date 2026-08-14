@@ -28,7 +28,6 @@ export default function PasswordRecoveryEmail() {
       try { await resetPassword({ email: email.value }); }
       catch (e) { Alert.alert('Erro', errorMessage(e, 'Não foi possível enviar o código.')); return; }
     }
-    // Figma 290:688 — show the recovery-specific "Acesse o link de
     // recuperação" confirmation screen (distinct from the signup variant
     // 211:12920). The email-sent screen auto-advances to new-password after
     // 4s, simulating the user clicking the magic-link in their inbox.
@@ -40,7 +39,6 @@ export default function PasswordRecoveryEmail() {
 
   // Trava de reentrancia: `disabled` so cobria o formulario incompleto,
   // nao o periodo da requisicao — um segundo toque disparava de novo
-  // (QA 2026-07-27, no fim do cadastro).
   const { run: enviar } = useSubmitOnce(handleSubmit);
 
   return (
@@ -77,14 +75,6 @@ export default function PasswordRecoveryEmail() {
             autoComplete="email"
             autoCapitalize="none"
           />
-          {/* SEM `disabled={!canSubmit}` (QA Mobile #1): o handleSubmit já
-              marca o campo como tocado pra revelar o erro, e botão
-              desabilitado nunca dispara onPress — aquele bloco era código
-              morto e o toque sumia no vazio.
-
-              A trava de duplo envio não cai junto: ela vive no useSubmitOnce
-              (`enviar`), que foi criado justamente porque o disabled era
-              insuficiente pra isso. */}
           <Button
             variant="contained"
             label="Enviar Link"

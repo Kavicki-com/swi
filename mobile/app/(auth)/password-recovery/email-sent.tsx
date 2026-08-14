@@ -4,10 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
 
-// Figma 290:688 — password-recovery email-confirmation-message.
 // Distinct from the signup variant (211:12920): copy is "Acesse o link de
 // recuperação" + "Enviamos um email para … confirmar a sua conta." (the
-// Figma copy reuses "confirmar a sua conta" verbatim across both variants).
 // Auto-advance to new-password simulates the user clicking the recovery link
 // in the email. 4s mirrors the signup variant (consistent UX between flows).
 const ADVANCE_MS = 4000;

@@ -18,11 +18,6 @@ export default function SettingsLayout() {
           animation: 'slide_from_bottom',
         }}
       />
-      {/* `privacy` segue o mesmo padrão de `support`: bottom-sheet sobre
-          settings, NÃO tela full-screen. Mesma motivação do comment acima —
-          `presentation` precisa ser resolvido no layout, não inline no
-          screen, senão o Expo Router aplica push default e a sheet abre
-          como tela. (Figma 348:10434.) */}
       <Stack.Screen
         name="privacy"
         options={{

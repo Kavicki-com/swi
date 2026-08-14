@@ -5,7 +5,6 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { ActiveAlertModal } from './ActiveAlertModal';
 import { useWeather } from '../../services/weather/WeatherProvider';
 
-// Figma 385:29591. O procedimento de evacuação, apresentado como modal sobre a
 // tela de notificações. É tela de SEGURANÇA: ela não pode quebrar nem ficar em
 // branco, aconteça o que acontecer com o clima.
 //

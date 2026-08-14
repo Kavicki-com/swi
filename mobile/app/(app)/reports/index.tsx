@@ -16,7 +16,6 @@ import { ReportsListState } from '../../../components/reports/ReportsListState';
 import { useReports } from '../../../services/reports/ReportsProvider';
 import type { Report } from '../../../services/reports/types';
 
-// Figma 364:18596 — reports list. SearchInput + Novo relatório CTA +
 // scrollable ReportCard list + Pagination + 2 FABs (chat + home).
 // Backend slice: 10 mock reports via useReports() (Unit A/B), todos navegam
 // pra /reports/[id]. Mesmos dados que antes (seed migrado das telas).
@@ -54,7 +53,6 @@ export default function Reports() {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Só carrega quando ainda não há nada carregado (status 'idle'). load() seta
-  // 'loading' primeiro, então re-disparar em todo mount apagaria a lista já
   // populada pra um spinner ao voltar pra tela. O provider mantém `reports` na
   // sessão e create() o mantém fresco, então visitas seguintes não dão flash.
   useEffect(() => {
@@ -83,10 +81,6 @@ export default function Reports() {
         <ReportsListState kind="error" onRetry={load} />
       ) : (
         <>
-          {/* Fixed header: SearchInput + Novo relatório CTA stay pinned at top.
-              Figma 364:18596 mostra apenas 1 e meio card na área scrollável.
-              `paddingTop` mínimo de 40 garante o respiro visto no Figma mesmo
-              no web (onde `insets.top` = 0). */}
           <View
             style={{
               paddingTop: Math.max(insets.top, 40),
@@ -112,12 +106,6 @@ export default function Reports() {
             />
           </View>
 
-          {/* Scrollable cards area — QA Mobile #8: a altura fixa (maxHeight
-              540, calibrada pro frame de 800dp do Figma) deixava um vão de
-              ~25% da tela até os FABs em aparelho real. flex: 1 faz a lista
-              ocupar tudo até a paginação; o corte do 2º card pedido pelo
-              cliente em 2026-05-22 continua acontecendo, só que na borda real
-              da área de scroll, não num teto fixo. */}
           <ScrollView
             style={{ flex: 1, marginTop: theme.gap.m }}
             contentContainerStyle={{
@@ -136,12 +124,6 @@ export default function Reports() {
             ))}
           </ScrollView>
 
-          {/* Pagination — Figma 461:10196 (shared with settings/faq.tsx).
-              Fora do ScrollView de propósito (QA Mobile #8): como rodapé fixo
-              ela fecha a tela por baixo e card nenhum passa por trás dela.
-              O paddingBottom reserva o obstáculo mais alto do rodapé, o FAB
-              do chat (bottom insets.bottom + 71, altura 56 → topo a
-              insets.bottom + 127), mais um respiro de gap.m. */}
           <View
             style={{
               paddingHorizontal: theme.padding.m,

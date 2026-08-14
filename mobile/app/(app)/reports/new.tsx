@@ -21,7 +21,6 @@ import { validateRequired } from '../../../lib/validation/validators';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
 import { useReports } from '../../../services/reports/ReportsProvider';
 
-// Figma 372:21297 — new-report form. Voltar + "Novo relatório" title +
 // 3 inputs (Título / Resumo / Detalhes multiline) + Atribuir
 // responsáveis OutlineButton + Anexos section (4 placeholders +
 // ImageUploader) + CTAs Salvar / Cancelar.
@@ -41,7 +40,6 @@ export default function NewReport() {
   const detalhes = useField({ validator: (v) => validateRequired(v, 'Detalhes') });
   // A seleção já vem com id E NOME. Antes só trazia ids e esta tela resolvia o
   // nome pelo diretório do chat via useChat() — que vive noutra subárvore de
-  // providers e derrubava a tela na montagem (review 2026-07-27).
   const [responsibles, setResponsibles] = useState<ResponsiblePick[]>(() =>
     responsiblesSelection.get(),
   );
@@ -72,7 +70,6 @@ export default function NewReport() {
   };
 
   const media = useMediaPicker();
-  // QA Mobile #4: tocar numa miniatura preenchida só oferecia trocar a foto,
   // não havia caminho de volta. `onRemove` só vai quando há o que remover; em
   // slot vazio o menu segue com as três opções de sempre.
   const showPicker = async (index: number) => {
@@ -85,7 +82,6 @@ export default function NewReport() {
   // "Enviar arquivo" alimenta a GRADE, não a si mesmo. A tela mantinha dois
   // estados separados — os 4 quadrados e uma preview própria do uploader — e a
   // foto escolhida por aqui aparecia dentro do próprio botão, longe dos
-  // quadrados que a pessoa estava olhando (QA no aparelho, 2026-07-27).
   //
   // Mesmo modelo que journey/task/[id] já usa: um lugar só pras fotos.
   const primeiroSlotLivre = attachments.findIndex((a) => !a);
@@ -126,7 +122,6 @@ export default function NewReport() {
     }
     // O backend guarda NOMES (e casa nome↔perfil pra resolver os avatares do
     // card). Vêm da seleção, que já os trouxe do diretório real da empresa —
-    // até 2026-07-26 saíam de uma lista fictícia e "Elisa Siqueira Jordão" era
     // GRAVADA como responsável no banco de verdade.
     const responsibleNames = responsibles.map((r) => r.name);
     setSaving(true);
@@ -165,13 +160,6 @@ export default function NewReport() {
         keyboardShouldPersistTaps="handled"
         bottomOffset={60}
       >
-        {/* Voltar — left-aligned, largura natural (match /reports/[id] e
-            Figma 372:21297). marginLeft:-18 compensa: (a) padding-left do
-            ghost Button (theme.padding.sm = 12pt) + (b) inset visual do
-            glyph keyboard_arrow_left dentro do bounding box 24x24 do Icon
-            (~6pt) = total 18pt. Alinha a ponta do "<" com o edge do
-            content area (settings TopBar precisa só de -6 porque seu BackSlot
-            tem padding-left:0). */}
         <View style={{ alignSelf: 'flex-start', marginLeft: -18 }}>
           <Button
             variant="ghost"
@@ -206,8 +194,6 @@ export default function NewReport() {
           label="Resumo do relatório"
           placeholder="Digite aqui um resumo do seu relatório"
         />
-        {/* Detalhes textarea — Figma 372:21297 mostra textarea alta
-            (~250-300h) ocupando espaço significativo do form. */}
         <Input
           {...detalhes.bind()}
           label="Detalhes do relatório"
@@ -233,12 +219,6 @@ export default function NewReport() {
           Anexos
         </Title>
 
-        {/* 4 image placeholders em 2×2 grid. Figma 372:21297 mostra cards
-            quadrados ocupando full-width do content area (com gap entre eles).
-            Antes era width:156 fixo + flexWrap, o que packava à esquerda e
-            deixava espaço sobrando à direita em viewports >320pt.
-            Row-grouping com flex:1 + aspectRatio:1 garante 2 colunas, cada
-            uma metade da largura, quadradas. */}
         <View style={{ gap: theme.gap.sm }}>
           {[[0, 1], [2, 3]].map((row, rowIdx) => (
             <View
@@ -283,11 +263,6 @@ export default function NewReport() {
           ))}
         </View>
 
-        {/* Upload progress bar — Figma 372:21297 mostra um bar fino branco
-            acima da dashed area que enche conforme arquivos são adicionados:
-            largura = fração dos 4 quadrados preenchidos. Fix LOCAL nesta
-            tela — não foi adicionado ao DS ImageUploader pra não afetar
-            outras telas (instrução explícita do designer). */}
         <View
           style={{
             height: 3,
@@ -316,20 +291,11 @@ export default function NewReport() {
           showTakePhoto={false}
           accentColor={theme.content.primary}
           // value null de proposito: a preview vive nos 4 quadrados acima.
-          // Mostrar a foto aqui dentro era o bug relatado.
           value={null}
           onPickFile={pickFileForUploader}
         />
 
         {/* CTAs */}
-        {/* SEM `!canSubmit` no disabled (QA Mobile #1): o save já marca os
-            campos como tocados pra revelar o erro de cada um, e botão
-            desabilitado nunca dispara onPress — aquele bloco era código morto
-            e o toque sumia no vazio.
-
-            O `saving` FICA. Diferente das telas de (auth), esta não usa
-            useSubmitOnce: é o `saving` que impede o segundo toque de criar um
-            relatório duplicado enquanto o primeiro está no ar. */}
         <Button
           variant="contained"
           backgroundColor={theme.surface.primary}

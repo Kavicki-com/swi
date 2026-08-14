@@ -20,7 +20,6 @@ export default function AppLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  // NotificationProvider subiu pra cá (QA Mobile #2, 30/07/2026). Antes vivia
   // DENTRO da tela de notificações, então só existia enquanto ela estava
   // aberta, e o dashboard não tinha como saber quantas há — por isso o badge
   // era o literal "4". Aqui ele acompanha a sessão inteira, como Journey e

@@ -45,7 +45,6 @@ const optional =
   (v: string): ValidationResult =>
     v.trim().length === 0 ? { valid: true } : validator(v);
 
-// Figma 353:11560 — settings sub-screen "Dados pessoais". Form-based.
 // TopBar (DS v0.1.38) + section title + 11 fields + Salvar button +
 // Home FAB. Prefill real via GET /profile/me e Salvar via saveProfile
 // (upload de avatar por URL assinada ANTES do PUT); ver handleSave.
@@ -54,11 +53,8 @@ export default function SettingsPersonalData() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  // Prefill REAL via GET /profile/me — os exemplos do Figma ('Carlos
   // Sampaio', '00/00/0000') eram mock fixo e o Salvar era um router.back():
-  // o cliente editava, "salvava" e perdia tudo (QA 2026-07-26).
   const { loadProfile, saveProfile } = useProfile();
-  // O e-mail da conta vive no User, nao no Profile. Ate 2026-07-27 este campo
   // era um input editavel que NUNCA era preenchido no load nem enviado no
   // save: digitar ali nao fazia absolutamente nada. Agora ele mostra o e-mail
   // real, em leitura — trocar e-mail e operacao de autenticacao (exige
@@ -67,7 +63,6 @@ export default function SettingsPersonalData() {
   // Máscara + validação vêm de lib/validation, as MESMAS já usadas no cadastro
   // (complimentary-data/step-1). Esta tela nasceu com useState cru: a data de
   // nascimento aceitava "02011999" sem barras e o Salvar mandava isso pro
-  // backend (QA no aparelho, 2026-07-27).
   const nome = useField({ validator: validateFullName });
   const data = useField({ validator: validateBirthDate, mask: maskBirthDate });
   const cpf = useField({ validator: validateCPF, mask: maskCPF });
@@ -192,8 +187,6 @@ export default function SettingsPersonalData() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Background overlay — Figma imgSettingsPersonalData.
-          Wrapper View pattern (RN ImageProps typing omits pointerEvents). */}
       <View
         pointerEvents="none"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
@@ -230,13 +223,6 @@ export default function SettingsPersonalData() {
             Dados do cadastro
           </Title>
 
-          {/* Foto de perfil — mesma UI ja aprovada no passo 1 do cadastro
-              (ImageUploader do DS). La ela existe mas DESCARTA o arquivo: o
-              wizard roda antes da conta existir, entao nao ha token pro
-              presign. Aqui a pessoa esta autenticada, e este passou a ser o
-              unico caminho no app pra definir foto — sem ele o Avatar cai nas
-              iniciais em jornada, dashboard, chat, mapa e no seletor de
-              responsaveis (QA no aparelho, 2026-07-27). */}
           <Title variant="title.xs" color={theme.content.primary}>
             Foto de perfil
           </Title>
@@ -335,7 +321,6 @@ export default function SettingsPersonalData() {
         </View>
       </KeyboardAwareScrollView>
 
-      {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
       <View
         pointerEvents="box-none"
         style={{

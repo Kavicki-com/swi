@@ -3,12 +3,10 @@ import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { DIVIDER_GRAD_END, DIVIDER_GRAD_MID } from '../../lib/dashboardDecor';
 import { useUniqueId } from '../../lib/uniqueSvg';
 
-// Divisor vertical entre as colunas de estatística (Figma 295:1585 / 304:2455):
 // 1px de largura por 106 de altura, com gradiente que vai do escuro nas pontas
 // ao verde de marca no meio.
 //
 // O `theme` que o dashboard passava nunca foi usado: as cores vêm das paradas
-// do Figma, que o design system não expõe. O parâmetro saiu na extração.
 export const StatDivider = memo(function StatDivider() {
   const gradId = useUniqueId('divider-grad');
   return (

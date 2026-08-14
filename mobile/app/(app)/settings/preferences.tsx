@@ -13,7 +13,6 @@ import {
 } from '@kavicki/swi-design-system';
 import { HomeFAB } from '../../../components/HomeFAB';
 
-// Figma 357:12302 — settings sub-screen "Preferências". 4 toggle rows
 // (Notificações / Localização / Acessar pastas e arquivos / Ligações
 // telefônicas) sob section title "Permissões" + Home FAB.
 //
@@ -98,10 +97,6 @@ export default function SettingsPreferences() {
             Permissões
           </Title>
 
-          {/* Toggle + label composto (Figma 357:12357 etc): label
-              sempre content.dark Inter Regular 14, independente do
-              state. Toggle DS sem `rightLabel` pra evitar o coloring
-              active/medium que vincula label ao estado. */}
           {(
             [
               { key: 'notifications', value: notifications, set: setNotifications, label: 'Notificações' },
@@ -133,7 +128,6 @@ export default function SettingsPreferences() {
           alignItems: 'center',
         }}
       >
-        {/* HomeFAB fiel ao Figma 348:10334 (substitui Button DS antigo). */}
         <HomeFAB onPress={() => router.push('/(app)/dashboard')} />
       </View>
     </View>

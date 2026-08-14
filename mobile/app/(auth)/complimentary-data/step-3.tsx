@@ -49,7 +49,6 @@ export default function ComplimentaryDataStep3() {
   const { saveProfile } = useProfile();
   const { user } = useAuth();
   // Saudação: primeiro nome da conta logada (o wizard roda pós-login desde a
-  // reordenação 2026-07-27 — não há mais param vindo do cadastro).
   const username = user?.name?.trim().split(/\s+/)[0] || undefined;
 
   const [gender, setGender] = useState<GenderValue | null>(null);
@@ -62,7 +61,6 @@ export default function ComplimentaryDataStep3() {
 
   // Coordinator: only one Combobox panel can be open at a time. Without this,
   // both Altura and Peso panels could float simultaneously (overlapping each
-  // other and the fields below), which was the observed bug.
   type ComboboxKey = 'altura' | 'peso' | 'sangue';
   const [openCombobox, setOpenCombobox] = useState<ComboboxKey | null>(null);
   const handleOpenChange = (key: ComboboxKey) => (next: boolean) => {
@@ -71,7 +69,6 @@ export default function ComplimentaryDataStep3() {
 
   // Required: gênero, altura, peso, tipo sanguíneo, status de deficiência.
   // Allergies + conditions ficam opcionais (não é incomum o usuário não ter).
-  // Match com R-10 em 2026-05-17-mobile-routes-audit.md.
   const canSubmit =
     gender !== null &&
     height.length > 0 &&
@@ -94,16 +91,13 @@ export default function ComplimentaryDataStep3() {
 
   const finish = async () => {
     if (!canSubmit) {
-      // QA Mobile #1 (classe): antes isto era um `return` seco. O toque morria
       // aqui e a tela não dizia nada, então a pessoa ficava presa na última
       // etapa do cadastro sem saber o que faltava.
       setTentouEnviar(true);
       return;
     }
     // Persiste o step-3 como os steps 1-2 já fazem. Tudo aqui é DIGITÁVEL
-    // (nada vem da smartband), então é dado real — até 2026-07-26 este step
     // simplesmente descartava o que o usuário preencheu. O wizard roda
-    // pós-login (fluxo 2, reordenação 2026-07-27), então o PUT sobe com o
     // token do próprio worker.
     try {
       await saveProfile({
@@ -136,7 +130,6 @@ export default function ComplimentaryDataStep3() {
   };
 
   // Trava de reentrancia: chamadas enquanto a anterior esta no ar sao
-  // ignoradas pelo ref interno (QA 2026-07-27: no cadastro, o 2o toque levou
   // 409 de e-mail ja existente enquanto o 1o ja tinha criado a conta e
   // navegado). O `disabled` do botao nunca fez parte desta trava.
   const { run: enviar } = useSubmitOnce(finish);
@@ -266,14 +259,6 @@ export default function ComplimentaryDataStep3() {
         />
 
         <View style={{ gap: theme.gap.sm, zIndex: 7 }}>
-          {/* SEM `disabled={!canSubmit}` (QA Mobile #1): o finish já marca
-              `tentouEnviar` pra revelar o que falta, e botão desabilitado
-              nunca dispara onPress — o toque sumia no vazio bem na última
-              porta antes do dashboard.
-
-              A validação não afrouxa: quem decide concluir continua sendo o
-              `if (!canSubmit)` do finish. E a trava de duplo envio vive no
-              useSubmitOnce (`enviar`). */}
           <Button
             variant="contained"
             label="Concluir"

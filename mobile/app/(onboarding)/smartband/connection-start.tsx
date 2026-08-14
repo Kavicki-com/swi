@@ -7,8 +7,6 @@ import { Smartwatch3D } from '../../../components/Smartwatch3D';
 import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
 
-// Figma 215:17901 — smartband-connection-start. Renamed from `pairing.tsx`
-// on 2026-05-17 to match the Figma frame name (audit reconciliation).
 // Content unchanged: animated 3D smartband + sync progress bar, auto-advances
 // to /smartband/complete when progress reaches 1.
 

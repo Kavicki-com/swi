@@ -52,7 +52,6 @@ describe('ResponsiblesModal', () => {
   // A regressão que motivou o teste: o modal usava useChat(), mas o
   // ChatProvider só envolve a subárvore de CHAT, montar isto a partir de
   // relatórios lançava "useChat must be used inside ChatProvider" e derrubava
-  // a tela (review 2026-07-27). Renderizar SEM provider de chat é o guarda.
   it('monta fora da subárvore de chat, sem ChatProvider', async () => {
     const tree = await render();
     expect(JSON.stringify(tree.toJSON())).toContain('Jennifer Gomes');
@@ -60,8 +59,6 @@ describe('ResponsiblesModal', () => {
 
   // Não é o diretório de CHAT: aquele devolve a empresa inteira de propósito
   // (os admins entram pra o worker conseguir falar com o painel), e por isso o
-  // seletor oferecia os 10 operadores como revisores no aparelho (QA
-  // 2026-07-27). A régua de quem revisa vive no backend, em /reports/assignees.
   it('busca a lista de responsáveis, não o diretório de chat', async () => {
     await render();
     expect(mockListAssignees).toHaveBeenCalledTimes(1);
@@ -74,7 +71,6 @@ describe('ResponsiblesModal', () => {
   });
 });
 
-// QA Mobile #5: "a lista aparece cortada atrás dos botões Cancelar/Continuar
 // (só 'Admin' aparece parcialmente)". Reproduzido nos dois extremos: com lista
 // curta ela virava uma fatia e o card ficava atrás dos botões; com lista longa
 // o sheet estourava a tela e o cabeçalho saía por cima do viewport.
@@ -351,7 +347,6 @@ describe('ResponsiblesModal, ficha de cada card', () => {
   });
 
   // A idade sai do birthDate: o card exibia "26 anos" cravado pra qualquer
-  // pessoa que o usuário abrisse (QA 2026-07-26). A data de teste é derivada
   // de hoje pra asserção não envelhecer, sem repetir a conta do ageFrom.
   it('a idade vem da data de nascimento; sem data, o card diz que não sabe', async () => {
     const hoje = new Date();

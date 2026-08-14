@@ -5,7 +5,6 @@ import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system';
 
 // Única tela do Expo web no build de release. O produto web suportado é o
 // painel administrativo; o app web sempre foi ferramenta de desenvolvimento e
-// de QA, e entregá-lo funcionando prometeria um segundo produto que ninguém
 // mantém.
 //
 // Renderizado por app/_layout.tsx ANTES de qualquer provider: sem

@@ -22,7 +22,6 @@ import { chipAnchors, chipEtaLabel, lineFeature, straightLine } from '@/services
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 
-// Figma 385:30193 — evacuation-route (idle / "rota planejada").
 //
 // First screen migrated off the legacy maplibre-gl imperative wrapper onto
 // the declarative MapView API that works on both react-native-web (via
@@ -37,7 +36,6 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 //   - cyan #8AD2E2 polyline rendered via <MapLineSource>
 
 // Theme-aware chip body extracted to components/MapChipBody.tsx (audit
-// cleanup 2026-05-17) — shared with evacuation-ongoing.tsx. Note: must
 // remain wrapped in <SwiThemeProvider> when rendered as a maplibre-gl
 // marker child on web (the detached React root doesn't inherit theme).
 
@@ -174,7 +172,6 @@ function EvacuationRouteScreen() {
         <NavFABs />
       </MapView>
 
-      {/* Evacuação REAL ativa (Fase 2): CTA de confirmação de presença. */}
       <EvacuationAckBar />
     </View>
   );

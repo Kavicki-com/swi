@@ -20,12 +20,9 @@ import {
 import { useWeather } from '../../services/weather/WeatherProvider';
 import { weatherDisplay } from '../../services/weather/weatherFormat';
 
-// Tela "Procedimento de evacuação" (Figma 385:29591 dashboard-alert-active).
-// Antes vivia em `app/(app)/alert-instructions.tsx`; por decisão de 2026-05-15,
 // dashboard e instruções são a mesma rota com dois estados, e este componente
 // serve o branch `?alert=active`.
 //
-// Extraída do dashboard.tsx na Task 5 do plano de entrega, sem alteração de
 // comportamento: é tela de segurança, coberta por dashboard.integration.test.
 export function AlertActiveView() {
   const theme = useTheme();
@@ -37,7 +34,6 @@ export function AlertActiveView() {
   const { snapshot, activeAlert } = useWeather();
   const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
 
-  // Bolinhas da timeline (Figma 385:29807 etc.) usam `surface/secondary`
   // #50B3D2 (teal escuro). A linha vertical entre bolinhas usa um cyan
   // mais claro `content/secondary` #8AD2E2, cores DIFERENTES por design.
   const stepCircle = (
@@ -73,8 +69,6 @@ export function AlertActiveView() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Dot-grid (Figma 385:29751 "Repetição de grade 4"): 27 colunas,
-          opacity 9%, centrado no topo. Mesma camada do dashboard/my-stats. */}
       <JourneyTheme />
       <ScrollView
         style={{ flex: 1 }}
@@ -102,10 +96,6 @@ export function AlertActiveView() {
             gap: theme.gap.m,
           }}
         >
-          {/* Left: condition card (Figma 385:30119). Fixed 203×100. Content
-              alinha bottom (justify-end) pra deixar espaço pro ícone de chuva
-              transbordar o topo do card. Padding só horizontal+bottom; top
-              fica zero pra não empurrar texto pra baixo do ícone. */}
           <View
             style={{
               width: 203,
@@ -119,10 +109,6 @@ export function AlertActiveView() {
               gap: theme.gap.s,
             }}
           >
-            {/* Ícone de chuva (Figma 385:30122): 72×72.76 posicionado
-                top:-28.38 (transborda o topo do card, ~40% fica fora). DS
-                WeatherIcon 404 com asset path em node_modules; renderiza
-                direto via RNImage do mobile/assets/. */}
             <View
               style={{
                 position: 'absolute',
@@ -147,9 +133,6 @@ export function AlertActiveView() {
             </Text>
           </View>
 
-          {/* Right: data column (Figma 385:30123). Width fixa 83px. Os
-              4 ícones vêm dos SVGs do Figma (alertWeatherSvgs) porque
-              os equivalentes do DS têm shapes diferentes. */}
           <View style={{ width: 83, gap: theme.gap.s }}>
             <WeatherDataRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value={humStr} theme={theme} />
             <WeatherDataRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value={windStr} theme={theme} />
@@ -304,9 +287,6 @@ function WeatherDataRow({
         gap: theme.gap.s,
       }}
     >
-      {/* Container 24x24 igual aos antigos ícones do DS pra manter
-          alinhamento vertical entre as 4 rows; ícone fica centralizado
-          dentro mas usa seu tamanho intrínseco do Figma. */}
       <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
         <SvgXml xml={svg} width={svgW} height={svgH} />
       </View>

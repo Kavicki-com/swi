@@ -1,5 +1,4 @@
 // mobile/app/(app)/map-weather.tsx
-// Figma 385:21840 — map-metereologic-alerts. Sprint 6 Wave 2 / item B.2.
 //
 // Sprint 6 Wave 3: migrated off the legacy maplibre-gl imperative wrapper
 // (createRoot + addSource/addLayer) onto the declarative MapView API.
@@ -10,7 +9,6 @@
 // MapsGeneral.tsx:67-87 (Box-Muller point generation) and lines 393-411
 // (storm-intensity color curve: cyan→green→yellow→orange→red→magenta).
 // The admin curve produces exactly the red/orange weather radar blob
-// shown in Figma 385:21840 — keeping it identical here makes the mobile
 // screen visually consistent with the admin Dashboard MapBanner.
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -93,9 +91,7 @@ function MapWeatherScreen() {
   const { coords } = useLocation();
   const router = useRouter();
 
-  // 3 icon-only toggle buttons (Figma 385:21840 → 165:21860). Cada botão
   // é simple toggle; tap liga, tap de novo desliga. `showHeatmap=true` por
-  // default (Figma) — mas iniciamos em false e ligamos APÓS 300ms via
   // useEffect (defer pattern). Sem o defer, 2 heatmap layers (storm + flood)
   // tentavam mountar no mesmo frame do MapView GL init e crashavam o
   // libmaplibre.so em GPUs Android mid-range (POCO/rodin observado em
@@ -155,10 +151,6 @@ function MapWeatherScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Centra no GPS real, igual o map.tsx já fazia — as duas telas de mapa
-          divergiam e o clima abria em São Paulo pra quem estava em Curitiba
-          (QA 2026-07-26). Os pontos de calor/alerta seguem ancorados na
-          constante de demo: são dados de clima fabricados, não posição. */}
       <MapView center={coords} zoom={13}>
         {/* Keys explícitos: toggles condicionais (showHeatmap, showOperators,
             showCameras) shiftam posições no array de children. Sem keys o
@@ -249,9 +241,6 @@ function MapWeatherScreen() {
             </MapMarker>
           ))}
 
-        {/* Map controls — right:20, vertically centered ~296px acima do
-            centro (Figma 385:28587). Stack top-down: operators → heatmap
-            → cameras. Cada controle alterna seu próprio overlay. */}
         <View
           style={{
             position: 'absolute',
@@ -296,13 +285,11 @@ function MapWeatherScreen() {
         </View>
       </MapView>
 
-      {/* Home FAB only — sem Chat FAB nesta variant (Figma 385:29139) */}
       <NavFABs showChat={false} />
     </View>
   );
 }
 
-// MapToggleButton (Figma 165:21575) — icon-only botão quadrado 48×48.
 // Background muda de `surface.high` (off) pra `activeColor` (on). Sem
 // expand panel; só toggle simples. Mesma copy local em map.tsx.
 function MapToggleButton({

@@ -10,7 +10,6 @@ import { Text, useTheme } from '@kavicki/swi-design-system';
 //
 // Previously duplicated verbatim in evacuation.tsx and evacuation-ongoing.tsx
 // (~16 lines each). Extracted per the audit cleanup in
-// 2026-05-17-mobile-routes-audit.md.
 
 export interface MapChipBodyProps {
   text: string;

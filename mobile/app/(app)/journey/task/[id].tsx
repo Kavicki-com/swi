@@ -19,7 +19,6 @@ import { elapsedSeconds, progressPct } from '../../../../services/journey/progre
 import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
 import { TaskDetailState } from '../../../../components/journey/JourneyState';
 
-// Figma 364:17126 (idle) / 364:17434 (in-progress). Breadcrumb
 // (Jornada > <task>) + task summary card + ProgressBar + Objetivo +
 // Fotos + Tempo estimado + Interessados + CTA.
 //
@@ -184,7 +183,6 @@ export default function TaskDetails() {
     if (uri && id) await addTaskPhoto(id, uri);
   };
 
-  // Interessados (label é a copy do Figma) — avatares reais dos responsáveis da
   // ordem (uris). O caption deriva do responsibleCount ("<1º nome> e mais N-1
   // pessoas estão acompanhando essa tarefa").
   const responsibleAvatars = liveTask.responsibleAvatars.map((uri, i) => ({
@@ -259,8 +257,6 @@ export default function TaskDetails() {
             >
               {liveTask.title}
             </Text>
-            {/* Figma 364:17194 — chevron also after o segundo item (não só após
-                "Jornada"). Visual parity com a SectionTitle do design. */}
             <Icon name="keyboard_arrow_right" size={16} color={theme.content.primary} />
           </View>
         </View>
@@ -288,9 +284,6 @@ export default function TaskDetails() {
           </View>
         </View>
 
-        {/* Progresso da tarefa — encapsulado em TaskProgress memoizado.
-            Figma 364:17426 — bordered track (pill, border #303030 = content.medium-ish,
-            padding-y 4) com fill 6px green. trackHeight 16 = padding 4*2 + fill 6 + border 1*2. */}
         <TaskProgress task={liveTask} theme={theme} />
 
         {/* Objetivo principal */}
@@ -303,9 +296,6 @@ export default function TaskDetails() {
           </Text>
         </View>
 
-        {/* Fotos da solicitação — 5 placeholders 56×56 com add_a_photo
-            glifo centrado (Figma 364:17126 mostra ícone de câmera/foto
-            em cada placeholder cinza). Slots inicializados de task.images. */}
         <View style={{ gap: theme.gap.m }}>
           <Title variant="title.xs" color={theme.content.dark}>
             Fotos da solicitação
@@ -378,11 +368,6 @@ export default function TaskDetails() {
           </Text>
         </View>
 
-        {/* CTA group — Figma 364:17126 idle / 364:17434 ongoing / 364:17766 pause.
-            State machine local: idle → ongoing ↔ paused.
-            Finalizar conclui ESTE item (completeTask); Cancelar devolve pra
-            pending (cancelTask). Ambos mantêm o turno rodando e voltam pra
-            /journey. */}
         {isActive ? (
           <View style={{ gap: theme.gap.m }}>
             <Button

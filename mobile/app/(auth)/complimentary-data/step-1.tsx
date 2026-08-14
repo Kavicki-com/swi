@@ -37,15 +37,11 @@ export default function ComplimentaryDataStep1() {
   const { user } = useAuth();
   const { profile, saveProfile } = useProfile();
 
-  // Fluxo 2 (reordenação 2026-07-27): o wizard roda DEPOIS do primeiro login
   // pós-aprovação — há sessão do próprio worker, e o login carregou o perfil
   // antes de navegar pra cá.
   //
-  // Saudação: primeiro nome da conta, como no Figma ("Boas vindas / Gabriel!").
   const username = user?.name?.trim().split(/\s+/)[0] || undefined;
 
-  // Figma 211:13009 mostra Nome completo "já preenchido" — o nome digitado no
-  // cadastro da conta é a única fonte (QA 2026-07-27: nada de nome truncado
   // nem de segunda digitação). Perfil vem primeiro: cobre a retomada de um
   // wizard abandonado com o passo 1 já salvo.
   const fullName = useField({
@@ -184,14 +180,6 @@ export default function ComplimentaryDataStep1() {
         {/* Actions inside the scroll (mesmo padrão do step-3): elimina o
             problema de overlap quando o ImageUploader expande, já que os
             botões fluem naturalmente abaixo do conteúdo. */}
-        {/* Sem "Voltar": este é o primeiro passo do fluxo 2, e o worker chegou
-            aqui pelo login, não por outra tela do wizard. Voltar o devolvia pra
-            tela de login já autenticado, um beco sem saída (2026-07-27). */}
-        {/* SEM `disabled={!canSubmit}`, mesmo motivo do step-2 (QA Mobile #1):
-            o goNext já marca os campos como tocados pra revelar os erros, e
-            botão desabilitado nunca dispara onPress, o que tornava esse bloco
-            código morto. O QA só reportou na etapa 2 porque foi lá que deixou
-            um campo vazio, mas o beco sem saída era igual aqui. */}
         <Button variant="contained" label="Avançar" fullWidth onPress={goNext} />
       </KeyboardAwareScrollView>
     </View>

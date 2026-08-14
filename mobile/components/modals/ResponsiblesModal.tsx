@@ -16,7 +16,6 @@ import { listReportAssignees } from '../../services/reports/assignees';
 import type { Contact } from '../../services/chat/types';
 import { ageFrom } from '../../lib/age';
 
-// Figma 364:18017 — bottom-sheet "Selecionar responsáveis".
 // Body compartilhado; até agora só `(app)/reports/responsibles.tsx`
 // usa este modal (chamado de `reports/new.tsx`). A stub
 // `app/modals/responsables.tsx` é dead code (zero callers).
@@ -32,7 +31,6 @@ import { ageFrom } from '../../lib/age';
 // carregado pelo ChatProvider). Antes eram 5 pessoas inventadas em
 // lib/admins.ts — e o pior: `reports/new.tsx` resolvia id→nome por elas e
 // GRAVAVA "Elisa Siqueira Jordão" como responsável no backend de verdade
-// (QA 2026-07-26). O singleton de seleção fica aqui por estar acoplado ao
 // confirm flow do modal.
 
 // Guarda id E NOME. Guardando só id, quem exibe precisaria do diretório pra
@@ -76,7 +74,6 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
   // ChatProvider só envolve a subárvore de chat, e este modal vive na de
   // relatórios — consumir o contexto aqui derrubava a tela na montagem.
   //
-  // Fonte trocada em 2026-07-27: era o diretório de CHAT, que devolve a
   // empresa inteira de propósito (sem os admins ali o worker não consegue
   // abrir conversa com o painel). O seletor acabava oferecendo os 10
   // operadores como revisores. Quem revisa é staff, e essa régua vive no
@@ -125,7 +122,6 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
     <View
       testID="responsibles-sheet"
       style={{
-        // Figma 364:18017 mostra modal um tom mais claro que o conteúdo
         // dentro (SearchInput + admin cards usam standard mais escuro).
         // Usar surface.medium garante contraste visível pro SearchInput.
         backgroundColor: theme.surface.medium,
@@ -135,7 +131,6 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
         borderTopLeftRadius: theme.border.radius.m,
         borderTopRightRadius: theme.border.radius.m,
         gap: theme.gap.l,
-        // QA Mobile #5: era '85%'. Percentual só resolve contra pai de altura
         // DEFINIDA, e o pai aqui é o KeyboardStickyView, que se dimensiona pelo
         // conteúdo: o teto não valia e o sheet crescia sem limite (com 15
         // pessoas, título e busca saíam por cima do topo da tela). Em pixels,
@@ -205,8 +200,6 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
                   <Text variant="body.m" color={theme.content.dark}>
                     {age !== null ? `${age} anos` : 'Idade não informada'}
                   </Text>
-                  {/* Figma 364:18017 mostra blood type com water_drop icon
-                      vermelho à esquerda (theme.surface.error). */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xs }}>
                     <Icon name="water_drop" size={20} color={theme.surface.error} />
                     <Text variant="label.l" color={theme.content.dark}>

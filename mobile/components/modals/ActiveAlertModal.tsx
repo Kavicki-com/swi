@@ -17,7 +17,6 @@ import {
 import { useWeather } from '../../services/weather/WeatherProvider';
 import { weatherDisplay } from '../../services/weather/weatherFormat';
 
-// Figma 385:29591 dashboard-alert-active — agora apresentado como MODAL
 // sobreposto à tela de notificações (mesmo padrão visual do WeatherAlertModal
 // que abriu antes). User spec: "no alerta atual ainda esta trocando de tela,
 // quero ele exatamente como o meteorológico" — backdrop levemente vermelho,
@@ -51,7 +50,6 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
   const { snapshot, activeAlert } = useWeather();
   const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
 
-  // Bolinhas da timeline (Figma 385:29807) usam `surface/secondary` #50B3D2
   // (teal escuro). A linha vertical entre bolinhas usa cyan mais claro
   // `content/secondary` #8AD2E2 — cores DIFERENTES por design.
   const stepCircle = (
@@ -143,9 +141,6 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
                 gap: theme.gap.m,
               }}
             >
-              {/* Condition card (Figma 385:30119) — flex pra preencher o
-                  espaço restante do modal. Conteúdo justify-end com ícone
-                  de chuva flutuando 28px acima do topo. */}
               <View
                 style={{
                   flex: 1,
@@ -183,7 +178,6 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
                 </Text>
               </View>
 
-              {/* Data column (Figma 385:30123) — width fixa 83px. */}
               <View style={{ width: 83, gap: theme.gap.s }}>
                 <WeatherDataRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value={humStr} theme={theme} />
                 <WeatherDataRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value={windStr} theme={theme} />

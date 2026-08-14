@@ -19,20 +19,13 @@
 //   - PanResponder — drag-to-rotate around Y. Lighter than OrbitControls
 //     and doesn't depend on gesture-handler wiring inside the GL canvas.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, PanResponder, Platform, View } from 'react-native';
+import { ActivityIndicator, PanResponder, View } from 'react-native';
 import { Canvas, useFrame } from '@react-three/fiber/native';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 import { GLTFLoader } from 'three-stdlib';
 import type { Group } from 'three';
 import type { Smartwatch3DProps } from './Smartwatch3D.types';
-
-const SW3D_DEBUG = false;
-const sw3dLog = (...args: unknown[]) => {
-  if (SW3D_DEBUG) {
-    console.log('[SW3D]', `(${Platform.OS})`, ...args);
-  }
-};
 
 // Module-level cache: a scene parseada é estática (não muda entre instâncias).
 // Primeiro mount paga download + parse (~3-5s); mounts subsequentes pegam
@@ -41,55 +34,36 @@ const sw3dLog = (...args: unknown[]) => {
 let cachedScene: Group | null = null;
 let inFlightPromise: Promise<Group> | null = null;
 
-type PhaseCallback = (phase: string) => void;
-
-async function loadSmartwatchScene(onPhase?: PhaseCallback): Promise<Group> {
+async function loadSmartwatchScene(): Promise<Group> {
   if (cachedScene) {
-    sw3dLog('cache hit — returning cached scene');
-    onPhase?.('scene-ready');
     return cachedScene;
   }
   if (inFlightPromise) {
-    sw3dLog('inflight hit — joining existing load promise');
-    onPhase?.('joining-inflight');
     return inFlightPromise;
   }
 
   inFlightPromise = (async () => {
     try {
-      onPhase?.('requiring-module');
-      sw3dLog('phase: require(.../smartwatch.glb)');
       const assetModule = require('../assets/smartwatch.glb');
 
-      onPhase?.('asset-from-module');
       const asset = Asset.fromModule(assetModule);
-      sw3dLog('asset before download:', { uri: asset.uri, localUri: asset.localUri, downloaded: asset.downloaded });
 
-      onPhase?.('download-async');
-      const t0 = Date.now();
       await asset.downloadAsync();
-      sw3dLog('downloadAsync done in', Date.now() - t0, 'ms');
 
       const localUri = asset.localUri ?? asset.uri;
       if (!localUri) throw new Error('no localUri after downloadAsync');
 
-      onPhase?.('reading-bytes');
       const file = new File(localUri);
-      const t1 = Date.now();
       const buffer = await file.arrayBuffer();
-      sw3dLog('arrayBuffer in', Date.now() - t1, 'ms, byteLength=', buffer.byteLength);
       if (buffer.byteLength === 0) throw new Error('empty buffer (0 bytes)');
 
-      onPhase?.('parsing-gltf');
       const loader = new GLTFLoader();
       // Quantize-compressed GLB — GLTFLoader stock lê nativamente.
-      const t2 = Date.now();
       const scene = await new Promise<Group>((resolve, reject) => {
         loader.parse(
           buffer,
           '',
           (gltf) => {
-            sw3dLog('GLTF parse OK in', Date.now() - t2, 'ms, scene children=', gltf.scene.children.length);
             resolve(gltf.scene as unknown as Group);
           },
           (err) => reject(err instanceof Error ? err : new Error(String(err))),
@@ -97,7 +71,6 @@ async function loadSmartwatchScene(onPhase?: PhaseCallback): Promise<Group> {
       });
 
       cachedScene = scene;
-      onPhase?.('scene-ready');
       return scene;
     } finally {
       // Limpa flag inflight — se houve erro, próxima tentativa refaz a pipeline
@@ -166,9 +139,7 @@ export function Smartwatch3D({
       .then((s) => {
         if (!cancelled) setScene(s);
       })
-      .catch((err: unknown) => {
-        sw3dLog('loadSmartwatchScene failed:', err);
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -212,19 +183,11 @@ export function Smartwatch3D({
     );
   }
 
-  sw3dLog('rendering Canvas with scene');
   return (
     <View style={{ width, height }} testID={testID} {...panResponder.panHandlers}>
       <Canvas
         camera={{ position: [0, 0, 4], fov: 45 }}
         gl={{ antialias: true }}
-        onCreated={(state) => {
-          sw3dLog('Canvas onCreated — GL context established', {
-            gl: !!state.gl,
-            scene: !!state.scene,
-            camera: !!state.camera,
-          });
-        }}
       >
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 5, 5]} intensity={1.2} />

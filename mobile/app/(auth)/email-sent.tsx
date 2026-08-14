@@ -11,7 +11,6 @@ import { errorMessage } from '../../lib/errors/errorMessage';
 
 // Auto-advance to account-confirmation simulating the user clicking the
 // confirmation link in the email. 4s gives enough time to read the message;
-// keeps fidelity to the Figma (no extra "Já confirmei" button there).
 const ADVANCE_MS = 4000;
 
 export default function EmailSent() {
@@ -31,7 +30,6 @@ export default function EmailSent() {
     if (AUTH_BACKEND !== 'mock') return;
     const t = setTimeout(() => {
       // account-confirmation fecha o fluxo 1 e despacha pro login — ninguém
-      // se autentica aqui (reordenação 2026-07-27).
       router.replace('/(auth)/account-confirmation');
     }, ADVANCE_MS);
     return () => clearTimeout(t);
@@ -61,7 +59,6 @@ export default function EmailSent() {
       // Fecha o fluxo 1 na tela de sucesso ("Conta criada"), que despacha pro
       // login. O wizard de perfil NÃO entra aqui: ele virou o fluxo 2, disparado
       // no primeiro login depois que o admin aprovar o cadastro no painel
-      // (reordenação 2026-07-27).
       router.replace('/(auth)/account-confirmation');
     } catch (e) {
       // Servidor separa "Código inválido" de "Código expirado" — a ação do
@@ -72,7 +69,6 @@ export default function EmailSent() {
 
   // Trava de reentrancia: `disabled` so cobria o formulario incompleto,
   // nao o periodo da requisicao — um segundo toque disparava de novo
-  // (QA 2026-07-27, no fim do cadastro).
   const { run: enviar, busy: enviando } = useSubmitOnce(handleConfirm);
 
   return (

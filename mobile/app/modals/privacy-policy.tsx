@@ -3,7 +3,6 @@ import { Stack, useRouter } from 'expo-router';
 import { useTheme } from '@kavicki/swi-design-system';
 import { PrivacyPolicyModal } from '../../components/modals/PrivacyPolicyModal';
 
-// Figma 213:13750 / 348:10434 — bottom-sheet "Política de privacidade".
 // Pre-auth route (acessível da tela de sign-up). Body real vive em
 // `components/modals/PrivacyPolicyModal.tsx`. O wrapper aplica
 // transparentModal + backdrop pressable, sobreescrevendo o

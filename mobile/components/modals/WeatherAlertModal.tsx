@@ -15,7 +15,6 @@ import {
 import { useWeather } from '../../services/weather/WeatherProvider';
 import { weatherDisplay } from '../../services/weather/weatherFormat';
 
-// Figma 385:29371 — alert-modal (weather alert). Modal estreito centrado:
 // title + row (weather-condition card + weather-data metrics) + body text +
 // "Instruções de segurança" CTA pink/coral.
 //
@@ -25,10 +24,8 @@ import { weatherDisplay } from '../../services/weather/weatherFormat';
 //
 // Card de temperatura segue o mesmo padrão do dashboard-alert-active:
 // fundo `surface.high`, content `justify-end`, ícone de chuva flutuando
-// 28px acima do topo. Sem termômetro inline — figma só tem o número.
 //
 // Ícones das métricas vêm de `alertWeatherSvgs.ts` (SVGs exportados direto
-// do Figma) porque os equivalentes do DS têm shapes diferentes (water_drop
 // com barra interna, wind_speed/air com end-caps circulares, arrows menores).
 
 export interface WeatherAlertModalProps {
@@ -57,12 +54,10 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
         alignItems: 'center',
       }}
     >
-      {/* Title (Figma 385:29391) — Montserrat Bold 16px branco. */}
       <Title variant="title.xs" color={theme.content.dark}>
         Local em Alerta!
       </Title>
 
-      {/* Weather row (Figma 385:29370) — card flex + coluna 83w, justify-between. */}
       <View
         style={{
           flexDirection: 'row',
@@ -71,8 +66,6 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
           width: '100%',
         }}
       >
-        {/* Weather condition card (Figma 385:29368) — content justify-end,
-            ícone de chuva flutua 28px acima do topo (transborda o card). */}
         <View
           style={{
             flex: 1,
@@ -88,7 +81,6 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
             marginRight: theme.gap.m,
           }}
         >
-          {/* Rainy icon (Figma 385:29365) — 72×72 absolute top:-28. */}
           <View
             pointerEvents="none"
             style={{
@@ -117,7 +109,6 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
           </Text>
         </View>
 
-        {/* Weather data column (Figma 385:29364) — width fixa 83px, gap 8. */}
         <View style={{ width: 83, gap: theme.gap.s }}>
           <MetricRow svg={WATER_DROP_SVG} svgW={14} svgH={20} value={humStr} theme={theme} />
           <MetricRow svg={WIND_SPEED_SVG} svgW={20} svgH={17} value={windStr} theme={theme} />
@@ -126,13 +117,6 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
         </View>
       </View>
 
-      {/* Description + CTA grouped (Figma 385:29384) — gap.s entre si,
-          separado do row de cima pelo gap.m do modal-level container.
-          Sem alignItems:center no pai: o Button `fullWidth` precisa do
-          default alignItems:stretch pra o pill renderizar full-width.
-          Com alignItems:center, o pill ficava content-width e o usuario
-          via desalinhamento mesmo com o texto interno centralizado. O
-          Text mantem centro visual via textAlign:center. */}
       <View style={{ width: '100%', gap: theme.gap.s }}>
         <Text
           variant="body.m"

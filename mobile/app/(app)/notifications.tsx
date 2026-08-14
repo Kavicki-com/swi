@@ -12,7 +12,6 @@ import { useNotifications } from '../../services/notifications/NotificationProvi
 import type { AppNotification, NotificationDomain } from '../../services/notifications/types';
 import { NotificationState } from '../../components/notifications/NotificationState';
 
-// Figma 401:30469 — notifications list. Title + notification cards compose-local
 // (DS HorizontalCard sem description) + Chat FAB + Home FAB. Unit 3 (backend):
 // a lista agora vem ao vivo do NotificationProvider (Unit 2) em vez do array
 // estático; more_vert icon segue decorativo (sem menu real).
@@ -22,7 +21,6 @@ import { NotificationState } from '../../components/notifications/NotificationSt
 // - weather  → WeatherAlertModal in-place (visualização do fenômeno; o estado
 //   de "alerta ativo" do dashboard segue acessível pelo botão SOS no próprio
 //   dashboard). Caso especial: NÃO navega, abre modal. Ver R-5 em
-//   2026-05-17-mobile-routes-audit.md.
 // - chat     → chat inbox (mensagens da equipe)
 // - reports  → lista de relatórios
 // - journey  → jornada (treinamento / tarefa / inspeção / cronograma)
@@ -40,7 +38,6 @@ const DOMAIN_ROUTE: Record<Exclude<NotificationDomain, 'weather'>, Href> = {
   reports: '/(app)/reports',
   journey: '/(app)/journey',
   faq: '/(app)/settings/faq',
-  // Evacuação real (Fase 2): tap → tela da rota de fuga; o CTA de confirmação
   // de presença vive lá.
   evacuation: '/(app)/evacuation',
 };
@@ -122,7 +119,6 @@ export default function Notifications() {
   if (!isFeatureEnabled('notifications')) {
     return <ProdOnlyPlaceholder />;
   }
-  // SEM NotificationProvider aqui: ele subiu pro (app)/_layout (QA Mobile #2).
   // Montar de novo criaria uma SEGUNDA instância de estado, e aí o badge do
   // dashboard e esta lista seriam fontes independentes: ler aqui não zeraria
   // o badge lá.
@@ -220,10 +216,6 @@ function NotificationsScreen() {
 
       <NavFABs />
 
-      {/* Weather alert modal (Figma 385:29371) — opens in-place sobre a
-          lista de notificações com backdrop levemente vermelho. CTA
-          "Instruções de segurança" navega pro fluxo de evacuação ativa
-          (`?alert=active`), mantendo o destino canônico do alert flow. */}
       <Modal
         visible={weatherAlertVisible}
         transparent
@@ -263,10 +255,6 @@ function NotificationsScreen() {
         </Pressable>
       </Modal>
 
-      {/* Active alert modal (Figma 385:29591) — procedimento de evacuação
-          como overlay sobre a lista de notificações. Mesmo padrão visual do
-          WeatherAlertModal: backdrop vermelho ~18%, card branco, tap fora
-          fecha. */}
       <ActiveAlertModal
         visible={activeAlertVisible}
         onClose={() => setActiveAlertVisible(false)}

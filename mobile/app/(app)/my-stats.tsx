@@ -106,10 +106,7 @@ function Divider() {
   );
 }
 
-// FASE 1+2 — StatusChart + Avatar + Vital signs + ProgressBar fatigue.
-// Figma 342:9419 (my-stats). Section width 328, gap.m 16.
 // Calories chart points are now derived from the live vitals `history` (last 3
-// caloriesPerHour samples) inside the component — Figma 342:10223 shows ~3
 // well-spaced markers per period, which the 3-sample window mirrors.
 
 const PERIOD_OPTIONS = [
@@ -118,8 +115,6 @@ const PERIOD_OPTIONS = [
   { label: 'Este mês', value: 'month' },
 ];
 
-// Histórico médico — Figma 342:9907 (4 ExamInfoCard rows). `future`
-// renderiza o year do 2033 em weight regular (não bold) per Figma
 // 342:9911 — não muta cores, só sinaliza exame futuro/agendado.
 // Comma-decimal percent string (pt-BR): 62.5 → "62,5%".
 function pct(value: number): string {
@@ -157,7 +152,6 @@ export default function MyStats() {
   const router = useRouter();
   const { phase, vitals, status, lastUpdated, history } = useVitals();
   // Exames REAIS. Eram 4 inventados aqui e os MESMOS 4 duplicados no
-  // settings/dados de saúde (QA 2026-07-26). Aqui é só leitura: enviar é no
   // settings, onde ficam os campos de nome e validade — um formulário só.
   const [exams, setExams] = useState<Exam[]>([]);
   useEffect(() => {
@@ -169,7 +163,6 @@ export default function MyStats() {
   }, []);
   const { profile } = useProfile();
   // Alergias REAIS do cadastro (settings/dados de saúde grava em profile.allergies,
-  // texto livre). Até 2026-07-26 esta tela exibia uma lista fixa — "Buscopan,
   // Dipirona, Chocolate, Camarão" para qualquer pessoa, o que numa tela de
   // segurança do trabalho é informação clínica falsa.
   const allergyChips = (profile?.allergies ?? '')
@@ -230,20 +223,9 @@ export default function MyStats() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-    {/* Background texture overlay — Figma 342:9419 `imgMyStats`. Soft
-        radial glow (faint blue top-right, faint green left) on top of the
-        dark page background. pointerEvents=none on the wrapper keeps the
-        decorative image from intercepting taps; setting `pointerEvents`
-        on <Image> directly is deprecated in RN 0.81 (TS error TS2769).
-        Explicit width/height + top:0 left:0 keeps RN-web from letting the
-        image's natural 1920×1080 dimensions inflate the layout. */}
     {/* BG: gradient (my-stats-bg.png) + dot-grid (BackgroundDotsGrid layer
         in JourneyTheme, showDotGrid default true). Same pattern as dashboard
         so the dot-grid is consistent across both screens. */}
-    {/* showDotGrid=false: a grade agora vem do PROPRIO grafico, como no nó
-        Figma 342:9420 — e la ela e tintada por `condition` (p.backgroundTint),
-        entao tambem comunica estado. Deixar as duas ligadas era a duplicacao
-        que o QA viu no aparelho (2026-07-27). */}
     <JourneyTheme gradient={require('../../assets/login-bg.png')} showDotGrid={false} />
     <ScrollView
       style={{ flex: 1, backgroundColor: 'transparent' }}
@@ -258,22 +240,6 @@ export default function MyStats() {
           status, replacing the compact StatusChart. No heart-rate / settings
           sub-badge here — my-stats is already the detail screen (showActionButton
           was false on the old StatusChart). Avatar overlays in the corner. */}
-      {/* Chart zone — StatusChart do DS (size="compact", Figma 342:9420).
-          ANTES: um PNG estatico ("grupo taigo novo") com a silhueta e o badge
-          empilhados por cima, e o comentario do componente dizia que "status
-          is not consumed here". O anel era imagem, entao NAO PODIA mudar de
-          cor — com o trabalhador em alerta, esta tela mostrava um personagem
-          verde e saudavel, contradizendo o dashboard (QA 2026-07-27).
-
-          O `condition` do DS dirige quatro coisas de uma vez: gradiente da
-          silhueta, cor do arco, tint do fundo pontilhado e o badge do peito.
-          Mesma fonte de verdade do dashboard (deriveStatus), entao as duas
-          telas nao tem como divergir de novo.
-
-          compact = 289.733x301 (0.80481x). O PNG anterior era renderizado a
-          82.78% de 360 = ~298pt, entao a escala na tela fica equivalente.
-          showActionButton=false: my-stats ja E a tela de detalhe, sem os
-          botoes de frequencia/ajustes do dashboard. */}
       <View
         style={{
           width: '100%',
@@ -290,13 +256,11 @@ export default function MyStats() {
           // heart-rate-button e o cartão do container. Bezel, pontos, trilho,
           // Ellipse 5 e poço seguem visíveis — sao eles que dao profundidade
           // ao botao. (A v0.1.126 escondia sete camadas por leitura errada
-          // minha de um pedido do QA; a prop que fazia isso foi removida.)
           size="compact"
           showActionButton={false}
           // O badge volta a ser posicionado pelo DS: fazer isso à mão exigia
           // converter HEART_STATUS_OFFSET pra percentuais do canvas, e no
           // preset compact a conta muda — o coração saiu do peito, deslocado
-          // pra direita (QA no aparelho, 2026-07-27).
           //
           // Sem status conhecido o badge some por inteiro, em vez de exibir um
           // check verde que ninguém mediu. É o mesmo princípio do resto da
@@ -306,16 +270,6 @@ export default function MyStats() {
         />
       </View>
 
-      {/* Avatar — Figma 342:9422: x=272, y=34, 64x64 num frame de 360, logo
-          right=24 / top=34. Os numeros ja eram esses; o que estava errado era o
-          REFERENCIAL. Absoluto solto no ScrollView, ele nao acompanhava o
-          gráfico: o paddingTop do insets.top empurrava um e nao o outro, e no
-          aparelho com notch o avatar subia pro canto, colado na status bar, em
-          vez de sobrepor a borda do bezel (QA 2026-07-27). Aqui os dois sao
-          filhos do MESMO container de 360, como no frame do Figma.
-
-          O anel de 4px vem da medida do proprio nó: ele renderiza 72x72 para um
-          circulo de 64. borderColor por token, nunca literal. */}
       <View style={{ position: 'absolute', right: 24, top: 34 }}>
         <Avatar
           customSize={64}
@@ -329,8 +283,6 @@ export default function MyStats() {
       </View>
       </View>
 
-      {/* User Data column — Figma 342:9966 (gap.l 24). Width was 328 fixo,
-          mudado pra full-width (esticando via paddingHorizontal do ScrollView). */}
       <View style={{ gap: theme.gap.l, marginTop: theme.gap.l }}>
         {/* Stale freshness chip — only when the latest sample aged past the
             stale window. DS TimeStamp ("atualizado há…"). */}
@@ -340,14 +292,6 @@ export default function MyStats() {
           </View>
         ) : null}
 
-        {/* Vital signs row — Figma 342:9431. 3 columns + dividers (1×106
-            content/medium). Each column: icon 24 / value (title.l) / unit
-            (caption.s).
-            space-evenly: respiro igual nas paredes e entre cols (Figma);
-            antes era space-between, que colava BPM/Kcal nas paredes e
-            comprimia os dividers entre BPM e 12/8 no Android.
-            opacity 0.5 when stale: dims the live-vitals block (see TimeStamp
-            above) without altering layout. */}
         <View
           style={{
             flexDirection: 'row',
@@ -357,12 +301,6 @@ export default function MyStats() {
             opacity: isStale ? 0.5 : 1,
           }}
         >
-          {/* Col 1 — Heart 67 BPM (Figma 342:9432).
-              width:70 (não 41 do Figma) — o simulador vai de 40 a 140 BPM,
-              então 3 dígitos são esperados, e mesmo 2 já quebravam em duas
-              linhas no aparelho (QA 2026-07-27). Mesma largura da coluna de
-              Kcal, que segura "184", e mesmo precedente das colunas 2 e 3, que
-              também subiram do valor do Figma quando o texto quebrava. */}
           <View
             style={{
               alignItems: 'center',
@@ -395,9 +333,6 @@ export default function MyStats() {
 
           <Divider />
 
-          {/* Col 2 — Blood pressure 12/8 Boa (Figma 342:9437).
-              width:80 (não 65 do Figma) — Android renderiza Montserrat-Bold
-              com advance widths maiores; "12/8" estoura 65px e quebra linha. */}
           <View
             style={{
               alignItems: 'center',
@@ -429,9 +364,6 @@ export default function MyStats() {
 
           <Divider />
 
-          {/* Col 3 — Flame 145 Kcal/hora (Figma 342:9442).
-              width:70 (não 55 do Figma) — "Kcal/hora" quebrava em "Kcal/" +
-              "hora" no Android com 55px; mesmo padrão do dashboard.tsx. */}
           <View
             style={{
               alignItems: 'center',
@@ -463,10 +395,6 @@ export default function MyStats() {
           </View>
         </View>
 
-        {/* Fatigue ProgressBar + label — Figma 342:9446/9447.
-            Bordered track 22px (content.medium border + theme.background),
-            gradient RTL: success → warning → error with stops 43.75/79.253/100.
-            Figma snapshot shows fill at ~74.4% (pr-76 on 328 container). */}
         <View style={{ gap: theme.gap.s, width: '100%', opacity: isStale ? 0.5 : 1 }}>
           {/* value is rounded to int — DS ProgressBar accessibilityValue.now
               é int64; floats triggam Fabric HostFunction precision error e a barra
@@ -489,15 +417,6 @@ export default function MyStats() {
           </Text>
         </View>
 
-        {/* Donut grid 2×2 — Figma 342:9831 (gap.m 16, w 328 = 156+16+156).
-            Donut size="small" = 156. Single-tone gradients per arc.
-
-            ANTES: o Home FAB (Figma 348:10334) era renderizado absolute
-            no centro geométrico deste grid (overlap nos 16px de gap). Isso
-            colocava o botão DENTRO do ScrollView → rolava com o conteúdo
-            (bug reportado pelo usuário). O Home FAB agora é fixo via
-            <NavFABs /> renderizado fora do ScrollView (mesmo pattern das
-            outras telas do app/(app)). */}
         <View
           style={{
             flexDirection: 'row',
@@ -507,9 +426,6 @@ export default function MyStats() {
             opacity: isStale ? 0.5 : 1,
           }}
         >
-          {/* Donut 1 — Esforço feito (vitals.effortPct). Built-in icon hidden via
-              iconColor="transparent"; Figma asset (green gradient heartbeat)
-              overlay-ed at the same center slot. Same pattern in donuts 2-4. */}
           <View style={{ position: 'relative' }}>
             <DonutChart
               size="small"
@@ -582,15 +498,8 @@ export default function MyStats() {
 
         </View>
 
-        {/* Divider — Figma 342:9905 */}
         <View style={{ height: 2, backgroundColor: theme.surface.standard }} />
 
-        {/* Gasto calórico section — Figma 342:10219.
-            Filter wrapper has zIndex:1 so the Combobox open-overlay (z:50
-            scoped to this wrapper's stacking context) paints above the
-            sibling chart container (z:0, later in DOM). Without this, the
-            "Esta semana / Este mês / Este ano" options get covered by the
-            chart line and labels. */}
         <View style={{ width: '100%', gap: theme.gap.m, opacity: isStale ? 0.5 : 1 }}>
           <View style={{ gap: 10, zIndex: 1 }}>
             <Title variant="title.xs" color={theme.content.dark}>
@@ -604,12 +513,6 @@ export default function MyStats() {
               accessibilityLabel="Filtrar período"
             />
           </View>
-          {/* LineCaloriesChart — Figma 342:10223. fullWidth + bg
-              surface.medium per spec. paddingHorizontal:28 dá respiro pros
-              CaloriesTag das pontas: pill min-width 55 → metade ~28pt
-              overflow pra cada lado do data point. overflow:visible
-              (default) é obrigatório aqui — callouts renderem em `top:
-              negativo` (acima do data point). */}
           <View
             style={{
               backgroundColor: theme.surface.medium,
@@ -621,8 +524,6 @@ export default function MyStats() {
           </View>
         </View>
 
-        {/* Alergias section — Figma 342:9892. Title + Editar button on top
-            row (justify-between); ChipGroup below. */}
         <View style={{ width: '100%', gap: theme.gap.m }}>
           <View
             style={{
@@ -645,9 +546,6 @@ export default function MyStats() {
               onPress={() => router.push('/(app)/settings/health-data')}
             />
           </View>
-          {/* Custom inline chips — DS Chip filled+secondary maps to
-              surface.secondaryLight (#E2F4F8, very pale) which doesn't
-              match Figma's saturated blue (#50B3D2 = surface.secondary). */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.s }}>
             {allergyChips.length === 0 ? (
               <Text variant="body.s" color={theme.content.dark}>
@@ -674,13 +572,8 @@ export default function MyStats() {
           </View>
         </View>
 
-        {/* Divider — Figma 342:9906 */}
         <View style={{ height: 2, backgroundColor: theme.surface.standard }} />
 
-        {/* Histórico Médico — Figma 342:9907. Aqui é LEITURA: os exames reais
-            com download. Enviar é no settings, onde ficam os campos de nome e
-            validade (sem eles o card não teria o que mostrar). gap 20 dá o
-            respiro que o gap.m (16) deixava apertado vs Figma. */}
         <View style={{ width: '100%', gap: 20 }}>
           <Title variant="title.xs" color={theme.content.dark}>
             Histórico Médico
@@ -721,10 +614,6 @@ export default function MyStats() {
       </View>
     </ScrollView>
 
-    {/* Home FAB — fixo no rodapé (FORA do ScrollView), igual ao resto do
-        app/(app). Antes ficava absolute no centro do donut grid DENTRO do
-        ScrollView e rolava junto com o conteúdo. showChat=false porque a
-        tela my-stats no Figma 342:9419 só tem o Home FAB. */}
     <NavFABs showChat={false} />
     </View>
   );

@@ -5,7 +5,6 @@ import { Button, Text, useTheme } from '@kavicki/swi-design-system';
 import { getEvacuationBackend } from '@/services/evacuation/getEvacuationBackend';
 import type { ActiveEvacuationView } from '@/services/evacuation/types';
 
-// Barra de confirmação de presença (Fase 2 — evacuação real). Overlay no rodapé
 // das telas de evacuação; só aparece quando existe evacuação ATIVA na org
 // (DATA_BACKEND=api). No mock, getActive() → null e a tela fica como sempre.
 // Composição page-level de componentes DS (Button/Text) — nada custom.

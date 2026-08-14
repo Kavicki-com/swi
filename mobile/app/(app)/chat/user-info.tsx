@@ -30,7 +30,6 @@ export default function ChatUserInfo() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  // Até 2026-07-26 esta tela não recebia parâmetro nenhum: abrir o avatar de
   // QUALQUER contato mostrava a ficha fixa do "Romulo Cardoso", com gênero,
   // idade, tipo sanguíneo e alergias inventados. O /chat/directory já devolvia
   // a identidade real de cada colega — só faltava dizer de quem é a ficha.
@@ -54,7 +53,6 @@ export default function ChatUserInfo() {
         gap: theme.gap.sm,
       }}
     >
-      {/* Close button — Figma 337:9155 (top-left X) */}
       <Pressable
         onPress={() => router.back()}
         accessibilityRole="button"
@@ -64,7 +62,6 @@ export default function ChatUserInfo() {
         <Icon name="close" size={24} color={theme.content.dark} />
       </Pressable>
 
-      {/* User card — Avatar + Name + Role (Figma 336:8893) */}
       <View style={{ gap: theme.padding.m, alignItems: 'center', width: '100%' }}>
         <Avatar
           customSize={56}
@@ -92,8 +89,6 @@ export default function ChatUserInfo() {
         </View>
       </View>
 
-      {/* Mini-map — Figma 336:8898. Increased to 140px tall to fit the "Ver mapa
-          completo" button cleanly (Figma 124px clipped it). */}
       <View
         style={{
           height: 140,
@@ -103,7 +98,6 @@ export default function ChatUserInfo() {
           backgroundColor: theme.surface.medium,
         }}
       >
-        {/* Basemap — real Figma asset (336:8899) saved at mobile/assets/basemap.png */}
         <RNImage
           source={require('../../../assets/basemap.png')}
           resizeMode="cover"
@@ -166,8 +160,6 @@ export default function ChatUserInfo() {
           />
         </View>
 
-        {/* "Ver mapa completo" — bottom-left (Figma 337:9186). variant=surface gives
-            content.dark label (white) on surface.standard bg automatically. */}
         <View style={{ position: 'absolute', bottom: 8, left: 8 }}>
           <Button
             variant="surface"
@@ -180,15 +172,10 @@ export default function ChatUserInfo() {
         </View>
       </View>
 
-      {/* Fadigue bar — Figma 336:8912 */}
       <View style={{ gap: theme.gap.m, width: '100%' }}>
         <Title variant="title.xs" color={theme.content.dark}>
           Tempo até a fadiga total
         </Title>
-        {/* Figma 336:8912 — track has pr-125 on a ~328 container, so the
-            gradient fill covers ~62% (success → warning at 54.327% → error).
-            DS ProgressBar auto-distributes stops evenly across the array,
-            close enough to Figma at this width. */}
         <ProgressBar
           value={fatigue.pct}
           trackColor={theme.surface.secondaryLight}
@@ -204,9 +191,6 @@ export default function ChatUserInfo() {
         </Title>
       </View>
 
-      {/* Complementary data card — Figma 336:8916. 5 rows matching the wrapped
-          layout (where `Masculino` has width 188 forcing wrap to its own line).
-          Bold labels use Inter Bold 16; values use body.m (14). */}
       <View
         style={{
           width: '100%',
@@ -227,7 +211,6 @@ export default function ChatUserInfo() {
             </Text>
           ) : null}
         </View>
-        {/* Row 2 — Masculino (own line per Figma 336:8920 width 188) */}
         <Text variant="body.m" color={theme.content.dark}>
           {gender?.text ?? NAO_INFORMADO}
         </Text>

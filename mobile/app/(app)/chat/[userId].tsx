@@ -19,7 +19,6 @@ import type { Message } from '../../../services/chat/types';
 
 // `me` = current user; `them` = the contact.
 // DS ChatBubble convention: position='left' means bubble on the left side of
-// the row (avatar on the right) — that's the OWN message (Figma uses
 // content/secondary-light border, padding-right m). position='right' is the
 // THEIR message (avatar on the left, content/primary-light border).
 
@@ -136,7 +135,6 @@ export default function ChatThread() {
         showDotGrid={false}
       />
 
-      {/* Topbar — Figma 336:9131 (Voltar + Avatar contato à direita) */}
       <View
         style={{
           flexDirection: 'row',
@@ -172,7 +170,6 @@ export default function ChatThread() {
           accessibilityRole="button"
           accessibilityLabel="Ver perfil do contato"
         >
-          {/* Figma 336:9131 — avatar com ring ciano (estilo notif/active). */}
           <Avatar
             customSize={40}
             uri={theirAvatar}
@@ -182,14 +179,6 @@ export default function ChatThread() {
         </Pressable>
       </View>
 
-      {/* Chat section — Figma 336:9026 (gap.sm 12). Width era 328 fixo;
-          mudado pra esticar via paddingHorizontal:theme.padding.m (match
-          Journey pattern). */}
-      {/* O teclado subia POR CIMA do compositor: a tela não tinha tratamento
-          nenhum e a pessoa digitava às cegas (QA no aparelho, 2026-07-27).
-          KeyboardAvoidingView em vez de scroll empurrado — num chat o
-          compositor é fixo no rodapé, e o que precisa acontecer é ele SUBIR
-          com o teclado, mantendo as mensagens visíveis acima. */}
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1, paddingTop: 16, paddingHorizontal: theme.padding.m }}
@@ -204,7 +193,6 @@ export default function ChatThread() {
           ) : messages.length === 0 ? (
             <ChatThreadState kind="empty" />
           ) : (
-            /* Chat box — Figma 336:9029 (overflow-y-auto, gap.xl 28) */
             <ScrollView
               ref={scrollRef}
               style={{
@@ -261,7 +249,6 @@ export default function ChatThread() {
             </Pressable>
           ) : null}
 
-          {/* Chat input — Figma 336:9037 */}
           <View
             style={{
               flexDirection: 'row',

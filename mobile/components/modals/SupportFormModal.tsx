@@ -14,7 +14,6 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 
-// Figma 348:10426 — bottom-sheet "Solicitação de suporte".
 // Body compartilhado entre `(app)/settings/support.tsx` (authenticated)
 // e `modals/support-form.tsx` (acessível também da tela de login).
 // Os wrappers de rota injetam o backdrop transparent + envelope do
@@ -47,7 +46,6 @@ export function SupportFormModal({ onClose }: SupportFormModalProps) {
   const podeEnviar =
     motivo.length > 0 && titulo.trim().length > 0 && mensagem.trim().length > 0;
 
-  // Ate 2026-07-27 este botao era `onPress={onClose}`: fechava o modal e
   // DESCARTAVA tudo. Nao havia rota chamada em lugar nenhum — enquanto o
   // backend (POST /support) ja existia, com um DTO que espelha estes campos.
   // Formulario que finge ter enviado e pior que formulario ausente.
