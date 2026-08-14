@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.23.2'
           cache: 'npm'
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.23.2'
           cache: 'npm'
           cache-dependency-path: swi-admin/package-lock.json
       - run: npm ci
@@ -67,19 +67,21 @@ jobs:
     defaults:
       run:
         working-directory: swi-backend
-    strategy:
-      fail-fast: false
-      matrix:
-        # 18 é a versão da hospedagem Cloudez; 22 é a do Dockerfile. A matriz
-        # existe por causa de um bug real: pg-boss v12 é ESM-only e estourava
-        # ERR_REQUIRE_ESM só no 18. O Docker local (22) mascarou, e o defeito
-        # apareceu direto em produção, no deploy de 2026-07-29.
-        node: ['18', '22']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          # A matriz 18+22 caiu quando o Node 22 virou runtime oficial único
+          # (.nvmrc, engines dos três projetos, Dockerfile). O 18 estava aqui
+          # porque era a versão da hospedagem Cloudez, e a matriz nasceu de um
+          # defeito real: pg-boss v12 é ESM-only e estourava ERR_REQUIRE_ESM só
+          # no 18, o Docker local (22) mascarou, e a quebra apareceu direto em
+          # produção no deploy de 2026-07-29.
+          #
+          # Enquanto a Cloudez não subir para 22.23.2, este CI NÃO cobre mais o
+          # runtime que roda em produção. Atualizar a hospedagem antes do
+          # próximo deploy é pré-requisito da entrega, não melhoria opcional.
+          node-version: '22.23.2'
           cache: 'npm'
           cache-dependency-path: swi-backend/package-lock.json
       - run: npm ci
@@ -123,7 +125,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.23.2'
           cache: 'npm'
           cache-dependency-path: swi-backend/package-lock.json
       - run: npm ci
@@ -140,7 +142,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.23.2'
       # Inventário de vulnerabilidades das dependências de runtime, um npm
       # audit por projeto. Ainda não bloqueia: o snapshot atual carrega
       # achados transitivos sem correção publicada (metro/image-size no

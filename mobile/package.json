@@ -2,6 +2,11 @@
   "name": "@swi/mobile",
   "main": "expo-router/entry",
   "version": "0.1.0",
+  "engines": {
+    "node": "22.23.2",
+    "npm": "10.9.8"
+  },
+  "packageManager": "npm@10.9.8",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
