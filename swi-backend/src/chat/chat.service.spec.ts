@@ -37,9 +37,9 @@ const msgRow = (over: any = {}) => ({
 })
 
 describe('ChatService', () => {
-  // 2026-07-27: o diretório deixou de ser org-scoped e de filtrar papel — o
-  // worker conversa com qualquer pessoa no app. Sobra o que ainda faz sentido:
-  // conta aprovada (PENDING/REJECTED nem loga) e eu fora da minha própria lista.
+  // O diretório não é escopado por empresa nem filtra papel: o worker conversa
+  // com qualquer pessoa no app. Sobram dois recortes: conta aprovada (PENDING e
+  // REJECTED nem logam) e eu fora da minha própria lista.
   it('listDirectory traz qualquer conta aprovada exceto eu, presignando avatar', async () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
     const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
@@ -49,9 +49,9 @@ describe('ChatService', () => {
       id: { not: A },
     })
     expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
-    // birthDate/bloodType/allergies/gender vão junto: o painel do chat mostrava
-    // 26 anos / O+ pra todo contato por não ter esses campos (QA de volume), e
-    // fixava "Masculino" mesmo pras colaboradoras (QA 2026-07-26).
+    // birthDate, bloodType, allergies e gender vão junto: sem esses campos o
+    // painel do chat cai em idade e tipo sanguíneo fixos para todo contato, e
+    // em um único gênero para todo mundo.
     expect(out[0]).toEqual({
       workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador',
       avatarUri: 'signed:chat/avatars/bbbb.png',
@@ -200,13 +200,11 @@ describe('ChatService', () => {
   })
 })
 
-// QA Web #4: o menu de ações da mensagem pedia editar, excluir, copiar. Copiar é
-// do cliente; editar e excluir não existiam em lugar nenhum — o controller tinha
-// listar, enviar e marcar como lida, e a tabela não tinha campo de edição nem de
-// exclusão.
+// O menu de ações da mensagem oferece editar, excluir e copiar. Copiar é do
+// cliente; editar e excluir vivem aqui.
 //
-// Decisões do usuário (2026-07-31): só o AUTOR edita e exclui, sem limite de
-// tempo; excluir deixa MARCA em vez de apagar; editar deixa a marca "editada".
+// Decisões do usuário: só o AUTOR edita e exclui, sem limite de tempo; excluir
+// deixa MARCA em vez de apagar; editar deixa a marca "editada".
 describe('ChatService — editar e excluir mensagem', () => {
   const svc = (db: any, rt: any = realtime()) =>
     new ChatService(db, media(), rt, notifications())
@@ -357,10 +355,9 @@ describe('ChatService — editar e excluir mensagem', () => {
   })
 })
 
-// QA Web #9 — "Denunciar" no menu da mensagem de outra pessoa. Decisões do
-// usuário (2026-08-04): o envio é por E-MAIL a um destinatário definido na env
-// REPORT_TO_EMAIL, sem persistência no banco por ora ("evoluir para fluxo
-// próprio depois, se necessário", diz a planilha).
+// "Denunciar" no menu da mensagem de outra pessoa. Por decisão do usuário, o
+// envio é por E-MAIL a um destinatário definido na env REPORT_TO_EMAIL, sem
+// persistência no banco.
 describe('ChatService — denunciar mensagem', () => {
   const mail = () => ({ sendMessageReport: jest.fn().mockResolvedValue(undefined) }) as any
 

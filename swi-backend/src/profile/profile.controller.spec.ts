@@ -1,9 +1,9 @@
 import { NotFoundException } from '@nestjs/common'
 import { ProfileController } from './profile.controller'
 
-// QA F (2026-07-24): o settings do admin precisa EXIBIR a foto e os exames que
-// salvou — o GET /profile/me devolve as keys cruas + URLs presignadas de view
-// (padrão house: reports/users/chat presignam no read).
+// O settings do admin precisa EXIBIR a foto e os exames que salvou, então o
+// GET /profile/me devolve as keys cruas mais URLs presignadas de view. É o
+// mesmo padrão de reports, users e chat, que presignam no read.
 const profile = (over: Record<string, unknown> = {}) => ({
   id: 'p1',
   userId: 'u1',

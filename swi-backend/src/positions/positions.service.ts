@@ -18,9 +18,9 @@ export interface PositionMarker {
 
 type WorkerWithProfile = User & { profile: Profile | null }
 
-// Fase 1 do realtime de localização (2026-07-24): última posição por worker.
-// O service é agnóstico à FONTE do sinal — em produção o GPS do app mobile
-// posta o heartbeat; em dev o PositionSimulatorService chama o mesmo método.
+// Última posição por worker. O service é agnóstico à FONTE do sinal: em
+// produção o GPS do app mobile posta o heartbeat, e em dev o
+// PositionSimulatorService chama o mesmo método.
 @Injectable()
 export class PositionsService {
   constructor(

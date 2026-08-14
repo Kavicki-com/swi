@@ -25,10 +25,10 @@ export interface TimedItem {
 /**
  * Progresso da tarefa POR TEMPO: tempo decorrido ÷ tempo estimado.
  *
- * O painel media progresso por itens concluídos do checklist, então uma tarefa
- * com um item só ficava em 0% durante a execução inteira e saltava pra 100% —
- * o oposto de "acompanhar o temporizador" (pedido do cliente, 2026-07-26). É a
- * mesma conta que o app faz por item; aqui agrega a ordem.
+ * Medir por itens concluídos do checklist deixaria uma tarefa de um item só em
+ * 0% durante a execução inteira, saltando pra 100% no fim, que é o oposto de
+ * acompanhar o temporizador, como o cliente pede. É a mesma conta que o app faz
+ * por item; aqui agrega a ordem.
  *
  * Um item em andamento conta o tempo desde `startedAt` além do já bancado, e é
  * por isso que o valor anda sozinho entre dois requests — quem exibe precisa

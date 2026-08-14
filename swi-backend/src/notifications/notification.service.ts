@@ -35,8 +35,8 @@ export class NotificationService implements OnModuleInit {
     })
   }
 
-  // QA F (2026-07-24): "Solicitar Pausa" real — notificação pro worker, com
-  // org-scoping (alvo de outra empresa/inexistente/não-worker → NotFound).
+  // "Solicitar Pausa" real: notificação pro worker, com escopo por empresa.
+  // Alvo de outra empresa, inexistente ou que não seja worker responde NotFound.
   async requestPause(workerId: string, adminCompanyId: string | null): Promise<void> {
     const target = await this.prisma.user.findUnique({ where: { id: workerId } })
     if (!target || target.role !== 'WORKER' || target.companyId !== adminCompanyId) {

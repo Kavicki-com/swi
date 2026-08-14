@@ -1,9 +1,10 @@
 import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator'
 
 // Valida que a string é uma data YYYY-MM-DD que EXISTE no calendário.
-// `new Date('YYYY-MM-DD')` parseia como UTC midnight; toISOString() é UTC →
-// o round-trip slice(0,10) compara sem drift de timezone. Datas impossíveis
-// (2000-13-45 → Invalid Date; 2000-02-30 → rola pra 03-01) não round-trip.
+// `new Date('YYYY-MM-DD')` parseia como meia-noite UTC e toISOString() também é
+// UTC, então o round-trip com slice(0,10) compara sem drift de fuso. Mês ou dia
+// impossível não sobrevive ao round-trip: vira Invalid Date ou rola para o mês
+// seguinte.
 export function IsCalendarDate(options?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({

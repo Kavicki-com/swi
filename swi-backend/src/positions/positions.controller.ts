@@ -6,9 +6,10 @@ import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 
-// Fase 1 do realtime de localização. Heartbeat é do WORKER (o app mobile — ou
-// o simulador dev — posta a própria posição); a listagem é do ADMIN, escopada
-// na empresa dele. Throttle global (100/min) comporta 1 heartbeat a cada ~5 s.
+// Localização em tempo real. O heartbeat é do WORKER, ou seja, o app mobile (ou
+// o simulador de dev) posta a própria posição; a listagem é do ADMIN, escopada
+// na empresa dele. O throttle global de 100 por minuto comporta um heartbeat a
+// cada 5 segundos.
 @Controller('positions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PositionsController {

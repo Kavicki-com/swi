@@ -25,7 +25,7 @@ export class ChatController {
     return this.chat.sendMessage(userId, id, dto)
   }
 
-  // QA Web #4 — editar e excluir mensagem. Só o autor, e exclusão deixa marca.
+  // Editar e excluir mensagem. Só o autor, e exclusão deixa marca.
   //
   // Os dois devolvem a mensagem no estado novo, em vez de 204: o cliente aplica
   // o retorno na hora, sem depender de o socket chegar, e o mesmo payload serve
@@ -53,9 +53,9 @@ export class ChatController {
   @HttpCode(204)
   markRead(@CurrentUserId() userId: string, @Param('id') id: string) { return this.chat.markRead(userId, id) }
 
-  // QA Web #9 — denunciar mensagem de outra pessoa. Aninhada na conversa como
-  // toda operação de mensagem (a autorização parte da membership). Throttle
-  // próprio porque cada chamada dispara e-mail — mesma dose do /support.
+  // Denunciar mensagem de outra pessoa. Aninhada na conversa como toda
+  // operação de mensagem, porque a autorização parte da membership. Throttle
+  // próprio porque cada chamada dispara e-mail, na mesma dose do /support.
   @Post('conversations/:id/messages/:messageId/report')
   @HttpCode(204)
   @Throttle({ default: { limit: 5, ttl: 60000 } })

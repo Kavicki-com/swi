@@ -278,8 +278,9 @@ export class JourneyService {
           }
         }
       }
-      // Turno encerrado zera o relógio (refino 2026-06-23: banked vazaria pro
-      // próximo turno). Banking por-task é preservado (cada task é seu objeto).
+      // Turno encerrado zera o relógio, senão o tempo acumulado vaza pro
+      // próximo turno. O acúmulo por task é preservado, já que cada task é seu
+      // próprio objeto.
       return tx.journey.update({
         where: { id: journey.id },
         data: { state: 'idle', activeTaskId: null, startedAt: null, accumulatedSeconds: 0 },

@@ -192,6 +192,7 @@ jobs:
           --dir .github
           --dir scripts
           --dir mobile
+          --dir swi-backend
       # Portão de vulnerabilidades. Bloqueia de verdade, sem continue-on-error.
       #
       # O `npm audit` cru não servia como portão: ele mistura o que tem conserto

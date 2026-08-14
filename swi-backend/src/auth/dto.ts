@@ -2,18 +2,16 @@ import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Length, Max, Min
 import { IsCalendarDate } from '../profile/is-calendar-date'
 import { Type } from 'class-transformer'
 // companyId: a empresa que o usuário escolhe na tela de cadastro do app. Sem
-// ele o WORKER nascia sem vínculo e ficava INVISÍVEL na fila de aprovação do
-// painel, que é org-scoped — o fluxo cadastro→aprovação morria aí (QA
-// 2026-07-26). Opcional pra não quebrar build antiga do app que ainda não manda.
+// ele o WORKER nasce sem vínculo e fica INVISÍVEL na fila de aprovação do
+// painel, que é escopada por empresa, e o fluxo de cadastro até aprovação morre
+// aí. Opcional pra não quebrar build antiga do app que ainda não manda.
 // @IsString e não @IsUUID: nem todo id de Company é uuid (o seed usa
 // 'company-seed-1', legível de propósito). A validação que importa é a
 // existência no banco, feita no AuthService.signup.
-// Perfil coletado NO cadastro. Até 2026-07-26 o app criava a conta primeiro e o
-// wizard (dados pessoais, endereço, saúde) só rodava no modo mock — no fluxo
-// real ele era PULADO, então o admin aprovava uma linha com nome e e-mail e
-// nada mais. Tudo aqui é DIGITÁVEL: escolha do worker, não telemetria de
-// smartband. Todos opcionais — cadastro sem perfil segue válido (build antiga
-// do app, integrações, testes).
+// Perfil coletado NO cadastro, para que a fila de aprovação já nasça completa
+// em vez de uma linha com nome e e-mail. Tudo aqui é DIGITÁVEL: escolha do
+// worker, não telemetria de smartband. Todos opcionais, porque cadastro sem
+// perfil segue válido (build antiga do app, integrações, testes).
 export class SignupProfileDto {
   @IsOptional() @IsString() cpf?: string
   @IsOptional() @IsString() phone?: string
@@ -46,7 +44,7 @@ export class LoginDto { @IsEmail() email!: string; @IsString() password!: string
 export class ForgotDto { @IsEmail() email!: string }
 export class ResendDto { @IsEmail() email!: string }
 export class ResetDto { @IsEmail() email!: string; @IsString() code!: string; @MinLength(6) newPassword!: string }
-// QA F (2026-07-24): troca de senha autenticada (settings) — exige a atual.
+// Troca de senha autenticada (settings): exige a senha atual.
 export class ChangePasswordDto { @IsString() currentPassword!: string; @MinLength(6) newPassword!: string }
 
 // Onboarding de empresa (painel). Aninhado (company/responsible) pra casar com

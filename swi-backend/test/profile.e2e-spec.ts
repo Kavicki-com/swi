@@ -42,8 +42,8 @@ describe('Profile e2e', () => {
   it('perfil: whitelist descarta campo fora do DTO (anti mass-assignment)', async () => {
     const { body } = await request(app.getHttpServer()).post('/auth/login').send({ email, password: 'test1234' }).expect(200)
     const auth = { Authorization: `Bearer ${body.accessToken}` }
-    // `sector` virou campo legítimo do DTO no QA F (perfil completo) — o campo
-    // perigoso de verdade é a FK: reapontar o Profile pra outro user.
+    // `sector` é campo legítimo do DTO. O campo perigoso de verdade é a FK:
+    // reapontar o Profile pra outro user.
     await request(app.getHttpServer()).put('/profile/me').set(auth).send({ userId: 'hijack-attempt', city: 'Campinas' }).expect(200)
     const g = await request(app.getHttpServer()).get('/profile/me').set(auth).expect(200)
     // O write legítimo do MESMO payload aplicou — ou seja, a FK foi descartada

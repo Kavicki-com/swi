@@ -16,21 +16,20 @@ export class ReportsService {
     private readonly notifications: NotificationService,
   ) {}
 
-  // Org-scoping (QA C1): Report não tem companyId — a empresa é a do autor.
+  // Escopo por empresa: Report não tem companyId, a empresa é a do autor.
   //
-  // Devolve `{ items, total }`: o cap de 200 continua valendo por segurança, mas
-  // o TOTAL vai junto pra UI poder dizer quantos ficaram de fora (QA de volume
-  // 2026-07-26: 262 no banco, 200 na resposta, silêncio na tela). O controller
-  // achata em array + header, então o contrato do wire (e o mobile) não muda.
+  // Devolve `{ items, total }`. O cap de 200 vale por segurança, e o TOTAL vai
+  // junto pra UI poder dizer quantos ficaram de fora, senão o que passa do cap
+  // some em silêncio na tela. O controller achata em array mais header, então o
+  // contrato do wire, e o mobile, não mudam.
   /**
    * Quem pode ser atribuído como responsável por um relatório.
    *
-   * O app pedia isso ao /chat/directory, que devolve a empresa INTEIRA de
-   * propósito — sem os admins ali o worker não conseguia iniciar conversa com
-   * o painel (decisão 2026-07-26). O efeito colateral era o seletor de
-   * responsáveis oferecer os 10 operadores como revisores (QA no aparelho,
-   * 2026-07-27). São perguntas diferentes: "com quem posso falar" e "quem
-   * revisa meu relatório".
+   * Não serve pedir isso ao /chat/directory, que devolve a empresa INTEIRA de
+   * propósito, porque sem os admins ali o worker não consegue iniciar conversa
+   * com o painel. Usá-lo aqui ofereceria todos os operadores como revisores.
+   * São perguntas diferentes: "com quem posso falar" e "quem revisa meu
+   * relatório".
    *
    * Fica aqui, e não em chat, porque a régua é de relatórios — e porque o
    * painel tem o seletor dele (ResponsablesModal, hoje via adminsApi) e
@@ -96,9 +95,10 @@ export class ReportsService {
     if (!r || r.author.companyId !== companyId) return null
     const comments = await Promise.all(r.comments.map((c) => this.toCommentDto(c, c.author)))
     const dto = await this.toDto(r)
-    // Fotos reais das equipes por atividade (o Figma desenha o grupo de
-    // avatares em cada linha; decorativos foram banidos no QA 2026-07-26).
-    // Só no detalhe: a lista não renderiza atividades e não paga a query.
+    // Fotos reais das equipes por atividade. O desenho pede um grupo de
+    // avatares em cada linha, e eles têm que ser das pessoas de verdade, nunca
+    // decorativos. Só no detalhe: a lista não renderiza atividades e não paga
+    // a query.
     return { ...dto, activities: await this.resolveActivityAvatars(dto.activities), comments }
   }
 
@@ -222,11 +222,10 @@ export class ReportsService {
       creationDate: this.formatDate(r.creationDate),
       sector: r.sector ?? '',
       responsibles: r.responsibles,
-      // Foto REAL de cada responsável, resolvida pelo nome (o campo é um
-      // snapshot denormalizado de nomes). O painel pintava uma rotação fixa de
-      // 3 PNGs decorativos ao lado de "Responsáveis:" — caras que não eram das
-      // pessoas listadas (QA 2026-07-26). Sem match → '' e a UI cai no
-      // placeholder, que é honesto.
+      // Foto REAL de cada responsável, resolvida pelo nome, já que o campo é um
+      // snapshot denormalizado de nomes. Sem isso o painel exibiria rostos
+      // decorativos que não são das pessoas listadas. Sem correspondência o
+      // valor vai vazio e a UI cai no placeholder, que é honesto.
       responsibleAvatars: await this.avatarsForNames(r.responsibles),
       details: r.details ?? '',
       images: await this.media.presignGetMany(r.imageKeys),

@@ -1,9 +1,9 @@
 import { PositionsService } from './positions.service'
 import { NotFoundException } from '@nestjs/common'
 
-// Fase 1 do realtime de localização (2026-07-24): pipeline REAL de última
-// posição por worker — upsert + push WS pros admins da org. A fonte (GPS do
-// app mobile ou simulador dev) é indiferente ao service.
+// Pipeline REAL de última posição por worker: upsert mais push por WS pros
+// admins da org. A fonte, GPS do app mobile ou simulador de dev, é indiferente
+// ao service.
 const realtime = () => ({ emitToUsers: jest.fn() }) as any
 const media = () => ({ presignGet: jest.fn(async (k: string) => `signed:${k}`) }) as any
 const prisma = () => ({

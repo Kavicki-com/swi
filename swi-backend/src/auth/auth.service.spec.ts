@@ -20,8 +20,8 @@ function deps() {
   return { svc, users, prisma, mail, jwt }
 }
 
-// QA F (2026-07-24): o "Alterar senha" do settings não fazia nada. Endpoint
-// autenticado: exige a senha ATUAL (verifyHash) antes de gravar a nova.
+// O "Alterar senha" do settings é endpoint autenticado: exige a senha ATUAL
+// (verifyHash) antes de gravar a nova.
 describe('AuthService.changePassword', () => {
   it('senha atual correta → grava o hash novo', async () => {
     const { svc, users, prisma } = deps()
@@ -158,8 +158,8 @@ describe('AuthService reset de senha', () => {
 
 describe('AuthService.signup — perfil junto do cadastro', () => {
   // O app coleta dados pessoais, endereço e saúde ANTES de criar a conta, pra
-  // que a fila de aprovação do painel já nasça completa (QA 2026-07-26: o
-  // wizard era mock-only e o admin aprovava com nome e e-mail só).
+  // que a fila de aprovação do painel já nasça completa. Sem isso o admin
+  // aprovaria uma linha com nome e e-mail só.
   it('grava o que o worker preencheu, com birthDate virando Date', async () => {
     const { svc, users, prisma } = deps()
     users.findByEmail.mockResolvedValue(null)
@@ -215,8 +215,8 @@ describe('AuthService.signup rollback', () => {
     prisma.user.create.mockResolvedValue({ id: 'u9' })
     ;(mail.sendConfirmationCode).mockRejectedValue(new Error('smtp down'))
     await expect(svc.signup({ email: 'j@ex.com', password: 'p', name: 'J' })).rejects.toThrow('smtp down')
-    // Profile ANTES do user: a FK Profile→User sem cascade estourava o delete e
-    // deixava os dois órfãos (visto ao vivo no 550 do Resend, 2026-07-26).
+    // Profile ANTES do user: a FK Profile para User não tem cascade, então
+    // deletar o user primeiro estoura e deixa os dois órfãos.
     expect(prisma.profile.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u9' } })
     expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'u9' } })
     const profileOrder = (prisma.profile.deleteMany).mock.invocationCallOrder[0]

@@ -6,9 +6,9 @@ const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMa
 // Espelha a convenção do work-orders.service.spec: presignGet devolve 'signed:<key>'.
 const media = () => ({ presignGet: jest.fn((k: string) => Promise.resolve('signed:' + k)) }) as any
 
-// Org-scoping (QA C1, 2026-07-24): TODA leitura/mutação de usuário é escopada
-// pela empresa do requisitante — org nova não enxerga (nem mexe em) usuários da
-// org seed. Alvo de outra empresa responde NotFound (não vaza existência).
+// Escopo por empresa: TODA leitura e mutação de usuário é escopada pela empresa
+// do requisitante, então uma empresa não enxerga nem mexe em usuários de outra.
+// Alvo de outra empresa responde NotFound, para não vazar existência.
 
 describe('UsersService', () => {
   it('approve() vira approvalStatus p/ APPROVED (mesma empresa)', async () => {
@@ -44,8 +44,8 @@ describe('UsersService', () => {
     expect(r).toHaveLength(1)
   })
 
-  // O admin decide aprovar em cima destes campos; a fila devolvia só nome e
-  // e-mail e ele aprovava às cegas (QA 2026-07-26).
+  // O admin decide aprovar em cima destes campos. Uma fila que devolve só nome
+  // e e-mail faz a aprovação acontecer às cegas.
   it('listPending() devolve o perfil que o worker preencheu no cadastro', async () => {
     const db = prisma()
     db.user.findMany = jest.fn().mockResolvedValue([
@@ -253,9 +253,9 @@ describe('UsersService', () => {
       phone: '11999',
       cpf: '12345',
       company: { id: 'c1', name: 'ACME' },
-      // Cadastro clínico declaratório: null quando não preenchido. O detalhe do
-      // painel caía num default fixo ("Gênero: Feminino" pra todo mundo) e
-      // mostrava "Alergias" como título sem conteúdo (QA 2026-07-26).
+      // Cadastro clínico declaratório: null quando não preenchido. Com default
+      // fixo o detalhe do painel atribuiria o mesmo gênero a todo mundo e
+      // mostraria "Alergias" como título sem conteúdo.
       gender: null,
       allergies: null,
       chronicConditions: null,
@@ -290,9 +290,9 @@ describe('UsersService', () => {
       ],
     })
     const r = await new UsersService(db, media()).getOne('w1', 'c1')
-    // Mesma ordem do ProfileService.listExams (validade mais distante primeiro):
-    // app e painel listando o MESMO histórico em ordens diferentes é bug de
-    // confiança, não detalhe cosmético.
+    // Mesma ordem do ProfileService.listExams, validade mais distante primeiro.
+    // App e painel listando o MESMO histórico em ordens diferentes é problema
+    // de confiança, não detalhe cosmético.
     expect(db.user.findUnique.mock.calls[0][0].include.exams).toEqual({ orderBy: { date: 'desc' } })
     // toEqual e não toMatchObject: correspondência PARCIAL por elemento deixaria
     // passar campo vazado por exame (o fileKey cru do storage ao lado do

@@ -1,9 +1,9 @@
 import { ConflictException, NotFoundException } from '@nestjs/common'
 import { EvacuationEventsService } from './evacuation-events.service'
 
-// Fase 2 do realtime (2026-07-25): evacuação REAL — admin dispara, workers da
-// org são notificados (fila) e ack'am; progresso X/N flui por WS. Uma ativa
-// por org; ack idempotente (unique evacuationId+workerId).
+// Evacuação real: o admin dispara, os workers da org são notificados pela fila
+// e confirmam presença, e o progresso X/N flui por WS. Uma ativa por org, com
+// ack idempotente (unique evacuationId+workerId).
 const realtime = () => ({ emitToUsers: jest.fn() }) as any
 const notifications = () => ({ enqueueForMany: jest.fn().mockResolvedValue(undefined) }) as any
 const prisma = () => ({

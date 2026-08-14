@@ -45,9 +45,9 @@ export class MailService {
     })
   }
 
-  // QA Web #9 — denúncia de mensagem do chat. Sem persistência no banco por
-  // ora (decisão 2026-08-04): este e-mail é o único registro da denúncia, por
-  // isso carrega tudo que um moderador precisa sem ir ao banco.
+  // Denúncia de mensagem do chat. Sem persistência no banco, este e-mail é o
+  // único registro da denúncia, por isso carrega tudo que um moderador precisa
+  // sem ir ao banco.
   async sendMessageReport(to: string, report: MessageReportInfo): Promise<void> {
     const detalhe = report.text?.trim() ? `\nDetalhes: ${report.text.trim()}` : ''
     await this.transporter.sendMail({

@@ -46,13 +46,13 @@ export default tseslint.config(
     // `as any` dos mocks de Prisma e de serviço. Um `db: any` faz cada acesso
     // seguinte virar `no-unsafe-member-access`, cada chamada virar
     // `no-unsafe-call`, e assim por diante. Tipar esses dublês seria reescrever
-    // centenas de pontos de suítes que já passam, sem pegar um defeito sequer:
-    // a forma do mock já é verificada pelo próprio teste, que falha se ela
+    // centenas de pontos de suítes que já passam, sem ganho de verificação: a
+    // forma do mock já é conferida pelo próprio teste, que falha se ela
     // divergir do que o serviço consome.
     //
     // Desligado por configuração, num bloco só, e não por `eslint-disable`
     // espalhado nos fontes: assim a decisão é visível e reversível em um lugar.
-    // O que pega defeito de verdade continua ligado aqui, em especial
+    // O que pega problema de verdade continua ligado aqui, em especial
     // `no-floating-promises` e `no-unused-vars`.
     files: ['**/*.spec.ts', 'test/**/*.ts'],
     rules: {

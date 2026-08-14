@@ -75,7 +75,7 @@ export class WorkOrdersService {
     return this.detailById(order.id)
   }
 
-  // Org-scoping (QA C1): WorkOrder não tem companyId — a empresa é a do autor.
+  // Escopo por empresa: WorkOrder não tem companyId, a empresa é a do autor.
   async list(status: string | undefined, companyId: string | null) {
     const rows = await this.prisma.workOrder.findMany({
       where: {

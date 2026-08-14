@@ -5,9 +5,9 @@
 // "Coordenação de Turno"). O radical cobre as três formas sem uma entrada por
 // flexão.
 //
-// ALLOWLIST de propósito. Uma blocklist ("tudo menos Operador") passa a
-// aceitar qualquer cargo novo por omissão — e aqui errar pra mais significa
-// devolver o operador como revisor, que é o bug que estamos consertando.
+// ALLOWLIST de propósito. Uma blocklist ("tudo menos Operador") aceitaria
+// qualquer cargo novo por omissão, e aqui errar pra mais significa devolver o
+// operador como revisor.
 const STAFF_STEMS = [
   'admin', // Administrador, Administrativo
   'gerent', // Gerente, Gerência

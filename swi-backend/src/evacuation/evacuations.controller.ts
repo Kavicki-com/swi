@@ -5,8 +5,8 @@ import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 
-// Fase 2 do realtime: evacuação real. Dispatch/encerramento/progresso são do
-// ADMIN (org-scoped); o ack é do WORKER (app mobile — ou simulador dev).
+// Evacuação real. Disparo, encerramento e progresso são do ADMIN, escopados por
+// empresa; o ack é do WORKER, vindo do app mobile ou do simulador de dev.
 // Plural /evacuations de propósito: /evacuation/route (passthrough da rota
 // de fuga pro mobile) é outro recurso e continua intocado.
 @Controller('evacuations')

@@ -12,8 +12,8 @@ export class UpdateProfileDto {
   @IsOptional() @IsString() neighborhood?: string
   @IsOptional() @IsString() city?: string
   @IsOptional() @IsString() @Length(2, 2) uf?: string
-  // QA F (2026-07-24): campos que o settings/cadastro coletavam e o whitelist
-  // do ValidationPipe descartava em silêncio (sem entrada no DTO = no-op).
+  // Campos que o settings e o cadastro coletam. Sem entrada aqui o whitelist do
+  // ValidationPipe os descarta em silêncio e o salvar vira no-op.
   @IsOptional() @IsString() sector?: string
   @IsOptional() @IsString() jobTitle?: string
   @IsOptional() @IsString() gender?: string

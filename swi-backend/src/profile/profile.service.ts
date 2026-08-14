@@ -19,8 +19,8 @@ export class ProfileService {
     })
   }
 
-  // Exames clínicos: nome + validade + arquivo. Validade mais distante primeiro,
-  // que é a ordem do histórico no Figma (342:9907).
+  // Exames clínicos: nome, validade e arquivo. Validade mais distante primeiro,
+  // que é a ordem em que o histórico é desenhado.
   listExams(userId: string) {
     return this.prisma.exam.findMany({ where: { userId }, orderBy: { date: 'desc' } })
   }
@@ -39,11 +39,10 @@ export class ProfileService {
   }
 
   /**
-   * Vocabulário REAL da organização: DISTINCT de jobTitle/sector/duty dos
-   * Profiles da empresa do caller. Alimenta os Comboboxes do settings e o
-   * setor do form de tarefas — que usavam listas fixas inventadas, divergentes
-   * entre telas e sem os valores do banco ('Administrador'/'Gestão' não
-   * existiam em lista nenhuma; QA 2026-07-26). Só oferece o que existe; a
+   * Vocabulário REAL da organização: DISTINCT de jobTitle, sector e duty dos
+   * Profiles da empresa do caller. Alimenta os Comboboxes do settings e o setor
+   * do form de tarefas. Lista fixa no código diverge entre telas e não contém
+   * os valores que existem no banco, então aqui só é oferecido o que existe. A
    * taxonomia curada vem quando o cliente definir a oficial.
    */
   async catalog(userId: string): Promise<{
@@ -60,9 +59,9 @@ export class ProfileService {
     // org-scoping do resto do backend.
     const rows = await this.prisma.profile.findMany({
       where: { user: { companyId: me?.companyId ?? null } },
-      // fullName + role entram por causa de `managers`: o combo "Gerente
-      // responsável" do app abria VAZIO (options={[]}), porque o catálogo não
-      // tinha de onde tirar a lista (QA 2026-07-27).
+      // fullName e role entram por causa de `managers`: sem eles o catálogo não
+      // tem de onde tirar a lista, e o combo "Gerente responsável" do app abre
+      // vazio.
       select: { jobTitle: true, sector: true, duty: true, fullName: true, user: { select: { role: true, name: true } } },
     })
     const distinct = (pick: (r: (typeof rows)[number]) => string | null): string[] =>

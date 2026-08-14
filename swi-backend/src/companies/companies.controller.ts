@@ -2,10 +2,10 @@ import { Controller, Get } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import { PrismaService } from '../prisma/prisma.service'
 
-// Catálogo PÚBLICO de empresas — o cadastro do app acontece ANTES do login, e
-// sem escolher a empresa o usuário nascia sem companyId: ficava invisível na
-// fila de aprovação do painel (que é org-scoped) e o fluxo inteiro morria ali
-// (QA 2026-07-26).
+// Catálogo PÚBLICO de empresas. O cadastro do app acontece ANTES do login, e
+// sem escolher a empresa o usuário nasce sem companyId: fica invisível na fila
+// de aprovação do painel, que é escopada por empresa, e o fluxo inteiro morre
+// ali.
 //
 // Expõe SÓ id + nome. CNPJ, endereço e telefone do responsável ficam de fora:
 // são dados da empresa, não precisam para escolher numa lista. O throttle

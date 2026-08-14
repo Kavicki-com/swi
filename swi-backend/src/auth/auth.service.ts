@@ -91,10 +91,9 @@ export class AuthService {
       await this.mail.sendConfirmationCode(p.email, code)
     } catch (err) {
       try {
-        // Profile PRIMEIRO (mesmo padrão do signupCompany): o cadastro agora
-        // cria o Profile junto, e a FK Profile→User sem cascade estourava o
-        // user.delete deixando os DOIS órfãos — visto ao vivo no 550 do
-        // Resend com domínio não verificado (2026-07-26).
+        // Profile PRIMEIRO, mesmo padrão do signupCompany: o cadastro cria o
+        // Profile junto, e a FK Profile para User não tem cascade, então
+        // deletar o user antes estoura e deixa os DOIS órfãos.
         await this.prisma.profile.deleteMany({ where: { userId: user.id } })
         await this.prisma.user.delete({ where: { id: user.id } })   // sem órfão
       } catch (delErr) {
@@ -154,9 +153,9 @@ export class AuthService {
     await this.mail.sendResetCode(p.email, code)
   }
 
-  // QA F (2026-07-24): "Alterar senha" do settings. Autenticado; a senha ATUAL
-  // é o portão (Unauthorized genérico — não diferencia usuário órfão de senha
-  // errada pra não virar oráculo).
+  // "Alterar senha" do settings. Autenticado, e a senha ATUAL é o portão. O
+  // Unauthorized é genérico de propósito: não diferencia usuário órfão de
+  // senha errada, pra não virar oráculo.
   async changePassword(userId: string, p: { currentPassword: string; newPassword: string }): Promise<void> {
     const u = await this.users.findById(userId)
     const ok = await verifyHash(p.currentPassword, u?.passwordHash ?? DUMMY_HASH) // sempre 1 compare

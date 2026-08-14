@@ -11,9 +11,9 @@ import { PrismaService } from '../src/prisma/prisma.service'
 const CNPJ_A = '99000000000101'
 const CNPJ_B = '99000000000202'
 
-// Fase 2 do realtime: fluxo completo da evacuação real — dispatch do admin,
-// notificação real (fila inline em NODE_ENV=test), ack idempotente do worker,
-// progresso X/N org-scoped e encerramento.
+// Fluxo completo da evacuação real: disparo do admin, notificação real (fila
+// inline em NODE_ENV=test), ack idempotente do worker, progresso X/N escopado
+// por empresa e encerramento.
 describe('Evacuations e2e', () => {
   let app: INestApplication, prisma: PrismaService
   const emails = {

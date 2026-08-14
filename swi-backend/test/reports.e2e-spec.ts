@@ -39,9 +39,9 @@ describe('Reports e2e', () => {
 
   it('reports sem token → 401', () => request(app.getHttpServer()).get('/reports').expect(401))
 
-  // Este teste ficou na API antiga. O presign migrou de POST para PUT em
-  // 2026-07-29 (o R2 não implementa presigned POST), e com isso `fields`, que
-  // era a policy do form POST, deixou de existir: a resposta agora é url+key.
+  // O presign é PUT, não POST, porque o R2 não implementa presigned POST. Por
+  // isso não existe `fields`, que era a policy do form POST: a resposta é
+  // url mais key.
   // O contentLength passou a ser obrigatório porque entra na ASSINATURA, então
   // o upload só passa com exatamente aqueles bytes; omiti-lo dá 400 no
   // ValidationPipe, que era o 400 que este teste vinha recebendo.

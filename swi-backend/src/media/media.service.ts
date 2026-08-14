@@ -32,7 +32,7 @@ export class MediaService {
     endpoint: process.env.MINIO_PUBLIC_URL || undefined,
     forcePathStyle: !!process.env.MINIO_PUBLIC_URL,
     region: process.env.MINIO_REGION ?? 'us-east-1',
-    // Credenciais estáticas só quando fornecidas (MinIO local/QA). Em AWS, sem
+    // Credenciais estáticas só quando fornecidas, como no MinIO local. Em AWS, sem
     // MINIO_ACCESS_KEY, NÃO passar `credentials` — passar strings vazias
     // desligaria a default provider chain do SDK e o IAM role nunca entraria.
     ...(process.env.MINIO_ACCESS_KEY && process.env.MINIO_SECRET_KEY
@@ -45,14 +45,14 @@ export class MediaService {
       : {}),
   })
   private readonly bucket = process.env.MINIO_BUCKET ?? 'swi-media'
-  // Storage configurado = credenciais explícitas presentes. Sem elas, o
-  // getSignedUrl dispararia a default provider chain do SDK — que tenta IMDS
-  // (169.254.169.254) e PENDURA por timeout fora da AWS. No deploy Cloudez
-  // isso travou todo endpoint que assina avatar (/users, /positions, /reports,
-  // /chat/*) até o dashboard inteiro cair (2026-07-29). Sem storage, presign
-  // falha RÁPIDO: '' pro GET (telas tratam como sem-imagem) e 503 pro upload.
-  // NB: um futuro modo IAM-role (sem chave estática) precisaria rever isto —
-  // hoje não existe: o storage é MinIO local ou R2, sempre com chave.
+  // Storage configurado significa credenciais explícitas presentes. Sem elas o
+  // getSignedUrl dispara a default provider chain do SDK, que tenta o IMDS
+  // (169.254.169.254) e PENDURA por timeout fora da AWS, travando todo endpoint
+  // que assina avatar (/users, /positions, /reports, /chat/*) até derrubar o
+  // dashboard inteiro. Sem storage, o presign falha RÁPIDO: '' pro GET, que as
+  // telas tratam como sem-imagem, e 503 pro upload.
+  // Atenção: um modo com IAM role, sem chave estática, exigiria rever isto.
+  // Hoje o storage é MinIO local ou R2, sempre com chave.
   private readonly configured = !!(process.env.MINIO_ACCESS_KEY && process.env.MINIO_SECRET_KEY)
 
   // Extensão derivada do content-type JÁ VALIDADO por allowed-content-types.
@@ -71,10 +71,10 @@ export class MediaService {
   /**
    * URL presignada de PUT pro cliente subir o arquivo direto no storage.
    *
-   * PUT e não POST: o Cloudflare R2 NÃO implementa presigned POST — devolve
-   * 501 "Presigned post requests are not yet implemented", que foi o erro na
-   * cara do usuário ao anexar a foto do cadastro (QA 2026-07-29). O MinIO
-   * local aceita ambos, então PUT atende os dois ambientes com um caminho só.
+   * PUT e não POST: o Cloudflare R2 NÃO implementa presigned POST, devolve 501
+   * "Presigned post requests are not yet implemented", e é por lá que a foto do
+   * cadastro sobe. O MinIO local aceita ambos, então PUT atende os dois
+   * ambientes com um caminho só.
    *
    * O que substitui a policy do POST (que impunha faixa de tamanho e tipo):
    *  - `signableHeaders` põe content-type e content-length NA ASSINATURA, então

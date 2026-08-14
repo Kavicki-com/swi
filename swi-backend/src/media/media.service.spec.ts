@@ -5,9 +5,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { MediaService } from './media.service'
 
 // O upload é PUT presignado, não POST. Motivo: o Cloudflare R2 NÃO implementa
-// presigned POST — responde 501 "Presigned post requests are not yet
-// implemented", e foi exatamente o que quebrou a foto do cadastro no QA
-// (2026-07-29). O MinIO local aceita os dois, então PUT serve aos dois mundos.
+// presigned POST, responde 501 "Presigned post requests are not yet
+// implemented", e é por lá que a foto do cadastro sobe. O MinIO local aceita os
+// dois, então PUT serve aos dois mundos.
 //
 // O que a assinatura garante, verificado no R2 de verdade antes de escrever
 // este código: sem `signableHeaders`, o content-type NÃO entra na assinatura e
@@ -108,7 +108,7 @@ describe('MediaService', () => {
 
     // A guarda precisa barrar ANTES de assinar. Se ela rodasse depois do
     // getSignedUrl, o teste de rejeição acima continuaria verde enquanto a URL
-    // assinada já teria sido gerada: defeito invisível.
+    // assinada já teria sido gerada, e a falha ficaria invisível.
     it('presignPut recusado não chega a assinar nada', async () => {
       await expect(
         new MediaService().presignPut('application/pdf', 100, 'chat'),
@@ -131,11 +131,11 @@ describe('MediaService', () => {
   })
 })
 
-// Deploy Cloudez 2026-07-29: sem credenciais de storage, o getSignedUrl do
-// SDK dispara a default provider chain — que tenta IMDS (169.254.169.254) e
-// PENDURA por timeout. No painel isso travou /users, /positions, /reports e
-// /chat/* de uma vez: todo endpoint que assina avatar. Sem storage
-// configurado, presign tem que falhar RAPIDO.
+// Sem credenciais de storage, o getSignedUrl do SDK dispara a default provider
+// chain, que tenta o IMDS (169.254.169.254) e PENDURA por timeout fora da AWS.
+// No painel isso trava /users, /positions, /reports e /chat/* de uma vez, ou
+// seja, todo endpoint que assina avatar. Sem storage configurado, o presign tem
+// que falhar RAPIDO.
 describe('MediaService sem storage configurado', () => {
   const OLD = { ...process.env }
   afterEach(() => { process.env = { ...OLD }; jest.resetModules() })

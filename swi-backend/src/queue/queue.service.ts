@@ -20,10 +20,10 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     if (this.inline) return // sem pg-boss em test-env (determinismo dos e2e)
     // `new Function` esconde o import() do tsc: com module=commonjs ele
-    // transpilaria pra require(), que explode com ERR_REQUIRE_ESM no Node <22
-    // (pg-boss v12 é ESM-only). O Docker local roda Node 22 e mascarava isso;
-    // a hospedagem Cloudez roda Node 18 e revelou (deploy 2026-07-29).
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call -- o `new Function` abaixo não é dinamismo gratuito: é o que esconde o import() do tsc. Trocar por import() direto o faz virar require() sob module=commonjs, que estoura ERR_REQUIRE_ESM no Node 18 da hospedagem (incidente de 2026-07-29).
+    // transpilaria pra require(), que estoura ERR_REQUIRE_ESM porque o pg-boss
+    // v12 é ESM-only. O runtime local não necessariamente reproduz isso, então
+    // a falha só apareceria depois do deploy.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call -- o `new Function` abaixo não é dinamismo gratuito: é o que esconde o import() do tsc. Trocar por import() direto o faz virar require() sob module=commonjs, que estoura ERR_REQUIRE_ESM com um pacote ESM-only.
     const { PgBoss } = await (new Function("return import('pg-boss')")() as Promise<
       typeof import('pg-boss')
     >)

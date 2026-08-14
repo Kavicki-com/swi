@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateSupportRequestDto } from './dto'
 
-// QA F (2026-07-24): o pedido de suporte era descartado em silêncio pelo
-// front. Agora persiste em SupportRequest — o vínculo é o userId do JWT
-// quando existe sessão, ou o email digitado quando não.
+// Persiste o pedido de suporte em SupportRequest, senão ele é descartado em
+// silêncio. O vínculo é o userId do JWT quando existe sessão, ou o email
+// digitado quando não.
 @Injectable()
 export class SupportService {
   constructor(private readonly prisma: PrismaService) {}

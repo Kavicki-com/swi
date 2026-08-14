@@ -35,7 +35,7 @@ describe('MediaController.presign — prefixo order é ADMIN-only', () => {
   })
 
   it.each(['reports', 'task', 'chat', 'exams', 'avatars'])('WORKER pedindo prefix %s segue liberado', async (prefix) => {
-    // exams/avatars (QA F): upload do próprio perfil — qualquer autenticado.
+    // 'exams' e 'avatars' são upload do próprio perfil: qualquer autenticado.
     const svc = media()
     const ctrl = new MediaController(svc)
     await ctrl.presign({ contentType: 'image/png', contentLength: 100, prefix }, reqWithRole('WORKER'))

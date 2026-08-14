@@ -3,10 +3,10 @@ import { get as httpsGet } from 'node:https'
 
 // GET JSON sem o fetch() global. Motivo: o fetch do Node é o undici, que
 // instancia o parser HTTP em WebAssembly na PRIMEIRA chamada. No servidor de
-// produção (Cloudez, 1 GB de RAM), essa alocação falhava sob pressão de
-// memória e derrubava o processo inteiro — toda vez que alguém abria o
-// dashboard e o painel pedia /weather (deploy 2026-07-29). node:https usa o
-// parser nativo em C, sem Wasm, sem pico de alocação.
+// produção, com 1 GB de RAM, essa alocação falha sob pressão de memória e
+// derruba o processo inteiro, o que acontece toda vez que alguém abre o
+// dashboard e o painel pede /weather. node:https usa o parser nativo em C, sem
+// Wasm e sem pico de alocação.
 //
 // A superfície imita o fetch de propósito ({ ok, status, json() }): os dois
 // consumidores (Open-Meteo e Mapbox Directions) migraram com diff mínimo.

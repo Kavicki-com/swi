@@ -1,9 +1,8 @@
 import { isStaffJobTitle } from './staff'
 
 // Quem pode ser atribuído como RESPONSÁVEL por um relatório ("eles revisarão e
-// farão comentários"). O app oferecia o diretório de chat inteiro, então o
-// worker via os 10 colegas de operação como revisores — nenhum deles revisa
-// nada (QA no aparelho, 2026-07-27).
+// farão comentários"). Oferecer o diretório de chat inteiro colocaria os
+// colegas de operação como revisores, e nenhum deles revisa nada.
 //
 // O campo certo pra isso seria User.companyRole (owner/partner/manager/safety),
 // que o schema já prevê — mas está NULO nos 16 usuários. Enquanto não for

@@ -4,7 +4,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
 import type { Evacuation } from '@prisma/client'
 
-// Fase 2 do realtime (2026-07-25): evacuação REAL. O admin dispara, os workers
+// Evacuação real. O admin dispara, os workers
 // da org são notificados (fila durável) e confirmam presença (ack idempotente);
 // o progresso X/N flui ao vivo por WS. UMA ativa por org por vez.
 // A fonte do ack (app mobile ou simulador dev) é indiferente ao service —

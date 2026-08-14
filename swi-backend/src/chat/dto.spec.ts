@@ -10,7 +10,7 @@ describe('SendMessageDto', () => {
   it('rejeita body > 4000', async () => { expect(await errs('a'.repeat(4001))).toBeGreaterThan(0) })
 })
 
-// QA Web #4: editar mensagem. Diferente do envio, aqui o body é OBRIGATÓRIO.
+// Editar mensagem. Diferente do envio, aqui o body é OBRIGATÓRIO.
 // Enviar só imagem existe; editar para vazio não, porque seria exclusão
 // disfarçada, sem lápide e sem trilha.
 describe('EditMessageDto', () => {
@@ -26,8 +26,8 @@ describe('EditMessageDto', () => {
   })
 })
 
-// QA Web #9: denunciar mensagem. Motivo obrigatório (lista fica no painel, o
-// backend valida formato); detalhe opcional limitado aos ~240 da planilha.
+// Denunciar mensagem. Motivo obrigatório (a lista fica no painel, o backend
+// valida formato) e detalhe opcional limitado a cerca de 240 caracteres.
 describe('ReportMessageDto', () => {
   const reportErrs = async (payload: Record<string, unknown>) =>
     (await validate(plainToInstance(ReportMessageDto, payload))).length

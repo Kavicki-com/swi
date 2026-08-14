@@ -88,8 +88,8 @@ describe('PositionSimulatorService', () => {
 
     await svc.tick()
     expect(pos.heartbeat).toHaveBeenCalledTimes(2)
-    // Ordem dos args é o bug clássico: heartbeat(workerId, LAT, LNG) — lat é
-    // o ~-23.5 e lng o ~-46.6, nunca trocados.
+    // A ordem dos args é o que este teste protege: heartbeat(workerId, LAT,
+    // LNG), com lat no ~-23.5 e lng no ~-46.6, nunca trocados.
     for (const [id, lat, lng] of pos.heartbeat.mock.calls) {
       expect(['w1', 'w2']).toContain(id)
       expect(lat).toBeGreaterThan(-23.6)
@@ -121,7 +121,7 @@ describe('PositionSimulatorService', () => {
     svc.onModuleDestroy()
   })
 
-  // Fase 2: evacuação ativa na org → workers convergem pro muster e ack'am.
+  // Com evacuação ativa na org, os workers convergem pro muster e confirmam.
   describe('evacuação ativa', () => {
     const setup = async (workers: any[], evacs: any[]) => {
       process.env.SIM_POSITIONS = '1'

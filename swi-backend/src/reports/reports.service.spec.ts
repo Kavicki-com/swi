@@ -25,9 +25,9 @@ const prisma = () =>
     comment: { create: jest.fn() },
   }) as any
 
-// Org-scoping (QA C1): Report não tem companyId próprio — a empresa é derivada
-// do autor (author.companyId). Toda leitura/escrita compara com a empresa do
-// requisitante; cross-org devolve null/NotFound.
+// Escopo por empresa: Report não tem companyId próprio, a empresa é derivada do
+// autor (author.companyId). Toda leitura e escrita compara com a empresa do
+// requisitante, e o acesso entre empresas devolve null ou NotFound.
 const row = (over = {}) => ({
   id: 'r1',
   title: 'T',
@@ -65,9 +65,9 @@ describe('ReportsService', () => {
     expect(out.items[0].summary).toBe('') // null → '' (telas exigem string)
   })
 
-  // QA de volume (2026-07-26): 262 relatórios no banco, a API devolvia 200 e a
-  // tela não dizia nada — 62 sumiam em silêncio. O total vem junto pra UI poder
-  // avisar, e limit/offset permitem buscar o resto.
+  // Com mais relatórios no banco do que o cap da resposta, o excedente sumiria
+  // em silêncio na tela. O total vem junto pra UI poder avisar, e limit e
+  // offset permitem buscar o resto.
   it('list devolve o TOTAL da empresa junto (não só a página) e aceita limit/offset', async () => {
     const db = prisma()
     db.report.findMany.mockResolvedValue([row()])
@@ -102,9 +102,8 @@ describe('ReportsService', () => {
     expect(out!.images).toEqual(['signed:reports/a.jpg', 'signed:reports/b.jpg']) // urls presigned coexistem
   })
 
-  // O painel pintava uma rotação fixa de 3 PNGs decorativos ao lado de
-  // "Responsáveis:" — caras que não eram das pessoas listadas, e uma pílula
-  // "+13" literal (QA 2026-07-26). O DTO agora resolve nome → foto real.
+  // O DTO resolve nome para foto real. Sem isso o painel exibe rostos
+  // decorativos ao lado de "Responsáveis:" que não são das pessoas listadas.
   it('resolve a foto de cada responsável pelo nome, na mesma ordem', async () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue(
@@ -135,8 +134,8 @@ describe('ReportsService', () => {
     expect(db.profile.findMany).not.toHaveBeenCalled()
   })
 
-  // Decisão 2026-07-26 (seguir o Figma): cada atividade tem o grupo de rostos
-  // da EQUIPE REAL — responsibleNames no Json, resolvidos pra foto no detalhe.
+  // Cada atividade tem o grupo de rostos da EQUIPE REAL: responsibleNames no
+  // Json, resolvidos pra foto no detalhe.
   it('resolve as fotos das equipes por atividade, em UMA query, ordem preservada', async () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue(
@@ -384,12 +383,11 @@ describe('ReportsService', () => {
   })
 })
 
-// Quem o app oferece como RESPONSÁVEL do relatório. Até 2026-07-27 o app
-// chamava /chat/directory — que inclui todo mundo da empresa de propósito
-// (decisão de 26/07: sem os admins na lista, o worker não tinha como iniciar
-// conversa com o painel). Resultado: o seletor de responsáveis oferecia os 10
-// operadores como revisores. O painel já usava outra régua (adminsApi), então
-// os dois seletores divergiam.
+// Quem o app oferece como RESPONSÁVEL do relatório. Não serve o
+// /chat/directory, que inclui todo mundo da empresa de propósito, porque sem os
+// admins na lista o worker não teria como iniciar conversa com o painel. Usá-lo
+// aqui ofereceria todos os operadores como revisores e divergiria da régua que
+// o painel aplica.
 describe('ReportsService.listAssignees', () => {
   const baseProfile = {
     fullName: null,

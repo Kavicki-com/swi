@@ -17,8 +17,8 @@ const row = (over: any = {}) => ({
   targetId: null, read: false, createdAt: new Date('2026-06-23T15:00:00Z'), ...over,
 })
 
-// QA F (2026-07-24): o "Solicitar Pausa" do detalhe do funcionário não fazia
-// nada. Vira notificação REAL pro worker (domain journey), com org-scoping.
+// O "Solicitar Pausa" do detalhe do funcionário vira notificação REAL pro
+// worker, no domínio journey, com escopo por empresa.
 describe('NotificationService.requestPause', () => {
   it('worker da mesma empresa → enfileira notificação de pausa', async () => {
     const db = prisma()

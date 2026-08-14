@@ -32,8 +32,8 @@ describe('ProfileService', () => {
     })
   })
 
-  // catalog: vocabulário DISTINCT da org — substitui as listas fixas
-  // inventadas do settings/tarefas (QA 2026-07-26).
+  // catalog: vocabulário DISTINCT da organização, no lugar de listas fixas no
+  // settings e no form de tarefas.
   describe('catalog', () => {
     it('escopa pela empresa do caller e devolve DISTINCT ordenado, sem vazios', async () => {
       const db = prisma()

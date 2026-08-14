@@ -30,8 +30,8 @@ const prisma = () => {
   return db
 }
 
-// Org-scoping (QA C1): WorkOrder não tem companyId — a empresa é a do autor.
-// Detalhe devolvido por get (create/update chamam o detail interno na volta).
+// Escopo por empresa: WorkOrder não tem companyId, a empresa é a do autor.
+// Detalhe devolvido por get (create e update chamam o detail interno na volta).
 const detailRow = (over: any = {}) => ({
   id: 'o1', title: 'Ordem', summary: 'Resumo', details: 'Detalhes', sector: 'Norte',
   estimatedMinutes: 120, startDate: null, dueDate: null, status: 'pending', imageKeys: ['order/a.jpg'],

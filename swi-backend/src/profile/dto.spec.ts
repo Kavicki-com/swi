@@ -2,9 +2,9 @@ import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'
 import { CreateExamDto, UpdateProfileDto } from './dto'
 
-// QA F (2026-07-24): o settings do admin coletava setor/cargo/saúde e o
-// ValidationPipe (whitelist) DESCARTAVA tudo que não estava no DTO — o "salvar"
-// virava no-op silencioso pros campos novos. Estes testes travam a superfície.
+// O ValidationPipe roda com whitelist, então tudo que não está declarado no DTO
+// é DESCARTADO em silêncio e o "salvar" vira no-op para aquele campo. Estes
+// testes travam a superfície que o settings do admin precisa gravar.
 describe('UpdateProfileDto', () => {
   const valid = async (body: Record<string, unknown>) => {
     const dto = plainToInstance(UpdateProfileDto, body)

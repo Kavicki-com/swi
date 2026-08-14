@@ -7,7 +7,7 @@ export class SendMessageDto {
   imageKey?: string
 }
 
-// QA Web #4 — editar mensagem. Aqui o body é OBRIGATÓRIO, ao contrário do
+// Editar mensagem. Aqui o body é OBRIGATÓRIO, ao contrário do
 // envio: mensagem só com imagem existe, mas editar para vazio seria exclusão
 // disfarçada, sem lápide e sem trilha. O trim vem antes da validação para que
 // "   " caia no IsNotEmpty em vez de passar como texto válido.
@@ -19,11 +19,11 @@ export class EditMessageDto {
   body!: string
 }
 
-// QA Web #9 — denunciar mensagem. O motivo vem de uma lista fixa do painel,
-// mas o backend valida só formato e tamanho: a lista é do cliente e amarrar
-// os literais aqui obrigaria deploy casado a cada motivo novo. O detalhe é a
-// "caixa de ~240 caracteres" da planilha — opcional, e trim antes da validação
-// pra "   " não passar como detalhe.
+// Denunciar mensagem. O motivo vem de uma lista fixa do painel, mas o backend
+// valida só formato e tamanho: a lista é do cliente, e amarrar os literais aqui
+// obrigaria deploy casado a cada motivo novo. O detalhe é uma caixa de cerca de
+// 240 caracteres, opcional, com trim antes da validação pra "   " não passar
+// como detalhe.
 export class ReportMessageDto {
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()

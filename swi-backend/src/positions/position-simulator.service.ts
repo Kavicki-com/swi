@@ -26,9 +26,9 @@ interface SimWorker {
 // lá a fonte é o GPS do app mobile). Move cada worker ativo num loop crível
 // dentro do site e alimenta o MESMO caminho de escrita do heartbeat real:
 // upsert + push WS. Nada na cadeia é fake, só a origem do sinal.
-// Fase 2: com evacuação ATIVA na org do worker, ele abandona o loop e CONVERGE
-// em linha reta pro muster point; na chegada, ack'a pelo MESMO service que o
-// app mobile usará — o admin vê o X/N subir ao vivo.
+// Com evacuação ATIVA na org do worker, ele abandona o loop e CONVERGE em linha
+// reta pro muster point. Na chegada confirma presença pelo MESMO service que o
+// app mobile usa, e o admin vê o X/N subir ao vivo.
 @Injectable()
 export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PositionSimulatorService.name)
@@ -72,8 +72,9 @@ export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
     const evacByOrg = await this.activeEvacuations()
     // Quem tem GPS REAL recente é dono do próprio pino: o app no celular posta
     // no mesmo heartbeat, e sem esta cedência o simulador sobrescreveria a
-    // posição verdadeira ~3s depois de ela chegar (decisão 2026-07-26). Janela
-    // de 60s: app fechado → o pino congela 1 min e o simulador retoma.
+    // posição verdadeira poucos segundos depois de ela chegar. A janela é de
+    // 60s, então com o app fechado o pino congela por um minuto e o simulador
+    // retoma.
     const liveReal = await this.recentRealWorkers()
     for (const w of this.workers) {
       if (liveReal.has(w.id)) continue

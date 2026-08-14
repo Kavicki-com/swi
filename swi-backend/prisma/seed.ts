@@ -14,8 +14,9 @@ async function main() {
   // administrativa com senha de demonstração. Contra um banco que não seja
   // descartável, isso é uma credencial pública, não dado de teste.
   assertSeedAllowed(process.env)
-  // Org-scoping (QA C1): TODO usuário seed pertence à empresa demo — sem isto,
-  // ficam com companyId null (balde legado) e as listas escopadas vêm vazias.
+  // Escopo por empresa: TODO usuário semeado pertence à empresa demo. Sem isto
+  // eles ficam com companyId null, no balde legado, e as listas escopadas
+  // chegam vazias.
   // id fixo → upsert idempotente; o `update` dos upserts abaixo re-vincula
   // usuários que já existiam no banco dev antes do scoping.
   const company = await prisma.company.upsert({
@@ -169,9 +170,8 @@ async function main() {
   }
 
   // TODO usuário semeado tem foto: sem avatarKey a UI cai no círculo cinza do
-  // DS e o mapa/listas ficam com "buracos" (QA de volume 2026-07-26). Os 8
-  // contatos já ganharam a sua no laço acima; aqui fecham o worker demo e o
-  // admin, que antes nasciam sem Profile completo.
+  // design system e o mapa e as listas ficam com "buracos". Os 8 contatos já
+  // ganharam a sua no laço acima; aqui fecham o worker demo e o admin.
   for (const p of [
     { user: worker, file: 'worker-demo.png', fullName: 'Worker Demo', sector: 'Operações', jobTitle: 'Operador de escavadeira', birthDate: '1994-02-17', bloodType: 'A+', gender: 'male', allergies: 'Poeira de sílica' },
     { user: admin, file: 'admin-1.png', fullName: 'Admin', sector: 'Gestão', jobTitle: 'Administrador', birthDate: '1986-06-09', bloodType: 'O+', gender: 'male', allergies: '' },
@@ -421,10 +421,10 @@ async function main() {
   // mock). As atividades NÃO carregam avatares aqui — o admin decora na renderização.
   const REPORT_DETAILS =
     'Inspeção realizada nas máquinas pesadas da Mina Córrego Seco, com foco especial no equipamento Komatsu K35E. Inicia o checklist abrangente de manutenção preventiva, abordando desde a verificação dos níveis de óleo e filtros até a substituição de componentes desgastados. A equipe técnica também realizou ajustes de calibração nos sistemas hidráulicos e elétricos, garantindo o desempenho ótimo dos equipamentos. Foram identificadas e corrigidas pequenas falhas no sistema de ignição de uma das escavadeiras, contribuindo para sua eficiência operacional aprimorada. Adicionalmente, foi realizada uma verificação minuciosa nos pneus, monitorando o desgaste e a pressão para garantir a segurança e o bom funcionamento das máquinas em todas as operações de mineração.'
-  // `responsibleNames`: equipes REAIS do CONTACTS (o Figma desenha rostos por
-  // atividade; faces decorativas foram banidas no QA 2026-07-26 — decisão do
-  // usuário: seguir o Figma COM gente de verdade). O read resolve nome → foto
-  // via avatarsForNames, igual aos responsáveis do relatório.
+  // `responsibleNames`: equipes REAIS do CONTACTS. O desenho pede um rosto por
+  // atividade, e a decisão do usuário é seguir o desenho com gente de verdade,
+  // sem face decorativa. O read resolve nome para foto via avatarsForNames,
+  // igual aos responsáveis do relatório.
   const REPORT_ACTIVITIES = [
     { title: 'Verificação de níveis de óleo e filtros', sector: 'Setor Noroeste', progress: 80, tone: 'success', responsibleNames: ['Josué Oliveira', 'Ezequiel Almeida'] },
     { title: 'Manutenção de motores', sector: 'Setor Noroeste', progress: 50, tone: 'warning', responsibleNames: ['Carlos Santos (Manut.)', 'Romulo Cardoso'] },
@@ -433,9 +433,9 @@ async function main() {
 
   // Fixture espelhando REPORTS_SEED (title/summary/status/statusLabel/creationDate/
   // sector/responsibles). Datas dd/mm/yyyy → Date (UTC midnight).
-  // `responsibles` NÃO vem da fixture: era a mesma dupla inventada ("Ana Clara
-  // Mendonça, Antonio Hayde") nos 12 relatórios, gente que não existe no quadro.
-  // Agora sai do próprio CONTACTS, rotacionando (QA 2026-07-26).
+  // `responsibles` NÃO vem da fixture, senão os 12 relatórios repetem a mesma
+  // dupla de nomes que não existe no quadro. Sai do próprio CONTACTS,
+  // rotacionando.
   type ReportFx = { title: string; summary: string; status: 'accept' | 'pending' | 'canceled' | 'info'; statusLabel: string; creationDate: string; sector: string }
   const REPORTS_FX: ReportFx[] = [
     { title: 'Inspeção Técnica das Máquinas Pesadas', summary: 'Checklist de manutenção preventiva e reparos necessários nos equipamentos da frota.', status: 'pending', statusLabel: 'Em Revisão', creationDate: '12/04/2026', sector: 'Setor Nordeste' },

@@ -2,10 +2,9 @@ import { createServer, type Server } from 'node:http'
 import { httpGetJson } from './httpGet'
 
 // Por que este helper existe: o fetch() do Node é o undici, que instancia um
-// parser HTTP em WebAssembly na primeira chamada. No servidor de produção
-// (1 GB de RAM, Cloudez), essa alocação falhava sob pressão de memória e
-// DERRUBAVA o processo inteiro — toda vez que o painel pedia /weather
-// (deploy 2026-07-29). node:https não tem Wasm nenhum.
+// parser HTTP em WebAssembly na primeira chamada. No servidor de produção, com
+// 1 GB de RAM, essa alocação falha sob pressão de memória e DERRUBA o processo
+// inteiro, toda vez que o painel pede /weather. node:https não tem Wasm nenhum.
 describe('httpGetJson', () => {
   let server: Server
   let base: string

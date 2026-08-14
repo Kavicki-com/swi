@@ -12,7 +12,7 @@ type UserWithProfile = User & { profile: Profile | null }
 // que isso permitiria é pior que o crash: "Nenhum exame registrado" para quem
 // TEM exame parece uma tela normal até alguém liberar um trabalhador para área
 // de risco confiando nela. É a mesma família das alergias fixas, do tipo
-// sanguíneo com default universal e dos vitais "excelentes" por padrão: defeito
+// sanguíneo com default universal e dos vitais "excelentes" por padrão: falha
 // silenciosamente plausível. Um 500 aparece no log e no monitoramento; um
 // histórico clínico vazio por engano não aparece em lugar nenhum. Obrigatório
 // também faz um segundo call site que esqueça o include falhar na COMPILAÇÃO.
@@ -72,9 +72,9 @@ export class UsersService {
     }
   }
 
-  // Org-scoping (QA C1): alvo fora da empresa do requisitante responde NotFound
-  // — não vaza nem a existência do usuário. companyId null = balde legado
-  // (usuários sem empresa só se enxergam entre si).
+  // Escopo por empresa: alvo fora da empresa do requisitante responde NotFound,
+  // para não vazar nem a existência do usuário. companyId null é o balde
+  // legado, onde usuários sem empresa só se enxergam entre si.
   private async requireSameCompany(id: string, companyId: string | null) {
     const u = await this.prisma.user.findUnique({ where: { id } })
     if (!u || u.companyId !== companyId) throw new NotFoundException('Usuário não encontrado')
@@ -213,9 +213,8 @@ export class UsersService {
       active: u.active,
       jobTitle: u.profile?.jobTitle ?? '',
       sector: u.profile?.sector ?? '',
-      // Fase 3 (monitoramento honesto): tipo sanguíneo REAL do Profile (o
-      // worker/admin edita no settings desde o QA F) — null quando não
-      // preenchido, NUNCA um default universal.
+      // Tipo sanguíneo REAL do Profile, que o worker ou o admin edita no
+      // settings. null quando não preenchido, NUNCA um default universal.
       bloodType: u.profile?.bloodType ?? null,
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
       avatar: u.profile?.avatarKey ? await this.media.presignGet(u.profile.avatarKey) : '',
@@ -231,10 +230,10 @@ export class UsersService {
       phone: u.profile?.phone ?? null,
       cpf: u.profile?.cpf ?? null,
       company: u.company ? { id: u.company.id, name: u.company.name } : null,
-      // Cadastro clínico declaratório (o worker preenche no settings). O
-      // detalhe do painel já tinha a UI pra isso mas nunca recebeu os campos:
-      // "Gênero" caía num default fixo ("Feminino" pra todo mundo) e "Alergias"
-      // renderizava um título sem conteúdo (QA 2026-07-26).
+      // Cadastro clínico declaratório, preenchido pelo worker no settings. O
+      // detalhe do painel tem UI pra isso e precisa receber os campos, senão
+      // "Gênero" cai num default fixo igual pra todo mundo e "Alergias"
+      // renderiza um título sem conteúdo.
       gender: u.profile?.gender ?? null,
       allergies: u.profile?.allergies ?? null,
       chronicConditions: u.profile?.chronicConditions ?? null,

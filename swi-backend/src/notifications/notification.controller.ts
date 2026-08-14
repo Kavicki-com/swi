@@ -6,7 +6,7 @@ import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 
-// QA F (2026-07-24): payload do "Solicitar Pausa" do detalhe do funcionário.
+// Payload do "Solicitar Pausa" do detalhe do funcionário.
 export class PauseRequestDto { @IsString() @MinLength(1) workerId!: string }
 
 @Controller('notifications')

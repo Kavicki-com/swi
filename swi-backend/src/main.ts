@@ -15,7 +15,7 @@ async function bootstrap() {
   if (env.nodeEnv === 'test') {
     new Logger('Bootstrap').warn('Rate limiting DESLIGADO (NODE_ENV=test) — nunca rode a API real com NODE_ENV=test.')
   }
-  // Hospedagem Cloudez (deploy 2026-07-29): o nginx deles não faz proxy pra
+  // Hospedagem atual: o nginx dela não faz proxy pra
   // porta TCP, e sim pra um socket Unix fixo da aplicação
   // (etc/nodejs/nodejs.sock). O socket anterior sobrevive a restart do
   // processo e daria EADDRINUSE — remove antes de escutar. Sem a env

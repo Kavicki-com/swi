@@ -62,7 +62,7 @@ describe('advance', () => {
   })
 })
 
-// Fase 2 (evacuação): convergência em linha reta pro ponto de encontro.
+// Evacuação: convergência em linha reta pro ponto de encontro.
 describe('stepToward', () => {
   const from: [number, number] = [-46.631, -23.551]
 

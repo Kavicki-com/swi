@@ -1,9 +1,8 @@
 import { SupportService } from './support.service'
 
-// QA F (2026-07-24): o modal "Solicitação de suporte" (login e settings)
-// fechava descartando o pedido — nenhuma chamada, nenhum registro. Agora o
-// pedido é PERSISTIDO (SupportRequest) com vínculo opcional (userId do JWT
-// quando logado; email digitado quando não).
+// O modal "Solicitação de suporte" (login e settings) precisa PERSISTIR o
+// pedido em SupportRequest, senão ele fecha sem chamada e sem registro. O
+// vínculo é opcional: userId do JWT quando logado, email digitado quando não.
 const prisma = () => ({ supportRequest: { create: jest.fn().mockResolvedValue({ id: 'sr1' }) } }) as any
 
 describe('SupportService', () => {

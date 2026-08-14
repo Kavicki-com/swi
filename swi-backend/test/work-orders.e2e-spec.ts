@@ -126,10 +126,10 @@ describe('WorkOrders e2e', () => {
     const { body: inProg } = await request(app.getHttpServer()).get('/work-orders?status=in_progress').set(adminAuth).expect(200)
     const row = inProg.find((o: any) => o.id === order1Id)
     expect(row).toBeTruthy()
-    // Este teste esperava 50 aqui, a conta antiga: itens concluídos ÷ total.
-    // A listagem passou a medir progresso por TEMPO (decorrido ÷ estimado) em
-    // 2026-07-26, a pedido do cliente, porque uma ordem de um item só ficava em
-    // 0% a execução inteira e saltava pra 100%. Esta ordem é criada SEM
+    // A listagem mede progresso por TEMPO (decorrido dividido por estimado), a
+    // pedido do cliente, e não por itens concluídos, que deixaria uma ordem de
+    // um item só em 0% a execução inteira saltando pra 100%. Esta ordem é
+    // criada SEM
     // estimatedMinutes, e sem estimativa não existe percentual honesto, então o
     // valor é 0 por definição, não por arredondamento de relógio. O que o caso
     // realmente guarda continua valendo: com 1 de 2 itens concluídos a ordem
@@ -166,7 +166,7 @@ describe('WorkOrders e2e', () => {
       const { body: d } = await request(app.getHttpServer()).get(`/work-orders/${o.id}`).set(adminAuth).expect(200)
       expect(d.status).toBe('done')
       // 0, não 100, e pelo mesmo motivo do caso anterior: progresso é por tempo
-      // desde 2026-07-26 e esta ordem não tem estimativa. O que este caso guarda
+      // e esta ordem não tem estimativa. O que este caso guarda
       // é a trava pessimista, ou seja, `status` fechar em done sob dois completes
       // simultâneos, e isso segue afirmado acima.
       expect(d.progressPct).toBe(0)

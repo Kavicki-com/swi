@@ -68,8 +68,8 @@ services:
       SMTP_USER: ${API_SMTP_USER:-}
       SMTP_PASS: ${API_SMTP_PASS:-}
       MAIL_FROM: ${API_MAIL_FROM:-no-reply@swi.local}
-      # QA Web #9 — destinatário das denúncias de mensagem. Sem default: com a
-      # env vazia a rota responde 503 em vez de "enviar" pra ninguém.
+      # Destinatário das denúncias de mensagem. Sem default: com a env vazia a
+      # rota responde 503 em vez de "enviar" pra ninguém.
       REPORT_TO_EMAIL: ${API_REPORT_TO_EMAIL:-}
       PORT: 3000
       # Origins do painel swi-admin no CORS HTTP (CSV). Default = dev server do Vite.

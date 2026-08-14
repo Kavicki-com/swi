@@ -20,7 +20,7 @@ export function wsCorsOptions(env: NodeJS.ProcessEnv): { origin: string[] } | un
 }
 
 export function applyCors(app: INestApplication): void {
-  // Hospedagem Cloudez (deploy 2026-07-29): o nginx do host injeta
+  // Hospedagem atual: o nginx do host injeta
   // `Access-Control-Allow-Origin: *` em TODA resposta, no nível do server, e o
   // conf é do root — não dá pra remover. Se a API emitir o próprio ACAO, o
   // navegador recebe DOIS valores ("https://..., *") e bloqueia. No modo proxy

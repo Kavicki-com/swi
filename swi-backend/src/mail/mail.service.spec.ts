@@ -11,10 +11,10 @@ describe('MailService', () => {
     expect(sendMail.mock.calls[0][0].text).toContain('123456')
   })
 
-  // QA Web #9 — denúncia de mensagem do chat. O e-mail É o registro (decisão
-  // 2026-08-04: sem persistência por ora), então precisa ser autossuficiente:
-  // quem denunciou, quem escreveu, o texto, onde e quando — sem exigir que o
-  // moderador vá caçar ids no banco.
+  // Denúncia de mensagem do chat. O e-mail É o registro, já que não há
+  // persistência no banco, então precisa ser autossuficiente: quem denunciou,
+  // quem escreveu, o texto, onde e quando, sem exigir que o moderador vá caçar
+  // ids no banco.
   it('envia denúncia de mensagem com motivo, texto, autores e localização da mensagem', async () => {
     const sendMail = jest.fn().mockResolvedValue({})
     const svc = new MailService({ sendMail } as any)
@@ -39,8 +39,8 @@ describe('MailService', () => {
     }
   })
 
-  // O detalhamento é opcional no QA ("caixa de texto para detalhar"); sem ele o
-  // e-mail não pode sair com "undefined" no corpo.
+  // O detalhamento é opcional, e sem ele o e-mail não pode sair com
+  // "undefined" no corpo.
   it('denúncia sem texto de detalhe sai sem "undefined" no corpo', async () => {
     const sendMail = jest.fn().mockResolvedValue({})
     const svc = new MailService({ sendMail } as any)

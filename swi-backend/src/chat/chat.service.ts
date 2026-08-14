@@ -28,12 +28,11 @@ export class ChatService {
 
   async listDirectory(userId: string) {
     const users = await this.prisma.user.findMany({
-      // Diretório ABERTO (decisão 2026-07-27): o worker conversa com quem
-      // quiser no app — colegas, painel, gente de outra empresa.
+      // Diretório ABERTO por decisão de produto: o worker conversa com quem
+      // quiser no app, sejam colegas, painel ou gente de outra empresa.
       //
-      // Saíram dois recortes: o de empresa (org-scoping da QA C1) e o de papel
-      // (que listava WORKER+ADMIN, hoje todo mundo, mas excluiria em silêncio
-      // qualquer papel novo).
+      // Aqui não entra recorte por empresa nem por papel. O recorte por papel
+      // excluiria em silêncio qualquer papel novo.
       //
       // Sobrou o que ainda faz sentido: conta aprovada — PENDING e REJECTED
       // sequer conseguem entrar, então oferecê-los como contato só renderia
@@ -131,8 +130,8 @@ export class ChatService {
     return out
   }
 
-  // QA Web #4 — editar e excluir mensagem. Só o AUTOR, sem limite de tempo, e
-  // exclusão deixa marca em vez de apagar (decisões do usuário 2026-07-31).
+  // Editar e excluir mensagem. Só o AUTOR, sem limite de tempo, e exclusão
+  // deixa marca em vez de apagar, por decisão do usuário.
   //
   // Os dois emitem o evento 'message' com o estado ATUAL da mensagem, e não um
   // evento novo: o cliente reconhece pelo id e faz upsert. Inventar
@@ -180,10 +179,10 @@ export class ChatService {
     return out
   }
 
-  // QA Web #9 — denunciar mensagem de outra pessoa. O e-mail é o único
-  // registro (sem persistência por ora, decisão 2026-08-04), então quem não
-  // tem destinatário configurado falha ALTO: 204 com denúncia pro vácuo faria
-  // o cliente mostrar "enviada" pra ninguém ler.
+  // Denunciar mensagem de outra pessoa. O e-mail é o único registro, sem
+  // persistência no banco, então quem não tem destinatário configurado falha
+  // ALTO: um 204 com a denúncia indo pro vácuo faria o cliente mostrar
+  // "enviada" pra ninguém ler.
   async reportMessage(userId: string, convId: string, msgId: string, dto: { reason: string; text?: string }) {
     await this.assertMember(userId, convId)
     const msg = await this.prisma.message.findUnique({ where: { id: msgId } })
@@ -282,9 +281,9 @@ export class ChatService {
       sector: u.profile?.sector ?? '',
       role: u.profile?.jobTitle ?? '',
       avatarUri: u.profile?.avatarKey ? await this.media.presignGet(u.profile.avatarKey) : '',
-      // Identidade clínica REAL (QA de volume 2026-07-26): sem estes campos o
-      // painel do chat mostrava 26 anos / O+ pra TODO mundo, contradizendo as
-      // outras telas do mesmo trabalhador. Não são vitais de smartband.
+      // Identidade clínica REAL: sem estes campos o painel do chat cai em
+      // valores fixos para TODO mundo e contradiz as outras telas do mesmo
+      // trabalhador. Não são vitais de smartband.
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
       bloodType: u.profile?.bloodType ?? null,
       allergies: u.profile?.allergies ?? null,
