@@ -8,7 +8,7 @@ export interface CompanyOption {
 // Catálogo público de empresas (GET /companies — só id + nome, pré-login).
 // Alimenta o seletor da tela de cadastro: o worker escolhe a empresa e o
 // signup grava o vínculo, sem o qual ele fica invisível na fila de aprovação
-// org-scoped do painel (QA 2026-07-26).
+// restrita à organização no painel.
 export function listCompanies(): Promise<CompanyOption[]> {
   return apiRequest<CompanyOption[]>('/companies');
 }

@@ -1,7 +1,7 @@
 import type { Exam } from './exams';
 
 // 'AAAA-MM-DD' → as partes que o ExamInfoCard do DS pede: ano separado do
-// dia/mês abreviado ("2027" + "05 Mar"), como o Figma 342:9907 desenha.
+// dia/mês abreviado ("2027" + "05 Mar").
 //
 // Fatia o texto em vez de usar Date: a validade é data de CALENDÁRIO, e
 // `new Date('2027-03-05')` é meia-noite UTC — em UTC-3 os getters locais
@@ -11,7 +11,7 @@ const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'O
 export interface ExamCardParts {
   year: string;
   date: string;
-  /** Validade ainda no futuro — o Figma renderiza o ano em peso regular. */
+  /** Indica validade ainda no futuro para definir o peso visual do ano. */
   future: boolean;
 }
 

@@ -1,7 +1,6 @@
 // mobile/lib/mapMockData.ts
-// Frontend-only seed data for the Sprint 6 mobile map migration. Wave 2
-// route files (map / map-weather / evacuation*) import these constants so
-// the demo renders deterministic, Figma-aligned pin layouts without a
+// Frontend-only seed data for the mobile map. Route files (map / map-weather /
+// evacuation*) import these constants so the demo renders deterministic pins without a
 // backend. Coordinates orbit USER_LOCATION (São Paulo Bela Vista region)
 // — same area the swi-admin Dashboard / MapsGeneral mocks use, keeping
 // the cross-product demo visually consistent.
@@ -44,7 +43,7 @@ const WORKER_AVATARS: readonly string[] = [
 
 // Avatar do usuário logado — mesma asset usada no dashboard (avatar-
 // construction.png). Renderizada no map-view-general como pin permanente
-// em USER_LOCATION (Figma 385:29023).
+// em USER_LOCATION.
 export const USER_AVATAR: string = Asset.fromModule(
   require('../assets/avatar-construction.png'),
 ).uri;
@@ -134,8 +133,8 @@ export const CAMERA_LOCATIONS: readonly CameraMarker[] = [
 ];
 
 // ----------------------------------------------------------------------
-// Weather alert pins — 11 pontos com distribuição idêntica ao Figma
-// 385:21840 map-metereologic-alerts: 6 good (success/green) + 2 alert
+// Weather alert pins — 11 pontos com distribuição determinística:
+// 6 good (success/green) + 2 alert
 // (warning/orange) + 3 low (error/pink). DS LocationPin badge variant
 // mapeia: good→#3EAB2E, alert→#EF8600, low→#F5667A.
 // ----------------------------------------------------------------------

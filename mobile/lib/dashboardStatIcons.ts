@@ -1,5 +1,4 @@
-// Stat row icons exported from Figma (304:2446 heart, 304:2448 pressure,
-// 304:2570 calories). Use `fill="currentColor"` so the consumer passes
+// Dashboard stat icons use `fill="currentColor"` so the consumer passes
 // color via the `<SvgXml color={...}>` prop — color is theme-driven instead
 // of baked in. Gauge has a clipPath in <defs> so render through useUniqueSvg
 // to namespace the id (avoids collision across dashboard instances).

@@ -65,9 +65,7 @@ describe('useMediaPicker.showPicker', () => {
     ]);
   });
 
-  // QA Mobile #4: com foto já anexada, o menu era o mesmo de slot vazio, então
-  // não existia caminho nenhum pra tirar a foto. Quem chama diz se há o que
-  // remover; slot vazio segue sem a opção, que não faria sentido.
+  // Quem chama informa se há imagem removível; slots vazios não exibem a opção.
   it('com onRemove o menu ganha "Remover foto" antes de Cancelar', () => {
     void picker().showPicker({ onRemove: jest.fn() });
     expect(botoes().map((b) => b.text)).toEqual([

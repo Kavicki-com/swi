@@ -78,10 +78,9 @@ export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPicker
     return result.assets[0].uri;
   }, [allowsEditing, quality]);
 
-  // QA Mobile #4: tocar numa miniatura JÁ preenchida abria este mesmo menu, sem
-  // nenhuma forma de tirar a foto. Quem tem o que remover passa `onRemove`, e
-  // aí entra a quarta opção, antes do Cancelar (posição de fim de lista, como
-  // manda o padrão de action sheet). Remover resolve `null`, igual a cancelar:
+  // Quem tem uma imagem para remover passa `onRemove`, que adiciona a opção
+  // antes de Cancelar, mantido no fim conforme o padrão de action sheet.
+  // Remover resolve `null`, assim como cancelar:
   // a remoção já aconteceu no callback, e quem chama continua escrevendo
   // `if (uri) ...` sem mudar nada.
   const showPicker = useCallback(

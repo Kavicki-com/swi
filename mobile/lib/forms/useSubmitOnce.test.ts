@@ -2,16 +2,8 @@ import { act, create } from 'react-test-renderer';
 import { createElement } from 'react';
 import { useSubmitOnce } from './useSubmitOnce';
 
-// O relato do QA (2026-07-27): no fim do cadastro apareceu "E-mail já
-// cadastrado" E, ao mesmo tempo, a tela do código abriu, com o código
-// chegando por e-mail e funcionando.
-//
-// Não eram dois bugs: era UM toque a mais. `disabled={!canSubmit}` é a única
-// trava das telas de auth, e `canSubmit` continua verdadeiro enquanto a
-// requisição está no ar. O 1º toque criou a conta (201) e navegou; o 2º, ainda
-// em voo, recebeu 409 e disparou o alerta por cima. Pela rede do QA (túnel
-// ngrok) a janela entre os dois é larga.
-//
+// `canSubmit` pode continuar verdadeiro durante a requisição; a trava evita
+// envios repetidos enquanto a primeira operação permanece em voo.
 // A trava vive aqui, e não em cada tela, porque a lacuna é sistêmica: nenhuma
 // das telas de (auth) tinha guarda de reentrância.
 

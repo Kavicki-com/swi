@@ -13,7 +13,7 @@ const exam = (date: string): Exam => ({
 const HOJE = new Date(2026, 6, 26, 12, 0, 0); // 26/07/2026
 
 describe('examCardParts', () => {
-  it('separa ano e dia/mês abreviado, como o card do Figma pede', () => {
+  it('separa ano e dia/mês abreviado para o card', () => {
     expect(examCardParts(exam('2027-03-05'), HOJE)).toMatchObject({
       year: '2027',
       date: '05 Mar',

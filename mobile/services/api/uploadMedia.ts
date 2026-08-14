@@ -2,7 +2,7 @@ import { File } from 'expo-file-system';
 import { apiRequest, withDeadline } from './http';
 
 // Infere content-type da extensão (default jpeg, cobre uris sem extensão do
-// picker). pdf/txt entram pelo exame (unificação 2026-08-03): sem eles o laudo
+// picker). pdf/txt entram pelo fluxo de exames: sem eles o laudo
 // subiria assinado como image/jpeg e o presign recusaria com 400.
 export function contentTypeFor(uri: string): string {
   if (/\.pdf(\?|$)/i.test(uri)) return 'application/pdf';
@@ -19,10 +19,8 @@ export const UPLOAD_TIMEOUT_MS = 90_000;
  * backend guarda. Fundação de mídia — Relatórios (reports/), Jornada (task/),
  * Chat (chat/), perfil (avatars/) e exames (exams/) passam o seu prefixo.
  *
- * PUT, não POST multipart: o Cloudflare R2 (storage de produção desde
- * 2026-07-29) NÃO implementa presigned POST — respondia 501 "Presigned post
- * requests are not yet implemented", e era isso que o usuário via ao anexar a
- * foto no cadastro. O MinIO local aceita os dois, então PUT serve aos dois.
+ * Usa PUT, não POST multipart, porque o Cloudflare R2 não implementa presigned
+ * POST. O MinIO local aceita os dois, então PUT serve aos dois.
  *
  * O `contentLength` vai no presign porque o servidor o inclui na ASSINATURA: o
  * upload só é aceito se o corpo tiver exatamente esse tamanho, e o Content-Type
@@ -51,8 +49,7 @@ export async function uploadImage(uri: string, prefix = 'reports'): Promise<stri
   // multipart, ele é obrigatório, faz parte da assinatura.
   //
   // Este PUT vai direto no storage e NÃO passa pelo apiRequest, então precisa do
-  // seu próprio prazo (mesmo defeito do QA Mobile #6: sem prazo, um upload que
-  // trava deixa a tela girando para sempre).
+  // seu próprio prazo para não manter a tela em espera indefinidamente.
   const res = await withDeadline(
     UPLOAD_TIMEOUT_MS,
     'Tempo esgotado ao enviar a imagem. Verifique sua conexão e tente novamente.',

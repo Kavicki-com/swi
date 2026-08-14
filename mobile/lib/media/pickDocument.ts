@@ -1,7 +1,7 @@
 // Seletor de DOCUMENTO pro exame clínico (laudo em PDF/TXT além de imagem).
 // O useMediaPicker não serve aqui: expo-image-picker abre a galeria de fotos e
-// um PDF nem aparece pra escolher — era a última ponta da unificação dos
-// exames (2026-08-03) que ainda restringia o formato.
+// um PDF nem aparece para escolha. O fluxo de exames mantém esta seleção
+// específica por aceitar documentos além de imagens.
 //
 // Mesmo contrato do useMediaPicker: resolve a uri ou null (cancelado/erro),
 // nunca lança — quem chama faz `if (!uri) return;` fora do try do envio.

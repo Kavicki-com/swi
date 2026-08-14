@@ -64,10 +64,8 @@ export function isRelaxedEnv(env: RuntimeEnv): boolean {
 /**
  * "Este web é o build entregue, ou uma ferramenta de trabalho?"
  *
- * O produto web suportado na entrega é o painel administrativo. O Expo web
- * sempre foi ferramenta de desenvolvimento e de QA, nunca uma versão do app
- * para o usuário final, e entregá-lo funcionando prometeria um segundo produto
- * que ninguém mantém.
+ * O produto web suportado na entrega é o painel administrativo. O Expo web é
+ * restrito ao desenvolvimento e não faz parte do aplicativo entregue ao usuário.
  *
  * O corte vale só no build de release, e por isso reusa `isRelaxedEnv`: em dev,
  * sob a suíte e com a escotilha de demonstração, o app web continua inteiro.
@@ -110,8 +108,8 @@ function resolveBackendKind(
 // conteinerizado (NestJS), padrão fora de dev e teste. 'mock' = demo in-memory,
 // honrado apenas em dev, teste ou com a escotilha de demonstração. Saúde
 // (vitals/telemetry) IGNORA esta flag até a smartband existir: os vitais seguem
-// simulados em todos os ambientes por decisão de produto (2026-07-30,
-// reafirmada em 2026-08-05). Setada no build/dev via EXPO_PUBLIC_DATA_BACKEND.
+// simulados em todos os ambientes por decisão de produto. Setada no build/dev
+// via EXPO_PUBLIC_DATA_BACKEND.
 export type DataBackendKind = 'mock' | 'api';
 
 export function resolveDataBackend(

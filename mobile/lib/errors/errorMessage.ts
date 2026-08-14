@@ -1,8 +1,7 @@
 // Mensagem de erro que o usuário vê. O backend já responde em pt-BR e com o
 // motivo exato ("E-mail já cadastrado", "aguardando aprovação do administrador"),
-// e o apiRequest anexa `status` — mas cada tela engolia isso num texto genérico,
-// e o cliente ficava sem saber o que corrigir (QA 2026-07-26: cadastro repetido
-// virou "Não foi possível criar a conta").
+// e o apiRequest anexa `status`. A função preserva mensagens acionáveis quando
+// são seguras para exibição e usa o fallback para falhas internas.
 //
 // Nem toda message do servidor serve pra tela, então há três exceções:
 //   429 → o throttler responde "ThrottlerException: Too many requests" (inglês,

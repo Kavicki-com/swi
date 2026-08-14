@@ -5,7 +5,7 @@ describe('simulatedFatigueFor', () => {
     expect(simulatedFatigueFor('worker-a')).toEqual(simulatedFatigueFor('worker-a'));
   });
 
-  it('varia entre pessoas (o bug era 62% pra TODO contato)', () => {
+  it('varia entre pessoas', () => {
     const ids = ['worker-a', 'worker-b', 'worker-c', 'worker-d', 'worker-e'];
     const pcts = new Set(ids.map((id) => simulatedFatigueFor(id).pct));
     expect(pcts.size).toBeGreaterThan(1);

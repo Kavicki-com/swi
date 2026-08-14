@@ -1,7 +1,6 @@
 // fatigueEtaMin → "Xh Ym" compacto (105 → "1h45m", 5 → "0h05m").
-// Morava embutido no my-stats; o dashboard não alcançava e por isso exibia a
-// string fixa "1h45m" logo abaixo de uma barra que já usava o valor real —
-// a barra andava e o texto ao lado não (QA 2026-07-26).
+// Compartilhado entre my-stats e dashboard: mantém o texto sincronizado com o
+// valor que alimenta a barra de progresso nas duas telas.
 export function formatEta(minutes: number): string {
   const total = Math.max(0, Math.round(minutes));
   const h = Math.floor(total / 60);

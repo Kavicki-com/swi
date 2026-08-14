@@ -3,7 +3,7 @@ import { uploadImage } from './uploadMedia';
 
 // Exames clínicos do worker. O card do design (ExamInfoCard) mostra ano, dia/mês
 // e nome, então o backend guarda os três — só a chave do arquivo não desenha
-// nada. `date` é a VALIDADE (as datas do Figma são futuras), informada pelo
+// nada. `date` é a VALIDADE, que pode ser futura, informada pelo
 // worker nos campos ao lado do botão de envio.
 export interface Exam {
   id: string;

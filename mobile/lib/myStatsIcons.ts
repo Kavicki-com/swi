@@ -1,4 +1,4 @@
-// My-stats screen icons exported from Figma. Solid-color icons (BPM heart,
+// My-stats screen icons. Solid-color icons (BPM heart,
 // Kcal flame) use `fill="currentColor"` so the consumer passes color via
 // `<SvgXml color={...}>`. Gradient icons keep their gradient inline and
 // MUST render through useUniqueSvg to namespace the gradient ids (avoids

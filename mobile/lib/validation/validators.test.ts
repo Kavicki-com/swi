@@ -12,9 +12,7 @@ import {
   validateUF,
 } from './validators';
 
-// Validade de exame é o INVERSO do nascimento: quase sempre está no futuro (as
-// datas do Figma são 2027, 2029…), enquanto nascimento no futuro é erro. Sem um
-// validador próprio, a tela de exames rejeitaria toda data válida.
+// Validade de exame pode estar no futuro, enquanto nascimento no futuro é erro.
 describe('validateExamDate', () => {
   it('aceita validade futura, que o validador de nascimento recusa', () => {
     const futura = `05/03/${new Date().getFullYear() + 1}`;

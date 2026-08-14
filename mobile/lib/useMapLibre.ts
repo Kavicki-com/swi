@@ -32,12 +32,9 @@ function load(): Promise<MapLibreModule> {
   // Load JS + CSS in parallel. Each resolves via a separate HTTP request on
   // web, but they resolve concurrently so we wait on both once.
   //
-  // Release `inFlight` once resolved (success or failure) so the Promise
-  // object can be garbage-collected. Pre-2026-05-17 this leaked: the
-  // resolved Promise was retained for the lifetime of the page session
-  // (callers early-return via the `cached` check before reading inFlight,
-  // so the leak was functionally harmless but still a footgun). Pattern
-  // now mirrors the dedupe pattern in EvacuationProvider.
+  // Release `inFlight` after success or failure so the resolved Promise can
+  // be garbage-collected. Deduplication holds either way: `inFlight` covers
+  // callers that arrive during the load, `cached` covers everyone after it.
   inFlight = Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')]).then(
     ([mod]) => {
       cached = mod.default;

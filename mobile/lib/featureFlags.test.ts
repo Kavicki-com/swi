@@ -112,10 +112,8 @@ describe('DATA_BACKEND e AUTH_BACKEND no ambiente de teste', () => {
   });
 });
 
-// O produto web suportado na entrega é o painel administrativo. O Expo web
-// existia como ferramenta de desenvolvimento e de QA, e nunca foi uma versão
-// do app para o usuário final: entregá-lo funcionando prometeria um segundo
-// produto que ninguém mantém.
+// O produto web suportado na entrega é o painel administrativo. O Expo web é
+// restrito ao desenvolvimento e não faz parte do aplicativo entregue ao usuário.
 //
 // O corte é só no build de release. Em dev, teste e na escotilha de
 // demonstração o app web segue inteiro, senão o smoke E2E de navegador

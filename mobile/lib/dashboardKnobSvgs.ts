@@ -1,6 +1,5 @@
-// Inline SVG markup for the "grupo taigo novo" knob composition
-// (Figma 1069:11605 + status-chart 304:2357 children). Loaded into
-// react-native-svg's <SvgXml> so we get vector fidelity without adding
+// Inline SVG markup for the dashboard knob composition. Loaded through
+// react-native-svg's <SvgXml> to preserve vector fidelity without adding
 // react-native-svg-transformer to the Metro pipeline.
 
 export const SILHOUETTE_BODY_SVG = `<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 76.9672 262.318" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -13,14 +12,11 @@ export const SILHOUETTE_BODY_SVG = `<svg preserveAspectRatio="none" width="100%"
 </defs>
 </svg>`;
 
-// Heart Status (Figma I304:2357;295:2180) — composite: white heart icon
-// (bottom-left) + green check-circle badge (top-right corner overlap).
-// viewBox 31.311×26.093 matches the Figma group bounds; heart is offset
-// 5.926 from top (Figma `bottom:-0.04` of a 20.167-tall element), and
-// the badge sits at left:15.66 top:0 (Figma `bottom:9.85`, 15.472×16.245).
-// Plus-darker shadow layers from Figma omitted — react-native-svg doesn't
-// support that blend mode; the simplified single-layer circle + check still
-// reads as the same badge visually.
+// White heart with an overlapping green status badge. The heart is offset
+// 5.926 from the top and the badge sits at x=15.66, which is what the two
+// transforms below apply. The badge is a single-layer circle plus check:
+// react-native-svg has no plus-darker blend mode, and the simplification
+// reads the same at this size.
 export const HEART_STATUS_SVG = `<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" viewBox="0 0 31.311 26.093" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g transform="translate(0, 5.926)">
 <path d="M20.8086 1.37845C19.5929 0.39409 18.0479 -0.0904764 16.4878 0.0232096C14.9276 0.136896 13.4692 0.840305 12.409 1.99051L11.5218 2.9045L10.6347 1.99051C9.57445 0.840305 8.11608 0.136896 6.55591 0.0232096C4.99574 -0.0904764 3.45081 0.39409 2.23503 1.37845C1.57181 1.95122 1.03198 2.65288 0.648368 3.44077C0.264752 4.22867 0.0453575 5.08634 0.00351944 5.96166C-0.0383186 6.83698 0.0982739 7.71167 0.404995 8.53256C0.711716 9.35345 1.18216 10.1034 1.78773 10.7368L10.5027 19.7314C10.6345 19.869 10.7927 19.9785 10.9679 20.0534C11.1431 20.1282 11.3317 20.1668 11.5222 20.1668C11.7127 20.1668 11.9013 20.1282 12.0765 20.0534C12.2517 19.9785 12.4099 19.869 12.5417 19.7314L21.2522 10.7376C21.8586 10.1046 22.3299 9.3549 22.6373 8.53403C22.9447 7.71315 23.0818 6.8383 23.0403 5.96274C22.9988 5.08718 22.7795 4.22922 22.3959 3.4411C22.0122 2.65298 21.4722 1.95119 20.8086 1.37845Z" fill="#F5F5F5"/>
@@ -37,7 +33,7 @@ export const ECG_ICON_SVG = `<svg preserveAspectRatio="none" width="100%" height
 <path d="M22.7711 32.8551C21.8436 32.8551 21.0202 32.2617 20.727 31.3818L13.2558 8.96842L10.5423 17.1089C10.249 17.9888 9.42563 18.5823 8.49819 18.5823H2.15469C0.964681 18.5823 0 17.6176 0 16.4276C0 15.2376 0.964681 14.2729 2.15469 14.2729H6.94518L11.2117 1.47332C11.505 0.593468 12.3284 0 13.2558 0C14.1833 0 15.0066 0.593468 15.2999 1.47332L22.7711 23.8867L25.4846 15.7462C25.7779 14.8663 26.6013 14.2729 27.5287 14.2729H33.8722C35.0622 14.2729 36.0269 15.2376 36.0269 16.4276C36.0269 17.6176 35.0622 18.5823 33.8722 18.5823H29.0817L24.8152 31.3818C24.5219 32.2617 23.6985 32.8551 22.7711 32.8551Z" fill="#3EAB2E"/>
 </svg>`;
 
-// Elipse 34 (Figma 1069:11337) — inner well of the heart-rate-button.
+// Inner well of the heart-rate button.
 // Circle r=34.4872 fill #1F1F1F (darker than surface/high #303030) with
 // SVG drop+inner shadow filters. viewBox 77.687 accommodates shadow bleed.
 export const ELIPSE34_RING_SVG = `<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 77.687 77.687" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -64,10 +60,11 @@ export const ELIPSE34_RING_SVG = `<svg preserveAspectRatio="none" width="100%" h
 </defs>
 </svg>`;
 
-// Caminho 4122 (Figma I304:2357;295:1926) — anel mais externo do knob.
+// Anel externo do controle.
 // Disco sólido 456.714×456.714, fill cinza-escuro (surface/medium tier).
-// Inner shadow Figma: X=0, Y=2.08, Blur=4.16, color=#000 98.82%.
-// Conversão: stdDeviation = blur/2 = 2.08.
+// A sombra interna mantém o relevo do controle: deslocamento Y=2.08 e desfoque
+// 4.16 em preto a 98,82%. No filtro SVG o desfoque vira stdDeviation=2.08,
+// metade do valor, que é a conversão que o `feGaussianBlur` espera.
 export const CAMINHO_4122_RING_SVG = `<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" viewBox="0 0 456.714 456.714" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g filter="url(#filter_caminho_4122_inner)">
 <circle cx="228.357" cy="228.357" r="228.357" fill="#222222"/>

@@ -1,9 +1,8 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-// Tela com campo de texto tem que tratar o teclado. Sem isso o teclado sobe
-// POR CIMA do que a pessoa está digitando, foi o que aconteceu na tela de
-// chat (QA no aparelho, 2026-07-27: o compositor sumia atrás do teclado).
+// Telas com campo de texto tratam o teclado para manter o conteúdo editável
+// visível, inclusive o compositor do chat.
 //
 // A cobertura era irregular: o fluxo de (auth) tinha tratamento, e settings,
 // chat e os modais não. Este teste lê os FONTES, e não o comportamento,
@@ -11,9 +10,8 @@ import { join } from 'node:path';
 // formato do web-bundler-compat do DS: travar um invariante que nenhum teste
 // de render alcança.
 //
-// A biblioteca é react-native-keyboard-controller. A anterior
-// (react-native-keyboard-aware-scroll-view) teve última publicação em
-// 2022-06-26 e é anterior à Nova Arquitetura.
+// A biblioteca é react-native-keyboard-controller, compatível com a Nova
+// Arquitetura do React Native.
 
 const ROOT = join(__dirname, '..');
 

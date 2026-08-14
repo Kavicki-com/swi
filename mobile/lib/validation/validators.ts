@@ -108,9 +108,9 @@ export function validateBirthDate(v: string): ValidationResult {
 }
 
 // Validade de exame clínico. Separado do nascimento porque a regra é o
-// INVERSO: nascimento não pode estar no futuro, validade quase sempre está
-// (as datas do Figma são 2027, 2029…). Aceita passado — exame vencido é um
-// fato, não erro de digitação — e barra ano absurdo.
+// INVERSO: nascimento não pode estar no futuro, enquanto validade pode estar.
+// Aceita passado — exame vencido é um fato, não erro de digitação — e barra
+// anos fora da faixa plausível.
 export function validateExamDate(v: string): ValidationResult {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v.trim());
   if (!m) return fail('Data inválida (dd/mm/aaaa)');

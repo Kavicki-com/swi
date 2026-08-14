@@ -2,22 +2,20 @@
 // vertical entre as colunas de estatística. Irmãs de dashboardStatIcons.ts e
 // dashboardKnobSvgs.ts; moram aqui para o dashboard.tsx guardar só a tela.
 //
-// Os hex são valores de marca vindos do Figma e o design system não expõe
-// equivalentes. Ficam nomeados para serem localizáveis quando o DS os shippar.
+// Os hex são valores de marca sem equivalentes no design system. Ficam
+// nomeados para facilitar a futura centralização em tokens.
 
-// Moldura inferior (Figma 304:2430 'background-element'): gradiente vertical
-// de #3BC958 (topo) a #1E652C (base), opacidade 46%.
+// Moldura inferior: gradiente vertical de #3BC958 (topo) a #1E652C (base),
+// com opacidade de 46%.
 export const BG_DECOR_GRAD_TOP = '#3BC958';
 export const BG_DECOR_GRAD_BOTTOM = '#1E652C';
 
 // Estado de alerta (?alert=modal): gradiente vermelho invertido, indicando
-// emergência. Topo e base extraídos da referência do usuário (Screenshot 85),
-// com a mesma opacidade 46% do estado normal.
+// emergência. Mantém a mesma opacidade de 46% do estado normal.
 export const BG_DECOR_GRAD_TOP_ALERT = '#E04848';
 export const BG_DECOR_GRAD_BOTTOM_ALERT = '#5E1818';
 
-// Paradas do gradiente do divisor vertical (Figma 295:1585 / 304:2455): vai do
-// escuro na borda para o verde de marca no meio e volta.
+// O divisor vai do tom escuro nas bordas ao verde de marca no centro.
 // DIVIDER_GRAD_END subiu para #3A3A3A por contraste real contra o fundo
 // #171717; #2A2A2A ainda sumia no Android em vãos estreitos.
 export const DIVIDER_GRAD_END = '#3A3A3A';

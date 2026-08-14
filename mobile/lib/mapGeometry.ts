@@ -1,12 +1,11 @@
 // Geometria PURA de mapa em metros reais. Sem efeitos, sem dependencia de
 // biblioteca de mapa. Espelha o estilo de services/evacuation/routeFormat.ts.
 //
-// POR QUE EXISTE: os aneis de 5 e 10 km da tela de mapa eram dois <View> de
-// 395 e 647 pixels grudados no centro da TELA, por cima do mapa. Pixel nao e
-// distancia: bastava dar zoom pra os rotulos "5KM"/"10KM" mentirem, e o par
-// nem seguia o mapa quando a pessoa arrastava (QA Mobile #10). Aqui os aneis
-// viram geometria em lat/lng, e quem projeta pra tela passa a ser o MapLibre,
-// que ja sabe fazer isso em qualquer zoom.
+// POR QUE EXISTE: pixel nao e distancia. Anel desenhado em pixels sobre a tela
+// faz os rotulos "5KM"/"10KM" mentirem assim que a pessoa da zoom, e nao
+// acompanha o mapa quando ela arrasta. Aqui os aneis de 5 e 10 km sao
+// geometria em lat/lng, e quem projeta pra tela e o MapLibre, que ja sabe
+// fazer isso em qualquer zoom.
 import type { Feature, LineString } from 'geojson';
 
 type Pt = [number, number]; // [longitude, latitude] em graus, ordem do GeoJSON

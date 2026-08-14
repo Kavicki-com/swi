@@ -20,11 +20,8 @@ export interface ApiRequestOptions {
 
 // Prazo padrão de QUALQUER chamada à API.
 //
-// QA Mobile #6: o chat aberto pela tela de Relatórios ficava "carregando para
-// sempre". A tela só sai do loading quando a promessa resolve OU rejeita, e sem
-// prazo uma requisição travada (rede que some no meio, proxy que segura a
-// conexão, leitura de token que não volta) deixa a promessa pendente para
-// sempre. O spinner nunca vira erro e o "Tentar novamente" fica inalcançável.
+// Toda requisição termina dentro de um prazo para que a UI possa encerrar o
+// estado de carregamento mesmo quando a conexão não responde.
 //
 // O React Native não protege: o OkHttp que ele monta vem com connect/read/write
 // timeout em 0, ou seja, infinito. Então o prazo é nosso.
@@ -40,9 +37,7 @@ export function isTimeoutError(e: unknown): boolean {
 /**
  * Roda `work` com prazo. Duas garantias, de propósito:
  *
- *  - REJEITA no prazo, por corrida, mesmo que o `work` ignore o sinal. Confiar
- *    só no abort deixaria o bug de pé se o fetch não honrasse o AbortSignal, e
- *    "promessa que nunca volta" é exatamente o defeito que estamos matando.
+ *  - REJEITA no prazo, por corrida, mesmo que o `work` ignore o sinal.
  *  - ABORTA junto, pra a conexão morrer em vez de ficar ocupando slot (o
  *    OkHttp do Android só deixa 5 requisições simultâneas por host).
  *

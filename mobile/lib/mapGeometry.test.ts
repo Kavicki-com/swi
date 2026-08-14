@@ -62,9 +62,7 @@ describe('circleFeature', () => {
     expect(f.geometry.coordinates[0]).toEqual(f.geometry.coordinates[64]);
   });
 
-  // O CORACAO do QA Mobile #10: o anel de 5KM tem 5 km DE VERDADE, medidos em
-  // metros a partir do centro, e nao um tamanho em pixels que mente conforme o
-  // zoom.
+  // O anel de 5 km usa metros a partir do centro, não pixels sujeitos ao zoom.
   it('todo vertice fica a exatamente o raio pedido do centro', () => {
     for (const raio of [5000, 10000]) {
       const f = circleFeature(CENTRO, raio, 64);

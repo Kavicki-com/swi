@@ -72,11 +72,8 @@ describe('apiRequest', () => {
   });
 });
 
-// QA Mobile #6: "o chat fica carregando para sempre". Toda tela que carrega
-// dados só sai do loading quando a promessa da requisição resolve OU rejeita.
-// Sem prazo, uma requisição que trava (rede que some no meio, proxy que segura
-// a conexão, leitura de token que não volta) deixa a promessa pendente PARA
-// SEMPRE: o spinner nunca vira erro e o "Tentar novamente" nunca é alcançado.
+// Toda tela que carrega dados depende da requisição resolver ou rejeitar.
+// O prazo cobre conexões e leituras de token que não retornam.
 // O RN não salva: o OkHttp que ele monta vem com todos os timeouts em 0. Por
 // isso o prazo cobre o apiRequest inteiro, não só o fetch.
 describe('apiRequest, prazo', () => {

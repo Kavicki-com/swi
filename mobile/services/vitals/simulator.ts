@@ -1,6 +1,6 @@
 import type { Vitals } from './types';
 
-// Baseline = the Figma my-stats values (342:9419).
+// Baseline used by the simulated vitals provider.
 export const BASELINE_VITALS: Vitals = {
   heartRate: 67, bloodPressureSys: 12, bloodPressureDia: 8, oxygenation: 92.2,
   caloriesPerHour: 145, steps: 8975, distanceKm: 4.32, effortPct: 62.5,

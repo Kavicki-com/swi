@@ -1,12 +1,9 @@
-// Password rules per Figma toast (sign-up 211:12899, recovery 138:7959,
-// change-password 353:12228 — same toast copy in all three):
+// Shared password rules for sign-up, recovery and password changes:
 //   - 8 characters minimum, letters and numbers
 //   - 1 symbol from @#$%ˆ
 //   - 1 uppercase letter
 //
-// Shared between sign-up.tsx, password-recovery/new-password.tsx and
-// settings/change-password.tsx. Before this file existed (2026-05-17),
-// the same function was copy-pasted in sign-up.tsx and new-password.tsx.
+// Keep these checks centralized so all password flows enforce the same policy.
 
 export interface PasswordChecks {
   length: boolean;

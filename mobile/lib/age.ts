@@ -1,6 +1,6 @@
 // birthDate ISO → idade em anos completos. Duas telas mostram a idade de outra
 // pessoa (ficha do contato no chat e seleção de responsáveis do relatório), e
-// ambas exibiam "26 anos" / "32 anos" cravados (QA 2026-07-26). null = sem data
+// ambas exibem a idade calculada a partir da data de nascimento. null = sem data
 // no cadastro — quem chama mostra "Não informado", nunca um palpite.
 // Nascimento é data de CALENDÁRIO, não instante. O backend guarda @db.Date e
 // serializa como meia-noite UTC ('2000-07-27T00:00:00.000Z'); ler isso com os

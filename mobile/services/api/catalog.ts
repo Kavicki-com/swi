@@ -5,15 +5,13 @@ export interface ProfileCatalog {
   sectors: string[];
   duties: string[];
   /** Quem pode ser "Gerente responsável" — mesma régua de staff que decide
-   *  quem revisa relatório (backend common/staff + role ADMIN). O combo abria
-   *  vazio porque o catálogo não devolvia esta lista (QA 2026-07-27). */
+   *  quem revisa relatório (backend common/staff + role ADMIN). */
   managers: string[];
 }
 
-// Vocabulário REAL da org (GET /profile/catalog — DISTINCT de
-// jobTitle/sector/duty, org-scoped). Mesmas listas que o painel usa: os
-// Comboboxes de Dados pessoais renderizavam options={[]} e o valor salvo nem
-// se exibia (QA 2026-07-26).
+// Vocabulário da organização, vindo de GET /profile/catalog: valores distintos
+// de jobTitle, sector e duty, com escopo por empresa. São as mesmas listas que
+// o painel usa, e alimentam as opções dos campos de dados pessoais.
 export function fetchProfileCatalog(): Promise<ProfileCatalog> {
   return apiRequest<ProfileCatalog>('/profile/catalog', { auth: true });
 }
