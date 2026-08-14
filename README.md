@@ -1,219 +1,131 @@
-# SWI
+# SWI Admin
 
-Sistema de monitoramento de segurança de trabalhadores em campo. O SWI é composto
-por **três projetos** neste mesmo repositório, mais a API pública que já roda em
-produção:
+Web admin para o SWI (monitoramento de funcionários em campo). Front-first MVP — ver `docs/plans/2026-05-08-swi-admin-pipeline-design.md`.
 
-| Pasta | O que é | Tecnologia |
-| --- | --- | --- |
-| `swi-backend/` | API, banco de dados, e-mail, armazenamento de arquivos e fila de notificações | NestJS + Prisma + PostgreSQL |
-| `swi-admin/` | Painel web usado pelo administrador | Vite + React + design system próprio |
-| `mobile/` | Aplicativo Android do trabalhador | Expo (React Native) |
+## Status
 
-Os três são **independentes**: cada um tem o próprio `package.json`, o próprio
-`node_modules/` e o próprio lockfile. Não há workspace, monorepo tooling nem
-configuração compartilhada na raiz. Cada projeto é instalado e executado de
-dentro da própria pasta.
+- **S0 — scaffold:** completo (`v0.0.1-scaffold`)
+- **S1 — auth + dashboard:** completo (`v0.1.0-s1`)
+- **DS bump v0.1.1:** bundled dist/ — resolveu o blocker DS↔Vite (S1.5)
+- **S1.6 — auth Figma fidelity:** completo (merged em `main`, DS bump v0.1.3)
+- **S1.7 — dashboard Figma fidelity:** completo (`v0.1.0-s1.7`) — DS Header,
+  map banner, KPI row, two-column row (Atividades + Alertas de Desgaste com
+  ChipGroup + SearchInput), WeatherTimeline com 6 entradas + AGORA marker.
+  Audit em `docs/audits/2026-05-08-s1.7-task0-divergence.md`.
+- **CI:** GitHub Actions em `.github/workflows/ci.yml`, três jobs:
+  - `admin` — typecheck, lint, test, build, storybook:build
+  - `mobile` — test (typecheck fora: 7 erros pré-existentes no baseline)
+  - `backend` — prisma generate, build, test, em matriz Node 18 e 22 (18 é a
+    hospedagem Cloudez, 22 é o Dockerfile; a divergência já causou um bug que
+    só apareceu em produção)
+- **Vercel preview:** _a configurar via `npx vercel link` em `swi-admin/`_
 
----
-
-## Só quero ver o sistema funcionando
-
-Não precisa instalar Node, npm nem Git. **O único requisito é o Docker Desktop.**
-
-1. Instale o [Docker Desktop](https://www.docker.com/products/docker-desktop/) e
-   espere ele terminar de iniciar.
-2. Dê **duplo clique em `START-SWI.cmd`**, na raiz desta pasta.
-3. Espere. O navegador abre sozinho no painel, em `http://localhost:5173`.
-
-Para desligar, duplo clique em `STOP-SWI.cmd`. Os dados ficam salvos.
-
-O passo a passo completo, com o que cada endereço serve, onde ler os e-mails do
-sistema e quanto de disco a instalação ocupa, está em
-**[`docs/client/INSTALL-WINDOWS.md`](docs/client/INSTALL-WINDOWS.md)**.
-
-Se algo falhar, vá direto para
-**[`docs/client/TROUBLESHOOTING.md`](docs/client/TROUBLESHOOTING.md)**.
-
----
-
-## O que roda onde
-
-Este é o ponto que mais gera confusão, então vale ser explícito. Existem **dois
-backends diferentes** em jogo, e eles não são o mesmo:
-
-| | Backend local (o do duplo clique) | API pública |
-| --- | --- | --- |
-| Endereço | `http://localhost:3000` | `https://api.kavicki.com` |
-| Quem usa | O painel web em `http://localhost:5173` | O **aplicativo Android** (APK) |
-| Onde roda | Na máquina de quem deu o duplo clique, em containers Docker | Em servidor na internet |
-| Banco de dados | PostgreSQL do container, descartável | PostgreSQL do servidor |
-| Arquivos | MinIO do container | Armazenamento de objetos do servidor |
-| E-mails | Não saem para a internet, ficam em `http://localhost:8025` | SMTP de verdade, chegam na caixa do destinatário |
-| Dados | Os de demonstração carregados pelo `START-SWI` | Os de produção |
-
-Consequência prática: o que você cadastra no painel local **não** aparece no
-aplicativo Android, e o contrário também vale. São dois ambientes separados de
-propósito. O painel local existe para o sistema poder ser aberto e avaliado sem
-depender de servidor, credencial ou internet além do download das imagens.
-
----
-
-## O que é real e o que é simulado
-
-O sistema tem backend de verdade: banco relacional com migrations versionadas,
-autenticação com JWT, aprovação de cadastro por administrador, upload de
-arquivos com URL assinada, chat por WebSocket, fila de notificações e envio de
-e-mail. Nada disso é tela de mentira.
-
-Há, porém, **partes deliberadamente simuladas**, e é honesto declará-las:
-
-- **Sinais vitais e telemetria de smartband.** Batimentos, temperatura e nível de
-  desgaste são gerados pelo sistema, não lidos de um dispositivo. É decisão de
-  produto: os dados de saúde só passam a ser reais quando a pulseira for
-  adquirida e integrada. As telas foram construídas para receber o dado real sem
-  mudança de layout, e toda superfície que exibe esses números carrega o selo
-  `SimulatedDataBadge` ("Dados simulados"), para o operador nunca confundir
-  biometria fabricada com sinal de sensor.
-- **Pareamento Bluetooth da smartband** no aplicativo, pelo mesmo motivo.
-- **Movimentação dos trabalhadores no mapa** da stack local. O container da API
-  sobe com `SIM_POSITIONS=1`, que faz as posições variarem para o mapa não ficar
-  parado numa demonstração. A API pública não liga essa simulação.
-- **Alerta de tempestade** da stack local, pelo mesmo motivo
-  (`WEATHER_SCENARIO=alert`).
-
-E há limites de escopo do que foi entregue:
-
-- **iOS não faz parte da entrega.** O código do aplicativo é React Native e tem
-  configuração de iOS no projeto, mas nenhuma build de iOS foi gerada, assinada
-  ou testada, e distribuir na App Store exige conta de desenvolvedor Apple paga.
-- **A versão web do aplicativo (Expo web) não é suportada.** O produto web
-  entregue é o painel administrativo, não o aplicativo rodando em navegador.
-- **Notificações push não estão neste build.** O aplicativo tem central de
-  notificações interna e o backend tem a fila que as produz, mas o envio de push
-  pelo sistema operacional exige configuração de projeto Firebase/APNs que não
-  foi feita. O botão de notificações na tela de preferências do aplicativo é
-  visual.
-
----
-
-## Desenvolvimento
-
-Aqui, sim, é preciso Node. A versão é **fixada**, e não é sugestão: o CI, o
-Dockerfile, o `.nvmrc` e o `.node-version` apontam todos para a mesma.
-
-```
-Node 22.23.2    npm 10.9.x
-```
-
-Os três `package.json` declaram `"node": ">=22.11.0 <23"`. A faixa é intencional:
-o ambiente de hospedagem roda 22.11.0, e um pin exato quebraria o deploy.
-
-Instale por projeto, nunca na raiz:
-
-```bash
-cd swi-backend && npm ci
-cd swi-admin   && npm ci
-cd mobile      && npm ci
-```
-
-### Backend
-
-Precisa de configuração antes de subir. Veja
-[`swi-backend/README.md`](swi-backend/README.md); em resumo, copie
-`swi-backend/.env.example` para `swi-backend/.env` e defina um `JWT_SECRET`
-forte, senão o Compose falha na hora de interpolar a variável.
-
-```bash
-cd swi-backend
-docker compose up -d --build   # Postgres, MailHog, MinIO e a API
-npm run prisma:seed            # dados de demonstração (não roda sozinho)
-npm run verify                 # lint + typecheck + testes + build
-```
-
-### Painel web
+## Local dev
 
 ```bash
 cd swi-admin
-npm run dev            # http://localhost:5173
-npm test               # Vitest
+npm install
+npm run dev          # http://localhost:5173
+npm run storybook    # http://localhost:6007
+npm test             # vitest
 npm run typecheck
 npm run lint
-npm run build          # gera dist/
-npm run storybook      # http://localhost:6007
-npm run test:e2e:managed   # Playwright com a stack de teste subida pelo runner
+npm run build        # produz dist/
 ```
 
-Por padrão o painel de desenvolvimento aponta para `http://localhost:3000`. Para
-apontar para outro lugar, use `VITE_API_URL` em `swi-admin/.env.local`.
+## Stack
 
-### Aplicativo
+- Vite 5 + React 18 + react-native-web + styled-components 6
+- Design System: `@kavicki/swi-design-system` pinned via tarball HTTPS de tag (`v0.1.0`)
+- Roteamento: react-router 6 (32 rotas placeholder cobrindo telas S1–S5)
+- Estado: zustand (planejado para S1+)
+- Camada de dados: `src/services/mockApi/*` com contratos Supabase-shaped (`{ data, error, count? }`)
+- Testes: Vitest + jsdom + @testing-library/react (38 testes)
+- Storybook 9 (admin) + Storybook 9 do DS hospedado em `kavicki-com.github.io/swi-design-system`
+- Lint/format: ESLint 9 flat config + Prettier
+- Deploy: Vercel (config em `swi-admin/vercel.json`)
 
-```bash
-cd mobile
-npx expo start         # e então 'a' para abrir no Android
-npm test               # Jest
-npm run typecheck
-npm run lint
-```
-
-O aplicativo escolhe a origem dos dados por variáveis de ambiente
-(`EXPO_PUBLIC_AUTH_BACKEND`, `EXPO_PUBLIC_DATA_BACKEND`, `EXPO_PUBLIC_API_URL`).
-Os perfis de build estão em `mobile/eas.json`; o perfil `qa` é o que gera o APK
-apontando para `https://api.kavicki.com`.
-
----
-
-## Testes e integração contínua
-
-O workflow em `.github/workflows/ci.yml` roda em todo pull request e em todo push
-para a `main`, sempre em Node 22.23.2:
-
-| Job | O que faz |
-| --- | --- |
-| `mobile` | `expo-doctor`, lint, typecheck, testes com cobertura e `expo export` das três plataformas como smoke de build |
-| `admin` | lint, typecheck, testes com cobertura, portão de tamanho de arquivo, build e build do Storybook |
-| `backend` | Prisma generate, lint, typecheck, testes com cobertura e build |
-| `backend-integration` | testes ponta a ponta da API contra Postgres e MinIO de verdade |
-| `admin-e2e` | Playwright no painel, com a API real subida pelo runner |
-| `security` | `npm audit` confrontado com `scripts/security/audit-policy.json`, onde cada tolerância tem justificativa, responsável e prazo. Exceção vencida bloqueia |
-
-Os três projetos exigem **80% de cobertura** de testes; abaixo disso o job falha.
-
-Os testes ponta a ponta usam `scripts/e2e/run-test-stack.mjs`, que sobe uma
-infraestrutura descartável em portas próprias, aplica as migrations, roda o seed
-e derruba tudo ao final.
-
----
-
-## Estrutura do repositório
+## Estrutura
 
 ```
 SWI/
-  START-SWI.cmd                inicia tudo (duplo clique)
-  STOP-SWI.cmd                 desliga preservando os dados
-  docker-compose.client.yml    a stack que o duplo clique sobe
-  scripts/
-    client/                    os scripts PowerShell chamados pelos .cmd
-    e2e/                       runner da stack descartável de testes
-    security/                  política de vulnerabilidades tolerada
-    quality/                   portões de qualidade usados no CI
-  docs/
-    client/                    documentação de instalação, aceite e problemas
-    plans/                     documentos de planejamento e decisão
-    runbooks/                  procedimentos operacionais
-    audits/                    auditorias visuais e de fidelidade
-  swi-backend/                 API (NestJS + Prisma + Postgres)
-  swi-admin/                   painel web (Vite + React)
-  mobile/                      aplicativo Android (Expo)
+  .github/workflows/ci.yml     CI (jobs admin, mobile e backend)
+  docs/plans/                  design doc + plano S0
+  swi-admin/
+    src/
+      app/                     router, App, Placeholder + stories
+      services/mockApi/        contratos Supabase-shaped (auth.signIn, sleep, types)
+      services/types/          User, Employee, Alert, AlertState, ...
+      hooks/                   useAuth (AuthProvider/useAuth)
+      stubs/                   shims para Vite (rn-svg Fabric, codegenNativeComponent)
+    types/                     ambient declarations (DS shim, react-native shim)
+    .storybook/                config + theme decorator
+    vite.config.ts             alias array com paths absolutos
+    vitest.config.ts           merge de vite.config + jsdom
+    tsconfig.json              strict, paths para @/, react-native, DS shim
+    package.json               DS pinned via HTTPS tarball, .npmrc legacy-peer-deps=true
 ```
 
-## Convenção de branches
+## O que S0 entregou
 
-As branches são prefixadas pelo projeto que tocam, para a lista continuar
-legível: `feat/admin-*`, `fix/mobile-*`, `chore/backend-*`, `chore/repo-*`. Uma
-branch não deve tocar dois projetos ao mesmo tempo.
+- 32 rotas placeholder navegáveis (cobrem S1–S5 do design doc)
+- Walking skeleton: `npm run dev` boota limpo e roteia
+- `npm run build` produz bundle de produção (~262 kB JS gzipped)
+- Storybook do admin com 1 smoke story (escala para stories de páginas em S1+)
+- 38 testes verdes (auth flow, mockApi, useAuth, todas as 32 rotas, smoke)
+- CI verde no GitHub Actions
+- Conventional Commits ao longo do histórico
 
-## Licença
+## O que S1 entregou
 
-Software proprietário. Veja [`NOTICE.md`](NOTICE.md).
+- **5 telas reais** (substituem placeholder): `login`, `sign-up`, `password-recovery-email`, `password-recovery-newpassword`, `dashboard`
+- **Auth flow completo:** AuthProvider com hidratação assíncrona via `localStorage["swi.admin.session"]`, `useAuth()` expondo `signIn`/`signUp`/`signOut`/`loading`
+- **Route guards:** `RequireAuth` (redireciona para `/login`, preserva `state.from`) e `GuestOnly` (redireciona usuário autenticado para `/`)
+- **AppLayout:** SideMenu com 9 entradas + header com nome do usuário + botão sair, composto com átomos do DS (Logo, Text, Button) — Header/HeaderUserInfo do DS são vitals widgets, não cabem aqui
+- **mockApi expansão:** `auth.signUp`, `auth.requestPasswordReset`, `auth.resetPassword`, `auth.getSession` persistente; `dashboard.summary({orgId})` agregando 12 funcionários + 5 alertas seed em KPIs/atividades/clima
+- **Validators hand-rolled** (`isEmail`, `minLength`, `requiredText`, `matches`) — sem dep nova
+- **Stories Storybook:** 4 estados (Default/Loading/Error/Filled) por tela = 20 stories de páginas
+- **103 testes verdes** (vitest+jsdom): validators, mockApi auth, mockApi dashboard, useAuth hidratação, route guards, AppLayout, 5 screens com fluxos de validação e navegação, routes 27 placeholders restantes
+- **typecheck/lint/build/storybook:build:** todos verdes
+- **Decisões registradas:** sign-up aberto ligado a `org_seed_1`, consent gated com `consent_given_at`, `dashboard.summary` thin (não toca `employees.list`/`alerts.list` — esses são S2/S3)
+
+## Workarounds aplicados (DS source-only)
+
+O DS publica TypeScript cru (`main: src/index.ts`, sem `dist/`). Para evitar refactor downstream:
+
+- `swi-admin/types/swi-design-system-shim.d.ts` declara o módulo como `any` para typecheck
+- `tsconfig.json` `paths` redireciona `@kavicki/swi-design-system` para o shim
+- `react-native` instalado como npm alias para `react-native-web`
+- `react-native-svg` Fabric components (`/lib/module/fabric/`) aliased para stub (Vite + esbuild bypass)
+- `optimizeDeps.exclude: ['react-native-svg']` para o esbuild não pré-bundlar
+- `swi-admin/.npmrc` codifica `legacy-peer-deps=true` (RN ecosystem peer noise)
+
+Esses workarounds devem ser removidos quando o DS publicar `dist/` + types em release futura.
+
+## O que S1.7 entregou
+
+- **DS Header em AppLayout:** swap do header composto (Logo+Text+Button) pelo
+  DS `Header` (que já encapsula Logo + HeaderUserInfo). User type ganhou
+  `bpm`/`pressure`/`avatarUri` opcionais; seed admin com vitals mockados.
+  "Sair" movido para o rodapé da sidebar como ghost button.
+- **Map preview banner** com `Image`/Icon + `Button` overlay → `/maps/general`.
+- **KPI row Figma:** Funcionários composite + Sinais vitais + Taxa de
+  desgaste (verde) + Alertas urgentes com sublabel "Necessita atenção".
+- **Two-column row:** ActivitiesSection com `ChipGroup` filter (Em Curso /
+  Concluídas / A Fazer / Ver Todas) + WearAlertsSection com `SearchInput` e
+  `EmployeeOverviewCard`s.
+- **WeatherTimeline:** 6 entradas com vocabulário do Figma + AGORA marker.
+- **108 testes verdes** (vitest+jsdom): +5 testes novos (KPI row, map CTA,
+  chips filter, search filter, AGORA marker, wearAlerts smoke).
+- **3 lacunas DS deferidas** (sublabel/tone em `BigNumbersCard`,
+  `onMorePress` em `EmployeeOverviewCard`, `KpiCompositeCard`) — issue de
+  follow-up no DS quando S1.7 fechar; nenhuma exige DS v0.1.4 para fechar S1.7.
+
+## Próximos passos (S2)
+
+S2 = admins + funcionários CRUD. 6 telas: `admins`, `admin-details`, `admin-registration`, `employees`, `employee-details`, `employee-registration`. Plano detalhado em `docs/plans/2026-05-08-swi-admin-s2-*.md`.
+
+**Ordem recomendada:**
+1. ~~Polimento de Figma fidelity nas 5 telas de S1~~ → fechado em S1.6
+2. ~~Polimento de Figma fidelity no Dashboard~~ → fechado em S1.7
+3. Iniciar S2 (admins + employees CRUD)
