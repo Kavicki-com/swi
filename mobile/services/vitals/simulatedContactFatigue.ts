@@ -1,11 +1,11 @@
 // Fadiga de um COLEGA (ficha do contato no chat). É dado de smartband, então
-// segue simulado até o hardware existir — decisão de 2026-07-26: mock só no que
-// depende da pulseira. Mas era 62% fixo para QUALQUER contato, o que fazia a
-// tela afirmar que o time inteiro tem exatamente a mesma fadiga. Determinístico
-// por workerId (mesma ideia do painel): a mesma pessoa sempre rende o mesmo
-// valor, pessoas diferentes rendem valores diferentes.
+// segue simulado até o hardware existir: por decisão de produto, só o que
+// depende da pulseira é simulado. Determinístico por workerId, a mesma ideia do
+// painel, para que a mesma pessoa sempre renda o mesmo valor e pessoas
+// diferentes rendam valores diferentes. Valor fixo faria a tela afirmar que o
+// time inteiro tem exatamente a mesma fadiga.
 //
-// NÃO é a mesma série do painel — são geradores independentes, e vão continuar
+// NÃO é a mesma série do painel. São geradores independentes, e vão continuar
 // divergindo até a smartband virar fonte única.
 
 function hash(str: string): number {

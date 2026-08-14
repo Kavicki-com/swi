@@ -34,26 +34,21 @@ export const apiProfileBackend: ProfileBackend = {
     }
   },
   async save(patch) {
-    // A chave só entra quando o patch a traz. Antes ela era montada SEMPRE
-    // (`birthDate: brToIso(patch.birthDate)`), valendo `undefined` nos patches
-    // que não a incluem — e o stash do wizard faz `{ ...prev, ...patch }`, então
-    // esse `undefined` do passo 2 (endereço) sobrescrevia a data guardada no
-    // passo 1, e o JSON.stringify apagava a chave de vez. A ficha chegava ao
-    // painel sem data de nascimento e, por consequência, sem idade
-    // (QA 2026-07-27, confirmado no banco: telefone, CPF e endereço inteiros,
-    // birthDate vazio).
-    //
-    // Só a data se perdia porque só ela era reescrita incondicionalmente aqui.
+    // A chave só entra quando o patch a traz. Montá-la sempre, como
+    // `birthDate: brToIso(patch.birthDate)`, a faria valer `undefined` nos
+    // patches que não a incluem. O stash do wizard faz `{ ...prev, ...patch }`,
+    // então esse `undefined` do passo de endereço sobrescreveria a data
+    // guardada no passo anterior, e o JSON.stringify apagaria a chave de vez.
+    // A ficha chegaria ao painel sem data de nascimento e, por consequência,
+    // sem idade.
     const body = {
       ...patch,
       ...(patch.birthDate !== undefined ? { birthDate: brToIso(patch.birthDate) } : {}),
     };
-    // Sempre PUT autenticado. Todo save de perfil roda com sessão desde a
-    // reordenação do cadastro (2026-07-27): o wizard de complimentary-data
-    // virou pós-login, então a máquina de stash local (pendingProfile) que
-    // cobria o wizard pré-conta morreu — e com ela o risco de um token alheio
-    // esquecido receber o perfil de outra pessoa (incidente "Teste Ricardo"
-    // × "Joao Tester").
+    // Sempre PUT autenticado. Todo save de perfil roda com sessão, porque o
+    // wizard de complimentary-data é pós-login. Não existe stash local
+    // pré-conta, e é isso que impede um token alheio esquecido de receber o
+    // perfil de outra pessoa.
     const profile = await apiRequest('/profile/me', { method: 'PUT', body, auth: true });
     return fromApi(profile);
   },

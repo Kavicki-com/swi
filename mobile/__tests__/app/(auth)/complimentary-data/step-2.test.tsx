@@ -53,19 +53,17 @@ beforeEach(() => {
   mockUseAuth.mockReturnValue({ user: { id: 'u1', email: 'worker@exemplo.test', name: 'Worker' } });
 });
 
-// QA Mobile #1 (30/07/2026), URGENTE: "ao tocar em Avançar, o cadastro não
-// avança e não avisa quais campos estão faltando ou inválidos (ex.: Número
-// está vazio)".
+// Tocar em Avançar com campo faltando ou inválido tem que avisar quais são.
 //
-// A causa não era validação ausente: o `goNext` SEMPRE teve o caminho certo,
-// marcando todos os campos como tocados pra revelar o erro de cada um. O que
-// matava era `disabled={!canSubmit}` no botão. Botão desabilitado não dispara
-// onPress, então aquele bloco era código morto e o toque sumia no vazio.
+// A validação existe: o `goNext` marca todos os campos como tocados pra
+// revelar o erro de cada um. Quem mata isso é `disabled={!canSubmit}` no
+// botão, porque botão desabilitado não dispara onPress, aquele bloco vira
+// código morto e o toque some no vazio.
 describe('step-2: Avançar com formulário incompleto', () => {
   // Esta asserção é o coração do teste, e é sutil: o DS faz
   // `onPress={disabled ? undefined : onPress}` no Pressable interno. Chamar
   // `onPress()` do elemento externo (como o teste abaixo faz) CONTORNA o
-  // disabled e passaria mesmo com o bug de volta. Verificado na prática.
+  // disabled e passaria mesmo com a regressão presente.
   // Por isso o estado desabilitado é checado explicitamente aqui.
   it('mantém o botão habilitado para que o toque chegue à validação', async () => {
     const tree = await render();

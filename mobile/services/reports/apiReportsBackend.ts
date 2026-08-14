@@ -2,15 +2,15 @@ import type { Report, ReportActivity, ReportComment, ReportInput, ReportsBackend
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 
-// Este arquivo dizia que "o backend já devolve o shape mobile `Report` pronto,
-// então não há fromApi". Era falso nas ATIVIDADES, e custou o QA Mobile #9 (app
-// fechava ao abrir qualquer relatório): a linha de atividade chega com
-// `responsibleNames` + `responsibleAvatars` e SEM `id`, enquanto a tela lê
-// `activity.avatars.map(...)`. O mock local devolve `avatars`, então nem a demo
-// nem a suíte viam o buraco — só o aparelho contra o servidor real.
+// As ATIVIDADES exigem conversão: a linha que o servidor manda chega com
+// `responsibleNames` e `responsibleAvatars` e SEM `id`, enquanto a tela lê
+// `activity.avatars.map(...)`. Sem `fromApi` o relatório derruba o app ao
+// abrir, e nem a demo nem a suíte pegam isso, porque o mock local já devolve
+// `avatars`.
 //
-// O painel já resolvia isso no mapper dele (swi-admin/src/services/api/reports.ts,
-// `toReport`); o app é que consumia o wire cru. `fromApi` é o par disso aqui.
+// O painel faz a mesma conversão no mapper dele
+// (swi-admin/src/services/api/reports.ts, `toReport`). `fromApi` é o par disso
+// aqui.
 type WireActivity = Partial<ReportActivity> & {
   responsibleNames?: string[];
   responsibleAvatars?: string[];

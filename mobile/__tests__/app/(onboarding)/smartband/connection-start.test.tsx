@@ -4,7 +4,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import SmartbandConnectionStart from '../../../../app/(onboarding)/smartband/connection-start';
 import { isFeatureEnabled } from '../../../../lib/featureFlags';
 
-// Figma 215:17901. A tela é um relógio 3D girando enquanto uma barra de
+// A tela é um relógio 3D girando enquanto uma barra de
 // sincronização enche sozinha; quando ela enche, a tela troca de rota. Tudo
 // aqui é tempo: o tique de 100ms, o teto em 1 e a espera de 400ms.
 //

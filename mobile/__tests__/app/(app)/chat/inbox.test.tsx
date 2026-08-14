@@ -118,8 +118,8 @@ describe('ChatInbox: QA Mobile #7', () => {
 });
 
 // ---------------------------------------------------------------------------
-// A suite acima nasceu do QA #7 e sempre rodou com a caixa VAZIA. Por isso a
-// lista de conversas em si, que e o corpo da tela, nunca tinha sido montada:
+// A suite acima roda com a caixa VAZIA. Por isso a lista de conversas em si,
+// que e o corpo da tela, nao chega a ser montada la:
 // nenhum card, nenhuma busca sobre conversas, nenhuma barra de rolagem.
 // ---------------------------------------------------------------------------
 

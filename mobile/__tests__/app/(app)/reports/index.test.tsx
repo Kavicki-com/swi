@@ -6,12 +6,10 @@ import Reports from '../../../../app/(app)/reports/index';
 import { useReports } from '../../../../services/reports/ReportsProvider';
 import type { Report } from '../../../../services/reports/types';
 
-// QA Mobile #8: a lista vivia numa janela de altura fixa (maxHeight 540,
-// calibrada em maio pro frame de 800dp do Figma) e a Pagination morava DENTRO
-// do scroll, com poucos relatórios ela afundava junto e sobrava um vão de
-// ~25% da tela até os FABs. Estes testes travam a estrutura da correção:
-// lista elástica, paginação como irmã do scroll e rodapé que fecha a tela
-// acima dos FABs.
+// Estes testes travam a estrutura da lista: elástica, paginação como irmã do
+// scroll e rodapé que fecha a tela acima dos FABs. Uma janela de altura fixa
+// somada à paginação DENTRO do scroll faz a paginação afundar junto quando há
+// poucos relatórios, e sobra um vão de cerca de 25% da tela até os FABs.
 
 jest.mock('../../../../services/reports/ReportsProvider', () => ({
   useReports: jest.fn(),

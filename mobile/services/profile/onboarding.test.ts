@@ -1,8 +1,8 @@
 import { onboardingPendente } from './onboarding';
 
-// Fluxo reordenado 2026-07-27: conta primeiro, aprovação do admin, e o wizard
-// de perfil roda DEPOIS do primeiro login. Este helper é o desvio do login:
-// pendente → step-1, completo → dashboard.
+// Conta primeiro, aprovação do admin, e o wizard de perfil roda DEPOIS do
+// primeiro login. Este helper é o desvio do login: pendente → step-1,
+// completo → dashboard.
 const COMPLETO = {
   fullName: 'Fulana Teste',
   cpf: '529.982.247-25',

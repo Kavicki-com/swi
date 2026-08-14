@@ -14,11 +14,11 @@ import { USER_LOCATION } from '../../../lib/mapMockData';
 //    GPUs Android mid-range. Se alguem trocar o setTimeout por um estado
 //    inicial `true`, o crash volta em campo e nao no CI, entao o teste afirma o
 //    frame de montagem VAZIO e a limpeza do timer no desmonte.
-// 2. O centro sai do GPS do provider, nao da constante de demo. As duas telas
-//    de mapa divergiam e o clima abria em Sao Paulo para quem estava em
-//    Curitiba (QA 2026-07-26).
-// 3. Os numeros de paint reduzidos pela metade no Fix 9. Sao a diferenca entre
-//    rodar e estourar a alocacao de textura.
+// 2. O centro sai do GPS do provider, nao da constante de demo. Usar a
+//    constante faz as duas telas de mapa divergirem, e o clima abre numa
+//    cidade diferente daquela onde a pessoa esta.
+// 3. Os numeros de paint reduzidos pela metade. Sao a diferenca entre rodar e
+//    estourar a alocacao de textura.
 
 const GPS: [number, number] = [-49.27, -25.43]; // Curitiba, longe da constante
 

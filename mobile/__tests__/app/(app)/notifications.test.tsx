@@ -11,8 +11,8 @@ import type { AppNotification, NotificationDomain } from '../../../services/noti
 //    dominio sem entrada na tabela empurra `undefined` no router e a tela some
 //    sem erro. O teste percorre os cinco dominios navegaveis, um a um.
 // 2. 'weather' e o caso especial: marca lida, abre modal NO LUGAR e nao navega
-//    (R-5 do 2026-05-17-mobile-routes-audit.md). Ja foi reportado como bug de
-//    "trocando de tela", entao a ausencia do push faz parte da afirmacao.
+//    A ausencia do push faz parte da afirmacao: navegar aqui tiraria a pessoa
+//    da tela em que ela esta.
 //
 // As fronteiras dubladas sao o provider, o router e os dois modais. Os modais
 // tem suite propria; aqui interessa QUEM os abre e fecha.

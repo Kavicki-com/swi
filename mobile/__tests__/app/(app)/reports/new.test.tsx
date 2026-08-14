@@ -122,8 +122,8 @@ describe('Novo relatório: anexos', () => {
     expect(slotPreenchido(tree, 2)).toBe(true);
   });
 
-  // Figma 372:21297: a barra fina enche conforme arquivos são adicionados.
-  // Estava congelada em 60% desde a fase demo, mentindo o estado da grade.
+  // A barra fina enche conforme arquivos são adicionados. Valor fixo aqui
+  // mentiria o estado da grade.
   it('a barra de progresso enche na proporção dos quadrados preenchidos', async () => {
     const tree = await render();
     const barra = () =>
@@ -154,9 +154,8 @@ describe('Novo relatório: anexos', () => {
   });
 });
 
-// QA Mobile #4: "não é possível remover uma foto já anexada. Ao tocar na
-// miniatura só abre o menu Adicionar imagem". Não havia caminho nenhum de
-// volta: escolher errado significava salvar com a foto errada.
+// Tocar na miniatura precisa oferecer remover, não só "Adicionar imagem". Sem
+// caminho de volta, escolher a foto errada significa salvar com a foto errada.
 describe('Novo relatório, remover anexo', () => {
   const anexar = async (tree: ReturnType<typeof create>, uri: string) => {
     pickFromGallery.mockResolvedValue(uri);
@@ -229,10 +228,9 @@ describe('Novo relatório, remover anexo', () => {
   });
 });
 
-// Mesma classe de defeito do QA Mobile #1 (corrigido no step-2 em 6ff9c1f e
-// encontrada aqui pela varredura): o save já marca os campos como tocados pra
-// revelar o erro de cada um, mas `disabled={!canSubmit || saving}` impedia o
-// onPress de chegar lá. O bloco era código morto e o toque sumia no vazio.
+// O save marca os campos como tocados pra revelar o erro de cada um, mas
+// `disabled={!canSubmit || saving}` impediria o onPress de chegar lá: o bloco
+// vira código morto e o toque some no vazio.
 //
 // Aqui a trava de reentrância NÃO pode cair junto: esta tela não usa
 // useSubmitOnce, o `saving` é quem impede o segundo toque de criar um
@@ -241,7 +239,7 @@ describe('Novo relatório, remover anexo', () => {
 // A asserção de `disabled` é o coração do teste, e é sutil: o DS faz
 // `onPress={disabled ? undefined : onPress}` no Pressable interno, então
 // chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
-// com o bug de volta. Sem ela o teste não tem dente.
+// com a regressão presente. Sem ela o teste não tem dente.
 describe('Novo relatório: Salvar com formulário incompleto', () => {
   it('mantém o botão habilitado para que o toque chegue à validação', async () => {
     const tree = await render();

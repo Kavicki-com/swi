@@ -191,6 +191,7 @@ jobs:
           node scripts/quality/assert-client-hygiene.mjs
           --dir .github
           --dir scripts
+          --dir mobile
       # Portão de vulnerabilidades. Bloqueia de verdade, sem continue-on-error.
       #
       # O `npm audit` cru não servia como portão: ele mistura o que tem conserto

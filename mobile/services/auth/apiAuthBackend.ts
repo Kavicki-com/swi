@@ -28,10 +28,9 @@ export const apiAuthBackend: AuthBackend = {
     catch (e) {
       // 401/403 = o token nao vale mais. Ele TEM que sair daqui.
       //
-      // INCIDENTE 2026-07-27: engolir a falha e devolver null deixava o app na
-      // tela de login com o token do usuario anterior ainda guardado. Quem
-      // comecasse um cadastro dali escrevia no perfil alheio — o "Teste
-      // Ricardo" nasceu vazio e os dados dele foram parar no "Joao Tester".
+      // Engolir a falha e devolver null deixaria o app na tela de login com o
+      // token do usuario anterior ainda guardado, e um cadastro iniciado dali
+      // gravaria no perfil de outra pessoa.
       //
       // Rede fora (fetch rejeita, sem status) e outra coisa: a sessao pode
       // estar perfeitamente boa e so nao da pra confirmar agora. Apagar ai

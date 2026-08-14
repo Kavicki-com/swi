@@ -93,12 +93,10 @@ beforeEach(() => {
   mockUseAuth.mockReturnValue({ user: { id: 'u1', email: 'worker@exemplo.test', name: 'Worker' } });
 });
 
-// QA Mobile #1 foi reportado na etapa 2, e a etapa 2 foi corrigida em 6ff9c1f.
-// A varredura da classe achou a MESMA parede aqui, um passo adiante e pior: o
-// `finish` fazia `if (!canSubmit) return;` seco, sem nem o bloco de setTouched
-// que o step-2 tinha. Não havia superfície de erro nenhuma, porque os campos
-// são Combobox / GenderSelector / Radio, e nenhum deles tinha legenda com
-// variante antes do DS 0.1.131.
+// Mesma parede do step-2, um passo adiante e pior: um `finish` com
+// `if (!canSubmit) return;` seco, sem o bloco de setTouched, não deixa
+// superfície de erro nenhuma, porque os campos são Combobox, GenderSelector e
+// Radio, e a legenda com variante depende do DS.
 //
 // É a última porta antes do dashboard: quem esbarrava aqui não terminava o
 // cadastro.
@@ -106,7 +104,7 @@ describe('step-3: Concluir com formulário incompleto', () => {
   // Esta asserção é o coração do teste, e é sutil: o DS faz
   // `onPress={disabled ? undefined : onPress}` no Pressable interno, então
   // chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
-  // com o bug de volta.
+  // com a regressão presente.
   it('mantém o botão habilitado para que o toque chegue à validação', async () => {
     const tree = await render();
     expect(botao(tree, 'Concluir').props.disabled).toBeFalsy();

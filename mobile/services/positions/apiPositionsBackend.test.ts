@@ -8,7 +8,7 @@ describe('apiPositionsBackend', () => {
   it('heartbeat → POST /positions/heartbeat autenticado com {lat, lng} NA ORDEM CERTA', async () => {
     (apiRequest as jest.Mock).mockResolvedValue({});
     await apiPositionsBackend.heartbeat(-23.55, -46.63);
-    // Ordem dos args é o bug clássico: lat é o ~-23.5, lng o ~-46.6.
+    // A ordem dos args é o que este teste protege: lat é o ~-23.5, lng o ~-46.6.
     expect(apiRequest).toHaveBeenCalledWith('/positions/heartbeat', {
       method: 'POST',
       auth: true,

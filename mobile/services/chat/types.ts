@@ -34,11 +34,10 @@ export interface Contact {
   sector: string;                   // → subtitle do card
   role: string;                     // header do user-info
   avatarUri: string;                // uri resolvida
-  // Identidade clínica REAL do contato. O backend já devolvia isto no
-  // /chat/directory (corrigido no QA de volume do painel); o app não declarava
-  // os campos e a ficha do contato exibia 26 anos / O+ / Masculino cravados
-  // pra qualquer pessoa que o usuário abrisse (QA 2026-07-26). null = o
-  // colega não preencheu — a tela mostra "não informado", nunca um palpite.
+  // Identidade clínica real do contato, vinda do /chat/directory. Declarar os
+  // campos aqui é o que impede a ficha de exibir valores cravados iguais para
+  // qualquer pessoa que o usuário abra. null significa que o colega não
+  // preencheu, e a tela mostra "não informado", nunca um palpite.
   birthDate?: string | null;        // ISO datetime
   bloodType?: string | null;
   allergies?: string | null;

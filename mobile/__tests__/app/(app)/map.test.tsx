@@ -2,7 +2,7 @@ import { act, create } from 'react-test-renderer';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import MapaGeral from '../../../app/(app)/map';
 
-// QA Mobile #10, os aneis de distancia do mapa.
+// Os aneis de distancia do mapa.
 //
 // A tela desenhava dois <View> de 395 e 647 PIXELS grudados no centro da tela,
 // com "5KM"/"10KM" digitado ao lado. Pixel nao e distancia: em qualquer zoom
@@ -122,7 +122,7 @@ describe('Mapa geral: aneis de distancia (QA Mobile #10)', () => {
     expect(textos).toContain('10KM');
   });
 
-  // Trava do bug: nenhum circulo com tamanho cravado em pixel sobrou na tela.
+  // Trava: nenhum circulo com tamanho cravado em pixel pode sobrar na tela.
   it('nao restou anel dimensionado em pixels', async () => {
     const tree = await render();
     const fixos = tree.root.findAll(

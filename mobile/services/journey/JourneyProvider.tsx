@@ -83,15 +83,15 @@ export function JourneyProvider({ children }: PropsWithChildren) {
     load();
   }, [load]);
 
-  // Tarefa nova tem que aparecer sozinha. Até 2026-07-26 a lista era buscada
-  // UMA vez, no mount: o admin atribuía a tarefa e o worker só via depois de
-  // deslogar e logar (o que remontava o provider). Três gatilhos, do mais
-  // imediato ao mais tolerante a falha:
+  // Tarefa nova tem que aparecer sozinha. Buscar a lista uma única vez, no
+  // mount, faria o worker só ver a atribuição depois de deslogar e logar, que é
+  // o que remonta o provider. Daí três gatilhos, do mais imediato ao mais
+  // tolerante a falha:
   //
-  // 1) push: o backend já cria uma notificação de domínio 'journey' pra cada
-  //    responsável e a empurra pelo socket — só ninguém escutava fora da tela
-  //    de notificações. Aqui o provider envolve o app inteiro, então chega
-  //    esteja o worker onde estiver.
+  // 1) push: o backend cria uma notificação de domínio 'journey' pra cada
+  //    responsável e a empurra pelo socket. Escutar aqui, e não na tela de
+  //    notificações, é o que faz o aviso chegar esteja o worker onde estiver,
+  //    porque o provider envolve o app inteiro.
   useEffect(() => {
     const backendN = getNotificationBackend();
     const unsub = backendN.subscribe((n) => {

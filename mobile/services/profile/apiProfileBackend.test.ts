@@ -5,11 +5,9 @@ jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 
 const mockApiRequest = apiRequest as jest.Mock;
 
-// Desde a reordenação do cadastro (2026-07-27) todo save roda AUTENTICADO: o
-// wizard de complimentary-data virou pós-login (fluxo 2), então o stash local
-// pré-conta (pendingProfile) morreu, e com ele o incidente do token alheio
-// ("Teste Ricardo" × "Joao Tester": o wizard rodava sem conta e um token
-// esquecido de outro usuário recebia o PUT).
+// Todo save roda AUTENTICADO: o wizard de complimentary-data é pós-login, e
+// não existe stash local pré-conta. É isso que impede um token esquecido de
+// outro usuário de receber o PUT.
 describe('apiProfileBackend', () => {
   beforeEach(() => {
     mockApiRequest.mockReset();
@@ -47,12 +45,10 @@ describe('apiProfileBackend', () => {
     expect(profile).toEqual({ city: 'SP', birthDate: '25/12/1990' });
   });
 
-  // A ficha do "Joao Tester" chegou ao painel SEM data de nascimento (e por
-  // isso sem idade) enquanto telefone, CPF e endereço passaram (QA 2026-07-27).
-  // Causa: o corpo era montado como `{ ...patch, birthDate: brToIso(...) }`, e
-  // a chave existia SEMPRE, valendo `undefined` quando o patch não a trazia,
-  // apagava a data salva pelo passo anterior. A chave só pode entrar quando o
-  // patch a traz.
+  // Montar o corpo como `{ ...patch, birthDate: brToIso(...) }` faz a chave
+  // existir SEMPRE, valendo `undefined` quando o patch não a traz, e isso apaga
+  // a data salva pelo passo anterior. A ficha chega ao painel sem data de
+  // nascimento e sem idade. A chave só pode entrar quando o patch a traz.
   it('patch SEM birthDate não manda a chave (senão apaga a do passo anterior)', async () => {
     mockApiRequest.mockResolvedValue({});
     await apiProfileBackend.save({ cep: '27280-080', street: 'Alameda Quatro' });

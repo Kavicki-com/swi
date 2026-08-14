@@ -4,7 +4,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import Dashboard from '../../../app/(app)/dashboard';
 import type { Vitals, VitalsPhase, WorkerStatus } from '../../../services/vitals/types';
 
-// Caracterização do dashboard, escrita ANTES da decomposição da Task 5.
+// Caracterização do dashboard.
 //
 // Não afirma estrutura de arquivo nem hierarquia de componentes: só o que a
 // tela mostra e para onde ela navega. É isso que precisa sobreviver quando o

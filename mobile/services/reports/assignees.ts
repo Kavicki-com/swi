@@ -6,15 +6,13 @@ import type { Contact } from '../chat/types';
 /**
  * Quem pode ser atribuído como responsável por um relatório.
  *
- * Até 2026-07-27 o modal pedia isso ao `/chat/directory`. Aquele endpoint
- * devolve a empresa INTEIRA de propósito — sem os admins na lista o worker não
- * tinha como iniciar conversa com o painel (decisão 2026-07-26). O efeito
- * colateral: o seletor de responsáveis oferecia os 10 operadores como
- * revisores, e o painel usava outra régua (adminsApi), então os dois seletores
- * divergiam.
- *
- * A régua agora vive no backend (ReportsService.listAssignees + isStaffJobTitle):
+ * A régua vive no backend (ReportsService.listAssignees + isStaffJobTitle):
  * staff da empresa, mais quem é ADMIN independentemente do cargo declarado.
+ *
+ * Não serve pedir isso ao `/chat/directory`. Aquele endpoint devolve a empresa
+ * INTEIRA de propósito, porque sem os admins na lista o worker não teria como
+ * iniciar conversa com o painel. Usá-lo aqui ofereceria todos os operadores
+ * como revisores e divergiria da régua que o painel aplica.
  */
 export function listReportAssignees(): Promise<Contact[]> {
   if (DATA_BACKEND === 'api') {

@@ -9,9 +9,9 @@ import type { Task } from '../../../../services/journey/types';
 // muda entre eles é justamente o que o worker usa pra se orientar: o donut
 // central, a seção "Em andamento" e os CTAs de finalizar/pausar.
 //
-// Dois detalhes com histórico de bug estão travados aqui: a data de "Hoje"
-// (era a string 27/04/2026 cravada do mockup) e o refresh ao focar a tela
-// (socket calado com o túnel caído deixava a tela desatualizada).
+// Dois detalhes ficam travados aqui: a data de "Hoje", que precisa ser
+// calculada e nunca uma string fixa, e o refresh ao focar a tela, que é o que
+// mantém a jornada atualizada quando o socket fica calado.
 
 const mockPush = jest.fn();
 // useFocusEffect roda o callback na montagem, como no foco real da rota.

@@ -28,7 +28,7 @@ beforeEach(() => {
 
 describe('pure builders', () => {
   it('builds a VitalsTelemetry with epoch-SECONDS expiresAt and derived status', () => {
-    const nowMs = 1_700_000_000_000; // 2023-11-14T...Z
+    const nowMs = 1_700_000_000_000; // instante fixo, em milissegundos
     const s = buildVitalsSample(VITALS, 'w1', nowMs);
     expect(s.workerId).toBe('w1');
     expect(s.heartRate).toBe(80);

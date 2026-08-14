@@ -19,12 +19,11 @@ export function ProfileProvider({ children }: PropsWithChildren) {
     const p = await backend.get(); setProfile(p); return p;
   }, [backend]);
 
-  // Carrega sozinho ao entrar uma sessão (e limpa ao sair). Antes o provider só
-  // enchia se a TELA pedisse — e só as de settings pediam, então jornada,
-  // dashboard e my-stats renderizavam sem perfil e caíam num PNG de estoque +
-  // nome de outra pessoa (QA 2026-07-26). Best-effort: erro aqui não pode
-  // derrubar a árvore (perfil ainda não preenchido responde 404, e o app fica
-  // um instante sem token logo após o signIn).
+  // Carrega sozinho ao entrar uma sessão, e limpa ao sair. Depender da TELA
+  // pedir deixaria jornada, dashboard e my-stats renderizando sem perfil, e
+  // essas telas caem num PNG de estoque com nome de outra pessoa. Best-effort:
+  // erro aqui não pode derrubar a árvore, porque perfil ainda não preenchido
+  // responde 404 e o app fica um instante sem token logo após o signIn.
   useEffect(() => {
     if (!user) { setProfile(null); return; }
     let cancelled = false;

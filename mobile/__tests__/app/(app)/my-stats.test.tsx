@@ -7,8 +7,8 @@ import type { Vitals, WorkerStatus } from '../../../services/vitals/types';
 import type { Exam } from '../../../services/api/exams';
 
 // Meus dados (app/(app)/my-stats.tsx). Tela de leitura clínica: o que ela mostra
-// tem que ser o que foi MEDIDO. Três correções de QA com histórico de dado
-// inventado estão travadas aqui:
+// tem que ser o que foi MEDIDO. Três invariantes de dado real estão travadas
+// aqui:
 //   - alergias saem do cadastro real, não da lista fixa "Buscopan, Dipirona,
 //     Chocolate, Camarão" que aparecia para qualquer pessoa;
 //   - o histórico médico são os exames do backend, não 4 exames escritos na tela;

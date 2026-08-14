@@ -89,10 +89,9 @@ beforeEach(() => {
 });
 
 describe('Dados pessoais: máscara de entrada', () => {
-  // O relato: digitando a data de nascimento as barras não apareciam, e o
-  // campo aceitava 02011999 (print do QA no aparelho, 2026-07-27). As
-  // máscaras já existiam em lib/validation/masks.ts e estavam ligadas só no
-  // cadastro; esta tela ficou com useState cru.
+  // A data de nascimento precisa das barras enquanto se digita, senão o campo
+  // aceita 02011999. As máscaras vivem em lib/validation/masks.ts, e esta tela
+  // tem que usá-las em vez de useState cru.
   it('formata a data de nascimento enquanto digita', async () => {
     const tree = await render();
     await type(tree, 'Data de Nascimento', '02011999');
@@ -160,10 +159,10 @@ describe('Dados pessoais: validação', () => {
   });
 });
 
-// Até 2026-07-27 NÃO EXISTIA caminho nenhum no app pra definir foto de perfil.
-// O seletor do passo 1 do cadastro guarda a uri num useState e a descarta, e
-// o backend sempre esteve pronto (/media/presign aceita prefix 'avatars', e o
-// PUT /profile/me valida avatarKey). Faltava só alguém ligar os dois.
+// Esta é a tela que define a foto de perfil. O seletor do passo 1 do cadastro
+// guarda a uri num useState e a descarta, então não serve como caminho. O
+// backend já aceita as duas pontas: /media/presign com prefix 'avatars' e
+// PUT /profile/me validando avatarKey.
 //
 // Sem foto, o Avatar cai nas iniciais em todas as telas: jornada, dashboard,
 // chat, mapa e no seletor de responsáveis.
@@ -327,9 +326,9 @@ describe('Dados pessoais: prefill do cadastro', () => {
 });
 
 describe('Dados pessoais: e-mail da conta', () => {
-  // Até 2026-07-27 este campo era editável e NUNCA era preenchido no load nem
-  // enviado no save: digitar ali não fazia absolutamente nada. Trocar e-mail é
-  // operação de autenticação e não cabe nesta tela.
+  // O e-mail fica em leitura. Trocar e-mail é operação de autenticação e não
+  // cabe nesta tela, então um campo editável aqui não seria preenchido no load
+  // nem enviado no save, e digitar nele não faria nada.
   it('mostra o e-mail da conta em leitura, com o caminho do suporte', async () => {
     const tree = await render();
     const email = tree.root.findAll((n) => n.props?.label === 'Email')[0];

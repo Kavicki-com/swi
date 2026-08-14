@@ -16,9 +16,8 @@ jest.mock('expo-file-system', () => ({
   })),
 }));
 
-// O upload virou PUT presignado (2026-07-29). O R2 NÃO implementa presigned
-// POST: devolvia 501 "Presigned post requests are not yet implemented" na cara
-// do usuário ao anexar a foto do cadastro. Isso muda três coisas aqui:
+// O upload é PUT presignado. O R2 NÃO implementa presigned POST, e a diferença
+// muda três coisas aqui:
 //  - o presign precisa do contentLength (entra na assinatura no servidor);
 //  - o método é PUT com os BYTES no corpo, não multipart;
 //  - o Content-Type tem que ir no header e casar com o assinado, senão 403.
@@ -101,9 +100,9 @@ describe('uploadMedia', () => {
     await expect(uploadImage('file:///a/b.jpg')).rejects.toThrow(/403.*SignatureDoesNotMatch/);
   });
 
-  // Mesmo defeito do QA Mobile #6, outro ponto: este PUT vai direto no storage,
-  // fora do apiRequest, então não herda o prazo de lá. Sem prazo, um upload que
-  // trava deixa "Salvar relatório" girando para sempre. O prazo aqui é maior
+  // Este PUT vai direto no storage, fora do apiRequest, então não herda o prazo
+  // de lá. Sem prazo, um upload que trava deixa "Salvar relatório" girando
+  // para sempre. O prazo aqui é maior
   // porque trafegam até 15 MB, contra um JSON pequeno nas outras chamadas.
   it('estoura prazo quando o PUT trava, e aborta a conexão', async () => {
     jest.useFakeTimers();

@@ -4,7 +4,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { EvacuationAckBar } from '../../components/EvacuationAckBar';
 import type { ActiveEvacuationView } from '../../services/evacuation/types';
 
-// Barra de confirmação de presença da evacuação real (Fase 2). Overlay do rodapé
+// Barra de confirmação de presença da evacuação real. Overlay do rodapé
 // das telas de evacuação: só existe quando a org TEM evacuação ativa.
 //
 // O risco que estes testes cercam é o silêncio: sem evacuação ativa, e também

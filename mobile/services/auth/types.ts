@@ -3,11 +3,11 @@ import type { User } from '../types';
 export type { User };
 
 // companyId: empresa escolhida no cadastro (GET /companies). Opcional no tipo
-// (o mock não usa), mas a tela de sign-up api sempre manda — sem ele o worker
-// fica invisível na fila de aprovação org-scoped do painel (QA 2026-07-26).
-// O perfil NÃO viaja junto: desde a reordenação 2026-07-27 o cadastro cria só
-// a conta, e o wizard de complimentary-data preenche o perfil DEPOIS do
-// primeiro login pós-aprovação (PUT /profile/me autenticado).
+// porque o mock não usa, mas a tela de sign-up da api sempre manda: sem ele o
+// worker fica invisível na fila de aprovação com escopo por empresa do painel.
+// O perfil NÃO viaja junto. O cadastro cria só a conta, e o wizard de
+// complimentary-data preenche o perfil DEPOIS do primeiro login pós-aprovação
+// (PUT /profile/me autenticado).
 export interface SignUpParams {
   email: string;
   password: string;

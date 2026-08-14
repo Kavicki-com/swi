@@ -50,10 +50,9 @@ beforeEach(() => {
   mockUseAuth.mockReturnValue({ confirmReset });
 });
 
-// Mesma classe de defeito do QA Mobile #1 (corrigido no step-2 em 6ff9c1f e
-// encontrado aqui pela varredura): o handleSubmit já marca os campos como
-// tocados pra revelar o erro de cada um, mas `disabled={!canSubmit || enviando}`
-// impedia o onPress de chegar lá. O bloco era código morto.
+// Mesma classe do step-2: o handleSubmit marca os campos como tocados pra
+// revelar o erro de cada um, mas `disabled={!canSubmit || enviando}` impediria
+// o onPress de chegar lá, e o bloco viraria código morto.
 //
 // Aqui o custo do silêncio é maior que no step-2: as regras de senha (8+
 // caracteres, maiúscula, número, símbolo) não estão escritas na tela. Sem a
@@ -62,7 +61,7 @@ beforeEach(() => {
 // A asserção de `disabled` é o coração do teste, e é sutil: o DS faz
 // `onPress={disabled ? undefined : onPress}` no Pressable interno, então
 // chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
-// com o bug de volta. Sem ela o teste não tem dente.
+// com a regressão presente. Sem ela o teste não tem dente.
 describe('nova senha: Alterar senha com formulário incompleto', () => {
   it('mantém o botão habilitado para que o toque chegue à validação', async () => {
     const tree = await render();

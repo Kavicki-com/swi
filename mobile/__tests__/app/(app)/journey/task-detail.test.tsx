@@ -385,7 +385,7 @@ describe('Detalhe da tarefa: CTA da tarefa ativa', () => {
     expect(mockPush).toHaveBeenCalledWith('/(app)/journey');
   });
 
-  // O bug que o `submitting` fecha: a falha era engolida e o worker voltava
+  // O que o `submitting` fecha: sem ele a falha é engolida e o worker volta
   // pra /journey achando que concluiu, sem a ação ter acontecido.
   it('falha ao finalizar fica na tela e mostra o erro', async () => {
     mockJourney.completeTask.mockRejectedValue(new Error('401'));

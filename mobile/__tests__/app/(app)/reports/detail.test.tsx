@@ -6,16 +6,16 @@ import ReportDetails from '../../../../app/(app)/reports/[id]';
 import type { Report, ReportComment } from '../../../../services/reports/types';
 
 // Companheiro de detail.integration.test.tsx. La a tela roda com o provider e o
-// adaptador REAIS e so o HTTP e dublado, para reproduzir o QA Mobile #9; e um
+// adaptador REAIS e so o HTTP e dublado; e um
 // caminho feliz. Aqui o provider e dublado e o assunto e o resto: rota sem id,
 // resposta vazia, falha e retry, resposta que chega atrasada, e o envio de
 // comentario inteiro.
 //
-// O envio de comentario e o que mais merece trava. Ate 2026-07-27 o botao era
-// `onPress={() => setComment('')}`: limpava o campo e DESCARTAVA o texto, entao
-// o comentario do worker nunca saia do aparelho. O teste afirma as duas metades
-// do conserto: o texto sai (addComment recebe o conteudo aparado) e o campo so
-// e limpo DEPOIS do sucesso, nunca antes e nunca no erro.
+// O envio de comentario e o que mais merece trava. Um botao que so faz
+// `setComment('')` limpa o campo e DESCARTA o texto, e o comentario do worker
+// nunca sai do aparelho. O teste afirma as duas metades do contrato: o texto
+// sai (addComment recebe o conteudo aparado) e o campo so e limpo DEPOIS do
+// sucesso, nunca antes e nunca no erro.
 
 // --- Fronteiras dubladas -----------------------------------------------------
 
@@ -376,7 +376,7 @@ describe('Detalhe do relatorio: envio de comentario', () => {
     await tocar(cta(tree));
 
     expect(alerta).toHaveBeenCalledWith('Erro', 'Comentário muito longo');
-    // O conserto de 2026-07-27: limpar antes fazia a pessoa perder o que escreveu.
+    // Limpar antes da validacao faria a pessoa perder o que escreveu.
     expect(campoComentario(tree).props.value).toBe('Texto que nao pode sumir');
   });
 

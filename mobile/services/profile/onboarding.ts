@@ -1,9 +1,8 @@
 import type { Profile } from './types';
 
 // Decide, no login, se o worker ainda precisa passar pelo wizard de
-// complimentary-data (fluxo 2 do cadastro, reordenado em 2026-07-27: a conta
-// nasce primeiro, o admin aprova, e SÓ ENTÃO o perfil é preenchido — agora
-// autenticado, com o token do próprio worker).
+// complimentary-data. A conta nasce primeiro, o admin aprova, e SÓ ENTÃO o
+// perfil é preenchido, autenticado com o token do próprio worker.
 //
 // Um marcador obrigatório por passo: CPF (passo 1), CEP (passo 2), tipo
 // sanguíneo (passo 3). Todos são exigidos pelo `canSubmit` do seu passo, então

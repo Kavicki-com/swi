@@ -5,9 +5,9 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import SignUp from '../../../app/(auth)/sign-up';
 import type { CompanyOption } from '../../../services/api/companies';
 
-// Cadastro (fluxo 1, reordenado em 2026-07-27): a conta nasce AQUI, com nome,
-// e-mail, senha e EMPRESA. O vínculo com a empresa é o que coloca o worker na
-// fila de aprovação org-scoped do painel, sem ele, ele fica invisível.
+// Cadastro: a conta nasce AQUI, com nome, e-mail, senha e EMPRESA. O vínculo
+// com a empresa é o que coloca o worker na fila de aprovação com escopo por
+// empresa do painel, e sem ele o worker fica invisível.
 //
 // Dois incidentes moldaram esta tela e estão travados aqui:
 //   - duplo toque no "Criar conta": o 2º toque levou 409 de e-mail já existente

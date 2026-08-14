@@ -7,8 +7,8 @@ import { defineConfig, devices } from '@playwright/test';
 // alcança, ou seja, o bundle inteiro subindo, a sessão de verdade, a
 // requisição de verdade e a navegação de verdade entre as rotas.
 //
-// Artefatos ficam DESLIGADOS por padrão (plano, Task 14). Para investigar uma
-// falha local, ligue por execução:
+// Artefatos ficam DESLIGADOS por padrão. Para investigar uma falha local,
+// ligue por execução:
 //   npx playwright test --trace on
 
 const PORTA = Number(process.env.E2E_MOBILE_PORT ?? 18081);

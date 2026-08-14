@@ -108,7 +108,7 @@ describe('Novo relatório, anexo de ponta a ponta (tela + hook reais)', () => {
     ]);
   });
 
-  // O caminho exato do QA Mobile #4: anexa, toca na miniatura, toca em remover.
+  // O caminho completo de volta: anexa, toca na miniatura, toca em remover.
   it('slot com foto: o menu oferece remover, e remover esvazia o quadrado', async () => {
     const tree = await render();
     await anexarPeloUploader(tree);

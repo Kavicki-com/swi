@@ -49,10 +49,9 @@ beforeEach(() => {
   });
 });
 
-// Fluxo 2 (reordenação 2026-07-27): o wizard roda DEPOIS do primeiro login
-// pós-aprovação. O nome tem UMA fonte, a conta criada no fluxo 1, então o
-// campo vem completo (QA 2026-07-27: "coloque o nome digitado completo como o
-// usuario fez no primeiro passo"), sem segunda digitação nem truncamento.
+// O wizard roda DEPOIS do primeiro login pós-aprovação. O nome tem UMA fonte,
+// a conta criada no cadastro, então o campo vem completo como a pessoa digitou
+// lá, sem segunda digitação nem truncamento.
 describe('step-1: pré-preenchimento do nome', () => {
   it('usa o nome completo da conta logada, não o primeiro nome', async () => {
     const tree = await render();

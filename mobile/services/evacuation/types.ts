@@ -10,8 +10,8 @@ export interface RouteSnapshot {
   fetchedAt: string;               // ISO datetime
 }
 
-// Evacuação ATIVA da org vista pelo worker (Fase 2 do realtime): o suficiente
-// pra tela decidir mostrar o CTA de confirmação e pro ack ter alvo.
+// Evacuação ATIVA da org vista pelo worker: o suficiente pra tela decidir
+// mostrar o CTA de confirmação e pro ack ter alvo.
 export interface ActiveEvacuationView {
   id: string;
   total: number;

@@ -5,12 +5,8 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import SettingsHealthData from '../../../../app/(app)/settings/health-data';
 import type { Exam } from '../../../../services/api/exams';
 
-// Dados de saúde (settings). Até 2026-07-26 esta tela era useState solto com
-// `Salvar` = router.back(): tudo que a pessoa editava era descartado. A lista de
-// exames era um array fixo de 4 exames inventados, duplicado com o my-stats, e o
-// botão de anexar tinha onPickFile={() => {}}, não fazia nada.
-//
-// Esta suíte trava o caminho real: prefill do backend, salvar de verdade,
+// Dados de saúde (settings). Esta suíte trava o caminho real: prefill do
+// backend, salvar de verdade,
 // exame com nome e validade ANTES do arquivo (decisão do cliente, senão o card
 // do histórico não tem o que mostrar), e seletor de DOCUMENTO em vez de galeria,
 // porque laudo costuma ser PDF e na galeria ele não aparece.

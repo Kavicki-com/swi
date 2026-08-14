@@ -9,8 +9,8 @@ import { apiRequest } from '../../../../services/api/http';
 //
 // La o adaptador e verificado contra a ideia que o teste tem da tela. Aqui a
 // TELA roda com o adaptador e o provider DE VERDADE, e a unica ponta dublada e
-// o HTTP. E a unica montagem que reproduz o QA Mobile #9 como o usuario viu:
-// abrir um relatorio do servidor e o app fechar.
+// o HTTP. E a unica montagem que reproduz o que o usuario ve quando o
+// adaptador falha: abrir um relatorio do servidor e o app fechar.
 
 jest.mock('../../../../services/api/http', () => ({ apiRequest: jest.fn() }));
 jest.mock('../../../../services/api/uploadMedia', () => ({ uploadImage: jest.fn() }));

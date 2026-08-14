@@ -39,9 +39,9 @@ describe('ProfileProvider: auto-carga', () => {
   });
 
   it('com sessão, busca o perfil sem a tela pedir', async () => {
-    // O bug: o provider só enchia se a TELA chamasse loadProfile(), e só as de
-    // settings chamavam, então jornada/dashboard/my-stats renderizavam sem
-    // perfil e caíam no PNG de estoque + nome de outra pessoa.
+    // Se o provider dependesse de a TELA chamar loadProfile(), jornada,
+    // dashboard e my-stats renderizariam sem perfil e cairiam no PNG de
+    // estoque com nome de outra pessoa.
     get.mockResolvedValue({ fullName: 'Gabriel De Souza Fernandes' });
     const tree = await renderWithUser({ id: 'u1' });
     expect(get).toHaveBeenCalledTimes(1);

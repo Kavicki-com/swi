@@ -55,9 +55,9 @@ describe('apiAuthBackend', () => {
     expect(await apiAuthBackend.getCurrentUser()).toBeNull()
   })
 
-  // Reordenação 2026-07-27: o cadastro cria SÓ a conta (fluxo 1). O perfil é
-  // preenchido pelo wizard DEPOIS do primeiro login pós-aprovação, via
-  // PUT /profile/me autenticado, nada de perfil viajando no signup.
+  // O cadastro cria SÓ a conta. O perfil é preenchido pelo wizard DEPOIS do
+  // primeiro login pós-aprovação, via PUT /profile/me autenticado, e nada de
+  // perfil viaja no signup.
   it('signUp manda só conta e vínculo de empresa', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(okJson({ nextStep: 'CONFIRM' }))
     await apiAuthBackend.signUp({
@@ -86,18 +86,14 @@ describe('apiAuthBackend', () => {
   })
 })
 
-// INCIDENTE 2026-07-27: o perfil do "Joao Tester" apareceu com o telefone e o
-// tipo sanguineo do "Teste Ricardo", gravados 1 segundo antes da conta do
-// Ricardo nascer. O wizard inteiro rodou com o token do Joao ainda valido.
+// Sessao fantasma: se `getCurrentUser` engolir QUALQUER falha do /auth/me e
+// devolver null, o app cai na tela de login mas o token continua no
+// SecureStore. Um cadastro iniciado dali roda com a sessao anterior ainda
+// valida e grava no perfil de outra pessoa.
 //
-// De onde vinha esse token: `getCurrentUser` engolia QUALQUER falha do
-// /auth/me e devolvia null. O app caia na tela de login, mas o token
-// continuava no SecureStore. Os tuneis do backend cairam duas vezes naquele
-// dia; bastou o /auth/me falhar por rede pra virar sessao fantasma.
-//
-// A distincao que faltava: 401 = token morto, apaga. Rede fora = a sessao
-// pode estar perfeitamente boa, so nao da pra confirmar agora, apagar ai
-// deslogaria todo mundo a cada soluco de conexao.
+// A distincao que estes testes protegem: 401 = token morto, apaga. Rede fora =
+// a sessao pode estar perfeitamente boa, so nao da pra confirmar agora, e
+// apagar ai deslogaria todo mundo a cada soluco de conexao.
 describe('getCurrentUser: token invalido nao pode sobreviver', () => {
   const store = () => require('expo-secure-store')
 

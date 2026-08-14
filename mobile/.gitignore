@@ -40,9 +40,9 @@ yarn-error.*
 /ios
 /android
 
-# QA artifacts na raiz do app (screenshots, dumps do Playwright MCP): ficam em
-# disco, nunca no git. Espelha o mesmo par no .gitignore da raiz, que por ser
-# ancorado com / só alcança a raiz do repo.
+# Artefatos de inspeção na raiz do app (screenshots, dumps do Playwright MCP):
+# ficam em disco, nunca no git. Espelha o mesmo par no .gitignore da raiz, que
+# por ser ancorado com / só alcança a raiz do repo.
 /*.png
 /*.jpg
 /*.jpeg

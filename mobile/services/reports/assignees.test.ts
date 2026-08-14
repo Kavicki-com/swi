@@ -26,10 +26,10 @@ beforeEach(() => {
 });
 
 describe('listReportAssignees', () => {
-  // O modal pedia /chat/directory, que devolve a empresa INTEIRA de propósito
-  // (sem os admins ali o worker não consegue abrir conversa com o painel).
-  // Resultado no aparelho: o seletor de responsáveis oferecia os 10 operadores
-  // como revisores (QA 2026-07-27). A régua de quem revisa vive no backend.
+  // /chat/directory devolve a empresa INTEIRA de propósito, porque sem os
+  // admins ali o worker não consegue abrir conversa com o painel. Usá-lo aqui
+  // ofereceria todos os operadores como revisores, e a régua de quem revisa
+  // vive no backend.
   it('no modo api busca a lista de responsáveis, não o diretório de chat', async () => {
     const out = await listReportAssignees();
     expect(mockApiRequest).toHaveBeenCalledWith('/reports/assignees', { auth: true });

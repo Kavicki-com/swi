@@ -3,8 +3,8 @@ import type { TelemetrySink } from './types';
 import { mockTelemetrySink } from './mockTelemetrySink';
 import { noopTelemetrySink } from './noopTelemetrySink';
 
-// SAÚDE: não há destino real para a telemetria enquanto a smartband não for
-// integrada (decisão de produto de 2026-07-30, reafirmada em 2026-08-05).
+// SAÚDE: por decisão de produto, não há destino real para a telemetria
+// enquanto a smartband não for integrada.
 // Ignora DATA_BACKEND de propósito: a flag não liga um provedor que não existe.
 //
 // Em dev e teste as amostras vão para um log inspecionável, que é o que permite
