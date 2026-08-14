@@ -1,7 +1,7 @@
 # Higienização e Entrega do Código-Fonte SWI — Desenho
 
 **Data:** 2026-08-05
-**Status:** aprovado
+**Status:** substituído em 2026-08-14 por `2026-08-13-client-delivery-readiness-remediation.md`. O desenho da entrega em `.txt` (e o BagIt que já tinha caído antes dele) deu lugar a um ZIP do fonte com APK Android e stack local por duplo clique. O escopo de higienização segue válido e executado.
 **Branch isolada:** `chore/repo-source-delivery`
 **Baseline:** `42141fa`
 

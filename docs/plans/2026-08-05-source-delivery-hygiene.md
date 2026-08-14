@@ -1,5 +1,7 @@
 # Higienização e Entrega do Código-Fonte SWI Implementation Plan
 
+> **SUBSTITUÍDO em 2026-08-14** por `2026-08-13-client-delivery-readiness-remediation.md`. A higienização descrita aqui foi executada e está na `main`; o que caiu foi o formato de entrega. O cliente não recebe mais um pacote de `.txt`, e sim um ZIP do fonte com APK Android e stack local por duplo clique. Este arquivo fica como registro do que foi higienizado, não como plano a executar.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Higienizar mobile, painel administrativo e backend para um snapshot seguro e orientado a produção e, somente após todos os portões verdes, gerar uma entrega composta exclusivamente por arquivos `.txt`.
