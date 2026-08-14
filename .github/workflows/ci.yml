@@ -75,14 +75,16 @@ jobs:
         with:
           # A matriz 18+22 caiu quando o Node 22 virou runtime oficial único
           # (.nvmrc, engines dos três projetos, Dockerfile). O 18 estava aqui
-          # porque era a versão da hospedagem Cloudez, e a matriz nasceu de um
-          # defeito real: pg-boss v12 é ESM-only e estourava ERR_REQUIRE_ESM só
-          # no 18, o Docker local (22) mascarou, e a quebra apareceu direto em
-          # produção no deploy de 2026-07-29.
+          # porque ERA a versão da hospedagem, e a matriz nasceu de um defeito
+          # real: pg-boss v12 é ESM-only e estourava ERR_REQUIRE_ESM só no 18, o
+          # Docker local (22) mascarou, e a quebra apareceu direto em produção
+          # no deploy de 2026-07-29.
           #
-          # Enquanto a Cloudez não subir para 22.23.2, este CI NÃO cobre mais o
-          # runtime que roda em produção. Atualizar a hospedagem antes do
-          # próximo deploy é pré-requisito da entrega, não melhoria opcional.
+          # Verificado em 2026-08-14 no painel da hospedagem: a API de produção
+          # roda Node 22.11.0, mesma linha LTS deste pin. Por isso o `engines`
+          # dos três projetos declara a FAIXA >=22.11.0 <23, e não a versão
+          # exata: com o pin exato mais engine-strict, o deploy quebraria na
+          # instalação por causa da diferença de patch.
           node-version: '22.23.2'
           cache: 'npm'
           cache-dependency-path: swi-backend/package-lock.json
