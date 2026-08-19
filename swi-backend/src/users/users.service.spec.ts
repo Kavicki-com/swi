@@ -365,43 +365,175 @@ describe('UsersService.create', () => {
   })
 })
 
-describe('UsersService.setActive', () => {
-  it('atualiza active (mesma empresa)', async () => {
+// PATCH /users/:id só aceitava { active }. Com isso o painel não tinha como
+// editar um funcionário nem um administrador, e os "Dados de saúde" digitados
+// no cadastro eram descartados no submit: o formulário mostrava campos que não
+// iam a lugar nenhum. Este patch cobre identidade + perfil declaratório.
+//
+// Fora do alcance de propósito: email e role. O ValidationPipe global roda com
+// whitelist, então campo não declarado no DTO é removido do corpo, e trocar
+// e-mail (identidade de login) ou papel exige fluxo próprio, não um PATCH de
+// cadastro.
+describe('UsersService.update', () => {
+  const alvo = { id: 'u1', companyId: 'org1', active: true }
+  const salvo = (over = {}) => ({ id: 'u1', name: 'Ana', email: 'a@b.c', role: 'WORKER', approvalStatus: 'APPROVED', active: true, companyRole: null, createdAt: new Date('2026-01-05T00:00:00Z'), profile: null, ...over })
+
+  it('grava nome no User e espelha no Profile por upsert', async () => {
     const db = prisma()
-    db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
-    db.user.update.mockResolvedValue({ id: 'u1', active: false })
-    const r = await new UsersService(db, media()).setActive('u1', false, 'admin', 'org1')
-    expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { active: false } })
-    expect(r).toEqual({ id: 'u1', active: false })
+    db.user.findUnique.mockResolvedValue(alvo)
+    db.user.update.mockResolvedValue(salvo())
+    await new UsersService(db, media()).update('u1', { name: 'Ana Maria' }, 'admin', 'org1')
+    const arg = db.user.update.mock.calls[0][0]
+    expect(arg.where).toEqual({ id: 'u1' })
+    expect(arg.data.name).toBe('Ana Maria')
+    // upsert, não update: quem nunca preencheu o perfil não tem linha em
+    // Profile, e um update puro estouraria P2025 no primeiro save.
+    expect(arg.data.profile.upsert.create.fullName).toBe('Ana Maria')
+    expect(arg.data.profile.upsert.update.fullName).toBe('Ana Maria')
   })
-  it('desativar a si mesmo → BadRequest (sem tocar no banco)', async () => {
+
+  // O buraco relatado na auditoria: tipo sanguíneo, gênero, alergias e doenças
+  // crônicas eram renderizados no cadastro e jogados fora no submit.
+  it('persiste os dados de saúde declaratórios do cadastro', async () => {
     const db = prisma()
-    await expect(new UsersService(db, media()).setActive('me', false, 'me', 'org1')).rejects.toBeInstanceOf(BadRequestException)
+    db.user.findUnique.mockResolvedValue(alvo)
+    db.user.update.mockResolvedValue(salvo())
+    await new UsersService(db, media()).update(
+      'u1',
+      { gender: 'Feminino', bloodType: 'O-', allergies: 'Dipirona', chronicConditions: 'Asma' },
+      'admin',
+      'org1',
+    )
+    expect(db.user.update.mock.calls[0][0].data.profile.upsert.update).toEqual(
+      expect.objectContaining({ gender: 'Feminino', bloodType: 'O-', allergies: 'Dipirona', chronicConditions: 'Asma' }),
+    )
+  })
+
+  it('birthDate ISO vira Date no Profile', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(alvo)
+    db.user.update.mockResolvedValue(salvo())
+    await new UsersService(db, media()).update('u1', { birthDate: '1990-05-04' }, 'admin', 'org1')
+    expect(db.user.update.mock.calls[0][0].data.profile.upsert.update.birthDate).toEqual(new Date('1990-05-04'))
+  })
+
+  // Compatibilidade: o toggle do painel manda exatamente este corpo hoje.
+  it('{ active: false } continua desativando, e sem escrever perfil', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(alvo)
+    db.user.update.mockResolvedValue(salvo({ active: false }))
+    const r = await new UsersService(db, media()).update('u1', { active: false }, 'admin', 'org1')
+    const arg = db.user.update.mock.calls[0][0]
+    expect(arg.data.active).toBe(false)
+    expect(arg.data.profile).toBeUndefined() // nada de perfil quando nenhum campo de perfil veio
+    expect(r).toEqual(expect.objectContaining({ id: 'u1', active: false }))
+  })
+
+  it('desativar a si mesmo → BadRequest, sem tocar no banco', async () => {
+    const db = prisma()
+    await expect(
+      new UsersService(db, media()).update('me', { active: false }, 'me', 'org1'),
+    ).rejects.toBeInstanceOf(BadRequestException)
     expect(db.user.update).not.toHaveBeenCalled()
   })
+
   it('reativar a si mesmo é permitido', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'me', companyId: 'org1' })
-    db.user.update.mockResolvedValue({ id: 'me', active: true })
-    const r = await new UsersService(db, media()).setActive('me', true, 'me', 'org1')
-    expect(r).toEqual({ id: 'me', active: true })
+    db.user.update.mockResolvedValue(salvo({ id: 'me', active: true }))
+    await expect(
+      new UsersService(db, media()).update('me', { active: true }, 'me', 'org1'),
+    ).resolves.toEqual(expect.objectContaining({ active: true }))
   })
-  it('alvo de outra empresa → NotFound sem tocar no update', async () => {
+
+  it('alvo de OUTRA empresa → NotFound sem tocar no update', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org2' })
-    await expect(new UsersService(db, media()).setActive('u1', false, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(
+      new UsersService(db, media()).update('u1', { name: 'X' }, 'admin', 'org1'),
+    ).rejects.toBeInstanceOf(NotFoundException)
     expect(db.user.update).not.toHaveBeenCalled()
   })
+
+  it('corpo vazio não inventa escrita de perfil', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(alvo)
+    db.user.update.mockResolvedValue(salvo())
+    await new UsersService(db, media()).update('u1', {}, 'admin', 'org1')
+    expect(db.user.update.mock.calls[0][0].data.profile).toBeUndefined()
+  })
+
+  // O DTO deixa null passar nos campos de perfil (@IsOptional pula null), e a
+  // régua da casa (PUT /profile/me) é: null em string anulável LIMPA, null em
+  // data é IGNORADO, porque new Date(null) fabricaria 1970-01-01 num registro
+  // de segurança.
+  it('birthDate null é ignorado, nunca vira 1970-01-01', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(alvo)
+    db.user.update.mockResolvedValue(salvo())
+    await new UsersService(db, media()).update('u1', { birthDate: null } as never, 'admin', 'org1')
+    expect(db.user.update.mock.calls[0][0].data.profile).toBeUndefined()
+  })
+
+  it('null em string anulável limpa o campo (paridade com o PUT /profile/me)', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(alvo)
+    db.user.update.mockResolvedValue(salvo())
+    await new UsersService(db, media()).update('u1', { allergies: null } as never, 'admin', 'org1')
+    expect(db.user.update.mock.calls[0][0].data.profile.upsert.update.allergies).toBeNull()
+  })
+
+  it('campos de endereço chegam ao Profile', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(alvo)
+    db.user.update.mockResolvedValue(salvo())
+    await new UsersService(db, media()).update(
+      'u1',
+      { cep: '01310-100', street: 'Av. Paulista', number: '1000', complement: 'Bloco B', neighborhood: 'Bela Vista', city: 'São Paulo', uf: 'SP' },
+      'admin',
+      'org1',
+    )
+    expect(db.user.update.mock.calls[0][0].data.profile.upsert.update).toEqual(
+      expect.objectContaining({ cep: '01310-100', street: 'Av. Paulista', number: '1000', complement: 'Bloco B', neighborhood: 'Bela Vista', city: 'São Paulo', uf: 'SP' }),
+    )
+  })
+})
+
+// O buraco que motivou a ampliação do PATCH morava no CREATE: o cadastro do
+// painel renderizava "Dados de saúde" e o payload os descartava. Agora eles
+// persistem no Profile já na criação.
+describe('UsersService.create com dados de saúde', () => {
+  it('persiste gender/bloodType/allergies/chronicConditions no profile.create', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(null) // pré-check de e-mail
+    db.user.create.mockResolvedValue({
+      id: 'u9', name: 'Ana', email: 'ana@empresa.com.br', role: 'WORKER', approvalStatus: 'APPROVED',
+      active: true, companyRole: null, createdAt: new Date('2026-01-05T00:00:00Z'), profile: null,
+    })
+    await new UsersService(db, media()).create('admin', {
+      name: 'Ana', email: 'ana@empresa.com.br', password: 'senha-forte', role: 'WORKER',
+      gender: 'Feminino', bloodType: 'O-', allergies: 'Dipirona', chronicConditions: 'Asma',
+    })
+    expect(db.user.create.mock.calls[0][0].data.profile.create).toEqual(
+      expect.objectContaining({ gender: 'Feminino', bloodType: 'O-', allergies: 'Dipirona', chronicConditions: 'Asma' }),
+    )
+  })
+})
+
+// Garantias herdadas do antigo setActive, que o update absorveu quando o PATCH
+// deixou de ser só o toggle de ativação. Ficam aqui para que remover a tradução
+// de erro por engano quebre um teste, e não a produção.
+describe('UsersService.update: herança do setActive', () => {
   it('id inexistente → NotFound', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
-    await expect(new UsersService(db, media()).setActive('ghost', false, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media()).update('ghost', { active: false }, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
   it('corrida: P2025 do update ainda vira NotFound', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
     db.user.update.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('nf', { code: 'P2025', clientVersion: 'x' }))
-    await expect(new UsersService(db, media()).setActive('u1', false, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media()).update('u1', { active: false }, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
 })
 

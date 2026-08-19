@@ -63,6 +63,15 @@ export class UpdateWorkOrderDto {
   @IsString({ each: true })
   @Matches(/^order\/[0-9a-f-]{36}\.(jpg|png)$/, { each: true })
   imageKeys?: string[]
+  // Snapshot dos anexos que o form carregou (ver UpdateReportDto.imageKeysBase):
+  // preserva a foto que o worker anexou pela jornada depois do load, e só apaga
+  // do bucket a remoção provada. Sem ele, substitui como sempre e nada é apagado.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @Matches(/^order\/[0-9a-f-]{36}\.(jpg|png)$/, { each: true })
+  imageKeysBase?: string[]
   @IsOptional() @IsArray() @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => WorkOrderItemDto)
   items?: WorkOrderItemDto[]
 }

@@ -104,7 +104,7 @@ export class WorkOrdersService {
   }
 
   async update(id: string, dto: UpdateWorkOrderDto, companyId: string | null) {
-    const { newlyAdded, title } = await this.prisma.$transaction(async (tx) => {
+    const { newlyAdded, title, removidos } = await this.prisma.$transaction(async (tx) => {
       await lockOrder(tx, id)
       const existing = await tx.workOrder.findUnique({
         where: { id },
@@ -126,7 +126,19 @@ export class WorkOrdersService {
       if (dto.estimatedMinutes !== undefined) data.estimatedMinutes = dto.estimatedMinutes ?? null
       if (dto.startDate !== undefined) data.startDate = dto.startDate ? new Date(dto.startDate) : null
       if (dto.dueDate !== undefined) data.dueDate = dto.dueDate ? new Date(dto.dueDate) : null
-      if (dto.imageKeys !== undefined) data.imageKeys = dto.imageKeys
+      if (dto.imageKeys !== undefined) {
+        if (dto.imageKeysBase !== undefined) {
+          // Merge com prova de snapshot (ver UpdateWorkOrderDto.imageKeysBase):
+          // o que existe no banco FORA do base chegou depois do load do form
+          // (foto do worker via jornada) e o form não pode removê-lo.
+          const base = new Set(dto.imageKeysBase)
+          const want = new Set(dto.imageKeys)
+          const chegaramDepois = existing.imageKeys.filter((k) => !base.has(k) && !want.has(k))
+          data.imageKeys = [...dto.imageKeys, ...chegaramDepois]
+        } else {
+          data.imageKeys = dto.imageKeys
+        }
+      }
 
       let newlyAdded: string[] = []
       if (dto.responsibleIds !== undefined) {
@@ -158,7 +170,16 @@ export class WorkOrdersService {
         if (finalItems.length === 0) throw new BadRequestException('a tarefa precisa de pelo menos 1 item')
         const deletes = existing.items.filter((it) => !kept.has(it.id))
         itemSetChanged = deletes.length > 0 || finalItems.some((f) => f.existingId === null)
-        if (deletes.length) await tx.task.deleteMany({ where: { id: { in: deletes.map((d) => d.id) } } })
+        if (deletes.length) {
+          // O ponteiro da jornada é SOFT (sem FK): apagar o item sem limpá-lo
+          // deixa o app renderizando "Em andamento" de uma tarefa que não
+          // existe mais. Mesma limpeza do remove(), na mesma transação.
+          await tx.journey.updateMany({
+            where: { activeTaskId: { in: deletes.map((d) => d.id) } },
+            data: { activeTaskId: null },
+          })
+          await tx.task.deleteMany({ where: { id: { in: deletes.map((d) => d.id) } } })
+        }
       } else {
         finalItems = existing.items.map((it) => ({ existingId: it.id, title: it.title, description: it.description }))
       }
@@ -193,13 +214,67 @@ export class WorkOrdersService {
       // Recompute só é relevante quando o CONJUNTO de itens muda: edições de
       // admin nunca tocam item.status; só add/delete pode virar o status do pai.
       if (itemSetChanged) await recomputeOrder(tx, id)
-      return { newlyAdded, title: dto.title ?? existing.title }
+      // Só sai do bucket a remoção PROVADA: estava no snapshot que o form viu
+      // (base) e saiu do payload. Sem base não há prova e nada é apagado,
+      // porque destruir evidência de campo é pior que vazar storage.
+      const removidos =
+        dto.imageKeys !== undefined && dto.imageKeysBase !== undefined
+          ? existing.imageKeys.filter((k) => dto.imageKeysBase!.includes(k) && !dto.imageKeys!.includes(k))
+          : []
+      return { newlyAdded, title: dto.title ?? existing.title, removidos }
     })
 
     // Best-effort, FORA da tx (derivado do write commitado): notifica só os
     // responsáveis recém-adicionados. Falha aqui não quebra o update.
     await this.notify(newlyAdded, id, title)
+    // Idem: só depois do commit, senão um rollback levaria junto o anexo de uma
+    // ordem que continuou intacta.
+    if (removidos.length) await this.media.deleteObjects(removidos)
     return this.detailById(id)
+  }
+
+  /**
+   * Exclusão de ordem de serviço (ADMIN, a guarda está na classe do
+   * controller). Os itens do checklist caem por cascade declarado no schema
+   * (Task.order onDelete: Cascade).
+   *
+   * A limpeza do `Journey.activeTaskId` não é zelo: esse ponteiro é SOFT, sem
+   * FK, de propósito. Apagar o item sem limpá-lo não quebra a jornada (todo
+   * uso é guardado por `if (active)` no JourneyService), ela passa a MENTIR: o
+   * DTO segue devolvendo o ponteiro e o app renderiza um card "em andamento" de
+   * uma tarefa que não existe mais. Por isso vai na MESMA transação do delete.
+   */
+  async remove(id: string, companyId: string | null) {
+    let imageKeys: string[]
+    try {
+      imageKeys = await this.prisma.$transaction(async (tx) => {
+        // Trava ANTES de ler: um startTask concorrente (que também trava o pai)
+        // poderia gravar activeTaskId entre o updateMany e o delete, e o
+        // cascade levaria a Task deixando o ponteiro pendurado. Sob a trava, ou
+        // o start commita antes (e o updateMany o enxerga) ou espera o delete.
+        // Pai inexistente casa 0 linhas no lock; a leitura valida em seguida.
+        await lockOrder(tx, id)
+        const existing = await tx.workOrder.findUnique({
+          where: { id },
+          select: { id: true, imageKeys: true, author: { select: { companyId: true } }, items: { select: { id: true } } },
+        })
+        // Org-scoping: ordem de outra empresa é invisível (404, não 403).
+        if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Tarefa não encontrada')
+        const taskIds = existing.items.map((t) => t.id)
+        if (taskIds.length) {
+          await tx.journey.updateMany({ where: { activeTaskId: { in: taskIds } }, data: { activeTaskId: null } })
+        }
+        await tx.workOrder.delete({ where: { id } })
+        return existing.imageKeys
+      })
+    } catch (e) {
+      // Dois admins apagando a mesma ordem: o segundo só chegou tarde, não é 500.
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException('Tarefa não encontrada')
+      throw e
+    }
+    // Depois do commit e best-effort: falha do bucket não pode transformar uma
+    // exclusão que já aconteceu em erro pro admin.
+    await this.media.deleteObjects(imageKeys)
   }
 
   async listAssignable(companyId: string | null) {

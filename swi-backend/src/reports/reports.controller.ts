@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common'
 import type { Response } from 'express'
 import { ReportsService } from './reports.service'
 import { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
@@ -57,6 +57,14 @@ export class ReportsController {
   @Patch(':id')
   update(@Param('id') id: string, @CurrentUser() user: JwtUser, @Body() dto: UpdateReportDto) {
     return this.reports.update(id, user.userId, dto, user.companyId)
+  }
+
+  // Exclusão (204). A régua de quem pode vive no serviço (autor ou ADMIN), e
+  // por isso o papel do token viaja junto: sem ele não haveria como distinguir
+  // um admin excluindo o relatório de outra pessoa de um worker qualquer.
+  @Delete(':id') @HttpCode(204)
+  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.reports.remove(id, user.userId, user.role, user.companyId)
   }
 
   @Post(':id/comments')

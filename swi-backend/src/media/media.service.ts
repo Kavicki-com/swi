@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common'
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
+import { S3Client, DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { randomUUID } from 'crypto'
 import { AllowedContentType, allowedTypesFor, isContentTypeAllowed } from './allowed-content-types'
@@ -27,6 +27,7 @@ const EXT_BY_CONTENT_TYPE: Record<string, string> & Record<AllowedContentType, s
 
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name)
   // endpoint unset em AWS → SDK usa o S3 real; forcePathStyle só contra MinIO.
   private readonly s3 = new S3Client({
     endpoint: process.env.MINIO_PUBLIC_URL || undefined,
@@ -125,5 +126,30 @@ export class MediaService {
 
   presignGetMany(keys: string[]): Promise<string[]> {
     return Promise.all(keys.map((k) => this.presignGet(k)))
+  }
+
+  /**
+   * Apaga objetos do bucket. Chamado quando o registro que os referenciava
+   * deixa de existir (exclusão de relatório, de ordem de serviço, ou anexo
+   * removido na edição): sem isto o arquivo some da tela mas segue ocupando o
+   * R2, sem nenhuma referência que permita encontrá-lo depois.
+   *
+   * BEST-EFFORT de propósito. Quando isto roda, a linha do banco já foi
+   * apagada e a operação já é um fato do ponto de vista do usuário. Propagar
+   * uma falha do storage viraria 500 numa exclusão bem-sucedida, e a retentativa
+   * bateria num id que não existe mais. Objeto órfão é o preço menor, e vai pro
+   * log pra poder ser varrido depois.
+   */
+  async deleteObjects(keys: string[]): Promise<void> {
+    if (!this.configured || keys.length === 0) return
+    await Promise.all(
+      keys.map(async (key) => {
+        try {
+          await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
+        } catch (e) {
+          this.logger.warn(`falha ao apagar '${key}' do bucket: ${String(e)}`)
+        }
+      }),
+    )
   }
 }

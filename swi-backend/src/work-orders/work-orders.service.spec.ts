@@ -5,6 +5,7 @@ const media = () =>
   ({
     presignGet: jest.fn(async (k: string) => `signed:${k}`),
     presignGetMany: jest.fn(async (ks: string[]) => ks.map((k) => `signed:${k}`)),
+    deleteObjects: jest.fn(async () => undefined),
   }) as any
 
 const notifications = () => ({ enqueueForMany: jest.fn() }) as any
@@ -16,8 +17,10 @@ const prisma = () => {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
+      delete: jest.fn().mockResolvedValue({}),
     },
     user: { findMany: jest.fn().mockResolvedValue([]) },
+    journey: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     task: {
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({}),
@@ -383,5 +386,176 @@ describe('WorkOrdersService', () => {
       birthDate: new Date('1988-03-02').toISOString(), avatar: 'signed:chat/av1.png',
     })
     expect(out[1]).toEqual({ id: 'u2', name: 'W2', jobTitle: '', sector: '', birthDate: null, avatar: '' })
+  })
+
+  // O ponteiro soft da jornada não pode sobreviver ao item: remover um item do
+  // checklist pelo PATCH apaga a Task, e sem limpar Journey.activeTaskId na
+  // MESMA transação o app segue renderizando "Em andamento" de uma tarefa que
+  // não existe mais (o mesmo furo que o remove() da ordem inteira já trata).
+  it('update que remove item do checklist limpa o activeTaskId das jornadas', async () => {
+    const db = prisma()
+    db.workOrder.findUnique
+      .mockResolvedValueOnce(existingRow()) // leitura sob a trava: itens t1 e t2
+      .mockResolvedValue(detailRow())
+    // payload mantém só t1: t2 é deletado
+    await new WorkOrdersService(db, media(), notifications()).update(
+      'o1',
+      { items: [{ id: 't1', title: 'Item 1' }] },
+      'org1',
+    )
+    expect(db.journey.updateMany).toHaveBeenCalledWith({
+      where: { activeTaskId: { in: ['t2'] } },
+      data: { activeTaskId: null },
+    })
+  })
+
+  it('update que só edita itens (sem deletar) não toca as jornadas', async () => {
+    const db = prisma()
+    db.workOrder.findUnique
+      .mockResolvedValueOnce(existingRow())
+      .mockResolvedValue(detailRow())
+    await new WorkOrdersService(db, media(), notifications()).update(
+      'o1',
+      { items: [{ id: 't1', title: 'Item 1' }, { id: 't2', title: 'Item 2' }] },
+      'org1',
+    )
+    expect(db.journey.updateMany).not.toHaveBeenCalled()
+  })
+
+  // Mesma régua dos relatórios: só sai do bucket a remoção PROVADA pelo
+  // snapshot do form (imageKeysBase), e o que chegou em paralelo (a foto que o
+  // worker anexou pela jornada depois do load do form) sobrevive no banco e no
+  // bucket. Sem base, o array substitui como sempre e nada é apagado.
+  describe('update: anexos com prova de snapshot (imageKeysBase)', () => {
+    it('com base: apaga do bucket só a remoção provada', async () => {
+      const db = prisma()
+      const m = media()
+      db.workOrder.findUnique
+        .mockResolvedValueOnce(existingRow({ imageKeys: ['order/a.jpg', 'order/b.jpg'] }))
+        .mockResolvedValue(detailRow())
+      await new WorkOrdersService(db, m, notifications()).update(
+        'o1',
+        { imageKeys: ['order/a.jpg'], imageKeysBase: ['order/a.jpg', 'order/b.jpg'] },
+        'org1',
+      )
+      expect(db.workOrder.update.mock.calls[0][0].data.imageKeys).toEqual(['order/a.jpg'])
+      expect(m.deleteObjects).toHaveBeenCalledWith(['order/b.jpg'])
+    })
+
+    it('com base: foto do worker anexada em paralelo sobrevive no banco e no bucket', async () => {
+      const db = prisma()
+      const m = media()
+      // form carregou [a]; worker anexou c pela jornada; admin removeu a e salvou [novo]
+      db.workOrder.findUnique
+        .mockResolvedValueOnce(existingRow({ imageKeys: ['order/a.jpg', 'order/c.jpg'] }))
+        .mockResolvedValue(detailRow())
+      await new WorkOrdersService(db, m, notifications()).update(
+        'o1',
+        { imageKeys: ['order/novo.jpg'], imageKeysBase: ['order/a.jpg'] },
+        'org1',
+      )
+      expect(db.workOrder.update.mock.calls[0][0].data.imageKeys).toEqual(['order/novo.jpg', 'order/c.jpg'])
+      expect(m.deleteObjects).toHaveBeenCalledWith(['order/a.jpg'])
+    })
+
+    it('sem base não apaga nada do bucket (sem prova, sem destruição)', async () => {
+      const db = prisma()
+      const m = media()
+      db.workOrder.findUnique
+        .mockResolvedValueOnce(existingRow({ imageKeys: ['order/a.jpg', 'order/b.jpg'] }))
+        .mockResolvedValue(detailRow())
+      await new WorkOrdersService(db, m, notifications()).update('o1', { imageKeys: ['order/a.jpg'] }, 'org1')
+      expect(db.workOrder.update.mock.calls[0][0].data.imageKeys).toEqual(['order/a.jpg'])
+      expect(m.deleteObjects).not.toHaveBeenCalled()
+    })
+
+    it('edição que não mexe em anexos não apaga nada', async () => {
+      const db = prisma()
+      const m = media()
+      db.workOrder.findUnique
+        .mockResolvedValueOnce(existingRow({ imageKeys: ['order/a.jpg'] }))
+        .mockResolvedValue(detailRow())
+      await new WorkOrdersService(db, m, notifications()).update('o1', { title: 'Nova' }, 'org1')
+      expect(m.deleteObjects).not.toHaveBeenCalled()
+    })
+  })
+
+  // Exclusão de ordem de serviço: existia create/list/get/update, nunca delete.
+  // Os itens do checklist caem por cascade (Task.order onDelete: Cascade), mas a
+  // Jornada aponta pro item por um ponteiro SOFT, sem FK, e é isso que exige
+  // cuidado aqui.
+  describe('remove', () => {
+    const alvo = (over: any = {}) => ({
+      id: 'o1',
+      imageKeys: ['order/a.jpg'],
+      author: { companyId: 'org1' },
+      items: [{ id: 't1' }, { id: 't2' }],
+      ...over,
+    })
+
+    it('apaga a ordem e tira os anexos do bucket', async () => {
+      const db = prisma()
+      const m = media()
+      db.workOrder.findUnique.mockResolvedValue(alvo())
+      await new WorkOrdersService(db, m, notifications()).remove('o1', 'org1')
+      expect(db.workOrder.delete).toHaveBeenCalledWith({ where: { id: 'o1' } })
+      expect(m.deleteObjects).toHaveBeenCalledWith(['order/a.jpg'])
+    })
+
+    // O ponto crítico. Sem FK, apagar o item deixa `Journey.activeTaskId`
+    // apontando pro vazio, e o app segue renderizando um card "em andamento"
+    // de uma tarefa que não existe mais: a jornada não quebra (o service tem
+    // `if (active)` em toda leitura), ela MENTE, que é pior.
+    it('limpa o activeTaskId das jornadas que apontavam pros itens da ordem', async () => {
+      const db = prisma()
+      db.workOrder.findUnique.mockResolvedValue(alvo())
+      await new WorkOrdersService(db, media(), notifications()).remove('o1', 'org1')
+      expect(db.journey.updateMany).toHaveBeenCalledWith({
+        where: { activeTaskId: { in: ['t1', 't2'] } },
+        data: { activeTaskId: null },
+      })
+    })
+
+    it('ordem de OUTRA empresa → 404, sem apagar nada', async () => {
+      const db = prisma()
+      const m = media()
+      db.workOrder.findUnique.mockResolvedValue(alvo({ author: { companyId: 'org2' } }))
+      await expect(
+        new WorkOrdersService(db, m, notifications()).remove('o1', 'org1'),
+      ).rejects.toBeInstanceOf(NotFoundException)
+      expect(db.workOrder.delete).not.toHaveBeenCalled()
+      expect(m.deleteObjects).not.toHaveBeenCalled()
+    })
+
+    it('ordem inexistente → 404', async () => {
+      const db = prisma()
+      db.workOrder.findUnique.mockResolvedValue(null)
+      await expect(
+        new WorkOrdersService(db, media(), notifications()).remove('nope', 'org1'),
+      ).rejects.toBeInstanceOf(NotFoundException)
+    })
+
+    it('P2025 (apagada em paralelo) vira 404, não 500', async () => {
+      const db = prisma()
+      db.workOrder.findUnique.mockResolvedValue(alvo())
+      db.workOrder.delete.mockRejectedValue(Object.assign(new Error('gone'), { code: 'P2025' }))
+      await expect(
+        new WorkOrdersService(db, media(), notifications()).remove('o1', 'org1'),
+      ).rejects.toBeInstanceOf(NotFoundException)
+    })
+
+    // Sem a trava, um startTask concorrente (que trava o pai via lockOrder)
+    // pode gravar activeTaskId DEPOIS do updateMany do remove e ANTES do
+    // delete: o cascade leva a Task e o ponteiro pendurado renasce. Travar
+    // primeiro e ler os itens SOB a trava fecha a janela.
+    it('toma a trava do pai antes de ler os itens', async () => {
+      const db = prisma()
+      db.workOrder.findUnique.mockResolvedValue(alvo())
+      await new WorkOrdersService(db, media(), notifications()).remove('o1', 'org1')
+      expect(db.$queryRaw).toHaveBeenCalled()
+      const lock = (db.$queryRaw as jest.Mock).mock.invocationCallOrder[0]
+      const read = (db.workOrder.findUnique as jest.Mock).mock.invocationCallOrder[0]
+      expect(lock).toBeLessThan(read)
+    })
   })
 })

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { WorkOrdersService } from './work-orders.service'
 import { CreateWorkOrderDto, ListWorkOrdersQueryDto, UpdateWorkOrderDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -36,5 +36,12 @@ export class WorkOrdersController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateWorkOrderDto, @CurrentUser() user: JwtUser) {
     return this.workOrders.update(id, dto, user.companyId)
+  }
+
+  // Exclusão (204). Itens do checklist caem por cascade; o ponteiro da jornada
+  // é limpo na mesma transação, no serviço.
+  @Delete(':id') @HttpCode(204)
+  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.workOrders.remove(id, user.companyId)
   }
 }

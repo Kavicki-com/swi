@@ -15,7 +15,7 @@ const service = () =>
     getOne: jest.fn().mockResolvedValue({ id: 'u1' }),
     approve: jest.fn().mockResolvedValue({ id: 'u1', approvalStatus: 'APPROVED', passwordHash: 'nao-vaza' }),
     reject: jest.fn().mockResolvedValue({ id: 'u1', approvalStatus: 'REJECTED', passwordHash: 'nao-vaza' }),
-    setActive: jest.fn().mockResolvedValue({ id: 'u1' }),
+    update: jest.fn().mockResolvedValue({ id: 'u1' }),
     remove: jest.fn().mockResolvedValue(undefined),
   }) as unknown as jest.Mocked<UsersService>
 
@@ -57,14 +57,22 @@ describe('UsersController', () => {
     expect(s.reject).toHaveBeenCalledWith('u1', 'empresa-1')
   })
 
-  it('ativar/desativar e excluir informam quem pediu, para o serviço barrar a ação sobre si mesmo', async () => {
+  it('editar e excluir informam quem pediu, para o serviço barrar a ação sobre si mesmo', async () => {
     const s = service()
     const c = new UsersController(s)
 
-    await c.setActive('u1', { active: false }, admin)
+    await c.update('u1', { active: false }, admin)
     await c.remove('u1', admin)
 
-    expect(s.setActive).toHaveBeenCalledWith('u1', false, 'admin-1', 'empresa-1')
+    expect(s.update).toHaveBeenCalledWith('u1', { active: false }, 'admin-1', 'empresa-1')
     expect(s.remove).toHaveBeenCalledWith('u1', 'admin-1', 'empresa-1')
+  })
+
+  // O PATCH deixou de ser só o toggle de ativação: o corpo inteiro tem que
+  // chegar ao serviço, senão editar cadastro continuaria impossível pelo painel.
+  it('o patch repassa o corpo inteiro, não apenas o active', async () => {
+    const s = service()
+    await new UsersController(s).update('u1', { name: 'Ana Maria', bloodType: 'O-' }, admin)
+    expect(s.update).toHaveBeenCalledWith('u1', { name: 'Ana Maria', bloodType: 'O-' }, 'admin-1', 'empresa-1')
   })
 })
