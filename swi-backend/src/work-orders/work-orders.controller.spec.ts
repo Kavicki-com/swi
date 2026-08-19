@@ -13,6 +13,7 @@ const service = () =>
     listAssignable: jest.fn().mockResolvedValue([]),
     get: jest.fn().mockResolvedValue({ id: 'o1' }),
     update: jest.fn().mockResolvedValue({ id: 'o1' }),
+    remove: jest.fn().mockResolvedValue(undefined),
   }) as unknown as jest.Mocked<WorkOrdersService>
 
 const admin = { userId: 'admin-1', companyId: 'empresa-1', role: 'ADMIN' } as unknown as JwtUser
@@ -46,5 +47,13 @@ describe('WorkOrdersController', () => {
     expect(s.listAssignable).toHaveBeenCalledWith('empresa-1')
     expect(s.get).toHaveBeenCalledWith('o1', 'empresa-1')
     expect(s.update).toHaveBeenCalledWith('o1', { title: 'Nova' }, 'empresa-1')
+  })
+
+  // Mesma régua das outras rotas: sem a empresa do token, um admin apagaria a
+  // ordem de outra empresa sabendo só o uuid, e aqui o estrago é permanente.
+  it('excluir também fica preso à empresa do token', async () => {
+    const s = service()
+    await new WorkOrdersController(s).remove('o1', admin)
+    expect(s.remove).toHaveBeenCalledWith('o1', 'empresa-1')
   })
 })

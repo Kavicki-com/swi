@@ -8,7 +8,6 @@ export const TOKEN_STORAGE_KEY = 'swi.admin.token'
 // existente; só o token JWT é chave nova.
 export const SESSION_STORAGE_KEY = 'swi.admin.session'
 
-
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -52,6 +51,26 @@ const mergeHeaders = (
   return merged
 }
 
+// Um 401 bloqueado por CORS e um servidor fora do ar chegam idênticos no catch
+// do fetch: os dois rejeitam e o navegador não deixa ler o status. A diferença
+// decide o destino de quem está usando o painel, então perguntamos ao /health,
+// que é público e não depende do token: se ele responde, o servidor está de pé
+// e o CORS funciona, logo o que falhou foi a credencial.
+//
+// Isso não é hipotético. O nginx da API pública carimba
+// `Access-Control-Allow-Origin` só em resposta 2xx (falta `always` no
+// `add_header`), então todo 401 dela volta sem o header. Sem esta sondagem um
+// token expirado prendia o painel: nada carregava, o RequireAuth não
+// redirecionava porque ninguém o avisava da sessão morta, e digitar /login
+// devolvia pra /. Sobrava um painel zerado sem saída visível.
+async function servidorNoAr(baseUrl: string): Promise<boolean> {
+  try {
+    return (await fetch(`${baseUrl}/health`)).ok
+  } catch {
+    return false
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
@@ -81,6 +100,14 @@ export async function apiFetch<T>(
     // Sem resposta do servidor (offline, DNS, CORS — e também abort: convertemos
     // tudo de propósito pra manter o contrato "todo erro de apiFetch é ApiError").
     // status 0 = a request nem chegou no backend.
+    //
+    // Antes disso, porém: se mandamos token e o servidor está no ar, o que o
+    // navegador engoliu foi um 401 sem CORS. Tratar igual ao 401 legível é o que
+    // impede a sessão morta de prender o painel (ver servidorNoAr acima).
+    if (token && !opts.keepSessionOn401 && (await servidorNoAr(baseUrl))) {
+      clearSession()
+      throw new ApiError('Sua sessão expirou. Entre novamente.', 401)
+    }
     throw new ApiError('Não foi possível conectar ao servidor', 0)
   }
 

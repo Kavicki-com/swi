@@ -4,6 +4,7 @@ import { MediaService } from '../media/media.service'
 import { hash } from '../auth/codes'
 import { Prisma, Role } from '@prisma/client'
 import type { ApprovalStatus, Company, Exam, Profile, User } from '@prisma/client'
+import type { UpdateUserDto } from './dto'
 
 type UserWithProfile = User & { profile: Profile | null }
 // exams OBRIGATÓRIO. O Prisma não tipa relação incluída como opcional: o
@@ -31,11 +32,16 @@ export class UsersService {
   findById(id: string) { return this.prisma.user.findUnique({ where: { id } }) }
 
   // Cadastro pelo painel: o admin define a senha e o usuário nasce pronto pra
-  // logar (APPROVED + emailVerified) — sem código de confirmação. Herda a empresa
+  // logar (APPROVED + emailVerified), sem código de confirmação. Herda a empresa
   // do admin logado (null se ele não tiver). Reusa o hash bcrypt do módulo auth.
+  // Os dados de saúde declaratórios persistem já na criação: o formulário os
+  // renderiza, e sem colunas de destino o que a pessoa digitava era descartado.
   async create(
     adminId: string,
-    dto: { name: string; email: string; password: string; role: Role; phone?: string; cpf?: string; birthDate?: string },
+    dto: {
+      name: string; email: string; password: string; role: Role; phone?: string; cpf?: string; birthDate?: string
+      gender?: string; bloodType?: string; allergies?: string; chronicConditions?: string
+    },
   ) {
     const exists = await this.findByEmail(dto.email)
     if (exists) throw new ConflictException('E-mail já cadastrado')
@@ -56,6 +62,10 @@ export class UsersService {
               ...(dto.phone ? { phone: dto.phone } : {}),
               ...(dto.cpf ? { cpf: dto.cpf } : {}),
               ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}),
+              ...(dto.gender ? { gender: dto.gender } : {}),
+              ...(dto.bloodType ? { bloodType: dto.bloodType } : {}),
+              ...(dto.allergies ? { allergies: dto.allergies } : {}),
+              ...(dto.chronicConditions ? { chronicConditions: dto.chronicConditions } : {}),
             },
           },
         },
@@ -152,18 +162,70 @@ export class UsersService {
     return Promise.all(users.map((u) => this.toSummaryDto(u)))
   }
 
-  // Ativar/desativar: usuário inativo não loga (guarda no AuthService.login) e
-  // tem a sessão revogada na hora (JwtStrategy reconsulta o banco). Aditivo e
-  // reversível — não apaga nada. Guarda de auto-desativação: como o self-delete
-  // do remove, o admin não pode se auto-trancar (reativar a si mesmo é ok).
-  async setActive(id: string, active: boolean, requesterId: string, companyId: string | null) {
-    if (id === requesterId && active === false) throw new BadRequestException('Não é possível desativar a si mesmo')
+  /**
+   * Patch de cadastro pelo painel: identidade no User e dados declaratórios no
+   * Profile, além do `active` que a rota já aceitava. Antes disto o PATCH só
+   * entendia `{ active }`, então não havia como editar um funcionário nem um
+   * administrador, e o que a pessoa digitava nos "Dados de saúde" do cadastro
+   * era descartado no submit.
+   *
+   * Perfil vai por UPSERT: quem nunca preencheu nada não tem linha em Profile,
+   * e um update puro estouraria P2025 logo no primeiro save.
+   *
+   * `fullName` acompanha `name` porque o Profile é a fonte canônica de exibição
+   * (os snapshots denorm de Report e o diretório do chat leem dele); deixar os
+   * dois divergirem faria a tela mostrar um nome e o card de outro.
+   */
+  async update(id: string, dto: UpdateUserDto, requesterId: string, companyId: string | null) {
+    // Mesma guarda do setActive: o admin não pode se auto-trancar (reativar a
+    // si mesmo segue permitido).
+    if (id === requesterId && dto.active === false) throw new BadRequestException('Não é possível desativar a si mesmo')
     await this.requireSameCompany(id, companyId)
+
+    const profile: Prisma.ProfileUpdateWithoutUserInput = {}
+    if (dto.name !== undefined) profile.fullName = dto.name
+    if (dto.phone !== undefined) profile.phone = dto.phone
+    if (dto.cpf !== undefined) profile.cpf = dto.cpf
+    // Truthy de propósito (paridade com o PUT /profile/me): null aqui é
+    // IGNORADO, nunca convertido, porque new Date(null) fabrica 1970-01-01.
+    if (dto.birthDate) profile.birthDate = new Date(dto.birthDate)
+    if (dto.cep !== undefined) profile.cep = dto.cep
+    if (dto.street !== undefined) profile.street = dto.street
+    if (dto.number !== undefined) profile.number = dto.number
+    if (dto.complement !== undefined) profile.complement = dto.complement
+    if (dto.neighborhood !== undefined) profile.neighborhood = dto.neighborhood
+    if (dto.city !== undefined) profile.city = dto.city
+    if (dto.uf !== undefined) profile.uf = dto.uf
+    if (dto.sector !== undefined) profile.sector = dto.sector
+    if (dto.jobTitle !== undefined) profile.jobTitle = dto.jobTitle
+    if (dto.duty !== undefined) profile.duty = dto.duty
+    if (dto.gender !== undefined) profile.gender = dto.gender
+    if (dto.bloodType !== undefined) profile.bloodType = dto.bloodType
+    if (dto.allergies !== undefined) profile.allergies = dto.allergies
+    if (dto.chronicConditions !== undefined) profile.chronicConditions = dto.chronicConditions
+    if (dto.managerName !== undefined) profile.managerName = dto.managerName
+    if (dto.heightCm !== undefined) profile.heightCm = dto.heightCm
+    if (dto.weightKg !== undefined) profile.weightKg = dto.weightKg
+    if (dto.hasDisability !== undefined) profile.hasDisability = dto.hasDisability
+    const tocaPerfil = Object.keys(profile).length > 0
+
     try {
-      const u = await this.prisma.user.update({ where: { id }, data: { active } })
-      return { id: u.id, active: u.active }
+      const u = await this.prisma.user.update({
+        where: { id },
+        data: {
+          ...(dto.active !== undefined ? { active: dto.active } : {}),
+          ...(dto.name !== undefined ? { name: dto.name } : {}),
+          // Sem campo de perfil no corpo, nada de `profile` no data: um upsert
+          // vazio criaria linha de Profile em quem só teve o active alternado.
+          ...(tocaPerfil
+            ? { profile: { upsert: { create: profile as Prisma.ProfileCreateWithoutUserInput, update: profile } } }
+            : {}),
+        },
+        include: { profile: true },
+      })
+      return this.toSummaryDto(u)
     } catch (e) {
-      // sem exception filter global: sem isto, P2025 (id inexistente) vira 500.
+      // sem exception filter global: sem isto, P2025 (id sumiu no meio) vira 500.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') throw new NotFoundException('Usuário não encontrado')
       throw e
     }

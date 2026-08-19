@@ -60,7 +60,7 @@ test('o pacote contem o codigo das frentes e o minimo de raiz, e nada alem disso
 
     const dentro = listarEntradas(readFileSync(caminhoZip))
       .filter((e) => !e.endsWith('/'))
-      .map((e) => e.replace('SWI-source-9.9.9/', ''))
+      .map((e) => e.replace('SWI/', ''))
       .sort()
 
     assert.deepEqual(dentro, [
@@ -72,6 +72,25 @@ test('o pacote contem o codigo das frentes e o minimo de raiz, e nada alem disso
       'swi-backend/src/main.ts',
     ])
     assert.equal(manifesto.totais.arquivos, 6)
+  })
+})
+
+// A pasta dentro do ZIP nao repete o nome do arquivo. Com o prefixo antigo,
+// extrair SWI-source-1.0.1.zip para uma pasta de mesmo nome produzia
+// SWI-source-1.0.1\SWI-source-1.0.1\START-SWI.cmd: caminho que confunde quem
+// procura o script e que gasta o limite de 260 caracteres do Windows antes
+// mesmo de chegar no fonte, que ja e fundo por natureza.
+test('a pasta dentro do ZIP e curta e nao repete o nome do pacote', async () => {
+  await comRepositorio(PROJETO, async (raiz) => {
+    const out = join(raiz, 'saida')
+    const { caminhoZip } = await exporta({
+      repo: raiz, out, commit: 'HEAD', versao: '9.9.9', listarEntradas,
+    })
+
+    const entradas = listarEntradas(readFileSync(caminhoZip)).filter((e) => !e.endsWith('/'))
+    assert.equal(entradas.length > 0, true)
+    assert.equal(entradas.every((e) => e.startsWith('SWI/')), true)
+    assert.equal(entradas.includes('SWI/START-SWI.cmd'), true)
   })
 })
 

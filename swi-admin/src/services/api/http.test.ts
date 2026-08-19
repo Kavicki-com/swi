@@ -81,6 +81,84 @@ describe('apiFetch', () => {
     })
   })
 
+  // Um 401 sem header de CORS e um servidor fora do ar chegam iguais no catch:
+  // `fetch` rejeita nos dois e o navegador não deixa ler o status. O /health é
+  // público, então responder 200 nele prova que o servidor está de pé e que o
+  // CORS funciona; logo, a chamada autenticada que falhou era 401 com o header
+  // suprimido, ou seja, sessão morta.
+  const fetchComSaude = (saudeOk: boolean) =>
+    vi.fn().mockImplementation((url: unknown) => {
+      if (String(url).endsWith('/health')) {
+        return saudeOk
+          ? Promise.resolve({
+              ok: true,
+              status: 200,
+              json: async () => ({ status: 'ok' }),
+            } as Response)
+          : Promise.reject(new TypeError('Failed to fetch'))
+      }
+      return Promise.reject(new TypeError('Failed to fetch'))
+    })
+
+  it('chamada autenticada bloqueada com o servidor de pé derruba a sessão', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-velho')
+    vi.stubGlobal('fetch', fetchComSaude(true))
+
+    await expect(apiFetch('/work-orders')).rejects.toMatchObject({
+      status: 401,
+      message: 'Sua sessão expirou. Entre novamente.',
+    })
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+  })
+
+  it('chamada autenticada bloqueada com o servidor de pé avisa o app pelo evento', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-velho')
+    vi.stubGlobal('fetch', fetchComSaude(true))
+    const heard = vi.fn()
+    window.addEventListener(SESSION_CLEARED_EVENT, heard)
+
+    await expect(apiFetch('/work-orders')).rejects.toBeInstanceOf(ApiError)
+
+    expect(heard).toHaveBeenCalledTimes(1)
+    window.removeEventListener(SESSION_CLEARED_EVENT, heard)
+  })
+
+  // Queda de rede de verdade não pode deslogar ninguém: aí o /health também cai.
+  it('servidor fora do ar preserva a sessão e segue com status 0', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-abc')
+    vi.stubGlobal('fetch', fetchComSaude(false))
+
+    await expect(apiFetch('/work-orders')).rejects.toMatchObject({
+      status: 0,
+      message: 'Não foi possível conectar ao servidor',
+    })
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-abc')
+  })
+
+  // keepSessionOn401 marca rotas onde 401 é resposta de negócio (senha atual
+  // errada). Nelas a sondagem não deve nem acontecer, quanto mais deslogar.
+  it('keepSessionOn401 preserva a sessão mesmo com o servidor de pé', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-abc')
+    const f = fetchComSaude(true)
+    vi.stubGlobal('fetch', f)
+
+    await expect(
+      apiFetch('/auth/password/change', { method: 'POST' }, { keepSessionOn401: true }),
+    ).rejects.toMatchObject({ status: 0 })
+
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-abc')
+    expect(f.mock.calls.some((c) => String(c[0]).endsWith('/health'))).toBe(false)
+  })
+
+  it('sem token guardado não sonda o /health (não há sessão a derrubar)', async () => {
+    const f = fetchComSaude(true)
+    vi.stubGlobal('fetch', f)
+
+    await expect(apiFetch('/work-orders')).rejects.toMatchObject({ status: 0 })
+
+    expect(f.mock.calls.some((c) => String(c[0]).endsWith('/health'))).toBe(false)
+  })
+
   it('propaga a mensagem de erro do Nest em ApiError', async () => {
     vi.stubGlobal('fetch', mockFetch({ message: 'responsável inválido' }, 400))
     await expect(apiFetch('/work-orders', { method: 'POST' })).rejects.toThrow(

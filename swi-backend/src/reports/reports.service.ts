@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
@@ -157,30 +157,92 @@ export class ReportsService {
     return this.toDto(r)
   }
 
+  /**
+   * Anexos na edição: o form manda o array completo, mas o array que ele viu
+   * pode estar VELHO (outra pessoa anexou entre o load e o save). Por isso o
+   * cliente manda também o `imageKeysBase`, o snapshot que carregou, e aqui:
+   *  - o que existe no banco fora do base chegou DEPOIS do load: o form nunca
+   *    o viu e não pode removê-lo, então é preservado no array final;
+   *  - só sai do bucket a remoção PROVADA (estava no base e saiu do payload).
+   * Sem base não há prova: o array substitui como sempre (contrato antigo) e
+   * nada é apagado do bucket, porque destruir evidência de campo é pior que
+   * vazar storage. Diff e write na MESMA transação, senão um write concorrente
+   * entre a leitura e o update deixaria o banco citando objeto apagado.
+   */
   async update(id: string, _userId: string, dto: UpdateReportDto, companyId: string | null) {
-    const existing = await this.prisma.report.findUnique({
-      where: { id },
-      select: { id: true, author: { select: { companyId: true } } },
-    })
-    if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Relatório não encontrado')
     try {
-      const r = await this.prisma.report.update({
-        where: { id },
-        data: {
-          ...(dto.title !== undefined && { title: dto.title }),
-          ...(dto.summary !== undefined && { summary: dto.summary }),
-          ...(dto.details !== undefined && { details: dto.details }),
-          ...(dto.responsibles !== undefined && { responsibles: dto.responsibles }),
-          ...(dto.status !== undefined && { status: dto.status as ReportStatus }),
-          ...(dto.statusLabel !== undefined && { statusLabel: dto.statusLabel }),
-          ...(dto.imageKeys !== undefined && { imageKeys: dto.imageKeys }),
-        },
+      const { r, removidos } = await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.report.findUnique({
+          where: { id },
+          select: { id: true, imageKeys: true, author: { select: { companyId: true } } },
+        })
+        if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Relatório não encontrado')
+
+        let imageKeys = dto.imageKeys
+        let removidos: string[] = []
+        if (dto.imageKeys !== undefined && dto.imageKeysBase !== undefined) {
+          const base = new Set(dto.imageKeysBase)
+          const want = new Set(dto.imageKeys)
+          const chegaramDepois = existing.imageKeys.filter((k) => !base.has(k) && !want.has(k))
+          imageKeys = [...dto.imageKeys, ...chegaramDepois]
+          removidos = existing.imageKeys.filter((k) => base.has(k) && !want.has(k))
+        }
+
+        const r = await tx.report.update({
+          where: { id },
+          data: {
+            ...(dto.title !== undefined && { title: dto.title }),
+            ...(dto.summary !== undefined && { summary: dto.summary }),
+            ...(dto.details !== undefined && { details: dto.details }),
+            ...(dto.responsibles !== undefined && { responsibles: dto.responsibles }),
+            ...(dto.status !== undefined && { status: dto.status as ReportStatus }),
+            ...(dto.statusLabel !== undefined && { statusLabel: dto.statusLabel }),
+            ...(imageKeys !== undefined && { imageKeys }),
+          },
+        })
+        return { r, removidos }
       })
+      // Depois do commit e best-effort: falha do bucket não desfaz uma edição
+      // que já aconteceu, e um rollback não pode ter apagado anexo de relatório
+      // intacto.
+      if (removidos.length) await this.media.deleteObjects(removidos)
       return this.toDto(r)
     } catch (e) {
       if ((e as { code?: string }).code === 'P2025') throw new NotFoundException('Relatório não encontrado')
       throw e
     }
+  }
+
+  /**
+   * Exclusão de relatório. Os comentários vão junto por cascade declarado no
+   * schema (Comment.report onDelete: Cascade), e os anexos saem do bucket
+   * depois do commit.
+   *
+   * A régua aqui é mais apertada que a do update, que é apenas org-scoped:
+   * editar é reversível, apagar não, e o relatório é o registro de segurança do
+   * trabalho. Por isso só o AUTOR ou um ADMIN da mesma empresa exclui. Fora da
+   * empresa responde 404, nunca 403, para não confirmar que o id existe.
+   */
+  async remove(id: string, userId: string, role: string, companyId: string | null) {
+    const existing = await this.prisma.report.findUnique({
+      where: { id },
+      select: { id: true, authorId: true, imageKeys: true, author: { select: { companyId: true } } },
+    })
+    if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Relatório não encontrado')
+    if (role !== 'ADMIN' && existing.authorId !== userId) {
+      throw new ForbiddenException('Apenas o autor ou um administrador pode excluir o relatório')
+    }
+    try {
+      await this.prisma.report.delete({ where: { id } })
+    } catch (e) {
+      // Corrida entre dois admins: sem esta tradução o segundo levaria 500 por
+      // ter apenas chegado tarde a uma exclusão que já aconteceu.
+      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException('Relatório não encontrado')
+      throw e
+    }
+    // Depois do commit e best-effort: o registro já não existe, e falha de
+    // bucket não pode transformar uma exclusão bem-sucedida em erro.
+    await this.media.deleteObjects(existing.imageKeys)
   }
 
   async addComment(reportId: string, authorId: string, dto: CreateCommentDto) {

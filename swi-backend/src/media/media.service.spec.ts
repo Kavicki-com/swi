@@ -129,6 +129,45 @@ describe('MediaService', () => {
     expect(urls).toEqual(['https://signed.example/obj?sig=1', 'https://signed.example/obj?sig=1'])
     expect(getSignedUrl).toHaveBeenCalledTimes(2)
   })
+
+  // Apagar o registro no banco sem apagar o objeto no bucket deixa lixo pago
+  // para sempre: o anexo some da tela mas continua ocupando o R2, e não sobra
+  // referência que permita achá-lo depois. Por isso a exclusão de relatório e
+  // de ordem de serviço chama isto.
+  describe('deleteObjects', () => {
+    const comSpy = () => {
+      const svc = new MediaService()
+      const send = jest.fn().mockResolvedValue({})
+      ;(svc as unknown as { s3: { send: jest.Mock } }).s3.send = send
+      return { svc, send }
+    }
+
+    it('manda um delete por key, no bucket configurado', async () => {
+      const { svc, send } = comSpy()
+      await svc.deleteObjects(['reports/a.jpg', 'reports/b.png'])
+      expect(send).toHaveBeenCalledTimes(2)
+      const inputs = send.mock.calls.map(([cmd]) => cmd.input)
+      expect(inputs.map((i) => i.Key)).toEqual(['reports/a.jpg', 'reports/b.png'])
+      expect(inputs.every((i) => typeof i.Bucket === 'string' && i.Bucket.length > 0)).toBe(true)
+    })
+
+    it('lista vazia não toca a rede', async () => {
+      const { svc, send } = comSpy()
+      await svc.deleteObjects([])
+      expect(send).not.toHaveBeenCalled()
+    })
+
+    // Best-effort de propósito: o registro no banco JÁ foi apagado quando isto
+    // roda. Propagar a falha do bucket viraria um 500 numa exclusão que, do
+    // ponto de vista do usuário, já aconteceu, e ele tentaria de novo em cima
+    // de um id que não existe mais. Um objeto órfão é o preço menor.
+    it('falha do storage não derruba a operação, e as outras keys seguem', async () => {
+      const { svc, send } = comSpy()
+      send.mockRejectedValueOnce(new Error('R2 fora do ar'))
+      await expect(svc.deleteObjects(['reports/a.jpg', 'reports/b.png'])).resolves.toBeUndefined()
+      expect(send).toHaveBeenCalledTimes(2)
+    })
+  })
 })
 
 // Sem credenciais de storage, o getSignedUrl do SDK dispara a default provider

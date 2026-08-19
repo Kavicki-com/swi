@@ -198,7 +198,14 @@ export async function exporta({ repo, out, commit, versao, listarEntradas }) {
   assertNoCollisions(payload.map((a) => a.caminho))
 
   const nomeZip = `SWI-source-${versao}.zip`
-  const prefixo = `SWI-source-${versao}/`
+  // A pasta dentro do ZIP é curta e NÃO repete o nome do arquivo, de propósito.
+  // Com o prefixo igual ao nome do pacote, extrair para uma pasta homônima
+  // produzia `SWI-source-1.0.1\SWI-source-1.0.1\START-SWI.cmd`: o caminho
+  // repetido esconde onde está o script que o cliente precisa executar, e ainda
+  // gasta o limite de 260 caracteres do Windows antes de chegar no fonte, que já
+  // é fundo por natureza (`swi-admin/src/pages/...`). A versão continua no nome
+  // do ZIP e no manifesto, que é onde ela serve para alguma coisa.
+  const prefixo = 'SWI/'
   mkdirSync(out, { recursive: true })
   const caminhoZip = join(out, nomeZip)
 

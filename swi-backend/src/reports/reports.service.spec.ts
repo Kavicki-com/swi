@@ -5,17 +5,19 @@ const media = () =>
   ({
     presignGet: jest.fn(async (k: string) => `signed:${k}`),
     presignGetMany: jest.fn(async (ks: string[]) => ks.map((k) => `signed:${k}`)),
+    deleteObjects: jest.fn(async () => undefined),
   }) as any
 
 const notifications = () => ({ enqueueForMany: jest.fn() }) as any
 
-const prisma = () =>
-  ({
+const prisma = () => {
+  const db: any = {
     report: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
     },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
@@ -23,7 +25,12 @@ const prisma = () =>
     // responsibleAvatars). Default vazio: sem match, avatar ''.
     profile: { findMany: jest.fn().mockResolvedValue([]) },
     comment: { create: jest.fn() },
-  }) as any
+  }
+  // O update roda em transação (o diff de anexos precisa sair da MESMA leitura
+  // que o write); o mock executa o callback direto sobre o próprio db.
+  db.$transaction = jest.fn(async (cb: any) => cb(db))
+  return db
+}
 
 // Escopo por empresa: Report não tem companyId próprio, a empresa é derivada do
 // autor (author.companyId). Toda leitura e escrita compara com a empresa do
@@ -469,5 +476,149 @@ describe('ReportsService.listAssignees', () => {
         birthDate: '1971-09-08T00:00:00.000Z',
       }),
     )
+  })
+
+  // Anexos na edição: o form manda o array completo, mas o array que ele viu
+  // pode estar VELHO (outra pessoa anexou depois do load). Por isso o cliente
+  // manda também o `imageKeysBase`, o snapshot que carregou, e o servidor:
+  //   - preserva o que apareceu depois do load (existing fora do base);
+  //   - só apaga do bucket o que o form PROVOU ter visto e removido
+  //     (estava no base, saiu do payload).
+  // Sem base não há prova: o array substitui como sempre, e nada é apagado do
+  // bucket, porque destruir evidência é pior que vazar storage.
+  describe('update: anexos com prova de snapshot (imageKeysBase)', () => {
+    it('com base: apaga do bucket só a remoção provada', async () => {
+      const db = prisma()
+      const m = media()
+      db.report.findUnique.mockResolvedValue(
+        row({ imageKeys: ['reports/a.jpg', 'reports/b.jpg'], author: { companyId: 'org1' } }),
+      )
+      db.report.update.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
+      await new ReportsService(db, m, notifications()).update(
+        'r1',
+        'u1',
+        { imageKeys: ['reports/a.jpg'], imageKeysBase: ['reports/a.jpg', 'reports/b.jpg'] },
+        'org1',
+      )
+      expect(db.report.update.mock.calls[0][0].data.imageKeys).toEqual(['reports/a.jpg'])
+      expect(m.deleteObjects).toHaveBeenCalledWith(['reports/b.jpg'])
+    })
+
+    it('com base: foto anexada em paralelo sobrevive no banco e no bucket', async () => {
+      const db = prisma()
+      const m = media()
+      // form carregou [a]; worker anexou c depois; form removeu a e salvou [novo]
+      db.report.findUnique.mockResolvedValue(
+        row({ imageKeys: ['reports/a.jpg', 'reports/c.jpg'], author: { companyId: 'org1' } }),
+      )
+      db.report.update.mockResolvedValue(row())
+      await new ReportsService(db, m, notifications()).update(
+        'r1',
+        'u1',
+        { imageKeys: ['reports/novo.jpg'], imageKeysBase: ['reports/a.jpg'] },
+        'org1',
+      )
+      // c.jpg não estava no base: o form nunca o viu, então não pode removê-lo
+      expect(db.report.update.mock.calls[0][0].data.imageKeys).toEqual(['reports/novo.jpg', 'reports/c.jpg'])
+      expect(m.deleteObjects).toHaveBeenCalledWith(['reports/a.jpg'])
+    })
+
+    it('sem base não apaga nada do bucket (sem prova, sem destruição)', async () => {
+      const db = prisma()
+      const m = media()
+      db.report.findUnique.mockResolvedValue(
+        row({ imageKeys: ['reports/a.jpg', 'reports/b.jpg'], author: { companyId: 'org1' } }),
+      )
+      db.report.update.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
+      await new ReportsService(db, m, notifications()).update('r1', 'u1', { imageKeys: ['reports/a.jpg'] }, 'org1')
+      // contrato antigo preservado: o array substitui...
+      expect(db.report.update.mock.calls[0][0].data.imageKeys).toEqual(['reports/a.jpg'])
+      // ...mas o objeto continua no bucket
+      expect(m.deleteObjects).not.toHaveBeenCalled()
+    })
+
+    it('edição que não mexe em anexos não apaga nada', async () => {
+      const db = prisma()
+      const m = media()
+      db.report.findUnique.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
+      db.report.update.mockResolvedValue(row())
+      await new ReportsService(db, m, notifications()).update('r1', 'u1', { title: 'Novo' }, 'org1')
+      expect(m.deleteObjects).not.toHaveBeenCalled()
+    })
+
+    it('o diff sai da mesma transação do write (leitura e update sob o mesmo tx)', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
+      db.report.update.mockResolvedValue(row())
+      await new ReportsService(db, media(), notifications()).update('r1', 'u1', { title: 'Novo' }, 'org1')
+      expect(db.$transaction).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // Exclusão de relatório: item do contrato que não existia nem no painel nem
+  // na API. Diferente do update, que é só org-scoped, apagar é destrutivo e
+  // irreversível (os comentários vão junto por cascade no schema), então a
+  // régua é mais apertada: autor ou ADMIN.
+  describe('remove', () => {
+    const alvo = (over = {}) => row({ authorId: 'u1', imageKeys: ['reports/x.jpg'], ...over })
+
+    it('autor exclui o próprio relatório e os anexos sabem do bucket', async () => {
+      const db = prisma()
+      const m = media()
+      db.report.findUnique.mockResolvedValue(alvo())
+      await new ReportsService(db, m, notifications()).remove('r1', 'u1', 'WORKER', 'org1')
+      expect(db.report.delete).toHaveBeenCalledWith({ where: { id: 'r1' } })
+      // Sem isto o anexo some da tela e segue pago no R2, sem referência que
+      // permita encontrá-lo depois.
+      expect(m.deleteObjects).toHaveBeenCalledWith(['reports/x.jpg'])
+    })
+
+    it('ADMIN exclui relatório de outra pessoa da mesma empresa', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo({ authorId: 'outro' }))
+      await new ReportsService(db, media(), notifications()).remove('r1', 'admin-1', 'ADMIN', 'org1')
+      expect(db.report.delete).toHaveBeenCalledWith({ where: { id: 'r1' } })
+    })
+
+    it('worker que não é o autor recebe 403 e nada é apagado', async () => {
+      const db = prisma()
+      const m = media()
+      db.report.findUnique.mockResolvedValue(alvo({ authorId: 'outro' }))
+      await expect(
+        new ReportsService(db, m, notifications()).remove('r1', 'u1', 'WORKER', 'org1'),
+      ).rejects.toMatchObject({ status: 403 })
+      expect(db.report.delete).not.toHaveBeenCalled()
+      expect(m.deleteObjects).not.toHaveBeenCalled()
+    })
+
+    // Mesma régua do resto do módulo: fora da empresa responde 404, nunca 403,
+    // pra não confirmar sequer que o id existe.
+    it('relatório de OUTRA empresa → 404, sem apagar nada', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo({ author: { companyId: 'org2' } }))
+      await expect(
+        new ReportsService(db, media(), notifications()).remove('r1', 'u1', 'ADMIN', 'org1'),
+      ).rejects.toBeInstanceOf(NotFoundException)
+      expect(db.report.delete).not.toHaveBeenCalled()
+    })
+
+    it('relatório inexistente → 404', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(null)
+      await expect(
+        new ReportsService(db, media(), notifications()).remove('nope', 'u1', 'ADMIN', 'org1'),
+      ).rejects.toBeInstanceOf(NotFoundException)
+    })
+
+    // Corrida: dois admins apagando o mesmo relatório. Sem tradução, o P2025 do
+    // Prisma viraria 500 no segundo, que na prática só chegou tarde.
+    it('P2025 (apagado em paralelo) vira 404, não 500', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      db.report.delete.mockRejectedValue(Object.assign(new Error('gone'), { code: 'P2025' }))
+      await expect(
+        new ReportsService(db, media(), notifications()).remove('r1', 'u1', 'ADMIN', 'org1'),
+      ).rejects.toBeInstanceOf(NotFoundException)
+    })
   })
 })

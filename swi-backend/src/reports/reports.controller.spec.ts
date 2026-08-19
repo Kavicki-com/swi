@@ -15,6 +15,7 @@ const service = () =>
     get: jest.fn().mockResolvedValue({ id: 'r1' }),
     create: jest.fn().mockResolvedValue({ id: 'r1' }),
     update: jest.fn().mockResolvedValue({ id: 'r1' }),
+    remove: jest.fn().mockResolvedValue(undefined),
     addComment: jest.fn().mockResolvedValue({ id: 'c1' }),
   }) as unknown as jest.Mocked<ReportsService>
 
@@ -63,5 +64,14 @@ describe('ReportsController', () => {
     expect(s.create).toHaveBeenCalledWith('u1', { title: 'T' })
     expect(s.update).toHaveBeenCalledWith('r1', 'u1', { title: 'T2' }, 'empresa-1')
     expect(s.addComment).toHaveBeenCalledWith('r1', 'u1', { body: 'oi' })
+  })
+
+  // Quem pode excluir é decisão do serviço (autor ou ADMIN), mas o controller
+  // precisa entregar a ele os três dados do token (id, papel e empresa),
+  // senão a régua de autorização não teria como ser aplicada.
+  it('excluir repassa id, papel e empresa do token ao serviço', async () => {
+    const s = service()
+    await new ReportsController(s).remove('r1', user)
+    expect(s.remove).toHaveBeenCalledWith('r1', 'u1', 'WORKER', 'empresa-1')
   })
 })

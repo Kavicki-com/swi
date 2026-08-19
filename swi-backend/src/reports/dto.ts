@@ -32,4 +32,14 @@ export class UpdateReportDto {
   @IsString({ each: true })
   @Matches(/^reports\/[0-9a-f-]{36}\.(jpg|png)$/, { each: true })
   imageKeys?: string[]
+  // Snapshot dos anexos que o FORM CARREGOU. Com ele o servidor distingue
+  // "removi este anexo" de "nunca vi este anexo" (outra pessoa anexou depois do
+  // load): preserva o que chegou em paralelo e só apaga do bucket a remoção
+  // provada. Sem ele, o array substitui como sempre e nada é apagado do bucket.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @Matches(/^reports\/[0-9a-f-]{36}\.(jpg|png)$/, { each: true })
+  imageKeysBase?: string[]
 }
