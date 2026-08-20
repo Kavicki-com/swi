@@ -173,9 +173,10 @@ async function getMapped<T>(
   }
 }
 
-// Cadastro pelo painel (POST /users). Só campos de IDENTIDADE — o role separa
-// funcionário (WORKER) de admin (ADMIN). Campos opcionais ausentes NÃO entram no
-// corpo (JSON.stringify já descarta `undefined`), pra não mandar chave vazia.
+// Cadastro pelo painel (POST /users). Identidade mais a saúde DECLARATÓRIA que
+// o formulário coleta; o role separa funcionário (WORKER) de admin (ADMIN).
+// Campos opcionais ausentes NÃO entram no corpo (JSON.stringify já descarta
+// `undefined`), pra não mandar chave vazia.
 export type CreateUserInput = {
   name: string
   email: string
@@ -183,6 +184,13 @@ export type CreateUserInput = {
   phone?: string
   cpf?: string
   birthDate?: string // ISO
+  // Saúde declaratória. Chega aqui JÁ no vocabulário gravado: gender em código
+  // ('male'/'female'/'other') e bloodType na sigla maiúscula. Quem traduz do
+  // vocabulário da tela é o dadosDeSaude do formulário de cadastro.
+  gender?: string
+  bloodType?: string
+  allergies?: string
+  chronicConditions?: string
 }
 
 async function createUser(
@@ -200,16 +208,14 @@ async function createUser(
   }
 }
 
-export const employeesApi = {
-  list: () => listMapped('WORKER', toEmployee),
-  get: (id: string) => getMapped(id, toEmployee),
-  create: (input: CreateUserInput) => createUser('WORKER', input),
-}
-
-// Ativar/desativar um admin (PATCH /users/:id {active}) — o backend responde só
-// o novo estado ({id, active}); a tela usa o envelope de erro pra reverter o
-// toggle otimista se falhar.
-const setAdminActive = async (
+// Ativar/desativar e excluir batem em /users/:id e servem os DOIS diretórios,
+// então moram ACIMA de ambos: declaradas depois de employeesApi, o const cai na
+// temporal dead zone e o módulo inteiro explode no import.
+// Ativar/desativar um usuário (PATCH /users/:id {active}). O backend responde
+// só o novo estado ({id, active}); a tela usa o envelope de erro pra reverter o
+// toggle otimista se falhar. Serve admin e funcionário: a rota é a mesma, e só
+// o nome daqui dizia o contrário.
+const setUserActive = async (
   id: string,
   active: boolean,
 ): Promise<ServiceResponse<{ id: string; active: boolean }>> => {
@@ -224,10 +230,12 @@ const setAdminActive = async (
   }
 }
 
-// Excluir um admin (DELETE /users/:id) — 204 sem corpo (apiFetch resolve null).
-// O backend recusa com 409 quando o usuário tem registros vinculados ("desative-o
-// em vez de excluir"); a mensagem vaza pro toast via envelope de erro.
-const removeAdmin = async (id: string): Promise<ServiceResponse<null>> => {
+// Excluir um usuário (DELETE /users/:id): 204 sem corpo (apiFetch resolve null).
+// O backend recusa com 409 quando há registros vinculados ('desative-o em vez de
+// excluir'), e a mensagem vaza pro toast via envelope de erro. Em funcionário
+// esse 409 é o caso ESPERADO, não a exceção: quem trabalhou acumula jornada,
+// tarefa e relatório.
+const removeUser = async (id: string): Promise<ServiceResponse<null>> => {
   try {
     await apiFetch<null>(`/users/${id}`, { method: 'DELETE' })
     return { data: null, error: null }
@@ -236,12 +244,20 @@ const removeAdmin = async (id: string): Promise<ServiceResponse<null>> => {
   }
 }
 
+export const employeesApi = {
+  list: () => listMapped('WORKER', toEmployee),
+  get: (id: string) => getMapped(id, toEmployee),
+  create: (input: CreateUserInput) => createUser('WORKER', input),
+  setActive: setUserActive,
+  remove: removeUser,
+}
+
 export const adminsApi = {
   list: () => listMapped('ADMIN', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
   create: (input: CreateUserInput) => createUser('ADMIN', input),
-  setActive: setAdminActive,
-  remove: removeAdmin,
+  setActive: setUserActive,
+  remove: removeUser,
 }
 
 // Fila de aprovação: WORKERs pendentes. createdAt (quando o cadastro entrou) vira

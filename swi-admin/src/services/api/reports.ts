@@ -122,6 +122,11 @@ export type UpdateReportInput = {
   details?: string
   responsibles?: string[]
   imageKeys?: string[]
+  // Snapshot dos anexos que ESTE form carregou. Sem ele o PATCH substitui o
+  // array cegamente e apaga o que outra pessoa anexou entre o load e o save;
+  // com ele o backend separa 'chegou depois' (preserva) de 'removido de
+  // propósito' (o único caso em que apaga do bucket). Só existe na edição.
+  imageKeysBase?: string[]
   status?: ReportStatus
   statusLabel?: string
 }

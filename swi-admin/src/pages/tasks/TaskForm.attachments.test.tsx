@@ -266,3 +266,69 @@ describe('TaskForm: anexos na edição (imageKeys no detail)', () => {
     expect(uploadMock).not.toHaveBeenCalled()
   })
 })
+
+// Mesmo contrato do relatório: o base é o snapshot que o form CARREGOU, e é
+// ele que dá ao backend como separar anexo que chegou depois (preserva) de
+// anexo removido de propósito (apaga do bucket).
+describe('TaskForm: prova do snapshot de anexos (imageKeysBase)', () => {
+  it('o PATCH leva o base com as keys que o form carregou', async () => {
+    getMock.mockResolvedValue(
+      detail({ images: ['signed:order/a.jpg'], imageKeys: ['order/a.jpg'] }),
+    )
+    await renderAt('/tasks/wo_7/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
+    })
+
+    fireEvent.change(screen.getByTestId('task-file-input'), { target: { files: [jpeg()] } })
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    expect(updateMock.mock.calls[0]?.[1].imageKeysBase).toEqual(['order/a.jpg'])
+  })
+
+  // O caso que decide o desenho. A lista de anexos existentes ENCOLHE quando
+  // se remove um, então mandá-la como base provaria a remoção contra si mesma
+  // e o backend nunca veria remoção nenhuma: o anexo sairia do relatório e o
+  // objeto ficaria órfão no bucket para sempre. O base precisa ser guardado à
+  // parte no load e nunca mutado.
+  it('remover um anexo NÃO encolhe o base', async () => {
+    getMock.mockResolvedValue(
+      detail({
+        images: ['signed:order/a.jpg', 'signed:order/b.png'],
+        imageKeys: ['order/a.jpg', 'order/b.png'],
+      }),
+    )
+    await renderAt('/tasks/wo_7/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover anexo 1' }))
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    const patch = updateMock.mock.calls[0]?.[1]
+    expect(patch.imageKeys).toEqual(['order/b.png'])
+    expect(patch.imageKeysBase).toEqual(['order/a.jpg', 'order/b.png'])
+  })
+
+  // Sem mexer na fileira o PATCH omite imageKeys, e o base não tem por que
+  // viajar sozinho: ele só existe para provar um diff que não está sendo feito.
+  it('sem mexer em anexos, nem imageKeys nem base entram no PATCH', async () => {
+    getMock.mockResolvedValue(
+      detail({ images: ['signed:order/a.jpg'], imageKeys: ['order/a.jpg'] }),
+    )
+    await renderAt('/tasks/wo_7/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('task-title')).toHaveValue('Manutenção da esteira')
+    })
+
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    const patch = updateMock.mock.calls[0]?.[1]
+    expect(patch).not.toHaveProperty('imageKeys')
+    expect(patch).not.toHaveProperty('imageKeysBase')
+  })
+})

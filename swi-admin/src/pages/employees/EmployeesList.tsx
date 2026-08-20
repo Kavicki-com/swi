@@ -32,6 +32,7 @@ type EmployeeRowProps = {
   onOpen: (id: string) => void
   onChat: (employee: Employee) => void
   onLocation: (employee: Employee) => void
+  onDelete: (employee: Employee) => void
   isTablet: boolean
 }
 
@@ -41,7 +42,7 @@ function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof 
   return theme.surface.success
 }
 
-function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: EmployeeRowProps) {
+function EmployeeRow({ employee, onOpen, onChat, onLocation, onDelete, isTablet }: EmployeeRowProps) {
   const theme = useTheme()
   return (
     <View
@@ -120,8 +121,15 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
           </Text>
         </View>
       </View>
-      {/* Right cluster: chat / location action icons + expand chevron. */}
+      {/* Right cluster: delete / chat / location action icons + expand chevron.
+          Mesma ordem da lista de admins: duas listas irmãs com a fileira em
+          ordens diferentes fazem o operador errar o alvo. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
+        <ActionIcon
+          icon="delete_icon"
+          label={`Excluir ${employee.name}`}
+          onPress={() => onDelete(employee)}
+        />
         <ActionIcon
           icon="chat_bubble"
           label={`Conversar com ${employee.name}`}
@@ -389,6 +397,10 @@ export function EmployeesList({
   // ao voltar do form, o incremento reexecuta o useEffect e a lista já mostra
   // o usuário recém-criado.
   const [reloadKey, setReloadKey] = useState(0)
+  // Alvo da confirmação de exclusão. Guarda o funcionário INTEIRO, não o id: a
+  // reinserção no rollback precisa da linha de volta, e relistar o servidor só
+  // pra desfazer piscaria a tela.
+  const [removing, setRemoving] = useState<Employee | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -414,8 +426,32 @@ export function EmployeesList({
     }
   }, [tab])
 
+  // Exclusão otimista (depois da confirmação): tira a linha já, chama o DELETE,
+  // e devolve a linha à POSIÇÃO original se o backend recusar. Recusa aqui é o
+  // caminho esperado, não a exceção: quem trabalhou acumula jornada, tarefa e
+  // relatório, e o backend responde 409 mandando desativar em vez de excluir.
+  // Por isso o rollback preserva a ordem: relistar reordenaria a tela na cara
+  // de quem só tentou excluir.
+  const handleRemove = async (e: Employee) => {
+    setRemoving(null)
+    const idx = employees.findIndex((x) => x.id === e.id)
+    setEmployees((prev) => prev.filter((x) => x.id !== e.id))
+    const { error } = await employeesApi.remove(e.id)
+    if (error) {
+      setEmployees((prev) => {
+        if (prev.some((x) => x.id === e.id)) return prev
+        const next = [...prev]
+        next.splice(idx < 0 ? next.length : idx, 0, e)
+        return next
+      })
+      showToast('Erro', error.message)
+      return
+    }
+    showToast('Funcionário excluído', `${e.name} foi removido do sistema`)
+  }
+
   // Rollback otimista: reinsere `p` na posição original `idx` e de forma
-  // idempotente — se um refetch concorrente já recolocou o item, não duplica.
+  // idempotente. Se um refetch concorrente já recolocou o item, não duplica.
   const reinsertPending = (idx: number, p: PendingUser) => {
     setPendentes((prev) => {
       if (prev.some((x) => x.id === p.id)) return prev
@@ -573,6 +609,7 @@ export function EmployeesList({
                 onLocation={() =>
                   navigate(`/maps/general?focus=${encodeURIComponent(employee.id)}`)
                 }
+                onDelete={setRemoving}
                 isTablet={isTablet}
               />
             ))}
@@ -585,6 +622,17 @@ export function EmployeesList({
           />
         </>
       )}
+
+      {removing ? (
+        <ConfirmDialog
+          title="Excluir funcionário?"
+          message={`${removing.name} será removido do sistema.`}
+          confirmLabel="Excluir"
+          confirmDanger
+          onConfirm={() => handleRemove(removing)}
+          onCancel={() => setRemoving(null)}
+        />
+      ) : null}
 
       {rejecting ? (
         <ConfirmDialog

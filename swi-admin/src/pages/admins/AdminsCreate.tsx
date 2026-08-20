@@ -56,6 +56,64 @@ const GENERO_OPTIONS = [
   { value: 'prefiro-nao-informar', label: 'Prefiro não informar' },
 ]
 
+// A tela oferece 5 respostas de gênero, mas o dado GRAVADO tem 3 códigos. A
+// convenção está declarada no mobile (settings/health-data.tsx) e é comparada
+// pelo painel inteiro (detalhe do funcionário, painel do chat). Sem traduzir,
+// gravar 'masculino' faria toda tela de leitura exibir 'não informado'.
+//
+// 'prefiro-nao-informar' de propósito NÃO tem código: o campo sai do corpo, e
+// ausência é o que a tela lê como 'não informado', que é literalmente o que a
+// pessoa escolheu. Mapear pra 'other' afirmaria que ela declarou algo.
+const CODIGO_DE_GENERO: Record<string, string | undefined> = {
+  masculino: 'male',
+  feminino: 'female',
+  'nao-binario': 'other',
+  outro: 'other',
+}
+
+type CamposDeSaude = Pick<
+  FormState,
+  | 'tipoSanguineo'
+  | 'genero'
+  | 'alergico'
+  | 'alergicoDesc'
+  | 'doencasCronicas'
+  | 'doencasCronicasDesc'
+>
+
+// Texto livre só vira campo quando há o que registrar. Responder 'Não' não
+// pode gravar a string 'Não': a tela de detalhe quebra esse campo por vírgula
+// em chips (parseAllergies), e sairia uma chip escrita Não.
+const textoLivre = (resposta: string, descricao: string): string | undefined =>
+  resposta === 'sim' && descricao.trim() ? descricao.trim() : undefined
+
+/**
+ * Saúde DECLARATÓRIA do cadastro (digitada, não medida: a telemetria da
+ * smartband não passa por aqui). Estes campos ficavam renderizados e o submit
+ * os descartava, então quem preenchia via o formulário aceitar e o dado sumir
+ * sem aviso. Traduz o vocabulário da TELA para o vocabulário GRAVADO.
+ */
+export function dadosDeSaude(form: CamposDeSaude): {
+  gender?: string
+  bloodType?: string
+  allergies?: string
+  chronicConditions?: string
+} {
+  const gender = CODIGO_DE_GENERO[form.genero]
+  // O Combobox guarda 'a+' e o conjunto gravado é 'A+' (o mesmo do mobile,
+  // onde value é igual ao label). Sem normalizar, a lista de funcionários
+  // mostraria 'a+' ao lado de 'O+' conforme a origem de cada cadastro.
+  const bloodType = form.tipoSanguineo.trim().toUpperCase() || undefined
+  const allergies = textoLivre(form.alergico, form.alergicoDesc)
+  const chronicConditions = textoLivre(form.doencasCronicas, form.doencasCronicasDesc)
+  return {
+    ...(gender ? { gender } : {}),
+    ...(bloodType ? { bloodType } : {}),
+    ...(allergies ? { allergies } : {}),
+    ...(chronicConditions ? { chronicConditions } : {}),
+  }
+}
+
 // 'DD/MM/AAAA' → ISO date-only ('AAAA-MM-DD'). Vazio/fora do formato → undefined
 // (o campo é opcional; não sobe chave vazia). Retorna date-only, NÃO .toISOString():
 // a meia-noite local vira UTC e a data recuaria um dia perto do fuso (off-by-one).
@@ -170,10 +228,9 @@ export function AdminsCreate({
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
-  // Só campos de IDENTIDADE sobem (name/email/senha + phone/cpf/nascimento
-  // opcionais). Saúde (tipo sanguíneo, gênero, alergias, doenças) e nome de
-  // usuário ficam renderizados na UI mas fora do corpo — dependem da smartband
-  // / de um cadastro clínico que ainda não existe no backend.
+  // Sobem a identidade (name/email/senha, mais phone/cpf/nascimento opcionais)
+  // e a saúde DECLARATÓRIA traduzida pelo dadosDeSaude. Fora do corpo sobra só
+  // o nome de usuário, que não tem campo correspondente no backend.
   async function handleSubmit() {
     if (submitting) return
     const nome = form.nomeCompleto.trim()
@@ -202,6 +259,7 @@ export function AdminsCreate({
       ...(onlyDigits(form.telefone) ? { phone: onlyDigits(form.telefone) } : {}),
       ...(onlyDigits(form.cpf) ? { cpf: onlyDigits(form.cpf) } : {}),
       ...(birthDate ? { birthDate } : {}),
+      ...dadosDeSaude(form),
     }
     const api = subject === 'funcionário' ? employeesApi : adminsApi
     try {

@@ -269,6 +269,10 @@ export function NewReport() {
         details: details.trim() || undefined,
         responsibles: responsibles.length > 0 ? [...responsibles] : undefined,
         imageKeys: [...existingImageKeys, ...newImageKeys],
+        // `existingImageKeys` só é escrito no load, então ele É o snapshot que
+        // este form viu. Vai junto como prova pro backend não apagar anexo
+        // que chegou depois nem apagar do bucket sem remoção provada.
+        imageKeysBase: [...existingImageKeys],
         status,
         statusLabel: STATUS_LABELS[status],
       }

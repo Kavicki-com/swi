@@ -253,3 +253,68 @@ describe('EmployeesList', () => {
     expect(reject).not.toHaveBeenCalled()
   })
 })
+
+// O backend expõe DELETE /users/:id desde o fechamento dos CRUDs, e a lista de
+// ADMINS já o consome com confirmação, exclusão otimista e rollback. A lista de
+// FUNCIONÁRIOS tinha o mesmo cluster de ícones na linha e nenhum caminho pra
+// excluir: a rota existia e ninguém a alcançava. Isto espelha o fluxo provado.
+describe('EmployeesList: excluir funcionário', () => {
+  afterEach(() => {
+    clearSession()
+    vi.restoreAllMocks()
+  })
+
+  const ZE: Employee = {
+    id: 'w1',
+    name: 'Zé da Silva',
+    age: 30,
+    bloodType: 'O+',
+    role: 'Operador',
+    specialization: 'Elétrica',
+    avatarUri: '',
+    sector: 'Manutenção',
+    vitalsStatus: 'good',
+  }
+
+  it('confirmar dispara o DELETE e a linha some; cancelar mantém', async () => {
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [ZE], error: null })
+    const remove = vi.spyOn(employeesApi, 'remove').mockResolvedValue({ data: null, error: null })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Zé da Silva'))
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir zé da silva/i }))
+    expect(screen.getByText('Excluir funcionário?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /cancelar/i }))
+    expect(remove).not.toHaveBeenCalled()
+    expect(screen.getByText('Zé da Silva')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir zé da silva/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+    expect(remove).toHaveBeenCalledWith('w1')
+    await waitFor(() => expect(screen.queryByText('Zé da Silva')).toBeNull())
+  })
+
+  // O 409 de registros vinculados é o caso REAL aqui: funcionário acumula
+  // jornada, tarefa e relatório, então recusar é o normal, não a exceção. A
+  // linha tem que voltar pra posição original, senão a lista se reordena
+  // sozinha na cara de quem só tentou excluir.
+  it('recusa do backend reinsere a linha na posição original', async () => {
+    const ALFA: Employee = { ...ZE, id: 'w-alfa', name: 'Alfa Operário' }
+    const BRAVO: Employee = { ...ZE, id: 'w-bravo', name: 'Bravo Operário' }
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [ALFA, BRAVO], error: null })
+    vi.spyOn(employeesApi, 'remove').mockResolvedValue({
+      data: null,
+      error: { message: 'Usuário possui registros vinculados; desative-o em vez de excluir' },
+    })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Alfa Operário'))
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir alfa operário/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+
+    await waitFor(() => expect(screen.getByText('Alfa Operário')).toBeTruthy())
+    const alfa = screen.getByText('Alfa Operário')
+    const bravo = screen.getByText('Bravo Operário')
+    expect(alfa.compareDocumentPosition(bravo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
