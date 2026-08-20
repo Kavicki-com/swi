@@ -136,3 +136,113 @@ describe('wsCorsOptions', () => {
     expect(wsCorsOptions({ CORS_PROXY_SETS_ORIGIN: '1' })).toBeUndefined()
   })
 })
+
+// Produção: o `add_header` do nginx SEM a flag `always` só carimba o
+// Access-Control-Allow-Origin numa lista fixa de status. Todo erro da API
+// volta sem o header, o navegador rejeita o fetch, e o painel não lê nem o
+// status nem a mensagem: 'E-mail já cadastrado' e 'data inválida' morrem
+// antes da tela. Preencher o COMPLEMENTO dessa lista devolve o erro legível
+// sem duplicar o header em status nenhum, porque os conjuntos são disjuntos.
+describe('applyCors: preenchimento do allow-origin nas respostas de erro', () => {
+  const OLD_PROXY = process.env.CORS_PROXY_SETS_ORIGIN
+  const OLD_ERROS = process.env.CORS_PROXY_SETS_ORIGIN_ON_ERRORS
+  afterEach(() => {
+    if (OLD_PROXY === undefined) delete process.env.CORS_PROXY_SETS_ORIGIN
+    else process.env.CORS_PROXY_SETS_ORIGIN = OLD_PROXY
+    if (OLD_ERROS === undefined) delete process.env.CORS_PROXY_SETS_ORIGIN_ON_ERRORS
+    else process.env.CORS_PROXY_SETS_ORIGIN_ON_ERRORS = OLD_ERROS
+  })
+
+  // Espelha o ServerResponse: o writeHead é o ponto por onde o status vira
+  // definitivo, e é lá que o header precisa (ou não) ter sido posto.
+  const fakeRes = () => {
+    const headers: Record<string, string> = {}
+    return {
+      headers,
+      statusCode: 200,
+      ended: false,
+      setHeader(k: string, v: string) { headers[k] = v },
+      end() { (this as any).ended = true },
+      writeHead(status: number) { (this as any).statusCode = status; return this },
+    }
+  }
+
+  const montar = () => {
+    const app = { enableCors: jest.fn(), use: jest.fn() }
+    applyCors(app as any)
+    const middleware = app.use.mock.calls[0][0]
+    const res = fakeRes()
+    middleware({ method: 'GET' }, res, jest.fn())
+    return res
+  }
+
+  const despachar = (status: number) => {
+    const res = montar()
+    ;(res as any).writeHead(status)
+    return res
+  }
+
+  it('status de erro ganha o header que o nginx não carimba', () => {
+    process.env.CORS_PROXY_SETS_ORIGIN = '1'
+    for (const status of [400, 401, 403, 404, 409, 422, 429, 500, 502]) {
+      expect(despachar(status).headers['Access-Control-Allow-Origin']).toBe('*')
+    }
+  })
+
+  it('status coberto pelo nginx NÃO ganha o header (dois valores bloqueiam tudo)', () => {
+    process.env.CORS_PROXY_SETS_ORIGIN = '1'
+    for (const status of [200, 201, 204, 206, 301, 302, 303, 304, 307, 308]) {
+      expect('Access-Control-Allow-Origin' in despachar(status).headers).toBe(false)
+    }
+  })
+
+  // 202, 203, 205 e 207 são 2xx e mesmo assim ficam FORA da lista do
+  // add_header. Tratar '2xx' como sinônimo de 'coberto' deixaria esses mudos.
+  it('2xx fora da lista do nginx também é preenchido', () => {
+    process.env.CORS_PROXY_SETS_ORIGIN = '1'
+    for (const status of [202, 203, 205, 207]) {
+      expect(despachar(status).headers['Access-Control-Allow-Origin']).toBe('*')
+    }
+  })
+
+  // Preflight responde 204, que está na lista do nginx: preencher aqui
+  // duplicaria o header justamente na resposta que decide se a requisição
+  // real chega a sair da máquina.
+  it('preflight segue sem allow-origin (204 está coberto)', () => {
+    process.env.CORS_PROXY_SETS_ORIGIN = '1'
+    const app = { enableCors: jest.fn(), use: jest.fn() }
+    applyCors(app as any)
+    const middleware = app.use.mock.calls[0][0]
+    const res = fakeRes()
+    middleware({ method: 'OPTIONS' }, res, jest.fn())
+    ;(res as any).writeHead(res.statusCode)
+    expect(res.statusCode).toBe(204)
+    expect('Access-Control-Allow-Origin' in res.headers).toBe(false)
+  })
+
+  // Se a hospedagem passar a carimbar em erro também (o `always`), os dois se
+  // somam e o navegador bloqueia por 'multiple values', voltando ao estado de
+  // hoje. A env desliga o preenchimento sem exigir deploy de código.
+  it('a env desliga o preenchimento quando o proxy passar a cobrir os erros', () => {
+    process.env.CORS_PROXY_SETS_ORIGIN = '1'
+    process.env.CORS_PROXY_SETS_ORIGIN_ON_ERRORS = '1'
+    expect('Access-Control-Allow-Origin' in despachar(500).headers).toBe(false)
+  })
+
+  it('devolve o que o writeHead original devolvia (encadeamento não pode quebrar)', () => {
+    process.env.CORS_PROXY_SETS_ORIGIN = '1'
+    const res = montar()
+    expect((res as any).writeHead(500)).toBe(res)
+  })
+
+  // Fora do modo proxy quem emite o header é o enableCors do Nest, que roda
+  // como middleware e por isso já alcança as respostas de erro. Embrulhar ali
+  // duplicaria.
+  it('fora do modo proxy nada é embrulhado', () => {
+    delete process.env.CORS_PROXY_SETS_ORIGIN
+    const app = { enableCors: jest.fn(), use: jest.fn() }
+    applyCors(app as any)
+    expect(app.use).not.toHaveBeenCalled()
+    expect(app.enableCors).toHaveBeenCalled()
+  })
+})
