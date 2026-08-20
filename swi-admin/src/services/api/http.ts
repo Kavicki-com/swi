@@ -28,6 +28,14 @@ export const SESSION_CLEARED_EVENT = 'swi:session-cleared'
 export const readToken = (): string | null => window.localStorage.getItem(TOKEN_STORAGE_KEY)
 
 export const clearSession = (): void => {
+  // Sem nada guardado não há sessão a derrubar. A saída antecipada mantém o
+  // evento proporcional ao fato: N chamadas simultâneas que descobrem a MESMA
+  // morte de sessão avisam o AuthContext uma vez, não N.
+  const guardado =
+    window.localStorage.getItem(TOKEN_STORAGE_KEY) !== null ||
+    window.localStorage.getItem(SESSION_STORAGE_KEY) !== null
+  if (!guardado) return
+
   window.localStorage.removeItem(TOKEN_STORAGE_KEY)
   window.localStorage.removeItem(SESSION_STORAGE_KEY)
   window.dispatchEvent(new Event(SESSION_CLEARED_EVENT))
@@ -51,24 +59,94 @@ const mergeHeaders = (
   return merged
 }
 
-// Um 401 bloqueado por CORS e um servidor fora do ar chegam idênticos no catch
+// Um erro bloqueado por CORS e um servidor fora do ar chegam idênticos no catch
 // do fetch: os dois rejeitam e o navegador não deixa ler o status. A diferença
-// decide o destino de quem está usando o painel, então perguntamos ao /health,
-// que é público e não depende do token: se ele responde, o servidor está de pé
-// e o CORS funciona, logo o que falhou foi a credencial.
+// decide o destino de quem está usando o painel, então sondamos o servidor.
 //
 // Isso não é hipotético. O nginx da API pública carimba
 // `Access-Control-Allow-Origin` só em resposta 2xx (falta `always` no
-// `add_header`), então todo 401 dela volta sem o header. Sem esta sondagem um
-// token expirado prendia o painel: nada carregava, o RequireAuth não
-// redirecionava porque ninguém o avisava da sessão morta, e digitar /login
+// `add_header`), então TODA resposta de erro dela volta sem o header. Sem
+// sondagem, um token expirado prendia o painel: nada carregava, o RequireAuth
+// não redirecionava porque ninguém o avisava da sessão morta, e digitar /login
 // devolvia pra /. Sobrava um painel zerado sem saída visível.
-async function servidorNoAr(baseUrl: string): Promise<boolean> {
+//
+// A correção durável é no servidor (`add_header ... always`). Enquanto ela não
+// vem, a sondagem daqui tem que ser específica: perguntar ao /health responde
+// só "o host está de pé", e isso é verdade em 401, 403, 409 e 500 igualmente.
+// Quem separa é o /auth/me, porque ele responde sobre a CREDENCIAL.
+const TEMPO_LIMITE_SONDAGEM = 4000
+
+// Resultado da sondagem em três estados, e não Response-ou-null, porque
+// 'rejeitou' e 'expirou' são evidências OPOSTAS: rejeição instantânea é o que
+// o navegador faz com resposta não-2xx sem header de CORS, enquanto silêncio
+// até o prazo é ausência de resposta. Colapsar os dois em null fazia banco
+// travado ser lido como token morto.
+type Sondagem = Response | 'rejeitou' | 'expirou'
+
+const leu = (s: Sondagem): s is Response => typeof s !== 'string'
+
+// O prazo é próprio porque host blackholed (pacote engolido, sem RST) pendura o
+// fetch até o timeout do navegador, e esse tempo entraria inteiro na espera do
+// usuário, somado ao da chamada que já falhou.
+async function sondar(url: string, init: RequestInit = {}): Promise<Sondagem> {
+  const cancelar = new AbortController()
+  let prazo: ReturnType<typeof setTimeout> | undefined
+  const expirou = new Promise<'expirou'>((resolve) => {
+    prazo = setTimeout(() => {
+      // Resolve ANTES de abortar: o abort rejeita o fetch, e se essa rejeição
+      // ganhasse a corrida o veredito viraria 'rejeitou', que é exatamente o
+      // estado oposto do que acabou de acontecer.
+      resolve('expirou')
+      cancelar.abort()
+    }, TEMPO_LIMITE_SONDAGEM)
+  })
   try {
-    return (await fetch(`${baseUrl}/health`)).ok
+    // no-store: um 200 guardado do /health provaria o passado, não o agora.
+    return await Promise.race([
+      fetch(url, { ...init, cache: 'no-store', signal: cancelar.signal }),
+      expirou,
+    ])
   } catch {
-    return false
+    return 'rejeitou'
+  } finally {
+    clearTimeout(prazo)
   }
+}
+
+type Veredito = 'sessao-morta' | 'sessao-viva' | 'sem-resposta'
+
+async function diagnosticar(baseUrl: string, token: string): Promise<Veredito> {
+  const eu = await sondar(`${baseUrl}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+
+  // Legível = o servidor respondeu SOBRE ESTE token. Só 401 condena a sessão;
+  // 429 ou 500 na sondagem não são prova de credencial morta, e na dúvida a
+  // sessão fica de pé (deslogar por engano custa o formulário aberto).
+  if (leu(eu)) return eu.status === 401 ? 'sessao-morta' : 'sessao-viva'
+
+  // Prazo estourado não condena nada: um 401 com o header suprimido rejeita na
+  // hora, não fica mudo até o prazo. Silêncio aponta pra servidor em sofrimento,
+  // e aí o /health responder rápido não prova credencial morta, prova só que ele
+  // não depende do que travou (o /auth/me consulta o banco, o /health não).
+  if (eu === 'expirou') return 'sem-resposta'
+
+  // Rejeitou. Se o /health (público, 2xx, portanto com o header de CORS
+  // presente) responde, o host está de pé e o CORS funciona, logo a resposta
+  // que sumiu era da chamada autenticada, com o header suprimido por não ser
+  // 2xx, e a sondagem autenticada sumiu junto pelo mesmo motivo.
+  const saude = await sondar(`${baseUrl}/health`)
+  return leu(saude) && saude.ok ? 'sessao-morta' : 'sem-resposta'
+}
+
+// Uma tela carrega várias coleções de uma vez. Sem compartilhar a sondagem,
+// cada falha abria a própria rodada de rede e derrubava o contexto de novo pelo
+// mesmo fato: N sondagens e N redirecionamentos para um único token morto.
+let diagnosticoEmVoo: Promise<Veredito> | null = null
+
+function diagnosticarUmaVez(baseUrl: string, token: string): Promise<Veredito> {
+  diagnosticoEmVoo ??= diagnosticar(baseUrl, token).finally(() => {
+    diagnosticoEmVoo = null
+  })
+  return diagnosticoEmVoo
 }
 
 export async function apiFetch<T>(
@@ -96,17 +174,36 @@ export async function apiFetch<T>(
         init.headers,
       ),
     })
-  } catch {
-    // Sem resposta do servidor (offline, DNS, CORS — e também abort: convertemos
-    // tudo de propósito pra manter o contrato "todo erro de apiFetch é ApiError").
-    // status 0 = a request nem chegou no backend.
+  } catch (erro) {
+    // Sem resposta do servidor (offline, DNS, CORS, abort: convertemos tudo de
+    // propósito pra manter o contrato "todo erro de apiFetch é ApiError").
+    // status 0 = nenhuma resposta pôde ser lida.
     //
-    // Antes disso, porém: se mandamos token e o servidor está no ar, o que o
-    // navegador engoliu foi um 401 sem CORS. Tratar igual ao 401 legível é o que
-    // impede a sessão morta de prender o painel (ver servidorNoAr acima).
-    if (token && !opts.keepSessionOn401 && (await servidorNoAr(baseUrl))) {
-      clearSession()
-      throw new ApiError('Sua sessão expirou. Entre novamente.', 401)
+    // Cancelamento cai neste mesmo catch e NÃO diz nada sobre o servidor nem
+    // sobre o token: quem aborta é o próprio painel, ao desmontar a tela ou
+    // trocar de filtro. Sondar aqui deslogava quem só saiu da tela no meio do
+    // carregamento.
+    const cancelado =
+      init.signal?.aborted === true || (erro as { name?: string } | null)?.name === 'AbortError'
+
+    if (token && !opts.keepSessionOn401 && !cancelado) {
+      const veredito = await diagnosticarUmaVez(baseUrl, token)
+      // Token morto tratado igual ao 401 legível: é o que impede a sessão morta
+      // de prender o painel (ver diagnosticar acima).
+      if (veredito === 'sessao-morta') {
+        clearSession()
+        throw new ApiError('Sua sessão expirou. Entre novamente.', 401)
+      }
+      // Token vivo e ainda assim ilegível: era 403, 409, 400 ou 500 com o header
+      // de CORS suprimido. O motivo real morreu no navegador e não há como
+      // recuperá-lo daqui, mas dizer "não foi possível conectar" mandaria o
+      // admin caçar rede, e derrubar a sessão custaria o formulário aberto.
+      if (veredito === 'sessao-viva') {
+        throw new ApiError(
+          'O servidor recusou a operação e não informou o motivo. Sua sessão continua ativa.',
+          0,
+        )
+      }
     }
     throw new ApiError('Não foi possível conectar ao servidor', 0)
   }
