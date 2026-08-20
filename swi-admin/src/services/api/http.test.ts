@@ -13,6 +13,10 @@ const mockFetch = (body: unknown, status = 200) =>
 afterEach(() => {
   window.localStorage.clear()
   vi.unstubAllGlobals()
+  // Sem isto, um teste de timer falso que quebre ANTES do próprio cleanup
+  // deixaria os timers congelados e derrubaria os testes seguintes por um
+  // motivo que não é o deles.
+  vi.useRealTimers()
 })
 
 describe('apiFetch', () => {
@@ -291,5 +295,190 @@ describe('apiFetch', () => {
 
     await expect(apiFetch('/qualquer')).rejects.toThrow(/VITE_API_URL/)
     vi.unstubAllEnvs()
+  })
+})
+
+// O nginx da API carimba `Access-Control-Allow-Origin` só em 2xx, então TODO
+// status de erro volta sem o header e chega no cliente como promise rejeitada,
+// indistinguível de servidor fora do ar. Sondar só o /health respondia "o
+// servidor está de pé", que é verdade em 401, 403, 409 e 500 igualmente, e o
+// painel deslogava o admin no meio do formulário por causa de um 403.
+// A sondagem que decide isso tem que perguntar pela CREDENCIAL, não pelo host.
+describe('sondagem de sessão atrás do CORS', () => {
+  type Rota = number | 'rejeita'
+
+  const respostaFalsa = (status: number) =>
+    ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => ({}),
+    }) as Response
+
+  // 'rejeita' reproduz o que o navegador entrega quando a resposta vem sem o
+  // header de CORS: promise rejeitada, status ilegível.
+  const fetchPorRota = (rotas: { chamada: Rota; me: Rota; health: Rota }) =>
+    vi.fn().mockImplementation((url: unknown) => {
+      const alvo = String(url)
+      const escolha = alvo.endsWith('/auth/me')
+        ? rotas.me
+        : alvo.endsWith('/health')
+          ? rotas.health
+          : rotas.chamada
+      return escolha === 'rejeita'
+        ? Promise.reject(new TypeError('Failed to fetch'))
+        : Promise.resolve(respostaFalsa(escolha))
+    })
+
+  const chamadasEm = (f: ReturnType<typeof vi.fn>, sufixo: string) =>
+    f.mock.calls.filter((c) => String(c[0]).endsWith(sufixo))
+
+  it('403 escondido pelo CORS não desloga: o /auth/me prova que o token vive', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-vivo')
+    vi.stubGlobal('fetch', fetchPorRota({ chamada: 'rejeita', me: 200, health: 200 }))
+
+    await expect(apiFetch('/reports/r1', { method: 'DELETE' })).rejects.toMatchObject({
+      status: 0,
+    })
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-vivo')
+  })
+
+  it('erro ilegível com token vivo não mente dizendo que a sessão expirou', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-vivo')
+    vi.stubGlobal('fetch', fetchPorRota({ chamada: 'rejeita', me: 200, health: 200 }))
+
+    await expect(apiFetch('/reports/r1', { method: 'DELETE' })).rejects.toThrow(
+      /sessão continua ativa/i,
+    )
+  })
+
+  // Onde o CORS está correto (dev, e a produção depois do `add_header always`),
+  // a sondagem lê o 401 direto e não precisa do /health pra concluir.
+  it('401 legível na sondagem derruba a sessão sem consultar o /health', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-velho')
+    const f = fetchPorRota({ chamada: 'rejeita', me: 401, health: 200 })
+    vi.stubGlobal('fetch', f)
+
+    await expect(apiFetch('/work-orders')).rejects.toMatchObject({
+      status: 401,
+      message: 'Sua sessão expirou. Entre novamente.',
+    })
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+    expect(chamadasEm(f, '/health')).toHaveLength(0)
+  })
+
+  // Cancelamento (unmount, troca de tela) cai no MESMO catch de rede. Sem
+  // distinguir, sair de uma tela no meio do carregamento deslogava o admin.
+  it('requisição cancelada não sonda nada e preserva a sessão', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-vivo')
+    const abortado = new DOMException('The user aborted a request.', 'AbortError')
+    const f = vi.fn().mockRejectedValue(abortado)
+    vi.stubGlobal('fetch', f)
+
+    const controle = new AbortController()
+    controle.abort()
+
+    await expect(apiFetch('/work-orders', { signal: controle.signal })).rejects.toMatchObject({
+      status: 0,
+    })
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-vivo')
+    expect(chamadasEm(f, '/auth/me')).toHaveLength(0)
+    expect(chamadasEm(f, '/health')).toHaveLength(0)
+  })
+
+  // Uma tela carrega várias coleções de uma vez. Com a sessão morta, cada falha
+  // abria a própria sondagem e disparava o próprio SESSION_CLEARED: N rodadas de
+  // rede e N derrubadas de contexto pro mesmo fato.
+  it('falhas simultâneas sondam uma vez só e avisam o app uma vez só', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-velho')
+    const f = fetchPorRota({ chamada: 'rejeita', me: 'rejeita', health: 200 })
+    vi.stubGlobal('fetch', f)
+    const ouviu = vi.fn()
+    window.addEventListener(SESSION_CLEARED_EVENT, ouviu)
+
+    const resultados = await Promise.allSettled([
+      apiFetch('/work-orders'),
+      apiFetch('/reports'),
+      apiFetch('/notifications'),
+    ])
+
+    expect(resultados.every((r) => r.status === 'rejected')).toBe(true)
+    expect(chamadasEm(f, '/auth/me')).toHaveLength(1)
+    expect(ouviu).toHaveBeenCalledTimes(1)
+    window.removeEventListener(SESSION_CLEARED_EVENT, ouviu)
+  })
+
+  // Resposta de sondagem servida do cache do navegador responderia sobre o
+  // passado: um 200 guardado do /health "provaria" que o servidor está de pé
+  // depois de ele cair.
+  it('sonda sem cache', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-vivo')
+    const f = fetchPorRota({ chamada: 'rejeita', me: 200, health: 200 })
+    vi.stubGlobal('fetch', f)
+
+    await expect(apiFetch('/work-orders')).rejects.toBeInstanceOf(ApiError)
+
+    const init = chamadasEm(f, '/auth/me')[0]?.[1] as RequestInit
+    expect(init.cache).toBe('no-store')
+  })
+
+  // Host blackholed (pacote engolido, sem RST): a sondagem sem prazo pendura o
+  // erro do usuário pelo tempo inteiro do timeout do navegador, somado ao da
+  // chamada original.
+  it('desiste da sondagem no tempo limite em vez de pendurar o erro', async () => {
+    vi.useFakeTimers()
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-vivo')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: unknown) => {
+        // A chamada de verdade falha rápido; as sondagens é que ficam penduradas.
+        if (String(url).endsWith('/work-orders')) {
+          return Promise.reject(new TypeError('Failed to fetch'))
+        }
+        return new Promise(() => {})
+      }),
+    )
+
+    const promessa = apiFetch('/work-orders')
+    const veredito = expect(promessa).rejects.toMatchObject({
+      status: 0,
+      message: 'Não foi possível conectar ao servidor',
+    })
+    await vi.advanceTimersByTimeAsync(30_000)
+    await veredito
+
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-vivo')
+  })
+
+  // Estouro de prazo não é evidência de token morto, é o contrário: um 401 com
+  // o header de CORS suprimido rejeita na hora, não fica 4 s mudo. Sondagem
+  // muda aponta pra servidor em sofrimento (o /auth/me consulta o banco, o
+  // /health não), e deslogar aí troca "servidor com problema" por "sua sessão
+  // expirou", que manda o admin refazer login sem que login resolva nada.
+  it('sondagem autenticada muda preserva a sessão mesmo com o /health de pé', async () => {
+    vi.useFakeTimers()
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-vivo')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: unknown) => {
+        const alvo = String(url)
+        // Banco travado: a rota autenticada pendura, e a de saúde, que não
+        // consulta o banco, segue respondendo na hora.
+        if (alvo.endsWith('/auth/me')) return new Promise(() => {})
+        if (alvo.endsWith('/health')) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({}) } as Response)
+        }
+        return Promise.reject(new TypeError('Failed to fetch'))
+      }),
+    )
+
+    const promessa = apiFetch('/work-orders')
+    const veredito = expect(promessa).rejects.toMatchObject({
+      status: 0,
+      message: 'Não foi possível conectar ao servidor',
+    })
+    await vi.advanceTimersByTimeAsync(30_000)
+    await veredito
+
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-vivo')
   })
 })
