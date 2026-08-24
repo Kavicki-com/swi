@@ -38,6 +38,9 @@ const AdminsList = lazy(() =>
 const AdminDetails = lazy(() =>
   import('@/pages/admins/AdminDetails').then((m) => ({ default: m.AdminDetails })),
 )
+const AdminsCreate = lazy(() =>
+  import('@/pages/admins/AdminsCreate').then((m) => ({ default: m.AdminsCreate })),
+)
 const EmployeesList = lazy(() =>
   import('@/pages/employees/EmployeesList').then((m) => ({ default: m.EmployeesList })),
 )
@@ -145,12 +148,23 @@ export function App() {
                     <Route path="/admins" element={<AdminsList />} />
                     <Route path="/admins/new" element={<AdminsList initialTab="cadastrar" />} />
                     <Route path="/admins/:id" element={<AdminDetails />} />
+                    {/* Edição reusa o formulário do cadastro, do mesmo jeito que
+                        /reports/:id/edit reusa o NewReport: o `:id` do useParams
+                        é o que separa criar de editar. */}
+                    <Route
+                      path="/admins/:id/edit"
+                      element={<AdminsCreate subject="administrador" />}
+                    />
                     <Route path="/employees" element={<EmployeesList />} />
                     <Route
                       path="/employees/new"
                       element={<EmployeesList initialTab="cadastrar" />}
                     />
                     <Route path="/employees/:id" element={<EmployeeDetails />} />
+                    <Route
+                      path="/employees/:id/edit"
+                      element={<AdminsCreate subject="funcionário" />}
+                    />
                     {/* /monitoring/* is a nested layout: MonitoringLayout owns
                     KPIs/title/tabs/search/userlist; child views render the
                     unique row that goes between KPIs and title. */}

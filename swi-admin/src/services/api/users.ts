@@ -6,6 +6,7 @@
 // até o hardware existir (decisão do roadmap: saúde fica mock até a smartband).
 import type { ServiceResponse } from '@/services/types'
 import type { Admin, Employee, ExamEntry, Gender } from '@/services/types/directory'
+import type { Exam } from './exams'
 import { examCardParts } from './examCard'
 import { apiFetch } from './http'
 
@@ -217,6 +218,115 @@ async function createUser(
   }
 }
 
+/**
+ * Forma que a tela de EDIÇÃO carrega. Employee e Admin são formas de exibição:
+ * descartam e-mail, CPF, telefone e nascimento, que são exatamente os campos
+ * que um formulário precisa reeditar. Ausência vira string vazia porque é o que
+ * um campo de texto controlado sabe representar; null viraria "null" na tela.
+ */
+export type EditableUser = {
+  id: string
+  name: string
+  email: string
+  phone: string
+  cpf: string
+  birthDate: string // date-only ('AAAA-MM-DD'), '' quando não informado
+  gender: string // código gravado ('male'/'female'/'other'), '' quando ausente
+  bloodType: string // sigla maiúscula, '' quando ausente
+  allergies: string
+  chronicConditions: string
+  // Exames JÁ gravados. A tela precisa mostrá-los antes de deixar anexar mais,
+  // senão o admin reanexa em duplicata o laudo que já estava lá.
+  exams: readonly Exam[]
+}
+
+// Datetime com fuso → data de CALENDÁRIO. Corta no 'T' em vez de passar por
+// Date: a meia-noite UTC vira o dia anterior a oeste de Greenwich, que é onde
+// o cliente opera, e o nascimento recuaria um dia a cada abertura do form.
+const dataPura = (iso: string | null): string => (iso ? (iso.split('T')[0] ?? '') : '')
+
+const toEditable = (u: UserDetailDto): EditableUser => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  phone: u.phone ?? '',
+  cpf: u.cpf ?? '',
+  birthDate: dataPura(u.birthDate),
+  gender: u.gender ?? '',
+  bloodType: u.bloodType ?? '',
+  allergies: u.allergies ?? '',
+  chronicConditions: u.chronicConditions ?? '',
+  // `?? []` porque backend anterior ao PR de exames não manda o campo, e a
+  // seção lendo undefined quebraria em vez de mostrar o vazio honesto.
+  exams: u.exams ?? [],
+})
+
+const getForEditUser = async (id: string): Promise<ServiceResponse<EditableUser | null>> => {
+  try {
+    return { data: toEditable(await apiFetch<UserDetailDto>(`/users/${id}`)), error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }
+  }
+}
+
+/**
+ * Corpo do PATCH /users/:id. Espelha o UpdateUserDto no que a tela de edição
+ * mexe. Omitir um campo significa "não mexe", nunca "apaga".
+ *
+ * `email` e `password` estão FORA porque o backend não os aceita aqui: e-mail é
+ * identidade de login (trocar exige reconfirmação) e o PATCH não tem campo de
+ * senha. A tela reflete isso em vez de mandar chave que a whitelist descarta
+ * calada, que é como um formulário passa a mentir sobre o que salvou.
+ */
+export type UpdateUserInput = {
+  name?: string
+  phone?: string
+  cpf?: string
+  birthDate?: string
+  gender?: string
+  bloodType?: string
+  allergies?: string
+  chronicConditions?: string
+}
+
+const updateUser = async (
+  id: string,
+  patch: UpdateUserInput,
+): Promise<ServiceResponse<UserSummaryDto>> => {
+  try {
+    const updated = await apiFetch<UserSummaryDto>(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+    return { data: updated, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha ao salvar') } }
+  }
+}
+
+/**
+ * Anexa um exame ao cadastro de OUTRA pessoa (POST /users/:id/exams). O
+ * examsApi bate em /profile/exams, que grava sempre no usuário da sessão: por
+ * ali o admin só conseguia anexar laudo no próprio perfil.
+ *
+ * Dois passos, como no settings: o arquivo sobe direto pro bucket por URL
+ * presignada (uploadImage(file, 'exams')) e aqui só viaja a key.
+ */
+const addUserExam = async (
+  id: string,
+  input: { name: string; date: string; fileKey: string },
+): Promise<ServiceResponse<Exam>> => {
+  try {
+    const exam = await apiFetch<Exam>(`/users/${id}/exams`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    return { data: exam, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha ao enviar o exame') } }
+  }
+}
+
 // Ativar/desativar e excluir batem em /users/:id, então moram ACIMA dos dois
 // diretórios: declaradas depois de employeesApi, o const cai na temporal dead
 // zone e o módulo inteiro explode no import.
@@ -258,6 +368,9 @@ export const employeesApi = {
   list: () => listMapped('WORKER', toEmployee),
   get: (id: string) => getMapped(id, toEmployee),
   create: (input: CreateUserInput) => createUser('WORKER', input),
+  getForEdit: getForEditUser,
+  update: updateUser,
+  addExam: addUserExam,
   remove: removeUser,
 }
 
@@ -265,6 +378,9 @@ export const adminsApi = {
   list: () => listMapped('ADMIN', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
   create: (input: CreateUserInput) => createUser('ADMIN', input),
+  getForEdit: getForEditUser,
+  update: updateUser,
+  addExam: addUserExam,
   setActive: setUserActive,
   remove: removeUser,
 }
