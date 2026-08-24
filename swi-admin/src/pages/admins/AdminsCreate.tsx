@@ -638,7 +638,10 @@ export function AdminsCreate({
         examDate={exames.examDate}
         onExamDateChange={exames.setExamDate}
         examError={exames.examError}
-        examsBusy={exames.examsBusy}
+        // `submitting` também trava o botão: um exame enfileirado ENQUANTO o
+        // create está em voo ficaria fora da descarga (ela fotografa a fila no
+        // início do submit) e morreria calado quando a tela navegasse.
+        examsBusy={exames.examsBusy || submitting}
         onPickFile={exames.pedirArquivo}
         exams={exames.gravados}
         pending={exames.pendentes}
