@@ -14,8 +14,9 @@ import {
   Tabs,
   Text,
   Title,
-  useTheme,
+  Toggle,
   type IconName,
+  useTheme,
 } from '@kavicki/swi-design-system'
 import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
@@ -34,6 +35,7 @@ type EmployeeRowProps = {
   onChat: (employee: Employee) => void
   onLocation: (employee: Employee) => void
   onDelete: (employee: Employee) => void
+  onToggle: (id: string, active: boolean) => void
   isTablet: boolean
 }
 
@@ -43,7 +45,15 @@ function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof 
   return theme.surface.success
 }
 
-function EmployeeRow({ employee, onOpen, onChat, onLocation, onDelete, isTablet }: EmployeeRowProps) {
+function EmployeeRow({
+  employee,
+  onOpen,
+  onChat,
+  onLocation,
+  onDelete,
+  onToggle,
+  isTablet,
+}: EmployeeRowProps) {
   const theme = useTheme()
   return (
     <View
@@ -121,6 +131,16 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, onDelete, isTablet 
             {employee.specialization}
           </Text>
         </View>
+        {/* Vertical divider */}
+        <View style={{ width: 1, height: 56, backgroundColor: theme.surface.high }} />
+        {/* Active toggle. Mesma posição da AdminsList (fim do cluster esquerdo,
+            depois do segundo divisor): as duas listas mostram a mesma ação sobre
+            a mesma rota, e diverger de lugar faz o operador errar o alvo. */}
+        <Toggle
+          value={employee.active}
+          onChange={(v) => onToggle(employee.id, v)}
+          accessibilityLabel={`Ativar ${employee.name}`}
+        />
       </View>
       {/* Right cluster: delete / chat / location action icons + expand chevron.
           Mesma ordem da lista de admins: duas listas irmãs com a fileira em
@@ -437,6 +457,19 @@ export function EmployeesList({
   // e devolve a linha à POSIÇÃO original se o backend recusar. Recusa aqui é o
   // caminho esperado, não a exceção: quem trabalhou acumula jornada, tarefa e
   // relatório, e o backend responde 409 mandando desativar em vez de excluir.
+  // Toggle otimista: liga ou desliga já na UI, confirma no backend (PATCH), e
+  // reverte mais avisa se falhar. Mesma régua do handleToggle da AdminsList,
+  // sobre a mesma rota. Sem isto, o 409 do DELETE mandava desativar e apontava
+  // pra um controle que a lista de funcionários não tinha.
+  const handleToggle = async (id: string, active: boolean) => {
+    setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, active } : e)))
+    const { error } = await employeesApi.setActive(id, active)
+    if (error) {
+      setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, active: !active } : e)))
+      showToast('Erro', error.message)
+    }
+  }
+
   // Por isso o rollback preserva a ordem: relistar reordenaria a tela na cara
   // de quem só tentou excluir.
   const handleRemove = async (e: Employee) => {
@@ -619,6 +652,7 @@ export function EmployeesList({
                   navigate(`/maps/general?focus=${encodeURIComponent(employee.id)}`)
                 }
                 onDelete={setRemoving}
+                onToggle={handleToggle}
                 isTablet={isTablet}
               />
             ))}

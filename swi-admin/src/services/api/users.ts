@@ -128,6 +128,7 @@ function toEmployee(u: UserSummaryDto | UserDetailDto): Employee {
     avatarUri: u.avatar,
     sector: u.sector,
     vitalsStatus: 'good',
+    active: u.active,
     username: u.username ?? undefined,
     gender: toGender(detail.gender),
     allergies: parseAllergies(detail.allergies),
@@ -341,9 +342,9 @@ const addUserExam = async (
 // zone e o módulo inteiro explode no import.
 // Ativar/desativar um usuário (PATCH /users/:id {active}). O backend responde
 // só o novo estado ({id, active}); a tela usa o envelope de erro pra reverter o
-// toggle otimista se falhar. Exposta só em adminsApi: a rota serve os dois
-// papéis, mas o toggle existe apenas na lista de admins, e pendurá-la também em
-// employeesApi criava um caminho que nenhuma tela chama.
+// toggle otimista se falhar. Exposta nos DOIS diretórios: a rota sempre serviu
+// os dois papéis, e em funcionário ela é a remediação que o 409 do DELETE manda
+// seguir ('desative-o em vez de excluir').
 const setUserActive = async (
   id: string,
   active: boolean,
@@ -380,6 +381,7 @@ export const employeesApi = {
   getForEdit: getForEditUser,
   update: updateUser,
   addExam: addUserExam,
+  setActive: setUserActive,
   remove: removeUser,
 }
 

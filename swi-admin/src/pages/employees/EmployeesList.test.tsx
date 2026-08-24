@@ -63,6 +63,7 @@ describe('EmployeesList', () => {
       avatarUri: '',
       sector: 'Setor Leste',
       vitalsStatus: 'good',
+      active: true,
     }
     vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [ALLAN], error: null })
     await renderPage(<EmployeesList />, { route: '/employees' })
@@ -274,6 +275,7 @@ describe('EmployeesList: excluir funcionário', () => {
     avatarUri: '',
     sector: 'Manutenção',
     vitalsStatus: 'good',
+    active: true,
   }
 
   it('confirmar dispara o DELETE e a linha some; cancelar mantém', async () => {
@@ -422,5 +424,89 @@ describe('EmployeesList: excluir funcionário', () => {
 
     await waitFor(() => expect(screen.getByText('Bravo Operário')).toBeTruthy())
     expect(screen.queryByText('Alfa Operário')).toBeNull()
+  })
+})
+
+// Ativar/desativar funcionário. O 409 do DELETE responde "desative-o em vez de
+// excluir", uma remediação que a lista não oferecia: o controle existia só na
+// lista de admins, sobre a MESMA rota. Estes casos espelham os da AdminsList
+// de propósito, porque duas listas irmãs que se comportam diferente sobre a
+// mesma ação fazem o operador errar o alvo.
+describe('EmployeesList: ativar e desativar', () => {
+  const CARLOS: Employee = {
+    id: 'w1',
+    name: 'Carlos Mendes',
+    age: 34,
+    bloodType: 'O+',
+    role: 'Soldador',
+    specialization: 'Estruturas metálicas',
+    avatarUri: '',
+    sector: 'Estruturas metálicas',
+    vitalsStatus: 'good',
+    active: true,
+  }
+
+  afterEach(() => {
+    clearSession()
+    vi.restoreAllMocks()
+  })
+
+  it('alternar o switch chama employeesApi.setActive(id, novoValor)', async () => {
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [CARLOS], error: null })
+    const setActive = vi
+      .spyOn(employeesApi, 'setActive')
+      .mockResolvedValue({ data: { id: 'w1', active: false }, error: null })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Carlos Mendes'))
+
+    // Estava ativo, então o toggle manda desativar.
+    fireEvent.click(screen.getByRole('switch', { name: /ativar carlos mendes/i }))
+
+    expect(setActive).toHaveBeenCalledWith('w1', false)
+  })
+
+  it('toggle com erro reverte o switch ao valor original', async () => {
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [CARLOS], error: null })
+    vi.spyOn(employeesApi, 'setActive').mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Carlos Mendes'))
+
+    // Esta versão do react-native-web não emite aria-checked: o estado on/off do
+    // Toggle vira a classe atômica de justify-content (thumb à direita/esquerda).
+    // É o mesmo sinal público que o teste irmão da AdminsList usa.
+    const sw = screen.getByRole('switch', { name: /ativar carlos mendes/i })
+    const classeAtiva = sw.className
+
+    fireEvent.click(sw)
+    expect(sw.className).not.toBe(classeAtiva)
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: /ativar carlos mendes/i }).className).toBe(
+        classeAtiva,
+      ),
+    )
+  })
+
+  // O funcionário que chega desativado do backend precisa ABRIR desligado: um
+  // switch que sempre nasce ligado mente sobre quem está sem acesso e faz o
+  // admin desligar de novo quem já estava desligado.
+  it('funcionário inativo abre com o switch desligado', async () => {
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({
+      data: [{ ...CARLOS, active: false }],
+      error: null,
+    })
+    const setActive = vi
+      .spyOn(employeesApi, 'setActive')
+      .mockResolvedValue({ data: { id: 'w1', active: true }, error: null })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Carlos Mendes'))
+
+    // Estava inativo, então o primeiro clique só pode significar ATIVAR.
+    fireEvent.click(screen.getByRole('switch', { name: /ativar carlos mendes/i }))
+
+    expect(setActive).toHaveBeenCalledWith('w1', true)
   })
 })

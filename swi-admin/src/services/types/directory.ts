@@ -42,6 +42,9 @@ export type Employee = {
   avatarUri: string
   sector: string
   vitalsStatus: 'good' | 'warning' | 'critical'
+  // Flag de ativação real (independente da aprovação): o admin liga e desliga o
+  // acesso pelo toggle da lista. Mesma forma do Admin, sobre a mesma rota.
+  active: boolean
   // Handle visível (@username). Opcional: contas anteriores à fase 1 não têm.
   username?: string
   hasUnreadMessages?: boolean
