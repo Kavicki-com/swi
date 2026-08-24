@@ -57,6 +57,9 @@ describe('ChatService', () => {
       avatarUri: 'signed:chat/avatars/bbbb.png',
       birthDate: new Date('1990-05-04').toISOString(), bloodType: 'B+', allergies: 'Poeira',
       gender: 'female',
+      // Handle da fase 1: o painel do chat mostra @username sob o nome, do
+      // MESMO cadastro que o detalhe. null quando a conta não definiu um.
+      username: null,
     })
   })
 

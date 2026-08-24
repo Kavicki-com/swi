@@ -290,6 +290,10 @@ export class ChatService {
       // Idem: o painel fixava `gender: 'male'`, então as colaboradoras do
       // quadro apareciam como "Masculino".
       gender: u.profile?.gender ?? null,
+      // Handle da fase 1 (@username sob o nome no painel do contato). Mesmo
+      // campo do User que o diretório de usuários expõe: dois wires divergindo
+      // sobre a mesma conta é o defeito que o gender já ensinou.
+      username: u.username ?? null,
     }
   }
 
