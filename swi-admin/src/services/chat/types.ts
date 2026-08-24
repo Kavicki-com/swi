@@ -68,6 +68,8 @@ export type ChatContact = {
   // cadastro que a tela de detalhe, e um alias próprio aqui fazia as duas
   // discordarem sobre a mesma pessoa. undefined = não informado.
   gender?: Gender
+  // Handle visível (@username), fase 1. Ausente em conta que não definiu um.
+  username?: string
   age?: number
   bloodType?: string
   allergies?: string
@@ -89,4 +91,6 @@ export interface Contact {
   bloodType: string | null
   allergies: string | null
   gender: string | null // 'male' | 'female' | null (não informado)
+  // Handle visível. Opcional no wire: backend anterior à fase 1 não manda.
+  username?: string | null
 }

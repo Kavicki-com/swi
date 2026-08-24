@@ -41,6 +41,8 @@ export type WorkerExamEntry = {
 
 export type WorkerDetailsData = {
   name: string
+  // Handle visível (@username), fase 1. Ausente em conta que não definiu um.
+  username?: string
   age: number
   bloodType: string
   role: string
@@ -415,6 +417,13 @@ export function WorkerDetailsLayout({
               <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
                 {worker.name}
               </Text>
+              {/* Handle sob o nome, apenas quando a conta tem um: @ vazio ou
+                  inventado afirmaria identidade que não existe. */}
+              {worker.username ? (
+                <Text variant="body.m" color={theme.content.medium}>
+                  {`@${worker.username}`}
+                </Text>
+              ) : null}
               <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
                 {worker.role}
               </Text>

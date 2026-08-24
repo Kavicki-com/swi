@@ -429,6 +429,7 @@ describe('getForEdit / update (real)', () => {
       bloodType: 'O+',
       allergies: 'Penicilina',
       chronicConditions: '',
+      username: '',
       // Cadastro sem exame nenhum: lista vazia, que é o que a seção sabe
       // renderizar como "Nenhum exame enviado".
       exams: [],
@@ -543,5 +544,24 @@ describe('addExam / exames na carga de edição', () => {
     vi.stubGlobal('fetch', okJson({ ...summary(), phone: null, cpf: null, company: null, gender: null, allergies: null, chronicConditions: null }))
     const { data } = await employeesApi.getForEdit('u1')
     expect(data?.exams).toEqual([])
+  })
+})
+
+// Fase 1 do "Nome do usuário": handle visível. O backend passou a gravar e
+// devolver `username`; o painel carrega na edição, manda no cadastro e exibe
+// como @handle no perfil e no chat.
+describe('username no wire', () => {
+  it('a carga de edição traz o username, e ausência vira string vazia', async () => {
+    vi.stubGlobal('fetch', okJson({ ...summary(), username: 'ze.silva', phone: null, cpf: null, company: null, gender: null, allergies: null, chronicConditions: null }))
+    expect((await employeesApi.getForEdit('u1')).data?.username).toBe('ze.silva')
+
+    vi.stubGlobal('fetch', okJson({ ...summary(), phone: null, cpf: null, company: null, gender: null, allergies: null, chronicConditions: null }))
+    expect((await employeesApi.getForEdit('u1')).data?.username).toBe('')
+  })
+
+  it('o Employee da lista carrega o handle pra exibição', async () => {
+    vi.stubGlobal('fetch', okJson([{ ...summary(), username: 'ze.silva' }]))
+    const { data } = await employeesApi.list()
+    expect(data?.[0]?.username).toBe('ze.silva')
   })
 })
