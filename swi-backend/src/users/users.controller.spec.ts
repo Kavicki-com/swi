@@ -17,6 +17,7 @@ const service = () =>
     reject: jest.fn().mockResolvedValue({ id: 'u1', approvalStatus: 'REJECTED', passwordHash: 'nao-vaza' }),
     update: jest.fn().mockResolvedValue({ id: 'u1' }),
     remove: jest.fn().mockResolvedValue(undefined),
+    addExam: jest.fn().mockResolvedValue({ id: 'e1' }),
   }) as unknown as jest.Mocked<UsersService>
 
 const admin = { userId: 'admin-1', companyId: 'empresa-1', role: 'ADMIN' } as unknown as JwtUser
@@ -75,4 +76,16 @@ describe('UsersController', () => {
     await new UsersController(s).update('u1', { name: 'Ana Maria', bloodType: 'O-' }, admin)
     expect(s.update).toHaveBeenCalledWith('u1', { name: 'Ana Maria', bloodType: 'O-' }, 'admin-1', 'empresa-1')
   })
+})
+
+// O exame vai pro usuário da ROTA, mas a autorização vem do TOKEN. Passar
+// qualquer coisa da rota como escopo deixaria um admin anexar laudo no cadastro
+// de outra empresa só trocando o id da URL.
+it('anexa exame no usuário da rota, escopado pela empresa do token', async () => {
+  const s = service()
+  const dto = { name: 'Hemograma', date: '2027-03-14', fileKey: 'exams/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf' }
+
+  await new UsersController(s).addExam('u1', dto, admin)
+
+  expect(s.addExam).toHaveBeenCalledWith('u1', dto, 'empresa-1')
 })
