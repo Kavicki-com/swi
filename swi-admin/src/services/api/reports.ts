@@ -252,6 +252,18 @@ export const reportsApi = {
     }
   },
 
+  // Excluir um relatório (DELETE /reports/:id): 204 sem corpo (apiFetch resolve
+  // null). O backend apaga os anexos do bucket junto, então não sobra objeto
+  // órfão. Só o autor ou um ADMIN pode excluir, e quem opera o painel é ADMIN.
+  async remove(id: string): Promise<ServiceResponse<null>> {
+    try {
+      await apiFetch<null>(`/reports/${id}`, { method: 'DELETE' })
+      return { data: null, error: null }
+    } catch (e) {
+      return { data: null, error: { message: errorMessage(e, 'Falha ao excluir') } }
+    }
+  },
+
   async addComment(id: string, body: string): Promise<ServiceResponse<ReportComment>> {
     try {
       const comment = await apiFetch<ReportComment>(`/reports/${id}/comments`, {

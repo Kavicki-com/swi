@@ -32,6 +32,7 @@ import {
   type ReportComment,
 } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
+import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 
 // reportsApi.get resolve o detalhe (Report) somado à lista de comentários — o
 // estado da página guarda os dois juntos pra renderizar a seção de comentários
@@ -297,6 +298,10 @@ export function ReportDetails() {
   const [search, setSearch] = useState('')
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // Confirmação da exclusão. Guarda um booleano e não o relatório: esta tela já
+  // tem UM relatório carregado, e o alvo nunca é ambíguo como numa lista.
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -326,6 +331,23 @@ export function ReportDetails() {
       setReport((prev) => (prev ? { ...prev, comments: [...prev.comments, data] } : prev))
       setComment('')
     }
+  }
+
+  // Exclusão SEM otimismo, ao contrário das listas: aqui a tela seguinte é outra
+  // rota, então tirar o relatório antes da confirmação do servidor não teria pra
+  // onde voltar se ele recusasse. Recusado, a tela continua inteira e legível.
+  async function handleDelete() {
+    if (!report || deleting) return
+    setDeleting(true)
+    const { error } = await reportsApi.remove(report.id)
+    setConfirmingDelete(false)
+    setDeleting(false)
+    if (error) {
+      showToast('Não foi possível excluir', error.message)
+      return
+    }
+    showToast('Relatório excluído', report.title)
+    navigate('/reports')
   }
 
   if (!report) {
@@ -387,6 +409,17 @@ export function ReportDetails() {
           iconLeft={<Icon name="edit" size={20} color={theme.content.primaryLight} />}
           accessibilityLabel="Revisar relatório"
           onPress={() => navigate(`/reports/${id}/edit`)}
+        />
+        {/* Por último e sem preenchimento: é a ação mais rara das três e a única
+            irreversível, então não disputa peso visual com as outras duas. */}
+        <Button
+          label="Excluir"
+          variant="outline"
+          borderColor={theme.surface.error}
+          labelColor={theme.content.error}
+          iconLeft={<Icon name="delete_icon" size={20} color={theme.content.error} />}
+          accessibilityLabel="Excluir relatório"
+          onPress={() => setConfirmingDelete(true)}
         />
       </View>
 
@@ -574,6 +607,17 @@ export function ReportDetails() {
           />
         </View>
       </View>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title="Excluir relatório"
+          message={`"${report.title}" e seus anexos serão excluídos de forma permanente. Os comentários também serão perdidos.`}
+          confirmLabel="Excluir"
+          confirmDanger
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
     </View>
   )
 }
