@@ -1,5 +1,12 @@
-import { IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Length, Max, Min, MinLength, ValidateIf } from 'class-validator'
+import { IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Length, Matches, Max, Min, MinLength, ValidateIf } from 'class-validator'
 import { IsCalendarDate } from '../profile/is-calendar-date'
+
+// Handle visível (@username no chat e no perfil). Formato fechado JÁ, antes do
+// consumidor de login da fase 2: minúsculas, dígitos, ponto e underscore, 3-30.
+// Um handle com espaço ou maiúscula gravado hoje viraria, amanhã, uma conta em
+// que não se consegue logar.
+const USERNAME_RE = /^[a-z0-9._]{3,30}$/
+
 
 // Cadastro de usuário pelo painel (ADMIN). Senha definida pelo admin (mín. 8);
 // role restrito a WORKER/ADMIN. Campos de identidade opcionais vão pro Profile,
@@ -17,6 +24,7 @@ export class CreateUserDto {
   @IsOptional() @IsString() phone?: string
   @IsOptional() @IsString() cpf?: string
   @IsOptional() @IsCalendarDate() birthDate?: string
+  @IsOptional() @Matches(USERNAME_RE, { message: 'username: use minúsculas, dígitos, ponto ou underscore (3 a 30)' }) username?: string
   @IsOptional() @IsString() gender?: string
   @IsOptional() @IsString() bloodType?: string
   @IsOptional() @IsString() allergies?: string
@@ -45,6 +53,9 @@ export class CreateUserDto {
 export class UpdateUserDto {
   @ValidateIf((o: UpdateUserDto) => o.active !== undefined) @IsBoolean() active?: boolean
   @ValidateIf((o: UpdateUserDto) => o.name !== undefined) @IsString() @IsNotEmpty() name?: string
+  // @ValidateIf e não @IsOptional: null explícito precisa REPROVAR (limpar o
+  // handle fica pra quando existir UI disso), e @IsOptional o deixaria passar.
+  @ValidateIf((o: UpdateUserDto) => o.username !== undefined) @Matches(USERNAME_RE, { message: 'username: use minúsculas, dígitos, ponto ou underscore (3 a 30)' }) username?: string
   @IsOptional() @IsString() phone?: string
   @IsOptional() @IsString() cpf?: string
   @IsOptional() @IsCalendarDate() birthDate?: string
