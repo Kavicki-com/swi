@@ -29,6 +29,8 @@ function toEmployeeUi(p: WorkerProfile): Employee {
     avatarUri: p.avatarUri,
     sector: p.sector,
     vitalsStatus: p.vitalsStatus,
+    // O roster mockado não modela desativação: todo mundo nele está ativo.
+    active: true,
     hasUnreadMessages: p.hasUnreadMessages,
     gender: p.gender,
     bpm: p.bpm,

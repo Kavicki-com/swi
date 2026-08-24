@@ -23,6 +23,7 @@ const employee = (id: string, name: string): Employee => ({
   avatarUri: `av-${id}`,
   sector: 'Setor Leste',
   vitalsStatus: 'good',
+  active: true,
 })
 
 // Ferido em (-23.550, -46.630). Próximo ~110 m ao norte; distante ~1,1 km.
