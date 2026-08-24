@@ -442,19 +442,41 @@ describe('WorkOrdersService', () => {
       expect(m.deleteObjects).toHaveBeenCalledWith(['order/b.jpg'])
     })
 
+    // A foto que chega em paralelo é, por definição, a do funcionário pela
+    // jornada, e ela nasce sob `task/` (JourneyPhotoDto), não sob `order/`. A
+    // fixture usava `order/c.jpg` e com isso escondia que o UpdateWorkOrderDto
+    // recusava justamente o prefixo deste cenário: o 400 morria antes de chegar
+    // aqui, e o teste do merge seguia verde sobre um caminho inalcançável.
     it('com base: foto do worker anexada em paralelo sobrevive no banco e no bucket', async () => {
       const db = prisma()
       const m = media()
-      // form carregou [a]; worker anexou c pela jornada; admin removeu a e salvou [novo]
+      // form carregou [a]; worker anexou task/c pela jornada; admin removeu a e salvou [novo]
       db.workOrder.findUnique
-        .mockResolvedValueOnce(existingRow({ imageKeys: ['order/a.jpg', 'order/c.jpg'] }))
+        .mockResolvedValueOnce(existingRow({ imageKeys: ['order/a.jpg', 'task/c.jpg'] }))
         .mockResolvedValue(detailRow())
       await new WorkOrdersService(db, m, notifications()).update(
         'o1',
         { imageKeys: ['order/novo.jpg'], imageKeysBase: ['order/a.jpg'] },
         'org1',
       )
-      expect(db.workOrder.update.mock.calls[0][0].data.imageKeys).toEqual(['order/novo.jpg', 'order/c.jpg'])
+      expect(db.workOrder.update.mock.calls[0][0].data.imageKeys).toEqual(['order/novo.jpg', 'task/c.jpg'])
+      expect(m.deleteObjects).toHaveBeenCalledWith(['order/a.jpg'])
+    })
+
+    // O outro lado do mesmo cenário: a foto de percurso que o form CARREGOU
+    // viaja no base e no imageKeys, e tem que atravessar o merge intacta.
+    it('com base: foto de percurso que o form carregou e manteve sobrevive', async () => {
+      const db = prisma()
+      const m = media()
+      db.workOrder.findUnique
+        .mockResolvedValueOnce(existingRow({ imageKeys: ['order/a.jpg', 'task/c.jpg'] }))
+        .mockResolvedValue(detailRow())
+      await new WorkOrdersService(db, m, notifications()).update(
+        'o1',
+        { imageKeys: ['task/c.jpg'], imageKeysBase: ['order/a.jpg', 'task/c.jpg'] },
+        'org1',
+      )
+      expect(db.workOrder.update.mock.calls[0][0].data.imageKeys).toEqual(['task/c.jpg'])
       expect(m.deleteObjects).toHaveBeenCalledWith(['order/a.jpg'])
     })
 
