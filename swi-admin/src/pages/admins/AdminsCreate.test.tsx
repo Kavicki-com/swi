@@ -252,6 +252,61 @@ describe('AdminsCreate: campos de saúde e rodapé', () => {
     expect(descricaoAlergias()).toHaveAttribute('readonly')
   })
 
+  // Declarar "Sim" e não descrever é o caso que o dadosDeSaude, corretamente,
+  // se recusa a inventar: sem texto não há o que gravar. O buraco ficava um
+  // nível acima, no submit, que aceitava o cadastro assim mesmo e deixava a
+  // declaração morrer calada, o mesmo defeito que este formulário existe pra
+  // não ter. Alergia some do prontuário de quem disse ter alergia.
+  it('alergia declarada sem descrição não cadastra e explica o que falta', async () => {
+    const create = vi.spyOn(employeesApi, 'create')
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+    fireEvent.click(screen.getAllByText('Sim')[0]!)
+
+    finalizar()
+
+    expect(create).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/alergia/i)
+  })
+
+  it('doença crônica declarada sem descrição não cadastra', async () => {
+    const create = vi.spyOn(employeesApi, 'create')
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+    fireEvent.click(screen.getAllByText('Sim')[1]!)
+
+    finalizar()
+
+    expect(create).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/crônica/i)
+  })
+
+  // Não-vacuidade: a mesma tela, com a descrição preenchida, PASSA e leva o
+  // texto no corpo. Sem este caso a guarda poderia bloquear todo mundo.
+  it('alergia declarada com descrição cadastra e leva o texto', async () => {
+    const create = vi
+      .spyOn(employeesApi, 'create')
+      .mockResolvedValue({ data: { id: 'n' } as never, error: null })
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+    fireEvent.click(screen.getAllByText('Sim')[0]!)
+    fireEvent.change(descricaoAlergias(), { target: { value: 'Penicilina' } })
+
+    finalizar()
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ allergies: 'Penicilina' })
+  })
+
   it('"Voltar" devolve para a lista sem cadastrar', async () => {
     const create = vi.spyOn(employeesApi, 'create')
     const onBack = vi.fn()
