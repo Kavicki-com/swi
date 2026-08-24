@@ -5,6 +5,7 @@ import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 import { CreateUserDto, UpdateUserDto } from './dto'
+import { CreateExamDto } from '../profile/dto'
 import type { ApprovalStatus, Role } from '@prisma/client'
 
 @Controller('users')
@@ -43,6 +44,16 @@ export class UsersController {
   // ValidationPipe global roda com whitelist e descarta o que não está no DTO.
   @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN') @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto, @CurrentUser() user: JwtUser) { return this.users.update(id, dto, user.userId, user.companyId) }
+
+  // Exame anexado pelo admin ao cadastro de OUTRA pessoa. O /profile/exams
+  // grava sempre no usuário da sessão; esta rota é a que faltava pro formulário
+  // do painel poder anexar o laudo de quem está sendo cadastrado. Reusa o
+  // CreateExamDto do profile: mesma tabela, mesmas réguas (prefixo exams/ e
+  // validade como data de calendário).
+  @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN') @Post(':id/exams') @HttpCode(201)
+  addExam(@Param('id') id: string, @Body() dto: CreateExamDto, @CurrentUser() user: JwtUser) {
+    return this.users.addExam(id, dto, user.companyId)
+  }
 
   // Exclusão dura (204). requesterId barra auto-exclusão no service.
   @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN') @Delete(':id') @HttpCode(204)

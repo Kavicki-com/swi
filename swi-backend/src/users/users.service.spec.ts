@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { Prisma } from '@prisma/client'
 import { UsersService } from './users.service'
 
-const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn() } }) as any
+const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn() }, exam: { create: jest.fn() } }) as any
 // Espelha a convenção do work-orders.service.spec: presignGet devolve 'signed:<key>'.
 const media = () => ({ presignGet: jest.fn((k: string) => Promise.resolve('signed:' + k)) }) as any
 
@@ -573,5 +573,60 @@ describe('UsersService.remove', () => {
     db.profile = { deleteMany: jest.fn() }
     db.$transaction = jest.fn(async (fn: any) => fn(db))
     await expect(new UsersService(db, media()).remove('ghost', 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+  })
+})
+
+// Exame anexado PELO ADMIN a outra pessoa. Até aqui só existia POST
+// /profile/exams, que grava sempre no usuário da sessão: o admin cadastrando
+// alguém não tinha como anexar o laudo dessa pessoa, e a seção de exames do
+// formulário aceitava o arquivo e não o mandava a lugar nenhum.
+describe('UsersService.addExam', () => {
+  const dto = { name: 'Hemograma', date: '2027-03-14', fileKey: 'exams/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf' }
+
+  it('grava no usuário da ROTA e devolve o exame já apresentável', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
+    db.exam.create.mockResolvedValue({
+      id: 'e1',
+      userId: 'u1',
+      name: 'Hemograma',
+      date: new Date('2027-03-14T00:00:00.000Z'),
+      fileKey: dto.fileKey,
+    })
+
+    const r = await new UsersService(db, media()).addExam('u1', dto, 'org1')
+
+    // userId sai da rota, e a validade vira Date porque a coluna é @db.Date.
+    expect(db.exam.create).toHaveBeenCalledWith({
+      data: { userId: 'u1', name: 'Hemograma', date: new Date('2027-03-14'), fileKey: dto.fileKey },
+    })
+    // Mesma forma que o detalhe do usuário já devolve: data de CALENDÁRIO (ISO
+    // com hora recuaria o dia em fuso negativo) e URL assinada, nunca a key.
+    expect(r).toEqual({
+      id: 'e1',
+      name: 'Hemograma',
+      date: '2027-03-14',
+      fileUrl: 'signed:' + dto.fileKey,
+    })
+  })
+
+  it('usuário de OUTRA empresa → NotFound sem gravar nada', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org2' })
+
+    await expect(new UsersService(db, media()).addExam('u1', dto, 'org1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    )
+    expect(db.exam.create).not.toHaveBeenCalled()
+  })
+
+  it('usuário inexistente → NotFound sem gravar nada', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(null)
+
+    await expect(new UsersService(db, media()).addExam('nope', dto, 'org1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    )
+    expect(db.exam.create).not.toHaveBeenCalled()
   })
 })

@@ -262,6 +262,26 @@ export class UsersService {
     return this.toDetailDto(user)
   }
 
+  /**
+   * Exame anexado PELO ADMIN ao cadastro de outra pessoa. O POST /profile/exams
+   * grava sempre no usuário da sessão, então o admin cadastrando alguém não
+   * tinha rota nenhuma pra anexar o laudo dessa pessoa: a seção de exames do
+   * formulário aceitava o arquivo e não o mandava a lugar nenhum.
+   *
+   * Escopo pela empresa do requisitante como o resto do módulo, e por isso
+   * NotFound e não Forbidden quando o alvo é de outra empresa: negar existência
+   * é o que impede descobrir quem é cliente sondando ids.
+   */
+  async addExam(id: string, dto: { name: string; date: string; fileKey: string }, companyId: string | null) {
+    await this.requireSameCompany(id, companyId)
+    const exam = await this.prisma.exam.create({
+      // `new Date` porque a coluna é @db.Date: a validade é data de calendário,
+      // igual ao ProfileService.addExam, que escreve na MESMA tabela.
+      data: { userId: id, name: dto.name, date: new Date(dto.date), fileKey: dto.fileKey },
+    })
+    return this.toExamDto(exam)
+  }
+
   // Identidade + display (fullName ↔ name fallback, jobTitle/sector vazios quando
   // sem profile). birthDate em ISO (paridade com o Profile cru do wire, igual ao
   // toWorkerDto de work-orders); avatar assinado ('' sem key).
@@ -303,14 +323,19 @@ export class UsersService {
       // (ExamInfoCard) mas o DTO nunca trouxe os exames, então a seção ficava
       // vazia para todo mundo. Data de CALENDÁRIO ('AAAA-MM-DD'): mandar ISO
       // datetime faria o dia recuar um em fuso negativo na formatação.
-      exams: await Promise.all(
-        u.exams.map(async (e) => ({
-          id: e.id,
-          name: e.name,
-          date: e.date.toISOString().slice(0, 10),
-          fileUrl: await this.media.presignGet(e.fileKey),
-        })),
-      ),
+      exams: await Promise.all(u.exams.map((e) => this.toExamDto(e))),
+    }
+  }
+
+  // Um exame como as telas o leem. Extraído porque o detalhe e o anexo do admin
+  // devolvem a MESMA coisa, e duas cópias divergiriam no primeiro ajuste feito
+  // de um lado só (a data fatiada e a URL assinada são justamente o que muda).
+  private async toExamDto(e: Exam) {
+    return {
+      id: e.id,
+      name: e.name,
+      date: e.date.toISOString().slice(0, 10),
+      fileUrl: await this.media.presignGet(e.fileKey),
     }
   }
 }
