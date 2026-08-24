@@ -16,14 +16,15 @@ import { seedSession, clearSession, settled } from '@/test-utils/renderPage'
 import type { ReportActivity } from '@/services/api/reports'
 import { ReportDetails } from './ReportDetails'
 
-const { getMock, addCommentMock, toastShow } = vi.hoisted(() => ({
+const { getMock, addCommentMock, removeMock, toastShow } = vi.hoisted(() => ({
   getMock: vi.fn(),
   addCommentMock: vi.fn(),
+  removeMock: vi.fn(),
   toastShow: vi.fn(),
 }))
 
 vi.mock('@/services/api/reports', () => ({
-  reportsApi: { get: getMock, addComment: addCommentMock },
+  reportsApi: { get: getMock, addComment: addCommentMock, remove: removeMock },
 }))
 
 vi.mock('@/lib/demoToast', () => ({
@@ -96,6 +97,7 @@ function sendComment() {
 beforeEach(() => {
   getMock.mockReset()
   addCommentMock.mockReset()
+  removeMock.mockReset()
   toastShow.mockReset()
 })
 
@@ -374,5 +376,51 @@ describe('ReportDetails — revisar', () => {
     await waitFor(() => {
       expect(screen.getByTestId('report-edit-route')).toBeInTheDocument()
     })
+  })
+})
+
+// Excluir relatório. O DELETE /reports/:id existe desde a fatia de CRUD e
+// apaga também os anexos do bucket, mas nenhuma tela chamava a rota: um
+// relatório aberto por engano ficava para sempre. Por ser destrutivo e
+// irreversível, passa pelo ConfirmDialog compartilhado, o mesmo das exclusões
+// de funcionário e de admin.
+describe('ReportDetails: excluir', () => {
+  const excluirNoHeader = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir relatório' }))
+
+  it('cancelar a confirmação não chama o backend nem sai da tela', async () => {
+    await renderAt()
+
+    excluirNoHeader()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(removeMock).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('reports-route')).toBeNull()
+  })
+
+  it('confirmar chama o DELETE e volta para a lista', async () => {
+    removeMock.mockResolvedValue({ data: null, error: null })
+    await renderAt()
+
+    excluirNoHeader()
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
+
+    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('r_1'))
+    await waitFor(() => expect(screen.getByTestId('reports-route')).toBeTruthy())
+  })
+
+  // O relatório não pode sumir da tela antes do servidor confirmar: aqui não
+  // cabe exclusão otimista, porque a tela seguinte é outra rota e não haveria
+  // para onde voltar. Recusado, o relatório continua inteiro e legível.
+  it('erro do backend mantém o relatório na tela e avisa', async () => {
+    removeMock.mockResolvedValue({ data: null, error: { message: 'vinculado a uma ordem' } })
+    await renderAt()
+
+    excluirNoHeader()
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
+
+    await waitFor(() => expect(toastShow).toHaveBeenCalled())
+    expect(screen.queryByTestId('reports-route')).toBeNull()
+    expect(screen.getByText('Vazamento na esteira')).toBeTruthy()
   })
 })
