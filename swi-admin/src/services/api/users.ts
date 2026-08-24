@@ -217,6 +217,86 @@ async function createUser(
   }
 }
 
+/**
+ * Forma que a tela de EDIÇÃO carrega. Employee e Admin são formas de exibição:
+ * descartam e-mail, CPF, telefone e nascimento, que são exatamente os campos
+ * que um formulário precisa reeditar. Ausência vira string vazia porque é o que
+ * um campo de texto controlado sabe representar; null viraria "null" na tela.
+ */
+export type EditableUser = {
+  id: string
+  name: string
+  email: string
+  phone: string
+  cpf: string
+  birthDate: string // date-only ('AAAA-MM-DD'), '' quando não informado
+  gender: string // código gravado ('male'/'female'/'other'), '' quando ausente
+  bloodType: string // sigla maiúscula, '' quando ausente
+  allergies: string
+  chronicConditions: string
+}
+
+// Datetime com fuso → data de CALENDÁRIO. Corta no 'T' em vez de passar por
+// Date: a meia-noite UTC vira o dia anterior a oeste de Greenwich, que é onde
+// o cliente opera, e o nascimento recuaria um dia a cada abertura do form.
+const dataPura = (iso: string | null): string => (iso ? (iso.split('T')[0] ?? '') : '')
+
+const toEditable = (u: UserDetailDto): EditableUser => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  phone: u.phone ?? '',
+  cpf: u.cpf ?? '',
+  birthDate: dataPura(u.birthDate),
+  gender: u.gender ?? '',
+  bloodType: u.bloodType ?? '',
+  allergies: u.allergies ?? '',
+  chronicConditions: u.chronicConditions ?? '',
+})
+
+const getForEditUser = async (id: string): Promise<ServiceResponse<EditableUser | null>> => {
+  try {
+    return { data: toEditable(await apiFetch<UserDetailDto>(`/users/${id}`)), error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }
+  }
+}
+
+/**
+ * Corpo do PATCH /users/:id. Espelha o UpdateUserDto no que a tela de edição
+ * mexe. Omitir um campo significa "não mexe", nunca "apaga".
+ *
+ * `email` e `password` estão FORA porque o backend não os aceita aqui: e-mail é
+ * identidade de login (trocar exige reconfirmação) e o PATCH não tem campo de
+ * senha. A tela reflete isso em vez de mandar chave que a whitelist descarta
+ * calada, que é como um formulário passa a mentir sobre o que salvou.
+ */
+export type UpdateUserInput = {
+  name?: string
+  phone?: string
+  cpf?: string
+  birthDate?: string
+  gender?: string
+  bloodType?: string
+  allergies?: string
+  chronicConditions?: string
+}
+
+const updateUser = async (
+  id: string,
+  patch: UpdateUserInput,
+): Promise<ServiceResponse<UserSummaryDto>> => {
+  try {
+    const updated = await apiFetch<UserSummaryDto>(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+    return { data: updated, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha ao salvar') } }
+  }
+}
+
 // Ativar/desativar e excluir batem em /users/:id, então moram ACIMA dos dois
 // diretórios: declaradas depois de employeesApi, o const cai na temporal dead
 // zone e o módulo inteiro explode no import.
@@ -258,6 +338,8 @@ export const employeesApi = {
   list: () => listMapped('WORKER', toEmployee),
   get: (id: string) => getMapped(id, toEmployee),
   create: (input: CreateUserInput) => createUser('WORKER', input),
+  getForEdit: getForEditUser,
+  update: updateUser,
   remove: removeUser,
 }
 
@@ -265,6 +347,8 @@ export const adminsApi = {
   list: () => listMapped('ADMIN', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
   create: (input: CreateUserInput) => createUser('ADMIN', input),
+  getForEdit: getForEditUser,
+  update: updateUser,
   setActive: setUserActive,
   remove: removeUser,
 }

@@ -7,7 +7,12 @@ import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderPage, clearSession } from '@/test-utils/renderPage'
 import { employeesApi, adminsApi } from '@/services/api/users'
-import { AdminsCreate, dadosDeSaude } from './AdminsCreate'
+import {
+  AdminsCreate,
+  dadosDeSaude,
+  formDoUsuario,
+  patchDoFormulario,
+} from './AdminsCreate'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -326,5 +331,174 @@ describe('dadosDeSaude', () => {
     const sim = dadosDeSaude({ ...vazio, doencasCronicas: 'sim', doencasCronicasDesc: 'Asma' })
     expect(sim.chronicConditions).toBe('Asma')
     expect(dadosDeSaude({ ...vazio, doencasCronicas: 'nao', doencasCronicasDesc: 'x' })).toEqual({})
+  })
+})
+
+// Edição de cadastro. O formulário é o mesmo do cadastro (mesmos campos, mesma
+// rota de dados), então a tradução precisa andar nos DOIS sentidos: o cadastro
+// leva o vocabulário da tela pro gravado, e a edição traz o gravado de volta.
+// Sem a volta, abrir a edição de quem é 'male' mostraria o gênero em branco e
+// salvar apagaria o dado de quem só queria corrigir o telefone.
+const GRAVADO = {
+  id: 'u1',
+  name: 'Carlos Mendes',
+  email: 'carlos@x.com',
+  phone: '11998765432',
+  cpf: '41255687890',
+  birthDate: '1992-03-14',
+  gender: 'male',
+  bloodType: 'O+',
+  allergies: 'Penicilina',
+  chronicConditions: '',
+}
+
+describe('formDoUsuario', () => {
+  it('traz o gênero gravado de volta pro vocabulário da tela', () => {
+    expect(formDoUsuario(GRAVADO).genero).toBe('masculino')
+    expect(formDoUsuario({ ...GRAVADO, gender: 'female' }).genero).toBe('feminino')
+    expect(formDoUsuario({ ...GRAVADO, gender: 'other' }).genero).toBe('outro')
+  })
+
+  // Perda decidida no cadastro: 'nao-binario' e 'outro' colapsam em 'other', e
+  // reabrir mostra 'Outro'. O teste fixa a perda pra que ela seja uma escolha
+  // registrada, e não uma surpresa achada em produção.
+  it('gênero fora do vocabulário não vira rótulo inventado', () => {
+    expect(formDoUsuario({ ...GRAVADO, gender: 'masculino' }).genero).toBe('')
+    expect(formDoUsuario({ ...GRAVADO, gender: '' }).genero).toBe('')
+  })
+
+  it('tipo sanguíneo volta em minúsculo, que é o valor que a combo guarda', () => {
+    expect(formDoUsuario(GRAVADO).tipoSanguineo).toBe('o+')
+  })
+
+  it('nascimento volta no formato que a máscara da tela edita', () => {
+    expect(formDoUsuario(GRAVADO).dataNascimento).toBe('14/03/1992')
+    expect(formDoUsuario({ ...GRAVADO, birthDate: '' }).dataNascimento).toBe('')
+  })
+
+  it('texto de alergia gravado reabre com a resposta Sim marcada', () => {
+    const f = formDoUsuario(GRAVADO)
+    expect(f.alergico).toBe('sim')
+    expect(f.alergicoDesc).toBe('Penicilina')
+  })
+
+  // Ausência de texto NÃO é o mesmo que ter respondido "Não": o banco guarda só
+  // o texto, então quem nunca respondeu e quem respondeu Não são indistinguíveis
+  // ali. Marcar 'nao' afirmaria uma declaração que ninguém fez.
+  it('ausência de texto reabre sem resposta, não como Não', () => {
+    expect(formDoUsuario(GRAVADO).doencasCronicas).toBe('')
+  })
+
+  it('senha nunca volta preenchida', () => {
+    expect(formDoUsuario(GRAVADO).senha).toBe('')
+  })
+})
+
+describe('patchDoFormulario', () => {
+  it('leva identidade e saúde no vocabulário gravado', () => {
+    expect(patchDoFormulario(formDoUsuario(GRAVADO))).toEqual({
+      name: 'Carlos Mendes',
+      phone: '11998765432',
+      cpf: '41255687890',
+      birthDate: '1992-03-14',
+      gender: 'male',
+      bloodType: 'O+',
+      allergies: 'Penicilina',
+      chronicConditions: '',
+    })
+  })
+
+  // Limpar um campo precisa CHEGAR como limpeza: omitir significa "não mexe" e
+  // o valor antigo sobreviveria a uma remoção deliberada.
+  it('campo de texto esvaziado sobe vazio, para de fato limpar', () => {
+    const patch = patchDoFormulario({ ...formDoUsuario(GRAVADO), telefone: '', alergico: 'nao' })
+    expect(patch.phone).toBe('')
+    expect(patch.allergies).toBe('')
+  })
+
+  // Nascimento é a exceção: o IsCalendarDate do backend recusa string vazia, e
+  // mandá-la trocaria um campo em branco por um 400 na cara de quem salvou.
+  it('nascimento em branco é omitido em vez de subir vazio', () => {
+    const patch = patchDoFormulario({ ...formDoUsuario(GRAVADO), dataNascimento: '' })
+    expect(patch).not.toHaveProperty('birthDate')
+  })
+
+  it('e-mail e senha ficam fora do patch, porque o backend não os aceita ali', () => {
+    const patch = patchDoFormulario(formDoUsuario(GRAVADO))
+    expect(patch).not.toHaveProperty('email')
+    expect(patch).not.toHaveProperty('password')
+  })
+})
+
+describe('AdminsCreate em modo edição', () => {
+  const renderEdicao = () =>
+    renderPage(<AdminsCreate subject="funcionário" />, {
+      route: '/employees/u1/edit',
+      path: '/employees/:id/edit',
+    })
+
+  it('carrega o cadastro e preenche os campos', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    await renderEdicao()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('admins-create-nome')).toHaveValue('Carlos Mendes'),
+    )
+    expect(screen.getByTestId('admins-create-email')).toHaveValue('carlos@x.com')
+  })
+
+  // Senha na edição não é um campo em branco inofensivo: o PATCH não aceita
+  // password, então o campo aceitaria uma senha nova e a jogaria fora.
+  it('não pede senha', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    await renderEdicao()
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+
+    expect(screen.queryByTestId('admins-create-senha')).toBeNull()
+  })
+
+  it('salvar manda o PATCH e não cria ninguém', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    const create = vi.spyOn(employeesApi, 'create')
+    const update = vi
+      .spyOn(employeesApi, 'update')
+      .mockResolvedValue({ data: { id: 'u1' } as never, error: null })
+    await renderEdicao()
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+
+    typeIn('admins-create-nome', 'Carlos M. Mendes')
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[0]).toBe('u1')
+    expect(update.mock.calls[0]?.[1]).toMatchObject({ name: 'Carlos M. Mendes', gender: 'male' })
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('erro do backend aparece na tela e não fecha o formulário', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    vi.spyOn(employeesApi, 'update').mockResolvedValue({
+      data: null,
+      error: { message: 'cpf inválido' },
+    })
+    await renderEdicao()
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/cpf inválido/i))
+  })
+
+  // Cadastro que não carrega não pode virar formulário em branco: salvar dali
+  // apagaria o cadastro inteiro de quem só queria corrigir um campo.
+  it('cadastro que não carrega diz isso em vez de abrir vazio', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({
+      data: null,
+      error: { message: 'Falha ao carregar' },
+    })
+    await renderEdicao()
+
+    await waitFor(() => expect(screen.getByTestId('admins-create-nao-encontrado')).toBeTruthy())
+    expect(screen.queryByTestId('admins-create-nome')).toBeNull()
   })
 })

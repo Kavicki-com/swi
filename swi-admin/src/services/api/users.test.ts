@@ -397,3 +397,78 @@ describe('approvalsApi.approve/reject (real)', () => {
     expect(error?.message).toBeTruthy()
   })
 })
+
+// Carga e gravação da tela de edição. O detalhe do usuário devolve o cadastro
+// inteiro, mas Employee/Admin são formas de EXIBIÇÃO: descartam e-mail, CPF,
+// telefone e nascimento, justamente os campos que um formulário precisa
+// reeditar. Por isso a edição carrega a sua própria forma.
+describe('getForEdit / update (real)', () => {
+  const detail = (over: Record<string, unknown> = {}) => ({
+    ...summary(),
+    phone: '11999998888',
+    cpf: '41255687890',
+    company: null,
+    gender: 'male',
+    allergies: 'Penicilina',
+    chronicConditions: null,
+    bloodType: 'O+',
+    ...over,
+  })
+
+  it('GET /users/:id devolve os campos editáveis, sem inventar ausência', async () => {
+    vi.stubGlobal('fetch', okJson(detail()))
+    const { data } = await employeesApi.getForEdit('u1')
+    expect(data).toEqual({
+      id: 'u1',
+      name: 'Worker Um',
+      email: 'w1@x.com',
+      phone: '11999998888',
+      cpf: '41255687890',
+      birthDate: '1990-05-04',
+      gender: 'male',
+      bloodType: 'O+',
+      allergies: 'Penicilina',
+      chronicConditions: '',
+    })
+  })
+
+  // O nascimento chega como datetime com fuso em alguns registros. Cortar no
+  // 'T' mantém a data de CALENDÁRIO; passar por Date recuaria um dia a oeste
+  // de Greenwich, que é exatamente onde o cliente opera.
+  it('nascimento vira data pura, sem passar por fuso', async () => {
+    vi.stubGlobal('fetch', okJson(detail({ birthDate: '1990-05-04T00:00:00.000Z' })))
+    const { data } = await employeesApi.getForEdit('u1')
+    expect(data?.birthDate).toBe('1990-05-04')
+  })
+
+  it('campos nulos viram string vazia, que é o que o formulário sabe editar', async () => {
+    vi.stubGlobal('fetch', okJson(detail({ phone: null, cpf: null, birthDate: null, gender: null, bloodType: null, allergies: null })))
+    const { data } = await employeesApi.getForEdit('u1')
+    expect(data).toMatchObject({ phone: '', cpf: '', birthDate: '', gender: '', bloodType: '', allergies: '' })
+  })
+
+  it('update → PATCH /users/:id com o corpo recebido', async () => {
+    const f = okJson(summary())
+    vi.stubGlobal('fetch', f)
+    const { error } = await employeesApi.update('u1', { name: 'Novo Nome', gender: 'other' })
+    expect(error).toBeNull()
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/u1')
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'Novo Nome', gender: 'other' })
+  })
+
+  it('update com erro do backend devolve o envelope de erro', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ message: 'cpf inválido' }),
+      } as Response),
+    )
+    const { data, error } = await adminsApi.update('a1', { cpf: 'x' })
+    expect(data).toBeNull()
+    expect(error?.message).toBe('cpf inválido')
+  })
+})

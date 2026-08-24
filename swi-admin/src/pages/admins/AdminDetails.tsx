@@ -91,7 +91,13 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Editar perfil do administrador"
-          onPress={() => navigate('/user/settings')}
+          // Dois contextos, dois destinos. Vindo do diretório (/admins/:id) o
+          // perfil é de OUTRA pessoa e o destino é a edição dela; mandar pra
+          // /user/settings levava o admin pro próprio cadastro, onde salvar
+          // alteraria a pessoa errada. Montada pelo UserProfile (adminId), a
+          // página é o próprio perfil, e aí as configurações da sessão seguem
+          // sendo o lugar certo: é lá que moram senha e avatar.
+          onPress={() => navigate(adminId ? '/user/settings' : `/admins/${id}/edit`)}
           style={{
             flexDirection: 'row',
             alignItems: 'center',

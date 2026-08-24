@@ -2,7 +2,7 @@
 // Admin registration form. Three sections (Dados do cadastro,
 // Dados de saúde, Exames clínicos) followed by Voltar / Finalizar Cadastro
 // footer. Rendered by AdminsList when tab='cadastrar'.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import {
   Button,
@@ -15,7 +15,14 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
-import { adminsApi, employeesApi, type CreateUserInput } from '@/services/api/users'
+import {
+  adminsApi,
+  employeesApi,
+  type CreateUserInput,
+  type EditableUser,
+  type UpdateUserInput,
+} from '@/services/api/users'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useDemoToast } from '@/lib/demoToast'
 import { maskCpf, maskDate, maskPhone, onlyDigits } from '@/lib/masks'
 
@@ -114,6 +121,87 @@ export function dadosDeSaude(form: CamposDeSaude): {
   }
 }
 
+// Tradução INVERSA do gênero: o vocabulário gravado de volta pro da tela. O
+// cadastro só precisava do sentido de ida; a edição precisa dos dois, porque
+// abrir o formulário com o gênero em branco e salvar apagaria a declaração de
+// quem só queria corrigir o telefone.
+//
+// Só os três códigos gravados voltam. 'nao-binario' NÃO tem volta: ele foi
+// gravado como 'other' e reabre como 'Outro'. É a perda que o cadastro já
+// aceitou de propósito, e inventar a volta aqui seria adivinhar qual das duas
+// respostas a pessoa deu.
+const GENERO_DA_TELA: Record<string, string | undefined> = {
+  male: 'masculino',
+  female: 'feminino',
+  other: 'outro',
+}
+
+// 'AAAA-MM-DD' → 'DD/MM/AAAA'. Fatia texto em vez de passar por Date, pela
+// mesma razão do caminho de ida: meia-noite UTC recua um dia no fuso do
+// cliente, e o nascimento andaria pra trás a cada abertura do formulário.
+const dataBR = (iso: string): string => {
+  const [aaaa, mm, dd] = iso.split('-')
+  return aaaa && mm && dd ? `${dd}/${mm}/${aaaa}` : ''
+}
+
+/**
+ * Cadastro gravado → estado do formulário. Espelho do dadosDeSaude, no sentido
+ * contrário.
+ *
+ * Texto vazio reabre SEM resposta, e não como "Não": o banco guarda apenas o
+ * texto livre, então quem nunca respondeu e quem respondeu "Não" chegam aqui
+ * idênticos. Marcar "Não" afirmaria uma declaração que ninguém fez, e é a mesma
+ * régua que faz a ausência de gênero virar "não informado" nas telas de leitura.
+ */
+export function formDoUsuario(u: EditableUser): FormState {
+  const temAlergia = u.allergies.trim().length > 0
+  const temCronica = u.chronicConditions.trim().length > 0
+  return {
+    nomeCompleto: u.name,
+    email: u.email,
+    telefone: maskPhone(u.phone),
+    dataNascimento: dataBR(u.birthDate),
+    cpf: maskCpf(u.cpf),
+    // Não tem campo correspondente no backend, então não há o que recarregar.
+    nomeUsuario: '',
+    // O PATCH não aceita senha e a tela de edição não a renderiza. Vazio aqui
+    // é o estado honesto: não há senha pra reexibir, e não haveria pra onde
+    // mandá-la.
+    senha: '',
+    tipoSanguineo: u.bloodType.toLowerCase(),
+    genero: GENERO_DA_TELA[u.gender] ?? '',
+    alergico: temAlergia ? 'sim' : '',
+    alergicoDesc: u.allergies,
+    doencasCronicas: temCronica ? 'sim' : '',
+    doencasCronicasDesc: u.chronicConditions,
+  }
+}
+
+/**
+ * Estado do formulário → corpo do PATCH. Difere do dadosDeSaude num ponto que
+ * importa: campo esvaziado sobe VAZIO em vez de ser omitido. No cadastro
+ * omitir significa "não tinha"; num patch significa "não mexe", e aí limpar um
+ * telefone deliberadamente deixaria o antigo no lugar.
+ *
+ * O nascimento é a única exceção, porque não é texto livre: o IsCalendarDate do
+ * backend recusa string vazia, então mandá-la trocaria um campo em branco por
+ * um 400 na cara de quem salvou. Em branco ele é omitido, o que significa que
+ * esta tela consegue CORRIGIR um nascimento mas não apagá-lo.
+ */
+export function patchDoFormulario(form: FormState): UpdateUserInput {
+  const birthDate = parseBR(form.dataNascimento)
+  return {
+    name: form.nomeCompleto.trim(),
+    phone: onlyDigits(form.telefone),
+    cpf: onlyDigits(form.cpf),
+    ...(birthDate ? { birthDate } : {}),
+    gender: CODIGO_DE_GENERO[form.genero] ?? '',
+    bloodType: form.tipoSanguineo.trim().toUpperCase(),
+    allergies: textoLivre(form.alergico, form.alergicoDesc) ?? '',
+    chronicConditions: textoLivre(form.doencasCronicas, form.doencasCronicasDesc) ?? '',
+  }
+}
+
 // 'DD/MM/AAAA' → ISO date-only ('AAAA-MM-DD'). Vazio/fora do formato → undefined
 // (o campo é opcional; não sobe chave vazia). Retorna date-only, NÃO .toISOString():
 // a meia-noite local vira UTC e a data recuaria um dia perto do fuso (off-by-one).
@@ -206,6 +294,16 @@ export function AdminsCreate({
 }) {
   const theme = useTheme()
   const { show: showToast } = useDemoToast()
+  const navigate = useNavigate()
+  // Mesma peça servindo criação e edição, como o NewReport já faz pros
+  // relatórios: a rota /:id/edit monta este componente e o `id` do useParams é
+  // o que separa os dois modos. Dentro da lista (tab de cadastro) não há `:id`
+  // na rota, então o modo é criação sem precisar de prop.
+  const { id: editandoId } = useParams()
+  const isEdit = Boolean(editandoId)
+  // Só na edição: enquanto o cadastro não chega, e quando ele não chega.
+  const [carregando, setCarregando] = useState(isEdit)
+  const [naoEncontrado, setNaoEncontrado] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({
@@ -224,6 +322,34 @@ export function AdminsCreate({
     doencasCronicasDesc: '',
   })
 
+  // Carga do cadastro na edição. `api` sai do subject, que é o mesmo que decide
+  // pra onde o submit vai: as duas rotas de usuário são a mesma no backend.
+  useEffect(() => {
+    if (!editandoId) return
+    let cancelado = false
+    const api = subject === 'funcionário' ? employeesApi : adminsApi
+    void api.getForEdit(editandoId).then(({ data }) => {
+      if (cancelado) return
+      // Sem cadastro não há formulário: um form em branco aqui salvaria por
+      // cima do cadastro inteiro de quem só queria corrigir um campo.
+      if (!data) setNaoEncontrado(true)
+      else setForm(formDoUsuario(data))
+      setCarregando(false)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [editandoId, subject])
+
+  // Saída da tela. Dentro da lista quem sabe voltar é o host (troca de aba, sem
+  // navegação); como rota de edição não há host, e o destino honesto é o
+  // detalhe de quem acabou de ser editado.
+  const voltar = () => {
+    if (onBack) return onBack()
+    const base = subject === 'funcionário' ? '/employees' : '/admins'
+    navigate(editandoId ? `${base}/${editandoId}` : base)
+  }
+
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
@@ -235,20 +361,38 @@ export function AdminsCreate({
     if (submitting) return
     const nome = form.nomeCompleto.trim()
     const email = form.email.trim()
-    if (!nome || !email || !form.senha) {
-      setError('Preencha nome, e-mail e senha.')
+    // Na edição a senha não é pedida (o PATCH não a aceita) e o e-mail não é
+    // editável, então cobrá-los aqui recusaria um salvamento legítimo.
+    if (!nome || (!isEdit && (!email || !form.senha))) {
+      setError(isEdit ? 'Preencha o nome.' : 'Preencha nome, e-mail e senha.')
       return
     }
-    if (!EMAIL_RE.test(email)) {
+    if (!isEdit && !EMAIL_RE.test(email)) {
       setError('Informe um e-mail válido.')
       return
     }
-    if (form.senha.length < 8) {
+    if (!isEdit && form.senha.length < 8) {
       setError('A senha deve ter no mínimo 8 caracteres.')
       return
     }
     setError(null)
     setSubmitting(true)
+    const api = subject === 'funcionário' ? employeesApi : adminsApi
+    if (isEdit && editandoId) {
+      try {
+        const { error: apiError } = await api.update(editandoId, patchDoFormulario(form))
+        if (apiError) {
+          setError(apiError.message)
+          showToast('Erro', apiError.message)
+          return
+        }
+        showToast('Cadastro atualizado', `${nome} foi salvo`)
+        voltar()
+      } finally {
+        setSubmitting(false)
+      }
+      return
+    }
     const birthDate = parseBR(form.dataNascimento)
     const payload: CreateUserInput = {
       name: nome,
@@ -261,7 +405,6 @@ export function AdminsCreate({
       ...(birthDate ? { birthDate } : {}),
       ...dadosDeSaude(form),
     }
-    const api = subject === 'funcionário' ? employeesApi : adminsApi
     try {
       const { error: apiError } = await api.create(payload)
       if (apiError) {
@@ -274,6 +417,35 @@ export function AdminsCreate({
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Estados exclusivos da edição. O formulário só é montado quando há cadastro
+  // pra editar: em branco ele salvaria por cima do que não conseguiu ler.
+  if (naoEncontrado) {
+    return (
+      <View testID="admins-create-nao-encontrado" style={{ gap: theme.gap.m }}>
+        <Text variant="body.m" color={theme.content.dark}>
+          Não foi possível carregar este cadastro.
+        </Text>
+        <View style={{ alignItems: 'flex-start' }}>
+          <Button
+            label="Voltar"
+            variant="outline"
+            onPress={voltar}
+            accessibilityLabel={`Voltar para a lista de ${subject === 'funcionário' ? 'funcionários' : 'administradores'}`}
+          />
+        </View>
+      </View>
+    )
+  }
+  if (carregando) {
+    return (
+      <View testID="admins-create-carregando" style={{ padding: theme.padding.m }}>
+        <Text variant="body.m" color={theme.content.dark}>
+          Carregando…
+        </Text>
+      </View>
+    )
   }
 
   return (
@@ -340,17 +512,22 @@ export function AdminsCreate({
               autoCapitalize="none"
             />
           </View>
-          <View style={{ flex: 1 }}>
-            <Input
-              testID="admins-create-senha"
-              label="Senha"
-              placeholder="digite aqui"
-              value={form.senha}
-              onChangeText={(v) => update('senha', v)}
-              secureTextEntry
-              iconRight={<Icon name="visibility" size={20} color={theme.content.dark} />}
-            />
-          </View>
+          {/* Senha só existe no cadastro. O PATCH /users/:id não aceita
+              password, então renderizar o campo na edição seria oferecer uma
+              troca de senha que a whitelist do backend descartaria calada. */}
+          {!isEdit ? (
+            <View style={{ flex: 1 }}>
+              <Input
+                testID="admins-create-senha"
+                label="Senha"
+                placeholder="digite aqui"
+                value={form.senha}
+                onChangeText={(v) => update('senha', v)}
+                secureTextEntry
+                iconRight={<Icon name="visibility" size={20} color={theme.content.dark} />}
+              />
+            </View>
+          ) : null}
         </View>
       </Section>
 
@@ -467,20 +644,20 @@ export function AdminsCreate({
             size="large"
             fullWidth
             disabled={submitting}
-            onPress={() => onBack?.()}
+            onPress={voltar}
             accessibilityLabel={`Voltar para a lista de ${subject === 'funcionário' ? 'funcionários' : 'administradores'}`}
           />
         </View>
         <View style={{ flex: 1 }}>
           <Button
-            label="Finalizar Cadastro"
+            label={isEdit ? 'Salvar alterações' : 'Finalizar Cadastro'}
             variant="contained"
             size="large"
             fullWidth
             disabled={submitting}
             backgroundColor={theme.surface.primary}
             onPress={handleSubmit}
-            accessibilityLabel={`Finalizar cadastro do ${subject}`}
+            accessibilityLabel={isEdit ? `Salvar alterações do ${subject}` : `Finalizar cadastro do ${subject}`}
           />
         </View>
       </View>
