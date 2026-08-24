@@ -7,6 +7,7 @@ import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderPage, clearSession } from '@/test-utils/renderPage'
 import { employeesApi, adminsApi } from '@/services/api/users'
+import * as uploadMod from '@/services/api/upload'
 import {
   AdminsCreate,
   dadosDeSaude,
@@ -358,6 +359,7 @@ const GRAVADO = {
   bloodType: 'O+',
   allergies: 'Penicilina',
   chronicConditions: '',
+  exams: [],
 }
 
 describe('formDoUsuario', () => {
@@ -523,5 +525,130 @@ describe('AdminsCreate em modo edição', () => {
 
     await waitFor(() => expect(screen.getByTestId('admins-create-nao-encontrado')).toBeTruthy())
     expect(screen.queryByTestId('admins-create-nome')).toBeNull()
+  })
+})
+
+// Exames no cadastro e na edição do painel. Duas situações diferentes:
+// na EDIÇÃO o usuário existe e o exame sobe na hora; no CADASTRO ele ainda não
+// tem id, então o exame fica na fila e só sobe depois do create devolver o id.
+describe('AdminsCreate: exames clínicos', () => {
+  const arquivo = () => new File(['x'], 'laudo.pdf', { type: 'application/pdf' })
+
+  const preencherExame = (nome: string, validade: string) => {
+    fireEvent.change(screen.getByTestId('admins-create-exam-name'), { target: { value: nome } })
+    fireEvent.change(screen.getByTestId('admins-create-exam-date'), { target: { value: validade } })
+  }
+
+  const escolherArquivo = () => {
+    fireEvent.click(screen.getByRole('button', { name: /enviar exame/i }))
+    fireEvent.change(screen.getByTestId('admins-create-exam-input'), {
+      target: { files: [arquivo()] },
+    })
+  }
+
+  it('no cadastro, o exame entra na fila e só sobe depois do usuário existir', async () => {
+    const create = vi
+      .spyOn(employeesApi, 'create')
+      .mockResolvedValue({ data: { id: 'novo-1' } as never, error: null })
+    const addExam = vi
+      .spyOn(employeesApi, 'addExam')
+      .mockResolvedValue({ data: { id: 'e1' } as never, error: null })
+    const upload = vi.spyOn(uploadMod, 'uploadImage').mockResolvedValue('exams/k.pdf')
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+    preencherExame('Hemograma', '14/03/2027')
+    escolherArquivo()
+
+    // Enquanto o cadastro não existe, nada subiu: não há a quem anexar.
+    await waitFor(() => expect(screen.getByText('Hemograma')).toBeTruthy())
+    expect(upload).not.toHaveBeenCalled()
+    expect(addExam).not.toHaveBeenCalled()
+
+    finalizar()
+
+    await waitFor(() => expect(addExam).toHaveBeenCalledTimes(1))
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(addExam.mock.calls[0]?.[0]).toBe('novo-1')
+    expect(addExam.mock.calls[0]?.[1]).toEqual({
+      name: 'Hemograma',
+      date: '2027-03-14',
+      fileKey: 'exams/k.pdf',
+    })
+  })
+
+  // Se o cadastro falhou, não existe usuário: subir o arquivo deixaria objeto
+  // órfão no bucket em nome de alguém que não foi criado.
+  it('cadastro recusado não sobe exame nenhum', async () => {
+    vi.spyOn(employeesApi, 'create').mockResolvedValue({
+      data: null,
+      error: { message: 'E-mail já cadastrado' },
+    })
+    const addExam = vi.spyOn(employeesApi, 'addExam')
+    const upload = vi.spyOn(uploadMod, 'uploadImage')
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+    preencherExame('Hemograma', '14/03/2027')
+    escolherArquivo()
+    finalizar()
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/já cadastrado/i))
+    expect(upload).not.toHaveBeenCalled()
+    expect(addExam).not.toHaveBeenCalled()
+  })
+
+  it('exame sem nome ou sem validade não entra na fila e diz o que falta', async () => {
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /enviar exame/i }))
+
+    // Casa a MENSAGEM, não o rótulo "Nome do exame" do campo, que existe sempre.
+    await waitFor(() => expect(screen.getByText(/informe o nome do exame/i)).toBeTruthy())
+  })
+
+  it('na edição o exame sobe na hora, porque o cadastro já existe', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    const addExam = vi
+      .spyOn(employeesApi, 'addExam')
+      .mockResolvedValue({
+        data: { id: 'e9', name: 'Hemograma', date: '2027-03-14', fileUrl: 'signed:k' },
+        error: null,
+      })
+    vi.spyOn(uploadMod, 'uploadImage').mockResolvedValue('exams/k.pdf')
+    await renderPage(<AdminsCreate subject="funcionário" />, {
+      route: '/employees/u1/edit',
+      path: '/employees/:id/edit',
+    })
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+
+    preencherExame('Hemograma', '14/03/2027')
+    escolherArquivo()
+
+    await waitFor(() => expect(addExam).toHaveBeenCalledWith('u1', {
+      name: 'Hemograma',
+      date: '2027-03-14',
+      fileKey: 'exams/k.pdf',
+    }))
+  })
+
+  it('a edição mostra os exames que já estavam gravados', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({
+      data: {
+        ...GRAVADO,
+        exams: [{ id: 'e1', name: 'Audiometria', date: '2027-08-01', fileUrl: 'signed:a' }],
+      },
+      error: null,
+    })
+    await renderPage(<AdminsCreate subject="funcionário" />, {
+      route: '/employees/u1/edit',
+      path: '/employees/:id/edit',
+    })
+
+    await waitFor(() => expect(screen.getByText('Audiometria')).toBeTruthy())
   })
 })

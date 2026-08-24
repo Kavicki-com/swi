@@ -429,6 +429,9 @@ describe('getForEdit / update (real)', () => {
       bloodType: 'O+',
       allergies: 'Penicilina',
       chronicConditions: '',
+      // Cadastro sem exame nenhum: lista vazia, que é o que a seção sabe
+      // renderizar como "Nenhum exame enviado".
+      exams: [],
     })
   })
 
@@ -470,5 +473,75 @@ describe('getForEdit / update (real)', () => {
     const { data, error } = await adminsApi.update('a1', { cpf: 'x' })
     expect(data).toBeNull()
     expect(error?.message).toBe('cpf inválido')
+  })
+})
+
+// Exame anexado pelo admin. A rota nova (POST /users/:id/exams) é a que deixa o
+// formulário anexar o laudo de QUEM está sendo cadastrado; o /profile/exams
+// grava sempre no usuário da sessão.
+describe('addExam / exames na carga de edição', () => {
+  it('POST /users/:id/exams com nome, validade e a key do arquivo', async () => {
+    const criado = { id: 'e1', name: 'Hemograma', date: '2027-03-14', fileUrl: 'signed:x' }
+    const f = okJson(criado)
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await employeesApi.addExam('u1', {
+      name: 'Hemograma',
+      date: '2027-03-14',
+      fileKey: 'exams/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf',
+    })
+
+    expect(error).toBeNull()
+    expect(data).toEqual(criado)
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/u1/exams')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: 'Hemograma',
+      date: '2027-03-14',
+      fileKey: 'exams/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf',
+    })
+  })
+
+  it('erro do backend vira envelope de erro, sem exame fantasma', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ message: 'fileKey inválida' }),
+      } as Response),
+    )
+    const { data, error } = await adminsApi.addExam('a1', { name: 'X', date: '2027-01-01', fileKey: 'k' })
+    expect(data).toBeNull()
+    expect(error?.message).toBe('fileKey inválida')
+  })
+
+  // A tela de edição precisa MOSTRAR o que já existe antes de deixar anexar
+  // mais: sem isso o admin anexa em duplicata o exame que já estava lá.
+  it('a carga de edição traz os exames que o detalhe já devolvia', async () => {
+    vi.stubGlobal(
+      'fetch',
+      okJson({
+        ...summary(),
+        phone: null,
+        cpf: null,
+        company: null,
+        gender: null,
+        allergies: null,
+        chronicConditions: null,
+        exams: [{ id: 'e1', name: 'Hemograma', date: '2027-03-14', fileUrl: 'signed:x' }],
+      }),
+    )
+    const { data } = await employeesApi.getForEdit('u1')
+    expect(data?.exams).toEqual([
+      { id: 'e1', name: 'Hemograma', date: '2027-03-14', fileUrl: 'signed:x' },
+    ])
+  })
+
+  it('backend sem o campo exams devolve lista vazia, não undefined', async () => {
+    vi.stubGlobal('fetch', okJson({ ...summary(), phone: null, cpf: null, company: null, gender: null, allergies: null, chronicConditions: null }))
+    const { data } = await employeesApi.getForEdit('u1')
+    expect(data?.exams).toEqual([])
   })
 })

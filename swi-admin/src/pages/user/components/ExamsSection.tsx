@@ -19,6 +19,8 @@ export function ExamsSection({
   examsBusy,
   onPickFile,
   exams,
+  pending = [],
+  testIDPrefix = 'settings',
 }: {
   examName: string
   onExamNameChange: (value: string) => void
@@ -28,6 +30,14 @@ export function ExamsSection({
   examsBusy: boolean
   onPickFile: () => void
   exams: readonly Exam[]
+  /** Exames escolhidos mas ainda NÃO gravados: o cadastro novo não tem id pra
+   *  anexá-los, então eles esperam o create. Vazio em toda tela onde o usuário
+   *  já existe. */
+  pending?: readonly { name: string; date: string }[]
+  /** Prefixo dos testID. A seção nasceu no settings e agora serve também o
+   *  formulário de cadastro; um id dizendo 'settings' numa tela de cadastro
+   *  manda o próximo leitor procurar no arquivo errado. */
+  testIDPrefix?: string
 }) {
   const theme = useTheme()
   return (
@@ -43,7 +53,7 @@ export function ExamsSection({
             label="Nome do exame"
             value={examName}
             onChangeText={onExamNameChange}
-            testID="settings-exam-name"
+            testID={`${testIDPrefix}-exam-name`}
           />
         </View>
         <View style={{ width: 192 }}>
@@ -52,7 +62,7 @@ export function ExamsSection({
             placeholder="dd/mm/aaaa"
             value={examDate}
             onChangeText={(v) => onExamDateChange(maskDate(v))}
-            testID="settings-exam-date"
+            testID={`${testIDPrefix}-exam-date`}
           />
         </View>
       </View>
@@ -65,7 +75,31 @@ export function ExamsSection({
         disabled={examsBusy}
         onPress={onPickFile}
       />
-      {exams.length === 0 ? (
+      {pending.length > 0 ? (
+        <>
+          {/* Ditos como o que são: escolhidos, ainda não gravados. Um card
+              idêntico ao dos salvos afirmaria que o exame já está no cadastro. */}
+          <Text variant="body.s" color={theme.content.medium}>
+            Serão anexados ao concluir o cadastro.
+          </Text>
+          {pending.map((p, i) => {
+            const parts = examCardParts(p.date)
+            return (
+              <ExamInfoCard
+                key={`pendente-${i}`}
+                compact
+                fullWidth
+                year={parts.year}
+                date={parts.date}
+                examName={p.name}
+                // Nada pra baixar antes de existir: o arquivo só sobe no submit.
+                actionDisabled
+              />
+            )
+          })}
+        </>
+      ) : null}
+      {exams.length === 0 && pending.length === 0 ? (
         <Text variant="body.s" color={theme.content.medium}>
           Nenhum exame enviado.
         </Text>

@@ -6,6 +6,7 @@
 // até o hardware existir (decisão do roadmap: saúde fica mock até a smartband).
 import type { ServiceResponse } from '@/services/types'
 import type { Admin, Employee, ExamEntry, Gender } from '@/services/types/directory'
+import type { Exam } from './exams'
 import { examCardParts } from './examCard'
 import { apiFetch } from './http'
 
@@ -234,6 +235,9 @@ export type EditableUser = {
   bloodType: string // sigla maiúscula, '' quando ausente
   allergies: string
   chronicConditions: string
+  // Exames JÁ gravados. A tela precisa mostrá-los antes de deixar anexar mais,
+  // senão o admin reanexa em duplicata o laudo que já estava lá.
+  exams: readonly Exam[]
 }
 
 // Datetime com fuso → data de CALENDÁRIO. Corta no 'T' em vez de passar por
@@ -252,6 +256,9 @@ const toEditable = (u: UserDetailDto): EditableUser => ({
   bloodType: u.bloodType ?? '',
   allergies: u.allergies ?? '',
   chronicConditions: u.chronicConditions ?? '',
+  // `?? []` porque backend anterior ao PR de exames não manda o campo, e a
+  // seção lendo undefined quebraria em vez de mostrar o vazio honesto.
+  exams: u.exams ?? [],
 })
 
 const getForEditUser = async (id: string): Promise<ServiceResponse<EditableUser | null>> => {
@@ -294,6 +301,29 @@ const updateUser = async (
     return { data: updated, error: null }
   } catch (e) {
     return { data: null, error: { message: errorMessage(e, 'Falha ao salvar') } }
+  }
+}
+
+/**
+ * Anexa um exame ao cadastro de OUTRA pessoa (POST /users/:id/exams). O
+ * examsApi bate em /profile/exams, que grava sempre no usuário da sessão: por
+ * ali o admin só conseguia anexar laudo no próprio perfil.
+ *
+ * Dois passos, como no settings: o arquivo sobe direto pro bucket por URL
+ * presignada (uploadImage(file, 'exams')) e aqui só viaja a key.
+ */
+const addUserExam = async (
+  id: string,
+  input: { name: string; date: string; fileKey: string },
+): Promise<ServiceResponse<Exam>> => {
+  try {
+    const exam = await apiFetch<Exam>(`/users/${id}/exams`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    return { data: exam, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha ao enviar o exame') } }
   }
 }
 
@@ -340,6 +370,7 @@ export const employeesApi = {
   create: (input: CreateUserInput) => createUser('WORKER', input),
   getForEdit: getForEditUser,
   update: updateUser,
+  addExam: addUserExam,
   remove: removeUser,
 }
 
@@ -349,6 +380,7 @@ export const adminsApi = {
   create: (input: CreateUserInput) => createUser('ADMIN', input),
   getForEdit: getForEditUser,
   update: updateUser,
+  addExam: addUserExam,
   setActive: setUserActive,
   remove: removeUser,
 }

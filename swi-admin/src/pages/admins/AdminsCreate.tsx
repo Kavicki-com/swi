@@ -2,13 +2,11 @@
 // Admin registration form. Three sections (Dados do cadastro,
 // Dados de saúde, Exames clínicos) followed by Voltar / Finalizar Cadastro
 // footer. Rendered by AdminsList when tab='cadastrar'.
-import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import {
   Button,
   Combobox,
   Icon,
-  ImageUploader,
   Input,
   Radio,
   Text,
@@ -22,9 +20,12 @@ import {
   type EditableUser,
   type UpdateUserInput,
 } from '@/services/api/users'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDemoToast } from '@/lib/demoToast'
 import { maskCpf, maskDate, maskPhone, onlyDigits } from '@/lib/masks'
+import { ExamsSection } from '@/pages/user/components/ExamsSection'
+import { useExamAttachments } from './hooks/useExamAttachments'
 
 type FormState = {
   // Dados do cadastro
@@ -304,6 +305,13 @@ export function AdminsCreate({
   // Só na edição: enquanto o cadastro não chega, e quando ele não chega.
   const [carregando, setCarregando] = useState(isEdit)
   const [naoEncontrado, setNaoEncontrado] = useState(false)
+  // Anexo de exame. Mora num hook porque são duas máquinas de estado (fila do
+  // cadastro e envio imediato da edição) que não têm nada a ver com o resto do
+  // formulário, e porque a tela já estava perto do teto de tamanho do gate.
+  const exames = useExamAttachments({ isEdit, editandoId, subject, showToast })
+  // Desestruturado porque o objeto do hook é novo a cada render e a carga
+  // depende só deste setter, que o useState mantém estável.
+  const { definirGravados } = exames
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({
@@ -333,13 +341,16 @@ export function AdminsCreate({
       // Sem cadastro não há formulário: um form em branco aqui salvaria por
       // cima do cadastro inteiro de quem só queria corrigir um campo.
       if (!data) setNaoEncontrado(true)
-      else setForm(formDoUsuario(data))
+      else {
+        setForm(formDoUsuario(data))
+        definirGravados(data.exams)
+      }
       setCarregando(false)
     })
     return () => {
       cancelado = true
     }
-  }, [editandoId, subject])
+  }, [editandoId, subject, definirGravados])
 
   // Saída da tela. Dentro da lista quem sabe voltar é o host (troca de aba, sem
   // navegação); como rota de edição não há host, e o destino honesto é o
@@ -406,14 +417,16 @@ export function AdminsCreate({
       ...dadosDeSaude(form),
     }
     try {
-      const { error: apiError } = await api.create(payload)
+      const { data, error: apiError } = await api.create(payload)
       if (apiError) {
         setError(apiError.message)
         showToast('Erro', apiError.message)
         return
       }
       showToast('Cadastro concluído', `${nome} foi cadastrado com sucesso`)
-      onBack?.()
+      // Só agora existe id pra anexar. Antes disto não havia a quem.
+      if (data?.id) await exames.enviarPendentes(data.id)
+      voltar()
     } finally {
       setSubmitting(false)
     }
@@ -614,14 +627,32 @@ export function AdminsCreate({
         </Section>
       </View>
 
-      <Section title="Exames clínicos">
-        {/* Use DS defaults for helperText / pickFileLabel — the DS ships the
-            exact copy from the spec ("Selecione arquivos do tipo: JPG ou PNG",
-            "Enviar arquivo" singular). Earlier this screen overrode both
-            with subtly different strings (".JPG/.PNG" + plural) which is
-            why the section diverged from the design. */}
-        <ImageUploader showTakePhoto={false} accessibilityLabel="Upload de exames clínicos" />
-      </Section>
+      {/* A mesma seção do settings, que é a única UX de exame que o painel tem:
+          nome, validade e o card do laudo. O uploader decorativo que vivia aqui
+          aceitava o arquivo e não o mandava a lugar nenhum, porque não existia
+          rota pra anexar exame de OUTRA pessoa. */}
+      <ExamsSection
+        testIDPrefix="admins-create"
+        examName={exames.examName}
+        onExamNameChange={exames.setExamName}
+        examDate={exames.examDate}
+        onExamDateChange={exames.setExamDate}
+        examError={exames.examError}
+        examsBusy={exames.examsBusy}
+        onPickFile={exames.pedirArquivo}
+        exams={exames.gravados}
+        pending={exames.pendentes}
+      />
+      {/* O DS não tem (nem deve ter) seletor de arquivo: o host abre o diálogo
+          nativo. Mesmo padrão do NewReport e do settings. */}
+      <input
+        ref={exames.inputRef}
+        data-testid="admins-create-exam-input"
+        type="file"
+        accept="image/jpeg,image/png,application/pdf,text/plain"
+        style={{ display: 'none' }}
+        onChange={exames.onArquivoEscolhido}
+      />
 
       {/* Erro de validação/backend em vermelho acima do rodapé (role=alert via
           accessibilityRole). Só aparece quando setError foi disparado. */}
