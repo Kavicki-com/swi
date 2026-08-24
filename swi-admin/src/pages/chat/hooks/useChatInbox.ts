@@ -121,6 +121,7 @@ export function useChatInbox() {
           // campo (inclusive todo contato sem entrada no diretório), aparecia
           // no painel declarado como "Masculino".
           gender: toGender(entry?.gender),
+          username: entry?.username ?? undefined,
           age: entry?.birthDate ? ageFrom(entry.birthDate, new Date()) : undefined,
           bloodType: entry?.bloodType ?? undefined,
           allergies: entry?.allergies ?? undefined,

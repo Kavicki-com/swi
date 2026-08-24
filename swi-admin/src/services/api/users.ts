@@ -30,6 +30,9 @@ export type UserSummaryDto = {
   birthDate: string | null // ISO
   avatar: string
   companyRole: string | null
+  // Handle visível (@username), fase 1 da função do campo "Nome do usuário".
+  // null enquanto a conta não definiu um.
+  username: string | null
   createdAt: string
 }
 
@@ -125,6 +128,7 @@ function toEmployee(u: UserSummaryDto | UserDetailDto): Employee {
     avatarUri: u.avatar,
     sector: u.sector,
     vitalsStatus: 'good',
+    username: u.username ?? undefined,
     gender: toGender(detail.gender),
     allergies: parseAllergies(detail.allergies),
     examHistory: toExamHistory(detail.exams),
@@ -145,6 +149,7 @@ function toAdmin(u: UserSummaryDto | UserDetailDto): Admin {
     avatarUri: u.avatar,
     active: u.active,
     status: APPROVAL_TO_STATUS[u.approvalStatus],
+    username: u.username ?? undefined,
     gender: toGender(detail.gender),
     allergies: parseAllergies(detail.allergies),
     examHistory: toExamHistory(detail.exams),
@@ -197,6 +202,7 @@ export type CreateUserInput = {
   // Saúde declaratória. Chega aqui JÁ no vocabulário gravado: gender em código
   // ('male'/'female'/'other') e bloodType na sigla maiúscula. Quem traduz do
   // vocabulário da tela é o dadosDeSaude do formulário de cadastro.
+  username?: string
   gender?: string
   bloodType?: string
   allergies?: string
@@ -235,6 +241,7 @@ export type EditableUser = {
   bloodType: string // sigla maiúscula, '' quando ausente
   allergies: string
   chronicConditions: string
+  username: string
   // Exames JÁ gravados. A tela precisa mostrá-los antes de deixar anexar mais,
   // senão o admin reanexa em duplicata o laudo que já estava lá.
   exams: readonly Exam[]
@@ -256,6 +263,7 @@ const toEditable = (u: UserDetailDto): EditableUser => ({
   bloodType: u.bloodType ?? '',
   allergies: u.allergies ?? '',
   chronicConditions: u.chronicConditions ?? '',
+  username: u.username ?? '',
   // `?? []` porque backend anterior ao PR de exames não manda o campo, e a
   // seção lendo undefined quebraria em vez de mostrar o vazio honesto.
   exams: u.exams ?? [],
@@ -280,6 +288,7 @@ const getForEditUser = async (id: string): Promise<ServiceResponse<EditableUser 
  */
 export type UpdateUserInput = {
   name?: string
+  username?: string
   phone?: string
   cpf?: string
   birthDate?: string

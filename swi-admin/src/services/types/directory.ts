@@ -42,6 +42,8 @@ export type Employee = {
   avatarUri: string
   sector: string
   vitalsStatus: 'good' | 'warning' | 'critical'
+  // Handle visível (@username). Opcional: contas anteriores à fase 1 não têm.
+  username?: string
   hasUnreadMessages?: boolean
   // Health/details fields used by EmployeeDetails: mirror the Admin shape so
   // the screen renders without per-field optionality.
@@ -65,6 +67,7 @@ export type Admin = {
   specialization: string
   avatarUri: string
   active: boolean
+  username?: string
   // Health fields used by the AdminDetails screen.
   gender?: Gender
   height?: string

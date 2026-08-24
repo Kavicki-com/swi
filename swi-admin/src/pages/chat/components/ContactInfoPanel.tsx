@@ -200,6 +200,13 @@ export function ContactInfoPanel({
           <Title variant="title.xs" color={theme.content.dark}>
             {contact.name}
           </Title>
+          {/* Handle sob o nome, só de quem tem: mesmo critério do detalhe
+              (WorkerDetailsLayout), que mostra o MESMO campo do MESMO cadastro. */}
+          {contact.username ? (
+            <Text variant="body.m" color={theme.content.medium} style={{ textAlign: 'center' }}>
+              {`@${contact.username}`}
+            </Text>
+          ) : null}
           <Text variant="body.m" color={theme.content.dark} style={{ textAlign: 'center' }}>
             {contact.role}
           </Text>

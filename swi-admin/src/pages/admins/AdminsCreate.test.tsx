@@ -56,8 +56,9 @@ describe('AdminsCreate — submit', () => {
     typeIn('admins-create-email', 'ze@x.com')
     typeIn('admins-create-telefone', '11999999999')
     typeIn('admins-create-senha', 'senha123')
-    // Preenche o nome de usuário (campo de UI que NÃO deve subir): prova que um
-    // campo PREENCHIDO fora da identidade não vaza pro payload, não só um vazio.
+    // Desde a fase 1 do handle o username SOBE (era o único campo da tela que
+    // engolia o que se digitava). O que este caso segue provando é que saúde em
+    // branco não gera chave de saúde.
     typeIn('admins-create-usuario', 'zedasilva')
 
     finalizar()
@@ -69,8 +70,10 @@ describe('AdminsCreate — submit', () => {
       email: 'ze@x.com',
       password: 'senha123',
       phone: '11999999999',
+      username: 'zedasilva',
     })
-    // Nada de saúde/username no corpo — esses campos ficam na UI mas não sobem.
+    // Nada de saúde no corpo, e o nome do campo da TELA (nomeUsuario) não
+    // vaza: o wire fala username.
     expect(payload).not.toHaveProperty('tipoSanguineo')
     expect(payload).not.toHaveProperty('genero')
     expect(payload).not.toHaveProperty('nomeUsuario')
@@ -359,6 +362,7 @@ const GRAVADO = {
   bloodType: 'O+',
   allergies: 'Penicilina',
   chronicConditions: '',
+  username: 'carlos.m',
   exams: [],
 }
 
@@ -408,6 +412,7 @@ describe('patchDoFormulario', () => {
   it('leva identidade e saúde no vocabulário gravado', () => {
     expect(patchDoFormulario(formDoUsuario(GRAVADO))).toEqual({
       name: 'Carlos Mendes',
+      username: 'carlos.m',
       phone: '11998765432',
       cpf: '41255687890',
       birthDate: '1992-03-14',
@@ -650,5 +655,82 @@ describe('AdminsCreate: exames clínicos', () => {
     })
 
     await waitFor(() => expect(screen.getByText('Audiometria')).toBeTruthy())
+  })
+})
+
+// Fase 1 do "Nome do usuário": o campo deixou de ser o único da tela que
+// engolia o que se digitava. Cadastro manda; edição carrega e manda de volta.
+describe('AdminsCreate: nome do usuário (fase 1)', () => {
+  it('cadastro leva o username no payload, normalizado pra minúsculo', async () => {
+    const create = vi
+      .spyOn(employeesApi, 'create')
+      .mockResolvedValue({ data: { id: 'n' } as never, error: null })
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-usuario', 'Ze.Silva')
+
+    finalizar()
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ username: 'ze.silva' })
+  })
+
+  it('cadastro sem username não manda a chave', async () => {
+    const create = vi
+      .spyOn(employeesApi, 'create')
+      .mockResolvedValue({ data: { id: 'n' } as never, error: null })
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    typeIn('admins-create-nome', 'Zé da Silva')
+    typeIn('admins-create-email', 'ze@x.com')
+    typeIn('admins-create-senha', 'senha123')
+
+    finalizar()
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('username')
+  })
+
+  it('a edição carrega o handle gravado e o leva no patch', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    const update = vi
+      .spyOn(employeesApi, 'update')
+      .mockResolvedValue({ data: { id: 'u1' } as never, error: null })
+    await renderPage(<AdminsCreate subject="funcionário" />, {
+      route: '/employees/u1/edit',
+      path: '/employees/:id/edit',
+    })
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+
+    expect(screen.getByTestId('admins-create-usuario')).toHaveValue('carlos.m')
+
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[1]).toMatchObject({ username: 'carlos.m' })
+  })
+
+  // Vazio é omitido: o backend recusa null e string vazia reprova no formato,
+  // então mandar qualquer um dos dois trocaria "campo em branco" por 400.
+  // Consequência documentada: esta tela define e corrige um handle, não apaga.
+  it('username esvaziado na edição é omitido do patch', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    const update = vi
+      .spyOn(employeesApi, 'update')
+      .mockResolvedValue({ data: { id: 'u1' } as never, error: null })
+    await renderPage(<AdminsCreate subject="funcionário" />, {
+      route: '/employees/u1/edit',
+      path: '/employees/:id/edit',
+    })
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+
+    typeIn('admins-create-usuario', '')
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[1]).not.toHaveProperty('username')
   })
 })

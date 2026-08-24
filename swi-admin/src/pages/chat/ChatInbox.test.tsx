@@ -82,6 +82,7 @@ const DIR: Contact = {
   bloodType: 'A+',
   allergies: null,
   gender: 'female',
+  username: 'bea.ramos',
 }
 
 let openConversation: ReturnType<typeof vi.fn>
@@ -152,6 +153,27 @@ describe('ChatInbox', () => {
   // inclusive quem não tem cadastro clínico nenhum (é o caso do 'w1' desta
   // fixture: ele não está no `directory`). Declarar o gênero errado de alguém é
   // pior do que admitir que o dado não veio.
+  // Handle da fase 1: o painel do contato mostra o @ de quem tem, e nada de
+  // quem não tem (o 'w1' desta fixture não está no directory).
+  it('mostra o @handle do contato que tem um e nenhum @ de quem não tem', async () => {
+    // Conversa ativa com w9, que ESTÁ no directory (com handle). O caso sem
+    // handle é o CONV_ROUTE padrão: w1 não tem entrada no directory.
+    const CONV9 = {
+      ...CONV,
+      id: 'me#w9',
+      participants: ['me', 'w9'] as [string, string],
+      participantNames: ['Eu', 'Beatriz Ramos'] as [string, string],
+    }
+    setChat({ conversations: [CONV, CONV9], messagesByConv: { 'me#w1': [MSG], 'me#w9': [] } })
+    await renderPage(<ChatInbox />, { route: '/chat/me%23w9', path: '/chat/:contactId' })
+    expect(await screen.findByText('@bea.ramos')).toBeInTheDocument()
+  })
+
+  it('não renderiza @ nenhum pra contato sem handle', async () => {
+    await renderPage(<ChatInbox />, CONV_ROUTE)
+    expect(screen.queryByText(/^@/)).toBeNull()
+  })
+
   it('não declara gênero de quem não tem o campo cadastrado', async () => {
     await renderPage(<ChatInbox />, CONV_ROUTE)
     expect(screen.getByText('Gênero')).toBeInTheDocument()

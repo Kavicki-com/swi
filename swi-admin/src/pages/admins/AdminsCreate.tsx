@@ -163,8 +163,7 @@ export function formDoUsuario(u: EditableUser): FormState {
     telefone: maskPhone(u.phone),
     dataNascimento: dataBR(u.birthDate),
     cpf: maskCpf(u.cpf),
-    // Não tem campo correspondente no backend, então não há o que recarregar.
-    nomeUsuario: '',
+    nomeUsuario: u.username,
     // O PATCH não aceita senha e a tela de edição não a renderiza. Vazio aqui
     // é o estado honesto: não há senha pra reexibir, e não haveria pra onde
     // mandá-la.
@@ -196,12 +195,23 @@ export function patchDoFormulario(form: FormState): UpdateUserInput {
     phone: onlyDigits(form.telefone),
     cpf: onlyDigits(form.cpf),
     ...(birthDate ? { birthDate } : {}),
+    // Vazio é omitido, como o nascimento: o backend recusa null e a string
+    // vazia reprova no formato. Esta tela define e corrige um handle; apagar
+    // fica pra quando existir UI disso.
+    ...(usernameNormalizado(form.nomeUsuario)
+      ? { username: usernameNormalizado(form.nomeUsuario) }
+      : {}),
     gender: CODIGO_DE_GENERO[form.genero] ?? '',
     bloodType: form.tipoSanguineo.trim().toUpperCase(),
     allergies: textoLivre(form.alergico, form.alergicoDesc) ?? '',
     chronicConditions: textoLivre(form.doencasCronicas, form.doencasCronicasDesc) ?? '',
   }
 }
+
+// Handle no vocabulário do banco: minúsculo e sem espaço nas pontas. A régua
+// completa (formato, unicidade) é do backend; normalizar aqui só evita que
+// "Ze.Silva" digitado com shift vire um 400 pedagógico.
+const usernameNormalizado = (raw: string): string => raw.trim().toLowerCase()
 
 // 'DD/MM/AAAA' → ISO date-only ('AAAA-MM-DD'). Vazio/fora do formato → undefined
 // (o campo é opcional; não sobe chave vazia). Retorna date-only, NÃO .toISOString():
@@ -414,6 +424,9 @@ export function AdminsCreate({
       ...(onlyDigits(form.telefone) ? { phone: onlyDigits(form.telefone) } : {}),
       ...(onlyDigits(form.cpf) ? { cpf: onlyDigits(form.cpf) } : {}),
       ...(birthDate ? { birthDate } : {}),
+      ...(usernameNormalizado(form.nomeUsuario)
+        ? { username: usernameNormalizado(form.nomeUsuario) }
+        : {}),
       ...dadosDeSaude(form),
     }
     try {
