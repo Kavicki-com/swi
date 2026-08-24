@@ -21,6 +21,11 @@ enum ApprovalStatus {
 model User {
   id             String         @id @default(uuid())
   email          String         @unique
+  // Handle visível (@username no chat e no perfil), fase 1 da função do campo
+  // "Nome do usuário" do cadastro. Nullable: contas existentes não têm, e o
+  // índice único do Postgres ignora NULL. A fase 2 (login por username) usa
+  // esta mesma coluna.
+  username       String?        @unique
   passwordHash   String
   name           String
   role           Role           @default(WORKER)

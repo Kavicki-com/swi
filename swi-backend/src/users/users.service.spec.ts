@@ -111,6 +111,7 @@ describe('UsersService', () => {
         approvalStatus: 'APPROVED',
         active: true,
         companyRole: null,
+        username: null,
         createdAt: new Date(0),
         profile: {
           fullName: 'Worker Um',
@@ -143,6 +144,7 @@ describe('UsersService', () => {
       birthDate: new Date('1990-05-04').toISOString(),
       avatar: 'signed:chat/av1.png',
       companyRole: null,
+      username: null,
       createdAt: new Date(0).toISOString(),
     })
   })
@@ -177,6 +179,7 @@ describe('UsersService', () => {
         approvalStatus: 'PENDING',
         active: false,
         companyRole: null,
+        username: null,
         createdAt: new Date(0),
         profile: null,
       },
@@ -196,6 +199,7 @@ describe('UsersService', () => {
       birthDate: null,
       avatar: '',
       companyRole: null,
+      username: null,
       createdAt: new Date(0).toISOString(),
     })
   })
@@ -218,6 +222,7 @@ describe('UsersService', () => {
       active: true,
       companyId: 'c1',
       companyRole: 'owner',
+      username: null,
       createdAt: new Date(0),
       profile: {
         fullName: 'Admin Full',
@@ -249,6 +254,7 @@ describe('UsersService', () => {
       birthDate: new Date('1980-01-02').toISOString(),
       avatar: 'signed:chat/adm.png',
       companyRole: 'owner',
+      username: null,
       createdAt: new Date(0).toISOString(),
       phone: '11999',
       cpf: '12345',
@@ -281,6 +287,7 @@ describe('UsersService', () => {
       active: true,
       companyId: 'c1',
       companyRole: null,
+      username: null,
       createdAt: new Date(0),
       profile: null,
       company: null,
@@ -308,6 +315,7 @@ describe('UsersService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'w2', name: 'Sem Exame', email: 'w2@x.com', role: 'WORKER',
       approvalStatus: 'APPROVED', active: true, companyId: 'c1', companyRole: null,
+      username: null,
       createdAt: new Date(0), profile: null, company: null, exams: [],
     })
     const r = await new UsersService(db, media()).getOne('w2', 'c1')
@@ -628,5 +636,62 @@ describe('UsersService.addExam', () => {
       NotFoundException,
     )
     expect(db.exam.create).not.toHaveBeenCalled()
+  })
+})
+
+// Username no create/update: gravado no User (identidade de conta, como o
+// e-mail), único no banco, e colisão traduzida pra 409 legível.
+describe('UsersService: username', () => {
+  it('create grava o username no User quando informado', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(null)
+    db.user.create.mockResolvedValue({ id: 'n1', createdAt: new Date(), profile: null })
+    await new UsersService(db, media()).create('admin-1', {
+      name: 'Zé', email: 'ze@x.com', password: 's3nh4!123', role: 'WORKER', username: 'ze.silva',
+    } as never)
+    expect(db.user.create.mock.calls[0][0].data.username).toBe('ze.silva')
+  })
+
+  it('create sem username não manda a chave (fica NULL, fora do índice único)', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(null)
+    db.user.create.mockResolvedValue({ id: 'n1', createdAt: new Date(), profile: null })
+    await new UsersService(db, media()).create('admin-1', {
+      name: 'Zé', email: 'ze@x.com', password: 's3nh4!123', role: 'WORKER',
+    } as never)
+    expect(db.user.create.mock.calls[0][0].data).not.toHaveProperty('username')
+  })
+
+  it('username já em uso vira 409 com mensagem própria, não a de e-mail', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(null)
+    db.user.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', {
+        code: 'P2002', clientVersion: 'x', meta: { target: ['username'] },
+      }),
+    )
+    await expect(
+      new UsersService(db, media()).create('admin-1', {
+        name: 'Zé', email: 'ze@x.com', password: 's3nh4!123', role: 'WORKER', username: 'ze.silva',
+      } as never),
+    ).rejects.toMatchObject({ message: 'Nome de usuário já em uso' })
+  })
+
+  it('update grava username no User e colisão também vira o 409 próprio', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
+    db.user.update.mockResolvedValue({ id: 'u1', profile: null, createdAt: new Date() })
+    const svc = new UsersService(db, media())
+    await svc.update('u1', { username: 'ana_2' }, 'admin-1', 'org1')
+    expect(db.user.update.mock.calls[0][0].data.username).toBe('ana_2')
+
+    db.user.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', {
+        code: 'P2002', clientVersion: 'x', meta: { target: ['username'] },
+      }),
+    )
+    await expect(svc.update('u1', { username: 'ana_2' }, 'admin-1', 'org1')).rejects.toMatchObject({
+      message: 'Nome de usuário já em uso',
+    })
   })
 })

@@ -40,7 +40,7 @@ export class UsersService {
     adminId: string,
     dto: {
       name: string; email: string; password: string; role: Role; phone?: string; cpf?: string; birthDate?: string
-      gender?: string; bloodType?: string; allergies?: string; chronicConditions?: string
+      username?: string; gender?: string; bloodType?: string; allergies?: string; chronicConditions?: string
     },
   ) {
     const exists = await this.findByEmail(dto.email)
@@ -53,6 +53,7 @@ export class UsersService {
           email: dto.email,
           passwordHash: await hash(dto.password),
           role: dto.role,
+          ...(dto.username ? { username: dto.username } : {}),
           approvalStatus: 'APPROVED',
           emailVerified: true,
           companyId: admin?.companyId ?? null,
@@ -74,11 +75,22 @@ export class UsersService {
       return this.toSummaryDto(user)
     } catch (e) {
       // Rede de segurança pra corrida: se dois creates concorrentes passarem o
-      // pré-check, o segundo bate no unique de email (P2002) → traduz pra 409.
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException('E-mail já cadastrado')
-      }
+      // pré-check, o segundo bate num unique (P2002) → traduz pra 409. O alvo
+      // do índice diz QUAL unique falhou; sem olhar, a colisão de username
+      // sairia como "E-mail já cadastrado" e mandaria o admin corrigir o campo
+      // errado.
+      this.traduzirUnique(e)
       throw e
+    }
+  }
+
+  // P2002 → 409 com a mensagem do índice que colidiu. Relança nada: quem chama
+  // decide o que fazer com erros que não são de unicidade.
+  private traduzirUnique(e: unknown): void {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      const alvo = (e.meta?.target as string[] | undefined) ?? []
+      if (alvo.includes('username')) throw new ConflictException('Nome de usuário já em uso')
+      throw new ConflictException('E-mail já cadastrado')
     }
   }
 
@@ -215,6 +227,9 @@ export class UsersService {
         data: {
           ...(dto.active !== undefined ? { active: dto.active } : {}),
           ...(dto.name !== undefined ? { name: dto.name } : {}),
+          // No User e não no Profile: o handle é identidade de conta, como o
+          // e-mail, e é onde o índice único mora.
+          ...(dto.username !== undefined ? { username: dto.username } : {}),
           // Sem campo de perfil no corpo, nada de `profile` no data: um upsert
           // vazio criaria linha de Profile em quem só teve o active alternado.
           ...(tocaPerfil
@@ -227,6 +242,7 @@ export class UsersService {
     } catch (e) {
       // sem exception filter global: sem isto, P2025 (id sumiu no meio) vira 500.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') throw new NotFoundException('Usuário não encontrado')
+      this.traduzirUnique(e)
       throw e
     }
   }
@@ -301,6 +317,9 @@ export class UsersService {
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
       avatar: u.profile?.avatarKey ? await this.media.presignGet(u.profile.avatarKey) : '',
       companyRole: u.companyRole,
+      // Handle visível (@username). null enquanto não definido; o painel exibe
+      // ausência, nunca inventa um.
+      username: u.username ?? null,
       createdAt: u.createdAt.toISOString(),
     }
   }

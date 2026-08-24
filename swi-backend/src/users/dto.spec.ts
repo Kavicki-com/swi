@@ -105,3 +105,41 @@ describe('CreateUserDto', () => {
     expect(errors.length).toBeGreaterThan(0)
   })
 })
+
+// Username: identificador visível (@handle no chat e no perfil). Formato
+// fechado ANTES de existir consumidor de login: se a fase 2 (entrar com
+// username) chegar, um handle com espaço ou maiúscula gravado hoje viraria uma
+// conta em que não se consegue logar amanhã.
+describe('username (create e update)', () => {
+  it('aceita minúsculas, dígitos, ponto e underscore, de 3 a 30', async () => {
+    for (const u of ['ze.silva', 'ana_2', 'abc']) {
+      const { errors } = await valid(UpdateUserDto, { username: u })
+      expect(errors).toHaveLength(0)
+    }
+  })
+
+  it('rejeita maiúscula, espaço, acento e curto demais', async () => {
+    for (const u of ['Ze.Silva', 'ze silva', 'josé', 'ab']) {
+      const { errors } = await valid(UpdateUserDto, { username: u })
+      expect(errors.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('no create é opcional: cadastro sem username segue válido', async () => {
+    const { errors } = await valid(CreateUserDto, {
+      name: 'Zé', email: 'ze@x.com', password: 'senha123!', role: 'WORKER',
+    })
+    expect(errors).toHaveLength(0)
+  })
+
+  it('create com username válido passa, com inválido não', async () => {
+    const base = { name: 'Zé', email: 'ze@x.com', password: 'senha123!', role: 'WORKER' }
+    expect((await valid(CreateUserDto, { ...base, username: 'ze.silva' })).errors).toHaveLength(0)
+    expect((await valid(CreateUserDto, { ...base, username: 'Zé Silva' })).errors.length).toBeGreaterThan(0)
+  })
+
+  it('update: null explícito é rejeitado (limpar handle fica pra quando houver UI disso)', async () => {
+    const { errors } = await valid(UpdateUserDto, { username: null })
+    expect(errors.length).toBeGreaterThan(0)
+  })
+})
