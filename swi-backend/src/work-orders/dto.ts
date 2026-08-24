@@ -15,6 +15,19 @@ import {
 } from 'class-validator'
 import { IsCalendarDate } from '../profile/is-calendar-date'
 
+// Anexo que o PATCH aceita DE VOLTA. O array de uma ordem tem duas origens, as
+// duas gravadas pelo próprio servidor: `order/` é o que o admin subiu pelo
+// painel (presign ADMIN-only) e `task/` é a foto que o funcionário tirou pela
+// jornada, que o addTaskPhoto empurra pro pai (JourneyService, Decisão F). O
+// form de edição carrega as duas cruas e devolve as duas no PATCH, então
+// aceitar só `order/` respondia 400 e deixava os anexos INEDITÁVEIS em toda
+// ordem que o funcionário tivesse fotografado.
+//
+// Continua sendo lista fechada: prefixo de outro domínio (reports/, chat/,
+// exams/, avatars/) segue recusado, que é o que impede referenciar objeto
+// alheio do bucket.
+const ANEXO_ECOADO = /^(order|task)\/[0-9a-f-]{36}\.(jpg|png)$/
+
 // Item do checklist. `id` presente só no PATCH (reconciliação: casa com um item
 // existente → update; ausente → cria).
 export class WorkOrderItemDto {
@@ -35,6 +48,10 @@ export class CreateWorkOrderDto {
   @IsArray() @ArrayNotEmpty() @ArrayMaxSize(50) @IsString({ each: true }) responsibleIds!: string[]
   // Só keys emitidas pelo presign (prefixo order/): impede referenciar objeto de
   // outro prefixo e trava o formato (paridade com o CreateReportDto).
+  //
+  // Mais estreito que o do PATCH de propósito: a ordem ainda não existe, logo
+  // não existe tarefa, jornada, nem foto de percurso pra ecoar. Aceitar `task/`
+  // aqui só abriria caminho pra referenciar a foto de OUTRA ordem.
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
@@ -61,16 +78,20 @@ export class UpdateWorkOrderDto {
   @IsArray()
   @ArrayMaxSize(20)
   @IsString({ each: true })
-  @Matches(/^order\/[0-9a-f-]{36}\.(jpg|png)$/, { each: true })
+  @Matches(ANEXO_ECOADO, { each: true })
   imageKeys?: string[]
   // Snapshot dos anexos que o form carregou (ver UpdateReportDto.imageKeysBase):
   // preserva a foto que o worker anexou pela jornada depois do load, e só apaga
   // do bucket a remoção provada. Sem ele, substitui como sempre e nada é apagado.
+  //
+  // Mesmo alfabeto do imageKeys: o base é o espelho do que o form CARREGOU, e o
+  // que ele carrega inclui a foto de percurso. Recusá-la aqui travava o mesmo
+  // PATCH pelo outro campo.
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
   @IsString({ each: true })
-  @Matches(/^order\/[0-9a-f-]{36}\.(jpg|png)$/, { each: true })
+  @Matches(ANEXO_ECOADO, { each: true })
   imageKeysBase?: string[]
   @IsOptional() @IsArray() @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => WorkOrderItemDto)
   items?: WorkOrderItemDto[]
