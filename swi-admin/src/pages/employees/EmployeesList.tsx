@@ -3,7 +3,7 @@
 // without the active toggle. Each row shows avatar + vitals status dot +
 // name/age/blood + role/specialization + sector + action icons (chat,
 // location) + expand chevron.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -20,6 +20,7 @@ import {
 import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
+import { ancoraDe, reinserirAncorado } from '@/pages/_shared/optimisticList'
 import { chatPathTo } from '@/services/chat/chatReducers'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
@@ -32,6 +33,7 @@ type EmployeeRowProps = {
   onOpen: (id: string) => void
   onChat: (employee: Employee) => void
   onLocation: (employee: Employee) => void
+  onDelete: (employee: Employee) => void
   isTablet: boolean
 }
 
@@ -41,7 +43,7 @@ function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof 
   return theme.surface.success
 }
 
-function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: EmployeeRowProps) {
+function EmployeeRow({ employee, onOpen, onChat, onLocation, onDelete, isTablet }: EmployeeRowProps) {
   const theme = useTheme()
   return (
     <View
@@ -120,8 +122,15 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
           </Text>
         </View>
       </View>
-      {/* Right cluster: chat / location action icons + expand chevron. */}
+      {/* Right cluster: delete / chat / location action icons + expand chevron.
+          Mesma ordem da lista de admins: duas listas irmãs com a fileira em
+          ordens diferentes fazem o operador errar o alvo. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
+        <ActionIcon
+          icon="delete_icon"
+          label={`Excluir ${employee.name}`}
+          onPress={() => onDelete(employee)}
+        />
         <ActionIcon
           icon="chat_bubble"
           label={`Conversar com ${employee.name}`}
@@ -389,11 +398,21 @@ export function EmployeesList({
   // ao voltar do form, o incremento reexecuta o useEffect e a lista já mostra
   // o usuário recém-criado.
   const [reloadKey, setReloadKey] = useState(0)
+  // Alvo da confirmação de exclusão. Guarda o funcionário INTEIRO, não o id: a
+  // reinserção no rollback precisa da linha de volta, e relistar o servidor só
+  // pra desfazer piscaria a tela.
+  const [removing, setRemoving] = useState<Employee | null>(null)
+  // Ids que ESTA tela tirou da lista e cuja saída o backend ainda não desmentiu.
+  // Uma resposta de list() em voo foi montada no servidor ANTES do DELETE, então
+  // aplicá-la crua ressuscita a linha recém-excluída. Ref, e não state: quem lê
+  // é o callback do fetch, que precisa do valor do MOMENTO da resposta, não do
+  // que ficou fechado no render que disparou a chamada.
+  const removidosRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
     employeesApi.list().then(({ data }) => {
-      if (!cancelled && data) setEmployees([...data])
+      if (!cancelled && data) setEmployees(data.filter((e) => !removidosRef.current.has(e.id)))
     })
     return () => {
       cancelled = true
@@ -414,8 +433,34 @@ export function EmployeesList({
     }
   }, [tab])
 
+  // Exclusão otimista (depois da confirmação): tira a linha já, chama o DELETE,
+  // e devolve a linha à POSIÇÃO original se o backend recusar. Recusa aqui é o
+  // caminho esperado, não a exceção: quem trabalhou acumula jornada, tarefa e
+  // relatório, e o backend responde 409 mandando desativar em vez de excluir.
+  // Por isso o rollback preserva a ordem: relistar reordenaria a tela na cara
+  // de quem só tentou excluir.
+  const handleRemove = async (e: Employee) => {
+    setRemoving(null)
+    // Âncora, e não índice: durante o await a lista pode andar (outra exclusão
+    // otimista, um refetch chegando), e um número guardado antes aponta pra
+    // outro lugar. `pos < 0` é o caso em que a linha JÁ tinha saído da lista
+    // (outro admin excluiu primeiro): aí não houve remoção otimista nenhuma, e
+    // devolver o item pintaria uma linha fantasma que o servidor não lista mais.
+    const { pos, anteriorId } = ancoraDe(employees, e.id)
+    removidosRef.current.add(e.id)
+    setEmployees((prev) => prev.filter((x) => x.id !== e.id))
+    const { error } = await employeesApi.remove(e.id)
+    if (error) {
+      removidosRef.current.delete(e.id)
+      if (pos >= 0) setEmployees((prev) => reinserirAncorado(prev, e, anteriorId))
+      showToast('Erro', error.message)
+      return
+    }
+    showToast('Funcionário excluído', `${e.name} foi removido do sistema`)
+  }
+
   // Rollback otimista: reinsere `p` na posição original `idx` e de forma
-  // idempotente — se um refetch concorrente já recolocou o item, não duplica.
+  // idempotente. Se um refetch concorrente já recolocou o item, não duplica.
   const reinsertPending = (idx: number, p: PendingUser) => {
     setPendentes((prev) => {
       if (prev.some((x) => x.id === p.id)) return prev
@@ -573,6 +618,7 @@ export function EmployeesList({
                 onLocation={() =>
                   navigate(`/maps/general?focus=${encodeURIComponent(employee.id)}`)
                 }
+                onDelete={setRemoving}
                 isTablet={isTablet}
               />
             ))}
@@ -585,6 +631,17 @@ export function EmployeesList({
           />
         </>
       )}
+
+      {removing ? (
+        <ConfirmDialog
+          title="Excluir funcionário?"
+          message={`${removing.name} será removido do sistema.`}
+          confirmLabel="Excluir"
+          confirmDanger
+          onConfirm={() => handleRemove(removing)}
+          onCancel={() => setRemoving(null)}
+        />
+      ) : null}
 
       {rejecting ? (
         <ConfirmDialog

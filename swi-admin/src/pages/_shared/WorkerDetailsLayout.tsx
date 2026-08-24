@@ -11,6 +11,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { formatAge } from '@/lib/formatAge'
+import type { Gender } from '@/services/types/directory'
 import { simulatedCaloriesFor } from '@/services/vitals/simulatedVitals'
 import {
   Avatar,
@@ -45,7 +46,7 @@ export type WorkerDetailsData = {
   role: string
   specialization: string
   avatarUri: string
-  gender?: 'male' | 'female'
+  gender?: Gender
   bpm?: number
   pressure?: string
   /** Percentual 0-100 (mesma escala de simulatedVitalsFor.fatiguePct). */
@@ -298,8 +299,18 @@ export function WorkerDetailsLayout({
       ? 'Masculino'
       : worker.gender === 'female'
         ? 'Feminino'
-        : 'Não informado'
-  const genderIcon: IconName = worker.gender === 'female' ? 'humidity_mid' : 'admin_filled'
+        : worker.gender === 'other'
+          ? 'Outro'
+          : 'Não informado'
+  // O glifo neutro cobre 'other' e a ausência. Antes o `else` caía no ícone
+  // masculino, então "Não informado" aparecia ao lado do desenho de um homem,
+  // que é exatamente o gênero que o rótulo se recusa a afirmar.
+  const genderIcon: IconName =
+    worker.gender === 'female'
+      ? 'humidity_mid'
+      : worker.gender === 'male'
+        ? 'admin_filled'
+        : 'account_circle'
   // fatigueRate/effort já chegam na escala 0-100, não em fração 0-1. formatPct
   // só limita e arredonda: multiplicar por 100 aqui exibiria "8.900,0%".
   const formatPct = (n: number) =>

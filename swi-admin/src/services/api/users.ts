@@ -5,7 +5,7 @@
 // sanguíneo/exames dependem da smartband e ficam como placeholder no mapeamento
 // até o hardware existir (decisão do roadmap: saúde fica mock até a smartband).
 import type { ServiceResponse } from '@/services/types'
-import type { Admin, Employee, ExamEntry } from '@/services/types/directory'
+import type { Admin, Employee, ExamEntry, Gender } from '@/services/types/directory'
 import { examCardParts } from './examCard'
 import { apiFetch } from './http'
 
@@ -82,11 +82,20 @@ export function parseAllergies(raw: string | null | undefined): string[] | undef
   return items.length > 0 ? items : undefined
 }
 
-// Só 'male'/'female' são renderizáveis pelo layout; qualquer outro valor (ou
-// ausência) fica undefined pra que a tela diga "não informado" em vez de
-// inventar um gênero.
-const toGender = (raw: string | null | undefined): 'male' | 'female' | undefined =>
-  raw === 'male' || raw === 'female' ? raw : undefined
+// Vocabulário gravado do gênero: os três códigos que o cadastro emite
+// ('male'/'female'/'other', ver dadosDeSaude no AdminsCreate). Qualquer outro
+// valor, ou a ausência, vira undefined pra que a tela diga "não informado" em
+// vez de inventar um gênero.
+//
+// 'other' NÃO pode colapsar em undefined: quem se declarou não-binário FEZ uma
+// declaração, e apagá-la o torna indistinguível de quem preferiu não responder,
+// que é a única distinção que o formulário se deu ao trabalho de coletar.
+//
+// Exportada porque o painel do chat mapeia o MESMO campo do MESMO backend
+// (useChatInbox): duplicar a tradução lá foi o que fez as duas telas
+// discordarem sobre a mesma pessoa.
+export const toGender = (raw: string | null | undefined): Gender | undefined =>
+  raw === 'male' || raw === 'female' || raw === 'other' ? raw : undefined
 
 // Exames do DTO → entradas do ExamInfoCard. Lista vazia vira undefined porque
 // o layout distingue "não tem exame" de "não veio no DTO", e undefined é o que
@@ -173,9 +182,10 @@ async function getMapped<T>(
   }
 }
 
-// Cadastro pelo painel (POST /users). Só campos de IDENTIDADE — o role separa
-// funcionário (WORKER) de admin (ADMIN). Campos opcionais ausentes NÃO entram no
-// corpo (JSON.stringify já descarta `undefined`), pra não mandar chave vazia.
+// Cadastro pelo painel (POST /users). Identidade mais a saúde DECLARATÓRIA que
+// o formulário coleta; o role separa funcionário (WORKER) de admin (ADMIN).
+// Campos opcionais ausentes NÃO entram no corpo (JSON.stringify já descarta
+// `undefined`), pra não mandar chave vazia.
 export type CreateUserInput = {
   name: string
   email: string
@@ -183,6 +193,13 @@ export type CreateUserInput = {
   phone?: string
   cpf?: string
   birthDate?: string // ISO
+  // Saúde declaratória. Chega aqui JÁ no vocabulário gravado: gender em código
+  // ('male'/'female'/'other') e bloodType na sigla maiúscula. Quem traduz do
+  // vocabulário da tela é o dadosDeSaude do formulário de cadastro.
+  gender?: string
+  bloodType?: string
+  allergies?: string
+  chronicConditions?: string
 }
 
 async function createUser(
@@ -200,16 +217,15 @@ async function createUser(
   }
 }
 
-export const employeesApi = {
-  list: () => listMapped('WORKER', toEmployee),
-  get: (id: string) => getMapped(id, toEmployee),
-  create: (input: CreateUserInput) => createUser('WORKER', input),
-}
-
-// Ativar/desativar um admin (PATCH /users/:id {active}) — o backend responde só
-// o novo estado ({id, active}); a tela usa o envelope de erro pra reverter o
-// toggle otimista se falhar.
-const setAdminActive = async (
+// Ativar/desativar e excluir batem em /users/:id, então moram ACIMA dos dois
+// diretórios: declaradas depois de employeesApi, o const cai na temporal dead
+// zone e o módulo inteiro explode no import.
+// Ativar/desativar um usuário (PATCH /users/:id {active}). O backend responde
+// só o novo estado ({id, active}); a tela usa o envelope de erro pra reverter o
+// toggle otimista se falhar. Exposta só em adminsApi: a rota serve os dois
+// papéis, mas o toggle existe apenas na lista de admins, e pendurá-la também em
+// employeesApi criava um caminho que nenhuma tela chama.
+const setUserActive = async (
   id: string,
   active: boolean,
 ): Promise<ServiceResponse<{ id: string; active: boolean }>> => {
@@ -224,10 +240,12 @@ const setAdminActive = async (
   }
 }
 
-// Excluir um admin (DELETE /users/:id) — 204 sem corpo (apiFetch resolve null).
-// O backend recusa com 409 quando o usuário tem registros vinculados ("desative-o
-// em vez de excluir"); a mensagem vaza pro toast via envelope de erro.
-const removeAdmin = async (id: string): Promise<ServiceResponse<null>> => {
+// Excluir um usuário (DELETE /users/:id): 204 sem corpo (apiFetch resolve null).
+// O backend recusa com 409 quando há registros vinculados ('desative-o em vez de
+// excluir'), e a mensagem vaza pro toast via envelope de erro. Em funcionário
+// esse 409 é o caso ESPERADO, não a exceção: quem trabalhou acumula jornada,
+// tarefa e relatório.
+const removeUser = async (id: string): Promise<ServiceResponse<null>> => {
   try {
     await apiFetch<null>(`/users/${id}`, { method: 'DELETE' })
     return { data: null, error: null }
@@ -236,12 +254,19 @@ const removeAdmin = async (id: string): Promise<ServiceResponse<null>> => {
   }
 }
 
+export const employeesApi = {
+  list: () => listMapped('WORKER', toEmployee),
+  get: (id: string) => getMapped(id, toEmployee),
+  create: (input: CreateUserInput) => createUser('WORKER', input),
+  remove: removeUser,
+}
+
 export const adminsApi = {
   list: () => listMapped('ADMIN', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
   create: (input: CreateUserInput) => createUser('ADMIN', input),
-  setActive: setAdminActive,
-  remove: removeAdmin,
+  setActive: setUserActive,
+  remove: removeUser,
 }
 
 // Fila de aprovação: WORKERs pendentes. createdAt (quando o cadastro entrou) vira

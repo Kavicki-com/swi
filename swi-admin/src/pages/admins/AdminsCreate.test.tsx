@@ -1,12 +1,13 @@
 // Comportamento do formulário compartilhado de cadastro (AdminsCreate serve
 // tanto /admins quanto /employees). Prova: validação de obrigatórios, forma do
-// payload (só identidade — nada de saúde/username) e o onBack no sucesso.
+// payload (identidade mais saúde declaratória, nunca o username) e o onBack no
+// sucesso.
 // describe/it/expect/beforeEach vêm dos globals do Vitest.
 import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderPage, clearSession } from '@/test-utils/renderPage'
 import { employeesApi, adminsApi } from '@/services/api/users'
-import { AdminsCreate } from './AdminsCreate'
+import { AdminsCreate, dadosDeSaude } from './AdminsCreate'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -31,7 +32,7 @@ describe('AdminsCreate — submit', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('submit válido chama create com a identidade mapeada (sem campos de saúde)', async () => {
+  it('submit válido com saúde em branco não gera chave de saúde no payload', async () => {
     const create = vi
       .spyOn(employeesApi, 'create')
       .mockResolvedValue({ data: { id: 'n' } as never, error: null })
@@ -252,5 +253,78 @@ describe('AdminsCreate: campos de saúde e rodapé', () => {
       screen.getByRole('button', { name: 'Voltar para a lista de administradores' }),
     ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Nome completo do novo administrador')).toBeInTheDocument()
+  })
+})
+
+// A tela renderizava tipo sanguíneo, gênero, alergias e doenças crônicas e o
+// submit jogava tudo fora: quem preenchia via o formulário aceitar e o dado
+// sumir sem um aviso sequer. O backend aceita esses campos (CreateUserDto), e
+// o que faltava aqui era traduzir o vocabulário da TELA para o CÓDIGO gravado.
+//
+// A convenção do código está declarada no mobile (settings/health-data.tsx) e
+// é comparada pelo painel inteiro: gênero em 'male'/'female'/'other', tipo
+// sanguíneo na sigla maiúscula, alergias em texto livre separado por vírgula.
+describe('dadosDeSaude', () => {
+  const vazio = {
+    tipoSanguineo: '',
+    genero: '',
+    alergico: '' as const,
+    alergicoDesc: '',
+    doencasCronicas: '' as const,
+    doencasCronicasDesc: '',
+  }
+
+  it('formulário intocado não produz campo nenhum', () => {
+    expect(dadosDeSaude(vazio)).toEqual({})
+  })
+
+  it('gênero vira o código que o resto do sistema compara', () => {
+    expect(dadosDeSaude({ ...vazio, genero: 'masculino' }).gender).toBe('male')
+    expect(dadosDeSaude({ ...vazio, genero: 'feminino' }).gender).toBe('female')
+  })
+
+  // Decisão registrada: a tela mantém as 5 respostas e duas colapsam num
+  // código só. Quem marca 'não-binário' reabre como 'Outro'. É perda de
+  // granularidade assumida, e ainda assim menos perda que descartar tudo.
+  it('não-binário e outro colapsam no mesmo código', () => {
+    expect(dadosDeSaude({ ...vazio, genero: 'nao-binario' }).gender).toBe('other')
+    expect(dadosDeSaude({ ...vazio, genero: 'outro' }).gender).toBe('other')
+  })
+
+  // 'Prefiro não informar' NÃO vira código: o campo sai do corpo, e ausência é
+  // exatamente o que a tela de detalhe lê como 'não informado'. Mapear pra
+  // 'other' diria que a pessoa declarou algo, quando ela declarou o contrário.
+  it('prefiro não informar omite o campo em vez de inventar um código', () => {
+    expect(dadosDeSaude({ ...vazio, genero: 'prefiro-nao-informar' })).toEqual({})
+  })
+
+  // O Combobox guarda 'a+' e o dado gravado é 'A+' (mesmo conjunto do mobile,
+  // onde value é igual ao label). Sem normalizar, a lista de funcionários
+  // mostraria 'a+' ao lado de 'O+' conforme a origem de cada cadastro.
+  it('tipo sanguíneo sobe na sigla maiúscula do conjunto canônico', () => {
+    expect(dadosDeSaude({ ...vazio, tipoSanguineo: 'a+' }).bloodType).toBe('A+')
+    expect(dadosDeSaude({ ...vazio, tipoSanguineo: 'ab-' }).bloodType).toBe('AB-')
+  })
+
+  it('alergias sobem como o texto digitado quando a resposta é sim', () => {
+    const r = dadosDeSaude({ ...vazio, alergico: 'sim', alergicoDesc: ' Penicilina, Látex ' })
+    expect(r.allergies).toBe('Penicilina, Látex')
+  })
+
+  // Responder 'Não' não pode virar a string 'Não': o campo é texto livre que a
+  // tela quebra por vírgula em chips (parseAllergies), então gravar 'Não'
+  // renderizaria uma chip escrita Não. Ausência é o estado vazio honesto.
+  it('responder não deixa o campo fora do corpo', () => {
+    expect(dadosDeSaude({ ...vazio, alergico: 'nao', alergicoDesc: 'ignorado' })).toEqual({})
+  })
+
+  it('sim sem descrição também não vira campo (não há o que registrar)', () => {
+    expect(dadosDeSaude({ ...vazio, alergico: 'sim', alergicoDesc: '   ' })).toEqual({})
+  })
+
+  it('doenças crônicas seguem a mesma régua das alergias', () => {
+    const sim = dadosDeSaude({ ...vazio, doencasCronicas: 'sim', doencasCronicasDesc: 'Asma' })
+    expect(sim.chronicConditions).toBe('Asma')
+    expect(dadosDeSaude({ ...vazio, doencasCronicas: 'nao', doencasCronicasDesc: 'x' })).toEqual({})
   })
 })

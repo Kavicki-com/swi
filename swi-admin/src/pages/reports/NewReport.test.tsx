@@ -492,3 +492,54 @@ describe('NewReport — edição (revisão)', () => {
     expect(patch.statusLabel).toBe(statusLabel)
   })
 })
+
+// O PATCH SUBSTITUI o array de anexos inteiro, então o form manda a lista que
+// ele montou a partir do que carregou. Se outra pessoa anexou algo entre o
+// load e o save, essa lista está velha e o anexo do colega sumiria do
+// relatório sem ninguém notar. O `imageKeysBase` é o snapshot que ESTE form
+// viu: com ele o backend separa 'chegou depois' (preserva) de 'removido de
+// propósito' (apaga do bucket). Sem base, o backend não apaga nada.
+describe('NewReport: prova do snapshot de anexos na edição', () => {
+  it('o PATCH leva o base com as keys que o form carregou', async () => {
+    renderAt('/reports/r_9/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-title')).toHaveValue('Relatório existente')
+    })
+
+    typeIn('new-report-title', 'Relatório revisado')
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    expect(updateMock.mock.calls[0]?.[1].imageKeysBase).toEqual([
+      'reports/existing-1.jpg',
+      'reports/existing-2.jpg',
+    ])
+  })
+
+  // O anexo novo entra em imageKeys mas NÃO no base: o base descreve o que o
+  // form viu ao abrir, não o que ele quer gravar.
+  it('anexo novo não entra no base', async () => {
+    uploadMock.mockResolvedValueOnce('reports/nova.jpg')
+    renderAt('/reports/r_9/edit')
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-title')).toHaveValue('Relatório existente')
+    })
+
+    fireEvent.change(screen.getByTestId('new-report-file-input'), { target: { files: [jpeg()] } })
+    save()
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1))
+    const patch = updateMock.mock.calls[0]?.[1]
+    expect(patch.imageKeys).toContain('reports/nova.jpg')
+    expect(patch.imageKeysBase).toEqual(['reports/existing-1.jpg', 'reports/existing-2.jpg'])
+  })
+
+  it('na criação não existe base a provar', async () => {
+    renderAt()
+    typeIn('new-report-title', 'Relatório novo')
+    save()
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
+    expect(createMock.mock.calls[0]?.[0]).not.toHaveProperty('imageKeysBase')
+  })
+})

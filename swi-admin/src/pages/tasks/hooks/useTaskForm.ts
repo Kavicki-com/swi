@@ -14,6 +14,7 @@ import {
   workOrdersApi,
   type WorkOrderDetail,
   type WorkOrderInput,
+  type WorkOrderUpdateInput,
   type WorkOrderItemInput,
 } from '@/services/api/workOrders'
 import {
@@ -109,6 +110,11 @@ export function useTaskForm() {
     ReadonlyArray<{ key: string; url: string }>
   >([])
   const [removedExisting, setRemovedExisting] = useState(false)
+  // Snapshot dos anexos NO LOAD, escrito uma vez e nunca mutado. Precisa ser
+  // separado de `existingAttachments`, que ENCOLHE a cada remoção: mandar a
+  // lista encolhida como base provaria a remoção contra si mesma, o backend
+  // não veria remoção nenhuma e o objeto ficaria órfão no bucket.
+  const [imageKeysBase, setImageKeysBase] = useState<ReadonlyArray<string>>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -157,6 +163,7 @@ export function useTaskForm() {
         setExistingAttachments(
           detail.imageKeys.map((key, i) => ({ key, url: detail.images[i] ?? '' })),
         )
+        setImageKeysBase(detail.imageKeys)
         // O backend garante ≥1 item (cria um espelhando título+resumo quando a
         // tarefa nasce sem checklist), então toda tarefa carregada tem lista.
         // Os ids vêm junto: é o que faz o PATCH ATUALIZAR os itens existentes.
@@ -341,7 +348,13 @@ export function useTaskForm() {
     // O usuário pode ter saído enquanto os anexos subiam.
     if (leftScreenRef.current) return
 
-    const payload: WorkOrderInput = {
+    // O tipo é a interseção porque este MESMO objeto alimenta create e update, e
+    // só o update conhece `imageKeysBase`. Cuidado ao mexer: a checagem de
+    // propriedade excedente do TS não vale pra variável, só pro literal passado
+    // direto na chamada, então tirar o `imageKeysBase` de dentro do `if (isEdit)`
+    // abaixo o mandaria no corpo do POST em silêncio, sem erro de compilação, e
+    // o CreateWorkOrderDto responderia 400 no cadastro de toda tarefa.
+    const payload: WorkOrderInput & Pick<WorkOrderUpdateInput, 'imageKeysBase'> = {
       title: title.trim(),
       responsibleIds: [...responsibleIds],
     }
@@ -361,6 +374,9 @@ export function useTaskForm() {
     if (isEdit) {
       if (imageKeys.length > 0 || removedExisting) {
         payload.imageKeys = [...existingAttachments.map((a) => a.key), ...imageKeys]
+        // O base viaja SÓ quando imageKeys viaja: ele existe para provar um diff,
+        // e sem diff não há o que provar.
+        payload.imageKeysBase = [...imageKeysBase]
       }
     } else if (imageKeys.length > 0) {
       payload.imageKeys = imageKeys

@@ -6,7 +6,7 @@
 // @testing-library/user-event is not a direct dependency of this app.
 // vitest globals (describe/it/expect/afterEach) are available via globals: true
 import { vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { adminsApi, type Admin } from '@/services/api/users'
 import { AdminsList } from './AdminsList'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
@@ -136,6 +136,69 @@ describe('AdminsList', () => {
     const alfa = screen.getByText('Alfa Admin')
     const bravo = screen.getByText('Bravo Admin')
     expect(alfa.compareDocumentPosition(bravo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // Mesma correção da EmployeesList, provada aqui porque a lógica é a mesma e
+  // já divergiu uma vez: a resposta do list() em voo foi montada ANTES do
+  // DELETE, e aplicá-la crua ressuscitava a linha recém-excluída.
+  it('lista em voo que chega depois do DELETE não ressuscita a linha', async () => {
+    let entregarRefetch: (r: { data: Admin[]; error: null }) => void = () => {}
+    vi.spyOn(adminsApi, 'list')
+      .mockResolvedValueOnce({ data: [ELISA], error: null })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            entregarRefetch = resolve
+          }),
+      )
+    vi.spyOn(adminsApi, 'remove').mockResolvedValue({ data: null, error: null })
+
+    await renderPage(<AdminsList initialTab="cadastrar" />, { route: '/admins' })
+    fireEvent.click(screen.getByRole('button', { name: /voltar para a lista de administradores/i }))
+    await waitFor(() => screen.getByText('Elisa Jordão'))
+    // Sem o segundo list() em voo o teste não prova nada: `entregarRefetch`
+    // seria um no-op e passaria por acidente.
+    expect(adminsApi.list).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir elisa jordão/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+    await waitFor(() => expect(screen.queryByText('Elisa Jordão')).toBeNull())
+
+    await act(async () => entregarRefetch({ data: [ELISA], error: null }))
+
+    expect(screen.queryByText('Elisa Jordão')).toBeNull()
+  })
+
+  // A linha pode sumir da lista entre abrir a confirmação e o backend responder.
+  // Reinserir depois disso pintava um admin que o servidor não lista mais.
+  it('recusa de linha que já saiu da lista não pinta linha fantasma', async () => {
+    const ALFA: Admin = { ...ELISA, id: 'admin-alfa', name: 'Alfa Admin' }
+    const BRAVO: Admin = { ...ELISA, id: 'admin-bravo', name: 'Bravo Admin' }
+    let entregarRefetch: (r: { data: Admin[]; error: null }) => void = () => {}
+    vi.spyOn(adminsApi, 'list')
+      .mockResolvedValueOnce({ data: [ALFA, BRAVO], error: null })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            entregarRefetch = resolve
+          }),
+      )
+    vi.spyOn(adminsApi, 'remove').mockResolvedValue({
+      data: null,
+      error: { message: 'Usuário não encontrado' },
+    })
+
+    await renderPage(<AdminsList initialTab="cadastrar" />, { route: '/admins' })
+    fireEvent.click(screen.getByRole('button', { name: /voltar para a lista de administradores/i }))
+    await waitFor(() => screen.getByText('Alfa Admin'))
+    expect(adminsApi.list).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir alfa admin/i }))
+    await act(async () => entregarRefetch({ data: [BRAVO], error: null }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+
+    await waitFor(() => expect(screen.getByText('Bravo Admin')).toBeTruthy())
+    expect(screen.queryByText('Alfa Admin')).toBeNull()
   })
 
   it('esconde o lixo na linha do próprio admin logado', async () => {

@@ -168,6 +168,22 @@ describe('employeesApi.get (real)', () => {
     expect(url).toContain('/users/u1')
   })
 
+  // O formulário de cadastro grava 'other' pra quem se declarou não-binário ou
+  // "outro" (dadosDeSaude do AdminsCreate). Colapsar isso em undefined fazia o
+  // detalhe dizer "Não informado", indistinguível de quem escolheu NÃO declarar,
+  // que é justamente a distinção que o cadastro se deu ao trabalho de coletar.
+  it('preserva o gênero declarado como "other"', async () => {
+    vi.stubGlobal('fetch', okJson({ ...summary(), gender: 'other' }))
+    const { data } = await employeesApi.get('u1')
+    expect(data?.gender).toBe('other')
+  })
+
+  it('gênero desconhecido segue virando ausência (a tela não inventa rótulo)', async () => {
+    vi.stubGlobal('fetch', okJson({ ...summary(), gender: 'xyz' }))
+    const { data } = await employeesApi.get('u1')
+    expect(data?.gender).toBeUndefined()
+  })
+
   it('não encontrado (404) → data null (tela mostra "não encontrado")', async () => {
     vi.stubGlobal(
       'fetch',

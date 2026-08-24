@@ -98,9 +98,14 @@ export type WorkOrderInput = {
   items?: WorkOrderItemInput[]
 }
 
-// PATCH parcial: todo campo é opcional. Cuidado com responsibleIds — opcional,
-// mas se vier NÃO pode ser [] (o backend responde 400).
-export type WorkOrderUpdateInput = Partial<WorkOrderInput>
+// PATCH parcial: todo campo é opcional. Cuidado com responsibleIds, que é
+// opcional mas, se vier, NÃO pode ser [] (o backend responde 400).
+//
+// `imageKeysBase` fica FORA do WorkOrderInput e só existe aqui: é o snapshot
+// dos anexos que o form carregou, e na criação não há snapshot anterior a
+// provar. Com ele o backend distingue anexo que chegou depois do load
+// (preserva) de anexo removido de propósito (apaga do bucket).
+export type WorkOrderUpdateInput = Partial<WorkOrderInput> & { imageKeysBase?: string[] }
 
 export const workOrdersApi = {
   // O backend limita a 200 linhas (mais recentes primeiro) e não pagina.

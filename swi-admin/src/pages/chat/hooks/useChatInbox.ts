@@ -8,7 +8,7 @@ import { useDemoToast } from '@/lib/demoToast'
 import type { ChatContact, ChatMessage } from '@/services/chats'
 import { useChat } from '@/services/chat/ChatProvider'
 import { conversationToContact, directoryToContact } from '@/services/chat/chatMap'
-import { ageFrom } from '@/services/api/users'
+import { ageFrom, toGender } from '@/services/api/users'
 import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 
 export function useChatInbox() {
@@ -115,9 +115,12 @@ export function useChatInbox() {
         return {
           ...selectedContact,
           role: entry?.role ?? '',
-          // Gênero REAL do cadastro. Fixar `'male'` faria toda colaboradora do
-          // quadro aparecer como "Masculino".
-          gender: entry?.gender === 'female' ? ('female' as const) : ('male' as const),
+          // Gênero REAL do cadastro, pela MESMA tradução do diretório. O
+          // ternário anterior só reconhecia 'female' e mandava todo o resto pra
+          // 'male': quem se declarou fora do binário, e quem não preencheu o
+          // campo (inclusive todo contato sem entrada no diretório), aparecia
+          // no painel declarado como "Masculino".
+          gender: toGender(entry?.gender),
           age: entry?.birthDate ? ageFrom(entry.birthDate, new Date()) : undefined,
           bloodType: entry?.bloodType ?? undefined,
           allergies: entry?.allergies ?? undefined,

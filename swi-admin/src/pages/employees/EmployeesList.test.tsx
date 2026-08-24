@@ -5,7 +5,7 @@
 // not a direct dependency of this app, so we follow the project convention.
 // vitest globals (describe/it/expect/afterEach) are available via globals: true
 import { vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { EmployeesList } from './EmployeesList'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
@@ -251,5 +251,176 @@ describe('EmployeesList', () => {
 
     await waitFor(() => expect(screen.queryByText('Rejeitar cadastro?')).toBeNull())
     expect(reject).not.toHaveBeenCalled()
+  })
+})
+
+// O backend expõe DELETE /users/:id desde o fechamento dos CRUDs, e a lista de
+// ADMINS já o consome com confirmação, exclusão otimista e rollback. A lista de
+// FUNCIONÁRIOS tinha o mesmo cluster de ícones na linha e nenhum caminho pra
+// excluir: a rota existia e ninguém a alcançava. Isto espelha o fluxo provado.
+describe('EmployeesList: excluir funcionário', () => {
+  afterEach(() => {
+    clearSession()
+    vi.restoreAllMocks()
+  })
+
+  const ZE: Employee = {
+    id: 'w1',
+    name: 'Zé da Silva',
+    age: 30,
+    bloodType: 'O+',
+    role: 'Operador',
+    specialization: 'Elétrica',
+    avatarUri: '',
+    sector: 'Manutenção',
+    vitalsStatus: 'good',
+  }
+
+  it('confirmar dispara o DELETE e a linha some; cancelar mantém', async () => {
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [ZE], error: null })
+    const remove = vi.spyOn(employeesApi, 'remove').mockResolvedValue({ data: null, error: null })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Zé da Silva'))
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir zé da silva/i }))
+    expect(screen.getByText('Excluir funcionário?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /cancelar/i }))
+    expect(remove).not.toHaveBeenCalled()
+    expect(screen.getByText('Zé da Silva')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir zé da silva/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+    expect(remove).toHaveBeenCalledWith('w1')
+    await waitFor(() => expect(screen.queryByText('Zé da Silva')).toBeNull())
+  })
+
+  // O 409 de registros vinculados é o caso REAL aqui: funcionário acumula
+  // jornada, tarefa e relatório, então recusar é o normal, não a exceção. A
+  // linha tem que voltar pra posição original, senão a lista se reordena
+  // sozinha na cara de quem só tentou excluir.
+  it('recusa do backend reinsere a linha na posição original', async () => {
+    const ALFA: Employee = { ...ZE, id: 'w-alfa', name: 'Alfa Operário' }
+    const BRAVO: Employee = { ...ZE, id: 'w-bravo', name: 'Bravo Operário' }
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [ALFA, BRAVO], error: null })
+    vi.spyOn(employeesApi, 'remove').mockResolvedValue({
+      data: null,
+      error: { message: 'Usuário possui registros vinculados; desative-o em vez de excluir' },
+    })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Alfa Operário'))
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir alfa operário/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+
+    await waitFor(() => expect(screen.getByText('Alfa Operário')).toBeTruthy())
+    const alfa = screen.getByText('Alfa Operário')
+    const bravo = screen.getByText('Bravo Operário')
+    expect(alfa.compareDocumentPosition(bravo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // Voltar do formulário de cadastro redispara o list(). Essa resposta é montada
+  // no servidor ANTES do DELETE, então chegar depois dele não desmente a
+  // exclusão: aplicá-la crua ressuscitava a linha recém-excluída, e só um F5 a
+  // tirava da tela de novo.
+  it('lista em voo que chega depois do DELETE não ressuscita a linha', async () => {
+    let entregarRefetch: (r: { data: Employee[]; error: null }) => void = () => {}
+    vi.spyOn(employeesApi, 'list')
+      .mockResolvedValueOnce({ data: [ZE], error: null })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            entregarRefetch = resolve
+          }),
+      )
+    vi.spyOn(employeesApi, 'remove').mockResolvedValue({ data: null, error: null })
+
+    await renderPage(<EmployeesList initialTab="cadastrar" />, { route: '/employees' })
+    fireEvent.click(screen.getByRole('button', { name: /voltar para a lista de funcionários/i }))
+    await waitFor(() => screen.getByText('Zé da Silva'))
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir zé da silva/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+    await waitFor(() => expect(screen.queryByText('Zé da Silva')).toBeNull())
+
+    await act(async () => entregarRefetch({ data: [ZE], error: null }))
+
+    expect(screen.queryByText('Zé da Silva')).toBeNull()
+  })
+
+  // Duas exclusões em voo, as duas recusadas: no funcionário isso não é caso de
+  // canto, é o normal (quem trabalhou tem jornada e relatório vinculados). A
+  // posição guardada como ÍNDICE envelhece durante o await, e a segunda linha
+  // voltava trocada de lugar com a primeira.
+  it('duas recusas em voo devolvem cada linha ao seu lugar', async () => {
+    const ALFA: Employee = { ...ZE, id: 'w-alfa', name: 'Alfa Operário' }
+    const BRAVO: Employee = { ...ZE, id: 'w-bravo', name: 'Bravo Operário' }
+    const CARLOS: Employee = { ...ZE, id: 'w-carlos', name: 'Carlos Operário' }
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [ALFA, BRAVO, CARLOS], error: null })
+    const recusas: Record<string, () => void> = {}
+    vi.spyOn(employeesApi, 'remove').mockImplementation(
+      (id: string) =>
+        new Promise((resolve) => {
+          recusas[id] = () =>
+            resolve({ data: null, error: { message: 'possui registros vinculados' } })
+        }),
+    )
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Alfa Operário'))
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir alfa operário/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /excluir carlos operário/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+    await waitFor(() => expect(screen.queryByText('Carlos Operário')).toBeNull())
+
+    // Estourar é melhor que passar: sem a recusa registrada o teste não
+    // exercitaria rollback nenhum e ficaria verde à toa.
+    const recusar = (id: string) => {
+      const recusa = recusas[id]
+      if (!recusa) throw new Error(`remove(${id}) não chegou a ser chamado`)
+      return act(async () => recusa())
+    }
+    await recusar('w-alfa')
+    await recusar('w-carlos')
+
+    const nomes = screen
+      .getAllByText(/ Operário$/)
+      .map((n) => n.textContent)
+      .filter((n): n is string => !!n)
+    expect(nomes).toEqual(['Alfa Operário', 'Bravo Operário', 'Carlos Operário'])
+  })
+
+  // A linha pode sumir da lista entre abrir a confirmação e o backend responder
+  // (outro admin excluiu primeiro, e o refetch já a tirou da tela). Reinserir
+  // depois disso pintava uma linha fantasma no fim: alguém que o servidor não
+  // lista mais.
+  it('recusa de linha que já saiu da lista não pinta linha fantasma', async () => {
+    const ALFA: Employee = { ...ZE, id: 'w-alfa', name: 'Alfa Operário' }
+    const BRAVO: Employee = { ...ZE, id: 'w-bravo', name: 'Bravo Operário' }
+    let entregarRefetch: (r: { data: Employee[]; error: null }) => void = () => {}
+    vi.spyOn(employeesApi, 'list')
+      .mockResolvedValueOnce({ data: [ALFA, BRAVO], error: null })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            entregarRefetch = resolve
+          }),
+      )
+    vi.spyOn(employeesApi, 'remove').mockResolvedValue({
+      data: null,
+      error: { message: 'Usuário não encontrado' },
+    })
+
+    await renderPage(<EmployeesList initialTab="cadastrar" />, { route: '/employees' })
+    fireEvent.click(screen.getByRole('button', { name: /voltar para a lista de funcionários/i }))
+    await waitFor(() => screen.getByText('Alfa Operário'))
+
+    fireEvent.click(screen.getByRole('button', { name: /excluir alfa operário/i }))
+    // O refetch chega com a lista SEM o Alfa, com a confirmação ainda aberta.
+    await act(async () => entregarRefetch({ data: [BRAVO], error: null }))
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+
+    await waitFor(() => expect(screen.getByText('Bravo Operário')).toBeTruthy())
+    expect(screen.queryByText('Alfa Operário')).toBeNull()
   })
 })

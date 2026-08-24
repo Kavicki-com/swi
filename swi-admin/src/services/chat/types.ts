@@ -5,6 +5,8 @@
 // auto-suficiente pro card do inbox sem um join no diretório. `avatars`/`imageUri`
 // são uris resolvidas. Datas são ISO strings; a
 // ordenação por recência usa comparação lexicográfica (= cronológica).
+import type { Gender } from '@/services/types/directory'
+
 export interface Conversation {
   id: string
   participants: string[] // [myId, contactId] (ids de usuário do backend)
@@ -62,7 +64,10 @@ export type ChatContact = {
   // é a conversa ativa.
   role?: string
   subtitle?: string
-  gender?: 'male' | 'female'
+  // Mesmo vocabulário do diretório: o painel do chat mostra o gênero do MESMO
+  // cadastro que a tela de detalhe, e um alias próprio aqui fazia as duas
+  // discordarem sobre a mesma pessoa. undefined = não informado.
+  gender?: Gender
   age?: number
   bloodType?: string
   allergies?: string

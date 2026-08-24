@@ -148,6 +148,17 @@ describe('ChatInbox', () => {
     await expect(renderPage(<ChatInbox />, { route: '/chat' })).resolves.toBeDefined()
   })
 
+  // O painel declarava "Masculino" pra todo contato que não fosse 'female',
+  // inclusive quem não tem cadastro clínico nenhum (é o caso do 'w1' desta
+  // fixture: ele não está no `directory`). Declarar o gênero errado de alguém é
+  // pior do que admitir que o dado não veio.
+  it('não declara gênero de quem não tem o campo cadastrado', async () => {
+    await renderPage(<ChatInbox />, CONV_ROUTE)
+    expect(screen.getByText('Gênero')).toBeInTheDocument()
+    expect(screen.getByText('Não informado')).toBeInTheDocument()
+    expect(screen.queryByText('Masculino')).not.toBeInTheDocument()
+  })
+
   it('lists the real conversation by contact name', async () => {
     await renderPage(<ChatInbox />, { route: '/chat' })
     // Name appears in the left contact list.
