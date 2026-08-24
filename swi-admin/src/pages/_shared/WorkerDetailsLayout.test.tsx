@@ -54,6 +54,15 @@ describe('WorkerDetailsLayout', () => {
     expect(screen.getByText('Masculino')).toBeInTheDocument()
   })
 
+  // Quem se declarou não-binário ou "outro" no cadastro é gravado como 'other'.
+  // Cair em "Não informado" apagaria uma declaração que a pessoa FEZ, e a
+  // deixaria indistinguível de quem preferiu não responder.
+  it('mostra "Outro" para o gênero declarado fora do binário', async () => {
+    await renderLayout({ gender: 'other' })
+    expect(screen.getByText('Outro')).toBeInTheDocument()
+    expect(screen.queryByText('Não informado')).not.toBeInTheDocument()
+  })
+
   // Título sozinho lê como falha de carregamento; o estado vazio é informação.
   it('declara os vazios de alergias e exames em vez de deixar a seção muda', async () => {
     await renderLayout({})

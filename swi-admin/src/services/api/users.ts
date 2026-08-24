@@ -5,7 +5,7 @@
 // sanguíneo/exames dependem da smartband e ficam como placeholder no mapeamento
 // até o hardware existir (decisão do roadmap: saúde fica mock até a smartband).
 import type { ServiceResponse } from '@/services/types'
-import type { Admin, Employee, ExamEntry } from '@/services/types/directory'
+import type { Admin, Employee, ExamEntry, Gender } from '@/services/types/directory'
 import { examCardParts } from './examCard'
 import { apiFetch } from './http'
 
@@ -82,11 +82,20 @@ export function parseAllergies(raw: string | null | undefined): string[] | undef
   return items.length > 0 ? items : undefined
 }
 
-// Só 'male'/'female' são renderizáveis pelo layout; qualquer outro valor (ou
-// ausência) fica undefined pra que a tela diga "não informado" em vez de
-// inventar um gênero.
-const toGender = (raw: string | null | undefined): 'male' | 'female' | undefined =>
-  raw === 'male' || raw === 'female' ? raw : undefined
+// Vocabulário gravado do gênero: os três códigos que o cadastro emite
+// ('male'/'female'/'other', ver dadosDeSaude no AdminsCreate). Qualquer outro
+// valor, ou a ausência, vira undefined pra que a tela diga "não informado" em
+// vez de inventar um gênero.
+//
+// 'other' NÃO pode colapsar em undefined: quem se declarou não-binário FEZ uma
+// declaração, e apagá-la o torna indistinguível de quem preferiu não responder,
+// que é a única distinção que o formulário se deu ao trabalho de coletar.
+//
+// Exportada porque o painel do chat mapeia o MESMO campo do MESMO backend
+// (useChatInbox): duplicar a tradução lá foi o que fez as duas telas
+// discordarem sobre a mesma pessoa.
+export const toGender = (raw: string | null | undefined): Gender | undefined =>
+  raw === 'male' || raw === 'female' || raw === 'other' ? raw : undefined
 
 // Exames do DTO → entradas do ExamInfoCard. Lista vazia vira undefined porque
 // o layout distingue "não tem exame" de "não veio no DTO", e undefined é o que
@@ -208,13 +217,14 @@ async function createUser(
   }
 }
 
-// Ativar/desativar e excluir batem em /users/:id e servem os DOIS diretórios,
-// então moram ACIMA de ambos: declaradas depois de employeesApi, o const cai na
-// temporal dead zone e o módulo inteiro explode no import.
+// Ativar/desativar e excluir batem em /users/:id, então moram ACIMA dos dois
+// diretórios: declaradas depois de employeesApi, o const cai na temporal dead
+// zone e o módulo inteiro explode no import.
 // Ativar/desativar um usuário (PATCH /users/:id {active}). O backend responde
 // só o novo estado ({id, active}); a tela usa o envelope de erro pra reverter o
-// toggle otimista se falhar. Serve admin e funcionário: a rota é a mesma, e só
-// o nome daqui dizia o contrário.
+// toggle otimista se falhar. Exposta só em adminsApi: a rota serve os dois
+// papéis, mas o toggle existe apenas na lista de admins, e pendurá-la também em
+// employeesApi criava um caminho que nenhuma tela chama.
 const setUserActive = async (
   id: string,
   active: boolean,
@@ -248,7 +258,6 @@ export const employeesApi = {
   list: () => listMapped('WORKER', toEmployee),
   get: (id: string) => getMapped(id, toEmployee),
   create: (input: CreateUserInput) => createUser('WORKER', input),
-  setActive: setUserActive,
   remove: removeUser,
 }
 

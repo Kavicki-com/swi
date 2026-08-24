@@ -348,6 +348,12 @@ export function useTaskForm() {
     // O usuário pode ter saído enquanto os anexos subiam.
     if (leftScreenRef.current) return
 
+    // O tipo é a interseção porque este MESMO objeto alimenta create e update, e
+    // só o update conhece `imageKeysBase`. Cuidado ao mexer: a checagem de
+    // propriedade excedente do TS não vale pra variável, só pro literal passado
+    // direto na chamada, então tirar o `imageKeysBase` de dentro do `if (isEdit)`
+    // abaixo o mandaria no corpo do POST em silêncio, sem erro de compilação, e
+    // o CreateWorkOrderDto responderia 400 no cadastro de toda tarefa.
     const payload: WorkOrderInput & Pick<WorkOrderUpdateInput, 'imageKeysBase'> = {
       title: title.trim(),
       responsibleIds: [...responsibleIds],

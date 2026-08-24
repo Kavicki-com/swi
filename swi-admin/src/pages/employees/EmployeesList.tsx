@@ -3,7 +3,7 @@
 // without the active toggle. Each row shows avatar + vitals status dot +
 // name/age/blood + role/specialization + sector + action icons (chat,
 // location) + expand chevron.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -20,6 +20,7 @@ import {
 import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
+import { ancoraDe, reinserirAncorado } from '@/pages/_shared/optimisticList'
 import { chatPathTo } from '@/services/chat/chatReducers'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
@@ -401,11 +402,17 @@ export function EmployeesList({
   // reinserção no rollback precisa da linha de volta, e relistar o servidor só
   // pra desfazer piscaria a tela.
   const [removing, setRemoving] = useState<Employee | null>(null)
+  // Ids que ESTA tela tirou da lista e cuja saída o backend ainda não desmentiu.
+  // Uma resposta de list() em voo foi montada no servidor ANTES do DELETE, então
+  // aplicá-la crua ressuscita a linha recém-excluída. Ref, e não state: quem lê
+  // é o callback do fetch, que precisa do valor do MOMENTO da resposta, não do
+  // que ficou fechado no render que disparou a chamada.
+  const removidosRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
     employeesApi.list().then(({ data }) => {
-      if (!cancelled && data) setEmployees([...data])
+      if (!cancelled && data) setEmployees(data.filter((e) => !removidosRef.current.has(e.id)))
     })
     return () => {
       cancelled = true
@@ -434,16 +441,18 @@ export function EmployeesList({
   // de quem só tentou excluir.
   const handleRemove = async (e: Employee) => {
     setRemoving(null)
-    const idx = employees.findIndex((x) => x.id === e.id)
+    // Âncora, e não índice: durante o await a lista pode andar (outra exclusão
+    // otimista, um refetch chegando), e um número guardado antes aponta pra
+    // outro lugar. `pos < 0` é o caso em que a linha JÁ tinha saído da lista
+    // (outro admin excluiu primeiro): aí não houve remoção otimista nenhuma, e
+    // devolver o item pintaria uma linha fantasma que o servidor não lista mais.
+    const { pos, anteriorId } = ancoraDe(employees, e.id)
+    removidosRef.current.add(e.id)
     setEmployees((prev) => prev.filter((x) => x.id !== e.id))
     const { error } = await employeesApi.remove(e.id)
     if (error) {
-      setEmployees((prev) => {
-        if (prev.some((x) => x.id === e.id)) return prev
-        const next = [...prev]
-        next.splice(idx < 0 ? next.length : idx, 0, e)
-        return next
-      })
+      removidosRef.current.delete(e.id)
+      if (pos >= 0) setEmployees((prev) => reinserirAncorado(prev, e, anteriorId))
       showToast('Erro', error.message)
       return
     }

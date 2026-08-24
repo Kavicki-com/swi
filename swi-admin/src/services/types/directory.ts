@@ -3,6 +3,14 @@
 // simulações de mockApi/. Módulo neutro de propósito: o caminho de produção
 // não importa nada do namespace de simulação.
 
+/**
+ * Gênero DECLARADO no cadastro, nos códigos que o backend grava. `other` cobre
+ * quem se declarou não-binário ou "outro" no formulário; a AUSÊNCIA do campo
+ * (undefined) é o estado separado de quem preferiu não responder, e as telas
+ * escrevem "Não informado" só nesse caso.
+ */
+export type Gender = 'male' | 'female' | 'other'
+
 export type ExamEntry = {
   id: string
   year: string
@@ -37,7 +45,7 @@ export type Employee = {
   hasUnreadMessages?: boolean
   // Health/details fields used by EmployeeDetails: mirror the Admin shape so
   // the screen renders without per-field optionality.
-  gender?: 'male' | 'female'
+  gender?: Gender
   bpm?: number
   pressure?: string
   fatigueRate?: number
@@ -58,7 +66,7 @@ export type Admin = {
   avatarUri: string
   active: boolean
   // Health fields used by the AdminDetails screen.
-  gender?: 'male' | 'female'
+  gender?: Gender
   height?: string
   weight?: string
   imc?: string

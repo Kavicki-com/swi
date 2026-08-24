@@ -6,7 +6,16 @@
 import { useEffect, useRef } from 'react'
 import { Pressable, View } from 'react-native'
 import { useMapLibre } from '@/lib/useMapLibre'
-import { Avatar, Button, Icon, Text, Title, elevation, useTheme } from '@kavicki/swi-design-system'
+import {
+  Avatar,
+  Button,
+  Icon,
+  Text,
+  Title,
+  elevation,
+  useTheme,
+  type IconName,
+} from '@kavicki/swi-design-system'
 import { useDemoToast } from '@/lib/demoToast'
 import type { ChatContact } from '@/services/chats'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
@@ -146,6 +155,18 @@ function ContactMiniMap({
   )
 }
 
+// Rótulo e glifo do gênero. Os dois tratam a AUSÊNCIA como um estado próprio:
+// o painel dizia "Masculino" pra todo contato que não fosse 'female', inclusive
+// pra quem não tem cadastro clínico nenhum. Mesmos rótulos da tela de detalhe
+// (WorkerDetailsLayout), que mostra o mesmo campo do mesmo cadastro.
+const generoRotulo = (g: ChatContact['gender']) =>
+  g === 'male' ? 'Masculino' : g === 'female' ? 'Feminino' : g === 'other' ? 'Outro' : 'Não informado'
+
+// Glifo neutro pra 'other' e pra ausência: os ícones `male`/`female` do DS
+// afirmam um gênero, e afirmá-lo ao lado de "Não informado" desmente o rótulo.
+const generoIcone = (g: ChatContact['gender']): IconName =>
+  g === 'male' ? 'male' : g === 'female' ? 'female' : 'account_circle'
+
 // Right-column profile panel. Avatar + name + role/subtitle
 // centered, mini-map, "Tempo até a fadiga total" with reversed gradient bar,
 // and a stats card with Gênero / Idade / Tipo sanguíneo / Alergias.
@@ -241,13 +262,9 @@ export function ContactInfoPanel({
             >
               Gênero
             </Text>
-            <Icon
-              name={contact.gender === 'male' ? 'male' : 'female'}
-              size={20}
-              color={theme.content.dark}
-            />
+            <Icon name={generoIcone(contact.gender)} size={20} color={theme.content.dark} />
             <Text variant="body.m" color={theme.content.dark}>
-              {contact.gender === 'male' ? 'Masculino' : 'Feminino'}
+              {generoRotulo(contact.gender)}
             </Text>
             <Text
               variant="body.m"

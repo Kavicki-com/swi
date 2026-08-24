@@ -3,7 +3,7 @@
 // row, and one AdminRow per admin in the seed. Composed inside AppLayout
 // (the sidebar + header are owned by AppLayout, this page provides the
 // main content slot only).
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -19,6 +19,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/api/users'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
+import { ancoraDe, reinserirAncorado } from '@/pages/_shared/optimisticList'
 import { chatPathTo } from '@/services/chat/chatReducers'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
@@ -224,11 +225,17 @@ export function AdminsList({
   // Bump pra forçar o refetch após um cadastro novo: ao voltar do form o
   // incremento reexecuta o useEffect e a lista já mostra o admin recém-criado.
   const [reloadKey, setReloadKey] = useState(0)
+  // Ids que ESTA tela tirou da lista e cuja saída o backend ainda não desmentiu.
+  // Uma resposta de list() em voo foi montada no servidor ANTES do DELETE, então
+  // aplicá-la crua ressuscita a linha recém-excluída. Ref, e não state: quem lê
+  // é o callback do fetch, que precisa do valor do MOMENTO da resposta, não do
+  // que ficou fechado no render que disparou a chamada.
+  const removidosRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
     adminsApi.list().then(({ data }) => {
-      if (!cancelled && data) setAdmins([...data])
+      if (!cancelled && data) setAdmins(data.filter((a) => !removidosRef.current.has(a.id)))
     })
     return () => {
       cancelled = true
@@ -255,16 +262,18 @@ export function AdminsList({
   // 409 quando o admin tem registros vinculados).
   async function handleRemove(a: Admin) {
     setRemoving(null)
-    const idx = admins.findIndex((x) => x.id === a.id)
+    // Âncora, e não índice: durante o await a lista pode andar (outra exclusão
+    // otimista, um refetch chegando), e um número guardado antes aponta pra
+    // outro lugar. `pos < 0` é o caso em que a linha JÁ tinha saído da lista
+    // (outro admin excluiu primeiro): aí não houve remoção otimista nenhuma, e
+    // devolver o item pintaria uma linha fantasma que o servidor não lista mais.
+    const { pos, anteriorId } = ancoraDe(admins, a.id)
+    removidosRef.current.add(a.id)
     setAdmins((prev) => prev.filter((x) => x.id !== a.id))
     const { error } = await adminsApi.remove(a.id)
     if (error) {
-      setAdmins((prev) => {
-        if (prev.some((x) => x.id === a.id)) return prev
-        const next = [...prev]
-        next.splice(idx < 0 ? next.length : idx, 0, a)
-        return next
-      })
+      removidosRef.current.delete(a.id)
+      if (pos >= 0) setAdmins((prev) => reinserirAncorado(prev, a, anteriorId))
       showToast('Erro', error.message)
       return
     }
