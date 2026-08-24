@@ -28,6 +28,14 @@ function finalizar() {
 }
 
 describe('AdminsCreate — submit', () => {
+  // Não-vacuidade do bloqueio na edição: no cadastro o e-mail É o campo que
+  // cria a identidade de login, e continua editável.
+  it('no cadastro o e-mail continua editável', async () => {
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    expect(screen.getByTestId('admins-create-email')).not.toHaveAttribute('readonly')
+  })
+
   it('sem obrigatórios não chama a api', async () => {
     const create = vi.spyOn(employeesApi, 'create')
     await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
@@ -455,6 +463,21 @@ describe('AdminsCreate em modo edição', () => {
     await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
 
     expect(screen.queryByTestId('admins-create-senha')).toBeNull()
+  })
+
+  // O campo estava editável e o patch nunca o mandava: dava pra digitar um
+  // e-mail novo, ver "Cadastro atualizado" e nada ter mudado. É o mesmo defeito
+  // que este formulário passou a existir pra não ter, e ele não pode voltar
+  // pela porta da edição. O backend recusa trocar e-mail de propósito (é a
+  // identidade de login), então a tela mostra o valor e bloqueia a digitação.
+  it('não deixa digitar um e-mail que o backend não vai aceitar', async () => {
+    vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    await renderEdicao()
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+
+    // O Input do DS bloqueia via editable={false}, que o react-native-web
+    // traduz pra `readonly` no DOM, não pro atributo `disabled`.
+    expect(screen.getByTestId('admins-create-email')).toHaveAttribute('readonly')
   })
 
   it('salvar manda o PATCH e não cria ninguém', async () => {

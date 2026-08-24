@@ -462,12 +462,18 @@ export function AdminsCreate({
             />
           </View>
           <View style={{ flex: 1 }}>
+            {/* Na edição o e-mail é exibido mas não é editável: o
+                UpdateUserDto o deixa de fora de propósito (é a identidade de
+                login, e trocá-la exige reconfirmação). Aceitar a digitação e
+                descartá-la no patch faria a tela dizer "atualizado" sobre algo
+                que não mudou. */}
             <Input
               testID="admins-create-email"
               label="Email"
               placeholder="seu@email.com"
               value={form.email}
               onChangeText={(v) => update('email', v)}
+              disabled={isEdit}
               keyboardType="email-address"
               autoCapitalize="none"
             />
