@@ -24,6 +24,7 @@ export class UpdateReportDto {
   @IsOptional() @IsString() summary?: string
   @IsOptional() @IsString() details?: string
   @IsOptional() @IsArray() @ArrayMaxSize(50) @IsString({ each: true }) responsibles?: string[]
+  // Veredito do ciclo de revisão: só ADMIN altera (regra no service, U01).
   @IsOptional() @IsIn(['accept', 'pending', 'canceled', 'info']) status?: string
   @IsOptional() @IsString() statusLabel?: string
   @IsOptional()

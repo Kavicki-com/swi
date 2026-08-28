@@ -8,6 +8,11 @@ import { isStaffJobTitle } from '../common/staff'
 
 const LIST_CAP = 200
 
+// O que o worker preenche na CRIAÇÃO (CreateReportDto), e portanto o que ele
+// pode editar depois. Allowlist de propósito, como em common/staff.ts: campo
+// novo no UpdateReportDto nasce restrito a ADMIN até decisão em contrário.
+const WORKER_EDITABLE_FIELDS = new Set(['title', 'summary', 'details', 'responsibles', 'imageKeys', 'imageKeysBase'])
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -168,15 +173,32 @@ export class ReportsService {
    * nada é apagado do bucket, porque destruir evidência de campo é pior que
    * vazar storage. Diff e write na MESMA transação, senão um write concorrente
    * entre a leitura e o update deixaria o banco citando objeto apagado.
+   *
+   * Autoria (ticket 11 da U01): mesma régua do remove, só autor ou ADMIN.
+   * Sem histórico de versões, editar sobrescreve o registro de segurança tão
+   * definitivamente quanto excluir, e o mobile expõe a edição a todo worker.
+   * E o worker autor edita só o que preenche na criação: status e statusLabel
+   * são o veredito do ciclo de revisão, ato de ADMIN.
    */
-  async update(id: string, _userId: string, dto: UpdateReportDto, companyId: string | null) {
+  async update(id: string, userId: string, role: string, dto: UpdateReportDto, companyId: string | null) {
+    if (role !== 'ADMIN') {
+      const proibidos = Object.keys(dto).filter(
+        (k) => (dto as Record<string, unknown>)[k] !== undefined && !WORKER_EDITABLE_FIELDS.has(k),
+      )
+      if (proibidos.length) {
+        throw new ForbiddenException(`Campos restritos a administradores: ${proibidos.join(', ')}`)
+      }
+    }
     try {
       const { r, removidos } = await this.prisma.$transaction(async (tx) => {
         const existing = await tx.report.findUnique({
           where: { id },
-          select: { id: true, imageKeys: true, author: { select: { companyId: true } } },
+          select: { id: true, authorId: true, imageKeys: true, author: { select: { companyId: true } } },
         })
         if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Relatório não encontrado')
+        if (role !== 'ADMIN' && existing.authorId !== userId) {
+          throw new ForbiddenException('Apenas o autor ou um administrador pode editar o relatório')
+        }
 
         let imageKeys = dto.imageKeys
         let removidos: string[] = []
@@ -218,10 +240,10 @@ export class ReportsService {
    * schema (Comment.report onDelete: Cascade), e os anexos saem do bucket
    * depois do commit.
    *
-   * A régua aqui é mais apertada que a do update, que é apenas org-scoped:
-   * editar é reversível, apagar não, e o relatório é o registro de segurança do
-   * trabalho. Por isso só o AUTOR ou um ADMIN da mesma empresa exclui. Fora da
-   * empresa responde 404, nunca 403, para não confirmar que o id existe.
+   * O relatório é o registro de segurança do trabalho: só o AUTOR ou um ADMIN
+   * da mesma empresa exclui, a mesma régua da edição desde o ticket 11 da U01.
+   * Fora da empresa responde 404, nunca 403, para não confirmar que o id
+   * existe.
    */
   async remove(id: string, userId: string, role: string, companyId: string | null) {
     const existing = await this.prisma.report.findUnique({

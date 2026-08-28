@@ -252,7 +252,7 @@ describe('ReportsService', () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue({ id: 'r1', author: { companyId: 'org1' } })
     db.report.update.mockResolvedValue(row({ title: 'Novo', status: 'accept', statusLabel: 'Aceito' }))
-    const out = await new ReportsService(db, media(), notifications()).update('r1', 'u1', {
+    const out = await new ReportsService(db, media(), notifications()).update('r1', 'u1', 'ADMIN', {
       title: 'Novo',
       status: 'accept',
       statusLabel: 'Aceito',
@@ -269,7 +269,7 @@ describe('ReportsService', () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue({ id: 'r1', author: { companyId: 'org2' } })
     await expect(
-      new ReportsService(db, media(), notifications()).update('r1', 'u1', { title: 'x' } as any, 'org1'),
+      new ReportsService(db, media(), notifications()).update('r1', 'u1', 'ADMIN', { title: 'x' } as any, 'org1'),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(db.report.update).not.toHaveBeenCalled()
   })
@@ -278,7 +278,7 @@ describe('ReportsService', () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue(null)
     await expect(
-      new ReportsService(db, media(), notifications()).update('nope', 'u1', { title: 'x' } as any, 'org1'),
+      new ReportsService(db, media(), notifications()).update('nope', 'u1', 'ADMIN', { title: 'x' } as any, 'org1'),
     ).rejects.toBeInstanceOf(NotFoundException)
   })
 
@@ -497,6 +497,7 @@ describe('ReportsService.listAssignees', () => {
       await new ReportsService(db, m, notifications()).update(
         'r1',
         'u1',
+        'ADMIN',
         { imageKeys: ['reports/a.jpg'], imageKeysBase: ['reports/a.jpg', 'reports/b.jpg'] },
         'org1',
       )
@@ -515,6 +516,7 @@ describe('ReportsService.listAssignees', () => {
       await new ReportsService(db, m, notifications()).update(
         'r1',
         'u1',
+        'ADMIN',
         { imageKeys: ['reports/novo.jpg'], imageKeysBase: ['reports/a.jpg'] },
         'org1',
       )
@@ -530,7 +532,7 @@ describe('ReportsService.listAssignees', () => {
         row({ imageKeys: ['reports/a.jpg', 'reports/b.jpg'], author: { companyId: 'org1' } }),
       )
       db.report.update.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
-      await new ReportsService(db, m, notifications()).update('r1', 'u1', { imageKeys: ['reports/a.jpg'] }, 'org1')
+      await new ReportsService(db, m, notifications()).update('r1', 'u1', 'ADMIN', { imageKeys: ['reports/a.jpg'] }, 'org1')
       // contrato antigo preservado: o array substitui...
       expect(db.report.update.mock.calls[0][0].data.imageKeys).toEqual(['reports/a.jpg'])
       // ...mas o objeto continua no bucket
@@ -542,7 +544,7 @@ describe('ReportsService.listAssignees', () => {
       const m = media()
       db.report.findUnique.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
       db.report.update.mockResolvedValue(row())
-      await new ReportsService(db, m, notifications()).update('r1', 'u1', { title: 'Novo' }, 'org1')
+      await new ReportsService(db, m, notifications()).update('r1', 'u1', 'ADMIN', { title: 'Novo' }, 'org1')
       expect(m.deleteObjects).not.toHaveBeenCalled()
     })
 
@@ -550,7 +552,7 @@ describe('ReportsService.listAssignees', () => {
       const db = prisma()
       db.report.findUnique.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
       db.report.update.mockResolvedValue(row())
-      await new ReportsService(db, media(), notifications()).update('r1', 'u1', { title: 'Novo' }, 'org1')
+      await new ReportsService(db, media(), notifications()).update('r1', 'u1', 'ADMIN', { title: 'Novo' }, 'org1')
       expect(db.$transaction).toHaveBeenCalledTimes(1)
     })
   })
@@ -619,6 +621,64 @@ describe('ReportsService.listAssignees', () => {
       await expect(
         new ReportsService(db, media(), notifications()).remove('r1', 'u1', 'ADMIN', 'org1'),
       ).rejects.toBeInstanceOf(NotFoundException)
+    })
+  })
+
+  // Régua de autoria da edição (ticket 11 da U01). O comentário histórico do
+  // remove justificava o update apenas org-scoped com "editar é reversível",
+  // mas sem histórico de versões a edição sobrescreve o registro de segurança
+  // de forma tão definitiva quanto a exclusão, e a U01 expõe o editar a todo
+  // worker no mobile. Mesma régua do remove: autor ou ADMIN.
+  describe('update: autoria (mesma régua do remove)', () => {
+    const alvo = (over = {}) => row({ authorId: 'u1', ...over })
+
+    it('worker que não é o autor recebe 403 e nada é alterado', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo({ authorId: 'outro' }))
+      await expect(
+        new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { title: 'x' } as any, 'org1'),
+      ).rejects.toMatchObject({ status: 403 })
+      expect(db.report.update).not.toHaveBeenCalled()
+    })
+
+    it('autor edita o próprio relatório', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      db.report.update.mockResolvedValue(row({ title: 'Novo' }))
+      const out = await new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { title: 'Novo' }, 'org1')
+      expect(out.title).toBe('Novo')
+    })
+
+    it('ADMIN edita relatório de outro autor da mesma empresa', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo({ authorId: 'outro' }))
+      db.report.update.mockResolvedValue(row())
+      await new ReportsService(db, media(), notifications()).update('r1', 'admin-1', 'ADMIN', { title: 'x' }, 'org1')
+      expect(db.report.update).toHaveBeenCalled()
+    })
+
+    // O worker edita o que ele preenche na CRIAÇÃO (CreateReportDto). Os dois
+    // campos que só existem no update, status e statusLabel, são o veredito do
+    // ciclo de revisão: mudá-los é ato de ADMIN, mesmo sendo o autor.
+    it('autor WORKER não altera campos do ciclo de revisão (status/statusLabel)', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      await expect(
+        new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { status: 'accept', statusLabel: 'Aceito' }, 'org1'),
+      ).rejects.toMatchObject({ status: 403 })
+      expect(db.report.update).not.toHaveBeenCalled()
+    })
+
+    // Allowlist, não blocklist: a régua é "o que o worker preenche na criação",
+    // então campo que entrar no UpdateReportDto amanhã já nasce restrito a
+    // ADMIN por omissão, em vez de vazar até alguém lembrar de listá-lo.
+    it('autor WORKER enviando campo fora da allowlist de criação recebe 403', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      await expect(
+        new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { title: 'x', reviewedBy: 'eu' } as any, 'org1'),
+      ).rejects.toMatchObject({ status: 403 })
+      expect(db.report.update).not.toHaveBeenCalled()
     })
   })
 })

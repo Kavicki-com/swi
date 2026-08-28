@@ -56,7 +56,7 @@ export class ReportsController {
 
   @Patch(':id')
   update(@Param('id') id: string, @CurrentUser() user: JwtUser, @Body() dto: UpdateReportDto) {
-    return this.reports.update(id, user.userId, dto, user.companyId)
+    return this.reports.update(id, user.userId, user.role, dto, user.companyId)
   }
 
   // Exclusão (204). A régua de quem pode vive no serviço (autor ou ADMIN), e
