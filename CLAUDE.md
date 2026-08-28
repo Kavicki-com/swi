@@ -110,3 +110,17 @@ Local overrides destroy DS-encoded design intent and produce drift that takes ma
 ### Reference
 
 Project's DS pin: `@kavicki/swi-design-system` (version in `swi-admin/package.json`). Source mirror: `swi-admin/node_modules/@kavicki/swi-design-system/src/`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues e especificações são mantidos localmente em `.scratch/`. Veja `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+A triagem usa os cinco rótulos padrão das engineering skills. Veja `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+O repositório usa o layout de domínio single-context. Veja `docs/agents/domain.md`.
