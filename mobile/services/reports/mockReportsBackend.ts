@@ -1,5 +1,6 @@
 import { Asset } from 'expo-asset';
 import type { Report, ReportActivity, ReportsBackend, ReportStatus, ReportComment } from './types';
+import { ReportPermissionError, ReportVersionConflictError } from './types';
 
 // In-memory demo backend for the Relatórios slice. Mirrors
 // services/profile/mockProfileBackend.ts: a module-level mutable store seeded at
@@ -69,6 +70,7 @@ function enrich(base: SeedBase): Report {
     ...base,
     // Mock nao acumula comentario: quem guarda e o backend.
     comments: [],
+    version: 0,
     authorAvatarUri: avatarUri,
     creationDate: CREATION_DATE,
     sector: SECTOR,
@@ -90,6 +92,10 @@ let store: Report[] = SEED_BASE.map(enrich);
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+// Date.now() sozinho colide quando dois create() caem no mesmo milissegundo
+// (get/update/remove buscam por id e achariam o relatório errado).
+let seq = 0;
+
 export const mockReportsBackend: ReportsBackend = {
   async list() {
     await tick();
@@ -104,7 +110,8 @@ export const mockReportsBackend: ReportsBackend = {
     await tick();
     const report: Report = {
       comments: [],
-      id: `local-${Date.now()}`,
+      version: 0,
+      id: `local-${Date.now()}-${seq++}`,
       title: input.title,
       summary: input.summary,
       status: 'pending',
@@ -120,6 +127,30 @@ export const mockReportsBackend: ReportsBackend = {
     };
     store = [report, ...store];
     return { ...report };
+  },
+  /** Reproduz a regua do backend (ticket 11/12): so o AUTOR edita (o usuario
+   *  do mock e um worker; quem ele criou tem authorName 'Você'), so os campos
+   *  de criacao viajam (garantido pelo tipo ReportUpdateInput) e baseVersion
+   *  desatualizada rejeita com o mesmo erro tipado da API real. */
+  async update(id, input) {
+    await tick();
+    const found = store.find((r) => r.id === id);
+    if (!found) throw new Error('Relatório não encontrado');
+    if (found.authorName !== 'Você') throw new ReportPermissionError();
+    if (input.baseVersion !== found.version) throw new ReportVersionConflictError();
+    if (input.title !== undefined) found.title = input.title;
+    if (input.summary !== undefined) found.summary = input.summary;
+    if (input.details !== undefined) found.details = input.details;
+    if (input.responsibles !== undefined) found.responsibles = input.responsibles;
+    found.version += 1;
+    return { ...found };
+  },
+  async remove(id) {
+    await tick();
+    const found = store.find((r) => r.id === id);
+    if (!found) throw new Error('Relatório não encontrado');
+    if (found.authorName !== 'Você') throw new ReportPermissionError();
+    store = store.filter((r) => r.id !== id);
   },
   /** Mock: devolve o comentario montado localmente. Nao ha persistencia — o
    *  mock existe pro dev local, e a regua real de comentario vive no backend. */

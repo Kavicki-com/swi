@@ -1,4 +1,5 @@
-import type { Report, ReportActivity, ReportComment, ReportInput, ReportsBackend } from './types';
+import type { Report, ReportActivity, ReportComment, ReportInput, ReportsBackend, ReportUpdateInput } from './types';
+import { ReportPermissionError, ReportVersionConflictError } from './types';
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 
@@ -48,7 +49,19 @@ function fromApi(dto: WireReport): Report {
       overflowCount: a.overflowCount,
     })),
     comments: dto.comments ?? [],
+    version: dto.version ?? 0,
   };
+}
+
+// 403/409 do PATCH/DELETE viram erros TIPADOS pra tela distinguir "sem
+// permissão" de "alguém editou antes" sem sniffar mensagem. Qualquer outro
+// status (404, 500, rede) propaga intacto.
+function traduzErroDeEscrita(e: unknown): unknown {
+  const status = (e as { status?: number }).status;
+  const message = e instanceof Error ? e.message : undefined;
+  if (status === 403) return new ReportPermissionError(message);
+  if (status === 409) return new ReportVersionConflictError(message);
+  return e;
 }
 
 export const apiReportsBackend: ReportsBackend = {
@@ -81,6 +94,28 @@ export const apiReportsBackend: ReportsBackend = {
       auth: true,
     });
     return fromApi(criado);
+  },
+  /** PATCH /reports/:id — só os campos de criação viajam (ReportUpdateInput
+   *  não tem status por construção); baseVersion fecha a corrida com 409. */
+  async update(id: string, input: ReportUpdateInput) {
+    try {
+      const atualizado = await apiRequest<WireReport>(`/reports/${id}`, {
+        method: 'PATCH',
+        body: input,
+        auth: true,
+      });
+      return fromApi(atualizado);
+    } catch (e) {
+      throw traduzErroDeEscrita(e);
+    }
+  },
+  /** DELETE /reports/:id — 204 sem corpo; 403 vira ReportPermissionError. */
+  async remove(id: string) {
+    try {
+      await apiRequest(`/reports/${id}`, { method: 'DELETE', auth: true });
+    } catch (e) {
+      throw traduzErroDeEscrita(e);
+    }
   },
   /** POST /reports/:id/comments — o backend devolve o comentario ja resolvido
    *  (autor, avatar presigned, data DD/MM/AAAA), pronto pra entrar na lista. */

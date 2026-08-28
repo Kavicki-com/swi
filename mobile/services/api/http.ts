@@ -11,7 +11,7 @@ export async function hasToken(): Promise<boolean> {
 }
 
 export interface ApiRequestOptions {
-  method?: 'GET' | 'POST' | 'PUT';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   auth?: boolean;
   /** Prazo desta chamada. Só suba para operações longas (upload). */

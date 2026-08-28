@@ -1,6 +1,7 @@
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 import { apiReportsBackend } from './apiReportsBackend';
+import { ReportPermissionError, ReportVersionConflictError } from './types';
 jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 jest.mock('../api/uploadMedia', () => ({ uploadImage: jest.fn() }));
 
@@ -83,5 +84,61 @@ describe('apiReportsBackend', () => {
       body: { title: 'T', summary: 'S', details: 'D', responsibles: ['Ana'], imageKeys: ['reports/a.jpg', 'reports/b.jpg'] },
       auth: true,
     });
+  });
+});
+
+
+describe('apiReportsBackend update/remove', () => {
+  beforeEach(() => {
+    (apiRequest as jest.Mock).mockReset();
+  });
+
+  it('update: PATCH /reports/:id com baseVersion e devolve o report normalizado', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', title: 'Novo', version: 3 });
+    const out = await apiReportsBackend.update('r1', { title: 'Novo', baseVersion: 2 });
+    expect(apiRequest).toHaveBeenCalledWith('/reports/r1', {
+      method: 'PATCH',
+      body: { title: 'Novo', baseVersion: 2 },
+      auth: true,
+    });
+    expect(out.version).toBe(3);
+    // Resposta do PATCH passa pela mesma normalização do get: arrays ausentes viram [].
+    expect(out.comments).toEqual([]);
+  });
+
+  it('update: 403 vira ReportPermissionError preservando a mensagem do backend', async () => {
+    (apiRequest as jest.Mock).mockRejectedValue(
+      Object.assign(new Error('Apenas o autor ou um administrador pode editar o relatório'), { status: 403 }),
+    );
+    const p = apiReportsBackend.update('r1', { title: 'x', baseVersion: 0 });
+    await expect(p).rejects.toBeInstanceOf(ReportPermissionError);
+    await expect(p).rejects.toThrow('Apenas o autor');
+  });
+
+  it('update: 409 vira ReportVersionConflictError', async () => {
+    (apiRequest as jest.Mock).mockRejectedValue(
+      Object.assign(new Error('O relatório foi alterado por outra pessoa. Recarregue e tente de novo.'), { status: 409 }),
+    );
+    await expect(apiReportsBackend.update('r1', { title: 'x', baseVersion: 0 })).rejects.toBeInstanceOf(
+      ReportVersionConflictError,
+    );
+  });
+
+  it('update: erro não-403/409 (ex. 500) propaga sem tradução', async () => {
+    (apiRequest as jest.Mock).mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));
+    await expect(apiReportsBackend.update('r1', { title: 'x', baseVersion: 0 })).rejects.toThrow('boom');
+  });
+
+  it('remove: DELETE /reports/:id', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({});
+    await apiReportsBackend.remove('r1');
+    expect(apiRequest).toHaveBeenCalledWith('/reports/r1', { method: 'DELETE', auth: true });
+  });
+
+  it('remove: 403 vira ReportPermissionError', async () => {
+    (apiRequest as jest.Mock).mockRejectedValue(
+      Object.assign(new Error('Apenas o autor ou um administrador pode excluir o relatório'), { status: 403 }),
+    );
+    await expect(apiReportsBackend.remove('r1')).rejects.toBeInstanceOf(ReportPermissionError);
   });
 });

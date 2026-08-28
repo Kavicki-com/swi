@@ -38,6 +38,7 @@ const relatorio = (id: string, title: string): Report => ({
   images: [],
   activities: [],
   comments: [],
+  version: 0,
 });
 
 const render = async () => {

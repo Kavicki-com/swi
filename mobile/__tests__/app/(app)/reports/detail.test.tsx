@@ -59,6 +59,7 @@ const relatorio = (over: Partial<Report> = {}): Report => ({
   images: [],
   activities: [],
   comments: [],
+  version: 0,
   ...over,
 });
 

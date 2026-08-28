@@ -40,6 +40,9 @@ export interface Report {
   images: string[];
   activities: ReportActivity[];
   comments: ReportComment[];
+  // Versao OCC do registro (backend Report.version): a tela de edicao a carrega
+  // e devolve em update() como baseVersion pra detectar edicao concorrente.
+  version: number;
 }
 
 export interface ReportInput {
@@ -50,10 +53,49 @@ export interface ReportInput {
   imageUris: string[];
 }
 
+// Edicao restrita POR CONSTRUCAO aos campos que o worker preenche na criacao:
+// status/statusLabel sao veredito do ciclo de revisao (ato de ADMIN no painel)
+// e nao existem aqui de proposito. Espelha WORKER_EDITABLE_FIELDS do backend.
+export interface ReportUpdateInput {
+  title?: string;
+  summary?: string;
+  details?: string;
+  responsibles?: string[];
+  /** Versao que a tela carregou. Desatualizada, o backend responde 409. */
+  baseVersion: number;
+}
+
+// Erros tipados do contrato de edicao/exclusao. `Object.setPrototypeOf` porque
+// o transform do Babel quebra `instanceof` em subclasse de Error sem ele.
+/** 403: quem esta logado nao e o autor (admin edita pelo painel, nao pelo app). */
+export class ReportPermissionError extends Error {
+  constructor(message?: string) {
+    super(message ?? 'Apenas o autor pode alterar o relatório');
+    this.name = 'ReportPermissionError';
+    Object.setPrototypeOf(this, ReportPermissionError.prototype);
+  }
+}
+
+/** 409: alguem editou o relatorio depois que a tela carregou (OCC). */
+export class ReportVersionConflictError extends Error {
+  constructor(message?: string) {
+    super(message ?? 'O relatório foi alterado por outra pessoa. Recarregue e tente de novo.');
+    this.name = 'ReportVersionConflictError';
+    Object.setPrototypeOf(this, ReportVersionConflictError.prototype);
+  }
+}
+
 export interface ReportsBackend {
   list(): Promise<Report[]>;
   get(id: string): Promise<Report | null>;
   create(input: ReportInput): Promise<Report>;
+  /**
+   * Edita um relatorio proprio. Rejeita com ReportPermissionError (403) ou
+   * ReportVersionConflictError (409); devolve o relatorio ja atualizado.
+   */
+  update(id: string, input: ReportUpdateInput): Promise<Report>;
+  /** Exclui um relatorio proprio. Rejeita com ReportPermissionError (403). */
+  remove(id: string): Promise<void>;
   /** Comenta num relatorio. Devolve o comentario criado, ja pronto pra lista. */
   addComment(reportId: string, body: string): Promise<ReportComment>;
 }
