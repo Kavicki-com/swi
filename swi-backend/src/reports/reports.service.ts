@@ -13,6 +13,11 @@ const LIST_CAP = 200
 // novo no UpdateReportDto nasce restrito a ADMIN até decisão em contrário.
 const WORKER_EDITABLE_FIELDS = new Set(['title', 'summary', 'details', 'responsibles', 'imageKeys', 'imageKeysBase', 'baseVersion'])
 
+// Quem está lendo, extraído do token. Serve pro DTO responder canEdit por
+// requisição: a régua "autor ou ADMIN" continua vivendo só aqui no serviço, e
+// o cliente esconde as ações sem reimplementar política de autorização.
+type Viewer = { userId: string; role: string }
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -75,7 +80,7 @@ export class ReportsService {
     }
   }
 
-  async list(companyId: string | null, page?: { limit?: number; offset?: number }) {
+  async list(companyId: string | null, page?: { limit?: number; offset?: number }, viewer?: Viewer) {
     const where = { author: { companyId } }
     const take = Math.min(Math.max(page?.limit ?? LIST_CAP, 1), LIST_CAP)
     const skip = Math.max(page?.offset ?? 0, 0)
@@ -83,10 +88,10 @@ export class ReportsService {
       this.prisma.report.findMany({ where, orderBy: { createdAt: 'desc' }, take, skip }),
       this.prisma.report.count({ where }),
     ])
-    return { items: await Promise.all(rows.map((r) => this.toDto(r))), total }
+    return { items: await Promise.all(rows.map((r) => this.toDto(r, viewer))), total }
   }
 
-  async get(id: string, companyId: string | null) {
+  async get(id: string, companyId: string | null, viewer?: Viewer) {
     const r = await this.prisma.report.findUnique({
       where: { id },
       include: {
@@ -99,7 +104,7 @@ export class ReportsService {
     })
     if (!r || r.author.companyId !== companyId) return null
     const comments = await Promise.all(r.comments.map((c) => this.toCommentDto(c, c.author)))
-    const dto = await this.toDto(r)
+    const dto = await this.toDto(r, viewer)
     // Fotos reais das equipes por atividade. O desenho pede um grupo de
     // avatares em cada linha, e eles têm que ser das pessoas de verdade, nunca
     // decorativos. Só no detalhe: a lista não renderiza atividades e não paga
@@ -159,7 +164,8 @@ export class ReportsService {
         targetId: r.id,
       })
     } catch { /* best-effort */ }
-    return this.toDto(r)
+    // Quem cria é o autor: canEdit sai true independente do papel.
+    return this.toDto(r, { userId: authorId, role: 'WORKER' })
   }
 
   /**
@@ -242,7 +248,7 @@ export class ReportsService {
       // que já aconteceu, e um rollback não pode ter apagado anexo de relatório
       // intacto.
       if (removidos.length) await this.media.deleteObjects(removidos)
-      return this.toDto(r)
+      return this.toDto(r, { userId, role })
     } catch (e) {
       if ((e as { code?: string }).code === 'P2025') {
         // Com baseVersion o write é condicionado à versão: P2025 aqui é a
@@ -316,7 +322,7 @@ export class ReportsService {
 
   // Devolve exatamente o shape mobile `Report` (keys→urls presigned, date
   // dd/mm/yyyy, null→'' nos campos string que as telas exigem).
-  private async toDto(r: Report) {
+  private async toDto(r: Report, viewer?: Viewer) {
     return {
       id: r.id,
       title: r.title,
@@ -324,6 +330,9 @@ export class ReportsService {
       status: r.status,
       statusLabel: r.statusLabel ?? '',
       version: r.version,
+      // A mesma régua do update/remove, respondida por requisição. Sem viewer
+      // (chamada legada), esconder é o fallback seguro, nunca mostrar indevido.
+      canEdit: viewer ? viewer.role === 'ADMIN' || r.authorId === viewer.userId : false,
       authorName: r.authorName ?? '',
       authorAvatarUri: r.authorAvatarKey ? await this.media.presignGet(r.authorAvatarKey) : '',
       creationDate: this.formatDate(r.creationDate),

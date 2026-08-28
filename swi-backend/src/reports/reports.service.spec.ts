@@ -730,3 +730,62 @@ describe('ReportsService.listAssignees', () => {
     })
   })
 })
+
+// Ticket 15 (U01): a régua "autor ou ADMIN" já vive no serviço; canEdit é essa
+// régua respondida por requisição, pra UI esconder as ações sem reimplementar
+// política de autorização no cliente. O 403 continua sendo a defesa real.
+describe('canEdit no DTO', () => {
+  const viewer = (userId: string, role = 'WORKER') => ({ userId, role })
+
+  it('get: o autor vê canEdit true', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(row({ authorId: 'u-ana', comments: [] }))
+    const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1', viewer('u-ana'))
+    expect(out!.canEdit).toBe(true)
+  })
+
+  it('get: quem não é o autor vê canEdit false', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(row({ authorId: 'u-ana', comments: [] }))
+    const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1', viewer('u-outro'))
+    expect(out!.canEdit).toBe(false)
+  })
+
+  it('get: ADMIN vê canEdit true mesmo sem ser o autor', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(row({ authorId: 'u-ana', comments: [] }))
+    const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1', viewer('u-adm', 'ADMIN'))
+    expect(out!.canEdit).toBe(true)
+  })
+
+  it('list: calcula canEdit linha a linha', async () => {
+    const db = prisma()
+    db.report.findMany.mockResolvedValue([
+      row({ id: 'meu', authorId: 'u-ana' }),
+      row({ id: 'alheio', authorId: 'u-outro' }),
+    ])
+    const out = await new ReportsService(db, media(), notifications()).list('org1', undefined, viewer('u-ana'))
+    expect(out.items.map((i: any) => [i.id, i.canEdit])).toEqual([
+      ['meu', true],
+      ['alheio', false],
+    ])
+  })
+
+  // Chamada sem viewer (não deve existir depois do controller atualizado, mas
+  // o default importa): esconder é o fallback seguro, nunca mostrar indevido.
+  it('sem viewer, canEdit é false', async () => {
+    const db = prisma()
+    db.report.findUnique.mockResolvedValue(row({ authorId: 'u-ana', comments: [] }))
+    const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1')
+    expect(out!.canEdit).toBe(false)
+  })
+
+  it('create: quem cria já recebe canEdit true na resposta', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: 'u-ana', companyId: 'org1', profile: null })
+    db.user.findMany.mockResolvedValue([])
+    db.report.create.mockResolvedValue(row({ authorId: 'u-ana' }))
+    const out = await new ReportsService(db, media(), notifications()).create('u-ana', { title: 'T' })
+    expect(out.canEdit).toBe(true)
+  })
+})

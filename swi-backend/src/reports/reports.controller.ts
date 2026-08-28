@@ -20,10 +20,15 @@ export class ReportsController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    const { items, total } = await this.reports.list(user.companyId, {
-      limit: limit ? Number(limit) : undefined,
-      offset: offset ? Number(offset) : undefined,
-    })
+    const { items, total } = await this.reports.list(
+      user.companyId,
+      {
+        limit: limit ? Number(limit) : undefined,
+        offset: offset ? Number(offset) : undefined,
+      },
+      // canEdit por linha: a régua vive no serviço, o cliente só esconde ação.
+      { userId: user.userId, role: user.role },
+    )
     res.setHeader('X-Total-Count', String(total))
     // Sem isto o browser não enxerga o header (CORS esconde tudo fora da lista segura).
     res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count')
@@ -44,7 +49,7 @@ export class ReportsController {
 
   @Get(':id')
   async get(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    const r = await this.reports.get(id, user.companyId)
+    const r = await this.reports.get(id, user.companyId, { userId: user.userId, role: user.role })
     if (!r) throw new NotFoundException('Relatório não encontrado')
     return r
   }

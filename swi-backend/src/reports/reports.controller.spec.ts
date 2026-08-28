@@ -29,7 +29,7 @@ describe('ReportsController', () => {
 
     await expect(new ReportsController(s).list(user, r, '10', '20')).resolves.toEqual([{ id: 'r1' }])
 
-    expect(s.list).toHaveBeenCalledWith('empresa-1', { limit: 10, offset: 20 })
+    expect(s.list).toHaveBeenCalledWith('empresa-1', { limit: 10, offset: 20 }, { userId: 'u1', role: 'WORKER' })
     expect(r.setHeader).toHaveBeenCalledWith('X-Total-Count', '42')
     expect(r.setHeader).toHaveBeenCalledWith('Access-Control-Expose-Headers', 'X-Total-Count')
   })
@@ -37,7 +37,7 @@ describe('ReportsController', () => {
   it('sem limit/offset na query passa undefined, não NaN', async () => {
     const s = service()
     await new ReportsController(s).list(user, res())
-    expect(s.list).toHaveBeenCalledWith('empresa-1', { limit: undefined, offset: undefined })
+    expect(s.list).toHaveBeenCalledWith('empresa-1', { limit: undefined, offset: undefined }, { userId: 'u1', role: 'WORKER' })
   })
 
   it('responsáveis atribuíveis saem do par usuário/empresa do token', async () => {
@@ -50,7 +50,7 @@ describe('ReportsController', () => {
     const s = service()
     s.get.mockResolvedValue(null)
     await expect(new ReportsController(s).get('r9', user)).rejects.toBeInstanceOf(NotFoundException)
-    expect(s.get).toHaveBeenCalledWith('r9', 'empresa-1')
+    expect(s.get).toHaveBeenCalledWith('r9', 'empresa-1', { userId: 'u1', role: 'WORKER' })
   })
 
   it('criar, atualizar e comentar usam a identidade do token', async () => {
