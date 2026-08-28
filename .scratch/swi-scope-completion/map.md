@@ -54,7 +54,7 @@ Nenhum defeito encontrado durante U00 é corrigido dentro de U00.
 | NN                                               | Título                                  | Blocked by     | Status          |
 | ------------------------------------------------ | --------------------------------------- | -------------- | --------------- |
 | [11](issues/11-backend-autoria-edicao.md)        | Backend: autoria na edição              | nenhum         | resolved        |
-| [12](issues/12-backend-versao-report.md)         | Backend: versão no Report e 409         | 11             | ready-for-agent |
+| [12](issues/12-backend-versao-report.md)         | Backend: versão no Report e 409         | 11             | resolved        |
 | [13](issues/13-mobile-contrato-update-remove.md) | Mobile: contrato e serviços             | 12             | ready-for-agent |
 | [14](issues/14-mobile-edicao-texto.md)           | Mobile: edição de texto (tracer bullet) | 13             | ready-for-agent |
 | [15](issues/15-mobile-exclusao.md)               | Mobile: exclusão confirmada             | 13             | ready-for-agent |

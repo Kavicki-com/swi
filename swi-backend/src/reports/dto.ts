@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsIn, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator'
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Min } from 'class-validator'
 
 export class CreateReportDto {
   @IsString() @IsNotEmpty() title!: string
@@ -43,4 +43,7 @@ export class UpdateReportDto {
   @IsString({ each: true })
   @Matches(/^reports\/[0-9a-f-]{36}\.(jpg|png)$/, { each: true })
   imageKeysBase?: string[]
+  // OCC: versão que o form carregou. Desatualizada responde 409; ausente, o
+  // PATCH mantém o contrato antigo do painel (last-write-wins).
+  @IsOptional() @IsInt() @Min(0) baseVersion?: number
 }

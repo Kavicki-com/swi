@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
@@ -11,7 +11,7 @@ const LIST_CAP = 200
 // O que o worker preenche na CRIAÇÃO (CreateReportDto), e portanto o que ele
 // pode editar depois. Allowlist de propósito, como em common/staff.ts: campo
 // novo no UpdateReportDto nasce restrito a ADMIN até decisão em contrário.
-const WORKER_EDITABLE_FIELDS = new Set(['title', 'summary', 'details', 'responsibles', 'imageKeys', 'imageKeysBase'])
+const WORKER_EDITABLE_FIELDS = new Set(['title', 'summary', 'details', 'responsibles', 'imageKeys', 'imageKeysBase', 'baseVersion'])
 
 @Injectable()
 export class ReportsService {
@@ -179,6 +179,10 @@ export class ReportsService {
    * definitivamente quanto excluir, e o mobile expõe a edição a todo worker.
    * E o worker autor edita só o que preenche na criação: status e statusLabel
    * são o veredito do ciclo de revisão, ato de ADMIN.
+   *
+   * OCC (ticket 12): baseVersion é a versão que o form carregou; desatualizada
+   * responde 409 e o write é condicionado à versão. Sem baseVersion vale o
+   * contrato antigo (painel), mas a versão incrementa sempre.
    */
   async update(id: string, userId: string, role: string, dto: UpdateReportDto, companyId: string | null) {
     if (role !== 'ADMIN') {
@@ -193,11 +197,18 @@ export class ReportsService {
       const { r, removidos } = await this.prisma.$transaction(async (tx) => {
         const existing = await tx.report.findUnique({
           where: { id },
-          select: { id: true, authorId: true, imageKeys: true, author: { select: { companyId: true } } },
+          select: { id: true, authorId: true, version: true, imageKeys: true, author: { select: { companyId: true } } },
         })
         if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Relatório não encontrado')
         if (role !== 'ADMIN' && existing.authorId !== userId) {
           throw new ForbiddenException('Apenas o autor ou um administrador pode editar o relatório')
+        }
+
+        // OCC: compara com a versão que o form carregou. O write abaixo ainda é
+        // condicionado à versão, fechando a corrida entre esta leitura e o
+        // update; este é só o caminho amigável, com erro claro.
+        if (dto.baseVersion !== undefined && existing.version !== dto.baseVersion) {
+          throw new ConflictException('O relatório foi alterado por outra pessoa. Recarregue e tente de novo.')
         }
 
         let imageKeys = dto.imageKeys
@@ -211,7 +222,7 @@ export class ReportsService {
         }
 
         const r = await tx.report.update({
-          where: { id },
+          where: dto.baseVersion !== undefined ? { id, version: dto.baseVersion } : { id },
           data: {
             ...(dto.title !== undefined && { title: dto.title }),
             ...(dto.summary !== undefined && { summary: dto.summary }),
@@ -220,6 +231,9 @@ export class ReportsService {
             ...(dto.status !== undefined && { status: dto.status as ReportStatus }),
             ...(dto.statusLabel !== undefined && { statusLabel: dto.statusLabel }),
             ...(imageKeys !== undefined && { imageKeys }),
+            // Sobe sempre, com ou sem baseVersion: sem isso uma edição do painel
+            // (contrato antigo) seria invisível pra quem trava por versão.
+            version: { increment: 1 },
           },
         })
         return { r, removidos }
@@ -230,7 +244,15 @@ export class ReportsService {
       if (removidos.length) await this.media.deleteObjects(removidos)
       return this.toDto(r)
     } catch (e) {
-      if ((e as { code?: string }).code === 'P2025') throw new NotFoundException('Relatório não encontrado')
+      if ((e as { code?: string }).code === 'P2025') {
+        // Com baseVersion o write é condicionado à versão: P2025 aqui é a
+        // corrida entre a leitura e o write (ou exclusão paralela), não id
+        // errado. Sem baseVersion, vale o 404 histórico.
+        if (dto.baseVersion !== undefined) {
+          throw new ConflictException('O relatório foi alterado por outra pessoa. Recarregue e tente de novo.')
+        }
+        throw new NotFoundException('Relatório não encontrado')
+      }
       throw e
     }
   }
@@ -301,6 +323,7 @@ export class ReportsService {
       summary: r.summary ?? '',
       status: r.status,
       statusLabel: r.statusLabel ?? '',
+      version: r.version,
       authorName: r.authorName ?? '',
       authorAvatarUri: r.authorAvatarKey ? await this.media.presignGet(r.authorAvatarKey) : '',
       creationDate: this.formatDate(r.creationDate),

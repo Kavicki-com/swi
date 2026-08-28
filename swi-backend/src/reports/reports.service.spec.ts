@@ -50,6 +50,7 @@ const row = (over = {}) => ({
   details: null,
   imageKeys: ['reports/x.jpg'],
   activities: [],
+  version: 0,
   author: { companyId: 'org1' },
   ...over,
 })
@@ -259,7 +260,7 @@ describe('ReportsService', () => {
     }, 'org1')
     const arg = db.report.update.mock.calls[0][0]
     expect(arg.where).toEqual({ id: 'r1' })
-    expect(arg.data).toEqual({ title: 'Novo', status: 'accept', statusLabel: 'Aceito' })
+    expect(arg.data).toEqual({ title: 'Novo', status: 'accept', statusLabel: 'Aceito', version: { increment: 1 } })
     expect(out.title).toBe('Novo')
     expect(out.status).toBe('accept')
     expect(out.statusLabel).toBe('Aceito')
@@ -679,6 +680,53 @@ describe('ReportsService.listAssignees', () => {
         new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { title: 'x', reviewedBy: 'eu' } as any, 'org1'),
       ).rejects.toMatchObject({ status: 403 })
       expect(db.report.update).not.toHaveBeenCalled()
+    })
+  })
+
+  // OCC do update (ticket 12 da U01): o form manda a versão que carregou
+  // (baseVersion) e o write é CONDICIONADO a ela; edição baseada em versão
+  // velha recebe 409 e recarrega, nunca sobrescreve em silêncio.
+  describe('update: controle de versão (baseVersion)', () => {
+    const alvo = (over = {}) => row({ authorId: 'u1', version: 3, ...over })
+
+    it('baseVersion desatualizada → 409 sem tocar no update', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      await expect(
+        new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { title: 'x', baseVersion: 2 }, 'org1'),
+      ).rejects.toMatchObject({ status: 409 })
+      expect(db.report.update).not.toHaveBeenCalled()
+    })
+
+    it('baseVersion atual → write condicionado a {id, version} e version incrementa', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      db.report.update.mockResolvedValue(row({ version: 4 }))
+      const out = await new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { title: 'Novo', baseVersion: 3 }, 'org1')
+      const arg = db.report.update.mock.calls[0][0]
+      expect(arg.where).toEqual({ id: 'r1', version: 3 })
+      expect(arg.data.version).toEqual({ increment: 1 })
+      expect(out.version).toBe(4)
+    })
+
+    it('corrida entre a leitura e o write (P2025 com baseVersion) vira 409, não 404', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      db.report.update.mockRejectedValue(Object.assign(new Error('stale'), { code: 'P2025' }))
+      await expect(
+        new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { title: 'x', baseVersion: 3 }, 'org1'),
+      ).rejects.toMatchObject({ status: 409 })
+    })
+
+    it('sem baseVersion vale o contrato antigo: write por id, e a versão sobe mesmo assim', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      db.report.update.mockResolvedValue(row({ version: 4 }))
+      await new ReportsService(db, media(), notifications()).update('r1', 'u1', 'WORKER', { title: 'Novo' }, 'org1')
+      const arg = db.report.update.mock.calls[0][0]
+      expect(arg.where).toEqual({ id: 'r1' })
+      // Sobe sempre: sem isso uma edição do painel seria invisível pro mobile.
+      expect(arg.data.version).toEqual({ increment: 1 })
     })
   })
 })
