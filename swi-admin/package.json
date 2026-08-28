@@ -16,6 +16,7 @@
     "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
     "gate:file-size": "node ../scripts/quality/assert-file-size.mjs --dir src --min-scanned 100",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:managed": "node ../scripts/e2e/run-test-stack.mjs --target admin",
     "test:watch": "vitest",
