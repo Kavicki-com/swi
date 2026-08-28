@@ -37,6 +37,7 @@ function fromApi(dto: WireReport): Report {
     responsibles: dto.responsibles ?? [],
     details: dto.details ?? '',
     images: dto.images ?? [],
+    imageKeys: dto.imageKeys ?? [],
     activities: (dto.activities ?? []).map((a, i) => ({
       id: a.id ?? `act-${i}`, // o servidor não manda id → sintetiza um estável por posição
       title: a.title ?? '',
@@ -98,12 +99,20 @@ export const apiReportsBackend: ReportsBackend = {
     return fromApi(criado);
   },
   /** PATCH /reports/:id — só os campos de criação viajam (ReportUpdateInput
-   *  não tem status por construção); baseVersion fecha a corrida com 409. */
+   *  não tem status por construção); baseVersion fecha a corrida com 409.
+   *  Anexos novos (uris locais) sobem ANTES do PATCH e viram keys atrás das
+   *  mantidas; `imageUris` nunca chega ao servidor: o worker edita por
+   *  allowlist lá, e um campo desconhecido derrubaria o PATCH inteiro com 403. */
   async update(id: string, input: ReportUpdateInput) {
     try {
+      const { imageUris, ...body } = input;
+      if (imageUris?.length) {
+        const novas = await Promise.all(imageUris.map((uri) => uploadImage(uri)));
+        body.imageKeys = [...(body.imageKeys ?? []), ...novas];
+      }
       const atualizado = await apiRequest<WireReport>(`/reports/${id}`, {
         method: 'PATCH',
-        body: input,
+        body,
         auth: true,
       });
       return fromApi(atualizado);

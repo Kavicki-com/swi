@@ -163,3 +163,53 @@ describe('apiReportsBackend canEdit', () => {
     expect(out?.canEdit).toBe(false);
   });
 });
+
+// Ticket 16: anexos na edição. O form manda os anexos MANTIDOS como keys crus,
+// os NOVOS como uris locais (o adapter sobe e converte) e o snapshot
+// imageKeysBase do load, com que o backend distingue "removi" de "nunca vi".
+describe('apiReportsBackend update: anexos', () => {
+  beforeEach(() => {
+    (apiRequest as jest.Mock).mockReset();
+    (uploadImage as jest.Mock).mockReset();
+  });
+
+  it('get expõe os imageKeys crus do wire (e [] de servidor antigo)', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', imageKeys: ['reports/a.jpg'] });
+    expect((await apiReportsBackend.get('r1'))?.imageKeys).toEqual(['reports/a.jpg']);
+
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1' });
+    expect((await apiReportsBackend.get('r1'))?.imageKeys).toEqual([]);
+  });
+
+  it('update sobe as uris novas e PATCHa mantidos+novos com o snapshot', async () => {
+    (uploadImage as jest.Mock).mockResolvedValue('reports/nova.jpg');
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', version: 2 });
+
+    await apiReportsBackend.update('r1', {
+      title: 'T',
+      baseVersion: 1,
+      imageKeys: ['reports/mantida.jpg'],
+      imageUris: ['file:///tmp/nova.jpg'],
+      imageKeysBase: ['reports/mantida.jpg', 'reports/removida.jpg'],
+    });
+
+    expect(uploadImage).toHaveBeenCalledWith('file:///tmp/nova.jpg');
+    const body = (apiRequest as jest.Mock).mock.calls[0][1].body;
+    expect(body.imageKeys).toEqual(['reports/mantida.jpg', 'reports/nova.jpg']);
+    expect(body.imageKeysBase).toEqual(['reports/mantida.jpg', 'reports/removida.jpg']);
+    // O worker edita por allowlist no servidor: um campo desconhecido como
+    // imageUris derrubaria o PATCH inteiro com 403.
+    expect(body).not.toHaveProperty('imageUris');
+    expect(body.title).toBe('T');
+    expect(body.baseVersion).toBe(1);
+  });
+
+  it('update sem mexer em anexos não manda campo de anexo nenhum', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', version: 2 });
+    await apiReportsBackend.update('r1', { title: 'T', baseVersion: 1 });
+    const body = (apiRequest as jest.Mock).mock.calls[0][1].body;
+    expect(body).not.toHaveProperty('imageKeys');
+    expect(body).not.toHaveProperty('imageKeysBase');
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+});

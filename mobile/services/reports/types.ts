@@ -38,6 +38,9 @@ export interface Report {
   responsibles: string[];
   details: string;
   images: string[];
+  // Keys crus dos anexos (não-presigned), na MESMA ordem de `images`. O form de
+  // edição precisa deles pra dizer ao backend o que manteve e o que removeu.
+  imageKeys: string[];
   activities: ReportActivity[];
   comments: ReportComment[];
   // Versao OCC do registro (backend Report.version): a tela de edicao a carrega
@@ -64,6 +67,16 @@ export interface ReportUpdateInput {
   summary?: string;
   details?: string;
   responsibles?: string[];
+  /** Anexos MANTIDOS: keys crus vindas do load (Report.imageKeys). */
+  imageKeys?: string[];
+  /** Anexos NOVOS: uris locais; o adapter da API sobe e converte em keys. */
+  imageUris?: string[];
+  /**
+   * Snapshot das keys que o form CARREGOU. Com ele o backend distingue
+   * "removi este anexo" de "nunca vi este anexo" (outra pessoa anexou depois
+   * do load) e preserva o que chegou em paralelo.
+   */
+  imageKeysBase?: string[];
   /** Versao que a tela carregou. Desatualizada, o backend responde 409. */
   baseVersion: number;
 }

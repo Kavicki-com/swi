@@ -22,6 +22,7 @@ const relatorio = (over: Partial<Report> = {}): Report => ({
   responsibles: [],
   details: 'detalhes antigos',
   images: [],
+  imageKeys: [],
   activities: [],
   comments: [],
   version: 0,

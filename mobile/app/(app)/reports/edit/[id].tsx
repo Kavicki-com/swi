@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Image, Pressable, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Icon, Input, JourneyTheme, Title, useTheme } from '@kavicki/swi-design-system';
+import {
+  Button,
+  Icon,
+  ImageUploader,
+  Input,
+  JourneyTheme,
+  Title,
+  useTheme,
+} from '@kavicki/swi-design-system';
 import { ReportDetailState } from '../../../../components/reports/ReportsListState';
 import { useReports } from '../../../../services/reports/ReportsProvider';
 import { useField } from '../../../../lib/forms/useField';
 import { validateRequired } from '../../../../lib/validation/validators';
+import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
 import { errorMessage } from '../../../../lib/errors/errorMessage';
 import {
   ReportPermissionError,
@@ -32,6 +41,18 @@ type FormStatus = 'loading' | 'ready' | 'empty' | 'error';
 // criação), então aqui eles também não travam o salvar.
 const semValidacao = () => ({ valid: true });
 
+// Um slot da grade de anexos: existente (veio do load, tem a key crua) ou novo
+// (escolhido agora, só uri local; o adapter da API sobe e converte no salvar).
+type Anexo = { uri: string; key?: string };
+
+// A grade cresce pra caber TODOS os anexos do relatório (o painel pode ter
+// anexado mais que os 4 slots do form de criação; o teto do backend é 20).
+// Slot escondido viraria "removi este anexo" na prova de snapshot do PATCH.
+const gradeDe = (anexos: Anexo[]): (Anexo | undefined)[] => {
+  const tamanho = Math.max(4, Math.ceil(anexos.length / 2) * 2);
+  return Array.from({ length: tamanho }, (_, i) => anexos[i]);
+};
+
 export default function EditarRelatorio() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -43,6 +64,12 @@ export default function EditarRelatorio() {
   const [baseVersion, setBaseVersion] = useState(0);
   const [salvando, setSalvando] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  const [attachments, setAttachments] = useState<(Anexo | undefined)[]>([]);
+  // Snapshot das keys que o form CARREGOU (imageKeysBase do PATCH). Fica
+  // congelado mesmo no recarregar pós-conflito: a base descreve o que o form
+  // mostrou à pessoa, e trocá-la faria anexo concorrente parecer remoção dela.
+  const [baseKeys, setBaseKeys] = useState<string[]>([]);
 
   const titulo = useField({ validator: (v) => validateRequired(v, 'Título') });
   const resumo = useField({ validator: semValidacao });
@@ -72,6 +99,9 @@ export default function EditarRelatorio() {
         setResumo(r.summary);
         setDetalhes(r.details);
         setBaseVersion(r.version);
+        // images e imageKeys chegam na MESMA ordem do backend: par uri/key.
+        setAttachments(gradeDe(r.images.map((uri, i) => ({ uri, key: r.imageKeys[i] }))));
+        setBaseKeys(r.imageKeys);
         setStatus('ready');
       })
       .catch(() => {
@@ -98,6 +128,33 @@ export default function EditarRelatorio() {
     }
   }, [id, loadOne]);
 
+  // Grade de anexos: mesmo comportamento do form de criação. Trocar a foto de
+  // um slot existente derruba a key antiga (remoção + adição, que é o que
+  // aconteceu de verdade); esvaziar não compacta, a grade fica onde a pessoa
+  // está olhando.
+  const setSlot = (index: number, anexo: Anexo | undefined) => {
+    setAttachments((prev) => {
+      const next = [...prev];
+      next[index] = anexo;
+      return next;
+    });
+  };
+
+  const media = useMediaPicker();
+  const showPicker = async (index: number) => {
+    const uri = await media.showPicker(
+      attachments[index] ? { onRemove: () => setSlot(index, undefined) } : undefined,
+    );
+    if (uri) setSlot(index, { uri });
+  };
+
+  const primeiroSlotLivre = attachments.findIndex((a) => !a);
+  const pickFileForUploader = async () => {
+    if (primeiroSlotLivre === -1) return;
+    const uri = await media.pickFromGallery();
+    if (uri) setSlot(primeiroSlotLivre, { uri });
+  };
+
   const salvar = async () => {
     if (!id) return;
     if (!titulo.isValid) {
@@ -106,10 +163,16 @@ export default function EditarRelatorio() {
     }
     setSalvando(true);
     try {
+      const preenchidos = attachments.filter(Boolean) as Anexo[];
       await update(id, {
         title: titulo.value,
         summary: resumo.value,
         details: detalhes.value,
+        // Mantidos (keys do load) e novos (uris locais) separados; o adapter
+        // sobe os novos. imageKeysBase é a prova de snapshot do backend.
+        imageKeys: preenchidos.filter((a) => a.key).map((a) => a.key as string),
+        imageUris: preenchidos.filter((a) => !a.key).map((a) => a.uri),
+        imageKeysBase: baseKeys,
         baseVersion,
       });
       router.back();
@@ -199,6 +262,62 @@ export default function EditarRelatorio() {
           placeholder="Digite aqui o seu relatório"
           multiline
           numberOfLines={16}
+        />
+
+        {/* Anexos: mesma grade do form de criação, pré-preenchida e crescendo
+            pra caber todos os anexos do relatório. */}
+        <Title variant="title.xs" color={theme.content.primary}>
+          Anexos
+        </Title>
+
+        <View style={{ gap: theme.gap.sm }}>
+          {Array.from({ length: attachments.length / 2 }, (_, rowIdx) => (
+            <View key={rowIdx} style={{ flexDirection: 'row', gap: theme.gap.sm }}>
+              {[rowIdx * 2, rowIdx * 2 + 1].map((i) => {
+                const anexo = attachments[i];
+                return (
+                  <Pressable
+                    key={i}
+                    onPress={() => showPicker(i)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      anexo
+                        ? `Anexo ${i + 1} (toque para trocar ou remover)`
+                        : `Adicionar anexo ${i + 1}`
+                    }
+                    style={{
+                      flex: 1,
+                      aspectRatio: 1,
+                      backgroundColor: theme.surface.medium,
+                      borderRadius: theme.border.radius.m,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {anexo ? (
+                      <Image
+                        source={{ uri: anexo.uri }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Icon name="add_a_photo" size={32} color={theme.content.medium} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+
+        <ImageUploader
+          helperText="Selecione arquivos do tipo: JPG ou PNG"
+          pickFileLabel="Enviar arquivo"
+          showTakePhoto={false}
+          accentColor={theme.content.primary}
+          value={null}
+          onPickFile={pickFileForUploader}
         />
 
         <Button

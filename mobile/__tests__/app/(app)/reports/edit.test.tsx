@@ -30,6 +30,12 @@ jest.mock('../../../../services/reports/ReportsProvider', () => ({
   useReports: () => ({ loadOne: mockLoadOne, update: mockUpdate }),
 }));
 
+const mockShowPicker = jest.fn();
+const mockPickFromGallery = jest.fn();
+jest.mock('../../../../lib/media/useMediaPicker', () => ({
+  useMediaPicker: () => ({ showPicker: mockShowPicker, pickFromGallery: mockPickFromGallery }),
+}));
+
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
@@ -48,6 +54,7 @@ const relatorio = (over: Partial<Report> = {}): Report => ({
   responsibles: ['Ezequiel Almeida'],
   details: 'Inspeção realizada nas máquinas pesadas.',
   images: [],
+  imageKeys: [],
   activities: [],
   comments: [],
   version: 4,
@@ -93,6 +100,8 @@ beforeEach(() => {
   mockBack.mockClear();
   mockLoadOne.mockReset().mockResolvedValue(relatorio());
   mockUpdate.mockReset().mockResolvedValue(relatorio({ version: 5 }));
+  mockShowPicker.mockReset();
+  mockPickFromGallery.mockReset();
   alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
 
@@ -122,6 +131,11 @@ describe('Editar relatório', () => {
       title: 'Título corrigido',
       summary: 'Checklist de manutenção preventiva.',
       details: 'Inspeção realizada nas máquinas pesadas.',
+      // Sem anexo no relatório: os campos viajam vazios (o backend trata
+      // base [] e want [] como nada a fazer).
+      imageKeys: [],
+      imageUris: [],
+      imageKeysBase: [],
       baseVersion: 4,
     });
     expect(mockBack).toHaveBeenCalled();
@@ -182,5 +196,110 @@ describe('Editar relatório', () => {
 
     expect(mockUpdate).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+// Ticket 16: anexos na edição. O form abre com os anexos atuais, captura o
+// snapshot imageKeysBase NO LOAD e envia mantidos (keys) + novos (uris locais)
+// separados, pra prova de snapshot do backend preservar anexo concorrente.
+describe('Editar relatório: anexos', () => {
+  const comAnexos = () =>
+    relatorio({
+      images: ['https://cdn/signed-a.jpg', 'https://cdn/signed-b.jpg'],
+      imageKeys: ['reports/a.jpg', 'reports/b.jpg'],
+    });
+
+  const slotPreenchido = (tree: ReturnType<typeof create>, i: number) =>
+    tree.root.findAll(
+      (n) => n.props?.accessibilityLabel === `Anexo ${i} (toque para trocar ou remover)`,
+    )[0];
+
+  it('pré-preenche a grade com os anexos existentes', async () => {
+    mockLoadOne.mockResolvedValue(comAnexos());
+    const tree = await render();
+
+    expect(slotPreenchido(tree, 1)).toBeDefined();
+    expect(slotPreenchido(tree, 2)).toBeDefined();
+    expect(slotPreenchido(tree, 3)).toBeUndefined();
+  });
+
+  it('sem mexer nos anexos, salva mantendo todos e com o snapshot do load', async () => {
+    mockLoadOne.mockResolvedValue(comAnexos());
+    const tree = await render();
+    await salvar(tree);
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'r1',
+      expect.objectContaining({
+        imageKeys: ['reports/a.jpg', 'reports/b.jpg'],
+        imageUris: [],
+        imageKeysBase: ['reports/a.jpg', 'reports/b.jpg'],
+      }),
+    );
+  });
+
+  it('remover um anexo pelo menu do slot sai do save, mas fica no snapshot', async () => {
+    mockLoadOne.mockResolvedValue(comAnexos());
+    // O menu do picker: o teste aciona direto o onRemove que a tela passou.
+    mockShowPicker.mockImplementation(async (opts?: { onRemove?: () => void }) => {
+      opts?.onRemove?.();
+      return null;
+    });
+    const tree = await render();
+
+    await act(async () => {
+      await slotPreenchido(tree, 1).props.onPress();
+    });
+    await salvar(tree);
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'r1',
+      expect.objectContaining({
+        imageKeys: ['reports/b.jpg'],
+        imageKeysBase: ['reports/a.jpg', 'reports/b.jpg'],
+      }),
+    );
+  });
+
+  it('anexo novo via "Enviar arquivo" viaja como uri local em imageUris', async () => {
+    mockLoadOne.mockResolvedValue(comAnexos());
+    mockPickFromGallery.mockResolvedValue('file:///tmp/nova.jpg');
+    const tree = await render();
+
+    const uploader = tree.root.findAll((n) => typeof n.props?.onPickFile === 'function')[0];
+    await act(async () => {
+      await uploader.props.onPickFile();
+    });
+    await salvar(tree);
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'r1',
+      expect.objectContaining({
+        imageKeys: ['reports/a.jpg', 'reports/b.jpg'],
+        imageUris: ['file:///tmp/nova.jpg'],
+        imageKeysBase: ['reports/a.jpg', 'reports/b.jpg'],
+      }),
+    );
+  });
+
+  // Um relatório pode ter mais anexos que os 4 slots do form de criação (o
+  // limite do backend é 20). Slot faltando viraria "removi" na prova de
+  // snapshot: a grade cresce pra mostrar TODOS.
+  it('relatório com mais de 4 anexos mostra todos e salva sem perder nenhum', async () => {
+    const seis = [1, 2, 3, 4, 5, 6];
+    mockLoadOne.mockResolvedValue(
+      relatorio({
+        images: seis.map((i) => `https://cdn/signed-${i}.jpg`),
+        imageKeys: seis.map((i) => `reports/${i}.jpg`),
+      }),
+    );
+    const tree = await render();
+
+    expect(slotPreenchido(tree, 6)).toBeDefined();
+    await salvar(tree);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'r1',
+      expect.objectContaining({ imageKeys: seis.map((i) => `reports/${i}.jpg`) }),
+    );
   });
 });

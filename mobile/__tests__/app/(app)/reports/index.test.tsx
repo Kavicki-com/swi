@@ -36,6 +36,7 @@ const relatorio = (id: string, title: string): Report => ({
   responsibles: ['Resp 1'],
   details: 'detalhes',
   images: [],
+  imageKeys: [],
   activities: [],
   comments: [],
   version: 0,

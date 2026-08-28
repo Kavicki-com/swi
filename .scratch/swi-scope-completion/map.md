@@ -58,6 +58,6 @@ Nenhum defeito encontrado durante U00 é corrigido dentro de U00.
 | [13](issues/13-mobile-contrato-update-remove.md) | Mobile: contrato e serviços             | 12             | resolved |
 | [14](issues/14-mobile-edicao-texto.md)           | Mobile: edição de texto (tracer bullet) | 13             | resolved |
 | [15](issues/15-mobile-exclusao.md)               | Mobile: exclusão confirmada             | 13             | resolved |
-| [16](issues/16-mobile-anexos-edicao.md)          | Mobile: anexos na edição                | 14             | ready-for-agent |
+| [16](issues/16-mobile-anexos-edicao.md)          | Mobile: anexos na edição                | 14             | resolved |
 | [17](issues/17-multimidia-validacao-upload.md)   | Multimídia: validação de upload         | nenhum         | ready-for-agent |
 | [18](issues/18-e2e-permissoes.md)                | E2E e permissões (aceite da U01)        | 14, 15, 16, 17 | ready-for-agent |

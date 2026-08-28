@@ -90,3 +90,30 @@ describe('mockReportsBackend canEdit', () => {
     expect(relido?.canEdit).toBe(true);
   });
 });
+
+// Ticket 16: o mock reproduz a mesma prova de snapshot do backend. A "key" no
+// mock é a própria uri (não há bucket): o form funciona idêntico nos dois modos.
+describe('mockReportsBackend update: anexos', () => {
+  it('aplica manter/adicionar/remover e PRESERVA anexo que chegou depois do load', async () => {
+    const criado = await mockReportsBackend.create({ ...INPUT, imageUris: ['file:///a', 'file:///b'] });
+    expect(criado.imageKeys).toEqual(['file:///a', 'file:///b']);
+
+    // Outra sessão anexa file:///c depois que o form carregou (base = a,b).
+    await mockReportsBackend.update(criado.id, {
+      baseVersion: 0,
+      imageKeys: ['file:///a', 'file:///b', 'file:///c'],
+      imageKeysBase: ['file:///a', 'file:///b'],
+    });
+
+    // O form (base a,b) remove b e adiciona d. c não estava na base: sobrevive.
+    const out = await mockReportsBackend.update(criado.id, {
+      baseVersion: 1,
+      imageKeys: ['file:///a'],
+      imageUris: ['file:///d'],
+      imageKeysBase: ['file:///a', 'file:///b'],
+    });
+
+    expect(out.imageKeys).toEqual(['file:///a', 'file:///d', 'file:///c']);
+    expect(out.images).toEqual(['file:///a', 'file:///d', 'file:///c']);
+  });
+});

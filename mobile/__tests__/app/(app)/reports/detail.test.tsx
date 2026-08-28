@@ -65,6 +65,7 @@ const relatorio = (over: Partial<Report> = {}): Report => ({
   responsibles: ['Ezequiel Almeida'],
   details: 'Inspecao realizada nas maquinas pesadas.',
   images: [],
+  imageKeys: [],
   activities: [],
   comments: [],
   version: 0,

@@ -35,6 +35,9 @@ const DETAIL_ACTIVITIES: ReportActivity[] = [
 const SHARED_DETAIL = {
   details: DETAIL_TEXT,
   images: DETAIL_IMAGES,
+  // No mock a "key" é a própria uri (não há bucket): o form de edição funciona
+  // idêntico nos dois modos.
+  imageKeys: DETAIL_IMAGES,
   activities: DETAIL_ACTIVITIES,
 };
 
@@ -127,6 +130,7 @@ export const mockReportsBackend: ReportsBackend = {
       responsibles: input.responsibles,
       details: input.details,
       images: input.imageUris,
+      imageKeys: input.imageUris,
       activities: [],
     };
     store = [report, ...store];
@@ -146,6 +150,16 @@ export const mockReportsBackend: ReportsBackend = {
     if (input.summary !== undefined) found.summary = input.summary;
     if (input.details !== undefined) found.details = input.details;
     if (input.responsibles !== undefined) found.responsibles = input.responsibles;
+    // Mesma prova de snapshot do backend: o que o form quer (mantidos + novos)
+    // substitui, mas anexo que NÃO estava na base (chegou depois do load) e o
+    // form não conhece sobrevive no fim, em vez de ser apagado sem prova.
+    if (input.imageKeys !== undefined) {
+      const want = [...input.imageKeys, ...(input.imageUris ?? [])];
+      const base = new Set(input.imageKeysBase ?? found.imageKeys);
+      const chegaramDepois = found.imageKeys.filter((k) => !base.has(k) && !want.includes(k));
+      found.imageKeys = [...want, ...chegaramDepois];
+      found.images = [...found.imageKeys];
+    }
     found.version += 1;
     return { ...found };
   },
