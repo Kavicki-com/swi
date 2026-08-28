@@ -50,6 +50,8 @@ function fromApi(dto: WireReport): Report {
     })),
     comments: dto.comments ?? [],
     version: dto.version ?? 0,
+    // Servidor antigo sem o campo: esconder as acoes e o fallback seguro.
+    canEdit: dto.canEdit ?? false,
   };
 }
 

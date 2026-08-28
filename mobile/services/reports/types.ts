@@ -43,6 +43,9 @@ export interface Report {
   // Versao OCC do registro (backend Report.version): a tela de edicao a carrega
   // e devolve em update() como baseVersion pra detectar edicao concorrente.
   version: number;
+  // Regua "autor ou ADMIN" respondida PELO SERVIDOR por requisicao: a UI so
+  // esconde as acoes de dono; a defesa real continua sendo o 403 la atras.
+  canEdit: boolean;
 }
 
 export interface ReportInput {

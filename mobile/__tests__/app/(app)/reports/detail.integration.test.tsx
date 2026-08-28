@@ -22,10 +22,17 @@ jest.mock('../../../../services/reports/getReportsBackend', () => ({
     require('../../../../services/reports/apiReportsBackend').apiReportsBackend,
 }));
 
-jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ id: 'r1' }),
-  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
-}));
+jest.mock('expo-router', () => {
+  const { useEffect } = require('react');
+  return {
+    useLocalSearchParams: () => ({ id: 'r1' }),
+    useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+    // Como o de verdade: dispara ao montar. Aqui a tela nunca perde o foco,
+    // entao esse e o unico disparo, e a releitura ao voltar da edicao (que
+    // depende de um SEGUNDO foco) fica com o detail.test.tsx.
+    useFocusEffect: (cb: () => void) => useEffect(cb, [cb]),
+  };
+});
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },

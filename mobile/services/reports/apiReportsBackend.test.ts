@@ -142,3 +142,24 @@ describe('apiReportsBackend update/remove', () => {
     await expect(apiReportsBackend.remove('r1')).rejects.toBeInstanceOf(ReportPermissionError);
   });
 });
+
+// Ticket 15: canEdit vem do servidor (a régua autor-ou-admin vive lá).
+describe('apiReportsBackend canEdit', () => {
+  beforeEach(() => {
+    (apiRequest as jest.Mock).mockReset();
+  });
+
+  it('get mapeia canEdit do wire', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', title: 'T', canEdit: true });
+    const out = await apiReportsBackend.get('r1');
+    expect(out?.canEdit).toBe(true);
+  });
+
+  // Servidor antigo sem o campo: esconder as ações é o fallback seguro; o
+  // contrário mostraria lápis e lixeira pra quem só vai colher um 403.
+  it('servidor antigo sem canEdit vira false, nunca undefined', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', title: 'T' });
+    const out = await apiReportsBackend.get('r1');
+    expect(out?.canEdit).toBe(false);
+  });
+});

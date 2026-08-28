@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Image as RNImage, ScrollView, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Avatar,
@@ -35,7 +35,7 @@ export default function ReportDetails() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { loadOne, addComment } = useReports();
+  const { loadOne, addComment, remove } = useReports();
 
   const [report, setReport] = useState<Report | null>(null);
   const [status, setStatus] = useState<DetailStatus>('loading');
@@ -73,6 +73,21 @@ export default function ReportDetails() {
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
+  // Volta da tela de edição: esta tela guarda a própria cópia do relatório e
+  // ninguém a avisa de um PATCH que aconteceu noutra rota, então ela releria o
+  // texto ANTIGO. O primeiro foco é o da montagem, que o effect acima já
+  // atendeu: reler ali seria uma segunda requisição em toda abertura.
+  const primeiroFoco = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (primeiroFoco.current) {
+        primeiroFoco.current = false;
+        return;
+      }
+      setReloadKey((k) => k + 1);
+    }, []),
+  );
+
   // campo e DESCARTAVA o texto. O comentario do worker nunca saia do aparelho,
   // e por isso tambem nunca aparecia no painel — o backend
   // (POST /reports/:id/comments) sempre funcionou, verificado ao vivo.
@@ -90,6 +105,29 @@ export default function ReportDetails() {
       Alert.alert('Erro', errorMessage(e, 'Nao foi possivel enviar o comentario.'));
     }
   };
+  // Exclusão: confirmação explícita SEMPRE (não há histórico de versões nem
+  // lixeira; excluir é definitivo). Só confirmada a exclusão chama o servidor:
+  // o provider tira o item da lista na hora e o restaura se a recusa vier.
+  // Recusa avisa o motivo e a pessoa FICA na tela, com o relatório intacto.
+  const excluir = () => {
+    if (!id) return;
+    Alert.alert('Excluir relatório?', 'Esta ação é definitiva e não pode ser desfeita.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await remove(id);
+            router.back();
+          } catch (e) {
+            Alert.alert('Erro', errorMessage(e, 'Não foi possível excluir o relatório.'));
+          }
+        },
+      },
+    ]);
+  };
+
   // ESTE HOOK FICA ACIMA DO RETURN ANTECIPADO, e nao junto do botao que ele
   // o primeiro render e 'loading' e sai pelo return, o segundo e 'ready' e
   // chega ate aqui, entao a contagem de hooks mudava de um render pro outro e
@@ -180,20 +218,24 @@ export default function ReportDetails() {
                 }
               />
             </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                variant="outline"
-                size="small"
-                borderColor={theme.content.primary}
-                labelColor={theme.content.primary}
-                label="Revisar relatório"
-                accessibilityLabel="Revisar relatório"
-                onPress={() => {}}
-                iconLeft={
-                  <Icon name="border_color" size={18} color={theme.content.primary} />
-                }
-              />
-            </View>
+            {/* Ação de dono: só aparece quando o SERVIDOR diz que este usuário
+                pode editar (autor ou admin). A UI esconde, o servidor decide. */}
+            {report.canEdit && (
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="outline"
+                  size="small"
+                  borderColor={theme.content.primary}
+                  labelColor={theme.content.primary}
+                  label="Revisar relatório"
+                  accessibilityLabel="Revisar relatório"
+                  onPress={() => router.push(`/(app)/reports/edit/${id}`)}
+                  iconLeft={
+                    <Icon name="border_color" size={18} color={theme.content.primary} />
+                  }
+                />
+              </View>
+            )}
           </View>
         </View>
 
@@ -357,6 +399,16 @@ export default function ReportDetails() {
           disabled={comment.trim().length === 0 || comentando}
           onPress={comentar}
         />
+
+        {report.canEdit && (
+          <Button
+            variant="ghost"
+            label="Excluir relatório"
+            labelColor={theme.surface.error}
+            accessibilityLabel="Excluir relatório"
+            onPress={excluir}
+          />
+        )}
       </KeyboardAwareScrollView>
     </View>
   );

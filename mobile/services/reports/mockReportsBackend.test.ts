@@ -74,3 +74,19 @@ describe('mockReportsBackend update/remove', () => {
     expect(await mockReportsBackend.get('eficiencia-energetica')).not.toBeNull();
   });
 });
+
+// Ticket 15: o mock espelha o canEdit do servidor: o usuário da demo é um
+// worker, então só o que ele criou é editável.
+describe('mockReportsBackend canEdit', () => {
+  it('relatório do seed (de outro autor) vem com canEdit false', async () => {
+    const alheio = await mockReportsBackend.get('qualidade-solo');
+    expect(alheio?.canEdit).toBe(false);
+  });
+
+  it('relatório criado pelo usuário vem com canEdit true', async () => {
+    const criado = await mockReportsBackend.create(INPUT);
+    expect(criado.canEdit).toBe(true);
+    const relido = await mockReportsBackend.get(criado.id);
+    expect(relido?.canEdit).toBe(true);
+  });
+});

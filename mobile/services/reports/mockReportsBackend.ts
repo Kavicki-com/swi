@@ -71,6 +71,9 @@ function enrich(base: SeedBase): Report {
     // Mock nao acumula comentario: quem guarda e o backend.
     comments: [],
     version: 0,
+    // Seed e de outros autores, e o usuario da demo e um worker: sem acao de
+    // dono. Espelha o canEdit que o servidor calcularia.
+    canEdit: false,
     authorAvatarUri: avatarUri,
     creationDate: CREATION_DATE,
     sector: SECTOR,
@@ -111,6 +114,7 @@ export const mockReportsBackend: ReportsBackend = {
     const report: Report = {
       comments: [],
       version: 0,
+      canEdit: true, // quem cria e o autor
       id: `local-${Date.now()}-${seq++}`,
       title: input.title,
       summary: input.summary,

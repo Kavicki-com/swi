@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import ReportDetails from '../../../../app/(app)/reports/[id]';
 import type { Report, ReportComment } from '../../../../services/reports/types';
+import { ReportPermissionError } from '../../../../services/reports/types';
 
 // Companheiro de detail.integration.test.tsx. La a tela roda com o provider e o
 // adaptador REAIS e so o HTTP e dublado; e um
@@ -22,15 +23,22 @@ import type { Report, ReportComment } from '../../../../services/reports/types';
 const mockBack = jest.fn();
 const mockRouter = { back: mockBack, push: jest.fn() };
 let mockId: string | undefined = 'r1';
+// useFocusEffect guardado em vez de executado: e assim que o teste simula a
+// volta da tela de edicao, chamando o callback de novo.
+let aoFocar: (() => void) | null = null;
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: mockId }),
   useRouter: () => mockRouter,
+  useFocusEffect: (cb: () => void) => {
+    aoFocar = cb;
+  },
 }));
 
 const mockLoadOne = jest.fn();
 const mockAddComment = jest.fn();
+const mockRemove = jest.fn();
 jest.mock('../../../../services/reports/ReportsProvider', () => ({
-  useReports: () => ({ loadOne: mockLoadOne, addComment: mockAddComment }),
+  useReports: () => ({ loadOne: mockLoadOne, addComment: mockAddComment, remove: mockRemove }),
 }));
 
 // --- Dados sinteticos --------------------------------------------------------
@@ -60,6 +68,7 @@ const relatorio = (over: Partial<Report> = {}): Report => ({
   activities: [],
   comments: [],
   version: 0,
+  canEdit: true,
   ...over,
 });
 
@@ -419,10 +428,43 @@ describe('Detalhe do relatorio: navegacao', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  // Os dois botoes da linha de acoes existem no Figma e estao ligados a
-  // `onPress={() => {}}`. O teste NOMEIA isso: sao decorativos hoje. Se algum
-  // dia ganharem destino, este teste cai e alguem escreve o de verdade.
-  it('os dois botoes da linha de acoes ainda nao levam a lugar nenhum', async () => {
+  // "Revisar relatorio" e o lapis da linha de acoes: leva ao formulario de
+  // edicao daquele relatorio, e so dele.
+  it('revisar relatorio abre a edicao do relatorio aberto', async () => {
+    const tree = await montar();
+
+    await tocar(porLabel(tree, 'Revisar relatório'));
+
+    expect(mockRouter.push).toHaveBeenCalledWith('/(app)/reports/edit/r1');
+  });
+
+  // Sem esta releitura o detalhe mostraria o texto ANTIGO depois de uma edicao
+  // salva: a tela guarda a propria copia do relatorio, e ninguem a avisa.
+  // O primeiro foco e o da montagem, que ja carregou: relê so a partir do
+  // segundo, para nao pagar duas requisicoes toda vez que alguem abre um
+  // relatorio.
+  it('ao voltar da edicao, rele o relatorio em vez de mostrar o texto antigo', async () => {
+    mockLoadOne.mockResolvedValue(relatorio());
+    await montar();
+    expect(mockLoadOne).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      aoFocar?.();
+    });
+    expect(mockLoadOne).toHaveBeenCalledTimes(1);
+
+    mockLoadOne.mockResolvedValue(relatorio({ title: 'Titulo corrigido', version: 1 }));
+    await act(async () => {
+      aoFocar?.();
+    });
+
+    expect(mockLoadOne).toHaveBeenCalledTimes(2);
+  });
+
+  // "Fazer comentario" existe no Figma e segue ligado a `onPress={() => {}}`.
+  // O teste NOMEIA isso: e decorativo hoje. Se um dia ganhar destino, este
+  // teste cai e alguem escreve o de verdade.
+  it('fazer comentario ainda nao leva a lugar nenhum', async () => {
     const tree = await montar();
 
     await tocar(
@@ -430,10 +472,66 @@ describe('Detalhe do relatorio: navegacao', () => {
         (n) => n.props?.variant === 'outline' && n.props?.label === 'Fazer comentário',
       )[0],
     );
-    await tocar(porLabel(tree, 'Revisar relatório'));
 
     expect(mockBack).not.toHaveBeenCalled();
     expect(mockRouter.push).not.toHaveBeenCalled();
     expect(mockAddComment).not.toHaveBeenCalled();
+  });
+});
+
+// Ticket 15: as ações de dono (editar, excluir) obedecem ao canEdit que o
+// SERVIDOR calculou. A UI esconde, o servidor decide: o 403 continua lá atrás
+// pra quem chegar por fora da UI.
+describe('Detalhe do relatorio: acoes de dono', () => {
+  it('sem canEdit, nem Revisar nem Excluir aparecem', async () => {
+    mockLoadOne.mockResolvedValue(relatorio({ canEdit: false }));
+    const tree = await montar();
+
+    expect(porLabel(tree, 'Revisar relatório')).toBeUndefined();
+    expect(porLabel(tree, 'Excluir relatório')).toBeUndefined();
+  });
+
+  it('com canEdit, Excluir pede confirmacao explicita antes de chamar o servidor', async () => {
+    const tree = await montar();
+
+    await tocar(porLabel(tree, 'Excluir relatório'));
+
+    expect(mockRemove).not.toHaveBeenCalled();
+    const [titulo, , botoes] = alerta.mock.calls[0];
+    expect(titulo).toMatch(/excluir/i);
+    expect(botoes.map((b: { text: string }) => b.text)).toEqual(
+      expect.arrayContaining(['Cancelar', 'Excluir']),
+    );
+  });
+
+  it('confirmada, a exclusao chama o servidor e volta pra lista', async () => {
+    mockRemove.mockResolvedValue(undefined);
+    const tree = await montar();
+
+    await tocar(porLabel(tree, 'Excluir relatório'));
+    const confirmar = alerta.mock.calls[0][2].find((b: { text: string }) => b.text === 'Excluir');
+    await act(async () => {
+      await confirmar.onPress();
+    });
+
+    expect(mockRemove).toHaveBeenCalledWith('r1');
+    expect(mockBack).toHaveBeenCalled();
+  });
+
+  it('recusa do servidor avisa o motivo e a pessoa FICA na tela', async () => {
+    mockRemove.mockRejectedValue(
+      new ReportPermissionError('Apenas o autor ou um administrador pode excluir o relatório'),
+    );
+    const tree = await montar();
+
+    await tocar(porLabel(tree, 'Excluir relatório'));
+    const confirmar = alerta.mock.calls[0][2].find((b: { text: string }) => b.text === 'Excluir');
+    await act(async () => {
+      await confirmar.onPress();
+    });
+
+    expect(mockBack).not.toHaveBeenCalled();
+    const aviso = alerta.mock.calls[1];
+    expect(aviso[1]).toMatch(/Apenas o autor/);
   });
 });
