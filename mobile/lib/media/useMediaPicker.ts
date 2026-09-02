@@ -12,6 +12,7 @@
 import { useCallback, useMemo } from 'react';
 import { Alert, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { validatePickedMedia } from './mediaConstraints';
 
 export interface UseMediaPickerOptions {
   quality?: number;
@@ -31,6 +32,17 @@ export interface UseMediaPickerReturn {
   pickFromGallery: () => Promise<string | null>;
   takePhoto: () => Promise<string | null>;
   showPicker: (opts?: ShowPickerOptions) => Promise<string | null>;
+}
+
+// Régua de mídia (ticket 17) aplicada ao que o picker devolveu: recusa vira
+// aviso claro + null, o mesmo contrato de cancelamento que os callers tratam.
+function validado(asset: { uri: string; fileSize?: number | null }): string | null {
+  const out = validatePickedMedia({ uri: asset.uri, size: asset.fileSize });
+  if (!out.ok) {
+    Alert.alert('Arquivo recusado', out.reason);
+    return null;
+  }
+  return asset.uri;
 }
 
 function alertPermissionDenied(kind: 'galeria' | 'câmera') {
@@ -60,7 +72,7 @@ export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPicker
       quality,
     });
     if (result.canceled || !result.assets[0]) return null;
-    return result.assets[0].uri;
+    return validado(result.assets[0]);
   }, [allowsEditing, quality]);
 
   const takePhoto = useCallback(async (): Promise<string | null> => {
@@ -75,7 +87,7 @@ export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPicker
       quality,
     });
     if (result.canceled || !result.assets[0]) return null;
-    return result.assets[0].uri;
+    return validado(result.assets[0]);
   }, [allowsEditing, quality]);
 
   // Quem tem uma imagem para remover passa `onRemove`, que adiciona a opção

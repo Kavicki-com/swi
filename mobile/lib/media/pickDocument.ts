@@ -5,7 +5,9 @@
 //
 // Mesmo contrato do useMediaPicker: resolve a uri ou null (cancelado/erro),
 // nunca lança — quem chama faz `if (!uri) return;` fora do try do envio.
+import { Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import { validatePickedMedia } from './mediaConstraints';
 
 // Mesma lista que o backend aceita pro prefixo exams
 // (swi-backend/src/media/allowed-content-types.ts). Divergir daqui não afrouxa
@@ -23,7 +25,16 @@ export async function pickExamDocument(): Promise<string | null> {
       multiple: false,
     });
     if (result.canceled) return null;
-    return result.assets?.[0]?.uri ?? null;
+    const asset = result.assets?.[0];
+    if (!asset) return null;
+    // Régua de mídia (ticket 17): o filtro de tipo acima não impõe o TETO, e o
+    // laudo pode passar de 15 MB. Recusa clara aqui, não 400 depois do upload.
+    const out = validatePickedMedia({ uri: asset.uri, size: asset.size }, 'exam');
+    if (!out.ok) {
+      Alert.alert('Arquivo recusado', out.reason);
+      return null;
+    }
+    return asset.uri;
   } catch {
     return null;
   }

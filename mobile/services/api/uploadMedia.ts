@@ -1,5 +1,6 @@
 import { File } from 'expo-file-system';
 import { apiRequest, withDeadline } from './http';
+import { MAX_UPLOAD_BYTES } from '../../lib/media/mediaConstraints';
 
 // Infere content-type da extensão (default jpeg, cobre uris sem extensão do
 // picker). pdf/txt entram pelo fluxo de exames: sem eles o laudo
@@ -38,6 +39,11 @@ export async function uploadImage(uri: string, prefix = 'reports'): Promise<stri
   // certo, mensagem ruim, e uma ida à rede desperdiçada.
   if (!file.size) {
     throw new Error('Arquivo vazio ou não encontrado. Selecione a imagem novamente.');
+  }
+  // Mesmo teto do presign (ticket 17): falhar AQUI dá mensagem clara e poupa a
+  // ida à rede; deixar pro servidor daria o 400 técnico do class-validator.
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error('Arquivo muito grande. O limite é 15 MB.');
   }
   const { url, key } = await apiRequest<{ url: string; key: string }>('/media/presign', {
     method: 'POST',

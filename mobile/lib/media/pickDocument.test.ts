@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { pickExamDocument } from './pickDocument';
 
@@ -61,5 +62,30 @@ describe('pickExamDocument', () => {
       new Error('boom nativo'),
     );
     await expect(pickExamDocument()).resolves.toBeNull();
+  });
+});
+
+// Ticket 17: o filtro de tipo do DocumentPicker não impõe TETO; um laudo acima
+// de 15 MB precisa ser recusado aqui, com aviso, não com 400 depois do upload.
+describe('pickExamDocument: régua de mídia', () => {
+  it('laudo acima de 15 MB avisa e resolve null', async () => {
+    const alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: LAUDO, size: 16 * 1024 * 1024 }],
+    });
+
+    expect(await pickExamDocument()).toBeNull();
+    expect(alerta.mock.calls[0][1]).toMatch(/15 MB/);
+    alerta.mockRestore();
+  });
+
+  it('laudo dentro do teto segue passando', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: LAUDO, size: 1024 }],
+    });
+
+    expect(await pickExamDocument()).toBe(LAUDO);
   });
 });

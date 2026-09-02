@@ -124,3 +124,22 @@ describe('uploadMedia', () => {
     }
   });
 });
+
+// Ticket 17: o teto de 15 MB é re-checado AQUI, antes do presign: mensagem
+// clara e nenhuma ida à rede, em vez do 400 do class-validator depois dela.
+describe('uploadMedia: teto de tamanho', () => {
+  beforeEach(() => {
+    (apiRequest as jest.Mock).mockReset();
+  });
+
+  it('arquivo acima de 15 MB falha com mensagem clara e sem tocar a rede', async () => {
+    (File as unknown as jest.Mock).mockImplementationOnce((uri: string) => ({
+      uri,
+      size: 16 * 1024 * 1024,
+      arrayBuffer: jest.fn(),
+    }));
+
+    await expect(uploadImage('file:///tmp/gigante.jpg')).rejects.toThrow(/15 MB/);
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
+});

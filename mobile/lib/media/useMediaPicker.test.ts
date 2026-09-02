@@ -114,3 +114,43 @@ describe('useMediaPicker.showPicker', () => {
     expect(onRemove).not.toHaveBeenCalled();
   });
 });
+
+// Ticket 17: o que a galeria devolve passa pela régua de mídia ANTES de chegar
+// ao caller: formato fora da lista ou arquivo acima do teto viram aviso claro
+// + null, o mesmo contrato de cancelamento que os callers já tratam.
+describe('useMediaPicker: validação do arquivo escolhido', () => {
+  it('formato não suportado avisa e resolve null', async () => {
+    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///tmp/anim.gif', fileSize: 1024 }],
+    });
+
+    const uri = await picker().pickFromGallery();
+
+    expect(uri).toBeNull();
+    const chamadas = (Alert.alert as jest.Mock).mock.calls;
+    expect(chamadas[chamadas.length - 1][1]).toMatch(/JPG ou PNG/);
+  });
+
+  it('arquivo acima de 15 MB avisa e resolve null', async () => {
+    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///tmp/foto.jpg', fileSize: 16 * 1024 * 1024 }],
+    });
+
+    const uri = await picker().pickFromGallery();
+
+    expect(uri).toBeNull();
+    const chamadas = (Alert.alert as jest.Mock).mock.calls;
+    expect(chamadas[chamadas.length - 1][1]).toMatch(/15 MB/);
+  });
+
+  it('arquivo válido segue passando direto', async () => {
+    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: FOTO, fileSize: 1024 }],
+    });
+
+    expect(await picker().pickFromGallery()).toBe(FOTO);
+  });
+});
