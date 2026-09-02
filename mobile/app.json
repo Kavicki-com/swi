@@ -18,7 +18,12 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Permite tirar fotos para anexar a tarefas e relatórios.",
-        "NSPhotoLibraryUsageDescription": "Permite selecionar fotos da galeria para anexar a tarefas e relatórios."
+        "NSPhotoLibraryUsageDescription": "Permite selecionar fotos da galeria para anexar a tarefas e relatórios.",
+        "NSHealthShareUsageDescription": "O SWI lê frequência cardíaca, energia ativa e passos do Apple Watch para o monitoramento de segurança em campo.",
+        "NSHealthUpdateUsageDescription": "O SWI registra a sessão de monitoramento do Apple Watch como um treino para manter a coleta contínua."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true
       }
     },
     "android": {
@@ -57,7 +62,8 @@
           "locationWhenInUsePermission": "O SWI usa sua localização para monitorar sua segurança em campo."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true

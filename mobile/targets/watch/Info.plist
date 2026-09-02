@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>WKApplication</key>
+	<true/>
+	<key>WKBackgroundModes</key>
+	<array>
+		<string>workout-processing</string>
+	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>O SWI lê frequência cardíaca, energia ativa e passos do relógio para o monitoramento de segurança em campo.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>O SWI registra a sessão de monitoramento como um treino para manter a coleta contínua no relógio.</string>
+</dict>
+</plist>

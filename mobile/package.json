@@ -38,6 +38,7 @@
       "components/**/*.{ts,tsx}",
       "lib/**/*.ts",
       "services/**/*.ts",
+      "modules/**/*.ts",
       "!**/*.d.ts",
       "!**/*.test.{ts,tsx}",
       "!**/__tests__/**"
@@ -56,6 +57,7 @@
     ]
   },
   "dependencies": {
+    "@bacons/apple-targets": "^5.0.0",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/montserrat": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
