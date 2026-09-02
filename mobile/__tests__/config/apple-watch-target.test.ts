@@ -71,6 +71,24 @@ describe('target watchOS (targets/watch)', () => {
     expect(collector).toContain('startMirroringToCompanionDevice');
     expect(collector).toContain('sendToRemoteWorkoutSession');
   });
+
+  // Ativar do iPhone acorda o app do relógio, mas quem abre a sessão é o
+  // delegate. Sem ele o startWatchApp acorda o app e nada acontece, e a falha
+  // só apareceria com o relógio na mão.
+  it('registra o delegate que recebe a sessão iniciada pelo iPhone', () => {
+    const app = read('targets/watch/SWIWatchApp.swift');
+    expect(app).toContain('WKApplicationDelegateAdaptor');
+    expect(app).toContain('WKApplicationDelegate');
+    expect(app).toContain('func handle(_ workoutConfiguration: HKWorkoutConfiguration)');
+  });
+
+  it('o coletor é único, para o delegate e a tela operarem a mesma sessão', () => {
+    const collector = read('targets/watch/WorkoutCollector.swift');
+    expect(collector).toContain('static let shared');
+    // A configuração entregue pelo sistema é usada como veio, em vez de uma
+    // recriada localmente que poderia divergir do que o iPhone pediu.
+    expect(collector).toContain('func start(configuration:');
+  });
 });
 
 describe('app iOS (app.json)', () => {
@@ -113,6 +131,26 @@ describe('módulo iPhone (modules/swi-watch-control)', () => {
     const receiver = read('modules/swi-watch-control/ios/MirroredWorkoutReceiver.swift');
     expect(receiver).toContain('workoutSessionMirroringStartHandler');
     expect(receiver).toContain('didReceiveDataFromRemoteWorkoutSession');
+  });
+
+  it('expõe ativar o monitoramento como ação distinta de autorizar (ADR-0003)', () => {
+    const receiver = read('modules/swi-watch-control/ios/MirroredWorkoutReceiver.swift');
+    expect(receiver).toContain('startWatchApp(toHandle:');
+    expect(receiver).toContain('func startMonitoring');
+    const module = read('modules/swi-watch-control/ios/SwiWatchControlModule.swift');
+    expect(module).toContain('AsyncFunction("startMonitoring")');
+  });
+
+  // A folha de permissão que o funcionário lê no primeiro uso é a do iPhone. Se
+  // ela pedir menos do que a tela promete, o texto e o sistema se contradizem,
+  // e o sistema só pergunta uma vez por tipo.
+  it('iPhone pede ao HealthKit os mesmos tipos que o relógio lê', () => {
+    const receiver = read('modules/swi-watch-control/ios/MirroredWorkoutReceiver.swift');
+    const collector = read('targets/watch/WorkoutCollector.swift');
+    for (const tipo of ['.heartRate', '.activeEnergyBurned', '.stepCount']) {
+      expect(collector).toContain(`HKQuantityType(${tipo})`);
+      expect(receiver).toContain(`HKQuantityType(${tipo})`);
+    }
   });
 
   it('podspec depende do ExpoModulesCore e linka HealthKit', () => {

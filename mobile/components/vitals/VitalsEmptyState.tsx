@@ -7,7 +7,7 @@ import { SmartbandStatus, Text, Title, useTheme } from '@kavicki/swi-design-syst
 //
 // SmartbandStatus props fit cleanly (see SmartbandStatus.types.ts): progress 0..1
 // drives the bar, heartRate/bloodPressure=null render the `/` placeholder, and
-// `message` conveys the "conecte sua smartband" prompt — so it's used as-is.
+// `message` conveys the "ative o monitoramento" prompt, so it's used as-is.
 export function VitalsEmptyState() {
   const theme = useTheme();
   return (
@@ -25,15 +25,15 @@ export function VitalsEmptyState() {
         Sem leituras ainda
       </Title>
       <Text variant="body.m" color={theme.content.dark} style={{ textAlign: 'center' }}>
-        Conecte sua smartband para começar a acompanhar seus sinais vitais.
+        Ative o monitoramento do seu Apple Watch para acompanhar seus sinais vitais.
       </Text>
       <View style={{ width: '100%' }}>
         <SmartbandStatus
           progress={0}
           heartRate={null}
           bloodPressure={null}
-          message="Conecte sua smartband"
-          accessibilityLabel="Conecte sua smartband para sincronizar os dados"
+          message="Monitoramento inativo"
+          accessibilityLabel="Ative o monitoramento do seu Apple Watch para acompanhar seus sinais vitais"
         />
       </View>
     </View>

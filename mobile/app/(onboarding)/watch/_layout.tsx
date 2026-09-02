@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
 
-export default function SmartbandLayout() {
+export default function WatchOnboardingLayout() {
   return <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />;
 }

@@ -25,14 +25,14 @@ export const IS_PROD_BUILD: boolean =
   MANUAL_OVERRIDE !== null ? MANUAL_OVERRIDE : detectProdBuild();
 
 export type FeatureGate =
-  | 'smartbandOnboarding'
+  | 'watchOnboarding'
   | 'maps'
   | 'notifications'
   | 'smartwatch3d'
   | 'appleWatchPilot';
 
 export const FEATURE_GATES: Record<FeatureGate, boolean> = {
-  smartbandOnboarding: IS_PROD_BUILD,
+  watchOnboarding: IS_PROD_BUILD,
   maps: IS_PROD_BUILD,
   notifications: IS_PROD_BUILD,
   smartwatch3d: IS_PROD_BUILD,

@@ -1,15 +1,20 @@
+import { useState } from 'react';
 import { Image as RNImage, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, Title, TopBar, useTheme } from '@kavicki/swi-design-system';
+import { Button, Text, Title, TopBar, useTheme } from '@kavicki/swi-design-system';
 import {
+  activateMonitoring,
   useWatchDiagnostics,
-  type WatchDiagnosticsState,
 } from '../../../services/telemetry/watchDiagnostics';
+import { deriveTelemetryAvailability } from '../../../services/telemetry/telemetryAvailability';
+import { telemetryCopy } from '../../../services/telemetry/telemetryCopy';
+import { useNow } from '../../../services/telemetry/useNow';
 
-// Superfície diagnóstica do gate técnico (Task 1 do piloto Apple Watch).
-// Mostra o que o iPhone recebe da sessão espelhada: estado e última amostra
-// de BPM com horário. Sem backend, sem média, sem dado simulado.
+// Porta de reentrada do monitoramento. Quem tocou "Configurar depois" no
+// cadastro, ou negou na folha do sistema, volta por aqui. Mesmo vocabulário da
+// tela final do primeiro uso (CONTEXT.md), e mesma regra: nenhuma frase afirma
+// que a permissão foi negada, porque o iOS não conta isso (ADR-0004).
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -19,43 +24,29 @@ function formatHoraLocal(iso: string): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-function titulo(state: WatchDiagnosticsState): string {
-  if (state.support === 'unsupported') return 'Sem suporte neste aparelho';
-  switch (state.session) {
-    case 'running':
-      return 'Sessão espelhada ativa';
-    case 'ended':
-      return 'Sessão encerrada';
-    default:
-      return 'Aguardando sessão do relógio';
-  }
-}
-
-function descricao(state: WatchDiagnosticsState): string {
-  if (state.support === 'unsupported') {
-    return 'Disponível apenas no iPhone com o SWI instalado pela TestFlight e pareado a um Apple Watch.';
-  }
-  switch (state.session) {
-    case 'running':
-      return state.sessionChangedAt
-        ? `Recebendo do Apple Watch desde ${formatHoraLocal(state.sessionChangedAt)}.`
-        : 'Recebendo do Apple Watch.';
-    case 'ended':
-      return state.sessionChangedAt
-        ? `Encerrada às ${formatHoraLocal(state.sessionChangedAt)}. A última amostra fica visível com o horário.`
-        : 'A última amostra fica visível com o horário.';
-    default:
-      return 'Abra o SWI no Apple Watch e toque em Iniciar teste. A sessão espelhada aparece aqui sozinha.';
-  }
-}
 
 export default function WatchDiagnostics() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const state = useWatchDiagnostics();
+  const estado = useWatchDiagnostics();
+  const [ativando, setAtivando] = useState(false);
 
-  const sample = state.support === 'ready' ? state.lastSample : null;
+  const disponibilidade = deriveTelemetryAvailability(estado, useNow());
+  const copy = telemetryCopy(disponibilidade, 'configuracoes');
+  // Decisao congelada do plano: sem sessao ativa, a ultima leitura permanece
+  // visivel com horario e qualidade. Some-la acima de 120s apagaria o unico
+  // dado real que chegou, entao vem do estado bruto e nao da derivacao.
+  const leitura = estado.support === 'ready' ? estado.lastSample : null;
+
+  // Com a sessão espelhada já ativa, ativar de novo não faria nada: o botão sai.
+  const podeAtivar = estado.support === 'ready' && estado.session !== 'running';
+
+  const ativar = async () => {
+    setAtivando(true);
+    await activateMonitoring();
+    setAtivando(false);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -80,46 +71,55 @@ export default function WatchDiagnostics() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <TopBar title="Diagnóstico do Apple Watch" onBack={() => router.back()} />
+        <TopBar title="Monitoramento" onBack={() => router.back()} />
 
         <View style={{ gap: theme.gap.l, marginTop: theme.padding.xxl }}>
           <View style={{ gap: theme.gap.s }}>
             <Title variant="title.xs" color={theme.content.dark}>
-              {titulo(state)}
+              {copy.titulo}
             </Title>
             <Text variant="body.s" color={theme.content.dark}>
-              {descricao(state)}
+              {copy.corpo}
             </Text>
           </View>
 
-          {state.support === 'ready' && (
+          {estado.support === 'ready' && (
             <View style={{ gap: theme.gap.s }}>
               <Text variant="caption.s" color={theme.content.dark}>
-                {state.session === 'ended' ? 'Última amostra' : 'BPM atual'}
+                {disponibilidade.kind === 'current' ? 'BPM atual' : 'Última leitura'}
               </Text>
-              {sample ? (
+              {leitura ? (
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: theme.gap.s }}>
                   <Title variant="title.l" color={theme.content.dark}>
-                    {String(Math.round(sample.bpm))}
+                    {String(Math.round(leitura.bpm))}
                   </Title>
                   <Text variant="body.m" color={theme.content.dark}>
                     bpm
                   </Text>
                   <Text variant="caption.s" color={theme.content.dark}>
-                    {`medido às ${formatHoraLocal(sample.measuredAt)}`}
+                    {`medido às ${formatHoraLocal(leitura.measuredAt)}`}
                   </Text>
                 </View>
               ) : (
+                // Ausência nunca vira zero.
                 <Text variant="body.m" color={theme.content.dark}>
-                  Sem amostra de BPM ainda
+                  Sem leitura ainda
                 </Text>
               )}
             </View>
           )}
 
-          <Text variant="caption.s" color={theme.content.dark}>
-            Gate técnico do piloto. O dado vem do HealthKit pelo espelhamento da sessão do relógio; nada é enviado ao backend nesta etapa.
-          </Text>
+          {podeAtivar && (
+            <Button
+              variant="contained"
+              label="Ativar monitoramento"
+              fullWidth
+              disabled={ativando}
+              onPress={() => {
+                void ativar();
+              }}
+            />
+          )}
         </View>
       </ScrollView>
     </View>

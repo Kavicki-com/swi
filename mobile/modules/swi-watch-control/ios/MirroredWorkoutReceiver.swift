@@ -90,11 +90,39 @@ final class MirroredWorkoutReceiver: NSObject {
       completion(false)
       return
     }
-    let typesToRead: Set<HKObjectType> = [HKQuantityType(.heartRate)]
+    // Os mesmos tres tipos que o relogio le. A folha do sistema no primeiro uso
+    // e esta; pedir menos do que a tela promete seria uma contradicao lida pelo
+    // funcionario, e o sistema so pergunta uma vez por tipo.
+    let typesToRead: Set<HKObjectType> = [
+      HKQuantityType(.heartRate),
+      HKQuantityType(.activeEnergyBurned),
+      HKQuantityType(.stepCount),
+    ]
     let typesToShare: Set<HKSampleType> = [HKWorkoutType.workoutType()]
     healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead) { granted, _ in
       DispatchQueue.main.async {
         completion(granted)
+      }
+    }
+  }
+
+  /// Ativa o monitoramento no relogio. Acao distinta de autorizar (ADR-0003):
+  /// acorda o app do relogio e entrega a configuracao, que o delegate de la
+  /// recebe em handle(_:) e usa para abrir a sessao espelhada.
+  ///
+  /// Recusa do sistema resolve false; a tela le o estado derivado depois e
+  /// mostra indisponivel se nenhuma leitura chegar.
+  func startMonitoring(completion: @escaping (Bool) -> Void) {
+    guard HKHealthStore.isHealthDataAvailable() else {
+      completion(false)
+      return
+    }
+    let configuration = HKWorkoutConfiguration()
+    configuration.activityType = .other
+    configuration.locationType = .indoor
+    healthStore.startWatchApp(toHandle: configuration) { success, _ in
+      DispatchQueue.main.async {
+        completion(success)
       }
     }
   }

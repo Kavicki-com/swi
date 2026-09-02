@@ -41,6 +41,7 @@ const UNSUPPORTED: WatchControl = {
   supported: false,
   getStatus: () => null,
   requestAuthorization: async () => false,
+  startMonitoring: async () => false,
   subscribe: () => () => undefined,
 };
 
@@ -50,6 +51,18 @@ export function createWatchControl(native: WatchControlNative | null): WatchCont
     supported: true,
     getStatus: () => normalize(native.getStatus()),
     requestAuthorization: () => native.requestAuthorization(),
+    async startMonitoring() {
+      // Com a sessão espelhada já ativa, pedir outra faria o relógio recusar.
+      // A guarda vive aqui, e não no Swift, para a tela ter um caminho só.
+      if (normalize(native.getStatus()).session === 'running') return true;
+      try {
+        return await native.startMonitoring();
+      } catch {
+        // Recusa do sistema é resposta, não exceção: a tela lê o estado
+        // derivado depois e mostra indisponível se nada chegar.
+        return false;
+      }
+    },
     subscribe(listener) {
       let status = normalize(native.getStatus());
       const session = native.addListener('onMirroredSessionChanged', (event) => {

@@ -18,6 +18,7 @@ import {
 import type { GenderValue } from '@kavicki/swi-design-system';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
+import { readWatchOnboarding } from '../../../services/telemetry/watchOnboarding';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 import { useAuth } from '../../../services/auth/AuthProvider';
@@ -114,19 +115,24 @@ export default function ComplimentaryDataStep3() {
       return;
     }
 
-    // Onboarding continues into the Smartband configuration flow before the
-    // dashboard. Smartband-complete is what finally lands on /(app)/dashboard.
+    // O cadastro continua no primeiro uso do Apple Watch antes do dashboard.
+    // A ultima tela de la e quem finalmente cai em /(app)/dashboard.
     //
-    // Demo phase: when the smartband gate is off (Expo Go / web preview), the
-    // entire smartband sub-tree renders ProdOnlyPlaceholder, dead-ending the
+    // Fase de demo: com o portao desligado (Expo Go, previa web), a subarvore
+    // inteira do primeiro uso renderiza ProdOnlyPlaceholder, o que encerraria o
     // signup flow. Skip directly to the dashboard so the demo's signup path
     // actually reaches the authenticated app. O worker fez login de verdade
     // antes do wizard (fluxo 2), então o guard de (app)/_layout deixa passar.
-    if (isFeatureEnabled('smartbandOnboarding')) {
-      router.replace('/(onboarding)/smartband/connection');
-    } else {
+    if (!isFeatureEnabled('watchOnboarding')) {
       router.replace('/(app)/dashboard');
+      return;
     }
+
+    // Quem ja passou pelo primeiro uso neste aparelho nao repete a tela. A
+    // marca e por instalacao e NAO diz se a autorizacao foi concedida
+    // (ADR-0004): so que a explicacao ja foi mostrada uma vez.
+    const jaPassou = await readWatchOnboarding();
+    router.replace(jaPassou ? '/(app)/dashboard' : '/(onboarding)/watch/connection');
   };
 
   // Trava de reentrancia: chamadas enquanto a anterior esta no ar sao

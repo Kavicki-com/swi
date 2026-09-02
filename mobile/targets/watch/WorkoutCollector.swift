@@ -11,6 +11,10 @@ final class WorkoutCollector: NSObject, ObservableObject {
     case idle, requestingAuthorization, starting, running, stopping, ended, failed
   }
 
+  /// Instancia unica. O delegate do relogio (sessao vinda do iPhone) e a tela
+  /// precisam operar a mesma sessao; duas instancias dariam dois monitoramentos.
+  static let shared = WorkoutCollector()
+
   @Published private(set) var state: State = .idle
   @Published private(set) var heartRate: Double?
   @Published private(set) var heartRateAt: Date?
@@ -26,7 +30,14 @@ final class WorkoutCollector: NSObject, ObservableObject {
     state == .starting || state == .running
   }
 
-  func start() {
+  /// `configuration` chega preenchida quando o iPhone abriu a sessao; nesse caso
+  /// e usada como veio, em vez de recriada aqui, para nao divergir do que foi
+  /// pedido. Os botoes do relogio chamam sem argumento.
+  func start(configuration: HKWorkoutConfiguration? = nil) {
+    // O iPhone pode pedir ativacao com a sessao ja rodando. Sem esta guarda,
+    // beginSession sobrescreveria session e builder e vazaria a sessao
+    // anterior, que continuaria espelhando para o iPhone.
+    guard !isRunning else { return }
     guard HKHealthStore.isHealthDataAvailable() else {
       fail("HealthKit indisponível neste relógio")
       return
@@ -48,11 +59,13 @@ final class WorkoutCollector: NSObject, ObservableObject {
           self.fail(error.localizedDescription)
           return
         }
-        guard granted else {
-          self.fail("Autorização do HealthKit negada")
-          return
-        }
-        self.beginSession()
+        // `granted` diz que a folha foi RESPONDIDA, nao que houve concessao, e
+        // volta false quando o app acorda em background e nao pode apresenta-la.
+        // O HealthKit simplesmente nao entrega amostra sem permissao, e ausencia
+        // de leitura ja e tratada com honestidade rio abaixo (ADR-0004). Seguir
+        // e melhor que abortar afirmando uma negacao que nao foi observada.
+        _ = granted
+        self.beginSession(with: configuration ?? Self.monitoringConfiguration())
       }
     }
   }
@@ -65,11 +78,17 @@ final class WorkoutCollector: NSObject, ObservableObject {
     session.stopActivity(with: Date())
   }
 
-  private func beginSession() {
+  /// Sessao tecnica de monitoramento. Aparece no app Fitness como um treino
+  /// "Outro" e fecha o anel de exercicio: e o preco do espelhamento oficial,
+  /// nao um defeito.
+  static func monitoringConfiguration() -> HKWorkoutConfiguration {
     let configuration = HKWorkoutConfiguration()
     configuration.activityType = .other
     configuration.locationType = .indoor
+    return configuration
+  }
 
+  private func beginSession(with configuration: HKWorkoutConfiguration) {
     do {
       let session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
       let builder = session.associatedWorkoutBuilder()

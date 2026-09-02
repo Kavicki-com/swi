@@ -90,7 +90,7 @@ export default function Settings() {
             <HorizontalCard label="FAQ"             onPress={go('/(app)/settings/faq')} />
             {isFeatureEnabled('appleWatchPilot') && (
               <HorizontalCard
-                label="Diagnóstico do Apple Watch"
+                label="Monitoramento"
                 onPress={go('/(app)/settings/watch-diagnostics')}
               />
             )}

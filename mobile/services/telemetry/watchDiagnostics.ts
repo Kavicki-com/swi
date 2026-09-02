@@ -12,14 +12,33 @@ export type WatchDiagnosticsState =
   | { support: 'unsupported' }
   | ({ support: 'ready' } & SwiWatchControlStatus);
 
+/**
+ * Autorizar e depois ativar, as duas ações que o ADR-0003 manda apresentar
+ * juntas no primeiro uso. É o que o botão faz, aqui e em Configurações.
+ *
+ * A ativação segue mesmo quando a autorização responde false ou falha: o iOS
+ * não conta negação de leitura (ADR-0004), e a folha pode já ter sido
+ * respondida numa instalação anterior. Parar aqui deixaria de ativar quem já
+ * tinha autorizado.
+ *
+ * Devolve se o monitoramento foi ativado. Nunca rejeita: a tela decide o que
+ * mostrar lendo o estado derivado, não este booleano.
+ */
+export async function activateMonitoring(
+  control: WatchControl = watchControl,
+): Promise<boolean> {
+  if (!control.supported) return false;
+  await control.requestAuthorization().catch(() => false);
+  return control.startMonitoring();
+}
+
 export function useWatchDiagnostics(control: WatchControl = watchControl): WatchDiagnosticsState {
   const [status, setStatus] = useState<SwiWatchControlStatus | null>(() => control.getStatus());
 
   useEffect(() => {
     if (!control.supported) return undefined;
-    // A amostra oficial de mirroring da Apple autoriza o HealthKit nos dois
-    // aparelhos. Sem isso a sessão espelhada pode nunca chegar ao iPhone.
-    void control.requestAuthorization().catch(() => undefined);
+    // Só observa. Autorizar é ação do funcionário, no botão: abrir a folha do
+    // sistema ao renderizar mostraria a pergunta antes da explicação.
     setStatus(control.getStatus());
     return control.subscribe(setStatus);
   }, [control]);

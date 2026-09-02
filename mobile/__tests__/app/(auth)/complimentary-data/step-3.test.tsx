@@ -12,7 +12,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
 jest.mock('../../../../services/auth/AuthProvider', () => ({ useAuth: jest.fn() }));
-// Gate da smartband desligado: o finish cai no ramo do dashboard, que é o do
+// Portao do primeiro uso desligado: o finish cai no ramo do dashboard, que é o do
 // preview/demo. O que se testa aqui é a validação, não o destino.
 jest.mock('../../../../lib/featureFlags', () => ({
   isFeatureEnabled: () => false,

@@ -7,7 +7,11 @@ import {
   type SwiWatchControlStatus,
   type WatchControlNative,
 } from '../../modules/swi-watch-control';
-import { useWatchDiagnostics, type WatchDiagnosticsState } from './watchDiagnostics';
+import {
+  activateMonitoring,
+  useWatchDiagnostics,
+  type WatchDiagnosticsState,
+} from './watchDiagnostics';
 
 type Listener<K extends keyof SwiWatchControlEvents> = (event: SwiWatchControlEvents[K]) => void;
 
@@ -25,9 +29,11 @@ function fakeNative(initial?: Partial<SwiWatchControlStatus>) {
     ...initial,
   };
   const requestAuthorization = jest.fn(async () => true);
+  const startMonitoring = jest.fn(async () => true);
   const native: WatchControlNative = {
     getStatus: () => ({ ...status }),
     requestAuthorization,
+    startMonitoring,
     addListener: (event, listener) => {
       const list = listeners[event] as Listener<typeof event>[];
       list.push(listener as Listener<typeof event>);
@@ -45,7 +51,7 @@ function fakeNative(initial?: Partial<SwiWatchControlStatus>) {
   ) => {
     for (const l of listeners[event] as Listener<K>[]) l(payload);
   };
-  return { native, emit, listeners, requestAuthorization };
+  return { native, emit, listeners, requestAuthorization, startMonitoring, status };
 }
 
 describe('loadNativeWatchControl', () => {
@@ -68,6 +74,7 @@ describe('createWatchControl', () => {
     expect(control.supported).toBe(false);
     expect(control.getStatus()).toBeNull();
     await expect(control.requestAuthorization()).resolves.toBe(false);
+    await expect(control.startMonitoring()).resolves.toBe(false);
     const listener = jest.fn();
     const unsubscribe = control.subscribe(listener);
     expect(() => unsubscribe()).not.toThrow();
@@ -130,6 +137,74 @@ describe('createWatchControl', () => {
   });
 });
 
+describe('activateMonitoring', () => {
+  it('sem suporte não tenta nada e responde que não ativou', async () => {
+    await expect(activateMonitoring(createWatchControl(null))).resolves.toBe(false);
+  });
+
+  it('autoriza e só então ativa, nessa ordem', async () => {
+    const { native, requestAuthorization, startMonitoring } = fakeNative();
+    const ordem: string[] = [];
+    requestAuthorization.mockImplementation(async () => {
+      ordem.push('autorizar');
+      return true;
+    });
+    startMonitoring.mockImplementation(async () => {
+      ordem.push('ativar');
+      return true;
+    });
+
+    await expect(activateMonitoring(createWatchControl(native))).resolves.toBe(true);
+    expect(ordem).toEqual(['autorizar', 'ativar']);
+  });
+
+  // ADR-0004: o iOS não conta negação de leitura, e a folha pode já ter sido
+  // respondida antes. Parar aqui deixaria de ativar quem já tinha autorizado.
+  it('autorização recusada ou falha não impede a ativação', async () => {
+    const { native, requestAuthorization, startMonitoring } = fakeNative();
+    requestAuthorization.mockResolvedValueOnce(false);
+    await activateMonitoring(createWatchControl(native));
+    expect(startMonitoring).toHaveBeenCalledTimes(1);
+
+    requestAuthorization.mockRejectedValueOnce(new Error('folha cancelada'));
+    await expect(activateMonitoring(createWatchControl(native))).resolves.toBe(true);
+    expect(startMonitoring).toHaveBeenCalledTimes(2);
+  });
+
+  it('devolve o resultado da ativação, não o da autorização', async () => {
+    const { native, requestAuthorization, startMonitoring } = fakeNative();
+    requestAuthorization.mockResolvedValueOnce(true);
+    startMonitoring.mockResolvedValueOnce(false);
+    await expect(activateMonitoring(createWatchControl(native))).resolves.toBe(false);
+  });
+});
+
+describe('createWatchControl.startMonitoring', () => {
+  it('pede ao nativo para acordar o relógio e abrir a sessão', async () => {
+    const { native, startMonitoring } = fakeNative();
+    await expect(createWatchControl(native).startMonitoring()).resolves.toBe(true);
+    expect(startMonitoring).toHaveBeenCalledTimes(1);
+  });
+
+  it('com a sessão espelhada já ativa não tenta abrir uma segunda', async () => {
+    const { native, startMonitoring } = fakeNative({ session: 'running' });
+    await expect(createWatchControl(native).startMonitoring()).resolves.toBe(true);
+    expect(startMonitoring).not.toHaveBeenCalled();
+  });
+
+  it('sessão encerrada pode ser reaberta', async () => {
+    const { native, startMonitoring } = fakeNative({ session: 'ended' });
+    await createWatchControl(native).startMonitoring();
+    expect(startMonitoring).toHaveBeenCalledTimes(1);
+  });
+
+  it('falha do nativo resolve false em vez de rejeitar, para a tela não ter dois caminhos de erro', async () => {
+    const { native, startMonitoring } = fakeNative();
+    startMonitoring.mockRejectedValueOnce(new Error('HealthKit indisponível'));
+    await expect(createWatchControl(native).startMonitoring()).resolves.toBe(false);
+  });
+});
+
 describe('useWatchDiagnostics', () => {
   const probe = (control: ReturnType<typeof createWatchControl>) => {
     const states: WatchDiagnosticsState[] = [];
@@ -177,24 +252,16 @@ describe('useWatchDiagnostics', () => {
     expect(last()).toMatchObject({ session: 'ended', lastSample: { bpm: 68 } });
   });
 
-  it('pede autorização do HealthKit no iPhone uma vez quando há suporte', async () => {
-    const { native, requestAuthorization } = fakeNative();
+  // Autorizar é ação do funcionário, no botão. Observar o estado não pode
+  // abrir a folha do sistema antes de a tela explicar o que vai ser lido.
+  it('apenas observar o estado não abre a folha de permissão', async () => {
+    const { native, requestAuthorization, startMonitoring } = fakeNative();
     const { Probe } = probe(createWatchControl(native));
     await act(async () => {
       create(createElement(Probe));
     });
-    expect(requestAuthorization).toHaveBeenCalledTimes(1);
-  });
-
-  it('sem suporte não tenta autorizar nada', async () => {
-    const control = createWatchControl(null);
-    const spy = jest.spyOn(control, 'requestAuthorization');
-    const { Probe } = probe(control);
-    await act(async () => {
-      create(createElement(Probe));
-    });
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
+    expect(requestAuthorization).not.toHaveBeenCalled();
+    expect(startMonitoring).not.toHaveBeenCalled();
   });
 
   it('desmontar cancela a inscrição', async () => {

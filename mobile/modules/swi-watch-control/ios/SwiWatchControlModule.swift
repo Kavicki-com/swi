@@ -23,6 +23,16 @@ public class SwiWatchControlModule: Module {
       }
     }
 
+    AsyncFunction("startMonitoring") { (promise: Promise) in
+      if #available(iOS 17.0, *) {
+        MirroredWorkoutReceiver.shared.startMonitoring { started in
+          promise.resolve(started)
+        }
+      } else {
+        promise.resolve(false)
+      }
+    }
+
     OnStartObserving {
       if #available(iOS 17.0, *) {
         let receiver = MirroredWorkoutReceiver.shared
