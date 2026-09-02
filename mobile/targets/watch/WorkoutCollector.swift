@@ -60,8 +60,9 @@ final class WorkoutCollector: NSObject, ObservableObject {
   func stop() {
     guard let session else { return }
     state = .stopping
+    // Segue a amostra oficial da Apple: parar a atividade e chamar end()
+    // somente quando a sessao reportar .stopped (ver delegate abaixo).
     session.stopActivity(with: Date())
-    session.end()
   }
 
   private func beginSession() {
@@ -168,6 +169,8 @@ extension WorkoutCollector: HKWorkoutSessionDelegate {
       switch toState {
       case .running:
         self.state = .running
+      case .stopped:
+        workoutSession.end()
       case .ended:
         self.finishBuilder()
       default:

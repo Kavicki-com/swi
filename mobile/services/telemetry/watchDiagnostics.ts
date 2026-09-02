@@ -17,6 +17,9 @@ export function useWatchDiagnostics(control: WatchControl = watchControl): Watch
 
   useEffect(() => {
     if (!control.supported) return undefined;
+    // A amostra oficial de mirroring da Apple autoriza o HealthKit nos dois
+    // aparelhos. Sem isso a sessão espelhada pode nunca chegar ao iPhone.
+    void control.requestAuthorization().catch(() => undefined);
     setStatus(control.getStatus());
     return control.subscribe(setStatus);
   }, [control]);

@@ -32,6 +32,8 @@ export interface SwiWatchControlStatus {
 /** Superfície do módulo nativo que o wrapper consome (e que os testes dublam). */
 export interface WatchControlNative {
   getStatus(): SwiWatchControlStatus;
+  /** Autorizacao do HealthKit no iPhone; o sistema so pergunta uma vez. */
+  requestAuthorization(): Promise<boolean>;
   addListener<K extends keyof SwiWatchControlEvents>(
     event: K,
     listener: (event: SwiWatchControlEvents[K]) => void,
@@ -42,6 +44,8 @@ export interface WatchControl {
   /** false em Android, web, Expo Go e Jest: não há módulo compilado. */
   readonly supported: boolean;
   getStatus(): SwiWatchControlStatus | null;
+  /** Resolve false quando não suportado. */
+  requestAuthorization(): Promise<boolean>;
   /** Retorna a função que cancela a inscrição. Inerte quando não suportado. */
   subscribe(listener: (status: SwiWatchControlStatus) => void): () => void;
 }

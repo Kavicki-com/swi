@@ -27,7 +27,7 @@ struct ContentView: View {
 
         Text(collector.mirroring ? "Espelhando para o iPhone" : "Sem espelhamento")
           .font(.caption2)
-          .foregroundStyle(collector.mirroring ? .green : .secondary)
+          .foregroundStyle(collector.mirroring ? Color.green : Color.secondary)
 
         if let error = collector.lastError {
           Text(error)

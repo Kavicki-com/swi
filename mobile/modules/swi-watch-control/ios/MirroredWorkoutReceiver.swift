@@ -5,15 +5,18 @@ import HealthKit
 /// disponibilidade para o modulo conseguir responder em iOS anterior ao 17.
 enum WatchControlStatusPayload {
   static func make(session: String, changedAt: String?, bpm: Double?, measuredAt: String?) -> [String: Any] {
-    var sample: Any = NSNull()
-    if let bpm, let measuredAt {
-      sample = ["bpm": bpm, "measuredAt": measuredAt]
+    var payload: [String: Any] = ["session": session]
+    if let changedAt {
+      payload["sessionChangedAt"] = changedAt
+    } else {
+      payload["sessionChangedAt"] = NSNull()
     }
-    return [
-      "session": session,
-      "sessionChangedAt": changedAt ?? NSNull(),
-      "lastSample": sample,
-    ]
+    if let bpm, let measuredAt {
+      payload["lastSample"] = ["bpm": bpm, "measuredAt": measuredAt] as [String: Any]
+    } else {
+      payload["lastSample"] = NSNull()
+    }
+    return payload
   }
 
   static let unavailable = make(session: "none", changedAt: nil, bpm: nil, measuredAt: nil)
@@ -75,6 +78,23 @@ final class MirroredWorkoutReceiver: NSObject {
     healthStore.workoutSessionMirroringStartHandler = { [weak self] mirroredSession in
       DispatchQueue.main.async {
         self?.attach(mirroredSession)
+      }
+    }
+  }
+
+  /// Autorizacao do HealthKit no iPhone. A amostra oficial de mirroring da
+  /// Apple pede autorizacao nos dois aparelhos; sem ela a sessao espelhada
+  /// pode nunca ser entregue. O sistema so mostra o dialogo uma vez.
+  func requestAuthorization(completion: @escaping (Bool) -> Void) {
+    guard HKHealthStore.isHealthDataAvailable() else {
+      completion(false)
+      return
+    }
+    let typesToRead: Set<HKObjectType> = [HKQuantityType(.heartRate)]
+    let typesToShare: Set<HKSampleType> = [HKWorkoutType.workoutType()]
+    healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead) { granted, _ in
+      DispatchQueue.main.async {
+        completion(granted)
       }
     }
   }

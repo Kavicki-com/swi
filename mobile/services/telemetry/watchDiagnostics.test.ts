@@ -24,8 +24,10 @@ function fakeNative(initial?: Partial<SwiWatchControlStatus>) {
     lastSample: null,
     ...initial,
   };
+  const requestAuthorization = jest.fn(async () => true);
   const native: WatchControlNative = {
     getStatus: () => ({ ...status }),
+    requestAuthorization,
     addListener: (event, listener) => {
       const list = listeners[event] as Listener<typeof event>[];
       list.push(listener as Listener<typeof event>);
@@ -43,7 +45,7 @@ function fakeNative(initial?: Partial<SwiWatchControlStatus>) {
   ) => {
     for (const l of listeners[event] as Listener<K>[]) l(payload);
   };
-  return { native, emit, listeners };
+  return { native, emit, listeners, requestAuthorization };
 }
 
 describe('loadNativeWatchControl', () => {
@@ -61,10 +63,11 @@ describe('loadNativeWatchControl', () => {
 });
 
 describe('createWatchControl', () => {
-  it('sem módulo nativo é unsupported: status null e subscribe inerte', () => {
+  it('sem módulo nativo é unsupported: status null e subscribe inerte', async () => {
     const control = createWatchControl(null);
     expect(control.supported).toBe(false);
     expect(control.getStatus()).toBeNull();
+    await expect(control.requestAuthorization()).resolves.toBe(false);
     const listener = jest.fn();
     const unsubscribe = control.subscribe(listener);
     expect(() => unsubscribe()).not.toThrow();
@@ -172,6 +175,26 @@ describe('useWatchDiagnostics', () => {
       emit('onMirroredSessionChanged', { state: 'ended', changedAt: '2026-09-02T13:10:00.000Z' });
     });
     expect(last()).toMatchObject({ session: 'ended', lastSample: { bpm: 68 } });
+  });
+
+  it('pede autorização do HealthKit no iPhone uma vez quando há suporte', async () => {
+    const { native, requestAuthorization } = fakeNative();
+    const { Probe } = probe(createWatchControl(native));
+    await act(async () => {
+      create(createElement(Probe));
+    });
+    expect(requestAuthorization).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem suporte não tenta autorizar nada', async () => {
+    const control = createWatchControl(null);
+    const spy = jest.spyOn(control, 'requestAuthorization');
+    const { Probe } = probe(control);
+    await act(async () => {
+      create(createElement(Probe));
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   it('desmontar cancela a inscrição', async () => {

@@ -40,6 +40,7 @@ function normalize(raw: SwiWatchControlStatus): SwiWatchControlStatus {
 const UNSUPPORTED: WatchControl = {
   supported: false,
   getStatus: () => null,
+  requestAuthorization: async () => false,
   subscribe: () => () => undefined,
 };
 
@@ -48,6 +49,7 @@ export function createWatchControl(native: WatchControlNative | null): WatchCont
   return {
     supported: true,
     getStatus: () => normalize(native.getStatus()),
+    requestAuthorization: () => native.requestAuthorization(),
     subscribe(listener) {
       let status = normalize(native.getStatus());
       const session = native.addListener('onMirroredSessionChanged', (event) => {

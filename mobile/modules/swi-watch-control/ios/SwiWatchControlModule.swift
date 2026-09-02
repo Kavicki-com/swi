@@ -13,6 +13,16 @@ public class SwiWatchControlModule: Module {
       return WatchControlStatusPayload.unavailable
     }
 
+    AsyncFunction("requestAuthorization") { (promise: Promise) in
+      if #available(iOS 17.0, *) {
+        MirroredWorkoutReceiver.shared.requestAuthorization { granted in
+          promise.resolve(granted)
+        }
+      } else {
+        promise.resolve(false)
+      }
+    }
+
     OnStartObserving {
       if #available(iOS 17.0, *) {
         let receiver = MirroredWorkoutReceiver.shared
