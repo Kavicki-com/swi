@@ -5,7 +5,14 @@
 /** Real vem do relógio ou de aparelho externo; DEMO é demonstração explícita. */
 export type TelemetryOrigin = 'REAL' | 'DEMO'
 
-export type MetricQuality = 'CURRENT' | 'STALE' | 'UNAVAILABLE'
+/**
+ * CALCULATING é exclusivo de métrica derivada que exige cobertura mínima antes
+ * de valer um número: hoje só kcal/h, que passa assim os cinco primeiros
+ * minutos. Não é indisponível, porque já existe amostra, e não é atual, porque
+ * ainda não há taxa que se sustente. Nenhuma medição bruta o produz:
+ * `qualityAt` nunca o devolve, e quem o emite é a projeção do read model.
+ */
+export type MetricQuality = 'CURRENT' | 'STALE' | 'UNAVAILABLE' | 'CALCULATING'
 
 export type MeasurementSource =
   | 'APPLE_WATCH'
@@ -86,6 +93,27 @@ export interface TelemetryEvent {
 }
 
 export type BloodPressureRecency = 'CURRENT' | 'HISTORICAL' | 'NONE'
+
+/** Espelha o enum TelemetryConditionKind do schema. */
+export type ConditionKind =
+  | 'HEART_RATE_HIGH'
+  | 'HEART_RATE_LOW'
+  | 'BLOOD_PRESSURE_REVIEW'
+  | 'DEVICE_BATTERY_LOW'
+  | 'DEVICE_SIGNAL_LOST'
+
+/**
+ * O que conta como urgente, e por exclusão o que não conta.
+ *
+ * É o mesmo conjunto que "condição cardíaca ativa" em sinais vitais: no piloto,
+ * o que urge é o coração fora da faixa. Ficam de fora por decisão congelada, e
+ * não por esquecimento: BLOOD_PRESSURE_REVIEW pede revisão humana e nunca vira
+ * urgência automática; DEVICE_BATTERY_LOW e DEVICE_SIGNAL_LOST são alertas de
+ * aparelho, e tratá-los como alerta de saúde faria um relógio descarregado
+ * contar como funcionário em risco. Quem for apresentá-los declara os próprios
+ * conjuntos: uma lista exportada sem consumidor envelheceria sem ninguém notar.
+ */
+export const URGENT_CONDITION_KINDS = ['HEART_RATE_HIGH', 'HEART_RATE_LOW'] as const
 
 /** LIVE promove o snapshot; BACKLOG só vai ao histórico; HISTORICAL passou de 48 h. */
 export type EventAge = 'LIVE' | 'BACKLOG' | 'HISTORICAL'
