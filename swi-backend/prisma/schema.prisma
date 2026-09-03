@@ -64,6 +64,8 @@ model User {
   evacuationAcks     EvacuationAck[]
 
   telemetryDevices     TelemetryDevice[]
+  telemetryEnrollments TelemetryEnrollment[] @relation("enrolledWorker")
+  createdEnrollments   TelemetryEnrollment[] @relation("enrollmentAuthor")
   telemetrySessions    TelemetrySession[]
   telemetrySamples     TelemetrySample[]
   telemetrySnapshot    TelemetrySnapshot?
@@ -476,6 +478,30 @@ enum OperationalAlertStatus {
   ACKNOWLEDGED
   RESOLVED
   DISMISSED
+}
+
+/// Convite de pareamento criado pelo administrador. O código é curto para ser
+/// ditado ao funcionário, então quem o protege não é o tamanho: é a janela de
+/// poucos minutos, o uso único e o limite de taxa da rota.
+model TelemetryEnrollment {
+  id          String              @id @default(uuid())
+  workerId    String
+  worker      User                @relation("enrolledWorker", fields: [workerId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User                @relation("enrollmentAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+  kind        TelemetryDeviceKind
+
+  /// Hash lento (bcrypt), como o código de confirmação de e-mail: seis dígitos
+  /// têm entropia baixa e o custo do hash é parte da defesa.
+  codeHash   String
+  expiresAt  DateTime
+  /// Carimbado na conclusão. É o que torna o código de uso único.
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([workerId, consumedAt])
+  @@index([expiresAt])
 }
 
 /// Aparelho pareado a um funcionário. O funcionário de cada evento sai daqui,
