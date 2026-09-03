@@ -9,8 +9,11 @@ import {
   METRICS,
   metricState,
   qualityAt,
+  assertEventTimeUsable,
+  assertMeasuresSomething,
   rejectWorkerIdAuthority,
   validateMeasurement,
+  validateRawMeasurement,
 } from './metric-state'
 import {
   InvalidMeasurementError,
@@ -284,5 +287,81 @@ describe('evento bruto: workerId não é autoridade', () => {
     expect(() =>
       rejectWorkerIdAuthority({ eventId: 'e1', journeyId: 'j1', taskId: null }),
     ).not.toThrow()
+  })
+})
+
+// Medições brutas do evento. Cinco delas são a mesma coisa que uma métrica
+// canônica e herdam a faixa dela; motionCount não, porque MPM é derivada e a
+// contagem crua não é apresentável (decisão congelada sobre Q16).
+describe('validateRawMeasurement', () => {
+  const bpm = { value: 82, unit: 'bpm', source: 'APPLE_WATCH' as const }
+
+  it('aceita as medições que o evento declara carregar', () => {
+    expect(() => validateRawMeasurement('heartRate', bpm)).not.toThrow()
+    expect(() =>
+      validateRawMeasurement('stepDelta', { value: 12, unit: 'steps', source: 'APPLE_WATCH' }),
+    ).not.toThrow()
+    expect(() =>
+      validateRawMeasurement('motionCount', { value: 40, unit: 'count', source: 'APPLE_WATCH' }),
+    ).not.toThrow()
+  })
+
+  // Sem esta recusa a chave desconhecida seria apagada em silêncio pelo
+  // normalizador, e o aparelho seguiria mandando o que nunca é gravado.
+  it('recusa chave de medição que o contrato não declara', () => {
+    expect(() => validateRawMeasurement('humidity', bpm)).toThrow(InvalidTelemetryEventError)
+  })
+
+  it('recusa medição sem forma de medição', () => {
+    expect(() => validateRawMeasurement('heartRate', 82)).toThrow(InvalidMeasurementError)
+    expect(() => validateRawMeasurement('heartRate', { value: 82 })).toThrow(InvalidMeasurementError)
+  })
+
+  it('valida motionCount pela própria unidade e origem', () => {
+    expect(() =>
+      validateRawMeasurement('motionCount', { value: 40, unit: 'mpm', source: 'APPLE_WATCH' }),
+    ).toThrow(InvalidMeasurementError)
+    expect(() =>
+      validateRawMeasurement('motionCount', { value: 40, unit: 'count', source: 'MANUAL_SWI' }),
+    ).toThrow(InvalidMeasurementError)
+    expect(() =>
+      validateRawMeasurement('motionCount', { value: -1, unit: 'count', source: 'APPLE_WATCH' }),
+    ).toThrow(InvalidMeasurementError)
+  })
+})
+
+// Horário no futuro não é curiosidade: o snapshot só é promovido por evento
+// mais recente que o já promovido, então um evento adiantado congelaria o
+// estado atual do funcionário até o relógio do servidor alcançá-lo.
+describe('assertEventTimeUsable', () => {
+  const now = new Date('2026-09-03T12:00:00.000Z')
+
+  it('aceita medição no passado e a pequena folga de relógio do aparelho', () => {
+    expect(() => assertEventTimeUsable('2026-09-03T11:59:00.000Z', now)).not.toThrow()
+    expect(() => assertEventTimeUsable('2026-09-03T12:01:00.000Z', now)).not.toThrow()
+  })
+
+  it('recusa medição muito adiantada', () => {
+    expect(() => assertEventTimeUsable('2026-09-03T12:30:00.000Z', now)).toThrow(
+      InvalidTelemetryEventError,
+    )
+  })
+
+  it('recusa horário que não é um instante', () => {
+    expect(() => assertEventTimeUsable('ontem de manhã', now)).toThrow(InvalidTelemetryEventError)
+  })
+})
+
+// Um evento que não mede nada gravaria uma linha só de nulos e queimaria uma
+// sequência da sessão, sem contar nada a ninguém.
+describe('assertMeasuresSomething', () => {
+  it('aceita evento com ao menos uma medição', () => {
+    expect(() =>
+      assertMeasuresSomething({ heartRate: { value: 82, unit: 'bpm', source: 'APPLE_WATCH' } }),
+    ).not.toThrow()
+  })
+
+  it('recusa evento sem medição alguma', () => {
+    expect(() => assertMeasuresSomething({})).toThrow(InvalidTelemetryEventError)
   })
 })

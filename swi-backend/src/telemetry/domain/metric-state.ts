@@ -14,6 +14,7 @@ import type {
   MetricQuality,
   MetricState,
   Sample,
+  TelemetryEvent,
   TelemetryOrigin,
 } from './telemetry.types'
 
@@ -186,8 +187,14 @@ export function assertOriginCompatible(
   }
 }
 
-/** Faixas de plausibilidade. Fora delas o valor é impossível, não "extremo". */
-const RANGES: Partial<Record<MetricKind, { min: number; max: number; integer?: boolean }>> = {
+/** Faixa de plausibilidade de um valor. Fora dela é impossível, não "extremo". */
+interface ValueRange {
+  min: number
+  max: number
+  integer?: boolean
+}
+
+const RANGES: Partial<Record<MetricKind, ValueRange>> = {
   heartRate: { min: 20, max: 300 },
   steps: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
   movementPerMinute: { min: 0, max: 1_000 },
@@ -205,6 +212,33 @@ const BLOOD_PRESSURE_RANGE = {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+// As três conferências que toda medição sofre, num lugar só. A métrica canônica
+// e a medição crua do evento passam pelas mesmas funções, e por isso não podem
+// divergir sobre o que é unidade certa, origem permitida ou faixa possível.
+
+function checkUnit(kind: string, unit: string, expected: string): void {
+  if (unit !== expected) throw new InvalidMeasurementError(kind, `unidade esperada ${expected}`)
+}
+
+function checkSource(kind: string, source: string, allowed: readonly MeasurementSource[]): void {
+  if (!allowed.includes(source as MeasurementSource)) {
+    throw new InvalidMeasurementError(kind, `origem ${source} não permitida`)
+  }
+}
+
+function checkNumber(kind: string, value: unknown, range: ValueRange | undefined): void {
+  if (!isFiniteNumber(value)) {
+    throw new InvalidMeasurementError(kind, 'valor precisa ser número finito')
+  }
+  if (range === undefined) return
+  if (range.integer && !Number.isInteger(value)) {
+    throw new InvalidMeasurementError(kind, 'valor inteiro')
+  }
+  if (value < range.min || value > range.max) {
+    throw new InvalidMeasurementError(kind, `fora da faixa ${range.min} a ${range.max}`)
+  }
 }
 
 function validateBloodPressure(value: unknown): void {
@@ -235,36 +269,137 @@ function validateBloodPressure(value: unknown): void {
  */
 export function validateMeasurement(kind: MetricKind, measurement: Measurement<unknown>): void {
   const spec = METRICS[kind]
-  if (measurement.unit !== spec.unit) {
-    throw new InvalidMeasurementError(kind, `unidade esperada ${spec.unit}`)
-  }
-  if (!spec.sources.includes(measurement.source)) {
-    throw new InvalidMeasurementError(kind, `origem ${measurement.source} não permitida`)
-  }
+  checkUnit(kind, measurement.unit, spec.unit)
+  checkSource(kind, measurement.source, spec.sources)
   if (kind === 'bloodPressure') {
     validateBloodPressure(measurement.value)
     return
   }
-  const { value } = measurement
-  if (!isFiniteNumber(value)) {
-    throw new InvalidMeasurementError(kind, 'valor precisa ser número finito')
-  }
-  const range = RANGES[kind]
-  if (range === undefined) return
-  if (range.integer && !Number.isInteger(value)) {
-    throw new InvalidMeasurementError(kind, 'valor inteiro')
-  }
-  if (value < range.min || value > range.max) {
-    throw new InvalidMeasurementError(kind, `fora da faixa ${range.min} a ${range.max}`)
-  }
+  checkNumber(kind, measurement.value, RANGES[kind])
 }
 
 /**
  * O funcionário vem da credencial do dispositivo, nunca do payload. Um evento
  * que traz workerId está tentando impor identidade e é recusado inteiro.
  */
-export function rejectWorkerIdAuthority(payload: Record<string, unknown>): void {
-  if ('workerId' in payload) {
+export function rejectWorkerIdAuthority(payload: object): void {
+  // Pelo valor, não pela presença da chave. Uma classe que declara o campo sem
+  // preenchê-lo pode carregar a chave vazia, e isso não é tentativa de impor
+  // identidade; um valor qualquer é.
+  const { workerId } = payload as { workerId?: unknown }
+  if (workerId !== undefined && workerId !== null) {
     throw new InvalidTelemetryEventError('workerId não é aceito no evento')
+  }
+}
+
+/** Chaves de medição que o evento bruto pode carregar. */
+export type RawMeasurementKey = keyof TelemetryEvent['measurements']
+
+interface RawMeasurementSpec {
+  unit: string
+  sources: readonly MeasurementSource[]
+  range?: ValueRange
+  /** Pressão é a única medição que chega como par, e não como um número. */
+  pair?: true
+}
+
+/** Herda de uma métrica canônica o que já foi decidido sobre ela. */
+function fromMetric(kind: MetricKind): RawMeasurementSpec {
+  const spec: RawMeasurementSpec = { unit: METRICS[kind].unit, sources: METRICS[kind].sources }
+  const range = RANGES[kind]
+  if (range !== undefined) spec.range = range
+  if (kind === 'bloodPressure') spec.pair = true
+  return spec
+}
+
+/**
+ * O que cada medição do evento bruto precisa cumprir.
+ *
+ * Cinco delas são a mesma coisa que uma métrica canônica e herdam dela unidade,
+ * origem e faixa. motionCount tem spec própria: é a contagem de movimento que
+ * alimenta a derivação de MPM, e registrá-la como MetricKind faria dela o
+ * sétimo indicador que a decisão congelada recusa.
+ *
+ * O Record cobre RawMeasurementKey inteiro de propósito: uma medição nova no
+ * evento não compila até alguém dizer como ela é validada.
+ */
+const RAW_MEASUREMENTS: Record<RawMeasurementKey, RawMeasurementSpec> = {
+  heartRate: fromMetric('heartRate'),
+  stepDelta: fromMetric('steps'),
+  activeEnergyKcal: fromMetric('activeEnergy'),
+  battery: fromMetric('battery'),
+  bloodPressure: fromMetric('bloodPressure'),
+  motionCount: { unit: 'count', sources: ['APPLE_WATCH'], range: { min: 0, max: 100_000 } },
+}
+
+/** Forma mínima de uma medição, antes de saber se o conteúdo dela vale. */
+interface MeasurementShape {
+  value: unknown
+  unit: string
+  source: string
+}
+
+function assertMeasurementShape(key: string, raw: unknown): asserts raw is MeasurementShape {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new InvalidMeasurementError(key, 'medição precisa ser um objeto')
+  }
+  const shape = raw as Partial<MeasurementShape>
+  if (!('value' in shape)) throw new InvalidMeasurementError(key, 'valor ausente')
+  if (typeof shape.unit !== 'string' || typeof shape.source !== 'string') {
+    throw new InvalidMeasurementError(key, 'unidade e origem são obrigatórias')
+  }
+}
+
+/**
+ * Valida uma medição como ela chega no evento, pela chave que o aparelho usou.
+ *
+ * Chave desconhecida é recusa, não descarte: o normalizador da persistência lê
+ * só as chaves que conhece, então aceitar o resto significaria responder ACK
+ * para uma medição que nunca foi gravada.
+ */
+export function validateRawMeasurement(key: string, raw: unknown): void {
+  if (!Object.prototype.hasOwnProperty.call(RAW_MEASUREMENTS, key)) {
+    throw new InvalidTelemetryEventError(`medição desconhecida: ${key}`)
+  }
+  const spec = RAW_MEASUREMENTS[key as RawMeasurementKey]
+  assertMeasurementShape(key, raw)
+  checkUnit(key, raw.unit, spec.unit)
+  checkSource(key, raw.source, spec.sources)
+  if (spec.pair === true) {
+    validateBloodPressure(raw.value)
+    return
+  }
+  checkNumber(key, raw.value, spec.range)
+}
+
+/**
+ * Um evento precisa medir alguma coisa. Sem medição ele grava uma linha só de
+ * nulos, consome uma sequência da sessão e não conta nada a ninguém.
+ */
+export function assertMeasuresSomething(measurements: object): void {
+  if (Object.keys(measurements).length === 0) {
+    throw new InvalidTelemetryEventError('evento sem medição alguma')
+  }
+}
+
+/**
+ * Folga aceita para o relógio do aparelho estar adiantado. Passado disso, o
+ * horário é do futuro e o evento é recusado.
+ */
+export const CLOCK_SKEW_MS = 2 * MINUTE
+
+/**
+ * O snapshot só é promovido por evento mais recente do que o já promovido. Um
+ * evento com horário no futuro passaria a barrar todos os seguintes, e o
+ * funcionário ficaria com o estado atual congelado até o relógio do servidor
+ * alcançar aquele instante. Por isso a checagem é da ingestão, antes de gravar.
+ */
+export function assertEventTimeUsable(eventTime: string, now: Date | string): void {
+  const measured = toMs(eventTime)
+  if (Number.isNaN(measured)) {
+    throw new InvalidTelemetryEventError('eventTime não é um instante válido')
+  }
+  if (measured - toMs(now) > CLOCK_SKEW_MS) {
+    throw new InvalidTelemetryEventError('eventTime no futuro')
   }
 }

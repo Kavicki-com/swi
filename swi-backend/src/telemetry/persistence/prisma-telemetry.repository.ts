@@ -7,8 +7,10 @@ import type { MeasurementSource, TelemetryEvent, TelemetryOrigin } from '../doma
 import {
   TelemetryIntegrityConflictError,
   TelemetrySessionNotFoundError,
+  type OpenSessionInput,
   type SaveEventResult,
   type TelemetryRepository,
+  type TelemetrySessionRef,
 } from './telemetry.repository'
 
 type CanonicalContent = Record<string, unknown>
@@ -152,6 +154,9 @@ const CLEARED_METRICS: Prisma.TelemetrySnapshotUncheckedUpdateInput = {
   bloodPressureAt: null,
 }
 
+/** Só o que a ingestão precisa saber da sessão para decidir se aceita o evento. */
+const SESSION_REF = { id: true, deviceId: true, workerId: true, origin: true } as const
+
 function isUniqueViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
 }
@@ -200,6 +205,37 @@ async function promote(
 @Injectable()
 export class PrismaTelemetryRepository implements TelemetryRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  async ensureSession(input: OpenSessionInput): Promise<TelemetrySessionRef> {
+    const existing = await this.findSession(input.id)
+    // Já aberta: devolve como está. Reabrir com os dados de quem chegou agora
+    // deixaria um aparelho assumir a sessão de outro só por adivinhar o id.
+    if (existing !== null) return existing
+
+    try {
+      return await this.prisma.telemetrySession.create({
+        data: {
+          id: input.id,
+          deviceId: input.deviceId,
+          workerId: input.workerId,
+          origin: input.origin,
+          startedAt: input.startedAt,
+        },
+        select: SESSION_REF,
+      })
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error
+      // Dois eventos do mesmo lote chegando por conexões diferentes abrem a
+      // corrida. Quem perde lê a linha que o outro acabou de gravar.
+      const raced = await this.findSession(input.id)
+      if (raced === null) throw error
+      return raced
+    }
+  }
+
+  private async findSession(id: string): Promise<TelemetrySessionRef | null> {
+    return this.prisma.telemetrySession.findUnique({ where: { id }, select: SESSION_REF })
+  }
 
   async saveEvent(event: TelemetryEvent, now: Date): Promise<SaveEventResult> {
     const session = await this.prisma.telemetrySession.findUnique({
