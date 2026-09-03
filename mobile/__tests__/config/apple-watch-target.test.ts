@@ -23,6 +23,7 @@ type TargetConfig = {
   name?: string;
   bundleIdentifier?: string;
   deploymentTarget?: string;
+  icon?: string;
   frameworks?: string[];
   entitlements?: Record<string, unknown>;
 };
@@ -42,6 +43,18 @@ describe('target watchOS (targets/watch)', () => {
     expect(`${app.ios.bundleIdentifier}${target.bundleIdentifier}`).toBe(
       'com.kavicki.swi.watchkitapp',
     );
+  });
+
+  // Sem icone a App Store Connect recusa o .ipa no processamento (erros 90713 e
+  // 90391), depois de um build inteiro de EAS. O plugin gera o 1024 sem alfa.
+  //
+  // O plugin resolve o caminho RELATIVO A PASTA DO TARGET, nao a raiz do
+  // projeto, e quando nao acha o arquivo apenas avisa e segue: o prebuild passa
+  // e a App Store recusa de novo. Por isso o teste resolve do mesmo lugar.
+  it('declara o ícone do relógio, sem o qual a App Store recusa o pacote', () => {
+    const target = loadTargetConfig();
+    expect(typeof target.icon).toBe('string');
+    expect(exists(path.join('targets', 'watch', target.icon as string))).toBe(true);
   });
 
   it('exige watchOS 10 ou superior, mínimo do workout mirroring', () => {

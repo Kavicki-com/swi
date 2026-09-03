@@ -112,17 +112,32 @@ final class MirroredWorkoutReceiver: NSObject {
   ///
   /// Recusa do sistema resolve false; a tela le o estado derivado depois e
   /// mostra indisponivel se nenhuma leitura chegar.
+  ///
+  /// A API tem duas formas e elas nao se misturam. `startWatchApp(with:completion:)`
+  /// e a antiga, de iOS 10; `startWatchApp(toHandle:)` e `async throws` e e a
+  /// que a amostra oficial de espelhamento usa. Escrever `toHandle:` com
+  /// callback nao compila.
+  ///
+  /// A HKWorkoutConfiguration nasce dentro do Task porque nao e Sendable e nao
+  /// pode ser capturada de fora ao cruzar a fronteira de concorrencia.
   func startMonitoring(completion: @escaping (Bool) -> Void) {
     guard HKHealthStore.isHealthDataAvailable() else {
       completion(false)
       return
     }
-    let configuration = HKWorkoutConfiguration()
-    configuration.activityType = .other
-    configuration.locationType = .indoor
-    healthStore.startWatchApp(toHandle: configuration) { success, _ in
-      DispatchQueue.main.async {
-        completion(success)
+    Task { [healthStore] in
+      let configuration = HKWorkoutConfiguration()
+      configuration.activityType = .other
+      configuration.locationType = .indoor
+      let started: Bool
+      do {
+        try await healthStore.startWatchApp(toHandle: configuration)
+        started = true
+      } catch {
+        started = false
+      }
+      await MainActor.run {
+        completion(started)
       }
     }
   }

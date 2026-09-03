@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kavicki.swi",
+      "appleTeamId": "822T2N8RMU",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Permite tirar fotos para anexar a tarefas e relatórios.",

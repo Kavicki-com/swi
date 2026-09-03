@@ -11,6 +11,13 @@ module.exports = {
   bundleIdentifier: '.watchkitapp',
   // Workout mirroring (startMirroringToCompanionDevice) exige watchOS 10.
   deploymentTarget: '10.0',
+  // O mesmo icone do app iOS. O plugin gera o 1024x1024 do relogio sem canal
+  // alfa e com fundo branco, como a App Store exige. Sem este campo o .ipa
+  // compila, sobe, e e recusado no processamento (erros 90713 e 90391).
+  //
+  // Caminho RELATIVO A ESTA PASTA, nao a raiz do mobile. Com caminho errado o
+  // plugin so avisa ("Skipping icon generation") e o prebuild passa.
+  icon: '../../assets/images/icon.png',
   frameworks: ['SwiftUI', 'HealthKit'],
   entitlements: {
     'com.apple.developer.healthkit': true,
