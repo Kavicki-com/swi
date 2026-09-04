@@ -1,4 +1,4 @@
-import { METRICS, bloodPressureRecency, metricState } from '../domain/metric-state'
+import { METRICS, bloodPressureRecency, metricState, qualityAt } from '../domain/metric-state'
 import {
   URGENT_CONDITION_KINDS,
   type BloodPressure,
@@ -288,9 +288,17 @@ function rateState(kind: MetricKind, rate: RateResult, now: Date): MetricState<n
   // Sem taxa, mas o horário da última amostra permanece quando houve alguma:
   // "não dá para calcular, e o dado é desta hora" é informação; um horário nulo
   // faria a tela não distinguir silêncio de cobertura insuficiente.
+  //
+  // "Calculando" promete um número que está chegando, então ele vale enquanto a
+  // última amostra ainda descreve o agora. Um relógio que envia duas medições e
+  // morre não está calculando nada: sem esta porta, ele anunciaria "Calculando"
+  // por quase uma hora, que é a mesma história falsa que a ADR-0004 proíbe na
+  // lacuna. O prazo é o do domínio, o mesmo que decide a qualidade quando há
+  // valor; a taxa não ganha limiar próprio.
+  const stillReading = qualityAt(kind, rate.latestAt, now) !== 'UNAVAILABLE'
   return {
     value: null,
-    quality: rate.calculating ? 'CALCULATING' : 'UNAVAILABLE',
+    quality: rate.calculating && stillReading ? 'CALCULATING' : 'UNAVAILABLE',
     measuredAt: rate.latestAt,
     source: rate.latestAt === null ? null : 'DERIVED',
     unit: METRICS[kind].unit,

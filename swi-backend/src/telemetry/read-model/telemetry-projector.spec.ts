@@ -223,6 +223,26 @@ describe('projectWorker: menos de cinco minutos de cobertura devolve Calculando'
     expect(projected.metrics.energyRatePerHour.value).toBeNull()
   })
 
+  it('Calculando expira: relógio que silencia logo depois de começar não fica calculando para sempre', () => {
+    // Duas amostras no começo da janela e nada depois. Pela regra de começo,
+    // isto seria "Calculando": o dia começou aqui e a cobertura é curta. Mas a
+    // última medição tem 57 minutos, e prometer um número que não vem é a mesma
+    // história falsa que a ADR-0004 proíbe na lacuna. Quem decide que a leitura
+    // deixou de descrever o agora é o prazo do domínio, não o projetor.
+    const projected = project({
+      windowSamples: [
+        sample({ eventTime: minutesAgo(59), activeEnergyKcal: 0 }),
+        sample({ eventTime: minutesAgo(57), activeEnergyKcal: 9 }),
+      ],
+      dayTotals: totals({ energy: 9, energyAt: minutesAgo(57), energyEarliestAt: minutesAgo(59) }),
+    })
+
+    expect(projected.metrics.energyRatePerHour.quality).toBe('UNAVAILABLE')
+    expect(projected.metrics.energyRatePerHour.value).toBeNull()
+    // O horário da última amostra permanece: houve dado, e ele é desta hora.
+    expect(projected.metrics.energyRatePerHour.measuredAt).toBe(minutesAgo(57))
+  })
+
   it('cobertura curta DEPOIS de uma lacuna é indisponível, e não Calculando', () => {
     // "Calculando" fala dos primeiros minutos de cobertura. No meio de um turno,
     // depois de um silêncio de rede, ele contaria uma história falsa sobre por
