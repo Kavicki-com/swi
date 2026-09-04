@@ -230,14 +230,25 @@ function rateOverWindow(
   options: RateOptions,
   now: Date,
 ): RateResult {
-  const windowStartMs = now.getTime() - options.windowMs
+  const nowMs = now.getTime()
+  const windowStartMs = nowMs - options.windowMs
   // flatMap e não filter: ele estreita o tipo para número no mesmo passo, e
   // assim a soma adiante não precisa de um `?? 0` que nunca acontece e que
   // esconderia uma medição ausente como se fosse consumo zero.
+  //
+  // A janela é fechada dos dois lados. A ingestão aceita medição adiantada
+  // dentro da folga de relógio do aparelho para não recusar o evento de um
+  // relógio mal ajustado, mas essa folga existe para o evento entrar, não para
+  // a projeção acreditar no horário dele. Descartar, e não grampear no
+  // presente: o delta descreve um intervalo que ainda não passou, então somá-lo
+  // distorceria a taxa com consumo que não aconteceu, e grampear inventaria um
+  // instante de medição que o aparelho nunca relatou. A amostra volta sozinha
+  // quando o presente a alcançar.
   const inWindow = samples
     .flatMap((s) => {
       const value = s[field]
-      if (value === null || toMs(s.eventTime) < windowStartMs) return []
+      const at = toMs(s.eventTime)
+      if (value === null || at < windowStartMs || at > nowMs) return []
       return [{ eventTime: s.eventTime, value }]
     })
     .sort((a, b) => toMs(a.eventTime) - toMs(b.eventTime))

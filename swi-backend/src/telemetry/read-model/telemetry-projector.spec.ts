@@ -1,3 +1,4 @@
+import { CLOCK_SKEW_MS } from '../domain/metric-state'
 import type { ConditionKind } from '../domain/telemetry.types'
 import {
   ENERGY_RATE_MIN_COVERAGE_MS,
@@ -191,6 +192,27 @@ describe('projectWorker: kcal/h é energia da janela sobre a duração coberta',
 
     expect(projected.metrics.energyRatePerHour.value).toBe(300)
     expect(projected.energyWindow.samples).toBe(11)
+  })
+
+  it('medição adiantada pelo relógio do aparelho não entra na janela', () => {
+    // A ingestão aceita até dois minutos de adiantamento para não recusar o
+    // evento de um relógio mal ajustado. Isso não obriga a projeção a acreditar
+    // no horário dele: um delta com horário no futuro descreve um intervalo que
+    // ainda não passou. Contá-lo daria à janela cobertura que ela não tem,
+    // distorceria a taxa com energia que ainda não foi gasta e prenderia a
+    // qualidade em atual, porque a idade de uma medição futura satura em zero.
+    const serie = energySeries(10, 6)
+    const adiantada = sample({
+      eventTime: new Date(NOW.getTime() + CLOCK_SKEW_MS - 1_000).toISOString(),
+      activeEnergyKcal: 30,
+    })
+
+    const sem = project({ windowSamples: serie })
+    const com = project({ windowSamples: [...serie, adiantada] })
+
+    expect(com.metrics.energyRatePerHour.value).toBe(sem.metrics.energyRatePerHour.value)
+    expect(com.metrics.energyRatePerHour.measuredAt).toBe(minutesAgo(0))
+    expect(com.energyWindow).toEqual(sem.energyWindow)
   })
 
   it('o acumulado do dia é o total do banco, não a soma da janela', () => {
