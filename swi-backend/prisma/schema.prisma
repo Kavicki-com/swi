@@ -62,6 +62,17 @@ model User {
   position           WorkerPosition?
   startedEvacuations Evacuation[]    @relation("startedEvacuations")
   evacuationAcks     EvacuationAck[]
+
+  telemetryDevices     TelemetryDevice[]
+  telemetryEnrollments TelemetryEnrollment[] @relation("enrolledWorker")
+  createdEnrollments   TelemetryEnrollment[] @relation("enrollmentAuthor")
+  telemetrySessions    TelemetrySession[]
+  telemetrySamples     TelemetrySample[]
+  telemetrySnapshot    TelemetrySnapshot?
+  telemetryAssessments TelemetryAssessment[]
+  telemetryConditions  TelemetryCondition[]
+  operationalAlerts    OperationalAlert[]    @relation("alertedWorker")
+  triagedAlerts        OperationalAlert[]    @relation("triagedAlerts")
 }
 
 // Última posição conhecida de cada worker. SÓ a última: upsert por worker, sem
@@ -409,4 +420,319 @@ model Notification {
 model WeatherAlertSeen {
   alertId    String   @id
   notifiedAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Telemetria do piloto Apple Watch (ADR-0003). O monitoramento é contínuo e
+// independente da Jornada SWI: nenhuma tabela daqui tem chave estrangeira para
+// Journey ou Task, e por isso a telemetria persiste com a jornada parada.
+//
+// Unidades canônicas, uma vez só: bpm, passos inteiros, mpm, kcal, percentual
+// de bateria e mmHg inteiro. O vocabulário em código é
+// src/telemetry/domain/telemetry.types.ts; os enums abaixo são o mesmo
+// vocabulário do lado do banco.
+// ---------------------------------------------------------------------------
+
+/// REAL vem do relógio ou de aparelho externo; DEMO é demonstração explícita.
+/// Nunca se misturam na mesma sessão, snapshot ou média.
+enum TelemetryOrigin {
+  REAL
+  DEMO
+}
+
+enum TelemetryDeviceKind {
+  APPLE_WATCH
+  IPHONE
+  EXTERNAL_CUFF
+}
+
+enum TelemetrySessionStatus {
+  ACTIVE
+  INTERRUPTED
+  ENDED
+}
+
+enum TelemetryMeasurementSource {
+  APPLE_WATCH
+  EXTERNAL_CUFF
+  MANUAL_HEALTHKIT
+  MANUAL_SWI
+  DERIVED
+}
+
+enum TelemetryConditionKind {
+  HEART_RATE_HIGH
+  HEART_RATE_LOW
+  BLOOD_PRESSURE_REVIEW
+  DEVICE_BATTERY_LOW
+  DEVICE_SIGNAL_LOST
+}
+
+enum TelemetryConditionStatus {
+  ACTIVE
+  RECOVERED
+}
+
+enum OperationalAlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+/// Convite de pareamento criado pelo administrador. O código é curto para ser
+/// ditado ao funcionário, então quem o protege não é o tamanho: é a janela de
+/// poucos minutos, o uso único e o limite de taxa da rota.
+model TelemetryEnrollment {
+  id          String              @id @default(uuid())
+  workerId    String
+  worker      User                @relation("enrolledWorker", fields: [workerId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User                @relation("enrollmentAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+  kind        TelemetryDeviceKind
+
+  /// Hash lento (bcrypt), como o código de confirmação de e-mail: seis dígitos
+  /// têm entropia baixa e o custo do hash é parte da defesa.
+  codeHash   String
+  expiresAt  DateTime
+  /// Carimbado na conclusão. É o que torna o código de uso único.
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([workerId, consumedAt])
+  @@index([expiresAt])
+}
+
+/// Aparelho pareado a um funcionário. O funcionário de cada evento sai daqui,
+/// nunca do payload: por isso a credencial é o que liga dispositivo e pessoa.
+model TelemetryDevice {
+  id       String              @id @default(uuid())
+  workerId String
+  worker   User                @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  kind     TelemetryDeviceKind
+  model    String?
+  /// Só o hash: o segredo em claro sai uma vez no pareamento e não volta.
+  credentialHash String
+  revokedAt      DateTime?
+  lastSeenAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  sessions TelemetrySession[]
+  samples  TelemetrySample[]
+
+  @@index([workerId, revokedAt])
+}
+
+/// Sessão técnica de monitoramento. O id é gerado no relógio e chega dentro do
+/// evento como monitoringSessionId, então não tem @default: quem nomeia é o
+/// aparelho, e é isso que torna o reenvio idempotente após reconexão.
+model TelemetrySession {
+  id       String                 @id
+  deviceId String
+  device   TelemetryDevice        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  workerId String
+  worker   User                   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  origin   TelemetryOrigin
+  status   TelemetrySessionStatus @default(ACTIVE)
+
+  startedAt     DateTime
+  interruptedAt DateTime?
+  endedAt       DateTime?
+
+  /// Acumuladores do dia monitorado. Escritos pela projeção do read model, não
+  /// pela ingestão: existem já na migration do piloto para não exigir um
+  /// segundo ALTER TABLE quando o projetor nascer. Nullable de propósito: uma
+  /// sessão sem amostra de passos não tem "0 passos", tem passos desconhecidos.
+  stepsTotal            Int?
+  activeEnergyKcalTotal Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  samples     TelemetrySample[]
+  snapshots   TelemetrySnapshot[]
+  assessments TelemetryAssessment[]
+  conditions  TelemetryCondition[]
+
+  @@index([workerId, startedAt])
+  @@index([origin, status])
+}
+
+/// Evento imutável, como o aparelho mediu. Nunca sofre update: correção vira
+/// evento novo. É a trilha que permite auditar qualquer número apresentado.
+model TelemetrySample {
+  id String @id @default(uuid())
+  /// Gerado no dispositivo. É a chave de idempotência do ACK de ingestão.
+  eventId  String           @unique
+  sessionId String
+  session  TelemetrySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  deviceId String
+  device   TelemetryDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  /// Denormalizado do dispositivo: o histórico por funcionário é a consulta
+  /// mais frequente e não deve depender de dois joins.
+  workerId String
+  worker   User             @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  origin   TelemetryOrigin
+
+  /// Sequência contínua dentro da sessão. Junto do eventId, é o que detecta
+  /// lacuna de fila e reenvio embaralhado.
+  sequence   Int
+  /// Quando o aparelho mediu.
+  eventTime  DateTime
+  /// Quando o backend recebeu. A diferença entre os dois é o atraso da fila.
+  receivedAt DateTime
+
+  /// Contexto opcional, de propósito sem chave estrangeira: jornada e tarefa
+  /// não controlam o monitoramento e não podem impedir a telemetria de gravar.
+  journeyId String?
+  taskId    String?
+
+  heartRateBpm        Float?
+  stepDelta           Int?
+  activeEnergyKcal    Float?
+  motionCount         Float?
+  batteryPercent      Float?
+  systolicMmHg        Int?
+  diastolicMmHg       Int?
+  /// Única fonte guardada em coluna: pressão é a métrica com várias origens
+  /// possíveis, e o painel precisa saber se veio de aparelho ou digitação.
+  bloodPressureSource TelemetryMeasurementSource?
+
+  /// Payload normalizado como recebido, para auditoria.
+  payload     Json
+  /// sha256 do payload canônico. É o que separa repetição idêntica (sucesso
+  /// idempotente) de mesmo identificador com conteúdo diferente (conflito).
+  payloadHash String
+
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, sequence])
+  @@index([workerId, eventTime])
+  @@index([sessionId, eventTime])
+  @@index([receivedAt])
+}
+
+/// Último estado promovido por funcionário. Só evento ao vivo chega aqui:
+/// backlog vai para o histórico sem mexer no atual. Ausência é null, nunca
+/// zero, e cada métrica guarda o próprio horário porque elas chegam em
+/// eventos diferentes.
+model TelemetrySnapshot {
+  id        String            @id @default(uuid())
+  workerId  String            @unique
+  worker    User              @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  sessionId String?
+  session   TelemetrySession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  origin    TelemetryOrigin
+
+  lastEventId   String?
+  lastEventTime DateTime
+
+  heartRateBpm        Float?
+  heartRateAt         DateTime?
+  stepsTotal          Int?
+  stepsAt             DateTime?
+  activeEnergyKcal    Float?
+  activeEnergyAt      DateTime?
+  movementPerMinute   Float?
+  movementAt          DateTime?
+  batteryPercent      Float?
+  batteryAt           DateTime?
+  systolicMmHg        Int?
+  diastolicMmHg       Int?
+  bloodPressureSource TelemetryMeasurementSource?
+  bloodPressureAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([origin, lastEventTime])
+  @@index([sessionId])
+}
+
+/// Esforço e desgaste calculados. Guarda a versão da fórmula e as entradas
+/// usadas: sem isso um número experimental vira um número sem defesa.
+model TelemetryAssessment {
+  id        String           @id @default(uuid())
+  workerId  String
+  worker    User             @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   TelemetrySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  origin    TelemetryOrigin
+
+  computedAt  DateTime
+  windowStart DateTime
+  windowEnd   DateTime
+
+  effortPercent Float?
+  wearPercent   Float?
+
+  /// Perfil versionado da fórmula. Experimental até a calibração em hardware.
+  formulaVersion String
+  /// Entradas do cálculo, para reproduzir o número exibido.
+  inputs         Json
+
+  createdAt DateTime @default(now())
+
+  @@index([workerId, computedAt])
+  @@index([sessionId, computedAt])
+}
+
+/// Condição automática detectada pelos limites do perfil. Duração é medida por
+/// timestamps, nunca por quantidade de amostras, porque a fila do relógio varia
+/// e contagem de amostras confundiria intervalo curto com intervalo longo.
+model TelemetryCondition {
+  id        String                   @id @default(uuid())
+  workerId  String
+  worker    User                     @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  sessionId String?
+  session   TelemetrySession?        @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  origin    TelemetryOrigin
+  kind      TelemetryConditionKind
+  status    TelemetryConditionStatus @default(ACTIVE)
+
+  firstSeenAt DateTime
+  lastSeenAt  DateTime
+  /// Preenchido pela banda de histerese, não pela primeira leitura normal.
+  recoveredAt DateTime?
+
+  /// Perfil de limites versionado que abriu a condição.
+  thresholdProfile String
+  observedValue    Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  alert OperationalAlert?
+
+  @@index([workerId, status])
+  @@index([status, lastSeenAt])
+  @@index([sessionId])
+}
+
+/// Triagem humana da condição. É estado separado de propósito: a condição é o
+/// que o sensor viu, o alerta é o que a operação decidiu fazer com aquilo.
+/// Nenhum estado daqui bloqueia o funcionário automaticamente.
+model OperationalAlert {
+  id          String             @id @default(uuid())
+  conditionId String             @unique
+  condition   TelemetryCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  workerId    String
+  worker      User               @relation("alertedWorker", fields: [workerId], references: [id], onDelete: Cascade)
+
+  status OperationalAlertStatus @default(OPEN)
+
+  triagedById String?
+  triagedBy   User?   @relation("triagedAlerts", fields: [triagedById], references: [id], onDelete: SetNull)
+
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  resolutionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([workerId, status])
 }
