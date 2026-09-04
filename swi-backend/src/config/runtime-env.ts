@@ -28,6 +28,71 @@ export interface SmtpEnv {
   readonly from?: string
 }
 
+/**
+ * Retenção da Leitura bruta de telemetria. A janela é política de produto e é
+ * ajustável; o piso não é. Reter menos que 48 horas apagaria Leitura de um dia
+ * que ainda pode receber evento atrasado, e o Resumo daquele dia nasceria de
+ * série incompleta. O piso é o mesmo prazo em que um dia monitorado fecha.
+ */
+export interface TelemetryRetentionEnv {
+  readonly windowMs: number
+  readonly batchSize: number
+}
+
+export const RETENTION_DEFAULT_DAYS = 30
+export const RETENTION_MIN_DAYS = 2
+/** Alguns milhares por lote: transação curta o bastante para não segurar o banco. */
+export const RETENTION_DEFAULT_BATCH = 5_000
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Inteiro a partir de um mínimo, ou problema declarado. Nunca corrige em
+ * silêncio: uma janela errada corrigida para o padrão esconderia a
+ * configuração ruim até alguém ir procurar o dado que sumiu.
+ */
+function parseBoundedInt(
+  raw: string | undefined,
+  name: string,
+  fallback: number,
+  minimum: number,
+  problems: string[],
+): number {
+  if (raw === undefined || raw === '') return fallback
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < minimum) {
+    problems.push(`${name} precisa ser um inteiro de ao menos ${minimum}`)
+    return fallback
+  }
+  return value
+}
+
+/**
+ * Vale em todo ambiente, e não só em produção: retenção apaga dado igual na
+ * máquina de quem desenvolve, e um piso que só valesse em produção deixaria
+ * apagar ali o que ainda não foi resumido.
+ */
+export function parseTelemetryRetention(
+  source: NodeJS.ProcessEnv,
+  problems: string[],
+): TelemetryRetentionEnv {
+  const days = parseBoundedInt(
+    source.TELEMETRY_RETENTION_DAYS,
+    'TELEMETRY_RETENTION_DAYS',
+    RETENTION_DEFAULT_DAYS,
+    RETENTION_MIN_DAYS,
+    problems,
+  )
+  const batchSize = parseBoundedInt(
+    source.TELEMETRY_RETENTION_BATCH_SIZE,
+    'TELEMETRY_RETENTION_BATCH_SIZE',
+    RETENTION_DEFAULT_BATCH,
+    1,
+    problems,
+  )
+  return { windowMs: days * DAY_MS, batchSize }
+}
+
 export interface RuntimeEnv {
   readonly nodeEnv: NodeEnv
   readonly isProduction: boolean
@@ -44,6 +109,7 @@ export interface RuntimeEnv {
   readonly mapboxToken?: string
   readonly weatherCron?: string
   readonly weatherScenario?: string
+  readonly telemetryRetention: TelemetryRetentionEnv
   readonly simPositions: boolean
 }
 
@@ -136,6 +202,8 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
   if (accessKey && !secretKey) problems.push('MINIO_SECRET_KEY é obrigatória quando MINIO_ACCESS_KEY está definida')
   if (secretKey && !accessKey) problems.push('MINIO_ACCESS_KEY é obrigatória quando MINIO_SECRET_KEY está definida')
 
+  const telemetryRetention = parseTelemetryRetention(source, problems)
+
   const smtpPort = Number(source.SMTP_PORT ?? 1025)
   if (!Number.isInteger(smtpPort) || smtpPort <= 0 || smtpPort > 65535) {
     problems.push('SMTP_PORT precisa ser um inteiro entre 1 e 65535')
@@ -174,6 +242,7 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
     mapboxToken: source.MAPBOX_TOKEN,
     weatherCron: source.WEATHER_CRON,
     weatherScenario: source.WEATHER_SCENARIO,
+    telemetryRetention: Object.freeze(telemetryRetention),
     simPositions: source.SIM_POSITIONS === '1',
   })
 }

@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import { parseTelemetryRetention } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
 import {
   BRT_OFFSET_MS,
   EVENT_AGE,
+  monitoredDayOf,
   monitoredDayRange,
   monitoredDayWindow,
 } from '../domain/metric-state'
@@ -34,6 +36,20 @@ export interface SummaryCandidate {
 export interface SummarizeRunResult {
   summarized: number
   failed: number
+}
+
+/**
+ * Quanto tempo uma execução pode gastar apagando. O que sobrar entra na rodada
+ * de amanhã: sem o teto, a primeira execução sobre um histórico grande
+ * seguraria o banco por horas, e o job roda de madrugada sem ninguém olhando.
+ */
+export const RETENTION_BUDGET_MS = 60_000
+
+export interface PurgeRunResult {
+  daysPurged: number
+  samplesDeleted: number
+  assessmentsDeleted: number
+  stoppedByBudget: boolean
 }
 
 /**
@@ -155,6 +171,129 @@ export class TelemetryLifecycleService {
       ORDER BY c."day" ASC
       LIMIT ${MAX_TRIPLES_PER_RUN}
     `)
+  }
+
+  /**
+   * Apaga a Leitura bruta e as avaliações de dias que já têm Resumo da versão
+   * corrente e estão inteiros fora da janela de retenção.
+   *
+   * As duas condições andam juntas, nunca "mais antigo que X" a seco: o gate é
+   * a existência do Resumo. Um dia cujo Resumo é de versão antiga ainda vai ser
+   * recalculado, e apagar a Leitura dele fecharia a porta da correção justo
+   * quando ela é necessária.
+   *
+   * O que esta rotina não toca, em nenhuma condição: condição, alerta
+   * operacional, sessão, snapshot, aparelho e o próprio Resumo. Condição e
+   * alerta são a memória clínica do piloto; sessão, snapshot e aparelho são a
+   * prova de que houve monitoramento.
+   */
+  async purgeRetainedData(now: Date): Promise<PurgeRunResult> {
+    const problems: string[] = []
+    const { windowMs, batchSize } = parseTelemetryRetention(process.env, problems)
+    if (problems.length > 0) {
+      // Mesma regra do contrato de ambiente: nunca corrigir em silêncio. Aqui
+      // é rede de segurança, porque a subida do processo já teria falhado.
+      throw new Error(`Configuração de retenção inválida:\n- ${problems.join('\n- ')}`)
+    }
+
+    // Um dia só sai inteiro da janela quando o dia MONITORADO dele é anterior
+    // ao dia do corte; comparar instante com instante deixaria meio dia dentro
+    // e meio fora, e a Leitura da manhã sumiria antes da Leitura da noite.
+    const cutoffDay = monitoredDayOf(new Date(now.getTime() - windowMs))
+
+    const summaries = await this.prisma.telemetryDailySummary.findMany({
+      where: { summarizerVersion: SUMMARIZER_VERSION, day: { lt: cutoffDay } },
+      select: { workerId: true, day: true, origin: true },
+      orderBy: { day: 'asc' },
+      take: MAX_TRIPLES_PER_RUN,
+    })
+
+    const startedAt = Date.now()
+    const spent = () => Date.now() - startedAt >= RETENTION_BUDGET_MS
+    const result: PurgeRunResult = {
+      daysPurged: 0,
+      samplesDeleted: 0,
+      assessmentsDeleted: 0,
+      stoppedByBudget: false,
+    }
+
+    for (const { workerId, day, origin } of summaries) {
+      if (spent()) {
+        result.stoppedByBudget = true
+        break
+      }
+      const { start, end } = monitoredDayWindow(day)
+      const samples = await this.deleteInBatches('TelemetrySample', 'eventTime', {
+        workerId,
+        origin,
+        start,
+        end,
+        batchSize,
+        spent,
+      })
+      const assessments = await this.deleteInBatches('TelemetryAssessment', 'computedAt', {
+        workerId,
+        origin,
+        start,
+        end,
+        batchSize,
+        spent,
+      })
+      result.samplesDeleted += samples.deleted
+      result.assessmentsDeleted += assessments.deleted
+      result.daysPurged++
+      if (samples.stopped || assessments.stopped) {
+        result.stoppedByBudget = true
+        break
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * Apaga em lotes pelo índice (workerId, instante), repetindo até o lote vir
+   * curto. Cada DELETE é uma instrução só, então é a transação curta que a
+   * decisão pede: uma falha no meio deixa os lotes anteriores gravados e os
+   * seguintes para a próxima execução.
+   *
+   * O subselect com LIMIT existe porque o Prisma não sabe limitar deleteMany, e
+   * apagar um dia inteiro numa tacada seguraria a tabela por tempo demais.
+   */
+  private async deleteInBatches(
+    table: 'TelemetrySample' | 'TelemetryAssessment',
+    timeColumn: 'eventTime' | 'computedAt',
+    scope: {
+      workerId: string
+      origin: TelemetryOrigin
+      start: Date
+      end: Date
+      batchSize: number
+      spent: () => boolean
+    },
+  ): Promise<{ deleted: number; stopped: boolean }> {
+    const target = Prisma.raw(`"${table}"`)
+    const column = Prisma.raw(`"${timeColumn}"`)
+    let deleted = 0
+
+    for (;;) {
+      if (scope.spent()) return { deleted, stopped: true }
+      const count = await this.prisma.$executeRaw(Prisma.sql`
+        DELETE FROM ${target}
+        WHERE "id" IN (
+          SELECT "id" FROM ${target}
+          WHERE "workerId" = ${scope.workerId}
+            AND "origin" = CAST(${scope.origin} AS "TelemetryOrigin")
+            AND ${column} >= ${scope.start}
+            AND ${column} < ${scope.end}
+          ORDER BY ${column}
+          LIMIT ${scope.batchSize}
+        )
+      `)
+      deleted += count
+      // Lote curto é o fim da trilha daquele dia. Página cheia pode ter mais.
+      if (count < scope.batchSize) return { deleted, stopped: false }
+    }
   }
 
   /** Devolve false quando o dia não tinha o que resumir. */

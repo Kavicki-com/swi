@@ -271,6 +271,105 @@ describe('Telemetry lifecycle e2e', () => {
     expect(await prisma.telemetryDailySummary.count({ where: { workerId } })).toBe(0)
   })
 
+  describe('retenção', () => {
+    // Um dia bem além da janela de 30 dias e outro dentro dela, os dois já
+    // fechados. Só o antigo pode perder a Leitura bruta.
+    const antigo = new Date('2026-06-01T00:00:00.000Z')
+    const antigoAt = (clock: string) => new Date(`2026-06-01T${clock}.000Z`)
+
+    beforeAll(async () => {
+      await prisma.telemetrySample.createMany({
+        data: [
+          { ...sampleRow(antigoAt('12:00:00'), { heartRateBpm: 66 }) },
+          { ...sampleRow(antigoAt('12:00:30'), { heartRateBpm: 70 }) },
+        ],
+      })
+      await prisma.telemetryCondition.create({
+        data: {
+          workerId,
+          sessionId,
+          origin: 'REAL',
+          kind: 'HEART_RATE_HIGH',
+          firstSeenAt: antigoAt('12:00:00'),
+          lastSeenAt: antigoAt('12:00:30'),
+          thresholdProfile: 'swi-limites-experimental',
+          observedValue: 70,
+        },
+      })
+      await prisma.telemetrySnapshot.create({
+        data: { workerId, sessionId, origin: 'REAL', lastEventTime: at('13:00:00') },
+      })
+    })
+
+    it('apaga a Leitura do dia antigo e mantém a do dia dentro da janela', async () => {
+      // Primeiro resume os dois dias, senão o antigo não tem Resumo e a
+      // retenção não pode tocá-lo.
+      await lifecycle.summarizeClosedDays(now)
+
+      const result = await lifecycle.purgeRetainedData(now)
+
+      expect(result.samplesDeleted).toBe(2)
+      expect(result.daysPurged).toBe(1)
+      expect(
+        await prisma.telemetrySample.count({
+          where: { workerId, eventTime: { gte: antigoAt('00:00:00'), lt: at('00:00:00') } },
+        }),
+      ).toBe(0)
+      // O dia recente continua inteiro: cinco leituras e três avaliações.
+      expect(await prisma.telemetrySample.count({ where: { workerId } })).toBe(5)
+      expect(await prisma.telemetryAssessment.count({ where: { workerId } })).toBe(3)
+    })
+
+    it('o Resumo do dia antigo sobrevive ao apagar, que é o motivo de tudo', async () => {
+      const summary = await prisma.telemetryDailySummary.findUniqueOrThrow({
+        where: { workerId_day_origin: { workerId, day: antigo, origin: 'REAL' } },
+      })
+
+      expect(summary.heartRateMin).toBe(66)
+      expect(summary.heartRateMax).toBe(70)
+      expect(summary.sampleCount).toBe(2)
+    })
+
+    it('não toca sessão, snapshot nem condição', async () => {
+      // A retenção apaga trilha bruta. Condição é a memória clínica, e sessão e
+      // snapshot são a prova de que houve monitoramento.
+      expect(await prisma.telemetrySession.count({ where: { workerId } })).toBe(1)
+      expect(await prisma.telemetrySnapshot.count({ where: { workerId } })).toBe(1)
+      expect(await prisma.telemetryCondition.count({ where: { workerId } })).toBe(1)
+    })
+
+    it('segunda execução apaga zero e deixa o Resumo idêntico', async () => {
+      const antes = await prisma.telemetryDailySummary.findMany({
+        where: { workerId },
+        orderBy: { day: 'asc' },
+      })
+
+      const result = await lifecycle.purgeRetainedData(now)
+
+      expect(result.samplesDeleted).toBe(0)
+      expect(result.assessmentsDeleted).toBe(0)
+      expect(
+        await prisma.telemetryDailySummary.findMany({ where: { workerId }, orderBy: { day: 'asc' } }),
+      ).toEqual(antes)
+    })
+
+    it('dia sem Resumo nunca perde a Leitura', async () => {
+      // Apaga o Resumo do dia antigo e roda de novo: sem linha, o gate fecha.
+      // É o invariante que impede a retenção de destruir o que ninguém apurou.
+      await prisma.telemetryDailySummary.deleteMany({ where: { workerId, day: antigo } })
+      await prisma.telemetrySample.create({
+        data: sampleRow(antigoAt('12:01:00'), { heartRateBpm: 68 }),
+      })
+
+      const result = await lifecycle.purgeRetainedData(now)
+
+      expect(result.samplesDeleted).toBe(0)
+      expect(
+        await prisma.telemetrySample.count({ where: { workerId, eventTime: antigoAt('12:01:00') } }),
+      ).toBe(1)
+    })
+  })
+
   it('a sessão perdeu as colunas de acumulado, que agora vivem no Resumo', async () => {
     // ADR-0007: as duas colunas saíram por migration nesta entrega. Se elas
     // voltarem, o Resumo passa a ter um concorrente para a mesma verdade.

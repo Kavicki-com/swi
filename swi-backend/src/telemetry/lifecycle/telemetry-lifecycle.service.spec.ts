@@ -1,8 +1,10 @@
 import { Logger } from '@nestjs/common'
+import { RETENTION_DEFAULT_BATCH } from '../../config/runtime-env'
 import type { PrismaService } from '../../prisma/prisma.service'
 import {
   closedDayCutoff,
   MAX_TRIPLES_PER_RUN,
+  RETENTION_BUDGET_MS,
   TelemetryLifecycleService,
 } from './telemetry-lifecycle.service'
 import { SUMMARIZER_VERSION } from './telemetry-summarizer'
@@ -265,6 +267,125 @@ describe('TelemetryLifecycleService.summarizeClosedDays: o que ela carrega e gra
     expect(result.summarized).toBe(0)
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
+  })
+})
+
+describe('TelemetryLifecycleService.purgeRetainedData: só apaga o que já foi resumido', () => {
+  /** Um dublê com tudo que a retenção NÃO pode tocar, para provar que não toca. */
+  const prismaWithNeighbours = () => {
+    const prisma = prismaDouble()
+    prisma.telemetryDailySummary.findMany = jest.fn().mockResolvedValue([])
+    prisma.$executeRaw = jest.fn().mockResolvedValue(0)
+    prisma.telemetryCondition = { deleteMany: jest.fn(), findMany: jest.fn() }
+    prisma.operationalAlert = { deleteMany: jest.fn() }
+    prisma.telemetrySession = { deleteMany: jest.fn(), findMany: jest.fn() }
+    prisma.telemetrySnapshot = { deleteMany: jest.fn() }
+    prisma.telemetryDevice = { deleteMany: jest.fn() }
+    prisma.telemetrySample.deleteMany = jest.fn()
+    prisma.telemetryAssessment.deleteMany = jest.fn()
+    return prisma
+  }
+
+  const summaryRow = (over: Record<string, unknown> = {}) => ({
+    workerId: 'worker-1',
+    day: new Date('2026-07-01T00:00:00.000Z'),
+    origin: 'REAL',
+    ...over,
+  })
+
+  it('procura só dia resumido pela versão corrente e mais velho que a janela', async () => {
+    // As duas condições juntas, nunca "mais antigo que X" a seco: o gate é a
+    // existência do Resumo, e um Resumo de versão velha ainda vai ser
+    // recalculado, então a Leitura dele não pode sumir antes.
+    const prisma = prismaWithNeighbours()
+
+    await service(prisma).purgeRetainedData(NOW)
+
+    expect(prisma.telemetryDailySummary.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          summarizerVersion: SUMMARIZER_VERSION,
+          // 30 dias antes de 2026-09-04T12:00Z é 2026-08-05T12:00Z, cujo dia
+          // monitorado é 2026-08-05: só dias estritamente anteriores a ele
+          // estão inteiros fora da janela.
+          day: { lt: new Date('2026-08-05T00:00:00.000Z') },
+        },
+      }),
+    )
+  })
+
+  it('apaga em lotes dentro da janela do dia, até o lote vir curto', async () => {
+    const prisma = prismaWithNeighbours()
+    prisma.telemetryDailySummary.findMany.mockResolvedValue([summaryRow()])
+    // Dois lotes cheios de leitura e depois um curto; avaliação já vem curta.
+    prisma.$executeRaw
+      .mockResolvedValueOnce(RETENTION_DEFAULT_BATCH)
+      .mockResolvedValueOnce(RETENTION_DEFAULT_BATCH)
+      .mockResolvedValueOnce(7)
+      .mockResolvedValueOnce(3)
+
+    const result = await service(prisma).purgeRetainedData(NOW)
+
+    expect(result.samplesDeleted).toBe(RETENTION_DEFAULT_BATCH * 2 + 7)
+    expect(result.assessmentsDeleted).toBe(3)
+    expect(result.daysPurged).toBe(1)
+  })
+
+  it('nunca toca condição, alerta, sessão, snapshot, aparelho nem o próprio Resumo', async () => {
+    // A retenção apaga trilha bruta. Condição e alerta são a memória clínica do
+    // piloto, e sessão, snapshot e aparelho são prova de que houve
+    // monitoramento: apagá-los junto destruiria a história que o Resumo existe
+    // para preservar.
+    const prisma = prismaWithNeighbours()
+    prisma.telemetryDailySummary.findMany.mockResolvedValue([summaryRow()])
+    prisma.$executeRaw.mockResolvedValue(0)
+
+    await service(prisma).purgeRetainedData(NOW)
+
+    expect(prisma.telemetryCondition.deleteMany).not.toHaveBeenCalled()
+    expect(prisma.operationalAlert.deleteMany).not.toHaveBeenCalled()
+    expect(prisma.telemetrySession.deleteMany).not.toHaveBeenCalled()
+    expect(prisma.telemetrySnapshot.deleteMany).not.toHaveBeenCalled()
+    expect(prisma.telemetryDevice.deleteMany).not.toHaveBeenCalled()
+    expect(prisma.telemetryDailySummary.upsert).not.toHaveBeenCalled()
+  })
+
+  it('origem de demonstração é apagada pela mesma regra, sem exceção', async () => {
+    const prisma = prismaWithNeighbours()
+    prisma.telemetryDailySummary.findMany.mockResolvedValue([summaryRow({ origin: 'DEMO' })])
+    prisma.$executeRaw.mockResolvedValue(0)
+
+    await service(prisma).purgeRetainedData(NOW)
+
+    const values = prisma.$executeRaw.mock.calls[0][0].values
+    expect(values).toContainEqual('DEMO')
+  })
+
+  it('para no orçamento de tempo em vez de varrer a noite inteira', async () => {
+    // Cada lote é uma transação curta e o que sobrar entra na rodada de
+    // amanhã. Sem o orçamento, uma primeira execução sobre anos de histórico
+    // seguraria o banco por horas.
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] })
+    try {
+      const prisma = prismaWithNeighbours()
+      prisma.telemetryDailySummary.findMany.mockResolvedValue([
+        summaryRow({ workerId: 'worker-1' }),
+        summaryRow({ workerId: 'worker-2' }),
+      ])
+      // Cada lote gasta o orçamento inteiro e volta cheio: sem a parada, o
+      // laço seguiria para os lotes seguintes e para o segundo dia.
+      prisma.$executeRaw.mockImplementation(() => {
+        jest.advanceTimersByTime(RETENTION_BUDGET_MS + 1)
+        return Promise.resolve(RETENTION_DEFAULT_BATCH)
+      })
+
+      const result = await service(prisma).purgeRetainedData(NOW)
+
+      expect(result.stoppedByBudget).toBe(true)
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })
 

@@ -39,9 +39,24 @@ export class TelemetryLifecycleJob {
   async run(): Promise<void> {
     const startedAt = Date.now()
     try {
-      const { summarized, failed } = await this.lifecycle.summarizeClosedDays(new Date())
+      // Um instante só para a rodada inteira: com dois relógios, a retenção
+      // mediria a janela contra um instante que a varredura não usou, e a
+      // fronteira do dia poderia cair entre as duas etapas.
+      const now = new Date()
+
+      // A ordem é fixa e é a garantia central do ciclo de vida: resumir, e só
+      // então apagar. Uma exceção na varredura pula a retenção de propósito,
+      // porque não se sabe o que foi resumido nesta noite, e apagar sem saber
+      // é o único erro daqui que não tem volta.
+      const { summarized, failed } = await this.lifecycle.summarizeClosedDays(now)
+      const purge = await this.lifecycle.purgeRetainedData(now)
+
       this.logger.log(
-        `Ciclo de vida: ${summarized} dias resumidos, ${failed} falharam, em ${Date.now() - startedAt} ms`,
+        `Ciclo de vida: ${summarized} dias resumidos, ${failed} falharam, ` +
+          `${purge.daysPurged} dias limpos, ${purge.samplesDeleted} leituras e ` +
+          `${purge.assessmentsDeleted} avaliações apagadas, ` +
+          `${purge.stoppedByBudget ? 'parou no orçamento de tempo' : 'orçamento de tempo folgado'}, ` +
+          `em ${Date.now() - startedAt} ms`,
       )
     } catch (error) {
       // Melhor esforço, como o alerta de clima: o job roda sem ninguém olhando,
