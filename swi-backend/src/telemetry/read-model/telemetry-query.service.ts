@@ -474,7 +474,14 @@ export class TelemetryQueryService {
       })),
       // Página cheia é o único sinal de que pode haver mais. Página curta é o
       // fim da trilha, e oferecer cursor ali faria o cliente pedir o vazio.
-      nextCursor: samples.length === limit ? samples[samples.length - 1].sequence : null,
+      // Página vazia é sempre fim de trilha: sem a guarda de tamanho, um limite
+      // zero faria "cheia" e "vazia" coincidirem e a busca pela última linha
+      // derrubaria a rota. O DTO recusa esse limite antes de chegar aqui, mas
+      // o serviço é público e não pode depender só de quem o chama hoje.
+      nextCursor:
+        samples.length > 0 && samples.length === limit
+          ? samples[samples.length - 1].sequence
+          : null,
     }
   }
 

@@ -523,6 +523,20 @@ describe('TelemetryQueryService.sessionHistory', () => {
     expect(page.nextCursor).toBeNull()
   })
 
+  it('página vazia devolve cursor nulo, e não estoura procurando a última linha', async () => {
+    // Com limite zero, página cheia e página vazia teriam o mesmo tamanho, e
+    // ler a última linha de uma lista vazia derrubaria a rota. Quem recusa
+    // limite zero é o DTO; esta guarda protege os outros chamadores do serviço.
+    const prisma = prismaDouble()
+    prisma.telemetrySession.findUnique.mockResolvedValue(sessionRow())
+    prisma.telemetrySample.findMany.mockResolvedValue([])
+
+    const page = await service(prisma).sessionHistory(ADMIN, 'session-1', { limit: 0 })
+
+    expect(page.samples).toEqual([])
+    expect(page.nextCursor).toBeNull()
+  })
+
   it('o funcionário audita a própria sessão', async () => {
     const prisma = prismaDouble()
     prisma.telemetrySession.findUnique.mockResolvedValue(sessionRow())
