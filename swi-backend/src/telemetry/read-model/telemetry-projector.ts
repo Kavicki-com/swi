@@ -480,6 +480,18 @@ export interface AggregateMetric<T> {
 export interface AlertCount {
   /** Funcionários, e não quantidade de registros. */
   workers: number
+  /**
+   * De quantos funcionários a contagem fala. É o denominador que os outros
+   * cards carregam em `coverage`, e sem ele "0 alertas" entre ninguém tinha a
+   * mesma cara de "0 alertas" entre doze pessoas monitoradas: ausência de
+   * monitoramento lida como notícia boa.
+   *
+   * Não é um `Coverage` como os irmãos de propósito. Ali `evaluated` conta quem
+   * tem leitura atual, porque uma média só admite contribuinte atual. Aqui todo
+   * funcionário da população tem estado de condição conhecido, então `evaluated`
+   * seria sempre igual a `total` e o par não diria nada.
+   */
+  total: number
   caption: string
 }
 
@@ -706,9 +718,15 @@ export function projectAdminSummary(
     ),
     // Funcionários únicos, não registros: a entrada é uma linha por
     // funcionário, então duas condições da mesma pessoa contam uma vez só.
+    //
+    // Sem população, a legenda vira a de sem cobertura, como nos outros cards.
+    // Zero alerta entre zero pessoas é verdade literal e mentira de leitura: o
+    // painel estaria dizendo que ninguém corre risco quando o que houve foi
+    // ninguém ser monitorado.
     urgentAlerts: {
       workers: workers.filter((w) => hasAny(w, URGENT_CONDITION_KINDS)).length,
-      caption: PANEL_CAPTIONS.urgentAlerts,
+      total: workers.length,
+      caption: workers.length === 0 ? PANEL_CAPTIONS.noCoverage : PANEL_CAPTIONS.urgentAlerts,
     },
   }
 }

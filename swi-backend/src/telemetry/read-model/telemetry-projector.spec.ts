@@ -614,6 +614,11 @@ describe('projectAdminSummary: médias excluem indisponíveis e devolvem cobertu
     expect(summary.movements.value).toBeNull()
     expect(summary.vitalSigns.value).toBeNull()
     expect(summary.heartRateAverage.coverage).toEqual({ evaluated: 0, total: 0 })
+    // O contador de alerta era o único card sem denominador: sem população, ele
+    // afirmava zero com a mesma confiança de quem olhou doze pessoas. Zero
+    // alerta entre ninguém não é notícia boa, é ausência de monitoramento.
+    expect(summary.urgentAlerts.total).toBe(0)
+    expect(summary.urgentAlerts.caption).toBe(PANEL_CAPTIONS.noCoverage)
   })
 })
 
@@ -645,6 +650,9 @@ describe('projectAdminSummary: sinais vitais e alertas urgentes', () => {
     )
 
     expect(summary.urgentAlerts.workers).toBe(2)
+    // Com população, zero é resposta honesta, e o denominador diz de quantos.
+    expect(summary.urgentAlerts.total).toBe(3)
+    expect(summary.urgentAlerts.caption).toBe(PANEL_CAPTIONS.urgentAlerts)
   })
 
   it('revisão de pressão e alerta de aparelho não são urgência automática', () => {
