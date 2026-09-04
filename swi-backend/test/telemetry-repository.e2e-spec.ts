@@ -269,14 +269,6 @@ describe('Telemetry repository e2e', () => {
     expect(again.outcome).toBe('DUPLICATE')
   })
 
-  it('sessão sem amostra de passos não nasce com zero passos', async () => {
-    const session = await prisma.telemetrySession.findUniqueOrThrow({
-      where: { id: realSessionId },
-    })
-    expect(session.stepsTotal).toBeNull()
-    expect(session.activeEnergyKcalTotal).toBeNull()
-  })
-
   it('recusa evento DEMO em sessão REAL', async () => {
     await expect(repo.saveEvent(event({ origin: 'DEMO' }), now)).rejects.toBeInstanceOf(
       TelemetryOriginMismatchError,

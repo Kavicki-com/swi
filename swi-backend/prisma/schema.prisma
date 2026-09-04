@@ -71,6 +71,7 @@ model User {
   telemetrySnapshot    TelemetrySnapshot?
   telemetryAssessments TelemetryAssessment[]
   telemetryConditions  TelemetryCondition[]
+  telemetrySummaries   TelemetryDailySummary[]
   operationalAlerts    OperationalAlert[]    @relation("alertedWorker")
   triagedAlerts        OperationalAlert[]    @relation("triagedAlerts")
 }
@@ -541,13 +542,6 @@ model TelemetrySession {
   interruptedAt DateTime?
   endedAt       DateTime?
 
-  /// Acumuladores do dia monitorado. Escritos pela projeção do read model, não
-  /// pela ingestão: existem já na migration do piloto para não exigir um
-  /// segundo ALTER TABLE quando o projetor nascer. Nullable de propósito: uma
-  /// sessão sem amostra de passos não tem "0 passos", tem passos desconhecidos.
-  stepsTotal            Int?
-  activeEnergyKcalTotal Float?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -735,4 +729,70 @@ model OperationalAlert {
 
   @@index([status, createdAt])
   @@index([workerId, status])
+}
+
+/// Resumo do dia monitorado: uma linha por funcionário, dia e origem.
+///
+/// É o que permite apagar a Leitura bruta sem perder a história do piloto. O
+/// dia é data de calendário, sem hora nem fuso, para que a chave não dependa de
+/// conversão: quem traduz instante em dia é o domínio da telemetria, uma vez.
+///
+/// Toda estatística é anulável porque métrica ausente é desconhecida, nunca
+/// zero. A exceção é a contagem de leituras, que existe sempre: a linha só é
+/// gravada quando houve o que resumir.
+model TelemetryDailySummary {
+  id       String          @id @default(uuid())
+  workerId String
+  worker   User            @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  /// Dia civil em Brasília, como data pura.
+  day      DateTime        @db.Date
+  origin   TelemetryOrigin
+
+  heartRateMin   Float?
+  heartRateMax   Float?
+  heartRateAvg   Float?
+  heartRateCount Int?
+  /// Soma dos intervalos entre leituras consecutivas de BPM, sem as lacunas.
+  heartRateCoveredMs Int?
+
+  stepsTotal Int?
+  stepsCount Int?
+
+  activeEnergyKcalTotal Float?
+  activeEnergyCount     Int?
+
+  effortMax       Float?
+  effortAvg       Float?
+  effortCount     Int?
+  effortAbove80Ms Int?
+  wearMax         Float?
+  wearAvg         Float?
+  wearCount       Int?
+  wearAbove80Ms   Int?
+
+  bloodPressureCount      Int?
+  lastSystolicMmHg        Int?
+  lastDiastolicMmHg       Int?
+  lastBloodPressureSource TelemetryMeasurementSource?
+  lastBloodPressureAt     DateTime?
+
+  batteryMin Float?
+
+  /// Cobertura do dia: quantas leituras, quantas sessões tocaram o dia, a
+  /// primeira e a última, e quanto tempo elas de fato cobrem.
+  sampleCount   Int
+  sessionCount  Int?
+  firstSampleAt DateTime?
+  lastSampleAt  DateTime?
+  coveredMs     Int?
+
+  /// Rastro do cálculo, para que um recálculo seja auditável.
+  summarizerVersion String
+  computedAt        DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workerId, day, origin])
+  @@index([day])
 }
