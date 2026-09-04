@@ -46,8 +46,12 @@ export const EVENT_AGE = {
 /**
  * BRT é UTC-3 fixo (o Brasil aboliu o horário de verão em 2019). Mesma conta
  * que reports.service.ts faz para formatar data, e sem depender de ICU.
+ *
+ * Exportado porque a varredura do ciclo de vida precisa da mesma conta dentro
+ * do SQL, ao agrupar leituras por dia. É o deslocamento, nunca a regra: quem
+ * traduz instante em dia continua sendo monitoredDayOf, aqui.
  */
-const BRT_OFFSET_MS = -3 * HOUR
+export const BRT_OFFSET_MS = -3 * HOUR
 
 /**
  * O dia monitorado é o dia civil em BRT, não as últimas 24 horas: "passos
@@ -65,9 +69,32 @@ const BRT_OFFSET_MS = -3 * HOUR
  * mudar isso é decisão de produto, não de código.
  */
 export function monitoredDayRange(now: Date): { start: Date; end: Date } {
-  const local = new Date(now.getTime() + BRT_OFFSET_MS)
-  const midnightLocal = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
-  const start = new Date(midnightLocal - BRT_OFFSET_MS)
+  return monitoredDayWindow(monitoredDayOf(now))
+}
+
+/**
+ * O dia monitorado a que um instante pertence, como data pura em meia-noite
+ * UTC. É essa data que vira a chave da linha do Resumo do dia: guardá-la com
+ * hora faria a chave depender de conversão, e duas linhas do mesmo dia
+ * poderiam coexistir sem que o índice único percebesse.
+ */
+export function monitoredDayOf(instant: Date): Date {
+  const local = new Date(instant.getTime() + BRT_OFFSET_MS)
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()))
+}
+
+/**
+ * A janela UTC de um dia monitorado já nomeado. O ciclo de vida resume um dia
+ * que passou, então ele parte do dia, e não de "agora"; as duas portas devolvem
+ * a mesma fronteira porque são a mesma conta.
+ */
+export function monitoredDayWindow(day: Date): { start: Date; end: Date } {
+  // A porta recebe o dia como o banco o guarda. Um instante qualquer daria uma
+  // janela deslocada sem nenhum erro, e o Resumo nasceria do dia errado.
+  if (day.getTime() % (24 * HOUR) !== 0) {
+    throw new Error('monitoredDayWindow espera uma data pura, em meia-noite UTC')
+  }
+  const start = new Date(day.getTime() - BRT_OFFSET_MS)
   return { start, end: new Date(start.getTime() + 24 * HOUR) }
 }
 

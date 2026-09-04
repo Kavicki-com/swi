@@ -8,7 +8,9 @@ import {
   isBacklog,
   METRICS,
   metricState,
+  monitoredDayOf,
   monitoredDayRange,
+  monitoredDayWindow,
   qualityAt,
   assertEventTimeUsable,
   assertMeasuresSomething,
@@ -191,6 +193,40 @@ describe('dia monitorado: o dia civil em Brasília, não as últimas 24 horas', 
     // Os dias se encostam sem lacuna nem sobreposição: o fim de um é o início
     // do seguinte, e quem consulta usa o fim como limite exclusivo.
     expect(beforeMidnight.end).toEqual(atMidnight.start)
+  })
+
+  it('a janela de um dia nomeado é a mesma que a do instante dentro dele', () => {
+    // O ciclo de vida resume um dia que já passou, então ele nomeia o dia em
+    // vez de partir de "agora". As duas portas precisam devolver a mesma
+    // fronteira: duas contas de meia-noite fariam o Resumo do dia discordar do
+    // painel sobre a mesma leitura.
+    const day = new Date('2026-09-02T00:00:00.000Z')
+
+    const window = monitoredDayWindow(day)
+
+    expect(window.start.toISOString()).toBe('2026-09-02T03:00:00.000Z')
+    expect(window.end.toISOString()).toBe('2026-09-03T03:00:00.000Z')
+    expect(window).toEqual(monitoredDayRange(NOW))
+  })
+
+  it('a janela recusa um instante que não seja data pura', () => {
+    // A porta recebe o dia como o banco o guarda, em meia-noite UTC. Um
+    // instante qualquer produziria uma janela deslocada sem nenhum erro, e o
+    // Resumo nasceria do dia errado. Melhor recusar do que calcular torto.
+    expect(() => monitoredDayWindow(new Date('2026-09-02T12:00:00.000Z'))).toThrow(
+      /data pura/,
+    )
+  })
+
+  it('o dia de um instante é a data civil em Brasília, como data pura', () => {
+    // 02:59:59.999Z ainda é 23:59 do dia anterior em Brasília, e é essa data
+    // que vira a chave da linha do Resumo.
+    expect(monitoredDayOf(new Date('2026-09-02T02:59:59.999Z')).toISOString()).toBe(
+      '2026-09-01T00:00:00.000Z',
+    )
+    expect(monitoredDayOf(new Date('2026-09-02T03:00:00.000Z')).toISOString()).toBe(
+      '2026-09-02T00:00:00.000Z',
+    )
   })
 })
 
