@@ -262,8 +262,13 @@ export class TelemetryQueryService {
         // A primeira amostra de energia do dia separa começo de lacuna.
         _min: { eventTime: true },
       }),
+      // Sem recorte por dia monitorado: a avaliação já tem prazo de atualidade
+      // próprio, e cortar também pelo calendário fazia esforço e desgaste
+      // sumirem nos primeiros minutos depois da meia-noite de Brasília, todo
+      // dia. A mais recente pelo índice (workerId, computedAt) basta; quem diz
+      // se ela ainda descreve o agora é o domínio, na projeção.
       this.prisma.telemetryAssessment.findMany({
-        where: { ...scope, computedAt: day },
+        where: scope,
         select: ASSESSMENT_FIELDS,
         orderBy: { computedAt: 'desc' },
         take: 1,
@@ -321,7 +326,7 @@ export class TelemetryQueryService {
         _sum: { stepDelta: true },
         _max: { eventTime: true },
       }),
-      this.latestAssessmentPerWorker(workerIds, day),
+      this.latestAssessmentPerWorker(workerIds),
       this.prisma.telemetryCondition.findMany({
         where: { ...scope, status: 'ACTIVE' },
         select: { workerId: true, kind: true },
@@ -359,18 +364,23 @@ export class TelemetryQueryService {
   }
 
   /**
-   * A última avaliação do dia de cada funcionário, escolhida pelo banco.
+   * A última avaliação de cada funcionário, escolhida pelo banco.
    *
-   * SQL cru de propósito. Trazer todas as avaliações do dia para ficar com uma
-   * por pessoa custaria milhares de linhas por refresh do painel, e o
-   * `distinct` do Prisma não resolve: ele filtra em memória depois de buscar
-   * tudo. `DISTINCT ON` com a ordenação certa devolve uma linha por
-   * funcionário direto do Postgres. A origem vai por parâmetro, com o cast que
-   * o enum exige; a tabela leva o nome do model porque nenhum deles usa @@map.
+   * SQL cru de propósito. Trazer todas as avaliações para ficar com uma por
+   * pessoa custaria milhares de linhas por refresh do painel, e o `distinct` do
+   * Prisma não resolve: ele filtra em memória depois de buscar tudo.
+   * `DISTINCT ON` com a ordenação certa devolve uma linha por funcionário
+   * direto do Postgres. A origem vai por parâmetro, com o cast que o enum
+   * exige; a tabela leva o nome do model porque nenhum deles usa @@map.
+   *
+   * Sem recorte por dia monitorado: esforço e desgaste já têm prazo de
+   * atualidade próprio, e cortar também pelo calendário zerava a cobertura do
+   * painel nos primeiros minutos depois da meia-noite de Brasília. A última
+   * linha de cada funcionário sai pelo índice (workerId, computedAt), então a
+   * busca continua barata sem o limite inferior.
    */
   private latestAssessmentPerWorker(
     workerIds: string[],
-    day: { gte: Date; lt: Date },
   ): Promise<(AssessmentRow & { workerId: string })[]> {
     const query = Prisma.sql`
       SELECT DISTINCT ON ("workerId")
@@ -378,8 +388,6 @@ export class TelemetryQueryService {
       FROM "TelemetryAssessment"
       WHERE "workerId" IN (${Prisma.join(workerIds)})
         AND "origin" = CAST(${'REAL'} AS "TelemetryOrigin")
-        AND "computedAt" >= ${day.gte}
-        AND "computedAt" < ${day.lt}
       ORDER BY "workerId", "computedAt" DESC
     `
     return this.prisma.$queryRaw(query)

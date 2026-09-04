@@ -214,6 +214,33 @@ describe('TelemetryQueryService.currentForWorker', () => {
     expect(result.metrics.effort.value).toBe(55)
     expect(result.metrics.wear.value).toBe(40)
   })
+
+  it('avaliação de segundos atrás não some na virada do dia monitorado', async () => {
+    // 03:00:30Z é 00:00:30 em Brasília. Uma avaliação de 40 segundos atrás foi
+    // calculada às 23:59:50, ou seja, no dia monitorado que acabou de terminar.
+    // Recortar a busca por dia a descartaria, e esforço e desgaste sumiriam por
+    // alguns minutos todo dia, na virada. Quem decide se a avaliação ainda vale
+    // é o prazo de atualidade do domínio, não o calendário.
+    const now = new Date('2026-09-04T03:00:30.000Z')
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
+    prisma.telemetryAssessment.findMany.mockResolvedValue([
+      {
+        computedAt: new Date('2026-09-04T02:59:50.000Z'),
+        effortPercent: 55,
+        wearPercent: 40,
+        formulaVersion: 'swi-fatigue-experimental',
+      },
+    ])
+
+    const result = await service(prisma).currentForWorker('worker-1', now)
+
+    expect(prisma.telemetryAssessment.findMany.mock.calls[0][0].where.computedAt).toBeUndefined()
+    expect(result.metrics.effort.quality).toBe('CURRENT')
+    expect(result.metrics.effort.value).toBe(55)
+    expect(result.metrics.wear.value).toBe(40)
+  })
 })
 
 describe('TelemetryQueryService.currentForAdmin', () => {
@@ -339,6 +366,21 @@ describe('TelemetryQueryService.adminSummary', () => {
     expect(query.values).toEqual(expect.arrayContaining(['worker-1', 'worker-2']))
     expect(summary.wearRate.value).toBe(35)
     expect(summary.wearRate.coverage).toEqual({ evaluated: 1, total: 2 })
+  })
+
+  it('a última avaliação do painel não é recortada pelo dia monitorado', async () => {
+    // Mesmo motivo do caso da rota do funcionário: na virada do dia, o recorte
+    // por dia zeraria a cobertura de desgaste do painel inteiro por alguns
+    // minutos. A escolha da linha continua sendo do banco, pela mais recente.
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    population(prisma, ['worker-1'])
+
+    await service(prisma).adminSummary(ADMIN, NOW)
+
+    const query = prisma.$queryRaw.mock.calls[0][0]
+    expect(query.sql).not.toMatch(/"computedAt" >=/)
+    expect(query.sql).not.toMatch(/"computedAt" </)
   })
 
   it('soma vazia do banco não vira zero passo', async () => {
