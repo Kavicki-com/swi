@@ -40,28 +40,10 @@ export const ENERGY_RATE_MIN_COVERAGE_MS = 5 * MINUTE
  */
 export const MOVEMENT_WINDOW_MS = 15_000
 
-/**
- * BRT é UTC-3 fixo (o Brasil aboliu o horário de verão em 2019). Mesma conta
- * que reports.service.ts faz para formatar data, e sem depender de ICU.
- */
-const BRT_OFFSET_MS = -3 * HOUR
-
-/**
- * O dia monitorado é o dia civil em BRT, não as últimas 24 horas: "passos
- * acumulados no dia monitorado" é o que a decisão congelada promete ao cliente,
- * e uma janela deslizante faria o total encolher sozinho durante o turno.
- *
- * Consequência conhecida: um turno que cruza a meia-noite reinicia o acumulado.
- * A janela de kcal/h atravessa a virada, mas a distinção entre começo e lacuna
- * olha só o dia, então uma lacuna nos primeiros minutos do dia lê como começo.
- * É o que a decisão descreve; mudar isso é decisão de produto, não de código.
- */
-export function monitoredDayRange(now: Date): { start: Date; end: Date } {
-  const local = new Date(now.getTime() + BRT_OFFSET_MS)
-  const midnightLocal = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
-  const start = new Date(midnightLocal - BRT_OFFSET_MS)
-  return { start, end: new Date(start.getTime() + 24 * HOUR) }
-}
+// O dia monitorado (dia civil em BRT) não é definido aqui: a regra mora no
+// domínio, em metric-state.ts, e é o serviço de consulta que a aplica ao
+// recortar o dia. A projeção só herda uma consequência dela: `earliestAt` é
+// do dia, então uma lacuna nos primeiros minutos do dia lê como começo.
 
 // ---------------------------------------------------------------------------
 // Entrada da projeção

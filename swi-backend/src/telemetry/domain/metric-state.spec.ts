@@ -8,6 +8,7 @@ import {
   isBacklog,
   METRICS,
   metricState,
+  monitoredDayRange,
   qualityAt,
   assertEventTimeUsable,
   assertMeasuresSomething,
@@ -168,6 +169,28 @@ describe('idade do evento: ao vivo, backlog e histórico', () => {
     expect(classifyEventAge(hoursAgo(48), NOW)).toBe('BACKLOG')
     expect(classifyEventAge(hoursAgo(48.01), NOW)).toBe('HISTORICAL')
     expect(isBacklog(hoursAgo(49), NOW)).toBe(true)
+  })
+})
+
+describe('dia monitorado: o dia civil em Brasília, não as últimas 24 horas', () => {
+  it('12:00Z é 09:00 em Brasília: o dia começou às 03:00Z e termina às 03:00Z seguintes', () => {
+    const { start, end } = monitoredDayRange(NOW)
+
+    expect(start.toISOString()).toBe('2026-09-02T03:00:00.000Z')
+    expect(end.toISOString()).toBe('2026-09-03T03:00:00.000Z')
+  })
+
+  it('a fronteira é a meia-noite de Brasília: 02:59:59.999Z ainda é a véspera, 03:00Z já é o dia novo', () => {
+    const beforeMidnight = monitoredDayRange(new Date('2026-09-02T02:59:59.999Z'))
+    const atMidnight = monitoredDayRange(new Date('2026-09-02T03:00:00.000Z'))
+
+    expect(beforeMidnight.start.toISOString()).toBe('2026-09-01T03:00:00.000Z')
+    expect(beforeMidnight.end.toISOString()).toBe('2026-09-02T03:00:00.000Z')
+    expect(atMidnight.start.toISOString()).toBe('2026-09-02T03:00:00.000Z')
+    expect(atMidnight.end.toISOString()).toBe('2026-09-03T03:00:00.000Z')
+    // Os dias se encostam sem lacuna nem sobreposição: o fim de um é o início
+    // do seguinte, e quem consulta usa o fim como limite exclusivo.
+    expect(beforeMidnight.end).toEqual(atMidnight.start)
   })
 })
 

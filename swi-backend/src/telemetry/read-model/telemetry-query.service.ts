@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { Prisma, type TelemetrySessionStatus } from '@prisma/client'
 import type { JwtUser } from '../../auth/current-user.decorator'
 import { PrismaService } from '../../prisma/prisma.service'
+import { monitoredDayRange } from '../domain/metric-state'
 import type {
   ConditionKind,
   MeasurementSource,
@@ -10,7 +11,6 @@ import type {
 } from '../domain/telemetry.types'
 import {
   ENERGY_RATE_WINDOW_MS,
-  monitoredDayRange,
   projectAdminSummary,
   projectAggregateWorker,
   projectWorker,

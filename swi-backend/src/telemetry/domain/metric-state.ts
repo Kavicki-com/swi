@@ -19,7 +19,8 @@ import type {
 } from './telemetry.types'
 
 // Funções puras de validade. Todos os limites de atualidade do piloto moram
-// aqui: nenhuma tela, projeção ou agregado recalcula os próprios prazos.
+// aqui, e o dia monitorado também: nenhuma tela, projeção, agregado ou job
+// recalcula os próprios prazos nem as próprias fronteiras de dia.
 // "now" entra por parâmetro para tornar cada função determinística.
 
 const MINUTE = 60_000
@@ -41,6 +42,34 @@ export const EVENT_AGE = {
   /** Até aqui é backlog: entra no histórico sem tocar o atual. Depois é histórico. */
   backlogMs: 48 * HOUR,
 } as const
+
+/**
+ * BRT é UTC-3 fixo (o Brasil aboliu o horário de verão em 2019). Mesma conta
+ * que reports.service.ts faz para formatar data, e sem depender de ICU.
+ */
+const BRT_OFFSET_MS = -3 * HOUR
+
+/**
+ * O dia monitorado é o dia civil em BRT, não as últimas 24 horas: "passos
+ * acumulados no dia monitorado" é o que a decisão congelada promete ao cliente,
+ * e uma janela deslizante faria o total encolher sozinho durante o turno.
+ *
+ * A regra mora no domínio porque tem mais de um dono: o read model a usa para
+ * recortar o dia do acumulado, e o ciclo de vida do dado (Resumo do dia e
+ * retenção) precisa da mesma fronteira para saber que dia resumir e quando
+ * ele fecha. Uma segunda conta de meia-noite, em qualquer um deles, faria o
+ * Resumo do dia discordar do painel.
+ *
+ * Consequência conhecida: um turno que cruza a meia-noite pertence a dois dias
+ * monitorados, e o acumulado reinicia na virada. É o que a decisão descreve;
+ * mudar isso é decisão de produto, não de código.
+ */
+export function monitoredDayRange(now: Date): { start: Date; end: Date } {
+  const local = new Date(now.getTime() + BRT_OFFSET_MS)
+  const midnightLocal = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
+  const start = new Date(midnightLocal - BRT_OFFSET_MS)
+  return { start, end: new Date(start.getTime() + 24 * HOUR) }
+}
 
 interface MetricSpec {
   unit: string

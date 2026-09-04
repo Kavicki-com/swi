@@ -4,7 +4,6 @@ import {
   ENERGY_RATE_WINDOW_MS,
   MOVEMENT_WINDOW_MS,
   PANEL_CAPTIONS,
-  monitoredDayRange,
   projectAdminSummary,
   projectAggregateWorker,
   projectWorker,
@@ -276,14 +275,6 @@ describe('projectWorker: passos são o acumulado do dia monitorado', () => {
     expect(projected.metrics.steps.value).toBe(4_200)
     expect(projected.metrics.steps.quality).toBe('UNAVAILABLE')
     expect(projected.metrics.steps.measuredAt).toBe(hoursAgo(2))
-  })
-
-  it('o dia monitorado é o dia civil em BRT, não as últimas 24 horas', () => {
-    // 12:00Z é 09:00 BRT: o dia começou às 03:00Z e termina às 03:00Z seguintes.
-    const { start, end } = monitoredDayRange(NOW)
-
-    expect(start.toISOString()).toBe('2026-09-03T03:00:00.000Z')
-    expect(end.toISOString()).toBe('2026-09-04T03:00:00.000Z')
   })
 })
 
