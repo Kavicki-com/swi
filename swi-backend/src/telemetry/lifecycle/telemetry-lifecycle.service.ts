@@ -8,7 +8,7 @@ import {
   monitoredDayWindow,
 } from '../domain/metric-state'
 import type { TelemetryOrigin } from '../domain/telemetry.types'
-import { summarizeDay, type DailySummary } from './telemetry-summarizer'
+import { summarizeDay, SUMMARIZER_VERSION } from './telemetry-summarizer'
 
 // Serviço do ciclo de vida do dado de telemetria. Ele decide QUAIS dias resumir
 // e fala com o banco; a conta é do resumidor, que é puro. O job só delega, e
@@ -55,11 +55,22 @@ export function closedDayCutoff(now: Date): Date {
  */
 const DAY_OFFSET_INTERVAL = `${BRT_OFFSET_MS} milliseconds`
 
+/**
+ * O contrato entre a linha do banco e o resumidor. Um campo esquecido aqui
+ * vira coluna nula no Resumo, indistinguível de "ninguém mediu", e o erro só
+ * aparece quando alguém for ler o relatório. O compilador cobre a omissão
+ * porque SummarizerSample exige todos.
+ */
 const SAMPLE_FIELDS = {
   eventTime: true,
   sessionId: true,
   heartRateBpm: true,
   stepDelta: true,
+  activeEnergyKcal: true,
+  batteryPercent: true,
+  systolicMmHg: true,
+  diastolicMmHg: true,
+  bloodPressureSource: true,
 } as const
 
 const ASSESSMENT_FIELDS = {
@@ -109,6 +120,13 @@ export class TelemetryLifecycleService {
    * varrer a tabela de leituras inteira a cada execução. A exclusão por
    * NOT EXISTS é o que faz a rodada avançar: sem ela os mesmos dias voltariam
    * para sempre, porque a Leitura só some na retenção.
+   *
+   * A versão do resumidor entra na exclusão: subir a conta recandidata os dias
+   * que ainda têm Leitura bruta, um teto por noite, e o upsert sobrescreve
+   * pela mesma chave. Sem isso, mudar a conta não recalcularia nada e o painel
+   * mostraria linhas vizinhas produzidas por regras diferentes. O alcance é o
+   * da retenção: um dia cuja Leitura já foi apagada não tem de onde ser
+   * recalculado, e por isso a retenção só apaga o que a versão atual resumiu.
    */
   private async findCandidates(cutoff: Date): Promise<SummaryCandidate[]> {
     return this.prisma.$queryRaw<SummaryCandidate[]>(Prisma.sql`
@@ -132,6 +150,7 @@ export class TelemetryLifecycleService {
         WHERE r."workerId" = c."workerId"
           AND r."origin" = c."origin"
           AND r."day" = c."day"
+          AND r."summarizerVersion" = ${SUMMARIZER_VERSION}
       )
       ORDER BY c."day" ASC
       LIMIT ${MAX_TRIPLES_PER_RUN}
@@ -169,40 +188,18 @@ export class TelemetryLifecycleService {
       return false
     }
 
-    const data = toRow(summary)
     // Upsert pela tripla: recalcular sobrescreve, e é isso que torna o Resumo
     // recomputável depois de a Leitura bruta ter sido apagada.
+    //
+    // O Resumo entra direto, sem adaptador: o tipo do resumidor e as colunas
+    // da tabela têm os mesmos nomes de propósito, e é o tipo de entrada do
+    // Prisma que faz o contrato valer nos dois sentidos, coluna esquecida no
+    // resumidor e campo que a tabela não tem.
     await this.prisma.telemetryDailySummary.upsert({
       where: { workerId_day_origin: { workerId, day, origin } },
-      create: data,
-      update: data,
+      create: summary,
+      update: summary,
     })
     return true
-  }
-}
-
-/**
- * A linha como o banco a recebe. As colunas que esta fatia ainda não calcula
- * ficam de fora, e não zeradas: elas nascem nulas, que é o que "ninguém mediu"
- * quer dizer, e a fatia seguinte as preenche.
- */
-function toRow(summary: DailySummary) {
-  return {
-    workerId: summary.workerId,
-    day: summary.day,
-    origin: summary.origin,
-    heartRateMin: summary.heartRateMin,
-    heartRateMax: summary.heartRateMax,
-    heartRateAvg: summary.heartRateAvg,
-    heartRateCount: summary.heartRateCount,
-    heartRateCoveredMs: summary.heartRateCoveredMs,
-    stepsTotal: summary.stepsTotal,
-    stepsCount: summary.stepsCount,
-    sampleCount: summary.sampleCount,
-    firstSampleAt: summary.firstSampleAt,
-    lastSampleAt: summary.lastSampleAt,
-    coveredMs: summary.coveredMs,
-    summarizerVersion: summary.summarizerVersion,
-    computedAt: summary.computedAt,
   }
 }

@@ -26,7 +26,18 @@ describe('Telemetry lifecycle e2e', () => {
   const at = (clock: string) => new Date(`2026-09-01T${clock}.000Z`)
 
   let sequence = 0
-  const sampleRow = (eventTime: Date, measures: { heartRateBpm?: number; stepDelta?: number }) => ({
+  const sampleRow = (
+    eventTime: Date,
+    measures: {
+      heartRateBpm?: number
+      stepDelta?: number
+      activeEnergyKcal?: number
+      batteryPercent?: number
+      systolicMmHg?: number
+      diastolicMmHg?: number
+      bloodPressureSource?: 'EXTERNAL_CUFF'
+    },
+  ) => ({
     eventId: randomUUID(),
     sessionId,
     deviceId,
@@ -37,6 +48,11 @@ describe('Telemetry lifecycle e2e', () => {
     receivedAt: eventTime,
     heartRateBpm: measures.heartRateBpm ?? null,
     stepDelta: measures.stepDelta ?? null,
+    activeEnergyKcal: measures.activeEnergyKcal ?? null,
+    batteryPercent: measures.batteryPercent ?? null,
+    systolicMmHg: measures.systolicMmHg ?? null,
+    diastolicMmHg: measures.diastolicMmHg ?? null,
+    bloodPressureSource: measures.bloodPressureSource ?? null,
     payload: {},
     payloadHash: `hash-${randomUUID()}`,
   })
@@ -72,10 +88,60 @@ describe('Telemetry lifecycle e2e', () => {
     // então a cobertura é conhecida de antemão.
     await prisma.telemetrySample.createMany({
       data: [
-        sampleRow(at('12:00:00'), { heartRateBpm: 60 }),
-        sampleRow(at('12:00:30'), { heartRateBpm: 90 }),
+        sampleRow(at('12:00:00'), { heartRateBpm: 60, activeEnergyKcal: 1.5, batteryPercent: 80 }),
+        sampleRow(at('12:00:30'), { heartRateBpm: 90, activeEnergyKcal: 2.25, batteryPercent: 61 }),
         sampleRow(at('12:01:00'), { heartRateBpm: 72 }),
         sampleRow(at('12:01:30'), { stepDelta: 40 }),
+        sampleRow(at('13:00:00'), {
+          systolicMmHg: 128,
+          diastolicMmHg: 82,
+          bloodPressureSource: 'EXTERNAL_CUFF',
+        }),
+      ],
+    })
+
+    // Avaliações do mesmo dia: duas seguidas acima de 80 por cento de esforço,
+    // de 30 em 30 segundos, e uma abaixo depois.
+    await prisma.telemetryAssessment.createMany({
+      data: [
+        {
+          workerId,
+          sessionId,
+          origin: 'REAL',
+          computedAt: at('12:00:00'),
+          windowStart: at('11:59:45'),
+          windowEnd: at('12:00:00'),
+          effortPercent: 85,
+          wearPercent: 30,
+          formulaVersion: 'swi-fatigue-experimental',
+          inputs: {},
+        },
+        {
+          workerId,
+          sessionId,
+          origin: 'REAL',
+          computedAt: at('12:00:30'),
+          windowStart: at('12:00:15'),
+          windowEnd: at('12:00:30'),
+          effortPercent: 95,
+          wearPercent: 40,
+          formulaVersion: 'swi-fatigue-experimental',
+          inputs: {},
+        },
+        {
+          workerId,
+          sessionId,
+          origin: 'REAL',
+          computedAt: at('12:01:00'),
+          windowStart: at('12:00:45'),
+          windowEnd: at('12:01:00'),
+          effortPercent: 30,
+          // Sem desgaste de propósito: esforço e desgaste não compartilham
+          // denominador, e a linha precisa provar isso contra o banco.
+          wearPercent: null,
+          formulaVersion: 'swi-fatigue-experimental',
+          inputs: {},
+        },
       ],
     })
   })
@@ -108,12 +174,58 @@ describe('Telemetry lifecycle e2e', () => {
     expect(summary.heartRateCoveredMs).toBe(60_000)
     expect(summary.stepsTotal).toBe(40)
     expect(summary.stepsCount).toBe(1)
-    expect(summary.sampleCount).toBe(4)
+    expect(summary.sampleCount).toBe(5)
+    expect(summary.sessionCount).toBe(1)
     expect(summary.firstSampleAt).toEqual(at('12:00:00'))
-    expect(summary.lastSampleAt).toEqual(at('12:01:30'))
-    // Três intervalos de 30 s entre as quatro leituras do dia.
+    expect(summary.lastSampleAt).toEqual(at('13:00:00'))
+    // Três intervalos de 30 s entre as quatro primeiras leituras. A aferição de
+    // pressão vem uma hora depois: lacuna, não cobertura.
     expect(summary.coveredMs).toBe(90_000)
     expect(summary.summarizerVersion).toBe(SUMMARIZER_VERSION)
+  })
+
+  it('resume energia, bateria, esforço, desgaste e pressão do mesmo dia', async () => {
+    const summary = await storedSummary()
+
+    expect(summary.activeEnergyKcalTotal).toBe(3.75)
+    expect(summary.activeEnergyCount).toBe(2)
+    expect(summary.batteryMin).toBe(61)
+
+    expect(summary.effortMax).toBe(95)
+    expect(summary.effortCount).toBe(3)
+    // Só as duas avaliações acima de 80, separadas por 30 s.
+    expect(summary.effortAbove80Ms).toBe(30_000)
+    expect(summary.wearMax).toBe(40)
+    // Uma das três avaliações não trouxe desgaste: o denominador é dele, não
+    // do esforço, e o banco guarda os dois separados.
+    expect(summary.wearCount).toBe(2)
+    // Nenhum desgaste chegou a 80: tempo alto é zero apurado, não nulo.
+    expect(summary.wearAbove80Ms).toBe(0)
+
+    expect(summary.bloodPressureCount).toBe(1)
+    expect(summary.lastSystolicMmHg).toBe(128)
+    expect(summary.lastDiastolicMmHg).toBe(82)
+    expect(summary.lastBloodPressureSource).toBe('EXTERNAL_CUFF')
+    expect(summary.lastBloodPressureAt).toEqual(at('13:00:00'))
+  })
+
+  it('Resumo de outra versão do resumidor é recalculado e sobrescrito pela mesma chave', async () => {
+    // Subir a conta precisa alcançar o histórico. Sem a versão no filtro da
+    // varredura, o dia já resumido nunca voltaria, e o painel mostraria linhas
+    // vizinhas produzidas por regras diferentes.
+    await prisma.telemetryDailySummary.update({
+      where: { workerId_day_origin: { workerId, day, origin: 'REAL' } },
+      data: { summarizerVersion: 'swi-daily-summary-0', heartRateMax: 999, sampleCount: 0 },
+    })
+
+    const result = await lifecycle.summarizeClosedDays(now)
+
+    expect(result.summarized).toBeGreaterThanOrEqual(1)
+    const linhas = await prisma.telemetryDailySummary.findMany({ where: { workerId } })
+    expect(linhas).toHaveLength(1)
+    expect(linhas[0].summarizerVersion).toBe(SUMMARIZER_VERSION)
+    expect(linhas[0].heartRateMax).toBe(90)
+    expect(linhas[0].sampleCount).toBe(5)
   })
 
   it('o dia guardado é data pura, sem hora nem fuso', async () => {
@@ -124,14 +236,15 @@ describe('Telemetry lifecycle e2e', () => {
     expect(summary.day.toISOString()).toBe('2026-09-01T00:00:00.000Z')
   })
 
-  it('métrica que ninguém mediu fica nula, e não zerada', async () => {
-    // A série não tem energia, pressão nem bateria. Zero ali afirmaria que a
-    // pessoa não gastou energia; nulo diz que ninguém mediu.
+  it('movimento por minuto não é do Resumo, e a coluna não existe para inventá-lo', async () => {
+    // MPM é derivada de janela e vive na projeção do painel, não no Resumo do
+    // dia. A ausência aqui é de propósito: o Resumo guarda o que foi medido, e
+    // uma coluna a mais convidaria alguém a recalcular a derivada de outro
+    // jeito, com outro resultado.
     const summary = await storedSummary()
 
-    expect(summary.activeEnergyKcalTotal).toBeNull()
-    expect(summary.bloodPressureCount).toBeNull()
-    expect(summary.batteryMin).toBeNull()
+    expect(summary).not.toHaveProperty('movementPerMinute')
+    expect(summary).not.toHaveProperty('movementPerMinuteAvg')
   })
 
   it('rodar de novo não duplica a linha nem muda os valores', async () => {

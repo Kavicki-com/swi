@@ -5,6 +5,7 @@ import {
   MAX_TRIPLES_PER_RUN,
   TelemetryLifecycleService,
 } from './telemetry-lifecycle.service'
+import { SUMMARIZER_VERSION } from './telemetry-summarizer'
 
 // O que estes casos protegem é a fronteira entre o que o resumidor calcula e o
 // que o banco entrega: quais dias entram na rodada e como a linha é gravada.
@@ -38,6 +39,11 @@ const sampleRow = (clock: string, over: Record<string, unknown> = {}) => ({
   sessionId: 'session-1',
   heartRateBpm: null,
   stepDelta: null,
+  activeEnergyKcal: null,
+  batteryPercent: null,
+  systolicMmHg: null,
+  diastolicMmHg: null,
+  bloodPressureSource: null,
   ...over,
 })
 
@@ -96,6 +102,19 @@ describe('TelemetryLifecycleService.summarizeClosedDays: quem entra na rodada', 
     expect(query.values).toContainEqual(MAX_TRIPLES_PER_RUN)
   })
 
+  it('recandidata dia cujo Resumo veio de outra versão do resumidor', async () => {
+    // Sem a versão no filtro, subir a conta do resumidor não recalcularia nada:
+    // o histórico ficaria congelado no que a versão antiga soube apurar, e duas
+    // linhas vizinhas do mesmo painel viriam de regras diferentes.
+    const prisma = prismaDouble()
+
+    await service(prisma).summarizeClosedDays(NOW)
+
+    const query = prisma.$queryRaw.mock.calls[0][0]
+    expect(query.sql).toMatch(/"summarizerVersion"/)
+    expect(query.values).toContainEqual(SUMMARIZER_VERSION)
+  })
+
   it('conta leitura e avaliação como motivo para resumir o dia', async () => {
     const prisma = prismaDouble()
 
@@ -144,6 +163,71 @@ describe('TelemetryLifecycleService.summarizeClosedDays: o que ela carrega e gra
         where: { workerId_day_origin: { workerId: 'worker-1', day: DAY, origin: 'REAL' } },
         create: expect.objectContaining({ heartRateMin: 60, heartRateMax: 80, sampleCount: 2 }),
         update: expect.objectContaining({ heartRateMin: 60, heartRateMax: 80, sampleCount: 2 }),
+      }),
+    )
+  })
+
+  it('carrega toda métrica que o Resumo carrega, e não só BPM e passos', async () => {
+    // O select é o contrato entre a linha do banco e o resumidor: um campo
+    // esquecido aqui vira coluna nula no Resumo, indistinguível de "ninguém
+    // mediu", e ninguém percebe até alguém ler o relatório.
+    const prisma = prismaDouble()
+    prisma.$queryRaw.mockResolvedValue([candidate()])
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow('12:00:00', { heartRateBpm: 70 })])
+
+    await service(prisma).summarizeClosedDays(NOW)
+
+    expect(prisma.telemetrySample.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: {
+          eventTime: true,
+          sessionId: true,
+          heartRateBpm: true,
+          stepDelta: true,
+          activeEnergyKcal: true,
+          batteryPercent: true,
+          systolicMmHg: true,
+          diastolicMmHg: true,
+          bloodPressureSource: true,
+        },
+      }),
+    )
+  })
+
+  it('grava as colunas de toda métrica, e não só as da primeira fatia', async () => {
+    const prisma = prismaDouble()
+    prisma.$queryRaw.mockResolvedValue([candidate()])
+    prisma.telemetrySample.findMany.mockResolvedValue([
+      sampleRow('12:00:00', {
+        activeEnergyKcal: 2.5,
+        batteryPercent: 44,
+        systolicMmHg: 128,
+        diastolicMmHg: 82,
+        bloodPressureSource: 'EXTERNAL_CUFF',
+      }),
+    ])
+    prisma.telemetryAssessment.findMany.mockResolvedValue([
+      { computedAt: new Date('2026-09-01T12:00:00.000Z'), effortPercent: 88, wearPercent: 30 },
+    ])
+
+    await service(prisma).summarizeClosedDays(NOW)
+
+    expect(prisma.telemetryDailySummary.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          activeEnergyKcalTotal: 2.5,
+          activeEnergyCount: 1,
+          batteryMin: 44,
+          bloodPressureCount: 1,
+          lastSystolicMmHg: 128,
+          lastDiastolicMmHg: 82,
+          lastBloodPressureSource: 'EXTERNAL_CUFF',
+          effortMax: 88,
+          effortCount: 1,
+          wearMax: 30,
+          sessionCount: 1,
+          summarizerVersion: SUMMARIZER_VERSION,
+        }),
       }),
     )
   })
