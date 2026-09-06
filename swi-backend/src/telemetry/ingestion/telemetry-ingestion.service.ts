@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { RealtimeGateway } from '../../realtime/realtime.gateway'
+import { TelemetryAssessmentService } from '../assessment/assessment.service'
 import type { DeviceIdentity } from '../devices/device-auth.service'
 import {
   assertEventTimeUsable,
   assertMeasuresSomething,
+  isBacklog,
   rejectWorkerIdAuthority,
   validateRawMeasurement,
 } from '../domain/metric-state'
@@ -24,9 +26,9 @@ import {
 import type { TelemetryBatchDto, TelemetryEventDto } from './dto/telemetry-batch.dto'
 
 // Ingestão do piloto. Um evento entra, é conferido, gravado e só então
-// confirmado. Não há acumulador nem janela aqui: a janela de 15 segundos existe
-// para recalcular MPM e esforço na projeção, e usá-la para segurar a gravação
-// atrasaria o painel sem melhorar nada.
+// confirmado. A avaliação de esforço e desgaste roda depois do laço, uma vez
+// por sessão ao vivo, com corte de 15 s no serviço de avaliação; a gravação do
+// evento nunca espera por ela.
 
 /** Motivos estáveis de recusa. O cliente decide o que fazer lendo este código. */
 export type TelemetryRejectionReason =
@@ -135,6 +137,7 @@ export class TelemetryIngestionService {
   constructor(
     @Inject(TELEMETRY_REPOSITORY) private readonly repository: TelemetryRepository,
     private readonly realtime: RealtimeGateway,
+    private readonly assessment: TelemetryAssessmentService,
   ) {}
 
   async ingest(device: DeviceIdentity, batch: TelemetryBatchDto): Promise<TelemetryBatchAck> {
@@ -148,6 +151,7 @@ export class TelemetryIngestionService {
     const conflicts: TelemetryRejection[] = []
     const sessions = new Map<string, TelemetrySessionRef>()
     const sessionStarts = earliestEventTimeBySession(batch.events)
+    const liveTriggers = new Map<string, Date>()
     let promoted: PromotedEvent | null = null
 
     for (const raw of batch.events) {
@@ -165,6 +169,14 @@ export class TelemetryIngestionService {
         }
         acceptedEventIds.push(event.eventId)
 
+        // Só evento ao vivo dispara avaliação; backlog vai ao histórico sem
+        // tocar o atual, e avaliar o passado produziria uma cadeia fora de ordem.
+        if (!isBacklog(event.eventTime, now)) {
+          const at = new Date(event.eventTime)
+          const known = liveTriggers.get(event.monitoringSessionId)
+          if (known === undefined || at > known) liveTriggers.set(event.monitoringSessionId, at)
+        }
+
         const candidate: PromotedEvent = {
           eventId: event.eventId,
           monitoringSessionId: event.monitoringSessionId,
@@ -173,6 +185,18 @@ export class TelemetryIngestionService {
         if (result.snapshotPromoted && isAtLeastAsRecent(promoted, candidate)) promoted = candidate
       } catch (error) {
         conflicts.push(rejectionFor(raw.eventId, error))
+      }
+    }
+
+    // Uma avaliação por sessão e por lote, antes do aviso: o painel busca o
+    // estado ao receber o aviso, e ele precisa já incluir a avaliação. O corte
+    // de 15 s é do serviço. Falha aqui nunca derruba o ACK: o evento já está
+    // gravado, e reenviá-lo só produziria duplicata.
+    for (const [sessionId, triggerAt] of liveTriggers) {
+      try {
+        await this.assessment.assessSession(sessionId, triggerAt, now)
+      } catch (error) {
+        this.logger.error(`Falha ao avaliar a sessão ${sessionId}: ${(error as Error).message}`)
       }
     }
 

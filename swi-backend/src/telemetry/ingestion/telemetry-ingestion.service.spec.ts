@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { RealtimeGateway } from '../../realtime/realtime.gateway'
+import type { TelemetryAssessmentService } from '../assessment/assessment.service'
 import type { DeviceIdentity } from '../devices/device-auth.service'
 import {
   TelemetryIntegrityConflictError,
@@ -35,14 +36,20 @@ const repositoryDouble = () => ({
 
 const realtimeDouble = () => ({ emitToUsers: jest.fn() })
 
+const assessmentDouble = () => ({
+  assessSession: jest.fn().mockResolvedValue({ outcome: 'assessed', assessmentId: 'a-1' }),
+})
+
 const build = () => {
   const repository = repositoryDouble()
   const realtime = realtimeDouble()
+  const assessment = assessmentDouble()
   const service = new TelemetryIngestionService(
     repository,
     realtime as unknown as RealtimeGateway,
+    assessment as unknown as TelemetryAssessmentService,
   )
-  return { repository, realtime, service }
+  return { repository, realtime, assessment, service }
 }
 
 // eventTime recente de propósito: um horário antigo cairia na regra de backlog
@@ -445,5 +452,61 @@ describe('TelemetryIngestionService', () => {
 
     const [aberta] = repository.ensureSession.mock.calls[0]
     expect(aberta.startedAt.toISOString()).toBe(antigo)
+  })
+})
+
+describe('avaliação de esforço e desgaste no caminho do evento', () => {
+  it('lote ao vivo avalia a sessão uma vez, com o eventTime mais recente e antes do aviso', async () => {
+    const { service, assessment, realtime } = build()
+    const older = new Date(Date.now() - 10_000).toISOString()
+    const newer = new Date(Date.now() - 2_000).toISOString()
+    const order: string[] = []
+    assessment.assessSession.mockImplementation(async () => {
+      order.push('assess')
+      return { outcome: 'assessed', assessmentId: 'a-1' }
+    })
+    realtime.emitToUsers.mockImplementation(() => {
+      order.push('announce')
+    })
+
+    await service.ingest(DEVICE, {
+      events: [event({ sequence: 1, eventTime: older }), event({ sequence: 2, eventTime: newer })],
+    })
+
+    expect(assessment.assessSession).toHaveBeenCalledTimes(1)
+    const [sessionId, triggerAt] = assessment.assessSession.mock.calls[0]
+    expect(sessionId).toBe(SESSION)
+    expect(triggerAt.toISOString()).toBe(newer)
+    expect(order).toEqual(['assess', 'announce'])
+  })
+
+  it('lote de backlog não avalia', async () => {
+    const { service, assessment } = build()
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+    await service.ingest(DEVICE, { events: [event({ eventTime: threeHoursAgo })] })
+    expect(assessment.assessSession).not.toHaveBeenCalled()
+  })
+
+  it('evento duplicado não dispara avaliação', async () => {
+    const { service, assessment, repository } = build()
+    repository.saveEvent.mockResolvedValue(stored({ outcome: 'DUPLICATE' }))
+    await service.ingest(DEVICE, { events: [event()] })
+    expect(assessment.assessSession).not.toHaveBeenCalled()
+  })
+
+  it('duas sessões ao vivo no mesmo lote avaliam cada uma uma vez', async () => {
+    const { service, assessment } = build()
+    const other = randomUUID()
+    await service.ingest(DEVICE, { events: [event(), event({ monitoringSessionId: other, sequence: 1 })] })
+    expect(assessment.assessSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('falha da avaliação não muda o ACK', async () => {
+    const { service, assessment } = build()
+    assessment.assessSession.mockRejectedValue(new Error('fórmula estourou'))
+    const e = event()
+    const ack = await service.ingest(DEVICE, { events: [e] })
+    expect(ack.acceptedEventIds).toEqual([e.eventId])
+    expect(ack.conflicts).toEqual([])
   })
 })
