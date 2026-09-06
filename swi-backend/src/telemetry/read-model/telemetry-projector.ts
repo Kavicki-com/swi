@@ -35,8 +35,10 @@ export const ENERGY_RATE_WINDOW_MS = 60 * MINUTE
 export const ENERGY_RATE_MIN_COVERAGE_MS = 5 * MINUTE
 
 /**
- * Janela curta de movimento. Ela só recalcula MPM, esforço e desgaste: não é
- * relógio de publicação e não segura a exibição de valor bruto.
+ * Janela curta de movimento. Ela só recalcula MPM: não é relógio de
+ * publicação e não segura a exibição de valor bruto. Esforço e desgaste não
+ * passam por aqui; são leitura da última avaliação, cuja cadência é o corte
+ * do serviço de avaliação.
  */
 export const MOVEMENT_WINDOW_MS = 15_000
 
