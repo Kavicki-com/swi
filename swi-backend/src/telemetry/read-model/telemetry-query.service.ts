@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma, type TelemetrySessionStatus } from '@prisma/client'
 import type { JwtUser } from '../../auth/current-user.decorator'
+import { parseTelemetryRetention } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
 import { monitoredDayRange } from '../domain/metric-state'
 import type {
@@ -103,6 +104,7 @@ export interface SessionHistoryPage {
     status: TelemetrySessionStatus
     startedAt: string
     endedAt: string | null
+    retainedUntil: string
   }
   samples: SessionHistorySample[]
   /** Última sequência desta página, quando ela encheu. Nulo no fim da trilha. */
@@ -430,6 +432,26 @@ export class TelemetryQueryService {
     // Só o padrão, sem reconferir o teto: quem valida `limit` é o DTO da rota,
     // e repetir a faixa aqui criaria duas listas de validade que podem divergir
     // em silêncio, além de trocar uma recusa clara por um corte mudo.
+    // Até quando as Leituras desta sessão ficam retidas. Sem esse instante, a
+    // auditoria não distingue "não houve leitura" de "já foi resumida e
+    // apagada": as duas chegam como a mesma lista vazia. Sai de conta com o
+    // que a sessão já trouxe, sem consulta a mais, porque esta é a rota mais
+    // paginada do read model.
+    //
+    // O instante é anterior ao apagamento real, que compara dia monitorado e
+    // só ocorre depois que o dia inteiro sai da janela. O erro é de propósito
+    // para este lado: anunciar retenção mais longa do que a real esconderia um
+    // apagamento de quem audita.
+    const problems: string[] = []
+    const { windowMs } = parseTelemetryRetention(process.env, problems)
+    if (problems.length > 0) {
+      // Nunca corrigir em silêncio: um instante de retenção calculado com a
+      // janela padrão, sobre um ambiente que pediu outra, faria o auditor
+      // concluir apagamento que não houve.
+      throw new Error(`Configuração de retenção inválida:\n- ${problems.join('\n- ')}`)
+    }
+    const retainedUntil = new Date(session.startedAt.getTime() + windowMs).toISOString()
+
     const limit = query.limit ?? HISTORY_DEFAULT_LIMIT
     const samples = await this.prisma.telemetrySample.findMany({
       where: {
@@ -466,6 +488,7 @@ export class TelemetryQueryService {
         status: session.status,
         startedAt: session.startedAt.toISOString(),
         endedAt: iso(session.endedAt),
+        retainedUntil,
       },
       samples: samples.map((s) => ({
         ...s,

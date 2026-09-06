@@ -537,6 +537,61 @@ describe('TelemetryQueryService.sessionHistory', () => {
     expect(page.nextCursor).toBeNull()
   })
 
+  // A trilha de auditoria precisa separar "não houve leitura" de "já foi
+  // resumida e apagada". Sem o instante de retenção na resposta, as duas
+  // chegam ao auditor como a mesma lista vazia.
+  describe('até quando as leituras ficam retidas', () => {
+    const START = new Date('2026-09-03T11:00:00.000Z')
+    const retentionDays = process.env.TELEMETRY_RETENTION_DAYS
+
+    afterEach(() => {
+      if (retentionDays === undefined) delete process.env.TELEMETRY_RETENTION_DAYS
+      else process.env.TELEMETRY_RETENTION_DAYS = retentionDays
+    })
+
+    const historyOf = async (prisma: any) => {
+      prisma.telemetrySession.findUnique.mockResolvedValue(sessionRow({ startedAt: START }))
+      prisma.telemetrySample.findMany.mockResolvedValue([])
+      return service(prisma).sessionHistory(ADMIN, 'session-1', {})
+    }
+
+    it('sem janela declarada, a resposta usa o padrão de trinta dias', async () => {
+      delete process.env.TELEMETRY_RETENTION_DAYS
+
+      const page = await historyOf(prismaDouble())
+
+      expect(page.session.retainedUntil).toBe('2026-10-03T11:00:00.000Z')
+    })
+
+    it('a janela declarada manda no instante, e não o padrão', async () => {
+      process.env.TELEMETRY_RETENTION_DAYS = '2'
+
+      const page = await historyOf(prismaDouble())
+
+      expect(page.session.retainedUntil).toBe('2026-09-05T11:00:00.000Z')
+    })
+
+    it('responde sem nenhuma consulta a mais', async () => {
+      // O instante sai de conta com o que a sessão já traz. Uma consulta extra
+      // por página de auditoria pesaria na rota mais paginada do read model.
+      const prisma = prismaDouble()
+
+      await historyOf(prisma)
+
+      expect(prisma.telemetrySession.findUnique).toHaveBeenCalledTimes(1)
+      expect(prisma.telemetrySample.findMany).toHaveBeenCalledTimes(1)
+    })
+
+    it('janela inválida recusa em voz alta, em vez de responder o padrão', async () => {
+      // Mesma regra do contrato de ambiente: nunca corrigir em silêncio. Um
+      // instante de retenção errado faria o auditor concluir apagamento que
+      // não houve.
+      process.env.TELEMETRY_RETENTION_DAYS = '1'
+
+      await expect(historyOf(prismaDouble())).rejects.toThrow(/TELEMETRY_RETENTION_DAYS/)
+    })
+  })
+
   it('o funcionário audita a própria sessão', async () => {
     const prisma = prismaDouble()
     prisma.telemetrySession.findUnique.mockResolvedValue(sessionRow())
