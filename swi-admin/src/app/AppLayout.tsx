@@ -18,6 +18,7 @@ function navigateWithTransition(navigate: (to: string) => void, to: string) {
   }
 }
 import {
+  Avatar,
   Button,
   ChatSection,
   HeaderUserInfo,
@@ -135,6 +136,147 @@ export function AppLayout() {
       />
     </Pressable>
   )
+
+  // Mobile (< 640): phone-class viewport. The tablet top-bar (Logo + Menu
+  // button + HeaderUserInfo widget) measured ~540 px wide and clipped on
+  // every authenticated page at 393 (iPhone 17). Mobile uses a slimmer
+  // shell — hamburger left, Logo center, avatar-only pressable right — and
+  // reuses the drawer panel from the tablet branch.
+  if (breakpoint === 'mobile') {
+    const drawerPanel = (
+      <View
+        testID="app-drawer-panel"
+        style={{
+          width: 280,
+          backgroundColor: theme.background,
+          paddingHorizontal: theme.padding.s,
+          paddingVertical: theme.padding.m,
+          gap: theme.gap.m,
+        }}
+      >
+        <View
+          style={{
+            paddingHorizontal: theme.padding.s,
+            paddingVertical: theme.padding.m,
+          }}
+        >
+          <Pressable
+            onPress={() => navigate('/')}
+            accessibilityRole="link"
+            accessibilityLabel="Ir para dashboard"
+          >
+            <Logo type="complete" size="m" />
+          </Pressable>
+        </View>
+        <SideMenu
+          testID="app-drawer-nav"
+          accessibilityLabel="Navegação principal"
+          items={NAV_ITEMS}
+          value={activeNavValue}
+          onChange={(v: string) => navigate(v)}
+          fullWidth
+        />
+        <View testID="app-drawer-chat">
+          <ChatSection
+            users={CHAT_USERS}
+            searchPlaceholder="Pesquisar Contatos"
+            expandLabel="Expandir chat"
+            onUserPress={(id: string) => navigateWithTransition(navigate, `/chat/${id}`)}
+            onExpand={() => navigateWithTransition(navigate, '/chat')}
+            fullWidth
+          />
+        </View>
+      </View>
+    )
+
+    return (
+      <View
+        testID="app-layout-mobile"
+        style={{
+          flexDirection: 'column',
+          minHeight: '100vh' as unknown as number,
+        }}
+      >
+        <View
+          testID="app-topbar"
+          dataSet={{ fidelity: 'topbar-mobile' }}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            // Three-slot layout. Hamburger anchors left, avatar anchors
+            // right, Logo sits in a flex:1 middle slot that centers its
+            // children — keeps the brand visually centered without
+            // depending on hamburger/avatar widths matching.
+            justifyContent: 'space-between',
+            paddingHorizontal: theme.padding.m,
+            paddingVertical: theme.padding.s,
+            backgroundColor: theme.background,
+            gap: theme.gap.s,
+          }}
+        >
+          <Button
+            label="Menu"
+            variant="outline"
+            size="small"
+            onPress={() => setDrawerOpen((v) => !v)}
+            accessibilityLabel="Abrir menu de navegação"
+            testID="app-topbar-hamburger"
+          />
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Pressable
+              onPress={() => navigate('/')}
+              accessibilityRole="link"
+              accessibilityLabel="Ir para dashboard"
+            >
+              <Logo type="complete" size="s" />
+            </Pressable>
+          </View>
+          <Pressable
+            onPress={() => setUserMenuOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir detalhes do usuário"
+            testID="app-topbar-avatar"
+          >
+            <Avatar
+              uri={user?.avatarUri ?? workerA}
+              size="s"
+              accessibilityLabel="Foto do usuário"
+            />
+          </Pressable>
+        </View>
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 16 }}>
+          <Outlet />
+        </View>
+        {drawerOpen && (
+          <View
+            testID="app-drawer"
+            dataSet={{ fidelity: 'drawer' }}
+            style={{
+              position: 'absolute' as unknown as never,
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              flexDirection: 'row',
+            }}
+          >
+            {drawerPanel}
+            <Pressable
+              testID="app-drawer-scrim"
+              accessibilityRole="button"
+              accessibilityLabel="Fechar menu de navegação"
+              onPress={() => setDrawerOpen(false)}
+              style={{
+                flex: 1,
+                backgroundColor: 'rgba(0,0,0,0.45)',
+              }}
+            />
+          </View>
+        )}
+        <UserDetailsMenu open={userMenuOpen} onClose={() => setUserMenuOpen(false)} />
+      </View>
+    )
+  }
 
   if (breakpoint === 'tablet') {
     return (

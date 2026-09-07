@@ -76,9 +76,14 @@ const fidelityNotesPlugin = (): PluginOption => ({
 // DEV ONLY: if a local clone of swi-design-system exists at ../../swi-design-system,
 // alias `@kavicki/swi-design-system` to its source so edits there appear instantly via
 // HMR (no rebuild, no `git push`, no version bump). Falls back to node_modules in CI.
+//
+// Escape hatch: when the local DS is on a branch that doesn't yet compile in
+// the admin (e.g. uses RN-SVG features the web shim doesn't expose), set
+// `SWI_USE_LOCAL_DS=false` to force resolution to the pinned node_modules
+// version and unblock admin work without renaming or moving the DS clone.
 const dsLocalRoot = path.resolve(__dirname, '../../swi-design-system')
 const dsLocalEntry = path.join(dsLocalRoot, 'src', 'index.ts')
-const useLocalDs = fs.existsSync(dsLocalEntry)
+const useLocalDs = process.env.SWI_USE_LOCAL_DS !== 'false' && fs.existsSync(dsLocalEntry)
 const dsLocalAlias = useLocalDs
   ? [{ find: /^@kavicki\/swi-design-system$/, replacement: dsLocalEntry }]
   : []

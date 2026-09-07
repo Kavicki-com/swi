@@ -476,7 +476,11 @@ export function ChatInbox() {
   const theme = useTheme()
   const navigate = useNavigate()
   const breakpoint = useBreakpoint()
-  const isTablet = breakpoint === 'tablet'
+  // Phase 1 of the responsive system rolled the mobile shell only.
+  // Page-level mobile layouts come in later phases; until then mobile
+  // borrows the tablet content layout (closest existing fit).
+  const isTablet = breakpoint === 'tablet' || breakpoint === 'mobile'
+  const isMobile = breakpoint === 'mobile'
   const { show: showToast } = useDemoToast()
   const [contacts, setContacts] = useState<ReadonlyArray<ChatContact>>([])
   const [search, setSearch] = useState('')
@@ -554,7 +558,7 @@ export function ChatInbox() {
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingHorizontal: theme.padding.xxl,
+          paddingHorizontal: isMobile ? theme.padding.m : theme.padding.xxl,
           paddingVertical: theme.padding.sm,
         }}
       >
@@ -564,18 +568,32 @@ export function ChatInbox() {
           accessibilityLabel="Ir para dashboard"
           testID="chat-header-logo-pressable"
         >
-          <Logo type="complete" size="m" />
+          <Logo type="complete" size={isMobile ? 's' : 'm'} />
         </Pressable>
-        <HeaderUserInfo
-          bpm={user?.bpm ?? 99}
-          pressure={user?.pressure ?? '12/8'}
-          progress={50}
-          avatarUri={user?.avatarUri ?? workerA}
-          heartIconName="heart_filled"
-          pressureIconName="vitals_pulse"
-          borderColor={theme.background}
-          testID="chat-header-user-info"
-        />
+        {isMobile ? (
+          // Mobile: HeaderUserInfo (~260 px) doesn't fit alongside the Logo
+          // in a 393 viewport. Use the avatar-only pressable instead — same
+          // pattern as AppLayout's mobile shell.
+          <Pressable
+            onPress={() => navigate('/user/profile')}
+            accessibilityRole="link"
+            accessibilityLabel="Abrir perfil do usuário"
+            testID="chat-header-avatar"
+          >
+            <Avatar uri={user?.avatarUri ?? workerA} size="s" />
+          </Pressable>
+        ) : (
+          <HeaderUserInfo
+            bpm={user?.bpm ?? 99}
+            pressure={user?.pressure ?? '12/8'}
+            progress={50}
+            avatarUri={user?.avatarUri ?? workerA}
+            heartIconName="heart_filled"
+            pressureIconName="vitals_pulse"
+            borderColor={theme.background}
+            testID="chat-header-user-info"
+          />
+        )}
       </View>
 
       <View
@@ -586,7 +604,7 @@ export function ChatInbox() {
           // below) — RN-Web ignored both `gap` and `marginLeft/Right` on the
           // flex children here, so a literal spacer is the only reliable
           // fix matching Figma 102:8997 Sidebar gap-[16px].
-          paddingHorizontal: theme.padding.xxl,
+          paddingHorizontal: isMobile ? theme.padding.m : theme.padding.xxl,
           // Figma 1366 spec: height 640. Switched to flex:1 + minHeight so
           // taller viewports (1080+) let the chat thread breathe and shorter
           // ones still respect 480 floor. At wide MIDDLE absorbs extra width
@@ -596,234 +614,249 @@ export function ChatInbox() {
           alignItems: 'stretch',
         }}
       >
-        {/* LEFT column */}
-        <View
-          style={{
-            width: 358,
-            // Container BG = theme.background (page bg ~#171717) per Figma
-            // 102:9091. The contact chips inside use surface.standard (~#1f1f1f),
-            // so they pop visually as cards on the darker container — same
-            // pattern Figma applies to all 3 columns (LEFT/MIDDLE/RIGHT).
-            backgroundColor: theme.background,
-            borderRadius: theme.border.radius.m,
-            padding: theme.padding.s,
-            gap: theme.gap.sm,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Voltar"
-            onPress={() => navigate(-1)}
+        {/* LEFT column — on mobile shown only when no contact is selected
+            (single-pane navigation). On tablet+ both LEFT and MIDDLE render
+            side-by-side. */}
+        {(!isMobile || !selectedContactId) && (
+          <View
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 4,
-              paddingHorizontal: theme.padding.sm,
-              paddingVertical: theme.padding.sm,
+              // 358 fixed at tablet+; on mobile the column flexes to fill the
+              // viewport since MIDDLE is hidden until a contact is selected.
+              ...(isMobile ? { flex: 1 } : { width: 358 }),
+              // Container BG = theme.background (page bg ~#171717) per Figma
+              // 102:9091. The contact chips inside use surface.standard (~#1f1f1f),
+              // so they pop visually as cards on the darker container — same
+              // pattern Figma applies to all 3 columns (LEFT/MIDDLE/RIGHT).
+              backgroundColor: theme.background,
               borderRadius: theme.border.radius.m,
+              padding: theme.padding.s,
+              gap: theme.gap.sm,
             }}
           >
-            <Icon name="keyboard_arrow_left" size={16} color={theme.content.primaryLight} />
-            <Text
-              variant="body.m"
-              color={theme.content.primaryLight}
-              style={{ fontFamily: theme.fontFamily.title, fontWeight: '700' }}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Voltar"
+              onPress={() => navigate(-1)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: theme.padding.sm,
+                paddingVertical: theme.padding.sm,
+                borderRadius: theme.border.radius.m,
+              }}
             >
-              Voltar
-            </Text>
-          </Pressable>
-
-          <SearchInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Pesquisar Contatos"
-            onClear={() => setSearch('')}
-          />
-
-          <div
-            className="no-scrollbar"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-              flex: 1,
-              minHeight: 0,
-              overflowY: 'auto',
-              overflowX: 'hidden',
-            }}
-          >
-            {filtered.map((c) => (
-              <div
-                key={c.id}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  width: '100%',
-                  viewTransitionName: `chat-card-${c.id}`,
-                }}
+              <Icon name="keyboard_arrow_left" size={16} color={theme.content.primaryLight} />
+              <Text
+                variant="body.m"
+                color={theme.content.primaryLight}
+                style={{ fontFamily: theme.fontFamily.title, fontWeight: '700' }}
               >
-                <ContactRow
-                  contact={c}
-                  selected={c.id === selectedContactId}
-                  onPress={() => navigate(`/chat/${c.id}`)}
-                />
-              </div>
-            ))}
-          </div>
+                Voltar
+              </Text>
+            </Pressable>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Novo chat"
-            onPress={() =>
-              showToast('Novo chat', 'Selecione um contato à esquerda para iniciar uma conversa')
-            }
+            <SearchInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Pesquisar Contatos"
+              onClear={() => setSearch('')}
+            />
+
+            <div
+              className="no-scrollbar"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+            >
+              {filtered.map((c) => (
+                <div
+                  key={c.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: '100%',
+                    viewTransitionName: `chat-card-${c.id}`,
+                  }}
+                >
+                  <ContactRow
+                    contact={c}
+                    selected={c.id === selectedContactId}
+                    onPress={() => navigate(`/chat/${c.id}`)}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Novo chat"
+              onPress={() =>
+                showToast('Novo chat', 'Selecione um contato à esquerda para iniciar uma conversa')
+              }
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                paddingHorizontal: theme.padding.sm,
+                paddingVertical: theme.padding.sm,
+                borderRadius: theme.border.radius.m,
+              }}
+            >
+              <Text
+                variant="body.m"
+                color={theme.content.primaryLight}
+                style={{ fontWeight: '700' }}
+              >
+                Novo Chat
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Spacer — 16px between LEFT and MIDDLE per Figma 102:8997. On
+            mobile only one of the two panes is visible at a time, so the
+            spacer is suppressed too. */}
+        {!isMobile && <View style={{ width: theme.padding.m }} />}
+
+        {/* MIDDLE column — on mobile shown only when a contact is selected
+            (single-pane navigation). */}
+        {(!isMobile || selectedContactId) && (
+          <View
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-              paddingHorizontal: theme.padding.sm,
-              paddingVertical: theme.padding.sm,
+              flex: 1,
+              // Container BG = theme.background per Figma 102:9619. Inner chat-box
+              // keeps surface.standard so it reads as a card on top of the
+              // darker page-bg container (same pattern as LEFT column chips).
+              backgroundColor: theme.background,
               borderRadius: theme.border.radius.m,
+              padding: theme.padding.s,
+              gap: theme.gap.sm,
             }}
           >
-            <Text variant="body.m" color={theme.content.primaryLight} style={{ fontWeight: '700' }}>
-              Novo Chat
-            </Text>
-          </Pressable>
-        </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <Button
+                label="Pesquisar"
+                variant="contained"
+                iconLeft={<Icon name="search" size={24} color={theme.content.light} />}
+                accessibilityLabel="Pesquisar mensagens"
+                onPress={() => showToast('Use o campo de pesquisa de contatos à esquerda')}
+              />
+            </View>
 
-        {/* Spacer — 16px between LEFT and MIDDLE per Figma 102:8997 */}
-        <View style={{ width: theme.padding.m }} />
-
-        {/* MIDDLE column */}
-        <View
-          style={{
-            flex: 1,
-            // Container BG = theme.background per Figma 102:9619. Inner chat-box
-            // keeps surface.standard so it reads as a card on top of the
-            // darker page-bg container (same pattern as LEFT column chips).
-            backgroundColor: theme.background,
-            borderRadius: theme.border.radius.m,
-            padding: theme.padding.s,
-            gap: theme.gap.sm,
-          }}
-        >
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <Button
-              label="Pesquisar"
-              variant="contained"
-              iconLeft={<Icon name="search" size={24} color={theme.content.light} />}
-              accessibilityLabel="Pesquisar mensagens"
-              onPress={() => showToast('Use o campo de pesquisa de contatos à esquerda')}
-            />
-          </View>
-
-          {/* Chat Container — Figma 103:9689 specifies h-[564px] fixed height
+            {/* Chat Container — Figma 103:9689 specifies h-[564px] fixed height
               with two children (chat-box flex:1 + chat-input shrink:0).
               We use a plain <div> here instead of <View> so the flex chain
               propagates min-height correctly to the inner scroll container;
               RN-Web's <View> wrapper was preventing the chat-box from
               shrinking below content height, breaking overflow:auto. */}
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: theme.gap.s,
-              alignItems: 'flex-end',
-              width: '100%',
-              boxSizing: 'border-box',
-            }}
-          >
-            {/* chat-box: empty placeholder when no selection, otherwise
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: theme.gap.s,
+                alignItems: 'flex-end',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
+              {/* chat-box: empty placeholder when no selection, otherwise
                 scrollable bubble history with the date separator after
                 the first two received/sent pair (Figma 102:8997 placement).
                 ref drives auto-scroll-to-bottom on send / contact switch. */}
-            <div
-              ref={chatBoxRef}
-              className="subtle-scrollbar"
-              style={{
-                flex: 1,
-                // min-height: 0 unlocks overflow scroll on a flex column
-                // container — without it the browser refuses to shrink the
-                // box below its content height, so overflow:auto never fires.
-                minHeight: 0,
-                width: '100%',
-                // box-sizing: border-box keeps width:100% + padding within
-                // the parent's bounds (CSS default for <div> is content-box,
-                // which would add the 16+16 padding ON TOP of 100% and make
-                // this overflow leftward into the contact-list spacer).
-                boxSizing: 'border-box',
-                backgroundColor: theme.surface.standard,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 28,
-                padding: 16,
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                // justifyContent flex-start (not flex-end) so overflow extends
-                // BELOW the container — that's what scrollHeight measures and
-                // what `overflow: auto` can scroll. With flex-end, overflow
-                // goes ABOVE the container and scrollHeight stays = clientHeight,
-                // making the box appear unscrollable. Latest message visibility
-                // is handled by the chatBoxRef auto-scroll useEffect above.
-                justifyContent: selectedContact ? 'flex-start' : 'center',
-                alignItems: 'center',
-              }}
-            >
-              {selectedContact ? (
-                <>
-                  {messages.slice(0, 2).map((m) => (
-                    <ChatBubble key={m.id} message={m} contact={selectedContact} />
-                  ))}
-                  {messages.length > 2 ? (
-                    <Text
-                      variant="body.s"
-                      color={theme.content.medium}
-                      style={{ textAlign: 'center', width: '100%' }}
-                    >
-                      Hoje - 21/03/2026
-                    </Text>
-                  ) : null}
-                  {messages.slice(2).map((m) => (
-                    <ChatBubble key={m.id} message={m} contact={selectedContact} />
-                  ))}
-                </>
-              ) : (
-                <Text variant="body.s" color={theme.content.medium}>
-                  Selecione uma conversa para visualizar as mensagens
-                </Text>
-              )}
-            </div>
+              <div
+                ref={chatBoxRef}
+                className="subtle-scrollbar"
+                style={{
+                  flex: 1,
+                  // min-height: 0 unlocks overflow scroll on a flex column
+                  // container — without it the browser refuses to shrink the
+                  // box below its content height, so overflow:auto never fires.
+                  minHeight: 0,
+                  width: '100%',
+                  // box-sizing: border-box keeps width:100% + padding within
+                  // the parent's bounds (CSS default for <div> is content-box,
+                  // which would add the 16+16 padding ON TOP of 100% and make
+                  // this overflow leftward into the contact-list spacer).
+                  boxSizing: 'border-box',
+                  backgroundColor: theme.surface.standard,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 28,
+                  padding: 16,
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  // justifyContent flex-start (not flex-end) so overflow extends
+                  // BELOW the container — that's what scrollHeight measures and
+                  // what `overflow: auto` can scroll. With flex-end, overflow
+                  // goes ABOVE the container and scrollHeight stays = clientHeight,
+                  // making the box appear unscrollable. Latest message visibility
+                  // is handled by the chatBoxRef auto-scroll useEffect above.
+                  justifyContent: selectedContact ? 'flex-start' : 'center',
+                  alignItems: 'center',
+                }}
+              >
+                {selectedContact ? (
+                  <>
+                    {messages.slice(0, 2).map((m) => (
+                      <ChatBubble key={m.id} message={m} contact={selectedContact} />
+                    ))}
+                    {messages.length > 2 ? (
+                      <Text
+                        variant="body.s"
+                        color={theme.content.medium}
+                        style={{ textAlign: 'center', width: '100%' }}
+                      >
+                        Hoje - 21/03/2026
+                      </Text>
+                    ) : null}
+                    {messages.slice(2).map((m) => (
+                      <ChatBubble key={m.id} message={m} contact={selectedContact} />
+                    ))}
+                  </>
+                ) : (
+                  <Text variant="body.s" color={theme.content.medium}>
+                    Selecione uma conversa para visualizar as mensagens
+                  </Text>
+                )}
+              </div>
 
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: theme.gap.m,
-                width: '100%',
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Input
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder="Digite aqui sua mensagem"
-                  iconRight={<Icon name="attach_file" size={20} color={theme.content.dark} />}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: theme.gap.m,
+                  width: '100%',
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Input
+                    value={draft}
+                    onChangeText={setDraft}
+                    placeholder="Digite aqui sua mensagem"
+                    iconRight={<Icon name="attach_file" size={20} color={theme.content.dark} />}
+                  />
+                </View>
+                <Button
+                  label="Enviar"
+                  variant="contained"
+                  iconRight={<Icon name="send" size={16} color={theme.content.light} />}
+                  accessibilityLabel="Enviar mensagem"
+                  onPress={handleSend}
                 />
               </View>
-              <Button
-                label="Enviar"
-                variant="contained"
-                iconRight={<Icon name="send" size={16} color={theme.content.light} />}
-                accessibilityLabel="Enviar mensagem"
-                onPress={handleSend}
-              />
-            </View>
-          </div>
-        </View>
+            </div>
+          </View>
+        )}
 
         {/* RIGHT column — hidden at tablet (<1024) so LEFT 358 + MIDDLE flex
             fit the narrow viewport. Contact info is reachable via the LEFT

@@ -23,8 +23,28 @@ describe('useBreakpoint', () => {
     useWindowDimensionsMock.mockReset()
   })
 
-  it('returns "tablet" for narrow viewports (< 1024)', () => {
+  it('returns "mobile" for phone-class viewports (< 640)', () => {
+    // iPhone 17 base width is 393. Anything below the 640 boundary
+    // collapses to the single-column mobile shell.
+    useWindowDimensionsMock.mockReturnValue(dims(393))
+    const { result } = renderHook(() => useBreakpoint())
+    expect(result.current).toBe('mobile')
+  })
+
+  it('returns "mobile" exactly at the boundary minus one (639)', () => {
+    useWindowDimensionsMock.mockReturnValue(dims(639))
+    const { result } = renderHook(() => useBreakpoint())
+    expect(result.current).toBe('mobile')
+  })
+
+  it('returns "tablet" for tablet-class viewports (640 ≤ w < 1024)', () => {
     useWindowDimensionsMock.mockReturnValue(dims(800))
+    const { result } = renderHook(() => useBreakpoint())
+    expect(result.current).toBe('tablet')
+  })
+
+  it('returns "tablet" exactly at the lower boundary (640)', () => {
+    useWindowDimensionsMock.mockReturnValue(dims(640))
     const { result } = renderHook(() => useBreakpoint())
     expect(result.current).toBe('tablet')
   })

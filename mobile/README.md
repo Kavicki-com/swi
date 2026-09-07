@@ -2,6 +2,20 @@
 
 App React Native do SWI (Expo SDK 54 + expo-router). Pasta irmã de `swi-admin/` no root do repo, totalmente independente — `package.json`, `node_modules`, lockfile próprios.
 
+## Escopo atual — demo frontend-only
+
+**O objetivo inicial deste app é ser uma demo demonstrativa que represente fielmente as telas do Figma.** Nada além disso por enquanto.
+
+Em termos práticos:
+
+- **Frontend apenas.** Sem integração de backend, sem chamadas reais de API, sem auth real, sem persistência remota, sem BLE de verdade no pareamento da smartband, sem push real.
+- **Fidelidade visual ao Figma é o critério de pronto.** Cada tela é "feita" quando bate com o frame do Figma correspondente: layout, tokens (`useTheme()`), tipografia, ícones (SVG do Figma), spacing, estados.
+- **Dados mockados / fixtures locais.** Tudo que precisar de dado dinâmico vem de mocks em memória ou JSON local, no mesmo espírito do `swi-admin/src/services/mockApi/`. Sem Supabase, sem fetch externo nesta fase.
+- **Navegação real, lógica fake.** Rotas do `expo-router` funcionam de verdade (você navega entre telas), mas ações que disparariam side-effects (login, salvar, enviar mensagem) só simulam o resultado.
+- **Plataforma alvo da demo:** Web (`w` no Expo) e iOS/Android via Expo Go — o suficiente pra demonstrar. Nada de build nativo customizado nesta fase.
+
+Quando essa fase terminar (todas as telas do Figma fiéis e navegáveis), abrimos uma nova fase pra plugar backend de verdade. Até lá, **se aparecer pedido de "integrar X de verdade", pause e confirme** — provavelmente está fora do escopo atual.
+
 ## Stack
 
 - Expo SDK 54 + expo-router (file-based routing)

@@ -25,6 +25,7 @@ import { AdminsCreate } from './AdminsCreate'
 type AdminRowProps = {
   admin: Admin
   isTablet: boolean
+  isMobile: boolean
   onToggle: (id: string, active: boolean) => void
   onOpen: (id: string) => void
   onDelete: (admin: Admin) => void
@@ -35,6 +36,7 @@ type AdminRowProps = {
 function AdminRow({
   admin,
   isTablet,
+  isMobile,
   onToggle,
   onOpen,
   onDelete,
@@ -46,9 +48,13 @@ function AdminRow({
     <View
       testID={`admin-row-${admin.id}`}
       style={{
-        flexDirection: 'row',
-        alignItems: 'center',
+        // Mobile (< 640): stack the card vertically so the left and right
+        // clusters get their own row. The horizontal layout otherwise
+        // exceeds the viewport even after the inner text columns flex.
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
         justifyContent: 'space-between',
+        gap: isMobile ? theme.gap.s : 0,
         backgroundColor: theme.surface.standard,
         borderRadius: theme.border.radius.m,
         paddingHorizontal: theme.padding.m,
@@ -59,7 +65,7 @@ function AdminRow({
         // and right cluster (3 action icons + chevron) can exceed the
         // sidebar-collapsed content width. Allow them to wrap onto two
         // lines so nothing gets clipped at the page edge.
-        ...(isTablet ? ({ flexWrap: 'wrap', rowGap: theme.gap.s } as const) : null),
+        ...(isTablet && !isMobile ? ({ flexWrap: 'wrap', rowGap: theme.gap.s } as const) : null),
       }}
     >
       {/* Left cluster: user-info + divider + role + divider + toggle.
@@ -76,8 +82,21 @@ function AdminRow({
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Avatar uri={admin.avatarUri} customSize={64} accessibilityLabel={admin.name} />
-          <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 145 }}>
+          <Avatar
+            uri={admin.avatarUri}
+            customSize={isMobile ? 48 : 64}
+            accessibilityLabel={admin.name}
+          />
+          {/* On mobile the fixed 145 px column would force the row past the
+              viewport — let the text shrink and wrap inside the available
+              space instead. */}
+          <View
+            style={{
+              flexDirection: 'column',
+              gap: theme.gap.xs,
+              ...(isMobile ? { flex: 1, minWidth: 0 } : { width: 145 }),
+            }}
+          >
             {/* Name is Inter Bold 14 per Figma 48:4889 (not in the DS Text
                 variant table, so override fontWeight inline). Pressable so a
                 click on the name itself opens the admin detail page. */}
@@ -107,11 +126,21 @@ function AdminRow({
             </View>
           </View>
         </View>
-        {/* Vertical divider */}
-        <View style={{ width: 1, height: 56, backgroundColor: theme.surface.high }} />
+        {/* Vertical divider — hidden on mobile where the role column lives
+            on its own line. */}
+        {!isMobile && (
+          <View style={{ width: 1, height: 56, backgroundColor: theme.surface.high }} />
+        )}
         {/* Role + specialization. Figma I48:4943;48:4901 spec: role is bold
-            14 + specialization is regular 14, container width 186. */}
-        <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 186 }}>
+            14 + specialization is regular 14, container width 186. On mobile
+            the column flexes to the row's free width. */}
+        <View
+          style={{
+            flexDirection: 'column',
+            gap: theme.gap.xs,
+            ...(isMobile ? { flex: 1, minWidth: 0 } : { width: 186 }),
+          }}
+        >
           <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
             {admin.role}
           </Text>
@@ -202,7 +231,11 @@ export function AdminsList({
   const theme = useTheme()
   const navigate = useNavigate()
   const breakpoint = useBreakpoint()
-  const isTablet = breakpoint === 'tablet'
+  // Phase 1 of the responsive system rolled the mobile shell only.
+  // Page-level mobile layouts come in later phases; until then mobile
+  // borrows the tablet content layout (closest existing fit).
+  const isTablet = breakpoint === 'tablet' || breakpoint === 'mobile'
+  const isMobile = breakpoint === 'mobile'
   const { show: showToast } = useDemoToast()
   const [admins, setAdmins] = useState<Admin[]>([])
   const [tab, setTab] = useState<string>(initialTab)
@@ -300,6 +333,7 @@ export function AdminsList({
               key={admin.id}
               admin={admin}
               isTablet={isTablet}
+              isMobile={isMobile}
               onToggle={handleToggle}
               onOpen={(adminId) => navigate(`/admins/${adminId}`)}
               onDelete={(a) =>

@@ -195,7 +195,10 @@ export function UserSettings() {
   const theme = useTheme()
   const navigate = useNavigate()
   const breakpoint = useBreakpoint()
-  const isTablet = breakpoint === 'tablet'
+  // Phase 1 of the responsive system rolled the mobile shell only.
+  // Page-level mobile layouts come in later phases; until then mobile
+  // borrows the tablet content layout (closest existing fit).
+  const isTablet = breakpoint === 'tablet' || breakpoint === 'mobile'
   const isWide = breakpoint === 'wide'
   const { user, signOut } = useAuth()
   const { show: showToast } = useDemoToast()
@@ -258,11 +261,13 @@ export function UserSettings() {
         </Pressable>
       </View>
 
-      {/* Profile header — avatar + edit + 3 actions row */}
+      {/* Profile header — avatar + edit + 3 actions row. Mobile stacks the
+          avatar above the action links so each line of the "Política de
+          privacidade…" label can occupy the full viewport width. */}
       <View
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
+          flexDirection: breakpoint === 'mobile' ? 'column' : 'row',
+          alignItems: breakpoint === 'mobile' ? 'flex-start' : 'center',
           gap: theme.gap.m,
           borderBottomWidth: 1,
           borderBottomColor: theme.content.dark,
@@ -270,7 +275,12 @@ export function UserSettings() {
         }}
       >
         <View style={{ position: 'relative' }}>
-          <Avatar uri={user?.avatarUri} customSize={108} bordered borderWidth={4} />
+          <Avatar
+            uri={user?.avatarUri}
+            customSize={breakpoint === 'mobile' ? 80 : 108}
+            bordered
+            borderWidth={4}
+          />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Editar foto"
@@ -389,7 +399,7 @@ export function UserSettings() {
           </Title>
           <Input label="Nome Completo" value={name} onChangeText={setName} />
           <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
-            <View style={{ width: 192 }}>
+            <View style={{ ...(breakpoint === 'mobile' ? { flex: 1 } : { width: 192 }) }}>
               <Input label="Data de Nascimento" value={dob} onChangeText={setDob} />
             </View>
             <View style={{ flex: 1 }}>

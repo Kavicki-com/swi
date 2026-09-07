@@ -284,7 +284,10 @@ export function WorkerDetailsLayout({
 }: WorkerDetailsLayoutProps) {
   const theme = useTheme()
   const breakpoint = useBreakpoint()
-  const isTablet = breakpoint === 'tablet'
+  // Phase 1 of the responsive system rolled the mobile shell only.
+  // Page-level mobile layouts come in later phases; until then mobile
+  // borrows the tablet content layout (closest existing fit).
+  const isTablet = breakpoint === 'tablet' || breakpoint === 'mobile'
   const isWide = breakpoint === 'wide'
   const genderLabel = worker.gender === 'male' ? 'Masculino' : 'Feminino'
   const genderIcon: IconName = worker.gender === 'male' ? 'admin_filled' : 'humidity_mid'

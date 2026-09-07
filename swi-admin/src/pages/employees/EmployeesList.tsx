@@ -26,6 +26,7 @@ type EmployeeRowProps = {
   onChat: (employee: Employee) => void
   onLocation: (employee: Employee) => void
   isTablet: boolean
+  isMobile: boolean
 }
 
 function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof useTheme>) {
@@ -34,15 +35,26 @@ function vitalsColor(status: Employee['vitalsStatus'], theme: ReturnType<typeof 
   return theme.surface.success
 }
 
-function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: EmployeeRowProps) {
+function EmployeeRow({
+  employee,
+  onOpen,
+  onChat,
+  onLocation,
+  isTablet,
+  isMobile,
+}: EmployeeRowProps) {
   const theme = useTheme()
   return (
     <View
       testID={`employee-row-${employee.id}`}
       style={{
-        flexDirection: 'row',
-        alignItems: 'center',
+        // Mobile (< 640): stack the card vertically so the left and right
+        // clusters get their own row. The horizontal layout otherwise
+        // exceeds the viewport even with text columns flexing.
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
         justifyContent: 'space-between',
+        gap: isMobile ? theme.gap.s : 0,
         backgroundColor: theme.surface.standard,
         borderRadius: theme.border.radius.m,
         paddingHorizontal: theme.padding.m,
@@ -51,7 +63,7 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
         paddingVertical: theme.padding.sm,
         // Tablet: if the right cluster can't fit on the same line, allow it
         // to wrap below. Desktop/wide keep the strict single-row Figma layout.
-        ...(isTablet ? ({ flexWrap: 'wrap', rowGap: theme.gap.s } as const) : null),
+        ...(isTablet && !isMobile ? ({ flexWrap: 'wrap', rowGap: theme.gap.s } as const) : null),
       }}
     >
       {/* Left cluster: avatar (with status dot) + name/age/blood + divider + role */}
@@ -59,7 +71,11 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
           {/* Avatar with vitals status dot overlay at top-right. */}
           <View style={{ position: 'relative' }}>
-            <Avatar uri={employee.avatarUri} customSize={64} accessibilityLabel={employee.name} />
+            <Avatar
+              uri={employee.avatarUri}
+              customSize={isMobile ? 48 : 64}
+              accessibilityLabel={employee.name}
+            />
             <View
               accessibilityLabel={`Status: ${employee.vitalsStatus}`}
               style={{
@@ -75,7 +91,13 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
               }}
             />
           </View>
-          <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 165 }}>
+          <View
+            style={{
+              flexDirection: 'column',
+              gap: theme.gap.xs,
+              ...(isMobile ? { flex: 1, minWidth: 0 } : { width: 165 }),
+            }}
+          >
             {/* Pressable so a click on the name itself opens the employee detail page. */}
             <Pressable
               onPress={() => onOpen(employee.id)}
@@ -101,10 +123,19 @@ function EmployeeRow({ employee, onOpen, onChat, onLocation, isTablet }: Employe
             </View>
           </View>
         </View>
-        {/* Vertical divider */}
-        <View style={{ width: 1, height: 56, backgroundColor: theme.surface.high }} />
-        {/* Role + specialization */}
-        <View style={{ flexDirection: 'column', gap: theme.gap.xs, width: 220 }}>
+        {/* Vertical divider — hidden on mobile (role moves to its own line). */}
+        {!isMobile && (
+          <View style={{ width: 1, height: 56, backgroundColor: theme.surface.high }} />
+        )}
+        {/* Role + specialization. On mobile the column flexes to the row's
+            free width. */}
+        <View
+          style={{
+            flexDirection: 'column',
+            gap: theme.gap.xs,
+            ...(isMobile ? { flex: 1, minWidth: 0 } : { width: 220 }),
+          }}
+        >
           <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
             {employee.role}
           </Text>
@@ -276,7 +307,11 @@ export function EmployeesList({
   const theme = useTheme()
   const navigate = useNavigate()
   const breakpoint = useBreakpoint()
-  const isTablet = breakpoint === 'tablet'
+  // Phase 1 of the responsive system rolled the mobile shell only.
+  // Page-level mobile layouts come in later phases; until then mobile
+  // borrows the tablet content layout (closest existing fit).
+  const isTablet = breakpoint === 'tablet' || breakpoint === 'mobile'
+  const isMobile = breakpoint === 'mobile'
   const [employees, setEmployees] = useState<Employee[]>([])
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
@@ -361,6 +396,7 @@ export function EmployeesList({
                 onChat={() => navigate('/chat')}
                 onLocation={() => navigate('/maps/general')}
                 isTablet={isTablet}
+                isMobile={isMobile}
               />
             ))}
           </View>

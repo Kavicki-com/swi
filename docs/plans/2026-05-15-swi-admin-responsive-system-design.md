@@ -25,10 +25,10 @@ at both ends.
 |---|---|---|---|
 | `tablet` | `< 1024` | Hidden, replaced by top bar with Logo + hamburger drawer + BPM | Single column, full width, cards reflow naturally |
 | `desktop` | `1024-1599` | 228 px fixed left (current Figma) | Existing layout |
-| `wide` | `>= 1600` | 228 px fixed left | Multi-column rows where Figma 1920 specifies it (e.g. Dashboard top row puts Map / Charts / KPIs side-by-side) |
+| `wide` | `>= 1500` | 228 px fixed left | Multi-column rows where Figma 1920 specifies it (e.g. Dashboard top row puts Map / Charts / KPIs side-by-side) |
 
 The boundary picks reflect Figma intent: 1024 is the natural cut where the
-228 px sidebar stops fitting next to a usable content column, and 1600 is
+228 px sidebar stops fitting next to a usable content column, and 1500 is
 the practical threshold where there is real room to add a column of
 content beside the existing two-column rows.
 
@@ -66,7 +66,7 @@ export type Breakpoint = 'tablet' | 'desktop' | 'wide'
 export function useBreakpoint(): Breakpoint {
   const { width } = useWindowDimensions()
   if (width < 1024) return 'tablet'
-  if (width < 1600) return 'desktop'
+  if (width < 1500) return 'desktop'
   return 'wide'
 }
 ```

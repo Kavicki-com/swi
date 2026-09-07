@@ -94,6 +94,7 @@ function AlertRow({ alert }: { alert: MonitoringAlertDetail }) {
 function AlertUserCard({
   user,
   expanded,
+  isMobile,
   onToggle,
   onDelete,
   onChat,
@@ -104,6 +105,7 @@ function AlertUserCard({
 }: {
   user: MonitoringUserAlert
   expanded: boolean
+  isMobile: boolean
   onToggle: () => void
   onDelete: () => void
   onChat: () => void
@@ -118,16 +120,38 @@ function AlertUserCard({
   const header = (
     <View
       style={{
-        flexDirection: 'row',
-        alignItems: 'center',
+        // Mobile (< 640): stack the left and right clusters vertically; the
+        // horizontal version (left flex-row + right cluster + chevron) is
+        // ~620 px and clipped at 393.
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
         justifyContent: 'space-between',
+        gap: isMobile ? theme.gap.s : 0,
         width: '100%',
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xl }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Avatar uri={user.avatarUri} customSize={64} accessibilityLabel={user.name} />
-          <View style={{ width: 220, gap: 4 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: isMobile ? theme.gap.s : theme.gap.xl,
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+        }}
+      >
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.gap.s,
+            ...(isMobile ? { flex: 1, minWidth: 0 } : null),
+          }}
+        >
+          <Avatar
+            uri={user.avatarUri}
+            customSize={isMobile ? 48 : 64}
+            accessibilityLabel={user.name}
+          />
+          <View style={{ gap: 4, ...(isMobile ? { flex: 1, minWidth: 0 } : { width: 220 }) }}>
             <View>
               <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
                 {user.name}
@@ -148,8 +172,8 @@ function AlertUserCard({
             </View>
           </View>
         </View>
-        <VerticalDivider />
-        <View style={{ width: 186, gap: 4 }}>
+        {!isMobile && <VerticalDivider />}
+        <View style={{ gap: 4, ...(isMobile ? { flex: 1, minWidth: 0 } : { width: 186 }) }}>
           <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
             {user.role}
           </Text>
@@ -157,7 +181,7 @@ function AlertUserCard({
             {user.specialization}
           </Text>
         </View>
-        <VerticalDivider />
+        {!isMobile && <VerticalDivider />}
         <Toggle
           defaultValue={user.active}
           accessibilityLabel={`Ativar/desativar monitoramento de ${user.name}`}
@@ -203,18 +227,19 @@ function AlertUserCard({
               as is (matches Figma horizontal rhythm between alerts and CTAs). */}
           <View
             style={{
-              flexDirection: 'row',
+              // Mobile: stack the alert list and the actions column.
+              flexDirection: isMobile ? 'column' : 'row',
               alignItems: 'flex-start',
-              gap: 51,
+              gap: isMobile ? theme.gap.m : 51,
               padding: theme.padding.sm,
             }}
           >
-            <View style={{ flex: 1, gap: 18 }}>
+            <View style={{ ...(isMobile ? { width: '100%' } : { flex: 1 }), gap: 18 }}>
               {user.alerts.map((a) => (
                 <AlertRow key={a.id} alert={a} />
               ))}
             </View>
-            <View style={{ width: 220, gap: theme.gap.sm }}>
+            <View style={{ ...(isMobile ? { width: '100%' } : { width: 220 }), gap: theme.gap.sm }}>
               <Button
                 label="Histórico de exames clínicos"
                 variant="outline"
@@ -373,7 +398,11 @@ export function MonitoringLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const breakpoint = useBreakpoint()
-  const isTablet = breakpoint === 'tablet'
+  // Phase 1 of the responsive system rolled the mobile shell only.
+  // Page-level mobile layouts come in later phases; until then mobile
+  // borrows the tablet content layout (closest existing fit).
+  const isTablet = breakpoint === 'tablet' || breakpoint === 'mobile'
+  const isMobile = breakpoint === 'mobile'
   const isWide = breakpoint === 'wide'
   // At wide on the good-conditions route the page reorganises into a
   // side-by-side layout: 4 donuts (rendered by the Outlet child) on the LEFT,
@@ -485,9 +514,16 @@ export function MonitoringLayout() {
         </Title>
 
         <View
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+          style={{
+            // Mobile: stack tabs above the "Ver Todos" CTA; the tabs alone
+            // need the whole row width to be readable at 393.
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'stretch' : 'center',
+            justifyContent: 'space-between',
+            gap: isMobile ? theme.gap.s : 0,
+          }}
         >
-          <View style={{ width: 492, position: 'relative' }}>
+          <View style={{ width: isMobile ? '100%' : 492, position: 'relative' }}>
             <Tabs
               tabs={[
                 { value: 'excelentes', label: 'Excelentes' },
@@ -548,6 +584,7 @@ export function MonitoringLayout() {
               key={u.id}
               user={u}
               expanded={expandedId === u.id}
+              isMobile={isMobile}
               onToggle={() => setExpandedId((prev) => (prev === u.id ? null : u.id))}
               onDelete={() =>
                 showToast('Funcionário removido', `${u.name} foi removido do monitoramento`)

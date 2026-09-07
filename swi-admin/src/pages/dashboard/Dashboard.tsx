@@ -1,6 +1,6 @@
 // src/pages/dashboard/Dashboard.tsx
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, View } from 'react-native'
+import { Pressable, ScrollView, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
@@ -664,6 +664,7 @@ function HealthDonuts({
   navigate,
   theme,
   flat = false,
+  wrap = false,
 }: {
   summary: DashboardSummary
   navigate: ReturnType<typeof useNavigate>
@@ -672,6 +673,9 @@ function HealthDonuts({
   // so the donut cards sit directly on the page bg. Used in the wide
   // dashboard variant where the section panel is intentionally absent.
   flat?: boolean
+  // Allow donuts to wrap to a new row. Used on mobile (< 640) where three
+  // donuts side-by-side don't fit a 393 px viewport.
+  wrap?: boolean
 }) {
   return (
     <View
@@ -679,6 +683,7 @@ function HealthDonuts({
       style={{
         flex: 1,
         flexDirection: 'row',
+        flexWrap: wrap ? 'wrap' : 'nowrap',
         gap: theme.gap.m,
         justifyContent: 'space-around',
         minWidth: 0,
@@ -753,36 +758,56 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
     isNow: w.isNow,
   }))
 
+  // WeatherTimeline renders intrinsically wide (~800 px for its 4 weather
+  // segments + scrubber). On mobile (< 640) the parent is only ~360 px, so
+  // we wrap it in a horizontal ScrollView. The component itself doesn't
+  // need to be aware — RN-Web maps ScrollView to a div with overflow-x.
+  const isMobile = breakpoint === 'mobile'
+  const weatherTimelineCore = (
+    <WeatherTimeline
+      events={weatherEvents}
+      // Figma flex: 280, 280, 280, 528 → ratios 1, 1, 1, 1.886.
+      // Colors per Figma: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
+      intensitySegments={[
+        { id: 'seg-0', flex: 1, color: '#3899bf' },
+        { id: 'seg-1', flex: 1, color: theme.surface.warning },
+        { id: 'seg-2', flex: 1, color: '#3899bf' },
+        { id: 'seg-3', flex: 1.886, color: theme.surface.success },
+      ]}
+      // Figma frame 21:1501 — scrubber: 148px thumb on 1037px track ≈ 14%.
+      scrollbar={{ thumbPercent: 14, thumbStartPercent: 0 }}
+      nowLabel={WEATHER_NOW_LABEL}
+      fullWidth
+      testID="weather-timeline"
+    />
+  )
   const weatherStrip = (
     <View
       dataSet={{ fidelity: 'weather' }}
       style={{ alignSelf: 'stretch', width: '100%', gap: theme.gap.m }}
     >
       <Title>Previsão do tempo</Title>
-      <WeatherTimeline
-        events={weatherEvents}
-        // Figma flex: 280, 280, 280, 528 → ratios 1, 1, 1, 1.886.
-        // Colors per Figma: blue (rain), orange (sol intenso), blue (rain), green-dark (parcialmente nublado).
-        intensitySegments={[
-          { id: 'seg-0', flex: 1, color: '#3899bf' },
-          { id: 'seg-1', flex: 1, color: theme.surface.warning },
-          { id: 'seg-2', flex: 1, color: '#3899bf' },
-          { id: 'seg-3', flex: 1.886, color: theme.surface.success },
-        ]}
-        // Figma frame 21:1501 — scrubber: 148px thumb on 1037px track ≈ 14%.
-        scrollbar={{ thumbPercent: 14, thumbStartPercent: 0 }}
-        nowLabel={WEATHER_NOW_LABEL}
-        fullWidth
-        testID="weather-timeline"
-      />
+      {isMobile ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ width: '100%' }}
+          contentContainerStyle={{ minWidth: 720 }}
+        >
+          {weatherTimelineCore}
+        </ScrollView>
+      ) : (
+        weatherTimelineCore
+      )}
     </View>
   )
 
-  // Tablet (< 1024): everything stacks into one column. The KPI 2x2 and the
-  // donut row keep their internal layouts (already responsive); we just
-  // stack their containers on top of each other, and the two-col row
-  // becomes two stacked sections.
-  if (breakpoint === 'tablet') {
+  // Tablet (< 1024) and mobile (< 640, Phase 1 fallback): everything stacks
+  // into one column. The KPI 2x2 and the donut row keep their internal
+  // layouts (already responsive); we just stack their containers on top of
+  // each other, and the two-col row becomes two stacked sections. Mobile
+  // gets a dedicated layout in a future phase.
+  if (breakpoint === 'tablet' || breakpoint === 'mobile') {
     return (
       <View testID="dashboard-content" style={{ gap: theme.gap.l }}>
         <MapBanner markers={summary.mapMarkers} />
@@ -792,7 +817,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
           style={{ flexDirection: 'column', gap: theme.gap.m }}
         >
           <FuncionariosKpi summary={summary} />
-          <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
+          <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat wrap={isMobile} />
         </View>
         <View
           testID="dashboard-two-col-row"

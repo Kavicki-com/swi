@@ -18,6 +18,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/mockApi/admins'
 import { useDemoToast } from '@/lib/demoToast'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 
 function VerticalDivider() {
   const theme = useTheme()
@@ -28,10 +29,12 @@ function VerticalDivider() {
 function AdminPickRow({
   admin,
   selected,
+  isMobile,
   onToggle,
 }: {
   admin: Admin
   selected: boolean
+  isMobile: boolean
   onToggle: (next: boolean) => void
 }) {
   const theme = useTheme()
@@ -42,15 +45,36 @@ function AdminPickRow({
         borderRadius: theme.border.radius.m,
         paddingHorizontal: theme.padding.m,
         paddingVertical: theme.padding.s,
-        flexDirection: 'row',
-        alignItems: 'center',
+        // Mobile: stack the left cluster on top of the Radio so the row
+        // doesn't punch past the modal width.
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
         justifyContent: 'space-between',
+        gap: isMobile ? theme.gap.s : 0,
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Avatar uri={admin.avatarUri} customSize={64} accessibilityLabel={admin.name} />
-          <View style={{ width: 145, gap: 4 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: theme.gap.m,
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+        }}
+      >
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.gap.s,
+            ...(isMobile ? { flex: 1, minWidth: 0 } : null),
+          }}
+        >
+          <Avatar
+            uri={admin.avatarUri}
+            customSize={isMobile ? 48 : 64}
+            accessibilityLabel={admin.name}
+          />
+          <View style={{ gap: 4, ...(isMobile ? { flex: 1, minWidth: 0 } : { width: 145 }) }}>
             <View>
               <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
                 {admin.name}
@@ -71,8 +95,8 @@ function AdminPickRow({
             </View>
           </View>
         </View>
-        <VerticalDivider />
-        <View style={{ width: 186, gap: 4 }}>
+        {!isMobile && <VerticalDivider />}
+        <View style={{ gap: 4, ...(isMobile ? { flex: 1, minWidth: 0 } : { width: 186 }) }}>
           <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
             {admin.role}
           </Text>
@@ -80,7 +104,7 @@ function AdminPickRow({
             {admin.specialization}
           </Text>
         </View>
-        <VerticalDivider />
+        {!isMobile && <VerticalDivider />}
       </View>
 
       <Radio
@@ -97,6 +121,7 @@ export function ResponsablesModal() {
   const theme = useTheme()
   const navigate = useNavigate()
   const { show: showToast } = useDemoToast()
+  const isMobile = useBreakpoint() === 'mobile'
   const [admins, setAdmins] = useState<ReadonlyArray<Admin>>([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
@@ -163,7 +188,10 @@ export function ResponsablesModal() {
       <View
         testID="responsables-modal"
         style={{
-          width: 720,
+          // Cap at the Figma desktop width but allow the modal to shrink to
+          // the viewport on phones (the dialog backdrop already centers it).
+          width: '100%',
+          maxWidth: 720,
           backgroundColor: theme.surface.standard,
           borderRadius: theme.border.radius.m,
           padding: theme.padding.m,
@@ -192,6 +220,7 @@ export function ResponsablesModal() {
               key={a.id}
               admin={a}
               selected={selected.has(a.id)}
+              isMobile={isMobile}
               onToggle={(next) => toggle(a.id, next)}
             />
           ))}

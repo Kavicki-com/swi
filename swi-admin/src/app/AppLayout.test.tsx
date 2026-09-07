@@ -145,7 +145,50 @@ describe('AppLayout', () => {
       setViewportWidth(1366)
     })
 
-    it('renders the tablet top-bar (no sidebar) when width < 1024', async () => {
+    it('renders the mobile shell (slim top-bar, no HeaderUserInfo widget) when width < 640', async () => {
+      // iPhone 17 width — the original tablet shell rendered the
+      // HeaderUserInfo widget (~260 px) plus a "Menu" button plus the
+      // Logo in a single row, which pushed the document past 540 px and
+      // clipped on every authenticated page. The mobile shell drops the
+      // widget for an avatar-only pressable.
+      setViewportWidth(393)
+      renderTree()
+      await waitFor(() => {
+        expect(screen.getByTestId('app-layout-mobile')).toBeInTheDocument()
+      })
+      expect(screen.getByTestId('app-topbar')).toBeInTheDocument()
+      expect(screen.getByTestId('app-topbar-hamburger')).toBeInTheDocument()
+      // Mobile collapses the HeaderUserInfo (heart-rate + pressure widget)
+      // into a smaller avatar pressable. The widget must NOT render.
+      expect(screen.queryByTestId('app-header-user-info')).not.toBeInTheDocument()
+      expect(screen.getByTestId('app-topbar-avatar')).toBeInTheDocument()
+      expect(screen.queryByTestId('app-sidebar')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('app-layout-tablet')).not.toBeInTheDocument()
+      // Drawer starts closed.
+      expect(screen.queryByTestId('app-drawer')).not.toBeInTheDocument()
+      // Hamburger opens it.
+      fireEvent.click(screen.getByTestId('app-topbar-hamburger'))
+      await waitFor(() => {
+        expect(screen.getByTestId('app-drawer')).toBeInTheDocument()
+      })
+    })
+
+    it('avatar pressable on the mobile top-bar opens the user-details menu', async () => {
+      // QA cliente §1.1 contract — the avatar must open the same menu that
+      // the HeaderUserInfo pressable opens on tablet/desktop.
+      setViewportWidth(393)
+      renderTree()
+      await waitFor(() => {
+        expect(screen.getByTestId('app-topbar-avatar')).toBeInTheDocument()
+      })
+      expect(screen.queryByLabelText('Detalhes do usuário')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByTestId('app-topbar-avatar'))
+      await waitFor(() => {
+        expect(screen.getByLabelText('Detalhes do usuário')).toBeInTheDocument()
+      })
+    })
+
+    it('renders the tablet top-bar (no sidebar) when 640 ≤ width < 1024', async () => {
       setViewportWidth(800)
       renderTree()
       await waitFor(() => {
@@ -153,6 +196,10 @@ describe('AppLayout', () => {
       })
       expect(screen.getByTestId('app-topbar')).toBeInTheDocument()
       expect(screen.getByTestId('app-topbar-hamburger')).toBeInTheDocument()
+      // Tablet still renders the full HeaderUserInfo widget — width is
+      // sufficient and the Figma tablet frame includes it.
+      expect(screen.getByTestId('app-header-user-info')).toBeInTheDocument()
+      expect(screen.queryByTestId('app-layout-mobile')).not.toBeInTheDocument()
       expect(screen.queryByTestId('app-sidebar')).not.toBeInTheDocument()
       // Drawer starts closed.
       expect(screen.queryByTestId('app-drawer')).not.toBeInTheDocument()
