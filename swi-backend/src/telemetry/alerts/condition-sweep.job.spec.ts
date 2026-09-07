@@ -85,3 +85,48 @@ describe('TelemetryConditionSweepJob.run: só delega', () => {
     warn.mockRestore()
   })
 })
+
+describe('TelemetryConditionSweepJob.run: uma rodada por vez', () => {
+  it('tique que cai com a rodada anterior em voo é pulado', async () => {
+    // O agendador do Nest não pula tique por causa da rodada anterior: o
+    // método devolve promessa que ninguém aguarda. Duas varreduras em voo ao
+    // mesmo tempo não corrompem nada, mas dobram a carga justo quando o banco
+    // já está sofrendo, que é o motivo de a rodada estar demorando.
+    const debug = jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined)
+    let libera = () => undefined as void
+    const sweep = jest.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          libera = () => resolve({ scanned: 0, signalLost: 0, recovered: 0 })
+        }),
+    )
+    const job = jobWith(sweep)
+
+    const emVoo = job.run()
+    await job.run()
+
+    expect(sweep).toHaveBeenCalledTimes(1)
+    expect(debug).toHaveBeenCalledTimes(1)
+
+    libera()
+    await emVoo
+    debug.mockRestore()
+  })
+
+  it('rodada que falhou não tranca as seguintes', async () => {
+    // A guarda tem de cair no fim, e não no caminho feliz: uma exceção que
+    // deixasse a marca em pé pararia a varredura para sempre, em silêncio.
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const sweep = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('banco fora do ar'))
+      .mockResolvedValue({ scanned: 0, signalLost: 0, recovered: 0 })
+    const job = jobWith(sweep)
+
+    await job.run()
+    await job.run()
+
+    expect(sweep).toHaveBeenCalledTimes(2)
+    warn.mockRestore()
+  })
+})

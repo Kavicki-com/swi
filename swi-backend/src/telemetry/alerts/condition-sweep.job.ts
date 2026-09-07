@@ -33,6 +33,16 @@ export function conditionSweepCron(env: NodeJS.ProcessEnv): string {
 export class TelemetryConditionSweepJob {
   private readonly logger = new Logger(TelemetryConditionSweepJob.name)
 
+  /**
+   * Marca de rodada em curso. O agendador do Nest não pula tique porque a
+   * anterior ainda está rodando: o método devolve promessa que ninguém aguarda,
+   * então duas varreduras podem estar em voo ao mesmo tempo, justo quando o
+   * banco já está sofrendo, que é o motivo de a rodada estar demorando. Não
+   * corrompem nada, porque o lock por funcionário e origem enfileira as
+   * escritas, mas dobram a carga na pior hora.
+   */
+  private running = false
+
   constructor(private readonly conditions: TelemetryConditionService) {}
 
   /**
@@ -43,6 +53,14 @@ export class TelemetryConditionSweepJob {
    */
   @Cron(conditionSweepCron(process.env))
   async run(): Promise<void> {
+    if (this.running) {
+      // Depuração, e não aviso: pular tique é o comportamento desejado, e o
+      // silêncio dos que sobraram é recuperado na rodada seguinte.
+      this.logger.debug('Varredura de silêncio ainda em curso: tique pulado')
+      return
+    }
+    this.running = true
+
     const startedAt = Date.now()
     try {
       // Um instante só para a rodada inteira, como no ciclo de vida: com dois
@@ -65,6 +83,10 @@ export class TelemetryConditionSweepJob {
       // uma exceção solta viraria rejeição não tratada no processo. O que ficou
       // de fora entra na rodada de daqui a 30 s, e o silêncio não some sozinho.
       this.logger.warn(`Varredura de silêncio falhou: ${(error as Error).message}`)
+    } finally {
+      // No finally, e não no fim do caminho feliz: uma rodada que estourasse
+      // deixaria a marca em pé e pararia a varredura para sempre, em silêncio.
+      this.running = false
     }
   }
 }
