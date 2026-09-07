@@ -31,3 +31,22 @@ describe('SessionHistoryQueryDto', () => {
     expect(await limitErrs({})).toBe(0)
   })
 })
+
+// O DTO importava o teto de paginação do serviço de consulta, e como valor, não
+// como tipo. Quem carregava o DTO carregava o serviço inteiro atrás, com o
+// cliente do Prisma e o projetor junto: um teste de unidade do DTO subia banco
+// sem precisar, e um pacote de contrato compartilhado com o mobile não
+// conseguiria levar o DTO sem levar o backend.
+describe('SessionHistoryQueryDto: carregar o DTO não carrega o backend', () => {
+  it('não puxa o serviço de consulta nem o cliente do Prisma', () => {
+    for (const path of Object.keys(require.cache)) delete require.cache[path]
+    jest.isolateModules(() => {
+      require('./session-history.dto')
+    })
+
+    const arrastados = Object.keys(require.cache).filter(
+      (p) => p.includes('telemetry-query.service') || p.includes('prisma.service') || p.includes('telemetry-projector'),
+    )
+    expect(arrastados).toEqual([])
+  })
+})
