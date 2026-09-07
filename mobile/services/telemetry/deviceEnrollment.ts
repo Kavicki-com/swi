@@ -11,6 +11,11 @@ import { nativeErrorCode, watchControl, type WatchControl } from '../../modules/
 
 const COMPLETE_PATH = '/telemetry/v1/devices/enrollments/complete';
 
+// Limite do validador no backend (complete-enrollment.dto.ts). Passar disso
+// daria um 400 que aqui viraria invalid_code, e a pessoa conferiria um código
+// que estava certo.
+const MODEL_MAX_LENGTH = 100;
+
 export type EnrollmentFailureReason =
   | 'unsupported'
   | 'unauthorized'
@@ -19,6 +24,7 @@ export type EnrollmentFailureReason =
   | 'already_used'
   | 'keychain'
   | 'network'
+  | 'rate_limited'
   | 'unexpected';
 
 export interface EnrollmentFailure {
@@ -68,6 +74,9 @@ function messageOf(body: string): string {
 function reasonForStatus(status: number, body: string): EnrollmentFailureReason {
   if (status === 400) return reasonForBadRequest(body);
   if (status === 401) return 'unauthorized';
+  // A rota limita cinco tentativas por minuto, e errar um código ditado é o
+  // caso comum: a pessoa precisa ouvir "aguarde", não "erro inesperado".
+  if (status === 429) return 'rate_limited';
   return 'unexpected';
 }
 
@@ -100,11 +109,14 @@ function credentialStored(control: WatchControl): boolean {
 /**
  * Nunca rejeita: todo desfecho vira um motivo que a tela sabe mostrar.
  *
- * Antes de qualquer `paired: false` que não seja `unsupported`, consulta o
- * chaveiro. Há um caminho raro em que o Swift guardou a credencial e a
- * resposta não chegou ao JavaScript (a ponte caiu, o app foi suspenso). Nesse
- * caso o aparelho ESTÁ pareado, e o backend já consumiu o convite: dizer
- * "tente de novo" mandaria o funcionário atrás de um convite novo à toa.
+ * O chaveiro é fotografado antes do request. Há um caminho raro em que o
+ * Swift guardou a credencial e a resposta não chegou ao JavaScript; nesse
+ * caso o aparelho ESTÁ pareado e o backend já consumiu o convite, então dizer
+ * "tente de novo" mandaria o funcionário atrás de outro convite à toa. A
+ * única evidência de que ESTA tentativa gravou é o chaveiro ter virado de
+ * vazio para cheio entre a foto e a falha. Uma credencial que já estava lá
+ * (por exemplo, revogada no painel e ainda não limpa pelo app) não prova nada
+ * sobre esta tentativa, e a falha é falha.
  */
 export async function completeEnrollment(
   enrollmentId: string,
@@ -120,8 +132,22 @@ export async function completeEnrollment(
 
   if (!control.supported) return { paired: false, reason: 'unsupported' };
 
+  let token: string | null;
+  try {
+    token = await readToken();
+  } catch {
+    token = null;
+  }
+  // Nada foi à rede ainda, então nada pode ter sido gravado: sem chaveiro.
+  if (!token) return { paired: false, reason: 'unauthorized' };
+
+  const model = deviceModel();
+  const payload: { enrollmentId: string; code: string; model?: string } = { enrollmentId, code };
+  if (model) payload.model = model.slice(0, MODEL_MAX_LENGTH);
+
+  const storedBefore = credentialStored(control);
   const failure = (reason: EnrollmentFailureReason): EnrollmentResult => {
-    if (credentialStored(control)) {
+    if (!storedBefore && credentialStored(control)) {
       console.warn(
         `[deviceEnrollment] pareamento confirmado pelo chaveiro, não pela resposta (motivo descartado: ${reason})`,
       );
@@ -129,18 +155,6 @@ export async function completeEnrollment(
     }
     return { paired: false, reason };
   };
-
-  let token: string | null;
-  try {
-    token = await readToken();
-  } catch {
-    token = null;
-  }
-  if (!token) return failure('unauthorized');
-
-  const model = deviceModel();
-  const payload: { enrollmentId: string; code: string; model?: string } = { enrollmentId, code };
-  if (model) payload.model = model;
 
   let response;
   try {

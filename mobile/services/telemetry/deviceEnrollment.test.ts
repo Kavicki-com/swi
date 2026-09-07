@@ -114,6 +114,17 @@ describe('completeEnrollment, caminho feliz', () => {
     });
   });
 
+  // O backend recusa modelo acima de 100 caracteres com 400 do validador, que
+  // aqui viraria invalid_code e faria a pessoa conferir um código certo.
+  it('corta o modelo em 100 caracteres antes de montar o corpo', async () => {
+    const { control, request } = fakeControl();
+    const longo = 'x'.repeat(150);
+    await completeEnrollment(ENROLLMENT_ID, CODE, deps(control, { deviceModel: () => longo }));
+    const corpo = JSON.parse(request.mock.calls[0][2] as string) as { model: string };
+    expect(corpo.model).toHaveLength(100);
+    expect(corpo.model).toBe('x'.repeat(100));
+  });
+
   it('2xx é pareado, e o segredo nunca passa pela função', async () => {
     const { control, request } = fakeControl();
     const resultado = await completeEnrollment(ENROLLMENT_ID, CODE, deps(control));
@@ -219,8 +230,18 @@ describe('completeEnrollment, status do backend', () => {
     });
   });
 
+  // A rota limita cinco tentativas por minuto, e errar um código ditado é o
+  // caso comum: a pessoa precisa ouvir "aguarde", não "erro inesperado".
+  it('429 é rate_limited', async () => {
+    const control = respondendo(429, nestError(429, 'ThrottlerException: Too Many Requests'));
+    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+      paired: false,
+      reason: 'rate_limited',
+    });
+  });
+
   it('qualquer outro status é unexpected', async () => {
-    for (const status of [429, 500, 503]) {
+    for (const status of [500, 503]) {
       const control = respondendo(status, '{}');
       await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
         paired: false,
@@ -269,13 +290,17 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
     warn.mockRestore();
   });
 
-  // O Swift guardou e a resposta não chegou ao JavaScript: o aparelho está
-  // pareado, e dizer o contrário faria o funcionário repetir um convite que o
-  // backend já consumiu.
-  it('rejeição com credencial guardada é pareado, com aviso', async () => {
+  // A única evidência de que ESTA tentativa gravou é o chaveiro ter virado de
+  // vazio para cheio entre a foto e a falha: o Swift guardou e a resposta se
+  // perdeu no caminho. Dizer "não pareado" mandaria o funcionário atrás de um
+  // convite que o backend já consumiu.
+  it('foto vazia, rejeição, chaveiro cheio: pareado, com aviso', async () => {
     const { control, request, hasDeviceCredential } = fakeControl();
-    request.mockRejectedValue(rejeicao('E_NETWORK'));
-    hasDeviceCredential.mockReturnValue(true);
+    hasDeviceCredential.mockReturnValueOnce(false);
+    request.mockImplementation(async () => {
+      hasDeviceCredential.mockReturnValue(true);
+      throw rejeicao('E_NETWORK');
+    });
     await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
       paired: true,
     });
@@ -283,16 +308,31 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
     expect(warn.mock.calls[0][0]).toMatch(/chaveiro/);
   });
 
-  it('status de recusa com credencial guardada também é pareado', async () => {
+  // Credencial revogada no painel continua no chaveiro até o app ver um 401 no
+  // envio. Um convite novo com código errado tem de ser código errado, não
+  // "pareado" por causa do que sobrou de antes.
+  it('credencial pré-existente e 400: a falha é falha', async () => {
     const { control, request, hasDeviceCredential } = fakeControl();
-    request.mockResolvedValue({ status: 500, body: '{}' });
     hasDeviceCredential.mockReturnValue(true);
+    request.mockResolvedValue({ status: 400, body: nestError(400, 'Código de pareamento inválido') });
     await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
-      paired: true,
+      paired: false,
+      reason: 'invalid_code',
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('credencial pré-existente e rejeição de rede: a falha é falha', async () => {
+    const { control, request, hasDeviceCredential } = fakeControl();
+    hasDeviceCredential.mockReturnValue(true);
+    request.mockRejectedValue(rejeicao('E_NETWORK'));
+    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+      paired: false,
+      reason: 'network',
     });
   });
 
-  it('chaveiro que falha ao responder conta como sem credencial', async () => {
+  it('chaveiro que falha ao responder conta como sem credencial nas duas leituras', async () => {
     const { control, request, hasDeviceCredential } = fakeControl();
     request.mockResolvedValue({ status: 500, body: '{}' });
     hasDeviceCredential.mockImplementation(() => {
@@ -304,6 +344,21 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
     });
   });
 
+  it('a foto é tirada antes do request, e a segunda leitura só na falha', async () => {
+    const { control, request, hasDeviceCredential } = fakeControl();
+    const ordem: string[] = [];
+    hasDeviceCredential.mockImplementation(() => {
+      ordem.push('chaveiro');
+      return false;
+    });
+    request.mockImplementation(async () => {
+      ordem.push('request');
+      return { status: 500, body: '{}' };
+    });
+    await completeEnrollment(ENROLLMENT_ID, CODE, deps(control));
+    expect(ordem).toEqual(['chaveiro', 'request', 'chaveiro']);
+  });
+
   it('sem suporte não consulta o chaveiro', async () => {
     const control = createWatchControl(null);
     const spy = jest.spyOn(control, 'hasDeviceCredential');
@@ -311,10 +366,16 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('no caminho feliz não consulta o chaveiro nem avisa', async () => {
+  it('sem token não consulta o chaveiro', async () => {
+    const { control, hasDeviceCredential } = fakeControl();
+    await completeEnrollment(ENROLLMENT_ID, CODE, deps(control, { readToken: async () => null }));
+    expect(hasDeviceCredential).not.toHaveBeenCalled();
+  });
+
+  it('no caminho feliz só a foto é lida, e não há aviso', async () => {
     const { control, hasDeviceCredential } = fakeControl();
     await completeEnrollment(ENROLLMENT_ID, CODE, deps(control));
-    expect(hasDeviceCredential).not.toHaveBeenCalled();
+    expect(hasDeviceCredential).toHaveBeenCalledTimes(1);
     expect(warn).not.toHaveBeenCalled();
   });
 });
