@@ -48,12 +48,24 @@ describe('TelemetryQueryController: fiação de autorização', () => {
 })
 
 describe('TelemetryQueryController: delegação', () => {
-  it('nenhuma rota lê o relógio: essa fronteira é do serviço', () => {
-    // Mesma escolha da ingestão, que carimba o instante no serviço. O relógio
-    // no controller deixaria o serviço sem como ser testado num instante fixo.
-    const source = TelemetryQueryController.toString()
+  // Mesma escolha da ingestão, que carimba o instante no serviço. O relógio no
+  // controller deixaria o serviço sem como ser testado num instante fixo. O que
+  // se afirma é a chamada, e não o texto do fonte: procurar "new Date(" no
+  // fonte da classe passava para Date.now(), para biblioteca de data, para
+  // `new Date` sem parênteses e para leitura movida a um método auxiliar, e
+  // reprovaria por motivo errado no dia em que a transpilação mudasse.
+  it.each([
+    ['me', (c: TelemetryQueryController) => c.me(WORKER.userId), 'currentForWorker'],
+    ['worker', (c: TelemetryQueryController) => c.worker(ADMIN, 'worker-9'), 'currentForAdmin'],
+    ['summary', (c: TelemetryQueryController) => c.summary(ADMIN), 'adminSummary'],
+    ['history', (c: TelemetryQueryController) => c.history(WORKER, 'session-1', {}), 'sessionHistory'],
+  ] as const)('%s chama o serviço sem passar instante', async (_rota, chamar, metodo) => {
+    const service = serviceDouble()
 
-    expect(source).not.toContain('new Date(')
+    await chamar(controller(service))
+
+    const [args] = service[metodo].mock.calls
+    expect(args.some((a: unknown) => a instanceof Date)).toBe(false)
   })
 
   it('me lê o id do token, e nunca da URL', async () => {
