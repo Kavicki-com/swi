@@ -3,6 +3,8 @@ import { createElement } from 'react';
 import {
   createWatchControl,
   loadNativeWatchControl,
+  nativeErrorCode,
+  type NativeHttpResponse,
   type SwiWatchControlEvents,
   type SwiWatchControlStatus,
   type WatchControlNative,
@@ -30,10 +32,16 @@ function fakeNative(initial?: Partial<SwiWatchControlStatus>) {
   };
   const requestAuthorization = jest.fn(async () => true);
   const startMonitoring = jest.fn(async () => true);
+  const request = jest.fn(async (): Promise<NativeHttpResponse> => ({ status: 200, body: '{}' }));
+  const hasDeviceCredential = jest.fn(() => false);
+  const clearDeviceCredential = jest.fn();
   const native: WatchControlNative = {
     getStatus: () => ({ ...status }),
     requestAuthorization,
     startMonitoring,
+    request,
+    hasDeviceCredential,
+    clearDeviceCredential,
     addListener: (event, listener) => {
       const list = listeners[event] as Listener<typeof event>[];
       list.push(listener as Listener<typeof event>);
@@ -51,7 +59,17 @@ function fakeNative(initial?: Partial<SwiWatchControlStatus>) {
   ) => {
     for (const l of listeners[event] as Listener<K>[]) l(payload);
   };
-  return { native, emit, listeners, requestAuthorization, startMonitoring, status };
+  return {
+    native,
+    emit,
+    listeners,
+    requestAuthorization,
+    startMonitoring,
+    request,
+    hasDeviceCredential,
+    clearDeviceCredential,
+    status,
+  };
 }
 
 describe('loadNativeWatchControl', () => {
@@ -134,6 +152,83 @@ describe('createWatchControl', () => {
     unsubscribe();
     expect(listeners.onMirroredSessionChanged).toHaveLength(0);
     expect(listeners.onHeartRateSample).toHaveLength(0);
+  });
+});
+
+describe('createWatchControl.request e estado de pareamento', () => {
+  it('sem suporte, request rejeita com E_UNSUPPORTED sem tocar a rede', async () => {
+    const control = createWatchControl(null);
+    await expect(
+      control.request('https://api/x', 'POST', null, { kind: 'device' }, false),
+    ).rejects.toMatchObject({ code: 'E_UNSUPPORTED' });
+  });
+
+  it('sem suporte, não há credencial e limpar não lança', () => {
+    const control = createWatchControl(null);
+    expect(control.hasDeviceCredential()).toBe(false);
+    expect(() => control.clearDeviceCredential()).not.toThrow();
+  });
+
+  it('com suporte, request repassa os cinco argumentos na ordem e devolve a resposta como veio', async () => {
+    const { native, request } = fakeNative();
+    request.mockResolvedValueOnce({ status: 201, body: '{"ok":true}' });
+    const control = createWatchControl(native);
+    const resposta = await control.request(
+      'https://api/telemetry',
+      'POST',
+      '{"a":1}',
+      { kind: 'bearer', token: 'tok' },
+      true,
+    );
+    expect(request).toHaveBeenCalledWith(
+      'https://api/telemetry',
+      'POST',
+      '{"a":1}',
+      { kind: 'bearer', token: 'tok' },
+      true,
+    );
+    expect(resposta).toEqual({ status: 201, body: '{"ok":true}' });
+  });
+
+  // Quem chama decide pelo código da rejeição; o invólucro não engole nada.
+  it('com suporte, a rejeição do nativo sobe intacta', async () => {
+    const { native, request } = fakeNative();
+    const erro = Object.assign(new Error('sem rede'), { code: 'E_NETWORK' });
+    request.mockRejectedValueOnce(erro);
+    await expect(
+      createWatchControl(native).request('https://api/x', 'GET', null, { kind: 'device' }, false),
+    ).rejects.toBe(erro);
+  });
+
+  it('hasDeviceCredential e clearDeviceCredential delegam ao nativo', () => {
+    const { native, hasDeviceCredential, clearDeviceCredential } = fakeNative();
+    hasDeviceCredential.mockReturnValueOnce(true);
+    const control = createWatchControl(native);
+    expect(control.hasDeviceCredential()).toBe(true);
+    expect(hasDeviceCredential).toHaveBeenCalledTimes(1);
+    control.clearDeviceCredential();
+    expect(clearDeviceCredential).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('nativeErrorCode', () => {
+  it.each([
+    'E_URL',
+    'E_NO_CREDENTIAL',
+    'E_NETWORK',
+    'E_KEYCHAIN',
+    'E_CREDENTIAL_MISSING',
+    'E_UNSUPPORTED',
+  ])('reconhece %s', (code) => {
+    expect(nativeErrorCode(Object.assign(new Error('x'), { code }))).toBe(code);
+  });
+
+  it('devolve null para código desconhecido, erro sem código e valores que não são erro', () => {
+    expect(nativeErrorCode(Object.assign(new Error('x'), { code: 'TIMEOUT' }))).toBeNull();
+    expect(nativeErrorCode(new Error('x'))).toBeNull();
+    expect(nativeErrorCode(null)).toBeNull();
+    expect(nativeErrorCode('E_NETWORK')).toBeNull();
+    expect(nativeErrorCode({ code: 42 })).toBeNull();
   });
 });
 
