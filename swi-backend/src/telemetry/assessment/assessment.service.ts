@@ -49,21 +49,61 @@ export class TelemetryAssessmentService {
    * corte de 15 s e o computedAt são medidos.
    */
   async assessSession(sessionId: string, triggerAt: Date, now: Date): Promise<AssessOutcome> {
-    const session = await this.prisma.telemetrySession.findUnique({
+    return this.prisma.$transaction((tx) => this.assessLocked(tx, sessionId, triggerAt, now))
+  }
+
+  /**
+   * O corpo da avaliação, já dentro da transação. Separado porque o que garante
+   * a cadeia é a transação inteira, e misturar abertura e conta na mesma função
+   * esconderia que toda leitura daqui para baixo acontece com a sessão travada.
+   */
+  private async assessLocked(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    triggerAt: Date,
+    now: Date,
+  ): Promise<AssessOutcome> {
+    // Lock na linha da sessão antes de ler qualquer coisa. Sem ele, dois lotes
+    // da mesma sessão em voo ao mesmo tempo leem a mesma anterior, passam os
+    // dois pelo corte e gravam duas avaliações apontando para o mesmo pai, o
+    // que bifurca a cadeia. Com ele, o segundo espera, lê o que o primeiro
+    // acabou de gravar e cai no corte. A garantia é do banco porque tem de
+    // valer para qualquer cliente, não só para um companion bem comportado.
+    // NO KEY porque inserir amostra pega FOR KEY SHARE na sessão pela chave
+    // estrangeira, e FOR UPDATE seguraria a ingestão de outro lote da mesma
+    // sessão enquanto esta avaliação roda. Só as avaliações precisam se
+    // enfileirar entre si.
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "TelemetrySession" WHERE id = ${sessionId} FOR NO KEY UPDATE
+    `
+    if (locked.length === 0) throw new Error(`Sessão de monitoramento ${sessionId} não existe para avaliar`)
+
+    // Sondagem leve do corte, pelo índice (sessionId, computedAt). Esta é a
+    // rota mais quente do backend e na maioria das chamadas o corte segura;
+    // carregar o JSON de inputs para depois descartá-lo seria desperdício.
+    const probe = await tx.telemetryAssessment.findFirst({
+      where: { sessionId },
+      orderBy: { computedAt: 'desc' },
+      select: { computedAt: true },
+    })
+    if (probe !== null && now.getTime() - probe.computedAt.getTime() < ASSESSMENT_THROTTLE_MS) {
+      return { outcome: 'throttled' }
+    }
+
+    const session = await tx.telemetrySession.findUnique({
       where: { id: sessionId },
       select: { id: true, workerId: true, origin: true, startedAt: true },
     })
     if (session === null) throw new Error(`Sessão de monitoramento ${sessionId} não existe para avaliar`)
 
-    const previous = await this.prisma.telemetryAssessment.findFirst({
-      where: { sessionId },
-      orderBy: { computedAt: 'desc' },
-      select: { id: true, computedAt: true, windowEnd: true, formulaVersion: true, inputs: true },
-    })
-
-    if (previous !== null && now.getTime() - previous.computedAt.getTime() < ASSESSMENT_THROTTLE_MS) {
-      return { outcome: 'throttled' }
-    }
+    const previous =
+      probe === null
+        ? null
+        : await tx.telemetryAssessment.findFirst({
+            where: { sessionId },
+            orderBy: { computedAt: 'desc' },
+            select: { id: true, windowEnd: true, formulaVersion: true, inputs: true },
+          })
 
     // A cadeia continua só com a mesma versão: estado de outra fórmula não é
     // comparável, e reiniciar é a decisão ficando visível na linha.
@@ -81,13 +121,13 @@ export class TelemetryAssessmentService {
 
     const sinceDay = new Date(monitoredDayOf(now).getTime() - this.profile.restingDays * DAY_MS)
     const [samples, profile, summaries] = await Promise.all([
-      this.prisma.telemetrySample.findMany({
+      tx.telemetrySample.findMany({
         where: { sessionId, eventTime: { gt: windowStart, lte: windowEnd } },
         select: { eventTime: true, heartRateBpm: true, motionCount: true },
         orderBy: { eventTime: 'asc' },
       }),
-      this.prisma.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
-      this.prisma.telemetryDailySummary.findMany({
+      tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
+      tx.telemetryDailySummary.findMany({
         where: { workerId: session.workerId, origin: session.origin, day: { gte: sinceDay }, heartRateMin: { not: null } },
         select: { heartRateMin: true },
         orderBy: { day: 'desc' },
@@ -134,7 +174,7 @@ export class TelemetryAssessmentService {
       unavailableReason: result.unavailableReason,
     }
 
-    const created = await this.prisma.telemetryAssessment.create({
+    const created = await tx.telemetryAssessment.create({
       data: {
         workerId: session.workerId,
         sessionId: session.id,

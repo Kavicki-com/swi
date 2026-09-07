@@ -12,17 +12,40 @@ const secondsAgo = (s: number) => new Date(NOW.getTime() - s * 1000)
 
 const SESSION = { id: 'session-1', workerId: 'worker-1', origin: 'REAL', startedAt: secondsAgo(3_600) }
 
-const prismaDouble = () =>
-  ({
+// O dublê é o mesmo objeto dentro e fora da transação, como o do device-auth:
+// o que interessa afirmar é a ordem das instruções e que a gravação aconteceu
+// com a transação aberta, não que o Prisma entrega outro cliente.
+const prismaDouble = () => {
+  const db: any = {
+    open: false,
+    createdWithTransactionOpen: false,
     telemetrySession: { findUnique: jest.fn().mockResolvedValue(SESSION) },
     telemetryAssessment: {
       findFirst: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'assessment-new', ...data })),
+      create: jest.fn(),
     },
     telemetrySample: { findMany: jest.fn().mockResolvedValue([]) },
     profile: { findUnique: jest.fn().mockResolvedValue({ birthDate: new Date('1991-05-10T00:00:00.000Z') }) },
     telemetryDailySummary: { findMany: jest.fn().mockResolvedValue([{ heartRateMin: 62 }]) },
-  }) as any
+  }
+  db.$transaction = jest.fn(async (fn: any) => {
+    db.open = true
+    try {
+      return await fn(db)
+    } finally {
+      db.open = false
+    }
+  })
+  db.$queryRaw = jest.fn().mockResolvedValue([{ id: SESSION.id }])
+  db.telemetryAssessment.create.mockImplementation(async ({ data }: any) => {
+    db.createdWithTransactionOpen = db.open
+    return { id: 'assessment-new', ...data }
+  })
+  return db
+}
+
+/** Em que ponto da execução um dublê foi chamado pela primeira vez. */
+const firstCall = (fn: jest.Mock) => fn.mock.invocationCallOrder[0]
 
 const service = (prisma: any) => new TelemetryAssessmentService(prisma as PrismaService)
 
@@ -191,7 +214,76 @@ describe('TelemetryAssessmentService.assessSession', () => {
 
   it('sessão inexistente estoura: é invariante quebrado, não caso normal', async () => {
     const prisma = prismaDouble()
-    prisma.telemetrySession.findUnique.mockResolvedValue(null)
+    prisma.$queryRaw.mockResolvedValue([])
     await expect(service(prisma).assessSession('nao-existe', NOW, NOW)).rejects.toThrow(/nao-existe/)
+  })
+})
+
+// Dois lotes da mesma sessão em voo ao mesmo tempo bifurcavam a cadeia: os dois
+// liam a mesma anterior, os dois passavam o corte, e os dois gravavam apontando
+// para o mesmo previousAssessmentId. Quem serializa é o banco, com lock na
+// linha da sessão, porque a garantia tem de valer para qualquer cliente.
+describe('TelemetryAssessmentService.assessSession, serialização por sessão', () => {
+  it('trava a linha da sessão antes de qualquer leitura', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow())
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const [sql] = prisma.$queryRaw.mock.calls[0]
+    expect(sql.join('?')).toMatch(/TelemetrySession/)
+    expect(sql.join('?')).toMatch(/for no key update/i)
+    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetryAssessment.findFirst))
+    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetrySession.findUnique))
+    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetrySample.findMany))
+  })
+
+  it('grava com a transação aberta, não depois de ela fechar', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    const out = await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(out.outcome).toBe('assessed')
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(prisma.createdWithTransactionOpen).toBe(true)
+  })
+
+  it('sonda o corte lendo só computedAt, e carrega inputs só depois de ele deixar passar', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow())
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.findFirst).toHaveBeenCalledTimes(2)
+    expect(prisma.telemetryAssessment.findFirst.mock.calls[0][0].select).toEqual({ computedAt: true })
+    expect(prisma.telemetryAssessment.findFirst.mock.calls[1][0].select).toMatchObject({ inputs: true })
+  })
+
+  it('primeira da sessão não faz a segunda consulta: não há anterior para carregar', async () => {
+    const prisma = prismaDouble()
+    await service(prisma).assessSession('session-1', NOW, NOW)
+    expect(prisma.telemetryAssessment.findFirst).toHaveBeenCalledTimes(1)
+  })
+
+  it('cortado: nem a sessão inteira, nem inputs, nem amostra são lidos', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow({ computedAt: secondsAgo(14) }))
+
+    const out = await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(out.outcome).toBe('throttled')
+    expect(prisma.telemetryAssessment.findFirst).toHaveBeenCalledTimes(1)
+    expect(prisma.telemetrySession.findUnique).not.toHaveBeenCalled()
+    expect(prisma.telemetrySample.findMany).not.toHaveBeenCalled()
+    expect(prisma.telemetryDailySummary.findMany).not.toHaveBeenCalled()
+  })
+
+  it('sessão que não existe estoura no lock, antes de sondar o corte', async () => {
+    const prisma = prismaDouble()
+    prisma.$queryRaw.mockResolvedValue([])
+
+    await expect(service(prisma).assessSession('sumida', NOW, NOW)).rejects.toThrow(/sumida/)
+    expect(prisma.telemetryAssessment.findFirst).not.toHaveBeenCalled()
   })
 })

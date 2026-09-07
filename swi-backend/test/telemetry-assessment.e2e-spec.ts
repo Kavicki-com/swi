@@ -5,6 +5,7 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { FORMULA_VERSION } from '../src/telemetry/assessment/assessment-profile'
+import { ASSESSMENT_THROTTLE_MS, TelemetryAssessmentService } from '../src/telemetry/assessment/assessment.service'
 import { encodeCredential, hashCredential } from '../src/telemetry/devices/device-auth.service'
 import { monitoredDayOf } from '../src/telemetry/domain/metric-state'
 import { SUMMARIZER_VERSION } from '../src/telemetry/lifecycle/telemetry-summarizer'
@@ -133,6 +134,37 @@ describe('Telemetry assessment e2e', () => {
     await post(headersA, liveBatch(session)).expect(200)
     await post(headersA, { events: [event({ monitoringSessionId: session })] }).expect(200)
     expect(await prisma.telemetryAssessment.count({ where: { sessionId: session } })).toBe(1)
+  })
+
+  it('dois lotes da mesma sessão em paralelo gravam uma avaliação só, e a cadeia segue dela', async () => {
+    const session = randomUUID()
+
+    const [first, second] = await Promise.all([post(headersA, liveBatch(session)), post(headersA, liveBatch(session))])
+
+    // O ACK dos dois é o normal: nenhum lote é recusado por causa do lock, que
+    // serializa a avaliação e não a ingestão.
+    for (const res of [first, second]) {
+      expect(res.status).toBe(200)
+      expect(res.body.acceptedEventIds).toHaveLength(2)
+      expect(res.body.conflicts).toEqual([])
+    }
+
+    const rows = await prisma.telemetryAssessment.findMany({ where: { sessionId: session } })
+    expect(rows).toHaveLength(1)
+
+    // E a cadeia não bifurcou: a próxima, já com o corte vencido, aponta para a
+    // única que existe. O `now` vem do teste porque é assim que o serviço
+    // permite adiantar o relógio sem esperar 15 s de verdade.
+    const later = new Date(Date.now() + ASSESSMENT_THROTTLE_MS + 1_000)
+    const out = await app.get(TelemetryAssessmentService).assessSession(session, later, later)
+    expect(out.outcome).toBe('assessed')
+
+    const chain = await prisma.telemetryAssessment.findMany({
+      where: { sessionId: session },
+      orderBy: { computedAt: 'asc' },
+    })
+    expect(chain).toHaveLength(2)
+    expect((chain[1].inputs as { chain: { previousAssessmentId: string } }).chain.previousAssessmentId).toBe(chain[0].id)
   })
 
   it('lote de backlog não avalia', async () => {
