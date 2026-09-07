@@ -35,10 +35,35 @@ const ALERTING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryCon
   'BLOOD_PRESSURE_REVIEW',
 ])
 
+/**
+ * Condições contínuas que o SILÊNCIO derruba. Batimento e bateria descrevem um
+ * valor que o relógio precisa estar mandando: parado o relógio, a evidência que
+ * sustentava a condição deixou de existir, e mantê-la aberta seria afirmar um
+ * agora que ninguém mediu.
+ *
+ * Pressão fica de fora de propósito: é medida à mão, vale por 72 h pelo prazo
+ * do domínio, e silêncio do relógio não diz nada sobre a pressão de ninguém.
+ * Ela só recupera por medição nova.
+ */
+const SILENCE_RECOVERS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
+  'HEART_RATE_HIGH',
+  'HEART_RATE_LOW',
+  'DEVICE_BATTERY_LOW',
+])
+
 export interface EvaluateOutcome {
   opened: TelemetryConditionKind[]
   recovered: TelemetryConditionKind[]
   alerts: number
+}
+
+export interface SweepOutcome {
+  /** Sessões silenciosas olhadas na rodada, tenham gerado escrita ou não. */
+  scanned: number
+  /** Perdas de sinal abertas por esta rodada. */
+  signalLost: number
+  /** Condições contínuas recuperadas por silêncio nesta rodada. */
+  recovered: number
 }
 
 @Injectable()
@@ -271,55 +296,15 @@ export class TelemetryConditionService {
 
     for (const decision of decisions) {
       if (decision.action !== 'OPEN') continue
-      // Escrita crua, e só ESTA: é a única do serviço que pode violar índice, e
-      // o preço da violação é a transação inteira. O lock é na linha da SESSÃO,
-      // mas o invariante do índice único parcial é por FUNCIONÁRIO e ORIGEM:
-      // duas sessões distintas do mesmo funcionário travam linhas diferentes,
-      // não se enfileiram, e podem tentar abrir a mesma condição ao mesmo
-      // tempo. O Prisma não envolve consulta individual em savepoint, então
-      // engolir o P2002 impediria o LANÇAMENTO, não o ABORTO: o Postgres põe a
-      // transação em estado abortado e o comando seguinte morre com 25P02, que
-      // não é P2002, sobe, e leva junto as recuperações já gravadas do lote.
-      //
-      // ON CONFLICT DO NOTHING resolve no banco: nunca levanta e nunca aborta.
-      // Zero linhas em RETURNING é exatamente o sinal de "outro escritor já
-      // abriu esta condição", que é o estado desejado, e não conta como aberta
-      // por este chamador: não vira alerta nem entra no resultado.
-      //
-      // Template marcado, nunca concatenação: é o que parametriza os valores.
-      // Os enums levam CAST explícito porque o parâmetro chega como texto, no
-      // mesmo padrão que o read model usa para origem. id e updatedAt vão à
-      // mão porque os padrões deles são do cliente Prisma, e não do banco: a
-      // inserção crua passa por fora do cliente e a coluna não tem DEFAULT.
-      const inserted = await tx.$queryRaw<Array<{ id: string }>>`
-        INSERT INTO "TelemetryCondition" (
-          "id", "workerId", "sessionId", "origin", "kind", "status", "firstSeenAt", "lastSeenAt",
-          "thresholdProfile", "thresholdRule", "thresholdValue", "observedValue", "updatedAt"
-        ) VALUES (
-          gen_random_uuid()::text,
-          ${session.workerId},
-          ${session.id},
-          CAST(${session.origin} AS "TelemetryOrigin"),
-          CAST(${decision.kind} AS "TelemetryConditionKind"),
-          CAST(${'ACTIVE'} AS "TelemetryConditionStatus"),
-          ${now},
-          ${now},
-          ${this.profile.version},
-          ${decision.threshold?.rule ?? null},
-          ${decision.threshold?.value ?? null},
-          ${decision.observedValue},
-          ${now}
-        )
-        ON CONFLICT ("workerId", "kind", "origin") WHERE "status" = 'ACTIVE' DO NOTHING
-        RETURNING id
-      `
-      const createdId = inserted[0]?.id ?? null
-      if (createdId === null) {
-        this.logger.debug(
-          `Condição ${decision.kind} de ${session.workerId} (${session.origin}) já estava aberta por outro escritor`,
-        )
-        continue
-      }
+      // A escrita é crua, e a mesma da varredura de silêncio: o motivo de ela
+      // ser crua está em insertCondition, junto do SQL.
+      const createdId = await this.insertCondition(tx, session, now, {
+        kind: decision.kind,
+        rule: decision.threshold?.rule ?? null,
+        value: decision.threshold?.value ?? null,
+        observedValue: decision.observedValue,
+      })
+      if (createdId === null) continue
 
       outcome.opened.push(decision.kind)
       if (await this.openAlert(tx, createdId, session.workerId, session.origin, decision.kind)) outcome.alerts += 1
@@ -331,6 +316,201 @@ export class TelemetryConditionService {
       )
     }
     return outcome
+  }
+
+  /**
+   * Varre as sessões silenciosas e trata a AUSÊNCIA de evento. É a outra porta
+   * do motor: perda de sinal não nasce de um valor que chegou, nasce de nada
+   * ter chegado, e o caminho do evento é cego para ela por definição, porque
+   * relógio calado não dispara chamada nenhuma.
+   *
+   * A candidata é lida do SNAPSHOT, e não da sessão, por dois motivos. O
+   * primeiro: o snapshot tem uma linha por funcionário e só é promovido por
+   * evento AO VIVO, então backlog que chega depois de uma reconexão nunca conta
+   * como sinal. O segundo é dívida assumida: sessão de monitoramento nunca
+   * encerra neste sistema, e `status`, `interruptedAt` e `endedAt` não são
+   * escritos por ninguém, então a varredura não pode confiar neles e "sessão
+   * viva" acaba definida por silêncio aqui. No dia em que o ciclo de vida
+   * passar a encerrar sessão, esta definição deve ceder à dele.
+   */
+  async sweepSilentSessions(now: Date): Promise<SweepOutcome> {
+    const { silenceMs, shiftCeilingMs } = this.profile.signalLost
+    // A faixa é entre os dois prazos do perfil. Fronteira de cima ABERTA: o
+    // prazo do silêncio é o mesmo que o caminho do evento usa para dizer "ao
+    // vivo", e um carimbo exatamente em cima dele é ao vivo lá, então não pode
+    // ser silêncio aqui. Passado o teto, o turno acabou e ninguém está
+    // esperando dado: abrir perda de sinal ali encheria o painel de relógio
+    // guardado no armário.
+    const candidates = await this.prisma.telemetrySnapshot.findMany({
+      where: {
+        sessionId: { not: null },
+        lastEventTime: {
+          gte: new Date(now.getTime() - shiftCeilingMs),
+          lt: new Date(now.getTime() - silenceMs),
+        },
+      },
+      select: { sessionId: true, lastEventTime: true },
+    })
+
+    const outcome: SweepOutcome = { scanned: candidates.length, signalLost: 0, recovered: 0 }
+    for (const candidate of candidates) {
+      // O `where` já exclui sessão nula; a conferência aqui é o que estreita o
+      // tipo, porque a coluna é opcional no schema.
+      const sessionId = candidate.sessionId
+      if (sessionId === null) continue
+      try {
+        // Uma transação por candidata, e não uma pela rodada: a rodada varre
+        // todo mundo a cada 30 s, e uma sessão que estoure não pode deixar o
+        // resto do turno sem perda de sinal registrada. É o mesmo desenho da
+        // varredura do ciclo de vida, pelo mesmo motivo.
+        const one = await this.prisma.$transaction((tx) =>
+          this.sweepLocked(tx, sessionId, now.getTime() - candidate.lastEventTime.getTime(), now),
+        )
+        outcome.signalLost += one.signalLost
+        outcome.recovered += one.recovered
+      } catch (error) {
+        // Sem valor de saúde na mensagem, como no ciclo de vida: log é lugar
+        // onde dado sensível vaza sem ninguém notar. Só a sessão, que é o que
+        // permite repetir a mão.
+        this.logger.warn(`Varredura de silêncio falhou para a sessão ${sessionId}: ${(error as Error).message}`)
+      }
+    }
+    return outcome
+  }
+
+  private async sweepLocked(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    observedSilenceMs: number,
+    now: Date,
+  ): Promise<{ signalLost: number; recovered: number }> {
+    const result = { signalLost: 0, recovered: 0 }
+
+    // Mesmo lock do caminho do evento, e é ele que resolve a corrida com um
+    // lote que chega neste instante: quem chegar segundo lê o estado que o
+    // primeiro já gravou, em vez de os dois decidirem sobre a mesma leitura.
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "TelemetrySession" WHERE id = ${sessionId} FOR NO KEY UPDATE
+    `
+    if (locked.length === 0) throw new Error(`Sessão de monitoramento ${sessionId} não existe para varrer silêncio`)
+
+    const session = await tx.telemetrySession.findUnique({
+      where: { id: sessionId },
+      select: { id: true, workerId: true, origin: true },
+    })
+    if (session === null) throw new Error(`Sessão de monitoramento ${sessionId} não existe para varrer silêncio`)
+
+    // Por funcionário e origem, como no caminho do evento: a condição sobrevive
+    // à sessão, e demonstração nunca cega o real.
+    //
+    // lastSeenAt fica FORA da projeção de propósito, porque a varredura não
+    // renova carimbo nenhum. Renovar faria a segunda rodada sobre o mesmo
+    // silêncio escrever, e o carimbo passaria a andar por causa de ausência de
+    // dado, que é o oposto do que ele significa.
+    const active = await tx.telemetryCondition.findMany({
+      where: { workerId: session.workerId, origin: session.origin, status: 'ACTIVE' },
+      select: { id: true, kind: true },
+    })
+
+    // Recuperar antes de abrir, pela mesma razão de ordem do caminho do evento:
+    // fechar o que já não vale antes de abrir o que passou a valer deixa a
+    // leitura da linha do tempo na ordem dos fatos.
+    for (const row of active) {
+      if (!SILENCE_RECOVERS.has(row.kind)) continue
+      await tx.telemetryCondition.update({
+        where: { id: row.id },
+        data: { status: 'RECOVERED', recoveredAt: now, recoveryReason: 'SIGNAL_LOST', lastSeenAt: now },
+      })
+      result.recovered += 1
+    }
+
+    // Idempotência: com perda de sinal já ativa não há o que abrir, e a rodada
+    // seguinte sobre o mesmo silêncio não grava nada. Importa porque a
+    // varredura roda a cada 30 s e o silêncio dura minutos.
+    if (active.some((row) => row.kind === 'DEVICE_SIGNAL_LOST')) return result
+
+    // Sem alerta de propósito: aparelho fora do alcance é estado do
+    // funcionário, não item de fila. DEVICE_SIGNAL_LOST não está em
+    // ALERTING_KINDS, e openAlert nem chega a ser chamado aqui.
+    const created = await this.insertCondition(tx, session, now, {
+      kind: 'DEVICE_SIGNAL_LOST',
+      // Regra nula porque não se personaliza silêncio: o limite é o prazo do
+      // perfil, igual para todo mundo. O valor observado é o silêncio medido em
+      // milissegundos, que é o que a auditoria quer saber depois.
+      rule: null,
+      value: this.profile.signalLost.silenceMs,
+      observedValue: observedSilenceMs,
+    })
+    if (created !== null) result.signalLost += 1
+    return result
+  }
+
+  /**
+   * Abre uma condição. Escrita crua, e só ESTA: é a única do serviço que pode
+   * violar índice, e o preço da violação é a transação inteira. O lock é na
+   * linha da SESSÃO, mas o invariante do índice único parcial é por FUNCIONÁRIO
+   * e ORIGEM: duas sessões distintas do mesmo funcionário travam linhas
+   * diferentes, não se enfileiram, e podem tentar abrir a mesma condição ao
+   * mesmo tempo. O Prisma não envolve consulta individual em savepoint, então
+   * engolir o P2002 impediria o LANÇAMENTO, não o ABORTO: o Postgres põe a
+   * transação em estado abortado e o comando seguinte morre com 25P02, que não
+   * é P2002, sobe, e leva junto as recuperações já gravadas.
+   *
+   * ON CONFLICT DO NOTHING resolve no banco: nunca levanta e nunca aborta. Zero
+   * linhas em RETURNING é exatamente o sinal de "outro escritor já abriu esta
+   * condição", que é o estado desejado, e devolve nulo: não conta como aberta
+   * por este chamador, não vira alerta e não entra no resultado.
+   *
+   * Uma função só para as duas portas, a do valor e a da ausência, porque o
+   * motivo de a escrita ser crua é o mesmo nas duas, e duas cópias deste SQL
+   * divergiriam na primeira coluna que alguém acrescentasse.
+   *
+   * Template marcado, nunca concatenação: é o que parametriza os valores. Os
+   * enums levam CAST explícito porque o parâmetro chega como texto, no mesmo
+   * padrão que o read model usa para origem. id e updatedAt vão à mão porque os
+   * padrões deles são do cliente Prisma, e não do banco: a inserção crua passa
+   * por fora do cliente e a coluna não tem DEFAULT.
+   */
+  private async insertCondition(
+    tx: Prisma.TransactionClient,
+    session: { id: string; workerId: string; origin: TelemetryOrigin },
+    now: Date,
+    opening: {
+      kind: TelemetryConditionKind
+      rule: string | null
+      value: number | null
+      observedValue: number | null
+    },
+  ): Promise<string | null> {
+    const inserted = await tx.$queryRaw<Array<{ id: string }>>`
+      INSERT INTO "TelemetryCondition" (
+        "id", "workerId", "sessionId", "origin", "kind", "status", "firstSeenAt", "lastSeenAt",
+        "thresholdProfile", "thresholdRule", "thresholdValue", "observedValue", "updatedAt"
+      ) VALUES (
+        gen_random_uuid()::text,
+        ${session.workerId},
+        ${session.id},
+        CAST(${session.origin} AS "TelemetryOrigin"),
+        CAST(${opening.kind} AS "TelemetryConditionKind"),
+        CAST(${'ACTIVE'} AS "TelemetryConditionStatus"),
+        ${now},
+        ${now},
+        ${this.profile.version},
+        ${opening.rule},
+        ${opening.value},
+        ${opening.observedValue},
+        ${now}
+      )
+      ON CONFLICT ("workerId", "kind", "origin") WHERE "status" = 'ACTIVE' DO NOTHING
+      RETURNING id
+    `
+    const createdId = inserted[0]?.id ?? null
+    if (createdId === null) {
+      this.logger.debug(
+        `Condição ${opening.kind} de ${session.workerId} (${session.origin}) já estava aberta por outro escritor`,
+      )
+    }
+    return createdId
   }
 
   /**

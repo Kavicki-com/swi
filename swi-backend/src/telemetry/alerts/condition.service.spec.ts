@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common'
 import type { PrismaService } from '../../prisma/prisma.service'
 import { ALERT_PROFILE_VERSION } from './alert-profile'
 import { TelemetryConditionService } from './condition.service'
@@ -566,5 +567,193 @@ describe('TelemetryConditionService.evaluateSession: recuperar', () => {
       status: 'RECOVERED',
       recoveryReason: 'SIGNAL_RESTORED',
     })
+  })
+})
+
+// A porta da AUSÊNCIA. Perda de sinal não nasce de um valor que chegou, nasce
+// de nada ter chegado, e o caminho do evento é cego para isso por definição:
+// relógio calado não dispara chamada nenhuma. Estes casos protegem a varredura
+// periódica: quem entra na conta, o que ela grava, e que rodar de novo sobre o
+// mesmo silêncio não grava nada.
+
+/** Uma linha do snapshot como a varredura a lê: sessão e último evento ao vivo. */
+const snapshotRow = (sessionId: string | null, secAgo: number) => ({
+  sessionId,
+  lastEventTime: secondsAgo(secAgo),
+})
+
+/**
+ * Dublê com estado nas condições: a inserção crua entra na lista de ativas e a
+ * recuperação sai dela. É o que permite rodar a varredura duas vezes seguidas e
+ * afirmar que a segunda não escreve.
+ */
+const withConditionState = (prisma: any, rows: Array<{ id: string; kind: string }>) => {
+  const state: any[] = rows.map((r) => ({ ...r, lastSeenAt: secondsAgo(10), status: 'ACTIVE' }))
+  prisma.telemetryCondition.findMany.mockImplementation(async () => state.filter((r) => r.status === 'ACTIVE'))
+  prisma.telemetryCondition.update.mockImplementation(async ({ where, data }: any) => {
+    const row = state.find((r) => r.id === where.id)
+    Object.assign(row, data)
+    return row
+  })
+  const raw = prisma.$queryRaw.getMockImplementation()
+  prisma.$queryRaw.mockImplementation(async (...args: any[]) => {
+    const result = await raw(...args)
+    // O quarto valor do INSERT é o tipo da condição, pela ordem das colunas.
+    if (isInsert(args)) state.push({ id: `c-${state.length}`, kind: args[4], lastSeenAt: NOW, status: 'ACTIVE' })
+    return result
+  })
+  return state
+}
+
+describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', () => {
+  it('candidata é a sessão calada além do prazo e ainda dentro do turno', async () => {
+    // O recorte é a faixa entre os dois prazos do perfil. Aquém do silêncio o
+    // relógio ainda está falando; além do teto o turno acabou e ninguém espera
+    // dado. Sessão nula não é candidata: não há o que travar.
+    const prisma = prismaDouble()
+
+    await service(prisma).sweepSilentSessions(NOW)
+
+    const { where, select } = prisma.telemetrySnapshot.findMany.mock.calls[0][0]
+    expect(where).toEqual({
+      sessionId: { not: null },
+      lastEventTime: { gte: hoursAgo(8), lt: secondsAgo(120) },
+    })
+    expect(select).toEqual({ sessionId: true, lastEventTime: true })
+  })
+
+  it('trava a sessão antes de ler as condições dela', async () => {
+    // Mesmo lock do caminho do evento, e pelo mesmo motivo: um lote que chega
+    // neste instante avaliaria as mesmas condições em paralelo.
+    const prisma = prismaDouble()
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow('session-1', 300)])
+
+    await service(prisma).sweepSilentSessions(NOW)
+
+    const sql = prisma.$queryRaw.mock.calls[0][0].join('?')
+    expect(sql).toMatch(/TelemetrySession/)
+    expect(sql).toMatch(/for no key update/i)
+    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetryCondition.findMany))
+  })
+})
+
+describe('TelemetryConditionService.sweepSilentSessions: abrir e recuperar', () => {
+  it('silêncio abre DEVICE_SIGNAL_LOST com a régua do perfil, e NÃO abre alerta', async () => {
+    // Sem regra personalizada: não se personaliza silêncio. O limite gravado é
+    // o prazo que abriu, e o valor observado é o silêncio medido, para a
+    // auditoria saber quanto tempo o relógio ficou calado. Aparelho fora do
+    // alcance é estado do funcionário, não item de fila.
+    const prisma = prismaDouble()
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow('session-1', 300)])
+
+    const outcome = await service(prisma).sweepSilentSessions(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, signalLost: 1, recovered: 0 })
+    expect(insertValues(prisma.$queryRaw)).toEqual([
+      'worker-1',
+      'session-1',
+      'REAL',
+      'DEVICE_SIGNAL_LOST',
+      'ACTIVE',
+      NOW,
+      NOW,
+      ALERT_PROFILE_VERSION,
+      null,
+      120_000,
+      300_000,
+      NOW,
+    ])
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+  })
+
+  it('perda de sinal já ativa não é aberta de novo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow('session-1', 300)])
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-sig', 'DEVICE_SIGNAL_LOST')])
+
+    const outcome = await service(prisma).sweepSilentSessions(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, signalLost: 0, recovered: 0 })
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
+    expect(prisma.telemetryCondition.update).not.toHaveBeenCalled()
+  })
+
+  it('silêncio recupera batimento e bateria com motivo SIGNAL_LOST, e deixa a pressão em paz', async () => {
+    // Batimento e bateria são contínuos: sem relógio falando, o valor que
+    // sustentava a condição deixou de existir, e mantê-la aberta seria afirmar
+    // um agora que ninguém mediu. Pressão é medida à mão e vale por 72 h:
+    // silêncio do relógio não diz nada sobre a pressão de ninguém, e ela só
+    // recupera por medição nova.
+    const prisma = prismaDouble()
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow('session-1', 300)])
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      activeRow('c-alto', 'HEART_RATE_HIGH'),
+      activeRow('c-baixo', 'HEART_RATE_LOW'),
+      activeRow('c-bat', 'DEVICE_BATTERY_LOW'),
+      activeRow('c-pressao', 'BLOOD_PRESSURE_REVIEW'),
+    ])
+
+    const outcome = await service(prisma).sweepSilentSessions(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, signalLost: 1, recovered: 3 })
+    const fechada = { status: 'RECOVERED', recoveredAt: NOW, recoveryReason: 'SIGNAL_LOST', lastSeenAt: NOW }
+    expect(prisma.telemetryCondition.update.mock.calls.map((c: any[]) => c[0])).toEqual([
+      { where: { id: 'c-alto' }, data: fechada },
+      { where: { id: 'c-baixo' }, data: fechada },
+      { where: { id: 'c-bat' }, data: fechada },
+    ])
+  })
+
+  it('a recuperação por silêncio é gravada ANTES da abertura da perda de sinal', async () => {
+    // Mesma ordem do caminho do evento: fechar o que já não vale antes de abrir
+    // o que passou a valer deixa a linha do tempo na ordem dos fatos.
+    const prisma = prismaDouble()
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow('session-1', 300)])
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-alto', 'HEART_RATE_HIGH')])
+
+    await service(prisma).sweepSilentSessions(NOW)
+
+    expect(firstCall(prisma.telemetryCondition.update)).toBeLessThan(firstInsert(prisma.$queryRaw))
+  })
+})
+
+describe('TelemetryConditionService.sweepSilentSessions: repetição e falha', () => {
+  it('segunda varredura sobre a mesma sessão ainda silenciosa não grava nada', async () => {
+    // A varredura roda a cada 30 s e o silêncio dura minutos: sem idempotência,
+    // cada rodada empilharia escrita sobre o mesmo estado.
+    const prisma = prismaDouble()
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow('session-1', 300)])
+    withConditionState(prisma, [{ id: 'c-alto', kind: 'HEART_RATE_HIGH' }])
+    const svc = service(prisma)
+
+    const primeira = await svc.sweepSilentSessions(NOW)
+    const gravacoes = insertCalls(prisma.$queryRaw).length + prisma.telemetryCondition.update.mock.calls.length
+    const segunda = await svc.sweepSilentSessions(NOW)
+
+    expect(primeira).toEqual({ scanned: 1, signalLost: 1, recovered: 1 })
+    expect(segunda).toEqual({ scanned: 1, signalLost: 0, recovered: 0 })
+    expect(insertCalls(prisma.$queryRaw).length + prisma.telemetryCondition.update.mock.calls.length).toBe(gravacoes)
+  })
+
+  it('falha numa sessão não impede a seguinte', async () => {
+    // Cada candidata na sua transação: uma sessão problemática não pode deixar
+    // o resto do turno sem perda de sinal registrada.
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const prisma = prismaDouble()
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([
+      snapshotRow('session-ruim', 300),
+      snapshotRow('session-1', 300),
+    ])
+    prisma.telemetrySession.findUnique.mockImplementation(async ({ where }: any) => {
+      if (where.id === 'session-ruim') throw new Error('deadlock detected')
+      return SESSION
+    })
+
+    const outcome = await service(prisma).sweepSilentSessions(NOW)
+
+    expect(outcome).toEqual({ scanned: 2, signalLost: 1, recovered: 0 })
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
   })
 })
