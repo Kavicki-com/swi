@@ -562,6 +562,13 @@ model TelemetrySession {
 
 /// Evento imutável, como o aparelho mediu. Nunca sofre update: correção vira
 /// evento novo. É a trilha que permite auditar qualquer número apresentado.
+///
+/// ATENÇÃO: esta tabela tem índices que NÃO aparecem aqui. Índice parcial não é
+/// declarável no schema do Prisma, então TelemetrySample_worker_pressure_idx e
+/// TelemetrySample_worker_battery_idx vivem só na migration
+/// 20260907120000_telemetry_conditions_engine, que explica para que servem.
+/// Quem mexer nas colunas de pressão ou de bateria, ou nas buscas que elas
+/// atendem, tem de abrir a migration: o schema sozinho não conta esta parte.
 model TelemetrySample {
   id String @id @default(uuid())
   /// Gerado no dispositivo. É a chave de idempotência do ACK de ingestão.
