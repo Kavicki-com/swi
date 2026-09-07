@@ -383,6 +383,16 @@ function fromMetric(kind: MetricKind): RawMeasurementSpec {
 /**
  * O que cada medição do evento bruto precisa cumprir.
  *
+ * CONTRATO DE DELTA: stepDelta, activeEnergyKcal e motionCount são variação
+ * desde a amostra anterior da mesma sessão, e o read model os soma. O nome de
+ * stepDelta já diz isso; os outros dois não, e o produtor não vive neste
+ * repositório. A faixa aqui não separa delta de acumulado, porque um acumulado
+ * pequeno cabe na faixa de um delta grande: a validação aceita os dois. Um
+ * envio acumulado passa inteiro e infla o total em silêncio. Não dá para
+ * detectar a partir de uma amostra, e por isso a ausência de erro não é prova
+ * de que o produtor está certo. O contrato está também no schema, junto das
+ * colunas, que é onde quem escreve o produtor olha.
+ *
  * Cinco delas são a mesma coisa que uma métrica canônica e herdam dela unidade,
  * origem e faixa. motionCount tem spec própria: é a contagem de movimento que
  * alimenta a derivação de MPM, e registrá-la como MetricKind faria dela o

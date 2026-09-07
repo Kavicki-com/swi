@@ -737,3 +737,31 @@ describe('projectWorker: amostra com horário ilegível não entra na janela', (
     expect(projected.metrics.energyRatePerHour.value).toBeNull()
   })
 })
+
+// Energia ativa e contagem de movimento são somadas como delta, na janela e no
+// total do dia, mas nada no nome do campo declara isso, ao contrário de
+// stepDelta. O produtor não vive neste repositório. Se o aplicativo do relógio
+// enviar o acumulado do HealthKit, que é a leitura natural de
+// "activeEnergyKcal", tudo passa e o número sai inflado sem erro em lugar
+// nenhum. Estes casos fixam a semântica de quem consome, para que mudar a soma
+// para outra coisa quebre aqui, e para que a inflação fique medida por escrito
+// em vez de ser descoberta em produção.
+describe('projectWorker: energia da janela é soma de deltas, e não de acumulado', () => {
+  const quatroPontos = (valores: readonly number[]) =>
+    valores.map((kcal, i) => sample({ eventTime: minutesAgo(30 - i * 10), activeEnergyKcal: kcal }))
+
+  it('a série em delta produz a taxa que o consumo descreve', () => {
+    const projected = project({ windowSamples: quatroPontos([10, 10, 10, 10]) })
+
+    expect(projected.metrics.energyRatePerHour.value).toBe(60)
+  })
+
+  it('a mesma energia enviada como acumulado infla a taxa, e nada recusa', () => {
+    // 10, 20, 30, 40 é o mesmo consumo do caso acima visto como acumulado. A
+    // soma triplica porque cada ponto reconta o que já foi contado.
+    const projected = project({ windowSamples: quatroPontos([10, 20, 30, 40]) })
+
+    expect(projected.metrics.energyRatePerHour.value).toBe(180)
+    expect(projected.metrics.energyRatePerHour.quality).toBe('CURRENT')
+  })
+})
