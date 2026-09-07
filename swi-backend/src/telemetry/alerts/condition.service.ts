@@ -36,6 +36,26 @@ const LAST_SEEN_REFRESH_MS = 60_000
  */
 export const MAX_SILENT_SESSIONS_PER_RUN = 200
 
+/**
+ * Piso da busca de candidatas: calado além disto, o funcionário deixa de ser
+ * varrido. Não é teto de turno e não tem relação nenhuma com ele: o teto de
+ * turno decide SE ABRE perda de sinal, e este piso decide se a pessoa ainda é
+ * um funcionário monitorado.
+ *
+ * Sete dias cobre queda de fim de semana e feriado emendado, que é o que a
+ * ausência de teto superior existia para proteger, e descarta quem saiu do
+ * piloto. Sem ele, relógio devolvido ou funcionário desligado fica candidato
+ * para sempre; como a ordem é pela mais calada primeiro, ele vem na frente de
+ * todo mundo e come uma vaga do teto da rodada a cada 30 s. Com desligados o
+ * bastante, os vivos param de ser varridos: o histórico vira uma negação de
+ * serviço lenta.
+ *
+ * O conserto de verdade é ENCERRAR sessão de monitoramento, dívida que este
+ * serviço já declara no comentário de sweepSilentSessions. Este piso é
+ * paliativo até lá.
+ */
+export const MONITORED_SILENCE_FLOOR_MS = 7 * 24 * 60 * 60 * 1000
+
 /** Tipos que viram item de fila. Bateria e sinal são estado, não item. */
 const ALERTING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
   'HEART_RATE_HIGH',
@@ -371,7 +391,12 @@ export class TelemetryConditionService {
       where: {
         origin: 'REAL',
         sessionId: { not: null },
-        lastEventTime: { lt: new Date(now.getTime() - silenceMs) },
+        // O piso (MONITORED_SILENCE_FLOOR_MS) corta quem sumiu do piloto; ele
+        // não é teto de turno, e o motivo está na declaração da constante.
+        lastEventTime: {
+          lt: new Date(now.getTime() - silenceMs),
+          gte: new Date(now.getTime() - MONITORED_SILENCE_FLOOR_MS),
+        },
       },
       select: { sessionId: true },
       orderBy: { lastEventTime: 'asc' },

@@ -1,7 +1,11 @@
 import { Logger } from '@nestjs/common'
 import type { PrismaService } from '../../prisma/prisma.service'
 import { ALERT_PROFILE_VERSION } from './alert-profile'
-import { MAX_SILENT_SESSIONS_PER_RUN, TelemetryConditionService } from './condition.service'
+import {
+  MAX_SILENT_SESSIONS_PER_RUN,
+  MONITORED_SILENCE_FLOOR_MS,
+  TelemetryConditionService,
+} from './condition.service'
 
 // O serviço decide QUAIS LINHAS entram na conta e grava o resultado; a conta
 // é do motor, que é puro. O Prisma é dublê; o índice único e a migration são
@@ -13,6 +17,7 @@ const NOW = new Date('2026-09-07T12:00:00.000Z')
 const secondsAgo = (s: number) => new Date(NOW.getTime() - s * 1000)
 const minutesAgo = (m: number) => secondsAgo(m * 60)
 const hoursAgo = (h: number) => minutesAgo(h * 60)
+const daysAgo = (d: number) => hoursAgo(d * 24)
 const SESSION = { id: 'session-1', workerId: 'worker-1', origin: 'REAL' }
 
 const sampleRow = (secAgo: number, heartRateBpm: number | null, over: Record<string, unknown> = {}) => ({
@@ -598,6 +603,24 @@ const silentFor = (prisma: any, secAgo: number, sessionId = 'session-1') => {
 }
 
 /**
+ * Candidatas como o BANCO as devolveria: o dublê aplica a fronteira de
+ * `lastEventTime` que o serviço pediu, em vez de devolver a lista inteira.
+ * É o que permite afirmar comportamento, e não só a forma do `where`.
+ */
+const snapshotOf = (prisma: any, rows: Array<{ sessionId: string; lastEventTime: Date }>) => {
+  prisma.telemetrySnapshot.findMany.mockImplementation(async ({ where }: any) =>
+    rows
+      .filter((r) => r.lastEventTime < where.lastEventTime.lt)
+      .filter((r) => where.lastEventTime.gte === undefined || r.lastEventTime >= where.lastEventTime.gte)
+      .map((r) => candidateRow(r.sessionId)),
+  )
+  prisma.telemetrySnapshot.findFirst.mockImplementation(async ({ where }: any) => {
+    const row = rows.find((r) => r.sessionId === where.sessionId)
+    return row === undefined ? null : { lastEventTime: row.lastEventTime }
+  })
+}
+
+/**
  * Dublê com estado nas condições: a inserção crua entra na lista de ativas e a
  * recuperação sai dela. É o que permite rodar a varredura duas vezes seguidas e
  * afirmar que a segunda não escreve.
@@ -645,10 +668,43 @@ describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', (
     await service(prisma).sweepSilentSessions(NOW)
 
     const { where, select } = prisma.telemetrySnapshot.findMany.mock.calls[0][0]
-    expect(where).toEqual({ origin: 'REAL', sessionId: { not: null }, lastEventTime: { lt: secondsAgo(120) } })
+    expect(where).toEqual({
+      origin: 'REAL',
+      sessionId: { not: null },
+      lastEventTime: { lt: secondsAgo(120), gte: daysAgo(7) },
+    })
     // lastEventTime sai da projeção: o silêncio que vale é o relido dentro da
     // transação, e não este, que envelhece durante o laço.
     expect(select).toEqual({ sessionId: true })
+  })
+
+  it('candidata calada há três dias continua sendo varrida', async () => {
+    // O piso existe para descartar quem SAIU do piloto, e não para encurtar
+    // queda longa: fim de semana emendado em feriado cabe folgado dentro dele,
+    // e é exatamente esse caso que a ausência de teto superior protegia.
+    const prisma = prismaDouble()
+    snapshotOf(prisma, [{ sessionId: 'session-1', lastEventTime: daysAgo(3) }])
+
+    const outcome = await service(prisma).sweepSilentSessions(NOW)
+
+    expect(outcome.scanned).toBe(1)
+  })
+
+  it('candidata calada há oito dias deixa de ser candidata', async () => {
+    // Sem o piso, quem devolveu o relógio fica candidato para sempre, e como a
+    // ordem é pela mais calada ele vem NA FRENTE de todo mundo e come uma vaga
+    // do teto a cada 30 s. Com desligados o bastante, os vivos param de ser
+    // varridos: o histórico vira negação de serviço lenta.
+    const prisma = prismaDouble()
+    snapshotOf(prisma, [{ sessionId: 'session-1', lastEventTime: daysAgo(8) }])
+
+    const outcome = await service(prisma).sweepSilentSessions(NOW)
+
+    expect(outcome.scanned).toBe(0)
+  })
+
+  it('o piso é de sete dias', async () => {
+    expect(MONITORED_SILENCE_FLOOR_MS).toBe(7 * 24 * 60 * 60 * 1000)
   })
 
   it('a rodada tem teto de candidatas, e a mais calada vem primeiro', async () => {
