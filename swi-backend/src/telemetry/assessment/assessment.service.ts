@@ -22,7 +22,18 @@ export type AssessOutcome =
   | { outcome: 'throttled' }
   | { outcome: 'nothing_new' }
 
-type ChainStartReason = 'first_of_session' | 'version_changed'
+type ChainStartReason = 'first_of_session' | 'version_changed' | 'state_unreadable'
+
+/**
+ * O último batimento só atravessa se os dois campos forem números. Sem a
+ * conferência campo a campo, um `{}` gravado por engano entraria na fórmula e
+ * viraria NaN em silêncio, contaminando percentual e estado seguinte.
+ */
+function heartRateFrom(value: unknown): FormulaState['lastHeartRate'] {
+  const hr = value as Partial<{ bpm: number; atMs: number }> | null | undefined
+  if (!hr || typeof hr.bpm !== 'number' || typeof hr.atMs !== 'number') return null
+  return { bpm: hr.bpm, atMs: hr.atMs }
+}
 
 function stateFrom(inputs: Prisma.JsonValue): FormulaState | null {
   const chain = (inputs as { chain?: { nextState?: unknown } } | null)?.chain
@@ -31,7 +42,7 @@ function stateFrom(inputs: Prisma.JsonValue): FormulaState | null {
   return {
     strainDose: state.strainDose,
     effortEma: typeof state.effortEma === 'number' ? state.effortEma : null,
-    lastHeartRate: state.lastHeartRate ?? null,
+    lastHeartRate: heartRateFrom(state.lastHeartRate),
     lastSampleAtMs: typeof state.lastSampleAtMs === 'number' ? state.lastSampleAtMs : null,
   }
 }
@@ -109,8 +120,16 @@ export class TelemetryAssessmentService {
     // comparável, e reiniciar é a decisão ficando visível na linha.
     const continues = previous !== null && previous.formulaVersion === this.profile.version
     const previousState = continues ? stateFrom(previous.inputs) : null
+    // Estado que não parseia é motivo próprio: chamar isso de version_changed
+    // seria um rótulo falso para quem for auditar a linha depois.
     const reason: ChainStartReason | null =
-      previous === null ? 'first_of_session' : continues && previousState !== null ? null : 'version_changed'
+      previous === null
+        ? 'first_of_session'
+        : !continues
+          ? 'version_changed'
+          : previousState === null
+            ? 'state_unreadable'
+            : null
 
     // Teto da janela. Sem ele, um relógio que ficou horas fora do ar e despeja
     // o backlog junto com um evento ao vivo puxa milhares de amostras para

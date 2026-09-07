@@ -417,3 +417,60 @@ describe('TelemetryAssessmentService.assessSession, fronteira de baixo da janela
     expect(prisma.telemetrySample.findMany.mock.calls[0][0].where.eventTime).toEqual({ gte: secondsAgo(120), lte: NOW })
   })
 })
+
+// Reiniciar a cadeia porque o estado da anterior não parseia é um motivo
+// diferente de reiniciar porque a fórmula mudou de versão, e rotular os dois
+// como version_changed mente para quem for auditar. Nenhum escritor produz
+// linha assim hoje; estes casos existem para o dia em que produzir.
+describe('TelemetryAssessmentService.assessSession, estado anterior ilegível', () => {
+  it('anterior da mesma versão com inputs vazio reinicia dizendo state_unreadable', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow({ inputs: {} }))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.chain).toMatchObject({ reason: 'state_unreadable', previousState: null, previousAssessmentId: null })
+    expect(data.windowStart).toEqual(secondsAgo(120))
+  })
+
+  it('versão diferente continua sendo version_changed, e não o motivo novo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(
+      previousRow({ formulaVersion: 'swi-fatigue-experimental-0', inputs: {} }),
+    )
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.chain.reason).toBe('version_changed')
+  })
+
+  it('lastHeartRate sem bpm numérico é tratado como nulo, e não vira NaN dentro da fórmula', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(
+      previousRow({ inputs: { chain: { nextState: { strainDose: 12, effortEma: 0.4, lastHeartRate: {} } } } }),
+    )
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.chain.reason).toBeNull()
+    expect(data.inputs.chain.previousState.lastHeartRate).toBeNull()
+    expect(Number.isNaN(data.wearPercent)).toBe(false)
+  })
+
+  it('lastHeartRate sem atMs numérico é tratado como nulo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(
+      previousRow({ inputs: { chain: { nextState: { strainDose: 12, lastHeartRate: { bpm: 110 } } } } }),
+    )
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.chain.previousState.lastHeartRate).toBeNull()
+  })
+})
