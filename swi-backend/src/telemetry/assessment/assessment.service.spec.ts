@@ -9,6 +9,7 @@ import { ASSESSMENT_THROTTLE_MS, TelemetryAssessmentService } from './assessment
 
 const NOW = new Date('2026-09-04T12:00:00.000Z')
 const secondsAgo = (s: number) => new Date(NOW.getTime() - s * 1000)
+const hoursAgo = (h: number) => secondsAgo(h * 3600)
 
 const SESSION = { id: 'session-1', workerId: 'worker-1', origin: 'REAL', startedAt: secondsAgo(3_600) }
 
@@ -46,6 +47,16 @@ const prismaDouble = () => {
 
 /** Em que ponto da execução um dublê foi chamado pela primeira vez. */
 const firstCall = (fn: jest.Mock) => fn.mock.invocationCallOrder[0]
+
+/**
+ * O findMany do dublê respeitando o where, para os casos em que o que importa é
+ * justamente quais linhas a janela alcança. Sem isto o teste afirmaria o que
+ * ele mesmo devolveu, e não o recorte que o serviço pediu.
+ */
+const rowsMatching = (rows: Array<{ eventTime: Date }>, where: any) => {
+  const { gt, gte, lte } = where.eventTime
+  return rows.filter((r) => (gte === undefined ? r.eventTime > gt : r.eventTime >= gte) && r.eventTime <= lte)
+}
 
 const service = (prisma: any) => new TelemetryAssessmentService(prisma as PrismaService)
 
@@ -285,5 +296,69 @@ describe('TelemetryAssessmentService.assessSession, serialização por sessão',
 
     await expect(service(prisma).assessSession('sumida', NOW, NOW)).rejects.toThrow(/sumida/)
     expect(prisma.telemetryAssessment.findFirst).not.toHaveBeenCalled()
+  })
+})
+
+// A cadeia contínua começava no windowEnd da anterior a seco. Um relógio que
+// fica horas fora do ar e despeja o backlog junto com um evento ao vivo puxava
+// milhares de amostras para dentro da janela, e como elas vêm espaçadas de 5 s
+// passavam pelo gapMaxMs e viravam dose. O mesmo backlog enviado no lote
+// anterior não seria avaliado: mesmo dado, desgaste diferente conforme o
+// cliente empacotou. A janela passa a olhar no máximo chainLookbackMs.
+describe('TelemetryAssessmentService.assessSession, teto da janela contínua', () => {
+  const longGap = () => previousRow({ computedAt: hoursAgo(3), windowEnd: hoursAgo(3) })
+
+  it('anterior de 3 h atrás: a janela começa 120 s antes do gatilho, não no fim dela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(longGap())
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.windowStart).toEqual(secondsAgo(120))
+    expect(prisma.telemetrySample.findMany.mock.calls[0][0].where.eventTime).toEqual({ gt: secondsAgo(120), lte: NOW })
+  })
+
+  it('a linha conta quanto tempo ficou fora da janela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(longGap())
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.window.skippedMs).toBe(3 * 3600 * 1000 - 120_000)
+  })
+
+  it('lacuna curta não pula nada: a janela continua começando no fim da anterior', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow())
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.windowStart).toEqual(secondsAgo(20))
+    expect(data.inputs.window.skippedMs).toBe(0)
+  })
+
+  it('backlog no mesmo lote do evento ao vivo dá a mesma dose que backlog em lote separado', async () => {
+    // Uma hora de amostras de 5 em 5 s, que é o que o relógio despeja quando
+    // volta do offline, mais duas amostras ao vivo. O caso roda duas vezes: com
+    // o backlog no banco e sem ele. A dose tem de ser a mesma.
+    const backlog = Array.from({ length: 720 }, (_, i) => sampleRow(3 * 3600 - i * 5))
+    const live = [sampleRow(10), sampleRow(0)]
+
+    const doseFrom = async (rows: Array<{ eventTime: Date }>) => {
+      const prisma = prismaDouble()
+      prisma.telemetryAssessment.findFirst.mockResolvedValue(longGap())
+      prisma.telemetrySample.findMany.mockImplementation(async ({ where }: any) => rowsMatching(rows, where))
+      await service(prisma).assessSession('session-1', NOW, NOW)
+      const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+      return { effortPercent: data.effortPercent, wearPercent: data.wearPercent }
+    }
+
+    expect(await doseFrom([...backlog, ...live])).toEqual(await doseFrom(live))
   })
 })

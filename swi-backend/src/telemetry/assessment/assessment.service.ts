@@ -112,12 +112,24 @@ export class TelemetryAssessmentService {
     const reason: ChainStartReason | null =
       previous === null ? 'first_of_session' : continues && previousState !== null ? null : 'version_changed'
 
+    // Teto da janela. Sem ele, um relógio que ficou horas fora do ar e despeja
+    // o backlog junto com um evento ao vivo puxa milhares de amostras para
+    // dentro da conta, e como o backlog vem espaçado de poucos segundos ele
+    // passa pelo gapMaxMs e vira dose. O mesmo dado enviado no lote anterior
+    // não seria avaliado, então o desgaste dependeria de como o cliente
+    // empacotou. O teto é a mesma fronteira que o perfil já usa para lacuna.
+    const floor = triggerAt.getTime() - this.profile.chainLookbackMs
     const windowStart =
       reason === null && previous !== null
-        ? previous.windowEnd
-        : new Date(Math.max(session.startedAt.getTime(), triggerAt.getTime() - this.profile.chainLookbackMs))
+        ? new Date(Math.max(previous.windowEnd.getTime(), floor))
+        : new Date(Math.max(session.startedAt.getTime(), floor))
     const windowEnd = triggerAt
     if (windowEnd.getTime() <= windowStart.getTime()) return { outcome: 'nothing_new' }
+
+    // Quanto da cadeia contínua ficou fora da janela, para a linha contar o que
+    // aconteceu. Fora da cadeia contínua não há de onde medir, e o valor é zero.
+    const skippedMs =
+      reason === null && previous !== null ? Math.max(0, windowStart.getTime() - previous.windowEnd.getTime()) : 0
 
     const sinceDay = new Date(monitoredDayOf(now).getTime() - this.profile.restingDays * DAY_MS)
     const [samples, profile, summaries] = await Promise.all([
@@ -166,6 +178,7 @@ export class TelemetryAssessmentService {
       },
       baseline: { restingBpm, days: minima.length, ageYears, maxBpm },
       window: {
+        skippedMs,
         sampleCount: samples.length,
         heartRateSamples: samples.filter((s) => s.heartRateBpm !== null).length,
         motionAvailable: result.motionAvailable,
