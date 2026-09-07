@@ -45,6 +45,14 @@ process.env.JWT_SECRET = `e2e-descartavel-${randomBytes(24).toString('hex')}`
 // ressuscitar a varredura por baixo da suíte.
 process.env.TELEMETRY_CONDITION_SWEEP_CRON = '0 0 0 1 1 *'
 
+// Mesma classe de problema, mais fria: o alerta de clima dispara nos minutos
+// cheios e nas meias horas, então uma rodada que cruze uma dessas marcas pega
+// o tique, consulta o provedor de clima e tenta notificar. Não é a cada 30 s
+// como a varredura, e por isso não é garantido; é instabilidade que só aparece
+// conforme a hora do dia em que a integração contínua roda. O spec de clima
+// que precisar do tique chama o serviço direto.
+process.env.WEATHER_CRON = '0 0 0 1 1 *'
+
 // Aqui valor dummy basta, e não por preguiça: o presign é puro, não faz rede.
 // Tanto o POST (createPresignedPost) quanto o GET (getSignedUrl) só assinam
 // com a credencial que o S3Client recebeu, então credencial fixa deixa a
