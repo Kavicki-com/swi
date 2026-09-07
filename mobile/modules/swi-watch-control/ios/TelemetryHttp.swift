@@ -28,6 +28,28 @@ enum TelemetryHttp {
     }
   }
 
+  /// Resposta 2xx do pareamento sem `credential` em texto na raiz do objeto.
+  /// Tipo proprio, e nao uma mensagem, para o modulo mapear num codigo que o
+  /// JavaScript distingue de falha de rede.
+  struct CredentialMissingError: LocalizedError {
+    var errorDescription: String? {
+      return "Resposta do pareamento sem credencial"
+    }
+  }
+
+  /// Codigo de rejeicao que o modulo entrega ao JavaScript para cada falha.
+  /// Fica aqui, e nao no closure do modulo, para o closure dentro do result
+  /// builder continuar curto: e o maior risco de tempo de type-check.
+  static func rejectionCode(for error: Error) -> String {
+    if error is DeviceCredentialStore.KeychainError {
+      return "E_KEYCHAIN"
+    }
+    if error is CredentialMissingError {
+      return "E_CREDENTIAL_MISSING"
+    }
+    return "E_NETWORK"
+  }
+
   /// Uma sessao so, criada uma vez. URLSession criada por chamada e nunca
   /// invalidada vaza (a sessao retem seu delegate e sua fila ate
   /// `invalidateAndCancel`), e uma sessao compartilhada reaproveita a conexao
@@ -35,10 +57,14 @@ enum TelemetryHttp {
   ///
   /// 20 s e o mesmo prazo do cliente HTTP do app em `services/api/http.ts`,
   /// pelo mesmo motivo escrito la: folgado para 3G ruim e curto o bastante
-  /// para virar erro acionavel em vez de carregamento eterno.
+  /// para virar erro acionavel em vez de carregamento eterno. Os dois prazos
+  /// juntos dao paridade com o withDeadline de la, que cobre a operacao
+  /// inteira: `ForRequest` reinicia a cada byte recebido e so pega silencio;
+  /// `ForResource` e o teto total, do primeiro byte enviado ao ultimo lido.
   private static let session: URLSession = {
     let configuration = URLSessionConfiguration.default
     configuration.timeoutIntervalForRequest = 20
+    configuration.timeoutIntervalForResource = 20
     return URLSession(configuration: configuration)
   }()
 
@@ -92,25 +118,24 @@ enum TelemetryHttp {
     }
 
     let status = httpResponse.statusCode
-    let rawBody: String
-    if let data = data, let decoded = String(data: data, encoding: .utf8) {
-      rawBody = decoded
-    } else {
-      rawBody = ""
-    }
+    let payloadData: Data = data ?? Data()
+    let rawBody: String = String(data: payloadData, encoding: .utf8) ?? ""
 
-    guard storeCredential, status >= 200, status <= 299, let data = data else {
+    if !storeCredential || status < 200 || status > 299 {
       return .success(Response(status: status, body: rawBody))
     }
 
-    // Corpo que nao e um objeto JSON, ou objeto sem `credential` em texto,
-    // volta intacto: nao ha o que guardar e o JavaScript le o que veio.
+    // Daqui para baixo o corpo e a resposta de um pareamento bem-sucedido e
+    // NUNCA sobe intacto. Se nao for um objeto JSON com `credential` em texto
+    // na raiz (o backend embrulhou a resposta, ou mudou a chave), a falha e
+    // ruidosa: e melhor o pareamento falhar ruidosamente do que a credencial
+    // vazar em silencio para o JavaScript.
     guard
-      let object = try? JSONSerialization.jsonObject(with: data, options: []),
+      let object = try? JSONSerialization.jsonObject(with: payloadData, options: []),
       let parsed = object as? [String: Any],
       let credential = parsed["credential"] as? String
     else {
-      return .success(Response(status: status, body: rawBody))
+      return .failure(CredentialMissingError())
     }
 
     // Guardar falhou: o JavaScript nao pode acreditar que pareou. O corpo

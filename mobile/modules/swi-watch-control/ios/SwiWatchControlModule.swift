@@ -52,7 +52,8 @@ public class SwiWatchControlModule: Module {
     // com a credencial do chaveiro, sem que ela passe pelo JavaScript;
     // `bearer` usa o token que o JavaScript ja tem por desenho. Qualquer
     // outro `kind` vai sem cabecalho. Resolve status e corpo crus; rejeita
-    // so por URL invalida, aparelho nao pareado ou falha de rede.
+    // por URL invalida, aparelho nao pareado, falha de rede, chaveiro que
+    // recusou guardar, ou resposta de pareamento sem credencial.
     AsyncFunction("request") { (url: String, method: String, body: String?, auth: [String: Any], storeCredential: Bool, promise: Promise) in
       guard let parsedUrl = URL(string: url) else {
         promise.reject("E_URL", "URL invalida")
@@ -85,7 +86,7 @@ public class SwiWatchControlModule: Module {
           let payload: [String: Any] = ["status": response.status, "body": response.body]
           promise.resolve(payload)
         case .failure(let error):
-          promise.reject("E_NETWORK", error.localizedDescription)
+          promise.reject(TelemetryHttp.rejectionCode(for: error), error.localizedDescription)
         }
       }
     }
