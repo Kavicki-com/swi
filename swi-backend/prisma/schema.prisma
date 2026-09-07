@@ -477,6 +477,7 @@ enum TelemetryConditionStatus {
 enum TelemetryConditionRecoveryReason {
   NORMALIZED
   SIGNAL_LOST
+  SIGNAL_RESTORED
 }
 
 enum OperationalAlertStatus {
@@ -707,6 +708,10 @@ model TelemetryCondition {
   thresholdValue   Float?
   /// Por que fechou. NORMALIZED: o valor voltou pela banda. SIGNAL_LOST: a
   /// sessão silenciou com a condição ativa, e ninguém viu o valor voltar.
+  /// SIGNAL_RESTORED: o aparelho voltou a falar, e é a perda de sinal em
+  /// pessoa que fechou. Motivo próprio porque perda de sinal não tem valor nem
+  /// banda: gravá-la como NORMALIZED faria a auditoria confundir batimento que
+  /// normalizou com relógio que reconectou, justo na condição que mais oscila.
   recoveryReason   TelemetryConditionRecoveryReason?
 
   createdAt DateTime @default(now())

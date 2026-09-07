@@ -212,9 +212,15 @@ export class TelemetryConditionService {
         // observedValue não é reescrito: ele guarda o valor que ABRIU a
         // condição, que é o que a auditoria quer saber. O valor da
         // recuperação já está no histórico de amostras.
+        //
+        // Perda de sinal fecha com motivo próprio: NORMALIZED afirma que o
+        // valor voltou pela banda, e esta condição não tem valor nem banda.
+        // Sem a distinção, quem audita não separa batimento que normalizou de
+        // relógio que voltou a falar, e é esta que mais vai oscilar no piloto.
+        const reason = decision.kind === 'DEVICE_SIGNAL_LOST' ? 'SIGNAL_RESTORED' : 'NORMALIZED'
         await tx.telemetryCondition.update({
           where: { id: row.id },
-          data: { status: 'RECOVERED', recoveredAt: now, recoveryReason: 'NORMALIZED', lastSeenAt: now },
+          data: { status: 'RECOVERED', recoveredAt: now, recoveryReason: reason, lastSeenAt: now },
         })
         outcome.recovered.push(decision.kind)
         recoveredIds.add(row.id)

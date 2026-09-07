@@ -405,7 +405,11 @@ describe('TelemetryConditionService.evaluateSession: recuperar', () => {
     })
   })
 
-  it('evento ao vivo recupera perda de sinal ativa, com motivo NORMALIZED', async () => {
+  it('evento ao vivo recupera perda de sinal ativa, com motivo SIGNAL_RESTORED', async () => {
+    // NORMALIZED quer dizer "o valor voltou pela banda", e perda de sinal não
+    // tem valor nem banda. Sem motivo próprio, quem audita não separa "o
+    // batimento normalizou" de "o relógio voltou a falar", e esta é a condição
+    // que mais vai oscilar no piloto.
     const prisma = prismaDouble()
     prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-sig', 'DEVICE_SIGNAL_LOST')])
 
@@ -414,7 +418,7 @@ describe('TelemetryConditionService.evaluateSession: recuperar', () => {
     expect(outcome.recovered).toEqual(['DEVICE_SIGNAL_LOST'])
     expect(prisma.telemetryCondition.update.mock.calls[0][0].data).toMatchObject({
       status: 'RECOVERED',
-      recoveryReason: 'NORMALIZED',
+      recoveryReason: 'SIGNAL_RESTORED',
     })
   })
 })

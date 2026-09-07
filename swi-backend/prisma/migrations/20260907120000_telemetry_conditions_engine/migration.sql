@@ -1,5 +1,5 @@
 -- Motivo de recuperação e regra que abriu, para a linha contar a história inteira.
-CREATE TYPE "TelemetryConditionRecoveryReason" AS ENUM ('NORMALIZED', 'SIGNAL_LOST');
+CREATE TYPE "TelemetryConditionRecoveryReason" AS ENUM ('NORMALIZED', 'SIGNAL_LOST', 'SIGNAL_RESTORED');
 
 ALTER TABLE "TelemetryCondition"
   ADD COLUMN "thresholdRule" TEXT,
