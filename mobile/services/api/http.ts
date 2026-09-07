@@ -10,6 +10,13 @@ export async function hasToken(): Promise<boolean> {
   return Boolean(await SecureStore.getItemAsync(TOKEN_KEY));
 }
 
+// Token de sessão do funcionário, para quem monta o pedido fora do apiRequest
+// (o pareamento do aparelho passa pelo módulo nativo, que só recebe o valor).
+// A chave fica privada: o único jeito de ler o token é por aqui.
+export async function readToken(): Promise<string | null> {
+  return SecureStore.getItemAsync(TOKEN_KEY);
+}
+
 export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PUT';
   body?: unknown;
@@ -82,7 +89,7 @@ async function send<T>(path: string, opts: ApiRequestOptions, signal: AbortSigna
   const { method, body, auth = false } = opts;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (auth) {
-    const t = await SecureStore.getItemAsync(TOKEN_KEY);
+    const t = await readToken();
     if (t) headers.Authorization = `Bearer ${t}`;
   }
   const res = await fetch(`${getApiUrl()}${path}`, {

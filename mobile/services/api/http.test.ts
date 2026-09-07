@@ -1,4 +1,4 @@
-import { apiRequest, REQUEST_TIMEOUT_MS } from './http';
+import { apiRequest, readToken, REQUEST_TIMEOUT_MS } from './http';
 import { getApiUrl } from '../auth/apiConfig';
 import * as SecureStore from 'expo-secure-store';
 
@@ -76,6 +76,21 @@ describe('apiRequest', () => {
 // O prazo cobre conexões e leituras de token que não retornam.
 // O RN não salva: o OkHttp que ele monta vem com todos os timeouts em 0. Por
 // isso o prazo cobre o apiRequest inteiro, não só o fetch.
+describe('readToken', () => {
+  beforeEach(async () => {
+    await SecureStore.deleteItemAsync('swi.auth.token');
+  });
+
+  it('sem sessão devolve null', async () => {
+    await expect(readToken()).resolves.toBeNull();
+  });
+
+  it('devolve o token da mesma chave que apiRequest usa no Bearer', async () => {
+    await SecureStore.setItemAsync('swi.auth.token', 'tok1');
+    await expect(readToken()).resolves.toBe('tok1');
+  });
+});
+
 describe('apiRequest, prazo', () => {
   beforeEach(() => {
     (global as any).fetch = jest.fn();
