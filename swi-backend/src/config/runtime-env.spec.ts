@@ -1,4 +1,4 @@
-import { parseRuntimeEnv } from './runtime-env'
+import { parseRuntimeEnv, RETENTION_DEFAULT_BATCH } from './runtime-env'
 
 // Ambiente de produção mínimo e válido. Cada teste sobrescreve só a chave que
 // está sendo exercitada, para que a falha aponte a variável e não o setup.
@@ -14,6 +14,55 @@ function validProd(overrides: Record<string, string | undefined> = {}): NodeJS.P
     ...overrides,
   }
 }
+
+describe('parseRuntimeEnv: retenção da telemetria', () => {
+  it('sem variável, retém trinta dias e apaga em lotes de alguns milhares', () => {
+    const env = parseRuntimeEnv(validProd())
+
+    expect(env.telemetryRetention.windowMs).toBe(30 * 24 * 60 * 60 * 1000)
+    expect(env.telemetryRetention.batchSize).toBe(RETENTION_DEFAULT_BATCH)
+  })
+
+  it('recusa janela abaixo de 48 horas, sem corrigir em silêncio', () => {
+    // O piso é o mesmo prazo em que um dia fecha: reter menos que isso
+    // apagaria Leitura que ainda pode receber evento atrasado, e o Resumo
+    // daquele dia nasceria de série incompleta. Corrigir para o piso em
+    // silêncio esconderia a configuração errada até alguém procurar o dado.
+    expect(() => parseRuntimeEnv(validProd({ TELEMETRY_RETENTION_DAYS: '1' }))).toThrow(
+      /TELEMETRY_RETENTION_DAYS/,
+    )
+    expect(() => parseRuntimeEnv(validProd({ TELEMETRY_RETENTION_DAYS: '0' }))).toThrow(
+      /TELEMETRY_RETENTION_DAYS/,
+    )
+  })
+
+  it('aceita exatamente 48 horas, que é o piso e não um valor proibido', () => {
+    expect(
+      parseRuntimeEnv(validProd({ TELEMETRY_RETENTION_DAYS: '2' })).telemetryRetention.windowMs,
+    ).toBe(2 * 24 * 60 * 60 * 1000)
+  })
+
+  it('recusa janela e lote que não sejam inteiros positivos', () => {
+    expect(() => parseRuntimeEnv(validProd({ TELEMETRY_RETENTION_DAYS: 'trinta' }))).toThrow(
+      /TELEMETRY_RETENTION_DAYS/,
+    )
+    expect(() => parseRuntimeEnv(validProd({ TELEMETRY_RETENTION_DAYS: '30.5' }))).toThrow(
+      /TELEMETRY_RETENTION_DAYS/,
+    )
+    expect(() => parseRuntimeEnv(validProd({ TELEMETRY_RETENTION_BATCH_SIZE: '0' }))).toThrow(
+      /TELEMETRY_RETENTION_BATCH_SIZE/,
+    )
+  })
+
+  it('a janela vale em desenvolvimento também, e não só em produção', () => {
+    // Retenção apaga dado igual nos dois ambientes; um piso que só valesse em
+    // produção deixaria a máquina de quem desenvolve apagar o que ainda não
+    // foi resumido.
+    expect(() => parseRuntimeEnv({ TELEMETRY_RETENTION_DAYS: '1' })).toThrow(
+      /TELEMETRY_RETENTION_DAYS/,
+    )
+  })
+})
 
 describe('parseRuntimeEnv', () => {
   it('recusa produção sem variáveis obrigatórias', () => {

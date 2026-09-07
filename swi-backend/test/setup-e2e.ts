@@ -26,6 +26,33 @@ process.env.NODE_ENV = 'test'
 // contrato de ambiente exige.
 process.env.JWT_SECRET = `e2e-descartavel-${randomBytes(24).toString('hex')}`
 
+// Uma vez por ano, 1º de janeiro: na prática, nunca dentro de uma rodada.
+//
+// Aqui, e não no spec das condições, porque o @Cron é avaliado na CARGA DO
+// MÓDULO, quando o spec faz `import { AppModule }`. Um `process.env` no
+// beforeAll chega tarde: o decorador já leu a expressão. E o cuidado não é de
+// um spec só: todo e2e que sobe o AppModule herda o agendador da raiz, então
+// são os dezessete.
+//
+// O que a varredura faria solta: ela roda a cada 30 s, e uma rodada é bem mais
+// longa que isso. Ela abriria perda de sinal e recuperaria condição sobre os
+// fixtures de QUALQUER suíte que tenha deixado um snapshot calado para trás, no
+// meio de outra suíte, e o resultado seria instabilidade que não se reproduz.
+// O spec das condições chama sweepSilentSessions DIRETO, com um instante
+// explícito, que é determinístico e é o que se quer provar.
+//
+// Forçado, não `??=`: a máquina que tiver a variável no .env não pode
+// ressuscitar a varredura por baixo da suíte.
+process.env.TELEMETRY_CONDITION_SWEEP_CRON = '0 0 0 1 1 *'
+
+// Mesma classe de problema, mais fria: o alerta de clima dispara nos minutos
+// cheios e nas meias horas, então uma rodada que cruze uma dessas marcas pega
+// o tique, consulta o provedor de clima e tenta notificar. Não é a cada 30 s
+// como a varredura, e por isso não é garantido; é instabilidade que só aparece
+// conforme a hora do dia em que a integração contínua roda. O spec de clima
+// que precisar do tique chama o serviço direto.
+process.env.WEATHER_CRON = '0 0 0 1 1 *'
+
 // Aqui valor dummy basta, e não por preguiça: o presign é puro, não faz rede.
 // Tanto o POST (createPresignedPost) quanto o GET (getSignedUrl) só assinam
 // com a credencial que o S3Client recebeu, então credencial fixa deixa a
