@@ -1,3 +1,5 @@
+import type { TelemetryConditionKind } from '@prisma/client'
+
 import type { AlertProfile } from './alert-profile'
 
 // Motor de condições: decide abrir, manter ou recuperar a partir de amostras,
@@ -47,4 +49,67 @@ export function heartRateLimits(profile: AlertProfile, baseline: HeartRateBaseli
       : { value: personalizedLow, rule: 'PERSONALIZED' }
 
   return { high, low }
+}
+
+export interface EngineSample {
+  atMs: number
+  heartRateBpm: number | null
+  batteryPercent: number | null
+}
+
+export interface Decision {
+  kind: TelemetryConditionKind
+  action: 'OPEN' | 'RECOVER'
+  observedValue: number | null
+  threshold: Threshold | null
+}
+
+type HeartRateKind = 'HEART_RATE_HIGH' | 'HEART_RATE_LOW'
+
+/**
+ * "Contínuo" é: toda amostra de BPM da janela satisfaz o predicado, e o
+ * intervalo entre a primeira e a última cobre a mínima. É a mesma noção de
+ * cobertura que o projetor usa para a taxa de energia: número sem denominador
+ * é número inventado. Lacuna deixa a cobertura curta e não decide nada.
+ */
+function sustained(
+  samples: readonly EngineSample[],
+  nowMs: number,
+  profile: AlertProfile,
+  holds: (bpm: number) => boolean,
+): number[] | null {
+  const windowStart = nowMs - profile.persistence.windowMs
+  const inWindow = samples
+    .filter((s) => s.heartRateBpm !== null && s.atMs > windowStart && s.atMs <= nowMs)
+    .sort((a, b) => a.atMs - b.atMs)
+  if (inWindow.length === 0) return null
+  const coveredMs = inWindow[inWindow.length - 1].atMs - inWindow[0].atMs
+  if (coveredMs < profile.persistence.minCoverageMs) return null
+  const values = inWindow.map((s) => s.heartRateBpm as number)
+  return values.every(holds) ? values : null
+}
+
+export function decideHeartRate(
+  kind: HeartRateKind,
+  samples: readonly EngineSample[],
+  threshold: Threshold,
+  active: boolean,
+  profile: AlertProfile,
+  nowMs: number,
+): Decision | null {
+  const high = kind === 'HEART_RATE_HIGH'
+  const band = high ? profile.heartRateHigh.hysteresisBpm : profile.heartRateLow.hysteresisBpm
+
+  if (!active) {
+    const values = sustained(samples, nowMs, profile, (bpm) => (high ? bpm >= threshold.value : bpm <= threshold.value))
+    if (values === null) return null
+    return { kind, action: 'OPEN', observedValue: high ? Math.max(...values) : Math.min(...values), threshold }
+  }
+
+  // Recupera pela banda, não pelo mesmo limite: quem oscila em torno dele
+  // abriria e fecharia a cada leitura.
+  const recoverAt = high ? threshold.value - band : threshold.value + band
+  const values = sustained(samples, nowMs, profile, (bpm) => (high ? bpm < recoverAt : bpm > recoverAt))
+  if (values === null) return null
+  return { kind, action: 'RECOVER', observedValue: high ? Math.max(...values) : Math.min(...values), threshold }
 }
