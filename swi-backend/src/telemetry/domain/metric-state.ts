@@ -23,8 +23,13 @@ import type {
 // recalcula os próprios prazos nem as próprias fronteiras de dia.
 // "now" entra por parâmetro para tornar cada função determinística.
 
-const MINUTE = 60_000
-const HOUR = 60 * MINUTE
+/**
+ * Constantes de tempo e conversão de horário moram aqui porque o domínio é
+ * quem decide o que é um instante legível. O read model as consome; redeclarar
+ * lá já produziu duas conversões que discordavam sobre horário inválido.
+ */
+export const MINUTE = 60_000
+export const HOUR = 60 * MINUTE
 
 export const FRESHNESS = {
   /** BPM, passos, MPM, energia, esforço e desgaste. */
@@ -158,8 +163,16 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
   wear: { unit: '%', freshness: 'VITAL', sources: ['DERIVED'], retainsExpiredValue: true },
 }
 
-const toMs = (iso: string | Date): number =>
+/** Instante em milissegundos. Horário ilegível vira NaN, e quem chama decide. */
+export const toMs = (iso: string | Date): number =>
   iso instanceof Date ? iso.getTime() : Date.parse(iso)
+
+/**
+ * Se o horário dá para situar no tempo. É o único lugar que responde isso:
+ * uma amostra que reprova aqui não é medição sem valor, é medição sem quando,
+ * e quem a recebe a trata como ausência em vez de deixar NaN se propagar.
+ */
+export const isReadableInstant = (iso: string | Date): boolean => !Number.isNaN(toMs(iso))
 
 /** Idade em ms; horário no futuro conta como zero, nunca como "mais atual". */
 function ageMs(measuredAt: string, now: Date | string): number {
@@ -171,7 +184,7 @@ export function qualityAt(
   measuredAt: string | null,
   now: Date | string,
 ): MetricQuality {
-  if (measuredAt === null || Number.isNaN(toMs(measuredAt))) return 'UNAVAILABLE'
+  if (measuredAt === null || !isReadableInstant(measuredAt)) return 'UNAVAILABLE'
   const { currentMs, staleMs } = FRESHNESS[METRICS[kind].freshness]
   const age = ageMs(measuredAt, now)
   if (age <= currentMs) return 'CURRENT'

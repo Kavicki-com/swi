@@ -704,3 +704,36 @@ describe('projectWorker: a cobertura vazia não é instância compartilhada', ()
     expect(project().energyWindow.samples).toBe(0)
   })
 })
+
+// O projetor redeclarava a conversão de texto para milissegundos que o domínio
+// já tem, e as duas discordavam: a do domínio é usada onde se checa NaN, a do
+// projetor devolvia NaN em silêncio. Como NaN reprova toda comparação, a
+// amostra de horário inválido escapava do recorte da janela, entrava na
+// ordenação e contaminava a cobertura. Uma amostra sem horário legível não é
+// medição que se possa situar no tempo: ela sai da janela, como ausência.
+describe('projectWorker: amostra com horário ilegível não entra na janela', () => {
+  it('a taxa é a mesma com ou sem a amostra de horário inválido', () => {
+    const serie = energySeries(30, 2)
+    const comLixo = [...serie, sample({ eventTime: 'nao-e-data', activeEnergyKcal: 500 })]
+
+    expect(project({ windowSamples: comLixo }).metrics.energyRatePerHour.value).toBe(
+      project({ windowSamples: serie }).metrics.energyRatePerHour.value,
+    )
+  })
+
+  it('a cobertura conta só as amostras que têm horário legível', () => {
+    const serie = energySeries(30, 2)
+    const comLixo = [...serie, sample({ eventTime: 'nao-e-data', activeEnergyKcal: 500 })]
+
+    expect(project({ windowSamples: comLixo }).energyWindow).toEqual(
+      project({ windowSamples: serie }).energyWindow,
+    )
+  })
+
+  it('janela só de horário ilegível é janela vazia, e não cobertura de NaN', () => {
+    const projected = project({ windowSamples: [sample({ eventTime: '', activeEnergyKcal: 10 })] })
+
+    expect(projected.energyWindow).toEqual({ samples: 0, coveredMs: 0, windowStart: null, windowEnd: null })
+    expect(projected.metrics.energyRatePerHour.value).toBeNull()
+  })
+})

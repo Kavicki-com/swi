@@ -1,4 +1,13 @@
-import { METRICS, bloodPressureRecency, metricState, qualityAt } from '../domain/metric-state'
+import {
+  HOUR,
+  METRICS,
+  MINUTE,
+  bloodPressureRecency,
+  isReadableInstant,
+  metricState,
+  qualityAt,
+  toMs,
+} from '../domain/metric-state'
 import {
   URGENT_CONDITION_KINDS,
   type BloodPressure,
@@ -24,9 +33,6 @@ import {
 //    minutos, e dividir pelos sessenta faria um turno pesado parecer leve.
 // 3. Todo agregado do painel viaja com a cobertura que o produziu. Uma média
 //    sem denominador é a mesma coisa que uma média inventada.
-
-const MINUTE = 60_000
-const HOUR = 60 * MINUTE
 
 /** Janela móvel de kcal/h. Acima disso a energia já não descreve o agora. */
 export const ENERGY_RATE_WINDOW_MS = 60 * MINUTE
@@ -167,8 +173,6 @@ const emptyWindow = (): WindowCoverage => ({
 // Funções de apoio
 // ---------------------------------------------------------------------------
 
-const toMs = (iso: string): number => Date.parse(iso)
-
 /** Uma casa decimal. Sem isto, 50/(1/6) devolve 300.00000000000006. */
 const round1 = (n: number): number => Math.round(n * 10) / 10
 
@@ -256,8 +260,12 @@ function rateOverWindow(
   const inWindow = samples
     .flatMap((s) => {
       const value = s[field]
+      // Horário ilegível sai antes de qualquer comparação. NaN reprova toda
+      // comparação, então sem esta guarda a amostra escapava do recorte da
+      // janela, entrava na ordenação e virava cobertura de NaN.
+      if (value === null || !isReadableInstant(s.eventTime)) return []
       const at = toMs(s.eventTime)
-      if (value === null || at < windowStartMs || at > nowMs) return []
+      if (at < windowStartMs || at > nowMs) return []
       return [{ eventTime: s.eventTime, value }]
     })
     .sort((a, b) => toMs(a.eventTime) - toMs(b.eventTime))
