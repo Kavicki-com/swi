@@ -30,6 +30,11 @@ export function samplesOf(scenario: Scenario, startMs = 0): FormulaSample[] {
         motionCount: peaksPerMinute === null ? null : (peaksPerMinute * scenario.cadenceSec) / 60,
       })
     }
+    // O trecho dura o que ele diz que dura, mesmo que a sobra não caiba em uma
+    // amostra. Parar na última amostra emitida comprimiria a linha do tempo e
+    // deslocaria todos os trechos seguintes, e um trecho menor que a cadência
+    // sumiria em vez de existir em silêncio.
+    atMs = endMs
   }
   return out
 }
