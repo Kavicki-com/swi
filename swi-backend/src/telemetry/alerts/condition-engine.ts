@@ -113,3 +113,54 @@ export function decideHeartRate(
   if (values === null) return null
   return { kind, action: 'RECOVER', observedValue: high ? Math.max(...values) : Math.min(...values), threshold }
 }
+
+/**
+ * Bateria chega a cada cinco minutos e cai de forma monótona: uma leitura
+ * basta para abrir. A banda de dez pontos é o que evita abre e fecha por
+ * leitura imprecisa, e a recuperação durante o turno existe: carregador no
+ * almoço é real.
+ */
+export function decideBattery(percent: number | null, active: boolean, profile: AlertProfile): Decision | null {
+  if (percent === null) return null
+  const threshold: Threshold = { value: profile.batteryLow.openAtPercent, rule: 'FLOOR' }
+  if (!active && percent <= profile.batteryLow.openAtPercent) {
+    return { kind: 'DEVICE_BATTERY_LOW', action: 'OPEN', observedValue: percent, threshold }
+  }
+  if (active && percent > profile.batteryLow.recoverAbovePercent) {
+    return { kind: 'DEVICE_BATTERY_LOW', action: 'RECOVER', observedValue: percent, threshold }
+  }
+  return null
+}
+
+export interface BloodPressureReading {
+  systolic: number
+  diastolic: number
+}
+
+/**
+ * Pressão é medida à mão e raramente: uma medição abre, e só medição nova
+ * recupera. A banda é pequena porque a série já é esparsa; sem ela, 139 e 141
+ * alternados abririam e fechariam a cada dia. O valor observado é o que
+ * cruzou, sistólica primeiro.
+ */
+export function decideBloodPressure(
+  reading: BloodPressureReading | null,
+  active: boolean,
+  profile: AlertProfile,
+): Decision | null {
+  if (reading === null) return null
+  const p = profile.bloodPressureReview
+  if (!active) {
+    if (reading.systolic >= p.systolicAt) {
+      return { kind: 'BLOOD_PRESSURE_REVIEW', action: 'OPEN', observedValue: reading.systolic, threshold: null }
+    }
+    if (reading.diastolic >= p.diastolicAt) {
+      return { kind: 'BLOOD_PRESSURE_REVIEW', action: 'OPEN', observedValue: reading.diastolic, threshold: null }
+    }
+    return null
+  }
+  if (reading.systolic < p.systolicRecoverBelow && reading.diastolic < p.diastolicRecoverBelow) {
+    return { kind: 'BLOOD_PRESSURE_REVIEW', action: 'RECOVER', observedValue: reading.systolic, threshold: null }
+  }
+  return null
+}

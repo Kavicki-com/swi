@@ -1,5 +1,11 @@
 import { EXPERIMENTAL_ALERT_PROFILE as PROFILE } from './alert-profile'
-import { decideHeartRate, heartRateLimits, type EngineSample } from './condition-engine'
+import {
+  decideBattery,
+  decideBloodPressure,
+  decideHeartRate,
+  heartRateLimits,
+  type EngineSample,
+} from './condition-engine'
 
 // O motor é puro: recebe amostras, limites e um instante, e devolve decisões.
 // Nada aqui lê banco nem relógio, e é isso que deixa regra temporal com
@@ -140,5 +146,64 @@ describe('decideHeartRate: histerese e recuperação', () => {
     expect(decideHeartRate('HEART_RATE_LOW', series(60, 42), LOW, false, PROFILE, NOW)?.action).toBe('OPEN')
     expect(decideHeartRate('HEART_RATE_LOW', series(60, 52), LOW, true, PROFILE, NOW)).toBeNull()
     expect(decideHeartRate('HEART_RATE_LOW', series(60, 60), LOW, true, PROFILE, NOW)?.action).toBe('RECOVER')
+  })
+})
+
+describe('decideBattery: uma leitura basta, banda de dez pontos', () => {
+  it('abre em 15% com uma leitura', () => {
+    expect(decideBattery(15, false, PROFILE)).toEqual({
+      kind: 'DEVICE_BATTERY_LOW',
+      action: 'OPEN',
+      observedValue: 15,
+      threshold: { value: 15, rule: 'FLOOR' },
+    })
+  })
+
+  it('não abre em 16%', () => {
+    expect(decideBattery(16, false, PROFILE)).toBeNull()
+  })
+
+  it('ativa, 20% não recupera: está dentro da banda', () => {
+    expect(decideBattery(20, true, PROFILE)).toBeNull()
+  })
+
+  it('ativa, 26% recupera', () => {
+    expect(decideBattery(26, true, PROFILE)?.action).toBe('RECOVER')
+  })
+
+  it('sem leitura de bateria não decide nada', () => {
+    expect(decideBattery(null, false, PROFILE)).toBeNull()
+    expect(decideBattery(null, true, PROFILE)).toBeNull()
+  })
+})
+
+describe('decideBloodPressure: abre em 140 ou 90, recupera abaixo de 130 e 85', () => {
+  it('sistólica 140 abre a revisão', () => {
+    expect(decideBloodPressure({ systolic: 140, diastolic: 80 }, false, PROFILE)).toEqual({
+      kind: 'BLOOD_PRESSURE_REVIEW',
+      action: 'OPEN',
+      observedValue: 140,
+      threshold: null,
+    })
+  })
+
+  it('diastólica 90 abre, e o valor observado é a que cruzou', () => {
+    expect(decideBloodPressure({ systolic: 120, diastolic: 90 }, false, PROFILE)?.observedValue).toBe(90)
+  })
+
+  it('139 por 89 não abre', () => {
+    expect(decideBloodPressure({ systolic: 139, diastolic: 89 }, false, PROFILE)).toBeNull()
+  })
+
+  it('ativa, 135 por 80 não recupera: sistólica ainda na banda', () => {
+    expect(decideBloodPressure({ systolic: 135, diastolic: 80 }, true, PROFILE)).toBeNull()
+  })
+
+  it('ativa, 129 por 84 recupera', () => {
+    expect(decideBloodPressure({ systolic: 129, diastolic: 84 }, true, PROFILE)?.action).toBe('RECOVER')
+  })
+
+  it('sem medição não decide nada', () => {
+    expect(decideBloodPressure(null, true, PROFILE)).toBeNull()
   })
 })
