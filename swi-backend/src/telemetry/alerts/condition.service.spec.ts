@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client'
 import type { PrismaService } from '../../prisma/prisma.service'
 import { ALERT_PROFILE_VERSION } from './alert-profile'
 import { TelemetryConditionService } from './condition.service'
@@ -49,13 +48,24 @@ const readingsOfAnotherSession = (readings: { battery?: unknown; pressure?: unkn
     return visivel ? row : null
   })
 
+/**
+ * Separa o INSERT cru da condição das outras consultas cruas do serviço: o lock
+ * da sessão e a inserção passam pelo mesmo `$queryRaw`.
+ */
+const isInsert = (call: unknown[]) =>
+  (call[0] as TemplateStringsArray).join('?').includes('INSERT INTO "TelemetryCondition"')
+const insertCalls = (fn: jest.Mock) => fn.mock.calls.filter(isInsert)
+const insertSql = (fn: jest.Mock, i = 0) =>
+  (insertCalls(fn)[i][0] as TemplateStringsArray).join('?').replace(/\s+/g, ' ').trim()
+const insertValues = (fn: jest.Mock, i = 0) => insertCalls(fn)[i].slice(1)
+const firstInsert = (fn: jest.Mock) => fn.mock.invocationCallOrder[fn.mock.calls.findIndex(isInsert)]
+
 const prismaDouble = () => {
   const db: any = {
     open: false,
     telemetrySession: { findUnique: jest.fn().mockResolvedValue(SESSION) },
     telemetryCondition: {
       findMany: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'condition-new', ...data })),
       update: jest.fn().mockImplementation(async ({ data }: any) => data),
     },
     operationalAlert: {
@@ -75,7 +85,15 @@ const prismaDouble = () => {
       db.open = false
     }
   })
-  db.$queryRaw = jest.fn().mockResolvedValue([{ id: SESSION.id }])
+  // A inserção da condição é crua, então o dublê responde pelo TEXTO da consulta:
+  // o lock devolve a linha da sessão, o INSERT devolve o id criado. `conflicting`
+  // faz o papel do índice único parcial: para o tipo que outro escritor já abriu,
+  // o ON CONFLICT DO NOTHING devolve zero linhas em vez de levantar.
+  db.conflicting = new Set<string>()
+  db.$queryRaw = jest.fn().mockImplementation(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    if (!isInsert([strings])) return [{ id: SESSION.id }]
+    return values.some((v) => db.conflicting.has(v)) ? [] : [{ id: 'condition-new' }]
+  })
   return db
 }
 
@@ -101,15 +119,16 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
   it('grava com a transação aberta, não depois de ela fechar', async () => {
     const prisma = prismaDouble()
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
-    let abertaNaGravacao = false
-    prisma.telemetryCondition.create.mockImplementation(async ({ data }: any) => {
-      abertaNaGravacao = prisma.open
-      return { id: 'condition-new', ...data }
+    const abertaNaGravacao: boolean[] = []
+    const raw = prisma.$queryRaw.getMockImplementation()
+    prisma.$queryRaw.mockImplementation(async (...args: any[]) => {
+      if (isInsert(args)) abertaNaGravacao.push(prisma.open)
+      return raw(...args)
     })
 
     await service(prisma).evaluateSession('session-1', NOW, NOW)
 
-    expect(abertaNaGravacao).toBe(true)
+    expect(abertaNaGravacao).toEqual([true])
     expect(prisma.$transaction).toHaveBeenCalledTimes(1)
   })
 
@@ -188,7 +207,7 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
     const outcome = await service(prisma).evaluateSession('session-1', secondsAgo(121), NOW)
 
     expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
-    expect(prisma.telemetryCondition.create).not.toHaveBeenCalled()
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
     expect(prisma.telemetryCondition.update).not.toHaveBeenCalled()
   })
 })
@@ -201,25 +220,27 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
 
     expect(outcome).toEqual({ opened: ['HEART_RATE_HIGH'], recovered: [], alerts: 1 })
-    const { data } = prisma.telemetryCondition.create.mock.calls[0][0]
-    expect(data).toMatchObject({
-      workerId: 'worker-1',
-      sessionId: 'session-1',
-      origin: 'REAL',
-      kind: 'HEART_RATE_HIGH',
-      status: 'ACTIVE',
-      firstSeenAt: NOW,
-      lastSeenAt: NOW,
-      thresholdProfile: ALERT_PROFILE_VERSION,
-      thresholdRule: 'PERSONALIZED',
-      observedValue: 185,
-    })
+    const values = insertValues(prisma.$queryRaw)
+    expect(values).toEqual([
+      'worker-1',
+      'session-1',
+      'REAL',
+      'HEART_RATE_HIGH',
+      'ACTIVE',
+      NOW,
+      NOW,
+      ALERT_PROFILE_VERSION,
+      'PERSONALIZED',
+      expect.any(Number),
+      185,
+      NOW,
+    ])
     // Quem nasceu em 1991-05-10 tem 35 anos completos no dia monitorado de
     // 2026-09-07, então a máxima por idade (Tanaka) é 208 - 0,7 x 35 = 183,5, e
     // 90% dela arredondado dá 165. O número entra fixo de propósito: se o
     // perfil ou a fórmula mudarem, a mudança aparece aqui, e não numa condição
     // aberta em produção.
-    expect(data.thresholdValue).toBe(165)
+    expect(values[9]).toBe(165)
     expect(prisma.operationalAlert.create.mock.calls[0][0].data).toMatchObject({
       conditionId: 'condition-new',
       workerId: 'worker-1',
@@ -235,10 +256,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
 
     await service(prisma).evaluateSession('session-1', NOW, NOW)
 
-    expect(prisma.telemetryCondition.create.mock.calls[0][0].data).toMatchObject({
-      thresholdRule: 'FLOOR',
-      thresholdValue: 180,
-    })
+    expect(insertValues(prisma.$queryRaw).slice(8, 10)).toEqual(['FLOOR', 180])
   })
 
   it('bateria baixa abre condição e NÃO abre alerta: aparelho é estado, não item de fila', async () => {
@@ -298,10 +316,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
 
     expect(outcome.opened).toEqual(['BLOOD_PRESSURE_REVIEW'])
     expect(prisma.operationalAlert.create).toHaveBeenCalledTimes(1)
-    expect(prisma.telemetryCondition.create.mock.calls[0][0].data).toMatchObject({
-      thresholdRule: 'FLOOR',
-      thresholdValue: 140,
-    })
+    expect(insertValues(prisma.$queryRaw).slice(8, 10)).toEqual(['FLOOR', 140])
   })
 
   it('pressão carimbada antes da janela do BPM ainda é avaliada', async () => {
@@ -355,50 +370,114 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
     expect(prisma.operationalAlert.create).toHaveBeenCalledTimes(1)
   })
 
-  it('condição já aberta por outro escritor não derruba a avaliação nem conta como aberta', async () => {
-    // O lock é na linha da sessão, mas o índice único é por funcionário e
-    // origem: duas sessões do mesmo funcionário travam linhas distintas e podem
-    // tentar abrir a mesma condição ao mesmo tempo. O P2002 subindo desfaria a
-    // transação inteira, inclusive a recuperação legítima de outro tipo.
+  it('a inserção da condição é crua, com ON CONFLICT DO NOTHING e as mesmas colunas de antes', async () => {
+    // Crua porque é a única escrita do serviço que pode conflitar, e o preço do
+    // conflito é a transação inteira: o Prisma não envolve consulta individual
+    // em savepoint. As colunas são afirmadas uma a uma porque é aqui que a
+    // linha nasce, e uma coluna esquecida no SQL só apareceria em produção.
     const prisma = prismaDouble()
-    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-sig', 'DEVICE_SIGNAL_LOST')])
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
-    prisma.telemetryCondition.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('unique constraint', { code: 'P2002', clientVersion: 'test' }),
-    )
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    const sql = insertSql(prisma.$queryRaw)
+    const colunas = /INSERT INTO "TelemetryCondition" \(([^)]*)\)/
+      .exec(sql)?.[1]
+      .split(',')
+      .map((c) => c.trim().replaceAll('"', ''))
+    expect(colunas).toEqual([
+      'id',
+      'workerId',
+      'sessionId',
+      'origin',
+      'kind',
+      'status',
+      'firstSeenAt',
+      'lastSeenAt',
+      'thresholdProfile',
+      'thresholdRule',
+      'thresholdValue',
+      'observedValue',
+      'updatedAt',
+    ])
+    // id e updatedAt não têm padrão no banco: os do schema são do cliente
+    // Prisma, e a inserção crua passa por fora dele.
+    expect(sql).toMatch(/gen_random_uuid\(\)::text/)
+    expect(sql).toMatch(/ON CONFLICT \("workerId", "kind", "origin"\) WHERE "status" = 'ACTIVE' DO NOTHING/)
+    expect(sql).toMatch(/RETURNING id/)
+    expect(insertValues(prisma.$queryRaw)).toEqual([
+      'worker-1',
+      'session-1',
+      'REAL',
+      'HEART_RATE_HIGH',
+      'ACTIVE',
+      NOW,
+      NOW,
+      ALERT_PROFILE_VERSION,
+      'PERSONALIZED',
+      165,
+      185,
+      NOW,
+    ])
+  })
+
+  it('conflito na inserção não conta como aberta, não abre alerta e não estoura', async () => {
+    // Zero linhas do ON CONFLICT DO NOTHING é o sinal de que outro escritor
+    // chegou primeiro, e o estado desejado já é o que está no banco.
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    prisma.conflicting.add('HEART_RATE_HIGH')
 
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
 
-    expect(outcome).toEqual({ opened: [], recovered: ['DEVICE_SIGNAL_LOST'], alerts: 0 })
+    expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
     expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
   })
 
-  it('recuperação do lote é gravada ANTES de qualquer abertura', async () => {
-    // Engolir o P2002 impede o lançamento, não o aborto: o Prisma não envolve
-    // consulta individual em savepoint, então a violação de unicidade põe a
-    // transação em estado abortado e todo comando seguinte morre com 25P02. A
-    // promessa de que recuperações legítimas sobrevivem só vale se nenhuma
-    // escrita vier depois da violação, e a ordem é o que garante isso.
+  it('conflito na primeira abertura não impede a segunda nem desfaz a recuperação do lote', async () => {
+    // O caso que a ordem sozinha não cobria: com duas aberturas no mesmo lote,
+    // a violação de unicidade na primeira punha a transação em estado abortado
+    // e a segunda morria com 25P02, que não é P2002, subia, e levava junto a
+    // recuperação já gravada. Sem exceção nenhuma, as três escritas convivem.
     const prisma = prismaDouble()
     prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-sig', 'DEVICE_SIGNAL_LOST')])
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
-    prisma.telemetryCondition.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('unique constraint', { code: 'P2002', clientVersion: 'test' }),
-    )
+    prisma.telemetrySample.findFirst = latestReadings({ pressure: { systolicMmHg: 150, diastolicMmHg: 80 } })
+    prisma.conflicting.add('HEART_RATE_HIGH')
 
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
 
-    expect(outcome).toEqual({ opened: [], recovered: ['DEVICE_SIGNAL_LOST'], alerts: 0 })
-    expect(prisma.telemetryCondition.update.mock.calls[0][0]).toMatchObject({ where: { id: 'c-sig' } })
-    expect(firstCall(prisma.telemetryCondition.update)).toBeLessThan(firstCall(prisma.telemetryCondition.create))
+    expect(outcome).toEqual({ opened: ['BLOOD_PRESSURE_REVIEW'], recovered: ['DEVICE_SIGNAL_LOST'], alerts: 1 })
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(2)
+    expect(insertValues(prisma.$queryRaw, 1)).toContain('BLOOD_PRESSURE_REVIEW')
+    expect(prisma.telemetryCondition.update.mock.calls[0][0].data).toMatchObject({ status: 'RECOVERED' })
   })
 
-  it('erro de escrita que não é violação do índice único continua subindo', async () => {
+  it('recuperação do lote é gravada ANTES de qualquer abertura', async () => {
+    // Deixou de ser a garantia contra a transação abortada, que agora é do ON
+    // CONFLICT, e virou ordem de leitura: fechar o que já não vale antes de
+    // abrir o que passou a valer.
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-sig', 'DEVICE_SIGNAL_LOST')])
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: ['HEART_RATE_HIGH'], recovered: ['DEVICE_SIGNAL_LOST'], alerts: 1 })
+    expect(prisma.telemetryCondition.update.mock.calls[0][0]).toMatchObject({ where: { id: 'c-sig' } })
+    expect(firstCall(prisma.telemetryCondition.update)).toBeLessThan(firstInsert(prisma.$queryRaw))
+  })
+
+  it('erro de escrita que não é conflito de unicidade continua subindo', async () => {
+    // O ON CONFLICT cobre a violação do índice único, e só ela: deadlock,
+    // tempo esgotado e afins continuam derrubando a avaliação, como devem.
     const prisma = prismaDouble()
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
-    prisma.telemetryCondition.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('deadlock', { code: 'P2034', clientVersion: 'test' }),
-    )
+    const raw = prisma.$queryRaw.getMockImplementation()
+    prisma.$queryRaw.mockImplementation(async (...args: any[]) => {
+      if (isInsert(args)) throw new Error('deadlock detected')
+      return raw(...args)
+    })
 
     await expect(service(prisma).evaluateSession('session-1', NOW, NOW)).rejects.toThrow(/deadlock/)
   })
@@ -411,7 +490,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
 
     expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
-    expect(prisma.telemetryCondition.create).not.toHaveBeenCalled()
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
     expect(prisma.telemetryCondition.update).not.toHaveBeenCalled()
   })
 })

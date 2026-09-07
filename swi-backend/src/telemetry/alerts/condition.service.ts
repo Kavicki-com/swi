@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
-import type { TelemetryConditionKind, TelemetryOrigin } from '@prisma/client'
+import type { Prisma, TelemetryConditionKind, TelemetryOrigin } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../assessment/assessment-baseline'
 import { EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
@@ -219,15 +218,11 @@ export class TelemetryConditionService {
       decisions.push({ kind: 'DEVICE_SIGNAL_LOST', action: 'RECOVER', observedValue: null, threshold: null })
     }
 
-    // Recuperar antes de abrir, e a ordem é a garantia, não arrumação. O
-    // Prisma não envolve consulta individual em savepoint: quando a violação do
-    // índice único dispara dentro de $transaction, o Postgres põe a transação
-    // em estado abortado e todo comando seguinte morre com 25P02, transação
-    // abortada. Ou seja, engolir o P2002 impede o lançamento, não o aborto, e
-    // qualquer escrita DEPOIS dele morreria junto. Com toda recuperação (e toda
-    // renovação de carimbo) já gravada, a única escrita que pode vir depois da
-    // violação é outra abertura, e abertura que falha é justamente a que não
-    // deveria acontecer: nada legítimo fica órfão.
+    // Recuperar antes de abrir. Já foi a garantia de que uma violação de
+    // unicidade não levava as recuperações junto; hoje quem garante isso é o ON
+    // CONFLICT DO NOTHING da abertura, que não aborta a transação. A ordem fica
+    // como boa prática: fechar o que já não vale antes de abrir o que passou a
+    // valer deixa a leitura da linha do tempo na ordem dos fatos.
     const recoveredIds = new Set<string>()
     for (const decision of decisions) {
       if (decision.action !== 'RECOVER') continue
@@ -265,9 +260,8 @@ export class TelemetryConditionService {
     // servir a uma varredura que procure condição esquecida. Quem recuperou
     // fica de fora: já levou o carimbo do fechamento e não segue aberta.
     //
-    // Antes das aberturas pelo mesmo motivo que as recuperações: é escrita
-    // legítima, e escrita legítima não pode ficar atrás de uma violação que
-    // aborta a transação.
+    // Antes das aberturas pelo mesmo motivo que as recuperações: mantém junto
+    // tudo o que mexe em condição já existente, antes do que cria linha nova.
     const refreshBefore = new Date(now.getTime() - LAST_SEEN_REFRESH_MS)
     for (const row of active) {
       if (recoveredIds.has(row.id)) continue
@@ -277,40 +271,55 @@ export class TelemetryConditionService {
 
     for (const decision of decisions) {
       if (decision.action !== 'OPEN') continue
-      // O lock é na linha da SESSÃO, mas o invariante do índice único é por
-      // FUNCIONÁRIO e ORIGEM: duas sessões distintas do mesmo funcionário
-      // travam linhas diferentes, não se enfileiram, e podem tentar abrir a
-      // mesma condição ao mesmo tempo. Deixar o P2002 subir derrubaria a
-      // transação inteira. Engolir aqui é certo porque a violação diz
-      // exatamente que a condição já está aberta, que é o estado desejado: o
-      // outro escritor chegou primeiro e o resultado é o mesmo. Não conta como
-      // aberta por este chamador, então não vira alerta nem entra no resultado.
-      let createdId: string | null = null
-      try {
-        const created = await tx.telemetryCondition.create({
-          data: {
-            workerId: session.workerId,
-            sessionId: session.id,
-            origin: session.origin,
-            kind: decision.kind,
-            status: 'ACTIVE',
-            firstSeenAt: now,
-            lastSeenAt: now,
-            thresholdProfile: this.profile.version,
-            thresholdRule: decision.threshold?.rule ?? null,
-            thresholdValue: decision.threshold?.value ?? null,
-            observedValue: decision.observedValue,
-          },
-          select: { id: true },
-        })
-        createdId = created.id
-      } catch (error) {
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      // Escrita crua, e só ESTA: é a única do serviço que pode violar índice, e
+      // o preço da violação é a transação inteira. O lock é na linha da SESSÃO,
+      // mas o invariante do índice único parcial é por FUNCIONÁRIO e ORIGEM:
+      // duas sessões distintas do mesmo funcionário travam linhas diferentes,
+      // não se enfileiram, e podem tentar abrir a mesma condição ao mesmo
+      // tempo. O Prisma não envolve consulta individual em savepoint, então
+      // engolir o P2002 impediria o LANÇAMENTO, não o ABORTO: o Postgres põe a
+      // transação em estado abortado e o comando seguinte morre com 25P02, que
+      // não é P2002, sobe, e leva junto as recuperações já gravadas do lote.
+      //
+      // ON CONFLICT DO NOTHING resolve no banco: nunca levanta e nunca aborta.
+      // Zero linhas em RETURNING é exatamente o sinal de "outro escritor já
+      // abriu esta condição", que é o estado desejado, e não conta como aberta
+      // por este chamador: não vira alerta nem entra no resultado.
+      //
+      // Template marcado, nunca concatenação: é o que parametriza os valores.
+      // Os enums levam CAST explícito porque o parâmetro chega como texto, no
+      // mesmo padrão que o read model usa para origem. id e updatedAt vão à
+      // mão porque os padrões deles são do cliente Prisma, e não do banco: a
+      // inserção crua passa por fora do cliente e a coluna não tem DEFAULT.
+      const inserted = await tx.$queryRaw<Array<{ id: string }>>`
+        INSERT INTO "TelemetryCondition" (
+          "id", "workerId", "sessionId", "origin", "kind", "status", "firstSeenAt", "lastSeenAt",
+          "thresholdProfile", "thresholdRule", "thresholdValue", "observedValue", "updatedAt"
+        ) VALUES (
+          gen_random_uuid()::text,
+          ${session.workerId},
+          ${session.id},
+          CAST(${session.origin} AS "TelemetryOrigin"),
+          CAST(${decision.kind} AS "TelemetryConditionKind"),
+          CAST(${'ACTIVE'} AS "TelemetryConditionStatus"),
+          ${now},
+          ${now},
+          ${this.profile.version},
+          ${decision.threshold?.rule ?? null},
+          ${decision.threshold?.value ?? null},
+          ${decision.observedValue},
+          ${now}
+        )
+        ON CONFLICT ("workerId", "kind", "origin") WHERE "status" = 'ACTIVE' DO NOTHING
+        RETURNING id
+      `
+      const createdId = inserted[0]?.id ?? null
+      if (createdId === null) {
         this.logger.debug(
           `Condição ${decision.kind} de ${session.workerId} (${session.origin}) já estava aberta por outro escritor`,
         )
+        continue
       }
-      if (createdId === null) continue
 
       outcome.opened.push(decision.kind)
       if (await this.openAlert(tx, createdId, session.workerId, session.origin, decision.kind)) outcome.alerts += 1
