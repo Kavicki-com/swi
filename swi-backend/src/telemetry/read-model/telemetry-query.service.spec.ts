@@ -1,3 +1,4 @@
+import { WINDOW_MAX_SAMPLES } from './telemetry-query.service'
 import { ForbiddenException, NotFoundException } from '@nestjs/common'
 import type { PrismaService } from '../../prisma/prisma.service'
 import { TelemetryQueryService } from './telemetry-query.service'
@@ -638,5 +639,34 @@ describe('TelemetryQueryService.sessionHistory', () => {
     await expect(service(prisma).sessionHistory(ADMIN, 'nao-existe', {})).rejects.toBeInstanceOf(
       NotFoundException,
     )
+  })
+})
+
+// A rota do estado atual é chamada a cada aviso do socket, ou seja, a cada
+// evento e para cada funcionário monitorado. A janela das taxas vinha sem
+// ordem e sem teto: na cadência de cinco segundos são cerca de setecentas
+// linhas por chamada, e um produtor em cadência maior não tinha nada que o
+// limitasse. Ordem e teto não dependem de medição nenhuma; a materialização
+// dos acumulados é que depende, e a ADR-0007 a condiciona a latência ou CPU
+// medidas.
+describe('TelemetryQueryService.currentForWorker: custo da janela por tick', () => {
+  it('a janela vem ordenada por horário, para o banco usar o índice', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow({ origin: 'REAL' }))
+
+    await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(prisma.telemetrySample.findMany.mock.calls[0][0].orderBy).toEqual({ eventTime: 'desc' })
+  })
+
+  it('a janela tem teto de linhas, para um produtor acelerado não varrer a tabela', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow({ origin: 'REAL' }))
+
+    await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(prisma.telemetrySample.findMany.mock.calls[0][0].take).toBe(WINDOW_MAX_SAMPLES)
   })
 })
