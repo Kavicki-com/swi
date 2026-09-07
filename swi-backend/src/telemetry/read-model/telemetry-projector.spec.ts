@@ -230,7 +230,8 @@ describe('projectWorker: menos de cinco minutos de cobertura devolve Calculando'
   it('com cobertura abaixo do mínimo, a taxa fica em Calculando e sem valor', () => {
     const projected = project({ windowSamples: energySeries(4, 5) })
 
-    expect(projected.metrics.energyRatePerHour.quality).toBe('CALCULATING')
+    expect(projected.metrics.energyRatePerHour.quality).toBe('UNAVAILABLE')
+    expect(projected.metrics.energyRatePerHour.calculating).toBe(true)
     expect(projected.metrics.energyRatePerHour.value).toBeNull()
     // Calculando não é indisponível: já há amostra, e o horário dela aparece.
     expect(projected.metrics.energyRatePerHour.measuredAt).toBe(minutesAgo(0))
@@ -241,7 +242,8 @@ describe('projectWorker: menos de cinco minutos de cobertura devolve Calculando'
       windowSamples: [sample({ eventTime: secondsAgo(10), activeEnergyKcal: 12 })],
     })
 
-    expect(projected.metrics.energyRatePerHour.quality).toBe('CALCULATING')
+    expect(projected.metrics.energyRatePerHour.quality).toBe('UNAVAILABLE')
+    expect(projected.metrics.energyRatePerHour.calculating).toBe(true)
     expect(projected.metrics.energyRatePerHour.value).toBeNull()
   })
 
@@ -763,5 +765,38 @@ describe('projectWorker: energia da janela é soma de deltas, e não de acumulad
 
     expect(projected.metrics.energyRatePerHour.value).toBe(180)
     expect(projected.metrics.energyRatePerHour.quality).toBe('CURRENT')
+  })
+})
+
+
+// "Calculando" era o quarto valor da união de qualidade que ingestão, projeção,
+// mobile e painel compartilham, e era inalcançável para oito das nove métricas:
+// nenhuma medição bruta o produz e qualityAt nunca o devolve. O custo aparecia
+// em cada consumidor, com um braço morto em todo switch sobre qualidade, e
+// dentro do próprio domínio a conversão de recência de pressão só se mantinha
+// correta porque caía no default. A decisão de produto é a mesma; ela passa a
+// viver na forma da métrica derivada que a produz.
+describe('projectWorker: Calculando não alarga a união de qualidade', () => {
+  it('nenhuma métrica devolve Calculando como qualidade, nem na cobertura curta', () => {
+    const projected = project({ windowSamples: energySeries(4, 5) })
+
+    for (const [kind, state] of Object.entries(projected.metrics)) {
+      expect({ kind, quality: state.quality }).not.toEqual({ kind, quality: 'CALCULATING' })
+    }
+  })
+
+  it('só kcal/h carrega o campo, porque só ela promete um número a caminho', () => {
+    const projected = project({ windowSamples: energySeries(4, 5) })
+
+    expect(projected.metrics.energyRatePerHour.calculating).toBe(true)
+    expect('calculating' in projected.metrics.movementPerMinute).toBe(false)
+    expect('calculating' in projected.metrics.heartRate).toBe(false)
+  })
+
+  it('com cobertura suficiente a taxa vale um número e não está mais calculando', () => {
+    const projected = project({ windowSamples: energySeries(30, 2) })
+
+    expect(projected.metrics.energyRatePerHour.value).toBe(120)
+    expect(projected.metrics.energyRatePerHour.calculating).toBe(false)
   })
 })

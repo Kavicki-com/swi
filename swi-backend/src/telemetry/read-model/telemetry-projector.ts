@@ -128,12 +128,23 @@ export interface WindowCoverage {
   windowEnd: string | null
 }
 
+/**
+ * kcal/h é a única métrica que promete um número a caminho: ela exige cobertura
+ * mínima antes de valer uma taxa honesta, e passa assim os primeiros minutos.
+ * Enquanto isso a qualidade é indisponível, porque valor não há, e este campo
+ * diz por quê. Ele vive aqui, e não na união de qualidade compartilhada, para
+ * não obrigar as outras oito métricas a carregar um estado que nunca alcançam.
+ */
+export interface EnergyRateState extends MetricState<number> {
+  calculating: boolean
+}
+
 export interface WorkerMetrics {
   heartRate: MetricState<number>
   steps: MetricState<number>
   movementPerMinute: MetricState<number>
   activeEnergy: MetricState<number>
-  energyRatePerHour: MetricState<number>
+  energyRatePerHour: EnergyRateState
   battery: MetricState<number>
   bloodPressure: MetricState<BloodPressure>
   effort: MetricState<number>
@@ -317,20 +328,30 @@ function rateState(kind: MetricKind, rate: RateResult, now: Date): MetricState<n
   // "não dá para calcular, e o dado é desta hora" é informação; um horário nulo
   // faria a tela não distinguir silêncio de cobertura insuficiente.
   //
-  // "Calculando" promete um número que está chegando, então ele vale enquanto a
-  // última amostra ainda descreve o agora. Um relógio que envia duas medições e
-  // morre não está calculando nada: sem esta porta, ele anunciaria "Calculando"
-  // por quase uma hora, que é a mesma história falsa que a ADR-0004 proíbe na
-  // lacuna. O prazo é o do domínio, o mesmo que decide a qualidade quando há
-  // valor; a taxa não ganha limiar próprio.
-  const stillReading = qualityAt(kind, rate.latestAt, now) !== 'UNAVAILABLE'
   return {
     value: null,
-    quality: rate.calculating && stillReading ? 'CALCULATING' : 'UNAVAILABLE',
+    quality: 'UNAVAILABLE',
     measuredAt: rate.latestAt,
     source: rate.latestAt === null ? null : 'DERIVED',
     unit: METRICS[kind].unit,
   }
+}
+
+/**
+ * kcal/h carrega o campo sempre, e só ela: com valor não se calcula mais nada,
+ * e sem valor ele separa cobertura insuficiente de silêncio. O campo não sobe
+ * para a união de qualidade porque as outras oito métricas nunca o alcançam.
+ */
+function energyRateState(rate: RateResult, now: Date): EnergyRateState {
+  const state = rateState('energyRatePerHour', rate, now)
+  // "Calculando" promete um número que está chegando, então vale só enquanto a
+  // última amostra ainda descreve o agora. Um relógio que envia duas medições e
+  // morre não está calculando nada: sem esta porta ele anunciaria "Calculando"
+  // por quase uma hora, a mesma história falsa que a ADR-0004 proíbe na lacuna.
+  // O prazo é o do domínio, o mesmo que decide a qualidade quando há valor; a
+  // taxa não ganha limiar próprio.
+  const stillReading = qualityAt('energyRatePerHour', rate.latestAt, now) !== 'UNAVAILABLE'
+  return { ...state, calculating: state.value === null && rate.calculating && stillReading }
 }
 
 // ---------------------------------------------------------------------------
@@ -446,7 +467,7 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     steps: metricState('steps', dayTotals.steps, now),
     movementPerMinute: rateState('movementPerMinute', movement, now),
     activeEnergy: metricState('activeEnergy', rounded(dayTotals.activeEnergy), now),
-    energyRatePerHour: rateState('energyRatePerHour', energy, now),
+    energyRatePerHour: energyRateState(energy, now),
     battery: fromSnapshot.battery,
     bloodPressure: fromSnapshot.bloodPressure,
     effort: derived.effort,
