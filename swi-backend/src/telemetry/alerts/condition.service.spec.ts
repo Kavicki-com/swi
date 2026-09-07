@@ -36,6 +36,19 @@ const latestReadings = (readings: { battery?: unknown; pressure?: unknown }) =>
     where.batteryPercent === undefined ? (readings.pressure ?? null) : (readings.battery ?? null),
   )
 
+/**
+ * Leituras gravadas em OUTRA sessão do mesmo funcionário. O dublê filtra como o
+ * banco filtraria: recorte por sessão não as acha, recorte por funcionário e
+ * origem acha.
+ */
+const readingsOfAnotherSession = (readings: { battery?: unknown; pressure?: unknown }) =>
+  jest.fn().mockImplementation(async ({ where }: any) => {
+    const row = (where.batteryPercent === undefined ? readings.pressure : readings.battery) ?? null
+    const visivel =
+      where.sessionId === undefined && where.workerId === SESSION.workerId && where.origin === SESSION.origin
+    return visivel ? row : null
+  })
+
 const prismaDouble = () => {
   const db: any = {
     open: false,
@@ -123,7 +136,12 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
     await service(prisma).evaluateSession('session-1', NOW, NOW)
 
     expect(readingCall(prisma.telemetrySample.findFirst, 'batteryPercent')).toEqual({
-      where: { sessionId: 'session-1', batteryPercent: { not: null }, eventTime: { gte: minutesAgo(30), lte: NOW } },
+      where: {
+        workerId: 'worker-1',
+        origin: 'REAL',
+        batteryPercent: { not: null },
+        eventTime: { gte: minutesAgo(30), lte: NOW },
+      },
       select: { batteryPercent: true },
       orderBy: { eventTime: 'desc' },
     })
@@ -136,7 +154,8 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
 
     expect(readingCall(prisma.telemetrySample.findFirst, 'systolicMmHg')).toEqual({
       where: {
-        sessionId: 'session-1',
+        workerId: 'worker-1',
+        origin: 'REAL',
         systolicMmHg: { not: null },
         diastolicMmHg: { not: null },
         eventTime: { gte: hoursAgo(72), lte: NOW },
@@ -242,6 +261,33 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
 
     expect(outcome.opened).toEqual(['DEVICE_BATTERY_LOW'])
+  })
+
+  it('bateria medida em outra sessão do mesmo funcionário, dentro do prazo, ainda abre', async () => {
+    // Sessão nova nasce a cada reconexão do relógio, e o prazo da bateria é de
+    // 30 min. Recortada por sessão, uma leitura de dez minutos atrás ficaria
+    // invisível só porque o relógio reconectou no meio. A condição já é
+    // chaveada por funcionário e origem justamente porque sobrevive à sessão.
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findFirst = readingsOfAnotherSession({ battery: { batteryPercent: 9 } })
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toEqual(['DEVICE_BATTERY_LOW'])
+  })
+
+  it('pressão medida em outra sessão do mesmo funcionário, dentro do prazo, ainda abre', async () => {
+    // O prazo da pressão é de 72 h: uma medição de ontem é atual pelo domínio,
+    // e nesse intervalo o relógio reconectou várias vezes. Recorte por sessão
+    // esconderia dela a medição que o painel mostra na tela.
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findFirst = readingsOfAnotherSession({
+      pressure: { systolicMmHg: 150, diastolicMmHg: 80 },
+    })
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toEqual(['BLOOD_PRESSURE_REVIEW'])
   })
 
   it('pressão fora da faixa abre condição e alerta, com a régua que cruzou', async () => {

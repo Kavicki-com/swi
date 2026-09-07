@@ -120,6 +120,15 @@ export class TelemetryConditionService {
     // avaliada por chamada nenhuma, porque a janela seguinte já andou para a
     // frente; e pressão é medida à mão e raramente, então perder uma é perder o
     // evento inteiro.
+    //
+    // As duas leituras pontuais são recortadas por FUNCIONÁRIO e origem, e não
+    // por sessão, porque prazo de 30 min e de 72 h não cabe dentro de uma
+    // sessão: ela nasce de novo a cada reconexão do relógio. Recortada por
+    // sessão, uma medição de pressão de ontem seria atual pelo domínio e
+    // apareceria no painel, mas ficaria invisível para a avaliação. A condição
+    // já é chaveada por (workerId, origin) pelo mesmo motivo: sobrevive à
+    // sessão. A janela de 60 s do BPM continua por sessão, porque evidência
+    // CONTÍNUA de esforço só faz sentido dentro de uma.
     const batteryFrom = new Date(triggerAt.getTime() - FRESHNESS.BATTERY.staleMs)
     const pressureFrom = new Date(triggerAt.getTime() - FRESHNESS.BLOOD_PRESSURE.staleMs)
     const [rows, batteryRow, pressureRow, profile, summaries] = await Promise.all([
@@ -137,7 +146,12 @@ export class TelemetryConditionService {
       // painel a trata como válida até meia hora, e a condição tem de decidir
       // sobre a mesma leitura que o painel mostra.
       tx.telemetrySample.findFirst({
-        where: { sessionId, batteryPercent: { not: null }, eventTime: { gte: batteryFrom, lte: triggerAt } },
+        where: {
+          workerId: session.workerId,
+          origin: session.origin,
+          batteryPercent: { not: null },
+          eventTime: { gte: batteryFrom, lte: triggerAt },
+        },
         select: { batteryPercent: true },
         orderBy: { eventTime: 'desc' },
       }),
@@ -146,7 +160,8 @@ export class TelemetryConditionService {
       // então é exatamente aí que ele deixa de poder abrir condição.
       tx.telemetrySample.findFirst({
         where: {
-          sessionId,
+          workerId: session.workerId,
+          origin: session.origin,
           systolicMmHg: { not: null },
           diastolicMmHg: { not: null },
           eventTime: { gte: pressureFrom, lte: triggerAt },
