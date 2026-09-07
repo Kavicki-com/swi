@@ -95,6 +95,27 @@ describe('decideHeartRate: abre só com persistência coberta', () => {
     expect(decideHeartRate('HEART_RATE_HIGH', samples, HIGH, false, PROFILE, NOW)).toBeNull()
   })
 
+  it('duas amostras nas pontas da janela não provam nada: o vão entre elas é grande demais', () => {
+    // O intervalo entre a primeira e a última é 45 s e cumpre o mínimo, mas
+    // entre as duas não há dado nenhum. Medir só as pontas deixava isto abrir:
+    // duas amostras a 45 s de distância não provam 45 s de nada, pela mesma
+    // razão que duas a 5 s não provam um minuto. É preciso um teto de vão
+    // entre amostras consecutivas, e não só o comprimento do trecho.
+    const samples: EngineSample[] = [
+      { atMs: secondsAgo(50), heartRateBpm: 185, batteryPercent: null },
+      { atMs: secondsAgo(5), heartRateBpm: 185, batteryPercent: null },
+    ]
+
+    expect(decideHeartRate('HEART_RATE_HIGH', samples, HIGH, false, PROFILE, NOW)).toBeNull()
+  })
+
+  it('vão de uma cadência perdida ainda abre: o teto tolera falha, não silêncio', () => {
+    // Cadência de 5 s com duas amostras faltando no meio: vão de 15 s, no teto.
+    const samples = series(60, 185).filter((_, i) => i !== 5 && i !== 6)
+
+    expect(decideHeartRate('HEART_RATE_HIGH', samples, HIGH, false, PROFILE, NOW)?.action).toBe('OPEN')
+  })
+
   it('amostra sem BPM não conta nem contra nem a favor', () => {
     const samples = series(60, 185).map((s, i) => (i % 2 === 0 ? { ...s, heartRateBpm: null } : s))
 

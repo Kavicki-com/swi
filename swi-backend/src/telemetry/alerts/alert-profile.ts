@@ -34,8 +34,28 @@ export interface AlertProfile {
     readonly floorBpm: number
     readonly hysteresisBpm: number
   }
-  /** Persistência das condições de BPM: janela olhada e cobertura mínima nela. */
-  readonly persistence: { readonly windowMs: number; readonly minCoverageMs: number }
+  /**
+   * Cobertura das condições de BPM. Os três juntos definem o que conta como
+   * evidência, e nenhum deles sozinho basta.
+   *
+   * ATENÇÃO ao calibrar: nenhum destes é a duração da persistência. Como a
+   * decisão exige que TODA amostra da janela cumpra o predicado, uma leitura
+   * fora do limite zera a evidência, e a condição só abre quando a janela
+   * inteira já está do outro lado. A persistência efetiva é sempre windowMs.
+   */
+  readonly persistence: {
+    /** Quanto se olha para trás do gatilho. É a persistência efetiva. */
+    readonly windowMs: number
+    /** Distância mínima entre a primeira e a última amostra da janela. */
+    readonly minSpanMs: number
+    /**
+     * Vão máximo entre amostras consecutivas. Sem ele, duas amostras nas
+     * pontas da janela cumpririam minSpanMs sem haver dado nenhum entre elas,
+     * e duas amostras a 45 s de distância não provam 45 s de nada. Três
+     * cadências de 5 s: tolera falha de entrega, não tolera silêncio.
+     */
+    readonly maxGapMs: number
+  }
   readonly batteryLow: { readonly openAtPercent: number; readonly recoverAbovePercent: number }
   readonly bloodPressureReview: {
     readonly systolicAt: number
@@ -57,7 +77,7 @@ export const EXPERIMENTAL_ALERT_PROFILE: AlertProfile = Object.freeze({
   version: ALERT_PROFILE_VERSION,
   heartRateHigh: Object.freeze({ maxFraction: 0.9, floorBpm: 180, hysteresisBpm: 10 }),
   heartRateLow: Object.freeze({ belowRestingBpm: 15, floorBpm: 40, hysteresisBpm: 10 }),
-  persistence: Object.freeze({ windowMs: 60_000, minCoverageMs: 45_000 }),
+  persistence: Object.freeze({ windowMs: 60_000, minSpanMs: 45_000, maxGapMs: 15_000 }),
   batteryLow: Object.freeze({ openAtPercent: 15, recoverAbovePercent: 25 }),
   bloodPressureReview: Object.freeze({
     systolicAt: 140,

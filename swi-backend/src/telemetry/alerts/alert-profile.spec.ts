@@ -24,7 +24,7 @@ describe('perfil de alertas experimental', () => {
     expect(EXPERIMENTAL_ALERT_PROFILE).toMatchObject({
       heartRateHigh: { maxFraction: 0.9, floorBpm: 180, hysteresisBpm: 10 },
       heartRateLow: { belowRestingBpm: 15, floorBpm: 40, hysteresisBpm: 10 },
-      persistence: { windowMs: 60_000, minCoverageMs: 45_000 },
+      persistence: { windowMs: 60_000, minSpanMs: 45_000, maxGapMs: 15_000 },
       batteryLow: { openAtPercent: 15, recoverAbovePercent: 25 },
       bloodPressureReview: { systolicAt: 140, diastolicAt: 90, systolicRecoverBelow: 130, diastolicRecoverBelow: 85 },
       signalLost: { shiftCeilingMs: 8 * 60 * 60 * 1000 },
