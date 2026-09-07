@@ -1,5 +1,5 @@
 import { EXPERIMENTAL_PROFILE } from './assessment-profile'
-import { simulate, steadyStateWear } from './fatigue-simulator'
+import { samplesOf, simulate, steadyStateWear } from './fatigue-simulator'
 import { CONTROLLED_SESSIONS } from './fixtures/controlled-sessions'
 
 // Simulador determinístico: gera a série de amostras de um cenário e corre a
@@ -13,6 +13,37 @@ const finalOf = (name: keyof typeof CONTROLLED_SESSIONS) => {
   const trace = simulate(CONTROLLED_SESSIONS[name].scenario, EXPERIMENTAL_PROFILE, BASELINE)
   return trace[trace.length - 1]
 }
+
+// O relógio do simulador tem de andar a duração do trecho, e não só até a
+// última amostra que coube nele. Trecho cuja duração não é múltipla da cadência
+// comprimia a linha do tempo e deslocava todos os trechos seguintes, então o
+// cenário escrito não era o cenário simulado.
+describe('samplesOf: o tempo anda a duração do trecho', () => {
+  it('trecho de 7 s com cadência 5 empurra o trecho seguinte para 7 s, não para 5 s', () => {
+    const samples = samplesOf({
+      cadenceSec: 5,
+      segments: [
+        [7, 140, 60],
+        [10, null, null],
+      ],
+    })
+
+    expect(samples.map((s) => s.atMs)).toEqual([5_000, 12_000, 17_000])
+    expect(samples.map((s) => s.heartRateBpm)).toEqual([140, null, null])
+  })
+
+  it('trecho menor que a cadência não emite amostra, mas avança o tempo', () => {
+    const samples = samplesOf({
+      cadenceSec: 5,
+      segments: [
+        [3, 140, null],
+        [10, 150, null],
+      ],
+    })
+
+    expect(samples.map((s) => s.atMs)).toEqual([8_000, 13_000])
+  })
+})
 
 describe('simulate: propriedades entre cenários', () => {
   it('desgaste cresce com a intensidade do cenário: repouso < leve < moderado < intenso', () => {

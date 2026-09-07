@@ -9,20 +9,54 @@ import { ASSESSMENT_THROTTLE_MS, TelemetryAssessmentService } from './assessment
 
 const NOW = new Date('2026-09-04T12:00:00.000Z')
 const secondsAgo = (s: number) => new Date(NOW.getTime() - s * 1000)
+const hoursAgo = (h: number) => secondsAgo(h * 3600)
 
 const SESSION = { id: 'session-1', workerId: 'worker-1', origin: 'REAL', startedAt: secondsAgo(3_600) }
 
-const prismaDouble = () =>
-  ({
+// O dublê é o mesmo objeto dentro e fora da transação, como o do device-auth:
+// o que interessa afirmar é a ordem das instruções e que a gravação aconteceu
+// com a transação aberta, não que o Prisma entrega outro cliente.
+const prismaDouble = () => {
+  const db: any = {
+    open: false,
+    createdWithTransactionOpen: false,
     telemetrySession: { findUnique: jest.fn().mockResolvedValue(SESSION) },
     telemetryAssessment: {
       findFirst: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'assessment-new', ...data })),
+      create: jest.fn(),
     },
     telemetrySample: { findMany: jest.fn().mockResolvedValue([]) },
     profile: { findUnique: jest.fn().mockResolvedValue({ birthDate: new Date('1991-05-10T00:00:00.000Z') }) },
     telemetryDailySummary: { findMany: jest.fn().mockResolvedValue([{ heartRateMin: 62 }]) },
-  }) as any
+  }
+  db.$transaction = jest.fn(async (fn: any) => {
+    db.open = true
+    try {
+      return await fn(db)
+    } finally {
+      db.open = false
+    }
+  })
+  db.$queryRaw = jest.fn().mockResolvedValue([{ id: SESSION.id }])
+  db.telemetryAssessment.create.mockImplementation(async ({ data }: any) => {
+    db.createdWithTransactionOpen = db.open
+    return { id: 'assessment-new', ...data }
+  })
+  return db
+}
+
+/** Em que ponto da execução um dublê foi chamado pela primeira vez. */
+const firstCall = (fn: jest.Mock) => fn.mock.invocationCallOrder[0]
+
+/**
+ * O findMany do dublê respeitando o where, para os casos em que o que importa é
+ * justamente quais linhas a janela alcança. Sem isto o teste afirmaria o que
+ * ele mesmo devolveu, e não o recorte que o serviço pediu.
+ */
+const rowsMatching = (rows: Array<{ eventTime: Date }>, where: any) => {
+  const { gt, gte, lte } = where.eventTime
+  return rows.filter((r) => (gte === undefined ? r.eventTime > gt : r.eventTime >= gte) && r.eventTime <= lte)
+}
 
 const service = (prisma: any) => new TelemetryAssessmentService(prisma as PrismaService)
 
@@ -79,7 +113,7 @@ describe('TelemetryAssessmentService.assessSession', () => {
     expect(data.windowStart).toEqual(secondsAgo(120))
     expect(data.inputs.chain).toMatchObject({ reason: 'first_of_session', previousAssessmentId: null, previousState: null })
     const where = prisma.telemetrySample.findMany.mock.calls[0][0].where
-    expect(where.eventTime).toEqual({ gt: secondsAgo(120), lte: NOW })
+    expect(where.eventTime).toEqual({ gte: secondsAgo(120), lte: NOW })
   })
 
   it('sessão que começou há menos de 120 s: a janela começa no início dela', async () => {
@@ -191,7 +225,252 @@ describe('TelemetryAssessmentService.assessSession', () => {
 
   it('sessão inexistente estoura: é invariante quebrado, não caso normal', async () => {
     const prisma = prismaDouble()
-    prisma.telemetrySession.findUnique.mockResolvedValue(null)
+    prisma.$queryRaw.mockResolvedValue([])
     await expect(service(prisma).assessSession('nao-existe', NOW, NOW)).rejects.toThrow(/nao-existe/)
+  })
+})
+
+// Dois lotes da mesma sessão em voo ao mesmo tempo bifurcavam a cadeia: os dois
+// liam a mesma anterior, os dois passavam o corte, e os dois gravavam apontando
+// para o mesmo previousAssessmentId. Quem serializa é o banco, com lock na
+// linha da sessão, porque a garantia tem de valer para qualquer cliente.
+describe('TelemetryAssessmentService.assessSession, serialização por sessão', () => {
+  it('trava a linha da sessão antes de qualquer leitura', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow())
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const [sql] = prisma.$queryRaw.mock.calls[0]
+    expect(sql.join('?')).toMatch(/TelemetrySession/)
+    expect(sql.join('?')).toMatch(/for no key update/i)
+    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetryAssessment.findFirst))
+    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetrySession.findUnique))
+    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetrySample.findMany))
+  })
+
+  it('grava com a transação aberta, não depois de ela fechar', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    const out = await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(out.outcome).toBe('assessed')
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(prisma.createdWithTransactionOpen).toBe(true)
+  })
+
+  it('sonda o corte lendo só computedAt, e carrega inputs só depois de ele deixar passar', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow())
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.findFirst).toHaveBeenCalledTimes(2)
+    expect(prisma.telemetryAssessment.findFirst.mock.calls[0][0].select).toEqual({ computedAt: true })
+    expect(prisma.telemetryAssessment.findFirst.mock.calls[1][0].select).toMatchObject({ inputs: true })
+  })
+
+  it('primeira da sessão não faz a segunda consulta: não há anterior para carregar', async () => {
+    const prisma = prismaDouble()
+    await service(prisma).assessSession('session-1', NOW, NOW)
+    expect(prisma.telemetryAssessment.findFirst).toHaveBeenCalledTimes(1)
+  })
+
+  it('cortado: nem a sessão inteira, nem inputs, nem amostra são lidos', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow({ computedAt: secondsAgo(14) }))
+
+    const out = await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(out.outcome).toBe('throttled')
+    expect(prisma.telemetryAssessment.findFirst).toHaveBeenCalledTimes(1)
+    expect(prisma.telemetrySession.findUnique).not.toHaveBeenCalled()
+    expect(prisma.telemetrySample.findMany).not.toHaveBeenCalled()
+    expect(prisma.telemetryDailySummary.findMany).not.toHaveBeenCalled()
+  })
+
+  it('sessão que não existe estoura no lock, antes de sondar o corte', async () => {
+    const prisma = prismaDouble()
+    prisma.$queryRaw.mockResolvedValue([])
+
+    await expect(service(prisma).assessSession('sumida', NOW, NOW)).rejects.toThrow(/sumida/)
+    expect(prisma.telemetryAssessment.findFirst).not.toHaveBeenCalled()
+  })
+})
+
+// A cadeia contínua começava no windowEnd da anterior a seco. Um relógio que
+// fica horas fora do ar e despeja o backlog junto com um evento ao vivo puxava
+// milhares de amostras para dentro da janela, e como elas vêm espaçadas de 5 s
+// passavam pelo gapMaxMs e viravam dose. O mesmo backlog enviado no lote
+// anterior não seria avaliado: mesmo dado, desgaste diferente conforme o
+// cliente empacotou. A janela passa a olhar no máximo chainLookbackMs.
+describe('TelemetryAssessmentService.assessSession, teto da janela contínua', () => {
+  const longGap = () => previousRow({ computedAt: hoursAgo(3), windowEnd: hoursAgo(3) })
+
+  it('anterior de 3 h atrás: a janela começa 120 s antes do gatilho, não no fim dela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(longGap())
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.windowStart).toEqual(secondsAgo(120))
+    expect(prisma.telemetrySample.findMany.mock.calls[0][0].where.eventTime).toEqual({ gt: secondsAgo(120), lte: NOW })
+  })
+
+  it('a linha conta quanto tempo ficou fora da janela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(longGap())
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.window.skippedMs).toBe(3 * 3600 * 1000 - 120_000)
+  })
+
+  it('lacuna curta não pula nada: a janela continua começando no fim da anterior', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow())
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.windowStart).toEqual(secondsAgo(20))
+    expect(data.inputs.window.skippedMs).toBe(0)
+  })
+
+  it('backlog no mesmo lote do evento ao vivo dá a mesma dose que backlog em lote separado', async () => {
+    // Uma hora de amostras de 5 em 5 s, que é o que o relógio despeja quando
+    // volta do offline, mais duas amostras ao vivo. O caso roda duas vezes: com
+    // o backlog no banco e sem ele. A dose tem de ser a mesma.
+    const backlog = Array.from({ length: 720 }, (_, i) => sampleRow(3 * 3600 - i * 5))
+    const live = [sampleRow(10), sampleRow(0)]
+
+    const doseFrom = async (rows: Array<{ eventTime: Date }>) => {
+      const prisma = prismaDouble()
+      prisma.telemetryAssessment.findFirst.mockResolvedValue(longGap())
+      prisma.telemetrySample.findMany.mockImplementation(async ({ where }: any) => rowsMatching(rows, where))
+      await service(prisma).assessSession('session-1', NOW, NOW)
+      const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+      return { effortPercent: data.effortPercent, wearPercent: data.wearPercent }
+    }
+
+    expect(await doseFrom([...backlog, ...live])).toEqual(await doseFrom(live))
+  })
+})
+
+// A fronteira de baixo da janela é fechada na primeira da cadeia e aberta na
+// continuação. Na primeira, windowStart cai exatamente no startedAt, que é o
+// eventTime mais antigo do lote de abertura, e o `gt` deixava essa leitura de
+// fora de todas as janelas, para sempre. Na continuação a fronteira é o
+// windowEnd da anterior, e a amostra que está nele já foi consumida.
+describe('TelemetryAssessmentService.assessSession, fronteira de baixo da janela', () => {
+  it('primeira da sessão: a amostra que está exatamente em startedAt entra na janela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySession.findUnique.mockResolvedValue({ ...SESSION, startedAt: secondsAgo(30) })
+    prisma.telemetrySample.findMany.mockImplementation(async ({ where }: any) =>
+      rowsMatching([sampleRow(30), sampleRow(10), sampleRow(0)], where),
+    )
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.windowStart).toEqual(secondsAgo(30))
+    expect(data.inputs.window.sampleCount).toBe(3)
+  })
+
+  it('continuação: a amostra que está exatamente no fim da janela anterior não é relida', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow())
+    prisma.telemetrySample.findMany.mockImplementation(async ({ where }: any) =>
+      rowsMatching([sampleRow(20), sampleRow(10), sampleRow(0)], where),
+    )
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.windowStart).toEqual(secondsAgo(20))
+    expect(data.inputs.window.sampleCount).toBe(2)
+  })
+
+  it('reinício por estado ilegível também fecha a fronteira de baixo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow({ inputs: {} }))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetrySample.findMany.mock.calls[0][0].where.eventTime).toEqual({ gte: secondsAgo(120), lte: NOW })
+  })
+
+  it('reinício por versão diferente também fecha a fronteira de baixo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow({ formulaVersion: 'swi-fatigue-experimental-0' }))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetrySample.findMany.mock.calls[0][0].where.eventTime).toEqual({ gte: secondsAgo(120), lte: NOW })
+  })
+})
+
+// Reiniciar a cadeia porque o estado da anterior não parseia é um motivo
+// diferente de reiniciar porque a fórmula mudou de versão, e rotular os dois
+// como version_changed mente para quem for auditar. Nenhum escritor produz
+// linha assim hoje; estes casos existem para o dia em que produzir.
+describe('TelemetryAssessmentService.assessSession, estado anterior ilegível', () => {
+  it('anterior da mesma versão com inputs vazio reinicia dizendo state_unreadable', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow({ inputs: {} }))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.chain).toMatchObject({ reason: 'state_unreadable', previousState: null, previousAssessmentId: null })
+    expect(data.windowStart).toEqual(secondsAgo(120))
+  })
+
+  it('versão diferente continua sendo version_changed, e não o motivo novo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(
+      previousRow({ formulaVersion: 'swi-fatigue-experimental-0', inputs: {} }),
+    )
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.chain.reason).toBe('version_changed')
+  })
+
+  it('lastHeartRate sem bpm numérico é tratado como nulo, e não vira NaN dentro da fórmula', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(
+      previousRow({ inputs: { chain: { nextState: { strainDose: 12, effortEma: 0.4, lastHeartRate: {} } } } }),
+    )
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.chain.reason).toBeNull()
+    expect(data.inputs.chain.previousState.lastHeartRate).toBeNull()
+    expect(Number.isNaN(data.wearPercent)).toBe(false)
+  })
+
+  it('lastHeartRate sem atMs numérico é tratado como nulo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(
+      previousRow({ inputs: { chain: { nextState: { strainDose: 12, lastHeartRate: { bpm: 110 } } } } }),
+    )
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.chain.previousState.lastHeartRate).toBeNull()
   })
 })
