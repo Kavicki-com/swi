@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { RealtimeGateway } from '../../realtime/realtime.gateway'
+import { TelemetryConditionService } from '../alerts/condition.service'
 import { TelemetryAssessmentService } from '../assessment/assessment.service'
 import type { DeviceIdentity } from '../devices/device-auth.service'
 import {
@@ -26,9 +27,10 @@ import {
 import type { TelemetryBatchDto, TelemetryEventDto } from './dto/telemetry-batch.dto'
 
 // Ingestão do piloto. Um evento entra, é conferido, gravado e só então
-// confirmado. A avaliação de esforço e desgaste roda depois do laço, uma vez
-// por sessão ao vivo, com corte de 15 s no serviço de avaliação; a gravação do
-// evento nunca espera por ela.
+// confirmado. A avaliação de esforço e desgaste e a avaliação de condições
+// rodam depois do laço, uma vez por sessão ao vivo cada, com corte de 15 s no
+// serviço de avaliação; a gravação do evento nunca espera por nenhuma das
+// duas, e nenhuma das duas derruba a outra.
 
 /** Motivos estáveis de recusa. O cliente decide o que fazer lendo este código. */
 export type TelemetryRejectionReason =
@@ -138,6 +140,7 @@ export class TelemetryIngestionService {
     @Inject(TELEMETRY_REPOSITORY) private readonly repository: TelemetryRepository,
     private readonly realtime: RealtimeGateway,
     private readonly assessment: TelemetryAssessmentService,
+    private readonly conditions: TelemetryConditionService,
   ) {}
 
   async ingest(device: DeviceIdentity, batch: TelemetryBatchDto): Promise<TelemetryBatchAck> {
@@ -188,15 +191,36 @@ export class TelemetryIngestionService {
       }
     }
 
-    // Uma avaliação por sessão e por lote, antes do aviso: o painel busca o
-    // estado ao receber o aviso, e ele precisa já incluir a avaliação. O corte
-    // de 15 s é do serviço. Falha aqui nunca derruba o ACK: o evento já está
-    // gravado, e reenviá-lo só produziria duplicata.
+    // Uma avaliação de cada por sessão e por lote, antes do aviso: o painel
+    // busca o estado ao receber o aviso, e ele precisa já incluir a avaliação e
+    // as condições que ela abriu. O corte de 15 s é do serviço. Falha aqui nunca
+    // derruba o ACK: o evento já está gravado, e reenviá-lo só produziria
+    // duplicata.
     for (const [sessionId, triggerAt] of liveTriggers) {
       try {
         await this.assessment.assessSession(sessionId, triggerAt, now)
       } catch (error) {
         this.logger.error(`Falha ao avaliar a sessão ${sessionId}: ${(error as Error).message}`)
+      }
+
+      // try/catch PRÓPRIO, e não o de cima: alerta é segurança. Um erro na
+      // fórmula de desgaste não pode ser o motivo de um alerta não sair, nem o
+      // contrário, e falha em qualquer um dos dois nunca derruba o ACK, pelo
+      // mesmo motivo da avaliação acima: o evento já está gravado, e reenviá-lo
+      // só produziria duplicata.
+      //
+      // DUAS TRANSAÇÕES SEPARADAS, sequenciais, cada uma completando antes de a
+      // seguinte começar. NÃO junte as duas numa transação só, por mais que
+      // pareça economia de ida ao banco: a avaliação de esforço trava a LINHA
+      // DA SESSÃO com FOR NO KEY UPDATE, e o serviço de condições toma um LOCK
+      // CONSULTIVO sobre funcionário e origem. São escopos diferentes, e numa
+      // transação só dois locks de escopos diferentes adquiridos por caminhos
+      // diferentes abrem espaço para impasse. Separadas, cada transação solta o
+      // que pegou antes de a próxima começar, e não há ciclo.
+      try {
+        await this.conditions.evaluateSession(sessionId, triggerAt, now)
+      } catch (error) {
+        this.logger.error(`Falha ao avaliar as condições da sessão ${sessionId}: ${(error as Error).message}`)
       }
     }
 
