@@ -28,6 +28,14 @@ const DAY_MS = 24 * 60 * 60 * 1000
  */
 const LAST_SEEN_REFRESH_MS = 60_000
 
+/**
+ * Teto de candidatas por execução da varredura, no molde do teto de triplas do
+ * ciclo de vida: a rodada tem tamanho previsível, e o que sobra entra na
+ * seguinte, daqui a 30 s. Sem ele, backend fora do ar por dez minutos põe o
+ * piloto inteiro na mesma rodada, justo quando o banco está voltando.
+ */
+export const MAX_SILENT_SESSIONS_PER_RUN = 200
+
 /** Tipos que viram item de fila. Bateria e sinal são estado, não item. */
 const ALERTING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
   'HEART_RATE_HIGH',
@@ -105,19 +113,18 @@ export class TelemetryConditionService {
       return outcome
     }
 
-    // Mesmo lock da avaliação de esforço, pelo mesmo motivo: dois lotes da
-    // mesma sessão em voo ao mesmo tempo abririam a mesma condição duas vezes.
-    // NO KEY para não segurar a inserção de amostra, que pega FOR KEY SHARE.
-    const locked = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM "TelemetrySession" WHERE id = ${sessionId} FOR NO KEY UPDATE
-    `
-    if (locked.length === 0) throw new Error(`Sessão de monitoramento ${sessionId} não existe para avaliar condições`)
-
+    // A sessão é lida ANTES do lock porque é dela que sai a chave do lock, e
+    // ler antes é seguro: funcionário e origem nascem com a linha e ninguém os
+    // reescreve. A conferência de existência é aqui, e não mais no lock: o lock
+    // consultivo não olha linha nenhuma, então zero linhas deixou de significar
+    // "sessão inexistente".
     const session = await tx.telemetrySession.findUnique({
       where: { id: sessionId },
       select: { id: true, workerId: true, origin: true },
     })
     if (session === null) throw new Error(`Sessão de monitoramento ${sessionId} não existe para avaliar condições`)
+
+    await this.lockWorkerOrigin(tx, session)
 
     // Por funcionário e origem, e não por sessão: uma condição aberta numa
     // sessão continua sendo dele na seguinte, mas real e demonstração nunca se
@@ -334,23 +341,47 @@ export class TelemetryConditionService {
    * passar a encerrar sessão, esta definição deve ceder à dele.
    */
   async sweepSilentSessions(now: Date): Promise<SweepOutcome> {
-    const { silenceMs, shiftCeilingMs } = this.profile.signalLost
-    // A faixa é entre os dois prazos do perfil. Fronteira de cima ABERTA: o
-    // prazo do silêncio é o mesmo que o caminho do evento usa para dizer "ao
-    // vivo", e um carimbo exatamente em cima dele é ao vivo lá, então não pode
-    // ser silêncio aqui. Passado o teto, o turno acabou e ninguém está
-    // esperando dado: abrir perda de sinal ali encheria o painel de relógio
-    // guardado no armário.
+    const { silenceMs } = this.profile.signalLost
+    // Só a fronteira do silêncio, e ABERTA em cima: o prazo é o mesmo que o
+    // caminho do evento usa para dizer "ao vivo", e um carimbo exatamente em
+    // cima dele é ao vivo lá, então não pode ser silêncio aqui.
+    //
+    // O teto de turno NÃO entra: filtrando por ele aqui, ele governaria as duas
+    // coisas, e recuperar passaria a depender de a gente estar rodando. Uma
+    // queda de fim de semana, ou um deploy longo, e o batimento alto aberto na
+    // sexta nunca recuperaria, porque na segunda a sessão já não seria
+    // candidata. O teto governa só a ABERTURA, e por candidata.
+    //
+    // Origem REAL, e só ela. O snapshot tem uma linha por funcionário e a
+    // origem é substituída por inteiro, então sem o filtro a varredura opera na
+    // origem de QUEM FALOU POR ÚLTIMO: uma demonstração rodada por cima de
+    // alguém com condição real aberta faria a rodada seguinte ler as condições
+    // de (funcionário, DEMO), não recuperar nada e abrir perda de sinal em
+    // DEMO, com a condição REAL aberta para sempre e perda de sinal real
+    // nenhuma registrada. Demonstração é ensaio, não observação: ninguém está
+    // esperando dado de um ensaio que acabou. CONSEQUÊNCIA ACEITA: rodar uma
+    // demonstração num funcionário que tem condição real aberta deixa essa
+    // condição aberta até ele voltar a mandar telemetria real, e isso é aceito
+    // porque demonstração é rara e deliberada. De brinde, o índice
+    // [origin, lastEventTime] do snapshot passa a ser usável: origem é a coluna
+    // líder dele.
+    //
+    // A mais calada primeiro, para o teto da rodada cortar as menos urgentes.
     const candidates = await this.prisma.telemetrySnapshot.findMany({
       where: {
+        origin: 'REAL',
         sessionId: { not: null },
-        lastEventTime: {
-          gte: new Date(now.getTime() - shiftCeilingMs),
-          lt: new Date(now.getTime() - silenceMs),
-        },
+        lastEventTime: { lt: new Date(now.getTime() - silenceMs) },
       },
-      select: { sessionId: true, lastEventTime: true },
+      select: { sessionId: true },
+      orderBy: { lastEventTime: 'asc' },
+      take: MAX_SILENT_SESSIONS_PER_RUN,
     })
+    if (candidates.length === MAX_SILENT_SESSIONS_PER_RUN) {
+      this.logger.warn(
+        `Varredura de silêncio bateu o teto de ${MAX_SILENT_SESSIONS_PER_RUN} candidatas na rodada; o resto entra na seguinte`,
+      )
+    }
 
     const outcome: SweepOutcome = { scanned: candidates.length, signalLost: 0, recovered: 0 }
     for (const candidate of candidates) {
@@ -363,9 +394,7 @@ export class TelemetryConditionService {
         // todo mundo a cada 30 s, e uma sessão que estoure não pode deixar o
         // resto do turno sem perda de sinal registrada. É o mesmo desenho da
         // varredura do ciclo de vida, pelo mesmo motivo.
-        const one = await this.prisma.$transaction((tx) =>
-          this.sweepLocked(tx, sessionId, now.getTime() - candidate.lastEventTime.getTime(), now),
-        )
+        const one = await this.prisma.$transaction((tx) => this.sweepLocked(tx, sessionId, now))
         outcome.signalLost += one.signalLost
         outcome.recovered += one.recovered
       } catch (error) {
@@ -381,24 +410,41 @@ export class TelemetryConditionService {
   private async sweepLocked(
     tx: Prisma.TransactionClient,
     sessionId: string,
-    observedSilenceMs: number,
     now: Date,
   ): Promise<{ signalLost: number; recovered: number }> {
     const result = { signalLost: 0, recovered: 0 }
 
-    // Mesmo lock do caminho do evento, e é ele que resolve a corrida com um
-    // lote que chega neste instante: quem chegar segundo lê o estado que o
-    // primeiro já gravou, em vez de os dois decidirem sobre a mesma leitura.
-    const locked = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM "TelemetrySession" WHERE id = ${sessionId} FOR NO KEY UPDATE
-    `
-    if (locked.length === 0) throw new Error(`Sessão de monitoramento ${sessionId} não existe para varrer silêncio`)
-
+    // Sessão antes do lock, como no caminho do evento e pelo mesmo motivo: é
+    // dela que sai a chave, e a existência precisa continuar sendo conferida
+    // agora que o lock não olha linha nenhuma.
     const session = await tx.telemetrySession.findUnique({
       where: { id: sessionId },
       select: { id: true, workerId: true, origin: true },
     })
     if (session === null) throw new Error(`Sessão de monitoramento ${sessionId} não existe para varrer silêncio`)
+
+    // Mesmo lock do caminho do evento, e é ele que resolve a corrida com um
+    // lote que chega neste instante: quem chegar segundo lê o estado que o
+    // primeiro já gravou, em vez de os dois decidirem sobre a mesma leitura.
+    await this.lockWorkerOrigin(tx, session)
+
+    // O silêncio é RELIDO aqui dentro, e não trazido da busca de candidatas: o
+    // laço leva tempo, e o carimbo da busca envelhece nesse intervalo, então
+    // gravá-lo subestimaria o silêncio pelo tempo da rodada, justo na coluna
+    // que a auditoria vai ler.
+    //
+    // Relê pela sessão, e não pelo funcionário: se o snapshot já não aponta
+    // para esta sessão e origem, quem manda é quem escreveu depois. E se a
+    // sessão voltou a falar entre a busca e o lock, esta candidata não é mais
+    // assunto da varredura: quem chegou depois tem a informação mais nova.
+    const { silenceMs, shiftCeilingMs } = this.profile.signalLost
+    const snapshot = await tx.telemetrySnapshot.findFirst({
+      where: { sessionId, origin: session.origin },
+      select: { lastEventTime: true },
+    })
+    if (snapshot === null) return result
+    const observedSilenceMs = now.getTime() - snapshot.lastEventTime.getTime()
+    if (observedSilenceMs <= silenceMs) return result
 
     // Por funcionário e origem, como no caminho do evento: a condição sobrevive
     // à sessão, e demonstração nunca cega o real.
@@ -415,6 +461,12 @@ export class TelemetryConditionService {
     // Recuperar antes de abrir, pela mesma razão de ordem do caminho do evento:
     // fechar o que já não vale antes de abrir o que passou a valer deixa a
     // leitura da linha do tempo na ordem dos fatos.
+    //
+    // E recuperar SEM olhar teto de turno, de propósito: valor que ninguém mede
+    // não vale, tenha o silêncio dois minutos ou dois dias. É a abertura que
+    // olha o teto, logo abaixo, e os dois tetos são diferentes porque as duas
+    // perguntas são diferentes: "esta condição ainda se sustenta?" não depende
+    // do turno de ninguém, "vale a pena avisar a operação?" depende.
     for (const row of active) {
       if (!SILENCE_RECOVERS.has(row.kind)) continue
       await tx.telemetryCondition.update({
@@ -423,6 +475,11 @@ export class TelemetryConditionService {
       })
       result.recovered += 1
     }
+
+    // Passado o teto do turno, ninguém está esperando dado: relógio guardado no
+    // armário há dois dias não é notícia, e abrir perda de sinal ali encheria o
+    // painel de item que não é para ninguém.
+    if (observedSilenceMs > shiftCeilingMs) return result
 
     // Idempotência: com perda de sinal já ativa não há o que abrir, e a rodada
     // seguinte sobre o mesmo silêncio não grava nada. Importa porque a
@@ -446,15 +503,39 @@ export class TelemetryConditionService {
   }
 
   /**
+   * Serializa as duas portas do motor, a do valor e a da ausência, pelo par
+   * FUNCIONÁRIO e ORIGEM, que é exatamente o escopo do invariante do índice
+   * único parcial (workerId, kind, origin).
+   *
+   * Lock consultivo, e não a linha da sessão. Travar a sessão tem escopo menor
+   * que o invariante: reconexão do relógio cria sessão nova, duas sessões do
+   * mesmo funcionário travam linhas distintas, não se enfileiram, e as duas
+   * mexem no mesmo conjunto de condições. A varredura torna isso COMUM em vez
+   * de raro, porque ela trava a sessão velha que veio do snapshot enquanto o
+   * lote novo trava a nova: por desenho, elas nunca se enfileiravam.
+   *
+   * `pg_advisory_xact_lock` é solto no fim da transação, sem unlock, então não
+   * há caminho de saída que vaze o lock. A chave sai do TEXTO "funcionário e
+   * origem" por `hashtext`: colisão de hash só faz dois pares distintos
+   * esperarem um pelo outro, que custa latência e não corrompe nada.
+   */
+  private async lockWorkerOrigin(
+    tx: Prisma.TransactionClient,
+    session: { workerId: string; origin: TelemetryOrigin },
+  ): Promise<void> {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`${session.workerId}:${session.origin}`}))`
+  }
+
+  /**
    * Abre uma condição. Escrita crua, e só ESTA: é a única do serviço que pode
-   * violar índice, e o preço da violação é a transação inteira. O lock é na
-   * linha da SESSÃO, mas o invariante do índice único parcial é por FUNCIONÁRIO
-   * e ORIGEM: duas sessões distintas do mesmo funcionário travam linhas
-   * diferentes, não se enfileiram, e podem tentar abrir a mesma condição ao
-   * mesmo tempo. O Prisma não envolve consulta individual em savepoint, então
-   * engolir o P2002 impediria o LANÇAMENTO, não o ABORTO: o Postgres põe a
-   * transação em estado abortado e o comando seguinte morre com 25P02, que não
-   * é P2002, sobe, e leva junto as recuperações já gravadas.
+   * violar índice, e o preço da violação é a transação inteira. O lock por
+   * funcionário e origem já enfileira as duas portas do motor, então o conflito
+   * ficou raro; ele não ficou impossível, porque nada obriga um escritor futuro
+   * a passar por aqui, e é contra isso que a cláusula abaixo protege. O Prisma
+   * não envolve consulta individual em savepoint, então engolir o P2002
+   * impediria o LANÇAMENTO, não o ABORTO: o Postgres põe a transação em estado
+   * abortado e o comando seguinte morre com 25P02, que não é P2002, sobe, e
+   * leva junto as recuperações já gravadas.
    *
    * ON CONFLICT DO NOTHING resolve no banco: nunca levanta e nunca aborta. Zero
    * linhas em RETURNING é exatamente o sinal de "outro escritor já abriu esta
