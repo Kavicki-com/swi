@@ -250,13 +250,20 @@ export class TelemetryConditionService {
       recoveredIds.add(row.id)
     }
 
-    // lastSeenAt quer dizer "última vez que uma avaliação viu esta condição
-    // ainda valendo", e não "quando ela abriu". Sem renovar, uma condição ativa
-    // há três horas, com o funcionário mandando dado o tempo todo, exibiria
-    // carimbo de três horas atrás, idêntico ao firstSeenAt, e o índice
-    // [status, lastSeenAt] deixaria de servir para achar condição ativa
-    // esquecida. Quem recuperou fica de fora: já levou o carimbo do fechamento
-    // e não segue valendo.
+    // lastSeenAt é a última vez que uma AVALIAÇÃO COBRIU este funcionário com a
+    // condição ainda aberta, e não quando ela abriu. Leia ao pé da letra: a
+    // renovação é movida por "uma avaliação rodou para esta sessão", e não por
+    // "a evidência ainda sustenta esta condição". Ela NÃO prova persistência,
+    // porque o motor devolve nulo tanto para "sem amostra na janela" quanto
+    // para "continua acima", e um HEART_RATE_HIGH segue ativo, e carimbado,
+    // sem nenhuma amostra de BPM chegando. Quem precisar da prova tem de olhar
+    // as amostras.
+    //
+    // Assim mesmo é o significado útil: sem renovar, uma condição ativa há três
+    // horas, com o funcionário mandando dado o tempo todo, exibiria carimbo
+    // idêntico ao firstSeenAt, e o índice [status, lastSeenAt] deixaria de
+    // servir a uma varredura que procure condição esquecida. Quem recuperou
+    // fica de fora: já levou o carimbo do fechamento e não segue aberta.
     //
     // Antes das aberturas pelo mesmo motivo que as recuperações: é escrita
     // legítima, e escrita legítima não pode ficar atrás de uma violação que

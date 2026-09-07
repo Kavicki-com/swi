@@ -417,10 +417,11 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
 })
 
 describe('TelemetryConditionService.evaluateSession: lastSeenAt', () => {
-  it('condição ativa que segue valendo tem o carimbo renovado', async () => {
-    // lastSeenAt é "última vez que uma avaliação viu esta condição valendo", e
-    // não "quando ela abriu". Sem renovar, uma condição ativa há três horas com
-    // o funcionário mandando dado o tempo todo mostra carimbo de três horas
+  it('condição ativa não recuperada tem o carimbo renovado', async () => {
+    // lastSeenAt é "última vez que uma avaliação cobriu este funcionário com a
+    // condição ainda aberta", e não "quando ela abriu" nem "quando a evidência
+    // foi confirmada". Sem renovar, uma condição ativa há três horas com o
+    // funcionário mandando dado o tempo todo mostra carimbo de três horas
     // atrás, e o índice [status, lastSeenAt] passa a apontar para o nada.
     const prisma = prismaDouble()
     prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-1', 'HEART_RATE_HIGH', minutesAgo(180))])
@@ -444,7 +445,7 @@ describe('TelemetryConditionService.evaluateSession: lastSeenAt', () => {
     expect(prisma.telemetryCondition.update).not.toHaveBeenCalled()
   })
 
-  it('condição recuperada não leva renovação por cima: quem fechou não segue valendo', async () => {
+  it('condição recuperada não leva renovação por cima: quem fechou não segue aberta', async () => {
     const prisma = prismaDouble()
     prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-1', 'HEART_RATE_HIGH', minutesAgo(180))])
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries(120))

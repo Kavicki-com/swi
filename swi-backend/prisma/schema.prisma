@@ -693,6 +693,11 @@ model TelemetryCondition {
   status    TelemetryConditionStatus @default(ACTIVE)
 
   firstSeenAt DateTime
+  /// Última vez que uma avaliação cobriu este funcionário com a condição ainda
+  /// aberta. Não prova que a evidência persiste: o carimbo anda porque uma
+  /// avaliação rodou, e não porque a amostra confirmou o limite de novo. Quem
+  /// precisar dessa prova tem de olhar as amostras. Serve para achar condição
+  /// aberta e esquecida, pelo índice [status, lastSeenAt].
   lastSeenAt  DateTime
   /// Preenchido pela banda de histerese, não pela primeira leitura normal.
   recoveredAt DateTime?
