@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { RealtimeGateway } from '../../realtime/realtime.gateway'
+import type { TelemetryConditionService } from '../alerts/condition.service'
 import type { TelemetryAssessmentService } from '../assessment/assessment.service'
 import type { DeviceIdentity } from '../devices/device-auth.service'
 import {
@@ -40,16 +41,22 @@ const assessmentDouble = () => ({
   assessSession: jest.fn().mockResolvedValue({ outcome: 'assessed', assessmentId: 'a-1' }),
 })
 
+const conditionsDouble = () => ({
+  evaluateSession: jest.fn().mockResolvedValue({ opened: [], recovered: [], alerts: 0 }),
+})
+
 const build = () => {
   const repository = repositoryDouble()
   const realtime = realtimeDouble()
   const assessment = assessmentDouble()
+  const conditions = conditionsDouble()
   const service = new TelemetryIngestionService(
     repository,
     realtime as unknown as RealtimeGateway,
     assessment as unknown as TelemetryAssessmentService,
+    conditions as unknown as TelemetryConditionService,
   )
-  return { repository, realtime, assessment, service }
+  return { repository, realtime, assessment, conditions, service }
 }
 
 // eventTime recente de propósito: um horário antigo cairia na regra de backlog
@@ -508,5 +515,75 @@ describe('avaliação de esforço e desgaste no caminho do evento', () => {
     const ack = await service.ingest(DEVICE, { events: [e] })
     expect(ack.acceptedEventIds).toEqual([e.eventId])
     expect(ack.conflicts).toEqual([])
+  })
+})
+
+// O motor de condições estava completo e testado, e mesmo assim era código
+// morto: ninguém o chamava. O que estes casos protegem é a fiação, e o
+// isolamento entre as duas avaliações: alerta é segurança, e um erro na
+// fórmula de desgaste não pode ser o motivo de um alerta não sair.
+describe('avaliação de condições no caminho do evento', () => {
+  it('lote ao vivo avalia as condições da mesma sessão, com os mesmos argumentos e DEPOIS do esforço', async () => {
+    const { service, assessment, conditions } = build()
+    const newer = new Date(Date.now() - 2_000).toISOString()
+
+    await service.ingest(DEVICE, { events: [event({ eventTime: newer })] })
+
+    expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
+    // Os MESMOS argumentos, e não argumentos parecidos: as duas avaliações
+    // descrevem o mesmo instante do mesmo lote, e um `now` recalculado aqui
+    // faria o corte de 15 s e o prazo de "ao vivo" medirem contra marcos
+    // diferentes.
+    expect(conditions.evaluateSession.mock.calls[0]).toEqual(assessment.assessSession.mock.calls[0])
+    const [, triggerAt] = conditions.evaluateSession.mock.calls[0]
+    expect(triggerAt.toISOString()).toBe(newer)
+    // Pela ordem de chamada, e não só pela presença das duas.
+    expect(conditions.evaluateSession.mock.invocationCallOrder[0]).toBeGreaterThan(
+      assessment.assessSession.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('lote de backlog não avalia condição', async () => {
+    // Condição descreve o AGORA. O serviço também se defende disso por dentro,
+    // mas quem não deve nem chamar é daqui.
+    const { service, conditions } = build()
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+
+    await service.ingest(DEVICE, { events: [event({ eventTime: threeHoursAgo })] })
+
+    expect(conditions.evaluateSession).not.toHaveBeenCalled()
+  })
+
+  it('falha na avaliação de esforço não impede as condições, e não derruba o ACK', async () => {
+    const { service, assessment, conditions } = build()
+    assessment.assessSession.mockRejectedValue(new Error('fórmula estourou'))
+    const aceito = event()
+
+    const ack = await service.ingest(DEVICE, { events: [aceito] })
+
+    expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
+    expect(ack.acceptedEventIds).toEqual([aceito.eventId])
+    expect(ack.conflicts).toEqual([])
+  })
+
+  it('falha nas condições não derruba o ACK, e o esforço já tinha rodado', async () => {
+    const { service, assessment, conditions } = build()
+    conditions.evaluateSession.mockRejectedValue(new Error('motor estourou'))
+    const aceito = event()
+
+    const ack = await service.ingest(DEVICE, { events: [aceito] })
+
+    expect(assessment.assessSession).toHaveBeenCalledTimes(1)
+    // O evento já está gravado, e reenviá-lo só produziria duplicata.
+    expect(ack.acceptedEventIds).toEqual([aceito.eventId])
+    expect(ack.conflicts).toEqual([])
+  })
+
+  it('vários eventos ao vivo da mesma sessão avaliam as condições uma vez só', async () => {
+    const { service, conditions } = build()
+
+    await service.ingest(DEVICE, { events: [event({ sequence: 1 }), event({ sequence: 2 })] })
+
+    expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
   })
 })

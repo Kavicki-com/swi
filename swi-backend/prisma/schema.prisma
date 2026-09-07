@@ -474,6 +474,12 @@ enum TelemetryConditionStatus {
   RECOVERED
 }
 
+enum TelemetryConditionRecoveryReason {
+  NORMALIZED
+  SIGNAL_LOST
+  SIGNAL_RESTORED
+}
+
 enum OperationalAlertStatus {
   OPEN
   ACKNOWLEDGED
@@ -556,6 +562,13 @@ model TelemetrySession {
 
 /// Evento imutável, como o aparelho mediu. Nunca sofre update: correção vira
 /// evento novo. É a trilha que permite auditar qualquer número apresentado.
+///
+/// ATENÇÃO: esta tabela tem índices que NÃO aparecem aqui. Índice parcial não é
+/// declarável no schema do Prisma, então TelemetrySample_worker_pressure_idx e
+/// TelemetrySample_worker_battery_idx vivem só na migration
+/// 20260907120000_telemetry_conditions_engine, que explica para que servem.
+/// Quem mexer nas colunas de pressão ou de bateria, ou nas buscas que elas
+/// atendem, tem de abrir a migration: o schema sozinho não conta esta parte.
 model TelemetrySample {
   id String @id @default(uuid())
   /// Gerado no dispositivo. É a chave de idempotência do ACK de ingestão.
@@ -694,6 +707,11 @@ model TelemetryCondition {
   status    TelemetryConditionStatus @default(ACTIVE)
 
   firstSeenAt DateTime
+  /// Última vez que uma avaliação cobriu este funcionário com a condição ainda
+  /// aberta. Não prova que a evidência persiste: o carimbo anda porque uma
+  /// avaliação rodou, e não porque a amostra confirmou o limite de novo. Quem
+  /// precisar dessa prova tem de olhar as amostras. Serve para achar condição
+  /// aberta e esquecida, pelo índice [status, lastSeenAt].
   lastSeenAt  DateTime
   /// Preenchido pela banda de histerese, não pela primeira leitura normal.
   recoveredAt DateTime?
@@ -701,6 +719,19 @@ model TelemetryCondition {
   /// Perfil de limites versionado que abriu a condição.
   thresholdProfile String
   observedValue    Float?
+  /// Qual regra do perfil abriu: PERSONALIZED (idade ou repouso) ou FLOOR (piso absoluto).
+  /// Nulo para condição sem limite numérico, como perda de sinal.
+  thresholdRule    String?
+  /// O limite em vigor quando abriu, na unidade da condição. Sem ele ninguém
+  /// audita depois por que 171 bpm abriu para um e não para outro.
+  thresholdValue   Float?
+  /// Por que fechou. NORMALIZED: o valor voltou pela banda. SIGNAL_LOST: a
+  /// sessão silenciou com a condição ativa, e ninguém viu o valor voltar.
+  /// SIGNAL_RESTORED: o aparelho voltou a falar, e é a perda de sinal em
+  /// pessoa que fechou. Motivo próprio porque perda de sinal não tem valor nem
+  /// banda: gravá-la como NORMALIZED faria a auditoria confundir batimento que
+  /// normalizou com relógio que reconectou, justo na condição que mais oscila.
+  recoveryReason   TelemetryConditionRecoveryReason?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -722,6 +753,11 @@ model OperationalAlert {
   workerId    String
   worker      User               @relation("alertedWorker", fields: [workerId], references: [id], onDelete: Cascade)
 
+  /// Redundante com a condição, de propósito: toda leitura de fila filtra por
+  /// origem, e fila que mistura demonstração com real é a mistura que o read
+  /// model proíbe. Sem a coluna, cada leitura faria join só para filtrar.
+  origin TelemetryOrigin
+
   status OperationalAlertStatus @default(OPEN)
 
   triagedById String?
@@ -734,7 +770,7 @@ model OperationalAlert {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([status, createdAt])
+  @@index([origin, status, createdAt])
   @@index([workerId, status])
 }
 
