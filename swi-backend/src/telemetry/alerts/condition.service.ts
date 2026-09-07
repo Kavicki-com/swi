@@ -204,35 +204,62 @@ export class TelemetryConditionService {
       decisions.push({ kind: 'DEVICE_SIGNAL_LOST', action: 'RECOVER', observedValue: null, threshold: null })
     }
 
+    // Recuperar antes de abrir, e a ordem é a garantia, não arrumação. O
+    // Prisma não envolve consulta individual em savepoint: quando a violação do
+    // índice único dispara dentro de $transaction, o Postgres põe a transação
+    // em estado abortado e todo comando seguinte morre com 25P02, transação
+    // abortada. Ou seja, engolir o P2002 impede o lançamento, não o aborto, e
+    // qualquer escrita DEPOIS dele morreria junto. Com toda recuperação (e toda
+    // renovação de carimbo) já gravada, a única escrita que pode vir depois da
+    // violação é outra abertura, e abertura que falha é justamente a que não
+    // deveria acontecer: nada legítimo fica órfão.
     const recoveredIds = new Set<string>()
     for (const decision of decisions) {
-      if (decision.action === 'RECOVER') {
-        const row = activeByKind.get(decision.kind)
-        if (row === undefined) continue
-        // observedValue não é reescrito: ele guarda o valor que ABRIU a
-        // condição, que é o que a auditoria quer saber. O valor da
-        // recuperação já está no histórico de amostras.
-        //
-        // Perda de sinal fecha com motivo próprio: NORMALIZED afirma que o
-        // valor voltou pela banda, e esta condição não tem valor nem banda.
-        // Sem a distinção, quem audita não separa batimento que normalizou de
-        // relógio que voltou a falar, e é esta que mais vai oscilar no piloto.
-        const reason = decision.kind === 'DEVICE_SIGNAL_LOST' ? 'SIGNAL_RESTORED' : 'NORMALIZED'
-        await tx.telemetryCondition.update({
-          where: { id: row.id },
-          data: { status: 'RECOVERED', recoveredAt: now, recoveryReason: reason, lastSeenAt: now },
-        })
-        outcome.recovered.push(decision.kind)
-        recoveredIds.add(row.id)
-        continue
-      }
+      if (decision.action !== 'RECOVER') continue
+      const row = activeByKind.get(decision.kind)
+      if (row === undefined) continue
+      // observedValue não é reescrito: ele guarda o valor que ABRIU a
+      // condição, que é o que a auditoria quer saber. O valor da recuperação
+      // já está no histórico de amostras.
+      //
+      // Perda de sinal fecha com motivo próprio: NORMALIZED afirma que o valor
+      // voltou pela banda, e esta condição não tem valor nem banda. Sem a
+      // distinção, quem audita não separa batimento que normalizou de relógio
+      // que voltou a falar, e é esta que mais vai oscilar no piloto.
+      const reason = decision.kind === 'DEVICE_SIGNAL_LOST' ? 'SIGNAL_RESTORED' : 'NORMALIZED'
+      await tx.telemetryCondition.update({
+        where: { id: row.id },
+        data: { status: 'RECOVERED', recoveredAt: now, recoveryReason: reason, lastSeenAt: now },
+      })
+      outcome.recovered.push(decision.kind)
+      recoveredIds.add(row.id)
+    }
 
+    // lastSeenAt quer dizer "última vez que uma avaliação viu esta condição
+    // ainda valendo", e não "quando ela abriu". Sem renovar, uma condição ativa
+    // há três horas, com o funcionário mandando dado o tempo todo, exibiria
+    // carimbo de três horas atrás, idêntico ao firstSeenAt, e o índice
+    // [status, lastSeenAt] deixaria de servir para achar condição ativa
+    // esquecida. Quem recuperou fica de fora: já levou o carimbo do fechamento
+    // e não segue valendo.
+    //
+    // Antes das aberturas pelo mesmo motivo que as recuperações: é escrita
+    // legítima, e escrita legítima não pode ficar atrás de uma violação que
+    // aborta a transação.
+    const refreshBefore = new Date(now.getTime() - LAST_SEEN_REFRESH_MS)
+    for (const row of active) {
+      if (recoveredIds.has(row.id)) continue
+      if (row.lastSeenAt > refreshBefore) continue
+      await tx.telemetryCondition.update({ where: { id: row.id }, data: { lastSeenAt: now } })
+    }
+
+    for (const decision of decisions) {
+      if (decision.action !== 'OPEN') continue
       // O lock é na linha da SESSÃO, mas o invariante do índice único é por
       // FUNCIONÁRIO e ORIGEM: duas sessões distintas do mesmo funcionário
       // travam linhas diferentes, não se enfileiram, e podem tentar abrir a
       // mesma condição ao mesmo tempo. Deixar o P2002 subir derrubaria a
-      // transação inteira e desfaria até recuperações legítimas de outros tipos
-      // já gravadas neste laço. Engolir aqui é certo porque a violação diz
+      // transação inteira. Engolir aqui é certo porque a violação diz
       // exatamente que a condição já está aberta, que é o estado desejado: o
       // outro escritor chegou primeiro e o resultado é o mesmo. Não conta como
       // aberta por este chamador, então não vira alerta nem entra no resultado.
@@ -265,20 +292,6 @@ export class TelemetryConditionService {
 
       outcome.opened.push(decision.kind)
       if (await this.openAlert(tx, createdId, session.workerId, session.origin, decision.kind)) outcome.alerts += 1
-    }
-
-    // lastSeenAt quer dizer "última vez que uma avaliação viu esta condição
-    // ainda valendo", e não "quando ela abriu". Sem renovar, uma condição ativa
-    // há três horas, com o funcionário mandando dado o tempo todo, exibiria
-    // carimbo de três horas atrás, idêntico ao firstSeenAt, e o índice
-    // [status, lastSeenAt] deixaria de servir para achar condição ativa
-    // esquecida. Quem recuperou fica de fora: já levou o carimbo do fechamento
-    // e não segue valendo.
-    const refreshBefore = new Date(now.getTime() - LAST_SEEN_REFRESH_MS)
-    for (const row of active) {
-      if (recoveredIds.has(row.id)) continue
-      if (row.lastSeenAt > refreshBefore) continue
-      await tx.telemetryCondition.update({ where: { id: row.id }, data: { lastSeenAt: now } })
     }
 
     if (outcome.opened.length > 0 || outcome.recovered.length > 0) {

@@ -327,6 +327,26 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
     expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
   })
 
+  it('recuperação do lote é gravada ANTES de qualquer abertura', async () => {
+    // Engolir o P2002 impede o lançamento, não o aborto: o Prisma não envolve
+    // consulta individual em savepoint, então a violação de unicidade põe a
+    // transação em estado abortado e todo comando seguinte morre com 25P02. A
+    // promessa de que recuperações legítimas sobrevivem só vale se nenhuma
+    // escrita vier depois da violação, e a ordem é o que garante isso.
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-sig', 'DEVICE_SIGNAL_LOST')])
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    prisma.telemetryCondition.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique constraint', { code: 'P2002', clientVersion: 'test' }),
+    )
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: [], recovered: ['DEVICE_SIGNAL_LOST'], alerts: 0 })
+    expect(prisma.telemetryCondition.update.mock.calls[0][0]).toMatchObject({ where: { id: 'c-sig' } })
+    expect(firstCall(prisma.telemetryCondition.update)).toBeLessThan(firstCall(prisma.telemetryCondition.create))
+  })
+
   it('erro de escrita que não é violação do índice único continua subindo', async () => {
     const prisma = prismaDouble()
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
