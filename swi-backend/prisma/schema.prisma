@@ -584,6 +584,13 @@ model TelemetrySample {
   taskId    String?
 
   heartRateBpm        Float?
+  /// CONTRATO DE DELTA. Os três campos abaixo são variação desde a amostra
+  /// anterior da mesma sessão, nunca o acumulado do dia nem o acumulado do
+  /// HealthKit. O read model os SOMA, na janela móvel e no total do dia.
+  /// Enviar acumulado passa em toda validação e infla o total em silêncio:
+  /// uma série que só cresce vira soma de si mesma. Não há como detectar isso
+  /// a partir de uma amostra, e por isso está escrito aqui, junto da coluna,
+  /// e não deduzido de um erro que nunca vai aparecer.
   stepDelta           Int?
   activeEnergyKcal    Float?
   motionCount         Float?

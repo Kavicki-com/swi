@@ -1,3 +1,4 @@
+import { BRT_OFFSET_MS } from '../../common/brazil-time'
 import {
   InvalidMeasurementError,
   InvalidTelemetryEventError,
@@ -23,8 +24,13 @@ import type {
 // recalcula os próprios prazos nem as próprias fronteiras de dia.
 // "now" entra por parâmetro para tornar cada função determinística.
 
-const MINUTE = 60_000
-const HOUR = 60 * MINUTE
+/**
+ * Constantes de tempo e conversão de horário moram aqui porque o domínio é
+ * quem decide o que é um instante legível. O read model as consome; redeclarar
+ * lá já produziu duas conversões que discordavam sobre horário inválido.
+ */
+export const MINUTE = 60_000
+export const HOUR = 60 * MINUTE
 
 export const FRESHNESS = {
   /** BPM, passos, MPM, energia, esforço e desgaste. */
@@ -44,14 +50,12 @@ export const EVENT_AGE = {
 } as const
 
 /**
- * BRT é UTC-3 fixo (o Brasil aboliu o horário de verão em 2019). Mesma conta
- * que reports.service.ts faz para formatar data, e sem depender de ICU.
- *
- * Exportado porque a varredura do ciclo de vida precisa da mesma conta dentro
- * do SQL, ao agrupar leituras por dia. É o deslocamento, nunca a regra: quem
- * traduz instante em dia continua sendo monitoredDayOf, aqui.
+ * O deslocamento vem de common/brazil-time, que é o dono dele: fuso do país
+ * não é fato da telemetria. Reexportado porque a varredura do ciclo de vida
+ * precisa da mesma conta dentro do SQL, e porque quem traduz instante em dia
+ * continua sendo monitoredDayOf, aqui.
  */
-export const BRT_OFFSET_MS = -3 * HOUR
+export { BRT_OFFSET_MS }
 
 /**
  * O dia monitorado é o dia civil em BRT, não as últimas 24 horas: "passos
@@ -158,8 +162,16 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
   wear: { unit: '%', freshness: 'VITAL', sources: ['DERIVED'], retainsExpiredValue: true },
 }
 
-const toMs = (iso: string | Date): number =>
+/** Instante em milissegundos. Horário ilegível vira NaN, e quem chama decide. */
+export const toMs = (iso: string | Date): number =>
   iso instanceof Date ? iso.getTime() : Date.parse(iso)
+
+/**
+ * Se o horário dá para situar no tempo. É o único lugar que responde isso:
+ * uma amostra que reprova aqui não é medição sem valor, é medição sem quando,
+ * e quem a recebe a trata como ausência em vez de deixar NaN se propagar.
+ */
+export const isReadableInstant = (iso: string | Date): boolean => !Number.isNaN(toMs(iso))
 
 /** Idade em ms; horário no futuro conta como zero, nunca como "mais atual". */
 function ageMs(measuredAt: string, now: Date | string): number {
@@ -171,7 +183,7 @@ export function qualityAt(
   measuredAt: string | null,
   now: Date | string,
 ): MetricQuality {
-  if (measuredAt === null || Number.isNaN(toMs(measuredAt))) return 'UNAVAILABLE'
+  if (measuredAt === null || !isReadableInstant(measuredAt)) return 'UNAVAILABLE'
   const { currentMs, staleMs } = FRESHNESS[METRICS[kind].freshness]
   const age = ageMs(measuredAt, now)
   if (age <= currentMs) return 'CURRENT'
@@ -370,6 +382,16 @@ function fromMetric(kind: MetricKind): RawMeasurementSpec {
 
 /**
  * O que cada medição do evento bruto precisa cumprir.
+ *
+ * CONTRATO DE DELTA: stepDelta, activeEnergyKcal e motionCount são variação
+ * desde a amostra anterior da mesma sessão, e o read model os soma. O nome de
+ * stepDelta já diz isso; os outros dois não, e o produtor não vive neste
+ * repositório. A faixa aqui não separa delta de acumulado, porque um acumulado
+ * pequeno cabe na faixa de um delta grande: a validação aceita os dois. Um
+ * envio acumulado passa inteiro e infla o total em silêncio. Não dá para
+ * detectar a partir de uma amostra, e por isso a ausência de erro não é prova
+ * de que o produtor está certo. O contrato está também no schema, junto das
+ * colunas, que é onde quem escreve o produtor olha.
  *
  * Cinco delas são a mesma coisa que uma métrica canônica e herdam dela unidade,
  * origem e faixa. motionCount tem spec própria: é a contagem de movimento que

@@ -1,3 +1,4 @@
+import { HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT } from './history-limits'
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma, type TelemetrySessionStatus } from '@prisma/client'
 import type { JwtUser } from '../../auth/current-user.decorator'
@@ -67,9 +68,22 @@ const SAMPLE_FIELDS = {
   motionCount: true,
 } as const
 
-/** Teto de amostras por página de auditoria, e o padrão de quem não escolhe. */
-export const HISTORY_MAX_LIMIT = 500
-export const HISTORY_DEFAULT_LIMIT = 200
+/**
+ * Teto de linhas da janela das taxas. A cadência do piloto é de cinco segundos,
+ * então a janela de uma hora tem cerca de setecentas amostras; o teto dá quase
+ * três vezes essa folga e existe para um produtor acelerado não transformar
+ * cada aviso do socket numa varredura da tabela.
+ *
+ * Quando o teto morde, ficam as amostras mais recentes, e a cobertura que viaja
+ * com a taxa encolhe junto: o número continua dizendo de quanto tempo ele fala,
+ * que é a razão de a cobertura existir.
+ */
+export const WINDOW_MAX_SAMPLES = 2_000
+
+// Os limites moram em history-limits para que o DTO da rota os leia sem
+// carregar este serviço, e com ele o cliente do Prisma. Reexportados porque
+// chamadores de fora da rota já os importam daqui.
+export { HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT }
 
 export interface SessionHistoryQuery {
   limit?: number
@@ -248,6 +262,11 @@ export class TelemetryQueryService {
       this.prisma.telemetrySample.findMany({
         where: { ...scope, eventTime: { gte: new Date(now.getTime() - ENERGY_RATE_WINDOW_MS) } },
         select: SAMPLE_FIELDS,
+        // Ordem para o banco percorrer o índice em vez de ordenar em memória, e
+        // teto para a leitura ser limitada por contrato. Do mais recente para
+        // trás porque é o recente que descreve o agora; a projeção reordena.
+        orderBy: { eventTime: 'desc' },
+        take: WINDOW_MAX_SAMPLES,
       }),
       // Cada total filtra pela própria coluna não nula: é o que faz o _max ser o
       // horário da última amostra DAQUELA medição, e não de um evento só de

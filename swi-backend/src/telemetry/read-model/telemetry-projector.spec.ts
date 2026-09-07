@@ -230,7 +230,8 @@ describe('projectWorker: menos de cinco minutos de cobertura devolve Calculando'
   it('com cobertura abaixo do mínimo, a taxa fica em Calculando e sem valor', () => {
     const projected = project({ windowSamples: energySeries(4, 5) })
 
-    expect(projected.metrics.energyRatePerHour.quality).toBe('CALCULATING')
+    expect(projected.metrics.energyRatePerHour.quality).toBe('UNAVAILABLE')
+    expect(projected.metrics.energyRatePerHour.calculating).toBe(true)
     expect(projected.metrics.energyRatePerHour.value).toBeNull()
     // Calculando não é indisponível: já há amostra, e o horário dela aparece.
     expect(projected.metrics.energyRatePerHour.measuredAt).toBe(minutesAgo(0))
@@ -241,7 +242,8 @@ describe('projectWorker: menos de cinco minutos de cobertura devolve Calculando'
       windowSamples: [sample({ eventTime: secondsAgo(10), activeEnergyKcal: 12 })],
     })
 
-    expect(projected.metrics.energyRatePerHour.quality).toBe('CALCULATING')
+    expect(projected.metrics.energyRatePerHour.quality).toBe('UNAVAILABLE')
+    expect(projected.metrics.energyRatePerHour.calculating).toBe(true)
     expect(projected.metrics.energyRatePerHour.value).toBeNull()
   })
 
@@ -678,5 +680,123 @@ describe('projectAdminSummary: sinais vitais e alertas urgentes', () => {
     )
 
     expect(summary.vitalSigns.value).toBe(1)
+  })
+})
+
+// A cobertura vazia era um objeto único do módulo, devolvido por referência a
+// cada janela sem amostra. Todas as respostas sem energia e sem movimento,
+// de todos os funcionários e de todas as requisições do processo, apontavam
+// para a mesma instância. Ninguém a modificava hoje, mas um incremento em cima
+// da cobertura devolvida, ou um serializador que anote o objeto, corromperia a
+// resposta de todo mundo de uma vez, com rastro péssimo.
+describe('projectWorker: a cobertura vazia não é instância compartilhada', () => {
+  it('duas projeções sem amostra não devolvem o mesmo objeto de cobertura', () => {
+    const um = project()
+    const outro = project()
+
+    expect(um.energyWindow).toEqual({ samples: 0, coveredMs: 0, windowStart: null, windowEnd: null })
+    expect(um.energyWindow).not.toBe(outro.energyWindow)
+    expect(um.energyWindow).not.toBe(um.movementWindow)
+  })
+
+  it('escrever na cobertura devolvida não contamina a projeção seguinte', () => {
+    const um = project()
+    ;(um.energyWindow as { samples: number }).samples = 999
+
+    expect(project().energyWindow.samples).toBe(0)
+  })
+})
+
+// O projetor redeclarava a conversão de texto para milissegundos que o domínio
+// já tem, e as duas discordavam: a do domínio é usada onde se checa NaN, a do
+// projetor devolvia NaN em silêncio. Como NaN reprova toda comparação, a
+// amostra de horário inválido escapava do recorte da janela, entrava na
+// ordenação e contaminava a cobertura. Uma amostra sem horário legível não é
+// medição que se possa situar no tempo: ela sai da janela, como ausência.
+describe('projectWorker: amostra com horário ilegível não entra na janela', () => {
+  it('a taxa é a mesma com ou sem a amostra de horário inválido', () => {
+    const serie = energySeries(30, 2)
+    const comLixo = [...serie, sample({ eventTime: 'nao-e-data', activeEnergyKcal: 500 })]
+
+    expect(project({ windowSamples: comLixo }).metrics.energyRatePerHour.value).toBe(
+      project({ windowSamples: serie }).metrics.energyRatePerHour.value,
+    )
+  })
+
+  it('a cobertura conta só as amostras que têm horário legível', () => {
+    const serie = energySeries(30, 2)
+    const comLixo = [...serie, sample({ eventTime: 'nao-e-data', activeEnergyKcal: 500 })]
+
+    expect(project({ windowSamples: comLixo }).energyWindow).toEqual(
+      project({ windowSamples: serie }).energyWindow,
+    )
+  })
+
+  it('janela só de horário ilegível é janela vazia, e não cobertura de NaN', () => {
+    const projected = project({ windowSamples: [sample({ eventTime: '', activeEnergyKcal: 10 })] })
+
+    expect(projected.energyWindow).toEqual({ samples: 0, coveredMs: 0, windowStart: null, windowEnd: null })
+    expect(projected.metrics.energyRatePerHour.value).toBeNull()
+  })
+})
+
+// Energia ativa e contagem de movimento são somadas como delta, na janela e no
+// total do dia, mas nada no nome do campo declara isso, ao contrário de
+// stepDelta. O produtor não vive neste repositório. Se o aplicativo do relógio
+// enviar o acumulado do HealthKit, que é a leitura natural de
+// "activeEnergyKcal", tudo passa e o número sai inflado sem erro em lugar
+// nenhum. Estes casos fixam a semântica de quem consome, para que mudar a soma
+// para outra coisa quebre aqui, e para que a inflação fique medida por escrito
+// em vez de ser descoberta em produção.
+describe('projectWorker: energia da janela é soma de deltas, e não de acumulado', () => {
+  const quatroPontos = (valores: readonly number[]) =>
+    valores.map((kcal, i) => sample({ eventTime: minutesAgo(30 - i * 10), activeEnergyKcal: kcal }))
+
+  it('a série em delta produz a taxa que o consumo descreve', () => {
+    const projected = project({ windowSamples: quatroPontos([10, 10, 10, 10]) })
+
+    expect(projected.metrics.energyRatePerHour.value).toBe(60)
+  })
+
+  it('a mesma energia enviada como acumulado infla a taxa, e nada recusa', () => {
+    // 10, 20, 30, 40 é o mesmo consumo do caso acima visto como acumulado. A
+    // soma triplica porque cada ponto reconta o que já foi contado.
+    const projected = project({ windowSamples: quatroPontos([10, 20, 30, 40]) })
+
+    expect(projected.metrics.energyRatePerHour.value).toBe(180)
+    expect(projected.metrics.energyRatePerHour.quality).toBe('CURRENT')
+  })
+})
+
+
+// "Calculando" era o quarto valor da união de qualidade que ingestão, projeção,
+// mobile e painel compartilham, e era inalcançável para oito das nove métricas:
+// nenhuma medição bruta o produz e qualityAt nunca o devolve. O custo aparecia
+// em cada consumidor, com um braço morto em todo switch sobre qualidade, e
+// dentro do próprio domínio a conversão de recência de pressão só se mantinha
+// correta porque caía no default. A decisão de produto é a mesma; ela passa a
+// viver na forma da métrica derivada que a produz.
+describe('projectWorker: Calculando não alarga a união de qualidade', () => {
+  it('nenhuma métrica devolve Calculando como qualidade, nem na cobertura curta', () => {
+    const projected = project({ windowSamples: energySeries(4, 5) })
+
+    for (const [kind, state] of Object.entries(projected.metrics)) {
+      expect({ kind, quality: state.quality }).not.toEqual({ kind, quality: 'CALCULATING' })
+    }
+  })
+
+  it('só kcal/h carrega o campo, porque só ela promete um número a caminho', () => {
+    const projected = project({ windowSamples: energySeries(4, 5) })
+
+    expect(projected.metrics.energyRatePerHour.calculating).toBe(true)
+    expect('calculating' in projected.metrics.movementPerMinute).toBe(false)
+    expect('calculating' in projected.metrics.heartRate).toBe(false)
+  })
+
+  it('com cobertura suficiente a taxa vale um número e não está mais calculando', () => {
+    const projected = project({ windowSamples: energySeries(30, 2) })
+
+    expect(projected.metrics.energyRatePerHour.value).toBe(120)
+    expect(projected.metrics.energyRatePerHour.calculating).toBe(false)
   })
 })

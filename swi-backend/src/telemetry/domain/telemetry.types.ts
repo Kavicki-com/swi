@@ -6,13 +6,14 @@
 export type TelemetryOrigin = 'REAL' | 'DEMO'
 
 /**
- * CALCULATING é exclusivo de métrica derivada que exige cobertura mínima antes
- * de valer um número: hoje só kcal/h, que passa assim os cinco primeiros
- * minutos. Não é indisponível, porque já existe amostra, e não é atual, porque
- * ainda não há taxa que se sustente. Nenhuma medição bruta o produz:
- * `qualityAt` nunca o devolve, e quem o emite é a projeção do read model.
+ * Três estados, e os três alcançáveis por qualquer métrica. "Calculando" não
+ * mora aqui: ele valia para uma métrica das nove, obrigava todo consumidor a
+ * carregar um braço morto em cada switch, e dentro do próprio domínio a
+ * conversão de recência de pressão só se mantinha correta por cair no default.
+ * A decisão de produto continua existindo, na forma da métrica que a produz:
+ * veja EnergyRateState, no projetor.
  */
-export type MetricQuality = 'CURRENT' | 'STALE' | 'UNAVAILABLE' | 'CALCULATING'
+export type MetricQuality = 'CURRENT' | 'STALE' | 'UNAVAILABLE'
 
 export type MeasurementSource =
   | 'APPLE_WATCH'

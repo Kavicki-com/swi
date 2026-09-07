@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer'
 import { IsInt, IsOptional, Max, Min } from 'class-validator'
-import { HISTORY_MAX_LIMIT } from '../telemetry-query.service'
+import { HISTORY_MAX_LIMIT } from '../history-limits'
 
 // Parâmetros de GET /telemetry/v1/sessions/:id/history. Query string chega como
 // texto, então o @Type converte antes de validar; sem ele, "limit=10" reprovaria
