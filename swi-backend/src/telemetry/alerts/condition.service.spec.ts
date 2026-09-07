@@ -55,8 +55,10 @@ const readingsOfAnotherSession = (readings: { battery?: unknown; pressure?: unkn
   })
 
 /**
- * Separa o INSERT cru da condição das outras consultas cruas do serviço: o lock
- * da sessão e a inserção passam pelo mesmo `$queryRaw`.
+ * Reconhece o INSERT cru da condição. Hoje ele é a única coisa que passa pelo
+ * `$queryRaw` do serviço, porque o lock consultivo saiu para o `$executeRaw`;
+ * o filtro fica porque a varredura e o caminho do evento inserem pelo mesmo
+ * caminho, e os casos precisam separar as duas inserções de uma rodada.
  */
 const isInsert = (call: unknown[]) =>
   (call[0] as TemplateStringsArray).join('?').includes('INSERT INTO "TelemetryCondition"')
@@ -91,13 +93,17 @@ const prismaDouble = () => {
       db.open = false
     }
   })
-  // A inserção da condição é crua, então o dublê responde pelo TEXTO da consulta:
-  // o lock devolve a linha da sessão, o INSERT devolve o id criado. `conflicting`
-  // faz o papel do índice único parcial: para o tipo que outro escritor já abriu,
-  // o ON CONFLICT DO NOTHING devolve zero linhas em vez de levantar.
+  // O lock consultivo é comando, não leitura: pg_advisory_xact_lock devolve
+  // void e o $queryRaw do Prisma estoura ao desserializar isso. O dublê separa
+  // os dois caminhos como o serviço separa, para um caso não poder passar com o
+  // serviço chamando a função errada.
+  db.$executeRaw = jest.fn().mockResolvedValue(1)
+  // A inserção da condição é crua, então o dublê responde o id criado.
+  // `conflicting` faz o papel do índice único parcial: para o tipo que outro
+  // escritor já abriu, o ON CONFLICT DO NOTHING devolve zero linhas em vez de
+  // levantar.
   db.conflicting = new Set<string>()
-  db.$queryRaw = jest.fn().mockImplementation(async (strings: TemplateStringsArray, ...values: unknown[]) => {
-    if (!isInsert([strings])) return [{ id: SESSION.id }]
+  db.$queryRaw = jest.fn().mockImplementation(async (_strings: TemplateStringsArray, ...values: unknown[]) => {
     return values.some((v) => db.conflicting.has(v)) ? [] : [{ id: 'condition-new' }]
   })
   return db
@@ -119,12 +125,14 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
 
     await service(prisma).evaluateSession('session-1', NOW, NOW)
 
-    const [sql, ...values] = prisma.$queryRaw.mock.calls[0]
+    // Pelo $executeRaw, e não pelo $queryRaw: a função devolve void, e o
+    // desserializador do Prisma levanta antes de o lock ser tomado.
+    const [sql, ...values] = prisma.$executeRaw.mock.calls[0]
     expect(sql.join('?')).toMatch(/pg_advisory_xact_lock\(hashtext\(/)
     expect(values[0]).toContain('worker-1')
     expect(values[0]).toContain('REAL')
-    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetryCondition.findMany))
-    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetrySample.findMany))
+    expect(firstCall(prisma.$executeRaw)).toBeLessThan(firstCall(prisma.telemetryCondition.findMany))
+    expect(firstCall(prisma.$executeRaw)).toBeLessThan(firstCall(prisma.telemetrySample.findMany))
   })
 
   it('grava com a transação aberta, não depois de ela fechar', async () => {
@@ -747,11 +755,13 @@ describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', (
 
     await service(prisma).sweepSilentSessions(NOW)
 
-    const [sql, ...values] = prisma.$queryRaw.mock.calls[0]
+    // Pelo $executeRaw, pelo mesmo motivo do caminho do evento: void não
+    // desserializa, e o lock tem de ser tomado como comando.
+    const [sql, ...values] = prisma.$executeRaw.mock.calls[0]
     expect(sql.join('?')).toMatch(/pg_advisory_xact_lock\(hashtext\(/)
     expect(values[0]).toContain('worker-1')
     expect(values[0]).toContain('REAL')
-    expect(firstCall(prisma.$queryRaw)).toBeLessThan(firstCall(prisma.telemetryCondition.findMany))
+    expect(firstCall(prisma.$executeRaw)).toBeLessThan(firstCall(prisma.telemetryCondition.findMany))
   })
 
   it('sessão que sumiu entre a busca e o lock estoura', async () => {

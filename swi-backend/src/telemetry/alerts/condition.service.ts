@@ -548,7 +548,10 @@ export class TelemetryConditionService {
     tx: Prisma.TransactionClient,
     session: { workerId: string; origin: TelemetryOrigin },
   ): Promise<void> {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`${session.workerId}:${session.origin}`}))`
+    // $executeRaw, NUNCA $queryRaw: pg_advisory_xact_lock devolve void, e o
+    // desserializador do Prisma não tem tipo para void, então o $queryRaw
+    // levanta ANTES de o lock ser tomado. Não padronize isto de volta.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${session.workerId}:${session.origin}`}))`
   }
 
   /**
