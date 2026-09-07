@@ -680,3 +680,27 @@ describe('projectAdminSummary: sinais vitais e alertas urgentes', () => {
     expect(summary.vitalSigns.value).toBe(1)
   })
 })
+
+// A cobertura vazia era um objeto único do módulo, devolvido por referência a
+// cada janela sem amostra. Todas as respostas sem energia e sem movimento,
+// de todos os funcionários e de todas as requisições do processo, apontavam
+// para a mesma instância. Ninguém a modificava hoje, mas um incremento em cima
+// da cobertura devolvida, ou um serializador que anote o objeto, corromperia a
+// resposta de todo mundo de uma vez, com rastro péssimo.
+describe('projectWorker: a cobertura vazia não é instância compartilhada', () => {
+  it('duas projeções sem amostra não devolvem o mesmo objeto de cobertura', () => {
+    const um = project()
+    const outro = project()
+
+    expect(um.energyWindow).toEqual({ samples: 0, coveredMs: 0, windowStart: null, windowEnd: null })
+    expect(um.energyWindow).not.toBe(outro.energyWindow)
+    expect(um.energyWindow).not.toBe(um.movementWindow)
+  })
+
+  it('escrever na cobertura devolvida não contamina a projeção seguinte', () => {
+    const um = project()
+    ;(um.energyWindow as { samples: number }).samples = 999
+
+    expect(project().energyWindow.samples).toBe(0)
+  })
+})

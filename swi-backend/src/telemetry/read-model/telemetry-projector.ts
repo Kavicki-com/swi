@@ -149,12 +149,19 @@ export interface WorkerTelemetry {
   observedAt: string
 }
 
-const EMPTY_WINDOW: WindowCoverage = {
+/**
+ * Cobertura vazia é fabricada a cada chamada, nunca uma constante devolvida por
+ * referência. Como toda janela sem amostra devolve este objeto, uma instância
+ * única seria compartilhada entre funcionários e entre requisições do processo
+ * inteiro, e bastaria um incremento em cima da cobertura devolvida para
+ * corromper a resposta de todo mundo de uma vez.
+ */
+const emptyWindow = (): WindowCoverage => ({
   samples: 0,
   coveredMs: 0,
   windowStart: null,
   windowEnd: null,
-}
+})
 
 // ---------------------------------------------------------------------------
 // Funções de apoio
@@ -256,7 +263,7 @@ function rateOverWindow(
     .sort((a, b) => toMs(a.eventTime) - toMs(b.eventTime))
 
   if (inWindow.length === 0) {
-    return { value: null, latestAt: null, coverage: EMPTY_WINDOW, calculating: false }
+    return { value: null, latestAt: null, coverage: emptyWindow(), calculating: false }
   }
 
   const first = inWindow[0]
