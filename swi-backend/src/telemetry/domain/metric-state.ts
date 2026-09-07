@@ -1,3 +1,4 @@
+import { BRT_OFFSET_MS } from '../../common/brazil-time'
 import {
   InvalidMeasurementError,
   InvalidTelemetryEventError,
@@ -49,14 +50,12 @@ export const EVENT_AGE = {
 } as const
 
 /**
- * BRT é UTC-3 fixo (o Brasil aboliu o horário de verão em 2019). Mesma conta
- * que reports.service.ts faz para formatar data, e sem depender de ICU.
- *
- * Exportado porque a varredura do ciclo de vida precisa da mesma conta dentro
- * do SQL, ao agrupar leituras por dia. É o deslocamento, nunca a regra: quem
- * traduz instante em dia continua sendo monitoredDayOf, aqui.
+ * O deslocamento vem de common/brazil-time, que é o dono dele: fuso do país
+ * não é fato da telemetria. Reexportado porque a varredura do ciclo de vida
+ * precisa da mesma conta dentro do SQL, e porque quem traduz instante em dia
+ * continua sendo monitoredDayOf, aqui.
  */
-export const BRT_OFFSET_MS = -3 * HOUR
+export { BRT_OFFSET_MS }
 
 /**
  * O dia monitorado é o dia civil em BRT, não as últimas 24 horas: "passos

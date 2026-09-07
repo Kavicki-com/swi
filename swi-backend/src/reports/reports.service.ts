@@ -4,6 +4,7 @@ import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
 import type { Comment, Profile, Report, ReportStatus, User } from '@prisma/client'
 import type { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
+import { formatBrtDate } from '../common/brazil-time'
 import { isStaffJobTitle } from '../common/staff'
 
 const LIST_CAP = 200
@@ -316,13 +317,8 @@ export class ReportsService {
     )
   }
 
+  /** Data em Brasília. A conta é de common/brazil-time, dono único do fuso. */
   private formatDate(d: Date): string {
-    // BRT (America/Sao_Paulo) é UTC-3 fixo (Brasil aboliu o horário de verão em
-    // 2019). Sem depender de ICU/tz-data: subtrai 3h e lê os componentes UTC.
-    // Paridade com o mock, que formata em hora local do device (BR).
-    const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000)
-    const dd = String(brt.getUTCDate()).padStart(2, '0')
-    const mm = String(brt.getUTCMonth() + 1).padStart(2, '0')
-    return `${dd}/${mm}/${brt.getUTCFullYear()}`
+    return formatBrtDate(d)
   }
 }
