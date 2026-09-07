@@ -113,7 +113,7 @@ describe('TelemetryAssessmentService.assessSession', () => {
     expect(data.windowStart).toEqual(secondsAgo(120))
     expect(data.inputs.chain).toMatchObject({ reason: 'first_of_session', previousAssessmentId: null, previousState: null })
     const where = prisma.telemetrySample.findMany.mock.calls[0][0].where
-    expect(where.eventTime).toEqual({ gt: secondsAgo(120), lte: NOW })
+    expect(where.eventTime).toEqual({ gte: secondsAgo(120), lte: NOW })
   })
 
   it('sessão que começou há menos de 120 s: a janela começa no início dela', async () => {
@@ -360,5 +360,60 @@ describe('TelemetryAssessmentService.assessSession, teto da janela contínua', (
     }
 
     expect(await doseFrom([...backlog, ...live])).toEqual(await doseFrom(live))
+  })
+})
+
+// A fronteira de baixo da janela é fechada na primeira da cadeia e aberta na
+// continuação. Na primeira, windowStart cai exatamente no startedAt, que é o
+// eventTime mais antigo do lote de abertura, e o `gt` deixava essa leitura de
+// fora de todas as janelas, para sempre. Na continuação a fronteira é o
+// windowEnd da anterior, e a amostra que está nele já foi consumida.
+describe('TelemetryAssessmentService.assessSession, fronteira de baixo da janela', () => {
+  it('primeira da sessão: a amostra que está exatamente em startedAt entra na janela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySession.findUnique.mockResolvedValue({ ...SESSION, startedAt: secondsAgo(30) })
+    prisma.telemetrySample.findMany.mockImplementation(async ({ where }: any) =>
+      rowsMatching([sampleRow(30), sampleRow(10), sampleRow(0)], where),
+    )
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.windowStart).toEqual(secondsAgo(30))
+    expect(data.inputs.window.sampleCount).toBe(3)
+  })
+
+  it('continuação: a amostra que está exatamente no fim da janela anterior não é relida', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow())
+    prisma.telemetrySample.findMany.mockImplementation(async ({ where }: any) =>
+      rowsMatching([sampleRow(20), sampleRow(10), sampleRow(0)], where),
+    )
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.windowStart).toEqual(secondsAgo(20))
+    expect(data.inputs.window.sampleCount).toBe(2)
+  })
+
+  it('reinício por estado ilegível também fecha a fronteira de baixo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow({ inputs: {} }))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetrySample.findMany.mock.calls[0][0].where.eventTime).toEqual({ gte: secondsAgo(120), lte: NOW })
+  })
+
+  it('reinício por versão diferente também fecha a fronteira de baixo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(previousRow({ formulaVersion: 'swi-fatigue-experimental-0' }))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetrySample.findMany.mock.calls[0][0].where.eventTime).toEqual({ gte: secondsAgo(120), lte: NOW })
   })
 })

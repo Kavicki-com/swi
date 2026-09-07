@@ -134,7 +134,12 @@ export class TelemetryAssessmentService {
     const sinceDay = new Date(monitoredDayOf(now).getTime() - this.profile.restingDays * DAY_MS)
     const [samples, profile, summaries] = await Promise.all([
       tx.telemetrySample.findMany({
-        where: { sessionId, eventTime: { gt: windowStart, lte: windowEnd } },
+        // Fronteira de baixo fechada na primeira da cadeia, aberta na
+        // continuação. Na primeira, windowStart cai no startedAt, que é o
+        // eventTime mais antigo do lote de abertura, e com `gt` essa leitura
+        // ficaria de fora de todas as janelas, para sempre. Na continuação a
+        // fronteira é o windowEnd da anterior, cuja amostra já foi consumida.
+        where: { sessionId, eventTime: { ...(reason === null ? { gt: windowStart } : { gte: windowStart }), lte: windowEnd } },
         select: { eventTime: true, heartRateBpm: true, motionCount: true },
         orderBy: { eventTime: 'asc' },
       }),
