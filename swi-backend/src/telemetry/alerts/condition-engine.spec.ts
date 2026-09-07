@@ -54,6 +54,24 @@ describe('heartRateLimits: cada regra cai no piso pela sua própria falta', () =
       low: { value: 40, rule: 'FLOOR' },
     })
   })
+
+  it('repouso que cruza a máxima por idade cai no piso: o limite baixo nunca alcança o alto', () => {
+    // Repouso observado de 190 daria limite baixo 175 contra limite alto 165, e
+    // um único 170 bpm satisfaria os dois predicados ao mesmo tempo, abrindo BPM
+    // alto e BPM baixo juntos, com dois alertas que se contradizem sobre o mesmo
+    // funcionário. Repouso acima da máxima por idade é dado poluído, não
+    // fisiologia, então a personalização é descartada e o piso assume.
+    const limits = heartRateLimits(PROFILE, { maxBpm: 183.5, restingBpm: 190 })
+
+    expect(limits.high).toEqual({ value: 165, rule: 'PERSONALIZED' })
+    expect(limits.low).toEqual({ value: 40, rule: 'FLOOR' })
+  })
+
+  it('limite baixo que empata com o alto também cai no piso', () => {
+    // Empate é tão ruim quanto cruzamento: os dois predicados são fechados, então
+    // um BPM exatamente no valor abriria as duas condições.
+    expect(heartRateLimits(PROFILE, { maxBpm: 200, restingBpm: 195 }).low).toEqual({ value: 40, rule: 'FLOOR' })
+  })
 })
 
 const NOW = Date.parse('2026-09-07T12:00:00.000Z')
@@ -199,17 +217,23 @@ describe('decideBattery: uma leitura basta, banda de dez pontos', () => {
 })
 
 describe('decideBloodPressure: abre em 140 ou 90, recupera abaixo de 130 e 85', () => {
-  it('sistólica 140 abre a revisão', () => {
+  it('sistólica 140 abre a revisão, e a régua gravada é a que cruzou', () => {
+    // A régua não é nula: a coluna existe para a auditoria saber com que número
+    // a condição abriu sem ter que recuperá-lo pela versão do perfil. Pressão
+    // não se personaliza, então a regra é sempre FLOOR.
     expect(decideBloodPressure({ systolic: 140, diastolic: 80 }, false, PROFILE)).toEqual({
       kind: 'BLOOD_PRESSURE_REVIEW',
       action: 'OPEN',
       observedValue: 140,
-      threshold: null,
+      threshold: { value: 140, rule: 'FLOOR' },
     })
   })
 
-  it('diastólica 90 abre, e o valor observado é a que cruzou', () => {
-    expect(decideBloodPressure({ systolic: 120, diastolic: 90 }, false, PROFILE)?.observedValue).toBe(90)
+  it('diastólica 90 abre, e o valor observado e a régua são os da que cruzou', () => {
+    const decision = decideBloodPressure({ systolic: 120, diastolic: 90 }, false, PROFILE)
+
+    expect(decision?.observedValue).toBe(90)
+    expect(decision?.threshold).toEqual({ value: 90, rule: 'FLOOR' })
   })
 
   it('139 por 89 não abre', () => {

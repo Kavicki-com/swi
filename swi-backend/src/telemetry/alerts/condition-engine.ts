@@ -30,7 +30,7 @@ export interface HeartRateBaseline {
  * Cada regra cai no piso pela sua própria falta: cadastro completo sem
  * histórico tem BPM alto personalizado e BPM baixo no piso. O piso é rede de
  * segurança para quem não tem dado; para BPM baixo ele também segura um
- * repouso observado absurdo, que produziria limite abaixo do piso.
+ * repouso observado absurdo, nos dois sentidos.
  */
 export function heartRateLimits(profile: AlertProfile, baseline: HeartRateBaseline): HeartRateLimits {
   const high: Threshold =
@@ -43,8 +43,16 @@ export function heartRateLimits(profile: AlertProfile, baseline: HeartRateBaseli
   // sem isto a casa decimal iria para a coluna da condição e para a tela.
   const personalizedLow =
     baseline.restingBpm === null ? null : Math.round(baseline.restingBpm - profile.heartRateLow.belowRestingBpm)
+  // O limite baixo personalizado só vale estritamente abaixo do alto. Sem esta
+  // conferência, um repouso observado poluído (190, digamos) daria limite baixo
+  // 175 contra limite alto 165, e um único 170 bpm satisfaria os dois
+  // predicados ao mesmo tempo: abriria BPM alto e BPM baixo juntos, e a fila
+  // receberia dois alertas que se contradizem sobre o mesmo funcionário.
+  // Repouso que alcança a máxima por idade é dado poluído, não fisiologia, e
+  // dado poluído não personaliza nada: cai no piso, como quem não tem dado.
+  const crossesHigh = personalizedLow !== null && personalizedLow >= high.value
   const low: Threshold =
-    personalizedLow === null || personalizedLow < profile.heartRateLow.floorBpm
+    personalizedLow === null || personalizedLow < profile.heartRateLow.floorBpm || crossesHigh
       ? { value: profile.heartRateLow.floorBpm, rule: 'FLOOR' }
       : { value: personalizedLow, rule: 'PERSONALIZED' }
 
@@ -155,7 +163,10 @@ export interface BloodPressureReading {
  * Pressão é medida à mão e raramente: uma medição abre, e só medição nova
  * recupera. A banda é pequena porque a série já é esparsa; sem ela, 139 e 141
  * alternados abririam e fechariam a cada dia. O valor observado é o que
- * cruzou, sistólica primeiro.
+ * cruzou, sistólica primeiro, e a régua acompanha o valor observado: a coluna
+ * thresholdValue existe para a auditoria ler o número que abriu sem ter que
+ * recuperá-lo pela versão do perfil. A regra é sempre FLOOR porque pressão não
+ * se personaliza por idade nem por histórico: 140 por 90 vale para todos.
  */
 export function decideBloodPressure(
   reading: BloodPressureReading | null,
@@ -164,17 +175,36 @@ export function decideBloodPressure(
 ): Decision | null {
   if (reading === null) return null
   const p = profile.bloodPressureReview
+  const systolicRule: Threshold = { value: p.systolicAt, rule: 'FLOOR' }
   if (!active) {
     if (reading.systolic >= p.systolicAt) {
-      return { kind: 'BLOOD_PRESSURE_REVIEW', action: 'OPEN', observedValue: reading.systolic, threshold: null }
+      return {
+        kind: 'BLOOD_PRESSURE_REVIEW',
+        action: 'OPEN',
+        observedValue: reading.systolic,
+        threshold: systolicRule,
+      }
     }
     if (reading.diastolic >= p.diastolicAt) {
-      return { kind: 'BLOOD_PRESSURE_REVIEW', action: 'OPEN', observedValue: reading.diastolic, threshold: null }
+      return {
+        kind: 'BLOOD_PRESSURE_REVIEW',
+        action: 'OPEN',
+        observedValue: reading.diastolic,
+        threshold: { value: p.diastolicAt, rule: 'FLOOR' },
+      }
     }
     return null
   }
   if (reading.systolic < p.systolicRecoverBelow && reading.diastolic < p.diastolicRecoverBelow) {
-    return { kind: 'BLOOD_PRESSURE_REVIEW', action: 'RECOVER', observedValue: reading.systolic, threshold: null }
+    // A recuperação carrega a régua da sistólica porque é a sistólica que ela
+    // reporta como valor observado. O serviço não regrava régua ao recuperar,
+    // então isto é coerência do motor, não coluna nova.
+    return {
+      kind: 'BLOOD_PRESSURE_REVIEW',
+      action: 'RECOVER',
+      observedValue: reading.systolic,
+      threshold: systolicRule,
+    }
   }
   return null
 }

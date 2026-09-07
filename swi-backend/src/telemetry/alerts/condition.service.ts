@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
-import type { Prisma, TelemetryConditionKind, TelemetryOrigin } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import type { TelemetryConditionKind, TelemetryOrigin } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../assessment/assessment-baseline'
-import { monitoredDayOf } from '../domain/metric-state'
+import { EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
 import { EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
 import {
   decideBattery,
@@ -20,6 +21,14 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Idade mínima do carimbo para valer uma escrita de renovação. Esta é a rota
+ * mais quente do backend: com cadência de 5 s, renovar sem amortizar daria uma
+ * escrita por condição ativa a cada evento, e um minuto de defasagem no carimbo
+ * não muda decisão nenhuma da varredura.
+ */
+const LAST_SEEN_REFRESH_MS = 60_000
+
 /** Tipos que viram item de fila. Bateria e sinal são estado, não item. */
 const ALERTING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
   'HEART_RATE_HIGH',
@@ -31,11 +40,6 @@ export interface EvaluateOutcome {
   opened: TelemetryConditionKind[]
   recovered: TelemetryConditionKind[]
   alerts: number
-}
-
-interface ActiveRow {
-  id: string
-  kind: TelemetryConditionKind
 }
 
 @Injectable()
@@ -60,6 +64,23 @@ export class TelemetryConditionService {
     triggerAt: Date,
     now: Date,
   ): Promise<EvaluateOutcome> {
+    const outcome: EvaluateOutcome = { opened: [], recovered: [], alerts: 0 }
+
+    // Condição descreve o AGORA, e evento que não é ao vivo não descreve agora
+    // nada. A ingestão só deveria chamar com evento ao vivo, mas essa garantia
+    // mora no chamador, e um gatilho de horas atrás faria estrago em silêncio
+    // aqui: o motor veria a série densa e sustentada que aconteceu de manhã e
+    // gravaria uma condição com firstSeenAt de agora, jurando 185 bpm neste
+    // instante; e a perda de sinal recuperaria incondicionalmente, com o
+    // backlog "provando" que o sinal voltou. O prazo é o do domínio, o mesmo
+    // que classifica evento como ao vivo, e não um número novo desta fatia.
+    if (now.getTime() - triggerAt.getTime() > EVENT_AGE.liveMs) {
+      this.logger.debug(
+        `Sessão ${sessionId}: gatilho de ${triggerAt.toISOString()} não é ao vivo em ${now.toISOString()}, nada avaliado`,
+      )
+      return outcome
+    }
+
     // Mesmo lock da avaliação de esforço, pelo mesmo motivo: dois lotes da
     // mesma sessão em voo ao mesmo tempo abririam a mesma condição duas vezes.
     // NO KEY para não segurar a inserção de amostra, que pega FOR KEY SHARE.
@@ -78,22 +99,60 @@ export class TelemetryConditionService {
     // sessão continua sendo dele na seguinte, mas real e demonstração nunca se
     // misturam, e sem o filtro uma condição de demonstração ativa faria o
     // motor concluir que a real já está aberta e nunca abri-la.
-    const active = (await tx.telemetryCondition.findMany({
+    //
+    // lastSeenAt entra na projeção porque é ele que decide, no fim, se o
+    // carimbo da condição ainda ativa precisa ser renovado. Sem cast: assim o
+    // compilador reprova qualquer mexida no select que tire uma coluna que o
+    // corpo abaixo consome, em vez de deixar o erro para o runtime.
+    const active = await tx.telemetryCondition.findMany({
       where: { workerId: session.workerId, origin: session.origin, status: 'ACTIVE' },
-      select: { id: true, kind: true },
-    })) as ActiveRow[]
+      select: { id: true, kind: true, lastSeenAt: true },
+    })
     const activeByKind = new Map(active.map((c) => [c.kind, c]))
 
     const windowStart = new Date(triggerAt.getTime() - this.profile.persistence.windowMs)
     const sinceDay = new Date(monitoredDayOf(now).getTime() - this.profile.restingDays * DAY_MS)
-    const [rows, profile, summaries] = await Promise.all([
+    // Cada métrica tem a sua própria noção de "vale agora", e uma janela só não
+    // serve às três. BPM precisa de evidência CONTÍNUA dentro da janela de
+    // persistência; bateria e pressão precisam do ÚLTIMO valor conhecido dentro
+    // do prazo de validade DELAS. Presa à janela do BPM, uma medição de pressão
+    // carimbada mais de 60 s antes da amostra mais nova do lote não seria
+    // avaliada por chamada nenhuma, porque a janela seguinte já andou para a
+    // frente; e pressão é medida à mão e raramente, então perder uma é perder o
+    // evento inteiro.
+    const batteryFrom = new Date(triggerAt.getTime() - FRESHNESS.BATTERY.staleMs)
+    const pressureFrom = new Date(triggerAt.getTime() - FRESHNESS.BLOOD_PRESSURE.staleMs)
+    const [rows, batteryRow, pressureRow, profile, summaries] = await Promise.all([
       // Fronteira de baixo fechada, como a do motor: aberta, a amostra que cai
       // exatamente no início da janela ficaria de fora e o trecho medido seria
-      // menor que o que o perfil declara.
+      // menor que o que o perfil declara. Só BPM: as colunas de bateria e de
+      // pressão saíram daqui porque quem as lê agora são as buscas abaixo.
       tx.telemetrySample.findMany({
         where: { sessionId, eventTime: { gte: windowStart, lte: triggerAt } },
-        select: { eventTime: true, heartRateBpm: true, batteryPercent: true, systolicMmHg: true, diastolicMmHg: true },
+        select: { eventTime: true, heartRateBpm: true },
         orderBy: { eventTime: 'asc' },
+      }),
+      // 30 min é FRESHNESS.BATTERY.staleMs, o prazo do domínio para bateria, e
+      // não número novo desta fatia: a leitura chega a cada cinco minutos, o
+      // painel a trata como válida até meia hora, e a condição tem de decidir
+      // sobre a mesma leitura que o painel mostra.
+      tx.telemetrySample.findFirst({
+        where: { sessionId, batteryPercent: { not: null }, eventTime: { gte: batteryFrom, lte: triggerAt } },
+        select: { batteryPercent: true },
+        orderBy: { eventTime: 'desc' },
+      }),
+      // 72 h é FRESHNESS.BLOOD_PRESSURE.staleMs, pelo mesmo motivo: passado
+      // esse prazo o domínio diz "sem medição recente" e o valor some da tela,
+      // então é exatamente aí que ele deixa de poder abrir condição.
+      tx.telemetrySample.findFirst({
+        where: {
+          sessionId,
+          systolicMmHg: { not: null },
+          diastolicMmHg: { not: null },
+          eventTime: { gte: pressureFrom, lte: triggerAt },
+        },
+        select: { systolicMmHg: true, diastolicMmHg: true },
+        orderBy: { eventTime: 'desc' },
       }),
       tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
       tx.telemetryDailySummary.findMany({
@@ -116,22 +175,20 @@ export class TelemetryConditionService {
     const maxBpm = birthDate === null ? null : maxHeartRateForAge(ageInYearsAt(birthDate, now))
     const limits = heartRateLimits(this.profile, { maxBpm, restingBpm })
 
+    // batteryPercent fica nulo aqui de propósito: o motor recebe a bateria como
+    // escalar, pela leitura própria, e nenhuma decisão de BPM olha esta coluna.
     const samples: EngineSample[] = rows.map((r) => ({
       atMs: r.eventTime.getTime(),
       heartRateBpm: r.heartRateBpm,
-      batteryPercent: r.batteryPercent,
+      batteryPercent: null,
     }))
-    // Bateria e pressão vêm da leitura mais recente DENTRO da janela, e é isso
-    // que lhes dá frescor: o motor recebe um escalar sem instante, então quem
-    // garante que ele descreve o agora é este recorte. Bateria chega a cada
-    // cinco minutos, então na maioria das avaliações não há leitura na janela
-    // e nada é decidido sobre ela, o que é correto.
-    const latestBattery = [...rows].reverse().find((r) => r.batteryPercent !== null)?.batteryPercent ?? null
-    const latestPressure = [...rows].reverse().find((r) => r.systolicMmHg !== null && r.diastolicMmHg !== null)
+    const latestBattery = batteryRow?.batteryPercent ?? null
+    // O filtro `not: null` não estreita o tipo devolvido pelo Prisma, então as
+    // duas colunas são conferidas aqui em vez de assertadas.
     const pressure =
-      latestPressure === undefined
+      pressureRow === null || pressureRow.systolicMmHg === null || pressureRow.diastolicMmHg === null
         ? null
-        : { systolic: latestPressure.systolicMmHg as number, diastolic: latestPressure.diastolicMmHg as number }
+        : { systolic: pressureRow.systolicMmHg, diastolic: pressureRow.diastolicMmHg }
 
     const nowMs = triggerAt.getTime()
     const decisions: Decision[] = [
@@ -147,7 +204,7 @@ export class TelemetryConditionService {
       decisions.push({ kind: 'DEVICE_SIGNAL_LOST', action: 'RECOVER', observedValue: null, threshold: null })
     }
 
-    const outcome: EvaluateOutcome = { opened: [], recovered: [], alerts: 0 }
+    const recoveredIds = new Set<string>()
     for (const decision of decisions) {
       if (decision.action === 'RECOVER') {
         const row = activeByKind.get(decision.kind)
@@ -160,27 +217,62 @@ export class TelemetryConditionService {
           data: { status: 'RECOVERED', recoveredAt: now, recoveryReason: 'NORMALIZED', lastSeenAt: now },
         })
         outcome.recovered.push(decision.kind)
+        recoveredIds.add(row.id)
         continue
       }
 
-      const created = await tx.telemetryCondition.create({
-        data: {
-          workerId: session.workerId,
-          sessionId: session.id,
-          origin: session.origin,
-          kind: decision.kind,
-          status: 'ACTIVE',
-          firstSeenAt: now,
-          lastSeenAt: now,
-          thresholdProfile: this.profile.version,
-          thresholdRule: decision.threshold?.rule ?? null,
-          thresholdValue: decision.threshold?.value ?? null,
-          observedValue: decision.observedValue,
-        },
-        select: { id: true },
-      })
+      // O lock é na linha da SESSÃO, mas o invariante do índice único é por
+      // FUNCIONÁRIO e ORIGEM: duas sessões distintas do mesmo funcionário
+      // travam linhas diferentes, não se enfileiram, e podem tentar abrir a
+      // mesma condição ao mesmo tempo. Deixar o P2002 subir derrubaria a
+      // transação inteira e desfaria até recuperações legítimas de outros tipos
+      // já gravadas neste laço. Engolir aqui é certo porque a violação diz
+      // exatamente que a condição já está aberta, que é o estado desejado: o
+      // outro escritor chegou primeiro e o resultado é o mesmo. Não conta como
+      // aberta por este chamador, então não vira alerta nem entra no resultado.
+      let createdId: string | null = null
+      try {
+        const created = await tx.telemetryCondition.create({
+          data: {
+            workerId: session.workerId,
+            sessionId: session.id,
+            origin: session.origin,
+            kind: decision.kind,
+            status: 'ACTIVE',
+            firstSeenAt: now,
+            lastSeenAt: now,
+            thresholdProfile: this.profile.version,
+            thresholdRule: decision.threshold?.rule ?? null,
+            thresholdValue: decision.threshold?.value ?? null,
+            observedValue: decision.observedValue,
+          },
+          select: { id: true },
+        })
+        createdId = created.id
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+        this.logger.debug(
+          `Condição ${decision.kind} de ${session.workerId} (${session.origin}) já estava aberta por outro escritor`,
+        )
+      }
+      if (createdId === null) continue
+
       outcome.opened.push(decision.kind)
-      if (await this.openAlert(tx, created.id, session.workerId, session.origin, decision.kind)) outcome.alerts += 1
+      if (await this.openAlert(tx, createdId, session.workerId, session.origin, decision.kind)) outcome.alerts += 1
+    }
+
+    // lastSeenAt quer dizer "última vez que uma avaliação viu esta condição
+    // ainda valendo", e não "quando ela abriu". Sem renovar, uma condição ativa
+    // há três horas, com o funcionário mandando dado o tempo todo, exibiria
+    // carimbo de três horas atrás, idêntico ao firstSeenAt, e o índice
+    // [status, lastSeenAt] deixaria de servir para achar condição ativa
+    // esquecida. Quem recuperou fica de fora: já levou o carimbo do fechamento
+    // e não segue valendo.
+    const refreshBefore = new Date(now.getTime() - LAST_SEEN_REFRESH_MS)
+    for (const row of active) {
+      if (recoveredIds.has(row.id)) continue
+      if (row.lastSeenAt > refreshBefore) continue
+      await tx.telemetryCondition.update({ where: { id: row.id }, data: { lastSeenAt: now } })
     }
 
     if (outcome.opened.length > 0 || outcome.recovered.length > 0) {
@@ -194,8 +286,15 @@ export class TelemetryConditionService {
   /**
    * Alerta nasce na mesma transação da condição, e só para os tipos que
    * exigem gente. Não nasce enquanto houver um não resolvido do mesmo
-   * funcionário e tipo: a fila não empilha o mesmo problema, e o alerta antigo
-   * já diz "olhe este funcionário".
+   * funcionário, tipo E ORIGEM: a fila não empilha o mesmo problema, e o
+   * alerta antigo já diz "olhe este funcionário".
+   *
+   * A origem é parte da chave, e não detalhe de leitura: demonstração nunca é
+   * triada, então um alerta de demonstração fica OPEN para sempre, e sem o
+   * filtro ele suprimiria o alerta REAL do mesmo funcionário e tipo pelo resto
+   * do piloto. A condição real abriria, a fila não receberia nada, e o painel
+   * voltaria a mostrar zero urgente. É a mesma falha que a chave única
+   * (workerId, kind, origin) já corrige um nível acima, na condição.
    */
   private async openAlert(
     tx: Prisma.TransactionClient,
@@ -206,7 +305,7 @@ export class TelemetryConditionService {
   ): Promise<boolean> {
     if (!ALERTING_KINDS.has(kind)) return false
     const unresolved = await tx.operationalAlert.findFirst({
-      where: { workerId, status: { in: ['OPEN', 'ACKNOWLEDGED'] }, condition: { kind } },
+      where: { workerId, origin, status: { in: ['OPEN', 'ACKNOWLEDGED'] }, condition: { kind } },
       select: { id: true },
     })
     if (unresolved !== null) return false
