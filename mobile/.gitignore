@@ -47,3 +47,6 @@ yarn-error.*
 /*.jpg
 /*.jpeg
 .playwright-mcp/
+
+# Gerado pelo prebuild a partir de expo-target.config.js (icon); o EAS regenera
+targets/watch/Assets.xcassets/

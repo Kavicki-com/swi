@@ -25,16 +25,20 @@ export const IS_PROD_BUILD: boolean =
   MANUAL_OVERRIDE !== null ? MANUAL_OVERRIDE : detectProdBuild();
 
 export type FeatureGate =
-  | 'smartbandOnboarding'
+  | 'watchOnboarding'
   | 'maps'
   | 'notifications'
-  | 'smartwatch3d';
+  | 'smartwatch3d'
+  | 'appleWatchPilot';
 
 export const FEATURE_GATES: Record<FeatureGate, boolean> = {
-  smartbandOnboarding: IS_PROD_BUILD,
+  watchOnboarding: IS_PROD_BUILD,
   maps: IS_PROD_BUILD,
   notifications: IS_PROD_BUILD,
   smartwatch3d: IS_PROD_BUILD,
+  // Piloto Apple Watch: só existe compilado em iOS (EAS/TestFlight). Em Android
+  // e Expo Go a tela diagnóstica nem aparece no menu.
+  appleWatchPilot: IS_PROD_BUILD && Platform.OS === 'ios',
 };
 
 export function isFeatureEnabled(gate: FeatureGate): boolean {

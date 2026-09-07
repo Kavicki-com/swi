@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../../../services/auth/AuthProvider';
 import { HomeFAB } from '../../../components/HomeFAB';
 import { useProfile } from '../../../services/profile/ProfileProvider';
+import { isFeatureEnabled } from '../../../lib/featureFlags';
 
 // items-center. ScrollView pattern matches my-stats; Home FAB sits absolute
 // over the safe-area bottom (matches my-stats home FAB).
@@ -87,6 +88,12 @@ export default function Settings() {
             <HorizontalCard label="Permissões"      onPress={go('/(app)/settings/preferences')} />
             <HorizontalCard label="Suporte"         onPress={go('/(app)/settings/support')} />
             <HorizontalCard label="FAQ"             onPress={go('/(app)/settings/faq')} />
+            {isFeatureEnabled('appleWatchPilot') && (
+              <HorizontalCard
+                label="Monitoramento"
+                onPress={go('/(app)/settings/watch-diagnostics')}
+              />
+            )}
           </View>
 
           <Pressable

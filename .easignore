@@ -1,0 +1,51 @@
+# O EAS le SO este arquivo ao empacotar o projeto. Ele SUBSTITUI o .gitignore,
+# nao o complementa, entao repete aqui o que importa dos dois .gitignore e
+# acrescenta o que o git nao sabe.
+#
+# Motivo de existir (2 de setembro de 2026): em git worktree o EAS nao filtra
+# pelo git e copia a pasta inteira. Um build subiu 896 MB por causa de
+# mobile/android/ gerado localmente, e levou junto docs que sao locais.
+
+# Nunca sobe
+.git
+node_modules/
+
+# Gerado pelo prebuild ou por builds locais; o EAS regenera do zero
+mobile/android/
+mobile/ios/
+mobile/.expo/
+mobile/coverage/
+mobile/dist/
+mobile/web-build/
+**/coverage/
+**/dist/
+**/test-results/
+**/playwright-report/
+
+# Segredos e artefatos assinados
+.env
+.env.local
+.env*.local
+.env*.bak*
+*.log
+*.apk
+*.aab
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+
+# Nada disto entra num build do app mobile
+swi-admin/
+swi-backend/
+scripts/
+output/
+tmp/
+
+# Docs sao locais. Nao vao para o GitHub nem para os servidores da Expo.
+docs/
+CONTEXT.md
+.scratch/
+mobile/services/telemetry/prototypes/

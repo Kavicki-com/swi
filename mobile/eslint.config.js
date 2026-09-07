@@ -73,7 +73,7 @@ module.exports = [
     // Arquivos de configuração da toolchain são CommonJS por exigência de
     // quem os carrega (Metro, Babel, Jest, o próprio ESLint). Não há `import`
     // possível aqui.
-    files: ['*.config.js', 'jest.setup.js'],
+    files: ['*.config.js', 'jest.setup.js', 'targets/**/expo-target.config.js'],
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
