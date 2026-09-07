@@ -488,4 +488,75 @@ describe('Telemetry conditions e2e', () => {
     expect(finais.filter((c) => c.kind === 'BLOOD_PRESSURE_REVIEW')).toHaveLength(1)
     expect(finais.filter((c) => c.kind === 'DEVICE_BATTERY_LOW')).toHaveLength(1)
   }, 60_000)
+
+  /**
+   * Pressão e bateria só tinham prova unitária, contra dublê. Estes dois casos
+   * fecham a lacuna e provam, de quebra, a decisão que uma revisão corrigiu: as
+   * duas são lidas por FUNCIONÁRIO e origem, com o prazo do próprio domínio,
+   * e não pela janela de 60 s da sessão. Por isso a medição que abre vai numa
+   * sessão e a que recupera vai em OUTRA.
+   */
+  it('10. pressão fora da faixa abre revisão com alerta não urgente, e recupera por medição em outra sessão', async () => {
+    const urgentesAntes = (await query.adminSummary(admin)).urgentAlerts.workers
+    const alertasAntes = await prisma.operationalAlert.count({ where: { workerId: workerB } })
+    const pressao = (systolic: number, diastolic: number) => ({
+      bloodPressure: { value: { systolic, diastolic }, unit: 'mmHg', source: 'EXTERNAL_CUFF' },
+    })
+
+    await post(headersB, { events: [event({ measurements: pressao(150, 80) })] }).expect(200)
+
+    const aberta = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerB, kind: 'BLOOD_PRESSURE_REVIEW', status: 'ACTIVE' },
+    })
+    expect(aberta).toMatchObject({
+      origin: 'REAL',
+      thresholdProfile: EXPERIMENTAL_ALERT_PROFILE.version,
+      thresholdRule: 'FLOOR',
+      thresholdValue: EXPERIMENTAL_ALERT_PROFILE.bloodPressureReview.systolicAt,
+      observedValue: 150,
+    })
+    // Revisão vira item de fila, porque exige gente. Mas não é urgente: o
+    // contador do painel só olha batimento.
+    const alerta = await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })
+    expect(alerta).toMatchObject({ workerId: workerB, origin: 'REAL', status: 'OPEN' })
+    expect(await prisma.operationalAlert.count({ where: { workerId: workerB } })).toBe(alertasAntes + 1)
+    expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(urgentesAntes)
+
+    // Medição nova, abaixo de 130 por 85, em sessão de monitoramento NOVA.
+    await post(headersB, { events: [event({ measurements: pressao(125, 80) })] }).expect(200)
+
+    const recuperada = await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: aberta.id } })
+    expect(recuperada).toMatchObject({ status: 'RECOVERED', recoveryReason: 'NORMALIZED' })
+    // Condição recuperar não fecha alerta: isso é da triagem humana.
+    expect(await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })).toMatchObject({ status: 'OPEN' })
+  })
+
+  it('11. bateria baixa abre condição sem alerta, e recupera acima da banda em outra sessão', async () => {
+    const alertasAntes = await prisma.operationalAlert.count({ where: { workerId: workerB } })
+    const bateria = (value: number) => ({ battery: { value, unit: '%', source: 'APPLE_WATCH' } })
+
+    await post(headersB, { events: [event({ measurements: bateria(12) })] }).expect(200)
+
+    const aberta = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerB, kind: 'DEVICE_BATTERY_LOW', status: 'ACTIVE' },
+    })
+    expect(aberta).toMatchObject({
+      thresholdRule: 'FLOOR',
+      thresholdValue: EXPERIMENTAL_ALERT_PROFILE.batteryLow.openAtPercent,
+      observedValue: 12,
+    })
+    // Aparelho é estado do funcionário, não item de fila.
+    expect(await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })).toBeNull()
+    expect(await prisma.operationalAlert.count({ where: { workerId: workerB } })).toBe(alertasAntes)
+
+    // 20% está dentro da banda e não recupera; 30% passa de 25% e recupera.
+    await post(headersB, { events: [event({ measurements: bateria(20) })] }).expect(200)
+    expect((await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: aberta.id } })).status).toBe('ACTIVE')
+
+    await post(headersB, { events: [event({ measurements: bateria(30) })] }).expect(200)
+    expect(await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: aberta.id } })).toMatchObject({
+      status: 'RECOVERED',
+      recoveryReason: 'NORMALIZED',
+    })
+  })
 })
