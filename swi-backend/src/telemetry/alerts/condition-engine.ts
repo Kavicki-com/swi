@@ -8,8 +8,8 @@ export type ThresholdRule = 'PERSONALIZED' | 'FLOOR'
 
 /** Limite em vigor e de onde ele veio. `value` na unidade da condição. */
 export interface Threshold {
-  value: number
-  rule: ThresholdRule
+  readonly value: number
+  readonly rule: ThresholdRule
 }
 
 export interface HeartRateLimits {
@@ -36,7 +36,11 @@ export function heartRateLimits(profile: AlertProfile, baseline: HeartRateBaseli
       ? { value: profile.heartRateHigh.floorBpm, rule: 'FLOOR' }
       : { value: Math.round(baseline.maxBpm * profile.heartRateHigh.maxFraction), rule: 'PERSONALIZED' }
 
-  const personalizedLow = baseline.restingBpm === null ? null : baseline.restingBpm - profile.heartRateLow.belowRestingBpm
+  // Arredondado como o limite alto: a mediana de um número par de dias fechados
+  // é a média dos dois centrais, então repouso observado de 62,5 é possível, e
+  // sem isto a casa decimal iria para a coluna da condição e para a tela.
+  const personalizedLow =
+    baseline.restingBpm === null ? null : Math.round(baseline.restingBpm - profile.heartRateLow.belowRestingBpm)
   const low: Threshold =
     personalizedLow === null || personalizedLow < profile.heartRateLow.floorBpm
       ? { value: profile.heartRateLow.floorBpm, rule: 'FLOOR' }
