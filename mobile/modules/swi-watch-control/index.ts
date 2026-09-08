@@ -7,7 +7,8 @@ import type {
   WatchControlNative,
 } from './src/SwiWatchControl.types';
 
-export type * from './src/SwiWatchControl.types';
+// Tipos e o leitor de código de erro, para os serviços importarem de um lugar só.
+export * from './src/SwiWatchControl.types';
 
 // O módulo só existe compilado em iOS (EAS/TestFlight). Em Android, web,
 // Expo Go e Jest ele não está registrado e a função devolve null: o app
@@ -43,6 +44,15 @@ const UNSUPPORTED: WatchControl = {
   requestAuthorization: async () => false,
   startMonitoring: async () => false,
   subscribe: () => () => undefined,
+  // Rejeita em vez de resolver um status inventado: sem módulo não houve
+  // requisição, e um 0 ou 503 fabricado se confundiria com resposta real.
+  request: async () => {
+    throw Object.assign(new Error('Módulo nativo indisponível nesta plataforma'), {
+      code: 'E_UNSUPPORTED',
+    });
+  },
+  hasDeviceCredential: () => false,
+  clearDeviceCredential: () => undefined,
 };
 
 export function createWatchControl(native: WatchControlNative | null): WatchControl {
@@ -80,6 +90,12 @@ export function createWatchControl(native: WatchControlNative | null): WatchCont
         sample.remove();
       };
     },
+    // Sem try/catch de propósito: o código da rejeição é a informação, e cada
+    // serviço mapeia para o próprio motivo.
+    request: (url, method, body, auth, storeCredential) =>
+      native.request(url, method, body, auth, storeCredential),
+    hasDeviceCredential: () => native.hasDeviceCredential(),
+    clearDeviceCredential: () => native.clearDeviceCredential(),
   };
 }
 

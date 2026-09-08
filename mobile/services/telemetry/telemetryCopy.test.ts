@@ -1,4 +1,4 @@
-import { telemetryCopy } from './telemetryCopy';
+import { telemetryCopy, telemetryUploadCopy } from './telemetryCopy';
 import type { TelemetryAvailability } from './telemetryAvailability';
 
 // Fonte unica da copy: as duas superficies precisam dizer a mesma coisa sobre o
@@ -62,5 +62,14 @@ describe('telemetryCopy', () => {
         expect(t).not.toContain('smartband');
       }
     }
+  });
+});
+
+describe('telemetryUploadCopy', () => {
+  // A linha de envio da tela de monitoramento: pareado envia; sem pareamento
+  // diz isso, e não "erro", porque parear é ação do administrador no painel.
+  it('distingue pareado de não pareado', () => {
+    expect(telemetryUploadCopy(true)).toBe('Enviando ao servidor');
+    expect(telemetryUploadCopy(false)).toBe('Aparelho não pareado');
   });
 });

@@ -59,3 +59,12 @@ export function telemetryCopy(
       };
   }
 }
+
+/**
+ * Linha de estado do envio ao backend, na tela de monitoramento. Sem
+ * pareamento não é erro: parear é ação do administrador no painel, e o
+ * funcionário só precisa saber que nada está saindo do aparelho.
+ */
+export function telemetryUploadCopy(paired: boolean): string {
+  return paired ? 'Enviando ao servidor' : 'Aparelho não pareado';
+}
