@@ -8,7 +8,11 @@ import {
   useWatchDiagnostics,
 } from '../../../services/telemetry/watchDiagnostics';
 import { deriveTelemetryAvailability } from '../../../services/telemetry/telemetryAvailability';
-import { telemetryCopy, telemetryUploadCopy } from '../../../services/telemetry/telemetryCopy';
+import {
+  telemetryCopy,
+  telemetryUploadCopy,
+  watchProtocolCopy,
+} from '../../../services/telemetry/telemetryCopy';
 import { useNow } from '../../../services/telemetry/useNow';
 import { useTelemetryUpload } from '../../../services/telemetry/useTelemetryUpload';
 
@@ -42,6 +46,9 @@ export default function WatchDiagnostics() {
   // visivel com horario e qualidade. Some-la acima de 120s apagaria o unico
   // dado real que chegou, entao vem do estado bruto e nao da derivacao.
   const leitura = estado.support === 'ready' ? estado.lastSample : null;
+  // Aviso, não erro: com o relógio antigo a leitura continua chegando.
+  const avisoDoRelogio =
+    estado.support === 'ready' ? watchProtocolCopy(estado.watchProtocol) : null;
 
   // Com a sessão espelhada já ativa, ativar de novo não faria nada: o botão sai.
   const podeAtivar = estado.support === 'ready' && estado.session !== 'running';
@@ -114,10 +121,16 @@ export default function WatchDiagnostics() {
           )}
 
           {/* Só a prova de que o caminho até o backend existe; a tela de
-              produto é da Task 11. Sem suporte não há o que enviar. */}
+              produto vem com o pareamento. Sem suporte não há o que enviar. */}
           {estado.support === 'ready' && (
             <Text variant="body.s" color={theme.content.dark}>
               {telemetryUploadCopy(envio.paired)}
+            </Text>
+          )}
+
+          {avisoDoRelogio !== null && (
+            <Text variant="body.s" color={theme.content.dark}>
+              {avisoDoRelogio}
             </Text>
           )}
 
