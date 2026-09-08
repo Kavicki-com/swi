@@ -107,6 +107,12 @@ final class WorkoutCollector: NSObject, ObservableObject {
         // de leitura ja e tratada com honestidade rio abaixo (ADR-0004). Seguir
         // e melhor que abortar afirmando uma negacao que nao foi observada.
         _ = granted
+        // A retomada pode ter chegado enquanto a folha do sistema estava
+        // aberta. A guarda la em cima nao cobre isto: durante a autorizacao o
+        // estado e `.requestingAuthorization`, que nao conta como rodando.
+        // Quem ja tem sessao ganha; criar outra vazaria a primeira e, pior,
+        // abriria a fila com identificador novo, apagando o que nao foi enviado.
+        guard self.session == nil, !self.isRunning else { return }
         self.beginSession(with: configuration ?? Self.monitoringConfiguration())
       }
     }
@@ -187,6 +193,9 @@ final class WorkoutCollector: NSObject, ObservableObject {
   }
 
   private func attach(_ recovered: HKWorkoutSession) {
+    // O outro lado da mesma corrida: a ativacao pelo iPhone pode ter chegado
+    // primeiro e ja estar com sessao.
+    guard session == nil else { return }
     let builder = recovered.associatedWorkoutBuilder()
     recovered.delegate = self
     builder.delegate = self

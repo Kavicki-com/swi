@@ -152,10 +152,26 @@ final class WatchOutbox {
       state.inFlight = nil  // reenvia a partir do confirmado
       recoverTail()
     } else {
+      // Fila de OUTRA sessao. As linhas nao servem aqui: a sequencia e as bases
+      // sao por sessao, e a marca d'agua nao saberia separar as duas. Mas o
+      // numero da perda tem de sobreviver, senao o piloto veria zero descartado
+      // com eventos sumidos.
+      //
+      // PENDENCIA: isto ainda perde os eventos que a sessao anterior gravou e
+      // nao conseguiu entregar (encerrar o turno fora de alcance do iPhone).
+      // Consertar de verdade exige ou segurar o encerramento ate drenar, ou uma
+      // marca d'agua por sessao. Registrado no desenho.
+      var carried = 0
+      if let data = try? Data(contentsOf: stateURL),
+        let stored = try? JSONDecoder().decode(OutboxState.self, from: data)
+      {
+        carried = max(0, stored.lastSequence - stored.ackedThrough)
+      }
       try? fileManager.removeItem(at: eventsURL)
       try? fileManager.removeItem(at: stateURL)
       state = OutboxState()
       state.sessionId = sessionId
+      state.discarded = carried
     }
     if !fileManager.fileExists(atPath: eventsURL.path) {
       fileManager.createFile(atPath: eventsURL.path, contents: nil)
@@ -179,6 +195,12 @@ final class WatchOutbox {
     }
     guard maxSequence > state.lastSequence else { return }
     state.lastSequence = maxSequence
+    // A base de energia telescopa exato, porque o delta gravado e a diferenca
+    // entre acumulados. A de passos nao: o delta gravado e INTEIRO, e eventos
+    // cuja fracao nao chegou a um passo nao gravaram delta nenhum. A base
+    // reconstruida fica ate um passo abaixo da verdadeira, e esse passo pode
+    // ser emitido de novo. Um passo por retomada e ruido aceito no piloto;
+    // exatidao exigiria gravar a base fracionaria dentro do evento.
     state.stepBase += steps
     state.energyBase += energy
   }
@@ -242,6 +264,9 @@ final class WatchOutbox {
 
   var pendingCount: Int { state.lastSequence - state.ackedThrough }
   var discarded: Int { state.discarded }
+  /// O transporte consulta isto: se a fila nao tem mais a remessa que ele acha
+  /// que esta em voo, foi o teto que a descartou, e ele precisa recomecar.
+  var hasInFlight: Bool { state.inFlight != nil }
   var acknowledgedThrough: Int { state.ackedThrough }
 
   /// As proximas linhas a enviar, na ordem, e quanto ocupam em bytes. A leitura
@@ -252,9 +277,25 @@ final class WatchOutbox {
     }
     var lines: [String] = []
     var bytes = 0
-    let start = reader.offset
+    var start = reader.offset
     while lines.count < limit, let line = reader.next() {
-      guard !line.isEmpty else { continue }
+      guard !line.isEmpty, TelemetryEvent.from(line: line) != nil else {
+        // Linha ilegivel. Nasce de uma escrita interrompida: a cauda sem quebra
+        // fica no arquivo e a escrita seguinte a emenda, formando uma linha que
+        // ninguem decodifica. Se ela ficar na frente da fila, toda remessa para
+        // aqui e nada mais e enviado nem confirmado, ate o teto estourar e
+        // descartar dez mil eventos de uma vez.
+        //
+        // So da para pular enquanto nenhuma linha boa entrou: depois disso o
+        // cursor nao pode andar sem quebrar a conta de bytes da confirmacao.
+        if lines.isEmpty {
+          pendingOffset = reader.offset
+          start = reader.offset
+          state.discarded += 1
+          try? writeState()
+        }
+        continue
+      }
       lines.append(line)
       bytes = reader.offset - start
     }
@@ -321,7 +362,15 @@ final class WatchOutbox {
     }
     try output.synchronize()
     try? output.close()
-    _ = try? fileManager.replaceItemAt(eventsURL, withItemAt: temporaryURL)
+    do {
+      _ = try fileManager.replaceItemAt(eventsURL, withItemAt: temporaryURL)
+    } catch {
+      // Engolir aqui era o pior erro possivel: sem a troca o arquivo continua
+      // sendo o antigo, com tudo o que ja foi confirmado, e zerar o cursor
+      // faria o relogio reenviar a sessao inteira, de novo, para sempre.
+      try? fileManager.removeItem(at: temporaryURL)
+      throw WatchOutboxError.cannotOpenFile
+    }
     pendingOffset = 0
     state.compactedThrough = state.ackedThrough
     try writeState()

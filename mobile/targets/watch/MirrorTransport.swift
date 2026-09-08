@@ -104,6 +104,12 @@ final class MirrorTransport {
   private func transmit() {
     guard let payload = inFlightData else { return }
     sending = true
+    // Temporizador armado ANTES de entregar. Se o completion nunca vier (a
+    // sessao espelhada morre no meio, o sistema suspende o app antes do
+    // callback), `sending` ficaria true para sempre e toda remessa futura
+    // morreria na guarda de `pump`. A fila pararia de esvaziar ate o processo
+    // reiniciar.
+    scheduleTimer(after: Self.ackTimeout)
     deliver(payload) { [weak self] accepted in
       Task { @MainActor in
         guard let self else { return }
@@ -137,11 +143,29 @@ final class MirrorTransport {
   /// Reenvia a MESMA remessa, com o mesmo numero. Numero novo faria o iPhone
   /// gravar as mesmas linhas duas vezes.
   private func retry() {
+    sending = false
     guard inFlightData != nil else {
       pump()
       return
     }
+    // O teto da fila pode ter descartado justamente esta remessa. Reenvia-la
+    // seria mandar linhas que nao existem mais e esperar por uma confirmacao
+    // que ninguem vai poder atribuir.
+    guard outbox.hasInFlight else {
+      discardInFlight()
+      pump()
+      return
+    }
     transmit()
+  }
+
+  private func discardInFlight() {
+    timer?.invalidate()
+    timer = nil
+    inFlightData = nil
+    inFlightBatch = nil
+    sending = false
+    backoff = 0
   }
 
   /// Uma linha vinda do iPhone. Devolve se era uma confirmacao.
@@ -151,9 +175,22 @@ final class MirrorTransport {
       let data = line.data(using: .utf8),
       let message = try? JSONDecoder().decode(AckMessage.self, from: data)
     else { return false }
+    // A numeracao recomeca a cada sessao, entao uma confirmacao atrasada da
+    // sessao anterior poderia casar com a remessa desta e mover a marca d'agua
+    // sobre eventos que o iPhone nunca recebeu.
+    guard message.session == nil || message.session == outbox.state.sessionId else {
+      return true
+    }
     guard message.ack == inFlightBatch else {
       // Confirmacao de remessa que nao esta em voo: chegou atrasada, depois de
       // um reenvio. Ignorar e o certo; o reenvio ja resolveu.
+      return true
+    }
+    guard outbox.hasInFlight else {
+      // O teto descartou esta remessa antes de a confirmacao chegar. Limpar sem
+      // anunciar confirmacao: dizer que foi confirmada mentiria na tela.
+      discardInFlight()
+      pump()
       return true
     }
     try? outbox.acknowledge(batch: message.ack)

@@ -14,9 +14,9 @@ enum MotionProfile {
   static let refractory: TimeInterval = 0.25
 }
 
-/// Conta picos de aceleracao linear acima do limiar. `drain()` devolve quantos
-/// desde a ultima drenagem: e a variacao de movimento de um evento, e zero e
-/// contagem, nao ausencia. Sem acelerometro, `available` fica false e nada e
+/// Conta picos de aceleracao linear acima do limiar. `peekCount()` devolve
+/// quantos desde o ultimo consumo: e a variacao de movimento de um evento, e
+/// zero e contagem, nao ausencia. Sem acelerometro, `available` fica false e nada e
 /// inventado; cadencia de passos NAO substitui movimento.
 ///
 /// As atualizacoes chegam numa fila propria, nao na principal: 20 por segundo
