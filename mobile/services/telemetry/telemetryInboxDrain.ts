@@ -80,6 +80,10 @@ export function createTelemetryInboxDrain(deps: TelemetryInboxDrainDeps): Teleme
           continue;
         }
 
+        // Acumula por arquivo e grava de uma vez: um `append` por linha
+        // reescreveria a fila inteira a cada linha, e um turno em segundo plano
+        // traz milhares delas.
+        const batch: OutboxEvent[] = [];
         for (const line of text.split('\n')) {
           const trimmed = line.trim();
           if (trimmed === '') continue;
@@ -106,10 +110,10 @@ export function createTelemetryInboxDrain(deps: TelemetryInboxDrainDeps): Teleme
             continue;
           }
 
-          await outbox.append(event);
+          batch.push(event);
           known.add(event.eventId);
-          drained += 1;
         }
+        drained += await outbox.appendMany(batch);
 
         // Só depois de todas as linhas dele estarem na fila. Apagar antes
         // perderia o que a gravação não tivesse alcançado, e estas linhas já

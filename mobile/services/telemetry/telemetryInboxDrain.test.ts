@@ -95,10 +95,10 @@ describe('dreno do arquivo durável', () => {
     // linhas já foram confirmadas ao relógio: ninguém mais as tem.
     const outbox = createTelemetryOutbox(memoryStorage());
     const ordem: string[] = [];
-    const original = outbox.append.bind(outbox);
-    jest.spyOn(outbox, 'append').mockImplementation(async (e) => {
-      ordem.push(`append:${e.sequence}`);
-      return original(e);
+    const original = outbox.appendMany.bind(outbox);
+    jest.spyOn(outbox, 'appendMany').mockImplementation(async (events) => {
+      ordem.push(`appendMany:${events.map((e) => e.sequence).join(',')}`);
+      return original(events);
     });
     const { files, apagados } = memoryFiles({
       'file:///inbox.0.ndjson': [linha(evento(0)), linha(evento(1))].join('\n') + '\n',
@@ -117,7 +117,7 @@ describe('dreno do arquivo durável', () => {
     });
 
     await drain.run();
-    expect(ordem).toEqual(['append:0', 'append:1', 'remove:file:///inbox.0.ndjson']);
+    expect(ordem).toEqual(['appendMany:0,1', 'remove:file:///inbox.0.ndjson']);
     expect(apagados).toEqual(['file:///inbox.0.ndjson']);
   });
 

@@ -100,6 +100,14 @@ export interface TelemetryOutbox {
    */
   append(event: OutboxEvent): Promise<void>;
   /**
+   * Muitos de uma vez, com UMA leitura e UMA escrita do arquivo. É o que o
+   * dreno do arquivo durável usa: depois de um turno em segundo plano ele traz
+   * milhares de eventos, e um `append` por evento reescreveria a fila inteira
+   * a cada um. Evento fora do contrato é pulado com aviso, como em `append`.
+   * Devolve quantos entraram.
+   */
+  appendMany(events: readonly OutboxEvent[]): Promise<number>;
+  /**
    * Ids desconhecidos são ignorados; sem mudança, não escreve. Quando o último
    * evento de uma sessão esquecida sai, o contador dela sai junto.
    */
@@ -283,6 +291,26 @@ export function createTelemetryOutbox(storage: OutboxStorage): TelemetryOutbox {
         const state = await read();
         state.events.push(event);
         await write(state);
+      }),
+
+    appendMany: (events) =>
+      serialized(async () => {
+        const accepted: OutboxEvent[] = [];
+        for (const event of events) {
+          const problem = outboxEventProblem(event);
+          if (problem !== null) {
+            console.warn(
+              `[telemetryOutbox] amostra recusada, ${problem} (evento ${String(event?.eventId)})`,
+            );
+            continue;
+          }
+          accepted.push(event);
+        }
+        if (accepted.length === 0) return 0;
+        const state = await read();
+        state.events.push(...accepted);
+        await write(state);
+        return accepted.length;
       }),
 
     remove: (eventIds) =>

@@ -3,6 +3,21 @@ import HealthKit
 
 /// Dicionario de status entregue ao JavaScript. Fica fora da classe gated por
 /// disponibilidade para o modulo conseguir responder em iOS anterior ao 17.
+/// So o suficiente para a tela do iPhone continuar mostrando o batimento no
+/// formato novo. Sem isto, com o relogio atualizado, a ultima leitura nunca
+/// mudaria e a tela diria "aguardando" enquanto a fila drena normalmente. Todo
+/// campo alem destes fica ignorado pelo decodificador.
+struct TailHeartRate: Decodable {
+  struct Value: Decodable {
+    let value: Double
+  }
+  struct Measurements: Decodable {
+    let heartRate: Value?
+  }
+  let eventTime: String
+  let measurements: Measurements
+}
+
 enum WatchControlStatusPayload {
   static func make(
     session: String,
@@ -50,10 +65,8 @@ struct MirroredPayload: Decodable {
   let measuredAt: String
 }
 
-/// Cabecalho da remessa. E a UNICA coisa que o iPhone interpreta do que o
-/// relogio manda: as linhas seguintes sao copiadas para o arquivo sem serem
-/// lidas. Menos interpretacao aqui e menos codigo Swift que so uma build do
-/// EAS consegue verificar.
+/// Cabecalho da remessa. Junto com `TailHeartRate`, e o que o iPhone interpreta
+/// do que o relogio manda; o resto vai para o arquivo sem ser lido.
 struct EnvelopeHeader: Decodable {
   let v: Int
   let batch: Int
@@ -274,7 +287,30 @@ final class MirroredWorkoutReceiver: NSObject {
     // relogio apagar da fila dele algo que ainda podia se perder aqui.
     guard TelemetryInbox.shared.append(lines: eventLines) else { return }
     lastAcknowledged = (header.session, header.batch, fingerprint)
+    // Depois de gravado, e nunca antes: o que a tela mostra e o que esta no
+    // disco.
+    publishLatestHeartRate(from: eventLines)
     acknowledge(batch: header.batch, session: header.session, on: workoutSession)
+  }
+
+  /// A leitura mais recente de batimento da remessa, da ultima linha para a
+  /// primeira. Uma remessa pode nao ter nenhuma (so passos, so bateria), e
+  /// nesse caso a ultima leitura conhecida fica como esta.
+  private func publishLatestHeartRate(from lines: [String]) {
+    let decoder = JSONDecoder()
+    for line in lines.reversed() {
+      guard
+        let data = line.data(using: .utf8),
+        let tail = try? decoder.decode(TailHeartRate.self, from: data),
+        let bpm = tail.measurements.heartRate?.value,
+        bpm.isFinite,
+        bpm > 0
+      else { continue }
+      let sample = Sample(bpm: bpm, measuredAt: tail.eventTime)
+      locked { _lastSample = sample }
+      onSample?(sample)
+      return
+    }
   }
 
   /// A sessao vem do delegate, e nao do campo `session`, que e zerado quando a

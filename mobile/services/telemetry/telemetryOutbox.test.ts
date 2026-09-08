@@ -466,3 +466,33 @@ describe('as cinco medições do contrato', () => {
     expect(await outbox.pending()).toEqual([]);
   });
 });
+
+describe('appendMany', () => {
+  // O dreno do arquivo durável traz milhares de eventos de uma vez depois de um
+  // turno em segundo plano. Um append por evento reescreveria o arquivo da
+  // fila a cada um: quadrático. Muitos de uma vez é uma leitura e uma escrita.
+  it('grava vários eventos com uma única escrita', async () => {
+    const { storage, write } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    await outbox.appendMany([evento('e1', SESSAO_A, 0), evento('e2', SESSAO_A, 1), evento('e3', SESSAO_A, 2)]);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(labels(await outbox.pending())).toEqual(['e1', 'e2', 'e3']);
+  });
+
+  it('pula os eventos fora do contrato e grava os demais', async () => {
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    const ruim = { ...evento('e2', SESSAO_A, 1), origin: 'DEMO' as 'REAL' };
+    const gravados = await outbox.appendMany([evento('e1', SESSAO_A, 0), ruim, evento('e3', SESSAO_A, 2)]);
+    expect(gravados).toBe(2);
+    expect(labels(await outbox.pending())).toEqual(['e1', 'e3']);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('com lista vazia não escreve', async () => {
+    const { storage, write } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    expect(await outbox.appendMany([])).toBe(0);
+    expect(write).not.toHaveBeenCalled();
+  });
+});
