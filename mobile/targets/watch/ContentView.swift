@@ -43,15 +43,34 @@ struct ContentView: View {
           reading("Bateria", batteryLabel, detail: nil)
         }
 
-        Text(collector.mirroring ? "Espelhando para o iPhone" : "Sem espelhamento")
-          .font(.caption2)
-          .foregroundStyle(collector.mirroring ? Color.green : Color.secondary)
+        // Segundo Group pelo mesmo motivo do primeiro: o ViewBuilder aceita 10
+        // filhos, e estas tres soltas estourariam de novo.
+        Group {
+          reading("Na fila", "\(collector.pendingCount)", detail: nil)
+          reading("Descartados", "\(collector.discarded)", detail: nil)
+          reading("Última remessa", remessaLabel, detail: nil)
+        }
 
-        if let error = collector.lastError {
-          Text(error)
+        // Terceiro Group: com estas tres soltas o VStack chegaria a 10 filhos,
+        // o limite exato do ViewBuilder, sem folga para a proxima linha.
+        Group {
+          Text(collector.mirroring ? "Espelhando para o iPhone" : "Sem espelhamento")
             .font(.caption2)
-            .foregroundStyle(.red)
-            .multilineTextAlignment(.center)
+            .foregroundStyle(collector.mirroring ? Color.green : Color.secondary)
+
+          if collector.resumed {
+            Text("Sessão retomada: totais recomeçaram")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+              .multilineTextAlignment(.center)
+          }
+
+          if let error = collector.lastError {
+            Text(error)
+              .font(.caption2)
+              .foregroundStyle(.red)
+              .multilineTextAlignment(.center)
+          }
         }
 
         if collector.isRunning {
@@ -91,6 +110,12 @@ struct ContentView: View {
     guard collector.motionAvailable else { return "sem acelerômetro" }
     guard let perMinute = collector.motionPerMinute else { return "aguardando" }
     return String(format: "%.0f/min", perMinute)
+  }
+
+  /// Sem remessa confirmada ainda e um estado legitimo no comeco da sessao.
+  private var remessaLabel: String {
+    guard let batch = collector.lastAcknowledgedBatch else { return "nenhuma" }
+    return "#\(batch)"
   }
 
   private var batteryLabel: String {
