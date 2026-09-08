@@ -359,3 +359,110 @@ describe('telemetryOutbox, arquivo corrompido', () => {
     expect(labels(await createTelemetryOutbox(storage).pending())).toEqual(['e1']);
   });
 });
+
+describe('as cinco medições do contrato', () => {
+  // O relógio passou a mandar passos, energia, movimento e bateria além do
+  // batimento. A fila é a mesma; o que muda é o que ela aceita guardar.
+  const completo = (): OutboxEvent => ({
+    ...evento('e1'),
+    measurements: {
+      heartRate: { value: 88, unit: 'bpm', source: 'APPLE_WATCH' },
+      stepDelta: { value: 12, unit: 'steps', source: 'APPLE_WATCH' },
+      activeEnergyKcal: { value: 0.8, unit: 'kcal', source: 'APPLE_WATCH' },
+      motionCount: { value: 3, unit: 'count', source: 'APPLE_WATCH' },
+      battery: { value: 76, unit: '%', source: 'APPLE_WATCH' },
+    },
+  });
+
+  it('guarda e devolve um evento com as cinco medições, sem alterar nenhuma', async () => {
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    await outbox.append(completo());
+    expect(await outbox.pending()).toEqual([completo()]);
+  });
+
+  it('continua aceitando evento só com batimento, sem migração de arquivo', async () => {
+    // Os eventos já gravados por versões anteriores são subconjunto do novo
+    // formato: se isto falhar, a atualização do app perde a fila do funcionário.
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    await outbox.append(evento('e1'));
+    expect(await outbox.pending()).toEqual([evento('e1')]);
+  });
+
+  it('aceita evento sem batimento quando há outra medição', async () => {
+    // Nem todo retorno do HealthKit traz batimento: um evento pode ser só
+    // passos, ou só bateria. Exigir batimento descartaria leitura real.
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    const soPassos: OutboxEvent = {
+      ...evento('e1'),
+      measurements: { stepDelta: { value: 5, unit: 'steps', source: 'APPLE_WATCH' } },
+    };
+    await outbox.append(soPassos);
+    expect(await outbox.pending()).toEqual([soPassos]);
+  });
+
+  it('recusa evento sem medição nenhuma', async () => {
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    await outbox.append({ ...evento('e1'), measurements: {} });
+    expect(await outbox.pending()).toEqual([]);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('recusa variação negativa de passos', async () => {
+    // O backend recusa, e um 400 descarta o lote inteiro: a amostra ruim é
+    // barrada na porta para as boas não pagarem por ela.
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    await outbox.append({
+      ...evento('e1'),
+      measurements: {
+        heartRate: { value: 72, unit: 'bpm', source: 'APPLE_WATCH' },
+        stepDelta: { value: -3, unit: 'steps', source: 'APPLE_WATCH' },
+      },
+    });
+    expect(await outbox.pending()).toEqual([]);
+  });
+
+  it('recusa passos fracionários', async () => {
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    await outbox.append({
+      ...evento('e1'),
+      measurements: {
+        heartRate: { value: 72, unit: 'bpm', source: 'APPLE_WATCH' },
+        stepDelta: { value: 2.5, unit: 'steps', source: 'APPLE_WATCH' },
+      },
+    });
+    expect(await outbox.pending()).toEqual([]);
+  });
+
+  it('recusa unidade trocada', async () => {
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    await outbox.append({
+      ...evento('e1'),
+      measurements: {
+        heartRate: { value: 72, unit: 'bpm', source: 'APPLE_WATCH' },
+        activeEnergyKcal: { value: 1, unit: 'bpm' as 'kcal', source: 'APPLE_WATCH' },
+      },
+    });
+    expect(await outbox.pending()).toEqual([]);
+  });
+
+  it('recusa medição que não existe no contrato', async () => {
+    // Chave desconhecida vira 400 no lote inteiro, então não pode entrar.
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    await outbox.append({
+      ...evento('e1'),
+      measurements: {
+        heartRate: { value: 72, unit: 'bpm', source: 'APPLE_WATCH' },
+        temperatura: { value: 36.5, unit: 'C', source: 'APPLE_WATCH' },
+      } as OutboxEvent['measurements'],
+    });
+    expect(await outbox.pending()).toEqual([]);
+  });
+});
