@@ -4,9 +4,12 @@ import HealthKit
 import WatchKit
 
 /// Coletor da sessao de monitoramento. Mantem uma HKWorkoutSession espelhada
-/// para o iPhone, le batimento, passos, energia, movimento e bateria, e mostra
-/// tudo na tela do relogio. Build 1 da Task 9: o espelhamento continua so com
-/// batimento, no formato de hoje; a fila e a remessa vem na build 2.
+/// para o iPhone, le batimento, passos, energia, movimento e bateria, numera
+/// cada leitura, guarda na fila e espelha em remessas confirmadas.
+///
+/// A ordem de tres passos aparece em todo lugar aqui e nao pode inverter:
+/// ESPIAR o que sairia, GRAVAR na fila, e so entao CONFIRMAR os contadores.
+/// Confirmar antes de gravar perde a leitura quando a gravacao falha.
 @MainActor
 final class WorkoutCollector: NSObject, ObservableObject {
   enum State: String {
@@ -27,37 +30,47 @@ final class WorkoutCollector: NSObject, ObservableObject {
   /// Passos e energia da sessao como SOMA DAS VARIACOES emitidas, e nao o
   /// acumulado do HealthKit. Devem bater com o app Fitness no fim da sessao;
   /// divergencia e defeito do rastreador, e e assim que ele e testado sem Mac.
+  /// Numa sessao retomada eles recomecam do zero, e a tela avisa.
   @Published private(set) var steps = 0
   @Published private(set) var activeEnergyKcal = 0.0
   @Published private(set) var lastStepVariation: Int?
   @Published private(set) var lastEnergyVariation: Double?
   /// Picos por minuto do ultimo intervalo, so para a tela. O que vai no evento
-  /// (build 2) e a contagem desde o evento anterior, nunca esta taxa.
+  /// e a contagem desde o evento anterior, nunca esta taxa.
   @Published private(set) var motionPerMinute: Double?
   @Published private(set) var motionAvailable = false
   /// Ausencia e nil, nunca zero.
   @Published private(set) var batteryPercent: Double?
   @Published private(set) var mirroring = false
   @Published private(set) var lastError: String?
+  /// Estado da fila, para a tela do piloto.
+  @Published private(set) var pendingCount = 0
+  @Published private(set) var discarded = 0
+  @Published private(set) var lastAcknowledgedBatch: Int?
+  /// Sessao retomada depois de o sistema encerrar o app do relogio. A fila e a
+  /// sequencia continuam; os totais da tela recomecam.
+  @Published private(set) var resumed = false
 
   private let healthStore = HKHealthStore()
   private var session: HKWorkoutSession?
   private var builder: HKLiveWorkoutBuilder?
-  private let encoder = JSONEncoder()
   private let motion = MotionCounter()
+  private let outbox = WatchOutbox()
+  private var transport: MirrorTransport?
   private var stepTracker = VariationTracker()
   private var energyTracker = VariationTracker()
+  private var stepsAccumulated = 0.0
   private var lastMotionDrainAt: Date?
   private var batteryTimer: Timer?
-  /// Acumulado exato dos passos, em Double. `steps` e o arredondamento dele.
-  /// Arredondar cada variacao isolada perderia a fracao de cada uma e a soma
-  /// dos inteiros deixaria de bater com o acumulado do HealthKit, que e
-  /// justamente a identidade usada para validar o rastreador sem Mac.
-  private var stepsAccumulated = 0.0
+  /// Bateria entra no proximo evento, e nao num evento so dela: uma leitura a
+  /// cada 3 minutos nao justifica um evento proprio.
+  private var batteryToSend: Double?
 
   var isRunning: Bool {
     state == .starting || state == .running
   }
+
+  // MARK: - Ciclo de vida
 
   /// `configuration` chega preenchida quando o iPhone abriu a sessao; nesse caso
   /// e usada como veio, em vez de recriada aqui, para nao divergir do que foi
@@ -94,7 +107,27 @@ final class WorkoutCollector: NSObject, ObservableObject {
         // de leitura ja e tratada com honestidade rio abaixo (ADR-0004). Seguir
         // e melhor que abortar afirmando uma negacao que nao foi observada.
         _ = granted
+        // A retomada pode ter chegado enquanto a folha do sistema estava
+        // aberta. A guarda la em cima nao cobre isto: durante a autorizacao o
+        // estado e `.requestingAuthorization`, que nao conta como rodando.
+        // Quem ja tem sessao ganha; criar outra vazaria a primeira e, pior,
+        // abriria a fila com identificador novo, apagando o que nao foi enviado.
+        guard self.session == nil, !self.isRunning else { return }
         self.beginSession(with: configuration ?? Self.monitoringConfiguration())
+      }
+    }
+  }
+
+  /// Retomada. O sistema pode encerrar o app do relogio com a sessao ainda
+  /// ativa; nesse caso o HealthKit devolve a MESMA sessao, e o identificador
+  /// dela esta no estado da fila. Sem isto, cada morte de processo abriria
+  /// sessao nova no backend e quebraria a cadeia de esforco e desgaste.
+  func resumeIfPossible() {
+    guard !isRunning, HKHealthStore.isHealthDataAvailable() else { return }
+    healthStore.recoverActiveWorkoutSession { [weak self] recovered, _ in
+      Task { @MainActor in
+        guard let self, let recovered, !self.isRunning else { return }
+        self.attach(recovered)
       }
     }
   }
@@ -153,27 +186,62 @@ final class WorkoutCollector: NSObject, ObservableObject {
           }
         }
       }
-      startSensors(at: startDate)
+      startSensors(at: startDate, sessionId: UUID().uuidString.lowercased(), resuming: false)
     } catch {
       fail(error.localizedDescription)
     }
   }
 
-  /// Sessao nova, bases novas: a variacao e presa a sessao.
-  private func startSensors(at startDate: Date) {
-    stepTracker = VariationTracker()
-    energyTracker = VariationTracker()
-    // Sessao nova nao herda leitura da anterior: mostrar o batimento da sessao
-    // passada ate o primeiro retorno do HealthKit seria dado velho sem rotulo.
-    heartRate = nil
-    heartRateAt = nil
+  private func attach(_ recovered: HKWorkoutSession) {
+    // O outro lado da mesma corrida: a ativacao pelo iPhone pode ter chegado
+    // primeiro e ja estar com sessao.
+    guard session == nil else { return }
+    let builder = recovered.associatedWorkoutBuilder()
+    recovered.delegate = self
+    builder.delegate = self
+    session = recovered
+    self.builder = builder
+    state = recovered.state == .running ? .running : .starting
+    mirroring = true
+    // Sem identificador gravado nao ha o que retomar: a fila comeca limpa, e
+    // inventar um identificador novo para uma sessao antiga seria pior.
+    let sessionId = outbox.storedSessionId ?? UUID().uuidString.lowercased()
+    startSensors(at: Date(), sessionId: sessionId, resuming: outbox.storedSessionId != nil)
+  }
+
+  /// Sessao nova, bases novas. Sessao retomada, bases vindas da fila.
+  private func startSensors(at startDate: Date, sessionId: String, resuming: Bool) {
+    do {
+      try outbox.open(sessionId: sessionId)
+    } catch {
+      lastError = "Fila: \(error.localizedDescription)"
+    }
+    resumed = resuming
+    stepTracker = VariationTracker(base: resuming ? outbox.state.stepBase : 0)
+    energyTracker = VariationTracker(base: resuming ? outbox.state.energyBase : 0)
+    // Totais da tela nao sobrevivem a retomada: eles sao a soma das variacoes
+    // desta execucao, e a comparacao com o app Fitness so vale numa sessao que
+    // nao foi interrompida. A tela diz quando foi retomada.
     steps = 0
     stepsAccumulated = 0
     activeEnergyKcal = 0
+    heartRate = nil
+    heartRateAt = nil
     lastStepVariation = nil
     lastEnergyVariation = nil
     motionPerMinute = nil
     lastMotionDrainAt = startDate
+
+    transport = MirrorTransport(outbox: outbox) { [weak self] payload, completion in
+      guard let session = self?.session else {
+        completion(false)
+        return
+      }
+      session.sendToRemoteWorkoutSession(data: payload) { accepted, _ in
+        completion(accepted)
+      }
+    }
+    refreshQueueCounters()
 
     motion.start()
     motionAvailable = motion.available
@@ -185,6 +253,8 @@ final class WorkoutCollector: NSObject, ObservableObject {
         self?.readBattery()
       }
     }
+    // Um acumulo pode ter sobrado da execucao anterior.
+    transport?.pump()
   }
 
   private func stopSensors() {
@@ -192,6 +262,7 @@ final class WorkoutCollector: NSObject, ObservableObject {
     motionAvailable = false
     batteryTimer?.invalidate()
     batteryTimer = nil
+    transport?.stop()
   }
 
   private func readBattery() {
@@ -199,45 +270,115 @@ final class WorkoutCollector: NSObject, ObservableObject {
     device.isBatteryMonitoringEnabled = true
     let level = device.batteryLevel
     // -1 e "desconhecido". Ausencia nunca vira zero.
-    batteryPercent = level < 0 ? nil : Double(level) * 100
+    guard level >= 0 else { return }
+    let percent = Double(level) * 100
+    batteryPercent = percent
+    batteryToSend = percent
   }
 
-  /// Um retorno do builder, ja no ator principal. Cada medicao presente vira
-  /// leitura; movimento e drenado em TODO retorno enquanto o acelerometro
-  /// entrega, porque o backend divide a contagem pelo intervalo desde o evento
-  /// anterior, qualquer evento.
+  // MARK: - Coleta
+
+  /// Um retorno do builder, ja no ator principal. Espia todas as variacoes,
+  /// grava um evento com o que houver, e so entao confirma os contadores.
   private func collect(_ reading: BuilderReading) {
-    if let bpm = reading.bpm, let bpmAt = reading.bpmAt {
-      heartRate = bpm
-      heartRateAt = bpmAt
-      mirror(bpm: bpm, at: bpmAt)
+    var measurements = TelemetryMeasurements()
+
+    if let bpm = reading.bpm {
+      measurements.heartRate = .heartRate(bpm: bpm)
     }
+
+    // Passos: o inteiro sai da diferenca entre arredondamentos do acumulado,
+    // e nao do arredondamento da variacao, para a soma dos inteiros nunca
+    // divergir do total do HealthKit.
+    var nextStepsAccumulated = stepsAccumulated
+    var stepWhole = 0
     if let cumulative = reading.stepsCumulative,
-      let variation = stepTracker.observe(cumulative: cumulative)
+      let variation = stepTracker.peek(cumulative: cumulative)
     {
-      stepsAccumulated += variation
-      // O inteiro sai da diferenca entre os arredondamentos, nao do
-      // arredondamento da variacao: assim `steps` acompanha o acumulado.
-      let whole = Int(stepsAccumulated.rounded()) - steps
-      lastStepVariation = whole
-      steps += whole
+      nextStepsAccumulated = stepsAccumulated + variation
+      stepWhole = Int(nextStepsAccumulated.rounded()) - steps
+      if stepWhole > 0 {
+        measurements.stepDelta = .steps(stepWhole)
+      }
     }
+
+    var energyVariation: Double?
     if let cumulative = reading.energyCumulative,
-      let variation = energyTracker.observe(cumulative: cumulative)
+      let variation = energyTracker.peek(cumulative: cumulative)
     {
-      lastEnergyVariation = variation
-      activeEnergyKcal += variation
+      energyVariation = variation
+      measurements.activeEnergyKcal = .energy(kcal: variation)
     }
-    // O intervalo e conferido ANTES de drenar: drenar e descobrir que o
-    // intervalo nao serve jogaria os picos fora. Sem intervalo util, eles
-    // ficam no contador e entram na proxima leitura.
+
+    var peaks = 0
+    var motionMinutes: Double?
     if motion.available, let since = lastMotionDrainAt {
       let minutes = reading.at.timeIntervalSince(since) / 60
       if minutes > 0 {
-        motionPerMinute = Double(motion.drain()) / minutes
-        lastMotionDrainAt = reading.at
+        peaks = motion.peekCount()
+        motionMinutes = minutes
+        // Zero picos num intervalo e CONTAGEM, nao ausencia: o backend divide
+        // a contagem pelo intervalo desde o evento anterior, e omitir aqui
+        // faria parado virar buraco em vez de repouso.
+        measurements.motionCount = .motion(peaks: peaks)
       }
     }
+
+    if let percent = batteryToSend {
+      measurements.battery = .battery(percent: percent)
+    }
+
+    // Nada medido, nada a gravar. Os rastreadores nao avancam, e a variacao
+    // reaparece inteira no proximo retorno.
+    guard !measurements.isEmpty else { return }
+
+    do {
+      try outbox.append(
+        measurements: measurements,
+        at: reading.at,
+        stepBase: reading.stepsCumulative ?? stepTracker.base,
+        energyBase: reading.energyCumulative ?? energyTracker.base
+      )
+    } catch {
+      lastError = "Fila: \(error.localizedDescription)"
+      return
+    }
+
+    // Gravado. So agora os contadores andam.
+    if let bpm = reading.bpm, let bpmAt = reading.bpmAt {
+      heartRate = bpm
+      heartRateAt = bpmAt
+    }
+    if let cumulative = reading.stepsCumulative {
+      stepTracker.commit(cumulative: cumulative)
+      stepsAccumulated = nextStepsAccumulated
+      if stepWhole > 0 {
+        lastStepVariation = stepWhole
+        steps += stepWhole
+      }
+    }
+    if let cumulative = reading.energyCumulative {
+      energyTracker.commit(cumulative: cumulative)
+      if let variation = energyVariation {
+        lastEnergyVariation = variation
+        activeEnergyKcal += variation
+      }
+    }
+    if let minutes = motionMinutes {
+      motion.consume(peaks)
+      motionPerMinute = Double(peaks) / minutes
+      lastMotionDrainAt = reading.at
+    }
+    batteryToSend = nil
+
+    refreshQueueCounters()
+    transport?.pump()
+  }
+
+  private func refreshQueueCounters() {
+    pendingCount = outbox.pendingCount
+    discarded = outbox.discarded
+    lastAcknowledgedBatch = transport?.lastAcknowledgedBatch
   }
 
   private func finishBuilder() {
@@ -264,23 +405,6 @@ final class WorkoutCollector: NSObject, ObservableObject {
     lastError = message
     state = .failed
   }
-
-  private func mirror(bpm: Double, at date: Date) {
-    guard let session else { return }
-    let payload = MirroredPayload(
-      type: "heartRate",
-      bpm: bpm,
-      measuredAt: ISO8601DateFormatter.swi.string(from: date)
-    )
-    guard let data = try? encoder.encode(payload) else { return }
-    session.sendToRemoteWorkoutSession(data: data) { [weak self] _, error in
-      if let error {
-        Task { @MainActor in
-          self?.lastError = "Envio: \(error.localizedDescription)"
-        }
-      }
-    }
-  }
 }
 
 /// Uma passada do builder, ja fechada em valores imutaveis. Existe para cruzar
@@ -292,14 +416,6 @@ private struct BuilderReading: Sendable {
   let stepsCumulative: Double?
   let energyCumulative: Double?
   let at: Date
-}
-
-/// Mesmo contrato decodificado por MirroredWorkoutReceiver no iPhone. Nao muda
-/// nesta build: o iPhone continua entendendo o que o relogio manda.
-struct MirroredPayload: Encodable {
-  let type: String
-  let bpm: Double?
-  let measuredAt: String
 }
 
 extension ISO8601DateFormatter {
@@ -334,6 +450,20 @@ extension WorkoutCollector: HKWorkoutSessionDelegate {
   nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
     Task { @MainActor in
       self.fail(error.localizedDescription)
+    }
+  }
+
+  /// O canal e nos dois sentidos: aqui chegam as confirmacoes do iPhone.
+  nonisolated func workoutSession(
+    _ workoutSession: HKWorkoutSession,
+    didReceiveDataFromRemoteWorkoutSession data: [Data]
+  ) {
+    let lines = data.compactMap { String(data: $0, encoding: .utf8) }
+    Task { @MainActor in
+      for line in lines {
+        self.transport?.handle(line: line)
+      }
+      self.refreshQueueCounters()
     }
   }
 }

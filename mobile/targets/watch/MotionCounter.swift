@@ -14,9 +14,9 @@ enum MotionProfile {
   static let refractory: TimeInterval = 0.25
 }
 
-/// Conta picos de aceleracao linear acima do limiar. `drain()` devolve quantos
-/// desde a ultima drenagem: e a variacao de movimento de um evento, e zero e
-/// contagem, nao ausencia. Sem acelerometro, `available` fica false e nada e
+/// Conta picos de aceleracao linear acima do limiar. `peekCount()` devolve
+/// quantos desde o ultimo consumo: e a variacao de movimento de um evento, e
+/// zero e contagem, nao ausencia. Sem acelerometro, `available` fica false e nada e
 /// inventado; cadencia de passos NAO substitui movimento.
 ///
 /// As atualizacoes chegam numa fila propria, nao na principal: 20 por segundo
@@ -66,13 +66,22 @@ final class MotionCounter: @unchecked Sendable {
     lock.unlock()
   }
 
-  /// Picos desde a ultima chamada. Zera ao devolver.
-  func drain() -> Int {
+  /// Picos acumulados, sem zerar. Espiar e consumir sao separados pelo mesmo
+  /// motivo que no rastreador de variacao: quem chama monta o evento entre os
+  /// dois, e falha ao enfileirar nao pode fazer os picos sumirem.
+  func peekCount() -> Int {
     lock.lock()
     defer { lock.unlock() }
-    let drained = count
-    count = 0
-    return drained
+    return count
+  }
+
+  /// Desconta o que ja entrou num evento gravado. Desconta, e nao zera: picos
+  /// contados entre espiar e consumir ficam para o evento seguinte.
+  func consume(_ amount: Int) {
+    guard amount > 0 else { return }
+    lock.lock()
+    defer { lock.unlock() }
+    count = max(0, count - amount)
   }
 
   /// Um pico e a subida acima do limiar, contada uma vez ate descer de novo,
