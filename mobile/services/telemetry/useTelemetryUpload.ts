@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { watchControl, type WatchControl } from '../../modules/swi-watch-control';
 import { createMirroredSessionRecorder } from './mirroredSessionRecorder';
+import {
+  createTelemetryInboxDrain,
+  type TelemetryInboxDrain,
+} from './telemetryInboxDrain';
 import {
   createFileOutboxStorage,
   createTelemetryOutbox,
@@ -30,9 +35,24 @@ import {
  */
 export const MAX_DRAIN_ROUNDS = 20;
 
+/**
+ * De quanto em quanto tempo o arquivo durável é drenado enquanto a tela está
+ * montada e o app em primeiro plano.
+ *
+ * Existe porque o formato novo NÃO acorda o JavaScript: o relógio manda a
+ * remessa, o Swift grava e confirma, e nada disso passa por aqui. O invólucro
+ * só anuncia mudança de sessão, não leitura. Sem este intervalo, o que chega
+ * com a tela aberta só apareceria na próxima montagem.
+ *
+ * Quinze segundos porque é a janela em que o painel espera novidade; rotacionar
+ * sem nada para drenar é uma listagem de diretório e mais nada.
+ */
+export const INBOX_DRAIN_INTERVAL_MS = 15_000;
+
 export interface TelemetryUploadDeps {
   outbox?: TelemetryOutbox;
   uploader?: TelemetryUploader;
+  inboxDrain?: TelemetryInboxDrain;
 }
 
 export interface TelemetryUploadState {
@@ -68,6 +88,8 @@ export function useTelemetryUpload(
     if (!pairedAtMount.current) return undefined;
     const outbox = depsRef.current.outbox ?? createTelemetryOutbox(createFileOutboxStorage());
     const uploader = depsRef.current.uploader ?? createTelemetryUploader({ outbox, control });
+    const inboxDrain =
+      depsRef.current.inboxDrain ?? createTelemetryInboxDrain({ control, outbox });
 
     let mounted = true;
     // Vira true com o 401 ou com o desmonte: nada mais sai até remontar.
@@ -92,6 +114,22 @@ export function useTelemetryUpload(
       }
       draining = true;
       try {
+        // Antes de enviar, e não depois: o que o Swift gravou com o app em
+        // segundo plano precisa entrar na fila para subir nesta mesma rodada.
+        // Uma falha aqui não segura o envio, porque o que já está na fila é
+        // durável e já foi confirmado ao relógio; perder o envio por causa do
+        // dreno seria perder duas vezes pelo mesmo problema.
+        try {
+          await inboxDrain.run();
+        } catch (error) {
+          console.warn(
+            `[useTelemetryUpload] dreno falhou: ${String(
+              (error as { message?: unknown })?.message ?? error,
+            )}`,
+          );
+        }
+        if (!mounted || halted) return;
+
         for (let round = 0; round < MAX_DRAIN_ROUNDS; round += 1) {
           const outcome = await uploader.uploadPending();
           if (!mounted || halted) return;
@@ -123,8 +161,20 @@ export function useTelemetryUpload(
     stop = recorder.start();
     void drain();
 
+    // O formato novo não anuncia leitura ao JavaScript, então o gatilho é o
+    // tempo, mais a volta ao primeiro plano, que é quando o acúmulo de segundo
+    // plano costuma estar maior.
+    const ticker = setInterval(() => {
+      void drain();
+    }, INBOX_DRAIN_INTERVAL_MS);
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void drain();
+    });
+
     return () => {
       mounted = false;
+      clearInterval(ticker);
+      subscription.remove();
       halt();
     };
   }, [control]);

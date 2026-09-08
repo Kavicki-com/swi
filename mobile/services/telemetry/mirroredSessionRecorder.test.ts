@@ -64,7 +64,9 @@ function fakeControl(initial: SwiWatchControlStatus | null = null) {
       session: 'none',
       sessionChangedAt: null,
       lastSample: null,
-      watchProtocol: 'v1',
+      // Este arquivo inteiro exercita o caminho LEGADO, que é o que o gravador
+      // atende: no formato novo a leitura chega pelo arquivo durável.
+      watchProtocol: 'legacy',
       ...status,
     });
   };
@@ -373,5 +375,59 @@ describe('mirroredSessionRecorder, parar', () => {
     await flush();
 
     expect(forget).toHaveBeenCalledWith(uid('sessA'));
+  });
+});
+
+describe('convivência com o formato novo do relógio', () => {
+  it('não grava nada quando o relógio fala o formato novo', async () => {
+    // No formato novo a leitura chega pelo arquivo durável, com identificador e
+    // sequência vindos do relógio. Se este gravador também agisse, ele geraria
+    // OUTRO identificador para a MESMA leitura, e o backend, que só reconhece
+    // repetição pelo identificador do evento, gravaria as duas.
+    const { control, emit } = fakeControl();
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const onEnqueued = jest.fn();
+    // Identificadores disponíveis de propósito: se o gravador agisse, ele
+    // conseguiria gravar, e o teste falharia. Sem isto o gerador lançaria e o
+    // teste passaria pelo motivo errado.
+    createMirroredSessionRecorder({
+      outbox,
+      control,
+      onEnqueued,
+      uuid: ids('sessA', 'ev1'),
+    }).start();
+
+    emit({ session: 'running', watchProtocol: 'v1' });
+    emit({
+      session: 'running',
+      watchProtocol: 'v1',
+      lastSample: { bpm: 72, measuredAt: T1 },
+    });
+    await flush();
+
+    expect(onEnqueued).not.toHaveBeenCalled();
+    expect(await outbox.pending()).toEqual([]);
+  });
+
+  it('continua gravando quando o relógio ainda é o antigo', async () => {
+    // Janela real: o app do relógio se instala no ritmo do sistema, então há um
+    // período de iPhone novo com relógio velho. Perder leitura nesse período
+    // seria pior que o identificador vir do telefone.
+    const { control, emit } = fakeControl();
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const onEnqueued = jest.fn();
+    createMirroredSessionRecorder({
+      outbox,
+      control,
+      onEnqueued,
+      uuid: ids('sessA', 'ev1'),
+    }).start();
+
+    emit(running());
+    emit(running({ bpm: 72, measuredAt: T1 }));
+    await flush();
+
+    expect(onEnqueued).toHaveBeenCalledTimes(1);
+    expect(await outbox.pending()).toHaveLength(1);
   });
 });
