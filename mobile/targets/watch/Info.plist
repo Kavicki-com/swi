@@ -8,6 +8,8 @@
 	<array>
 		<string>workout-processing</string>
 	</array>
+	<key>NSMotionUsageDescription</key>
+	<string>O SWI conta o movimento do braço durante o monitoramento para estimar o esforço.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>O SWI lê frequência cardíaca, energia ativa e passos do relógio para o monitoramento de segurança em campo.</string>
 	<key>NSHealthUpdateUsageDescription</key>

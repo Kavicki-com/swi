@@ -1,0 +1,85 @@
+# Compila (só análise semântica, sem binário) o Swift do Apple Watch e os
+# arquivos Swift do módulo do iPhone que não dependem do Expo.
+#
+# Existe porque não há Mac na máquina de desenvolvimento e cada build do EAS
+# custa cota. Uma build do EAS produz um .ipa; para saber se o Swift compila
+# basta o compilador contra o SDK, e isso leva um ou dois minutos num runner
+# macOS, sem npm, sem prebuild e sem pods: o alvo do relógio só usa frameworks
+# do sistema (confirmado no log da build anterior do EAS, que nao tem nenhuma
+# linha de Pods para o alvo SWIWatch).
+#
+# Os flags espelham os da build do EAS naquele log: SDK do Xcode 26,
+# `-swift-version 5`, alvos arm64 e arm64_32 em watchOS 10.0, sem
+# concorrência estrita. Mudar o Xcode aqui sem mudar no EAS dá confiança falsa.
+#
+# O que este job NÃO pega: erro de link, Info.plist, entitlements, build
+# settings, e os dois arquivos que importam ExpoModulesCore (o módulo e o
+# subscriber), que só compilam depois do pod install. Esses ficam com revisão
+# de leitura.
+#
+# Workflow separado do ci.yml de propósito: filtro de caminho é por workflow,
+# e no ci.yml ele filtraria os seis jobs que já existem.
+
+name: Swift do relógio
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'mobile/targets/watch/**'
+      - 'mobile/modules/swi-watch-control/ios/**'
+      - '.github/workflows/watch-swift.yml'
+
+permissions:
+  contents: read
+
+# Um push em cima do outro cancela o anterior: minutos de macOS contam 10x.
+concurrency:
+  group: watch-swift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: typecheck (watchOS e iOS)
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Selecionar o Xcode 26
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -z "$XCODE" ]; then
+            echo "::error::Nenhum Xcode 26 neste runner. Disponíveis:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk watchos --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Relógio (arm64 e arm64_32, watchOS 10.0)
+        run: |
+          set -euo pipefail
+          SDK=$(xcrun --sdk watchos --show-sdk-path)
+          for TARGET in arm64-apple-watchos10.0 arm64_32-apple-watchos10.0; do
+            echo "== $TARGET"
+            xcrun swiftc -typecheck -parse-as-library -swift-version 5 \
+              -sdk "$SDK" -target "$TARGET" \
+              mobile/targets/watch/*.swift
+          done
+
+      - name: iPhone (só os arquivos sem ExpoModulesCore, iOS 15.1)
+        run: |
+          set -euo pipefail
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          # Lista explícita, não glob: os dois arquivos que importam
+          # ExpoModulesCore não compilam sem o pod, e um arquivo novo que
+          # dependa do Expo precisa ser deixado de fora aqui de propósito.
+          xcrun swiftc -typecheck -parse-as-library -swift-version 5 \
+            -sdk "$SDK" -target arm64-apple-ios15.1 \
+            mobile/modules/swi-watch-control/ios/DeviceCredentialStore.swift \
+            mobile/modules/swi-watch-control/ios/MirroredWorkoutReceiver.swift \
+            mobile/modules/swi-watch-control/ios/TelemetryHttp.swift

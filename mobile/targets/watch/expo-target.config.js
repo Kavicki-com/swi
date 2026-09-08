@@ -18,7 +18,7 @@ module.exports = {
   // Caminho RELATIVO A ESTA PASTA, nao a raiz do mobile. Com caminho errado o
   // plugin so avisa ("Skipping icon generation") e o prebuild passa.
   icon: '../../assets/images/icon.png',
-  frameworks: ['SwiftUI', 'HealthKit'],
+  frameworks: ['SwiftUI', 'HealthKit', 'CoreMotion'],
   entitlements: {
     'com.apple.developer.healthkit': true,
   },

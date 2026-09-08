@@ -1,13 +1,15 @@
+import Foundation
 import SwiftUI
 
-/// Superficie minima do gate tecnico: iniciar/parar a sessao, ver o BPM real
-/// e saber se o espelhamento para o iPhone esta ativo.
+/// Superficie de piloto: estado da sessao, as leituras, e ativar/encerrar.
+/// Quem faz o teste em hardware esta com o relogio no pulso, entao os numeros
+/// de verificacao moram aqui. Sai quando o piloto sair.
 struct ContentView: View {
   @EnvironmentObject private var collector: WorkoutCollector
 
   var body: some View {
     ScrollView {
-      VStack(spacing: 8) {
+      VStack(spacing: 6) {
         Text("SWI")
           .font(.headline)
 
@@ -17,12 +19,28 @@ struct ContentView: View {
 
         if let bpm = collector.heartRate {
           Text("\(Int(bpm.rounded()))")
-            .font(.system(size: 40, weight: .bold, design: .rounded))
+            .font(.system(size: 36, weight: .bold, design: .rounded))
           Text("bpm")
-            .font(.caption)
+            .font(.caption2)
         } else {
-          Text("Sem BPM ainda")
+          Text("Sem batimento ainda")
             .font(.caption)
+        }
+
+        Divider()
+
+        // Agrupadas de proposito: o ViewBuilder do SwiftUI aceita no maximo 10
+        // filhos, e soltas elas levariam este VStack a 11. Group e transparente
+        // para o layout, entao o spacing continua valendo entre elas.
+        Group {
+          reading("Passos", "\(collector.steps)", detail: collector.lastStepVariation.map { "+\($0)" })
+          reading(
+            "Energia",
+            String(format: "%.1f kcal", collector.activeEnergyKcal),
+            detail: collector.lastEnergyVariation.map { String(format: "+%.2f", $0) }
+          )
+          reading("Movimento", motionLabel, detail: nil)
+          reading("Bateria", batteryLabel, detail: nil)
         }
 
         Text(collector.mirroring ? "Espelhando para o iPhone" : "Sem espelhamento")
@@ -37,17 +55,47 @@ struct ContentView: View {
         }
 
         if collector.isRunning {
-          Button("Parar teste", role: .destructive) {
+          Button("Encerrar monitoramento", role: .destructive) {
             collector.stop()
           }
         } else {
-          Button("Iniciar teste") {
+          Button("Ativar monitoramento") {
             collector.start()
           }
         }
       }
       .padding(.horizontal, 4)
     }
+  }
+
+  private func reading(_ label: String, _ value: String, detail: String?) -> some View {
+    HStack {
+      Text(label)
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+      Spacer()
+      if let detail {
+        Text(detail)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+      Text(value)
+        .font(.caption)
+        .monospacedDigit()
+    }
+  }
+
+  /// Ausencia e dita como ausencia. "Sem acelerometro" e um fato do aparelho;
+  /// "aguardando" e a sessao que ainda nao drenou nenhum intervalo.
+  private var motionLabel: String {
+    guard collector.motionAvailable else { return "sem acelerômetro" }
+    guard let perMinute = collector.motionPerMinute else { return "aguardando" }
+    return String(format: "%.0f/min", perMinute)
+  }
+
+  private var batteryLabel: String {
+    guard let percent = collector.batteryPercent else { return "desconhecida" }
+    return String(format: "%.0f%%", percent)
   }
 
   private var statusLabel: String {
