@@ -72,7 +72,10 @@ enum DeviceCredentialStore {
     query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
     let status = SecItemAdd(query as CFDictionary, nil)
-    guard status == errSecSuccess else {
+    // Duplicado e sucesso: duas conclusoes de pareamento simultaneas podem
+    // intercalar apagar e adicionar, e a segunda encontra o item que a
+    // primeira acabou de gravar. A credencial esta la; e isso que importa.
+    guard status == errSecSuccess || status == errSecDuplicateItem else {
       throw KeychainError(status: status)
     }
   }

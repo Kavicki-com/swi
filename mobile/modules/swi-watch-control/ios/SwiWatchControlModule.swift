@@ -55,7 +55,7 @@ public class SwiWatchControlModule: Module {
     // por URL invalida, aparelho nao pareado, falha de rede, chaveiro que
     // recusou guardar, ou resposta de pareamento sem credencial.
     AsyncFunction("request") { (url: String, method: String, body: String?, auth: [String: Any], storeCredential: Bool, promise: Promise) in
-      guard let parsedUrl = URL(string: url) else {
+      guard let parsedUrl = TelemetryHttp.parseUrl(url) else {
         promise.reject("E_URL", "URL invalida")
         return
       }

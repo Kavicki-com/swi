@@ -17,9 +17,8 @@ enum TelemetryHttp {
     let body: String
   }
 
-  /// Erro proprio para os dois casos que nao vem da URLSession: resposta sem
-  /// HTTPURLResponse e corpo que nao pode ser reescrito depois de guardar a
-  /// credencial.
+  /// Erro proprio para o unico caso que nao vem da URLSession: resposta sem
+  /// HTTPURLResponse.
   struct TelemetryHttpError: LocalizedError {
     let message: String
 
@@ -50,6 +49,23 @@ enum TelemetryHttp {
     return "E_NETWORK"
   }
 
+  /// URL(string:) aceita "localhost:3000" (esquema "localhost", sem host) e
+  /// isso so falharia la na frente como E_NETWORK. Exigir http ou https com
+  /// host faz URL errada ser E_URL, que e o que ela e.
+  static func parseUrl(_ raw: String) -> URL? {
+    guard let url = URL(string: raw) else {
+      return nil
+    }
+    let scheme = url.scheme ?? ""
+    guard scheme == "http" || scheme == "https" else {
+      return nil
+    }
+    guard let host = url.host, !host.isEmpty else {
+      return nil
+    }
+    return url
+  }
+
   /// Uma sessao so, criada uma vez. URLSession criada por chamada e nunca
   /// invalidada vaza (a sessao retem seu delegate e sua fila ate
   /// `invalidateAndCancel`), e uma sessao compartilhada reaproveita a conexao
@@ -65,6 +81,10 @@ enum TelemetryHttp {
     let configuration = URLSessionConfiguration.default
     configuration.timeoutIntervalForRequest = 20
     configuration.timeoutIntervalForResource = 20
+    // Sem cookies: um Set-Cookie do backend ou do balanceador iria junto com
+    // o Authorization na chamada seguinte, e o primitivo e burro de verdade.
+    configuration.httpCookieStorage = nil
+    configuration.httpShouldSetCookies = false
     return URLSession(configuration: configuration)
   }()
 
@@ -78,6 +98,10 @@ enum TelemetryHttp {
   ) {
     var urlRequest = URLRequest(url: url)
     urlRequest.httpMethod = method
+    // URLRequest nasce com 60 s proprios, e a documentacao e ambigua sobre
+    // qual prazo vence entre o da requisicao e o da configuracao. Os dois em
+    // 20 tiram a duvida.
+    urlRequest.timeoutInterval = 20
     if let body = body {
       urlRequest.httpBody = Data(body.utf8)
       urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -152,7 +176,10 @@ enum TelemetryHttp {
       let rewrittenData = try? JSONSerialization.data(withJSONObject: rewritten, options: []),
       let rewrittenBody = String(data: rewrittenData, encoding: .utf8)
     else {
-      return .failure(TelemetryHttpError(message: "Credencial guardada, mas a resposta nao pode ser reescrita"))
+      // A gravacao e o fato; a reescrita e cosmetica. O chaveiro ja tem a
+      // credencial, entao falhar aqui faria o JavaScript concluir que nao
+      // pareou enquanto pareou. Sobe o minimo que ele precisa saber.
+      return .success(Response(status: status, body: "{\"credential\":true}"))
     }
     return .success(Response(status: status, body: rewrittenBody))
   }
