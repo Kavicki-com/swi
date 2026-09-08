@@ -7,6 +7,7 @@ import {
   useWatchDiagnostics,
   type WatchDiagnosticsState,
 } from '../../../../services/telemetry/watchDiagnostics';
+import { useTelemetryUpload } from '../../../../services/telemetry/useTelemetryUpload';
 
 // Porta de reentrada: quem tocou "Configurar depois" no cadastro, ou negou na
 // folha do sistema, volta por aqui. Mesmo vocabulario da tela final do
@@ -21,8 +22,14 @@ jest.mock('../../../../services/telemetry/watchDiagnostics', () => ({
   activateMonitoring: jest.fn(async () => true),
 }));
 
+// A fiação do envio (Task 7) tem teste próprio; aqui só o que a tela mostra.
+jest.mock('../../../../services/telemetry/useTelemetryUpload', () => ({
+  useTelemetryUpload: jest.fn(),
+}));
+
 const mockEstado = useWatchDiagnostics as jest.MockedFunction<typeof useWatchDiagnostics>;
 const mockAtivar = activateMonitoring as jest.MockedFunction<typeof activateMonitoring>;
+const mockEnvio = useTelemetryUpload as jest.MockedFunction<typeof useTelemetryUpload>;
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -102,6 +109,7 @@ const ENCERRADO_COM_LEITURA = (): WatchDiagnosticsState => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockAtivar.mockResolvedValue(true);
+  mockEnvio.mockReturnValue({ paired: false, lastOutcome: null });
 });
 
 describe('Configurações, Monitoramento', () => {
@@ -174,5 +182,22 @@ describe('Configurações, Monitoramento', () => {
   it('sem leitura não inventa zero', async () => {
     const t = textoDe(await render(SEM_NADA));
     expect(t).not.toMatch(/\b0\s*bpm/i);
+  });
+
+  // A linha de envio ao backend. A tela de produto é da Task 11; aqui só a
+  // prova de que o caminho existe.
+  it('pareado diz que está enviando ao servidor', async () => {
+    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null });
+    expect(textoDe(await render(ATIVO()))).toContain('Enviando ao servidor');
+  });
+
+  it('sem pareamento diz que o aparelho não está pareado', async () => {
+    expect(textoDe(await render(SEM_NADA))).toContain('Aparelho não pareado');
+  });
+
+  it('sem suporte não fala de envio', async () => {
+    const t = textoDe(await render(SEM_SUPORTE));
+    expect(t).not.toContain('Enviando ao servidor');
+    expect(t).not.toContain('Aparelho não pareado');
   });
 });

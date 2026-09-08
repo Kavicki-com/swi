@@ -8,8 +8,9 @@ import {
   useWatchDiagnostics,
 } from '../../../services/telemetry/watchDiagnostics';
 import { deriveTelemetryAvailability } from '../../../services/telemetry/telemetryAvailability';
-import { telemetryCopy } from '../../../services/telemetry/telemetryCopy';
+import { telemetryCopy, telemetryUploadCopy } from '../../../services/telemetry/telemetryCopy';
 import { useNow } from '../../../services/telemetry/useNow';
+import { useTelemetryUpload } from '../../../services/telemetry/useTelemetryUpload';
 
 // Porta de reentrada do monitoramento. Quem tocou "Configurar depois" no
 // cadastro, ou negou na folha do sistema, volta por aqui. Mesmo vocabulário da
@@ -30,6 +31,9 @@ export default function WatchDiagnostics() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const estado = useWatchDiagnostics();
+  // Enquanto esta tela está montada, o batimento vai ao backend. É a tela que
+  // fica aberta durante a prova do piloto; as do primeiro uso são de passagem.
+  const envio = useTelemetryUpload();
   const [ativando, setAtivando] = useState(false);
 
   const disponibilidade = deriveTelemetryAvailability(estado, useNow());
@@ -107,6 +111,14 @@ export default function WatchDiagnostics() {
                 </Text>
               )}
             </View>
+          )}
+
+          {/* Só a prova de que o caminho até o backend existe; a tela de
+              produto é da Task 11. Sem suporte não há o que enviar. */}
+          {estado.support === 'ready' && (
+            <Text variant="body.s" color={theme.content.dark}>
+              {telemetryUploadCopy(envio.paired)}
+            </Text>
           )}
 
           {podeAtivar && (
