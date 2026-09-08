@@ -44,11 +44,20 @@ function fakeControl(overrides: Partial<WatchControl> = {}) {
     request: async () => ({ status: 200, body: '{}' }),
     hasDeviceCredential,
     clearDeviceCredential: () => undefined,
+    rotateInbox: () => [],
     ...overrides,
   };
+  // `watchProtocol` entra com o padrão do formato novo: é o que o relógio
+  // desta entrega fala, e os testes que exercitam o legado o sobrescrevem.
   const emit = (status: Partial<SwiWatchControlStatus>) => {
     if (!listener) throw new Error('ninguém assinou o controle');
-    listener({ session: 'none', sessionChangedAt: null, lastSample: null, ...status });
+    listener({
+      session: 'none',
+      sessionChangedAt: null,
+      lastSample: null,
+      watchProtocol: 'v1',
+      ...status,
+    });
   };
   return { control, emit, subscribe, unsubscribe, hasDeviceCredential };
 }
@@ -69,6 +78,7 @@ const sent = (accepted: number, remaining: number): UploadOutcome => ({
 
 const amostra = (measuredAt: string): SwiWatchControlStatus => ({
   session: 'running',
+  watchProtocol: null,
   sessionChangedAt: '2026-09-07T12:00:00.000Z',
   lastSample: { bpm: 70, measuredAt },
 });

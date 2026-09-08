@@ -48,6 +48,17 @@ public class SwiWatchControlModule: Module {
       DeviceCredentialStore.clear()
     }
 
+    // Fecha o arquivo duravel corrente, passa a escrever no proximo, e devolve
+    // as URIs dos fechados. Quem rotaciona e o Swift, e nao o JavaScript,
+    // porque o JavaScript renomeando teria uma corrida capaz de apagar um
+    // evento que ja foi confirmado ao relogio.
+    //
+    // Sincrono de proposito: e so um `contentsOfDirectory` e uma troca de
+    // indice em memoria, e o JavaScript chama isto antes de cada dreno.
+    Function("rotateInbox") { () -> [String] in
+      return TelemetryInbox.shared.rotate()
+    }
+
     // Primitivo HTTP. Dois modos de autenticacao: `device` monta o cabecalho
     // com a credencial do chaveiro, sem que ela passe pelo JavaScript;
     // `bearer` usa o token que o JavaScript ja tem por desenho. Qualquer

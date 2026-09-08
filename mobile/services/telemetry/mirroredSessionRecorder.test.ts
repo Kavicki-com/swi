@@ -56,10 +56,17 @@ function fakeControl(initial: SwiWatchControlStatus | null = null) {
     request: async () => ({ status: 200, body: '{}' }),
     hasDeviceCredential: () => true,
     clearDeviceCredential: () => undefined,
+    rotateInbox: () => [],
   };
   const emit = (status: Partial<SwiWatchControlStatus>) => {
     if (!listener) throw new Error('ninguém assinou o controle');
-    listener({ session: 'none', sessionChangedAt: null, lastSample: null, ...status });
+    listener({
+      session: 'none',
+      sessionChangedAt: null,
+      lastSample: null,
+      watchProtocol: 'v1',
+      ...status,
+    });
   };
   return { control, emit, unsubscribe, hasListener: () => listener !== null };
 }
@@ -71,6 +78,7 @@ const T3 = '2026-09-07T12:00:15.000Z';
 
 const running = (lastSample: SwiWatchControlStatus['lastSample'] = null): SwiWatchControlStatus => ({
   session: 'running',
+  watchProtocol: null,
   sessionChangedAt: T0,
   lastSample,
 });
@@ -213,6 +221,7 @@ describe('mirroredSessionRecorder, amostra', () => {
     emit({ session: 'ended', sessionChangedAt: T3, lastSample: { bpm: 72, measuredAt: T3 } });
     emit({
       session: 'ended',
+      watchProtocol: null,
       sessionChangedAt: T3,
       lastSample: { bpm: 73, measuredAt: '2026-09-07T12:00:20.000Z' },
     });

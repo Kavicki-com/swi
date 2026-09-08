@@ -66,6 +66,7 @@ function fakeControl(overrides: Partial<WatchControl> = {}) {
     request,
     hasDeviceCredential: () => true,
     clearDeviceCredential,
+    rotateInbox: () => [],
     ...overrides,
   };
   return { control, request, clearDeviceCredential };
