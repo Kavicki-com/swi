@@ -9,15 +9,13 @@ enum WatchControlStatusPayload {
     changedAt: String?,
     bpm: Double?,
     measuredAt: String?,
-    watchProtocol: String? = nil,
-    inboxPending: Int = 0
+    watchProtocol: String? = nil
   ) -> [String: Any] {
     var payload: [String: Any] = ["session": session]
     // Qual formato o relogio esta falando. Nulo enquanto nada chegou: o app do
     // relogio se instala no ritmo do sistema, entao existe uma janela real de
     // iPhone novo com relogio velho, e a tela precisa poder dizer isso.
     payload["watchProtocol"] = watchProtocol ?? NSNull()
-    payload["inboxPending"] = inboxPending
     if let changedAt {
       payload["sessionChangedAt"] = changedAt
     } else {
@@ -32,8 +30,7 @@ enum WatchControlStatusPayload {
   }
 
   static let unavailable = make(
-    session: "none", changedAt: nil, bpm: nil, measuredAt: nil,
-    watchProtocol: nil, inboxPending: 0
+    session: "none", changedAt: nil, bpm: nil, measuredAt: nil, watchProtocol: nil
   )
 }
 
@@ -84,27 +81,56 @@ final class MirroredWorkoutReceiver: NSObject {
   private let healthStore = HKHealthStore()
   private var session: HKWorkoutSession?
 
-  private(set) var sessionState: SessionState = .none
-  private(set) var sessionChangedAt: String?
-  private(set) var lastSample: Sample?
+  /// Estado lido pelo JavaScript. As escritas vem sempre da main; a leitura
+  /// vem da thread do JavaScript, pelo getStatus do modulo. Sao propriedades
+  /// comuns, e ler `String?` ou `Sample?` durante a escrita pode pegar um
+  /// ponteiro meio trocado e derrubar o app. Dai a trava.
+  private let stateLock = NSLock()
+
+  /// `NSLock.withLock` so existe do iOS 16 em diante e o alvo deste modulo e
+  /// 15.1, entao a versao propria.
+  private func locked<T>(_ body: () -> T) -> T {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    return body()
+  }
+  private var _sessionState: SessionState = .none
+  private var _sessionChangedAt: String?
+  private var _lastSample: Sample?
   /// "v1" ou "legacy", conforme o que chegou. Nulo ate a primeira mensagem.
-  private(set) var watchProtocol: String?
-  /// Ultima remessa confirmada por sessao. So em memoria: se o processo morrer,
-  /// o relogio reenvia, as linhas repetem no arquivo, e o JavaScript resolve
-  /// pelo identificador do evento. Repetir e barato; perder nao.
-  private var acknowledgedBatches: [String: Int] = [:]
+  private var _watchProtocol: String?
+
+  var sessionState: SessionState { locked { _sessionState } }
+  var sessionChangedAt: String? { locked { _sessionChangedAt } }
+  var lastSample: Sample? { locked { _lastSample } }
+  var watchProtocol: String? { locked { _watchProtocol } }
+
+  /// A ultima remessa confirmada, com uma impressao do conteudo. So existe uma
+  /// sessao espelhada por vez, entao um registro basta.
+  ///
+  /// A impressao e o que impede o pior caso: o relogio pode reiniciar no meio
+  /// da sessao e repetir um numero de remessa com conteudo DIFERENTE. Comparar
+  /// so o numero confirmaria essa remessa sem grava-la, e o relogio a apagaria
+  /// da fila dele. So em memoria: se o processo morrer, o relogio reenvia, as
+  /// linhas repetem no arquivo, e o JavaScript resolve pelo identificador do
+  /// evento. Repetir e barato; perder nao.
+  private var lastAcknowledged: (session: String, batch: Int, fingerprint: Int)?
 
   var onSessionChanged: ((SessionState, String) -> Void)?
   var onSample: ((Sample) -> Void)?
 
   var statusPayload: [String: Any] {
-    WatchControlStatusPayload.make(
-      session: sessionState.rawValue,
-      changedAt: sessionChangedAt,
-      bpm: lastSample?.bpm,
-      measuredAt: lastSample?.measuredAt,
-      watchProtocol: watchProtocol,
-      inboxPending: TelemetryInbox.shared.pendingFileCount
+    // Uma leitura so, coerente entre si: quatro leituras separadas poderiam
+    // pegar metade de um estado e metade do seguinte.
+    let (state, changedAt, sample, watchProtocol) = locked {
+      (_sessionState, _sessionChangedAt, _lastSample, _watchProtocol)
+    }
+    return WatchControlStatusPayload.make(
+      session: state.rawValue,
+      changedAt: changedAt,
+      bpm: sample?.bpm,
+      measuredAt: sample?.measuredAt,
+      watchProtocol: watchProtocol
     )
   }
 
@@ -185,51 +211,77 @@ final class MirroredWorkoutReceiver: NSObject {
 
   private func update(state: SessionState) {
     let at = ISO8601DateFormatter.swi.string(from: Date())
-    sessionState = state
-    sessionChangedAt = at
+    locked {
+      _sessionState = state
+      _sessionChangedAt = at
+    }
+    // Fora da trava: o ouvinte pode ler o status, e ler de dentro travaria.
     onSessionChanged?(state, at)
   }
 
   /// Uma mensagem do relogio. A primeira linha decide o caminho: `batch`
   /// presente e remessa, `type` presente e o formato legado.
-  private func receive(_ items: [Data]) {
+  private func receive(_ items: [Data], from workoutSession: HKWorkoutSession) {
     for item in items {
       guard let text = String(data: item, encoding: .utf8) else { continue }
-      var lines = text.components(separatedBy: "
-")
-      guard let first = lines.first, !first.isEmpty else { continue }
+      // Filtrar ANTES de escolher a primeira: uma mensagem que comece com
+      // quebra de linha teria primeira linha vazia e seria descartada inteira,
+      // sem confirmacao, e o relogio a reenviaria para sempre.
+      var lines = text.components(separatedBy: "\n").filter { !$0.isEmpty }
+      guard let first = lines.first else { continue }
       guard let headerData = first.data(using: .utf8) else { continue }
 
       if let header = try? JSONDecoder().decode(EnvelopeHeader.self, from: headerData) {
         lines.removeFirst()
-        handle(header: header, eventLines: lines.filter { !$0.isEmpty })
+        handle(header: header, eventLines: lines, on: workoutSession)
       } else {
         handleLegacy(headerData)
       }
     }
   }
 
-  private func handle(header: EnvelopeHeader, eventLines: [String]) {
-    watchProtocol = "v1"
+  private func handle(
+    header: EnvelopeHeader,
+    eventLines: [String],
+    on workoutSession: HKWorkoutSession
+  ) {
+    // Versao diferente tem semantica diferente. Tratar v2 como v1 gravaria
+    // evento com sentido trocado, que e pior que nao gravar.
+    guard header.v == 1 else { return }
+
+    locked { _watchProtocol = "v1" }
+
+    let fingerprint = eventLines.joined(separator: "\n").hashValue
 
     // Remessa ja confirmada, reenviada porque a confirmacao se perdeu no
-    // caminho. Reconfirmar sem gravar de novo evita duplicar a toa; se este
-    // processo tiver morrido no meio-tempo a memoria esta vazia, as linhas
-    // repetem no arquivo, e o JavaScript deduplica pelo identificador.
-    if let acknowledged = acknowledgedBatches[header.session], acknowledged == header.batch {
-      acknowledge(batch: header.batch, session: header.session)
+    // caminho. Reconfirmar sem gravar de novo evita duplicar a toa. A
+    // impressao do conteudo entra na comparacao porque o relogio pode
+    // reiniciar e repetir um numero com conteudo diferente.
+    if let acknowledged = lastAcknowledged,
+      acknowledged.session == header.session,
+      acknowledged.batch == header.batch,
+      acknowledged.fingerprint == fingerprint
+    {
+      acknowledge(batch: header.batch, session: header.session, on: workoutSession)
       return
     }
+
+    // Remessa truncada: confirmar faria o relogio apagar da fila dele os
+    // eventos que nunca chegaram aqui. Sem confirmacao ele reenvia inteira.
+    guard eventLines.count == header.count else { return }
 
     // Confirmar so depois de gravado E sincronizado. Confirmar antes faria o
     // relogio apagar da fila dele algo que ainda podia se perder aqui.
     guard TelemetryInbox.shared.append(lines: eventLines) else { return }
-    acknowledgedBatches[header.session] = header.batch
-    acknowledge(batch: header.batch, session: header.session)
+    lastAcknowledged = (header.session, header.batch, fingerprint)
+    acknowledge(batch: header.batch, session: header.session, on: workoutSession)
   }
 
-  private func acknowledge(batch: Int, session: String) {
-    guard let workoutSession = self.session else { return }
+  /// A sessao vem do delegate, e nao do campo `session`, que e zerado quando a
+  /// sessao encerra. Uma remessa entregue logo depois desse encerramento seria
+  /// gravada e memoizada, mas a confirmacao nao sairia, e o relogio reenviaria
+  /// para sempre sem nunca ser atendido.
+  private func acknowledge(batch: Int, session: String, on workoutSession: HKWorkoutSession) {
     // Serializado, e nao montado com texto: o identificador vem de fora deste
     // arquivo, e uma aspa nele produziria um JSON quebrado que o relogio
     // descartaria em silencio, deixando a remessa sem confirmacao para sempre.
@@ -249,9 +301,11 @@ final class MirroredWorkoutReceiver: NSObject {
       bpm.isFinite,
       bpm > 0
     else { return }
-    watchProtocol = "legacy"
     let sample = Sample(bpm: bpm, measuredAt: payload.measuredAt)
-    lastSample = sample
+    locked {
+      _watchProtocol = "legacy"
+      _lastSample = sample
+    }
     onSample?(sample)
   }
 }
@@ -289,7 +343,7 @@ extension MirroredWorkoutReceiver: HKWorkoutSessionDelegate {
     didReceiveDataFromRemoteWorkoutSession data: [Data]
   ) {
     DispatchQueue.main.async {
-      self.receive(data)
+      self.receive(data, from: workoutSession)
     }
   }
 
