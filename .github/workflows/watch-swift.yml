@@ -5,8 +5,8 @@
 # custa cota. Uma build do EAS produz um .ipa; para saber se o Swift compila
 # basta o compilador contra o SDK, e isso leva um ou dois minutos num runner
 # macOS, sem npm, sem prebuild e sem pods: o alvo do relógio só usa frameworks
-# do sistema (confirmado no log da build de 2026-09-08, zero linhas de Pods
-# para SWIWatch).
+# do sistema (confirmado no log da build anterior do EAS, que nao tem nenhuma
+# linha de Pods para o alvo SWIWatch).
 #
 # Os flags espelham os da build do EAS naquele log: SDK do Xcode 26,
 # `-swift-version 5`, alvos arm64 e arm64_32 em watchOS 10.0, sem
