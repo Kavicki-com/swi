@@ -22,9 +22,15 @@ function memoryStorage(): OutboxStorage {
   };
 }
 
-function evento(eventId: string, sessionId = SESSAO_A, sequence = 0): OutboxEvent {
+// A fila só aceita UUID, e o teste quer falar em 'e1'. O rótulo vira os
+// últimos bytes de um UUID v4 fixo, e volta pelo caminho inverso.
+const uid = (label: string) =>
+  `00000000-0000-4000-8000-${Buffer.from(label, 'ascii').toString('hex').padStart(12, '0')}`;
+const label = (id: string) => Buffer.from(id.slice(-12).replace(/^(00)+/, ''), 'hex').toString('ascii');
+
+function evento(id: string, sessionId = SESSAO_A, sequence = 0): OutboxEvent {
   return {
-    eventId,
+    eventId: uid(id),
     monitoringSessionId: sessionId,
     sequence,
     eventTime: '2026-09-07T12:00:00.000Z',
@@ -32,6 +38,8 @@ function evento(eventId: string, sessionId = SESSAO_A, sequence = 0): OutboxEven
     measurements: { heartRate: { value: 72, unit: 'bpm', source: 'APPLE_WATCH' } },
   };
 }
+
+const muitos = (n: number) => Array.from({ length: n }, (_, i) => evento(`e${i}`, SESSAO_A, i));
 
 // Fila real sobre armazenamento em memória, e não um dublê: o que interessa é
 // o que sobra na fila depois de cada resposta, e isso é comportamento da fila.
@@ -41,7 +49,8 @@ async function filaCom(...events: OutboxEvent[]): Promise<TelemetryOutbox> {
   return outbox;
 }
 
-const ids = async (outbox: TelemetryOutbox) => (await outbox.pending()).map((e) => e.eventId);
+const labels = async (outbox: TelemetryOutbox) =>
+  (await outbox.pending()).map((e) => label(e.eventId));
 
 function fakeControl(overrides: Partial<WatchControl> = {}) {
   const request = jest.fn<Promise<NativeHttpResponse>, Parameters<WatchControl['request']>>(
@@ -62,16 +71,17 @@ function fakeControl(overrides: Partial<WatchControl> = {}) {
   return { control, request, clearDeviceCredential };
 }
 
-// Confirmação do backend (telemetry-ingestion.service.ts, TelemetryBatchAck).
+// Confirmação do backend (telemetry-ingestion.service.ts, TelemetryBatchAck),
+// com os ids em rótulo.
 function ack(parts: {
   accepted?: string[];
   duplicates?: string[];
   conflicts?: { eventId: string; reason: string; detail: string }[];
 }): string {
   return JSON.stringify({
-    acceptedEventIds: parts.accepted ?? [],
-    duplicateEventIds: parts.duplicates ?? [],
-    conflicts: parts.conflicts ?? [],
+    acceptedEventIds: (parts.accepted ?? []).map(uid),
+    duplicateEventIds: (parts.duplicates ?? []).map(uid),
+    conflicts: (parts.conflicts ?? []).map((c) => ({ ...c, eventId: uid(c.eventId) })),
     serverTime: '2026-09-07T12:00:01.000Z',
   });
 }
@@ -84,6 +94,14 @@ const rejeicao = (code: string) => Object.assign(new Error(code), { code });
 function uploader(outbox: TelemetryOutbox, control: WatchControl) {
   return createTelemetryUploader({ outbox, control, apiUrl: () => API });
 }
+
+const sent = (accepted: number, remaining: number, duplicates = 0, conflicts = 0) => ({
+  outcome: 'sent',
+  accepted,
+  duplicates,
+  conflicts,
+  remaining,
+});
 
 let warn: jest.SpyInstance;
 beforeEach(() => {
@@ -122,24 +140,22 @@ describe('telemetryUploader, pedido', () => {
   // O DTO do backend recusa lote acima de MAX_BATCH_EVENTS com 400. Sem este
   // corte, uma fila acumulada num turno sem rede seria recusada inteira na
   // primeira tentativa, e o 400 a esvaziaria.
-  it('corta o lote no teto do backend e deixa o resto para a próxima chamada', async () => {
+  it('corta o lote no teto do backend e diz quantos sobraram para a próxima chamada', async () => {
     const { control, request } = fakeControl();
-    const todos = Array.from({ length: MAX_BATCH_EVENTS + 5 }, (_, i) => evento(`e${i}`, SESSAO_A, i));
+    const todos = muitos(250);
     const outbox = await filaCom(...todos);
     request.mockResolvedValue({
       status: 200,
-      body: ack({ accepted: todos.slice(0, MAX_BATCH_EVENTS).map((e) => e.eventId) }),
+      body: ack({ accepted: todos.slice(0, MAX_BATCH_EVENTS).map((e) => label(e.eventId)) }),
     });
-    await expect(uploader(outbox, control).uploadPending()).resolves.toEqual({
-      outcome: 'sent',
-      accepted: MAX_BATCH_EVENTS,
-      duplicates: 0,
-      conflicts: 0,
-    });
+    await expect(uploader(outbox, control).uploadPending()).resolves.toEqual(
+      sent(MAX_BATCH_EVENTS, 50),
+    );
     const corpo = JSON.parse(request.mock.calls[0][2] as string) as { events: OutboxEvent[] };
     expect(corpo.events).toHaveLength(MAX_BATCH_EVENTS);
-    expect(corpo.events[0].eventId).toBe('e0');
-    await expect(ids(outbox)).resolves.toEqual(['e200', 'e201', 'e202', 'e203', 'e204']);
+    expect(label(corpo.events[0].eventId)).toBe('e0');
+    expect(await labels(outbox)).toHaveLength(50);
+    expect((await labels(outbox))[0]).toBe('e200');
   });
 });
 
@@ -155,14 +171,16 @@ describe('telemetryUploader, confirmação 2xx', () => {
         conflicts: [{ eventId: 'e3', reason: 'sequence_conflict', detail: 'sequência 0 já usada' }],
       }),
     });
-    await expect(uploader(outbox, control).uploadPending()).resolves.toEqual({
-      outcome: 'sent',
-      accepted: 1,
-      duplicates: 1,
-      conflicts: 1,
-    });
+    await expect(uploader(outbox, control).uploadPending()).resolves.toEqual(sent(1, 1, 1, 1));
     // e4 não foi citado: melhor reenviar do que perder.
-    await expect(ids(outbox)).resolves.toEqual(['e4']);
+    await expect(labels(outbox)).resolves.toEqual(['e4']);
+  });
+
+  it('remaining é 0 quando a confirmação citou tudo', async () => {
+    const { control, request } = fakeControl();
+    const outbox = await filaCom(evento('e1'), evento('e2'));
+    request.mockResolvedValue({ status: 200, body: ack({ accepted: ['e1', 'e2'] }) });
+    await expect(uploader(outbox, control).uploadPending()).resolves.toEqual(sent(2, 0));
   });
 
   it('conflito é registrado com o eventId e o motivo', async () => {
@@ -176,7 +194,7 @@ describe('telemetryUploader, confirmação 2xx', () => {
     });
     await uploader(outbox, control).uploadPending();
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toMatch(/e3/);
+    expect(warn.mock.calls[0][0]).toContain(uid('e3'));
     expect(warn.mock.calls[0][0]).toMatch(/session_unavailable/);
   });
 
@@ -191,7 +209,7 @@ describe('telemetryUploader, confirmação 2xx', () => {
       });
       expect(warn).toHaveBeenCalledTimes(1);
     }
-    await expect(ids(outbox)).resolves.toEqual(['e1']);
+    await expect(labels(outbox)).resolves.toEqual(['e1']);
   });
 
   it('não chama clearDeviceCredential no caminho feliz', async () => {
@@ -209,14 +227,20 @@ describe('telemetryUploader, status do backend', () => {
     return fake;
   };
 
-  it('401 limpa a credencial e é unpaired, com a fila intacta', async () => {
+  // Depois de re-parear, as sessões antigas pertencem ao aparelho revogado e
+  // voltariam todas como session_unavailable: um lote de recusas no log a
+  // cada re-pareamento. Melhor descartar de uma vez, dizendo quantos.
+  it('401 limpa a credencial, esvazia a fila inteira com aviso da contagem e é unpaired', async () => {
     const { control, clearDeviceCredential } = respondendo(401, nestError(401, 'Unauthorized'));
-    const outbox = await filaCom(evento('e1'));
+    const outbox = await filaCom(...muitos(203));
     await expect(uploader(outbox, control).uploadPending()).resolves.toEqual({
       outcome: 'unpaired',
     });
     expect(clearDeviceCredential).toHaveBeenCalledTimes(1);
-    await expect(ids(outbox)).resolves.toEqual(['e1']);
+    await expect(labels(outbox)).resolves.toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/203/);
+    expect(warn.mock.calls[0][0]).toMatch(/revog/);
   });
 
   it('401 com chaveiro que falha ao limpar ainda é unpaired', async () => {
@@ -236,7 +260,7 @@ describe('telemetryUploader, status do backend', () => {
     await expect(uploader(outbox, control).uploadPending()).resolves.toEqual({
       outcome: 'deferred',
     });
-    await expect(ids(outbox)).resolves.toEqual(['e1', 'e2']);
+    await expect(labels(outbox)).resolves.toEqual(['e1', 'e2']);
     expect(clearDeviceCredential).not.toHaveBeenCalled();
   });
 
@@ -247,7 +271,7 @@ describe('telemetryUploader, status do backend', () => {
       outcome: 'rejected',
       status,
     });
-    await expect(ids(outbox)).resolves.toEqual([]);
+    await expect(labels(outbox)).resolves.toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toMatch(/no more than 200/);
     expect(clearDeviceCredential).not.toHaveBeenCalled();
@@ -256,11 +280,10 @@ describe('telemetryUploader, status do backend', () => {
   // Só o que foi enviado é descartado: o que ficou atrás do teto nunca foi
   // visto pelo backend e ainda pode ser aceito.
   it('rejected acima do teto esvazia só o lote enviado', async () => {
-    const todos = Array.from({ length: MAX_BATCH_EVENTS + 2 }, (_, i) => evento(`e${i}`, SESSAO_A, i));
     const { control } = respondendo(422, '{}');
-    const outbox = await filaCom(...todos);
+    const outbox = await filaCom(...muitos(MAX_BATCH_EVENTS + 2));
     await uploader(outbox, control).uploadPending();
-    await expect(ids(outbox)).resolves.toEqual(['e200', 'e201']);
+    await expect(labels(outbox)).resolves.toEqual(['e200', 'e201']);
   });
 
   it('status fora de qualquer faixa esperada (3xx) é deferred com aviso', async () => {
@@ -270,7 +293,7 @@ describe('telemetryUploader, status do backend', () => {
       outcome: 'deferred',
     });
     expect(warn).toHaveBeenCalledTimes(1);
-    await expect(ids(outbox)).resolves.toEqual(['e1']);
+    await expect(labels(outbox)).resolves.toEqual(['e1']);
   });
 });
 
@@ -294,7 +317,7 @@ describe('telemetryUploader, rejeição do nativo', () => {
     await expect(uploader(outbox, control).uploadPending()).resolves.toEqual({ outcome });
     expect(warn).toHaveBeenCalledTimes(avisos);
     expect(clearDeviceCredential).not.toHaveBeenCalled();
-    await expect(ids(outbox)).resolves.toEqual(['e1']);
+    await expect(labels(outbox)).resolves.toEqual(['e1']);
   });
 
   it('rejeição sem código é deferred com aviso, sem lançar', async () => {
@@ -328,7 +351,7 @@ describe('telemetryUploader, reentrância', () => {
     responde({ status: 200, body: ack({ accepted: ['e1'] }) });
 
     const [r1, r2] = await Promise.all([primeira, segunda]);
-    expect(r1).toEqual({ outcome: 'sent', accepted: 1, duplicates: 0, conflicts: 0 });
+    expect(r1).toEqual(sent(1, 0));
     expect(r2).toBe(r1);
     expect(request).toHaveBeenCalledTimes(1);
   });
@@ -340,13 +363,8 @@ describe('telemetryUploader, reentrância', () => {
     request.mockResolvedValueOnce({ status: 503, body: '' });
     await expect(up.uploadPending()).resolves.toEqual({ outcome: 'deferred' });
     request.mockResolvedValueOnce({ status: 200, body: ack({ accepted: ['e1'] }) });
-    await expect(up.uploadPending()).resolves.toEqual({
-      outcome: 'sent',
-      accepted: 1,
-      duplicates: 0,
-      conflicts: 0,
-    });
+    await expect(up.uploadPending()).resolves.toEqual(sent(1, 0));
     expect(request).toHaveBeenCalledTimes(2);
-    await expect(ids(outbox)).resolves.toEqual([]);
+    await expect(labels(outbox)).resolves.toEqual([]);
   });
 });

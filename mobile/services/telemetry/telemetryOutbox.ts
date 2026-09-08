@@ -29,6 +29,13 @@ export interface OutboxState {
    * a 0 num reinício do app e colidiria com o que já foi gravado.
    */
   sequences: Record<string, number>;
+  /**
+   * Sessões que `forgetSession` quis esquecer enquanto ainda tinham evento na
+   * fila. O contador delas sai quando o último evento sair (em `remove`), e
+   * não antes: se o relógio reconectar a sessão espelhada com o mesmo id, um
+   * contador zerado repetiria uma sequência já gravada.
+   */
+  forgotten: string[];
 }
 
 /**
@@ -43,15 +50,23 @@ export interface OutboxStorage {
 export interface TelemetryOutbox {
   /** Ausência, arquivo vazio, ilegível ou de forma errada: estado vazio. */
   load(): Promise<OutboxState>;
-  /** Resolve só depois de o estado inteiro estar no arquivo. */
+  /**
+   * Resolve só depois de o estado inteiro estar no arquivo. Evento fora do
+   * contrato do backend é recusado com aviso e NÃO entra; a promessa resolve
+   * do mesmo jeito, porque uma amostra ruim não pode derrubar quem grava.
+   */
   append(event: OutboxEvent): Promise<void>;
-  /** Ids desconhecidos são ignorados; sem mudança, não escreve. */
+  /**
+   * Ids desconhecidos são ignorados; sem mudança, não escreve. Quando o último
+   * evento de uma sessão esquecida sai, o contador dela sai junto.
+   */
   remove(eventIds: readonly string[]): Promise<void>;
   /** Lê, incrementa, persiste, devolve. A primeira da sessão é 0. */
   nextSequence(sessionId: string): Promise<number>;
   /**
-   * Apaga só o contador daquela sessão. Os eventos dela que ainda estão na
-   * fila ficam: ainda precisam ser enviados.
+   * Apaga o contador daquela sessão se nenhum evento dela espera envio. Se
+   * ainda há, marca a sessão como esquecida e o contador sai com o último
+   * evento, em `remove`. Os eventos ficam: ainda precisam ser enviados.
    */
   forgetSession(sessionId: string): Promise<void>;
   /** Os eventos, na ordem em que entraram. */
@@ -82,7 +97,7 @@ export function createFileOutboxStorage(): OutboxStorage {
 }
 
 function emptyState(): OutboxState {
-  return { events: [], sequences: {} };
+  return { events: [], sequences: {}, forgotten: [] };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -93,6 +108,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * Só o envelope é conferido: `events` array e `sequences` objeto. Qualquer
  * outra coisa é estado vazio, nunca exceção: um arquivo corrompido não pode
  * impedir a próxima amostra de entrar, e a próxima escrita o conserta.
+ * `forgotten` chegou depois; arquivo sem ele lê como lista vazia.
  */
 function parseState(text: string | null): OutboxState {
   if (!text) return emptyState();
@@ -103,10 +119,63 @@ function parseState(text: string | null): OutboxState {
     return emptyState();
   }
   if (!isPlainObject(parsed)) return emptyState();
-  const { events, sequences } = parsed;
+  const { events, sequences, forgotten } = parsed;
   if (!Array.isArray(events) || !isPlainObject(sequences)) return emptyState();
-  return { events: events as OutboxEvent[], sequences: sequences as Record<string, number> };
+  return {
+    events: events as OutboxEvent[],
+    sequences: sequences as Record<string, number>,
+    forgotten: Array.isArray(forgotten)
+      ? forgotten.filter((id): id is string => typeof id === 'string')
+      : [],
+  };
 }
+
+// O mesmo regex do validador do backend (validator.js, isUUID 'all'): versão
+// 1 a 8 e variante 89ab. Recusar aqui o que ele recusaria lá é o objetivo.
+const UUID =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
+
+// Data e hora completas com Z ou fuso, que é o que `toISOString` e o Swift
+// produzem. O `Date.parse` depois pega mês 13 e dia 45, que o regex deixa passar.
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
+
+/**
+ * Descreve o que está fora do contrato de telemetry-batch.dto.ts e do domínio
+ * (unidade e origem da medição), ou null se o evento pode ir à rede. Um único
+ * evento fora do contrato dá 400 no lote inteiro, e o 400 descarta o lote:
+ * a amostra ruim é recusada na porta para as boas não pagarem por ela.
+ *
+ * A faixa (20 a 300 bpm) fica com o backend: ele a recusa por evento, dentro
+ * de um 2xx, e isso não custa o lote.
+ */
+export function outboxEventProblem(event: OutboxEvent): string | null {
+  if (!isUuid(event.eventId)) return 'eventId não é UUID';
+  if (!isUuid(event.monitoringSessionId)) return 'monitoringSessionId não é UUID';
+  if (!Number.isInteger(event.sequence) || event.sequence < 0) {
+    return 'sequence não é inteiro não negativo';
+  }
+  if (
+    typeof event.eventTime !== 'string' ||
+    !ISO_DATE_TIME.test(event.eventTime) ||
+    Number.isNaN(Date.parse(event.eventTime))
+  ) {
+    return 'eventTime não é ISO-8601';
+  }
+  if (event.origin !== 'REAL') return 'origin não é REAL';
+  const heartRate = event.measurements?.heartRate;
+  if (typeof heartRate !== 'object' || heartRate === null) return 'sem heartRate';
+  if (typeof heartRate.value !== 'number' || !Number.isFinite(heartRate.value)) {
+    return 'heartRate.value não é número finito';
+  }
+  if (heartRate.unit !== 'bpm') return 'heartRate.unit não é bpm';
+  if (heartRate.source !== 'APPLE_WATCH') return 'heartRate.source não é APPLE_WATCH';
+  return null;
+}
+
+const hasEventOf = (state: OutboxState, sessionId: string) =>
+  state.events.some((event) => event.monitoringSessionId === sessionId);
 
 export function createTelemetryOutbox(storage: OutboxStorage): TelemetryOutbox {
   // Corrente de operações. Cada uma começa quando a anterior terminou, com
@@ -138,6 +207,13 @@ export function createTelemetryOutbox(storage: OutboxStorage): TelemetryOutbox {
 
     append: (event) =>
       serialized(async () => {
+        const problem = outboxEventProblem(event);
+        if (problem !== null) {
+          console.warn(
+            `[telemetryOutbox] amostra recusada, ${problem} (evento ${String(event?.eventId)})`,
+          );
+          return;
+        }
         const state = await read();
         state.events.push(event);
         await write(state);
@@ -150,7 +226,15 @@ export function createTelemetryOutbox(storage: OutboxStorage): TelemetryOutbox {
         const drop = new Set(eventIds);
         const kept = state.events.filter((event) => !drop.has(event.eventId));
         if (kept.length === state.events.length) return;
-        await write({ ...state, events: kept });
+        const next: OutboxState = { ...state, events: kept };
+        // Sessão esquecida cujo último evento acabou de sair: agora sim o
+        // contador pode ir embora.
+        for (const sessionId of state.forgotten) {
+          if (hasEventOf(next, sessionId)) continue;
+          delete next.sequences[sessionId];
+          next.forgotten = next.forgotten.filter((id) => id !== sessionId);
+        }
+        await write(next);
       }),
 
     nextSequence: (sessionId) =>
@@ -161,6 +245,9 @@ export function createTelemetryOutbox(storage: OutboxStorage): TelemetryOutbox {
         // 0: o backend recusa a colisão evento a evento e a fila segue viva.
         const next = typeof last === 'number' && Number.isFinite(last) ? last + 1 : 0;
         state.sequences[sessionId] = next;
+        // Voltou a gerar amostra: está viva, e o contador não sai mais com o
+        // último evento dela.
+        state.forgotten = state.forgotten.filter((id) => id !== sessionId);
         await write(state);
         return next;
       }),
@@ -168,8 +255,16 @@ export function createTelemetryOutbox(storage: OutboxStorage): TelemetryOutbox {
     forgetSession: (sessionId) =>
       serialized(async () => {
         const state = await read();
-        if (!(sessionId in state.sequences)) return;
+        if (hasEventOf(state, sessionId)) {
+          if (state.forgotten.includes(sessionId)) return;
+          state.forgotten.push(sessionId);
+          await write(state);
+          return;
+        }
+        const known = sessionId in state.sequences || state.forgotten.includes(sessionId);
+        if (!known) return;
         delete state.sequences[sessionId];
+        state.forgotten = state.forgotten.filter((id) => id !== sessionId);
         await write(state);
       }),
 

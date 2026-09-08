@@ -24,7 +24,14 @@ export const MAX_BATCH_EVENTS = 200;
 export type UploadOutcome =
   /** Fila vazia; nada foi à rede. */
   | { outcome: 'idle' }
-  | { outcome: 'sent'; accepted: number; duplicates: number; conflicts: number }
+  /** `remaining` é o que ficou na fila: sent não significa fila vazia. */
+  | {
+      outcome: 'sent';
+      accepted: number;
+      duplicates: number;
+      conflicts: number;
+      remaining: number;
+    }
   /** 5xx, 429 ou rede: fila intacta, tenta depois. */
   | { outcome: 'deferred' }
   /** Outro 4xx: o lote enviado saiu da fila, porque reenviar não muda a resposta. */
@@ -159,18 +166,28 @@ export function createTelemetryUploader(deps: TelemetryUploaderDeps): TelemetryU
         ...ack.duplicateEventIds,
         ...ack.conflicts.map((conflict) => conflict.eventId),
       ]);
+      // Lida depois do remove e não calculada: a fila pode ter recebido
+      // amostra nova durante o envio, e é ela que a próxima chamada vai drenar.
+      const remaining = (await outbox.pending()).length;
       return {
         outcome: 'sent',
         accepted: ack.acceptedEventIds.length,
         duplicates: ack.duplicateEventIds.length,
         conflicts: ack.conflicts.length,
+        remaining,
       };
     }
 
     // O painel revogou o aparelho, e este é o único lugar onde o iPhone
-    // descobre. A fila fica: um pareamento novo ainda pode tentar entregá-la.
+    // descobre. A fila inteira sai: depois de re-parear, as sessões antigas
+    // pertencem ao aparelho revogado e voltariam todas como
+    // session_unavailable, um lote de recusas no log a cada re-pareamento.
     if (status === 401) {
       clearCredential(control);
+      console.warn(
+        `[telemetryUploader] aparelho revogado pelo painel: ${queued.length} evento(s) descartado(s) da fila`,
+      );
+      await outbox.remove(queued.map((event) => event.eventId));
       return { outcome: 'unpaired' };
     }
 
