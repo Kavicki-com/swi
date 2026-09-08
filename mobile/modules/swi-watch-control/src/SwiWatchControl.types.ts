@@ -23,11 +23,23 @@ export interface SwiWatchControlEvents {
   onHeartRateSample: HeartRateSampleEvent;
 }
 
+/**
+ * Qual formato o relógio está falando. `v1` é a remessa numerada com fila e
+ * confirmação; `legacy` é o formato antigo, só com batimento e sem
+ * identificadores. Null enquanto nada chegou.
+ *
+ * Os dois existem porque o app do relógio vem dentro do `.ipa` mas se instala
+ * no ritmo do sistema: há uma janela real de iPhone novo com relógio velho. O
+ * contrário não existe, e por isso não é tratado.
+ */
+export type WatchProtocol = 'v1' | 'legacy';
+
 export interface SwiWatchControlStatus {
   session: MirroredSessionState;
   sessionChangedAt: string | null;
   /** Ausência é null. Nunca zero. */
   lastSample: HeartRateSampleEvent | null;
+  watchProtocol: WatchProtocol | null;
 }
 
 /**
@@ -109,6 +121,8 @@ export interface WatchControlNative {
     auth: NativeAuth,
     storeCredential: boolean,
   ): Promise<NativeHttpResponse>;
+  /** Ver `WatchControl.rotateInbox`. */
+  rotateInbox(): string[];
   /** Só o fato de existir; o valor nunca sobe. Lê o chaveiro, síncrono. */
   hasDeviceCredential(): boolean;
   /** Revogação é do painel; o iPhone descobre pelo 401 no envio e limpa aqui. */
@@ -122,6 +136,14 @@ export interface WatchControlNative {
 export interface WatchControl {
   /** false em Android, web, Expo Go e Jest: não há módulo compilado. */
   readonly supported: boolean;
+  /**
+   * Fecha o arquivo durável corrente, passa a escrever no próximo, e devolve
+   * as URIs `file://` dos que o Swift nunca mais vai tocar. Só depois disso é
+   * seguro ler e apagar: quem rotaciona é o nativo, porque o JavaScript
+   * renomeando teria uma corrida capaz de apagar um evento já confirmado ao
+   * relógio. `[]` quando não suportado.
+   */
+  rotateInbox(): string[];
   getStatus(): SwiWatchControlStatus | null;
   /** Resolve false quando não suportado. */
   requestAuthorization(): Promise<boolean>;

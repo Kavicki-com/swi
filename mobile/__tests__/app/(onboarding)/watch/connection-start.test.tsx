@@ -46,6 +46,7 @@ const METRICS = {
 const PRONTO: WatchDiagnosticsState = {
   support: 'ready',
   session: 'none',
+  watchProtocol: null,
   sessionChangedAt: null,
   lastSample: null,
 };
@@ -105,6 +106,7 @@ describe('primeiro uso, espera do relogio', () => {
       mockEstado.mockReturnValue({
         support: 'ready',
         session: 'running',
+        watchProtocol: null,
         sessionChangedAt: '2026-09-02T13:00:00.000Z',
         lastSample: null,
       });
@@ -125,6 +127,7 @@ describe('primeiro uso, espera do relogio', () => {
       mockEstado.mockReturnValue({
         support: 'ready',
         session: 'none',
+        watchProtocol: null,
         sessionChangedAt: null,
         lastSample: { bpm: 71, measuredAt: '2026-09-02T13:00:05.000Z' },
       });

@@ -44,11 +44,20 @@ function fakeControl(overrides: Partial<WatchControl> = {}) {
     request: async () => ({ status: 200, body: '{}' }),
     hasDeviceCredential,
     clearDeviceCredential: () => undefined,
+    rotateInbox: () => [],
     ...overrides,
   };
+  // `watchProtocol` entra com o padrão do formato novo: é o que o relógio
+  // desta entrega fala, e os testes que exercitam o legado o sobrescrevem.
   const emit = (status: Partial<SwiWatchControlStatus>) => {
     if (!listener) throw new Error('ninguém assinou o controle');
-    listener({ session: 'none', sessionChangedAt: null, lastSample: null, ...status });
+    listener({
+      session: 'none',
+      sessionChangedAt: null,
+      lastSample: null,
+      watchProtocol: 'v1',
+      ...status,
+    });
   };
   return { control, emit, subscribe, unsubscribe, hasDeviceCredential };
 }
@@ -69,6 +78,7 @@ const sent = (accepted: number, remaining: number): UploadOutcome => ({
 
 const amostra = (measuredAt: string): SwiWatchControlStatus => ({
   session: 'running',
+  watchProtocol: null,
   sessionChangedAt: '2026-09-07T12:00:00.000Z',
   lastSample: { bpm: 70, measuredAt },
 });
@@ -245,5 +255,62 @@ describe('useTelemetryUpload, montagem', () => {
     });
     expect(s.states.length).toBeGreaterThanOrEqual(2);
     expect(s.hasDeviceCredential).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('dreno do arquivo durável', () => {
+  // Dublê do dreno: registra quando rodou e finge ter trazido linhas.
+  function fakeDrain(drained = 0) {
+    const run = jest.fn(async () => ({ drained, skipped: 0 }));
+    return { drain: { run }, run };
+  }
+
+  it('drena antes de enviar, ao montar', async () => {
+    // A ordem importa: drenar depois de enviar deixaria o que o Swift gravou em
+    // segundo plano esperando a próxima amostra para subir.
+    const ordem: string[] = [];
+    const c = fakeControl();
+    const u = fakeUploader();
+    u.uploadPending.mockImplementation(async () => {
+      ordem.push('upload');
+      return { outcome: 'idle' as const };
+    });
+    const drain = { run: jest.fn(async () => {
+      ordem.push('drain');
+      return { drained: 0, skipped: 0 };
+    }) };
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const p = probe(c.control, { outbox, uploader: u.uploader, inboxDrain: drain });
+
+    montadas.push(await mount(p.Probe));
+
+    expect(ordem[0]).toBe('drain');
+    expect(ordem).toContain('upload');
+  });
+
+  it('não drena sem módulo nativo', async () => {
+    const c = fakeControl({ supported: false });
+    const u = fakeUploader();
+    const d = fakeDrain();
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const p = probe(c.control, { outbox, uploader: u.uploader, inboxDrain: d.drain });
+
+    montadas.push(await mount(p.Probe));
+
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
+  it('uma falha do dreno não impede o envio do que já estava na fila', async () => {
+    // O que está na fila já é durável e já foi confirmado ao relógio: segurá-lo
+    // porque o dreno tropeçou seria perder duas vezes pelo mesmo problema.
+    const c = fakeControl();
+    const u = fakeUploader();
+    const drain = { run: jest.fn(async () => { throw new Error('arquivo ilegível'); }) };
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const p = probe(c.control, { outbox, uploader: u.uploader, inboxDrain: drain });
+
+    montadas.push(await mount(p.Probe));
+
+    expect(u.uploadPending).toHaveBeenCalled();
   });
 });

@@ -10,6 +10,33 @@ import { File, Paths } from 'expo-file-system';
 // uma corrente de promessas, porque duas chamadas concorrentes que lessem o
 // mesmo estado fariam a segunda escrita apagar a primeira.
 
+/**
+ * Uma medição do evento. `source` é sempre APPLE_WATCH aqui: pressão arterial,
+ * que tem outras origens, não vem do relógio e não passa por esta fila.
+ */
+export interface OutboxMeasurement<U extends string> {
+  value: number;
+  unit: U;
+  source: 'APPLE_WATCH';
+}
+
+/**
+ * As cinco medições que o relógio produz, todas opcionais. Nem todo retorno do
+ * HealthKit traz batimento: um evento pode ser só passos, ou só bateria, e
+ * exigir batimento descartaria leitura real.
+ *
+ * CONTRATO DE VARIAÇÃO: `stepDelta`, `activeEnergyKcal` e `motionCount` são a
+ * mudança desde o evento anterior da mesma sessão, nunca o acumulado. O backend
+ * os SOMA. Enviar acumulado passa em toda validação e infla o total em silêncio.
+ */
+export interface OutboxMeasurements {
+  heartRate?: OutboxMeasurement<'bpm'>;
+  stepDelta?: OutboxMeasurement<'steps'>;
+  activeEnergyKcal?: OutboxMeasurement<'kcal'>;
+  motionCount?: OutboxMeasurement<'count'>;
+  battery?: OutboxMeasurement<'%'>;
+}
+
 /** Exatamente a forma que POST /telemetry/v1/batches aceita (telemetry-batch.dto.ts). */
 export interface OutboxEvent {
   eventId: string;
@@ -17,8 +44,24 @@ export interface OutboxEvent {
   sequence: number;
   eventTime: string;
   origin: 'REAL';
-  measurements: { heartRate: { value: number; unit: 'bpm'; source: 'APPLE_WATCH' } };
+  measurements: OutboxMeasurements;
 }
+
+/**
+ * Unidade e restrição de cada medição, do domínio do backend
+ * (`metric-state.ts`). O Record cobre a chave inteira de propósito: uma
+ * medição nova no contrato não compila até alguém dizer como é validada.
+ */
+const MEASUREMENT_RULES: Record<
+  keyof OutboxMeasurements,
+  { unit: string; integer?: true; min?: number; max?: number }
+> = {
+  heartRate: { unit: 'bpm' },
+  stepDelta: { unit: 'steps', integer: true, min: 0 },
+  activeEnergyKcal: { unit: 'kcal', min: 0 },
+  motionCount: { unit: 'count', min: 0 },
+  battery: { unit: '%', min: 0, max: 100 },
+};
 
 export interface OutboxState {
   /** Na ordem em que entraram. */
@@ -56,6 +99,14 @@ export interface TelemetryOutbox {
    * do mesmo jeito, porque uma amostra ruim não pode derrubar quem grava.
    */
   append(event: OutboxEvent): Promise<void>;
+  /**
+   * Muitos de uma vez, com UMA leitura e UMA escrita do arquivo. É o que o
+   * dreno do arquivo durável usa: depois de um turno em segundo plano ele traz
+   * milhares de eventos, e um `append` por evento reescreveria a fila inteira
+   * a cada um. Evento fora do contrato é pulado com aviso, como em `append`.
+   * Devolve quantos entraram.
+   */
+  appendMany(events: readonly OutboxEvent[]): Promise<number>;
   /**
    * Ids desconhecidos são ignorados; sem mudança, não escreve. Quando o último
    * evento de uma sessão esquecida sai, o contador dela sai junto.
@@ -164,13 +215,36 @@ export function outboxEventProblem(event: OutboxEvent): string | null {
     return 'eventTime não é ISO-8601';
   }
   if (event.origin !== 'REAL') return 'origin não é REAL';
-  const heartRate = event.measurements?.heartRate;
-  if (typeof heartRate !== 'object' || heartRate === null) return 'sem heartRate';
-  if (typeof heartRate.value !== 'number' || !Number.isFinite(heartRate.value)) {
-    return 'heartRate.value não é número finito';
+
+  const measurements = event.measurements;
+  if (typeof measurements !== 'object' || measurements === null) return 'sem measurements';
+
+  const keys = Object.keys(measurements);
+  // Chave fora do contrato dá 400 no lote inteiro, então não pode entrar.
+  const unknown = keys.find((key) => !(key in MEASUREMENT_RULES));
+  if (unknown !== undefined) return `medição desconhecida: ${unknown}`;
+  // Evento sem medição nenhuma não tem por que existir e ocuparia sequência.
+  if (keys.length === 0) return 'sem nenhuma medição';
+
+  for (const key of keys as (keyof OutboxMeasurements)[]) {
+    const measurement = measurements[key];
+    const rule = MEASUREMENT_RULES[key];
+    if (typeof measurement !== 'object' || measurement === null) return `${key} não é objeto`;
+    if (typeof measurement.value !== 'number' || !Number.isFinite(measurement.value)) {
+      return `${key}.value não é número finito`;
+    }
+    if (rule.integer && !Number.isInteger(measurement.value)) {
+      return `${key}.value não é inteiro`;
+    }
+    if (rule.min !== undefined && measurement.value < rule.min) {
+      return `${key}.value abaixo de ${rule.min}`;
+    }
+    if (rule.max !== undefined && measurement.value > rule.max) {
+      return `${key}.value acima de ${rule.max}`;
+    }
+    if (measurement.unit !== rule.unit) return `${key}.unit não é ${rule.unit}`;
+    if (measurement.source !== 'APPLE_WATCH') return `${key}.source não é APPLE_WATCH`;
   }
-  if (heartRate.unit !== 'bpm') return 'heartRate.unit não é bpm';
-  if (heartRate.source !== 'APPLE_WATCH') return 'heartRate.source não é APPLE_WATCH';
   return null;
 }
 
@@ -217,6 +291,26 @@ export function createTelemetryOutbox(storage: OutboxStorage): TelemetryOutbox {
         const state = await read();
         state.events.push(event);
         await write(state);
+      }),
+
+    appendMany: (events) =>
+      serialized(async () => {
+        const accepted: OutboxEvent[] = [];
+        for (const event of events) {
+          const problem = outboxEventProblem(event);
+          if (problem !== null) {
+            console.warn(
+              `[telemetryOutbox] amostra recusada, ${problem} (evento ${String(event?.eventId)})`,
+            );
+            continue;
+          }
+          accepted.push(event);
+        }
+        if (accepted.length === 0) return 0;
+        const state = await read();
+        state.events.push(...accepted);
+        await write(state);
+        return accepted.length;
       }),
 
     remove: (eventIds) =>

@@ -26,6 +26,7 @@ function fakeNative(initial?: Partial<SwiWatchControlStatus>) {
   };
   const status: SwiWatchControlStatus = {
     session: 'none',
+    watchProtocol: null,
     sessionChangedAt: null,
     lastSample: null,
     ...initial,
@@ -42,6 +43,7 @@ function fakeNative(initial?: Partial<SwiWatchControlStatus>) {
     request,
     hasDeviceCredential,
     clearDeviceCredential,
+    rotateInbox: () => [],
     addListener: (event, listener) => {
       const list = listeners[event] as Listener<typeof event>[];
       list.push(listener as Listener<typeof event>);
@@ -105,6 +107,7 @@ describe('createWatchControl', () => {
     expect(control.supported).toBe(true);
     expect(control.getStatus()).toEqual({
       session: 'none',
+      watchProtocol: null,
       sessionChangedAt: null,
       lastSample: null,
     });
@@ -122,6 +125,7 @@ describe('createWatchControl', () => {
     expect(seen).toHaveLength(2);
     expect(seen[0]).toEqual({
       session: 'running',
+      watchProtocol: null,
       sessionChangedAt: '2026-09-02T13:00:00.000Z',
       lastSample: null,
     });
@@ -327,6 +331,7 @@ describe('useWatchDiagnostics', () => {
     expect(last()).toEqual({
       support: 'ready',
       session: 'none',
+      watchProtocol: null,
       sessionChangedAt: null,
       lastSample: null,
     });
@@ -338,6 +343,7 @@ describe('useWatchDiagnostics', () => {
     expect(last()).toMatchObject({
       support: 'ready',
       session: 'running',
+      watchProtocol: null,
       lastSample: { bpm: 68, measuredAt: '2026-09-02T13:00:03.000Z' },
     });
 
