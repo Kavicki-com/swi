@@ -75,11 +75,20 @@ jobs:
         run: |
           set -euo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          # Lista explícita, não glob: os dois arquivos que importam
-          # ExpoModulesCore não compilam sem o pod, e um arquivo novo que
-          # dependa do Expo precisa ser deixado de fora aqui de propósito.
-          xcrun swiftc -typecheck -parse-as-library -swift-version 5 \
-            -sdk "$SDK" -target arm64-apple-ios15.1 \
-            mobile/modules/swi-watch-control/ios/DeviceCredentialStore.swift \
-            mobile/modules/swi-watch-control/ios/MirroredWorkoutReceiver.swift \
-            mobile/modules/swi-watch-control/ios/TelemetryHttp.swift
+          # Tudo, MENOS os que importam ExpoModulesCore, que nao compila sem
+          # o pod. A exclusao e nominal e a inclusao e automatica de proposito:
+          # com lista explicita, um arquivo novo ficava fora do portao sem
+          # ninguem perceber, que foi exatamente o que aconteceu com
+          # TelemetryInbox.swift. Errar agora custa um job vermelho; errar do
+          # outro jeito custava uma build.
+          EXPO='SwiWatchControlModule.swift SwiWatchControlAppDelegateSubscriber.swift'
+          FILES=""
+          for f in mobile/modules/swi-watch-control/ios/*.swift; do
+            case " $EXPO " in
+              *" $(basename "$f") "*) echo "fora do portao (usa Expo): $f"; continue ;;
+            esac
+            FILES="$FILES $f"
+          done
+          echo "compilando:$FILES"
+          # shellcheck disable=SC2086
+          xcrun swiftc -typecheck -parse-as-library -swift-version 5 -sdk "$SDK" -target arm64-apple-ios15.1 $FILES

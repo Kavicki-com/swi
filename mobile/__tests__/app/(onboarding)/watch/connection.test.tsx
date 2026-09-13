@@ -41,6 +41,7 @@ const SEM_SUPORTE: WatchDiagnosticsState = { support: 'unsupported' };
 const PRONTO: WatchDiagnosticsState = {
   support: 'ready',
   session: 'none',
+  watchProtocol: null,
   sessionChangedAt: null,
   lastSample: null,
 };

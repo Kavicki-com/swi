@@ -59,18 +59,21 @@ const agoraMenos = (s: number) => new Date(Date.now() - s * 1000).toISOString();
 const comLeitura = (): WatchDiagnosticsState => ({
   support: 'ready',
   session: 'running',
+  watchProtocol: null,
   sessionChangedAt: agoraMenos(30),
   lastSample: { bpm: 72, measuredAt: agoraMenos(5) },
 });
 const AGUARDANDO: WatchDiagnosticsState = {
   support: 'ready',
   session: 'running',
+  watchProtocol: null,
   sessionChangedAt: MEDIDO_EM,
   lastSample: null,
 };
 const SEM_NADA: WatchDiagnosticsState = {
   support: 'ready',
   session: 'none',
+  watchProtocol: null,
   sessionChangedAt: null,
   lastSample: null,
 };
@@ -181,6 +184,7 @@ describe('primeiro uso, tela final', () => {
     const tree = await render({
       support: 'ready',
       session: 'ended',
+      watchProtocol: null,
       sessionChangedAt: agoraMenos(200),
       lastSample: { bpm: 68, measuredAt: agoraMenos(90) },
     });

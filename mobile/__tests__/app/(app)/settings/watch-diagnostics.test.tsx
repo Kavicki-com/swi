@@ -90,18 +90,21 @@ const SEM_SUPORTE: WatchDiagnosticsState = { support: 'unsupported' };
 const SEM_NADA: WatchDiagnosticsState = {
   support: 'ready',
   session: 'none',
+  watchProtocol: null,
   sessionChangedAt: null,
   lastSample: null,
 };
 const ATIVO = (): WatchDiagnosticsState => ({
   support: 'ready',
   session: 'running',
+  watchProtocol: null,
   sessionChangedAt: agoraMenos(60),
   lastSample: { bpm: 72, measuredAt: agoraMenos(5) },
 });
 const ENCERRADO_COM_LEITURA = (): WatchDiagnosticsState => ({
   support: 'ready',
   session: 'ended',
+  watchProtocol: null,
   sessionChangedAt: agoraMenos(30),
   lastSample: { bpm: 65, measuredAt: agoraMenos(10) },
 });
@@ -162,6 +165,7 @@ describe('Configurações, Monitoramento', () => {
     const tree = await render({
       support: 'ready',
       session: 'ended',
+      watchProtocol: null,
       sessionChangedAt: agoraMenos(600),
       lastSample: { bpm: 58, measuredAt: agoraMenos(600) },
     });

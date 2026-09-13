@@ -35,6 +35,10 @@ function normalize(raw: SwiWatchControlStatus): SwiWatchControlStatus {
     session: raw.session ?? 'none',
     sessionChangedAt: raw.sessionChangedAt ?? null,
     lastSample: sanitizeSample(raw.lastSample),
+    // Só os dois valores do contrato passam: qualquer outra coisa vinda do
+    // nativo é tratada como "ainda não sei", que é a verdade.
+    watchProtocol:
+      raw.watchProtocol === 'v1' || raw.watchProtocol === 'legacy' ? raw.watchProtocol : null,
   };
 }
 
@@ -51,6 +55,8 @@ const UNSUPPORTED: WatchControl = {
       code: 'E_UNSUPPORTED',
     });
   },
+  // Inerte, e não uma lista inventada: sem módulo não há arquivo para drenar.
+  rotateInbox: () => [],
   hasDeviceCredential: () => false,
   clearDeviceCredential: () => undefined,
 };
@@ -94,6 +100,16 @@ export function createWatchControl(native: WatchControlNative | null): WatchCont
     // serviço mapeia para o próprio motivo.
     request: (url, method, body, auth, storeCredential) =>
       native.request(url, method, body, auth, storeCredential),
+    // Uma falha aqui não pode derrubar o dreno nem o envio: sem arquivo
+    // rotacionado, o dreno simplesmente não tem o que fazer nesta rodada.
+    rotateInbox: () => {
+      try {
+        const files = native.rotateInbox();
+        return Array.isArray(files) ? files.filter((f) => typeof f === 'string') : [];
+      } catch {
+        return [];
+      }
+    },
     hasDeviceCredential: () => native.hasDeviceCredential(),
     clearDeviceCredential: () => native.clearDeviceCredential(),
   };

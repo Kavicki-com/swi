@@ -1,3 +1,4 @@
+import type { WatchProtocol } from '../../modules/swi-watch-control';
 import type { TelemetryAvailability } from './telemetryAvailability';
 
 // Fonte única da copy de estado do monitoramento. As duas superfícies que a
@@ -67,4 +68,18 @@ export function telemetryCopy(
  */
 export function telemetryUploadCopy(paired: boolean): string {
   return paired ? 'Enviando ao servidor' : 'Aparelho não pareado';
+}
+
+/**
+ * Aviso de relógio desatualizado, ou null quando não há o que avisar.
+ *
+ * O app do relógio vem dentro do pacote do iPhone, mas o sistema o instala no
+ * ritmo dele: existe uma janela real de iPhone novo com relógio velho. Nela a
+ * leitura continua chegando, pelo caminho antigo, então isto é um aviso e não
+ * um erro. Antes de o relógio falar não se afirma nada: dizer que ele está
+ * desatualizado sem saber seria inventar.
+ */
+export function watchProtocolCopy(watchProtocol: WatchProtocol | null): string | null {
+  if (watchProtocol !== 'legacy') return null;
+  return 'O app do relógio ainda não atualizou. Abra o SWI no Apple Watch.';
 }

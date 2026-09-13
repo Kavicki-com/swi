@@ -66,6 +66,17 @@ export function createMirroredSessionRecorder(
   }
 
   async function handle(status: SwiWatchControlStatus): Promise<void> {
+    // CAMINHO LEGADO. No formato novo a leitura chega pelo arquivo durável, com
+    // identificador e sequência gerados no relógio, e o dreno a põe na fila. Se
+    // este gravador também agisse, geraria OUTRO identificador para a MESMA
+    // leitura, e o backend, que só reconhece repetição pelo identificador do
+    // evento, gravaria as duas.
+    //
+    // Este caminho existe porque o app do relógio se instala no ritmo do
+    // sistema: há uma janela real de iPhone novo com relógio velho. O contrário
+    // não existe. Sai na entrega seguinte, quando todo relógio tiver atualizado.
+    if (status.watchProtocol === 'v1') return;
+
     if (status.session === 'running' && sessionId === null) {
       sessionId = uuid();
       warnedDiscard = false;

@@ -1,4 +1,4 @@
-import { telemetryCopy, telemetryUploadCopy } from './telemetryCopy';
+import { watchProtocolCopy, telemetryCopy, telemetryUploadCopy } from './telemetryCopy';
 import type { TelemetryAvailability } from './telemetryAvailability';
 
 // Fonte unica da copy: as duas superficies precisam dizer a mesma coisa sobre o
@@ -71,5 +71,25 @@ describe('telemetryUploadCopy', () => {
   it('distingue pareado de não pareado', () => {
     expect(telemetryUploadCopy(true)).toBe('Enviando ao servidor');
     expect(telemetryUploadCopy(false)).toBe('Aparelho não pareado');
+  });
+});
+
+describe('aviso de relógio desatualizado', () => {
+  it('avisa quando o relógio ainda fala o formato antigo', () => {
+    expect(watchProtocolCopy('legacy')).toBe(
+      'O app do relógio ainda não atualizou. Abra o SWI no Apple Watch.',
+    );
+  });
+
+  it('não diz nada quando o relógio já está no formato novo', () => {
+    // Estado normal não merece aviso: uma tela cheia de linhas verdes esconde
+    // a única que importa.
+    expect(watchProtocolCopy('v1')).toBeNull();
+  });
+
+  it('não diz nada antes de o relógio falar', () => {
+    // Ausência de informação não é problema do funcionário, e afirmar que o
+    // relógio está desatualizado sem saber seria inventar.
+    expect(watchProtocolCopy(null)).toBeNull();
   });
 });

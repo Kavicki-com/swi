@@ -14,6 +14,7 @@ const pronto = (over: Partial<Omit<WatchDiagnosticsState & { support: 'ready' },
   ({
     support: 'ready',
     session: 'none',
+    watchProtocol: null,
     sessionChangedAt: null,
     lastSample: null,
     ...over,
@@ -29,6 +30,7 @@ describe('deriveTelemetryAvailability', () => {
   it('leitura recém-chegada é atual, com o BPM e o horário preservados', () => {
     const state = pronto({
       session: 'running',
+      watchProtocol: null,
       lastSample: { bpm: 72, measuredAt: haSegundos(0) },
     });
     expect(deriveTelemetryAvailability(state, AGORA)).toEqual({
@@ -65,6 +67,7 @@ describe('deriveTelemetryAvailability', () => {
   it('sessão ativa com leitura velha demais volta a aguardar, porque o relógio está ligado', () => {
     const state = pronto({
       session: 'running',
+      watchProtocol: null,
       lastSample: { bpm: 70, measuredAt: haSegundos(121) },
     });
     expect(deriveTelemetryAvailability(state, AGORA)).toEqual({ kind: 'awaiting' });
@@ -77,6 +80,7 @@ describe('deriveTelemetryAvailability', () => {
   it('sessão encerrada com leitura velha demais é indisponível', () => {
     const state = pronto({
       session: 'ended',
+      watchProtocol: null,
       lastSample: { bpm: 70, measuredAt: haSegundos(121) },
     });
     expect(deriveTelemetryAvailability(state, AGORA)).toEqual({ kind: 'unavailable' });
@@ -85,6 +89,7 @@ describe('deriveTelemetryAvailability', () => {
   it('sessão encerrada com leitura recente continua atual: a última leitura vale', () => {
     const state = pronto({
       session: 'ended',
+      watchProtocol: null,
       lastSample: { bpm: 65, measuredAt: haSegundos(10) },
     });
     expect(deriveTelemetryAvailability(state, AGORA)).toEqual({
@@ -102,6 +107,7 @@ describe('deriveTelemetryAvailability', () => {
   it('leitura com horário no futuro não vira atual por acidente de relógio', () => {
     const state = pronto({
       session: 'ended',
+      watchProtocol: null,
       lastSample: { bpm: 70, measuredAt: haSegundos(-600) },
     });
     expect(deriveTelemetryAvailability(state, AGORA)).toEqual({ kind: 'unavailable' });
