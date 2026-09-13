@@ -32,4 +32,11 @@ final class SWIWatchAppDelegate: NSObject, WKApplicationDelegate {
   func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
     WorkoutCollector.shared.start(configuration: workoutConfiguration)
   }
+
+  /// O sistema pode ter encerrado este app com a sessao ainda ativa. Perguntar
+  /// ao HealthKit no arranque e o que retoma a mesma sessao, com a mesma fila e
+  /// a mesma sequencia, em vez de abrir uma sessao nova no backend.
+  func applicationDidFinishLaunching() {
+    WorkoutCollector.shared.resumeIfPossible()
+  }
 }
