@@ -380,3 +380,83 @@ describe('DeviceAuthService.revoke', () => {
     expect(prisma.telemetryDevice.updateMany).not.toHaveBeenCalled()
   })
 })
+
+// O app decide a frase pelo `code`, não pelo texto: uma vírgula corrigida na
+// mensagem não pode mudar o conselho ao funcionário. `message` fica no corpo
+// para o app de hoje, que ainda casa por texto, não quebrar no intervalo.
+describe('DeviceAuthService, códigos de recusa do pareamento', () => {
+  const rejectionOf = async (promise: Promise<unknown>) => {
+    const erro = await promise.catch((e: BadRequestException) => e)
+    expect(erro).toBeInstanceOf(BadRequestException)
+    return (erro as BadRequestException).getResponse() as Record<string, unknown>
+  }
+
+  it('código expirado', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryEnrollment.findUnique.mockResolvedValue(
+      await enrollment({ expiresAt: new Date(Date.now() - 1_000) }),
+    )
+    const body = await rejectionOf(
+      service(prisma).completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: CODE }),
+    )
+    expect(body).toMatchObject({
+      statusCode: 400,
+      code: 'ENROLLMENT_EXPIRED',
+      message: 'Código de pareamento expirado',
+    })
+  })
+
+  it('código já utilizado, pelo consumedAt e pela corrida perdida', async () => {
+    const consumido = prismaDouble()
+    consumido.telemetryEnrollment.findUnique.mockResolvedValue(
+      await enrollment({ consumedAt: new Date() }),
+    )
+    const corrida = prismaDouble()
+    corrida.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment())
+    corrida.$transaction.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('registro não encontrado', {
+        code: 'P2025',
+        clientVersion: '5.22.0',
+      }),
+    )
+    for (const prisma of [consumido, corrida]) {
+      const body = await rejectionOf(
+        service(prisma).completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: CODE }),
+      )
+      expect(body).toMatchObject({ code: 'ENROLLMENT_USED', message: 'Código de pareamento já utilizado' })
+    }
+  })
+
+  it('inválido: código errado, de outro funcionário e inexistente dão o MESMO corpo', async () => {
+    // Sondar identificadores não pode revelar quais existem nem de quem são.
+    const errado = prismaDouble()
+    errado.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment())
+    const alheio = prismaDouble()
+    alheio.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment())
+    const inexistente = prismaDouble()
+    inexistente.telemetryEnrollment.findUnique.mockResolvedValue(null)
+
+    const bodies = await Promise.all([
+      rejectionOf(service(errado).completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: '999999' })),
+      rejectionOf(service(alheio).completeEnrollment('worker-2', { enrollmentId: 'enrollment-1', code: CODE })),
+      rejectionOf(service(inexistente).completeEnrollment('worker-2', { enrollmentId: 'nao-existe', code: CODE })),
+    ])
+    for (const body of bodies) {
+      expect(body).toMatchObject({ code: 'ENROLLMENT_INVALID', message: 'Código de pareamento inválido' })
+    }
+    expect(bodies[0]).toEqual(bodies[1])
+    expect(bodies[1]).toEqual(bodies[2])
+  })
+
+  it('tipo de aparelho que não recebe credencial', async () => {
+    const prisma = prismaDouble()
+    prisma.user.findUnique.mockResolvedValue(worker())
+    const body = await rejectionOf(
+      service(prisma).createEnrollment(ADMIN, { workerId: 'worker-1', kind: 'APPLE_WATCH' as never }),
+    )
+    expect(body).toMatchObject({
+      code: 'ENROLLMENT_UNSUPPORTED_DEVICE',
+      message: 'Este tipo de aparelho não recebe credencial própria',
+    })
+  })
+})
