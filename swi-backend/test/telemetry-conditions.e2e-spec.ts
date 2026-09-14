@@ -587,7 +587,7 @@ describe('Telemetry conditions e2e', () => {
     // Vinte segundos atrás para passar o corte de 15 s da avaliação seguinte.
     await prisma.telemetryAssessment.update({
       where: { id: primeira.id },
-      data: { inputs: inputs as object, computedAt: new Date(Date.now() - 20_000) },
+      data: { inputs, computedAt: new Date(Date.now() - 20_000) },
     })
 
     await post(headersA, { events: [event({ monitoringSessionId: sessao })] }).expect(200)

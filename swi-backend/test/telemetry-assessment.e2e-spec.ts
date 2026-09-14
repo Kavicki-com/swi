@@ -123,10 +123,15 @@ describe('Telemetry assessment e2e', () => {
     expect(rows[0].effortPercent).not.toBeNull()
     expect(rows[0].wearPercent).not.toBeNull()
     expect((rows[0].inputs as { chain: { reason: string } }).chain.reason).toBe('first_of_session')
+    // A 82 bpm a intensidade não sustenta a dose até o alerta: os minutos até
+    // a fadiga são nulos de propósito, e a linha registra contra que alvo.
+    expect(rows[0].fatigueEtaMin).toBeNull()
+    expect((rows[0].inputs as { wearAlertPercent: number }).wearAlertPercent).toBe(80)
 
     const current = await query.currentForWorker(workerA)
     expect(current.metrics.effort.quality).toBe('CURRENT')
     expect(current.metrics.wear.quality).toBe('CURRENT')
+    expect(current.metrics.fatigueEtaMin).toMatchObject({ value: null, quality: 'UNAVAILABLE', unit: 'min' })
   })
 
   it('segundo lote em menos de 15 s não grava segunda avaliação', async () => {

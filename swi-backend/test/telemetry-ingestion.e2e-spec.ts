@@ -6,6 +6,7 @@ import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { encodeCredential, hashCredential } from '../src/telemetry/devices/device-auth.service'
 import { MAX_BATCH_EVENTS } from '../src/telemetry/ingestion/dto/telemetry-batch.dto'
+import { TelemetryQueryService } from '../src/telemetry/read-model/telemetry-query.service'
 
 // E2E de verdade porque o que a Task 5 promete só existe com HTTP e Postgres
 // juntos: o guard trocando credencial por identidade, o índice único
@@ -14,6 +15,7 @@ import { MAX_BATCH_EVENTS } from '../src/telemetry/ingestion/dto/telemetry-batch
 describe('Telemetry ingestion e2e', () => {
   let app: INestApplication
   let prisma: PrismaService
+  let query: TelemetryQueryService
 
   const emailA = `telemetry-ingest-a-${randomUUID()}@ex.com`
   const emailB = `telemetry-ingest-b-${randomUUID()}@ex.com`
@@ -53,6 +55,7 @@ describe('Telemetry ingestion e2e', () => {
     app = mod.createNestApplication()
     await app.init()
     prisma = app.get(PrismaService)
+    query = app.get(TelemetryQueryService)
 
     const worker = async (email: string, name: string) =>
       (
@@ -135,6 +138,51 @@ describe('Telemetry ingestion e2e', () => {
 
     const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId: workerA } })
     expect(snapshot?.heartRateBpm).toBe(82)
+  })
+
+  it('aceita distância e oxigenação, e o read model as devolve: acumulado do dia e última medição', async () => {
+    const session = randomUUID()
+    const events = [
+      event({
+        monitoringSessionId: session,
+        eventTime: new Date(Date.now() - 10_000).toISOString(),
+        measurements: { distanceDeltaM: { value: 12.5, unit: 'm', source: 'APPLE_WATCH' } },
+      }),
+      event({
+        monitoringSessionId: session,
+        measurements: {
+          distanceDeltaM: { value: 7.5, unit: 'm', source: 'APPLE_WATCH' },
+          oxygenSaturation: { value: 96, unit: '%', source: 'APPLE_WATCH' },
+        },
+      }),
+    ]
+
+    const { body } = await post(headersB, { events }).expect(200)
+    expect(body.acceptedEventIds).toEqual(events.map((e) => e.eventId))
+
+    const sample = await prisma.telemetrySample.findUnique({ where: { eventId: events[1].eventId } })
+    expect(sample?.distanceDeltaM).toBe(7.5)
+    expect(sample?.oxygenSaturationPct).toBe(96)
+
+    const current = await query.currentForWorker(workerB)
+    // Distância soma no dia como os passos; oxigenação é a última medição,
+    // atual pela régua da pressão, e vem do snapshot que a ingestão promoveu.
+    expect(current.metrics.distance).toMatchObject({ value: 20, quality: 'CURRENT', unit: 'm' })
+    expect(current.metrics.oxygenSaturation).toMatchObject({ value: 96, quality: 'CURRENT', unit: '%' })
+  })
+
+  it('recusa distância negativa e oxigenação acima de 100, sem gravar nada', async () => {
+    const negativa = event({ measurements: { distanceDeltaM: { value: -1, unit: 'm', source: 'APPLE_WATCH' } } })
+    const acima = event({ measurements: { oxygenSaturation: { value: 101, unit: '%', source: 'APPLE_WATCH' } } })
+
+    const { body } = await post(headersB, { events: [negativa, acima] }).expect(200)
+
+    expect(body.acceptedEventIds).toEqual([])
+    expect(body.conflicts.map((c: { eventId: string }) => c.eventId).sort()).toEqual(
+      [negativa.eventId, acima.eventId].sort(),
+    )
+    expect(body.conflicts.map((c: { reason: string }) => c.reason)).toEqual(['invalid_measurement', 'invalid_measurement'])
+    expect(await prisma.telemetrySample.count({ where: { eventId: { in: [negativa.eventId, acima.eventId] } } })).toBe(0)
   })
 
   it('confirma o reenvio idêntico sem gravar uma segunda amostra', async () => {
