@@ -41,6 +41,10 @@ export type MetricKind =
   | 'bloodPressure'
   | 'effort'
   | 'wear'
+  | 'distance'
+  | 'oxygenSaturation'
+  /** Minutos até o desgaste cruzar o limiar do alerta. Derivada da avaliação. */
+  | 'fatigueEtaMin'
 
 /** Identificadores do escopo do cliente para as métricas que ele nomeou. */
 export type ClientIndicator = 'Q13' | 'Q14' | 'Q16'
@@ -88,6 +92,10 @@ export interface TelemetryEvent {
     motionCount: Measurement
     battery: Measurement
     bloodPressure: Measurement<BloodPressure>
+    /** Variação em metros desde a amostra anterior, como stepDelta. */
+    distanceDeltaM: Measurement
+    /** Percentual. O relógio só mede em repouso, então chega raramente. */
+    oxygenSaturation: Measurement
   }>
   journeyId?: string | null
   taskId?: string | null
