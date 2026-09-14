@@ -1,20 +1,36 @@
 import { randomUUID } from 'node:crypto'
 import type { Segment } from '../assessment/fatigue-simulator'
+import { monitoredDayOf } from '../domain/metric-state'
+import { SUMMARIZER_VERSION } from '../lifecycle/telemetry-summarizer'
 
 // Parte pura do script de homologação: um cenário de segmentos vira lotes no
-// formato exato que a ingestão aceita. Não toca banco nem Nest, e por isso é
-// o que se testa.
+// formato exato que a ingestão aceita, e a base de repouso vira linhas de
+// resumo do dia. Não toca banco nem Nest, e por isso é o que se testa.
 //
-// Por que existe: o alerta de desgaste foi desenhado para ser raro num turno
-// normal. Sem um jeito de provocá-lo, o cliente homologa alertas sem nunca
-// ter visto um. Isto NÃO é um gerador de demonstração como recurso: é uma
-// ferramenta de homologação, e a origem DEMO em todo evento é o rótulo que impede o
-// dado injetado de ser confundido com real, no read model e na tela.
+// Por que existe: as condições do piloto foram desenhadas para serem raras
+// num turno normal, e sem um jeito de provocá-las o cliente homologa alertas
+// sem nunca ter visto um. Isto NÃO é um gerador de demonstração como recurso:
+// é uma ferramenta de homologação, e a origem DEMO em todo evento e em toda
+// linha de resumo é o rótulo que impede o dado injetado de ser confundido com
+// real, no read model, na fórmula e na tela.
+//
+// Duas regras da ingestão decidem o que o script consegue provocar:
+// 1. Só evento AO VIVO (idade até o limiar de desatualizado) dispara avaliação
+//    e condições; o que chega com atraso vai ao histórico e não abre nada. Por
+//    isso o modo `live` do script é o único que provoca alerta.
+// 2. Esforço e desgaste exigem base de repouso (mínimos diários dos últimos 14
+//    dias, da MESMA origem) e data de nascimento. `baselineSummaries` cobre a
+//    primeira; a segunda vem do seed.
 
 export interface DemoScenario {
   cadenceSec: number
   /** [segundos, bpm ou null, picos por minuto ou null], como no simulador. */
   segments: readonly Segment[]
+  /**
+   * Bateria fixa em toda leitura de bateria do cenário. Sem isto a bateria
+   * começa em 100 e cai devagar. É o que o cenário de bateria baixa usa.
+   */
+  batteryPercent?: number
 }
 
 interface Measurement {
@@ -49,6 +65,7 @@ export interface DemoBatch {
 
 const CADENCE_SEC = 5
 const MIN = 60
+const DAY_MS = 24 * 60 * 60 * 1000
 /**
  * O teto de eventos por lote da ingestão (MAX_BATCH_EVENTS em
  * telemetry-batch.dto.ts). Repetido aqui, e não importado, de propósito: o
@@ -57,24 +74,45 @@ const MIN = 60
  */
 const MAX_BATCH_EVENTS = 200
 
+export type ScenarioName =
+  | 'repouso'
+  | 'leve'
+  | 'moderado'
+  | 'intenso'
+  | 'desgaste'
+  | 'batimento-alto'
+  | 'bateria-baixa'
+
 /**
- * Os cenários da varredura de parâmetros da fórmula: repouso, leve, moderado
- * e intenso, 30 minutos cada. `alerta` encadeia moderado e intenso pelo tempo
- * que a varredura mostrou ser preciso para o desgaste cruzar 80% e a condição
- * abrir. Cadência de 5 s, que é a do relógio em sessão.
+ * Cenários e o que cada um prova, em modo `live`:
+ *
+ * - repouso, leve, moderado, intenso: 30 min cada, os quatro da varredura de
+ *   parâmetros da fórmula. Mostram esforço e desgaste subindo na tela.
+ * - desgaste: 20 min moderado e 90 min intenso, que a varredura mostrou levar
+ *   o desgaste acima de 80%. NÃO abre condição: não existe condição de
+ *   desgaste no perfil de alertas de hoje. Serve para ver a fórmula no teto.
+ * - batimento-alto: 3 min a 185 bpm. Abre HEART_RATE_HIGH em cerca de um
+ *   minuto (janela de 60 s, sustentado por 45 s): o limiar personalizado é
+ *   90% do máximo pela idade, e nunca abaixo de 180.
+ * - bateria-baixa: 1 min em repouso com a bateria em 10%. Abre
+ *   DEVICE_BATTERY_LOW no primeiro evento (abre em 15%).
+ *
+ * Cadência de 5 s, que é a do relógio em sessão.
  */
-export const SCENARIOS: Record<'repouso' | 'leve' | 'moderado' | 'intenso' | 'alerta', DemoScenario> = {
+export const SCENARIOS: Record<ScenarioName, DemoScenario> = {
   repouso: { cadenceSec: CADENCE_SEC, segments: [[30 * MIN, 66, 2]] },
   leve: { cadenceSec: CADENCE_SEC, segments: [[30 * MIN, 95, 30]] },
   moderado: { cadenceSec: CADENCE_SEC, segments: [[30 * MIN, 125, 54]] },
   intenso: { cadenceSec: CADENCE_SEC, segments: [[30 * MIN, 165, 90]] },
-  alerta: {
+  desgaste: {
     cadenceSec: CADENCE_SEC,
     segments: [
       [20 * MIN, 125, 54],
       [90 * MIN, 165, 90],
     ],
   },
+  'batimento-alto': { cadenceSec: CADENCE_SEC, segments: [[3 * MIN, 185, 90]] },
+  'bateria-baixa': { cadenceSec: CADENCE_SEC, segments: [[1 * MIN, 66, 2]], batteryPercent: 10 },
 }
 
 export interface BatchesOptions {
@@ -132,9 +170,11 @@ export function batchesFor(scenario: DemoScenario, options: BatchesOptions): Dem
       measurements.stepDelta = measurement(Math.round(peaks), 'steps')
     }
 
-    // Bateria a cada 3 minutos, contando o primeiro evento, caindo devagar.
+    // Bateria a cada 3 minutos, contando o primeiro evento: fixa quando o
+    // cenário manda, senão caindo devagar a partir de 100.
     if (elapsedSec % (3 * MIN) === 0) {
-      measurements.battery = measurement(round3(100 - (elapsedSec / MIN) * 0.05), '%')
+      const percent = scenario.batteryPercent ?? round3(100 - (elapsedSec / MIN) * 0.05)
+      measurements.battery = measurement(percent, '%')
     }
 
     return {
@@ -152,6 +192,55 @@ export function batchesFor(scenario: DemoScenario, options: BatchesOptions): Dem
     batches.push({ events: events.slice(i, i + maxBatch) })
   }
   return batches
+}
+
+export interface BaselineOptions {
+  /** Mínimo diário de batimento a semear. 62 é o repouso da varredura. */
+  restingBpm?: number
+  /** Dias fechados a semear, contando de ontem para trás. 14 é o da fórmula. */
+  days?: number
+}
+
+/** Uma linha de resumo do dia, no formato da tabela, só com o que a base lê. */
+export interface BaselineSummary {
+  workerId: string
+  day: Date
+  origin: 'DEMO'
+  heartRateMin: number
+  sampleCount: number
+  summarizerVersion: string
+  computedAt: Date
+}
+
+/**
+ * A base de repouso que a fórmula exige, como linhas de resumo do dia sob a
+ * origem DEMO. A consulta da base filtra pela origem da sessão, então estas
+ * linhas alimentam só sessões de demonstração e nunca tocam o real.
+ *
+ * Dias fechados, de ontem para trás, no dia monitorado (fuso do Brasil), que
+ * é o que a fórmula soma. `sampleCount` e a versão do resumidor entram porque
+ * a tabela os exige; o valor que importa é o mínimo.
+ */
+export function baselineSummaries(
+  workerId: string,
+  now: Date,
+  options: BaselineOptions = {},
+): BaselineSummary[] {
+  const { restingBpm = 62, days = 14 } = options
+  const today = monitoredDayOf(now)
+  const rows: BaselineSummary[] = []
+  for (let k = 1; k <= days; k += 1) {
+    rows.push({
+      workerId,
+      day: new Date(today.getTime() - k * DAY_MS),
+      origin: 'DEMO',
+      heartRateMin: restingBpm,
+      sampleCount: 1,
+      summarizerVersion: SUMMARIZER_VERSION,
+      computedAt: now,
+    })
+  }
+  return rows
 }
 
 /**

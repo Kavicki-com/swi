@@ -1,10 +1,11 @@
-import { assertNotProduction, batchesFor, SCENARIOS } from './demo-telemetry'
+import { assertNotProduction, baselineSummaries, batchesFor, SCENARIOS } from './demo-telemetry'
 
 // O gerador é a parte pura do script de homologação: recebe um cenário e
-// devolve lotes no formato exato que a ingestão aceita. É o que dá para
-// provar sem banco. O que ele protege: a origem é sempre DEMO (o rótulo que
-// impede dado injetado de ser confundido com real), ausência nunca vira zero,
-// e o movimento vai como contagem por intervalo, que é o que a fórmula divide.
+// devolve lotes no formato exato que a ingestão aceita, e a base de repouso
+// como linhas de resumo do dia. É o que dá para provar sem banco. O que ele
+// protege: a origem é sempre DEMO (o rótulo que impede dado injetado de ser
+// confundido com real), ausência nunca vira zero, e o movimento vai como
+// contagem por intervalo, que é o que a fórmula divide.
 
 const SESSAO = '11111111-1111-4111-8111-111111111111'
 const T_FIM = new Date('2026-09-13T12:00:00.000Z')
@@ -32,11 +33,11 @@ describe('gerador de cenário de demonstração', () => {
   })
 
   it('respeita o teto de 200 eventos por lote, que é o da ingestão', () => {
-    const batches = batchesFor(SCENARIOS.alerta, { sessionId: SESSAO, endAt: T_FIM })
+    const batches = batchesFor(SCENARIOS.desgaste, { sessionId: SESSAO, endAt: T_FIM })
     expect(batches.length).toBeGreaterThan(1)
     expect(batches.every((b) => b.events.length <= 200)).toBe(true)
-    // Nada se perde na divisão.
-    expect(eventos(batches)).toHaveLength(SCENARIOS.alerta.segments.reduce((n, [s]) => n + s / 5, 0))
+    // Nada se perde na divisão: 110 min a 5 s.
+    expect(eventos(batches)).toHaveLength(1320)
   })
 
   it('segmento sem batimento não escreve heartRate, e nunca escreve zero', () => {
@@ -85,10 +86,47 @@ describe('gerador de cenário de demonstração', () => {
     expect(valores.every((v) => v > 0 && v <= 100)).toBe(true)
   })
 
+  it('o cenário de bateria baixa fixa a bateria abaixo do limiar de abertura, já no primeiro evento', () => {
+    // DEVICE_BATTERY_LOW abre em 15%: uma leitura a 10% basta, e ela vem no
+    // primeiro evento para a homologação não esperar.
+    const all = eventos(batchesFor(SCENARIOS['bateria-baixa'], { sessionId: SESSAO, endAt: T_FIM }))
+    expect(all).toHaveLength(12)
+    expect(all[0].measurements.battery).toEqual({ value: 10, unit: '%', source: 'APPLE_WATCH' })
+  })
+
+  it('o cenário de batimento alto fica acima do piso de 180 por mais que a persistência', () => {
+    // HEART_RATE_HIGH: limiar personalizado é 90% do máximo pela idade e nunca
+    // abaixo de 180; persistência é janela de 60 s sustentada por 45 s.
+    const all = eventos(batchesFor(SCENARIOS['batimento-alto'], { sessionId: SESSAO, endAt: T_FIM }))
+    expect(all).toHaveLength(36)
+    expect(all.every((e) => (e.measurements.heartRate?.value ?? 0) >= 180)).toBe(true)
+  })
+
   it('identificadores de evento são UUID em minúsculas e únicos', () => {
     const all = eventos(batchesFor(SCENARIOS.leve, { sessionId: SESSAO, endAt: T_FIM }))
     expect(all.every((e) => UUID_MINUSCULO.test(e.eventId))).toBe(true)
     expect(new Set(all.map((e) => e.eventId)).size).toBe(all.length)
+  })
+})
+
+describe('base de repouso de demonstração', () => {
+  // A fórmula exige a mediana dos mínimos diários dos últimos 14 dias, da
+  // MESMA origem da sessão. Sem isto, esforço e desgaste saem nulos e a
+  // homologação não vê nada, como aconteceu na primeira rodada contra o banco.
+  it('gera 14 dias fechados, de ontem para trás, sob origem DEMO', () => {
+    const rows = baselineSummaries('worker-1', T_FIM)
+    expect(rows).toHaveLength(14)
+    expect(rows.every((r) => r.origin === 'DEMO' && r.workerId === 'worker-1')).toBe(true)
+    expect(rows.every((r) => r.heartRateMin === 62)).toBe(true)
+    // Todos antes do dia de hoje, sem repetição.
+    expect(rows.every((r) => r.day.getTime() < T_FIM.getTime())).toBe(true)
+    expect(new Set(rows.map((r) => r.day.toISOString())).size).toBe(14)
+  })
+
+  it('aceita outro repouso e outro número de dias', () => {
+    const rows = baselineSummaries('worker-1', T_FIM, { restingBpm: 58, days: 3 })
+    expect(rows).toHaveLength(3)
+    expect(rows.every((r) => r.heartRateMin === 58)).toBe(true)
   })
 })
 
