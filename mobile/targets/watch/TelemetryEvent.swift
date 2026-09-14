@@ -16,6 +16,7 @@ enum TelemetryUnit: String, Codable {
   case kcal
   case count
   case percent = "%"
+  case meters = "m"
 }
 
 /// Uma medicao. `source` e sempre APPLE_WATCH nesta entrega: o relogio e a
@@ -53,9 +54,20 @@ struct TelemetryMeasurement: Codable {
   static func battery(percent: Double) -> TelemetryMeasurement {
     TelemetryMeasurement(value: percent, unit: .percent)
   }
+
+  /// Variacao em metros desde a leitura anterior, sob o mesmo contrato de
+  /// delta dos passos. O backend recusa negativo.
+  static func distance(meters: Double) -> TelemetryMeasurement {
+    TelemetryMeasurement(value: meters, unit: .meters)
+  }
+
+  /// Percentual de 0 a 100, ja convertido: o HealthKit entrega fracao (0,97).
+  static func oxygenSaturation(percent: Double) -> TelemetryMeasurement {
+    TelemetryMeasurement(value: percent, unit: .percent)
+  }
 }
 
-/// As cinco medicoes, todas opcionais. Ausente e ausente: chave nula NAO e
+/// As sete medicoes, todas opcionais. Ausente e ausente: chave nula NAO e
 /// escrita, porque o backend trata ausencia como ausencia e um zero escrito
 /// aqui viraria leitura de verdade la.
 struct TelemetryMeasurements: Codable {
@@ -64,16 +76,20 @@ struct TelemetryMeasurements: Codable {
   var activeEnergyKcal: TelemetryMeasurement?
   var motionCount: TelemetryMeasurement?
   var battery: TelemetryMeasurement?
+  var distanceDeltaM: TelemetryMeasurement?
+  var oxygenSaturation: TelemetryMeasurement?
 
   /// Evento sem nenhuma medicao nao tem por que existir; quem monta confere
   /// isto antes de enfileirar.
   var isEmpty: Bool {
     heartRate == nil && stepDelta == nil && activeEnergyKcal == nil
       && motionCount == nil && battery == nil
+      && distanceDeltaM == nil && oxygenSaturation == nil
   }
 
   enum CodingKeys: String, CodingKey {
     case heartRate, stepDelta, activeEnergyKcal, motionCount, battery
+    case distanceDeltaM, oxygenSaturation
   }
 
   // Escrito a mao, e nao deixado para a sintese, porque a omissao de chave
@@ -85,6 +101,8 @@ struct TelemetryMeasurements: Codable {
     try container.encodeIfPresent(activeEnergyKcal, forKey: .activeEnergyKcal)
     try container.encodeIfPresent(motionCount, forKey: .motionCount)
     try container.encodeIfPresent(battery, forKey: .battery)
+    try container.encodeIfPresent(distanceDeltaM, forKey: .distanceDeltaM)
+    try container.encodeIfPresent(oxygenSaturation, forKey: .oxygenSaturation)
   }
 }
 
