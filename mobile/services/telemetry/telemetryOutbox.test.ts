@@ -360,9 +360,10 @@ describe('telemetryOutbox, arquivo corrompido', () => {
   });
 });
 
-describe('as cinco medições do contrato', () => {
+describe('as sete medições do contrato', () => {
   // O relógio passou a mandar passos, energia, movimento e bateria além do
-  // batimento. A fila é a mesma; o que muda é o que ela aceita guardar.
+  // batimento, e depois distância e oxigenação. A fila é a mesma; o que muda
+  // é o que ela aceita guardar.
   const completo = (): OutboxEvent => ({
     ...evento('e1'),
     measurements: {
@@ -371,10 +372,12 @@ describe('as cinco medições do contrato', () => {
       activeEnergyKcal: { value: 0.8, unit: 'kcal', source: 'APPLE_WATCH' },
       motionCount: { value: 3, unit: 'count', source: 'APPLE_WATCH' },
       battery: { value: 76, unit: '%', source: 'APPLE_WATCH' },
+      distanceDeltaM: { value: 12.5, unit: 'm', source: 'APPLE_WATCH' },
+      oxygenSaturation: { value: 96, unit: '%', source: 'APPLE_WATCH' },
     },
   });
 
-  it('guarda e devolve um evento com as cinco medições, sem alterar nenhuma', async () => {
+  it('guarda e devolve um evento com as sete medições, sem alterar nenhuma', async () => {
     const { storage } = memoryStorage();
     const outbox = createTelemetryOutbox(storage);
     await outbox.append(completo());
@@ -450,6 +453,19 @@ describe('as cinco medições do contrato', () => {
       },
     });
     expect(await outbox.pending()).toEqual([]);
+  });
+
+  it('recusa distância negativa, oxigenação acima de 100 e unidade errada de distância', async () => {
+    // As mesmas regras do backend (metric-state.ts): distância é variação em
+    // metros, nunca negativa; oxigenação é percentual entre 0 e 100.
+    const { storage } = memoryStorage();
+    const outbox = createTelemetryOutbox(storage);
+    const com = (measurements: OutboxEvent['measurements']) => ({ ...evento('e1'), measurements });
+    await outbox.append(com({ distanceDeltaM: { value: -1, unit: 'm', source: 'APPLE_WATCH' } }));
+    await outbox.append(com({ oxygenSaturation: { value: 101, unit: '%', source: 'APPLE_WATCH' } }));
+    await outbox.append(com({ distanceDeltaM: { value: 8, unit: 'km' as 'm', source: 'APPLE_WATCH' } }));
+    expect(await outbox.pending()).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(3);
   });
 
   it('recusa medição que não existe no contrato', async () => {

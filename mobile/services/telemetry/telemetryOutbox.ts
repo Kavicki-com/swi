@@ -21,13 +21,17 @@ export interface OutboxMeasurement<U extends string> {
 }
 
 /**
- * As cinco medições que o relógio produz, todas opcionais. Nem todo retorno do
+ * As sete medições que o relógio produz, todas opcionais. Nem todo retorno do
  * HealthKit traz batimento: um evento pode ser só passos, ou só bateria, e
  * exigir batimento descartaria leitura real.
  *
- * CONTRATO DE VARIAÇÃO: `stepDelta`, `activeEnergyKcal` e `motionCount` são a
- * mudança desde o evento anterior da mesma sessão, nunca o acumulado. O backend
- * os SOMA. Enviar acumulado passa em toda validação e infla o total em silêncio.
+ * CONTRATO DE VARIAÇÃO: `stepDelta`, `distanceDeltaM`, `activeEnergyKcal` e
+ * `motionCount` são a mudança desde o evento anterior da mesma sessão, nunca o
+ * acumulado. O backend os SOMA. Enviar acumulado passa em toda validação e
+ * infla o total em silêncio.
+ *
+ * `oxygenSaturation` é medição pontual: o relógio só mede em repouso, e a
+ * medição sai no evento seguinte à entrega dela pelo HealthKit.
  */
 export interface OutboxMeasurements {
   heartRate?: OutboxMeasurement<'bpm'>;
@@ -35,6 +39,8 @@ export interface OutboxMeasurements {
   activeEnergyKcal?: OutboxMeasurement<'kcal'>;
   motionCount?: OutboxMeasurement<'count'>;
   battery?: OutboxMeasurement<'%'>;
+  distanceDeltaM?: OutboxMeasurement<'m'>;
+  oxygenSaturation?: OutboxMeasurement<'%'>;
 }
 
 /** Exatamente a forma que POST /telemetry/v1/batches aceita (telemetry-batch.dto.ts). */
@@ -61,6 +67,8 @@ const MEASUREMENT_RULES: Record<
   activeEnergyKcal: { unit: 'kcal', min: 0 },
   motionCount: { unit: 'count', min: 0 },
   battery: { unit: '%', min: 0, max: 100 },
+  distanceDeltaM: { unit: 'm', min: 0 },
+  oxygenSaturation: { unit: '%', min: 0, max: 100 },
 };
 
 export interface OutboxState {
