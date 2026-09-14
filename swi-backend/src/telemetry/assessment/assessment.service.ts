@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
+import { EXPERIMENTAL_ALERT_PROFILE } from '../alerts/alert-profile'
 import { monitoredDayOf } from '../domain/metric-state'
 import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from './assessment-baseline'
 import { EXPERIMENTAL_PROFILE, type AssessmentProfile } from './assessment-profile'
@@ -190,6 +191,9 @@ export class TelemetryAssessmentService {
       baseline,
       samples: samples.map((s) => ({ atMs: s.eventTime.getTime(), heartRateBpm: s.heartRateBpm, motionCount: s.motionCount })),
       window: { startMs: windowStart.getTime(), endMs: windowEnd.getTime() },
+      // O 80 tem um dono só, o perfil de alertas: é a condição de desgaste
+      // alto que dá sentido aos minutos até a fadiga.
+      wearAlertPercent: EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent,
     })
 
     const inputs = {
@@ -201,6 +205,7 @@ export class TelemetryAssessmentService {
         nextState: result.nextState,
       },
       baseline: { restingBpm, days: minima.length, ageYears, maxBpm },
+      wearAlertPercent: EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent,
       window: {
         skippedMs,
         sampleCount: samples.length,
@@ -221,6 +226,7 @@ export class TelemetryAssessmentService {
         windowEnd,
         effortPercent: result.effortPercent,
         wearPercent: result.wearPercent,
+        fatigueEtaMin: result.fatigueEtaMin,
         formulaVersion: this.profile.version,
         inputs: inputs as unknown as Prisma.InputJsonValue,
       },

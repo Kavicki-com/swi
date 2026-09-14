@@ -1,6 +1,7 @@
 import { EXPERIMENTAL_PROFILE, FORMULA_VERSION } from './assessment-profile'
 import {
   assessWindow,
+  fatigueEtaMinutes,
   type Baseline,
   type FormulaSample,
   type FormulaState,
@@ -37,6 +38,7 @@ const run = (over: Partial<Parameters<typeof assessWindow>[0]> = {}) =>
     baseline: BASELINE,
     samples: steady(118),
     window: { startMs: sec(0), endMs: sec(15) },
+    wearAlertPercent: 80,
     ...over,
   })
 
@@ -80,8 +82,54 @@ describe('assessWindow: perfil', () => {
       gapMaxMs: 120_000,
       heartRateReuseMs: 45_000,
       chainLookbackMs: 120_000,
+      fatigueEtaHorizonMinutes: 480,
     })
     expect(Object.isFrozen(EXPERIMENTAL_PROFILE)).toBe(true)
+  })
+})
+
+describe('fatigueEtaMinutes: minutos até o desgaste cruzar o limiar do alerta', () => {
+  const eta = (strainDose: number, effortEma: number | null) =>
+    fatigueEtaMinutes({ strainDose, effortEma }, EXPERIMENTAL_PROFILE, 80)
+
+  it('sem intensidade recente não há projeção', () => {
+    expect(eta(0, null)).toBeNull()
+  })
+
+  it('intensidade que não sustenta a dose até o alvo devolve nulo: a chegada nunca acontece', () => {
+    // Com decaimento de 180 min, intensidade 1,0 estaciona a dose em 180, e
+    // 80% de desgaste exige cerca de 190. O número não é "muito longe": é
+    // "não chega", e a tela diz "não se aproxima".
+    expect(eta(0, 1.0)).toBeNull()
+  })
+
+  it('dose já em 80% devolve zero, não nulo: a chegada é agora', () => {
+    // 190,2 é a menor dose cuja porcentagem arredonda para 80: é o mesmo
+    // arredondamento que abre a condição, para o número nunca dizer "faltam
+    // dois minutos" com a condição já aberta.
+    expect(eta(190.2, 0.5)).toBe(0)
+    expect(eta(300, 1.2)).toBe(0)
+  })
+
+  it('reproduz a forma fechada: dose zero e intensidade 1,1 chegam em 428 minutos', () => {
+    // D_ss = 180 * 1,1^1,6 = 209,65; D* = -120 ln(1 - 0,795) = 190,17;
+    // t = 180 ln((209,65 - 0) / (209,65 - 190,17)) = 180 ln(10,76) = 427,7.
+    expect(eta(0, 1.1)).toBe(428)
+  })
+
+  it('chegada além de um turno devolve nulo', () => {
+    // Intensidade 1,05 estaciona em 194,6, pouco acima do alvo: a curva chega,
+    // mas depois de 14 horas. Um número desses não orienta ninguém no turno.
+    expect(eta(0, 1.05)).toBeNull()
+  })
+
+  it('mais dose ou mais intensidade encurtam a chegada', () => {
+    expect(eta(100, 1.1)).toBeLessThan(eta(0, 1.1) as number)
+    expect(eta(0, 1.2)).toBeLessThan(eta(0, 1.1) as number)
+  })
+
+  it('a intensidade respeita o teto do perfil: acima dele não encurta mais', () => {
+    expect(eta(0, 5)).toBe(eta(0, EXPERIMENTAL_PROFILE.intensityCeiling))
   })
 })
 
@@ -218,6 +266,24 @@ describe('assessWindow: invariantes', () => {
   it('data de nascimento ausente é motivo próprio', () => {
     const r = run({ baseline: { kind: 'unavailable', reason: 'no_birth_date' } })
     expect(r.unavailableReason).toBe('no_birth_date')
+  })
+
+  it('a janela devolve os minutos até a fadiga a partir do estado que ela mesma produziu', () => {
+    // 200 bpm passa da máxima por idade: a intensidade encosta no teto de 1,2
+    // e a dose de regime (241) supera o alvo (190), então a chegada existe.
+    const before = chain(5, 200)
+    const r = run({
+      previous: before.nextState,
+      samples: steady(200, 75),
+      window: { startMs: sec(75), endMs: sec(90) },
+    })
+    expect(r.fatigueEtaMin).toBe(fatigueEtaMinutes(r.nextState, EXPERIMENTAL_PROFILE, 80))
+    expect(r.fatigueEtaMin).not.toBeNull()
+  })
+
+  it('sem repouso observado, e sem BPM na janela, os minutos até a fadiga ficam nulos como o esforço', () => {
+    expect(run({ baseline: { kind: 'unavailable', reason: 'no_resting_baseline' } }).fatigueEtaMin).toBeNull()
+    expect(run({ samples: [sample(15, null)] }).fatigueEtaMin).toBeNull()
   })
 
   it('zero fisiológico nunca representa ausência: BPM zero não é tratado como nulo', () => {

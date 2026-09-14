@@ -28,11 +28,19 @@ export interface FormulaInput {
   /** Em ordem crescente de atMs, todas dentro da janela. */
   samples: readonly FormulaSample[]
   window: { startMs: number; endMs: number }
+  /**
+   * Percentual de desgaste em que o alerta abre. Vem do perfil de alertas,
+   * por parâmetro: a fórmula não conhece o perfil de alertas, e o número
+   * gravado em inputs diz contra o que os minutos foram calculados.
+   */
+  wearAlertPercent: number
 }
 
 export interface FormulaResult {
   effortPercent: number | null
   wearPercent: number | null
+  /** Minutos até o desgaste cruzar wearAlertPercent. Nulo: não se aproxima. */
+  fatigueEtaMin: number | null
   nextState: FormulaState
   unavailableReason: UnavailableReason | null
   motionAvailable: boolean
@@ -63,6 +71,39 @@ function decayed(dose: number, elapsedMs: number, decayMinutes: number): number 
 
 function wearOf(dose: number, doseScale: number): number {
   return Math.round(100 * (1 - Math.exp(-dose / doseScale)))
+}
+
+/**
+ * Minutos até o desgaste cruzar o limiar do alerta, mantida a intensidade
+ * recente. É a forma fechada da própria dinâmica da dose: com intensidade
+ * constante I, a dose obedece dD/dt = I^e - D/tau (por minuto) e tende a
+ * D_ss = tau * I^e; a solução é D(t) = D_ss + (D0 - D_ss) e^(-t/tau), e o
+ * instante em que ela cruza a dose alvo D* é t = tau ln((D_ss - D0)/(D_ss - D*)).
+ *
+ * A dose alvo é a MENOR dose cuja porcentagem arredonda para o limiar, e não
+ * a dose do limiar exato: a condição abre pelo percentual arredondado, e o
+ * número nunca pode dizer "faltam dois minutos" com a condição já aberta.
+ *
+ * Nulo quando não há intensidade recente, quando a intensidade não sustenta a
+ * dose até o alvo (D_ss <= D*: a projeção nunca chega, e a tela diz "não se
+ * aproxima") ou quando a chegada está além do horizonte do perfil. Zero quando
+ * a dose já passou do alvo: a chegada é agora.
+ */
+export function fatigueEtaMinutes(
+  state: Pick<FormulaState, 'strainDose' | 'effortEma'>,
+  profile: AssessmentProfile,
+  wearAlertPercent: number,
+): number | null {
+  if (state.effortEma === null) return null
+  const targetDose = -profile.doseScale * Math.log(1 - (wearAlertPercent - 0.5) / 100)
+  if (state.strainDose >= targetDose) return 0
+  const intensity = clamp(state.effortEma, 0, profile.intensityCeiling)
+  const steadyDose = profile.decayMinutes * intensity ** profile.doseExponent
+  if (steadyDose <= targetDose) return null
+  const minutes =
+    profile.decayMinutes * Math.log((steadyDose - state.strainDose) / (steadyDose - targetDose))
+  if (minutes > profile.fatigueEtaHorizonMinutes) return null
+  return Math.round(minutes)
 }
 
 /**
@@ -135,6 +176,7 @@ export function assessWindow(input: FormulaInput): FormulaResult {
     return {
       effortPercent: null,
       wearPercent: null,
+      fatigueEtaMin: null,
       nextState,
       unavailableReason: baseline.reason,
       motionAvailable: false,
@@ -145,6 +187,9 @@ export function assessWindow(input: FormulaInput): FormulaResult {
   return {
     effortPercent: heartRateSeen && ema !== null ? Math.round(100 * clamp(ema, 0, 1)) : null,
     wearPercent: wearOf(dose, profile.doseScale),
+    // Acompanha o esforço: sem BPM na janela não há intensidade recente que
+    // valha uma projeção, mesmo que a média móvel antiga ainda exista.
+    fatigueEtaMin: heartRateSeen ? fatigueEtaMinutes(nextState, profile, input.wearAlertPercent) : null,
     nextState,
     unavailableReason: heartRateSeen ? null : 'no_heart_rate',
     motionAvailable,

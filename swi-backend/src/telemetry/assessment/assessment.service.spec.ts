@@ -1,4 +1,5 @@
 import type { PrismaService } from '../../prisma/prisma.service'
+import { EXPERIMENTAL_ALERT_PROFILE } from '../alerts/alert-profile'
 import { EXPERIMENTAL_PROFILE, FORMULA_VERSION } from './assessment-profile'
 import { ASSESSMENT_THROTTLE_MS, TelemetryAssessmentService } from './assessment.service'
 
@@ -214,6 +215,39 @@ describe('TelemetryAssessmentService.assessSession', () => {
     await service(prisma).assessSession('session-1', NOW, NOW)
     // 1991-05-10 em 2026-09-04: 35 anos; 208 - 0.7*35 = 183.5
     expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.baseline).toMatchObject({ ageYears: 35, maxBpm: 183.5 })
+  })
+
+  it('grava os minutos até a fadiga contra o limiar do alerta de desgaste, e registra o alvo em inputs', async () => {
+    // O alvo vem do perfil de alertas, dono único do 80: a fórmula não o
+    // conhece, recebe por parâmetro, e a linha registra contra o que calculou.
+    // Dose já acima do alvo: a chegada é agora, e o número é zero, não nulo.
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue(
+      previousRow({
+        inputs: {
+          chain: {
+            nextState: { strainDose: 250, effortEma: 0.9, lastHeartRate: null, lastSampleAtMs: secondsAgo(20).getTime() },
+          },
+        },
+      }),
+    )
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(10), sampleRow(5), sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.fatigueEtaMin).toBe(0)
+    expect(data.inputs.wearAlertPercent).toBe(EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent)
+  })
+
+  it('sem repouso observado, os minutos até a fadiga ficam nulos como esforço e desgaste', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryDailySummary.findMany.mockResolvedValue([])
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.fatigueEtaMin).toBeNull()
   })
 
   it('grava o perfil inteiro em inputs, para a linha se reproduzir depois de o perfil mudar', async () => {
