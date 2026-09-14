@@ -45,6 +45,8 @@ const snapshot = (over: Partial<ProjectionSnapshot> = {}): ProjectionSnapshot =>
   diastolicMmHg: null,
   bloodPressureSource: null,
   bloodPressureAt: null,
+  oxygenSaturationPct: null,
+  oxygenSaturationAt: null,
   ...over,
 })
 
@@ -60,12 +62,18 @@ const totals = (
     energy?: number
     energyAt?: string
     energyEarliestAt?: string
+    distance?: number
+    distanceAt?: string
   } = {},
 ): DayTotals => ({
   steps:
     over.steps === undefined
       ? null
       : { value: over.steps, measuredAt: over.stepsAt ?? secondsAgo(20), source: 'APPLE_WATCH' },
+  distance:
+    over.distance === undefined
+      ? null
+      : { value: over.distance, measuredAt: over.distanceAt ?? secondsAgo(20), source: 'APPLE_WATCH' },
   activeEnergy:
     over.energy === undefined
       ? null
@@ -361,13 +369,93 @@ describe('projectWorker: MPM fica disponível para cálculo e diagnóstico', () 
   })
 })
 
+describe('projectWorker: distância é o acumulado do dia, como passos', () => {
+  it('o total do dia chega somado do banco, em metros, carimbado pela última amostra de distância', () => {
+    const projected = project({ dayTotals: totals({ distance: 1234.56, distanceAt: secondsAgo(10) }) })
+
+    expect(projected.metrics.distance).toEqual({
+      value: 1234.6,
+      quality: 'CURRENT',
+      measuredAt: secondsAgo(10),
+      source: 'APPLE_WATCH',
+      unit: 'm',
+    })
+  })
+
+  it('acumulado antigo continua visível, com a qualidade dizendo que envelheceu', () => {
+    const projected = project({ dayTotals: totals({ distance: 900, distanceAt: minutesAgo(10) }) })
+
+    expect(projected.metrics.distance.value).toBe(900)
+    expect(projected.metrics.distance.quality).toBe('UNAVAILABLE')
+  })
+
+  it('sem amostra de distância, o total é nulo e não zero', () => {
+    const projected = project({ dayTotals: totals({ steps: 10 }) })
+
+    expect(projected.metrics.distance.value).toBeNull()
+    expect(projected.metrics.distance.quality).toBe('UNAVAILABLE')
+  })
+})
+
+describe('projectWorker: oxigenação segue a régua da pressão', () => {
+  const withOxygen = (measuredAt: string) =>
+    project({ snapshot: snapshot({ oxygenSaturationPct: 96, oxygenSaturationAt: measuredAt }) })
+
+  it('até 24 horas é a medição atual, em percentual', () => {
+    expect(withOxygen(hoursAgo(23)).metrics.oxygenSaturation).toEqual({
+      value: 96,
+      quality: 'CURRENT',
+      measuredAt: hoursAgo(23),
+      source: 'APPLE_WATCH',
+      unit: '%',
+    })
+  })
+
+  it('entre 24 e 72 horas é histórica: o valor fica, a qualidade avisa', () => {
+    expect(withOxygen(hoursAgo(30)).metrics.oxygenSaturation).toMatchObject({ value: 96, quality: 'STALE' })
+  })
+
+  it('acima de 72 horas o valor some, e nunca vira zero', () => {
+    expect(withOxygen(hoursAgo(80)).metrics.oxygenSaturation).toMatchObject({
+      value: null,
+      quality: 'UNAVAILABLE',
+      measuredAt: null,
+    })
+  })
+})
+
 describe('projectWorker: esforço e desgaste vêm da avaliação, com versão', () => {
   const assessment = (over: Partial<ProjectionAssessment> = {}): ProjectionAssessment => ({
     computedAt: secondsAgo(10),
     effortPercent: 62,
     wearPercent: 31,
+    fatigueEtaMin: null,
     formulaVersion: 'swi-fatigue-experimental',
     ...over,
+  })
+
+  it('minutos até a fadiga vêm da avaliação, derivados, em minutos', () => {
+    expect(project({ assessment: assessment({ fatigueEtaMin: 37 }) }).metrics.fatigueEtaMin).toEqual({
+      value: 37,
+      quality: 'CURRENT',
+      measuredAt: secondsAgo(10),
+      source: 'DERIVED',
+      unit: 'min',
+    })
+  })
+
+  it('avaliação sem chegada prevista deixa os minutos nulos, sem apagar esforço e desgaste', () => {
+    const projected = project({ assessment: assessment({ fatigueEtaMin: null }) })
+
+    expect(projected.metrics.fatigueEtaMin.value).toBeNull()
+    expect(projected.metrics.fatigueEtaMin.quality).toBe('UNAVAILABLE')
+    expect(projected.metrics.wear.value).toBe(31)
+  })
+
+  it('os minutos envelhecem com a avaliação que os produziu', () => {
+    expect(
+      project({ assessment: assessment({ fatigueEtaMin: 37, computedAt: secondsAgo(90) }) }).metrics.fatigueEtaMin,
+    ).toMatchObject({ value: 37, quality: 'STALE' })
   })
 
   it('esforço recente é atual e carrega a versão da fórmula que o produziu', () => {
@@ -524,6 +612,7 @@ const worker = (id: string, over: WorkerOverrides = {}) =>
               computedAt: over.wearAt ?? secondsAgo(10),
               effortPercent: null,
               wearPercent: over.wearPercent,
+              fatigueEtaMin: null,
               formulaVersion: 'swi-fatigue-experimental',
             },
       activeConditions: (over.conditions ?? []) as ConditionKind[],

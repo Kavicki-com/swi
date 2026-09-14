@@ -51,6 +51,8 @@ const SNAPSHOT_FIELDS = {
   diastolicMmHg: true,
   bloodPressureSource: true,
   bloodPressureAt: true,
+  oxygenSaturationPct: true,
+  oxygenSaturationAt: true,
 } as const
 
 const ASSESSMENT_FIELDS = {
@@ -58,6 +60,7 @@ const ASSESSMENT_FIELDS = {
   computedAt: true,
   effortPercent: true,
   wearPercent: true,
+  fatigueEtaMin: true,
   formulaVersion: true,
 } as const
 
@@ -105,6 +108,8 @@ export interface SessionHistorySample {
   systolicMmHg: number | null
   diastolicMmHg: number | null
   bloodPressureSource: MeasurementSource | null
+  distanceDeltaM: number | null
+  oxygenSaturationPct: number | null
   journeyId: string | null
   taskId: string | null
 }
@@ -136,12 +141,15 @@ interface SnapshotRow {
   diastolicMmHg: number | null
   bloodPressureSource: MeasurementSource | null
   bloodPressureAt: Date | null
+  oxygenSaturationPct: number | null
+  oxygenSaturationAt: Date | null
 }
 
 interface AssessmentRow {
   computedAt: Date
   effortPercent: number | null
   wearPercent: number | null
+  fatigueEtaMin: number | null
   formulaVersion: string
 }
 
@@ -154,6 +162,11 @@ interface SampleRow {
 
 interface StepsTotalRow {
   _sum: { stepDelta: number | null }
+  _max: { eventTime: Date | null }
+}
+
+interface DistanceTotalRow {
+  _sum: { distanceDeltaM: number | null }
   _max: { eventTime: Date | null }
 }
 
@@ -177,6 +190,8 @@ function toProjectionSnapshot(row: SnapshotRow): ProjectionSnapshot {
     diastolicMmHg: row.diastolicMmHg,
     bloodPressureSource: row.bloodPressureSource,
     bloodPressureAt: iso(row.bloodPressureAt),
+    oxygenSaturationPct: row.oxygenSaturationPct,
+    oxygenSaturationAt: iso(row.oxygenSaturationAt),
   }
 }
 
@@ -185,6 +200,7 @@ function toProjectionAssessment(row: AssessmentRow): ProjectionAssessment {
     computedAt: row.computedAt.toISOString(),
     effortPercent: row.effortPercent,
     wearPercent: row.wearPercent,
+    fatigueEtaMin: row.fatigueEtaMin,
     formulaVersion: row.formulaVersion,
   }
 }
@@ -202,6 +218,14 @@ function toProjectionSample(row: SampleRow): ProjectionSample {
 function toStepsSample(row: StepsTotalRow | undefined): Sample<number> | null {
   if (row === undefined) return null
   const total = row._sum.stepDelta
+  const latestAt = row._max.eventTime
+  if (total === null || latestAt === null) return null
+  return { value: total, measuredAt: latestAt.toISOString(), source: 'APPLE_WATCH' }
+}
+
+/** Mesma regra dos passos: distância é acumulado do dia, somado pelo banco. */
+function toDistanceSample(row: DistanceTotalRow): Sample<number> | null {
+  const total = row._sum.distanceDeltaM
   const latestAt = row._max.eventTime
   if (total === null || latestAt === null) return null
   return { value: total, measuredAt: latestAt.toISOString(), source: 'APPLE_WATCH' }
@@ -241,7 +265,7 @@ export class TelemetryQueryService {
           workerId,
           snapshot: null,
           windowSamples: [],
-          dayTotals: { steps: null, activeEnergy: null },
+          dayTotals: { steps: null, activeEnergy: null, distance: null },
           assessment: null,
         },
         now,
@@ -258,7 +282,7 @@ export class TelemetryQueryService {
     // isso a série que vem é só a janela das taxas, e os acumulados do dia
     // chegam somados pelo banco: o dia inteiro seriam milhares de linhas por
     // chamada, multiplicadas pelo número de funcionários a cada cinco segundos.
-    const [windowSamples, steps, energy, assessments] = await Promise.all([
+    const [windowSamples, steps, energy, distance, assessments] = await Promise.all([
       this.prisma.telemetrySample.findMany({
         where: { ...scope, eventTime: { gte: new Date(now.getTime() - ENERGY_RATE_WINDOW_MS) } },
         select: SAMPLE_FIELDS,
@@ -283,6 +307,11 @@ export class TelemetryQueryService {
         // A primeira amostra de energia do dia separa começo de lacuna.
         _min: { eventTime: true },
       }),
+      this.prisma.telemetrySample.aggregate({
+        where: { ...scope, eventTime: day, distanceDeltaM: { not: null } },
+        _sum: { distanceDeltaM: true },
+        _max: { eventTime: true },
+      }),
       // Sem recorte por dia monitorado: a avaliação já tem prazo de atualidade
       // próprio, e cortar também pelo calendário fazia esforço e desgaste
       // sumirem nos primeiros minutos depois da meia-noite de Brasília, todo
@@ -301,7 +330,11 @@ export class TelemetryQueryService {
         workerId,
         snapshot: toProjectionSnapshot(snapshot),
         windowSamples: windowSamples.map(toProjectionSample),
-        dayTotals: { steps: toStepsSample(steps), activeEnergy: toEnergyTotal(energy) },
+        dayTotals: {
+          steps: toStepsSample(steps),
+          activeEnergy: toEnergyTotal(energy),
+          distance: toDistanceSample(distance),
+        },
         assessment: assessments.length === 0 ? null : toProjectionAssessment(assessments[0]),
       },
       now,
@@ -405,7 +438,7 @@ export class TelemetryQueryService {
   ): Promise<(AssessmentRow & { workerId: string })[]> {
     const query = Prisma.sql`
       SELECT DISTINCT ON ("workerId")
-        "workerId", "computedAt", "effortPercent", "wearPercent", "formulaVersion"
+        "workerId", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion"
       FROM "TelemetryAssessment"
       WHERE "workerId" IN (${Prisma.join(workerIds)})
         AND "origin" = CAST(${'REAL'} AS "TelemetryOrigin")
@@ -491,6 +524,8 @@ export class TelemetryQueryService {
         systolicMmHg: true,
         diastolicMmHg: true,
         bloodPressureSource: true,
+        distanceDeltaM: true,
+        oxygenSaturationPct: true,
         journeyId: true,
         taskId: true,
       },
