@@ -1,6 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import {
-  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -8,6 +7,7 @@ import {
 import { Prisma, TelemetryDeviceKind } from '@prisma/client'
 import { generateCode, hash, verifyHash } from '../../auth/codes'
 import type { JwtUser } from '../../auth/current-user.decorator'
+import { enrollmentRejection } from './enrollment-rejection'
 import { PrismaService } from '../../prisma/prisma.service'
 
 // Fronteira de identidade da telemetria. O administrador convida, o funcionário
@@ -106,7 +106,10 @@ export class DeviceAuthService {
   async createEnrollment(admin: JwtUser, input: CreateEnrollmentInput) {
     const companyId = companyScopeOf(admin, 'Funcionário não encontrado')
     if (!ENROLLABLE_KINDS.includes(input.kind)) {
-      throw new BadRequestException('Este tipo de aparelho não recebe credencial própria')
+      throw enrollmentRejection(
+        'ENROLLMENT_UNSUPPORTED_DEVICE',
+        'Este tipo de aparelho não recebe credencial própria',
+      )
     }
 
     const worker = await this.prisma.user.findUnique({
@@ -141,18 +144,18 @@ export class DeviceAuthService {
     // Inexistente e de outro funcionário dão a mesma resposta: sondar
     // identificadores não pode revelar quais existem.
     if (enrollment === null || enrollment.workerId !== workerId) {
-      throw new BadRequestException(INVALID_CODE)
+      throw enrollmentRejection('ENROLLMENT_INVALID', INVALID_CODE)
     }
     if (enrollment.consumedAt !== null) {
-      throw new BadRequestException('Código de pareamento já utilizado')
+      throw enrollmentRejection('ENROLLMENT_USED', 'Código de pareamento já utilizado')
     }
     if (enrollment.expiresAt < new Date()) {
-      throw new BadRequestException('Código de pareamento expirado')
+      throw enrollmentRejection('ENROLLMENT_EXPIRED', 'Código de pareamento expirado')
     }
     if (!(await verifyHash(input.code, enrollment.codeHash))) {
       // A mensagem não repete o código tentado: resposta de erro e log são
       // lugares onde segredo vaza sem ninguém notar.
-      throw new BadRequestException(INVALID_CODE)
+      throw enrollmentRejection('ENROLLMENT_INVALID', INVALID_CODE)
     }
 
     const secret = randomBytes(32).toString('hex')
@@ -186,7 +189,7 @@ export class DeviceAuthService {
       // seja, outro aparelho consumiu o código primeiro. Isso é recusa do
       // cliente, não falha do servidor.
       if (isMissingRecord(error)) {
-        throw new BadRequestException('Código de pareamento já utilizado')
+        throw enrollmentRejection('ENROLLMENT_USED', 'Código de pareamento já utilizado')
       }
       throw error
     }
