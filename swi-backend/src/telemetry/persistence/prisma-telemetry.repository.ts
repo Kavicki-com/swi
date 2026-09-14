@@ -68,6 +68,8 @@ interface NormalizedMeasurements {
   systolicMmHg: number | null
   diastolicMmHg: number | null
   bloodPressureSource: MeasurementSource | null
+  distanceDeltaM: number | null
+  oxygenSaturationPct: number | null
 }
 
 /** Achata as medições em colunas. Métrica ausente vira null, nunca zero. */
@@ -82,6 +84,8 @@ function normalize(event: TelemetryEvent): NormalizedMeasurements {
     systolicMmHg: m.bloodPressure?.value.systolic ?? null,
     diastolicMmHg: m.bloodPressure?.value.diastolic ?? null,
     bloodPressureSource: m.bloodPressure?.source ?? null,
+    distanceDeltaM: m.distanceDeltaM?.value ?? null,
+    oxygenSaturationPct: m.oxygenSaturation?.value ?? null,
   }
 }
 
@@ -90,8 +94,8 @@ function normalize(event: TelemetryEvent): NormalizedMeasurements {
  * métricas que ele realmente carrega: um evento de bateria não pode apagar o
  * BPM que veio no evento anterior.
  *
- * Passos, energia acumulada e MPM ficam de fora porque são acumulado e derivada
- * do dia monitorado, e quem os calcula é a projeção do read model.
+ * Passos, distância, energia acumulada e MPM ficam de fora porque são acumulado
+ * e derivada do dia monitorado, e quem os calcula é a projeção do read model.
  */
 interface SnapshotPatch {
   sessionId: string
@@ -106,6 +110,8 @@ interface SnapshotPatch {
   diastolicMmHg?: number
   bloodPressureSource?: MeasurementSource
   bloodPressureAt?: Date
+  oxygenSaturationPct?: number
+  oxygenSaturationAt?: Date
 }
 
 function buildSnapshotPatch(
@@ -133,6 +139,10 @@ function buildSnapshotPatch(
     patch.bloodPressureSource = measured.bloodPressureSource ?? undefined
     patch.bloodPressureAt = eventTime
   }
+  if (measured.oxygenSaturationPct !== null) {
+    patch.oxygenSaturationPct = measured.oxygenSaturationPct
+    patch.oxygenSaturationAt = eventTime
+  }
   return patch
 }
 
@@ -152,6 +162,8 @@ const CLEARED_METRICS: Prisma.TelemetrySnapshotUncheckedUpdateInput = {
   diastolicMmHg: null,
   bloodPressureSource: null,
   bloodPressureAt: null,
+  oxygenSaturationPct: null,
+  oxygenSaturationAt: null,
 }
 
 /** Só o que a ingestão precisa saber da sessão para decidir se aceita o evento. */

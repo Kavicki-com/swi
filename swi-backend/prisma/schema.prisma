@@ -467,6 +467,7 @@ enum TelemetryConditionKind {
   BLOOD_PRESSURE_REVIEW
   DEVICE_BATTERY_LOW
   DEVICE_SIGNAL_LOST
+  WEAR_HIGH
 }
 
 enum TelemetryConditionStatus {
@@ -597,9 +598,9 @@ model TelemetrySample {
   taskId    String?
 
   heartRateBpm        Float?
-  /// CONTRATO DE DELTA. Os três campos abaixo são variação desde a amostra
-  /// anterior da mesma sessão, nunca o acumulado do dia nem o acumulado do
-  /// HealthKit. O read model os SOMA, na janela móvel e no total do dia.
+  /// CONTRATO DE DELTA. stepDelta, distanceDeltaM, activeEnergyKcal e
+  /// motionCount são variação desde a amostra anterior da mesma sessão, nunca
+  /// o acumulado do dia nem o acumulado do HealthKit. O read model os SOMA, na janela móvel e no total do dia.
   /// Enviar acumulado passa em toda validação e infla o total em silêncio:
   /// uma série que só cresce vira soma de si mesma. Não há como detectar isso
   /// a partir de uma amostra, e por isso está escrito aqui, junto da coluna,
@@ -613,6 +614,10 @@ model TelemetrySample {
   /// Única fonte guardada em coluna: pressão é a métrica com várias origens
   /// possíveis, e o painel precisa saber se veio de aparelho ou digitação.
   bloodPressureSource TelemetryMeasurementSource?
+  /// Variação em metros, sob o contrato de delta acima.
+  distanceDeltaM      Float?
+  /// Percentual. O relógio só mede em repouso, então chega poucas vezes por turno.
+  oxygenSaturationPct Float?
 
   /// Payload normalizado como recebido, para auditoria.
   payload     Json
@@ -657,6 +662,10 @@ model TelemetrySnapshot {
   diastolicMmHg       Int?
   bloodPressureSource TelemetryMeasurementSource?
   bloodPressureAt     DateTime?
+  /// Medição pontual, como a pressão: a última vive aqui com o próprio horário.
+  /// Distância não tem coluna de propósito: é acumulado do dia, como passos.
+  oxygenSaturationPct Float?
+  oxygenSaturationAt  DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -681,6 +690,10 @@ model TelemetryAssessment {
 
   effortPercent Float?
   wearPercent   Float?
+  /// Minutos até o desgaste cruzar o limiar do alerta, mantida a intensidade
+  /// recente. Nulo quando a intensidade não sustenta a dose até lá, quando
+  /// passa de um turno, ou quando esforço e desgaste estão indisponíveis.
+  fatigueEtaMin Int?
 
   /// Perfil versionado da fórmula. Experimental até a calibração em hardware.
   formulaVersion String
@@ -800,6 +813,9 @@ model TelemetryDailySummary {
 
   stepsTotal Int?
   stepsCount Int?
+
+  distanceTotalM Float?
+  distanceCount  Int?
 
   activeEnergyKcalTotal Float?
   activeEnergyCount     Int?
