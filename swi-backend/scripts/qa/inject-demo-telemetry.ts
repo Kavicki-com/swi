@@ -14,8 +14,8 @@
 // - `live` (padrão): um evento por cadência, no instante do envio. É o ÚNICO
 //   modo que avalia e abre condições, porque a ingestão só avalia evento ao
 //   vivo. `bateria-baixa` abre alerta no primeiro evento; `batimento-alto` em
-//   cerca de um minuto; `desgaste` leva o desgaste ao teto em 110 min, sem
-//   condição, porque não existe condição de desgaste no perfil de hoje.
+//   cerca de um minuto; `desgaste` leva o desgaste ao teto em 110 min e abre
+//   WEAR_HIGH com alerta quando a avaliação cruza 80%.
 // - `backfill`: grava o cenário inteiro de uma vez, terminando agora. Vai ao
 //   histórico, alimenta o snapshot e os totais do dia, mas NÃO avalia nem abre
 //   condição: para a ingestão, tudo menos o último minuto é backlog.
