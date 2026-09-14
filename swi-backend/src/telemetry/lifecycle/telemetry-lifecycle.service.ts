@@ -82,6 +82,7 @@ const SAMPLE_FIELDS = {
   sessionId: true,
   heartRateBpm: true,
   stepDelta: true,
+  distanceDeltaM: true,
   activeEnergyKcal: true,
   batteryPercent: true,
   systolicMmHg: true,
