@@ -4,8 +4,9 @@ import HealthKit
 import WatchKit
 
 /// Coletor da sessao de monitoramento. Mantem uma HKWorkoutSession espelhada
-/// para o iPhone, le batimento, passos, energia, movimento e bateria, numera
-/// cada leitura, guarda na fila e espelha em remessas confirmadas.
+/// para o iPhone, le batimento, passos, distancia, energia, movimento, bateria
+/// e oxigenacao, numera cada leitura, guarda na fila e espelha em remessas
+/// confirmadas.
 ///
 /// A ordem de tres passos aparece em todo lugar aqui e nao pode inverter:
 /// ESPIAR o que sairia, GRAVAR na fila, e so entao CONFIRMAR os contadores.
@@ -39,6 +40,15 @@ final class WorkoutCollector: NSObject, ObservableObject {
   /// e a contagem desde o evento anterior, nunca esta taxa.
   @Published private(set) var motionPerMinute: Double?
   @Published private(set) var motionAvailable = false
+  /// Distancia da sessao como soma das variacoes emitidas, em metros, pela
+  /// mesma regra dos passos e da energia.
+  @Published private(set) var distanceMeters = 0.0
+  @Published private(set) var lastDistanceVariation: Double?
+  /// Ultima oxigenacao que o HealthKit do relogio entregou nesta sessao.
+  /// Medicao pontual: o relogio so mede em repouso, e ausencia e nil. A hora
+  /// e a da medicao, que a tela mostra; o evento leva o proprio instante.
+  @Published private(set) var oxygenSaturation: Double?
+  @Published private(set) var oxygenSaturationAt: Date?
   /// Ausencia e nil, nunca zero.
   @Published private(set) var batteryPercent: Double?
   @Published private(set) var mirroring = false
@@ -59,7 +69,12 @@ final class WorkoutCollector: NSObject, ObservableObject {
   private var transport: MirrorTransport?
   private var stepTracker = VariationTracker()
   private var energyTracker = VariationTracker()
+  private var distanceTracker = VariationTracker()
   private var stepsAccumulated = 0.0
+  private var oxygenQuery: HKAnchoredObjectQuery?
+  /// Oxigenacao entra no proximo evento, como a bateria: uma medicao nova
+  /// antes de a anterior sair a substitui, porque so a ultima interessa.
+  private var pendingOxygen: Double?
   private var lastMotionDrainAt: Date?
   private var batteryTimer: Timer?
   /// Bateria entra no proximo evento, e nao num evento so dela: uma leitura a
@@ -91,6 +106,8 @@ final class WorkoutCollector: NSObject, ObservableObject {
       HKQuantityType(.heartRate),
       HKQuantityType(.activeEnergyBurned),
       HKQuantityType(.stepCount),
+      HKQuantityType(.distanceWalkingRunning),
+      HKQuantityType(.oxygenSaturation),
     ]
     let typesToShare: Set<HKSampleType> = [HKWorkoutType.workoutType()]
 
@@ -162,6 +179,9 @@ final class WorkoutCollector: NSObject, ObservableObject {
       // e a culpa cairia no sensor.
       dataSource.enableCollection(for: HKQuantityType(.stepCount), predicate: nil)
       dataSource.enableCollection(for: HKQuantityType(.activeEnergyBurned), predicate: nil)
+      // Distancia pela mesma razao dos passos: "Outro" nao a garante sozinha.
+      // Se a atividade nao a entregar em hardware, o risco esta no desenho.
+      dataSource.enableCollection(for: HKQuantityType(.distanceWalkingRunning), predicate: nil)
       builder.dataSource = dataSource
       session.delegate = self
       builder.delegate = self
@@ -219,18 +239,24 @@ final class WorkoutCollector: NSObject, ObservableObject {
     resumed = resuming
     stepTracker = VariationTracker(base: resuming ? outbox.state.stepBase : 0)
     energyTracker = VariationTracker(base: resuming ? outbox.state.energyBase : 0)
+    distanceTracker = VariationTracker(base: resuming ? outbox.state.distanceBase : 0)
     // Totais da tela nao sobrevivem a retomada: eles sao a soma das variacoes
     // desta execucao, e a comparacao com o app Fitness so vale numa sessao que
     // nao foi interrompida. A tela diz quando foi retomada.
     steps = 0
     stepsAccumulated = 0
     activeEnergyKcal = 0
+    distanceMeters = 0
     heartRate = nil
     heartRateAt = nil
     lastStepVariation = nil
     lastEnergyVariation = nil
+    lastDistanceVariation = nil
     motionPerMinute = nil
     lastMotionDrainAt = startDate
+    oxygenSaturation = nil
+    oxygenSaturationAt = nil
+    pendingOxygen = nil
 
     transport = MirrorTransport(outbox: outbox) { [weak self] payload, completion in
       guard let session = self?.session else {
@@ -253,6 +279,7 @@ final class WorkoutCollector: NSObject, ObservableObject {
         self?.readBattery()
       }
     }
+    startOxygenQuery(since: startDate)
     // Um acumulo pode ter sobrado da execucao anterior.
     transport?.pump()
   }
@@ -262,7 +289,58 @@ final class WorkoutCollector: NSObject, ObservableObject {
     motionAvailable = false
     batteryTimer?.invalidate()
     batteryTimer = nil
+    if let oxygenQuery {
+      healthStore.stop(oxygenQuery)
+    }
+    oxygenQuery = nil
+    pendingOxygen = nil
     transport?.stop()
+  }
+
+  /// Oxigenacao nao passa pelo builder: o relogio mede em repouso, por conta
+  /// propria, e grava no proprio HealthKit. A consulta ancorada entrega cada
+  /// amostra nova enquanto estiver aberta, e fecha com os sensores. So o que
+  /// foi medido depois de a sessao comecar interessa: "ultima medicao" e
+  /// desta sessao, e uma medicao de ontem nao descreve o turno.
+  ///
+  /// A medicao sai no PROXIMO evento regular, com o instante dele. O snapshot
+  /// do backend so e promovido por evento mais novo que o ja promovido, entao
+  /// um evento carimbado com o instante da medicao chegaria atras dos eventos
+  /// de 5 s e nunca apareceria. A diferenca e a latencia de entrega do
+  /// HealthKit, aceitavel para uma metrica cuja regua de "atual" e de 24 h.
+  private func startOxygenQuery(since startDate: Date) {
+    if let oxygenQuery {
+      healthStore.stop(oxygenQuery)
+    }
+    let type = HKQuantityType(.oxygenSaturation)
+    let predicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: [])
+    let handler: (HKAnchoredObjectQuery, [HKSample]?, [HKDeletedObject]?, HKQueryAnchor?, Error?) -> Void = {
+      [weak self] _, samples, _, _, _ in
+      let quantities = samples?.compactMap { $0 as? HKQuantitySample } ?? []
+      guard let latest = quantities.max(by: { $0.endDate < $1.endDate }) else { return }
+      // O HealthKit entrega fracao (0,97); o backend quer percentual (97).
+      let percent = latest.quantity.doubleValue(for: .percent()) * 100
+      let at = latest.endDate
+      Task { @MainActor in
+        self?.noteOxygen(percent: percent, at: at)
+      }
+    }
+    let query = HKAnchoredObjectQuery(
+      type: type,
+      predicate: predicate,
+      anchor: nil,
+      limit: HKObjectQueryNoLimit,
+      resultsHandler: handler
+    )
+    query.updateHandler = handler
+    healthStore.execute(query)
+    oxygenQuery = query
+  }
+
+  private func noteOxygen(percent: Double, at: Date) {
+    pendingOxygen = percent
+    oxygenSaturation = percent
+    oxygenSaturationAt = at
   }
 
   private func readBattery() {
@@ -310,6 +388,14 @@ final class WorkoutCollector: NSObject, ObservableObject {
       measurements.activeEnergyKcal = .energy(kcal: variation)
     }
 
+    var distanceVariation: Double?
+    if let cumulative = reading.distanceCumulative,
+      let variation = distanceTracker.peek(cumulative: cumulative)
+    {
+      distanceVariation = variation
+      measurements.distanceDeltaM = .distance(meters: variation)
+    }
+
     var peaks = 0
     var motionMinutes: Double?
     if motion.available, let since = lastMotionDrainAt {
@@ -327,6 +413,9 @@ final class WorkoutCollector: NSObject, ObservableObject {
     if let percent = batteryToSend {
       measurements.battery = .battery(percent: percent)
     }
+    if let percent = pendingOxygen {
+      measurements.oxygenSaturation = .oxygenSaturation(percent: percent)
+    }
 
     // Nada medido, nada a gravar. Os rastreadores nao avancam, e a variacao
     // reaparece inteira no proximo retorno.
@@ -337,7 +426,8 @@ final class WorkoutCollector: NSObject, ObservableObject {
         measurements: measurements,
         at: reading.at,
         stepBase: reading.stepsCumulative ?? stepTracker.base,
-        energyBase: reading.energyCumulative ?? energyTracker.base
+        energyBase: reading.energyCumulative ?? energyTracker.base,
+        distanceBase: reading.distanceCumulative ?? distanceTracker.base
       )
     } catch {
       lastError = "Fila: \(error.localizedDescription)"
@@ -364,12 +454,20 @@ final class WorkoutCollector: NSObject, ObservableObject {
         activeEnergyKcal += variation
       }
     }
+    if let cumulative = reading.distanceCumulative {
+      distanceTracker.commit(cumulative: cumulative)
+      if let variation = distanceVariation {
+        lastDistanceVariation = variation
+        distanceMeters += variation
+      }
+    }
     if let minutes = motionMinutes {
       motion.consume(peaks)
       motionPerMinute = Double(peaks) / minutes
       lastMotionDrainAt = reading.at
     }
     batteryToSend = nil
+    pendingOxygen = nil
 
     refreshQueueCounters()
     transport?.pump()
@@ -415,6 +513,7 @@ private struct BuilderReading: Sendable {
   let bpmAt: Date?
   let stepsCumulative: Double?
   let energyCumulative: Double?
+  let distanceCumulative: Double?
   let at: Date
 }
 
@@ -480,6 +579,7 @@ extension WorkoutCollector: HKLiveWorkoutBuilderDelegate {
     let heartRateType = HKQuantityType(.heartRate)
     let stepType = HKQuantityType(.stepCount)
     let energyType = HKQuantityType(.activeEnergyBurned)
+    let distanceType = HKQuantityType(.distanceWalkingRunning)
 
     var bpm: Double?
     var bpmAt: Date?
@@ -505,11 +605,19 @@ extension WorkoutCollector: HKLiveWorkoutBuilderDelegate {
       energyCumulative = quantity.doubleValue(for: HKUnit.kilocalorie())
     }
 
+    var distanceCumulative: Double?
+    if collectedTypes.contains(distanceType),
+      let quantity = workoutBuilder.statistics(for: distanceType)?.sumQuantity()
+    {
+      distanceCumulative = quantity.doubleValue(for: HKUnit.meter())
+    }
+
     let reading = BuilderReading(
       bpm: bpm,
       bpmAt: bpmAt,
       stepsCumulative: stepsCumulative,
       energyCumulative: energyCumulative,
+      distanceCumulative: distanceCumulative,
       at: Date()
     )
     Task { @MainActor in
