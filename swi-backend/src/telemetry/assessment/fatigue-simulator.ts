@@ -1,3 +1,4 @@
+import { EXPERIMENTAL_ALERT_PROFILE } from '../alerts/alert-profile'
 import type { AssessmentProfile } from './assessment-profile'
 import { assessWindow, type Baseline, type FormulaResult, type FormulaSample, type FormulaState } from './fatigue-formula'
 
@@ -53,6 +54,7 @@ export function simulate(scenario: Scenario, profile: AssessmentProfile, baselin
       baseline,
       samples: samples.filter((s) => s.atMs > startMs && s.atMs <= endMs),
       window: { startMs, endMs },
+      wearAlertPercent: EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent,
     })
     trace.push(result)
     state = result.nextState

@@ -77,6 +77,8 @@ export interface ProjectionSnapshot {
   diastolicMmHg: number | null
   bloodPressureSource: MeasurementSource | null
   bloodPressureAt: string | null
+  oxygenSaturationPct: number | null
+  oxygenSaturationAt: string | null
 }
 
 /** Avaliação já calculada. Quem a escreve é a Task 7; aqui só se lê. */
@@ -84,6 +86,8 @@ export interface ProjectionAssessment {
   computedAt: string
   effortPercent: number | null
   wearPercent: number | null
+  /** Minutos até o desgaste cruzar o limiar do alerta. Nulo: não se aproxima. */
+  fatigueEtaMin: number | null
   formulaVersion: string
 }
 
@@ -97,6 +101,8 @@ export interface ProjectionAssessment {
  */
 export interface DayTotals {
   steps: Sample<number> | null
+  /** Metros do dia monitorado, somados pelo banco como os passos. */
+  distance: Sample<number> | null
   /**
    * `earliestAt` é a primeira amostra de energia do dia. A janela de kcal/h
    * não enxerga o que veio antes dela, e é isso que separa cobertura curta por
@@ -149,6 +155,12 @@ export interface WorkerMetrics {
   bloodPressure: MetricState<BloodPressure>
   effort: MetricState<number>
   wear: MetricState<number>
+  /** Acumulado do dia monitorado, em metros. A tela converte para km. */
+  distance: MetricState<number>
+  /** Medição pontual, com a régua da pressão: "última medição às", nunca "atual". */
+  oxygenSaturation: MetricState<number>
+  /** Minutos até o alerta de desgaste, mantida a intensidade recente. */
+  fatigueEtaMin: MetricState<number>
 }
 
 export interface WorkerTelemetry {
@@ -367,6 +379,7 @@ interface SnapshotStates {
   heartRate: MetricState<number>
   battery: MetricState<number>
   bloodPressure: MetricState<BloodPressure>
+  oxygenSaturation: MetricState<number>
   /** A amostra crua da pressão, para decidir a recência sem reabrir o snapshot. */
   pressureSample: Sample<BloodPressure> | null
 }
@@ -377,6 +390,7 @@ function snapshotStates(snapshot: ProjectionSnapshot | null, now: Date): Snapsho
       heartRate: unavailable('heartRate'),
       battery: unavailable('battery'),
       bloodPressure: unavailable('bloodPressure'),
+      oxygenSaturation: unavailable('oxygenSaturation'),
       pressureSample: null,
     }
   }
@@ -405,6 +419,12 @@ function snapshotStates(snapshot: ProjectionSnapshot | null, now: Date): Snapsho
       now,
     ),
     bloodPressure: metricState('bloodPressure', pressureSample, now),
+    // A régua da pressão, decidida no domínio: acima de 72 h o valor some.
+    oxygenSaturation: metricState(
+      'oxygenSaturation',
+      sampleOf(snapshot.oxygenSaturationPct, snapshot.oxygenSaturationAt, 'APPLE_WATCH'),
+      now,
+    ),
     pressureSample,
   }
 }
@@ -417,11 +437,12 @@ function snapshotStates(snapshot: ProjectionSnapshot | null, now: Date): Snapsho
 function assessmentStates(
   assessment: ProjectionAssessment | null,
   now: Date,
-): { effort: MetricState<number>; wear: MetricState<number> } {
+): { effort: MetricState<number>; wear: MetricState<number>; fatigueEtaMin: MetricState<number> } {
   const at = assessment?.computedAt ?? null
   return {
     effort: metricState('effort', sampleOf(assessment?.effortPercent ?? null, at, 'DERIVED'), now),
     wear: metricState('wear', sampleOf(assessment?.wearPercent ?? null, at, 'DERIVED'), now),
+    fatigueEtaMin: metricState('fatigueEtaMin', sampleOf(assessment?.fatigueEtaMin ?? null, at, 'DERIVED'), now),
   }
 }
 
@@ -472,6 +493,9 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     bloodPressure: fromSnapshot.bloodPressure,
     effort: derived.effort,
     wear: derived.wear,
+    distance: metricState('distance', rounded(dayTotals.distance), now),
+    oxygenSaturation: fromSnapshot.oxygenSaturation,
+    fatigueEtaMin: derived.fatigueEtaMin,
   }
 
   return {

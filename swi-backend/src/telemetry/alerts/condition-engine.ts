@@ -154,6 +154,27 @@ export function decideBattery(percent: number | null, active: boolean, profile: 
   return null
 }
 
+/**
+ * Desgaste é leitura da última avaliação, e a persistência já está dentro
+ * dela: a dose é a integral da intensidade com decaimento de 180 min, e um
+ * pico isolado não a leva a 80%. Por isso uma leitura basta, como a bateria.
+ * A banda de dez pontos evita abre e fecha em torno do limiar, e é o
+ * decaimento que recupera sozinho depois de uma pausa. A regra é sempre FLOOR:
+ * o limiar é o mesmo para todo mundo, e a personalização já aconteceu dentro
+ * da fórmula, pelo repouso observado e pela máxima por idade.
+ */
+export function decideWear(wearPercent: number | null, active: boolean, profile: AlertProfile): Decision | null {
+  if (wearPercent === null) return null
+  const threshold: Threshold = { value: profile.wearHigh.openAtPercent, rule: 'FLOOR' }
+  if (!active && wearPercent >= profile.wearHigh.openAtPercent) {
+    return { kind: 'WEAR_HIGH', action: 'OPEN', observedValue: wearPercent, threshold }
+  }
+  if (active && wearPercent < profile.wearHigh.recoverBelowPercent) {
+    return { kind: 'WEAR_HIGH', action: 'RECOVER', observedValue: wearPercent, threshold }
+  }
+  return null
+}
+
 export interface BloodPressureReading {
   systolic: number
   diastolic: number

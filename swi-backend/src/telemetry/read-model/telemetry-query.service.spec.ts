@@ -41,12 +41,14 @@ const snapshotRow = (over: Record<string, unknown> = {}) => ({
   diastolicMmHg: null,
   bloodPressureSource: null,
   bloodPressureAt: null,
+  oxygenSaturationPct: null,
+  oxygenSaturationAt: null,
   ...over,
 })
 
 /** Um agregado vazio, como o Prisma devolve quando nenhuma linha casa. */
 const NO_TOTALS = {
-  _sum: { stepDelta: null, activeEnergyKcal: null },
+  _sum: { stepDelta: null, activeEnergyKcal: null, distanceDeltaM: null },
   _max: { eventTime: null },
   _min: { eventTime: null },
 }
@@ -155,12 +157,16 @@ describe('TelemetryQueryService.currentForWorker', () => {
     await service(prisma).currentForWorker('worker-1', NOW)
 
     const calls = prisma.telemetrySample.aggregate.mock.calls.map((c: any) => c[0])
-    expect(calls).toHaveLength(2)
+    expect(calls).toHaveLength(3)
     const steps = calls.find((c: any) => c.where.stepDelta !== undefined)
     const energy = calls.find((c: any) => c.where.activeEnergyKcal !== undefined)
+    const distance = calls.find((c: any) => c.where.distanceDeltaM !== undefined)
     expect(steps.where.stepDelta).toEqual({ not: null })
     expect(steps._sum).toEqual({ stepDelta: true })
     expect(steps._max).toEqual({ eventTime: true })
+    expect(distance.where.distanceDeltaM).toEqual({ not: null })
+    expect(distance._sum).toEqual({ distanceDeltaM: true })
+    expect(distance._max).toEqual({ eventTime: true })
     expect(energy.where.activeEnergyKcal).toEqual({ not: null })
     expect(energy._sum).toEqual({ activeEnergyKcal: true })
     expect(energy._max).toEqual({ eventTime: true })
@@ -179,19 +185,46 @@ describe('TelemetryQueryService.currentForWorker', () => {
     prisma.telemetrySample.aggregate.mockImplementation(({ where }: any) =>
       where.stepDelta !== undefined
         ? { _sum: { stepDelta: 1_500 }, _max: { eventTime: secondsAgo(20) }, _min: { eventTime: null } }
-        : {
-            _sum: { activeEnergyKcal: 50 },
-            _max: { eventTime: secondsAgo(20) },
-            _min: { eventTime: secondsAgo(600) },
-          },
+        : where.distanceDeltaM !== undefined
+          ? { _sum: { distanceDeltaM: 1_180.25 }, _max: { eventTime: secondsAgo(25) }, _min: { eventTime: null } }
+          : {
+              _sum: { activeEnergyKcal: 50 },
+              _max: { eventTime: secondsAgo(20) },
+              _min: { eventTime: secondsAgo(600) },
+            },
     )
 
     const result = await service(prisma).currentForWorker('worker-1', NOW)
 
     expect(result.metrics.steps.value).toBe(1_500)
     expect(result.metrics.steps.measuredAt).toBe(secondsAgo(20).toISOString())
+    expect(result.metrics.distance.value).toBe(1_180.3)
+    expect(result.metrics.distance.measuredAt).toBe(secondsAgo(25).toISOString())
     // 50 kcal cobrindo 580 s, o intervalo entre as duas amostras de energia.
     expect(result.metrics.energyRatePerHour.value).toBe(310.3)
+  })
+
+  it('oxigenação e minutos até a fadiga atravessam do banco para a projeção', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(
+      snapshotRow({ oxygenSaturationPct: 96, oxygenSaturationAt: secondsAgo(3_600) }),
+    )
+    prisma.telemetryAssessment.findMany.mockResolvedValue([
+      { computedAt: secondsAgo(10), effortPercent: 50, wearPercent: 40, fatigueEtaMin: 37, formulaVersion: 'v' },
+    ])
+
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(result.metrics.oxygenSaturation).toMatchObject({ value: 96, quality: 'CURRENT' })
+    expect(result.metrics.fatigueEtaMin).toMatchObject({ value: 37, quality: 'CURRENT', unit: 'min' })
+    // O select do snapshot e o da avaliação carregam as colunas novas: sem
+    // elas o Prisma devolveria undefined e a métrica nasceria indisponível.
+    expect(prisma.telemetrySnapshot.findUnique.mock.calls[0][0].select).toMatchObject({
+      oxygenSaturationPct: true,
+      oxygenSaturationAt: true,
+    })
+    expect(prisma.telemetryAssessment.findMany.mock.calls[0][0].select).toMatchObject({ fatigueEtaMin: true })
   })
 
   it('usa a avaliação mais recente do dia monitorado', async () => {

@@ -36,6 +36,12 @@ export interface AssessmentProfile {
   readonly heartRateReuseMs: number
   /** Quanto a primeira janela de uma cadeia olha para trás. */
   readonly chainLookbackMs: number
+  /**
+   * Horizonte dos minutos até a fadiga. Chegada além disso vira nulo: um
+   * número de catorze horas não orienta ninguém dentro de um turno, e a
+   * intensidade recente não se sustenta por tanto tempo de qualquer jeito.
+   */
+  readonly fatigueEtaHorizonMinutes: number
 }
 
 export const EXPERIMENTAL_PROFILE: AssessmentProfile = Object.freeze({
@@ -54,4 +60,7 @@ export const EXPERIMENTAL_PROFILE: AssessmentProfile = Object.freeze({
   gapMaxMs: FRESHNESS.VITAL.staleMs,
   heartRateReuseMs: FRESHNESS.VITAL.currentMs,
   chainLookbackMs: FRESHNESS.VITAL.staleMs,
+  // Um turno de oito horas. Acrescentado depois da v1 sem subir a versão:
+  // é entrada de uma saída nova, e não muda nenhum número já gravado.
+  fatigueEtaHorizonMinutes: 480,
 })

@@ -33,10 +33,13 @@ export const MINUTE = 60_000
 export const HOUR = 60 * MINUTE
 
 export const FRESHNESS = {
-  /** BPM, passos, MPM, energia, esforço e desgaste. */
+  /** BPM, passos, distância, MPM, energia, esforço, desgaste e minutos até a fadiga. */
   VITAL: { currentMs: 45_000, staleMs: 120_000 },
   BATTERY: { currentMs: 5 * MINUTE, staleMs: 30 * MINUTE },
-  /** Atual para mobile e painel; histórica só no mobile; depois, sem medição recente. */
+  /**
+   * Atual para mobile e painel; histórica só no mobile; depois, sem medição
+   * recente. Pressão e oxigenação: as duas são medição pontual e rara.
+   */
   BLOOD_PRESSURE: { currentMs: 24 * HOUR, staleMs: 72 * HOUR },
 } as const
 
@@ -160,6 +163,30 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
   },
   effort: { unit: '%', freshness: 'VITAL', sources: ['DERIVED'], retainsExpiredValue: true },
   wear: { unit: '%', freshness: 'VITAL', sources: ['DERIVED'], retainsExpiredValue: true },
+  /** Acumulado do dia monitorado, como passos. A tela converte para km. */
+  distance: {
+    unit: 'm',
+    freshness: 'VITAL',
+    sources: ['APPLE_WATCH'],
+    retainsExpiredValue: true,
+  },
+  /**
+   * O relógio só mede oxigenação em repouso, então ela chega poucas vezes por
+   * turno e segue a régua da pressão: "última medição às", nunca "atual" no
+   * sentido do BPM. Acima de 72 h o valor some, como a pressão.
+   */
+  oxygenSaturation: {
+    unit: '%',
+    freshness: 'BLOOD_PRESSURE',
+    sources: ['APPLE_WATCH'],
+    retainsExpiredValue: false,
+  },
+  /**
+   * Minutos até o desgaste cruzar o limiar do alerta, mantida a intensidade
+   * recente. Nasce na avaliação, junto de esforço e desgaste, e envelhece com
+   * eles. Nulo quando a intensidade não sustenta a dose até lá.
+   */
+  fatigueEtaMin: { unit: 'min', freshness: 'VITAL', sources: ['DERIVED'], retainsExpiredValue: true },
 }
 
 /** Instante em milissegundos. Horário ilegível vira NaN, e quem chama decide. */
@@ -271,6 +298,11 @@ const RANGES: Partial<Record<MetricKind, ValueRange>> = {
   battery: { min: 0, max: 100 },
   effort: { min: 0, max: 100 },
   wear: { min: 0, max: 100 },
+  // Sem teto de plausibilidade além do inteiro seguro: uma variação de
+  // distância é pequena, mas o acumulado que a projeção devolve não é.
+  distance: { min: 0, max: Number.MAX_SAFE_INTEGER },
+  oxygenSaturation: { min: 0, max: 100 },
+  fatigueEtaMin: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
 }
 
 const BLOOD_PRESSURE_RANGE = {
@@ -383,17 +415,17 @@ function fromMetric(kind: MetricKind): RawMeasurementSpec {
 /**
  * O que cada medição do evento bruto precisa cumprir.
  *
- * CONTRATO DE DELTA: stepDelta, activeEnergyKcal e motionCount são variação
- * desde a amostra anterior da mesma sessão, e o read model os soma. O nome de
- * stepDelta já diz isso; os outros dois não, e o produtor não vive neste
- * repositório. A faixa aqui não separa delta de acumulado, porque um acumulado
+ * CONTRATO DE DELTA: stepDelta, distanceDeltaM, activeEnergyKcal e motionCount
+ * são variação desde a amostra anterior da mesma sessão, e o read model os
+ * soma. O nome de stepDelta e de distanceDeltaM já diz isso; os outros dois
+ * não, e o produtor não vive neste repositório. A faixa aqui não separa delta de acumulado, porque um acumulado
  * pequeno cabe na faixa de um delta grande: a validação aceita os dois. Um
  * envio acumulado passa inteiro e infla o total em silêncio. Não dá para
  * detectar a partir de uma amostra, e por isso a ausência de erro não é prova
  * de que o produtor está certo. O contrato está também no schema, junto das
  * colunas, que é onde quem escreve o produtor olha.
  *
- * Cinco delas são a mesma coisa que uma métrica canônica e herdam dela unidade,
+ * Sete delas são a mesma coisa que uma métrica canônica e herdam dela unidade,
  * origem e faixa. motionCount tem spec própria: é a contagem de movimento que
  * alimenta a derivação de MPM, e registrá-la como MetricKind faria dela o
  * sétimo indicador que a decisão congelada recusa.
@@ -408,6 +440,8 @@ const RAW_MEASUREMENTS: Record<RawMeasurementKey, RawMeasurementSpec> = {
   battery: fromMetric('battery'),
   bloodPressure: fromMetric('bloodPressure'),
   motionCount: { unit: 'count', sources: ['APPLE_WATCH'], range: { min: 0, max: 100_000 } },
+  distanceDeltaM: fromMetric('distance'),
+  oxygenSaturation: fromMetric('oxygenSaturation'),
 }
 
 /** Forma mínima de uma medição, antes de saber se o conteúdo dela vale. */

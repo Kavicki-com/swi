@@ -263,6 +263,24 @@ describe('Q13, Q14 e Q16 com unidades explícitas', () => {
     expect(METRICS.bloodPressure.unit).toBe('mmHg')
   })
 
+  it('distância acumula no dia como passos; oxigenação segue a régua da pressão', () => {
+    expect(METRICS.distance).toMatchObject({
+      unit: 'm',
+      freshness: 'VITAL',
+      sources: ['APPLE_WATCH'],
+      retainsExpiredValue: true,
+    })
+    // Medida em repouso e raramente: acima de 72 h é "sem medição recente" e o
+    // valor some, como a pressão. Um 97% de três dias atrás não descreve o agora.
+    expect(METRICS.oxygenSaturation).toMatchObject({
+      unit: '%',
+      freshness: 'BLOOD_PRESSURE',
+      sources: ['APPLE_WATCH'],
+      retainsExpiredValue: false,
+    })
+    expect(METRICS.fatigueEtaMin).toMatchObject({ unit: 'min', freshness: 'VITAL', sources: ['DERIVED'] })
+  })
+
   it('unidade errada é rejeitada', () => {
     expect(() => validateMeasurement('steps', { value: 10, unit: 'km', source: watch })).toThrow(
       InvalidMeasurementError,
@@ -374,6 +392,36 @@ describe('validateRawMeasurement', () => {
   it('recusa medição sem forma de medição', () => {
     expect(() => validateRawMeasurement('heartRate', 82)).toThrow(InvalidMeasurementError)
     expect(() => validateRawMeasurement('heartRate', { value: 82 })).toThrow(InvalidMeasurementError)
+  })
+
+  // Distância é variação, como passos; oxigenação é medição pontual, como
+  // pressão. As duas entram pelo contrato do evento, e o Record que valida o
+  // evento bruto é o que obriga cada uma a ter regra própria.
+  it('aceita distância como variação em metros e oxigenação como percentual', () => {
+    expect(() =>
+      validateRawMeasurement('distanceDeltaM', { value: 8.4, unit: 'm', source: 'APPLE_WATCH' }),
+    ).not.toThrow()
+    expect(() =>
+      validateRawMeasurement('oxygenSaturation', { value: 97, unit: '%', source: 'APPLE_WATCH' }),
+    ).not.toThrow()
+  })
+
+  it('distância negativa, oxigenação fora de 0 a 100 e unidade errada são recusadas', () => {
+    expect(() =>
+      validateRawMeasurement('distanceDeltaM', { value: -1, unit: 'm', source: 'APPLE_WATCH' }),
+    ).toThrow(InvalidMeasurementError)
+    expect(() =>
+      validateRawMeasurement('distanceDeltaM', { value: 8, unit: 'km', source: 'APPLE_WATCH' }),
+    ).toThrow(InvalidMeasurementError)
+    expect(() =>
+      validateRawMeasurement('oxygenSaturation', { value: 101, unit: '%', source: 'APPLE_WATCH' }),
+    ).toThrow(InvalidMeasurementError)
+    expect(() =>
+      validateRawMeasurement('oxygenSaturation', { value: -1, unit: '%', source: 'APPLE_WATCH' }),
+    ).toThrow(InvalidMeasurementError)
+    expect(() =>
+      validateRawMeasurement('oxygenSaturation', { value: 97, unit: 'mmHg', source: 'APPLE_WATCH' }),
+    ).toThrow(InvalidMeasurementError)
   })
 
   it('valida motionCount pela própria unidade e origem', () => {

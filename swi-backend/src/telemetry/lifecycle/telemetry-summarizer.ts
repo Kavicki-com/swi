@@ -33,6 +33,7 @@ export interface SummarizerSample {
   sessionId: string
   heartRateBpm: number | null
   stepDelta: number | null
+  distanceDeltaM: number | null
   activeEnergyKcal: number | null
   batteryPercent: number | null
   systolicMmHg: number | null
@@ -80,6 +81,9 @@ export interface DailySummary {
 
   stepsTotal: number | null
   stepsCount: number | null
+
+  distanceTotalM: number | null
+  distanceCount: number | null
 
   activeEnergyKcalTotal: number | null
   activeEnergyCount: number | null
@@ -226,6 +230,7 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
   const beats = samples.flatMap((s) => (s.heartRateBpm === null ? [] : [s.eventTime.getTime()]))
   const bpm = samples.flatMap((s) => (s.heartRateBpm === null ? [] : [s.heartRateBpm]))
   const steps = samples.flatMap((s) => (s.stepDelta === null ? [] : [s.stepDelta]))
+  const distance = samples.flatMap((s) => (s.distanceDeltaM === null ? [] : [s.distanceDeltaM]))
   const energy = samples.flatMap((s) => (s.activeEnergyKcal === null ? [] : [s.activeEnergyKcal]))
   const battery = samples.flatMap((s) => (s.batteryPercent === null ? [] : [s.batteryPercent]))
 
@@ -257,6 +262,9 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
 
     stepsTotal: steps.length === 0 ? null : steps.reduce((a, b) => a + b, 0),
     stepsCount: steps.length === 0 ? null : steps.length,
+
+    distanceTotalM: distance.length === 0 ? null : distance.reduce((a, b) => a + b, 0),
+    distanceCount: distance.length === 0 ? null : distance.length,
 
     activeEnergyKcalTotal: energy.length === 0 ? null : energy.reduce((a, b) => a + b, 0),
     activeEnergyCount: energy.length === 0 ? null : energy.length,

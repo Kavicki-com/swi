@@ -215,6 +215,33 @@ describe('Telemetry repository e2e', () => {
     expect(snapshot?.bloodPressureAt).toEqual(medidoEm)
   })
 
+  it('promove oxigenação com o próprio horário; distância vai só para a amostra', async () => {
+    await repo.saveEvent(event(), now)
+
+    const medidoEm = new Date(now.getTime() - 5_000)
+    const saved = event({
+      eventTime: medidoEm.toISOString(),
+      measurements: {
+        distanceDeltaM: { value: 12.5, unit: 'm', source: 'APPLE_WATCH' },
+        oxygenSaturation: { value: 96, unit: '%', source: 'APPLE_WATCH' },
+      },
+    })
+    await repo.saveEvent(saved, now)
+
+    const sample = await prisma.telemetrySample.findUnique({ where: { eventId: saved.eventId } })
+    expect(sample?.distanceDeltaM).toBe(12.5)
+    expect(sample?.oxygenSaturationPct).toBe(96)
+
+    const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+    // Oxigenação é medição pontual e vive no snapshot, como a pressão.
+    // Distância é acumulado do dia e quem a soma é o read model, como passos:
+    // o snapshot não tem coluna para ela de propósito.
+    expect(snapshot?.oxygenSaturationPct).toBe(96)
+    expect(snapshot?.oxygenSaturationAt).toEqual(medidoEm)
+    expect(snapshot?.heartRateBpm).toBe(82)
+    expect(snapshot).not.toHaveProperty('distanceDeltaM')
+  })
+
   it('não deixa um evento ao vivo mais antigo sobrescrever o snapshot mais novo', async () => {
     const novo = event()
     await repo.saveEvent(novo, now)
@@ -258,6 +285,26 @@ describe('Telemetry repository e2e', () => {
     expect(snapshot?.batteryPercent).toBe(64)
     expect(snapshot?.heartRateBpm).toBeNull()
     expect(snapshot?.heartRateAt).toBeNull()
+  })
+
+  it('troca de origem também apaga a oxigenação da origem anterior', async () => {
+    await repo.saveEvent(
+      event({
+        monitoringSessionId: demoSessionId,
+        origin: 'DEMO',
+        measurements: { oxygenSaturation: { value: 95, unit: '%', source: 'APPLE_WATCH' } },
+      }),
+      now,
+    )
+    await repo.saveEvent(
+      event({ measurements: { battery: { value: 64, unit: '%', source: 'APPLE_WATCH' } } }),
+      now,
+    )
+
+    const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+    expect(snapshot?.origin).toBe('REAL')
+    expect(snapshot?.oxygenSaturationPct).toBeNull()
+    expect(snapshot?.oxygenSaturationAt).toBeNull()
   })
 
   it('trata o mesmo instante escrito de outra forma como repetição, não conflito', async () => {

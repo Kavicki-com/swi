@@ -23,6 +23,7 @@ const sample = (over: Partial<SummarizerSample> & { eventTime: Date }): Summariz
   sessionId: 'session-1',
   heartRateBpm: null,
   stepDelta: null,
+  distanceDeltaM: null,
   activeEnergyKcal: null,
   batteryPercent: null,
   systolicMmHg: null,
@@ -132,6 +133,26 @@ describe('summarizeDay: passos', () => {
 
     expect(summary?.stepsTotal).toBe(35)
     expect(summary?.stepsCount).toBe(2)
+  })
+})
+
+describe('summarizeDay: distância', () => {
+  it('soma as variações de distância e conta as leituras que as trazem', () => {
+    const summary = summarize([
+      sample({ eventTime: at('12:00:00'), distanceDeltaM: 8.5 }),
+      sample({ eventTime: at('12:00:30'), distanceDeltaM: 11.25 }),
+      sample({ eventTime: at('12:01:00'), heartRateBpm: 80 }),
+    ])
+
+    expect(summary?.distanceTotalM).toBe(19.75)
+    expect(summary?.distanceCount).toBe(2)
+  })
+
+  it('dia sem distância deixa o total nulo, e não zerado', () => {
+    const summary = summarize([sample({ eventTime: at('12:00:00'), heartRateBpm: 80 })])
+
+    expect(summary?.distanceTotalM).toBeNull()
+    expect(summary?.distanceCount).toBeNull()
   })
 })
 

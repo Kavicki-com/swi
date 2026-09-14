@@ -82,6 +82,7 @@ const prismaDouble = () => {
     },
     telemetrySample: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
     telemetrySnapshot: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
+    telemetryAssessment: { findFirst: jest.fn().mockResolvedValue(null) },
     profile: { findUnique: jest.fn().mockResolvedValue({ birthDate: new Date('1991-05-10T00:00:00.000Z') }) },
     telemetryDailySummary: { findMany: jest.fn().mockResolvedValue([{ heartRateMin: 62 }]) },
   }
@@ -354,6 +355,44 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
     expect(outcome.opened).toEqual(['BLOOD_PRESSURE_REVIEW'])
   })
 
+  it('desgaste em 80% ou mais abre condição E alerta: é o alerta que a narrativa do piloto promete', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 82 })
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toEqual(['WEAR_HIGH'])
+    expect(outcome.alerts).toBe(1)
+    expect(prisma.operationalAlert.create).toHaveBeenCalledTimes(1)
+    expect(insertValues(prisma.$queryRaw).slice(8, 11)).toEqual(['FLOOR', 80, 82])
+  })
+
+  it('desgaste em 79% não abre nada', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 79 })
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toEqual([])
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+  })
+
+  it('o desgaste é lido da avaliação mais recente DA SESSÃO, até o gatilho e dentro do prazo do domínio', async () => {
+    // Por sessão, e não por funcionário: a cadeia da fórmula reinicia a cada
+    // sessão, e é o desgaste dessa cadeia que a condição descreve. O prazo é o
+    // mesmo que torna esforço e desgaste indisponíveis no painel: avaliação
+    // mais velha que isso não descreve o agora, e não pode abrir condição.
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.findFirst).toHaveBeenCalledWith({
+      where: { sessionId: 'session-1', windowEnd: { gte: secondsAgo(120), lte: NOW } },
+      select: { wearPercent: true },
+      orderBy: { windowEnd: 'desc' },
+    })
+  })
+
   it('não abre alerta novo enquanto houver um não resolvido do mesmo funcionário, tipo E ORIGEM', async () => {
     const prisma = prismaDouble()
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
@@ -559,6 +598,25 @@ describe('TelemetryConditionService.evaluateSession: lastSeenAt', () => {
 })
 
 describe('TelemetryConditionService.evaluateSession: recuperar', () => {
+  it('desgaste ativo recupera abaixo de 70, e não entre 70 e 80', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-wear', 'WEAR_HIGH')])
+    prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 75 })
+
+    expect((await service(prisma).evaluateSession('session-1', NOW, NOW)).recovered).toEqual([])
+    expect(prisma.telemetryCondition.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'RECOVERED' }) }),
+    )
+
+    prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 65 })
+
+    expect((await service(prisma).evaluateSession('session-1', NOW, NOW)).recovered).toEqual(['WEAR_HIGH'])
+    expect(prisma.telemetryCondition.update).toHaveBeenCalledWith({
+      where: { id: 'c-wear' },
+      data: { status: 'RECOVERED', recoveredAt: NOW, recoveryReason: 'NORMALIZED', lastSeenAt: NOW },
+    })
+  })
+
   it('BPM de volta abaixo da banda recupera com motivo NORMALIZED e carimbo', async () => {
     const prisma = prismaDouble()
     prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-1', 'HEART_RATE_HIGH')])
@@ -822,29 +880,32 @@ describe('TelemetryConditionService.sweepSilentSessions: abrir e recuperar', () 
     expect(prisma.telemetryCondition.update).not.toHaveBeenCalled()
   })
 
-  it('silêncio recupera batimento e bateria com motivo SIGNAL_LOST, e deixa a pressão em paz', async () => {
-    // Batimento e bateria são contínuos: sem relógio falando, o valor que
-    // sustentava a condição deixou de existir, e mantê-la aberta seria afirmar
-    // um agora que ninguém mediu. Pressão é medida à mão e vale por 72 h:
-    // silêncio do relógio não diz nada sobre a pressão de ninguém, e ela só
-    // recupera por medição nova.
+  it('silêncio recupera batimento, bateria e desgaste com motivo SIGNAL_LOST, e deixa a pressão em paz', async () => {
+    // Batimento, bateria e desgaste são contínuos: sem relógio falando, o
+    // valor que sustentava a condição deixou de existir, e mantê-la aberta
+    // seria afirmar um agora que ninguém mediu. Desgaste vem da avaliação, e
+    // a avaliação só nasce de evento ao vivo. Pressão é medida à mão e vale
+    // por 72 h: silêncio do relógio não diz nada sobre a pressão de ninguém, e
+    // ela só recupera por medição nova.
     const prisma = prismaDouble()
     silentFor(prisma, 300)
     prisma.telemetryCondition.findMany.mockResolvedValue([
       activeRow('c-alto', 'HEART_RATE_HIGH'),
       activeRow('c-baixo', 'HEART_RATE_LOW'),
       activeRow('c-bat', 'DEVICE_BATTERY_LOW'),
+      activeRow('c-wear', 'WEAR_HIGH'),
       activeRow('c-pressao', 'BLOOD_PRESSURE_REVIEW'),
     ])
 
     const outcome = await service(prisma).sweepSilentSessions(NOW)
 
-    expect(outcome).toEqual({ scanned: 1, signalLost: 1, recovered: 3 })
+    expect(outcome).toEqual({ scanned: 1, signalLost: 1, recovered: 4 })
     const fechada = { status: 'RECOVERED', recoveredAt: NOW, recoveryReason: 'SIGNAL_LOST', lastSeenAt: NOW }
     expect(prisma.telemetryCondition.update.mock.calls.map((c: any[]) => c[0])).toEqual([
       { where: { id: 'c-alto' }, data: fechada },
       { where: { id: 'c-baixo' }, data: fechada },
       { where: { id: 'c-bat' }, data: fechada },
+      { where: { id: 'c-wear' }, data: fechada },
     ])
   })
 

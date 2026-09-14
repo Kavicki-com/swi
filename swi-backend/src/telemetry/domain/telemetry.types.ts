@@ -41,6 +41,10 @@ export type MetricKind =
   | 'bloodPressure'
   | 'effort'
   | 'wear'
+  | 'distance'
+  | 'oxygenSaturation'
+  /** Minutos até o desgaste cruzar o limiar do alerta. Derivada da avaliação. */
+  | 'fatigueEtaMin'
 
 /** Identificadores do escopo do cliente para as métricas que ele nomeou. */
 export type ClientIndicator = 'Q13' | 'Q14' | 'Q16'
@@ -88,6 +92,10 @@ export interface TelemetryEvent {
     motionCount: Measurement
     battery: Measurement
     bloodPressure: Measurement<BloodPressure>
+    /** Variação em metros desde a amostra anterior, como stepDelta. */
+    distanceDeltaM: Measurement
+    /** Percentual. O relógio só mede em repouso, então chega raramente. */
+    oxygenSaturation: Measurement
   }>
   journeyId?: string | null
   taskId?: string | null
@@ -102,6 +110,8 @@ export type ConditionKind =
   | 'BLOOD_PRESSURE_REVIEW'
   | 'DEVICE_BATTERY_LOW'
   | 'DEVICE_SIGNAL_LOST'
+  /** Desgaste da avaliação em 80% ou mais. Vira item de fila, não urgência. */
+  | 'WEAR_HIGH'
 
 /**
  * O que conta como urgente, e por exclusão o que não conta.
@@ -111,7 +121,9 @@ export type ConditionKind =
  * não por esquecimento: BLOOD_PRESSURE_REVIEW pede revisão humana e nunca vira
  * urgência automática; DEVICE_BATTERY_LOW e DEVICE_SIGNAL_LOST são alertas de
  * aparelho, e tratá-los como alerta de saúde faria um relógio descarregado
- * contar como funcionário em risco. Quem for apresentá-los declara os próprios
+ * contar como funcionário em risco; WEAR_HIGH é estimativa experimental de uma
+ * fórmula ainda sem calibração em hardware, e a fórmula não pode tirar ninguém
+ * de "dentro dos limites" antes de provar que acerta. Quem for apresentá-los declara os próprios
  * conjuntos: uma lista exportada sem consumidor envelheceria sem ninguém notar.
  */
 export const URGENT_CONDITION_KINDS = ['HEART_RATE_HIGH', 'HEART_RATE_LOW'] as const
