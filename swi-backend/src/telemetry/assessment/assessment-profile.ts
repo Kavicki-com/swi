@@ -60,7 +60,7 @@ export const EXPERIMENTAL_PROFILE: AssessmentProfile = Object.freeze({
   gapMaxMs: FRESHNESS.VITAL.staleMs,
   heartRateReuseMs: FRESHNESS.VITAL.currentMs,
   chainLookbackMs: FRESHNESS.VITAL.staleMs,
-  // Um turno de oito horas. Acrescentado em 2026-09-14 sem subir a versão:
+  // Um turno de oito horas. Acrescentado depois da v1 sem subir a versão:
   // é entrada de uma saída nova, e não muda nenhum número já gravado.
   fatigueEtaHorizonMinutes: 480,
 })

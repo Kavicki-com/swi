@@ -16,8 +16,8 @@ import { FRESHNESS } from '../domain/metric-state'
 // calibrado deixaria o painel em zero, e sem condição gravada não há dado
 // para calibrar.
 //
-// v2 (2026-09-14): entra a condição de desgaste alto. Até a v1, o "alerta a
-// 80% de desgaste" que a fórmula sempre prometeu era só limiar operacional,
+// v2: entra a condição de desgaste alto. Até a v1, o "alerta a 80% de
+// desgaste" que a fórmula sempre prometeu era só limiar operacional,
 // sem condição que abrisse; "minutos até a fadiga" precisava de um alvo que
 // significasse alguma coisa, e o alvo é esta condição.
 
@@ -63,10 +63,10 @@ export interface AlertProfile {
   }
   readonly batteryLow: { readonly openAtPercent: number; readonly recoverAbovePercent: number }
   /**
-   * Desgaste da última avaliação da sessão. É o limiar operacional da fórmula
-   * (desenho de 2026-09-04), agora como condição. A recuperação fica dez pontos
-   * abaixo, como a bateria: o decaimento da dose faz o número descer devagar, e
-   * sem banda ele abriria e fecharia a cada avaliação em torno do 80.
+   * Desgaste da última avaliação da sessão. É o limiar operacional que o
+   * desenho da fórmula sempre citou, agora como condição. A recuperação fica
+   * dez pontos abaixo, como a bateria: o decaimento da dose faz o número descer
+   * devagar, e sem banda ele abriria e fecharia a cada avaliação em torno do 80.
    */
   readonly wearHigh: { readonly openAtPercent: number; readonly recoverBelowPercent: number }
   readonly bloodPressureReview: {
