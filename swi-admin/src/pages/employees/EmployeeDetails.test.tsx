@@ -17,6 +17,15 @@ vi.mock('@/services/api/users', async (importOriginal) => {
 vi.mock('@/services/api/notifications', () => ({
   notificationsApi: { requestPause: vi.fn() },
 }))
+// O bloco "Aparelho" carrega o estado ao montar; sem o dublê a página tentaria
+// falar com o backend. O comportamento do bloco tem suíte própria.
+vi.mock('@/services/api/telemetryDevices', () => ({
+  telemetryDevicesApi: {
+    stateOf: vi.fn().mockResolvedValue({ data: { device: null, pendingEnrollment: null }, error: null }),
+    createEnrollment: vi.fn(),
+    revoke: vi.fn(),
+  },
+}))
 
 const getMock = vi.mocked(employeesApi.get)
 const pauseMock = vi.mocked(notificationsApi.requestPause)

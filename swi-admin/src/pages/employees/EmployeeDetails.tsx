@@ -10,6 +10,7 @@ import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { employeesApi, type Employee } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
+import { DeviceSection } from '@/pages/employees/DeviceSection'
 import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 import { useLivePositions } from '@/hooks/useLivePositions'
 import { useDemoToast } from '@/lib/demoToast'
@@ -96,6 +97,7 @@ export function EmployeeDetails() {
       onBack={() => navigate('/employees')}
       backA11yLabel="Voltar para a lista de funcionários"
       onOpenFullMap={() => navigate('/maps/general')}
+      deviceSection={<DeviceSection workerId={employee.id} />}
       topRightAction={
         <Button
           label={pausing ? 'Solicitando…' : 'Solicitar Pausa'}

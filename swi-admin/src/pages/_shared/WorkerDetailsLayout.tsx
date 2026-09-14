@@ -80,6 +80,12 @@ export type WorkerDetailsLayoutProps = {
   backA11yLabel: string
   onOpenFullMap: () => void
   topRightAction: ReactNode
+  /**
+   * Bloco "Aparelho" (pareamento do iPhone do piloto). Só o detalhe de
+   * funcionário passa este slot; administrador não tem aparelho, e o layout
+   * não decide isso sozinho.
+   */
+  deviceSection?: ReactNode
 }
 
 // O gasto calórico por período sai de simulatedCaloriesFor(seedId), e não de
@@ -289,6 +295,7 @@ export function WorkerDetailsLayout({
   backA11yLabel,
   onOpenFullMap,
   topRightAction,
+  deviceSection,
 }: WorkerDetailsLayoutProps) {
   const theme = useTheme()
   const breakpoint = useBreakpoint()
@@ -435,6 +442,8 @@ export function WorkerDetailsLayout({
 
           {/* Mini map with location */}
           <MiniMap worker={worker} position={position} onOpenFullMap={onOpenFullMap} />
+
+          {deviceSection}
 
           {/* Exam history: h-[176px] scrollable area. Vertical-only scroll, no visible scrollbar
               (class `no-scrollbar` declared in index.html hides webkit/firefox UI). */}
