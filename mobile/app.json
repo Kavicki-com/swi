@@ -20,7 +20,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Permite tirar fotos para anexar a tarefas e relatórios.",
         "NSPhotoLibraryUsageDescription": "Permite selecionar fotos da galeria para anexar a tarefas e relatórios.",
-        "NSHealthShareUsageDescription": "O SWI lê frequência cardíaca, energia ativa e passos do Apple Watch para o monitoramento de segurança em campo.",
+        "NSHealthShareUsageDescription": "O SWI lê frequência cardíaca, energia ativa, passos, distância e oxigenação do sangue do Apple Watch para o monitoramento de segurança em campo.",
         "NSHealthUpdateUsageDescription": "O SWI registra a sessão de monitoramento do Apple Watch como um treino para manter a coleta contínua."
       },
       "entitlements": {
