@@ -47,6 +47,22 @@ export interface CompleteEnrollmentInput {
 }
 
 /**
+ * O que o painel precisa saber antes de agir. `device` é o aparelho ativo, se
+ * houver; `pendingEnrollment` diz se há um código ainda válido aguardando o
+ * funcionário, sem o código, que só existe em claro no retorno da criação.
+ */
+export interface WorkerDeviceState {
+  device: {
+    id: string
+    kind: TelemetryDeviceKind
+    model: string | null
+    pairedAt: Date
+    lastSeenAt: Date | null
+  } | null
+  pendingEnrollment: { expiresAt: Date } | null
+}
+
+/**
  * sha256 e não bcrypt, de propósito. A credencial do dispositivo tem 256 bits
  * sorteados, então não existe dicionário a percorrer e o hash lento só custaria
  * centenas de milissegundos em cada evento de telemetria. bcrypt fica para o
@@ -227,6 +243,51 @@ export class DeviceAuthService {
     // O funcionário sai daqui, do vínculo do aparelho, e não do que o cliente
     // afirma ser. É esta linha que sustenta a regra do evento sem workerId.
     return { deviceId: device.id, workerId: device.workerId }
+  }
+
+  /**
+   * A única leitura de aparelho do backend, escopada pela empresa como as
+   * escritas: funcionário de fora responde como inexistente, sem consultar
+   * aparelho nenhum. Concluir um pareamento revoga o anterior do mesmo tipo,
+   * então "o ativo" é no máximo um por tipo, e o piloto só emite para iPhone.
+   */
+  async deviceStateForAdmin(admin: JwtUser, workerId: string): Promise<WorkerDeviceState> {
+    const companyId = companyScopeOf(admin, 'Funcionário não encontrado')
+    const worker = await this.prisma.user.findUnique({
+      where: { id: workerId },
+      select: { id: true, companyId: true },
+    })
+    if (worker === null || worker.companyId !== companyId) {
+      throw new NotFoundException('Funcionário não encontrado')
+    }
+
+    const [device, pending] = await Promise.all([
+      this.prisma.telemetryDevice.findFirst({
+        where: { workerId: worker.id, revokedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, kind: true, model: true, createdAt: true, lastSeenAt: true },
+      }),
+      // Pendente é o que ainda pode ser concluído: não consumido e não expirado.
+      this.prisma.telemetryEnrollment.findFirst({
+        where: { workerId: worker.id, consumedAt: null, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: 'desc' },
+        select: { expiresAt: true },
+      }),
+    ])
+
+    return {
+      device:
+        device === null
+          ? null
+          : {
+              id: device.id,
+              kind: device.kind,
+              model: device.model,
+              pairedAt: device.createdAt,
+              lastSeenAt: device.lastSeenAt,
+            },
+      pendingEnrollment: pending === null ? null : { expiresAt: pending.expiresAt },
+    }
   }
 
   async revoke(admin: JwtUser, deviceId: string): Promise<void> {

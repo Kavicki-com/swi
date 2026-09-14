@@ -15,10 +15,16 @@ const ADMIN = { userId: 'admin-1', role: 'ADMIN', companyId: 'company-1' }
 const prismaDouble = () =>
   ({
     user: { findUnique: jest.fn() },
-    telemetryEnrollment: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+    telemetryEnrollment: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
+    },
     telemetryDevice: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn(),
       updateMany: jest.fn(),
     },
@@ -378,6 +384,85 @@ describe('DeviceAuthService.revoke', () => {
       service(prisma).revoke({ ...ADMIN, companyId: null }, 'device-1'),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(prisma.telemetryDevice.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+// O painel precisa saber o estado ANTES de agir: não pareado, código válido
+// aguardando o funcionário, ou pareado desde quando. É a única leitura de
+// aparelho do backend, e por isso é escopada pela empresa como as escritas.
+describe('DeviceAuthService.deviceStateForAdmin', () => {
+  const PAIRED_AT = new Date('2026-09-14T12:00:00.000Z')
+  const SEEN_AT = new Date('2026-09-14T15:30:00.000Z')
+
+  it('devolve o aparelho ativo, com quando foi pareado e o último contato', async () => {
+    const prisma = prismaDouble()
+    prisma.user.findUnique.mockResolvedValue(worker())
+    prisma.telemetryDevice.findFirst.mockResolvedValue({
+      id: 'device-1',
+      kind: 'IPHONE',
+      model: 'iPhone 15',
+      createdAt: PAIRED_AT,
+      lastSeenAt: SEEN_AT,
+    })
+
+    const state = await service(prisma).deviceStateForAdmin(ADMIN, 'worker-1')
+
+    expect(state).toEqual({
+      device: { id: 'device-1', kind: 'IPHONE', model: 'iPhone 15', pairedAt: PAIRED_AT, lastSeenAt: SEEN_AT },
+      pendingEnrollment: null,
+    })
+    // Só o ativo interessa: um revogado não é aparelho pareado.
+    const { where } = prisma.telemetryDevice.findFirst.mock.calls[0][0]
+    expect(where).toEqual({ workerId: 'worker-1', revokedAt: null })
+  })
+
+  it('sem aparelho ativo, diz se há um código ainda válido aguardando o funcionário', async () => {
+    const prisma = prismaDouble()
+    prisma.user.findUnique.mockResolvedValue(worker())
+    const expiresAt = new Date(Date.now() + 4 * 60_000)
+    prisma.telemetryEnrollment.findFirst.mockResolvedValue({ expiresAt })
+
+    const state = await service(prisma).deviceStateForAdmin(ADMIN, 'worker-1')
+
+    expect(state).toEqual({ device: null, pendingEnrollment: { expiresAt } })
+    // Pendente é o que ainda pode ser concluído: não consumido e não expirado.
+    const { where } = prisma.telemetryEnrollment.findFirst.mock.calls[0][0]
+    expect(where.workerId).toBe('worker-1')
+    expect(where.consumedAt).toBeNull()
+    expect(where.expiresAt.gt).toBeInstanceOf(Date)
+  })
+
+  it('sem aparelho e sem código válido, os dois vêm nulos', async () => {
+    const prisma = prismaDouble()
+    prisma.user.findUnique.mockResolvedValue(worker())
+
+    expect(await service(prisma).deviceStateForAdmin(ADMIN, 'worker-1')).toEqual({
+      device: null,
+      pendingEnrollment: null,
+    })
+  })
+
+  it('funcionário de outra empresa responde como inexistente, sem consultar aparelho', async () => {
+    const prisma = prismaDouble()
+    prisma.user.findUnique.mockResolvedValue(worker({ companyId: 'company-2' }))
+
+    const erro = await service(prisma)
+      .deviceStateForAdmin(ADMIN, 'worker-1')
+      .catch((e: Error) => e)
+
+    expect(erro).toBeInstanceOf(NotFoundException)
+    expect((erro as Error).message).toBe('Funcionário não encontrado')
+    expect(prisma.telemetryDevice.findFirst).not.toHaveBeenCalled()
+    expect(prisma.telemetryEnrollment.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('recusa administrador sem empresa antes de tocar o banco', async () => {
+    const prisma = prismaDouble()
+
+    await expect(
+      service(prisma).deviceStateForAdmin({ ...ADMIN, companyId: null }, 'worker-1'),
+    ).rejects.toBeInstanceOf(NotFoundException)
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
   })
 })
 
