@@ -41,6 +41,12 @@ struct ContentView: View {
           )
           reading("Movimento", motionLabel, detail: nil)
           reading("Bateria", batteryLabel, detail: nil)
+          reading(
+            "Distância",
+            String(format: "%.0f m", collector.distanceMeters),
+            detail: collector.lastDistanceVariation.map { String(format: "+%.1f", $0) }
+          )
+          reading("Oxigenação", oxygenLabel, detail: nil)
         }
 
         // Segundo Group pelo mesmo motivo do primeiro: o ViewBuilder aceita 10
@@ -122,6 +128,23 @@ struct ContentView: View {
     guard let percent = collector.batteryPercent else { return "desconhecida" }
     return String(format: "%.0f%%", percent)
   }
+
+  /// Oxigenacao e medicao pontual: o relogio so mede em repouso, e uma sessao
+  /// inteira pode passar sem nenhuma. "Nenhuma nesta sessao" e um fato, nao
+  /// um defeito; a hora diz de quando e a ultima.
+  private var oxygenLabel: String {
+    guard let percent = collector.oxygenSaturation, let at = collector.oxygenSaturationAt else {
+      return "nenhuma nesta sessão"
+    }
+    return String(format: "%.0f%% às %@", percent, Self.clock.string(from: at))
+  }
+
+  private static let clock: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .none
+    formatter.timeStyle = .short
+    return formatter
+  }()
 
   private var statusLabel: String {
     switch collector.state {

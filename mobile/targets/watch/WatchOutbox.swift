@@ -67,6 +67,8 @@ struct OutboxState: Codable {
   var compactedThrough = -1
   var stepBase = 0.0
   var energyBase = 0.0
+  /// Base da distancia, como a da energia: delta continuo, telescopa exato.
+  var distanceBase = 0.0
   var discarded = 0
   /// Ultima remessa numerada. Vive no estado, e nao na memoria, porque o
   /// iPhone guarda a ultima remessa confirmada por sessao: se o relogio
@@ -82,6 +84,34 @@ struct OutboxState: Codable {
     /// Bytes que essas linhas ocupam, para a confirmacao avancar o cursor sem
     /// varrer o arquivo de novo.
     let bytes: Int
+  }
+
+  init() {}
+
+  enum CodingKeys: String, CodingKey {
+    case version, sessionId, lastSequence, ackedThrough, compactedThrough
+    case stepBase, energyBase, distanceBase, discarded, lastBatch, inFlight
+  }
+
+  /// Escrito a mao porque o decodificador sintetizado exige TODA chave, mesmo
+  /// as que tem valor padrao na declaracao. Um estado gravado pela build
+  /// anterior nao tem `distanceBase`; com o sintetizado ele falharia em
+  /// `open`, seria tratado como fila de outra sessao e a fila inteira, com os
+  /// eventos ainda nao entregues, seria apagada na primeira retomada depois
+  /// da atualizacao. Chave ausente vale o padrao, e nada mais muda.
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+    sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? ""
+    lastSequence = try c.decodeIfPresent(Int.self, forKey: .lastSequence) ?? -1
+    ackedThrough = try c.decodeIfPresent(Int.self, forKey: .ackedThrough) ?? -1
+    compactedThrough = try c.decodeIfPresent(Int.self, forKey: .compactedThrough) ?? -1
+    stepBase = try c.decodeIfPresent(Double.self, forKey: .stepBase) ?? 0
+    energyBase = try c.decodeIfPresent(Double.self, forKey: .energyBase) ?? 0
+    distanceBase = try c.decodeIfPresent(Double.self, forKey: .distanceBase) ?? 0
+    discarded = try c.decodeIfPresent(Int.self, forKey: .discarded) ?? 0
+    lastBatch = try c.decodeIfPresent(Int.self, forKey: .lastBatch) ?? 0
+    inFlight = try c.decodeIfPresent(InFlight.self, forKey: .inFlight)
   }
 }
 
@@ -186,12 +216,14 @@ final class WatchOutbox {
     var maxSequence = state.lastSequence
     var steps = 0.0
     var energy = 0.0
+    var distance = 0.0
     while let line = reader.next() {
       guard !line.isEmpty, let event = TelemetryEvent.from(line: line) else { continue }
       guard event.sequence > state.lastSequence else { continue }
       maxSequence = max(maxSequence, event.sequence)
       steps += event.measurements.stepDelta?.value ?? 0
       energy += event.measurements.activeEnergyKcal?.value ?? 0
+      distance += event.measurements.distanceDeltaM?.value ?? 0
     }
     guard maxSequence > state.lastSequence else { return }
     state.lastSequence = maxSequence
@@ -203,6 +235,9 @@ final class WatchOutbox {
     // exatidao exigiria gravar a base fracionaria dentro do evento.
     state.stepBase += steps
     state.energyBase += energy
+    // Distancia telescopa exato, como a energia: o delta e a diferenca entre
+    // acumulados, sem arredondamento no meio.
+    state.distanceBase += distance
   }
 
   // MARK: - Escrita
@@ -218,7 +253,8 @@ final class WatchOutbox {
     measurements: TelemetryMeasurements,
     at date: Date,
     stepBase: Double,
-    energyBase: Double
+    energyBase: Double,
+    distanceBase: Double
   ) throws -> Int {
     let sequence = state.lastSequence + 1
     let event = TelemetryEvent(
@@ -234,6 +270,7 @@ final class WatchOutbox {
     state.lastSequence = sequence
     state.stepBase = stepBase
     state.energyBase = energyBase
+    state.distanceBase = distanceBase
     enforceCap()
     try writeState()
     return sequence

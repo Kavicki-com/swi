@@ -164,13 +164,16 @@ final class MirroredWorkoutReceiver: NSObject {
       completion(false)
       return
     }
-    // Os mesmos tres tipos que o relogio le. A folha do sistema no primeiro uso
-    // e esta; pedir menos do que a tela promete seria uma contradicao lida pelo
-    // funcionario, e o sistema so pergunta uma vez por tipo.
+    // Os mesmos cinco tipos que o relogio le. A folha do sistema no primeiro
+    // uso e esta; pedir menos do que a tela promete seria uma contradicao lida
+    // pelo funcionario, e o sistema so pergunta uma vez por tipo: quem ja
+    // autorizou os tres primeiros ve a folha so com os dois novos.
     let typesToRead: Set<HKObjectType> = [
       HKQuantityType(.heartRate),
       HKQuantityType(.activeEnergyBurned),
       HKQuantityType(.stepCount),
+      HKQuantityType(.distanceWalkingRunning),
+      HKQuantityType(.oxygenSaturation),
     ]
     let typesToShare: Set<HKSampleType> = [HKWorkoutType.workoutType()]
     healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead) { granted, _ in

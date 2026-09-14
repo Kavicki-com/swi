@@ -180,6 +180,28 @@ describe('dreno do arquivo durável', () => {
     expect(await outbox.pending()).toEqual([]);
   });
 
+  it('leva distância e oxigenação do relógio para a fila', async () => {
+    // O relógio passou a medir as duas; a linha do arquivo durável tem de
+    // atravessar o dreno inteira, senão o backend nunca as vê.
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const comAsDuas: OutboxEvent = {
+      ...evento(0),
+      measurements: {
+        distanceDeltaM: { value: 4.2, unit: 'm', source: 'APPLE_WATCH' },
+        oxygenSaturation: { value: 97, unit: '%', source: 'APPLE_WATCH' },
+      },
+    };
+    const { files } = memoryFiles({ 'file:///inbox.0.ndjson': linha(comAsDuas) + '\n' });
+    const drain = createTelemetryInboxDrain({
+      control: controle(['file:///inbox.0.ndjson']),
+      outbox,
+      files,
+    });
+
+    expect(await drain.run()).toEqual({ drained: 1, skipped: 0 });
+    expect(await outbox.pending()).toEqual([comAsDuas]);
+  });
+
   it('recusa linha fora do contrato sem derrubar o dreno', async () => {
     const outbox = createTelemetryOutbox(memoryStorage());
     const foraDoContrato = { ...evento(1), origin: 'DEMO' };
