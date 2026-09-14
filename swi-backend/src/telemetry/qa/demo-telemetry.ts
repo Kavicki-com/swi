@@ -89,8 +89,10 @@ export type ScenarioName =
  * - repouso, leve, moderado, intenso: 30 min cada, os quatro da varredura de
  *   parâmetros da fórmula. Mostram esforço e desgaste subindo na tela.
  * - desgaste: 20 min moderado e 90 min intenso, que a varredura mostrou levar
- *   o desgaste acima de 80%. NÃO abre condição: não existe condição de
- *   desgaste no perfil de alertas de hoje. Serve para ver a fórmula no teto.
+ *   o desgaste acima de 80%. Abre WEAR_HIGH (perfil de alertas v2) e o alerta
+ *   de fila correspondente quando o desgaste avaliado chega a 80%; recupera
+ *   abaixo de 70%, ou por silêncio. Serve para ver a fórmula no teto e o
+ *   alerta que ela promete.
  * - batimento-alto: 3 min a 185 bpm. Abre HEART_RATE_HIGH em cerca de um
  *   minuto (janela de 60 s, sustentado por 45 s): o limiar personalizado é
  *   90% do máximo pela idade, e nunca abaixo de 180.
