@@ -559,4 +559,73 @@ describe('Telemetry conditions e2e', () => {
       recoveryReason: 'NORMALIZED',
     })
   })
+
+  it('12. desgaste em 80% abre condição com alerta não urgente, e recupera em sessão nova com desgaste baixo', async () => {
+    const urgentesAntes = (await query.adminSummary(admin)).urgentAlerts.workers
+    const alertasAntes = await prisma.operationalAlert.count({ where: { workerId: workerA } })
+
+    // Chegar a 80% de desgaste pela porta da frente leva mais de duas horas de
+    // intensidade máxima. O caso planta a dose na cadeia da sessão, que é o
+    // estado que a avaliação seguinte continua, e deixa a fórmula e o motor
+    // fazerem o resto: é a fiação avaliação -> condição -> alerta que se prova.
+    // Dois eventos separados no tempo: um evento sozinho no primeiro lote de
+    // uma sessão faz a janela começar e terminar no mesmo instante, e janela
+    // sem duração não é avaliada.
+    const sessao = randomUUID()
+    await post(headersA, {
+      events: [
+        event({ monitoringSessionId: sessao, eventTime: new Date(Date.now() - 10_000).toISOString() }),
+        event({ monitoringSessionId: sessao, eventTime: new Date(Date.now() - 5_000).toISOString() }),
+      ],
+    }).expect(200)
+    const primeira = await prisma.telemetryAssessment.findFirstOrThrow({
+      where: { sessionId: sessao },
+      orderBy: { computedAt: 'desc' },
+    })
+    const inputs = primeira.inputs as { chain: { nextState: { strainDose: number } } }
+    inputs.chain.nextState.strainDose = 300
+    // Vinte segundos atrás para passar o corte de 15 s da avaliação seguinte.
+    await prisma.telemetryAssessment.update({
+      where: { id: primeira.id },
+      data: { inputs: inputs as object, computedAt: new Date(Date.now() - 20_000) },
+    })
+
+    await post(headersA, { events: [event({ monitoringSessionId: sessao })] }).expect(200)
+
+    const avaliada = await prisma.telemetryAssessment.findFirstOrThrow({
+      where: { sessionId: sessao },
+      orderBy: { computedAt: 'desc' },
+    })
+    expect(avaliada.wearPercent).toBeGreaterThanOrEqual(80)
+
+    const aberta = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerA, kind: 'WEAR_HIGH', status: 'ACTIVE' },
+    })
+    expect(aberta).toMatchObject({
+      origin: 'REAL',
+      thresholdProfile: EXPERIMENTAL_ALERT_PROFILE.version,
+      thresholdRule: 'FLOOR',
+      thresholdValue: EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent,
+      observedValue: avaliada.wearPercent,
+    })
+    // Vira item de fila, porque é o alerta que o piloto promete. Mas não é
+    // urgente: o contador do painel só olha batimento.
+    const alerta = await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })
+    expect(alerta).toMatchObject({ workerId: workerA, origin: 'REAL', status: 'OPEN' })
+    expect(await prisma.operationalAlert.count({ where: { workerId: workerA } })).toBe(alertasAntes + 1)
+    expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(urgentesAntes)
+
+    // Sessão nova começa a cadeia do zero: um lote denso a 70 bpm produz uma
+    // avaliação com desgaste próximo de zero, abaixo da banda de recuperação.
+    const nova = randomUUID()
+    await post(
+      headersA,
+      sustainedBatch(nova, { measurements: { heartRate: { value: 70, unit: 'bpm', source: 'APPLE_WATCH' } } }),
+    ).expect(200)
+
+    const recuperada = await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: aberta.id } })
+    expect(recuperada).toMatchObject({ status: 'RECOVERED', recoveryReason: 'NORMALIZED' })
+    // Condição recuperar não fecha alerta: isso é da triagem humana.
+    expect(await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })).toMatchObject({ status: 'OPEN' })
+  })
 })

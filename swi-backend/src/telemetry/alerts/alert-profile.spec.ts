@@ -8,7 +8,7 @@ import { ALERT_PROFILE_VERSION, EXPERIMENTAL_ALERT_PROFILE } from './alert-profi
 
 describe('perfil de alertas experimental', () => {
   it('tem a versão fixada', () => {
-    expect(ALERT_PROFILE_VERSION).toBe('swi-alert-experimental-1')
+    expect(ALERT_PROFILE_VERSION).toBe('swi-alert-experimental-2')
     expect(EXPERIMENTAL_ALERT_PROFILE.version).toBe(ALERT_PROFILE_VERSION)
   })
 
@@ -20,7 +20,13 @@ describe('perfil de alertas experimental', () => {
     expect(EXPERIMENTAL_ALERT_PROFILE.signalLost.silenceMs).toBe(FRESHNESS.VITAL.staleMs)
   })
 
-  it('os números da v1 são os do desenho de 2026-09-07', () => {
+  it('a v2 acrescenta o desgaste alto: abre em 80, recupera abaixo de 70', () => {
+    // O 80 é o limiar operacional que a fórmula sempre prometeu; até a v1 ele
+    // não abria condição nenhuma. A banda de dez pontos é a mesma da bateria.
+    expect(EXPERIMENTAL_ALERT_PROFILE.wearHigh).toEqual({ openAtPercent: 80, recoverBelowPercent: 70 })
+  })
+
+  it('os números da v1 continuam os do desenho de 2026-09-07', () => {
     expect(EXPERIMENTAL_ALERT_PROFILE).toMatchObject({
       heartRateHigh: { maxFraction: 0.9, floorBpm: 180, hysteresisBpm: 10 },
       heartRateLow: { belowRestingBpm: 15, floorBpm: 40, hysteresisBpm: 10 },

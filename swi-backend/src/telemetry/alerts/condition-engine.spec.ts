@@ -3,6 +3,7 @@ import {
   decideBattery,
   decideBloodPressure,
   decideHeartRate,
+  decideWear,
   heartRateLimits,
   type EngineSample,
 } from './condition-engine'
@@ -213,6 +214,34 @@ describe('decideBattery: uma leitura basta, banda de dez pontos', () => {
   it('sem leitura de bateria não decide nada', () => {
     expect(decideBattery(null, false, PROFILE)).toBeNull()
     expect(decideBattery(null, true, PROFILE)).toBeNull()
+  })
+})
+
+describe('decideWear: uma leitura da avaliação basta, banda de dez pontos', () => {
+  it('abre em 80% com a régua de piso e o valor observado', () => {
+    expect(decideWear(80, false, PROFILE)).toEqual({
+      kind: 'WEAR_HIGH',
+      action: 'OPEN',
+      observedValue: 80,
+      threshold: { value: 80, rule: 'FLOOR' },
+    })
+  })
+
+  it('não abre em 79%', () => {
+    expect(decideWear(79, false, PROFILE)).toBeNull()
+  })
+
+  it('ativa, 75% não recupera: está dentro da banda', () => {
+    expect(decideWear(75, true, PROFILE)).toBeNull()
+  })
+
+  it('ativa, 69% recupera', () => {
+    expect(decideWear(69, true, PROFILE)?.action).toBe('RECOVER')
+  })
+
+  it('sem avaliação com desgaste não decide nada', () => {
+    expect(decideWear(null, false, PROFILE)).toBeNull()
+    expect(decideWear(null, true, PROFILE)).toBeNull()
   })
 })
 

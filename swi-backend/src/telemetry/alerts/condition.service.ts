@@ -8,6 +8,7 @@ import {
   decideBattery,
   decideBloodPressure,
   decideHeartRate,
+  decideWear,
   heartRateLimits,
   type Decision,
   type EngineSample,
@@ -56,18 +57,24 @@ export const MAX_SILENT_SESSIONS_PER_RUN = 200
  */
 export const MONITORED_SILENCE_FLOOR_MS = 7 * 24 * 60 * 60 * 1000
 
-/** Tipos que viram item de fila. Bateria e sinal são estado, não item. */
+/**
+ * Tipos que viram item de fila. Bateria e sinal são estado, não item. Desgaste
+ * alto vira item porque é o alerta que a narrativa do piloto promete: alguém
+ * tem de decidir se o funcionário para.
+ */
 const ALERTING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
   'HEART_RATE_HIGH',
   'HEART_RATE_LOW',
   'BLOOD_PRESSURE_REVIEW',
+  'WEAR_HIGH',
 ])
 
 /**
  * Condições contínuas que o SILÊNCIO derruba. Batimento e bateria descrevem um
  * valor que o relógio precisa estar mandando: parado o relógio, a evidência que
  * sustentava a condição deixou de existir, e mantê-la aberta seria afirmar um
- * agora que ninguém mediu.
+ * agora que ninguém mediu. Desgaste entra pelo mesmo motivo: ele vem da
+ * avaliação, e a avaliação só nasce de evento ao vivo.
  *
  * Pressão fica de fora de propósito: é medida à mão, vale por 72 h pelo prazo
  * do domínio, e silêncio do relógio não diz nada sobre a pressão de ninguém.
@@ -77,6 +84,7 @@ const SILENCE_RECOVERS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryC
   'HEART_RATE_HIGH',
   'HEART_RATE_LOW',
   'DEVICE_BATTERY_LOW',
+  'WEAR_HIGH',
 ])
 
 export interface EvaluateOutcome {
@@ -182,7 +190,8 @@ export class TelemetryConditionService {
     // CONTÍNUA de esforço só faz sentido dentro de uma.
     const batteryFrom = new Date(triggerAt.getTime() - FRESHNESS.BATTERY.staleMs)
     const pressureFrom = new Date(triggerAt.getTime() - FRESHNESS.BLOOD_PRESSURE.staleMs)
-    const [rows, batteryRow, pressureRow, profile, summaries] = await Promise.all([
+    const wearFrom = new Date(triggerAt.getTime() - FRESHNESS.VITAL.staleMs)
+    const [rows, batteryRow, pressureRow, wearRow, profile, summaries] = await Promise.all([
       // Fronteira de baixo fechada, como a do motor: aberta, a amostra que cai
       // exatamente no início da janela ficaria de fora e o trecho medido seria
       // menor que o que o perfil declara. Só BPM: as colunas de bateria e de
@@ -220,6 +229,18 @@ export class TelemetryConditionService {
         select: { systolicMmHg: true, diastolicMmHg: true },
         orderBy: { eventTime: 'desc' },
       }),
+      // Desgaste é a última avaliação DA SESSÃO, e não do funcionário: a cadeia
+      // da fórmula reinicia a cada sessão, e é o desgaste dessa cadeia que a
+      // condição descreve. A ingestão avalia antes de chamar aqui, então no
+      // caminho normal a avaliação lida é a que este mesmo lote acabou de
+      // gravar. O prazo é FRESHNESS.VITAL.staleMs, o mesmo que torna esforço
+      // e desgaste indisponíveis no painel: avaliação mais velha que isso não
+      // descreve o agora e não pode abrir condição.
+      tx.telemetryAssessment.findFirst({
+        where: { sessionId, windowEnd: { gte: wearFrom, lte: triggerAt } },
+        select: { wearPercent: true },
+        orderBy: { windowEnd: 'desc' },
+      }),
       tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
       tx.telemetryDailySummary.findMany({
         where: {
@@ -249,6 +270,7 @@ export class TelemetryConditionService {
       batteryPercent: null,
     }))
     const latestBattery = batteryRow?.batteryPercent ?? null
+    const latestWear = wearRow?.wearPercent ?? null
     // O filtro `not: null` não estreita o tipo devolvido pelo Prisma, então as
     // duas colunas são conferidas aqui em vez de assertadas.
     const pressure =
@@ -262,6 +284,7 @@ export class TelemetryConditionService {
       decideHeartRate('HEART_RATE_LOW', samples, limits.low, activeByKind.has('HEART_RATE_LOW'), this.profile, nowMs),
       decideBattery(latestBattery, activeByKind.has('DEVICE_BATTERY_LOW'), this.profile),
       decideBloodPressure(pressure, activeByKind.has('BLOOD_PRESSURE_REVIEW'), this.profile),
+      decideWear(latestWear, activeByKind.has('WEAR_HIGH'), this.profile),
     ].flatMap((d) => (d === null ? [] : [d]))
 
     // Evento ao vivo é sinal de volta: perda de sinal ativa recupera aqui, e
