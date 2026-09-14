@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
@@ -39,5 +39,16 @@ export class TelemetryDevicesController {
   @HttpCode(204)
   revoke(@CurrentUser() admin: JwtUser, @Param('id') deviceId: string) {
     return this.devices.revoke(admin, deviceId)
+  }
+
+  /**
+   * O estado do aparelho de um funcionário, para o painel decidir entre Parear
+   * e Revogar. Por funcionário, e não por aparelho: é o funcionário que o
+   * administrador está olhando, e o aparelho ativo é no máximo um.
+   */
+  @Roles('ADMIN')
+  @Get('workers/:workerId')
+  deviceOfWorker(@CurrentUser() admin: JwtUser, @Param('workerId') workerId: string) {
+    return this.devices.deviceStateForAdmin(admin, workerId)
   }
 }

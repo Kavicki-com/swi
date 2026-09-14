@@ -13,6 +13,7 @@ const serviceDouble = () =>
     createEnrollment: jest.fn().mockResolvedValue({ enrollmentId: 'e1', code: '123456' }),
     completeEnrollment: jest.fn().mockResolvedValue({ deviceId: 'd1', credential: 'd1.segredo' }),
     revoke: jest.fn().mockResolvedValue(undefined),
+    deviceStateForAdmin: jest.fn().mockResolvedValue({ device: null, pendingEnrollment: null }),
   }) as unknown as jest.Mocked<DeviceAuthService>
 
 describe('TelemetryDevicesController', () => {
@@ -52,14 +53,23 @@ describe('TelemetryDevicesController', () => {
     expect(devices.revoke).toHaveBeenCalledWith(ADMIN, 'device-1')
   })
 
-  it('reserva a criação de enrollment e a revogação ao administrador', () => {
-    const roles = (method: 'createEnrollment' | 'complete' | 'revoke') =>
+  it('lê o estado do aparelho de um funcionário com o escopo do administrador do token', async () => {
+    const devices = serviceDouble()
+
+    await new TelemetryDevicesController(devices).deviceOfWorker(ADMIN, 'worker-1')
+
+    expect(devices.deviceStateForAdmin).toHaveBeenCalledWith(ADMIN, 'worker-1')
+  })
+
+  it('reserva a criação de enrollment, a revogação e a leitura do aparelho ao administrador', () => {
+    const roles = (method: 'createEnrollment' | 'complete' | 'revoke' | 'deviceOfWorker') =>
       Reflect.getMetadata('roles', TelemetryDevicesController.prototype[method]) as
         | string[]
         | undefined
 
     expect(roles('createEnrollment')).toEqual(['ADMIN'])
     expect(roles('revoke')).toEqual(['ADMIN'])
+    expect(roles('deviceOfWorker')).toEqual(['ADMIN'])
     // Concluir o pareamento é do funcionário dono do enrollment, não do admin.
     expect(roles('complete')).toBeUndefined()
   })
