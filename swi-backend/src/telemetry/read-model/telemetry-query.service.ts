@@ -20,6 +20,7 @@ import {
   type AggregateWorkerInput,
   type DayTotals,
   type ProjectionAssessment,
+  type ProjectionCondition,
   type ProjectionSample,
   type ProjectionSnapshot,
   type WorkerTelemetry,
@@ -153,6 +154,32 @@ interface AssessmentRow {
   formulaVersion: string
 }
 
+const CONDITION_FIELDS = {
+  kind: true,
+  origin: true,
+  firstSeenAt: true,
+  observedValue: true,
+  thresholdValue: true,
+} as const
+
+interface ConditionRow {
+  kind: ConditionKind
+  origin: TelemetryOrigin
+  firstSeenAt: Date
+  observedValue: number | null
+  thresholdValue: number | null
+}
+
+function toProjectionCondition(row: ConditionRow): ProjectionCondition {
+  return {
+    kind: row.kind,
+    origin: row.origin,
+    firstSeenAt: row.firstSeenAt.toISOString(),
+    observedValue: row.observedValue,
+    thresholdValue: row.thresholdValue,
+  }
+}
+
 interface SampleRow {
   eventTime: Date
   stepDelta: number | null
@@ -267,6 +294,7 @@ export class TelemetryQueryService {
           windowSamples: [],
           dayTotals: { steps: null, activeEnergy: null, distance: null },
           assessment: null,
+          conditions: [],
         },
         now,
       )
@@ -282,7 +310,7 @@ export class TelemetryQueryService {
     // isso a série que vem é só a janela das taxas, e os acumulados do dia
     // chegam somados pelo banco: o dia inteiro seriam milhares de linhas por
     // chamada, multiplicadas pelo número de funcionários a cada cinco segundos.
-    const [windowSamples, steps, energy, distance, assessments] = await Promise.all([
+    const [windowSamples, steps, energy, distance, assessments, conditions] = await Promise.all([
       this.prisma.telemetrySample.findMany({
         where: { ...scope, eventTime: { gte: new Date(now.getTime() - ENERGY_RATE_WINDOW_MS) } },
         select: SAMPLE_FIELDS,
@@ -323,6 +351,13 @@ export class TelemetryQueryService {
         orderBy: { computedAt: 'desc' },
         take: 1,
       }),
+      // Só as abertas e só da origem do snapshot. Poucas linhas por definição:
+      // o índice único deixa no máximo uma ativa por tipo e origem.
+      this.prisma.telemetryCondition.findMany({
+        where: { ...scope, status: 'ACTIVE' },
+        select: CONDITION_FIELDS,
+        orderBy: { firstSeenAt: 'asc' },
+      }),
     ])
 
     return projectWorker(
@@ -336,6 +371,7 @@ export class TelemetryQueryService {
           distance: toDistanceSample(distance),
         },
         assessment: assessments.length === 0 ? null : toProjectionAssessment(assessments[0]),
+        conditions: conditions.map(toProjectionCondition),
       },
       now,
     )

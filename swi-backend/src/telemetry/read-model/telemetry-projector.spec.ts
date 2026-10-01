@@ -9,7 +9,9 @@ import {
   projectAggregateWorker,
   projectWorker,
   type DayTotals,
+  CONDITION_CATEGORY,
   type ProjectionAssessment,
+  type ProjectionCondition,
   type ProjectionSample,
   type ProjectionSnapshot,
   type WorkerTelemetry,
@@ -91,6 +93,7 @@ const project = (
     windowSamples?: readonly ProjectionSample[]
     dayTotals?: DayTotals
     assessment?: ProjectionAssessment | null
+    conditions?: readonly ProjectionCondition[]
   } = {},
 ): WorkerTelemetry =>
   projectWorker(
@@ -100,6 +103,7 @@ const project = (
       windowSamples: over.windowSamples ?? [],
       dayTotals: over.dayTotals ?? totals(),
       assessment: over.assessment ?? null,
+      conditions: over.conditions ?? [],
     },
     NOW,
   )
@@ -887,5 +891,83 @@ describe('projectWorker: Calculando não alarga a união de qualidade', () => {
 
     expect(projected.metrics.energyRatePerHour.value).toBe(120)
     expect(projected.metrics.energyRatePerHour.calculating).toBe(false)
+  })
+})
+
+// A leitura do funcionário carrega as condições abertas para que app e painel
+// derivem o estado de saúde de condição real, em vez de inventá-lo a partir
+// dos números. A projeção só classifica e ordena; quem decide abrir e fechar
+// é o motor de condições.
+describe('projectWorker: condições ativas acompanham a leitura', () => {
+  const condition = (over: Partial<ProjectionCondition> = {}): ProjectionCondition => ({
+    kind: 'HEART_RATE_HIGH',
+    origin: 'REAL',
+    firstSeenAt: minutesAgo(3),
+    observedValue: 182,
+    thresholdValue: 167,
+    ...over,
+  })
+
+  it('sem condição aberta a lista vem vazia, nunca ausente', () => {
+    expect(project().conditions).toEqual([])
+  })
+
+  it('batimento fora da faixa vem como urgente, com valor e limite que a abriram', () => {
+    const projected = project({ conditions: [condition()] })
+
+    expect(projected.conditions).toEqual([
+      {
+        kind: 'HEART_RATE_HIGH',
+        category: 'URGENT',
+        openedAt: minutesAgo(3),
+        observedValue: 182,
+        thresholdValue: 167,
+      },
+    ])
+  })
+
+  it('alerta de aparelho é classificado como aparelho, não como saúde', () => {
+    const projected = project({
+      conditions: [condition({ kind: 'DEVICE_BATTERY_LOW', observedValue: 9, thresholdValue: 15 })],
+    })
+
+    expect(projected.conditions.map((c) => c.category)).toEqual(['DEVICE'])
+  })
+
+  it('condição de outra origem não entra na leitura', () => {
+    const projected = project({
+      snapshot: snapshot({ origin: 'REAL' }),
+      conditions: [condition({ origin: 'DEMO' }), condition({ kind: 'WEAR_HIGH', origin: 'REAL' })],
+    })
+
+    expect(projected.conditions.map((c) => c.kind)).toEqual(['WEAR_HIGH'])
+  })
+
+  it('quem nunca reportou não tem condição, mesmo que alguma linha sobre', () => {
+    expect(project({ snapshot: null, conditions: [condition()] }).conditions).toEqual([])
+  })
+
+  it('vêm da mais antiga para a mais recente', () => {
+    const projected = project({
+      conditions: [
+        condition({ kind: 'WEAR_HIGH', firstSeenAt: minutesAgo(1) }),
+        condition({ kind: 'DEVICE_BATTERY_LOW', firstSeenAt: minutesAgo(9) }),
+      ],
+    })
+
+    expect(projected.conditions.map((c) => c.kind)).toEqual(['DEVICE_BATTERY_LOW', 'WEAR_HIGH'])
+  })
+
+  // A classificação é exaustiva por construção: tipo novo de condição não
+  // compila sem categoria. O urgente é exatamente o conjunto do domínio, para
+  // a leitura e o resumo do painel nunca divergirem sobre o que urge.
+  it('urgente é exatamente o conjunto de urgência do domínio', () => {
+    const urgent = (Object.keys(CONDITION_CATEGORY) as ConditionKind[]).filter(
+      (kind) => CONDITION_CATEGORY[kind] === 'URGENT',
+    )
+    expect(urgent.sort()).toEqual(['HEART_RATE_HIGH', 'HEART_RATE_LOW'])
+    expect(CONDITION_CATEGORY.DEVICE_SIGNAL_LOST).toBe('DEVICE')
+    expect(CONDITION_CATEGORY.BLOOD_PRESSURE_REVIEW).toBe('HEALTH')
+    expect(CONDITION_CATEGORY.WEAR_HIGH).toBe('HEALTH')
   })
 })

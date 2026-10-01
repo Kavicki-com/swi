@@ -111,6 +111,15 @@ export interface DayTotals {
   activeEnergy: (Sample<number> & { earliestAt: string }) | null
 }
 
+/** Condição aberta, como o motor de condições a gravou. */
+export interface ProjectionCondition {
+  kind: ConditionKind
+  origin: TelemetryOrigin
+  firstSeenAt: string
+  observedValue: number | null
+  thresholdValue: number | null
+}
+
 export interface WorkerProjectionInput {
   workerId: string
   snapshot: ProjectionSnapshot | null
@@ -119,6 +128,8 @@ export interface WorkerProjectionInput {
   dayTotals: DayTotals
   /** A avaliação mais recente do dia monitorado, quando houver. */
   assessment: ProjectionAssessment | null
+  /** Condições abertas do funcionário, em qualquer ordem. */
+  conditions: readonly ProjectionCondition[]
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +174,46 @@ export interface WorkerMetrics {
   fatigueEtaMin: MetricState<number>
 }
 
+/**
+ * Como a leitura agrupa uma condição para quem a apresenta.
+ *
+ * URGENT é exatamente o conjunto de urgência do domínio. HEALTH é saúde que
+ * pede atenção sem urgência: a pressão pede revisão humana e o desgaste é
+ * estimativa experimental, então nenhum dos dois pode virar urgência. DEVICE é
+ * aparelho, e misturá-lo com saúde faria um relógio descarregado contar como
+ * funcionário em risco.
+ */
+export type ConditionCategory = 'URGENT' | 'HEALTH' | 'DEVICE'
+
+const isUrgent = (kind: ConditionKind): boolean =>
+  (URGENT_CONDITION_KINDS as readonly ConditionKind[]).includes(kind)
+
+/**
+ * Exaustiva por construção: tipo novo de condição não compila sem categoria. O
+ * urgente é derivado do conjunto do domínio, para a leitura e o resumo do
+ * painel nunca divergirem sobre o que urge.
+ */
+export const CONDITION_CATEGORY: Readonly<Record<ConditionKind, ConditionCategory>> = {
+  HEART_RATE_HIGH: isUrgent('HEART_RATE_HIGH') ? 'URGENT' : 'HEALTH',
+  HEART_RATE_LOW: isUrgent('HEART_RATE_LOW') ? 'URGENT' : 'HEALTH',
+  BLOOD_PRESSURE_REVIEW: 'HEALTH',
+  WEAR_HIGH: 'HEALTH',
+  DEVICE_BATTERY_LOW: 'DEVICE',
+  DEVICE_SIGNAL_LOST: 'DEVICE',
+}
+
+/** Condição aberta como a leitura a entrega. */
+export interface ActiveCondition {
+  kind: ConditionKind
+  category: ConditionCategory
+  /** ISO-8601 de quando a condição abriu. */
+  openedAt: string
+  /** O valor que abriu a condição, na unidade dela. Nulo sem limite numérico. */
+  observedValue: number | null
+  /** O limite em vigor quando abriu. Nulo sem limite numérico. */
+  thresholdValue: number | null
+}
+
 export interface WorkerTelemetry {
   workerId: string
   /** Nulo enquanto o funcionário nunca reportou. Nunca se mistura com a outra. */
@@ -176,6 +227,12 @@ export interface WorkerTelemetry {
   movementWindow: WindowCoverage
   /** ISO-8601 do instante contra o qual toda qualidade acima foi decidida. */
   observedAt: string
+  /**
+   * Condições abertas na mesma origem da leitura, da mais antiga para a mais
+   * recente. É daqui que app e painel tiram o estado de saúde: sem condição
+   * aberta não há alerta a mostrar, e a tela não deduz um dos números.
+   */
+  conditions: ActiveCondition[]
 }
 
 /**
@@ -446,6 +503,29 @@ function assessmentStates(
   }
 }
 
+/**
+ * Condições da leitura: só as da origem do snapshot, porque real e
+ * demonstração nunca se misturam, e nenhuma para quem nunca reportou. A ordem
+ * é a de abertura, a mais antiga primeiro.
+ */
+function activeConditions(
+  origin: TelemetryOrigin | null,
+  conditions: readonly ProjectionCondition[],
+): ActiveCondition[] {
+  if (origin === null) return []
+  return conditions
+    .filter((c) => c.origin === origin)
+    .slice()
+    .sort((a, b) => toMs(a.firstSeenAt) - toMs(b.firstSeenAt))
+    .map((c) => ({
+      kind: c.kind,
+      category: CONDITION_CATEGORY[c.kind],
+      openedAt: c.firstSeenAt,
+      observedValue: c.observedValue,
+      thresholdValue: c.thresholdValue,
+    }))
+}
+
 // ---------------------------------------------------------------------------
 // Projeção por funcionário
 // ---------------------------------------------------------------------------
@@ -508,6 +588,7 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     energyWindow: energy.coverage,
     movementWindow: movement.coverage,
     observedAt: now.toISOString(),
+    conditions: activeConditions(snapshot?.origin ?? null, input.conditions),
   }
 }
 
