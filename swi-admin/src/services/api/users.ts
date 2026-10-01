@@ -30,7 +30,7 @@ export type UserSummaryDto = {
   birthDate: string | null // ISO
   avatar: string
   companyRole: string | null
-  // Handle visível (@username), fase 1 da função do campo "Nome do usuário".
+  // Handle visível (@username), o campo "Nome do usuário".
   // null enquanto a conta não definiu um.
   username: string | null
   createdAt: string

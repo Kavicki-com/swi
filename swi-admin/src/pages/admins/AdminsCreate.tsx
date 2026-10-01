@@ -399,8 +399,8 @@ export function AdminsCreate({
     // Responder "Sim" sem descrever é uma declaração que não cabe no campo: o
     // dadosDeSaude se recusa (com razão) a inventar texto, então o cadastro
     // subiria SEM a alergia e o prontuário diria que a pessoa não tem nenhuma.
-    // Perder assim o dado é justamente o defeito que este formulário passou a
-    // existir pra não ter, então ele para aqui e diz o que falta.
+    // Este formulário existe para não perder dado declarado, então ele para
+    // aqui e diz o que falta.
     if (form.alergico === 'sim' && !form.alergicoDesc.trim()) {
       setError('Descreva a alergia ou responda "Não".')
       return

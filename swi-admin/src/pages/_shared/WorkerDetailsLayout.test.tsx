@@ -64,8 +64,8 @@ describe('WorkerDetailsLayout', () => {
   })
 
   // Título sozinho lê como falha de carregamento; o estado vazio é informação.
-  // Handle da fase 1 do "Nome do usuário": aparece sob o nome quando existe, e
-  // NÃO aparece quando não existe. Um @ vazio ou inventado afirmaria identidade
+  // Handle do "Nome do usuário": aparece sob o nome quando existe, e NÃO
+  // aparece quando não existe. Um @ vazio ou inventado afirmaria identidade
   // que a conta não tem.
   it('mostra o @handle quando a conta tem um', async () => {
     await renderLayout({ username: 'carlos.m' })

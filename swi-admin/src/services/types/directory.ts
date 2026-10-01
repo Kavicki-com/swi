@@ -45,7 +45,7 @@ export type Employee = {
   // Flag de ativação real (independente da aprovação): o admin liga e desliga o
   // acesso pelo toggle da lista. Mesma forma do Admin, sobre a mesma rota.
   active: boolean
-  // Handle visível (@username). Opcional: contas anteriores à fase 1 não têm.
+  // Handle visível (@username). Opcional: conta que não definiu um não tem.
   username?: string
   hasUnreadMessages?: boolean
   // Health/details fields used by EmployeeDetails: mirror the Admin shape so

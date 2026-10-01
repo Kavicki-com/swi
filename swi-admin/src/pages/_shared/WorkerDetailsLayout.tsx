@@ -41,7 +41,7 @@ export type WorkerExamEntry = {
 
 export type WorkerDetailsData = {
   name: string
-  // Handle visível (@username), fase 1. Ausente em conta que não definiu um.
+  // Handle visível (@username). Ausente em conta que não definiu um.
   username?: string
   age: number
   bloodType: string

@@ -153,7 +153,7 @@ describe('ChatInbox', () => {
   // inclusive quem não tem cadastro clínico nenhum (é o caso do 'w1' desta
   // fixture: ele não está no `directory`). Declarar o gênero errado de alguém é
   // pior do que admitir que o dado não veio.
-  // Handle da fase 1: o painel do contato mostra o @ de quem tem, e nada de
+  // Handle: o painel do contato mostra o @ de quem tem, e nada de
   // quem não tem (o 'w1' desta fixture não está no directory).
   it('mostra o @handle do contato que tem um e nenhum @ de quem não tem', async () => {
     // Conversa ativa com w9, que ESTÁ no directory (com handle). O caso sem
