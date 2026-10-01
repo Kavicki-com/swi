@@ -213,7 +213,7 @@ describe('TelemetryAssessmentService.assessSession', () => {
     const prisma = prismaDouble()
     prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
     await service(prisma).assessSession('session-1', NOW, NOW)
-    // 1991-05-10 em 2026-09-04: 35 anos; 208 - 0.7*35 = 183.5
+    // `1991-05-10` em `2026-09-04`: 35 anos; 208 - 0.7*35 = 183.5
     expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.baseline).toMatchObject({ ageYears: 35, maxBpm: 183.5 })
   })
 

@@ -11,7 +11,7 @@ import { monitoredDayOf } from '../src/telemetry/domain/metric-state'
 import { SUMMARIZER_VERSION } from '../src/telemetry/lifecycle/telemetry-summarizer'
 import { TelemetryQueryService } from '../src/telemetry/read-model/telemetry-query.service'
 
-// E2E de verdade porque o que a Task 7 promete só existe com HTTP e Postgres
+// E2E de verdade porque o que a avaliação promete só existe com HTTP e Postgres
 // juntos: o lote entra pela rota, a avaliação nasce na mesma requisição, a
 // cadeia é lida da linha anterior, e o read model devolve esforço e desgaste
 // como métricas atuais.

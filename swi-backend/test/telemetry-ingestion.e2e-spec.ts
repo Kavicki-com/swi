@@ -8,7 +8,7 @@ import { encodeCredential, hashCredential } from '../src/telemetry/devices/devic
 import { MAX_BATCH_EVENTS } from '../src/telemetry/ingestion/dto/telemetry-batch.dto'
 import { TelemetryQueryService } from '../src/telemetry/read-model/telemetry-query.service'
 
-// E2E de verdade porque o que a Task 5 promete só existe com HTTP e Postgres
+// E2E de verdade porque o que a ingestão promete só existe com HTTP e Postgres
 // juntos: o guard trocando credencial por identidade, o índice único
 // sustentando a idempotência e a sessão nascendo do primeiro evento. Com Prisma
 // mockado, os três viram promessa do autor do mock.

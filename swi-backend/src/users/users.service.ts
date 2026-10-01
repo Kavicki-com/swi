@@ -199,7 +199,7 @@ export class UsersService {
     if (dto.phone !== undefined) profile.phone = dto.phone
     if (dto.cpf !== undefined) profile.cpf = dto.cpf
     // Truthy de propósito (paridade com o PUT /profile/me): null aqui é
-    // IGNORADO, nunca convertido, porque new Date(null) fabrica 1970-01-01.
+    // IGNORADO, nunca convertido, porque new Date(null) fabrica `1970-01-01`.
     if (dto.birthDate) profile.birthDate = new Date(dto.birthDate)
     if (dto.cep !== undefined) profile.cep = dto.cep
     if (dto.street !== undefined) profile.street = dto.street

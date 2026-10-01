@@ -11,12 +11,12 @@ import {
 // congeladas do ciclo de vida: ausência de métrica nunca vira zero, lacuna
 // nunca vira cobertura, e a mesma entrada sempre produz o mesmo Resumo.
 
-/** Dia civil em Brasília 2026-09-02, como data pura (meia-noite UTC). */
+/** Dia civil em Brasília `2026-09-02`, como data pura (meia-noite UTC). */
 const DAY = new Date('2026-09-02T00:00:00.000Z')
 /** Instante do cálculo: o job roda depois, com o dia já fechado. */
 const COMPUTED_AT = new Date('2026-09-05T06:00:00.000Z')
 
-// 12:00Z é 09:00 em Brasília, bem dentro do dia monitorado 2026-09-02.
+// 12:00Z é 09:00 em Brasília, bem dentro do dia monitorado `2026-09-02`.
 const at = (clock: string) => new Date(`2026-09-02T${clock}.000Z`)
 
 const sample = (over: Partial<SummarizerSample> & { eventTime: Date }): SummarizerSample => ({
