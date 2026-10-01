@@ -5,7 +5,7 @@ import {
   type WatchControl,
 } from '../../modules/swi-watch-control';
 
-// Estado da tela diagnóstica do piloto Apple Watch (Task 1). Não há dado
+// Estado da tela diagnóstica do piloto Apple Watch. Não há dado
 // sintético: sem módulo nativo a tela diz "sem suporte", e sem amostra o BPM
 // fica null. O controle é injetável para os testes dublarem o módulo.
 export type WatchDiagnosticsState =

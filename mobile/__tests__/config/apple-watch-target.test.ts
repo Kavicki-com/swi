@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-// Gate da Task 1 do piloto Apple Watch: o target watchOS e o módulo iPhone
+// Portão do piloto Apple Watch: o target watchOS e o módulo iPhone
 // nascem de arquivos de configuração lidos pelo prebuild (CNG). Este teste lê
 // esses arquivos reais e prende as invariantes que, se quebrarem, só seriam
 // descobertas num build EAS de vinte minutos.
