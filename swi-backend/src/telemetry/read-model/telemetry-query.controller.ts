@@ -3,6 +3,7 @@ import { CurrentUser, CurrentUserId, type JwtUser } from '../../auth/current-use
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Roles } from '../../auth/roles.decorator'
 import { RolesGuard } from '../../auth/roles.guard'
+import { SeriesQueryDto } from './dto/series.dto'
 import { SessionHistoryQueryDto } from './dto/session-history.dto'
 import { TelemetryQueryService } from './telemetry-query.service'
 
@@ -32,6 +33,26 @@ export class TelemetryQueryController {
   @Get('workers/:id/current')
   worker(@CurrentUser() admin: JwtUser, @Param('id') workerId: string) {
     return this.query.currentForAdmin(admin, workerId)
+  }
+
+  /**
+   * A série por período do próprio funcionário. Sem @Roles pelo mesmo motivo
+   * de me/current: o id vem do token, nunca da URL.
+   */
+  @Get('me/series')
+  mySeries(@CurrentUserId() workerId: string, @Query() query: SeriesQueryDto) {
+    return this.query.seriesForWorker(workerId, query.period)
+  }
+
+  /** A série de um funcionário no painel, dentro da empresa do administrador. */
+  @Roles('ADMIN')
+  @Get('workers/:id/series')
+  workerSeries(
+    @CurrentUser() admin: JwtUser,
+    @Param('id') workerId: string,
+    @Query() query: SeriesQueryDto,
+  ) {
+    return this.query.seriesForAdmin(admin, workerId, query.period)
   }
 
   @Roles('ADMIN')

@@ -1,4 +1,4 @@
-import { WINDOW_MAX_SAMPLES } from './telemetry-query.service'
+import { SERIES_MAX_SAMPLES, WINDOW_MAX_SAMPLES } from './telemetry-query.service'
 import { ForbiddenException, NotFoundException } from '@nestjs/common'
 import type { PrismaService } from '../../prisma/prisma.service'
 import { TelemetryQueryService } from './telemetry-query.service'
@@ -24,6 +24,7 @@ const prismaDouble = () =>
     telemetryCondition: { findMany: jest.fn() },
     telemetryDevice: { findMany: jest.fn() },
     telemetrySession: { findUnique: jest.fn() },
+    telemetryDailySummary: { findMany: jest.fn() },
     user: { findUnique: jest.fn() },
   }) as any
 
@@ -701,5 +702,122 @@ describe('TelemetryQueryService.currentForWorker: custo da janela por tick', () 
     await service(prisma).currentForWorker('worker-1', NOW)
 
     expect(prisma.telemetrySample.findMany.mock.calls[0][0].take).toBe(WINDOW_MAX_SAMPLES)
+  })
+})
+
+describe('TelemetryQueryService.seriesForWorker', () => {
+  const SERIES_FIELDS_SAMPLE = {
+    eventTime: true,
+    sessionId: true,
+    heartRateBpm: true,
+    stepDelta: true,
+    distanceDeltaM: true,
+    activeEnergyKcal: true,
+    batteryPercent: true,
+    systolicMmHg: true,
+    diastolicMmHg: true,
+    bloodPressureSource: true,
+  }
+
+  it('quem nunca reportou recebe os baldes vazios sem consultar amostra nem Resumo', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(null)
+
+    const result = await service(prisma).seriesForWorker('worker-1', 'week', NOW)
+
+    expect(result.origin).toBeNull()
+    expect(result.points).toHaveLength(7)
+    expect(prisma.telemetrySample.findMany).not.toHaveBeenCalled()
+    expect(prisma.telemetryDailySummary.findMany).not.toHaveBeenCalled()
+  })
+
+  it('hoje: lê só as amostras do dia monitorado, na origem do snapshot, com teto', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow({ origin: 'DEMO' }))
+    prisma.telemetrySample.findMany.mockResolvedValue([
+      {
+        eventTime: secondsAgo(60),
+        sessionId: 'session-1',
+        heartRateBpm: 100,
+        stepDelta: null,
+        distanceDeltaM: null,
+        activeEnergyKcal: 2,
+        batteryPercent: null,
+        systolicMmHg: null,
+        diastolicMmHg: null,
+        bloodPressureSource: null,
+      },
+    ])
+
+    const result = await service(prisma).seriesForWorker('worker-1', 'day', NOW)
+
+    const args = prisma.telemetrySample.findMany.mock.calls[0][0]
+    expect(args.where).toEqual({
+      workerId: 'worker-1',
+      origin: 'DEMO',
+      eventTime: { gte: new Date('2026-09-03T03:00:00.000Z'), lte: NOW },
+    })
+    expect(args.select).toEqual(SERIES_FIELDS_SAMPLE)
+    // Do mais recente para trás: se o teto morder, perde-se o começo do
+    // período, nunca o agora.
+    expect(args.orderBy).toEqual({ eventTime: 'desc' })
+    expect(args.take).toBe(SERIES_MAX_SAMPLES)
+    expect(prisma.telemetryDailySummary.findMany).not.toHaveBeenCalled()
+    expect(result.origin).toBe('DEMO')
+    expect(result.bucket).toBe('hour')
+    // Um minuto antes das 12:00Z cai no balde das 11:00Z (08:00 em Brasília).
+    const hour = result.points.find((p) => p.start === '2026-09-03T11:00:00.000Z')
+    expect(hour?.heartRate.avg).toBe(100)
+  })
+
+  it('semana: Resumo para os dias fechados e amostras só a partir do primeiro dia ainda aberto', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
+    prisma.telemetryDailySummary.findMany.mockResolvedValue([])
+
+    const result = await service(prisma).seriesForWorker('worker-1', 'week', NOW)
+
+    const summaryArgs = prisma.telemetryDailySummary.findMany.mock.calls[0][0]
+    expect(summaryArgs.where).toEqual({
+      workerId: 'worker-1',
+      origin: 'REAL',
+      day: {
+        gte: new Date('2026-08-28T00:00:00.000Z'),
+        lte: new Date('2026-09-03T00:00:00.000Z'),
+      },
+    })
+    // NOW é 03/09 meio-dia em UTC; o dia 01/09 fecha só 48 h depois do fim
+    // dele, então 01, 02 e 03 ainda não têm Resumo e saem das amostras.
+    const sampleArgs = prisma.telemetrySample.findMany.mock.calls[0][0]
+    expect(sampleArgs.where.eventTime.gte).toEqual(new Date('2026-09-01T03:00:00.000Z'))
+    expect(sampleArgs.where.origin).toBe('REAL')
+    expect(result.points).toHaveLength(7)
+  })
+})
+
+describe('TelemetryQueryService.seriesForAdmin', () => {
+  it('administrador lê a série do funcionário da própria empresa', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findUnique.mockResolvedValue({ id: 'worker-1', companyId: 'company-1' })
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(null)
+
+    const result = await service(prisma).seriesForAdmin(ADMIN, 'worker-1', 'month', NOW)
+
+    expect(result.points).toHaveLength(30)
+  })
+
+  it('funcionário de outra empresa responde igual a inexistente', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findUnique.mockResolvedValue({ id: 'worker-1', companyId: 'outra-empresa' })
+
+    await expect(
+      service(prisma).seriesForAdmin(ADMIN, 'worker-1', 'day', NOW),
+    ).rejects.toBeInstanceOf(NotFoundException)
+    expect(prisma.telemetrySnapshot.findUnique).not.toHaveBeenCalled()
   })
 })
