@@ -56,9 +56,8 @@ describe('AdminsCreate — submit', () => {
     typeIn('admins-create-email', 'ze@x.com')
     typeIn('admins-create-telefone', '11999999999')
     typeIn('admins-create-senha', 'senha123')
-    // Desde a fase 1 do handle o username SOBE (era o único campo da tela que
-    // engolia o que se digitava). O que este caso segue provando é que saúde em
-    // branco não gera chave de saúde.
+    // O username SOBE no payload junto com o resto. O que este caso prova é que
+    // saúde em branco não gera chave de saúde.
     typeIn('admins-create-usuario', 'zedasilva')
 
     finalizar()
@@ -253,10 +252,10 @@ describe('AdminsCreate: campos de saúde e rodapé', () => {
   })
 
   // Declarar "Sim" e não descrever é o caso que o dadosDeSaude, corretamente,
-  // se recusa a inventar: sem texto não há o que gravar. O buraco ficava um
-  // nível acima, no submit, que aceitava o cadastro assim mesmo e deixava a
-  // declaração morrer calada, o mesmo defeito que este formulário existe pra
-  // não ter. Alergia some do prontuário de quem disse ter alergia.
+  // se recusa a inventar: sem texto não há o que gravar. Por isso o submit
+  // precisa barrar o cadastro e dizer o que falta; se aceitasse, a declaração
+  // morreria calada e a alergia sumiria do prontuário de quem disse ter
+  // alergia.
   it('alergia declarada sem descrição não cadastra e explica o que falta', async () => {
     const create = vi.spyOn(employeesApi, 'create')
     await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
@@ -527,11 +526,10 @@ describe('AdminsCreate em modo edição', () => {
     expect(screen.queryByTestId('admins-create-senha')).toBeNull()
   })
 
-  // O campo estava editável e o patch nunca o mandava: dava pra digitar um
-  // e-mail novo, ver "Cadastro atualizado" e nada ter mudado. É o mesmo defeito
-  // que este formulário passou a existir pra não ter, e ele não pode voltar
-  // pela porta da edição. O backend recusa trocar e-mail de propósito (é a
-  // identidade de login), então a tela mostra o valor e bloqueia a digitação.
+  // O patch de edição não manda e-mail: o backend recusa trocá-lo de propósito
+  // (é a identidade de login). Um campo editável deixaria digitar um e-mail
+  // novo, mostrar "Cadastro atualizado" e nada mudar, então a tela mostra o
+  // valor e bloqueia a digitação.
   it('não deixa digitar um e-mail que o backend não vai aceitar', async () => {
     vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
     await renderEdicao()
@@ -713,8 +711,8 @@ describe('AdminsCreate: exames clínicos', () => {
   })
 })
 
-// Fase 1 do "Nome do usuário": o campo deixou de ser o único da tela que
-// engolia o que se digitava. Cadastro manda; edição carrega e manda de volta.
+// "Nome do usuário" (handle): o que se digita no campo chega ao backend.
+// Cadastro manda; edição carrega e manda de volta.
 describe('AdminsCreate: nome do usuário (fase 1)', () => {
   it('cadastro leva o username no payload, normalizado pra minúsculo', async () => {
     const create = vi

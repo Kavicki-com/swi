@@ -547,9 +547,9 @@ describe('addExam / exames na carga de edição', () => {
   })
 })
 
-// Fase 1 do "Nome do usuário": handle visível. O backend passou a gravar e
-// devolver `username`; o painel carrega na edição, manda no cadastro e exibe
-// como @handle no perfil e no chat.
+// "Nome do usuário": handle visível. O backend grava e devolve `username`; o
+// painel carrega na edição, manda no cadastro e exibe como @handle no perfil e
+// no chat.
 describe('username no wire', () => {
   it('a carga de edição traz o username, e ausência vira string vazia', async () => {
     vi.stubGlobal('fetch', okJson({ ...summary(), username: 'ze.silva', phone: null, cpf: null, company: null, gender: null, allergies: null, chronicConditions: null }))
