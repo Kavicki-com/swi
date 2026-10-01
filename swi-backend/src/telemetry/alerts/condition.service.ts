@@ -3,6 +3,7 @@ import type { Prisma, TelemetryConditionKind, TelemetryOrigin } from '@prisma/cl
 import { PrismaService } from '../../prisma/prisma.service'
 import { RealtimeGateway } from '../../realtime/realtime.gateway'
 import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
+import { TelemetryHealthNotifier } from './health-notifier'
 import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../assessment/assessment-baseline'
 import { EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
 import { EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
@@ -129,6 +130,7 @@ export class TelemetryConditionService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
     private readonly audience: TelemetryAudienceService,
+    private readonly healthNotifier: TelemetryHealthNotifier,
   ) {}
 
   /**
@@ -142,6 +144,7 @@ export class TelemetryConditionService {
     const changes: ConditionChange[] = []
     const outcome = await this.prisma.$transaction((tx) => this.evaluateLocked(tx, sessionId, triggerAt, now, changes))
     await this.announce(changes)
+    await this.notifyHealth(changes)
     return outcome
   }
 
@@ -479,6 +482,7 @@ export class TelemetryConditionService {
         // Depois do commit desta candidata, e não ao fim da rodada: quem
         // recuperou ou perdeu sinal aparece no painel sem esperar o resto.
         await this.announce(changes)
+        await this.notifyHealth(changes)
       } catch (error) {
         // Sem valor de saúde na mensagem, como no ciclo de vida: log é lugar
         // onde dado sensível vaza sem ninguém notar. Só a sessão, que é o que
@@ -594,6 +598,20 @@ export class TelemetryConditionService {
    * levanta: a condição já está gravada, e o painel reconcilia pelo REST quando
    * o socket falha.
    */
+  /**
+   * Condição aberta vira notificação do feed. O notificador já não levanta;
+   * a guarda aqui mantém a regra local: nada depois do commit derruba a
+   * avaliação.
+   */
+  private async notifyHealth(changes: ConditionChange[]): Promise<void> {
+    if (changes.length === 0) return
+    try {
+      await this.healthNotifier.notifyOpened(changes)
+    } catch (error) {
+      this.logger.warn(`Falha ao notificar condições: ${(error as Error).message}`)
+    }
+  }
+
   private async announce(changes: ConditionChange[]): Promise<void> {
     if (changes.length === 0) return
     const recipientsByWorker = new Map<string, string[]>()
