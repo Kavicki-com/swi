@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { SATELLITE_STYLE } from '@/lib/mapStyles'
 import { buildHeatmapPoints, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'

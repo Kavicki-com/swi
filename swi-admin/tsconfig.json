@@ -23,7 +23,7 @@
       "react-native": ["./node_modules/@types/react-native"],
       "react-native/*": ["./node_modules/@types/react-native/*"]
     },
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vitest/globals", "@testing-library/jest-dom", "geojson"]
   },
   "include": ["src", "e2e", "playwright.config.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]

@@ -2,7 +2,7 @@
 // Fábricas de pino do mapa. Extraídas de MapsGeneral.tsx sem mudança de
 // comportamento: cada uma monta um LocationPin do DS dentro de um elemento
 // solto e o pendura como maplibregl.Marker.
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 import { LocationPin } from '@kavicki/swi-design-system'
 import { createPinElement, type PinElement } from '@/lib/pinFactory'
 import { type DashboardMapMarker } from '@/services/dashboard'
