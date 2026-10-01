@@ -1,9 +1,9 @@
 import { FRESHNESS } from '../domain/metric-state'
 
 // Perfil da fórmula: o conjunto versionado de coeficientes com que uma
-// avaliação foi calculada. Os números da pesquisa de 2026-08-28 são parâmetros
-// SWI, não constantes fisiológicas; ficam aqui para a calibração (Task 10b)
-// mexer num lugar só. Toda avaliação grava o perfil inteiro em inputs.
+// avaliação foi calculada. Os números vêm de pesquisa e são parâmetros SWI,
+// não constantes fisiológicas; ficam aqui para a calibração em hardware mexer
+// num lugar só. Toda avaliação grava o perfil inteiro em inputs.
 //
 // A versão é literal e fixada por teste: mudar coeficiente sem mudar versão é
 // proibido, porque a cadeia por sessão compara versão para saber se o estado

@@ -9,9 +9,10 @@ import {
 
 // O que estes casos protegem é a fórmula como função pura: mesmo estado, mesmas
 // amostras e mesmo perfil dão o mesmo esforço e o mesmo desgaste, sempre. Nada
-// aqui toca relógio nem banco. Os números de referência vêm da pesquisa de
-// 2026-08-28; os desvios (intervalo real, média móvel por intervalo, lacuna que
-// não acrescenta dose) estão no desenho de 2026-09-04.
+// aqui toca relógio nem banco. Os números de referência são os do perfil da
+// fórmula; os desvios em relação ao modelo contínuo (intervalo real, média
+// móvel por intervalo, lacuna que não acrescenta dose) são deliberados e cada
+// um tem caso próprio abaixo.
 
 const T0 = Date.parse('2026-09-03T12:00:00.000Z')
 const sec = (s: number) => T0 + s * 1000

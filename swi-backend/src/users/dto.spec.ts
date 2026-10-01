@@ -107,8 +107,8 @@ describe('CreateUserDto', () => {
 })
 
 // Username: identificador visível (@handle no chat e no perfil). Formato
-// fechado ANTES de existir consumidor de login: se a fase 2 (entrar com
-// username) chegar, um handle com espaço ou maiúscula gravado hoje viraria uma
+// fechado ANTES de existir consumidor de login: se entrar com username um
+// dia existir, um handle com espaço ou maiúscula gravado hoje viraria uma
 // conta em que não se consegue logar amanhã.
 describe('username (create e update)', () => {
   it('aceita minúsculas, dígitos, ponto e underscore, de 3 a 30', async () => {

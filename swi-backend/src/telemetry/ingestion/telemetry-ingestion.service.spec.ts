@@ -423,7 +423,7 @@ describe('TelemetryIngestionService', () => {
   })
 
   // A revisão é o que deixa o cliente descartar aviso mais velho do que o que
-  // já aplicou, e é o campo que a Task 13 exige no contrato de realtime.
+  // já aplicou, e por isso faz parte do contrato de realtime.
   it('anuncia a revisão do que foi promovido, para o cliente ordenar', async () => {
     const { service, realtime } = build()
     const promovido = event()

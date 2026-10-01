@@ -29,7 +29,7 @@ describe('restingFromDailyMinima', () => {
 
 describe('ageInYearsAt', () => {
   it('conta anos completos no calendário de Brasília', () => {
-    // Nasceu em 1991-05-10. Em 2026-05-10T01:00Z ainda é 09/05 em Brasília: 34 anos.
+    // Nasceu em `1991-05-10`. Em `2026-05-10T01:00Z` ainda é 09/05 em Brasília: 34 anos.
     expect(ageInYearsAt(new Date('1991-05-10T00:00:00.000Z'), new Date('2026-05-10T01:00:00.000Z'))).toBe(34)
     // Às 03:00Z já é 10/05 em Brasília: 35 anos.
     expect(ageInYearsAt(new Date('1991-05-10T00:00:00.000Z'), new Date('2026-05-10T03:00:00.000Z'))).toBe(35)

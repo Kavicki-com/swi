@@ -69,8 +69,8 @@ interface PromotedEvent {
   /**
    * Token de ordem do aviso, opaco para o cliente, que só o usa para descartar
    * revisão anterior à que já aplicou. Hoje é o instante da medição promovida,
-   * porque é exatamente por ele que a promoção do snapshot se ordena; a Task 13
-   * pode trocá-lo por um contador sem quebrar quem o trata como opaco.
+   * porque é exatamente por ele que a promoção do snapshot se ordena; pode
+   * virar um contador sem quebrar quem o trata como opaco.
    */
   revision: string
 }
@@ -84,7 +84,7 @@ interface PromotedEvent {
  * sido gravado, e é de propósito: falha de infraestrutura não é recusa do
  * evento, e transformá-la em 200 faria um banco fora do ar parecer um lote
  * vazio. O reenvio inteiro é barato porque o que já entrou volta como
- * repetição, que é o contrato de idempotência da Task 3.
+ * repetição, que é o contrato de idempotência da ingestão.
  */
 function rejectionFor(eventId: string, error: unknown): TelemetryRejection {
   if (error instanceof TelemetryIntegrityConflictError) {
@@ -295,7 +295,7 @@ export class TelemetryIngestionService {
         // demonstração. O que fica garantido é a decisão congelada, que proíbe
         // MISTURAR origens: a sessão fixa a sua no primeiro evento e a
         // persistência recusa evento de origem diferente. Fechar a brecha exige
-        // coluna de origem no dispositivo, o que é migration e sai da Task 5.
+        // coluna de origem no dispositivo, ou seja, uma migration própria.
         origin: event.origin,
         // O evento mais antigo do lote é o mais perto que se tem do início
         // real. Entre lotes, quem diz o intervalo de fato é a tabela de

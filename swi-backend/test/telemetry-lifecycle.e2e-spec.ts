@@ -17,8 +17,8 @@ describe('Telemetry lifecycle e2e', () => {
   let deviceId = ''
   const sessionId = `lifecycle-${randomUUID()}`
 
-  // "Agora" fixo: o dia 2026-09-01 em Brasília termina às 2026-09-02T03:00Z e
-  // fecha 48 h depois, em 2026-09-04T03:00Z. Rodar às 12:00Z do dia 4 deixa o
+  // "Agora" fixo: o dia `2026-09-01` em Brasília termina às `2026-09-02T03:00Z` e
+  // fecha 48 h depois, em `2026-09-04T03:00Z`. Rodar às 12:00Z do dia 4 deixa o
   // dia 1 fechado, sem depender da hora em que a suíte roda.
   const now = new Date('2026-09-04T12:00:00.000Z')
   /** O dia como o banco o guarda: data pura, sem hora nem fuso. */
@@ -261,7 +261,7 @@ describe('Telemetry lifecycle e2e', () => {
   })
 
   it('não resume dia que ainda não fechou', async () => {
-    // Mesma série, mas rodando um milissegundo antes de o dia 2026-09-01
+    // Mesma série, mas rodando um milissegundo antes de o dia `2026-09-01`
     // fechar. Um dia aberto ainda pode receber evento atrasado, e resumi-lo
     // agora gravaria um número que a chegada seguinte tornaria mentira.
     await prisma.telemetryDailySummary.deleteMany({ where: { workerId } })

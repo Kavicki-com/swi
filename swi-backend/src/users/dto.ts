@@ -1,8 +1,8 @@
 import { IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Length, Matches, Max, Min, MinLength, ValidateIf } from 'class-validator'
 import { IsCalendarDate } from '../profile/is-calendar-date'
 
-// Handle visível (@username no chat e no perfil). Formato fechado JÁ, antes do
-// consumidor de login da fase 2: minúsculas, dígitos, ponto e underscore, 3-30.
+// Handle visível (@username no chat e no perfil). Formato fechado JÁ, antes de
+// qualquer login por username: minúsculas, dígitos, ponto e underscore, 3-30.
 // Um handle com espaço ou maiúscula gravado hoje viraria, amanhã, uma conta em
 // que não se consegue logar.
 const USERNAME_RE = /^[a-z0-9._]{3,30}$/

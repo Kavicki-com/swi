@@ -81,7 +81,7 @@ export interface ProjectionSnapshot {
   oxygenSaturationAt: string | null
 }
 
-/** Avaliação já calculada. Quem a escreve é a Task 7; aqui só se lê. */
+/** Avaliação já calculada. Quem a escreve é o serviço de avaliação; aqui só se lê. */
 export interface ProjectionAssessment {
   computedAt: string
   effortPercent: number | null
@@ -566,9 +566,9 @@ export interface AdminTelemetrySummary {
   bloodPressureAverage: AggregateMetric<BloodPressure>
   movements: AggregateMetric<number>
   /**
-   * O único contador de alerta que a Task 6 expõe. Revisão de pressão e alerta
-   * de aparelho existem na classificação, mas quem os apresenta é a Task 8,
-   * dona das condições e da triagem: a tabela congelada do painel não os lista
+   * O único contador de alerta deste resumo. Revisão de pressão e alerta de
+   * aparelho existem na classificação, mas quem os apresenta é a triagem das
+   * condições: a tabela congelada do painel não os lista
    * como card, e antecipá-los aqui seria decidir tela no lugar dela.
    */
   urgentAlerts: AlertCount
@@ -730,7 +730,7 @@ export function projectAdminSummary(
         }
 
   // Movimentos é soma do dia, e não média do agora, e por isso a regra "exclui
-  // indisponíveis", que a Task 6 enuncia para MÉDIA, não se aplica aqui: quem
+  // indisponíveis", que vale para MÉDIA, não se aplica aqui: quem
   // caminhou 4 mil passos hoje caminhou 4 mil passos, mesmo que a última
   // amostra tenha dez minutos. Descartá-la subestimaria o dia. Fica de fora só
   // quem não tem total algum, que é o caso em que não se sabe.

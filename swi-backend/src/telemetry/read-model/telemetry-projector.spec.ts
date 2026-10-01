@@ -755,8 +755,8 @@ describe('projectAdminSummary: sinais vitais e alertas urgentes', () => {
       NOW,
     )
 
-    // Só o contador urgente existe na Task 6. Apresentar revisão e alerta de
-    // aparelho é da Task 8, dona das condições e da triagem.
+    // O resumo expõe só o contador urgente. Revisão e alerta de aparelho são
+    // apresentados pela triagem das condições, não por este resumo.
     expect(summary.urgentAlerts.workers).toBe(0)
     expect(summary).not.toHaveProperty('reviewAlerts')
     expect(summary).not.toHaveProperty('deviceAlerts')

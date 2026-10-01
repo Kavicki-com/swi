@@ -17,8 +17,14 @@ services:
     image: mailhog/mailhog
     ports: ["1025:1025", "8025:8025"]   # 1025 SMTP · 8025 UI web
 
+  # As imagens oficiais do MinIO saíram do Docker Hub; esta é a mesma build do
+  # servidor, publicada pela Bitnami e congelada. Versão fixa para a stack não
+  # mudar sozinha. `minio` direto como entrypoint e usuário root mantêm o dado
+  # em /data, compatível com os volumes que já existem.
   minio:
-    image: minio/minio
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    user: "0"
+    entrypoint: ["minio"]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -28,7 +34,8 @@ services:
 
   # Cria o bucket uma vez (em AWS = IaC). Mantém o Nest sem rede pro MinIO no boot.
   minio-init:
-    image: minio/mc
+    image: bitnamilegacy/minio-client:2025.7.21-debian-12-r3
+    user: "0"
     depends_on:
       minio: { condition: service_started }
     entrypoint: >

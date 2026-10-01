@@ -258,8 +258,8 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
       185,
       NOW,
     ])
-    // Quem nasceu em 1991-05-10 tem 35 anos completos no dia monitorado de
-    // 2026-09-07, então a máxima por idade (Tanaka) é 208 - 0,7 x 35 = 183,5, e
+    // Quem nasceu em `1991-05-10` tem 35 anos completos no dia monitorado de
+    // `2026-09-07`, então a máxima por idade (Tanaka) é 208 - 0,7 x 35 = 183,5, e
     // 90% dela arredondado dá 165. O número entra fixo de propósito: se o
     // perfil ou a fórmula mudarem, a mudança aparece aqui, e não numa condição
     // aberta em produção.

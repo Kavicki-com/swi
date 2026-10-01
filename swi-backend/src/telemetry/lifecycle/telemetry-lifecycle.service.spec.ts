@@ -16,7 +16,7 @@ import { SUMMARIZER_VERSION } from './telemetry-summarizer'
 // exige banco real (a migration, o upsert e o SQL da varredura) é o e2e.
 
 const NOW = new Date('2026-09-04T12:00:00.000Z')
-/** Dia civil em Brasília 2026-09-01, já fechado às 12:00Z de 2026-09-04. */
+/** Dia civil em Brasília `2026-09-01`, já fechado às 12:00Z de `2026-09-04`. */
 const DAY = new Date('2026-09-01T00:00:00.000Z')
 
 const prismaDouble = () =>
@@ -52,19 +52,19 @@ const sampleRow = (clock: string, over: Record<string, unknown> = {}) => ({
 
 describe('closedDayCutoff: um dia só é resumido depois de fechado', () => {
   it('o corte é a meia-noite de Brasília 48 horas atrás', () => {
-    // 48 horas antes de 2026-09-04T12:00Z é 2026-09-02T12:00Z, que em Brasília
-    // é o dia 2026-09-02, começado às 03:00Z. Tudo anterior a esse instante
+    // 48 horas antes de `2026-09-04T12:00Z` é `2026-09-02T12:00Z`, que em Brasília
+    // é o dia `2026-09-02`, começado às 03:00Z. Tudo anterior a esse instante
     // pertence a dia que já fechou.
     expect(closedDayCutoff(NOW).toISOString()).toBe('2026-09-02T03:00:00.000Z')
   })
 
   it('o prazo é o mesmo que separa backlog de histórico, e não um número novo', () => {
-    // O dia 2026-09-01 termina às 2026-09-02T03:00Z e fecha 48 h depois, em
-    // 2026-09-04T03:00Z. No instante exato ele já entra na rodada.
+    // O dia `2026-09-01` termina às `2026-09-02T03:00Z` e fecha 48 h depois, em
+    // `2026-09-04T03:00Z`. No instante exato ele já entra na rodada.
     expect(closedDayCutoff(new Date('2026-09-04T03:00:00.000Z')).toISOString()).toBe(
       '2026-09-02T03:00:00.000Z',
     )
-    // Um segundo antes, o corte ainda é o dia anterior: 2026-09-01 fica de fora.
+    // Um segundo antes, o corte ainda é o dia anterior: `2026-09-01` fica de fora.
     expect(closedDayCutoff(new Date('2026-09-04T02:59:59.999Z')).toISOString()).toBe(
       '2026-09-01T03:00:00.000Z',
     )
@@ -307,8 +307,8 @@ describe('TelemetryLifecycleService.purgeRetainedData: só apaga o que já foi r
       expect.objectContaining({
         where: {
           summarizerVersion: SUMMARIZER_VERSION,
-          // 30 dias antes de 2026-09-04T12:00Z é 2026-08-05T12:00Z, cujo dia
-          // monitorado é 2026-08-05: só dias estritamente anteriores a ele
+          // 30 dias antes de `2026-09-04T12:00Z` é `2026-08-05T12:00Z`, cujo dia
+          // monitorado é `2026-08-05`: só dias estritamente anteriores a ele
           // estão inteiros fora da janela.
           day: { lt: new Date('2026-08-05T00:00:00.000Z') },
         },

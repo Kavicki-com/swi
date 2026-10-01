@@ -473,7 +473,7 @@ describe('UsersService.update', () => {
 
   // O DTO deixa null passar nos campos de perfil (@IsOptional pula null), e a
   // régua da casa (PUT /profile/me) é: null em string anulável LIMPA, null em
-  // data é IGNORADO, porque new Date(null) fabricaria 1970-01-01 num registro
+  // data é IGNORADO, porque new Date(null) fabricaria `1970-01-01` num registro
   // de segurança.
   it('birthDate null é ignorado, nunca vira 1970-01-01', async () => {
     const db = prisma()
