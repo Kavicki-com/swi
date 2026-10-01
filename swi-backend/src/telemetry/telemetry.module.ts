@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common'
 import { RealtimeModule } from '../realtime/realtime.module'
+import { AlertQueueController } from './alerts/alert-queue.controller'
+import { AlertQueueService } from './alerts/alert-queue.service'
 import { TelemetryConditionSweepJob } from './alerts/condition-sweep.job'
 import { TelemetryConditionService } from './alerts/condition.service'
 import { TelemetryAssessmentService } from './assessment/assessment.service'
@@ -26,7 +28,12 @@ import { TelemetryQueryService } from './read-model/telemetry-query.service'
 // porque a ingestão avisa pelo socket depois de gravar.
 @Module({
   imports: [RealtimeModule],
-  controllers: [TelemetryDevicesController, TelemetryIngestionController, TelemetryQueryController],
+  controllers: [
+    TelemetryDevicesController,
+    TelemetryIngestionController,
+    TelemetryQueryController,
+    AlertQueueController,
+  ],
   providers: [
     DeviceAuthService,
     DeviceAuthGuard,
@@ -38,6 +45,7 @@ import { TelemetryQueryService } from './read-model/telemetry-query.service'
     // Depois da avaliação, porque é nessa ordem que a ingestão as chama.
     TelemetryConditionService,
     TelemetryConditionSweepJob,
+    AlertQueueService,
     TelemetryIngestionService,
     TelemetryQueryService,
     TelemetryLifecycleService,

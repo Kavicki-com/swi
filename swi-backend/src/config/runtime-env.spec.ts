@@ -1,4 +1,4 @@
-import { parseRuntimeEnv, RETENTION_DEFAULT_BATCH } from './runtime-env'
+import { parseAlertsIncludeDemo, parseRuntimeEnv, RETENTION_DEFAULT_BATCH } from './runtime-env'
 
 // Ambiente de produção mínimo e válido. Cada teste sobrescreve só a chave que
 // está sendo exercitada, para que a falha aponte a variável e não o setup.
@@ -14,6 +14,21 @@ function validProd(overrides: Record<string, string | undefined> = {}): NodeJS.P
     ...overrides,
   }
 }
+
+// Homologação roda com NODE_ENV=production, então a flag não pode depender do
+// NODE_ENV: só o valor '1' liga, e qualquer outra coisa deixa desligado.
+describe('parseRuntimeEnv: alertas de demonstração na fila', () => {
+  it('desligado por padrão, inclusive em produção', () => {
+    expect(parseRuntimeEnv(validProd()).telemetryAlertsIncludeDemo).toBe(false)
+    expect(parseAlertsIncludeDemo({})).toBe(false)
+  })
+
+  it("só '1' liga, mesmo com NODE_ENV=production", () => {
+    expect(parseRuntimeEnv(validProd({ TELEMETRY_ALERTS_INCLUDE_DEMO: '1' })).telemetryAlertsIncludeDemo).toBe(true)
+    expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: 'true' })).toBe(false)
+    expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: '0' })).toBe(false)
+  })
+})
 
 describe('parseRuntimeEnv: retenção da telemetria', () => {
   it('sem variável, retém trinta dias e apaga em lotes de alguns milhares', () => {
