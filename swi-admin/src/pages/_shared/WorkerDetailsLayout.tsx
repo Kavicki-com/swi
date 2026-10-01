@@ -13,6 +13,7 @@ import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { formatAge } from '@/lib/formatAge'
 import type { Gender } from '@/services/types/directory'
 import { simulatedCaloriesFor } from '@/services/vitals/simulatedVitals'
+import { NO_VALUE, type WorkerVitalsView } from '@/services/vitals/vitalsView'
 import {
   Avatar,
   Button,
@@ -49,14 +50,11 @@ export type WorkerDetailsData = {
   specialization: string
   avatarUri: string
   gender?: Gender
-  bpm?: number
-  pressure?: string
-  /** Percentual 0-100 (mesma escala de simulatedVitalsFor.fatiguePct). */
-  fatigueRate?: number
-  /** Percentual 0-100 (mesma escala de simulatedVitalsFor.effortPct). */
-  effort?: number
-  statusLabel?: string
-  fatigueMinutes?: number
+  /**
+   * Vitais já decididos a partir da leitura do aparelho (vitalsViewFrom).
+   * Obrigatório de propósito: sem ele a tela voltaria a preencher com zero.
+   */
+  vitals: WorkerVitalsView
   allergies?: ReadonlyArray<string>
   examHistory?: ReadonlyArray<WorkerExamEntry>
   /**
@@ -320,14 +318,16 @@ export function WorkerDetailsLayout({
       : worker.gender === 'male'
         ? 'admin_filled'
         : 'account_circle'
-  // fatigueRate/effort já chegam na escala 0-100, não em fração 0-1. formatPct
-  // só limita e arredonda: multiplicar por 100 aqui exibiria "8.900,0%".
-  const formatPct = (n: number) =>
-    new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(
-      Math.round(Math.min(100, Math.max(0, n)) * 10) / 10,
-    )
-  const fatiguePct = formatPct(worker.fatigueRate ?? 0)
-  const effortPct = formatPct(worker.effort ?? 0)
+  const { vitals } = worker
+  // Desgaste e esforço já chegam na escala 0-100, não em fração 0-1. formatPct
+  // só formata: multiplicar por 100 aqui exibiria "8.900,0%". Sem leitura, a
+  // rosca mostra NO_VALUE e fica vazia em vez de afirmar 0%.
+  const formatPct = (n: number | null) =>
+    n === null
+      ? NO_VALUE
+      : `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n)}%`
+  const fatiguePct = formatPct(vitals.wearPct)
+  const effortPct = formatPct(vitals.effortPct)
   const allergies = worker.allergies ?? []
   const exams = worker.examHistory ?? []
   const [caloriesPeriod, setCaloriesPeriod] = useState('today')
@@ -561,7 +561,7 @@ export function WorkerDetailsLayout({
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Icon name="heart_filled" size={20} color={theme.content.light} />
                 <Text variant="body.s" color={theme.content.light} style={{ fontWeight: '700' }}>
-                  {`${worker.bpm ?? 0} `}
+                  {`${vitals.heartRate ?? NO_VALUE} `}
                   <Text variant="body.s" color={theme.content.light}>
                     bpm
                   </Text>
@@ -570,20 +570,24 @@ export function WorkerDetailsLayout({
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Icon name="vitals_pulse" size={20} color={theme.content.light} />
                 <Text variant="body.s" color={theme.content.light} style={{ fontWeight: '700' }}>
-                  {worker.pressure ?? '—'}
+                  {vitals.pressure ?? NO_VALUE}
                 </Text>
               </View>
             </View>
+            {/* Estado da LEITURA, não da saúde: juízo de saúde só com as
+                condições do backend. */}
             <Title variant="title.xs" color={theme.content.light}>
-              {worker.statusLabel ?? 'Condições excelentes'}
+              {vitals.status}
             </Title>
           </div>
 
-          {/* A biometria é SIMULADA enquanto a smartband não existe, e o selo
-              deixa isso explícito pro operador. */}
-          <View style={{ alignItems: 'flex-end' }}>
-            <SimulatedDataBadge />
-          </View>
+          {/* Leitura de demonstração é declarada; leitura real do relógio
+              dispensa selo. */}
+          {vitals.sourceBadge ? (
+            <View style={{ alignItems: 'flex-end' }}>
+              <SimulatedDataBadge label={vitals.sourceBadge} testID="vitals-source-badge" />
+            </View>
+          ) : null}
 
           {/* Fatigue total time. Pill-rounded
               outer container (bg=background) with padding.xs inset and an
@@ -608,7 +612,7 @@ export function WorkerDetailsLayout({
             >
               <div
                 style={{
-                  width: `${Math.min(100, ((worker.fatigueMinutes ?? 0) / 240) * 100)}%`,
+                  width: `${Math.min(100, ((vitals.fatigueEta.minutes ?? 0) / 240) * 100)}%`,
                   height: 6,
                   borderRadius: 999,
                   background: `linear-gradient(90deg, ${theme.surface.error} 0%, ${theme.surface.warning} 45.673%, ${theme.surface.success} 100%)`,
@@ -616,7 +620,7 @@ export function WorkerDetailsLayout({
               />
             </div>
             <Text variant="body.m" color={theme.content.dark}>
-              {worker.fatigueMinutes ?? 0} minutos
+              {vitals.fatigueEta.label}
             </Text>
           </View>
 
@@ -680,11 +684,11 @@ export function WorkerDetailsLayout({
           <View style={{ flexDirection: 'row', gap: theme.gap.m, alignItems: 'flex-start' }}>
             <DonutChart
               title="Taxa de fadiga"
-              value={`${fatiguePct}%`}
+              value={fatiguePct}
               // O donut mede UMA pessoa, então a legenda fala do estado dela e
               // não de um KPI de equipe.
               label="Fadiga atual"
-              progress={Math.min(100, Math.max(0, worker.fatigueRate ?? 0))}
+              progress={vitals.wearPct ?? 0}
               size="small"
               appearance="bevel"
               icon="heartbeat"
@@ -692,9 +696,9 @@ export function WorkerDetailsLayout({
             />
             <DonutChart
               title="Esforço realizado"
-              value={`${effortPct}%`}
+              value={effortPct}
               label="Esforço feito"
-              progress={Math.min(100, Math.max(0, worker.effort ?? 0))}
+              progress={vitals.effortPct ?? 0}
               size="small"
               appearance="bevel"
               icon="heartbeat"
@@ -742,6 +746,11 @@ export function WorkerDetailsLayout({
           unit="kcal"
           fullWidth
         />
+        {/* A curva por período ainda é simulada: a série real de energia
+            depende da rota de histórico por período. O selo fica com ela. */}
+        <View testID="calories-simulated-badge" style={{ alignItems: 'flex-end' }}>
+          <SimulatedDataBadge />
+        </View>
       </View>
     </View>
   )

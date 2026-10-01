@@ -11,8 +11,9 @@ import { employeesApi, type Employee } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { DeviceSection } from '@/pages/employees/DeviceSection'
-import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
+import { vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { useLivePositions } from '@/hooks/useLivePositions'
+import { useWorkerTelemetry } from '@/hooks/useWorkerTelemetry'
 import { useDemoToast } from '@/lib/demoToast'
 
 export function EmployeeDetails() {
@@ -27,6 +28,8 @@ export function EmployeeDetails() {
   // todo mundo no mesmo ponto.
   const positions = useLivePositions()
   const position = positions?.find((p) => p.id === id) ?? null
+  // Vitais do aparelho pareado, relidos sozinhos enquanto a página está aberta.
+  const { telemetry, failed } = useWorkerTelemetry(id)
 
   // POST real: o worker recebe a notificação de journey no app, e erro do
   // backend aparece no toast.
@@ -74,23 +77,14 @@ export function EmployeeDetails() {
     )
   }
 
-  // Vitais SIMULADOS plausíveis, e o layout exibe o selo "Dados simulados".
-  // Valor fixo aqui mostraria 0 bpm e "excelentes" para todo mundo.
-  const vitals = simulatedVitalsFor(employee.id, Date.now())
-
   return (
     <WorkerDetailsLayout
       worker={{
         ...employee,
-        // Semente da curva de gasto calórico: sem ela todo mundo compartilha a
-        // mesma série de kcal.
+        // Semente da curva de gasto calórico, que ainda é simulada: sem ela
+        // todo mundo compartilha a mesma série de kcal.
         seedId: employee.id,
-        bpm: vitals.bpm,
-        pressure: vitals.pressure,
-        fatigueRate: vitals.fatiguePct,
-        effort: vitals.effortPct,
-        fatigueMinutes: vitals.fatigueMinutes,
-        statusLabel: vitals.statusLabel,
+        vitals: vitalsViewFrom(telemetry, { failed }),
       }}
       position={position ? { lat: position.lat, lng: position.lng } : null}
       testID="employee-details"
