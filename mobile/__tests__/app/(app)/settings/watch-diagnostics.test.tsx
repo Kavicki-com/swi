@@ -22,7 +22,7 @@ jest.mock('../../../../services/telemetry/watchDiagnostics', () => ({
   activateMonitoring: jest.fn(async () => true),
 }));
 
-// A fiação do envio (Task 7) tem teste próprio; aqui só o que a tela mostra.
+// A fiação do envio tem teste próprio; aqui só o que a tela mostra.
 jest.mock('../../../../services/telemetry/useTelemetryUpload', () => ({
   useTelemetryUpload: jest.fn(),
 }));
@@ -188,8 +188,8 @@ describe('Configurações, Monitoramento', () => {
     expect(t).not.toMatch(/\b0\s*bpm/i);
   });
 
-  // A linha de envio ao backend. A tela de produto é da Task 11; aqui só a
-  // prova de que o caminho existe.
+  // A linha de envio ao backend. A tela de produto é outra; aqui só a prova
+  // de que o caminho existe.
   it('pareado diz que está enviando ao servidor', async () => {
     mockEnvio.mockReturnValue({ paired: true, lastOutcome: null });
     expect(textoDe(await render(ATIVO()))).toContain('Enviando ao servidor');

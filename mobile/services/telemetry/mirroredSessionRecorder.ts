@@ -6,19 +6,19 @@ import type { OutboxEvent, TelemetryOutbox } from './telemetryOutbox';
 // recebe do Apple Watch em evento na fila (telemetryOutbox). É a única ponta
 // entre o invólucro nativo e a fila.
 //
-// DÍVIDA DECLARADA PARA A TASK 9. Hoje o iPhone gera o identificador da
-// sessão, o identificador de cada evento e a sequência, porque o relógio ainda
-// não os produz: o receptor expõe só o estado da sessão e a última amostra.
-// Quando o relógio passar a gerar os três, este arquivo passa a REPASSAR em
-// vez de gerar, e as duas builds (iPhone e relógio) sobem JUNTAS. Uma build
+// LIMITE DESTE GRAVADOR. Aqui o iPhone gera o identificador da sessão, o
+// identificador de cada evento e a sequência, porque o receptor que o alimenta
+// expõe só o estado da sessão e a última amostra. Com um relógio que gera os
+// três, o caminho certo é REPASSAR em vez de gerar, e as duas builds (iPhone e
+// relógio) sobem JUNTAS. Uma build
 // antiga do iPhone com uma nova do relógio geraria identificador novo para
 // amostra reentregue e duplicaria tudo no backend, porque o backend só
 // reconhece repetição pelo identificador do evento.
 //
 // Consequência aceita: o identificador da sessão vive neste processo. Reiniciar
 // o app no meio de uma sessão espelhada produz sessão nova no backend, e a
-// cadeia de avaliação recomeça. Para o piloto serve; a Task 9, com sessão
-// nascida no relógio, elimina.
+// cadeia de avaliação recomeça. Para o piloto serve; sessão nascida no
+// relógio elimina essa consequência.
 
 export interface MirroredSessionRecorderDeps {
   outbox: TelemetryOutbox;

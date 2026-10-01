@@ -19,7 +19,7 @@ export interface WatchOnboardingRecord {
 }
 
 /**
- * Ausência e defeito são a mesma coisa para quem chama: os dois significam
+ * Ausência e falha de leitura são a mesma coisa para quem chama: os dois significam
  * "mostre o primeiro uso". Um keychain indisponível não pode derrubar o
  * cadastro, então nada aqui propaga erro.
  */

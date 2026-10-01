@@ -113,8 +113,8 @@ function outcomeForRejection(error: unknown): UploadOutcome {
     case 'E_UNSUPPORTED':
       return { outcome: 'unpaired' };
     // E_URL e E_CREDENTIAL_MISSING não são deste caminho (a URL é a da API e
-    // `storeCredential` vai desligado), e rejeição sem código é defeito. A
-    // fila não paga por defeito de configuração: adia, e o aviso fica no log.
+    // `storeCredential` vai desligado), e rejeição sem código é erro de
+    // configuração. A fila não paga por isso: adia, e o aviso fica no log.
     default:
       console.warn(
         `[telemetryUploader] rejeição fora do contrato, lote adiado: ${String(
