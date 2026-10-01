@@ -19,7 +19,7 @@
 //     return () => map.remove()
 //   }, [lib /* + your other deps */])
 import { useEffect, useState } from 'react';
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 
 type MapLibreModule = typeof maplibregl;
 
@@ -37,7 +37,9 @@ function load(): Promise<MapLibreModule> {
   // callers that arrive during the load, `cached` covers everyone after it.
   inFlight = Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')]).then(
     ([mod]) => {
-      cached = mod.default;
+      // O pacote é só ESM: o módulo inteiro é a API. A interop CJS do
+      // bundler pode ainda embrulhá-lo em `default`, então aceita os dois.
+      cached = (mod as { default?: MapLibreModule }).default ?? mod;
       inFlight = null;
       return cached;
     },
