@@ -70,6 +70,8 @@ interface NormalizedMeasurements {
   bloodPressureSource: MeasurementSource | null
   distanceDeltaM: number | null
   oxygenSaturationPct: number | null
+  bodyTemperatureC: number | null
+  bodyTemperatureSource: MeasurementSource | null
 }
 
 /** Achata as medições em colunas. Métrica ausente vira null, nunca zero. */
@@ -86,6 +88,8 @@ function normalize(event: TelemetryEvent): NormalizedMeasurements {
     bloodPressureSource: m.bloodPressure?.source ?? null,
     distanceDeltaM: m.distanceDeltaM?.value ?? null,
     oxygenSaturationPct: m.oxygenSaturation?.value ?? null,
+    bodyTemperatureC: m.bodyTemperature?.value ?? null,
+    bodyTemperatureSource: m.bodyTemperature?.source ?? null,
   }
 }
 
@@ -112,6 +116,9 @@ interface SnapshotPatch {
   bloodPressureAt?: Date
   oxygenSaturationPct?: number
   oxygenSaturationAt?: Date
+  bodyTemperatureC?: number
+  bodyTemperatureSource?: MeasurementSource
+  bodyTemperatureAt?: Date
 }
 
 function buildSnapshotPatch(
@@ -143,6 +150,11 @@ function buildSnapshotPatch(
     patch.oxygenSaturationPct = measured.oxygenSaturationPct
     patch.oxygenSaturationAt = eventTime
   }
+  if (measured.bodyTemperatureC !== null) {
+    patch.bodyTemperatureC = measured.bodyTemperatureC
+    patch.bodyTemperatureSource = measured.bodyTemperatureSource ?? undefined
+    patch.bodyTemperatureAt = eventTime
+  }
   return patch
 }
 
@@ -164,6 +176,9 @@ const CLEARED_METRICS: Prisma.TelemetrySnapshotUncheckedUpdateInput = {
   bloodPressureAt: null,
   oxygenSaturationPct: null,
   oxygenSaturationAt: null,
+  bodyTemperatureC: null,
+  bodyTemperatureSource: null,
+  bodyTemperatureAt: null,
 }
 
 /** Só o que a ingestão precisa saber da sessão para decidir se aceita o evento. */

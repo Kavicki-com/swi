@@ -47,6 +47,9 @@ const snapshot = (over: Partial<ProjectionSnapshot> = {}): ProjectionSnapshot =>
   bloodPressureAt: null,
   oxygenSaturationPct: null,
   oxygenSaturationAt: null,
+  bodyTemperatureC: null,
+  bodyTemperatureSource: null,
+  bodyTemperatureAt: null,
   ...over,
 })
 
@@ -424,6 +427,41 @@ describe('projectWorker: oxigenação segue a régua da pressão', () => {
   })
 })
 
+describe('projectWorker: temperatura corporal segue a régua da pressão', () => {
+  const withTemperature = (measuredAt: string, source: 'MANUAL_HEALTHKIT' | null = 'MANUAL_HEALTHKIT') =>
+    project({
+      snapshot: snapshot({ bodyTemperatureC: 36.9, bodyTemperatureSource: source, bodyTemperatureAt: measuredAt }),
+    })
+
+  it('até 24 horas é a medição atual, em graus Celsius, com a origem do app Saúde', () => {
+    expect(withTemperature(hoursAgo(6)).metrics.bodyTemperature).toEqual({
+      value: 36.9,
+      quality: 'CURRENT',
+      measuredAt: hoursAgo(6),
+      source: 'MANUAL_HEALTHKIT',
+      unit: '°C',
+    })
+  })
+
+  it('entre 24 e 72 horas é histórica; acima disso o valor some', () => {
+    expect(withTemperature(hoursAgo(30)).metrics.bodyTemperature).toMatchObject({ value: 36.9, quality: 'STALE' })
+    expect(withTemperature(hoursAgo(80)).metrics.bodyTemperature).toMatchObject({
+      value: null,
+      quality: 'UNAVAILABLE',
+      measuredAt: null,
+    })
+  })
+
+  // Como a pressão: leitura cuja procedência não se sabe não sustenta a tela.
+  it('sem origem declarada não há leitura', () => {
+    expect(withTemperature(hoursAgo(1), null).metrics.bodyTemperature.value).toBeNull()
+  })
+
+  it('quem nunca reportou tem temperatura indisponível, nunca zero', () => {
+    expect(project({ snapshot: null }).metrics.bodyTemperature).toMatchObject({ value: null, quality: 'UNAVAILABLE' })
+  })
+})
+
 describe('projectWorker: esforço e desgaste vêm da avaliação, com versão', () => {
   const assessment = (over: Partial<ProjectionAssessment> = {}): ProjectionAssessment => ({
     computedAt: secondsAgo(10),
@@ -585,6 +623,8 @@ interface WorkerOverrides {
   pressureAt?: string
   systolic?: number
   diastolic?: number
+  temperatureAt?: string
+  temperature?: number
   conditions?: readonly string[]
 }
 
@@ -599,6 +639,9 @@ const worker = (id: string, over: WorkerOverrides = {}) =>
         diastolicMmHg: over.pressureAt === undefined ? null : (over.diastolic ?? 80),
         bloodPressureSource: over.pressureAt === undefined ? null : 'EXTERNAL_CUFF',
         bloodPressureAt: over.pressureAt ?? null,
+        bodyTemperatureC: over.temperatureAt === undefined ? null : (over.temperature ?? 36.5),
+        bodyTemperatureSource: over.temperatureAt === undefined ? null : 'MANUAL_HEALTHKIT',
+        bodyTemperatureAt: over.temperatureAt ?? null,
       }),
       // Já somado pelo banco no caminho real do painel.
       steps:
@@ -678,6 +721,30 @@ describe('projectAdminSummary: médias excluem indisponíveis e devolvem cobertu
 
     expect(summary.bloodPressureAverage.value).toEqual({ systolic: 125, diastolic: 85 })
     expect(summary.bloodPressureAverage.coverage).toEqual({ evaluated: 2, total: 3 })
+  })
+
+  it('a média de temperatura só aceita leitura de até 24 horas, com uma casa', () => {
+    const summary = projectAdminSummary(
+      [
+        worker('a', { temperatureAt: hoursAgo(2), temperature: 36.4 }),
+        worker('b', { temperatureAt: hoursAgo(20), temperature: 36.9 }),
+        // Histórica: aparece no mobile, mas está fora do painel.
+        worker('c', { temperatureAt: hoursAgo(40), temperature: 39 }),
+        worker('d'),
+      ],
+      NOW,
+    )
+
+    expect(summary.bodyTemperatureAverage.value).toBe(36.7)
+    expect(summary.bodyTemperatureAverage.unit).toBe('°C')
+    expect(summary.bodyTemperatureAverage.coverage).toEqual({ evaluated: 2, total: 4 })
+    expect(summary.bodyTemperatureAverage.caption).toBe(PANEL_CAPTIONS.bodyTemperature)
+  })
+
+  it('sem temperatura recente, a média é nula e a legenda diz sem dados', () => {
+    const summary = projectAdminSummary([worker('a')], NOW)
+    expect(summary.bodyTemperatureAverage.value).toBeNull()
+    expect(summary.bodyTemperatureAverage.caption).toBe(PANEL_CAPTIONS.noCoverage)
   })
 
   it('movimentos somam o acumulado do dia de quem tem total conhecido', () => {

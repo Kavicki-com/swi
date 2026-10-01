@@ -43,6 +43,9 @@ const snapshotRow = (over: Record<string, unknown> = {}) => ({
   bloodPressureAt: null,
   oxygenSaturationPct: null,
   oxygenSaturationAt: null,
+  bodyTemperatureC: null,
+  bodyTemperatureSource: null,
+  bodyTemperatureAt: null,
   ...over,
 })
 
@@ -225,6 +228,32 @@ describe('TelemetryQueryService.currentForWorker', () => {
       oxygenSaturationAt: true,
     })
     expect(prisma.telemetryAssessment.findMany.mock.calls[0][0].select).toMatchObject({ fatigueEtaMin: true })
+  })
+
+  it('temperatura corporal atravessa do banco para a projeção, com a origem gravada', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(
+      snapshotRow({
+        bodyTemperatureC: 36.8,
+        bodyTemperatureSource: 'MANUAL_HEALTHKIT',
+        bodyTemperatureAt: secondsAgo(7_200),
+      }),
+    )
+
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(result.metrics.bodyTemperature).toMatchObject({
+      value: 36.8,
+      quality: 'CURRENT',
+      source: 'MANUAL_HEALTHKIT',
+      unit: '°C',
+    })
+    expect(prisma.telemetrySnapshot.findUnique.mock.calls[0][0].select).toMatchObject({
+      bodyTemperatureC: true,
+      bodyTemperatureSource: true,
+      bodyTemperatureAt: true,
+    })
   })
 
   it('usa a avaliação mais recente do dia monitorado', async () => {

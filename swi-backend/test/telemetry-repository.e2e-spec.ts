@@ -242,6 +242,30 @@ describe('Telemetry repository e2e', () => {
     expect(snapshot).not.toHaveProperty('distanceDeltaM')
   })
 
+  it('promove temperatura corporal com origem e horário próprios, como a pressão', async () => {
+    await repo.saveEvent(event(), now)
+
+    const medidoEm = new Date(now.getTime() - 5_000)
+    const saved = event({
+      eventTime: medidoEm.toISOString(),
+      measurements: {
+        bodyTemperature: { value: 36.8, unit: '°C', source: 'MANUAL_HEALTHKIT' },
+      },
+    })
+    await repo.saveEvent(saved, now)
+
+    const sample = await prisma.telemetrySample.findUnique({ where: { eventId: saved.eventId } })
+    expect(sample?.bodyTemperatureC).toBe(36.8)
+    expect(sample?.bodyTemperatureSource).toBe('MANUAL_HEALTHKIT')
+
+    const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+    expect(snapshot?.bodyTemperatureC).toBe(36.8)
+    expect(snapshot?.bodyTemperatureSource).toBe('MANUAL_HEALTHKIT')
+    expect(snapshot?.bodyTemperatureAt).toEqual(medidoEm)
+    // Evento que só traz temperatura não apaga o BPM promovido antes.
+    expect(snapshot?.heartRateBpm).toBe(82)
+  })
+
   it('não deixa um evento ao vivo mais antigo sobrescrever o snapshot mais novo', async () => {
     const novo = event()
     await repo.saveEvent(novo, now)
@@ -305,6 +329,27 @@ describe('Telemetry repository e2e', () => {
     expect(snapshot?.origin).toBe('REAL')
     expect(snapshot?.oxygenSaturationPct).toBeNull()
     expect(snapshot?.oxygenSaturationAt).toBeNull()
+  })
+
+  it('troca de origem também apaga a temperatura da origem anterior', async () => {
+    await repo.saveEvent(
+      event({
+        monitoringSessionId: demoSessionId,
+        origin: 'DEMO',
+        measurements: { bodyTemperature: { value: 37.1, unit: '°C', source: 'MANUAL_HEALTHKIT' } },
+      }),
+      now,
+    )
+    await repo.saveEvent(
+      event({ measurements: { battery: { value: 64, unit: '%', source: 'APPLE_WATCH' } } }),
+      now,
+    )
+
+    const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+    expect(snapshot?.origin).toBe('REAL')
+    expect(snapshot?.bodyTemperatureC).toBeNull()
+    expect(snapshot?.bodyTemperatureSource).toBeNull()
+    expect(snapshot?.bodyTemperatureAt).toBeNull()
   })
 
   it('trata o mesmo instante escrito de outra forma como repetição, não conflito', async () => {
