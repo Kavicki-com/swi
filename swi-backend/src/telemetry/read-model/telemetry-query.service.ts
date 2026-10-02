@@ -14,9 +14,12 @@ import type {
 import {
   ENERGY_RATE_WINDOW_MS,
   projectAdminSummary,
+  projectAdminWorkers,
   projectAggregateWorker,
   projectWorker,
   type AdminTelemetrySummary,
+  type AdminWorkerInput,
+  type AdminWorkersTelemetry,
   type AggregateWorkerInput,
   type DayTotals,
   type ProjectionAssessment,
@@ -451,6 +454,154 @@ export class TelemetryQueryService {
     })
 
     return projectAdminSummary(workers, now)
+  }
+
+  /**
+   * Todos os funcionários ativos da empresa numa leitura só, cada um com o
+   * aparelho e a mesma projeção de workers/:id/current.
+   *
+   * Escala do piloto: dezenas de funcionários. O que é por pessoa e pequeno sai
+   * em lote com `in` (snapshot, totais do dia, última avaliação, condições
+   * abertas, aparelhos), cada um em uma consulta para a empresa inteira. A
+   * janela das taxas continua uma consulta por funcionário que reporta, com o
+   * mesmo teto de linhas da leitura individual: juntar todas numa só exigiria
+   * um teto por pessoa que o `take` do Prisma não expressa, e sem ele um
+   * produtor acelerado puxaria a janela inteira de todo mundo.
+   */
+  async adminWorkers(admin: JwtUser, now = new Date()): Promise<AdminWorkersTelemetry> {
+    const companyId = this.companyOfPanelAdmin(admin)
+    const people = await this.prisma.user.findMany({
+      where: { companyId, role: 'WORKER', active: true },
+      select: { id: true, name: true, profile: { select: { sector: true } } },
+    })
+    if (people.length === 0) return projectAdminWorkers([], now)
+
+    const workerIds = people.map((p) => p.id)
+    const ids = { workerId: { in: workerIds } }
+    const { start, end } = monitoredDayRange(now)
+    const day = { gte: start, lt: end }
+
+    // Os totais e a avaliação vêm agrupados também por origem: cada funcionário
+    // lê na origem do próprio snapshot, e a escolha da linha certa é feita em
+    // memória, sobre poucas linhas por pessoa.
+    const [devices, snapshots, steps, energy, distance, assessments, conditions] = await Promise.all([
+      this.prisma.telemetryDevice.findMany({
+        where: { revokedAt: null, ...ids },
+        select: { workerId: true, lastSeenAt: true },
+      }),
+      this.prisma.telemetrySnapshot.findMany({ where: ids, select: SNAPSHOT_FIELDS }),
+      this.prisma.telemetrySample.groupBy({
+        by: ['workerId', 'origin'],
+        where: { ...ids, eventTime: day, stepDelta: { not: null } },
+        _sum: { stepDelta: true },
+        _max: { eventTime: true },
+      }),
+      this.prisma.telemetrySample.groupBy({
+        by: ['workerId', 'origin'],
+        where: { ...ids, eventTime: day, activeEnergyKcal: { not: null } },
+        _sum: { activeEnergyKcal: true },
+        _max: { eventTime: true },
+        _min: { eventTime: true },
+      }),
+      this.prisma.telemetrySample.groupBy({
+        by: ['workerId', 'origin'],
+        where: { ...ids, eventTime: day, distanceDeltaM: { not: null } },
+        _sum: { distanceDeltaM: true },
+        _max: { eventTime: true },
+      }),
+      this.latestAssessmentPerWorkerAndOrigin(workerIds),
+      this.prisma.telemetryCondition.findMany({
+        where: { ...ids, status: 'ACTIVE' },
+        select: { workerId: true, ...CONDITION_FIELDS },
+        orderBy: { firstSeenAt: 'asc' },
+      }),
+    ])
+
+    const snapshotBy = new Map(snapshots.map((s) => [s.workerId, s]))
+    const key = (workerId: string, origin: string) => `${workerId}|${origin}`
+    const stepsBy = new Map(steps.map((r) => [key(r.workerId, r.origin), r]))
+    const energyBy = new Map(energy.map((r) => [key(r.workerId, r.origin), r]))
+    const distanceBy = new Map(distance.map((r) => [key(r.workerId, r.origin), r]))
+    const assessmentBy = new Map(assessments.map((a) => [key(a.workerId, a.origin), a]))
+
+    const windowStart = new Date(now.getTime() - ENERGY_RATE_WINDOW_MS)
+    const windows = new Map(
+      await Promise.all(
+        snapshots.map(
+          async (s) =>
+            [
+              s.workerId,
+              await this.prisma.telemetrySample.findMany({
+                where: { workerId: s.workerId, origin: s.origin, eventTime: { gte: windowStart } },
+                select: SAMPLE_FIELDS,
+                orderBy: { eventTime: 'desc' },
+                take: WINDOW_MAX_SAMPLES,
+              }),
+            ] as const,
+        ),
+      ),
+    )
+
+    const inputs: AdminWorkerInput[] = people.map((person) => {
+      const snapshot = snapshotBy.get(person.id)
+      const own = (c: { workerId: string }) => c.workerId === person.id
+      const base = {
+        worker: { id: person.id, name: person.name, sector: person.profile?.sector ?? null },
+        devices: devices.filter(own).map((d) => ({ lastSeenAt: iso(d.lastSeenAt) })),
+      }
+      if (snapshot === undefined) {
+        return {
+          ...base,
+          projection: {
+            workerId: person.id,
+            snapshot: null,
+            windowSamples: [],
+            dayTotals: { steps: null, activeEnergy: null, distance: null },
+            assessment: null,
+            conditions: [],
+          },
+        }
+      }
+      const k = key(person.id, snapshot.origin)
+      const energyRow = energyBy.get(k)
+      const distanceRow = distanceBy.get(k)
+      const assessment = assessmentBy.get(k)
+      return {
+        ...base,
+        projection: {
+          workerId: person.id,
+          snapshot: toProjectionSnapshot(snapshot),
+          windowSamples: (windows.get(person.id) ?? []).map(toProjectionSample),
+          dayTotals: {
+            steps: toStepsSample(stepsBy.get(k)),
+            activeEnergy: energyRow === undefined ? null : toEnergyTotal(energyRow),
+            distance: distanceRow === undefined ? null : toDistanceSample(distanceRow),
+          },
+          assessment: assessment === undefined ? null : toProjectionAssessment(assessment),
+          conditions: conditions.filter(own).map(toProjectionCondition),
+        },
+      }
+    })
+
+    return projectAdminWorkers(inputs, now)
+  }
+
+  /**
+   * A última avaliação de cada funcionário em cada origem, escolhida pelo
+   * banco pelo mesmo motivo de `latestAssessmentPerWorker`. A origem entra no
+   * DISTINCT ON porque a lista lê cada pessoa na origem do próprio snapshot.
+   */
+  private latestAssessmentPerWorkerAndOrigin(
+    workerIds: string[],
+  ): Promise<(AssessmentRow & { workerId: string; origin: TelemetryOrigin })[]> {
+    const query = Prisma.sql`
+      SELECT DISTINCT ON ("workerId", "origin")
+        "workerId", "origin", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion"
+      FROM "TelemetryAssessment"
+      WHERE "workerId" IN (${Prisma.join(workerIds)})
+      ORDER BY "workerId", "origin", "computedAt" DESC
+    `
+    return this.prisma.$queryRaw(query)
   }
 
   /**

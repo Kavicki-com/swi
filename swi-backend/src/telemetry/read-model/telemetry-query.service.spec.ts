@@ -24,7 +24,7 @@ const prismaDouble = () =>
     telemetryCondition: { findMany: jest.fn() },
     telemetryDevice: { findMany: jest.fn() },
     telemetrySession: { findUnique: jest.fn() },
-    user: { findUnique: jest.fn() },
+    user: { findUnique: jest.fn(), findMany: jest.fn() },
   }) as any
 
 const service = (prisma: any) => new TelemetryQueryService(prisma as PrismaService)
@@ -745,5 +745,135 @@ describe('TelemetryQueryService.currentForWorker: custo da janela por tick', () 
     await service(prisma).currentForWorker('worker-1', NOW)
 
     expect(prisma.telemetrySample.findMany.mock.calls[0][0].take).toBe(WINDOW_MAX_SAMPLES)
+  })
+})
+
+describe('TelemetryQueryService.adminWorkers', () => {
+  const person = (id: string, name: string, sector: string | null = 'Leste') => ({
+    id,
+    name,
+    profile: sector === null ? null : { sector },
+  })
+  const conditionRow = (workerId: string, over: Record<string, unknown> = {}) => ({
+    workerId,
+    kind: 'HEART_RATE_HIGH',
+    origin: 'REAL',
+    firstSeenAt: secondsAgo(120),
+    observedValue: 182,
+    thresholdValue: 167,
+    ...over,
+  })
+
+  it('administrador sem empresa não tem painel', async () => {
+    const prisma = prismaDouble()
+    await expect(
+      service(prisma).adminWorkers({ ...ADMIN, companyId: null } as any, NOW),
+    ).rejects.toBeInstanceOf(ForbiddenException)
+    expect(prisma.user.findMany).not.toHaveBeenCalled()
+  })
+
+  it('lista só funcionários ativos da empresa do administrador', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([])
+
+    const result = await service(prisma).adminWorkers(ADMIN as any, NOW)
+
+    expect(result).toEqual({ observedAt: NOW.toISOString(), workers: [] })
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { companyId: 'company-1', role: 'WORKER', active: true } }),
+    )
+    // Empresa sem funcionário não consulta telemetria nenhuma.
+    expect(prisma.telemetrySnapshot.findMany).not.toHaveBeenCalled()
+  })
+
+  it('quem nunca reportou e não tem aparelho vem com leitura vazia e NONE, sem consulta de janela', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana', null)])
+
+    const { workers } = await service(prisma).adminWorkers(ADMIN as any, NOW)
+
+    expect(workers).toHaveLength(1)
+    expect(workers[0].worker).toEqual({ id: 'worker-1', name: 'Ana', sector: null })
+    expect(workers[0].device).toEqual({ state: 'NONE', lastSeenAt: null })
+    expect(workers[0].telemetry.origin).toBeNull()
+    expect(prisma.telemetrySample.findMany).not.toHaveBeenCalled()
+  })
+
+  it('aparelho revogado não conta: só os ativos são consultados', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana')])
+    prisma.telemetryDevice.findMany.mockResolvedValue([{ workerId: 'worker-1', lastSeenAt: secondsAgo(30) }])
+
+    const { workers } = await service(prisma).adminWorkers(ADMIN as any, NOW)
+
+    expect(prisma.telemetryDevice.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { revokedAt: null, workerId: { in: ['worker-1'] } } }),
+    )
+    expect(workers[0].device).toEqual({ state: 'PAIRED', lastSeenAt: secondsAgo(30).toISOString() })
+  })
+
+  it('cada funcionário lê na origem do próprio snapshot, sem misturar linhas de outro', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana'), person('worker-2', 'Bruno')])
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([
+      snapshotRow({ workerId: 'worker-1', origin: 'REAL', heartRateBpm: 90 }),
+      snapshotRow({ workerId: 'worker-2', origin: 'DEMO', heartRateBpm: 120 }),
+    ])
+    prisma.telemetrySample.groupBy.mockImplementation(async (args: any) => {
+      if (!('stepDelta' in args._sum)) return []
+      return [
+        { workerId: 'worker-1', origin: 'REAL', _sum: { stepDelta: 400 }, _max: { eventTime: secondsAgo(10) } },
+        { workerId: 'worker-1', origin: 'DEMO', _sum: { stepDelta: 9999 }, _max: { eventTime: secondsAgo(10) } },
+      ]
+    })
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      conditionRow('worker-2', { origin: 'DEMO' }),
+      conditionRow('worker-1', { origin: 'DEMO' }),
+    ])
+
+    const { workers } = await service(prisma).adminWorkers(ADMIN as any, NOW)
+    const ana = workers.find((w) => w.worker.id === 'worker-1')!
+    const bruno = workers.find((w) => w.worker.id === 'worker-2')!
+
+    expect(ana.telemetry.metrics.steps.value).toBe(400)
+    expect(ana.telemetry.conditions).toEqual([])
+    expect(bruno.telemetry.origin).toBe('DEMO')
+    expect(bruno.telemetry.conditions.map((c) => c.category)).toEqual(['URGENT'])
+  })
+
+  it('urgência sobe para o topo da lista', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana'), person('worker-2', 'Bruno')])
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([
+      snapshotRow({ workerId: 'worker-1' }),
+      snapshotRow({ workerId: 'worker-2' }),
+    ])
+    prisma.telemetryCondition.findMany.mockResolvedValue([conditionRow('worker-2')])
+
+    const { workers } = await service(prisma).adminWorkers(ADMIN as any, NOW)
+
+    expect(workers.map((w) => w.worker.name)).toEqual(['Bruno', 'Ana'])
+  })
+
+  it('a janela das taxas é uma consulta limitada por funcionário que reporta', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana'), person('worker-2', 'Bruno')])
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow({ workerId: 'worker-1' })])
+
+    await service(prisma).adminWorkers(ADMIN as any, NOW)
+
+    expect(prisma.telemetrySample.findMany).toHaveBeenCalledTimes(1)
+    expect(prisma.telemetrySample.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ workerId: 'worker-1', origin: 'REAL' }),
+        take: WINDOW_MAX_SAMPLES,
+      }),
+    )
   })
 })

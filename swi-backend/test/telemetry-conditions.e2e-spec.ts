@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { INestApplication } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
+import { requireJwtSecret } from '../src/auth/jwt-secret'
 import type { JwtUser } from '../src/auth/current-user.decorator'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { ALERT_PROFILE_VERSION, EXPERIMENTAL_ALERT_PROFILE } from '../src/telemetry/alerts/alert-profile'
@@ -32,6 +34,7 @@ import { TelemetryQueryService } from '../src/telemetry/read-model/telemetry-que
 // desvincularia os usuários dela, porque User.companyId é opcional e o Prisma
 // aplica SetNull.
 const CNPJ = '99000000000303'
+const OUTRO_CNPJ = '99000000000304'
 
 describe('Telemetry conditions e2e', () => {
   let app: INestApplication
@@ -45,6 +48,7 @@ describe('Telemetry conditions e2e', () => {
     semNascimento: `telemetry-cond-c-${randomUUID()}@ex.com`,
     demo: `telemetry-cond-d-${randomUUID()}@ex.com`,
     admin: `telemetry-cond-admin-${randomUUID()}@ex.com`,
+    outroAdmin: `telemetry-cond-outro-admin-${randomUUID()}@ex.com`,
   }
   let workerA = ''
   let workerB = ''
@@ -117,7 +121,7 @@ describe('Telemetry conditions e2e', () => {
     // viola a chave estrangeira e deixa lixo entre execuções.
     await prisma.profile.deleteMany({ where: { userId: { in: users.map((u) => u.id) } } })
     await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
-    await prisma.company.deleteMany({ where: { cnpj: CNPJ } })
+    await prisma.company.deleteMany({ where: { cnpj: { in: [CNPJ, OUTRO_CNPJ] } } })
   }
 
   beforeAll(async () => {
@@ -648,5 +652,54 @@ describe('Telemetry conditions e2e', () => {
     expect(recuperada).toMatchObject({ status: 'RECOVERED', recoveryReason: 'NORMALIZED' })
     // Condição recuperar não fecha alerta: isso é da triagem humana.
     expect(await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })).toMatchObject({ status: 'OPEN' })
+  })
+
+  it('13. a lista do painel traz todos os funcionários da empresa, por HTTP, e só para administrador dela', async () => {
+    // Assina com o mesmo segredo que a estratégia JWT confere; o papel vem do
+    // banco a cada requisição, então o token só identifica a pessoa.
+    const bearer = (sub: string, role: string) => ({ Authorization: `Bearer ${new JwtService({ secret: requireJwtSecret() }).sign({ sub, role })}` })
+    const lista = (headers: Record<string, string>) =>
+      request(app.getHttpServer()).get('/telemetry/v1/admin/workers').set(headers)
+
+    const { body } = await lista(bearer(admin.userId, 'ADMIN')).expect(200)
+    const ids = body.workers.map((w: { worker: { id: string } }) => w.worker.id)
+    expect(new Set(ids)).toEqual(new Set([workerA, workerB, workerSemNascimento, workerDemo]))
+    for (const entry of body.workers) {
+      expect(entry.device.state).toBe('PAIRED')
+      expect(Array.isArray(entry.telemetry.conditions)).toBe(true)
+    }
+    // A mesma leitura da rota individual, com condições incluídas.
+    const individual = await query.currentForWorker(workerA)
+    const daLista = body.workers.find((w: { worker: { id: string } }) => w.worker.id === workerA)
+    expect(daLista.telemetry.conditions).toEqual(individual.conditions)
+    expect(daLista.telemetry.origin).toBe(individual.origin)
+
+    // Ordem de atenção: ninguém sem urgência aparece antes de quem tem.
+    const rank = (entry: { telemetry: { conditions: { category: string }[] } }) => {
+      const cats = entry.telemetry.conditions.map((c) => c.category)
+      return cats.includes('URGENT') ? 0 : cats.includes('HEALTH') ? 1 : 2
+    }
+    const ranks = body.workers.map(rank)
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b))
+
+    // Funcionário não lê a lista do painel.
+    await lista(bearer(workerA, 'WORKER')).expect(403)
+
+    // Administrador de outra empresa não vê nenhum destes funcionários.
+    const endereco = { cep: '01000-000', street: 'Rua B', number: '2', neighborhood: 'Centro', uf: 'SP' }
+    const outra = await prisma.company.create({ data: { name: 'Outra Co', cnpj: OUTRO_CNPJ, ...endereco } })
+    const outroAdmin = await prisma.user.create({
+      data: {
+        email: emails.outroAdmin,
+        name: 'Outro Admin',
+        passwordHash: 'nao-usado-neste-spec',
+        role: 'ADMIN',
+        emailVerified: true,
+        approvalStatus: 'APPROVED',
+        companyId: outra.id,
+      },
+    })
+    const alheia = await lista(bearer(outroAdmin.id, 'ADMIN')).expect(200)
+    expect(alheia.body.workers).toEqual([])
   })
 })

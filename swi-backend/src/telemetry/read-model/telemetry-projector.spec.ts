@@ -6,6 +6,8 @@ import {
   MOVEMENT_WINDOW_MS,
   PANEL_CAPTIONS,
   projectAdminSummary,
+  projectAdminWorkers,
+  type AdminWorkerInput,
   projectAggregateWorker,
   projectWorker,
   type DayTotals,
@@ -969,5 +971,79 @@ describe('projectWorker: condições ativas acompanham a leitura', () => {
     expect(CONDITION_CATEGORY.DEVICE_SIGNAL_LOST).toBe('DEVICE')
     expect(CONDITION_CATEGORY.BLOOD_PRESSURE_REVIEW).toBe('HEALTH')
     expect(CONDITION_CATEGORY.WEAR_HIGH).toBe('HEALTH')
+  })
+})
+
+describe('projectAdminWorkers: lista do painel, uma leitura por funcionário', () => {
+  const urgent: ProjectionCondition = {
+    kind: 'HEART_RATE_HIGH',
+    origin: 'REAL',
+    firstSeenAt: minutesAgo(3),
+    observedValue: 182,
+    thresholdValue: 167,
+  }
+  const wear: ProjectionCondition = { ...urgent, kind: 'WEAR_HIGH', observedValue: 84, thresholdValue: 80 }
+  const battery: ProjectionCondition = { ...urgent, kind: 'DEVICE_BATTERY_LOW', observedValue: 9, thresholdValue: 15 }
+
+  const entry = (
+    id: string,
+    name: string,
+    over: { conditions?: ProjectionCondition[]; snapshot?: ProjectionSnapshot | null; devices?: { lastSeenAt: string | null }[] } = {},
+  ): AdminWorkerInput => ({
+    worker: { id, name, sector: 'Leste' },
+    devices: over.devices ?? [{ lastSeenAt: secondsAgo(10) }],
+    projection: {
+      workerId: id,
+      snapshot: over.snapshot === undefined ? snapshot() : over.snapshot,
+      windowSamples: [],
+      dayTotals: totals(),
+      assessment: null,
+      conditions: over.conditions ?? [],
+    },
+  })
+
+  it('empresa sem funcionário devolve lista vazia com o instante da leitura', () => {
+    expect(projectAdminWorkers([], NOW)).toEqual({ observedAt: NOW.toISOString(), workers: [] })
+  })
+
+  it('cada funcionário vem com o aparelho e a mesma leitura de workers/:id/current', () => {
+    const [only] = projectAdminWorkers([entry('w1', 'Ana')], NOW).workers
+
+    expect(only.worker).toEqual({ id: 'w1', name: 'Ana', sector: 'Leste' })
+    expect(only.device).toEqual({ state: 'PAIRED', lastSeenAt: secondsAgo(10) })
+    expect(only.telemetry).toEqual({ ...project(), workerId: 'w1' })
+  })
+
+  it('quem nunca reportou aparece, com leitura vazia, e sem aparelho fica NONE', () => {
+    const [only] = projectAdminWorkers([entry('w1', 'Ana', { snapshot: null, devices: [] })], NOW).workers
+
+    expect(only.device).toEqual({ state: 'NONE', lastSeenAt: null })
+    expect(only.telemetry.origin).toBeNull()
+    expect(only.telemetry.metrics.heartRate.value).toBeNull()
+  })
+
+  it('com mais de um aparelho ativo, o último contato é o mais recente deles', () => {
+    const [only] = projectAdminWorkers(
+      [entry('w1', 'Ana', { devices: [{ lastSeenAt: minutesAgo(9) }, { lastSeenAt: null }, { lastSeenAt: secondsAgo(4) }] })],
+      NOW,
+    ).workers
+
+    expect(only.device).toEqual({ state: 'PAIRED', lastSeenAt: secondsAgo(4) })
+  })
+
+  it('ordena urgência primeiro, depois saúde, depois o resto, e por nome dentro de cada grupo', () => {
+    const order = projectAdminWorkers(
+      [
+        entry('w1', 'Zuleica'),
+        entry('w2', 'Bruno', { conditions: [wear] }),
+        entry('w3', 'Carla', { conditions: [battery] }),
+        entry('w4', 'Ana', { conditions: [urgent] }),
+        entry('w5', 'Álvaro'),
+        entry('w6', 'Davi', { conditions: [wear, urgent] }),
+      ],
+      NOW,
+    ).workers.map((w) => w.worker.name)
+
+    expect(order).toEqual(['Ana', 'Davi', 'Bruno', 'Álvaro', 'Carla', 'Zuleica'])
   })
 })
