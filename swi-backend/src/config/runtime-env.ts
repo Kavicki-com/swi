@@ -111,6 +111,18 @@ export interface RuntimeEnv {
   readonly weatherScenario?: string
   readonly telemetryRetention: TelemetryRetentionEnv
   readonly simPositions: boolean
+  /** Fila de alertas também com origem de demonstração. Só homologação. */
+  readonly telemetryAlertsIncludeDemo: boolean
+}
+
+/**
+ * Liga a fila de alertas para mostrar e triar alertas de demonstração, para o
+ * roteiro de aceite da homologação ver o alerta que o injetor abre. Não depende
+ * do NODE_ENV porque a homologação roda como produção; só '1' liga. Lida a cada
+ * chamada, como a retenção, para valer sem recompilar a configuração.
+ */
+export function parseAlertsIncludeDemo(source: NodeJS.ProcessEnv): boolean {
+  return source.TELEMETRY_ALERTS_INCLUDE_DEMO === '1'
 }
 
 const DEV_CORS_ORIGIN = 'http://localhost:5173'
@@ -244,5 +256,6 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
     weatherScenario: source.WEATHER_SCENARIO,
     telemetryRetention: Object.freeze(telemetryRetention),
     simPositions: source.SIM_POSITIONS === '1',
+    telemetryAlertsIncludeDemo: parseAlertsIncludeDemo(source),
   })
 }

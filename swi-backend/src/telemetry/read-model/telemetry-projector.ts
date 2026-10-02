@@ -111,6 +111,15 @@ export interface DayTotals {
   activeEnergy: (Sample<number> & { earliestAt: string }) | null
 }
 
+/** Condição aberta, como o motor de condições a gravou. */
+export interface ProjectionCondition {
+  kind: ConditionKind
+  origin: TelemetryOrigin
+  firstSeenAt: string
+  observedValue: number | null
+  thresholdValue: number | null
+}
+
 export interface WorkerProjectionInput {
   workerId: string
   snapshot: ProjectionSnapshot | null
@@ -119,6 +128,8 @@ export interface WorkerProjectionInput {
   dayTotals: DayTotals
   /** A avaliação mais recente do dia monitorado, quando houver. */
   assessment: ProjectionAssessment | null
+  /** Condições abertas do funcionário, em qualquer ordem. */
+  conditions: readonly ProjectionCondition[]
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +174,46 @@ export interface WorkerMetrics {
   fatigueEtaMin: MetricState<number>
 }
 
+/**
+ * Como a leitura agrupa uma condição para quem a apresenta.
+ *
+ * URGENT é exatamente o conjunto de urgência do domínio. HEALTH é saúde que
+ * pede atenção sem urgência: a pressão pede revisão humana e o desgaste é
+ * estimativa experimental, então nenhum dos dois pode virar urgência. DEVICE é
+ * aparelho, e misturá-lo com saúde faria um relógio descarregado contar como
+ * funcionário em risco.
+ */
+export type ConditionCategory = 'URGENT' | 'HEALTH' | 'DEVICE'
+
+const isUrgent = (kind: ConditionKind): boolean =>
+  (URGENT_CONDITION_KINDS as readonly ConditionKind[]).includes(kind)
+
+/**
+ * Exaustiva por construção: tipo novo de condição não compila sem categoria. O
+ * urgente é derivado do conjunto do domínio, para a leitura e o resumo do
+ * painel nunca divergirem sobre o que urge.
+ */
+export const CONDITION_CATEGORY: Readonly<Record<ConditionKind, ConditionCategory>> = {
+  HEART_RATE_HIGH: isUrgent('HEART_RATE_HIGH') ? 'URGENT' : 'HEALTH',
+  HEART_RATE_LOW: isUrgent('HEART_RATE_LOW') ? 'URGENT' : 'HEALTH',
+  BLOOD_PRESSURE_REVIEW: 'HEALTH',
+  WEAR_HIGH: 'HEALTH',
+  DEVICE_BATTERY_LOW: 'DEVICE',
+  DEVICE_SIGNAL_LOST: 'DEVICE',
+}
+
+/** Condição aberta como a leitura a entrega. */
+export interface ActiveCondition {
+  kind: ConditionKind
+  category: ConditionCategory
+  /** ISO-8601 de quando a condição abriu. */
+  openedAt: string
+  /** O valor que abriu a condição, na unidade dela. Nulo sem limite numérico. */
+  observedValue: number | null
+  /** O limite em vigor quando abriu. Nulo sem limite numérico. */
+  thresholdValue: number | null
+}
+
 export interface WorkerTelemetry {
   workerId: string
   /** Nulo enquanto o funcionário nunca reportou. Nunca se mistura com a outra. */
@@ -176,6 +227,12 @@ export interface WorkerTelemetry {
   movementWindow: WindowCoverage
   /** ISO-8601 do instante contra o qual toda qualidade acima foi decidida. */
   observedAt: string
+  /**
+   * Condições abertas na mesma origem da leitura, da mais antiga para a mais
+   * recente. É daqui que app e painel tiram o estado de saúde: sem condição
+   * aberta não há alerta a mostrar, e a tela não deduz um dos números.
+   */
+  conditions: ActiveCondition[]
 }
 
 /**
@@ -446,6 +503,29 @@ function assessmentStates(
   }
 }
 
+/**
+ * Condições da leitura: só as da origem do snapshot, porque real e
+ * demonstração nunca se misturam, e nenhuma para quem nunca reportou. A ordem
+ * é a de abertura, a mais antiga primeiro.
+ */
+function activeConditions(
+  origin: TelemetryOrigin | null,
+  conditions: readonly ProjectionCondition[],
+): ActiveCondition[] {
+  if (origin === null) return []
+  return conditions
+    .filter((c) => c.origin === origin)
+    .slice()
+    .sort((a, b) => toMs(a.firstSeenAt) - toMs(b.firstSeenAt))
+    .map((c) => ({
+      kind: c.kind,
+      category: CONDITION_CATEGORY[c.kind],
+      openedAt: c.firstSeenAt,
+      observedValue: c.observedValue,
+      thresholdValue: c.thresholdValue,
+    }))
+}
+
 // ---------------------------------------------------------------------------
 // Projeção por funcionário
 // ---------------------------------------------------------------------------
@@ -508,7 +588,88 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     energyWindow: energy.coverage,
     movementWindow: movement.coverage,
     observedAt: now.toISOString(),
+    conditions: activeConditions(snapshot?.origin ?? null, input.conditions),
   }
+}
+
+// ---------------------------------------------------------------------------
+// Lista do painel
+// ---------------------------------------------------------------------------
+
+/** Aparelho do funcionário como o painel o mostra na lista. */
+export interface AdminWorkerDevice {
+  /** PAIRED quando há aparelho não revogado; NONE quando não há nenhum. */
+  state: 'NONE' | 'PAIRED'
+  /** ISO-8601 do contato mais recente entre os aparelhos ativos. */
+  lastSeenAt: string | null
+}
+
+export interface AdminWorkerEntry {
+  worker: { id: string; name: string; sector: string | null }
+  device: AdminWorkerDevice
+  /** A mesma leitura de workers/:id/current, condições incluídas. */
+  telemetry: WorkerTelemetry
+}
+
+export interface AdminWorkersTelemetry {
+  /** ISO-8601 do instante contra o qual toda qualidade da lista foi decidida. */
+  observedAt: string
+  workers: AdminWorkerEntry[]
+}
+
+export interface AdminWorkerInput {
+  worker: { id: string; name: string; sector: string | null }
+  /** Aparelhos não revogados do funcionário; vazio quando não há nenhum. */
+  devices: readonly { lastSeenAt: string | null }[]
+  projection: WorkerProjectionInput
+}
+
+/**
+ * Peso de atenção de uma leitura: urgência primeiro, depois saúde. Condição só
+ * de aparelho não sobe ninguém na lista, pelo mesmo motivo que não conta como
+ * risco no resumo: relógio descarregado não é funcionário em risco.
+ */
+function attentionRank(telemetry: WorkerTelemetry): number {
+  const categories = new Set(telemetry.conditions.map((c) => c.category))
+  if (categories.has('URGENT')) return 0
+  if (categories.has('HEALTH')) return 1
+  return 2
+}
+
+function latestContact(devices: readonly { lastSeenAt: string | null }[]): string | null {
+  let latest: string | null = null
+  for (const { lastSeenAt } of devices) {
+    if (lastSeenAt !== null && (latest === null || toMs(lastSeenAt) > toMs(latest))) latest = lastSeenAt
+  }
+  return latest
+}
+
+const byName = new Intl.Collator('pt-BR', { sensitivity: 'base' })
+
+/**
+ * Todos os funcionários da empresa numa leitura só, para dashboard,
+ * monitoramento e mapa montarem a tela sem uma chamada por pessoa. A ordem é a
+ * de quem precisa de atenção: condição urgente aberta, depois condição de
+ * saúde, depois o resto; dentro de cada grupo, por nome.
+ */
+export function projectAdminWorkers(
+  inputs: readonly AdminWorkerInput[],
+  now: Date,
+): AdminWorkersTelemetry {
+  const workers = inputs.map((input) => ({
+    worker: input.worker,
+    device: {
+      state: input.devices.length > 0 ? ('PAIRED' as const) : ('NONE' as const),
+      lastSeenAt: latestContact(input.devices),
+    },
+    telemetry: projectWorker(input.projection, now),
+  }))
+  workers.sort(
+    (a, b) =>
+      attentionRank(a.telemetry) - attentionRank(b.telemetry) ||
+      byName.compare(a.worker.name, b.worker.name),
+  )
+  return { observedAt: now.toISOString(), workers }
 }
 
 // ---------------------------------------------------------------------------

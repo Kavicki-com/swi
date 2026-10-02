@@ -41,6 +41,16 @@ export class TelemetryQueryController {
   }
 
   /**
+   * Todos os funcionários da empresa numa leitura, para dashboard,
+   * monitoramento e mapa não fazerem uma chamada por pessoa.
+   */
+  @Roles('ADMIN')
+  @Get('admin/workers')
+  workers(@CurrentUser() admin: JwtUser) {
+    return this.query.adminWorkers(admin)
+  }
+
+  /**
    * Trilha de auditoria. Sem @Roles porque o dono da sessão também a audita; o
    * serviço é que confere se quem pede é o funcionário dela ou administrador da
    * mesma empresa, e recusa igual nos dois casos em que não é.

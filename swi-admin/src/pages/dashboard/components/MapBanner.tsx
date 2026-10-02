@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { Button, Text, useTheme } from '@kavicki/swi-design-system'
 import type { DashboardMapMarker } from '@/services/dashboard'

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common'
 import { NotificationModule } from '../notifications/notification.module'
 import { RealtimeModule } from '../realtime/realtime.module'
+import { AlertQueueController } from './alerts/alert-queue.controller'
+import { AlertQueueService } from './alerts/alert-queue.service'
 import { TelemetryConditionSweepJob } from './alerts/condition-sweep.job'
 import { TelemetryConditionService } from './alerts/condition.service'
 import { TelemetryHealthNotifier } from './alerts/health-notifier'
@@ -30,7 +32,12 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
 @Module({
   // NotificationModule porque condição aberta vira notificação do feed.
   imports: [RealtimeModule, NotificationModule],
-  controllers: [TelemetryDevicesController, TelemetryIngestionController, TelemetryQueryController],
+  controllers: [
+    TelemetryDevicesController,
+    TelemetryIngestionController,
+    TelemetryQueryController,
+    AlertQueueController,
+  ],
   providers: [
     DeviceAuthService,
     DeviceAuthGuard,
@@ -47,6 +54,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     // Depois da avaliação, porque é nessa ordem que a ingestão as chama.
     TelemetryConditionService,
     TelemetryConditionSweepJob,
+    AlertQueueService,
     TelemetryIngestionService,
     TelemetryQueryService,
     TelemetryLifecycleService,
