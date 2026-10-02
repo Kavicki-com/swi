@@ -15,7 +15,7 @@
 //     return () => map.remove()
 //   }, [lib /* + your other deps */])
 import { useEffect, useState } from 'react'
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 
 type MapLibreModule = typeof maplibregl
 
@@ -27,9 +27,18 @@ function load(): Promise<MapLibreModule> {
   if (inFlight) return inFlight
   // Load JS + CSS in parallel. Vite serves each via a separate HTTP
   // request, but they resolve concurrently so we wait on both once.
-  inFlight = Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')]).then(
-    ([mod]) => {
-      cached = mod.default
+  inFlight = Promise.all([
+    import('maplibre-gl'),
+    import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'),
+    import('maplibre-gl/dist/maplibre-gl.css'),
+  ]).then(
+    ([mod, worker]) => {
+      // A 6 monta o endereço do worker em tempo de execução, com um nome que o
+      // Vite não enxerga, então o build não emitiria o arquivo e o mapa ficaria
+      // sem camadas em produção. O import ?worker&url faz o Vite emitir o
+      // worker, e setWorkerUrl aponta a biblioteca para ele.
+      mod.setWorkerUrl(worker.default)
+      cached = mod
       return cached
     },
   )
