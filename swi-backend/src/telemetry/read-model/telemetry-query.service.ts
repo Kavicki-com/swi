@@ -5,6 +5,8 @@ import type { JwtUser } from '../../auth/current-user.decorator'
 import { parseTelemetryRetention } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
 import { monitoredDayRange } from '../domain/metric-state'
+import { closedDayCutoff, SUMMARIZER_SAMPLE_FIELDS } from '../lifecycle/telemetry-lifecycle.service'
+import { assembleSeries, seriesBuckets, type SeriesPeriod, type WorkerSeries } from './telemetry-series'
 import type {
   ConditionKind,
   MeasurementSource,
@@ -89,6 +91,14 @@ const SAMPLE_FIELDS = {
  * que é a razão de a cobertura existir.
  */
 export const WINDOW_MAX_SAMPLES = 2_000
+
+/**
+ * Teto de amostras de uma série por período. Só os dias ainda sem Resumo saem
+ * das amostras, e são no máximo três (o de hoje e os dois que esperam fechar);
+ * na cadência de cinco segundos isso dá cerca de 52 mil linhas. O teto cobre
+ * isso com folga e existe para um produtor acelerado não virar varredura.
+ */
+export const SERIES_MAX_SAMPLES = 60_000
 
 // Os limites moram em history-limits para que o DTO da rota os leia sem
 // carregar este serviço, e com ele o cliente do Prisma. Reexportados porque
@@ -395,6 +405,73 @@ export class TelemetryQueryService {
   async currentForAdmin(admin: JwtUser, workerId: string, now = new Date()): Promise<WorkerTelemetry> {
     await this.requireSameCompany(admin, workerId)
     return this.currentForWorker(workerId, now)
+  }
+
+  /**
+   * Série por período de um funcionário. A origem é a do snapshot, como no
+   * estado atual: as duas leituras nunca discordam sobre de onde vem o dado, e
+   * a série nunca mistura real com demonstração.
+   *
+   * Dia fechado vem do Resumo do dia; só os dias que o ciclo de vida ainda não
+   * resumiu saem das amostras, pela mesma conta. Assim a consulta bruta fica
+   * limitada a poucos dias, mesmo no período de um mês.
+   */
+  async seriesForWorker(workerId: string, period: SeriesPeriod, now = new Date()): Promise<WorkerSeries> {
+    const snapshot = await this.prisma.telemetrySnapshot.findUnique({
+      where: { workerId },
+      select: { origin: true },
+    })
+    const base = { workerId, period, now }
+    if (snapshot === null) {
+      return assembleSeries({ ...base, origin: null, summaries: [], samples: [], openFrom: now })
+    }
+
+    const { buckets } = seriesBuckets(period, now)
+    const first = buckets[0]
+    const last = buckets[buckets.length - 1]
+    const scope = { workerId, origin: snapshot.origin }
+    // "Hoje" nunca tem Resumo: o dia inteiro sai das amostras.
+    const openFrom = period === 'day' ? first.start : closedDayCutoff(now)
+    const samplesFrom = new Date(Math.max(first.start.getTime(), openFrom.getTime()))
+
+    const [summaries, samples] = await Promise.all([
+      period === 'day'
+        ? Promise.resolve([])
+        : this.prisma.telemetryDailySummary.findMany({
+            where: { ...scope, day: { gte: first.day, lte: last.day } },
+            select: {
+              day: true,
+              heartRateMin: true,
+              heartRateMax: true,
+              heartRateAvg: true,
+              stepsTotal: true,
+              distanceTotalM: true,
+              activeEnergyKcalTotal: true,
+              coveredMs: true,
+            },
+          }),
+      this.prisma.telemetrySample.findMany({
+        where: { ...scope, eventTime: { gte: samplesFrom, lte: now } },
+        select: SUMMARIZER_SAMPLE_FIELDS,
+        // Do mais recente para trás: se o teto morder, perde-se o começo do
+        // período, nunca o agora. O resumidor reordena.
+        orderBy: { eventTime: 'desc' },
+        take: SERIES_MAX_SAMPLES,
+      }),
+    ])
+
+    return assembleSeries({ ...base, origin: snapshot.origin, summaries, samples, openFrom })
+  }
+
+  /** A série de um funcionário no painel, dentro da empresa do administrador. */
+  async seriesForAdmin(
+    admin: JwtUser,
+    workerId: string,
+    period: SeriesPeriod,
+    now = new Date(),
+  ): Promise<WorkerSeries> {
+    await this.requireSameCompany(admin, workerId)
+    return this.seriesForWorker(workerId, period, now)
   }
 
   /**

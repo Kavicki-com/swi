@@ -19,6 +19,8 @@ const serviceDouble = () =>
     adminSummary: jest.fn().mockResolvedValue('resumo'),
     adminWorkers: jest.fn().mockResolvedValue('lista'),
     sessionHistory: jest.fn().mockResolvedValue('historico'),
+    seriesForWorker: jest.fn().mockResolvedValue('serie-propria'),
+    seriesForAdmin: jest.fn().mockResolvedValue('serie-do-funcionario'),
   }) as any
 
 const controller = (service: any) => new TelemetryQueryController(service as TelemetryQueryService)
@@ -36,11 +38,11 @@ describe('TelemetryQueryController: fiação de autorização', () => {
     expect(guards).toEqual([JwtAuthGuard, RolesGuard])
   })
 
-  it.each(['worker', 'summary', 'workers'] as const)('%s exige ADMIN', (method) => {
+  it.each(['worker', 'summary', 'workers', 'workerSeries'] as const)('%s exige ADMIN', (method) => {
     expect(rolesOf(TelemetryQueryController.prototype[method])).toEqual(['ADMIN'])
   })
 
-  it.each(['me', 'history'] as const)(
+  it.each(['me', 'history', 'mySeries'] as const)(
     '%s não declara papel: quem confere o dono é o serviço',
     (method) => {
       expect(rolesOf(TelemetryQueryController.prototype[method])).toBeUndefined()
@@ -61,6 +63,12 @@ describe('TelemetryQueryController: delegação', () => {
     ['summary', (c: TelemetryQueryController) => c.summary(ADMIN), 'adminSummary'],
     ['workers', (c: TelemetryQueryController) => c.workers(ADMIN), 'adminWorkers'],
     ['history', (c: TelemetryQueryController) => c.history(WORKER, 'session-1', {}), 'sessionHistory'],
+    ['mySeries', (c: TelemetryQueryController) => c.mySeries(WORKER.userId, { period: 'week' }), 'seriesForWorker'],
+    [
+      'workerSeries',
+      (c: TelemetryQueryController) => c.workerSeries(ADMIN, 'worker-9', { period: 'day' }),
+      'seriesForAdmin',
+    ],
   ] as const)('%s chama o serviço sem passar instante', async (_rota, chamar, metodo) => {
     const service = serviceDouble()
 
@@ -106,5 +114,22 @@ describe('TelemetryQueryController: delegação', () => {
       limit: 50,
       afterSequence: 10,
     })
+  })
+})
+
+describe('TelemetryQueryController: série por período', () => {
+  it('mySeries lê o id do token e repassa o período', async () => {
+    const service = serviceDouble()
+
+    await expect(controller(service).mySeries(WORKER.userId, { period: 'month' })).resolves.toBe('serie-propria')
+    expect(service.seriesForWorker).toHaveBeenCalledWith('worker-1', 'month')
+  })
+
+  it('workerSeries passa o administrador inteiro, para o serviço aplicar o escopo', async () => {
+    const service = serviceDouble()
+
+    await controller(service).workerSeries(ADMIN, 'worker-9', { period: 'week' })
+
+    expect(service.seriesForAdmin).toHaveBeenCalledWith(ADMIN, 'worker-9', 'week')
   })
 })
