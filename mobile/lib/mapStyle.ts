@@ -3,7 +3,7 @@
 // MapsGeneral.tsx:38-60 — both apps consume the same ESRI World Imagery
 // tile source so satellite imagery stays visually consistent across the
 // admin dashboard and the mobile demo.
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 
 // ESRI World Imagery — same tile source the Dashboard MapBanner uses.
 export const ESRI_SATELLITE_STYLE: maplibregl.StyleSpecification = {

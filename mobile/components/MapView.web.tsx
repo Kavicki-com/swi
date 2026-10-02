@@ -14,7 +14,7 @@
 //      so children authored against this API render natively too.
 import { createContext, useEffect, useRef, useState, type ReactElement } from 'react';
 import { View } from 'react-native';
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import { useMapLibre } from '@/lib/useMapLibre';
 import { ESRI_SATELLITE_STYLE } from '@/lib/mapStyle';
 
