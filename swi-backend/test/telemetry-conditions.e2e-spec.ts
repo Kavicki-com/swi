@@ -120,6 +120,8 @@ describe('Telemetry conditions e2e', () => {
     // Profile não tem cascade: apagar o funcionário sem apagar o perfil antes
     // viola a chave estrangeira e deixa lixo entre execuções.
     await prisma.profile.deleteMany({ where: { userId: { in: users.map((u) => u.id) } } })
+    // Notificação também não tem cascade, e condição aberta passa a gerar uma.
+    await prisma.notification.deleteMany({ where: { workerId: { in: users.map((u) => u.id) } } })
     await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
     await prisma.company.deleteMany({ where: { cnpj: { in: [CNPJ, OUTRO_CNPJ] } } })
   }
@@ -252,6 +254,15 @@ describe('Telemetry conditions e2e', () => {
         thresholdValue: LIMITE_PERSONALIZADO,
       },
     ])
+
+    // Condição urgente vira notificação de saúde para o funcionário e para a
+    // administração, uma por público, com a condição como alvo.
+    const doFuncionario = await prisma.notification.findMany({ where: { workerId: workerA, domain: 'health' } })
+    expect(doFuncionario).toHaveLength(1)
+    expect(doFuncionario[0]).toMatchObject({ targetId: condicao.id, title: 'Batimento acima do limite' })
+    const doAdmin = await prisma.notification.findMany({ where: { workerId: admin.userId, domain: 'health', targetId: condicao.id } })
+    expect(doAdmin).toHaveLength(1)
+    expect(doAdmin[0].title).toMatch(/^Batimento alto: /)
   }, 30_000)
 
   it('2. dois lotes em paralelo abrem uma condição só', async () => {
@@ -407,6 +418,9 @@ describe('Telemetry conditions e2e', () => {
 
     // O painel lê só o real. Ensaio não entra na conta de quem está em risco.
     expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(antes)
+
+    // Nem vira aviso para pessoa nenhuma.
+    expect(await prisma.notification.count({ where: { domain: 'health', targetId: rows[0].id } })).toBe(0)
   }, 30_000)
 
   /**

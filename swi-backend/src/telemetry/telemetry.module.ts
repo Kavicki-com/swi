@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common'
+import { NotificationModule } from '../notifications/notification.module'
 import { RealtimeModule } from '../realtime/realtime.module'
 import { AlertQueueController } from './alerts/alert-queue.controller'
 import { AlertQueueService } from './alerts/alert-queue.service'
 import { TelemetryConditionSweepJob } from './alerts/condition-sweep.job'
 import { TelemetryConditionService } from './alerts/condition.service'
+import { TelemetryHealthNotifier } from './alerts/health-notifier'
 import { TelemetryAssessmentService } from './assessment/assessment.service'
 import { DeviceAuthGuard } from './devices/device-auth.guard'
 import { DeviceAuthService } from './devices/device-auth.service'
@@ -28,7 +30,8 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
 // PrismaModule é global, então não precisa ser importado; RealtimeModule sim,
 // porque a ingestão avisa pelo socket depois de gravar.
 @Module({
-  imports: [RealtimeModule],
+  // NotificationModule porque condição aberta vira notificação do feed.
+  imports: [RealtimeModule, NotificationModule],
   controllers: [
     TelemetryDevicesController,
     TelemetryIngestionController,
@@ -47,6 +50,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     // condições.
     TelemetryAudienceService,
     TelemetryAssessmentService,
+    TelemetryHealthNotifier,
     // Depois da avaliação, porque é nessa ordem que a ingestão as chama.
     TelemetryConditionService,
     TelemetryConditionSweepJob,
