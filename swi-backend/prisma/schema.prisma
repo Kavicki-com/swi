@@ -74,6 +74,7 @@ model User {
   telemetrySummaries   TelemetryDailySummary[]
   operationalAlerts    OperationalAlert[]    @relation("alertedWorker")
   triagedAlerts        OperationalAlert[]    @relation("triagedAlerts")
+  positionSamples      WorkerPositionSample[]
 }
 
 // Última posição conhecida de cada worker. SÓ a última: upsert por worker, sem
@@ -92,6 +93,27 @@ model WorkerPosition {
   source     String   @default("sim")
   recordedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// Trilha de posições para o mapa de calor. O heartbeat grava aqui com
+// espaçamento mínimo (src/positions/position-history.ts) e o job de retenção
+// apaga o que passou da janela. `companyId` é cópia da empresa do funcionário
+// no instante da gravação, sem chave estrangeira: o mapa de calor filtra por
+// empresa sem juntar com User, e a amostra continua sendo de onde a pessoa
+// estava quando trabalhava ali. A amostra some junto com o funcionário.
+model WorkerPositionSample {
+  id         String   @id @default(uuid())
+  workerId   String
+  worker     User     @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  companyId  String?
+  lat        Float
+  lng        Float
+  // 'real' = GPS do app; 'sim' = simulador de desenvolvimento.
+  source     String
+  recordedAt DateTime @default(now())
+
+  @@index([companyId, recordedAt])
+  @@index([workerId, recordedAt])
 }
 
 // Empresa cadastrada no onboarding do painel (SignUp.tsx). Um cadastro cria a

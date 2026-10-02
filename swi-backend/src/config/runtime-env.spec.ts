@@ -79,6 +79,31 @@ describe('parseRuntimeEnv: retenção da telemetria', () => {
   })
 })
 
+describe('parseRuntimeEnv: trilha de posições', () => {
+  it('sem variável, retém trinta dias de posições', () => {
+    const env = parseRuntimeEnv(validProd())
+    expect(env.positionRetention.windowMs).toBe(30 * 24 * 60 * 60 * 1000)
+    expect(env.positionRetention.batchSize).toBe(RETENTION_DEFAULT_BATCH)
+  })
+
+  it('aceita a janela a partir de um dia e recusa abaixo disso, sem corrigir em silêncio', () => {
+    expect(parseRuntimeEnv(validProd({ POSITION_RETENTION_DAYS: '1' })).positionRetention.windowMs).toBe(
+      24 * 60 * 60 * 1000,
+    )
+    expect(() => parseRuntimeEnv(validProd({ POSITION_RETENTION_DAYS: '0' }))).toThrow(/POSITION_RETENTION_DAYS/)
+    expect(() => parseRuntimeEnv(validProd({ POSITION_RETENTION_DAYS: 'trinta' }))).toThrow(
+      /POSITION_RETENTION_DAYS/,
+    )
+  })
+
+  it('posição simulada no calor só com a variável exatamente em 1, e nunca por NODE_ENV', () => {
+    expect(parseRuntimeEnv(validProd()).positionsHeatIncludeSim).toBe(false)
+    expect(parseRuntimeEnv({ NODE_ENV: 'development' }).positionsHeatIncludeSim).toBe(false)
+    expect(parseRuntimeEnv(validProd({ POSITIONS_HEAT_INCLUDE_SIM: 'true' })).positionsHeatIncludeSim).toBe(false)
+    expect(parseRuntimeEnv(validProd({ POSITIONS_HEAT_INCLUDE_SIM: '1' })).positionsHeatIncludeSim).toBe(true)
+  })
+})
+
 describe('parseRuntimeEnv', () => {
   it('recusa produção sem variáveis obrigatórias', () => {
     expect(() => parseRuntimeEnv({ NODE_ENV: 'production' })).toThrow(/DATABASE_URL/)
