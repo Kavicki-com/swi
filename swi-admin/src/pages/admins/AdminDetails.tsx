@@ -9,7 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/api/users'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
-import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
+import { vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { useLivePositions } from '@/hooks/useLivePositions'
 
 export function AdminDetails({ adminId }: { adminId?: string } = {}) {
@@ -65,22 +65,11 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
     <WorkerDetailsLayout
       worker={{
         ...admin,
-        // Semente da curva de gasto calórico. Sem ela todo mundo compartilha
-        // a mesma série de kcal.
+        // Semente da curva de gasto calórico, que ainda é simulada. Sem ela
+        // todo mundo compartilha a mesma série de kcal.
         seedId: admin.id,
-        // Biometria é simulada enquanto a smartband não existe: valores
-        // plausíveis e determinísticos, com o selo "Dados simulados" no layout.
-        ...(() => {
-          const v = simulatedVitalsFor(admin.id, Date.now())
-          return {
-            bpm: v.bpm,
-            pressure: v.pressure,
-            fatigueRate: v.fatiguePct,
-            effort: v.effortPct,
-            fatigueMinutes: v.fatigueMinutes,
-            statusLabel: v.statusLabel,
-          }
-        })(),
+        // Administrador não pareia aparelho, então não há biometria a mostrar.
+        vitals: vitalsViewFrom(null, { noDevice: true }),
       }}
       position={position ? { lat: position.lat, lng: position.lng } : null}
       testID="admin-details"

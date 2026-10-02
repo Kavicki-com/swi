@@ -4,6 +4,7 @@
 // vitest globals (describe/it/expect) via globals: true.
 import { screen } from '@testing-library/react'
 import { renderPage } from '@/test-utils/renderPage'
+import { vitalsViewFrom, type WorkerVitalsView } from '@/services/vitals/vitalsView'
 import { WorkerDetailsLayout, type WorkerDetailsData } from './WorkerDetailsLayout'
 
 const BASE: WorkerDetailsData = {
@@ -13,6 +14,17 @@ const BASE: WorkerDetailsData = {
   role: 'Operador',
   specialization: 'Setor Leste',
   avatarUri: '',
+  vitals: vitalsViewFrom(null),
+}
+
+const READING: WorkerVitalsView = {
+  heartRate: '112',
+  pressure: '128/82',
+  wearPct: 89,
+  effortPct: 92,
+  fatigueEta: { minutes: 95, label: '95 minutos' },
+  status: 'Monitorando agora',
+  sourceBadge: null,
 }
 
 const renderLayout = async (
@@ -33,13 +45,46 @@ const renderLayout = async (
   )
 
 describe('WorkerDetailsLayout', () => {
-  // fatigueRate/effort vêm em 0-100 (simulatedVitalsFor). Multiplicar por 100
-  // de novo na formatação exibiria "8.900,0%".
+  // Desgaste e esforço vêm em 0-100 do backend. Multiplicar por 100 de novo na
+  // formatação exibiria "8.900,0%".
   it('formata fadiga/esforço na escala 0-100, sem multiplicar de novo', async () => {
-    await renderLayout({ fatigueRate: 89, effort: 92 })
+    await renderLayout({ vitals: READING })
     expect(screen.getByText('89,0%')).toBeInTheDocument()
     expect(screen.getByText('92,0%')).toBeInTheDocument()
     expect(screen.queryByText('8.900,0%')).not.toBeInTheDocument()
+  })
+
+  it('mostra a leitura do aparelho: batimento, pressão, estado e tempo até a fadiga', async () => {
+    await renderLayout({ vitals: READING })
+    expect(screen.getByText(/^112\s*$/)).toBeInTheDocument()
+    expect(screen.getByText('128/82')).toBeInTheDocument()
+    expect(screen.getByText('Monitorando agora')).toBeInTheDocument()
+    expect(screen.getByText('95 minutos')).toBeInTheDocument()
+  })
+
+  it('sem leitura, declara a ausência em vez de mostrar 0', async () => {
+    await renderLayout({})
+    expect(screen.getByText('Sem leitura do aparelho')).toBeInTheDocument()
+    expect(screen.getByText('Sem estimativa')).toBeInTheDocument()
+    expect(screen.queryByText(/^0\s*$/)).not.toBeInTheDocument()
+    expect(screen.queryByText('0 minutos')).not.toBeInTheDocument()
+    expect(screen.queryByText('0,0%')).not.toBeInTheDocument()
+    // Nenhum juízo de saúde sem condição do backend que o sustente.
+    expect(screen.queryByText('Condições excelentes')).not.toBeInTheDocument()
+  })
+
+  it('leitura de demonstração leva o selo de demonstração', async () => {
+    await renderLayout({ vitals: { ...READING, sourceBadge: 'Dados de demonstração' } })
+    expect(screen.getByText('Dados de demonstração')).toBeInTheDocument()
+  })
+
+  // Os vitais vêm do aparelho; só a curva de calorias por período segue
+  // simulada, e o selo fica com ela, não com o cartão de vitais.
+  it('o selo de simulação acompanha só o gráfico de calorias', async () => {
+    await renderLayout({ vitals: READING })
+    const badges = screen.getAllByTestId('simulated-data-badge')
+    expect(badges).toHaveLength(1)
+    expect(screen.getByTestId('calories-simulated-badge')).toContainElement(badges[0] ?? null)
   })
 
   // Sem gênero cadastrado a tela não pode eleger "Feminino" como default.

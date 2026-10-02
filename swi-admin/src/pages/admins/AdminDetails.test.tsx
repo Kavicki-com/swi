@@ -20,7 +20,35 @@ describe('AdminDetails', () => {
   afterEach(clearSession)
 
   it('renders without crashing', async () => {
-    await expect(renderPage(<AdminDetails />, { route: '/admins/seed_id', path: '/admins/:id' })).resolves.toBeDefined()
+    await expect(
+      renderPage(<AdminDetails />, { route: '/admins/seed_id', path: '/admins/:id' }),
+    ).resolves.toBeDefined()
+  })
+})
+
+// Administrador não pareia aparelho: o cartão diz isso em vez de exibir uma
+// biometria que ninguém mediu.
+describe('AdminDetails: vitais', () => {
+  it('mostra "Sem aparelho" e nenhum número de vital', async () => {
+    vi.spyOn(adminsApi, 'get').mockResolvedValue({
+      data: {
+        id: 'admin-7',
+        name: 'Elisa Jordão',
+        age: 33,
+        bloodType: 'A+',
+        role: 'Coordenadora',
+        specialization: 'Operações',
+        avatarUri: '',
+        active: true,
+        status: 'accept',
+      } as never,
+      error: null,
+    })
+    await renderPage(<AdminDetails />, { route: '/admins/admin-7', path: '/admins/:id' })
+
+    expect(await screen.findByText('Sem aparelho')).toBeInTheDocument()
+    expect(screen.getByText('Sem estimativa')).toBeInTheDocument()
+    expect(screen.queryByTestId('vitals-source-badge')).not.toBeInTheDocument()
   })
 })
 
