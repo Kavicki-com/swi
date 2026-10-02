@@ -16,6 +16,7 @@ import { PrismaTelemetryRepository } from './persistence/prisma-telemetry.reposi
 import { TELEMETRY_REPOSITORY } from './persistence/telemetry.repository'
 import { TelemetryQueryController } from './read-model/telemetry-query.controller'
 import { TelemetryQueryService } from './read-model/telemetry-query.service'
+import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
 
 // Módulo da telemetria do piloto: pareamento, ingestão, avaliação de esforço e
 // desgaste, condições e alertas, read model e ciclo de vida do dado (Resumo do
@@ -41,6 +42,10 @@ import { TelemetryQueryService } from './read-model/telemetry-query.service'
     // A ingestão depende da porta, não do adapter. useExisting e não useClass:
     // o token e a classe têm de resolver para a mesma instância.
     { provide: TELEMETRY_REPOSITORY, useExisting: PrismaTelemetryRepository },
+    // Quem recebe os avisos de telemetria: o funcionário e os administradores
+    // da empresa dele. Uma instância só, para o cache valer entre ingestão e
+    // condições.
+    TelemetryAudienceService,
     TelemetryAssessmentService,
     // Depois da avaliação, porque é nessa ordem que a ingestão as chama.
     TelemetryConditionService,

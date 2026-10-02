@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
 import type { Prisma, TelemetryConditionKind, TelemetryOrigin } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
+import { RealtimeGateway } from '../../realtime/realtime.gateway'
+import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../assessment/assessment-baseline'
 import { EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
 import { EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
@@ -93,6 +95,22 @@ export interface EvaluateOutcome {
   alerts: number
 }
 
+/** Nome do evento de socket que anuncia condição aberta ou recuperada. */
+export const CONDITION_CHANGED_EVENT = 'telemetry.condition.changed'
+
+/**
+ * Aviso de condição que mudou. Só identificadores, como o aviso do snapshot: o
+ * valor e a régua vêm pelo read model, que confere o acesso a cada leitura.
+ */
+export interface ConditionChange {
+  workerId: string
+  conditionId: string
+  kind: TelemetryConditionKind
+  change: 'OPENED' | 'RECOVERED'
+  /** ISO-8601 do relógio do servidor, o mesmo carimbo gravado na linha. */
+  at: string
+}
+
 export interface SweepOutcome {
   /** Sessões silenciosas olhadas na rodada, tenham gerado escrita ou não. */
   scanned: number
@@ -107,7 +125,11 @@ export class TelemetryConditionService {
   private readonly logger = new Logger(TelemetryConditionService.name)
   private readonly profile: AlertProfile = EXPERIMENTAL_ALERT_PROFILE
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeGateway,
+    private readonly audience: TelemetryAudienceService,
+  ) {}
 
   /**
    * Avalia as condições de VALOR de uma sessão a partir de um evento ao vivo.
@@ -115,7 +137,12 @@ export class TelemetryConditionService {
    * servidor, e é contra ele que os carimbos são gravados.
    */
   async evaluateSession(sessionId: string, triggerAt: Date, now: Date): Promise<EvaluateOutcome> {
-    return this.prisma.$transaction((tx) => this.evaluateLocked(tx, sessionId, triggerAt, now))
+    // As mudanças são juntadas dentro da transação e anunciadas só depois do
+    // commit: se ela falhar, nada foi gravado e nada é anunciado.
+    const changes: ConditionChange[] = []
+    const outcome = await this.prisma.$transaction((tx) => this.evaluateLocked(tx, sessionId, triggerAt, now, changes))
+    await this.announce(changes)
+    return outcome
   }
 
   private async evaluateLocked(
@@ -123,6 +150,7 @@ export class TelemetryConditionService {
     sessionId: string,
     triggerAt: Date,
     now: Date,
+    changes: ConditionChange[],
   ): Promise<EvaluateOutcome> {
     const outcome: EvaluateOutcome = { opened: [], recovered: [], alerts: 0 }
 
@@ -318,6 +346,7 @@ export class TelemetryConditionService {
       })
       outcome.recovered.push(decision.kind)
       recoveredIds.add(row.id)
+      changes.push(changeOf(session.workerId, row.id, decision.kind, 'RECOVERED', now))
     }
 
     // lastSeenAt é a última vez que uma AVALIAÇÃO COBRIU este funcionário com a
@@ -357,6 +386,7 @@ export class TelemetryConditionService {
       if (createdId === null) continue
 
       outcome.opened.push(decision.kind)
+      changes.push(changeOf(session.workerId, createdId, decision.kind, 'OPENED', now))
       if (await this.openAlert(tx, createdId, session.workerId, session.origin, decision.kind)) outcome.alerts += 1
     }
 
@@ -442,9 +472,13 @@ export class TelemetryConditionService {
         // todo mundo a cada 30 s, e uma sessão que estoure não pode deixar o
         // resto do turno sem perda de sinal registrada. É o mesmo desenho da
         // varredura do ciclo de vida, pelo mesmo motivo.
-        const one = await this.prisma.$transaction((tx) => this.sweepLocked(tx, sessionId, now))
+        const changes: ConditionChange[] = []
+        const one = await this.prisma.$transaction((tx) => this.sweepLocked(tx, sessionId, now, changes))
         outcome.signalLost += one.signalLost
         outcome.recovered += one.recovered
+        // Depois do commit desta candidata, e não ao fim da rodada: quem
+        // recuperou ou perdeu sinal aparece no painel sem esperar o resto.
+        await this.announce(changes)
       } catch (error) {
         // Sem valor de saúde na mensagem, como no ciclo de vida: log é lugar
         // onde dado sensível vaza sem ninguém notar. Só a sessão, que é o que
@@ -459,6 +493,7 @@ export class TelemetryConditionService {
     tx: Prisma.TransactionClient,
     sessionId: string,
     now: Date,
+    changes: ConditionChange[],
   ): Promise<{ signalLost: number; recovered: number }> {
     const result = { signalLost: 0, recovered: 0 }
 
@@ -522,6 +557,7 @@ export class TelemetryConditionService {
         data: { status: 'RECOVERED', recoveredAt: now, recoveryReason: 'SIGNAL_LOST', lastSeenAt: now },
       })
       result.recovered += 1
+      changes.push(changeOf(session.workerId, row.id, row.kind, 'RECOVERED', now))
     }
 
     // Passado o teto do turno, ninguém está esperando dado: relógio guardado no
@@ -546,8 +582,33 @@ export class TelemetryConditionService {
       value: this.profile.signalLost.silenceMs,
       observedValue: observedSilenceMs,
     })
-    if (created !== null) result.signalLost += 1
+    if (created !== null) {
+      result.signalLost += 1
+      changes.push(changeOf(session.workerId, created, 'DEVICE_SIGNAL_LOST', 'OPENED', now))
+    }
     return result
+  }
+
+  /**
+   * Anuncia ao funcionário e aos administradores da empresa dele. Nunca
+   * levanta: a condição já está gravada, e o painel reconcilia pelo REST quando
+   * o socket falha.
+   */
+  private async announce(changes: ConditionChange[]): Promise<void> {
+    if (changes.length === 0) return
+    const recipientsByWorker = new Map<string, string[]>()
+    for (const change of changes) {
+      try {
+        let recipients = recipientsByWorker.get(change.workerId)
+        if (recipients === undefined) {
+          recipients = await this.audience.recipientsFor(change.workerId)
+          recipientsByWorker.set(change.workerId, recipients)
+        }
+        this.realtime.emitToUsers(recipients, CONDITION_CHANGED_EVENT, change)
+      } catch (error) {
+        this.logger.warn(`Falha ao anunciar condição ${change.conditionId}: ${(error as Error).message}`)
+      }
+    }
   }
 
   /**
@@ -674,4 +735,14 @@ export class TelemetryConditionService {
     await tx.operationalAlert.create({ data: { conditionId, workerId, origin, status: 'OPEN' } })
     return true
   }
+}
+
+function changeOf(
+  workerId: string,
+  conditionId: string,
+  kind: TelemetryConditionKind,
+  change: ConditionChange['change'],
+  now: Date,
+): ConditionChange {
+  return { workerId, conditionId, kind, change, at: now.toISOString() }
 }
