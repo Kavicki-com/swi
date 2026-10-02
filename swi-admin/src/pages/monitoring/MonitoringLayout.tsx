@@ -6,7 +6,7 @@
 //
 // The Outlet slot sits between the KPI row and the title so child routes
 // can inject a unique row (e.g. good-conditions adds 4 DonutCharts).
-import { Fragment, Suspense, useEffect, useState } from 'react'
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { RouteFallback } from '@/app/RouteFallback'
@@ -24,19 +24,29 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import {
+  buildKpis,
+  buildUserAlerts,
   monitoringApi,
-  type MonitoringKpi,
   type MonitoringAlertDetail,
+  type MonitoringDirectory,
+  type MonitoringKpi,
+  type MonitoringTier,
   type MonitoringUserAlert,
 } from '@/services/monitoring'
-import type { SimulatedTier } from '@/services/vitals/simulatedVitals'
+import { telemetryApi, type AlertQueueItem } from '@/services/api/telemetry'
+import { notificationsApi } from '@/services/api/notifications'
+import { subscribeTelemetryEvents } from '@/services/telemetry/telemetrySocket'
+import { useAdminTelemetry } from '@/hooks/useAdminTelemetry'
 import { chatPathTo } from '@/services/chat/chatReducers'
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
-import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { formatAge } from '@/lib/formatAge'
 import { formatBadgeCount } from '@/app/nav'
+import type { MonitoringOutletContext } from './monitoringContext'
+
+/** Espera depois do último aviso de condição antes de reler a fila. */
+export const QUEUE_REFETCH_DEBOUNCE_MS = 1_000
 
 // --- Shared row helpers ---
 
@@ -74,13 +84,27 @@ function VerticalDivider() {
   return <View style={{ width: 2, height: 56, backgroundColor: theme.content.lightGrey }} />
 }
 
-function AlertRow({ alert }: { alert: MonitoringAlertDetail }) {
+function AlertRow({
+  alert,
+  pending,
+  onAcknowledge,
+  onResolve,
+}: {
+  alert: MonitoringAlertDetail
+  pending: boolean
+  onAcknowledge: (alertId: string) => void
+  onResolve: (alertId: string) => void
+}) {
   const theme = useTheme()
+  const triage = alert.triage
   // Per the spec: all alert row icons render in content.dark (white) regardless
-  // of tone — tone-based colouring (error red / warning orange) didn't match
+  // of tone. Tone-based colouring (error red / warning orange) didn't match
   // the design.
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m, width: '100%' }}>
+    <View
+      testID={`alert-row-${alert.id}`}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m, width: '100%' }}
+    >
       <Icon name={alert.icon} size={28} color={theme.content.dark} />
       <View style={{ flex: 1, gap: 5 }}>
         <Text
@@ -93,7 +117,43 @@ function AlertRow({ alert }: { alert: MonitoringAlertDetail }) {
         <Text variant="body.m" color={theme.content.dark}>
           {alert.description}
         </Text>
+        {(alert.notes ?? []).map((note) => (
+          <Text key={note} variant="body.s" color={theme.content.medium}>
+            {note}
+          </Text>
+        ))}
+        {triage?.triageLine ? (
+          <Text variant="body.s" color={theme.content.medium}>
+            {triage.triageLine}
+          </Text>
+        ) : null}
       </View>
+      {/* Triagem: a tela só muda com a resposta do servidor, então dois admins
+          olhando a mesma fila nunca veem um estado que não existe. */}
+      {triage && (triage.canAcknowledge || triage.canResolve) ? (
+        <View style={{ flexDirection: 'row', gap: theme.gap.s }}>
+          {triage.canAcknowledge ? (
+            <Button
+              label="Reconhecer"
+              variant="outline"
+              labelColor={theme.content.primary}
+              borderColor={theme.content.primary}
+              accessibilityLabel={`Reconhecer alerta: ${alert.title}`}
+              disabled={pending}
+              onPress={() => onAcknowledge(triage.alertId)}
+            />
+          ) : null}
+          {triage.canResolve ? (
+            <Button
+              label="Resolver"
+              variant="contained"
+              accessibilityLabel={`Resolver alerta: ${alert.title}`}
+              disabled={pending}
+              onPress={() => onResolve(triage.alertId)}
+            />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -102,22 +162,26 @@ function AlertUserCard({
   user,
   expanded,
   onToggle,
-  onDelete,
   onChat,
   onLocation,
   onViewExams,
-  onCall,
   onPause,
+  pausing,
+  pendingAlerts,
+  onAcknowledge,
+  onResolve,
 }: {
   user: MonitoringUserAlert
   expanded: boolean
   onToggle: () => void
-  onDelete: () => void
   onChat: () => void
   onLocation: () => void
   onViewExams: () => void
-  onCall: () => void
   onPause: () => void
+  pausing: boolean
+  pendingAlerts: ReadonlySet<string>
+  onAcknowledge: (alertId: string) => void
+  onResolve: (alertId: string) => void
 }) {
   const theme = useTheme()
   const hasAlerts = user.alerts.length > 0
@@ -170,8 +234,9 @@ function AlertUserCard({
           accessibilityLabel={`Ativar/desativar monitoramento de ${user.name}`}
         />
       </View>
+      {/* Sem "remover do monitoramento": não há ação no backend que faça
+          isso, e um botão que só mostra um aviso fingiria ter feito. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-        <ActionIcon icon="delete_icon" label={`Remover ${user.name}`} onPress={onDelete} />
         <ActionIcon icon="chat_bubble" label={`Chat com ${user.name}`} onPress={onChat} />
         <ActionIcon icon="location_on" label={`Localização de ${user.name}`} onPress={onLocation} />
       </View>
@@ -218,9 +283,17 @@ function AlertUserCard({
           >
             <View style={{ flex: 1, gap: 18 }}>
               {user.alerts.map((a) => (
-                <AlertRow key={a.id} alert={a} />
+                <AlertRow
+                  key={a.id}
+                  alert={a}
+                  pending={pendingAlerts.has(a.id)}
+                  onAcknowledge={onAcknowledge}
+                  onResolve={onResolve}
+                />
               ))}
             </View>
+            {/* Sem "ligar para o funcionário": o cadastro do painel não traz
+                telefone por funcionário, e o botão só mostrava um aviso. */}
             <View style={{ width: 220, gap: theme.gap.sm }}>
               <Button
                 label="Histórico de exames clínicos"
@@ -232,20 +305,12 @@ function AlertUserCard({
                 onPress={onViewExams}
               />
               <Button
-                label="Ligar para o funcionário"
-                variant="outline"
-                labelColor={theme.content.primary}
-                borderColor={theme.content.primary}
-                fullWidth
-                accessibilityLabel="Ligar para o funcionário"
-                onPress={onCall}
-              />
-              <Button
-                label="Enviar alerta de pausa"
+                label={pausing ? 'Enviando…' : 'Enviar alerta de pausa'}
                 variant="contained"
                 backgroundColor={theme.surface.accent}
                 fullWidth
                 accessibilityLabel="Enviar alerta de pausa"
+                disabled={pausing}
                 onPress={onPause}
               />
             </View>
@@ -378,18 +443,24 @@ function activeTabFromPath(pathname: string): string {
 // Que tier cada aba mostra. A régua se anuncia "Filtro de status" e o badge
 // vermelho conta os em fadiga, então listar a população inteira nas 3 rotas
 // faria o número e a lista se contradizerem na mesma tela.
-const TIER_BY_TAB: Record<string, SimulatedTier> = {
+const TIER_BY_TAB: Record<string, MonitoringTier> = {
   excelentes: 'excelente',
   desgastados: 'desgastado',
   alertas: 'alerta-fadiga',
 }
 
-// Fallback pro caso do tier não vir preenchido (o seed mock não simula vitais):
-// o tom do alerta é consequência direta do tier, então dá pra recuperá-lo.
-function tierOf(u: MonitoringUserAlert): SimulatedTier {
+// Fallback pro caso do tier não vir preenchido (o seed mock não traz
+// telemetria): o tom do alerta é consequência direta do tier.
+function tierOf(u: MonitoringUserAlert): MonitoringTier {
   if (u.tier) return u.tier
   if (u.alerts.some((a) => a.tone === 'error')) return 'alerta-fadiga'
   return u.alerts.length > 0 ? 'desgastado' : 'excelente'
+}
+
+const EMPTY_BY_TAB: Record<string, string> = {
+  alertas: 'Nenhum alerta aberto',
+  desgastados: 'Ninguém com desgaste agora',
+  excelentes: 'Ninguém com leitura atual e sem alerta',
 }
 
 export function MonitoringLayout() {
@@ -409,32 +480,89 @@ export function MonitoringLayout() {
   const isGoodConditions = location.pathname.startsWith('/monitoring/good-conditions')
   const useWideSideBySide = isWide && isGoodConditions
   const { show: showToast } = useDemoToast()
-  const [kpis, setKpis] = useState<ReadonlyArray<MonitoringKpi>>([])
-  const [users, setUsers] = useState<ReadonlyArray<MonitoringUserAlert>>([])
+  // Lista e resumo da empresa, relidos quando o socket avisa e, por
+  // segurança, em intervalo fixo.
+  const telemetry = useAdminTelemetry()
+  const [directory, setDirectory] = useState<MonitoringDirectory | null>(null)
+  const [queue, setQueue] = useState<ReadonlyArray<AlertQueueItem> | null>(null)
+  const [queueFailed, setQueueFailed] = useState(false)
+  const [pendingAlerts, setPendingAlerts] = useState<ReadonlySet<string>>(new Set())
+  const [pausingId, setPausingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  // "Ver Todos" derruba o filtro de tier sem sair da rota — mesmo padrão das
-  // atividades do dashboard (Dashboard.tsx:640). Volta a false a cada troca de
-  // aba, senão a aba seguinte abriria já sem filtro.
+  // "Ver Todos" derruba o filtro de tier sem sair da rota, mesmo padrão das
+  // atividades do dashboard. Volta a false a cada troca de aba, senão a aba
+  // seguinte abriria já sem filtro.
   const [showAllTiers, setShowAllTiers] = useState(false)
 
-  // Quantos estão no tier de fadiga AGORA. Alimenta o badge das abas (que era
-  // "+3" fixo) usando o mesmo formatador do menu lateral.
-  const fatigueCount = users.filter((u) => tierOf(u) === 'alerta-fadiga').length
-  const fatigueBadge = formatBadgeCount(fatigueCount)
-
-  // Fetch once for the layout's lifetime. Tab switches don't re-fire these.
+  // Cadastro da org: muda pouco, então é lido uma vez por montagem.
   useEffect(() => {
     let cancelled = false
-    Promise.all([monitoringApi.kpis(), monitoringApi.alertUsers()]).then(([k, u]) => {
-      if (cancelled) return
-      if (k.data) setKpis(k.data)
-      if (u.data) setUsers(u.data)
+    monitoringApi.directory().then(({ data }) => {
+      if (!cancelled && data) setDirectory(data)
     })
     return () => {
       cancelled = true
     }
   }, [])
+
+  // Fila de alertas: lida ao montar e de novo quando uma condição abre ou se
+  // recupera. Vários avisos seguidos viram uma releitura só.
+  const loadQueue = useCallback(async () => {
+    const { data, error } = await monitoringApi.queue()
+    if (error || !data) {
+      setQueue(null)
+      setQueueFailed(true)
+      return
+    }
+    setQueue(data)
+    setQueueFailed(false)
+  }, [])
+
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    void loadQueue()
+    const unsubscribe = subscribeTelemetryEvents({
+      onSnapshot: () => {},
+      onCondition: () => {
+        if (debounce.current) clearTimeout(debounce.current)
+        debounce.current = setTimeout(() => {
+          debounce.current = null
+          void loadQueue()
+        }, QUEUE_REFETCH_DEBOUNCE_MS)
+      },
+    })
+    return () => {
+      if (debounce.current) clearTimeout(debounce.current)
+      unsubscribe()
+    }
+  }, [loadQueue])
+
+  const users = useMemo(
+    () =>
+      directory
+        ? buildUserAlerts(directory.employees, telemetry.workers?.workers ?? null, queue ?? [])
+        : [],
+    [directory, telemetry.workers, queue],
+  )
+
+  // Quantos estão no tier de fadiga AGORA. Alimenta o badge das abas usando o
+  // mesmo formatador do menu lateral, e o KPI da mesma tela.
+  const fatigueCount = users.filter((u) => tierOf(u) === 'alerta-fadiga').length
+  const fatigueBadge = formatBadgeCount(fatigueCount)
+
+  const kpis: ReadonlyArray<MonitoringKpi> = buildKpis({
+    admins: directory?.admins ?? 0,
+    workers: directory?.employees.length ?? 0,
+    pendingReports: directory?.pendingReports ?? 0,
+    fatigueCount,
+    summary: telemetry.summary,
+  })
+
+  const outletContext: MonitoringOutletContext = {
+    summary: telemetry.summary,
+    failed: telemetry.failed,
+  }
 
   const tab = activeTabFromPath(location.pathname)
   const tierOfTab = TIER_BY_TAB[tab]
@@ -444,14 +572,57 @@ export function MonitoringLayout() {
   })
 
   // Abre o primeiro card da aba de fadiga (o desenho mostra a tela com o
-  // detalhe visível). Era comparado com 'emp-04', id do roster mock — com ids
-  // reais (UUID) nenhum card abria.
+  // detalhe visível). Depende do id, e não da lista: a lista é recalculada a
+  // cada releitura, e o card aberto não pode fechar sozinho por isso.
+  const firstFatigueId = users.find((u) => tierOf(u) === 'alerta-fadiga')?.id ?? null
   useEffect(() => {
     setShowAllTiers(false)
-    setExpandedId(
-      tab === 'alertas' ? (users.find((u) => tierOf(u) === 'alerta-fadiga')?.id ?? null) : null,
-    )
-  }, [tab, users])
+    setExpandedId(tab === 'alertas' ? firstFatigueId : null)
+  }, [tab, firstFatigueId])
+
+  // A tela só muda com a resposta do servidor: reconhecer ou resolver troca o
+  // alerta pelo estado que o backend devolveu, com quem triou e quando.
+  const triage = async (alertId: string, action: 'acknowledge' | 'resolve') => {
+    setPendingAlerts((prev) => new Set(prev).add(alertId))
+    const { data, error } =
+      action === 'acknowledge'
+        ? await telemetryApi.acknowledgeAlert(alertId)
+        : await telemetryApi.resolveAlert(alertId)
+    setPendingAlerts((prev) => {
+      const next = new Set(prev)
+      next.delete(alertId)
+      return next
+    })
+    if (error || !data) {
+      showToast(
+        action === 'acknowledge' ? 'Não foi possível reconhecer' : 'Não foi possível resolver',
+        error?.message,
+      )
+      return
+    }
+    setQueue((prev) => (prev ?? []).map((a) => (a.id === alertId ? data : a)))
+  }
+
+  // Mesmo pedido de pausa do detalhe do funcionário: o backend notifica o app.
+  const requestPause = async (target: MonitoringUserAlert) => {
+    setPausingId(target.id)
+    const { error } = await notificationsApi.requestPause(target.id)
+    setPausingId(null)
+    if (error) {
+      showToast('Falha ao solicitar pausa', error.message)
+      return
+    }
+    showToast('Pausa solicitada', `${target.name} foi notificado para pausar a atividade`)
+  }
+
+  const loading = telemetry.loading || directory === null
+  const statusLine = loading
+    ? 'Carregando…'
+    : telemetry.failed
+      ? 'Leitura indisponível no momento'
+      : queueFailed
+        ? 'Não foi possível carregar os alertas'
+        : null
 
   return (
     <View
@@ -482,7 +653,7 @@ export function MonitoringLayout() {
                 substitua os KPIs, o título e a lista pelo fallback enquanto o
                 chunk da tab carrega. Vale para os três branches de layout. */}
             <Suspense fallback={<RouteFallback />}>
-              <Outlet />
+              <Outlet context={outletContext} />
             </Suspense>
           </View>
         </View>
@@ -506,7 +677,7 @@ export function MonitoringLayout() {
             ))}
           </div>
           <Suspense fallback={<RouteFallback />}>
-            <Outlet />
+            <Outlet context={outletContext} />
           </Suspense>
         </>
       ) : (
@@ -527,7 +698,7 @@ export function MonitoringLayout() {
 
           {/* Child-route unique content (e.g. good-conditions stats row). */}
           <Suspense fallback={<RouteFallback />}>
-            <Outlet />
+            <Outlet context={outletContext} />
           </Suspense>
         </>
       )}
@@ -545,8 +716,11 @@ export function MonitoringLayout() {
           <Title variant="title.s" color={theme.content.dark}>
             Alertas de Desgaste
           </Title>
-          {/* Vitais e alertas derivam de dados SIMULADOS sobre funcionários reais. */}
-          <SimulatedDataBadge />
+          {statusLine ? (
+            <Text testID="monitoring-status" variant="body.s" color={theme.content.medium}>
+              {statusLine}
+            </Text>
+          ) : null}
         </View>
 
         <View
@@ -622,19 +796,27 @@ export function MonitoringLayout() {
               user={u}
               expanded={expandedId === u.id}
               onToggle={() => setExpandedId((prev) => (prev === u.id ? null : u.id))}
-              onDelete={() =>
-                showToast('Funcionário removido', `${u.name} foi removido do monitoramento`)
-              }
               // /chat sem destino abre sempre a conversa mais recente.
               onChat={() => navigate(chatPathTo(myId, u.id))}
               onLocation={() => navigate('/maps/general')}
               onViewExams={() => navigate(`/employees/${u.id}`)}
-              onCall={() => showToast('Chamada iniciada', `Ligando para ${u.name}`)}
-              onPause={() =>
-                showToast('Alerta de pausa enviado', `${u.name} foi notificado para parar`)
-              }
+              onPause={() => void requestPause(u)}
+              pausing={pausingId === u.id}
+              pendingAlerts={pendingAlerts}
+              onAcknowledge={(id) => void triage(id, 'acknowledge')}
+              onResolve={(id) => void triage(id, 'resolve')}
             />
           ))}
+          {/* Lista vazia diz por quê, em vez de deixar a seção muda. */}
+          {!loading && filteredUsers.length === 0 ? (
+            <Text testID="monitoring-empty" variant="body.m" color={theme.content.medium}>
+              {search.trim()
+                ? 'Nenhum funcionário com esse nome'
+                : showAllTiers
+                  ? 'Nenhum funcionário cadastrado'
+                  : (EMPTY_BY_TAB[tab] ?? 'Nenhum alerta aberto')}
+            </Text>
+          ) : null}
         </View>
       </View>
     </View>
