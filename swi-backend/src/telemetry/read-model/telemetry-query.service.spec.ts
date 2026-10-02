@@ -807,7 +807,7 @@ describe('TelemetryQueryService.adminWorkers', () => {
     emptyReads(prisma)
     prisma.user.findMany.mockResolvedValue([])
 
-    const result = await service(prisma).adminWorkers(ADMIN as any, NOW)
+    const result = await service(prisma).adminWorkers(ADMIN, NOW)
 
     expect(result).toEqual({ observedAt: NOW.toISOString(), workers: [] })
     expect(prisma.user.findMany).toHaveBeenCalledWith(
@@ -822,7 +822,7 @@ describe('TelemetryQueryService.adminWorkers', () => {
     emptyReads(prisma)
     prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana', null)])
 
-    const { workers } = await service(prisma).adminWorkers(ADMIN as any, NOW)
+    const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
 
     expect(workers).toHaveLength(1)
     expect(workers[0].worker).toEqual({ id: 'worker-1', name: 'Ana', sector: null })
@@ -837,7 +837,7 @@ describe('TelemetryQueryService.adminWorkers', () => {
     prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana')])
     prisma.telemetryDevice.findMany.mockResolvedValue([{ workerId: 'worker-1', lastSeenAt: secondsAgo(30) }])
 
-    const { workers } = await service(prisma).adminWorkers(ADMIN as any, NOW)
+    const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
 
     expect(prisma.telemetryDevice.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { revokedAt: null, workerId: { in: ['worker-1'] } } }),
@@ -865,7 +865,7 @@ describe('TelemetryQueryService.adminWorkers', () => {
       conditionRow('worker-1', { origin: 'DEMO' }),
     ])
 
-    const { workers } = await service(prisma).adminWorkers(ADMIN as any, NOW)
+    const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
     const ana = workers.find((w) => w.worker.id === 'worker-1')!
     const bruno = workers.find((w) => w.worker.id === 'worker-2')!
 
@@ -885,7 +885,7 @@ describe('TelemetryQueryService.adminWorkers', () => {
     ])
     prisma.telemetryCondition.findMany.mockResolvedValue([conditionRow('worker-2')])
 
-    const { workers } = await service(prisma).adminWorkers(ADMIN as any, NOW)
+    const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
 
     expect(workers.map((w) => w.worker.name)).toEqual(['Bruno', 'Ana'])
   })
@@ -896,7 +896,7 @@ describe('TelemetryQueryService.adminWorkers', () => {
     prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana'), person('worker-2', 'Bruno')])
     prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow({ workerId: 'worker-1' })])
 
-    await service(prisma).adminWorkers(ADMIN as any, NOW)
+    await service(prisma).adminWorkers(ADMIN, NOW)
 
     expect(prisma.telemetrySample.findMany).toHaveBeenCalledTimes(1)
     expect(prisma.telemetrySample.findMany).toHaveBeenCalledWith(

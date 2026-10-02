@@ -5,5 +5,5 @@ import { SERIES_PERIODS, type SeriesPeriod } from '../telemetry-series'
 // obrigatório: um padrão silencioso trocaria o mês pelo dia sem ninguém
 // perceber, e o gráfico sempre sabe qual pediu.
 export class SeriesQueryDto {
-  @IsIn(SERIES_PERIODS as unknown as string[]) period!: SeriesPeriod
+  @IsIn(SERIES_PERIODS) period!: SeriesPeriod
 }

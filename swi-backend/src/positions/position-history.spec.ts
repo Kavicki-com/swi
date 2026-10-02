@@ -92,7 +92,7 @@ describe('aggregateHeat: peso = minutos distintos de funcionário na célula', (
       { workerId: 'w1', ...p, recordedAt: at(59_000) },
     ])
     expect(cells).toHaveLength(1)
-    expect(cells[0]!.weight).toBe(1)
+    expect(cells[0].weight).toBe(1)
   })
 
   it('minutos diferentes e funcionários diferentes somam', () => {
@@ -101,7 +101,7 @@ describe('aggregateHeat: peso = minutos distintos de funcionário na célula', (
       { workerId: 'w1', ...p, recordedAt: at(60_000) },
       { workerId: 'w2', ...p, recordedAt: at(0) },
     ])
-    expect(cells[0]!.weight).toBe(3)
+    expect(cells[0].weight).toBe(3)
   })
 
   it('pontos em células diferentes viram células diferentes, mais quentes primeiro', () => {
@@ -113,7 +113,7 @@ describe('aggregateHeat: peso = minutos distintos de funcionário na célula', (
     ])
     expect(cells.map((c) => c.weight)).toEqual([2, 1])
     const hot = cellOf(p)
-    expect(cells[0]!.lat).toBeCloseTo(cellCenter(hot.row, hot.col).lat, 10)
+    expect(cells[0].lat).toBeCloseTo(cellCenter(hot.row, hot.col).lat, 10)
   })
 
   it('sem amostra não há célula', () => {
