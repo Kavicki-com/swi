@@ -8,6 +8,15 @@ import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { dashboardApi, type DashboardSummary } from '@/services/dashboard'
 import { Dashboard } from './Dashboard'
 import { settled } from '@/test-utils/renderPage'
+import type { AdminTelemetrySummary, AdminWorkersTelemetry } from '@/services/api/telemetry'
+import {
+  adminSummary,
+  adminWorker,
+  condition,
+  neverReported,
+  noMetric,
+  reporting,
+} from '@/test-utils/telemetryFixtures'
 
 // Posições live têm suite própria (useLivePositions.test); aqui devolvemos os
 // markers do fixture direto pra não abrir fetch/socket reais no jsdom.
@@ -15,21 +24,56 @@ vi.mock('@/hooks/useLivePositions', () => ({
   useLivePositions: () => FAKE_SUMMARY.mapMarkers,
 }))
 
-const FAKE_SUMMARY: DashboardSummary = {
-  employees: { total: 12, byStatus: { good: 8, alert: 2, low: 1, offline: 1 } },
-  alerts: {
-    openOrAcknowledged: 2,
-    bySeverity: { info: 0, warning: 1, critical: 1 },
+// A saúde da frota vem do hook de telemetria, que tem suíte própria (socket e
+// releitura); aqui o estado dele é controlado por teste.
+const telemetry = vi.hoisted(() => ({
+  state: {
+    workers: null as AdminWorkersTelemetry | null,
+    summary: null as AdminTelemetrySummary | null,
+    loading: false,
+    failed: false,
   },
+}))
+vi.mock('@/hooks/useAdminTelemetry', () => ({
+  useAdminTelemetry: () => ({ ...telemetry.state, refresh: () => {} }),
+}))
+
+const urgent = (id: string, name: string, sector: string) =>
+  adminWorker(id, name, {
+    worker: { id, name, sector },
+    telemetry: { ...reporting({}, 'REAL', id), conditions: [condition('URGENT')] },
+  })
+
+const FLEET: AdminWorkersTelemetry = {
+  observedAt: '2026-10-01T15:00:00.000Z',
+  workers: [
+    urgent('w1', 'Ezequiel Almeida', 'Setor Leste'),
+    urgent('w2', 'Mariana Costa', 'Setor Leste'),
+    urgent('w3', 'Rafael Souza', 'Setor Norte'),
+    adminWorker('w4', 'Estável Silva', {
+      telemetry: reporting({ fatigueEtaMin: noMetric('min') }, 'REAL', 'w4'),
+    }),
+  ],
+}
+
+const FLEET_SUMMARY = adminSummary({
+  vitalSigns: {
+    value: 1,
+    unit: 'workers',
+    coverage: { evaluated: 4, total: 4 },
+    measuredAt: null,
+    caption: 'Dentro dos limites do piloto',
+  },
+  urgentAlerts: { workers: 3, total: 4, caption: 'Funcionários com condição urgente ativa' },
+})
+
+const FAKE_SUMMARY: DashboardSummary = {
+  employees: { total: 12 },
   kpis: {
     admins: 3,
     totalEmployees: 1205,
     newReports: 4,
     activeCameras: 564,
-    vitalSigns: 512,
-    wearRate: 512,
-    urgentAlerts: 2,
-    commonAlerts: 0,
   },
   mapMarkers: [{ id: 'e1', name: 'A', lat: -23.55, lng: -46.63, status: 'good', avatarUri: 'x' }],
   activities: [
@@ -66,39 +110,7 @@ const FAKE_SUMMARY: DashboardSummary = {
       participants: [],
     },
   ],
-  // All on the same tier so the existing assertions (which render the
-  // default tab without interacting with the filter) still see all three.
-  // Tab-filtering behavior is covered separately below ("switches the
-  // activity filter when a chip is pressed").
-  wearAlerts: [
-    {
-      id: 'w1',
-      employeeName: 'Ezequiel Almeida',
-      sector: 'Setor Leste',
-      progress: 88,
-      bpm: 138,
-      pressure: '16/10',
-      tier: 'alerta-fadiga',
-    },
-    {
-      id: 'w2',
-      employeeName: 'Mariana Costa',
-      sector: 'Setor Leste',
-      progress: 85,
-      bpm: 134,
-      pressure: '15/10',
-      tier: 'alerta-fadiga',
-    },
-    {
-      id: 'w3',
-      employeeName: 'Rafael Souza',
-      sector: 'Setor Norte',
-      progress: 91,
-      bpm: 142,
-      pressure: '17/11',
-      tier: 'alerta-fadiga',
-    },
-  ],
+  employeeAvatars: { w1: 'https://img/w1.png' },
   weather: [
     { at: '2026-05-08T08:00:00.000Z', condition: 'rain', tempC: 22, label: 'CHUVAS\nMODERADAS' },
     { at: '2026-05-08T10:00:00.000Z', condition: 'sun', tempC: 26, label: 'SOL\nINTENSO' },
@@ -121,6 +133,7 @@ const FAKE_SUMMARY: DashboardSummary = {
 }
 
 beforeEach(() => {
+  telemetry.state = { workers: FLEET, summary: FLEET_SUMMARY, loading: false, failed: false }
   // Seed an authenticated session (getSession real exige token + sessão)
   window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
   window.localStorage.setItem(
@@ -198,10 +211,20 @@ describe('Dashboard', () => {
     // Mocked numbers surface in the rendered output.
     expect(screen.getByText('1205')).toBeInTheDocument()
     expect(screen.getByText('564')).toBeInTheDocument()
-    // 512 is shared by Sinais vitais and Taxa de desgaste donuts.
-    expect(screen.getAllByText('512').length).toBeGreaterThanOrEqual(2)
-    // Caption from the Alertas urgentes donut.
-    expect(screen.getByText(/Necessária mobilização/i)).toBeInTheDocument()
+    // Donuts de saúde: números e legendas da telemetria, não do simulador.
+    const vital = screen.getByTestId('kpi-vital-signs')
+    expect(within(vital).getByText('1')).toBeInTheDocument()
+    expect(within(vital).getByText('Dentro dos limites do piloto')).toBeInTheDocument()
+    const urgentDonut = screen.getByTestId('kpi-urgent-alerts')
+    expect(within(urgentDonut).getByText('3')).toBeInTheDocument()
+    expect(
+      within(urgentDonut).getByText('Funcionários com condição urgente ativa'),
+    ).toBeInTheDocument()
+    // Desgaste baixo: só o funcionário sem condição de desgaste nem urgência
+    // conta; os três urgentes têm desgaste atual sem WEAR_HIGH, então entram.
+    const wear = screen.getByTestId('kpi-wear-rate')
+    expect(within(wear).getByText('4')).toBeInTheDocument()
+    expect(within(wear).getByText('Desgaste baixo')).toBeInTheDocument()
     // DS 0.1.118: pinos dos 3 donuts com label pt-BR (fim do 'Open location').
     expect(screen.getAllByLabelText('Abrir localização no mapa')).toHaveLength(3)
     expect(screen.queryByLabelText('Open location')).not.toBeInTheDocument()
@@ -254,6 +277,8 @@ describe('Dashboard', () => {
     expect(screen.getByTestId('wear-alert-w1')).toBeInTheDocument()
     expect(screen.getByTestId('wear-alert-w2')).toBeInTheDocument()
     expect(screen.getByTestId('wear-alert-w3')).toBeInTheDocument()
+    // A aba padrão é Alertas de Fadiga: o estável fica na sua própria aba.
+    expect(screen.queryByTestId('wear-alert-w4')).not.toBeInTheDocument()
   })
 
   it('filters wear alerts via the SearchInput', async () => {
@@ -428,5 +453,122 @@ describe('Dashboard', () => {
       expect(screen.queryByTestId('kpi-row')).not.toBeInTheDocument()
       expect(screen.queryByTestId('dashboard-top-row-tablet')).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('Dashboard: saúde da frota pela telemetria', () => {
+  const renderReady = async () => {
+    vi.spyOn(dashboardApi, 'summary').mockResolvedValue({ data: FAKE_SUMMARY, error: null })
+    await renderAt()
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-content')).toBeInTheDocument()
+    })
+  }
+
+  it('não mostra mais o selo de dados simulados', async () => {
+    await renderReady()
+    expect(screen.queryByTestId('simulated-data-badge')).not.toBeInTheDocument()
+  })
+
+  it('a aba Excelentes mostra quem tem batimento atual e nenhum alerta', async () => {
+    await renderReady()
+    fireEvent.click(within(screen.getByTestId('wear-alerts-tabs')).getByText('Excelentes'))
+    await waitFor(() => {
+      expect(screen.getByTestId('wear-alert-w4')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('wear-alert-w1')).not.toBeInTheDocument()
+  })
+
+  it('carregando a telemetria, os donuts dizem isso e a lista também', async () => {
+    telemetry.state = { workers: null, summary: null, loading: true, failed: false }
+    await renderReady()
+    // Três legendas de donut e o aviso da lista.
+    expect(screen.getAllByText('Carregando leitura').length).toBe(4)
+    expect(screen.getByTestId('wear-alerts-status')).toHaveTextContent('Carregando leitura')
+  })
+
+  it('falha na telemetria declara a leitura indisponível, sem número', async () => {
+    telemetry.state = { workers: null, summary: null, loading: false, failed: true }
+    await renderReady()
+    expect(screen.getAllByText('Leitura indisponível no momento').length).toBe(4)
+    expect(screen.queryByTestId('wear-alert-w1')).not.toBeInTheDocument()
+  })
+
+  it('empresa sem aparelho pareado tem estado vazio honesto', async () => {
+    telemetry.state = {
+      workers: { observedAt: '2026-10-01T15:00:00.000Z', workers: [] },
+      summary: adminSummary({
+        vitalSigns: {
+          value: null,
+          unit: 'workers',
+          coverage: { evaluated: 0, total: 0 },
+          measuredAt: null,
+          caption: 'Sem dados atuais',
+        },
+        urgentAlerts: { workers: 0, total: 0, caption: 'Sem dados atuais' },
+      }),
+      loading: false,
+      failed: false,
+    }
+    await renderReady()
+    expect(screen.getByTestId('wear-alerts-status')).toHaveTextContent(
+      'Nenhum funcionário com aparelho pareado.',
+    )
+    expect(screen.getAllByText('Sem dados atuais').length).toBe(3)
+  })
+
+  it('leitura de demonstração leva o selo de demonstração no card', async () => {
+    telemetry.state = {
+      ...telemetry.state,
+      workers: {
+        observedAt: '2026-10-01T15:00:00.000Z',
+        workers: [
+          adminWorker('d1', 'Demo Silva', {
+            telemetry: { ...reporting({}, 'DEMO', 'd1'), conditions: [condition('URGENT')] },
+          }),
+        ],
+      },
+    }
+    await renderReady()
+    expect(screen.getByTestId('wear-alert-d1')).toBeInTheDocument()
+    expect(screen.getByTestId('wear-alert-d1-demo')).toHaveTextContent('Dados de demonstração')
+  })
+
+  it('quem não tem leitura atual aparece contado, não escondido', async () => {
+    telemetry.state = {
+      ...telemetry.state,
+      workers: {
+        observedAt: '2026-10-01T15:00:00.000Z',
+        workers: [
+          ...FLEET.workers,
+          adminWorker('s1', 'Sem Leitura', { telemetry: neverReported('s1') }),
+        ],
+      },
+    }
+    await renderReady()
+    expect(screen.getByTestId('wear-alerts-unread')).toHaveTextContent(
+      '1 funcionário sem leitura atual',
+    )
+  })
+
+  it('alerta sem batimento conhecido aparece na lista sem inventar número', async () => {
+    telemetry.state = {
+      ...telemetry.state,
+      workers: {
+        observedAt: '2026-10-01T15:00:00.000Z',
+        workers: [
+          adminWorker('h1', 'Sem Batimento', {
+            telemetry: {
+              ...reporting({ heartRate: noMetric('bpm') }, 'REAL', 'h1'),
+              conditions: [condition('HEALTH')],
+            },
+          }),
+        ],
+      },
+    }
+    await renderReady()
+    expect(screen.getByTestId('wear-alert-h1')).toHaveTextContent(
+      'Sem Batimento: alerta ativo, sem leitura de batimento',
+    )
   })
 })
