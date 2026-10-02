@@ -634,13 +634,16 @@ model TelemetrySample {
   batteryPercent      Float?
   systolicMmHg        Int?
   diastolicMmHg       Int?
-  /// Única fonte guardada em coluna: pressão é a métrica com várias origens
-  /// possíveis, e o painel precisa saber se veio de aparelho ou digitação.
+  /// Fontes guardadas em coluna só para pressão e temperatura: são as métricas
+  /// que chegam de fora do relógio, e o painel precisa saber de onde vieram.
   bloodPressureSource TelemetryMeasurementSource?
   /// Variação em metros, sob o contrato de delta acima.
   distanceDeltaM      Float?
   /// Percentual. O relógio só mede em repouso, então chega poucas vezes por turno.
   oxygenSaturationPct Float?
+  /// Graus Celsius, lidos do app Saúde. Medição pontual, chega raramente.
+  bodyTemperatureC      Float?
+  bodyTemperatureSource TelemetryMeasurementSource?
 
   /// Payload normalizado como recebido, para auditoria.
   payload     Json
@@ -689,6 +692,10 @@ model TelemetrySnapshot {
   /// Distância não tem coluna de propósito: é acumulado do dia, como passos.
   oxygenSaturationPct Float?
   oxygenSaturationAt  DateTime?
+  /// Temperatura corporal, medição pontual como a pressão, com origem e horário.
+  bodyTemperatureC      Float?
+  bodyTemperatureSource TelemetryMeasurementSource?
+  bodyTemperatureAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -57,6 +57,9 @@ const SNAPSHOT_FIELDS = {
   bloodPressureAt: true,
   oxygenSaturationPct: true,
   oxygenSaturationAt: true,
+  bodyTemperatureC: true,
+  bodyTemperatureSource: true,
+  bodyTemperatureAt: true,
 } as const
 
 const ASSESSMENT_FIELDS = {
@@ -114,6 +117,8 @@ export interface SessionHistorySample {
   bloodPressureSource: MeasurementSource | null
   distanceDeltaM: number | null
   oxygenSaturationPct: number | null
+  bodyTemperatureC: number | null
+  bodyTemperatureSource: MeasurementSource | null
   journeyId: string | null
   taskId: string | null
 }
@@ -147,6 +152,9 @@ interface SnapshotRow {
   bloodPressureAt: Date | null
   oxygenSaturationPct: number | null
   oxygenSaturationAt: Date | null
+  bodyTemperatureC: number | null
+  bodyTemperatureSource: MeasurementSource | null
+  bodyTemperatureAt: Date | null
 }
 
 interface AssessmentRow {
@@ -222,6 +230,9 @@ function toProjectionSnapshot(row: SnapshotRow): ProjectionSnapshot {
     bloodPressureAt: iso(row.bloodPressureAt),
     oxygenSaturationPct: row.oxygenSaturationPct,
     oxygenSaturationAt: iso(row.oxygenSaturationAt),
+    bodyTemperatureC: row.bodyTemperatureC,
+    bodyTemperatureSource: row.bodyTemperatureSource,
+    bodyTemperatureAt: iso(row.bodyTemperatureAt),
   }
 }
 
@@ -713,6 +724,8 @@ export class TelemetryQueryService {
         bloodPressureSource: true,
         distanceDeltaM: true,
         oxygenSaturationPct: true,
+        bodyTemperatureC: true,
+        bodyTemperatureSource: true,
         journeyId: true,
         taskId: true,
       },

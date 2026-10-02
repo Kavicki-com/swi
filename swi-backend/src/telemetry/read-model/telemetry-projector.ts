@@ -79,6 +79,9 @@ export interface ProjectionSnapshot {
   bloodPressureAt: string | null
   oxygenSaturationPct: number | null
   oxygenSaturationAt: string | null
+  bodyTemperatureC: number | null
+  bodyTemperatureSource: MeasurementSource | null
+  bodyTemperatureAt: string | null
 }
 
 /** Avaliação já calculada. Quem a escreve é o serviço de avaliação; aqui só se lê. */
@@ -170,6 +173,8 @@ export interface WorkerMetrics {
   distance: MetricState<number>
   /** Medição pontual, com a régua da pressão: "última medição às", nunca "atual". */
   oxygenSaturation: MetricState<number>
+  /** Graus Celsius vindos do app Saúde, com a régua da pressão. Sem alerta. */
+  bodyTemperature: MetricState<number>
   /** Minutos até o alerta de desgaste, mantida a intensidade recente. */
   fatigueEtaMin: MetricState<number>
 }
@@ -437,6 +442,7 @@ interface SnapshotStates {
   battery: MetricState<number>
   bloodPressure: MetricState<BloodPressure>
   oxygenSaturation: MetricState<number>
+  bodyTemperature: MetricState<number>
   /** A amostra crua da pressão, para decidir a recência sem reabrir o snapshot. */
   pressureSample: Sample<BloodPressure> | null
 }
@@ -448,6 +454,7 @@ function snapshotStates(snapshot: ProjectionSnapshot | null, now: Date): Snapsho
       battery: unavailable('battery'),
       bloodPressure: unavailable('bloodPressure'),
       oxygenSaturation: unavailable('oxygenSaturation'),
+      bodyTemperature: unavailable('bodyTemperature'),
       pressureSample: null,
     }
   }
@@ -480,6 +487,12 @@ function snapshotStates(snapshot: ProjectionSnapshot | null, now: Date): Snapsho
     oxygenSaturation: metricState(
       'oxygenSaturation',
       sampleOf(snapshot.oxygenSaturationPct, snapshot.oxygenSaturationAt, 'APPLE_WATCH'),
+      now,
+    ),
+    // Como a pressão, a origem vem gravada: sem ela a leitura não se sustenta.
+    bodyTemperature: metricState(
+      'bodyTemperature',
+      sampleOf(snapshot.bodyTemperatureC, snapshot.bodyTemperatureAt, snapshot.bodyTemperatureSource),
       now,
     ),
     pressureSample,
@@ -575,6 +588,7 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     wear: derived.wear,
     distance: metricState('distance', rounded(dayTotals.distance), now),
     oxygenSaturation: fromSnapshot.oxygenSaturation,
+    bodyTemperature: fromSnapshot.bodyTemperature,
     fatigueEtaMin: derived.fatigueEtaMin,
   }
 
@@ -725,6 +739,8 @@ export interface AdminTelemetrySummary {
   wearRate: AggregateMetric<number>
   heartRateAverage: AggregateMetric<number>
   bloodPressureAverage: AggregateMetric<BloodPressure>
+  /** Média das medições de até 24 h, em °C com uma casa, e cobertura. */
+  bodyTemperatureAverage: AggregateMetric<number>
   movements: AggregateMetric<number>
   /**
    * O único contador de alerta deste resumo. Revisão de pressão e alerta de
@@ -748,6 +764,7 @@ export interface AggregateWorkerInput {
   heartRate: MetricState<number>
   wear: MetricState<number>
   bloodPressure: MetricState<BloodPressure>
+  bodyTemperature: MetricState<number>
   /** Acumulado do dia monitorado. */
   steps: MetricState<number>
   activeConditions: readonly ConditionKind[]
@@ -775,6 +792,7 @@ export function projectAggregateWorker(
     heartRate: fromSnapshot.heartRate,
     wear: assessmentStates(input.assessment, now).wear,
     bloodPressure: fromSnapshot.bloodPressure,
+    bodyTemperature: fromSnapshot.bodyTemperature,
     steps: metricState('steps', input.steps, now),
     activeConditions: input.activeConditions,
   }
@@ -792,6 +810,7 @@ export const PANEL_CAPTIONS = {
   wearRate: 'Estimativa experimental',
   heartRate: 'Média atual e cobertura',
   bloodPressure: 'Média recente em mmHg e cobertura',
+  bodyTemperature: 'Média recente em °C e cobertura',
   // "Passos da jornada" seria falso: monitoramento e Jornada SWI são
   // independentes, e o acumulado é do dia monitorado inteiro.
   movements: 'Passos acumulados no dia monitorado',
@@ -874,6 +893,8 @@ export function projectAdminSummary(
   // Só leitura de até 24 h entra na média do painel; entre 24 e 72 h ela é
   // histórica e vive somente no mobile.
   const pressure = currentValuesOf(workers, (w) => w.bloodPressure)
+  // A mesma régua: só medição de até 24 h entra na média de temperatura.
+  const temperature = currentValuesOf(workers, (w) => w.bodyTemperature)
 
   // Avaliável em sinais vitais é quem tem BPM atual. Quem não tem é "não
   // avaliado", nunca saudável: por isso ele conta no total e não no evaluated.
@@ -931,6 +952,13 @@ export function projectAdminSummary(
       pressure.contributors,
       total,
       PANEL_CAPTIONS.bloodPressure,
+    ),
+    bodyTemperatureAverage: aggregate(
+      average(temperature.values),
+      METRICS.bodyTemperature.unit,
+      temperature.contributors,
+      total,
+      PANEL_CAPTIONS.bodyTemperature,
     ),
     movements: aggregate(
       stepTotals.reduce((sum, v) => sum + v, 0),
