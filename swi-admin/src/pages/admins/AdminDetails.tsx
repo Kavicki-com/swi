@@ -65,10 +65,8 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
     <WorkerDetailsLayout
       worker={{
         ...admin,
-        // Semente da curva de gasto calórico, que ainda é simulada. Sem ela
-        // todo mundo compartilha a mesma série de kcal.
-        seedId: admin.id,
-        // Administrador não pareia aparelho, então não há biometria a mostrar.
+        // Administrador não pareia aparelho, então não há biometria nem série
+        // de gasto calórico a mostrar.
         vitals: vitalsViewFrom(null, { noDevice: true }),
       }}
       position={position ? { lat: position.lat, lng: position.lng } : null}

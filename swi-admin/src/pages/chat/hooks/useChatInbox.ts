@@ -9,7 +9,8 @@ import type { ChatContact, ChatMessage } from '@/services/chats'
 import { useChat } from '@/services/chat/ChatProvider'
 import { conversationToContact, directoryToContact } from '@/services/chat/chatMap'
 import { ageFrom, toGender } from '@/services/api/users'
-import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
+import { usePairedTelemetry } from '@/hooks/usePairedTelemetry'
+import { pairedFatigue } from '@/services/vitals/pairedFatigue'
 
 export function useChatInbox() {
   const navigate = useNavigate()
@@ -106,12 +107,15 @@ export function useChatInbox() {
   // Identidade REAL do painel: nome, setor e avatar vêm da conversa; idade,
   // tipo sanguíneo e alergias vêm do DIRETÓRIO. Servir esses campos de um
   // conjunto fixo faria o painel contradizer as demais telas do mesmo
-  // trabalhador. Só a fadiga segue simulada, com o mesmo gerador do resto do
-  // painel.
+  // trabalhador. O tempo até a fadiga vem do aparelho do contato: sem aparelho
+  // (admin, ou funcionário não pareado) a frase diz isso.
+  const selectedEntry = selectedContact
+    ? directory.find((d) => keyFor(d.workerId) === selectedContact.id)
+    : undefined
+  const fatigue = pairedFatigue(usePairedTelemetry(selectedEntry?.workerId))
   const panelContact: ChatContact | null = selectedContact
     ? (() => {
-        const entry = directory.find((d) => keyFor(d.workerId) === selectedContact.id)
-        const vitals = entry ? simulatedVitalsFor(entry.workerId, Date.now()) : null
+        const entry = selectedEntry
         return {
           ...selectedContact,
           role: entry?.role ?? '',
@@ -125,9 +129,8 @@ export function useChatInbox() {
           age: entry?.birthDate ? ageFrom(entry.birthDate, new Date()) : undefined,
           bloodType: entry?.bloodType ?? undefined,
           allergies: entry?.allergies ?? undefined,
-          fatigueRemaining: vitals
-            ? `${Math.floor(vitals.fatigueMinutes / 60)}h${String(vitals.fatigueMinutes % 60).padStart(2, '0')}`
-            : '—',
+          fatigueRemaining: fatigue.label,
+          fatigueSourceBadge: fatigue.sourceBadge ?? undefined,
         }
       })()
     : null

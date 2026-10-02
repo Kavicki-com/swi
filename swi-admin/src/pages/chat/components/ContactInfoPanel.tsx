@@ -19,6 +19,7 @@ import {
 import { useDemoToast } from '@/lib/demoToast'
 import type { ChatContact } from '@/services/chats'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { NO_VALUE } from '@/services/vitals/vitalsView'
 
 // ESRI satellite tile: same source as AdminDetails / MapsGeneral so the
 // chat-inbox mini-map shares the canonical basemap.
@@ -236,11 +237,12 @@ export function ContactInfoPanel({
             }}
           />
           <Title variant="title.xs" color={theme.content.dark}>
-            {contact.fatigueRemaining ?? '—'}
+            {contact.fatigueRemaining ?? NO_VALUE}
           </Title>
-          {/* Fadiga é o único número simulado que sobrou aqui (identidade e
-              tipo sanguíneo agora vêm do Profile), selo igual ao resto do painel. */}
-          <SimulatedDataBadge />
+          {/* Leitura de demonstração é declarada; leitura real dispensa selo. */}
+          {contact.fatigueSourceBadge ? (
+            <SimulatedDataBadge label={contact.fatigueSourceBadge} testID="fatigue-source-badge" />
+          ) : null}
         </View>
 
         {/* Stats card sits on surface.medium because the outer RIGHT column
