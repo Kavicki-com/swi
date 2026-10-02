@@ -10,7 +10,7 @@ import { describeApiTarget, getApiUrl } from '@/services/api/apiConfig'
 // sem saber disso conclui que o sistema está quebrado, porque um não mostra o
 // dado do outro. O selo põe essa resposta na tela.
 //
-// Composição DS (Icon + Text), mesmo padrão do SimulatedDataBadge. O glifo é
+// Composição DS (Icon + Text), mesmo padrão do DataOriginBadge. O glifo é
 // `info` porque o design system não tem ícone de ambiente ou servidor, e um
 // selo informativo não justifica um bump só por isso.
 export function ApiTargetBadge() {

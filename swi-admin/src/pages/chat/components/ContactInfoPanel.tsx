@@ -18,7 +18,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { useDemoToast } from '@/lib/demoToast'
 import type { ChatContact } from '@/services/chats'
-import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { DataOriginBadge } from '@/components/DataOriginBadge'
 import { NO_VALUE } from '@/services/vitals/vitalsView'
 
 // ESRI satellite tile: same source as AdminDetails / MapsGeneral so the
@@ -241,7 +241,7 @@ export function ContactInfoPanel({
           </Title>
           {/* Leitura de demonstração é declarada; leitura real dispensa selo. */}
           {contact.fatigueSourceBadge ? (
-            <SimulatedDataBadge label={contact.fatigueSourceBadge} testID="fatigue-source-badge" />
+            <DataOriginBadge label={contact.fatigueSourceBadge} testID="fatigue-source-badge" />
           ) : null}
         </View>
 

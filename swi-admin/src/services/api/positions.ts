@@ -4,6 +4,7 @@
 import type { ServiceResponse } from '@/services/types'
 import type { DashboardMapMarker } from './dashboard'
 import type { AdminWorkerEntry, AdminWorkersTelemetry } from './telemetry'
+import { healthStatusFrom } from '@/services/vitals/healthStatus'
 import { apiFetch, ApiError } from './http'
 
 // Shape do backend (PositionMarker em swi-backend/src/positions/positions.service.ts).
@@ -34,17 +35,13 @@ export function toDashboardMarker(dto: PositionMarkerDto): DashboardMapMarker {
 }
 
 /**
- * Cor do pino a partir das condições abertas no backend, a mesma régua da
- * silhueta do app: urgência é urgência médica, saúde é risco, condição só de
- * aparelho não conta (relógio descarregado não é funcionário em risco), e bom
- * exige leitura atual. Sem leitura o pino fica neutro.
+ * Cor do pino pela régua única de estado de saúde (healthStatusFrom): as
+ * condições abertas no backend decidem, e sem leitura o pino fica neutro.
  */
 export function markerStatusFor(entry: AdminWorkerEntry | undefined): DashboardMapMarker['status'] {
-  if (!entry || entry.telemetry.origin === null) return 'offline'
-  const categories = new Set(entry.telemetry.conditions.map((c) => c.category))
-  if (categories.has('URGENT')) return 'low'
-  if (categories.has('HEALTH')) return 'alert'
-  return entry.telemetry.metrics.heartRate.quality === 'CURRENT' ? 'good' : 'offline'
+  const status = healthStatusFrom(entry?.telemetry ?? null)
+  // O pino chama de offline o que a régua chama de desconhecido.
+  return status === 'unknown' ? 'offline' : status
 }
 
 /** Pinta cada pino com o estado do seu funcionário; a posição não muda. */
