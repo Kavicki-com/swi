@@ -93,6 +93,50 @@ describe('TelemetryQueryService.currentForWorker', () => {
     expect(prisma.telemetrySample.aggregate).not.toHaveBeenCalled()
   })
 
+  it('traz as condições ativas da origem do snapshot, da mais antiga para a mais recente', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow({ origin: 'DEMO' }))
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      {
+        kind: 'HEART_RATE_HIGH',
+        origin: 'DEMO',
+        firstSeenAt: secondsAgo(90),
+        observedValue: 185,
+        thresholdValue: 167,
+      },
+    ])
+
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(prisma.telemetryCondition.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workerId: 'worker-1', origin: 'DEMO', status: 'ACTIVE' },
+        orderBy: { firstSeenAt: 'asc' },
+      }),
+    )
+    expect(result.conditions).toEqual([
+      {
+        kind: 'HEART_RATE_HIGH',
+        category: 'URGENT',
+        openedAt: secondsAgo(90).toISOString(),
+        observedValue: 185,
+        thresholdValue: 167,
+      },
+    ])
+  })
+
+  it('quem nunca reportou não consulta condição e devolve lista vazia', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(null)
+
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(result.conditions).toEqual([])
+    expect(prisma.telemetryCondition.findMany).not.toHaveBeenCalled()
+  })
+
   it('a janela e os totais do dia são filtrados pela origem do snapshot', async () => {
     const prisma = prismaDouble()
     emptyReads(prisma)

@@ -235,6 +235,19 @@ describe('Telemetry conditions e2e', () => {
 
     const resumo = await query.adminSummary(admin)
     expect(resumo.urgentAlerts.workers).toBeGreaterThanOrEqual(1)
+
+    // A leitura do funcionário traz a condição aberta, já classificada, com o
+    // valor e o limite que a abriram: é daí que app e painel tiram o estado.
+    const leitura = await query.currentForWorker(workerA)
+    expect(leitura.conditions).toEqual([
+      {
+        kind: 'HEART_RATE_HIGH',
+        category: 'URGENT',
+        openedAt: condicao.firstSeenAt.toISOString(),
+        observedValue: SUSTAINED_BPM,
+        thresholdValue: LIMITE_PERSONALIZADO,
+      },
+    ])
   }, 30_000)
 
   it('2. dois lotes em paralelo abrem uma condição só', async () => {
@@ -547,6 +560,11 @@ describe('Telemetry conditions e2e', () => {
     })
     // Aparelho é estado do funcionário, não item de fila.
     expect(await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })).toBeNull()
+    // Na leitura ela aparece como aparelho, nunca como saúde.
+    const comBateriaBaixa = await query.currentForWorker(workerB)
+    expect(comBateriaBaixa.conditions.filter((c) => c.kind === 'DEVICE_BATTERY_LOW')).toEqual([
+      expect.objectContaining({ category: 'DEVICE', observedValue: 12 }),
+    ])
     expect(await prisma.operationalAlert.count({ where: { workerId: workerB } })).toBe(alertasAntes)
 
     // 20% está dentro da banda e não recupera; 30% passa de 25% e recupera.
@@ -558,6 +576,9 @@ describe('Telemetry conditions e2e', () => {
       status: 'RECOVERED',
       recoveryReason: 'NORMALIZED',
     })
+    // Recuperada, sai da leitura.
+    const recuperada = await query.currentForWorker(workerB)
+    expect(recuperada.conditions.some((c) => c.kind === 'DEVICE_BATTERY_LOW')).toBe(false)
   })
 
   it('12. desgaste em 80% abre condição com alerta não urgente, e recupera em sessão nova com desgaste baixo', async () => {
