@@ -101,5 +101,8 @@
     },
     "testEnvironment": "node",
     "maxWorkers": "50%"
+  },
+  "overrides": {
+    "multer": "2.4.0"
   }
 }
