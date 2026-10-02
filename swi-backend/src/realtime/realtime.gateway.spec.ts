@@ -1,6 +1,7 @@
 import { RealtimeGateway } from './realtime.gateway'
 import { JwtService } from '@nestjs/jwt'
 import { wsCorsOptions } from '../cors'
+import type { PrismaService } from '../prisma/prisma.service'
 
 const secret = 'test-secret-realtime'
 
@@ -15,16 +16,25 @@ const fakeSocket = (token?: string) => {
   }
 }
 
+/** Usuário que o banco devolve para o id do token; null = não existe. */
+const prismaDouble = (user: { active: boolean } | null = { active: true }) => ({
+  user: { findUnique: jest.fn().mockResolvedValue(user) },
+})
+
 describe('RealtimeGateway', () => {
   const jwt = new JwtService({ secret })
   let g: RealtimeGateway
+  let prisma: ReturnType<typeof prismaDouble>
   beforeAll(() => { process.env.JWT_SECRET = secret })
-  beforeEach(() => { g = new RealtimeGateway(jwt) })
+  beforeEach(() => {
+    prisma = prismaDouble()
+    g = new RealtimeGateway(jwt, prisma as unknown as PrismaService)
+  })
 
-  it('connect com token válido entra na sala user:<sub>', () => {
+  it('connect com token válido entra na sala user:<sub>', async () => {
     const token = jwt.sign({ sub: 'u1', role: 'WORKER' })
     const c = fakeSocket(token) as any
-    g.handleConnection(c)
+    await g.handleConnection(c)
     expect(c.data.userId).toBe('u1')
     expect(c._joined).toContain('user:u1')
     expect(c.disconnect).not.toHaveBeenCalled()
@@ -38,13 +48,42 @@ describe('RealtimeGateway', () => {
     expect(opts?.cors).toEqual(wsCorsOptions(process.env))
   })
 
-  it('connect sem/ com token inválido desconecta', () => {
+  it('connect sem/ com token inválido desconecta', async () => {
     const c = fakeSocket('lixo') as any
-    g.handleConnection(c)
+    await g.handleConnection(c)
     expect(c.disconnect).toHaveBeenCalled()
     const c2 = fakeSocket(undefined) as any
-    g.handleConnection(c2)
+    await g.handleConnection(c2)
     expect(c2.disconnect).toHaveBeenCalled()
+  })
+
+  // O token vale por dias; sem esta conferência, um usuário desativado seguiria
+  // recebendo chat, notificação e telemetria até o token vencer.
+  it('usuário desativado desconecta e não entra em sala nenhuma', async () => {
+    prisma.user.findUnique.mockResolvedValue({ active: false })
+    const c = fakeSocket(jwt.sign({ sub: 'u1', role: 'ADMIN' })) as any
+    await g.handleConnection(c)
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'u1' }, select: { active: true } })
+    expect(c.disconnect).toHaveBeenCalled()
+    expect(c._joined).toEqual([])
+  })
+
+  it('usuário que não existe mais desconecta', async () => {
+    prisma.user.findUnique.mockResolvedValue(null)
+    const c = fakeSocket(jwt.sign({ sub: 'apagado', role: 'WORKER' })) as any
+    await g.handleConnection(c)
+    expect(c.disconnect).toHaveBeenCalled()
+    expect(c._joined).toEqual([])
+  })
+
+  // Sem conseguir conferir, a conexão não abre: ela some, o cliente tenta de
+  // novo, e o REST continua respondendo com a própria checagem.
+  it('falha na conferência do usuário desconecta em vez de deixar entrar', async () => {
+    prisma.user.findUnique.mockRejectedValue(new Error('banco fora'))
+    const c = fakeSocket(jwt.sign({ sub: 'u1', role: 'WORKER' })) as any
+    await g.handleConnection(c)
+    expect(c.disconnect).toHaveBeenCalled()
+    expect(c._joined).toEqual([])
   })
 
   it('emitToUsers emite o evento nas salas de cada participante', () => {

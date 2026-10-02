@@ -5,7 +5,7 @@
 // data fetching, loading/empty states, and back/CTA navigation.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'

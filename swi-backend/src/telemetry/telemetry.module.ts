@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common'
+import { NotificationModule } from '../notifications/notification.module'
 import { RealtimeModule } from '../realtime/realtime.module'
+import { AlertQueueController } from './alerts/alert-queue.controller'
+import { AlertQueueService } from './alerts/alert-queue.service'
 import { TelemetryConditionSweepJob } from './alerts/condition-sweep.job'
 import { TelemetryConditionService } from './alerts/condition.service'
+import { TelemetryHealthNotifier } from './alerts/health-notifier'
 import { TelemetryAssessmentService } from './assessment/assessment.service'
 import { DeviceAuthGuard } from './devices/device-auth.guard'
 import { DeviceAuthService } from './devices/device-auth.service'
@@ -14,6 +18,7 @@ import { PrismaTelemetryRepository } from './persistence/prisma-telemetry.reposi
 import { TELEMETRY_REPOSITORY } from './persistence/telemetry.repository'
 import { TelemetryQueryController } from './read-model/telemetry-query.controller'
 import { TelemetryQueryService } from './read-model/telemetry-query.service'
+import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
 
 // Módulo da telemetria do piloto: pareamento, ingestão, avaliação de esforço e
 // desgaste, condições e alertas, read model e ciclo de vida do dado (Resumo do
@@ -25,8 +30,14 @@ import { TelemetryQueryService } from './read-model/telemetry-query.service'
 // PrismaModule é global, então não precisa ser importado; RealtimeModule sim,
 // porque a ingestão avisa pelo socket depois de gravar.
 @Module({
-  imports: [RealtimeModule],
-  controllers: [TelemetryDevicesController, TelemetryIngestionController, TelemetryQueryController],
+  // NotificationModule porque condição aberta vira notificação do feed.
+  imports: [RealtimeModule, NotificationModule],
+  controllers: [
+    TelemetryDevicesController,
+    TelemetryIngestionController,
+    TelemetryQueryController,
+    AlertQueueController,
+  ],
   providers: [
     DeviceAuthService,
     DeviceAuthGuard,
@@ -34,10 +45,16 @@ import { TelemetryQueryService } from './read-model/telemetry-query.service'
     // A ingestão depende da porta, não do adapter. useExisting e não useClass:
     // o token e a classe têm de resolver para a mesma instância.
     { provide: TELEMETRY_REPOSITORY, useExisting: PrismaTelemetryRepository },
+    // Quem recebe os avisos de telemetria: o funcionário e os administradores
+    // da empresa dele. Uma instância só, para o cache valer entre ingestão e
+    // condições.
+    TelemetryAudienceService,
     TelemetryAssessmentService,
+    TelemetryHealthNotifier,
     // Depois da avaliação, porque é nessa ordem que a ingestão as chama.
     TelemetryConditionService,
     TelemetryConditionSweepJob,
+    AlertQueueService,
     TelemetryIngestionService,
     TelemetryQueryService,
     TelemetryLifecycleService,

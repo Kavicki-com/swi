@@ -281,6 +281,30 @@ describe('Q13, Q14 e Q16 com unidades explícitas', () => {
     expect(METRICS.fatigueEtaMin).toMatchObject({ unit: 'min', freshness: 'VITAL', sources: ['DERIVED'] })
   })
 
+  // A temperatura chega pelo app Saúde, gravada por termômetro ou vestível de
+  // terceiro, nunca pelo relógio do piloto. É medição pontual como a pressão:
+  // "última medição às", e acima de 72 h some.
+  it('temperatura corporal vem do app Saúde e segue a régua da pressão', () => {
+    expect(METRICS.bodyTemperature).toMatchObject({
+      unit: '°C',
+      freshness: 'BLOOD_PRESSURE',
+      sources: ['MANUAL_HEALTHKIT'],
+      retainsExpiredValue: false,
+    })
+  })
+
+  it('temperatura de três dias atrás não aparece', () => {
+    const now = '2026-10-01T15:00:00.000Z'
+    const sample = { value: 36.6, measuredAt: '2026-09-28T14:00:00.000Z', source: 'MANUAL_HEALTHKIT' as const }
+    expect(metricState('bodyTemperature', sample, now)).toMatchObject({
+      value: null,
+      quality: 'UNAVAILABLE',
+    })
+    expect(
+      metricState('bodyTemperature', { ...sample, measuredAt: '2026-10-01T09:00:00.000Z' }, now),
+    ).toMatchObject({ value: 36.6, quality: 'CURRENT' })
+  })
+
   it('unidade errada é rejeitada', () => {
     expect(() => validateMeasurement('steps', { value: 10, unit: 'km', source: watch })).toThrow(
       InvalidMeasurementError,
@@ -422,6 +446,26 @@ describe('validateRawMeasurement', () => {
     expect(() =>
       validateRawMeasurement('oxygenSaturation', { value: 97, unit: 'mmHg', source: 'APPLE_WATCH' }),
     ).toThrow(InvalidMeasurementError)
+  })
+
+  it('aceita temperatura corporal em graus Celsius com casa decimal, vinda do app Saúde', () => {
+    expect(() =>
+      validateRawMeasurement('bodyTemperature', { value: 36.7, unit: '°C', source: 'MANUAL_HEALTHKIT' }),
+    ).not.toThrow()
+  })
+
+  // O relógio do piloto não mede temperatura no turno: aceitar a origem dele
+  // seria aceitar um número que nenhum produtor desta entrega envia.
+  it('temperatura fora de 30 a 45, em outra unidade ou de outra origem é recusada', () => {
+    const recusa = (value: number, unit: string, source: string) =>
+      expect(() => validateRawMeasurement('bodyTemperature', { value, unit, source })).toThrow(
+        InvalidMeasurementError,
+      )
+    recusa(29.9, '°C', 'MANUAL_HEALTHKIT')
+    recusa(45.1, '°C', 'MANUAL_HEALTHKIT')
+    recusa(98.6, '°F', 'MANUAL_HEALTHKIT')
+    recusa(36.7, '°C', 'APPLE_WATCH')
+    recusa(36.7, '°C', 'EXTERNAL_CUFF')
   })
 
   it('valida motionCount pela própria unidade e origem', () => {

@@ -1,5 +1,8 @@
 import { Logger } from '@nestjs/common'
 import type { PrismaService } from '../../prisma/prisma.service'
+import type { RealtimeGateway } from '../../realtime/realtime.gateway'
+import type { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
+import type { TelemetryHealthNotifier } from './health-notifier'
 import { ALERT_PROFILE_VERSION } from './alert-profile'
 import {
   MAX_SILENT_SESSIONS_PER_RUN,
@@ -111,7 +114,24 @@ const prismaDouble = () => {
 }
 
 const firstCall = (fn: jest.Mock) => fn.mock.invocationCallOrder[0]
-const service = (prisma: any) => new TelemetryConditionService(prisma as PrismaService)
+const realtimeDouble = () => ({ emitToUsers: jest.fn() })
+/** Por padrão só o próprio funcionário, como quem não tem empresa. */
+const audienceDouble = () => ({
+  recipientsFor: jest.fn().mockImplementation(async (workerId: string) => [workerId]),
+})
+const notifierDouble = () => ({ notifyOpened: jest.fn().mockResolvedValue(undefined) })
+const service = (
+  prisma: any,
+  realtime: ReturnType<typeof realtimeDouble> = realtimeDouble(),
+  audience: ReturnType<typeof audienceDouble> = audienceDouble(),
+  notifier: ReturnType<typeof notifierDouble> = notifierDouble(),
+) =>
+  new TelemetryConditionService(
+    prisma as PrismaService,
+    realtime as unknown as RealtimeGateway,
+    audience as unknown as TelemetryAudienceService,
+    notifier as unknown as TelemetryHealthNotifier,
+  )
 /** A chamada de leitura pontual que filtra a coluna dada. */
 const readingCall = (fn: jest.Mock, column: string) =>
   fn.mock.calls.map((c) => c[0]).find((arg) => arg.where[column] !== undefined)
@@ -1003,5 +1023,175 @@ describe('TelemetryConditionService.sweepSilentSessions: repetição e falha', (
     expect(prisma.$transaction).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
+  })
+})
+
+describe('TelemetryConditionService: notificação de saúde', () => {
+  // A notificação lê a condição gravada; antes do commit ela ainda não existe
+  // para quem lê.
+  it('entrega as mudanças ao notificador depois do commit', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    const notifier = notifierDouble()
+    let openAtNotify: boolean | undefined
+    notifier.notifyOpened.mockImplementation(async () => {
+      openAtNotify = prisma.open
+    })
+
+    await service(prisma, realtimeDouble(), audienceDouble(), notifier).evaluateSession('session-1', NOW, NOW)
+
+    expect(openAtNotify).toBe(false)
+    expect(notifier.notifyOpened).toHaveBeenCalledWith([
+      { workerId: 'worker-1', conditionId: 'condition-new', kind: 'HEART_RATE_HIGH', change: 'OPENED', at: NOW.toISOString() },
+    ])
+  })
+
+  it('transação que falha não notifica', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    prisma.operationalAlert.create.mockRejectedValue(new Error('falha de escrita'))
+    const notifier = notifierDouble()
+
+    await expect(service(prisma, realtimeDouble(), audienceDouble(), notifier).evaluateSession('session-1', NOW, NOW)).rejects.toThrow('falha de escrita')
+    expect(notifier.notifyOpened).not.toHaveBeenCalled()
+  })
+
+  it('falha do notificador não derruba a avaliação', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    const notifier = notifierDouble()
+    notifier.notifyOpened.mockRejectedValue(new Error('fila fora'))
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const outcome = await service(prisma, realtimeDouble(), audienceDouble(), notifier).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: ['HEART_RATE_HIGH'], recovered: [], alerts: 1 })
+    warn.mockRestore()
+  })
+
+  it('a varredura de silêncio entrega a perda de sinal ao notificador', async () => {
+    const prisma = prismaDouble()
+    silentFor(prisma, 300)
+    const notifier = notifierDouble()
+
+    await service(prisma, realtimeDouble(), audienceDouble(), notifier).sweepSilentSessions(NOW)
+
+    const delivered = notifier.notifyOpened.mock.calls.flatMap((c: any[]) => c[0])
+    expect(delivered).toContainEqual(expect.objectContaining({ kind: 'DEVICE_SIGNAL_LOST', change: 'OPENED' }))
+  })
+})
+
+describe('TelemetryConditionService: aviso de condição em tempo real', () => {
+  // O painel atualiza a fila sem recarregar. O aviso só carrega identificadores,
+  // e sai depois do commit: antes, quem recebesse buscaria uma condição que o
+  // banco ainda não mostra.
+  it('condição aberta avisa depois do commit, com identificadores e nenhum valor de saúde', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    const realtime = realtimeDouble()
+    let openAtEmit: boolean | undefined
+    realtime.emitToUsers.mockImplementation(() => {
+      openAtEmit = prisma.open
+    })
+
+    await service(prisma, realtime).evaluateSession('session-1', NOW, NOW)
+
+    expect(openAtEmit).toBe(false)
+    expect(realtime.emitToUsers).toHaveBeenCalledWith(['worker-1'], 'telemetry.condition.changed', {
+      workerId: 'worker-1',
+      conditionId: 'condition-new',
+      kind: 'HEART_RATE_HIGH',
+      change: 'OPENED',
+      at: NOW.toISOString(),
+    })
+  })
+
+  it('condição recuperada avisa com o id da linha que fechou', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-1', 'HEART_RATE_HIGH')])
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries(120))
+    const realtime = realtimeDouble()
+
+    await service(prisma, realtime).evaluateSession('session-1', NOW, NOW)
+
+    expect(realtime.emitToUsers).toHaveBeenCalledWith(['worker-1'], 'telemetry.condition.changed', {
+      workerId: 'worker-1',
+      conditionId: 'c-1',
+      kind: 'HEART_RATE_HIGH',
+      change: 'RECOVERED',
+      at: NOW.toISOString(),
+    })
+  })
+
+  it('vai ao funcionário e aos administradores da empresa dele', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    const realtime = realtimeDouble()
+    const audience = audienceDouble()
+    audience.recipientsFor.mockResolvedValue(['worker-1', 'admin-1'])
+
+    await service(prisma, realtime, audience).evaluateSession('session-1', NOW, NOW)
+
+    expect(audience.recipientsFor).toHaveBeenCalledWith('worker-1')
+    expect(realtime.emitToUsers.mock.calls[0][0]).toEqual(['worker-1', 'admin-1'])
+  })
+
+  it('sem condição aberta nem recuperada, não avisa nada', async () => {
+    const prisma = prismaDouble()
+    const realtime = realtimeDouble()
+
+    await service(prisma, realtime).evaluateSession('session-1', NOW, NOW)
+
+    expect(realtime.emitToUsers).not.toHaveBeenCalled()
+  })
+
+  it('transação que falha não avisa: nada foi gravado', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    prisma.operationalAlert.create.mockRejectedValue(new Error('falha de escrita'))
+    const realtime = realtimeDouble()
+
+    await expect(service(prisma, realtime).evaluateSession('session-1', NOW, NOW)).rejects.toThrow('falha de escrita')
+    expect(realtime.emitToUsers).not.toHaveBeenCalled()
+  })
+
+  // O alerta já está gravado: uma falha de socket não pode desfazer nem
+  // esconder isso de quem chamou, e o painel reconcilia pelo REST.
+  it('falha do socket não derruba a avaliação', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    const realtime = realtimeDouble()
+    realtime.emitToUsers.mockImplementation(() => {
+      throw new Error('socket down')
+    })
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const outcome = await service(prisma, realtime).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: ['HEART_RATE_HIGH'], recovered: [], alerts: 1 })
+    warn.mockRestore()
+  })
+
+  it('a varredura de silêncio avisa as recuperações e a perda de sinal, depois do commit', async () => {
+    const prisma = prismaDouble()
+    silentFor(prisma, 300)
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-alto', 'HEART_RATE_HIGH')])
+    const realtime = realtimeDouble()
+    const openAtEmit: boolean[] = []
+    realtime.emitToUsers.mockImplementation(() => openAtEmit.push(prisma.open))
+
+    await service(prisma, realtime).sweepSilentSessions(NOW)
+
+    expect(openAtEmit).toEqual([false, false])
+    expect(realtime.emitToUsers.mock.calls.map((c: any[]) => c[2])).toEqual([
+      { workerId: 'worker-1', conditionId: 'c-alto', kind: 'HEART_RATE_HIGH', change: 'RECOVERED', at: NOW.toISOString() },
+      {
+        workerId: 'worker-1',
+        conditionId: 'condition-new',
+        kind: 'DEVICE_SIGNAL_LOST',
+        change: 'OPENED',
+        at: NOW.toISOString(),
+      },
+    ])
   })
 })

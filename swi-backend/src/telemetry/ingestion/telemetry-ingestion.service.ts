@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { RealtimeGateway } from '../../realtime/realtime.gateway'
+import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import { TelemetryConditionService } from '../alerts/condition.service'
 import { TelemetryAssessmentService } from '../assessment/assessment.service'
 import type { DeviceIdentity } from '../devices/device-auth.service'
@@ -141,6 +142,7 @@ export class TelemetryIngestionService {
     private readonly realtime: RealtimeGateway,
     private readonly assessment: TelemetryAssessmentService,
     private readonly conditions: TelemetryConditionService,
+    private readonly audience: TelemetryAudienceService,
   ) {}
 
   async ingest(device: DeviceIdentity, batch: TelemetryBatchDto): Promise<TelemetryBatchAck> {
@@ -226,7 +228,7 @@ export class TelemetryIngestionService {
 
     // Depois do commit, sempre. Antes, o painel buscaria um estado que ainda
     // não existe e concluiria que nada mudou.
-    if (promoted !== null) this.announce(device.workerId, promoted)
+    if (promoted !== null) await this.announce(device.workerId, promoted)
 
     return { acceptedEventIds, duplicateEventIds, conflicts, serverTime: receivedAt }
   }
@@ -312,11 +314,13 @@ export class TelemetryIngestionService {
   /**
    * Aviso, não leitura: só identificadores. O valor vem pelo read model, que é
    * onde mora o controle de acesso; mandá-lo aqui criaria uma segunda fonte da
-   * verdade viajando por fora dele.
+   * verdade viajando por fora dele. Vai ao funcionário e aos administradores
+   * da empresa dele, para o painel atualizar sem recarregar.
    */
-  private announce(workerId: string, promoted: PromotedEvent): void {
+  private async announce(workerId: string, promoted: PromotedEvent): Promise<void> {
     try {
-      this.realtime.emitToUsers([workerId], 'telemetry.snapshot.updated', {
+      const recipients = await this.audience.recipientsFor(workerId)
+      this.realtime.emitToUsers(recipients, 'telemetry.snapshot.updated', {
         workerId,
         monitoringSessionId: promoted.monitoringSessionId,
         eventId: promoted.eventId,

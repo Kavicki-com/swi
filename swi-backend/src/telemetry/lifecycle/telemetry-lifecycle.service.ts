@@ -90,6 +90,13 @@ const SAMPLE_FIELDS = {
   bloodPressureSource: true,
 } as const
 
+/**
+ * O mesmo contrato, para quem resume fora do ciclo de vida: a série por
+ * período agrega os dias ainda abertos pela mesma conta, e uma lista própria
+ * de colunas poderia esquecer uma que o Resumo lê.
+ */
+export const SUMMARIZER_SAMPLE_FIELDS = SAMPLE_FIELDS
+
 const ASSESSMENT_FIELDS = {
   computedAt: true,
   effortPercent: true,

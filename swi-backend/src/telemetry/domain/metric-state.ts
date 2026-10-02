@@ -187,6 +187,19 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
    * eles. Nulo quando a intensidade não sustenta a dose até lá.
    */
   fatigueEtaMin: { unit: 'min', freshness: 'VITAL', sources: ['DERIVED'], retainsExpiredValue: true },
+  /**
+   * Temperatura corporal lida do app Saúde pelo iPhone, gravada lá por um
+   * termômetro ou vestível de terceiro. O relógio do piloto não a mede no
+   * turno, então APPLE_WATCH não entra. Segue a régua da pressão: "última
+   * medição às", e acima de 72 h o valor some. Não abre condição nem alerta:
+   * medida no pulso é temperatura de pele, não temperatura central.
+   */
+  bodyTemperature: {
+    unit: '°C',
+    freshness: 'BLOOD_PRESSURE',
+    sources: ['MANUAL_HEALTHKIT'],
+    retainsExpiredValue: false,
+  },
 }
 
 /** Instante em milissegundos. Horário ilegível vira NaN, e quem chama decide. */
@@ -303,6 +316,9 @@ const RANGES: Partial<Record<MetricKind, ValueRange>> = {
   distance: { min: 0, max: Number.MAX_SAFE_INTEGER },
   oxygenSaturation: { min: 0, max: 100 },
   fatigueEtaMin: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
+  // Faixa de leitura possível de um corpo vivo, não de normalidade: 30 °C já
+  // é hipotermia grave e 45 °C, hipertermia fatal. Fora disso é erro de aparelho.
+  bodyTemperature: { min: 30, max: 45 },
 }
 
 const BLOOD_PRESSURE_RANGE = {
@@ -425,7 +441,7 @@ function fromMetric(kind: MetricKind): RawMeasurementSpec {
  * de que o produtor está certo. O contrato está também no schema, junto das
  * colunas, que é onde quem escreve o produtor olha.
  *
- * Sete delas são a mesma coisa que uma métrica canônica e herdam dela unidade,
+ * Oito delas são a mesma coisa que uma métrica canônica e herdam dela unidade,
  * origem e faixa. motionCount tem spec própria: é a contagem de movimento que
  * alimenta a derivação de MPM, e registrá-la como MetricKind faria dela o
  * sétimo indicador que a decisão congelada recusa.
@@ -442,6 +458,7 @@ const RAW_MEASUREMENTS: Record<RawMeasurementKey, RawMeasurementSpec> = {
   motionCount: { unit: 'count', sources: ['APPLE_WATCH'], range: { min: 0, max: 100_000 } },
   distanceDeltaM: fromMetric('distance'),
   oxygenSaturation: fromMetric('oxygenSaturation'),
+  bodyTemperature: fromMetric('bodyTemperature'),
 }
 
 /** Forma mínima de uma medição, antes de saber se o conteúdo dela vale. */

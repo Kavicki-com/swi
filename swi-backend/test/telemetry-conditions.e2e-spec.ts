@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { INestApplication } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
+import { requireJwtSecret } from '../src/auth/jwt-secret'
 import type { JwtUser } from '../src/auth/current-user.decorator'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { ALERT_PROFILE_VERSION, EXPERIMENTAL_ALERT_PROFILE } from '../src/telemetry/alerts/alert-profile'
@@ -32,6 +34,7 @@ import { TelemetryQueryService } from '../src/telemetry/read-model/telemetry-que
 // desvincularia os usuários dela, porque User.companyId é opcional e o Prisma
 // aplica SetNull.
 const CNPJ = '99000000000303'
+const OUTRO_CNPJ = '99000000000304'
 
 describe('Telemetry conditions e2e', () => {
   let app: INestApplication
@@ -45,6 +48,7 @@ describe('Telemetry conditions e2e', () => {
     semNascimento: `telemetry-cond-c-${randomUUID()}@ex.com`,
     demo: `telemetry-cond-d-${randomUUID()}@ex.com`,
     admin: `telemetry-cond-admin-${randomUUID()}@ex.com`,
+    outroAdmin: `telemetry-cond-outro-admin-${randomUUID()}@ex.com`,
   }
   let workerA = ''
   let workerB = ''
@@ -116,8 +120,10 @@ describe('Telemetry conditions e2e', () => {
     // Profile não tem cascade: apagar o funcionário sem apagar o perfil antes
     // viola a chave estrangeira e deixa lixo entre execuções.
     await prisma.profile.deleteMany({ where: { userId: { in: users.map((u) => u.id) } } })
+    // Notificação também não tem cascade, e condição aberta passa a gerar uma.
+    await prisma.notification.deleteMany({ where: { workerId: { in: users.map((u) => u.id) } } })
     await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
-    await prisma.company.deleteMany({ where: { cnpj: CNPJ } })
+    await prisma.company.deleteMany({ where: { cnpj: { in: [CNPJ, OUTRO_CNPJ] } } })
   }
 
   beforeAll(async () => {
@@ -235,6 +241,28 @@ describe('Telemetry conditions e2e', () => {
 
     const resumo = await query.adminSummary(admin)
     expect(resumo.urgentAlerts.workers).toBeGreaterThanOrEqual(1)
+
+    // A leitura do funcionário traz a condição aberta, já classificada, com o
+    // valor e o limite que a abriram: é daí que app e painel tiram o estado.
+    const leitura = await query.currentForWorker(workerA)
+    expect(leitura.conditions).toEqual([
+      {
+        kind: 'HEART_RATE_HIGH',
+        category: 'URGENT',
+        openedAt: condicao.firstSeenAt.toISOString(),
+        observedValue: SUSTAINED_BPM,
+        thresholdValue: LIMITE_PERSONALIZADO,
+      },
+    ])
+
+    // Condição urgente vira notificação de saúde para o funcionário e para a
+    // administração, uma por público, com a condição como alvo.
+    const doFuncionario = await prisma.notification.findMany({ where: { workerId: workerA, domain: 'health' } })
+    expect(doFuncionario).toHaveLength(1)
+    expect(doFuncionario[0]).toMatchObject({ targetId: condicao.id, title: 'Batimento acima do limite' })
+    const doAdmin = await prisma.notification.findMany({ where: { workerId: admin.userId, domain: 'health', targetId: condicao.id } })
+    expect(doAdmin).toHaveLength(1)
+    expect(doAdmin[0].title).toMatch(/^Batimento alto: /)
   }, 30_000)
 
   it('2. dois lotes em paralelo abrem uma condição só', async () => {
@@ -390,6 +418,9 @@ describe('Telemetry conditions e2e', () => {
 
     // O painel lê só o real. Ensaio não entra na conta de quem está em risco.
     expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(antes)
+
+    // Nem vira aviso para pessoa nenhuma.
+    expect(await prisma.notification.count({ where: { domain: 'health', targetId: rows[0].id } })).toBe(0)
   }, 30_000)
 
   /**
@@ -547,6 +578,11 @@ describe('Telemetry conditions e2e', () => {
     })
     // Aparelho é estado do funcionário, não item de fila.
     expect(await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })).toBeNull()
+    // Na leitura ela aparece como aparelho, nunca como saúde.
+    const comBateriaBaixa = await query.currentForWorker(workerB)
+    expect(comBateriaBaixa.conditions.filter((c) => c.kind === 'DEVICE_BATTERY_LOW')).toEqual([
+      expect.objectContaining({ category: 'DEVICE', observedValue: 12 }),
+    ])
     expect(await prisma.operationalAlert.count({ where: { workerId: workerB } })).toBe(alertasAntes)
 
     // 20% está dentro da banda e não recupera; 30% passa de 25% e recupera.
@@ -558,6 +594,9 @@ describe('Telemetry conditions e2e', () => {
       status: 'RECOVERED',
       recoveryReason: 'NORMALIZED',
     })
+    // Recuperada, sai da leitura.
+    const recuperada = await query.currentForWorker(workerB)
+    expect(recuperada.conditions.some((c) => c.kind === 'DEVICE_BATTERY_LOW')).toBe(false)
   })
 
   it('12. desgaste em 80% abre condição com alerta não urgente, e recupera em sessão nova com desgaste baixo', async () => {
@@ -627,5 +666,54 @@ describe('Telemetry conditions e2e', () => {
     expect(recuperada).toMatchObject({ status: 'RECOVERED', recoveryReason: 'NORMALIZED' })
     // Condição recuperar não fecha alerta: isso é da triagem humana.
     expect(await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })).toMatchObject({ status: 'OPEN' })
+  })
+
+  it('13. a lista do painel traz todos os funcionários da empresa, por HTTP, e só para administrador dela', async () => {
+    // Assina com o mesmo segredo que a estratégia JWT confere; o papel vem do
+    // banco a cada requisição, então o token só identifica a pessoa.
+    const bearer = (sub: string, role: string) => ({ Authorization: `Bearer ${new JwtService({ secret: requireJwtSecret() }).sign({ sub, role })}` })
+    const lista = (headers: Record<string, string>) =>
+      request(app.getHttpServer()).get('/telemetry/v1/admin/workers').set(headers)
+
+    const { body } = await lista(bearer(admin.userId, 'ADMIN')).expect(200)
+    const ids = body.workers.map((w: { worker: { id: string } }) => w.worker.id)
+    expect(new Set(ids)).toEqual(new Set([workerA, workerB, workerSemNascimento, workerDemo]))
+    for (const entry of body.workers) {
+      expect(entry.device.state).toBe('PAIRED')
+      expect(Array.isArray(entry.telemetry.conditions)).toBe(true)
+    }
+    // A mesma leitura da rota individual, com condições incluídas.
+    const individual = await query.currentForWorker(workerA)
+    const daLista = body.workers.find((w: { worker: { id: string } }) => w.worker.id === workerA)
+    expect(daLista.telemetry.conditions).toEqual(individual.conditions)
+    expect(daLista.telemetry.origin).toBe(individual.origin)
+
+    // Ordem de atenção: ninguém sem urgência aparece antes de quem tem.
+    const rank = (entry: { telemetry: { conditions: { category: string }[] } }) => {
+      const cats = entry.telemetry.conditions.map((c) => c.category)
+      return cats.includes('URGENT') ? 0 : cats.includes('HEALTH') ? 1 : 2
+    }
+    const ranks = body.workers.map(rank)
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b))
+
+    // Funcionário não lê a lista do painel.
+    await lista(bearer(workerA, 'WORKER')).expect(403)
+
+    // Administrador de outra empresa não vê nenhum destes funcionários.
+    const endereco = { cep: '01000-000', street: 'Rua B', number: '2', neighborhood: 'Centro', uf: 'SP' }
+    const outra = await prisma.company.create({ data: { name: 'Outra Co', cnpj: OUTRO_CNPJ, ...endereco } })
+    const outroAdmin = await prisma.user.create({
+      data: {
+        email: emails.outroAdmin,
+        name: 'Outro Admin',
+        passwordHash: 'nao-usado-neste-spec',
+        role: 'ADMIN',
+        emailVerified: true,
+        approvalStatus: 'APPROVED',
+        companyId: outra.id,
+      },
+    })
+    const alheia = await lista(bearer(outroAdmin.id, 'ADMIN')).expect(200)
+    expect(alheia.body.workers).toEqual([])
   })
 })
