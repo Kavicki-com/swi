@@ -110,7 +110,10 @@ vi.mock('maplibre-gl', () => {
       return this
     }
   }
-  const ns = { Map, Marker, LngLatBounds }
+  // A 6 exige registrar o endereço do worker antes do primeiro mapa; o
+  // carregador chama esta função, então o dublê precisa tê-la.
+  const setWorkerUrl = () => {}
+  const ns = { Map, Marker, LngLatBounds, setWorkerUrl }
   return { default: ns, ...ns }
 })
 
