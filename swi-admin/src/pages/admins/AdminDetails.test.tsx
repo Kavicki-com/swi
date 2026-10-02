@@ -46,7 +46,9 @@ describe('AdminDetails: vitais', () => {
     })
     await renderPage(<AdminDetails />, { route: '/admins/admin-7', path: '/admins/:id' })
 
-    expect(await screen.findByText('Sem aparelho')).toBeInTheDocument()
+    // Os vitais e o gráfico de gasto calórico dizem os dois que não há aparelho.
+    expect(await screen.findAllByText('Sem aparelho')).toHaveLength(2)
+    expect(screen.getByTestId('calories-empty')).toHaveTextContent('Sem aparelho')
     expect(screen.getByText('Sem estimativa')).toBeInTheDocument()
     expect(screen.queryByTestId('vitals-source-badge')).not.toBeInTheDocument()
   })

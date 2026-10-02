@@ -3,7 +3,7 @@
 // EmployeeDetails. Pure presentational: takes a `worker`
 // payload + a `topRightAction` slot for the page-specific CTA. The page owns
 // data fetching, loading/empty states, and back/CTA navigation.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
 import type * as maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
@@ -12,7 +12,8 @@ import { useDemoToast } from '@/lib/demoToast'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
 import { formatAge } from '@/lib/formatAge'
 import type { Gender } from '@/services/types/directory'
-import { simulatedCaloriesFor } from '@/services/vitals/simulatedVitals'
+import { PERIOD_FROM_OPTION } from '@/services/vitals/caloriesSeries'
+import { useWorkerSeries } from '@/hooks/useWorkerSeries'
 import { NO_VALUE, type WorkerVitalsView } from '@/services/vitals/vitalsView'
 import {
   Avatar,
@@ -58,12 +59,10 @@ export type WorkerDetailsData = {
   allergies?: ReadonlyArray<string>
   examHistory?: ReadonlyArray<WorkerExamEntry>
   /**
-   * Semente do gasto calórico simulado — o `User.id` da pessoa. Sem ela a
-   * curva cai no seed do nome, que ainda diferencia pessoas mas colide entre
-   * homônimos ("Carlos Santos" × "Carlos Santos (Manut.)" não colidem, mas
-   * dois Carlos Santos exatos colidiriam).
+   * Funcionário cuja série de gasto calórico o gráfico lê. Ausente para quem
+   * não pareia aparelho (administrador): o gráfico diz "Sem aparelho".
    */
-  seedId?: string
+  seriesWorkerId?: string
 }
 
 export type WorkerDetailsLayoutProps = {
@@ -85,10 +84,6 @@ export type WorkerDetailsLayoutProps = {
    */
   deviceSection?: ReactNode
 }
-
-// O gasto calórico por período sai de simulatedCaloriesFor(seedId), e não de
-// uma constante compartilhada: a forma da curva especificada é preservada, a
-// magnitude varia por pessoa. Assim cada perfil mostra a própria curva.
 
 // ESRI World Imagery — same satellite tile source the dashboard MapBanner
 // and /maps/general use. Reused here for the mini-map in the user profile.
@@ -330,13 +325,18 @@ export function WorkerDetailsLayout({
   const effortPct = formatPct(vitals.effortPct)
   const allergies = worker.allergies ?? []
   const exams = worker.examHistory ?? []
-  const [caloriesPeriod, setCaloriesPeriod] = useState('today')
-  // Seed do id quando a página o passa; cai no nome só pra não quebrar quem
-  // ainda não migrou (o valor continua variando por pessoa nos dois casos).
-  const calories = useMemo(
-    () => simulatedCaloriesFor(worker.seedId ?? worker.name),
-    [worker.seedId, worker.name],
-  )
+  const [caloriesPeriod, setCaloriesPeriod] = useState<keyof typeof PERIOD_FROM_OPTION>('today')
+  const calories = useWorkerSeries(worker.seriesWorkerId, PERIOD_FROM_OPTION[caloriesPeriod])
+  // Estado do gráfico quando não há curva a desenhar: a frase diz o porquê.
+  const caloriesEmpty = calories.noDevice
+    ? 'Sem aparelho'
+    : calories.loading
+      ? 'Carregando…'
+      : calories.failed
+        ? 'Gasto calórico indisponível no momento'
+        : calories.points.length === 0
+          ? 'Sem medição neste período'
+          : null
 
   return (
     <View testID={testID} style={{ gap: theme.gap.m }}>
@@ -736,21 +736,35 @@ export function WorkerDetailsLayout({
                 { label: 'Este mês', value: 'month' },
               ]}
               value={caloriesPeriod}
-              onChange={setCaloriesPeriod}
+              onChange={(value) => {
+                if (value in PERIOD_FROM_OPTION)
+                  setCaloriesPeriod(value as keyof typeof PERIOD_FROM_OPTION)
+              }}
               accessibilityLabel="Período do gasto calórico"
             />
           </View>
         </View>
-        <LineCaloriesChart
-          points={calories[caloriesPeriod as keyof typeof calories] ?? calories.today}
-          unit="kcal"
-          fullWidth
-        />
-        {/* A curva por período ainda é simulada: a série real de energia
-            depende da rota de histórico por período. O selo fica com ela. */}
-        <View testID="calories-simulated-badge" style={{ alignItems: 'flex-end' }}>
-          <SimulatedDataBadge />
-        </View>
+        {/* A curva sai da série do backend. Balde sem medição fica fora da
+            curva, e período sem nenhuma medição vira frase, nunca zeros. */}
+        {caloriesEmpty === null ? (
+          <View testID="calories-chart">
+            <LineCaloriesChart points={calories.points} unit="kcal" fullWidth />
+          </View>
+        ) : (
+          <View
+            testID="calories-empty"
+            style={{
+              backgroundColor: theme.surface.medium,
+              borderRadius: theme.border.radius.l,
+              padding: theme.padding.m,
+              alignItems: 'center',
+            }}
+          >
+            <Text variant="body.m" color={theme.content.medium}>
+              {caloriesEmpty}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   )

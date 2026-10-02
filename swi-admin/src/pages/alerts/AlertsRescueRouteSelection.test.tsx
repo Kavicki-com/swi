@@ -7,20 +7,28 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { AlertsRescueRouteSelection } from './AlertsRescueRouteSelection'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
+import { adminWorker, condition } from '@/test-utils/telemetryFixtures'
+import type { AdminWorkerEntry } from '@/services/api/telemetry'
 
 const h = vi.hoisted(() => ({
   positions: [] as Array<Record<string, unknown>>,
   directory: [] as Array<Record<string, unknown>>,
   navigations: [] as string[],
-  tierPorId: {} as Record<string, string>,
+  workers: [] as AdminWorkerEntry[],
 }))
 
 vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => h.positions }))
-// O estado de saúde do candidato NÃO sai do `status` da posição: vem dos vitais
-// simulados, determinísticos por id. Fixar o tier por id é o que torna o filtro
-// desta tela testável.
-vi.mock('@/services/vitals/simulatedVitals', () => ({
-  simulatedVitalsFor: (id: string) => ({ tier: h.tierPorId[id] ?? 'excelente' }),
+// O estado de saúde do candidato NÃO sai do `status` da posição: vem das
+// condições abertas na lista de funcionários. Fixar as condições por id é o que
+// torna o filtro desta tela testável.
+vi.mock('@/hooks/useAdminTelemetry', () => ({
+  useAdminTelemetry: () => ({
+    workers: { observedAt: '2026-10-01T15:00:00.000Z', workers: h.workers },
+    summary: null,
+    loading: false,
+    failed: false,
+    refresh: () => {},
+  }),
 }))
 vi.mock('@/services/api/users', () => ({
   employeesApi: { list: async () => ({ data: h.directory, error: null }) },
@@ -63,7 +71,11 @@ beforeEach(() => {
   ]
   h.directory = [emp('w2', 'Ana Lima'), emp('w3', 'Bruno Souza')]
   h.navigations = []
-  h.tierPorId = { w2: 'excelente', w3: 'desgastado' }
+  // Ana sem condição (sem incidentes); Bruno com desgaste alto (risco).
+  h.workers = [
+    adminWorker('w2', 'Ana Lima'),
+    { ...adminWorker('w3', 'Bruno Souza'), telemetry: { ...adminWorker('w3', 'Bruno Souza').telemetry, conditions: [condition('HEALTH')] } },
+  ]
 })
 
 afterEach(clearSession)

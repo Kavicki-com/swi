@@ -2,8 +2,30 @@
 // nunca mostra número ou rótulo CONFIANTE que não corresponda a dado real.
 // Onde o dado falta, ela declara a ausência em vez de preencher com um default.
 // vitest globals (describe/it/expect) via globals: true.
+import { vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { renderPage } from '@/test-utils/renderPage'
+import { emptyPoint, series } from '@/test-utils/telemetryFixtures'
+
+const seriesMock = vi.fn()
+
+vi.mock('@/services/api/telemetry', () => ({
+  telemetryApi: { workerSeries: (...args: unknown[]) => seriesMock(...args) },
+}))
+
+const withKcal = (kcal: number | null) =>
+  series(
+    [
+      {
+        ...emptyPoint('2026-10-01T11:00:00.000Z', '2026-10-01T12:00:00.000Z'),
+        activeEnergyKcal: kcal,
+      },
+    ],
+    {
+      bucket: 'hour',
+      period: 'day',
+    },
+  )
 import { vitalsViewFrom, type WorkerVitalsView } from '@/services/vitals/vitalsView'
 import { WorkerDetailsLayout, type WorkerDetailsData } from './WorkerDetailsLayout'
 
@@ -78,13 +100,39 @@ describe('WorkerDetailsLayout', () => {
     expect(screen.getByText('Dados de demonstração')).toBeInTheDocument()
   })
 
-  // Os vitais vêm do aparelho; só a curva de calorias por período segue
-  // simulada, e o selo fica com ela, não com o cartão de vitais.
-  it('o selo de simulação acompanha só o gráfico de calorias', async () => {
-    await renderLayout({ vitals: READING })
-    const badges = screen.getAllByTestId('simulated-data-badge')
-    expect(badges).toHaveLength(1)
-    expect(screen.getByTestId('calories-simulated-badge')).toContainElement(badges[0] ?? null)
+  describe('gasto calórico por período', () => {
+    beforeEach(() => {
+      seriesMock.mockReset()
+    })
+
+    // A curva sai da série do backend: nada no detalhe é simulado.
+    it('lê a série de hoje do funcionário e não exibe selo de simulação', async () => {
+      seriesMock.mockResolvedValue({ data: withKcal(62), error: null })
+      await renderLayout({ vitals: READING, seriesWorkerId: 'w1' })
+      expect(seriesMock).toHaveBeenCalledWith('w1', 'day')
+      expect(await screen.findByTestId('calories-chart')).toBeInTheDocument()
+      expect(screen.queryByTestId('simulated-data-badge')).not.toBeInTheDocument()
+    })
+
+    it('período sem medição declara a ausência em vez de desenhar zeros', async () => {
+      seriesMock.mockResolvedValue({ data: withKcal(null), error: null })
+      await renderLayout({ vitals: READING, seriesWorkerId: 'w1' })
+      expect(await screen.findByText('Sem medição neste período')).toBeInTheDocument()
+      expect(screen.queryByTestId('calories-chart')).not.toBeInTheDocument()
+    })
+
+    it('falha na leitura diz que está indisponível', async () => {
+      seriesMock.mockResolvedValue({ data: null, error: { message: 'offline' } })
+      await renderLayout({ vitals: READING, seriesWorkerId: 'w1' })
+      expect(await screen.findByText('Gasto calórico indisponível no momento')).toBeInTheDocument()
+    })
+
+    // Administrador não pareia aparelho: curva ali seria inventada.
+    it('sem funcionário com aparelho não busca série e diz que não há aparelho', async () => {
+      await renderLayout({ vitals: READING })
+      expect(seriesMock).not.toHaveBeenCalled()
+      expect(screen.getByTestId('calories-empty')).toHaveTextContent('Sem aparelho')
+    })
   })
 
   // Sem gênero cadastrado a tela não pode eleger "Feminino" como default.

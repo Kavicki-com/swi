@@ -8,9 +8,10 @@
 // nem ETA de quem o sistema não sabe onde está.
 import type { DashboardMapMarker } from './dashboard'
 import type { Employee } from './users'
-import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
+import type { HealthStatus } from '@/services/vitals/healthStatus'
 
-export type RescueCandidateStatus = 'good' | 'alert' | 'low'
+/** Mesmo estado da régua de saúde: 'unknown' é quem não tem leitura atual. */
+export type RescueCandidateStatus = HealthStatus
 
 export type RescueCandidate = {
   id: string
@@ -37,28 +38,23 @@ function metersBetween(a: DashboardMapMarker, b: DashboardMapMarker): number {
   return Math.hypot(dx, dy)
 }
 
-const TIER_TO_HEALTH: Record<string, RescueCandidateStatus> = {
-  excelente: 'good',
-  desgastado: 'alert',
-  'alerta-fadiga': 'low',
-}
-
 /**
  * Puro: ranqueia os colegas do ferido por distância real.
  *
  * `directory` enriquece com identidade (nome/idade/tipo sanguíneo/foto); quem
  * não estiver nele ainda aparece pelo marker, porque estar no mapa já prova que
- * existe. O status de saúde vem do mesmo gerador simulado do resto do app.
+ * existe. O estado de saúde vem de `healthById`, decidido pelas condições
+ * abertas de cada pessoa; quem não está no mapa é 'unknown', nunca "bom".
  */
 export function rankRescueCandidates(
   injuredId: string,
   positions: ReadonlyArray<DashboardMapMarker>,
   directory: ReadonlyArray<Employee>,
+  healthById: ReadonlyMap<string, RescueCandidateStatus> = new Map(),
 ): RescueCandidate[] {
   const injured = positions.find((p) => p.id === injuredId)
   if (!injured) return []
   const byId = new Map(directory.map((e) => [e.id, e]))
-  const now = Date.now()
 
   return positions
     .filter((p) => p.id !== injuredId)
@@ -75,7 +71,7 @@ export function rankRescueCandidates(
         // Piso de 1 min: "0 minutos" soaria como teletransporte.
         etaMinutes: Math.max(1, Math.round(meters / WALK_SPEED_MPS / 60)),
         isBestOption: false,
-        healthStatus: TIER_TO_HEALTH[simulatedVitalsFor(p.id, now).tier] ?? 'good',
+        healthStatus: healthById.get(p.id) ?? 'unknown',
       }
     })
     .sort((a, b) => a.distanceKm - b.distanceKm)

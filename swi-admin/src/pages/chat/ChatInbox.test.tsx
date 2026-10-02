@@ -46,6 +46,27 @@ const maplibre = vi.hoisted(() => {
 })
 vi.mock('@/lib/useMapLibre', () => ({ useMapLibre: () => maplibre.lib }))
 
+// O tempo até a fadiga do contato vem do aparelho dele: sem os dublês a página
+// consultaria o backend de verdade.
+const telemetry = vi.hoisted(() => ({
+  // Padrão: contato sem aparelho; o bloco do tempo até a fadiga troca isso.
+  stateOf: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+    data: { device: null, pendingEnrollment: null },
+    error: null,
+  })),
+  current: vi.fn(),
+}))
+vi.mock('@/services/api/telemetryDevices', () => ({
+  telemetryDevicesApi: { stateOf: (...a: unknown[]) => telemetry.stateOf(...a) },
+}))
+vi.mock('@/services/api/telemetry', () => ({
+  telemetryApi: { workerCurrent: (...a: unknown[]) => telemetry.current(...a) },
+}))
+vi.mock('@/services/telemetry/telemetrySocket', () => ({
+  subscribeTelemetryEvents: () => () => {},
+}))
+
+import { reporting } from '@/test-utils/telemetryFixtures'
 import { ChatInbox } from './ChatInbox'
 import { ChatBubble } from './components/ChatBubble'
 
@@ -167,6 +188,53 @@ describe('ChatInbox', () => {
     setChat({ conversations: [CONV, CONV9], messagesByConv: { 'me#w1': [MSG], 'me#w9': [] } })
     await renderPage(<ChatInbox />, { route: '/chat/me%23w9', path: '/chat/:contactId' })
     expect(await screen.findByText('@bea.ramos')).toBeInTheDocument()
+  })
+
+  describe('tempo até a fadiga do contato', () => {
+    const CONV9 = {
+      ...CONV,
+      id: 'me#w9',
+      participants: ['me', 'w9'] as [string, string],
+      participantNames: ['Eu', 'Beatriz Ramos'] as [string, string],
+    }
+
+    beforeEach(() => {
+      telemetry.stateOf.mockReset()
+      telemetry.current.mockReset()
+      telemetry.current.mockResolvedValue({ data: reporting(), error: null })
+      setChat({ conversations: [CONV, CONV9], messagesByConv: { 'me#w1': [MSG], 'me#w9': [] } })
+    })
+
+    // Admin ou funcionário não pareado: não há de onde vir o dado.
+    it('contato sem aparelho diz isso e não exibe selo de simulação', async () => {
+      telemetry.stateOf.mockResolvedValue({
+        data: { device: null, pendingEnrollment: null },
+        error: null,
+      })
+      await renderPage(<ChatInbox />, { route: '/chat/me%23w9', path: '/chat/:contactId' })
+      expect(await screen.findByText('Sem aparelho')).toBeInTheDocument()
+      expect(screen.queryByTestId('simulated-data-badge')).not.toBeInTheDocument()
+      expect(telemetry.current).not.toHaveBeenCalled()
+    })
+
+    it('contato com aparelho mostra o tempo até a fadiga da leitura dele', async () => {
+      telemetry.stateOf.mockResolvedValue({
+        data: {
+          device: {
+            id: 'd1',
+            kind: 'IPHONE',
+            model: null,
+            pairedAt: '2026-10-01T10:00:00.000Z',
+            lastSeenAt: null,
+          },
+          pendingEnrollment: null,
+        },
+        error: null,
+      })
+      await renderPage(<ChatInbox />, { route: '/chat/me%23w9', path: '/chat/:contactId' })
+      expect(await screen.findByText('95 minutos')).toBeInTheDocument()
+      expect(telemetry.current).toHaveBeenCalledWith('w9')
+    })
   })
 
   it('não renderiza @ nenhum pra contato sem handle', async () => {
