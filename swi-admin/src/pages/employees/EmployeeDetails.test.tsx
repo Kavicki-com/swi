@@ -34,6 +34,10 @@ vi.mock('@/services/api/telemetryDevices', () => ({
 vi.mock('@/services/api/telemetry', () => ({
   telemetryApi: { workerCurrent: vi.fn() },
 }))
+// Sem o dublê a página abriria um socket de verdade no jsdom.
+vi.mock('@/services/telemetry/telemetrySocket', () => ({
+  subscribeTelemetryEvents: vi.fn(() => () => {}),
+}))
 
 const getMock = vi.mocked(employeesApi.get)
 const pauseMock = vi.mocked(notificationsApi.requestPause)
