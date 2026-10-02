@@ -3,7 +3,7 @@
 // pelos mesmos endpoints). Substitui o buildMockMapMarkers dos mapas.
 import type { ServiceResponse } from '@/services/types'
 import type { DashboardMapMarker } from './dashboard'
-import { simulatedVitalsFor, type SimulatedTier } from '@/services/vitals/simulatedVitals'
+import type { AdminWorkerEntry, AdminWorkersTelemetry } from './telemetry'
 import { apiFetch, ApiError } from './http'
 
 // Shape do backend (PositionMarker em swi-backend/src/positions/positions.service.ts).
@@ -17,25 +17,10 @@ export type PositionMarkerDto = {
   recordedAt: string
 }
 
-// Borda do pino ↔ tier dos vitais, o MESMO mapeamento do resto do app
-// (rescue.ts). Ver nota de derivação abaixo.
-const TIER_TO_STATUS: Record<SimulatedTier, DashboardMapMarker['status']> = {
-  excelente: 'good',
-  desgastado: 'alert',
-  'alerta-fadiga': 'low',
-}
-
 /**
- * Posição é REAL (heartbeat); a borda de saúde vem do gerador SIMULADO comum,
- * o mesmo que alimenta KPIs, monitoramento e triagem de socorro.
- *
- * O status não pode ser fixo em `'good'`: o mapa de alertas pintaria todos os
- * pinos de verde enquanto o dashboard, na mesma tela, conta desgastados e
- * alertas de fadiga. Um pino verde sobre alguém em alerta é pior que um pino
- * neutro, é uma afirmação errada.
- *
- * O tier é estável por worker (hash do id, sem componente temporal), então o
- * pino não pisca de cor a cada tick do heartbeat.
+ * A posição vem do heartbeat e não sabe nada de saúde: o pino nasce neutro e
+ * só ganha cor quando a telemetria do funcionário chega (withHealthStatus).
+ * Verde por padrão afirmaria um estado que ninguém mediu.
  */
 export function toDashboardMarker(dto: PositionMarkerDto): DashboardMapMarker {
   return {
@@ -43,9 +28,32 @@ export function toDashboardMarker(dto: PositionMarkerDto): DashboardMapMarker {
     name: dto.name,
     lat: dto.lat,
     lng: dto.lng,
-    status: TIER_TO_STATUS[simulatedVitalsFor(dto.id, Date.now()).tier],
+    status: 'offline',
     avatarUri: dto.avatar,
   }
+}
+
+/**
+ * Cor do pino a partir das condições abertas no backend, a mesma régua da
+ * silhueta do app: urgência é urgência médica, saúde é risco, condição só de
+ * aparelho não conta (relógio descarregado não é funcionário em risco), e bom
+ * exige leitura atual. Sem leitura o pino fica neutro.
+ */
+export function markerStatusFor(entry: AdminWorkerEntry | undefined): DashboardMapMarker['status'] {
+  if (!entry || entry.telemetry.origin === null) return 'offline'
+  const categories = new Set(entry.telemetry.conditions.map((c) => c.category))
+  if (categories.has('URGENT')) return 'low'
+  if (categories.has('HEALTH')) return 'alert'
+  return entry.telemetry.metrics.heartRate.quality === 'CURRENT' ? 'good' : 'offline'
+}
+
+/** Pinta cada pino com o estado do seu funcionário; a posição não muda. */
+export function withHealthStatus(
+  markers: ReadonlyArray<DashboardMapMarker>,
+  telemetry: AdminWorkersTelemetry | null,
+): DashboardMapMarker[] {
+  const byId = new Map((telemetry?.workers ?? []).map((e) => [e.worker.id, e]))
+  return markers.map((m) => ({ ...m, status: markerStatusFor(byId.get(m.id)) }))
 }
 
 export const positionsApi = {

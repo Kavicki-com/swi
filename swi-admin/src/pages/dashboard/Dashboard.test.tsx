@@ -23,6 +23,17 @@ import {
 vi.mock('@/hooks/useLivePositions', () => ({
   useLivePositions: () => FAKE_SUMMARY.mapMarkers,
 }))
+// O banner do mapa pinta os pinos com a telemetria; a telemetria tem suite
+// própria, e aqui ela vem vazia para não abrir fetch nem socket.
+vi.mock('@/hooks/useAdminTelemetry', () => ({
+  useAdminTelemetry: () => ({
+    workers: null,
+    summary: null,
+    loading: false,
+    failed: false,
+    refresh: () => {},
+  }),
+}))
 
 // A saúde da frota vem do hook de telemetria, que tem suíte própria (socket e
 // releitura); aqui o estado dele é controlado por teste.

@@ -1,27 +1,20 @@
-// Helpers compartilhados entre MapsGeneral e AlertsList para o heatmap
-// "Produtividade". Em producao buildHeatmapPoints sera substituido pelos
-// coords reais vindos da API de telemetria — ver design doc, P0.3.
+// Helpers compartilhados entre MapsGeneral e AlertsList para o mapa de calor
+// "Produtividade": a trilha real de posições, agregada em células pelo backend.
+import type { HeatCell } from '@/services/api/positionHeat'
 
 export type HeatPoint = { lng: number; lat: number; weight: number }
 
-export function buildHeatmapPoints(
-  center: [number, number],
-  count: number,
-  spread: number,
-): HeatPoint[] {
-  const pts: HeatPoint[] = []
-  for (let i = 0; i < count; i++) {
-    const u = 1 - Math.random()
-    const v = Math.random()
-    const r = Math.sqrt(-2 * Math.log(u)) * spread
-    const theta = 2 * Math.PI * v
-    const dx = r * Math.cos(theta)
-    const dy = r * Math.sin(theta)
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    const weight = Math.max(0.2, 1 - distance / (spread * 2.4))
-    pts.push({ lng: center[0] + dx, lat: center[1] + dy, weight })
-  }
-  return pts
+/**
+ * Células do backend viram pontos com peso relativo à célula mais quente, que
+ * vale 1: a escala de cor fica estável qualquer que seja a janela consultada.
+ * Sem trilha não há ponto nenhum, nunca um borrão de preenchimento.
+ */
+export function heatPointsFromCells(cells: ReadonlyArray<HeatCell>): HeatPoint[] {
+  const max = cells.reduce((m, c) => Math.max(m, c.weight), 0)
+  if (max <= 0) return []
+  return cells
+    .filter((c) => c.weight > 0)
+    .map((c) => ({ lat: c.lat, lng: c.lng, weight: c.weight / max }))
 }
 
 export function buildHeatmapGeoJSON(
