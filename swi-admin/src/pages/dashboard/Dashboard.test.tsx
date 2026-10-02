@@ -14,6 +14,17 @@ import { settled } from '@/test-utils/renderPage'
 vi.mock('@/hooks/useLivePositions', () => ({
   useLivePositions: () => FAKE_SUMMARY.mapMarkers,
 }))
+// O banner do mapa pinta os pinos com a telemetria; a telemetria tem suite
+// própria, e aqui ela vem vazia para não abrir fetch nem socket.
+vi.mock('@/hooks/useAdminTelemetry', () => ({
+  useAdminTelemetry: () => ({
+    workers: null,
+    summary: null,
+    loading: false,
+    failed: false,
+    refresh: () => {},
+  }),
+}))
 
 const FAKE_SUMMARY: DashboardSummary = {
   employees: { total: 12, byStatus: { good: 8, alert: 2, low: 1, offline: 1 } },
