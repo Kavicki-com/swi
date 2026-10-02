@@ -2,12 +2,13 @@
 // Child view for /monitoring/good-conditions. The shared
 // chrome (KPIs, title, tabs, search, user list) lives in MonitoringLayout.
 // This view contributes only the row of 4 DonutCharts that sits between
-// the KPI row and the "Alertas de Desgaste" title.
-import { useEffect, useState } from 'react'
+// the KPI row and the "Alertas de Desgaste" title. Os números vêm do resumo da
+// empresa que o layout já lê, com a legenda pronta do backend.
 import { View } from 'react-native'
 import { DonutChart, useTheme } from '@kavicki/swi-design-system'
-import { monitoringApi, type MonitoringGoodConditionsStats } from '@/services/monitoring'
+import { buildGoodConditions } from '@/services/monitoring'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { useMonitoringContext } from './monitoringContext'
 
 export function MonitoringGoodConditions() {
   const theme = useTheme()
@@ -16,19 +17,8 @@ export function MonitoringGoodConditions() {
   // the BigNumbers panel on the LEFT. The narrower cells
   // need the small donut variant so titles don't overlap.
   const donutSize = breakpoint === 'wide' ? 'small' : 'default'
-  const [stats, setStats] = useState<MonitoringGoodConditionsStats | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    monitoringApi.goodConditionsStats().then(({ data }) => {
-      if (!cancelled && data) setStats(data)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  if (!stats) return null
+  const { summary, failed } = useMonitoringContext()
+  const stats = buildGoodConditions(summary, failed)
 
   // Each card hosts one DS DonutChart at size="default" (182×182 outer /
   // 160 arc / 138 inner well). Cards sit flat on
@@ -43,6 +33,7 @@ export function MonitoringGoodConditions() {
 
   return (
     <View
+      testID="monitoring-good-conditions"
       style={{
         flexDirection: 'row',
         alignItems: 'stretch',
@@ -50,13 +41,13 @@ export function MonitoringGoodConditions() {
         width: '100%',
       }}
     >
-      {/* Card 1 — Sinais vitais */}
+      {/* Card 1: sinais vitais dentro dos limites */}
       <View style={cardStyle}>
         <DonutChart
           title="Sinais vitais"
-          value={String(stats.vitals.value)}
+          value={stats.vitals.value}
           label={stats.vitals.label}
-          caption="Excelentes"
+          caption={stats.vitals.caption}
           progress={stats.vitals.progress}
           size={donutSize}
           icon="heartbeat"
@@ -64,13 +55,13 @@ export function MonitoringGoodConditions() {
         />
       </View>
 
-      {/* Card 2 — Taxa de desgaste */}
+      {/* Card 2: taxa de desgaste */}
       <View style={cardStyle}>
         <DonutChart
           title="Taxa de desgaste"
           value={stats.fatigueRate.value}
-          label=""
-          caption={stats.fatigueRate.label}
+          label={stats.fatigueRate.label}
+          caption={stats.fatigueRate.caption}
           progress={stats.fatigueRate.progress}
           size={donutSize}
           icon="heartbeat"
@@ -78,28 +69,28 @@ export function MonitoringGoodConditions() {
         />
       </View>
 
-      {/* Card 3 — Média de batimentos (cyan→green) */}
+      {/* Card 3: média de batimentos (cyan→green); o arco é a cobertura */}
       <View style={cardStyle}>
         <DonutChart
           title="Média de batimentos"
-          value={String(stats.heartrate.value)}
-          label={stats.heartrate.unit.toUpperCase()}
-          caption="Média normal"
-          progress={80}
+          value={stats.heartrate.value}
+          label={stats.heartrate.label}
+          caption={stats.heartrate.caption}
+          progress={stats.heartrate.progress}
           size={donutSize}
           icon="heartbeat"
           progressGradient={[theme.surface.secondary, theme.surface.primary]}
         />
       </View>
 
-      {/* Card 4 — Alertas urgentes (red arc, small progress) */}
+      {/* Card 4: alertas urgentes (red arc) */}
       <View style={cardStyle}>
         <DonutChart
           title="Alertas urgentes"
-          value={String(stats.urgentAlerts.value)}
-          label="Funcionários"
-          caption="Necessária mobilização"
-          progress={8}
+          value={stats.urgentAlerts.value}
+          label={stats.urgentAlerts.label}
+          caption={stats.urgentAlerts.caption}
+          progress={stats.urgentAlerts.progress}
           size={donutSize}
           icon="heartbeat"
           progressGradient={[theme.surface.error, theme.surface.error]}
