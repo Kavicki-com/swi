@@ -81,9 +81,8 @@ export function EmployeeDetails() {
     <WorkerDetailsLayout
       worker={{
         ...employee,
-        // Semente da curva de gasto calórico, que ainda é simulada: sem ela
-        // todo mundo compartilha a mesma série de kcal.
-        seedId: employee.id,
+        // O gráfico de gasto calórico lê a série deste funcionário.
+        seriesWorkerId: employee.id,
         vitals: vitalsViewFrom(telemetry, { failed }),
       }}
       position={position ? { lat: position.lat, lng: position.lng } : null}

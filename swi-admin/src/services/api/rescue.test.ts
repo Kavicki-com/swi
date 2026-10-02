@@ -66,4 +66,22 @@ describe('rankRescueCandidates', () => {
   it('ferido sem posição → lista vazia (não dá pra ranquear distância)', () => {
     expect(rankRescueCandidates('desconhecido', [PERTO, LONGE], [])).toEqual([])
   })
+
+  // O estado de saúde vem das condições abertas, nunca de um palpite.
+  it('o estado de saúde de cada candidato vem do mapa recebido', () => {
+    const health = new Map([
+      ['perto', 'low' as const],
+      ['longe', 'alert' as const],
+    ])
+    const out = rankRescueCandidates('ferido', [INJURED, LONGE, PERTO], [], health)
+    expect(out.map((c) => [c.id, c.healthStatus])).toEqual([
+      ['perto', 'low'],
+      ['longe', 'alert'],
+    ])
+  })
+
+  it('sem leitura do candidato o estado é desconhecido, nunca "sem incidentes"', () => {
+    const out = rankRescueCandidates('ferido', [INJURED, PERTO], [])
+    expect(out[0]!.healthStatus).toBe('unknown')
+  })
 })

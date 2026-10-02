@@ -32,7 +32,11 @@ vi.mock('@/services/api/telemetryDevices', () => ({
 }))
 
 vi.mock('@/services/api/telemetry', () => ({
-  telemetryApi: { workerCurrent: vi.fn() },
+  telemetryApi: {
+    workerCurrent: vi.fn(),
+    // O gráfico de gasto calórico tem suíte própria; aqui basta não quebrar.
+    workerSeries: vi.fn().mockResolvedValue({ data: null, error: { message: 'sem série' } }),
+  },
 }))
 // Sem o dublê a página abriria um socket de verdade no jsdom.
 vi.mock('@/services/telemetry/telemetrySocket', () => ({

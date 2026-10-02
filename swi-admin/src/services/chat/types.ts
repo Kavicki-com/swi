@@ -74,6 +74,8 @@ export type ChatContact = {
   bloodType?: string
   allergies?: string
   fatigueRemaining?: string
+  /** Selo de origem do tempo até a fadiga, quando a leitura é de demonstração. */
+  fatigueSourceBadge?: string
   // Histórico já resolvido. O inbox recebe as mensagens junto do contato ativo
   // em vez de disparar uma segunda chamada ao selecionar.
   messages?: ReadonlyArray<ChatMessage>

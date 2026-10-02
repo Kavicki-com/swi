@@ -5,8 +5,8 @@
 // of the client reference software/dashboard.html (`row-menu` + overlay).
 //
 // Diferenças do original: o avatar grande navega pra /user/profile (rota
-// deste painel; /user/settings era do demo) e os vitais vêm do gerador
-// determinístico compartilhado com o header (ver adminVitals.ts).
+// deste painel; /user/settings era do demo), cargo e setor vêm do cadastro do
+// admin e os vitais só aparecem com aparelho pareado (ver adminVitals.ts).
 //
 // Interaction:
 //  - ESC or click on the dim backdrop calls onClose.
@@ -31,7 +31,7 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
   const theme = useTheme()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const vitals = useAdminVitals()
+  const vitals = useAdminVitals(open)
   // Keep a ref so the video can be paused programmatically when it ends —
   // HTML5 video naturally freezes on the last frame after ended without
   // loop, but holding a ref lets us also force pause() if the browser
@@ -52,8 +52,6 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
   if (!open) return null
 
   const fullName = user?.full_name ?? 'Administrador'
-  const fatigueLabel = `${vitals.fatigueHours}horas, ${vitals.fatigueMinutes} minutos`
-  const temperatureLabel = `${vitals.temperature.toString().replace('.', ',')}°C, ${vitals.temperatureLabel}`
 
   // Rótulo em caixa alta da coluna da esquerda. Extraído porque estava copiado
   // em quatro lugares, e cada cópia carregava o próprio `fontSize: 14` cravado.
@@ -217,12 +215,17 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
             <Title variant="title.l" color={theme.content.dark}>
               {fullName}
             </Title>
-            <Text color={theme.content.medium} style={labelStyle}>
-              {vitals.role}
-            </Text>
-            <Text color={theme.content.medium} style={labelStyle}>
-              {vitals.sector}
-            </Text>
+            {/* Cargo e setor só depois que o cadastro chega: nunca uma persona fixa. */}
+            {vitals.role ? (
+              <Text color={theme.content.medium} style={labelStyle}>
+                {vitals.role}
+              </Text>
+            ) : null}
+            {vitals.sector ? (
+              <Text color={theme.content.medium} style={labelStyle}>
+                {vitals.sector}
+              </Text>
+            ) : null}
             <Text color={theme.content.medium} style={{ ...labelStyle, marginTop: theme.gap.s }}>
               Batimentos cardíacos:
             </Text>
@@ -251,7 +254,7 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
                   fontSize: theme.fontSize.l,
                 }}
               >
-                {vitals.heartRate}bpm
+                {vitals.heartRate} bpm
               </Text>
             </View>
             {/* Canvas em 295×147, medida do `#canvasBatimentos` da referência
@@ -265,9 +268,13 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
                 HeartPulseCanvas, que o call site nunca cumpriu. Efeito
                 colateral bem-vindo: a linha do ECG passa a usar o MESMO verde
                 do fill das barras de progresso ao lado. */}
-            <View style={{ marginTop: theme.gap.s }}>
-              <HeartPulseCanvas width={295} height={147} color={theme.surface.success} />
-            </View>
+            {/* O traçado anima só com leitura atual: sem ela, desenharia um
+                pulso que ninguém mediu. */}
+            {vitals.showPulse ? (
+              <View style={{ marginTop: theme.gap.s }}>
+                <HeartPulseCanvas width={295} height={147} color={theme.surface.success} />
+              </View>
+            ) : null}
             <Text color={theme.content.medium} style={{ ...labelStyle, marginTop: theme.gap.s }}>
               status:
             </Text>
@@ -288,7 +295,7 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
         <View style={{ width: 401, gap: theme.gap.m }}>
           <VitalBlock
             label="Movimentos por minuto:"
-            value={`${vitals.mpm} mpm`}
+            value={vitals.mpm}
             percent={vitals.mpmPercent}
           />
           <View
@@ -297,7 +304,7 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
           />
           <VitalBlock
             label="tempo estimado para atingir fadiga:"
-            value={fatigueLabel}
+            value={vitals.fatigue}
             percent={vitals.fatiguePercent}
           />
           <View
@@ -306,7 +313,7 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
           />
           <VitalBlock
             label="temperatura corporal:"
-            value={temperatureLabel}
+            value={vitals.temperature}
             percent={vitals.temperaturePercent}
           />
           <View
@@ -314,8 +321,8 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
             style={{ height: 1, backgroundColor: theme.content.medium, opacity: 0.2 }}
           />
           <VitalBlock
-            label="bateria da smartband"
-            value={`${vitals.battery}%`}
+            label="bateria do aparelho"
+            value={vitals.battery}
             percent={vitals.batteryPercent}
           />
         </View>

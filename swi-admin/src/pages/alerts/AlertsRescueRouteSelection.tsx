@@ -10,6 +10,8 @@ import { Avatar, Button, Chip, Icon, SearchInput, Text, useTheme } from '@kavick
 import { rankRescueCandidates, type RescueCandidate } from '@/services/api/rescue'
 import { employeesApi, type Employee } from '@/services/api/users'
 import { useLivePositions } from '@/hooks/useLivePositions'
+import { useAdminTelemetry } from '@/hooks/useAdminTelemetry'
+import { healthStatusFrom, type HealthStatus } from '@/services/vitals/healthStatus'
 import { formatAge } from '@/lib/formatAge'
 
 const FILTER_CHIPS = [
@@ -40,9 +42,21 @@ export function AlertsRescueRouteSelection() {
     }
   }, [])
 
+  // Estado de saúde de cada pessoa pelas condições abertas no backend, a
+  // mesma régua do resto do painel. Quem não está na lista fica 'unknown'.
+  const { workers } = useAdminTelemetry()
+  const healthById = useMemo(
+    () =>
+      new Map<string, HealthStatus>(
+        (workers?.workers ?? []).map((w) => [w.worker.id, healthStatusFrom(w.telemetry)]),
+      ),
+    [workers],
+  )
+
   const candidates: RescueCandidate[] = useMemo(
-    () => (employeeId ? rankRescueCandidates(employeeId, positions ?? [], directory) : []),
-    [employeeId, positions, directory],
+    () =>
+      employeeId ? rankRescueCandidates(employeeId, positions ?? [], directory, healthById) : [],
+    [employeeId, positions, directory, healthById],
   )
 
   const filtered = useMemo(() => {
