@@ -6,7 +6,8 @@
 //      remaining area. Worker pins are real maplibre Markers anchored at
 //      each lat/lng, so they pan/zoom with the basemap.
 //   3. mapMode toggles in top-left:
-//        'heat'  → adds a maplibre heatmap layer (mock GeoJSON points).
+//        'heat'  → adds a maplibre heatmap layer (trilha real de posições,
+//                  agregada em células pelo backend).
 //        'meteo' → adds a RainViewer raster overlay (real-time precipitation
 //                  radar; no API key, free).
 //      'pins' is the default with no extra overlay.
@@ -21,7 +22,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { SATELLITE_STYLE } from '@/lib/mapStyles'
-import { buildHeatmapPoints, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
+import { heatPointsFromCells, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
+import { positionHeatApi } from '@/services/api/positionHeat'
+import { DEMO_DATA_LABEL, NO_VALUE, vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { createPinElement, type PinElement } from '@/lib/pinFactory'
 import { MapAttribution } from '@/components/MapAttribution'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
@@ -37,7 +40,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { type DashboardMapMarker } from '@/services/dashboard'
-import { useLivePositions } from '@/hooks/useLivePositions'
+import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { useEvacuation } from '@/hooks/useEvacuation'
 
 const FILTER_CHIPS = [
@@ -51,7 +54,9 @@ function passesFilter(status: DashboardMapMarker['status'], filter: string): boo
   if (filter === 'all') return true
   if (filter === 'good') return status === 'good'
   if (filter === 'alert') return status === 'alert'
-  if (filter === 'low') return status === 'low' || status === 'offline'
+  // Sem leitura do aparelho não é urgência médica: o pino neutro só aparece em
+  // "Todos", senão quem nunca pareou um relógio cairia no filtro de urgência.
+  if (filter === 'low') return status === 'low'
   return true
 }
 
@@ -77,9 +82,15 @@ export function AlertsList() {
   const theme = useTheme()
   const navigate = useNavigate()
   const { employeeId } = useParams<{ employeeId?: string }>()
-  // Posições REAIS ao vivo (REST snapshot + WS). null (carregando) → [].
-  const liveMarkers = useLivePositions()
+  // Posições REAIS ao vivo (REST snapshot + WS) com a cor do estado real de
+  // cada funcionário. null (carregando) → [].
+  const { markers: liveMarkers, entryFor } = useLiveMapMarkers()
   const markers = useMemo<DashboardMapMarker[]>(() => liveMarkers ?? [], [liveMarkers])
+  // Leitura de demonstração em algum pino: o selo avisa o operador.
+  const hasDemo = useMemo(
+    () => markers.some((m) => entryFor(m.id)?.telemetry.origin === 'DEMO'),
+    [markers, entryFor],
+  )
   // Evacuação real: dispatch/encerramento + progresso X/N ao vivo.
   const {
     evacuation,
@@ -125,6 +136,16 @@ export function AlertsList() {
     () => (employeeId ? (markers.find((m) => m.id === employeeId) ?? null) : null),
     [employeeId, markers],
   )
+  // Leitura real do funcionário selecionado, para o cartão sobre o pino.
+  const selectedEntry = selectedMarker ? entryFor(selectedMarker.id) : undefined
+  const selectedVitals = selectedMarker ? vitalsViewFrom(selectedEntry?.telemetry ?? null) : null
+  // A borda acompanha o estado real; sem condição, o cartão fica com a borda padrão.
+  const selectedBorder =
+    selectedMarker?.status === 'low'
+      ? theme.content.error
+      : selectedMarker?.status === 'alert'
+        ? theme.content.warning
+        : undefined
 
   // Init the map once we have lib + container + at least one marker (so
   // we know where to center). Tear down on unmount.
@@ -210,37 +231,35 @@ export function AlertsList() {
     }
   }, [lib, mapReady, displayMarkers])
 
-  // Heatmap layer — only when mapMode === 'heat'. Mock points clustered
-  // around the markers' centroid produce the same blob shape as MapsGeneral.
-  // Ancorado no snapshot INICIAL: o blob é mock de produtividade; seguir o
-  // heartbeat recriaria a layer a cada 3s sem ganho visual.
+  // Heatmap layer, só no modo 'heat': a trilha real de posições das últimas 24
+  // horas, agregada em células pelo backend. Sem trilha, nenhuma camada.
   useEffect(() => {
     const map = mapRef.current
-    const initial = initialMarkersRef.current ?? []
-    if (!map || !mapReady || mapMode !== 'heat' || initial.length === 0) return
-    const center: [number, number] = [
-      initial.reduce((s, m) => s + m.lng, 0) / initial.length,
-      initial.reduce((s, m) => s + m.lat, 0) / initial.length,
-    ]
-    const corePoints = buildHeatmapPoints(center, 220, 0.006)
-    const haloPoints = buildHeatmapPoints(center, 280, 0.018)
-    const geojson = buildHeatmapGeoJSON([...corePoints, ...haloPoints])
-    if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
-    if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
-    map.addSource('heatmap-points', { type: 'geojson', data: geojson })
-    map.addLayer({
-      id: 'heatmap-layer',
-      type: 'heatmap',
-      source: 'heatmap-points',
-      paint: {
-        'heatmap-weight': ['get', 'weight'],
-        'heatmap-intensity': 2.0,
-        'heatmap-radius': 70,
-        'heatmap-opacity': 0.82,
-        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...HEATMAP_COLOR_RAMP],
-      },
+    if (!map || !mapReady || mapMode !== 'heat') return
+    let cancelled = false
+    void positionHeatApi.heat().then(({ data }) => {
+      if (cancelled || mapRef.current !== map) return
+      const points = heatPointsFromCells(data?.cells ?? [])
+      if (points.length === 0) return
+      const geojson = buildHeatmapGeoJSON(points)
+      if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
+      if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
+      map.addSource('heatmap-points', { type: 'geojson', data: geojson })
+      map.addLayer({
+        id: 'heatmap-layer',
+        type: 'heatmap',
+        source: 'heatmap-points',
+        paint: {
+          'heatmap-weight': ['get', 'weight'],
+          'heatmap-intensity': 2.0,
+          'heatmap-radius': 70,
+          'heatmap-opacity': 0.82,
+          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...HEATMAP_COLOR_RAMP],
+        },
+      })
     })
     return () => {
+      cancelled = true
       // Cleanups rodam na ordem de declaração: ao sair da tela o `map.remove()`
       // do efeito de init já destruiu o style, e chamar getLayer() sobre ele
       // lançaria, derrubando a árvore. A guarda abaixo só mexe nas camadas
@@ -249,7 +268,7 @@ export function AlertsList() {
       if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
       if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
     }
-  }, [mapReady, mapMode, markersLoaded])
+  }, [mapReady, mapMode])
 
   // Meteo layer — RainViewer real-time precipitation radar. Free, no key.
   // We hit their public manifest for the latest timestamp and use it as a
@@ -341,10 +360,11 @@ export function AlertsList() {
               onPress={() => setFilter(c.value)}
             />
           ))}
-          {/* A posição do pino é real (heartbeat); a COR dele sai do gerador
-              simulado de vitais. Regra do projeto: toda superfície que mostra
-              valor simulado carrega o selo. */}
-          <SimulatedDataBadge />
+          {/* Posição e cor do pino são reais. Só leitura de demonstração
+              leva selo. */}
+          {hasDemo ? (
+            <SimulatedDataBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" />
+          ) : null}
         </View>
 
         {/* Evacuação real: sem ativa → dispatch; ativa → progresso
@@ -455,12 +475,13 @@ export function AlertsList() {
         </View>
 
         {/* Selected marker overlay. Tracked to its pin via
-            map.project() so it follows pan/zoom. Skipped when meteo basemap
-            + red pin combo — that case shows the weather toast instead. */}
-        {selectedMarker &&
-        overlayPos &&
-        !(mapMode === 'meteo' && selectedMarker.status === 'low') ? (
+            map.project() so it follows pan/zoom. Os dados saem da leitura
+            real do funcionário. O cartão do DS exige batimento numérico, então
+            sem leitura a tela compõe o aviso com Text e Button do DS em vez de
+            mostrar zero. */}
+        {selectedMarker && overlayPos ? (
           <View
+            testID="alerts-selected-worker"
             style={{
               position: 'absolute',
               left: overlayPos.left,
@@ -470,68 +491,61 @@ export function AlertsList() {
               zIndex: 3,
             }}
           >
-            <EmployeeOverviewCard
-              employee={{
-                name: selectedMarker.name,
-                sector: 'Setor Leste',
-                avatarUri: selectedMarker.avatarUri,
-              }}
-              progress={84}
-              bpm={117}
-              pressure="140/110"
-              borderColor={theme.content.error}
-              actionElement={
+            {selectedVitals && selectedVitals.heartRate !== null ? (
+              <EmployeeOverviewCard
+                employee={{
+                  name: selectedMarker.name,
+                  sector: selectedEntry?.worker.sector ?? '',
+                  avatarUri: selectedMarker.avatarUri,
+                }}
+                progress={selectedVitals.wearPct ?? undefined}
+                bpm={Number(selectedVitals.heartRate)}
+                pressure={selectedVitals.pressure ?? NO_VALUE}
+                borderColor={selectedBorder}
+                actionElement={
+                  <Button
+                    label="Criar rota de socorro"
+                    backgroundColor={theme.surface.primary}
+                    onPress={() => navigate(`/alerts/${selectedMarker.id}/rescue`)}
+                  />
+                }
+              />
+            ) : (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: theme.gap.m,
+                  padding: theme.padding.s,
+                  borderRadius: theme.border.radius.m,
+                  backgroundColor: theme.surface.medium,
+                }}
+              >
+                <View style={{ flex: 1, gap: theme.gap.xs }}>
+                  <Text
+                    variant="body.s"
+                    color={theme.content.dark}
+                    style={{ fontWeight: '700' as const }}
+                  >
+                    {selectedMarker.name}
+                  </Text>
+                  <Text variant="body.s" color={theme.content.medium}>
+                    {selectedVitals?.status ?? 'Sem leitura do aparelho'}
+                  </Text>
+                </View>
                 <Button
                   label="Criar rota de socorro"
                   backgroundColor={theme.surface.primary}
                   onPress={() => navigate(`/alerts/${selectedMarker.id}/rescue`)}
                 />
-              }
-            />
-          </View>
-        ) : null}
-
-        {/* Meteo alert toast. Surfaces only
-            when the meteorologic basemap is active AND a RED pin (status
-            'low' — pink/red badge) has been clicked. Re-clicking the same
-            pin clears the selection, which dismisses this toast. */}
-        {mapMode === 'meteo' && selectedMarker && overlayPos && selectedMarker.status === 'low' ? (
-          <View
-            style={{
-              position: 'absolute',
-              left: overlayPos.left,
-              top: overlayPos.top,
-              transform: [{ translateX: 8 }, { translateY: -90 }],
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: theme.gap.m,
-              padding: theme.padding.s,
-              borderRadius: theme.border.radius.m,
-              backgroundColor: theme.surface.errorLight,
-              maxWidth: 460,
-              zIndex: 3,
-            }}
-          >
-            <Icon name="rainy" size={24} color={theme.content.light} />
-            <View style={{ flex: 1, gap: theme.gap.xs }}>
-              <Text
-                variant="body.s"
-                color={theme.content.light}
-                style={{ fontWeight: '700' as const }}
-              >
-                Alerta de Chuvas intensas
-              </Text>
-              <Text variant="body.s" color={theme.content.light}>
-                O colaborador José Santos Setor f32 - está em risco
-              </Text>
-            </View>
-            <Button
-              label="Evacuar área"
-              backgroundColor={theme.surface.error}
-              // Dispatch REAL: notifica os workers da org e liga o progresso
-              // X/N. O banner acima é o feedback, não um toast simulado.
-              onPress={() => void startEvacuation()}
-            />
+              </View>
+            )}
+            {selectedVitals?.sourceBadge ? (
+              <SimulatedDataBadge
+                label={selectedVitals.sourceBadge}
+                testID="alerts-selected-demo"
+              />
+            ) : null}
           </View>
         ) : null}
       </View>

@@ -1,17 +1,24 @@
-import { buildHeatmapPoints, HEATMAP_COLOR_RAMP, buildHeatmapGeoJSON } from './heatmap'
+import { heatPointsFromCells, HEATMAP_COLOR_RAMP, buildHeatmapGeoJSON } from './heatmap'
 
-describe('buildHeatmapPoints', () => {
-  it('returns the requested number of points', () => {
-    const pts = buildHeatmapPoints([-46.63, -23.55], 100, 0.01)
-    expect(pts).toHaveLength(100)
+describe('heatPointsFromCells', () => {
+  it('normaliza o peso pela célula mais quente, que vale 1', () => {
+    const pts = heatPointsFromCells([
+      { lat: -23.55, lng: -46.63, weight: 40 },
+      { lat: -23.56, lng: -46.64, weight: 10 },
+    ])
+    expect(pts).toEqual([
+      { lat: -23.55, lng: -46.63, weight: 1 },
+      { lat: -23.56, lng: -46.64, weight: 0.25 },
+    ])
   })
 
-  it('clamps weight to [0.2, 1]', () => {
-    const pts = buildHeatmapPoints([-46.63, -23.55], 200, 0.01)
-    pts.forEach((p) => {
-      expect(p.weight).toBeGreaterThanOrEqual(0.2)
-      expect(p.weight).toBeLessThanOrEqual(1)
-    })
+  // Sem trilha no período não há calor: nenhum ponto, nunca um borrão inventado.
+  it('sem células devolve vazio', () => {
+    expect(heatPointsFromCells([])).toEqual([])
+  })
+
+  it('células de peso zero não viram ponto', () => {
+    expect(heatPointsFromCells([{ lat: 1, lng: 2, weight: 0 }])).toEqual([])
   })
 })
 

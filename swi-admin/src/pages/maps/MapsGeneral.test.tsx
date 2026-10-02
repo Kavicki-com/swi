@@ -26,6 +26,35 @@ const live = vi.hoisted(() => ({
 }))
 vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => live.value }))
 
+// A cor dos pinos sai da telemetria, que tem suite própria; aqui ela vem vazia
+// para não abrir fetch nem socket. Pinos ficam neutros.
+vi.mock('@/hooks/useAdminTelemetry', () => ({
+  useAdminTelemetry: () => ({
+    workers: null,
+    summary: null,
+    loading: false,
+    failed: false,
+    refresh: () => {},
+  }),
+}))
+
+// Trilha agregada do backend. Os testes do caminho vazio trocam `heat.cells`.
+const heat = vi.hoisted(() => ({
+  cells: [{ lat: -23.55, lng: -46.63, weight: 12 }] as Array<{
+    lat: number
+    lng: number
+    weight: number
+  }>,
+}))
+vi.mock('@/services/api/positionHeat', () => ({
+  positionHeatApi: {
+    heat: async () => ({
+      data: { cellSizeM: 50, from: '', to: '', cells: heat.cells },
+      error: null,
+    }),
+  },
+}))
+
 // Radar externo: por padrão resolve null pra não abrir rede. O efeito de "Zonas
 // de alerta" sai cedo do .then, MAS ainda registra o cleanup, que é onde mora a
 // ordem de desmontagem testada abaixo. Os testes do caminho feliz trocam
@@ -453,6 +482,28 @@ describe('MapsGeneral', () => {
     })
   })
 
+  // Sem trilha no período não existe calor: nenhuma camada, e o operador é
+  // avisado em vez de ver um borrão inventado.
+  it('Produtividade sem trilha no período avisa e não adiciona camada', async () => {
+    heat.cells = []
+    const view = await renderMaps()
+    fireEvent.click(screen.getByRole('button', { name: 'Mapa de calor' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Produtividade' }))
+    await drain()
+
+    expect(maplibre.addLayer).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'heatmap-layer' }),
+    )
+    expect(toast.show).toHaveBeenCalledWith(
+      'Sem dados de calor',
+      'Nenhuma posição registrada nas últimas 24 horas.',
+    )
+    heat.cells = [{ lat: -23.55, lng: -46.63, weight: 12 }]
+    await act(async () => {
+      view.unmount()
+    })
+  })
+
   // ----------------------------------------------------------------- meteo
 
   // Duas decisões que este teste tranca: usar o `path` (hash) do manifesto em
@@ -483,12 +534,10 @@ describe('MapsGeneral', () => {
 
   // ------------------------------------------------------- geolocalização
 
-  // "Minha localização" não só voa: re-ancora TODO o dataset de demo em volta
-  // do usuário, deslocando cada coordenada por (geoloc - MOCK_ORIGIN) * 0.2.
-  // O operador de teste fica FORA da âncora de propósito: em cima dela o
-  // resultado seria a própria posição do usuário e o fator de escala poderia
-  // estar errado sem o teste perceber.
-  it('minha localização re-ancora operadores e câmeras em volta do usuário', async () => {
+  // "Minha localização" só voa até quem opera o painel. A posição de cada
+  // funcionário é GPS real e nunca se move: deslocá-la em volta do usuário
+  // desenharia a pessoa num lugar onde ela não está.
+  it('minha localização voa até o usuário sem mover operadores nem câmeras', async () => {
     live.value = [{ ...W1, id: 'w2', lng: -46.6, lat: -23.5 }]
     geolocation.getCurrentPosition.mockImplementation((ok: PositionCallback) =>
       ok({ coords: { longitude: -50, latitude: -10 } } as GeolocationPosition),
@@ -503,13 +552,12 @@ describe('MapsGeneral', () => {
     await drain()
 
     expect(flyToSpy).toHaveBeenCalledWith(expect.objectContaining({ center: [-50, -10], zoom: 16 }))
-    const novas = contentPins()
-      .slice(antes)
-      .flatMap((p) => p.lngLats)
-    // Operador: -50 + (-46.6 + 46.63) * 0.2 e -10 + (-23.5 + 23.55) * 0.2
-    expect(perto(novas, -49.994, -9.99)).toBe(true)
-    // Câmera 1: -50 + (-46.638 + 46.63) * 0.2 e -10 + (-23.541 + 23.55) * 0.2
-    expect(perto(novas, -50.0016, -9.9982)).toBe(true)
+    // Nenhum pino é redesenhado em coordenada nova.
+    expect(contentPins()).toHaveLength(antes)
+    const todas = contentPins().flatMap((p) => p.lngLats)
+    expect(perto(todas, -46.6, -23.5)).toBe(true)
+    expect(perto(todas, -49.994, -9.99)).toBe(false)
+    expect(perto(todas, -50.0016, -9.9982)).toBe(false)
     await act(async () => {
       view.unmount()
     })
@@ -575,8 +623,8 @@ describe('MapsGeneral', () => {
   })
 
   // O pino azul existe porque a geolocalização de desktop erra por quilômetros:
-  // arrastá-lo corrige a âncora e o dataset de demo acompanha.
-  it('arrastar o pino azul re-ancora o dataset na posição corrigida', async () => {
+  // arrastá-lo corrige só a posição de quem opera o painel.
+  it('arrastar o pino azul não move os operadores', async () => {
     live.value = [{ ...W1, id: 'w2', lng: -46.6, lat: -23.5 }]
     geolocation.getCurrentPosition.mockImplementation((ok: PositionCallback) =>
       ok({ coords: { longitude: -50, latitude: -10 } } as GeolocationPosition),
@@ -605,11 +653,10 @@ describe('MapsGeneral', () => {
     await drain()
 
     expect(azul?.element?.style.cursor).toBe('grab')
-    const novas = contentPins()
-      .slice(antes)
-      .flatMap((p) => p.lngLats)
-    // Operador re-ancorado: -40 + (-46.6 + 46.63) * 0.2 e -20 + (-23.5 + 23.55) * 0.2
-    expect(perto(novas, -39.994, -19.99)).toBe(true)
+    expect(contentPins()).toHaveLength(antes)
+    const todas = contentPins().flatMap((p) => p.lngLats)
+    expect(perto(todas, -46.6, -23.5)).toBe(true)
+    expect(perto(todas, -39.994, -19.99)).toBe(false)
     await act(async () => {
       view.unmount()
     })

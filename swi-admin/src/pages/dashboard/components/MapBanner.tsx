@@ -2,13 +2,15 @@
 // Faixa de mapa do dashboard: tiles de satélite da Esri, um pino por
 // funcionário ao vivo, selo de quantos estão na moldura e os CTAs de
 // recentralizar e abrir o mapa geral. Extraída de Dashboard.tsx.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { Button, Text, useTheme } from '@kavicki/swi-design-system'
 import type { DashboardMapMarker } from '@/services/dashboard'
+import { withHealthStatus } from '@/services/api/positions'
+import { useAdminTelemetry } from '@/hooks/useAdminTelemetry'
 
 // Esri World Imagery: free satellite tiles, no API key required (attribution required).
 // https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9
@@ -61,7 +63,7 @@ function buildMarkerEl(marker: DashboardMapMarker, onClick: () => void): HTMLEle
 }
 
 export function MapBanner({
-  markers,
+  markers: positionMarkers,
   height = 172,
 }: {
   markers: DashboardMapMarker[]
@@ -73,6 +75,13 @@ export function MapBanner({
   const theme = useTheme()
   const navigate = useNavigate()
   const lib = useMapLibre()
+  // A posição chega pela prop; a cor de cada pino sai do estado real do
+  // funcionário. Sem leitura, o pino fica neutro.
+  const { workers } = useAdminTelemetry()
+  const markers = useMemo(
+    () => withHealthStatus(positionMarkers, workers),
+    [positionMarkers, workers],
+  )
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)

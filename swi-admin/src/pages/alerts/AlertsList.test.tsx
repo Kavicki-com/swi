@@ -14,6 +14,16 @@ vi.mock('@/hooks/useLivePositions', () => ({
   ],
 }))
 
+vi.mock('@/hooks/useAdminTelemetry', () => ({
+  useAdminTelemetry: () => ({
+    workers: null,
+    summary: null,
+    loading: false,
+    failed: false,
+    refresh: () => {},
+  }),
+}))
+
 vi.mock('@/hooks/useEvacuation', () => ({
   useEvacuation: () => ({
     evacuation: null,

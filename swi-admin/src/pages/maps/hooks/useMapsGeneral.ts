@@ -11,28 +11,16 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import type maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { SATELLITE_STYLE } from '@/lib/mapStyles'
-import { buildHeatmapPoints, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
+import { heatPointsFromCells, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
+import { positionHeatApi } from '@/services/api/positionHeat'
 import { getRainViewerLatestRadar } from '@/lib/rainViewer'
 import { useDemoToast } from '@/lib/demoToast'
 import { formatBadgeCount, withBadges } from '@/app/nav'
 import { type DashboardMapMarker } from '@/services/dashboard'
-import { useLivePositions } from '@/hooks/useLivePositions'
+import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { reportsApi } from '@/services/api/reports'
 import { CAMERA_LOCATIONS, type CameraLocation } from '@/services/cameras'
 import { buildPin, buildCameraPin } from '../pinBuilders'
-
-// Anchor that every mock coordinate (workers + cameras + heatmap) is defined
-// around. When the user hits "Minha localização", we re-anchor the whole
-// dataset by adding (geoloc - MOCK_ORIGIN) to every coordinate, so the demo
-// surrounds them wherever they are instead of staying in São Paulo.
-const MOCK_ORIGIN: [number, number] = [-46.63, -23.55]
-
-// The Bela Vista mock spans ~2km of São Paulo, which is realistic for a
-// neighborhood but reads as scattered at the building-level zoom we land on
-// after geolocation. We compress relative offsets by this factor so the whole
-// dataset fits inside ~400m around the user's pin, the scale of a real
-// mining/industrial site. Drag the pin to test: workers/cameras stay clustered.
-const SHIFT_SCALE = 0.2
 
 export function useMapsGeneral() {
   const navigate = useNavigate()
@@ -41,8 +29,9 @@ export function useMapsGeneral() {
   const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  // Posições REAIS ao vivo (REST snapshot + WS). null = carregando.
-  const mapMarkers = useLivePositions()
+  // Posições REAIS ao vivo (REST snapshot + WS), com a cor do estado real de
+  // cada funcionário. null = carregando.
+  const { markers: mapMarkers } = useLiveMapMarkers()
   // Badge do menu compacto: contagem REAL de relatórios pendentes. Sem
   // pendências, sem badge, nunca um número fixo.
   // Alertas não tem badge: não existe entidade de alerta com estado de leitura
@@ -103,8 +92,8 @@ export function useMapsGeneral() {
     moved: boolean
   } | null>(null)
 
-  // User's real geolocation when they've hit the "Minha localização" button.
-  // Drives both the flyTo and the dataset re-anchoring below.
+  // Posição real de quem opera o painel, depois de "Minha localização". Só
+  // move a câmera e o ponto azul; os pinos dos funcionários não saem do lugar.
   const [geolocOrigin, setGeolocOrigin] = useState<[number, number] | null>(null)
   // Throttle the geolocation button: at most one request per 5s window.
   // navigator.geolocation.getCurrentPosition can take seconds + dispatch
@@ -120,24 +109,11 @@ export function useMapsGeneral() {
     [],
   )
 
-  const shiftedMarkers = useMemo<DashboardMapMarker[]>(() => {
-    const markers = mapMarkers ?? []
-    if (!geolocOrigin) return [...markers]
-    return markers.map((m) => ({
-      ...m,
-      lng: geolocOrigin[0] + (m.lng - MOCK_ORIGIN[0]) * SHIFT_SCALE,
-      lat: geolocOrigin[1] + (m.lat - MOCK_ORIGIN[1]) * SHIFT_SCALE,
-    }))
-  }, [mapMarkers, geolocOrigin])
-
-  const shiftedCameras = useMemo<ReadonlyArray<CameraLocation>>(() => {
-    if (!geolocOrigin) return CAMERA_LOCATIONS
-    return CAMERA_LOCATIONS.map((c) => ({
-      ...c,
-      lng: geolocOrigin[0] + (c.lng - MOCK_ORIGIN[0]) * SHIFT_SCALE,
-      lat: geolocOrigin[1] + (c.lat - MOCK_ORIGIN[1]) * SHIFT_SCALE,
-    }))
-  }, [geolocOrigin])
+  // Posição real nunca se move: "Minha localização" só recentra a câmera e
+  // desenha o ponto azul. Deslocar os pinos em volta do usuário desenharia o
+  // GPS de cada funcionário num lugar onde ele não está.
+  const operatorMarkers = useMemo<DashboardMapMarker[]>(() => mapMarkers ?? [], [mapMarkers])
+  const cameraLocations: ReadonlyArray<CameraLocation> = CAMERA_LOCATIONS
 
   // Conservative over-estimate of button bbox (measured ~285×71 at 1920w, ~204×52 at 1366w).
   // Used only for clamping during drag; CSS handles initial anchored layout.
@@ -243,26 +219,26 @@ export function useMapsGeneral() {
   }, [markersLoaded, lib])
 
   // Centraliza no funcionario que veio no `?focus`, uma unica vez. O ref e
-  // necessario porque `shiftedMarkers` muda a cada atualizacao de posicao ao
+  // necessario porque `operatorMarkers` muda a cada atualizacao de posicao ao
   // vivo (WebSocket); sem ele a camera seria reescrita embaixo do operador
   // toda vez que uma posicao chegasse.
   const focusedRef = useRef(false)
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady || !focusId || focusedRef.current) return
-    const target = shiftedMarkers.find((m) => m.id === focusId)
+    const target = operatorMarkers.find((m) => m.id === focusId)
     // Sem `return` marcando focusedRef: o alvo pode simplesmente ainda nao ter
     // chegado no primeiro snapshot, e queremos tentar de novo no proximo.
     if (!target) return
     focusedRef.current = true
     map.flyTo({ center: [target.lng, target.lat], zoom: 16, duration: 1500 })
-  }, [mapReady, focusId, shiftedMarkers])
+  }, [mapReady, focusId, operatorMarkers])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!lib || !map || !mapReady || !showOperators || shiftedMarkers.length === 0) return
+    if (!lib || !map || !mapReady || !showOperators || operatorMarkers.length === 0) return
 
-    const handles = shiftedMarkers.map((m) =>
+    const handles = operatorMarkers.map((m) =>
       buildPin(m, map, lib, () => navigate(`/employees/${m.id}`)),
     )
 
@@ -279,7 +255,7 @@ export function useMapsGeneral() {
         })
       })
     }
-  }, [mapReady, shiftedMarkers, showOperators, lib, navigate])
+  }, [mapReady, operatorMarkers, showOperators, lib, navigate])
 
   // Camera pins: rendered when the "Câmeras" MapControl is expanded.
   // Mirrors the operator-pin useEffect; uses the same PinHandle/cleanup
@@ -289,7 +265,7 @@ export function useMapsGeneral() {
     const map = mapRef.current
     if (!lib || !map || !mapReady || !showCameras) return
 
-    const handles = shiftedCameras.map((c) =>
+    const handles = cameraLocations.map((c) =>
       buildCameraPin(c, map, lib, () =>
         showToast('Câmera selecionada', `Stream ao vivo de ${c.name}`),
       ),
@@ -306,56 +282,50 @@ export function useMapsGeneral() {
         })
       })
     }
-  }, [mapReady, showCameras, shiftedCameras, lib, showToast])
+  }, [mapReady, showCameras, cameraLocations, lib, showToast])
 
-  // Maplibre heatmap layer: replaces the previous CSS radial-gradient overlay.
-  // Mock ~150 GeoJSON points clustered around the markers' centroid produce an
-  // organic blob with real heatmap-density interpolation (cool blue edges → hot
-  // red center), matching the specified visualization shape.
+  // Camada de calor "Produtividade": a trilha real de posições das últimas 24
+  // horas, agregada em células pelo backend. Sem trilha no período não há
+  // camada, e o operador é avisado em vez de ver um borrão inventado.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady || !showHeatmap || !heatmapOptions.produtividade) return
+    let cancelled = false
 
-    const center: [number, number] =
-      shiftedMarkers.length > 0
-        ? [
-            shiftedMarkers.reduce((s, m) => s + m.lng, 0) / shiftedMarkers.length,
-            shiftedMarkers.reduce((s, m) => s + m.lat, 0) / shiftedMarkers.length,
-          ]
-        : (geolocOrigin ?? MOCK_ORIGIN)
-
-    // Shows ONE dense organic blob spanning ~half the visible map,
-    // with a hot magenta/red core fading to orange/yellow/green/cyan at edges.
-    // To get that shape with maplibre we need (a) tightly clustered points so
-    // their kernels fuse rather than producing many small blobs, (b) enough
-    // points + intensity to push the density curve past the red threshold, and
-    // (c) a secondary hot core to drive the magenta peak in the center.
-    // The spread also scales with SHIFT_SCALE when geolocated so the blob
-    // matches the tightened worker cluster.
-    const spreadFactor = geolocOrigin ? SHIFT_SCALE : 1
-    const corePoints = buildHeatmapPoints(center, 220, 0.006 * spreadFactor)
-    const haloPoints = buildHeatmapPoints(center, 280, 0.018 * spreadFactor)
-    const geojson = buildHeatmapGeoJSON([...corePoints, ...haloPoints])
-
-    // Defensive: clear any stale layer/source from a prior strict-mode mount.
-    if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
-    if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
-
-    map.addSource('heatmap-points', { type: 'geojson', data: geojson })
-    map.addLayer({
-      id: 'heatmap-layer',
-      type: 'heatmap',
-      source: 'heatmap-points',
-      paint: {
-        'heatmap-weight': ['get', 'weight'],
-        'heatmap-intensity': 2.0,
-        'heatmap-radius': 70,
-        'heatmap-opacity': 0.82,
-        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...HEATMAP_COLOR_RAMP],
-      },
+    void positionHeatApi.heat().then(({ data, error }) => {
+      // `cancelled` cobre o desligar do toggle e a saída da página; a guarda do
+      // mapa cobre o mapa já destruído.
+      if (cancelled || mapRef.current !== map) return
+      if (error) {
+        showToast('Mapa de calor indisponível', error.message)
+        return
+      }
+      const points = heatPointsFromCells(data?.cells ?? [])
+      if (points.length === 0) {
+        showToast('Sem dados de calor', 'Nenhuma posição registrada nas últimas 24 horas.')
+        return
+      }
+      const geojson = buildHeatmapGeoJSON(points)
+      // Defensivo: limpa camada e fonte que tenham sobrado de uma montagem anterior.
+      if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
+      if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
+      map.addSource('heatmap-points', { type: 'geojson', data: geojson })
+      map.addLayer({
+        id: 'heatmap-layer',
+        type: 'heatmap',
+        source: 'heatmap-points',
+        paint: {
+          'heatmap-weight': ['get', 'weight'],
+          'heatmap-intensity': 2.0,
+          'heatmap-radius': 70,
+          'heatmap-opacity': 0.82,
+          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...HEATMAP_COLOR_RAMP],
+        },
+      })
     })
 
     return () => {
+      cancelled = true
       // Guarda de unmount: sem ela, sair da página com o mapa de calor ligado
       // deixa a tela preta.
       //
@@ -371,14 +341,13 @@ export function useMapsGeneral() {
       if (map.getLayer('heatmap-layer')) map.removeLayer('heatmap-layer')
       if (map.getSource('heatmap-points')) map.removeSource('heatmap-points')
     }
-  }, [mapReady, shiftedMarkers, geolocOrigin, showHeatmap, heatmapOptions.produtividade])
+  }, [mapReady, showHeatmap, heatmapOptions.produtividade, showToast])
 
   // "Você está aqui" dot: drawn at the coordinates returned by the browser's
   // geolocation API (initial guess), then user-draggable to correct the API's
   // imprecision (desktop browsers without GPS typically resolve to IP-based
-  // coords that can be km off). On dragend we update geolocOrigin, which
-  // cascades through coordShift → shiftedMarkers/shiftedCameras → heatmap,
-  // re-anchoring the whole mock dataset around the corrected position.
+  // coords that can be km off). On dragend we update geolocOrigin, which only
+  // moves this dot; worker pins and cameras keep their real coordinates.
   // Colors hard-coded for contrast over the always-dark satellite tiles.
   useEffect(() => {
     const map = mapRef.current
@@ -447,8 +416,8 @@ export function useMapsGeneral() {
   }, [mapReady, showHeatmap, heatmapOptions.zonasAlerta])
 
   // Corpo verbatim do onPress do botão "Minha localização", que morava no
-  // JSX da página. Pede a posição ao browser, voa até ela e re-ancora o
-  // dataset de demo em volta do usuário.
+  // JSX da página. Pede a posição ao browser e voa até ela, sem mexer na
+  // posição de ninguém.
   const handleLocate = () => {
     if (isLocating) return
     if (!navigator.geolocation) {
@@ -462,17 +431,14 @@ export function useMapsGeneral() {
         if (map) {
           const next: [number, number] = [pos.coords.longitude, pos.coords.latitude]
           setGeolocOrigin(next)
-          // zoom 16 ≈ ~500m viewport, buildings visible, mock cluster fits,
-          // and ESRI World Imagery has z16 tiles globally (z17+ is patchy).
+          // zoom 16 ≈ ~500m viewport, buildings visible, and ESRI World
+          // Imagery has z16 tiles globally (z17+ is patchy).
           map.flyTo({
             center: next,
             zoom: 16,
             duration: 1500,
           })
-          showToast(
-            'Localização encontrada',
-            'Arraste o pin azul se a posição estiver imprecisa, dados de demo seguem.',
-          )
+          showToast('Localização encontrada', 'Arraste o pin azul se a posição estiver imprecisa.')
         }
         locateTimeoutRef.current = setTimeout(() => {
           setIsLocating(false)

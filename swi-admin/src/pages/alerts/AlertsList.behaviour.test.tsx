@@ -8,6 +8,9 @@
 import { act, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AlertsList } from './AlertsList'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
+import type { AdminWorkersTelemetry } from '@/services/api/telemetry'
+import type { HeatCell } from '@/services/api/positionHeat'
+import { adminWorker, condition, neverReported, reporting } from '@/test-utils/telemetryFixtures'
 
 const h = vi.hoisted(() => ({
   positions: [] as Array<Record<string, unknown>>,
@@ -25,9 +28,40 @@ const h = vi.hoisted(() => ({
   // do maplibre.
   pins: [] as Array<{ status: unknown; name: unknown; onClick: () => void }>,
   radar: null as null | { host: string; path: string },
+  // A cor dos pinos e o cartão saem desta leitura, não do pino do heartbeat.
+  workers: null as AdminWorkersTelemetry | null,
+  heatCells: [] as HeatCell[],
 }))
 
 vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => h.positions }))
+vi.mock('@/hooks/useAdminTelemetry', () => ({
+  useAdminTelemetry: () => ({
+    workers: h.workers,
+    summary: null,
+    loading: false,
+    failed: false,
+    refresh: () => {},
+  }),
+}))
+vi.mock('@/services/api/positionHeat', () => ({
+  positionHeatApi: {
+    heat: async () => ({
+      data: { cellSizeM: 50, from: '', to: '', cells: h.heatCells },
+      error: null,
+    }),
+  },
+}))
+
+// Ana com leitura atual e nenhuma condição; Bruno com batimento alto aberto.
+const companyTelemetry = (): AdminWorkersTelemetry => ({
+  observedAt: '2026-10-01T15:00:00.000Z',
+  workers: [
+    adminWorker('w2', 'Bruno Souza', {
+      telemetry: { ...reporting({}, 'REAL', 'w2'), conditions: [condition('URGENT')] },
+    }),
+    adminWorker('w1', 'Ana Lima'),
+  ],
+})
 vi.mock('@/hooks/useEvacuation', () => ({
   useEvacuation: () => ({
     evacuation: h.evacuation,
@@ -132,7 +166,13 @@ const renderAlerts = (route = '/alerts') =>
   renderPage(<AlertsList />, { route, path: '/alerts/:employeeId?' })
 
 beforeEach(() => {
-  h.positions = [worker(), worker({ id: 'w2', name: 'Bruno Souza', status: 'low' })]
+  // O status do heartbeat é neutro; a telemetria é que decide a cor.
+  h.positions = [
+    worker({ status: 'offline' }),
+    worker({ id: 'w2', name: 'Bruno Souza', status: 'offline' }),
+  ]
+  h.workers = companyTelemetry()
+  h.heatCells = [{ lat: -23.55, lng: -46.63, weight: 12 }]
   h.evacuation = null
   h.evacError = null
   h.navigations = []
@@ -250,6 +290,19 @@ describe('AlertsList: camadas do mapa', () => {
     await waitFor(() => expect(mapState.layers.has('heatmap-layer')).toBe(false))
   })
 
+  // Sem trilha registrada no período não existe calor: nenhuma camada, nunca
+  // um borrão de preenchimento.
+  it('modo calor sem trilha no período não adiciona camada', async () => {
+    h.heatCells = []
+    await renderAlerts()
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Mapa de calor'))
+    })
+
+    await waitFor(() => expect(mapState.layers.has('heatmap-layer')).toBe(false))
+  })
+
   it('modo meteo adiciona a camada de radar quando o RainViewer responde', async () => {
     h.radar = { host: 'https://radar.exemplo', path: '/v2/radar/000' }
     await renderAlerts()
@@ -290,27 +343,46 @@ describe('AlertsList: seleção de pino', () => {
     expect(await screen.findByText('Criar rota de socorro')).toBeTruthy()
   })
 
-  it('no basemap meteo, pino vermelho troca o cartão pelo alerta de chuva', async () => {
+  it('o cartão mostra a leitura real do selecionado', async () => {
     await renderAlerts('/alerts/w2')
-
-    await act(async () => {
-      fireEvent.click(screen.getByLabelText('Mapa meteorológico'))
-    })
-
-    expect(await screen.findByText('Alerta de Chuvas intensas')).toBeTruthy()
-    expect(screen.queryByText('Criar rota de socorro')).toBeNull()
+    expect(await screen.findByText('Criar rota de socorro')).toBeTruthy()
+    // 112 bpm é o batimento da leitura de teste.
+    expect(screen.getByText(/112/)).toBeTruthy()
+    expect(screen.queryByText('Setor Leste')).toBeNull()
   })
 
-  it('o botão "Evacuar área" do alerta de chuva dispara evacuação real', async () => {
+  // Sem leitura o cartão do DS mostraria 0 bpm; a tela diz que não há leitura.
+  it('sem leitura do aparelho, o aviso substitui o cartão e mantém a rota de socorro', async () => {
+    h.workers = {
+      observedAt: '2026-10-01T15:00:00.000Z',
+      workers: [adminWorker('w1', 'Ana Lima', { telemetry: neverReported('w1') })],
+    }
+    await renderAlerts('/alerts/w1')
+    expect(await screen.findByText('Sem leitura do aparelho')).toBeTruthy()
+    expect(screen.getByText('Criar rota de socorro')).toBeTruthy()
+  })
+
+  // O alerta de chuva era um texto fixo com um nome inventado. Sem alerta
+  // meteorológico real, nada aparece no lugar do cartão.
+  it('no basemap meteo, o cartão real continua e nenhum alerta de chuva é inventado', async () => {
     await renderAlerts('/alerts/w2')
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Mapa meteorológico'))
     })
-    await act(async () => {
-      fireEvent.click(await screen.findByText('Evacuar área'))
-    })
 
-    expect(h.start).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('Criar rota de socorro')).toBeTruthy()
+    expect(screen.queryByText('Alerta de Chuvas intensas')).toBeNull()
+    expect(screen.queryByText(/José Santos/)).toBeNull()
+  })
+
+  it('leitura de demonstração leva o selo', async () => {
+    h.workers = {
+      observedAt: '2026-10-01T15:00:00.000Z',
+      workers: [adminWorker('w1', 'Ana Lima', { telemetry: reporting({}, 'DEMO', 'w1') })],
+    }
+    await renderAlerts('/alerts/w1')
+    expect(await screen.findByTestId('alerts-demo-badge')).toBeTruthy()
+    expect(screen.getByTestId('alerts-selected-demo')).toBeTruthy()
   })
 })
