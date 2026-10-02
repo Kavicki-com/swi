@@ -8,6 +8,7 @@ import {
   TelemetrySessionNotFoundError,
   type SaveEventResult,
 } from '../persistence/telemetry.repository'
+import type { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import type { TelemetryEventDto } from './dto/telemetry-batch.dto'
 import { TelemetryIngestionService } from './telemetry-ingestion.service'
 
@@ -45,18 +46,25 @@ const conditionsDouble = () => ({
   evaluateSession: jest.fn().mockResolvedValue({ opened: [], recovered: [], alerts: 0 }),
 })
 
+/** Por padrão só o próprio funcionário, como quem não tem empresa. */
+const audienceDouble = () => ({
+  recipientsFor: jest.fn().mockImplementation(async (workerId: string) => [workerId]),
+})
+
 const build = () => {
   const repository = repositoryDouble()
   const realtime = realtimeDouble()
   const assessment = assessmentDouble()
   const conditions = conditionsDouble()
+  const audience = audienceDouble()
   const service = new TelemetryIngestionService(
     repository,
     realtime as unknown as RealtimeGateway,
     assessment as unknown as TelemetryAssessmentService,
     conditions as unknown as TelemetryConditionService,
+    audience as unknown as TelemetryAudienceService,
   )
-  return { repository, realtime, assessment, conditions, service }
+  return { repository, realtime, assessment, conditions, audience, service }
 }
 
 // eventTime recente de propósito: um horário antigo cairia na regra de backlog
@@ -359,6 +367,21 @@ describe('TelemetryIngestionService', () => {
     expect(realtime.emitToUsers).toHaveBeenCalledTimes(1)
     const [destinatarios, nome] = realtime.emitToUsers.mock.calls[0]
     expect(destinatarios).toEqual([DEVICE.workerId])
+    expect(nome).toBe('telemetry.snapshot.updated')
+  })
+
+  // O painel precisa saber sem recarregar: o aviso vai também aos
+  // administradores da empresa do funcionário, e é o serviço de destinatários
+  // quem decide quem são.
+  it('avisa também os administradores da empresa do funcionário', async () => {
+    const { service, realtime, audience } = build()
+    audience.recipientsFor.mockResolvedValue([DEVICE.workerId, 'admin-1', 'admin-2'])
+
+    await service.ingest(DEVICE, { events: [event()] })
+
+    expect(audience.recipientsFor).toHaveBeenCalledWith(DEVICE.workerId)
+    const [destinatarios, nome] = realtime.emitToUsers.mock.calls[0]
+    expect(destinatarios).toEqual([DEVICE.workerId, 'admin-1', 'admin-2'])
     expect(nome).toBe('telemetry.snapshot.updated')
   })
 

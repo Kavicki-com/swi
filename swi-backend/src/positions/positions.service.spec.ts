@@ -1,4 +1,4 @@
-import { PositionsService } from './positions.service'
+import { COLLEAGUE_STALE_MS, PositionsService } from './positions.service'
 import { NotFoundException } from '@nestjs/common'
 
 // Pipeline REAL de última posição por worker: upsert mais push por WS pros
@@ -6,6 +6,7 @@ import { NotFoundException } from '@nestjs/common'
 // ao service.
 const realtime = () => ({ emitToUsers: jest.fn() }) as any
 const media = () => ({ presignGet: jest.fn(async (k: string) => `signed:${k}`) }) as any
+const history = () => ({ record: jest.fn() }) as any
 const prisma = () => ({
   user: { findUnique: jest.fn(), findMany: jest.fn() },
   workerPosition: { upsert: jest.fn(), findMany: jest.fn() },
@@ -27,7 +28,7 @@ describe('PositionsService.heartbeat', () => {
     db.user.findUnique.mockResolvedValue(worker())
     db.user.findMany.mockResolvedValue([])
     db.workerPosition.upsert.mockResolvedValue(posRow())
-    await new PositionsService(db, realtime(), media()).heartbeat('w1', -23.55, -46.63)
+    await new PositionsService(db, realtime(), media(), history()).heartbeat('w1', -23.55, -46.63)
     const arg = db.workerPosition.upsert.mock.calls[0][0]
     expect(arg.where).toEqual({ workerId: 'w1' })
     expect(arg.create).toMatchObject({ workerId: 'w1', lat: -23.55, lng: -46.63 })
@@ -42,7 +43,7 @@ describe('PositionsService.heartbeat', () => {
     db.user.findMany.mockResolvedValue([{ id: 'a1' }, { id: 'a2' }])
     db.workerPosition.upsert.mockResolvedValue(posRow())
     const rt = realtime()
-    await new PositionsService(db, rt, media()).heartbeat('w1', -23.55, -46.63)
+    await new PositionsService(db, rt, media(), history()).heartbeat('w1', -23.55, -46.63)
     expect(db.user.findMany).toHaveBeenCalledWith({
       where: { role: 'ADMIN', companyId: 'org1' },
       select: { id: true },
@@ -60,16 +61,16 @@ describe('PositionsService.heartbeat', () => {
     db.user.findMany.mockResolvedValue([{ id: 'a1' }])
     db.workerPosition.upsert.mockResolvedValue(posRow())
     const rt = { emitToUsers: jest.fn(() => { throw new Error('socket down') }) } as any
-    await expect(new PositionsService(db, rt, media()).heartbeat('w1', -23.55, -46.63)).resolves.toBeUndefined()
+    await expect(new PositionsService(db, rt, media(), history()).heartbeat('w1', -23.55, -46.63)).resolves.toBeUndefined()
   })
 
   it('usuário inexistente ou não-WORKER → NotFound sem upsert', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
-    await expect(new PositionsService(db, realtime(), media()).heartbeat('ghost', 0, 0)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new PositionsService(db, realtime(), media(), history()).heartbeat('ghost', 0, 0)).rejects.toBeInstanceOf(NotFoundException)
     const db2 = prisma()
     db2.user.findUnique.mockResolvedValue(worker({ role: 'ADMIN' }))
-    await expect(new PositionsService(db2, realtime(), media()).heartbeat('a1', 0, 0)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new PositionsService(db2, realtime(), media(), history()).heartbeat('a1', 0, 0)).rejects.toBeInstanceOf(NotFoundException)
     expect(db2.workerPosition.upsert).not.toHaveBeenCalled()
   })
 })
@@ -80,7 +81,7 @@ describe('PositionsService.listForCompany', () => {
     db.workerPosition.findMany.mockResolvedValue([
       { ...posRow(), worker: worker({ profile: { sector: 'Setor Leste', avatarKey: 'avatars/a.png' } }) },
     ])
-    const out = await new PositionsService(db, realtime(), media()).listForCompany('org1')
+    const out = await new PositionsService(db, realtime(), media(), history()).listForCompany('org1')
     expect(db.workerPosition.findMany).toHaveBeenCalledWith({
       where: { worker: { role: 'WORKER', active: true, companyId: 'org1' } },
       include: { worker: { include: { profile: true } } },
@@ -95,14 +96,82 @@ describe('PositionsService.listForCompany', () => {
   it('companyId null (legado) escopa em null — não vaza outras orgs', async () => {
     const db = prisma()
     db.workerPosition.findMany.mockResolvedValue([])
-    await new PositionsService(db, realtime(), media()).listForCompany(null)
+    await new PositionsService(db, realtime(), media(), history()).listForCompany(null)
     expect(db.workerPosition.findMany.mock.calls[0][0].where.worker.companyId).toBeNull()
   })
 
   it('worker sem profile → sector null e avatar vazio', async () => {
     const db = prisma()
     db.workerPosition.findMany.mockResolvedValue([{ ...posRow(), worker: worker({ profile: null }) }])
-    const out = await new PositionsService(db, realtime(), media()).listForCompany('org1')
+    const out = await new PositionsService(db, realtime(), media(), history()).listForCompany('org1')
     expect(out[0]).toMatchObject({ sector: null, avatar: '' })
+  })
+})
+
+describe('PositionsService.heartbeat: trilha do mapa de calor', () => {
+  it('entrega a posição à trilha com a empresa, a origem e o instante gravado', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(worker())
+    db.user.findMany.mockResolvedValue([])
+    db.workerPosition.upsert.mockResolvedValue(posRow())
+    const h = history()
+    await new PositionsService(db, realtime(), media(), h).heartbeat('w1', -23.55, -46.63, 'sim')
+    expect(h.record).toHaveBeenCalledWith(
+      { id: 'w1', companyId: 'org1' },
+      -23.55,
+      -46.63,
+      'sim',
+      new Date('2026-07-24T12:00:00Z'),
+    )
+  })
+
+  // A posição ao vivo é o que o mapa mostra agora; a trilha é secundária e não
+  // pode derrubar o heartbeat.
+  it('falha ao gravar a trilha não rejeita o heartbeat', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue(worker())
+    db.user.findMany.mockResolvedValue([])
+    db.workerPosition.upsert.mockResolvedValue(posRow())
+    const h = { record: jest.fn().mockRejectedValue(new Error('db down')) } as any
+    await expect(
+      new PositionsService(db, realtime(), media(), h).heartbeat('w1', -23.55, -46.63),
+    ).resolves.toBeUndefined()
+  })
+})
+
+describe('PositionsService.listColleagues', () => {
+  const NOW = new Date('2026-10-01T12:00:00.000Z')
+
+  it('sem empresa não há colega, e nada é consultado', async () => {
+    const db = prisma()
+    const out = await new PositionsService(db, realtime(), media(), history()).listColleagues(
+      { userId: 'w1', companyId: null },
+      NOW,
+    )
+    expect(out).toEqual([])
+    expect(db.workerPosition.findMany).not.toHaveBeenCalled()
+  })
+
+  it('outros funcionários ativos da mesma empresa, sem a própria pessoa, só posições recentes', async () => {
+    const db = prisma()
+    db.workerPosition.findMany.mockResolvedValue([
+      { ...posRow({ workerId: 'w2' }), worker: worker({ id: 'w2', name: 'Colega' }) },
+    ])
+    const out = await new PositionsService(db, realtime(), media(), history()).listColleagues(
+      { userId: 'w1', companyId: 'org1' },
+      NOW,
+    )
+    expect(db.workerPosition.findMany).toHaveBeenCalledWith({
+      where: {
+        workerId: { not: 'w1' },
+        recordedAt: { gte: new Date(NOW.getTime() - COLLEAGUE_STALE_MS) },
+        worker: { role: 'WORKER', active: true, companyId: 'org1' },
+      },
+      include: { worker: { include: { profile: true } } },
+    })
+    expect(out).toEqual([
+      expect.objectContaining({ id: 'w2', name: 'Colega', lat: -23.55, lng: -46.63, sector: 'Setor Leste' }),
+    ])
+    expect(COLLEAGUE_STALE_MS).toBe(30 * 60 * 1000)
   })
 })

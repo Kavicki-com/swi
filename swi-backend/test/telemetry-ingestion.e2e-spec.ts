@@ -185,6 +185,40 @@ describe('Telemetry ingestion e2e', () => {
     expect(await prisma.telemetrySample.count({ where: { eventId: { in: [negativa.eventId, acima.eventId] } } })).toBe(0)
   })
 
+  it('aceita temperatura corporal do app Saúde, e o read model a devolve com a origem', async () => {
+    const e = event({
+      measurements: { bodyTemperature: { value: 36.8, unit: '°C', source: 'MANUAL_HEALTHKIT' } },
+    })
+
+    const { body } = await post(headersB, { events: [e] }).expect(200)
+    expect(body.acceptedEventIds).toEqual([e.eventId])
+
+    const sample = await prisma.telemetrySample.findUnique({ where: { eventId: e.eventId } })
+    expect(sample?.bodyTemperatureC).toBe(36.8)
+    expect(sample?.bodyTemperatureSource).toBe('MANUAL_HEALTHKIT')
+
+    const current = await query.currentForWorker(workerB)
+    expect(current.metrics.bodyTemperature).toMatchObject({
+      value: 36.8,
+      quality: 'CURRENT',
+      source: 'MANUAL_HEALTHKIT',
+      unit: '°C',
+    })
+  })
+
+  // O relógio do piloto não mede temperatura no turno, então a origem dele é
+  // recusada: aceitar seria guardar um número que nenhum produtor envia.
+  it('recusa temperatura fora da faixa ou vinda do relógio, sem gravar nada', async () => {
+    const alta = event({ measurements: { bodyTemperature: { value: 46, unit: '°C', source: 'MANUAL_HEALTHKIT' } } })
+    const doRelogio = event({ measurements: { bodyTemperature: { value: 36.5, unit: '°C', source: 'APPLE_WATCH' } } })
+
+    const { body } = await post(headersB, { events: [alta, doRelogio] }).expect(200)
+
+    expect(body.acceptedEventIds).toEqual([])
+    expect(body.conflicts.map((c: { reason: string }) => c.reason)).toEqual(['invalid_measurement', 'invalid_measurement'])
+    expect(await prisma.telemetrySample.count({ where: { eventId: { in: [alta.eventId, doRelogio.eventId] } } })).toBe(0)
+  })
+
   it('confirma o reenvio idêntico sem gravar uma segunda amostra', async () => {
     const e = event()
     await post(headersA, { events: [e] }).expect(200)

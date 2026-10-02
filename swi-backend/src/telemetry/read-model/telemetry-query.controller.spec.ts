@@ -17,6 +17,7 @@ const serviceDouble = () =>
     currentForWorker: jest.fn().mockResolvedValue('estado-proprio'),
     currentForAdmin: jest.fn().mockResolvedValue('estado-do-funcionario'),
     adminSummary: jest.fn().mockResolvedValue('resumo'),
+    adminWorkers: jest.fn().mockResolvedValue('lista'),
     sessionHistory: jest.fn().mockResolvedValue('historico'),
     seriesForWorker: jest.fn().mockResolvedValue('serie-propria'),
     seriesForAdmin: jest.fn().mockResolvedValue('serie-do-funcionario'),
@@ -37,7 +38,7 @@ describe('TelemetryQueryController: fiação de autorização', () => {
     expect(guards).toEqual([JwtAuthGuard, RolesGuard])
   })
 
-  it.each(['worker', 'summary', 'workerSeries'] as const)('%s exige ADMIN', (method) => {
+  it.each(['worker', 'summary', 'workers', 'workerSeries'] as const)('%s exige ADMIN', (method) => {
     expect(rolesOf(TelemetryQueryController.prototype[method])).toEqual(['ADMIN'])
   })
 
@@ -60,6 +61,7 @@ describe('TelemetryQueryController: delegação', () => {
     ['me', (c: TelemetryQueryController) => c.me(WORKER.userId), 'currentForWorker'],
     ['worker', (c: TelemetryQueryController) => c.worker(ADMIN, 'worker-9'), 'currentForAdmin'],
     ['summary', (c: TelemetryQueryController) => c.summary(ADMIN), 'adminSummary'],
+    ['workers', (c: TelemetryQueryController) => c.workers(ADMIN), 'adminWorkers'],
     ['history', (c: TelemetryQueryController) => c.history(WORKER, 'session-1', {}), 'sessionHistory'],
     ['mySeries', (c: TelemetryQueryController) => c.mySeries(WORKER.userId, { period: 'week' }), 'seriesForWorker'],
     [

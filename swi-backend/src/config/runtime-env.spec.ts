@@ -1,4 +1,4 @@
-import { parseRuntimeEnv, RETENTION_DEFAULT_BATCH } from './runtime-env'
+import { parseAlertsIncludeDemo, parseRuntimeEnv, RETENTION_DEFAULT_BATCH } from './runtime-env'
 
 // Ambiente de produção mínimo e válido. Cada teste sobrescreve só a chave que
 // está sendo exercitada, para que a falha aponte a variável e não o setup.
@@ -14,6 +14,21 @@ function validProd(overrides: Record<string, string | undefined> = {}): NodeJS.P
     ...overrides,
   }
 }
+
+// Homologação roda com NODE_ENV=production, então a flag não pode depender do
+// NODE_ENV: só o valor '1' liga, e qualquer outra coisa deixa desligado.
+describe('parseRuntimeEnv: alertas de demonstração na fila', () => {
+  it('desligado por padrão, inclusive em produção', () => {
+    expect(parseRuntimeEnv(validProd()).telemetryAlertsIncludeDemo).toBe(false)
+    expect(parseAlertsIncludeDemo({})).toBe(false)
+  })
+
+  it("só '1' liga, mesmo com NODE_ENV=production", () => {
+    expect(parseRuntimeEnv(validProd({ TELEMETRY_ALERTS_INCLUDE_DEMO: '1' })).telemetryAlertsIncludeDemo).toBe(true)
+    expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: 'true' })).toBe(false)
+    expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: '0' })).toBe(false)
+  })
+})
 
 describe('parseRuntimeEnv: retenção da telemetria', () => {
   it('sem variável, retém trinta dias e apaga em lotes de alguns milhares', () => {
@@ -61,6 +76,31 @@ describe('parseRuntimeEnv: retenção da telemetria', () => {
     expect(() => parseRuntimeEnv({ TELEMETRY_RETENTION_DAYS: '1' })).toThrow(
       /TELEMETRY_RETENTION_DAYS/,
     )
+  })
+})
+
+describe('parseRuntimeEnv: trilha de posições', () => {
+  it('sem variável, retém trinta dias de posições', () => {
+    const env = parseRuntimeEnv(validProd())
+    expect(env.positionRetention.windowMs).toBe(30 * 24 * 60 * 60 * 1000)
+    expect(env.positionRetention.batchSize).toBe(RETENTION_DEFAULT_BATCH)
+  })
+
+  it('aceita a janela a partir de um dia e recusa abaixo disso, sem corrigir em silêncio', () => {
+    expect(parseRuntimeEnv(validProd({ POSITION_RETENTION_DAYS: '1' })).positionRetention.windowMs).toBe(
+      24 * 60 * 60 * 1000,
+    )
+    expect(() => parseRuntimeEnv(validProd({ POSITION_RETENTION_DAYS: '0' }))).toThrow(/POSITION_RETENTION_DAYS/)
+    expect(() => parseRuntimeEnv(validProd({ POSITION_RETENTION_DAYS: 'trinta' }))).toThrow(
+      /POSITION_RETENTION_DAYS/,
+    )
+  })
+
+  it('posição simulada no calor só com a variável exatamente em 1, e nunca por NODE_ENV', () => {
+    expect(parseRuntimeEnv(validProd()).positionsHeatIncludeSim).toBe(false)
+    expect(parseRuntimeEnv({ NODE_ENV: 'development' }).positionsHeatIncludeSim).toBe(false)
+    expect(parseRuntimeEnv(validProd({ POSITIONS_HEAT_INCLUDE_SIM: 'true' })).positionsHeatIncludeSim).toBe(false)
+    expect(parseRuntimeEnv(validProd({ POSITIONS_HEAT_INCLUDE_SIM: '1' })).positionsHeatIncludeSim).toBe(true)
   })
 })
 

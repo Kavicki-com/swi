@@ -16,12 +16,16 @@ import type {
 import {
   ENERGY_RATE_WINDOW_MS,
   projectAdminSummary,
+  projectAdminWorkers,
   projectAggregateWorker,
   projectWorker,
   type AdminTelemetrySummary,
+  type AdminWorkerInput,
+  type AdminWorkersTelemetry,
   type AggregateWorkerInput,
   type DayTotals,
   type ProjectionAssessment,
+  type ProjectionCondition,
   type ProjectionSample,
   type ProjectionSnapshot,
   type WorkerTelemetry,
@@ -55,6 +59,9 @@ const SNAPSHOT_FIELDS = {
   bloodPressureAt: true,
   oxygenSaturationPct: true,
   oxygenSaturationAt: true,
+  bodyTemperatureC: true,
+  bodyTemperatureSource: true,
+  bodyTemperatureAt: true,
 } as const
 
 const ASSESSMENT_FIELDS = {
@@ -120,6 +127,8 @@ export interface SessionHistorySample {
   bloodPressureSource: MeasurementSource | null
   distanceDeltaM: number | null
   oxygenSaturationPct: number | null
+  bodyTemperatureC: number | null
+  bodyTemperatureSource: MeasurementSource | null
   journeyId: string | null
   taskId: string | null
 }
@@ -153,6 +162,9 @@ interface SnapshotRow {
   bloodPressureAt: Date | null
   oxygenSaturationPct: number | null
   oxygenSaturationAt: Date | null
+  bodyTemperatureC: number | null
+  bodyTemperatureSource: MeasurementSource | null
+  bodyTemperatureAt: Date | null
 }
 
 interface AssessmentRow {
@@ -161,6 +173,32 @@ interface AssessmentRow {
   wearPercent: number | null
   fatigueEtaMin: number | null
   formulaVersion: string
+}
+
+const CONDITION_FIELDS = {
+  kind: true,
+  origin: true,
+  firstSeenAt: true,
+  observedValue: true,
+  thresholdValue: true,
+} as const
+
+interface ConditionRow {
+  kind: ConditionKind
+  origin: TelemetryOrigin
+  firstSeenAt: Date
+  observedValue: number | null
+  thresholdValue: number | null
+}
+
+function toProjectionCondition(row: ConditionRow): ProjectionCondition {
+  return {
+    kind: row.kind,
+    origin: row.origin,
+    firstSeenAt: row.firstSeenAt.toISOString(),
+    observedValue: row.observedValue,
+    thresholdValue: row.thresholdValue,
+  }
 }
 
 interface SampleRow {
@@ -202,6 +240,9 @@ function toProjectionSnapshot(row: SnapshotRow): ProjectionSnapshot {
     bloodPressureAt: iso(row.bloodPressureAt),
     oxygenSaturationPct: row.oxygenSaturationPct,
     oxygenSaturationAt: iso(row.oxygenSaturationAt),
+    bodyTemperatureC: row.bodyTemperatureC,
+    bodyTemperatureSource: row.bodyTemperatureSource,
+    bodyTemperatureAt: iso(row.bodyTemperatureAt),
   }
 }
 
@@ -277,6 +318,7 @@ export class TelemetryQueryService {
           windowSamples: [],
           dayTotals: { steps: null, activeEnergy: null, distance: null },
           assessment: null,
+          conditions: [],
         },
         now,
       )
@@ -292,7 +334,7 @@ export class TelemetryQueryService {
     // isso a série que vem é só a janela das taxas, e os acumulados do dia
     // chegam somados pelo banco: o dia inteiro seriam milhares de linhas por
     // chamada, multiplicadas pelo número de funcionários a cada cinco segundos.
-    const [windowSamples, steps, energy, distance, assessments] = await Promise.all([
+    const [windowSamples, steps, energy, distance, assessments, conditions] = await Promise.all([
       this.prisma.telemetrySample.findMany({
         where: { ...scope, eventTime: { gte: new Date(now.getTime() - ENERGY_RATE_WINDOW_MS) } },
         select: SAMPLE_FIELDS,
@@ -333,6 +375,13 @@ export class TelemetryQueryService {
         orderBy: { computedAt: 'desc' },
         take: 1,
       }),
+      // Só as abertas e só da origem do snapshot. Poucas linhas por definição:
+      // o índice único deixa no máximo uma ativa por tipo e origem.
+      this.prisma.telemetryCondition.findMany({
+        where: { ...scope, status: 'ACTIVE' },
+        select: CONDITION_FIELDS,
+        orderBy: { firstSeenAt: 'asc' },
+      }),
     ])
 
     return projectWorker(
@@ -346,6 +395,7 @@ export class TelemetryQueryService {
           distance: toDistanceSample(distance),
         },
         assessment: assessments.length === 0 ? null : toProjectionAssessment(assessments[0]),
+        conditions: conditions.map(toProjectionCondition),
       },
       now,
     )
@@ -495,6 +545,154 @@ export class TelemetryQueryService {
   }
 
   /**
+   * Todos os funcionários ativos da empresa numa leitura só, cada um com o
+   * aparelho e a mesma projeção de workers/:id/current.
+   *
+   * Escala do piloto: dezenas de funcionários. O que é por pessoa e pequeno sai
+   * em lote com `in` (snapshot, totais do dia, última avaliação, condições
+   * abertas, aparelhos), cada um em uma consulta para a empresa inteira. A
+   * janela das taxas continua uma consulta por funcionário que reporta, com o
+   * mesmo teto de linhas da leitura individual: juntar todas numa só exigiria
+   * um teto por pessoa que o `take` do Prisma não expressa, e sem ele um
+   * produtor acelerado puxaria a janela inteira de todo mundo.
+   */
+  async adminWorkers(admin: JwtUser, now = new Date()): Promise<AdminWorkersTelemetry> {
+    const companyId = this.companyOfPanelAdmin(admin)
+    const people = await this.prisma.user.findMany({
+      where: { companyId, role: 'WORKER', active: true },
+      select: { id: true, name: true, profile: { select: { sector: true } } },
+    })
+    if (people.length === 0) return projectAdminWorkers([], now)
+
+    const workerIds = people.map((p) => p.id)
+    const ids = { workerId: { in: workerIds } }
+    const { start, end } = monitoredDayRange(now)
+    const day = { gte: start, lt: end }
+
+    // Os totais e a avaliação vêm agrupados também por origem: cada funcionário
+    // lê na origem do próprio snapshot, e a escolha da linha certa é feita em
+    // memória, sobre poucas linhas por pessoa.
+    const [devices, snapshots, steps, energy, distance, assessments, conditions] = await Promise.all([
+      this.prisma.telemetryDevice.findMany({
+        where: { revokedAt: null, ...ids },
+        select: { workerId: true, lastSeenAt: true },
+      }),
+      this.prisma.telemetrySnapshot.findMany({ where: ids, select: SNAPSHOT_FIELDS }),
+      this.prisma.telemetrySample.groupBy({
+        by: ['workerId', 'origin'],
+        where: { ...ids, eventTime: day, stepDelta: { not: null } },
+        _sum: { stepDelta: true },
+        _max: { eventTime: true },
+      }),
+      this.prisma.telemetrySample.groupBy({
+        by: ['workerId', 'origin'],
+        where: { ...ids, eventTime: day, activeEnergyKcal: { not: null } },
+        _sum: { activeEnergyKcal: true },
+        _max: { eventTime: true },
+        _min: { eventTime: true },
+      }),
+      this.prisma.telemetrySample.groupBy({
+        by: ['workerId', 'origin'],
+        where: { ...ids, eventTime: day, distanceDeltaM: { not: null } },
+        _sum: { distanceDeltaM: true },
+        _max: { eventTime: true },
+      }),
+      this.latestAssessmentPerWorkerAndOrigin(workerIds),
+      this.prisma.telemetryCondition.findMany({
+        where: { ...ids, status: 'ACTIVE' },
+        select: { workerId: true, ...CONDITION_FIELDS },
+        orderBy: { firstSeenAt: 'asc' },
+      }),
+    ])
+
+    const snapshotBy = new Map(snapshots.map((s) => [s.workerId, s]))
+    const key = (workerId: string, origin: string) => `${workerId}|${origin}`
+    const stepsBy = new Map(steps.map((r) => [key(r.workerId, r.origin), r]))
+    const energyBy = new Map(energy.map((r) => [key(r.workerId, r.origin), r]))
+    const distanceBy = new Map(distance.map((r) => [key(r.workerId, r.origin), r]))
+    const assessmentBy = new Map(assessments.map((a) => [key(a.workerId, a.origin), a]))
+
+    const windowStart = new Date(now.getTime() - ENERGY_RATE_WINDOW_MS)
+    const windows = new Map(
+      await Promise.all(
+        snapshots.map(
+          async (s) =>
+            [
+              s.workerId,
+              await this.prisma.telemetrySample.findMany({
+                where: { workerId: s.workerId, origin: s.origin, eventTime: { gte: windowStart } },
+                select: SAMPLE_FIELDS,
+                orderBy: { eventTime: 'desc' },
+                take: WINDOW_MAX_SAMPLES,
+              }),
+            ] as const,
+        ),
+      ),
+    )
+
+    const inputs: AdminWorkerInput[] = people.map((person) => {
+      const snapshot = snapshotBy.get(person.id)
+      const own = (c: { workerId: string }) => c.workerId === person.id
+      const base = {
+        worker: { id: person.id, name: person.name, sector: person.profile?.sector ?? null },
+        devices: devices.filter(own).map((d) => ({ lastSeenAt: iso(d.lastSeenAt) })),
+      }
+      if (snapshot === undefined) {
+        return {
+          ...base,
+          projection: {
+            workerId: person.id,
+            snapshot: null,
+            windowSamples: [],
+            dayTotals: { steps: null, activeEnergy: null, distance: null },
+            assessment: null,
+            conditions: [],
+          },
+        }
+      }
+      const k = key(person.id, snapshot.origin)
+      const energyRow = energyBy.get(k)
+      const distanceRow = distanceBy.get(k)
+      const assessment = assessmentBy.get(k)
+      return {
+        ...base,
+        projection: {
+          workerId: person.id,
+          snapshot: toProjectionSnapshot(snapshot),
+          windowSamples: (windows.get(person.id) ?? []).map(toProjectionSample),
+          dayTotals: {
+            steps: toStepsSample(stepsBy.get(k)),
+            activeEnergy: energyRow === undefined ? null : toEnergyTotal(energyRow),
+            distance: distanceRow === undefined ? null : toDistanceSample(distanceRow),
+          },
+          assessment: assessment === undefined ? null : toProjectionAssessment(assessment),
+          conditions: conditions.filter(own).map(toProjectionCondition),
+        },
+      }
+    })
+
+    return projectAdminWorkers(inputs, now)
+  }
+
+  /**
+   * A última avaliação de cada funcionário em cada origem, escolhida pelo
+   * banco pelo mesmo motivo de `latestAssessmentPerWorker`. A origem entra no
+   * DISTINCT ON porque a lista lê cada pessoa na origem do próprio snapshot.
+   */
+  private latestAssessmentPerWorkerAndOrigin(
+    workerIds: string[],
+  ): Promise<(AssessmentRow & { workerId: string; origin: TelemetryOrigin })[]> {
+    const query = Prisma.sql`
+      SELECT DISTINCT ON ("workerId", "origin")
+        "workerId", "origin", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion"
+      FROM "TelemetryAssessment"
+      WHERE "workerId" IN (${Prisma.join(workerIds)})
+      ORDER BY "workerId", "origin", "computedAt" DESC
+    `
+    return this.prisma.$queryRaw(query)
+  }
+
+  /**
    * A última avaliação de cada funcionário, escolhida pelo banco.
    *
    * SQL cru de propósito. Trazer todas as avaliações para ficar com uma por
@@ -603,6 +801,8 @@ export class TelemetryQueryService {
         bloodPressureSource: true,
         distanceDeltaM: true,
         oxygenSaturationPct: true,
+        bodyTemperatureC: true,
+        bodyTemperatureSource: true,
         journeyId: true,
         taskId: true,
       },

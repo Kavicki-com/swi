@@ -43,6 +43,8 @@ export type MetricKind =
   | 'wear'
   | 'distance'
   | 'oxygenSaturation'
+  /** Medição pontual vinda do app Saúde, como a pressão. Sem alerta: o pulso mede pele. */
+  | 'bodyTemperature'
   /** Minutos até o desgaste cruzar o limiar do alerta. Derivada da avaliação. */
   | 'fatigueEtaMin'
 
@@ -96,6 +98,8 @@ export interface TelemetryEvent {
     distanceDeltaM: Measurement
     /** Percentual. O relógio só mede em repouso, então chega raramente. */
     oxygenSaturation: Measurement
+    /** Graus Celsius, lidos do app Saúde pelo iPhone. Chega raramente. */
+    bodyTemperature: Measurement
   }>
   journeyId?: string | null
   taskId?: string | null

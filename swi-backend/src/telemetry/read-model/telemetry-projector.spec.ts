@@ -6,10 +6,14 @@ import {
   MOVEMENT_WINDOW_MS,
   PANEL_CAPTIONS,
   projectAdminSummary,
+  projectAdminWorkers,
+  type AdminWorkerInput,
   projectAggregateWorker,
   projectWorker,
   type DayTotals,
+  CONDITION_CATEGORY,
   type ProjectionAssessment,
+  type ProjectionCondition,
   type ProjectionSample,
   type ProjectionSnapshot,
   type WorkerTelemetry,
@@ -47,6 +51,9 @@ const snapshot = (over: Partial<ProjectionSnapshot> = {}): ProjectionSnapshot =>
   bloodPressureAt: null,
   oxygenSaturationPct: null,
   oxygenSaturationAt: null,
+  bodyTemperatureC: null,
+  bodyTemperatureSource: null,
+  bodyTemperatureAt: null,
   ...over,
 })
 
@@ -91,6 +98,7 @@ const project = (
     windowSamples?: readonly ProjectionSample[]
     dayTotals?: DayTotals
     assessment?: ProjectionAssessment | null
+    conditions?: readonly ProjectionCondition[]
   } = {},
 ): WorkerTelemetry =>
   projectWorker(
@@ -100,6 +108,7 @@ const project = (
       windowSamples: over.windowSamples ?? [],
       dayTotals: over.dayTotals ?? totals(),
       assessment: over.assessment ?? null,
+      conditions: over.conditions ?? [],
     },
     NOW,
   )
@@ -424,6 +433,41 @@ describe('projectWorker: oxigenação segue a régua da pressão', () => {
   })
 })
 
+describe('projectWorker: temperatura corporal segue a régua da pressão', () => {
+  const withTemperature = (measuredAt: string, source: 'MANUAL_HEALTHKIT' | null = 'MANUAL_HEALTHKIT') =>
+    project({
+      snapshot: snapshot({ bodyTemperatureC: 36.9, bodyTemperatureSource: source, bodyTemperatureAt: measuredAt }),
+    })
+
+  it('até 24 horas é a medição atual, em graus Celsius, com a origem do app Saúde', () => {
+    expect(withTemperature(hoursAgo(6)).metrics.bodyTemperature).toEqual({
+      value: 36.9,
+      quality: 'CURRENT',
+      measuredAt: hoursAgo(6),
+      source: 'MANUAL_HEALTHKIT',
+      unit: '°C',
+    })
+  })
+
+  it('entre 24 e 72 horas é histórica; acima disso o valor some', () => {
+    expect(withTemperature(hoursAgo(30)).metrics.bodyTemperature).toMatchObject({ value: 36.9, quality: 'STALE' })
+    expect(withTemperature(hoursAgo(80)).metrics.bodyTemperature).toMatchObject({
+      value: null,
+      quality: 'UNAVAILABLE',
+      measuredAt: null,
+    })
+  })
+
+  // Como a pressão: leitura cuja procedência não se sabe não sustenta a tela.
+  it('sem origem declarada não há leitura', () => {
+    expect(withTemperature(hoursAgo(1), null).metrics.bodyTemperature.value).toBeNull()
+  })
+
+  it('quem nunca reportou tem temperatura indisponível, nunca zero', () => {
+    expect(project({ snapshot: null }).metrics.bodyTemperature).toMatchObject({ value: null, quality: 'UNAVAILABLE' })
+  })
+})
+
 describe('projectWorker: esforço e desgaste vêm da avaliação, com versão', () => {
   const assessment = (over: Partial<ProjectionAssessment> = {}): ProjectionAssessment => ({
     computedAt: secondsAgo(10),
@@ -585,6 +629,8 @@ interface WorkerOverrides {
   pressureAt?: string
   systolic?: number
   diastolic?: number
+  temperatureAt?: string
+  temperature?: number
   conditions?: readonly string[]
 }
 
@@ -599,6 +645,9 @@ const worker = (id: string, over: WorkerOverrides = {}) =>
         diastolicMmHg: over.pressureAt === undefined ? null : (over.diastolic ?? 80),
         bloodPressureSource: over.pressureAt === undefined ? null : 'EXTERNAL_CUFF',
         bloodPressureAt: over.pressureAt ?? null,
+        bodyTemperatureC: over.temperatureAt === undefined ? null : (over.temperature ?? 36.5),
+        bodyTemperatureSource: over.temperatureAt === undefined ? null : 'MANUAL_HEALTHKIT',
+        bodyTemperatureAt: over.temperatureAt ?? null,
       }),
       // Já somado pelo banco no caminho real do painel.
       steps:
@@ -678,6 +727,30 @@ describe('projectAdminSummary: médias excluem indisponíveis e devolvem cobertu
 
     expect(summary.bloodPressureAverage.value).toEqual({ systolic: 125, diastolic: 85 })
     expect(summary.bloodPressureAverage.coverage).toEqual({ evaluated: 2, total: 3 })
+  })
+
+  it('a média de temperatura só aceita leitura de até 24 horas, com uma casa', () => {
+    const summary = projectAdminSummary(
+      [
+        worker('a', { temperatureAt: hoursAgo(2), temperature: 36.4 }),
+        worker('b', { temperatureAt: hoursAgo(20), temperature: 36.9 }),
+        // Histórica: aparece no mobile, mas está fora do painel.
+        worker('c', { temperatureAt: hoursAgo(40), temperature: 39 }),
+        worker('d'),
+      ],
+      NOW,
+    )
+
+    expect(summary.bodyTemperatureAverage.value).toBe(36.7)
+    expect(summary.bodyTemperatureAverage.unit).toBe('°C')
+    expect(summary.bodyTemperatureAverage.coverage).toEqual({ evaluated: 2, total: 4 })
+    expect(summary.bodyTemperatureAverage.caption).toBe(PANEL_CAPTIONS.bodyTemperature)
+  })
+
+  it('sem temperatura recente, a média é nula e a legenda diz sem dados', () => {
+    const summary = projectAdminSummary([worker('a')], NOW)
+    expect(summary.bodyTemperatureAverage.value).toBeNull()
+    expect(summary.bodyTemperatureAverage.caption).toBe(PANEL_CAPTIONS.noCoverage)
   })
 
   it('movimentos somam o acumulado do dia de quem tem total conhecido', () => {
@@ -887,5 +960,157 @@ describe('projectWorker: Calculando não alarga a união de qualidade', () => {
 
     expect(projected.metrics.energyRatePerHour.value).toBe(120)
     expect(projected.metrics.energyRatePerHour.calculating).toBe(false)
+  })
+})
+
+// A leitura do funcionário carrega as condições abertas para que app e painel
+// derivem o estado de saúde de condição real, em vez de inventá-lo a partir
+// dos números. A projeção só classifica e ordena; quem decide abrir e fechar
+// é o motor de condições.
+describe('projectWorker: condições ativas acompanham a leitura', () => {
+  const condition = (over: Partial<ProjectionCondition> = {}): ProjectionCondition => ({
+    kind: 'HEART_RATE_HIGH',
+    origin: 'REAL',
+    firstSeenAt: minutesAgo(3),
+    observedValue: 182,
+    thresholdValue: 167,
+    ...over,
+  })
+
+  it('sem condição aberta a lista vem vazia, nunca ausente', () => {
+    expect(project().conditions).toEqual([])
+  })
+
+  it('batimento fora da faixa vem como urgente, com valor e limite que a abriram', () => {
+    const projected = project({ conditions: [condition()] })
+
+    expect(projected.conditions).toEqual([
+      {
+        kind: 'HEART_RATE_HIGH',
+        category: 'URGENT',
+        openedAt: minutesAgo(3),
+        observedValue: 182,
+        thresholdValue: 167,
+      },
+    ])
+  })
+
+  it('alerta de aparelho é classificado como aparelho, não como saúde', () => {
+    const projected = project({
+      conditions: [condition({ kind: 'DEVICE_BATTERY_LOW', observedValue: 9, thresholdValue: 15 })],
+    })
+
+    expect(projected.conditions.map((c) => c.category)).toEqual(['DEVICE'])
+  })
+
+  it('condição de outra origem não entra na leitura', () => {
+    const projected = project({
+      snapshot: snapshot({ origin: 'REAL' }),
+      conditions: [condition({ origin: 'DEMO' }), condition({ kind: 'WEAR_HIGH', origin: 'REAL' })],
+    })
+
+    expect(projected.conditions.map((c) => c.kind)).toEqual(['WEAR_HIGH'])
+  })
+
+  it('quem nunca reportou não tem condição, mesmo que alguma linha sobre', () => {
+    expect(project({ snapshot: null, conditions: [condition()] }).conditions).toEqual([])
+  })
+
+  it('vêm da mais antiga para a mais recente', () => {
+    const projected = project({
+      conditions: [
+        condition({ kind: 'WEAR_HIGH', firstSeenAt: minutesAgo(1) }),
+        condition({ kind: 'DEVICE_BATTERY_LOW', firstSeenAt: minutesAgo(9) }),
+      ],
+    })
+
+    expect(projected.conditions.map((c) => c.kind)).toEqual(['DEVICE_BATTERY_LOW', 'WEAR_HIGH'])
+  })
+
+  // A classificação é exaustiva por construção: tipo novo de condição não
+  // compila sem categoria. O urgente é exatamente o conjunto do domínio, para
+  // a leitura e o resumo do painel nunca divergirem sobre o que urge.
+  it('urgente é exatamente o conjunto de urgência do domínio', () => {
+    const urgent = (Object.keys(CONDITION_CATEGORY) as ConditionKind[]).filter(
+      (kind) => CONDITION_CATEGORY[kind] === 'URGENT',
+    )
+    expect(urgent.sort()).toEqual(['HEART_RATE_HIGH', 'HEART_RATE_LOW'])
+    expect(CONDITION_CATEGORY.DEVICE_SIGNAL_LOST).toBe('DEVICE')
+    expect(CONDITION_CATEGORY.BLOOD_PRESSURE_REVIEW).toBe('HEALTH')
+    expect(CONDITION_CATEGORY.WEAR_HIGH).toBe('HEALTH')
+  })
+})
+
+describe('projectAdminWorkers: lista do painel, uma leitura por funcionário', () => {
+  const urgent: ProjectionCondition = {
+    kind: 'HEART_RATE_HIGH',
+    origin: 'REAL',
+    firstSeenAt: minutesAgo(3),
+    observedValue: 182,
+    thresholdValue: 167,
+  }
+  const wear: ProjectionCondition = { ...urgent, kind: 'WEAR_HIGH', observedValue: 84, thresholdValue: 80 }
+  const battery: ProjectionCondition = { ...urgent, kind: 'DEVICE_BATTERY_LOW', observedValue: 9, thresholdValue: 15 }
+
+  const entry = (
+    id: string,
+    name: string,
+    over: { conditions?: ProjectionCondition[]; snapshot?: ProjectionSnapshot | null; devices?: { lastSeenAt: string | null }[] } = {},
+  ): AdminWorkerInput => ({
+    worker: { id, name, sector: 'Leste' },
+    devices: over.devices ?? [{ lastSeenAt: secondsAgo(10) }],
+    projection: {
+      workerId: id,
+      snapshot: over.snapshot === undefined ? snapshot() : over.snapshot,
+      windowSamples: [],
+      dayTotals: totals(),
+      assessment: null,
+      conditions: over.conditions ?? [],
+    },
+  })
+
+  it('empresa sem funcionário devolve lista vazia com o instante da leitura', () => {
+    expect(projectAdminWorkers([], NOW)).toEqual({ observedAt: NOW.toISOString(), workers: [] })
+  })
+
+  it('cada funcionário vem com o aparelho e a mesma leitura de workers/:id/current', () => {
+    const [only] = projectAdminWorkers([entry('w1', 'Ana')], NOW).workers
+
+    expect(only.worker).toEqual({ id: 'w1', name: 'Ana', sector: 'Leste' })
+    expect(only.device).toEqual({ state: 'PAIRED', lastSeenAt: secondsAgo(10) })
+    expect(only.telemetry).toEqual({ ...project(), workerId: 'w1' })
+  })
+
+  it('quem nunca reportou aparece, com leitura vazia, e sem aparelho fica NONE', () => {
+    const [only] = projectAdminWorkers([entry('w1', 'Ana', { snapshot: null, devices: [] })], NOW).workers
+
+    expect(only.device).toEqual({ state: 'NONE', lastSeenAt: null })
+    expect(only.telemetry.origin).toBeNull()
+    expect(only.telemetry.metrics.heartRate.value).toBeNull()
+  })
+
+  it('com mais de um aparelho ativo, o último contato é o mais recente deles', () => {
+    const [only] = projectAdminWorkers(
+      [entry('w1', 'Ana', { devices: [{ lastSeenAt: minutesAgo(9) }, { lastSeenAt: null }, { lastSeenAt: secondsAgo(4) }] })],
+      NOW,
+    ).workers
+
+    expect(only.device).toEqual({ state: 'PAIRED', lastSeenAt: secondsAgo(4) })
+  })
+
+  it('ordena urgência primeiro, depois saúde, depois o resto, e por nome dentro de cada grupo', () => {
+    const order = projectAdminWorkers(
+      [
+        entry('w1', 'Zuleica'),
+        entry('w2', 'Bruno', { conditions: [wear] }),
+        entry('w3', 'Carla', { conditions: [battery] }),
+        entry('w4', 'Ana', { conditions: [urgent] }),
+        entry('w5', 'Álvaro'),
+        entry('w6', 'Davi', { conditions: [wear, urgent] }),
+      ],
+      NOW,
+    ).workers.map((w) => w.worker.name)
+
+    expect(order).toEqual(['Ana', 'Davi', 'Bruno', 'Álvaro', 'Carla', 'Zuleica'])
   })
 })

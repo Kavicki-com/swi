@@ -93,6 +93,37 @@ export function parseTelemetryRetention(
   return { windowMs: days * DAY_MS, batchSize }
 }
 
+/**
+ * Retenção da trilha de posições do mapa de calor. Diferente da telemetria,
+ * nada é resumido antes de apagar, então o piso é só o da janela padrão do
+ * mapa de calor: um dia.
+ */
+export const POSITION_RETENTION_DEFAULT_DAYS = 30
+export const POSITION_RETENTION_MIN_DAYS = 1
+
+export function parsePositionRetention(
+  source: NodeJS.ProcessEnv,
+  problems: string[],
+): TelemetryRetentionEnv {
+  const days = parseBoundedInt(
+    source.POSITION_RETENTION_DAYS,
+    'POSITION_RETENTION_DAYS',
+    POSITION_RETENTION_DEFAULT_DAYS,
+    POSITION_RETENTION_MIN_DAYS,
+    problems,
+  )
+  return { windowMs: days * DAY_MS, batchSize: RETENTION_DEFAULT_BATCH }
+}
+
+/**
+ * Posição do simulador no mapa de calor só com a variável exatamente em "1".
+ * Existe para a homologação e nunca é ligada no servidor de produção; não
+ * depende de NODE_ENV porque a homologação também roda em modo de produção.
+ */
+export function parsePositionsHeatIncludeSim(source: NodeJS.ProcessEnv): boolean {
+  return source.POSITIONS_HEAT_INCLUDE_SIM === '1'
+}
+
 export interface RuntimeEnv {
   readonly nodeEnv: NodeEnv
   readonly isProduction: boolean
@@ -110,7 +141,21 @@ export interface RuntimeEnv {
   readonly weatherCron?: string
   readonly weatherScenario?: string
   readonly telemetryRetention: TelemetryRetentionEnv
+  readonly positionRetention: TelemetryRetentionEnv
+  readonly positionsHeatIncludeSim: boolean
   readonly simPositions: boolean
+  /** Fila de alertas também com origem de demonstração. Só homologação. */
+  readonly telemetryAlertsIncludeDemo: boolean
+}
+
+/**
+ * Liga a fila de alertas para mostrar e triar alertas de demonstração, para o
+ * roteiro de aceite da homologação ver o alerta que o injetor abre. Não depende
+ * do NODE_ENV porque a homologação roda como produção; só '1' liga. Lida a cada
+ * chamada, como a retenção, para valer sem recompilar a configuração.
+ */
+export function parseAlertsIncludeDemo(source: NodeJS.ProcessEnv): boolean {
+  return source.TELEMETRY_ALERTS_INCLUDE_DEMO === '1'
 }
 
 const DEV_CORS_ORIGIN = 'http://localhost:5173'
@@ -203,6 +248,7 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
   if (secretKey && !accessKey) problems.push('MINIO_ACCESS_KEY é obrigatória quando MINIO_SECRET_KEY está definida')
 
   const telemetryRetention = parseTelemetryRetention(source, problems)
+  const positionRetention = parsePositionRetention(source, problems)
 
   const smtpPort = Number(source.SMTP_PORT ?? 1025)
   if (!Number.isInteger(smtpPort) || smtpPort <= 0 || smtpPort > 65535) {
@@ -243,6 +289,9 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
     weatherCron: source.WEATHER_CRON,
     weatherScenario: source.WEATHER_SCENARIO,
     telemetryRetention: Object.freeze(telemetryRetention),
+    positionRetention: Object.freeze(positionRetention),
+    positionsHeatIncludeSim: parsePositionsHeatIncludeSim(source),
     simPositions: source.SIM_POSITIONS === '1',
+    telemetryAlertsIncludeDemo: parseAlertsIncludeDemo(source),
   })
 }

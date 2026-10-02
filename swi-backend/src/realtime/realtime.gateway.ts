@@ -3,10 +3,13 @@ import { Server, Socket } from 'socket.io'
 import { JwtService } from '@nestjs/jwt'
 import { requireJwtSecret } from '../auth/jwt-secret'
 import { wsCorsOptions } from '../cors'
+import { PrismaService } from '../prisma/prisma.service'
 
 // Gateway WS único (chat agora; notificações na Fatia 5). Mesma porta HTTP (3000).
-// Autentica no handshake com o MESMO segredo JWT do REST; cada conexão entra na
-// sala `user:<userId>` pra ser endereçável por `emitToUsers`.
+// Autentica no handshake com o MESMO segredo JWT do REST e confere no banco que
+// o usuário existe e está ativo: o token vale por dias, e sem a conferência um
+// usuário desativado seguiria recebendo eventos até ele vencer. Cada conexão
+// entra na sala `user:<userId>` pra ser endereçável por `emitToUsers`.
 // CORS alinhado ao HTTP (mesma env CORS_ORIGINS do PR #41). Cliente RN não manda
 // header Origin no handshake, então o mobile não é afetado; browser (admin) só
 // conecta das origins liberadas.
@@ -15,12 +18,22 @@ import { wsCorsOptions } from '../cors'
 @WebSocketGateway({ cors: wsCorsOptions(process.env) })
 export class RealtimeGateway implements OnGatewayConnection {
   @WebSocketServer() server!: Server
-  constructor(private readonly jwt: JwtService) {}
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  handleConnection(client: Socket): void {
+  async handleConnection(client: Socket): Promise<void> {
     const token = this.extractToken(client)
     try {
       const payload = this.jwt.verify<{ sub: string }>(token, { secret: requireJwtSecret() })
+      // Falha na conferência também fecha: sem saber se o usuário está ativo,
+      // a conexão não abre, e o cliente tenta de novo.
+      const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { active: true } })
+      if (user === null || !user.active) {
+        client.disconnect()
+        return
+      }
       // `client.data` é `any` no tipo do socket.io (o payload por conexão é
       // livre); a asserção estreita só o campo que este gateway grava.
       ;(client.data as { userId?: string }).userId = payload.sub
