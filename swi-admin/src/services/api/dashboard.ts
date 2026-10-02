@@ -1,16 +1,15 @@
 // Fachada-cliente do dashboard. summary() faz fan-out sobre endpoints reais
-// (admins/funcionários/relatórios/tarefas/clima); desgaste/vitais derivam dos
-// funcionários REAIS com vitais SIMULADOS plausíveis (simulatedVitalsFor,
-// rotulados na UI). Nenhuma seção real derruba as outras: cada chamada é
-// isolada e degrada só a sua fatia (KPIs→0, activities→[], weather→[]). Este é
-// o lar canônico dos tipos do dashboard.
-import type { Alert, Employee } from '../types'
+// (admins/funcionários/relatórios/tarefas/clima). Biometria não passa por
+// aqui: a saúde da frota vem da telemetria, lida pela própria tela. Nenhuma
+// seção derruba as outras: cada chamada é isolada e degrada só a sua fatia
+// (KPIs→0, activities→[], weather→[]). Este é o lar canônico dos tipos do
+// dashboard.
+import type { Employee } from '../types'
 import type { ServiceResponse } from '@/services/types'
 import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi, type WorkOrderRow, type WorkOrderStatus } from './workOrders'
 import { weatherApi } from './weather'
-import { simulatedVitalsFor, type SimulatedTier } from '@/services/vitals/simulatedVitals'
 import { ACTIVE_CAMERAS } from '@/services/cameras'
 
 export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
@@ -40,23 +39,6 @@ export type DashboardActivity = {
   locationLabel?: string
 }
 
-// Wear tier groups workers into the filter tabs the dashboard shows
-// (Excelentes / Desgastados / Alertas de Fadiga). Production would derive
-// this from a sliding-window aggregate of vitals + fatigue. Demo uses it
-// as a static field so each tier has predictable members.
-export type DashboardWearTier = 'excelente' | 'desgastado' | 'alerta-fadiga'
-
-export type DashboardWearAlert = {
-  id: string
-  employeeName: string
-  sector: string
-  progress: number
-  bpm: number
-  pressure: string
-  tier: DashboardWearTier
-  avatarUri?: string
-}
-
 export type DashboardMapMarker = {
   id: string
   name: string
@@ -80,27 +62,19 @@ export type WeatherSlot = {
 export type DashboardSummary = {
   employees: {
     total: number
-    byStatus: Record<Employee['status'], number>
   }
-  alerts: {
-    openOrAcknowledged: number
-    bySeverity: Record<Alert['severity'], number>
-  }
-  // KPI row. admins/totalEmployees/newReports são REAIS (fan-out); o resto é
-  // vital/telemetria e fica mock até a smartband.
+  // Os quatro quadros de cabeçalho. Os números de saúde (sinais vitais,
+  // desgaste, alertas urgentes) vêm da telemetria, não daqui.
   kpis: {
     admins: number
     totalEmployees: number
     newReports: number
     activeCameras: number
-    vitalSigns: number
-    wearRate: number
-    urgentAlerts: number
-    commonAlerts: number
   }
   mapMarkers: DashboardMapMarker[]
   activities: DashboardActivity[]
-  wearAlerts: DashboardWearAlert[]
+  /** Foto de cada funcionário do diretório, para a lista de desgaste. */
+  employeeAvatars: Record<string, string | undefined>
   weather: WeatherSlot[]
 }
 
@@ -140,12 +114,6 @@ async function fetchActivities(): Promise<DashboardActivity[]> {
 // Câmeras: MESMA frota que o mapa desenha (services/cameras). Era 564 fixo
 // contra 12 pinos no mapa — número que não correspondia a nada.
 
-const TIER_TO_STATUS: Record<SimulatedTier, 'good' | 'alert' | 'low'> = {
-  excelente: 'good',
-  desgastado: 'alert',
-  'alerta-fadiga': 'low',
-}
-
 export const dashboardApi = {
   summary: async (): Promise<ServiceResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
@@ -158,60 +126,28 @@ export const dashboardApi = {
       weatherApi.get(),
     ])
 
-    // Desgaste e vitais derivam dos funcionários REAIS da org, com vitais
-    // SIMULADOS plausíveis (rotulados na UI). Nada de roster fixo com nomes que
-    // não existem no diretório.
-    const now = Date.now()
     const workers = employees.data ?? []
-    const withVitals = workers.map((w) => ({ w, v: simulatedVitalsFor(w.id, now) }))
-    const tierCount: Record<SimulatedTier, number> = {
-      excelente: 0,
-      desgastado: 0,
-      'alerta-fadiga': 0,
-    }
-    const byStatus = { good: 0, alert: 0, low: 0, offline: 0 }
-    withVitals.forEach(({ v }) => {
-      tierCount[v.tier] += 1
-      byStatus[TIER_TO_STATUS[v.tier]] += 1
-    })
-
-    const wearAlerts = withVitals.map(({ w, v }) => ({
-      id: w.id,
-      employeeName: w.name,
-      sector: w.sector ?? '',
-      progress: v.fatiguePct,
-      bpm: v.bpm,
-      pressure: v.pressure,
-      tier: v.tier,
-      avatarUri: w.avatarUri || undefined,
-    }))
+    // Só a foto sai do diretório; nome e setor da lista de desgaste vêm da
+    // telemetria. Avatar vazio vira ausência, nunca string vazia.
+    const employeeAvatars: Record<string, string | undefined> = {}
+    for (const w of workers) employeeAvatars[w.id] = w.avatarUri || undefined
 
     const newReports = (reports.data ?? []).filter((r) => r.status === 'pending').length
-    const urgentAlerts = tierCount['alerta-fadiga']
-    const commonAlerts = tierCount.desgastado
 
     return {
       data: {
-        employees: { total: workers.length, byStatus },
-        alerts: {
-          openOrAcknowledged: urgentAlerts + commonAlerts,
-          bySeverity: { info: 0, warning: commonAlerts, critical: urgentAlerts },
-        },
+        employees: { total: workers.length },
         kpis: {
           admins: admins.data?.length ?? 0,
           totalEmployees: workers.length,
           newReports,
           activeCameras: ACTIVE_CAMERAS,
-          vitalSigns: tierCount.excelente,
-          wearRate: tierCount.desgastado,
-          urgentAlerts,
-          commonAlerts,
         },
         // Posições agora são REAIS (GET /positions + WS): o Dashboard splica
         // useLivePositions() sobre o summary no render. Vazio aqui de propósito.
         mapMarkers: [],
         activities,
-        wearAlerts,
+        employeeAvatars,
         weather: weather.data ?? [],
       },
       error: null,

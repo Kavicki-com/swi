@@ -1,6 +1,7 @@
 // src/pages/dashboard/components/WearAlertsSection.tsx
 // Bloco de alertas de desgaste: abas por faixa, busca por nome ou setor e um
-// EmployeeOverviewCard por funcionário. Extraído de Dashboard.tsx.
+// EmployeeOverviewCard por funcionário, a partir da leitura real da
+// telemetria (dashboardHealth). Extraído de Dashboard.tsx.
 import { useMemo, useState } from 'react'
 import { View } from 'react-native'
 import {
@@ -13,19 +14,37 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useDemoToast } from '@/lib/demoToast'
-import type { DashboardWearAlert } from '@/services/dashboard'
 import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { DEMO_DATA_LABEL } from '@/services/vitals/vitalsView'
+import type { WearRow, WearTier } from '../dashboardHealth'
 
 const WEAR_FILTER_TABS = ['Excelentes', 'Desgastados', 'Alertas de Fadiga'] as const
 type WearFilterTab = (typeof WEAR_FILTER_TABS)[number]
 
-const WEAR_TAB_TO_TIER: Record<WearFilterTab, DashboardWearAlert['tier']> = {
+// Excelentes: batimento atual, nenhuma condição de saúde e nenhum caminho até
+// o alerta de desgaste. Desgastados: o ritmo atual leva ao alerta de
+// desgaste (o backend estima os minutos). Alertas de Fadiga: condição
+// urgente ou de saúde aberta.
+const WEAR_TAB_TO_TIER: Record<WearFilterTab, WearTier> = {
   Excelentes: 'excelente',
   Desgastados: 'desgastado',
   'Alertas de Fadiga': 'alerta-fadiga',
 }
 
-export function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) {
+export type WearReadingStatus = 'loading' | 'failed' | 'ready'
+
+const STATUS_TEXT: Record<Exclude<WearReadingStatus, 'ready'>, string> = {
+  loading: 'Carregando leitura',
+  failed: 'Leitura indisponível no momento',
+}
+
+export function WearAlertsSection({
+  rows,
+  status,
+}: {
+  rows: WearRow[]
+  status: WearReadingStatus
+}) {
   const theme = useTheme()
   const { show: showToast } = useDemoToast()
   const [query, setQuery] = useState('')
@@ -33,31 +52,29 @@ export function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) 
 
   const filtered = useMemo(() => {
     const tier = WEAR_TAB_TO_TIER[filter]
-    const byTab = alerts.filter((a) => a.tier === tier)
+    const byTab = rows.filter((r) => r.tier === tier)
     const q = query.trim().toLowerCase()
     if (!q) return byTab
     return byTab.filter(
-      (a) => a.employeeName.toLowerCase().includes(q) || a.sector.toLowerCase().includes(q),
+      (r) => r.employeeName.toLowerCase().includes(q) || r.sector.toLowerCase().includes(q),
     )
-  }, [alerts, filter, query])
+  }, [rows, filter, query])
+
+  // Quem não tem leitura atual não cabe em nenhuma faixa, mas não some: a
+  // lista diz quantos são.
+  const unread = rows.filter((r) => r.tier === null).length
+  const anyPaired = rows.some((r) => r.paired)
+
+  const statusText =
+    status !== 'ready'
+      ? STATUS_TEXT[status]
+      : !anyPaired
+        ? 'Nenhum funcionário com aparelho pareado.'
+        : null
 
   return (
-    <View
-      testID="wear-alerts-section"
-      style={{ gap: theme.gap.m }}
-    >
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: theme.gap.s,
-        }}
-      >
-        <Title variant="title.s">Alertas de Desgaste</Title>
-        {/* O desgaste deriva de vitais SIMULADOS sobre funcionários reais. */}
-        <SimulatedDataBadge />
-      </View>
+    <View testID="wear-alerts-section" style={{ gap: theme.gap.m }}>
+      <Title variant="title.s">Alertas de Desgaste</Title>
       <View
         style={{
           flexDirection: 'row',
@@ -93,27 +110,63 @@ export function WearAlertsSection({ alerts }: { alerts: DashboardWearAlert[] }) 
           onClear={() => setQuery('')}
         />
       </View>
-      <View testID="wear-alerts-list" style={{ gap: theme.gap.s }}>
-        {filtered.length === 0 ? (
-          <Text testID="wear-alerts-empty">Nenhum funcionário encontrado.</Text>
-        ) : (
-          filtered.map((alert) => (
-            <EmployeeOverviewCard
-              key={alert.id}
-              employee={{
-                name: alert.employeeName,
-                sector: alert.sector,
-                avatarUri: alert.avatarUri,
-              }}
-              progress={alert.progress}
-              bpm={alert.bpm}
-              pressure={alert.pressure}
-              fullWidth
-              testID={`wear-alert-${alert.id}`}
-            />
-          ))
-        )}
+      {statusText ? (
+        <Text testID="wear-alerts-status" color={theme.content.medium}>
+          {statusText}
+        </Text>
+      ) : (
+        <View testID="wear-alerts-list" style={{ gap: theme.gap.s }}>
+          {filtered.length === 0 ? (
+            <Text testID="wear-alerts-empty">Nenhum funcionário encontrado.</Text>
+          ) : (
+            filtered.map((row) => <WearCard key={row.id} row={row} />)
+          )}
+          {unread > 0 ? (
+            <Text testID="wear-alerts-unread" variant="body.s" color={theme.content.medium}>
+              {unread === 1
+                ? '1 funcionário sem leitura atual'
+                : `${unread} funcionários sem leitura atual`}
+            </Text>
+          ) : null}
+        </View>
+      )}
+    </View>
+  )
+}
+
+function WearCard({ row }: { row: WearRow }) {
+  const theme = useTheme()
+  // O card do DS exige um batimento numérico. Sem batimento conhecido, a
+  // linha diz isso por extenso em vez de inventar um número.
+  if (row.bpm === null) {
+    return (
+      <View testID={`wear-alert-${row.id}`} style={{ gap: theme.gap.xs }}>
+        <Text>{`${row.employeeName}: alerta ativo, sem leitura de batimento`}</Text>
+        {row.demo ? (
+          <SimulatedDataBadge label={DEMO_DATA_LABEL} testID={`wear-alert-${row.id}-demo`} />
+        ) : null}
       </View>
+    )
+  }
+  return (
+    <View style={{ gap: theme.gap.xs }}>
+      <EmployeeOverviewCard
+        employee={{
+          name: row.employeeName,
+          sector: row.sector,
+          avatarUri: row.avatarUri,
+        }}
+        progress={row.progress}
+        bpm={row.bpm}
+        pressure={row.pressure}
+        fullWidth
+        testID={`wear-alert-${row.id}`}
+      />
+      {row.demo ? (
+        <View style={{ alignItems: 'flex-end' }}>
+          <SimulatedDataBadge label={DEMO_DATA_LABEL} testID={`wear-alert-${row.id}-demo`} />
+        </View>
+      ) : null}
     </View>
   )
 }
