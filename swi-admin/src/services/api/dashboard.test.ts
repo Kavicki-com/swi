@@ -2,9 +2,8 @@
 // 'vitest' duplicaria a instância e quebraria o suite (ver nota no auth.test.ts).
 import { vi } from 'vitest'
 
-// As 4 fachadas do fan-out são mockadas; os VITAIS derivam dos funcionários
-// sintéticos via simulatedVitalsFor (determinístico) — o teste assere a
-// derivação, não fixtures.
+// As fachadas do fan-out são mockadas. Biometria não passa por aqui: vem da
+// telemetria, lida pela tela.
 vi.mock('./users', () => ({
   adminsApi: { list: vi.fn() },
   employeesApi: { list: vi.fn() },
@@ -113,33 +112,25 @@ describe('dashboardApi.summary', () => {
     expect(a3!.risk).toBeUndefined()
   })
 
-  it('deriva desgaste/vitais dos funcionários REAIS com vitais simulados plausíveis', async () => {
+  // A saúde da frota vem da telemetria (useAdminTelemetry), não daqui: o
+  // resumo só entrega o que não é biometria, mais o avatar de cada pessoa.
+  it('não fabrica biometria: entrega só os avatares do diretório para a lista de desgaste', async () => {
     const { data } = await dashboardApi.summary()
-    // Posições agora são reais: o Dashboard splica useLivePositions() sobre o
-    // summary — o serviço não fabrica mais markers mock.
+    // Posições são reais: o Dashboard splica useLivePositions() sobre o
+    // summary, o serviço não fabrica markers.
     expect(data!.mapMarkers).toEqual([])
-    // Wear alerts: um por funcionário real, com nome/setor do diretório e
-    // vitais plausíveis (nunca 0 bpm).
-    expect(data!.wearAlerts).toHaveLength(5)
-    expect(data!.wearAlerts.map((w) => w.employeeName)).toEqual([
-      'Func 0',
-      'Func 1',
-      'Func 2',
-      'Func 3',
-      'Func 4',
-    ])
-    for (const w of data!.wearAlerts) {
-      expect(w.bpm).toBeGreaterThanOrEqual(55)
-      expect(w.pressure).toMatch(/^\d{2}\/\d{1,2}$/)
-      expect(['excelente', 'desgastado', 'alerta-fadiga']).toContain(w.tier)
-    }
-    // KPIs vitais: partição dos 5 funcionários pelos 3 tiers (soma fecha).
-    const { vitalSigns, wearRate, urgentAlerts } = data!.kpis
-    expect(vitalSigns + wearRate + urgentAlerts).toBe(5)
+    expect(data!).not.toHaveProperty('wearAlerts')
+    expect(data!.kpis).not.toHaveProperty('vitalSigns')
+    expect(data!.kpis).not.toHaveProperty('urgentAlerts')
+    // Avatar vazio no diretório vira ausência, nunca string vazia.
+    expect(data!.employeeAvatars).toEqual({
+      'emp-0': undefined,
+      'emp-1': 'url-1',
+      'emp-2': undefined,
+      'emp-3': 'url-3',
+      'emp-4': undefined,
+    })
     expect(data!.employees.total).toBe(5)
-    expect(
-      data!.employees.byStatus.good + data!.employees.byStatus.alert + data!.employees.byStatus.low,
-    ).toBe(5)
     // Câmeras: o KPI conta a MESMA frota que o mapa desenha (services/cameras),
     // senão o número da tela diverge da quantidade de pinos.
     expect(data!.kpis.activeCameras).toBe(ACTIVE_CAMERAS)
@@ -187,7 +178,7 @@ describe('dashboardApi.summary', () => {
     expect(data!.kpis.newReports).toBe(0)
     expect(data!.activities).toEqual([])
     expect(data!.weather).toEqual([])
-    // Sem diretório → sem desgaste fabricado: lista vazia, não roster fake.
-    expect(data!.wearAlerts).toEqual([])
+    // Sem diretório, nenhum avatar: nada é fabricado.
+    expect(data!.employeeAvatars).toEqual({})
   })
 })

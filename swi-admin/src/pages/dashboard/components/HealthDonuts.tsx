@@ -1,26 +1,19 @@
 // src/pages/dashboard/components/HealthDonuts.tsx
 // Os três donuts de saúde da frota: sinais vitais, taxa de desgaste e
-// alertas urgentes. Recebe `navigate` e `theme` por prop, como no original.
-// Extraídos de Dashboard.tsx.
+// alertas urgentes. Recebe os números já decididos a partir da telemetria
+// (dashboardHealth) e `navigate` e `theme` por prop, como no original.
 import { View } from 'react-native'
 import type { useNavigate } from 'react-router-dom'
 import { DonutChart, type useTheme } from '@kavicki/swi-design-system'
-import type { DashboardSummary } from '@/services/dashboard'
-
-// surface/success (lime/700) -> surface/success-light (lime/200), Sinais vitais.
-const VITAL_GRADIENT = ['#3EAB2E', '#B7E9A4'] as const
-// surface/info (blue/600) -> surface/info-light (blue/200), Taxa de desgaste.
-const WEAR_GRADIENT = ['#3899BF', '#8AD2E2'] as const
-// content/error (red/400) -> surface/error-light (red/200), Alertas urgentes.
-const URGENT_GRADIENT = ['#F5667A', '#FAB3BD'] as const
+import type { HealthDonuts as HealthDonutsData } from '../dashboardHealth'
 
 export function HealthDonuts({
-  summary,
+  donuts,
   navigate,
   theme,
   flat = false,
 }: {
-  summary: DashboardSummary
+  donuts: HealthDonutsData
   navigate: ReturnType<typeof useNavigate>
   theme: ReturnType<typeof useTheme>
   // When true the wrapper drops its surface background / padding / radius
@@ -28,6 +21,12 @@ export function HealthDonuts({
   // dashboard variant where the section panel is intentionally absent.
   flat?: boolean
 }) {
+  // Gradientes pelos tokens: sinais vitais em verde, desgaste em azul e
+  // urgência em vermelho, os mesmos tons do Figma.
+  const vitalGradient = [theme.surface.success, theme.surface.successLight] as const
+  const wearGradient = [theme.surface.info, theme.surface.infoLight] as const
+  const urgentGradient = [theme.content.error, theme.surface.errorLight] as const
+
   return (
     <View
       testID="kpi-row-health"
@@ -48,14 +47,14 @@ export function HealthDonuts({
     >
       <DonutChart
         title="Sinais vitais"
-        value={summary.kpis.vitalSigns}
+        value={donuts.vitalSigns.value}
         label="Funcionários"
-        caption="Excelentes"
-        progress={85}
-        progressGradient={VITAL_GRADIENT}
+        caption={donuts.vitalSigns.caption}
+        progress={donuts.vitalSigns.progress}
+        progressGradient={vitalGradient}
         icon="heartbeat_filled"
         iconColor={theme.surface.success}
-        iconGradient={VITAL_GRADIENT}
+        iconGradient={vitalGradient}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
         locationAccessibilityLabel="Abrir localização no mapa"
@@ -63,14 +62,14 @@ export function HealthDonuts({
       />
       <DonutChart
         title="Taxa de desgaste"
-        value={summary.kpis.wearRate}
+        value={donuts.wear.value}
         label="Funcionários"
-        caption="Desgastados"
-        progress={70}
-        progressGradient={WEAR_GRADIENT}
+        caption={donuts.wear.caption}
+        progress={donuts.wear.progress}
+        progressGradient={wearGradient}
         icon="heartbeat_filled"
         iconColor={theme.surface.success}
-        iconGradient={VITAL_GRADIENT}
+        iconGradient={vitalGradient}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
         locationAccessibilityLabel="Abrir localização no mapa"
@@ -78,14 +77,14 @@ export function HealthDonuts({
       />
       <DonutChart
         title="Alertas urgentes"
-        value={summary.kpis.urgentAlerts}
+        value={donuts.urgentAlerts.value}
         label="Funcionários"
-        caption="Necessária mobilização"
-        progress={60}
-        progressGradient={URGENT_GRADIENT}
+        caption={donuts.urgentAlerts.caption}
+        progress={donuts.urgentAlerts.progress}
+        progressGradient={urgentGradient}
         icon="heartbeat_filled"
         iconColor={theme.surface.success}
-        iconGradient={VITAL_GRADIENT}
+        iconGradient={vitalGradient}
         size="small"
         onLocationPress={() => navigate('/maps/general')}
         locationAccessibilityLabel="Abrir localização no mapa"

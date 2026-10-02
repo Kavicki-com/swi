@@ -1,22 +1,37 @@
 // src/pages/dashboard/Dashboard.tsx
 // Casca do dashboard: carrega o summary, escolhe entre esqueleto, erro e
 // conteúdo, e monta as três variantes de layout (tablet, desktop, wide).
-// Cada seção mora em components/.
-import { useEffect, useState } from 'react'
+// A saúde da frota vem da telemetria em tempo real (useAdminTelemetry), que
+// relê sozinha quando o socket avisa. Cada seção mora em components/.
+import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import { Button, useTheme } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useLivePositions } from '@/hooks/useLivePositions'
+import { useAdminTelemetry } from '@/hooks/useAdminTelemetry'
 import { dashboardApi, type DashboardSummary } from '@/services/dashboard'
 import { FormError } from '@/components/FormError'
 import { ActivitiesSection } from './components/ActivitiesSection'
 import { FuncionariosKpi } from './components/DashboardKpis'
 import { HealthDonuts } from './components/HealthDonuts'
 import { MapBanner } from './components/MapBanner'
-import { WearAlertsSection } from './components/WearAlertsSection'
+import { WearAlertsSection, type WearReadingStatus } from './components/WearAlertsSection'
 import { WeatherStrip } from './components/WeatherStrip'
+import {
+  healthDonuts,
+  unavailableDonuts,
+  wearRows,
+  type HealthDonuts as HealthDonutsData,
+  type WearRow,
+} from './dashboardHealth'
+
+type FleetHealth = {
+  donuts: HealthDonutsData
+  rows: WearRow[]
+  status: WearReadingStatus
+}
 
 type Phase = 'loading' | 'error' | 'populated'
 
@@ -25,6 +40,7 @@ export function Dashboard() {
   // Posições REAIS ao vivo (REST + WS) — splicadas sobre o summary no render;
   // o resto do summary continua vindo do fan-out.
   const liveMarkers = useLivePositions()
+  const fleet = useAdminTelemetry()
   const [phase, setPhase] = useState<Phase>('loading')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +65,27 @@ export function Dashboard() {
     }
   }, [user, refetchTrigger])
 
+  const avatars = summary?.employeeAvatars
+  const health = useMemo<FleetHealth>(() => {
+    if (fleet.workers && fleet.summary) {
+      return {
+        donuts: healthDonuts(fleet.summary, fleet.workers),
+        rows: wearRows(fleet.workers, avatars ?? {}),
+        status: 'ready',
+      }
+    }
+    // Falha limpa a leitura no hook: aqui ela vira ausência declarada, nunca
+    // o último número que ninguém consegue mais confirmar.
+    const status: WearReadingStatus = fleet.failed ? 'failed' : 'loading'
+    return {
+      donuts: unavailableDonuts(
+        status === 'failed' ? 'Leitura indisponível no momento' : 'Carregando leitura',
+      ),
+      rows: [],
+      status,
+    }
+  }, [fleet.workers, fleet.summary, fleet.failed, avatars])
+
   return (
     <View testID="dashboard-page">
       {phase === 'loading' && <DashboardSkeleton />}
@@ -56,7 +93,7 @@ export function Dashboard() {
         <DashboardError message={error} onRetry={() => setRefetchTrigger((n) => n + 1)} />
       )}
       {phase === 'populated' && summary && (
-        <DashboardContent summary={{ ...summary, mapMarkers: liveMarkers ?? [] }} />
+        <DashboardContent summary={{ ...summary, mapMarkers: liveMarkers ?? [] }} health={health} />
       )}
     </View>
   )
@@ -101,7 +138,7 @@ function DashboardError({ message, onRetry }: { message: string | null; onRetry:
   )
 }
 
-function DashboardContent({ summary }: { summary: DashboardSummary }) {
+function DashboardContent({ summary, health }: { summary: DashboardSummary; health: FleetHealth }) {
   const theme = useTheme()
   const navigate = useNavigate()
   const breakpoint = useBreakpoint()
@@ -119,14 +156,11 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
           style={{ flexDirection: 'column', gap: theme.gap.m }}
         >
           <FuncionariosKpi summary={summary} />
-          <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
+          <HealthDonuts donuts={health.donuts} navigate={navigate} theme={theme} flat />
         </View>
-        <View
-          testID="dashboard-two-col-row"
-          style={{ flexDirection: 'column', gap: theme.gap.l }}
-        >
+        <View testID="dashboard-two-col-row" style={{ flexDirection: 'column', gap: theme.gap.l }}>
           <ActivitiesSection activities={summary.activities} />
-          <WearAlertsSection alerts={summary.wearAlerts} />
+          <WearAlertsSection rows={health.rows} status={health.status} />
         </View>
         <WeatherStrip weather={summary.weather} />
       </View>
@@ -164,7 +198,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
               flexDirection: 'row',
             }}
           >
-            <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
+            <HealthDonuts donuts={health.donuts} navigate={navigate} theme={theme} flat />
           </View>
           <View
             style={{
@@ -186,7 +220,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
             <ActivitiesSection activities={summary.activities} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <WearAlertsSection alerts={summary.wearAlerts} />
+            <WearAlertsSection rows={health.rows} status={health.status} />
           </View>
         </View>
         <WeatherStrip weather={summary.weather} />
@@ -210,7 +244,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
         }}
       >
         <FuncionariosKpi summary={summary} />
-        <HealthDonuts summary={summary} navigate={navigate} theme={theme} flat />
+        <HealthDonuts donuts={health.donuts} navigate={navigate} theme={theme} flat />
       </View>
 
       {/* Two-column row: Atividades em andamento (left) + Alertas de Desgaste (right) */}
@@ -222,7 +256,7 @@ function DashboardContent({ summary }: { summary: DashboardSummary }) {
           <ActivitiesSection activities={summary.activities} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <WearAlertsSection alerts={summary.wearAlerts} />
+          <WearAlertsSection rows={health.rows} status={health.status} />
         </View>
       </View>
 
