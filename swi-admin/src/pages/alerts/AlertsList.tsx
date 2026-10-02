@@ -24,10 +24,10 @@ import { useMapLibre } from '@/lib/useMapLibre'
 import { SATELLITE_STYLE } from '@/lib/mapStyles'
 import { heatPointsFromCells, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
 import { positionHeatApi } from '@/services/api/positionHeat'
-import { DEMO_DATA_LABEL, NO_VALUE, vitalsViewFrom } from '@/services/vitals/vitalsView'
+import { DEMO_DATA_LABEL, vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { createPinElement, type PinElement } from '@/lib/pinFactory'
 import { MapAttribution } from '@/components/MapAttribution'
-import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { DataOriginBadge } from '@/components/DataOriginBadge'
 import { getRainViewerLatestRadar } from '@/lib/rainViewer'
 import {
   Button,
@@ -139,6 +139,9 @@ export function AlertsList() {
   // Leitura real do funcionário selecionado, para o cartão sobre o pino.
   const selectedEntry = selectedMarker ? entryFor(selectedMarker.id) : undefined
   const selectedVitals = selectedMarker ? vitalsViewFrom(selectedEntry?.telemetry ?? null) : null
+  // Batimento como número para o cartão do DS; null mostra a ausência.
+  const selectedHeartRate =
+    selectedVitals?.heartRate == null ? null : Number(selectedVitals.heartRate)
   // A borda acompanha o estado real; sem condição, o cartão fica com a borda padrão.
   const selectedBorder =
     selectedMarker?.status === 'low'
@@ -363,7 +366,7 @@ export function AlertsList() {
           {/* Posição e cor do pino são reais. Só leitura de demonstração
               leva selo. */}
           {hasDemo ? (
-            <SimulatedDataBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" />
+            <DataOriginBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" />
           ) : null}
         </View>
 
@@ -476,9 +479,8 @@ export function AlertsList() {
 
         {/* Selected marker overlay. Tracked to its pin via
             map.project() so it follows pan/zoom. Os dados saem da leitura
-            real do funcionário. O cartão do DS exige batimento numérico, então
-            sem leitura a tela compõe o aviso com Text e Button do DS em vez de
-            mostrar zero. */}
+            real do funcionário; sem leitura o cartão do DS mostra a ausência
+            e a linha abaixo diz em que pé está a leitura. */}
         {selectedMarker && overlayPos ? (
           <View
             testID="alerts-selected-worker"
@@ -491,57 +493,31 @@ export function AlertsList() {
               zIndex: 3,
             }}
           >
-            {selectedVitals && selectedVitals.heartRate !== null ? (
-              <EmployeeOverviewCard
-                employee={{
-                  name: selectedMarker.name,
-                  sector: selectedEntry?.worker.sector ?? '',
-                  avatarUri: selectedMarker.avatarUri,
-                }}
-                progress={selectedVitals.wearPct ?? undefined}
-                bpm={Number(selectedVitals.heartRate)}
-                pressure={selectedVitals.pressure ?? NO_VALUE}
-                borderColor={selectedBorder}
-                actionElement={
-                  <Button
-                    label="Criar rota de socorro"
-                    backgroundColor={theme.surface.primary}
-                    onPress={() => navigate(`/alerts/${selectedMarker.id}/rescue`)}
-                  />
-                }
-              />
-            ) : (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: theme.gap.m,
-                  padding: theme.padding.s,
-                  borderRadius: theme.border.radius.m,
-                  backgroundColor: theme.surface.medium,
-                }}
-              >
-                <View style={{ flex: 1, gap: theme.gap.xs }}>
-                  <Text
-                    variant="body.s"
-                    color={theme.content.dark}
-                    style={{ fontWeight: '700' as const }}
-                  >
-                    {selectedMarker.name}
-                  </Text>
-                  <Text variant="body.s" color={theme.content.medium}>
-                    {selectedVitals?.status ?? 'Sem leitura do aparelho'}
-                  </Text>
-                </View>
+            <EmployeeOverviewCard
+              employee={{
+                name: selectedMarker.name,
+                sector: selectedEntry?.worker.sector ?? '',
+                avatarUri: selectedMarker.avatarUri,
+              }}
+              progress={selectedVitals?.wearPct ?? undefined}
+              bpm={selectedHeartRate}
+              pressure={selectedVitals?.pressure ?? null}
+              borderColor={selectedBorder}
+              actionElement={
                 <Button
                   label="Criar rota de socorro"
                   backgroundColor={theme.surface.primary}
                   onPress={() => navigate(`/alerts/${selectedMarker.id}/rescue`)}
                 />
-              </View>
-            )}
+              }
+            />
+            {selectedHeartRate === null ? (
+              <Text testID="alerts-selected-status" variant="body.s" color={theme.content.medium}>
+                {selectedVitals?.status ?? 'Sem leitura do aparelho'}
+              </Text>
+            ) : null}
             {selectedVitals?.sourceBadge ? (
-              <SimulatedDataBadge
+              <DataOriginBadge
                 label={selectedVitals.sourceBadge}
                 testID="alerts-selected-demo"
               />

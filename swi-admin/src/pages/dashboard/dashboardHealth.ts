@@ -10,6 +10,7 @@ import type {
   AdminWorkersTelemetry,
   WorkerTelemetry,
 } from '@/services/api/telemetry'
+import { healthStatusFrom } from '@/services/vitals/healthStatus'
 import { NO_VALUE } from '@/services/vitals/vitalsView'
 
 export type HealthDonut = {
@@ -37,7 +38,7 @@ export type WearRow = {
   progress?: number
   /** Batimento; null quando não há leitura nem condição que o tenha medido. */
   bpm: number | null
-  pressure: string
+  pressure: string | null
   tier: WearTier | null
   /** Leitura de origem demonstração, rotulada na tela. */
   demo: boolean
@@ -97,14 +98,13 @@ export function unavailableDonuts(caption: string): HealthDonuts {
   return { vitalSigns: empty, wear: empty, urgentAlerts: empty }
 }
 
-// Condição urgente ou de saúde aberta pede atenção agora; condição só de
-// aparelho não muda a faixa, porque relógio descarregado não é funcionário em
-// risco. "Bom" exige batimento atual.
+// A faixa parte da régua única de estado de saúde: condição urgente ou de
+// saúde aberta pede atenção agora, e sem leitura atual a pessoa fica fora das
+// abas. Entre quem está bem, a estimativa de fadiga separa as duas faixas.
 function tierOf(t: WorkerTelemetry): WearTier | null {
-  if (t.conditions.some((c) => c.category === 'URGENT' || c.category === 'HEALTH')) {
-    return 'alerta-fadiga'
-  }
-  if (t.metrics.heartRate.quality !== 'CURRENT') return null
+  const status = healthStatusFrom(t)
+  if (status === 'low' || status === 'alert') return 'alerta-fadiga'
+  if (status === 'unknown') return null
   if (t.metrics.fatigueEtaMin.value !== null) return 'desgastado'
   return 'excelente'
 }
@@ -138,7 +138,7 @@ export function wearRows(
       bpm: bpmOf(telemetry),
       pressure:
         bloodPressure.value === null
-          ? NO_VALUE
+          ? null
           : `${bloodPressure.value.systolic}/${bloodPressure.value.diastolic}`,
       tier: tierOf(telemetry),
       demo: telemetry.origin === 'DEMO',

@@ -9,7 +9,7 @@ import type * as maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
-import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { DataOriginBadge } from '@/components/DataOriginBadge'
 import { formatAge } from '@/lib/formatAge'
 import type { Gender } from '@/services/types/directory'
 import { PERIOD_FROM_OPTION } from '@/services/vitals/caloriesSeries'
@@ -585,7 +585,7 @@ export function WorkerDetailsLayout({
               dispensa selo. */}
           {vitals.sourceBadge ? (
             <View style={{ alignItems: 'flex-end' }}>
-              <SimulatedDataBadge label={vitals.sourceBadge} testID="vitals-source-badge" />
+              <DataOriginBadge label={vitals.sourceBadge} testID="vitals-source-badge" />
             </View>
           ) : null}
 

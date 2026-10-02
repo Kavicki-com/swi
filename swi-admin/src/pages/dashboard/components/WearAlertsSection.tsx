@@ -14,7 +14,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useDemoToast } from '@/lib/demoToast'
-import { SimulatedDataBadge } from '@/components/SimulatedDataBadge'
+import { DataOriginBadge } from '@/components/DataOriginBadge'
 import { DEMO_DATA_LABEL } from '@/services/vitals/vitalsView'
 import type { WearRow, WearTier } from '../dashboardHealth'
 
@@ -136,18 +136,8 @@ export function WearAlertsSection({
 
 function WearCard({ row }: { row: WearRow }) {
   const theme = useTheme()
-  // O card do DS exige um batimento numérico. Sem batimento conhecido, a
-  // linha diz isso por extenso em vez de inventar um número.
-  if (row.bpm === null) {
-    return (
-      <View testID={`wear-alert-${row.id}`} style={{ gap: theme.gap.xs }}>
-        <Text>{`${row.employeeName}: alerta ativo, sem leitura de batimento`}</Text>
-        {row.demo ? (
-          <SimulatedDataBadge label={DEMO_DATA_LABEL} testID={`wear-alert-${row.id}-demo`} />
-        ) : null}
-      </View>
-    )
-  }
+  // Sem batimento ou pressão conhecidos o cartão do DS mostra a ausência; a
+  // tela nunca passa zero no lugar.
   return (
     <View style={{ gap: theme.gap.xs }}>
       <EmployeeOverviewCard
@@ -164,7 +154,7 @@ function WearCard({ row }: { row: WearRow }) {
       />
       {row.demo ? (
         <View style={{ alignItems: 'flex-end' }}>
-          <SimulatedDataBadge label={DEMO_DATA_LABEL} testID={`wear-alert-${row.id}-demo`} />
+          <DataOriginBadge label={DEMO_DATA_LABEL} testID={`wear-alert-${row.id}-demo`} />
         </View>
       ) : null}
     </View>

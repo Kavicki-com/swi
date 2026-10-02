@@ -578,8 +578,9 @@ describe('Dashboard: saúde da frota pela telemetria', () => {
       },
     }
     await renderReady()
-    expect(screen.getByTestId('wear-alert-h1')).toHaveTextContent(
-      'Sem Batimento: alerta ativo, sem leitura de batimento',
-    )
+    const card = screen.getByTestId('wear-alert-h1')
+    expect(card).toHaveTextContent('Sem Batimento')
+    expect(card).toHaveTextContent('-- Bpm')
+    expect(card).not.toHaveTextContent('0 Bpm')
   })
 })

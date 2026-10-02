@@ -170,7 +170,7 @@ describe('wearRows', () => {
       {},
     )
     expect(row?.bpm).toBe(185)
-    expect(row?.pressure).toBe('--')
+    expect(row?.pressure).toBeNull()
   })
 
   it('sem batimento algum, o batimento fica nulo e o desgaste ausente fica sem barra', () => {

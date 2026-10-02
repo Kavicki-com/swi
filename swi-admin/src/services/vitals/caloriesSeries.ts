@@ -1,10 +1,10 @@
 // Série de gasto calórico do backend traduzida para os pontos do gráfico do
-// detalhe. O LineCaloriesChart do DS só aceita número por ponto, então balde
-// sem medição fica fora da curva em vez de entrar como zero: zero aqui é
-// medição de zero, nunca ausência.
+// detalhe. Balde sem medição entre duas medições vira ponto nulo, e o
+// LineCaloriesChart do DS interrompe a linha ali: zero aqui é medição de zero,
+// nunca ausência.
 import type { SeriesPeriod, WorkerSeries } from '@/services/api/telemetry'
 
-export type CaloriesPoint = { time: string; kcal: number }
+export type CaloriesPoint = { time: string; kcal: number | null }
 
 /** Opção do seletor da tela para o período que o backend entende. */
 export const PERIOD_FROM_OPTION: Readonly<Record<'today' | 'week' | 'month', SeriesPeriod>> = {
@@ -31,10 +31,14 @@ const label = (iso: string, bucket: WorkerSeries['bucket']) =>
       })
 
 export function caloriesPointsFrom(series: WorkerSeries): CaloriesPoint[] {
-  return series.points
-    .filter((p) => p.activeEnergyKcal !== null)
-    .map((p) => ({
-      time: label(p.start, series.bucket),
-      kcal: Math.round(p.activeEnergyKcal as number),
-    }))
+  const measured = (p: WorkerSeries['points'][number]) => p.activeEnergyKcal !== null
+  const first = series.points.findIndex(measured)
+  if (first === -1) return []
+  // Só o intervalo entre a primeira e a última medição entra: antes e depois
+  // não há curva a interromper, e o gráfico abriria com um vazio.
+  const last = series.points.length - 1 - [...series.points].reverse().findIndex(measured)
+  return series.points.slice(first, last + 1).map((p) => ({
+    time: label(p.start, series.bucket),
+    kcal: p.activeEnergyKcal === null ? null : Math.round(p.activeEnergyKcal),
+  }))
 }

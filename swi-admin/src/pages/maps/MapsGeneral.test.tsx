@@ -25,6 +25,13 @@ const live = vi.hoisted(() => ({
   ] as Array<Record<string, unknown>> | null,
 }))
 vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => live.value }))
+// O widget do header consulta o aparelho do usuário logado; o dublê responde
+// "sem aparelho" para o teste não falar com o backend.
+vi.mock('@/services/api/telemetryDevices', () => ({
+  telemetryDevicesApi: {
+    stateOf: vi.fn().mockResolvedValue({ data: { device: null, pendingEnrollment: null }, error: null }),
+  },
+}))
 
 // A cor dos pinos sai da telemetria, que tem suite própria; aqui ela vem vazia
 // para não abrir fetch nem socket. Pinos ficam neutros.

@@ -4,12 +4,21 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
-import { simulatedVitalsFor } from '@/services/vitals/simulatedVitals'
 
 // AppLayout agora consome useChat() (ChatProvider). Este teste NÃO monta o
 // provider real (isso é a task B5) — mocka useChat pra devolver um contexto
 // fixo com uma conversa que tem contato resolvível e badge de não-lidas. Os
 // helpers puros resolveContact/unreadFor rodam de verdade sobre a conversa.
+// O widget do header consulta o aparelho do usuário logado; o dublê responde
+// "sem aparelho" para o teste não falar com o backend.
+vi.mock('@/services/api/telemetryDevices', () => ({
+  telemetryDevicesApi: {
+    stateOf: vi.fn().mockResolvedValue({ data: { device: null, pendingEnrollment: null }, error: null }),
+  },
+}))
+vi.mock('@/services/telemetry/telemetrySocket', () => ({
+  subscribeTelemetryEvents: () => () => {},
+}))
 vi.mock('@/services/chat/ChatProvider', () => ({
   useChat: () => ({
     myId: 'me',
@@ -100,17 +109,15 @@ describe('AppLayout', () => {
     })
   })
 
-  // Os vitais do header saem do MESMO gerador das outras telas (useMyVitals).
-  // Com um literal no header ("99 bpm", "12/8"), ele contradiria o detalhe do
-  // próprio admin.
-  it('mostra os vitais do usuário logado, derivados do gerador (não um literal)', async () => {
+  // Admin não pareia aparelho: o widget do header mostra a ausência de
+  // leitura em vez de um batimento que ninguém mediu.
+  it('sem aparelho pareado, o header mostra a ausência de leitura', async () => {
     await renderTree()
-    const esperado = simulatedVitalsFor('u_seed_1', Date.now())
     await waitFor(() => {
       expect(screen.getByTestId('app-header-user-info')).toBeInTheDocument()
-      expect(screen.getByText(String(esperado.bpm))).toBeInTheDocument()
-      expect(screen.getByText(esperado.pressure)).toBeInTheDocument()
     })
+    const widget = screen.getByTestId('app-header-user-info')
+    expect(widget).toHaveTextContent('-- bpm')
   })
 
   it('renders Logo at the top of the sidebar (not in the header)', async () => {

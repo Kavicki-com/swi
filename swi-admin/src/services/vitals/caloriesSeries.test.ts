@@ -44,17 +44,36 @@ describe('caloriesPointsFrom', () => {
     expect(caloriesPointsFrom(s)).toEqual([{ time: day('2026-09-30T03:00:00.000Z'), kcal: 1840 }])
   })
 
-  // O gráfico do DS só aceita número: balde sem medição fica fora da curva,
-  // nunca entra como zero.
-  it('balde sem medição fica fora, nunca vira zero', () => {
+  // Balde sem medição entre duas medições vira ponto nulo: o gráfico do DS
+  // interrompe a linha ali em vez de ligar os vizinhos. Nunca entra como zero.
+  it('balde sem medição no meio vira buraco, nunca zero', () => {
     const s = series(
       [
-        point('2026-10-01T11:00:00.000Z', '2026-10-01T12:00:00.000Z', null),
-        point('2026-10-01T12:00:00.000Z', '2026-10-01T13:00:00.000Z', 0),
+        point('2026-10-01T11:00:00.000Z', '2026-10-01T12:00:00.000Z', 40),
+        point('2026-10-01T12:00:00.000Z', '2026-10-01T13:00:00.000Z', null),
+        point('2026-10-01T13:00:00.000Z', '2026-10-01T14:00:00.000Z', 0),
       ],
       { bucket: 'hour', period: 'day' },
     )
-    expect(caloriesPointsFrom(s)).toEqual([{ time: hour('2026-10-01T12:00:00.000Z'), kcal: 0 }])
+    expect(caloriesPointsFrom(s)).toEqual([
+      { time: hour('2026-10-01T11:00:00.000Z'), kcal: 40 },
+      { time: hour('2026-10-01T12:00:00.000Z'), kcal: null },
+      { time: hour('2026-10-01T13:00:00.000Z'), kcal: 0 },
+    ])
+  })
+
+  // Antes da primeira medição e depois da última não há curva a interromper:
+  // esses baldes saem, para o gráfico não abrir com um vazio.
+  it('baldes sem medição nas pontas ficam fora', () => {
+    const s = series(
+      [
+        point('2026-10-01T10:00:00.000Z', '2026-10-01T11:00:00.000Z', null),
+        point('2026-10-01T11:00:00.000Z', '2026-10-01T12:00:00.000Z', 40),
+        point('2026-10-01T12:00:00.000Z', '2026-10-01T13:00:00.000Z', null),
+      ],
+      { bucket: 'hour', period: 'day' },
+    )
+    expect(caloriesPointsFrom(s)).toEqual([{ time: hour('2026-10-01T11:00:00.000Z'), kcal: 40 }])
   })
 
   it('série sem nenhuma medição devolve lista vazia', () => {
