@@ -2,7 +2,13 @@ import { BadRequestException, NotFoundException, UnauthorizedException } from '@
 import { Prisma } from '@prisma/client'
 import { hash } from '../../auth/codes'
 import type { PrismaService } from '../../prisma/prisma.service'
-import { DeviceAuthService, ENROLLMENT_TTL_MIN, hashCredential } from './device-auth.service'
+import {
+  CODE_MATCH_CANDIDATES,
+  DeviceAuthService,
+  ENROLLMENT_TTL_MIN,
+  EXPIRED_CODE_GRACE_MIN,
+  hashCredential,
+} from './device-auth.service'
 
 // O que estes casos protegem é a fronteira de identidade do piloto: quem pode
 // parear, por quanto tempo, uma vez só, e de quem é o funcionário que a
@@ -19,6 +25,7 @@ const prismaDouble = () =>
       create: jest.fn(),
       findUnique: jest.fn(),
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
     },
     telemetryDevice: {
@@ -271,6 +278,245 @@ describe('DeviceAuthService.completeEnrollment', () => {
     } as never)
 
     expect(prisma.telemetryDevice.create.mock.calls[0][0].data.workerId).toBe('worker-1')
+  })
+})
+
+// O app conclui só com o código que o administrador dita: o painel nunca mostra
+// o id do convite. Sem o id, o convite é achado pelo código entre os do próprio
+// funcionário do token, e o que estes casos protegem é que essa busca não abre
+// porta nova: nada de convite alheio, consumido ou vencido virando aparelho.
+describe('DeviceAuthService.completeEnrollment sem enrollmentId', () => {
+  const OUTRO_CODIGO = '654321'
+  const minutos = (n: number) => n * 60_000
+
+  const withTransaction = (prisma: any) => {
+    prisma.$transaction.mockImplementation((fn: any) => fn(prisma))
+    prisma.telemetryDevice.create.mockImplementation(({ data }: any) => ({
+      id: 'device-1',
+      ...data,
+    }))
+  }
+
+  // Convites em memória, filtrados como o Postgres filtraria o `where` que o
+  // serviço monta. Assim o caso prova a regra (de quem, pendente, recente, os
+  // mais novos) e não só que o método foi chamado; o e2e confere a mesma regra
+  // contra o banco de verdade.
+  const withRows = (prisma: any, rows: any[]) => {
+    prisma.telemetryEnrollment.findMany.mockImplementation(({ where, take }: any) =>
+      rows
+        .filter((r) => r.workerId === where.workerId)
+        .filter((r) => where.consumedAt !== null || r.consumedAt === null)
+        .filter((r) => where.expiresAt?.gt === undefined || r.expiresAt > where.expiresAt.gt)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, take),
+    )
+  }
+
+  // Hashes calculados uma vez: cada bcrypt custa centenas de milissegundos, e
+  // os casos com vários convites estourariam o tempo do jest à toa.
+  let codeHash = ''
+  let outroHash = ''
+  beforeAll(async () => {
+    ;[codeHash, outroHash] = await Promise.all([hash(CODE), hash(OUTRO_CODIGO)])
+  })
+
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 'enrollment-1',
+    workerId: 'worker-1',
+    kind: 'IPHONE',
+    codeHash,
+    expiresAt: new Date(Date.now() + minutos(5)),
+    consumedAt: null,
+    createdAt: new Date(Date.now() - minutos(1)),
+    ...over,
+  })
+
+  const rejectionOf = async (promise: Promise<unknown>) => {
+    const erro = await promise.catch((e: BadRequestException) => e)
+    expect(erro).toBeInstanceOf(BadRequestException)
+    return (erro as BadRequestException).getResponse() as Record<string, unknown>
+  }
+
+  it('o código certo pareia com o convite pendente do funcionário do token', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [row()])
+    withTransaction(prisma)
+
+    const result = await service(prisma).completeEnrollment('worker-1', {
+      code: CODE,
+      model: 'iPhone 15',
+    })
+
+    expect(result.deviceId).toBe('device-1')
+    expect(result.workerId).toBe('worker-1')
+    // O mesmo consumo condicional do caminho com id: uso único vale igual.
+    const { where } = prisma.telemetryEnrollment.update.mock.calls[0][0]
+    expect(where).toEqual({ id: 'enrollment-1', consumedAt: null })
+    const { data } = prisma.telemetryDevice.create.mock.calls[0][0]
+    expect(data).toMatchObject({ workerId: 'worker-1', kind: 'IPHONE', model: 'iPhone 15' })
+    expect(prisma.telemetryEnrollment.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('procura só nos convites do funcionário do token, ainda abertos, os mais novos primeiro e com teto', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [row()])
+    withTransaction(prisma)
+
+    await service(prisma).completeEnrollment('worker-1', {
+      code: CODE,
+      workerId: 'worker-invasor',
+    } as never)
+
+    const { where, orderBy, take } = prisma.telemetryEnrollment.findMany.mock.calls[0][0]
+    expect(where.workerId).toBe('worker-1')
+    expect(where.consumedAt).toBeNull()
+    expect(where.expiresAt.gt).toBeInstanceOf(Date)
+    expect(orderBy).toEqual({ createdAt: 'desc' })
+    expect(take).toBe(CODE_MATCH_CANDIDATES)
+    expect(prisma.telemetryDevice.create.mock.calls[0][0].data.workerId).toBe('worker-1')
+  })
+
+  it('entre vários convites pendentes, consome o que o código abre', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [
+      row({ id: 'mais-novo', codeHash: outroHash, createdAt: new Date() }),
+      row({ id: 'mais-velho', createdAt: new Date(Date.now() - minutos(2)) }),
+    ])
+    withTransaction(prisma)
+
+    await service(prisma).completeEnrollment('worker-1', { code: CODE })
+
+    expect(prisma.telemetryEnrollment.update.mock.calls[0][0].where.id).toBe('mais-velho')
+  })
+
+  it('código errado dá ENROLLMENT_INVALID, com o mesmo corpo do caminho com id', async () => {
+    const semId = prismaDouble()
+    withRows(semId, [row()])
+    const comId = prismaDouble()
+    comId.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment())
+
+    const [porCodigo, porId] = await Promise.all([
+      rejectionOf(service(semId).completeEnrollment('worker-1', { code: '999999' })),
+      rejectionOf(
+        service(comId).completeEnrollment('worker-1', {
+          enrollmentId: 'enrollment-1',
+          code: '999999',
+        }),
+      ),
+    ])
+
+    expect(porCodigo).toMatchObject({ code: 'ENROLLMENT_INVALID', message: 'Código de pareamento inválido' })
+    expect(porCodigo).toEqual(porId)
+    expect(JSON.stringify(porCodigo)).not.toContain('999999')
+    expect(semId.telemetryDevice.create).not.toHaveBeenCalled()
+  })
+
+  it('convite de outro funcionário nunca é aceito, mesmo com o código certo', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [row({ workerId: 'worker-2' })])
+    withTransaction(prisma)
+
+    const body = await rejectionOf(service(prisma).completeEnrollment('worker-1', { code: CODE }))
+
+    expect(body).toMatchObject({ code: 'ENROLLMENT_INVALID' })
+    expect(prisma.telemetryEnrollment.update).not.toHaveBeenCalled()
+    expect(prisma.telemetryDevice.create).not.toHaveBeenCalled()
+  })
+
+  it('convite já consumido não é aceito, e responde como inválido', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [row({ consumedAt: new Date() })])
+    withTransaction(prisma)
+
+    const body = await rejectionOf(service(prisma).completeEnrollment('worker-1', { code: CODE }))
+
+    expect(body).toMatchObject({ code: 'ENROLLMENT_INVALID' })
+    expect(prisma.telemetryDevice.create).not.toHaveBeenCalled()
+  })
+
+  it('convite vencido há pouco responde ENROLLMENT_EXPIRED só a quem digita o código dele', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [row({ expiresAt: new Date(Date.now() - 1_000) })])
+    withTransaction(prisma)
+
+    const certo = await rejectionOf(service(prisma).completeEnrollment('worker-1', { code: CODE }))
+    const chute = await rejectionOf(service(prisma).completeEnrollment('worker-1', { code: '999999' }))
+
+    expect(certo).toMatchObject({ code: 'ENROLLMENT_EXPIRED', message: 'Código de pareamento expirado' })
+    // Um chute não aprende que existe convite vencido: recebe o inválido de sempre.
+    expect(chute).toMatchObject({ code: 'ENROLLMENT_INVALID' })
+    expect(prisma.telemetryDevice.create).not.toHaveBeenCalled()
+  })
+
+  it('convite vencido fora da janela de cortesia é só inválido', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [
+      row({ expiresAt: new Date(Date.now() - minutos(EXPIRED_CODE_GRACE_MIN + 1)) }),
+    ])
+
+    const body = await rejectionOf(service(prisma).completeEnrollment('worker-1', { code: CODE }))
+
+    expect(body).toMatchObject({ code: 'ENROLLMENT_INVALID' })
+  })
+
+  it('código de convite antigo e vencido diz expirado, mesmo com um convite novo pendente', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [
+      row({ id: 'novo', codeHash: outroHash, createdAt: new Date() }),
+      row({
+        id: 'vencido',
+        expiresAt: new Date(Date.now() - 1_000),
+        createdAt: new Date(Date.now() - minutos(ENROLLMENT_TTL_MIN + 1)),
+      }),
+    ])
+    withTransaction(prisma)
+
+    const antigo = await rejectionOf(service(prisma).completeEnrollment('worker-1', { code: CODE }))
+    expect(antigo).toMatchObject({ code: 'ENROLLMENT_EXPIRED' })
+
+    await service(prisma).completeEnrollment('worker-1', { code: OUTRO_CODIGO })
+    expect(prisma.telemetryEnrollment.update.mock.calls[0][0].where.id).toBe('novo')
+  })
+
+  it('compara o código com no máximo os convites mais novos do teto', async () => {
+    const prisma = prismaDouble()
+    const novos = Array.from({ length: CODE_MATCH_CANDIDATES }, (_, i) =>
+      row({ id: `novo-${i}`, codeHash: outroHash, createdAt: new Date(Date.now() - i * 1_000) }),
+    )
+    // O único que o código abre é mais velho que todos os do teto.
+    withRows(prisma, [...novos, row({ id: 'fora-do-teto', createdAt: new Date(Date.now() - minutos(5)) })])
+    withTransaction(prisma)
+
+    const body = await rejectionOf(service(prisma).completeEnrollment('worker-1', { code: CODE }))
+
+    expect(body).toMatchObject({ code: 'ENROLLMENT_INVALID' })
+    expect(prisma.telemetryDevice.create).not.toHaveBeenCalled()
+  })
+
+  it('a corrida perdida do uso único também vira ENROLLMENT_USED', async () => {
+    const prisma = prismaDouble()
+    withRows(prisma, [row()])
+    prisma.$transaction.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('registro não encontrado', {
+        code: 'P2025',
+        clientVersion: '5.22.0',
+      }),
+    )
+
+    const body = await rejectionOf(service(prisma).completeEnrollment('worker-1', { code: CODE }))
+
+    expect(body).toMatchObject({ code: 'ENROLLMENT_USED' })
+  })
+
+  it('com enrollmentId, a busca por código não entra em cena', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment())
+    withTransaction(prisma)
+
+    await service(prisma).completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: CODE })
+
+    expect(prisma.telemetryEnrollment.findUnique).toHaveBeenCalledWith({ where: { id: 'enrollment-1' } })
+    expect(prisma.telemetryEnrollment.findMany).not.toHaveBeenCalled()
   })
 })
 

@@ -68,6 +68,168 @@
       "responsavel": "Gabriel Fernandes <design@kavicki.com>",
       "declaradaEm": "2026-10-02",
       "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "braces",
+      "advisories": ["braces vulnerable to stack-exhaustion denial of service through deeply nested patterns"],
+      "justificativa": "Não há versão corrigida publicada: a 3.0.3 é a mais recente e é a afetada. O braces entra só pelo micromatch, que o metro (empacotador) e o jest (testes) usam para ler padrões de arquivo da configuração do próprio repositório, não entrada de usuário. Não vai dentro do app instalado: os pacotes exportados para iOS, Android e web não o contêm. Rever assim que sair a versão corrigida.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "micromatch",
+      "advisories": ["depende de braces vulnerável"],
+      "justificativa": "Marcado só por depender do braces, sem defeito próprio. Usado pelo metro e pelo jest na máquina de quem desenvolve e no CI, nunca no app. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@expo/metro",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@expo/metro-config",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@jest/environment",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@jest/fake-timers",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@jest/transform",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "@react-native/community-cli-plugin",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "babel-jest",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "jest-environment-node",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "jest-haste-map",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "jest-message-util",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "metro",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "metro-config",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "metro-file-map",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "metro-transform-worker",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "react-native",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
+      "pacote": "react-native-reanimated",
+      "advisories": ["depende de braces vulnerável (via micromatch)"],
+      "justificativa": "Marcado só pela corrente que termina no braces, usado pelo empacotador e pelos testes para ler padrões de arquivo do repositório. O código que roda no aparelho não inclui o braces. Sai junto com o braces.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-03",
+      "expiraEm": "2026-12-31"
     }
   ]
 }

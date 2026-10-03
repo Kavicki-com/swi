@@ -45,6 +45,14 @@ describe('TelemetryDevicesController', () => {
     })
   })
 
+  it('conclui só pelo código com o funcionário do token, sem id do convite', async () => {
+    const devices = serviceDouble()
+
+    await new TelemetryDevicesController(devices).complete('worker-1', { code: '123456' })
+
+    expect(devices.completeEnrollment).toHaveBeenCalledWith('worker-1', { code: '123456' })
+  })
+
   it('revoga usando o escopo do administrador do token', async () => {
     const devices = serviceDouble()
 
