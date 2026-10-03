@@ -74,10 +74,10 @@ function TelemetryRoot() {
 // (sem token o POST só viraria 401 a cada batida).
 function PositionsRoot() {
   const { user } = useAuth();
-  const { coords, source } = useLocation();
-  // Só posta posição REAL (source 'gps'): o fallback mock do LocationProvider
-  // não pode virar "última posição" do worker no mapa do admin.
-  usePositionHeartbeat(() => (user && source === 'gps' ? coords : null));
+  const { coords } = useLocation();
+  // Sem leitura do GPS `coords` é null e a batida é pulada: o mapa do admin só
+  // recebe posição medida.
+  usePositionHeartbeat(() => (user ? coords : null));
   return null;
 }
 

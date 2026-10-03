@@ -9,4 +9,13 @@ export const mockPositionsBackend: PositionsBackend = {
   async heartbeat(lat: number, lng: number): Promise<void> {
     mockHeartbeatLog.push({ lat, lng });
   },
+  // Sem backend não há colega nem presença para mostrar: o mapa fica vazio em
+  // vez de inventar gente.
+  async listColleagues() {
+    return [];
+  },
+  async heat() {
+    const now = new Date().toISOString();
+    return { cellSizeM: 50, from: now, to: now, cells: [] };
+  },
 };

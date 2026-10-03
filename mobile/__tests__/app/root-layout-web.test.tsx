@@ -87,7 +87,7 @@ jest.mock('../../services/vitals/VitalsProvider', () => ({
 }));
 jest.mock('../../services/location/LocationProvider', () => ({
   LocationProvider: ({ children }: { children: ReactNode }) => children,
-  useLocation: () => ({ coords: null, source: 'mock' }),
+  useLocation: () => ({ coords: null, permission: 'denied' }),
 }));
 jest.mock('../../services/weather/WeatherProvider', () => ({
   WeatherProvider: ({ children }: { children: ReactNode }) => children,

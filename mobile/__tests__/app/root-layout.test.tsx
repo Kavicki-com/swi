@@ -56,10 +56,7 @@ jest.mock('expo-router', () => ({ Stack: mockStack }));
 
 let mockAuth: { user: unknown } = { user: { id: 'u-1' } };
 let mockVitals: unknown = { heartRate: 72 };
-let mockLocation: { coords: [number, number] | null; source: string } = {
-  coords: [-46.6, -23.5],
-  source: 'gps',
-};
+let mockLocation: { coords: [number, number] | null } = { coords: [-46.6, -23.5] };
 
 jest.mock('../../services/auth/AuthProvider', () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
@@ -138,7 +135,7 @@ beforeEach(() => {
   mockFontError = null;
   mockAuth = { user: { id: 'u-1' } };
   mockVitals = { heartRate: 72 };
-  mockLocation = { coords: [-46.6, -23.5], source: 'gps' };
+  mockLocation = { coords: [-46.6, -23.5] };
 });
 
 afterEach(desmontarTudo);
@@ -252,14 +249,16 @@ describe('RootLayout: telemetria e heartbeat de posição', () => {
     expect(getter()).toBeNull();
   });
 
-  // A posição simulada do provider não pode virar "última posição" do
-  // trabalhador no mapa do admin.
-  it('com posição simulada (source diferente de gps), o heartbeat não recebe posição', async () => {
-    mockLocation = { coords: [-46.6, -23.5], source: 'mock' };
+  // Sem leitura do GPS não existe posição de reserva: nem o mapa do admin nem
+  // a telemetria recebem um ponto que ninguém mediu.
+  it('sem leitura do GPS, o heartbeat e o amostrador não recebem posição', async () => {
+    mockLocation = { coords: null };
     await render();
 
     const getter = mockHeartbeat.mock.calls[0][0] as () => unknown;
     expect(getter()).toBeNull();
+    const [, getCoords] = mockSampler.mock.calls[0] as [() => unknown, () => unknown];
+    expect(getCoords()).toBeNull();
   });
 });
 

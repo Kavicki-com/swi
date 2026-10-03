@@ -18,12 +18,12 @@ import {
   Text,
   useTheme,
   type IconName,
-  type LocationPinStatus,
 } from '@kavicki/swi-design-system';
 import { useLocation } from '@/services/location/LocationProvider';
+import { getPositionsBackend } from '@/services/positions/getPositionsBackend';
+import { usePolledRead } from '@/services/positions/usePolledRead';
 import { useProfile } from '@/services/profile/ProfileProvider';
 import { useVitals } from '@/services/vitals/VitalsProvider';
-import type { WorkerStatus } from '@/services/vitals/types';
 import { MapView } from '@/components/MapView';
 import { MapMarker } from '@/components/MapMarker';
 import { MapLineSource } from '@/components/MapLineSource';
@@ -32,36 +32,17 @@ import { NavFABs } from '@/components/NavFABs';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { circleFeature, destinationPoint } from '@/lib/mapGeometry';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import {
-  CAMERA_LOCATIONS,
-  USER_LOCATION,
-  WORKER_LOCATIONS,
-} from '@/lib/mapMockData';
+import { CAMERA_LOCATIONS } from '@/lib/mapMockData';
+import { toPinStatus } from '@/lib/mapPins';
+import { heatShapeFromCells } from '@/lib/positionHeat';
+import { useMapViewport } from '@/lib/useMapViewport';
 
-// ---------------------------------------------------------------------------
-// Heatmap data generation — Box-Muller transform produces normally-distributed
-// offsets so the cluster fades organically toward its edges. Verbatim port of
-// swi-admin MapsGeneral.tsx:67-87.
-// ---------------------------------------------------------------------------
-function buildHeatmapPoints(
-  center: [number, number],
-  count: number,
-  spread: number,
-): { lng: number; lat: number; weight: number }[] {
-  const pts: { lng: number; lat: number; weight: number }[] = [];
-  for (let i = 0; i < count; i++) {
-    const u = 1 - Math.random();
-    const v = Math.random();
-    const r = Math.sqrt(-2 * Math.log(u)) * spread;
-    const theta = 2 * Math.PI * v;
-    const dx = r * Math.cos(theta);
-    const dy = r * Math.sin(theta);
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const weight = Math.max(0.2, 1 - distance / (spread * 2.4));
-    pts.push({ lng: center[0] + dx, lat: center[1] + dy, weight });
-  }
-  return pts;
-}
+// O calor é agregado de 24 horas: reler a cada poucos minutos já acompanha.
+// Depois de uma falha, a nova tentativa não espera esses minutos todos.
+const HEAT_REFRESH_MS = 5 * 60_000;
+const HEAT_RETRY_MS = 30_000;
+
+const readHeat = () => getPositionsBackend().heat();
 
 // Productivity color ramp (cyan → green → yellow → orange → red → magenta) —
 // verbatim port from swi-admin spec. Used by the heatmap layer when the
@@ -75,12 +56,6 @@ const PRODUCTIVITY_COLOR_STOPS: [number, string][] = [
   [0.84, 'rgb(220,38,38)'],
   [1.0, 'rgb(159,18,57)'],
 ];
-
-// Map the domain WorkerStatus to the DS LocationPin status. good/alert/low pass
-// through; 'unknown' (empty/stale/error/loading) → 'offline' (DS-supported).
-function toPinStatus(status: WorkerStatus): LocationPinStatus {
-  return status === 'unknown' ? 'offline' : status;
-}
 
 // A distância é o dado, e o desenho é consequência: `meters` alimenta tanto a
 // geometria quanto o rótulo, então os dois não têm como divergir. Antes o par
@@ -99,8 +74,8 @@ export default function MapViewGeneral() {
 
 function MapViewGeneralScreen() {
   const theme = useTheme();
-  // Real GPS coords (falls back to mock when permission denied / no fix yet)
-  // + live worker status drive the user's own pin. Other pins stay mock.
+  // Posição do GPS (null sem permissão ou sem leitura) e estado de saúde vivo
+  // desenham o pino de quem usa. Sem posição não há pino próprio nem anéis.
   const { coords } = useLocation();
   const { profile } = useProfile();
   const { status } = useVitals();
@@ -112,53 +87,44 @@ function MapViewGeneralScreen() {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showCameras, setShowCameras] = useState(false);
 
-  // Two clusters fused: dense core (220 points / spread 0.006°) drives the
-  // hot magenta peak; halo (280 points / spread 0.018°) widens the organic
-  // blob so it spans roughly half the visible viewport at z=14. Computed
-  // once on first mount — re-running on every render would shuffle the
-  // distribution and make the heatmap "blink" when the user toggles other
-  // overlays. Toggle off → memoized data is dropped from the shape passed
-  // to <MapHeatmapSource> via the conditional render.
-  // Counts reduzidos pela metade (Fix 9 do cliente — preventivo, alinhado
-  // com map-weather): 220+280=500 features × intensity 2.0 × radius 70 era
-  // pesado pra GPUs mid-range Android. 110+140=250 mantém densidade visual.
-  const heatmapShape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => {
-    const corePoints = buildHeatmapPoints(USER_LOCATION, 110, 0.006);
-    const haloPoints = buildHeatmapPoints(USER_LOCATION, 140, 0.018);
-    const points = [...corePoints, ...haloPoints];
-    return {
-      type: 'FeatureCollection',
-      features: points.map((p) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: { weight: p.weight },
-      })),
-    };
-  }, []);
+  // Colegas da mesma empresa, com a última posição recente e só o estado de
+  // saúde. Sem posição própria são eles que o mapa enquadra.
+  const { viewport, colleagues } = useMapViewport(coords, showOperators);
+  // Presença agregada da empresa nas últimas 24 horas, em células.
+  const heat = usePolledRead(showHeatmap, readHeat, HEAT_REFRESH_MS, HEAT_RETRY_MS);
+
+  // A forma só muda quando chega leitura nova: religar outro overlay não
+  // refaz a camada de calor.
+  const heatmapShape = useMemo(
+    () => (heat.data ? heatShapeFromCells(heat.data.cells) : null),
+    [heat.data],
+  );
 
   // Anéis + âncora do rótulo, recalculados quando chega uma posição nova do
   // GPS. O centro é a posição REAL de quem está usando (a mesma do pino), não
   // o centro da tela: arrastar o mapa não pode mudar de onde a distância é
-  // medida.
+  // medida. Sem posição não há de onde medir, então não há anel.
   const radiusRings = useMemo(
     () =>
-      RADIUS_RINGS.map((r) => ({
-        ...r,
-        ring: circleFeature(coords, r.meters),
-        // e agora anda junto com ela em qualquer zoom.
-        labelAt: destinationPoint(coords, 180, r.meters),
-      })),
+      coords
+        ? RADIUS_RINGS.map((r) => ({
+            ...r,
+            ring: circleFeature(coords, r.meters),
+            // e agora anda junto com ela em qualquer zoom.
+            labelAt: destinationPoint(coords, 180, r.meters),
+          }))
+        : [],
     [coords],
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView center={coords} zoom={14}>
+      <MapView {...viewport} zoom={14}>
         {/* Keys explícitos pra reconciliação estável: showHeatmap toggle
             muda composição do array de children, shifta as posições e sem
             keys o maplibre useFrozenId throws "id cannot be changed".
             Ver detalhes no comentário equivalente em evacuation.tsx. */}
-        {showHeatmap && (
+        {heatmapShape && heatmapShape.features.length > 0 && (
           <MapHeatmapSource
             key="productivity-heatmap"
             id="productivity-heatmap"
@@ -191,30 +157,30 @@ function MapViewGeneralScreen() {
           </MapMarker>
         ))}
 
-        <MapMarker key="user-pin" coordinate={coords} id="user-pin">
-            <LocationPin
-              variant="avatar"
-              // Foto real do perfil. As coordenadas sempre foram reais (GPS do
-              // aparelho), mas o rosto era um PNG de estoque — o pino mostrava
-              avatarUri={profile?.avatarUrl ?? ''}
-              status={toPinStatus(status)}
-              name="Você"
-            />
-        </MapMarker>
+        {coords && (
+          <MapMarker key="user-pin" coordinate={coords} id="user-pin">
+              <LocationPin
+                variant="avatar"
+                avatarUri={profile?.avatarUrl ?? ''}
+                status={toPinStatus(status)}
+                name="Você"
+              />
+          </MapMarker>
+        )}
 
-        {/* Operator pins overlay — 7 WORKER_LOCATIONS quando toggle ligado. */}
+        {/* Operator pins overlay: os colegas lidos do backend, quando ligado. */}
         {showOperators &&
-          WORKER_LOCATIONS.map((m) => (
+          colleagues?.map((c) => (
             <MapMarker
-              key={m.id}
-              id={`worker-${m.id}`}
-              coordinate={[m.lng, m.lat]}
+              key={`worker-${c.id}`}
+              id={`worker-${c.id}`}
+              coordinate={[c.lng, c.lat]}
             >
                 <LocationPin
                   variant="avatar"
-                  avatarUri={m.avatarUri}
-                  status={m.status}
-                  name={m.name}
+                  avatarUri={c.avatar}
+                  status={toPinStatus(c.status)}
+                  name={c.name}
                 />
             </MapMarker>
           ))}

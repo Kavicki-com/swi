@@ -1,81 +1,54 @@
 // mobile/app/(app)/map-weather.tsx
 //
-// Sprint 6 Wave 3: migrated off the legacy maplibre-gl imperative wrapper
-// (createRoot + addSource/addLayer) onto the declarative MapView API.
+// Mapa de clima: o radar de chuva real (IMERG, via NASA GIBS) sobre o mapa de
+// satélite, com os colegas e as câmeras como camadas opcionais. Nada aqui é
+// sorteado: sem leitura do radar a camada não aparece.
+//
 // Works on both web (via MapView.web.tsx + maplibre-gl) and native
 // iOS/Android (via MapView.native.tsx + @maplibre/maplibre-react-native).
-//
-// Heatmap pattern is a verbatim port of swi-admin/src/pages/maps/
-// MapsGeneral.tsx:67-87 (Box-Muller point generation) and lines 393-411
-// (storm-intensity color curve: cyan→green→yellow→orange→red→magenta).
-// The admin curve produces exactly the red/orange weather radar blob
-// screen visually consistent with the admin Dashboard MapBanner.
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Icon,
   LocationPin,
+  Surface,
+  Text,
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system';
 import { useLocation } from '@/services/location/LocationProvider';
+import { usePolledRead } from '@/services/positions/usePolledRead';
+import {
+  RAIN_RADAR_MAX_ZOOM,
+  RAIN_RADAR_TILE_SIZE,
+  latestRainRadarTime,
+  rainRadarLabel,
+  rainRadarTiles,
+} from '@/services/weather/rainRadar';
 import { MapView } from '@/components/MapView';
 import { MapMarker } from '@/components/MapMarker';
-import { MapHeatmapSource } from '@/components/MapHeatmapSource';
+import { MapRasterSource } from '@/components/MapRasterSource';
 import { NavFABs } from '@/components/NavFABs';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import {
-  CAMERA_LOCATIONS,
-  USER_LOCATION,
-  WORKER_LOCATIONS,
-} from '@/lib/mapMockData';
+import { BRAZIL_BOUNDS, boundsCenter } from '@/lib/mapGeometry';
+import { CAMERA_LOCATIONS } from '@/lib/mapMockData';
+import { toPinStatus } from '@/lib/mapPins';
+import { useMapViewport } from '@/lib/useMapViewport';
 
-// Box-Muller transform for normally-distributed offsets — produces an
-// organic cluster denser near `center`, fading at the edges. Verbatim port
-// of swi-admin MapsGeneral.tsx:67-87.
-function buildHeatmapPoints(
-  center: [number, number],
-  count: number,
-  spread: number,
-): { lng: number; lat: number; weight: number }[] {
-  const pts: { lng: number; lat: number; weight: number }[] = [];
-  for (let i = 0; i < count; i++) {
-    const u = 1 - Math.random();
-    const v = Math.random();
-    const r = Math.sqrt(-2 * Math.log(u)) * spread;
-    const theta = 2 * Math.PI * v;
-    const dx = r * Math.cos(theta);
-    const dy = r * Math.sin(theta);
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const weight = Math.max(0.2, 1 - distance / (spread * 2.4));
-    pts.push({ lng: center[0] + dx, lat: center[1] + dy, weight });
-  }
-  return pts;
-}
+// O radar tem cerca de 10 km por quadrado. No zoom de rua a tela inteira cabe
+// dentro de um quadrado só; no 7 aparecem uns 400 km em volta e dá para ver a
+// chuva chegando.
+const WEATHER_ZOOM = 7;
 
-// Storm intensity color ramp — cyan → green → yellow → orange → red →
-// magenta (verbatim port of admin MapsGeneral.tsx:393-411). Magenta core
-// when the density curve peaks.
-const STORM_COLOR_STOPS: [number, string][] = [
-  [0, 'rgba(34,211,238,0)'],
-  [0.08, 'rgb(34,211,238)'],
-  [0.24, 'rgb(34,197,94)'],
-  [0.44, 'rgb(250,204,21)'],
-  [0.64, 'rgb(249,115,22)'],
-  [0.84, 'rgb(220,38,38)'],
-  [1.0, 'rgb(159,18,57)'],
-];
+// O GIBS publica um horário novo a cada 30 minutos. Depois de uma falha, a
+// nova tentativa vem em um minuto, sem esperar a meia hora.
+const RADAR_REFRESH_MS = 30 * 60_000;
+const RADAR_RETRY_MS = 60_000;
+const RADAR_OPACITY = 0.7;
 
-// Flood color ramp — narrower spectrum (orange → red → magenta). Reads as
-// a more localized hot zone vs the broader storm cloud.
-const FLOOD_COLOR_STOPS: [number, string][] = [
-  [0, 'rgba(249,115,22,0)'],
-  [0.2, 'rgb(249,115,22)'],
-  [0.55, 'rgb(234,88,12)'],
-  [0.85, 'rgb(220,38,38)'],
-  [1.0, 'rgb(159,18,57)'],
-];
+const readRadarTime = () => latestRainRadarTime();
 
 export default function MapWeather() {
   if (!isFeatureEnabled('maps')) {
@@ -86,122 +59,79 @@ export default function MapWeather() {
 
 function MapWeatherScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { coords } = useLocation();
 
-  // é simple toggle; tap liga, tap de novo desliga. `showHeatmap=true` por
-  // useEffect (defer pattern). Sem o defer, 2 heatmap layers (storm + flood)
-  // tentavam mountar no mesmo frame do MapView GL init e crashavam o
-  // libmaplibre.so em GPUs Android mid-range (POCO/rodin observado em
-  // produção). Fix 9 do cliente.
+  // é simple toggle; tap liga, tap de novo desliga. `showRadar=true` por
+  // useEffect (defer pattern). Montar camada no mesmo frame do MapView GL
+  // init crashava o libmaplibre.so em GPUs Android mid-range (POCO/rodin
+  // observado em produção). Fix 9 do cliente.
   const [showOperators, setShowOperators] = useState(false);
   const [showCameras, setShowCameras] = useState(false);
-  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showRadar, setShowRadar] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setShowHeatmap(true), 300);
+    const t = setTimeout(() => setShowRadar(true), 300);
     return () => clearTimeout(t);
   }, []);
 
-  // Storm (tempestades) heatmap data — 110 core + 140 halo centered on
-  // USER_LOCATION. Computed once on mount; toggling the heatmap off just
-  // unmounts <MapHeatmapSource> without re-shuffling the distribution.
-  // Counts reduzidos pela metade (Fix 9 do cliente): combinação 500+300
-  // features × intensity 2.0 × radius 70 estourava texture allocation em
-  // GPUs mid-range. Densidade visual praticamente inalterada.
-  const stormShape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => {
-    const corePoints = buildHeatmapPoints(USER_LOCATION, 110, 0.006);
-    const haloPoints = buildHeatmapPoints(USER_LOCATION, 140, 0.018);
-    const points = [...corePoints, ...haloPoints];
-    return {
-      type: 'FeatureCollection',
-      features: points.map((p) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: { weight: p.weight },
-      })),
-    };
-  }, []);
+  // Horário da observação mais recente do radar. Relido a cada meia hora; se a
+  // releitura falha, a última observação lida segue na tela com a hora dela.
+  const radar = usePolledRead(showRadar, readRadarTime, RADAR_REFRESH_MS, RADAR_RETRY_MS);
+  const radarTiles = useMemo(() => (radar.data ? [rainRadarTiles(radar.data)] : null), [radar.data]);
 
-  // Flood (inundações) heatmap data — secondary cluster offset slightly
-  // south of USER_LOCATION so it doesn't perfectly overlap the storm blob
-  // when both layers are on. Narrower spread (0.004 / 0.01) produces a
-  // tighter hot zone.
-  const floodShape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => {
-    const floodCenter: [number, number] = [
-      USER_LOCATION[0] + 0.004,
-      USER_LOCATION[1] - 0.008,
-    ];
-    const corePoints = buildHeatmapPoints(floodCenter, 70, 0.004);
-    const haloPoints = buildHeatmapPoints(floodCenter, 80, 0.01);
-    const points = [...corePoints, ...haloPoints];
-    return {
-      type: 'FeatureCollection',
-      features: points.map((p) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: { weight: p.weight },
-      })),
-    };
-  }, []);
+  // Mesma regra do mapa geral: sem GPS, são os colegas que dão o enquadramento.
+  const { viewport: frame, colleagues } = useMapViewport(coords, showOperators);
+  // Aqui o enquadramento dos colegas vira só o centro: fechar o mapa em volta
+  // deles deixaria o radar sem leitura, pelo mesmo motivo do WEATHER_ZOOM.
+  const viewport =
+    'center' in frame || frame.bounds === BRAZIL_BOUNDS
+      ? frame
+      : { center: boundsCenter(frame.bounds) };
+
+  const radarNote = radar.data
+    ? rainRadarLabel(radar.data)
+    : radar.failed
+      ? 'Radar de chuva indisponível'
+      : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView center={coords} zoom={13}>
-        {/* Keys explícitos: toggles condicionais (showHeatmap, showOperators,
+      <MapView {...viewport} zoom={WEATHER_ZOOM}>
+        {/* Keys explícitos: toggles condicionais (showRadar, showOperators,
             showCameras) shiftam posições no array de children. Sem keys o
-            maplibre useFrozenId throws "id cannot be changed". Ver evacuation.tsx. */}
-
-        {/* Storm heatmap (tempestades) — driven by `showHeatmap` toggle. */}
-        {showHeatmap && (
-          <MapHeatmapSource
-            key="storm-heatmap"
-            id="storm-heatmap"
-            shape={stormShape}
-            paint={{
-              colorStops: STORM_COLOR_STOPS,
-              intensity: 2.0,
-              radius: 70,
-              opacity: 0.82,
-              weightProperty: 'weight',
-            }}
+            maplibre useFrozenId throws "id cannot be changed". Ver evacuation.tsx.
+            A key e o id do radar levam o horário: observação nova é uma fonte
+            nova, que nunca disputa o id com a que está saindo. */}
+        {radar.data && radarTiles && (
+          <MapRasterSource
+            key={`rain-radar-${radar.data}`}
+            id={`rain-radar-${radar.data}`}
+            tiles={radarTiles}
+            tileSize={RAIN_RADAR_TILE_SIZE}
+            maxzoom={RAIN_RADAR_MAX_ZOOM}
+            opacity={RADAR_OPACITY}
           />
         )}
 
-        {/* Flood heatmap (inundações) — same toggle as storm; both layers
-            light up together per mobile spec (sem expand panel). */}
-        {showHeatmap && (
-          <MapHeatmapSource
-            key="flood-heatmap"
-            id="flood-heatmap"
-            shape={floodShape}
-            paint={{
-              colorStops: FLOOD_COLOR_STOPS,
-              intensity: 1.6,
-              radius: 55,
-              opacity: 0.78,
-              weightProperty: 'weight',
-            }}
-          />
-        )}
-
-        {/* Operators overlay — 7 WORKER_LOCATIONS quando toggle ligado. */}
+        {/* Operators overlay: os colegas lidos do backend, quando ligado. */}
         {showOperators &&
-          WORKER_LOCATIONS.map((m) => (
+          colleagues?.map((c) => (
             <MapMarker
-              key={m.id}
-              id={`worker-${m.id}`}
-              coordinate={[m.lng, m.lat]}
+              key={`worker-${c.id}`}
+              id={`worker-${c.id}`}
+              coordinate={[c.lng, c.lat]}
             >
                 <LocationPin
                   variant="avatar"
-                  avatarUri={m.avatarUri}
-                  status={m.status}
-                  name={m.name}
+                  avatarUri={c.avatar}
+                  status={toPinStatus(c.status)}
+                  name={c.name}
                 />
             </MapMarker>
           ))}
 
-        {/* Camera pins overlay — 12 CAMERA_LOCATIONS quando toggle ligado. */}
+        {/* Camera pins overlay: 12 CAMERA_LOCATIONS quando toggle ligado. */}
         {showCameras &&
           CAMERA_LOCATIONS.map((c) => (
             <MapMarker
@@ -212,6 +142,26 @@ function MapWeatherScreen() {
                 <LocationPin variant="camera" name={c.name} />
             </MapMarker>
           ))}
+
+        {/* De quando é a chuva desenhada. O dado chega com horas de atraso,
+            então a camada nunca aparece sem a hora dela. */}
+        {radarNote && (
+          <Surface
+            variant="high"
+            padding="s"
+            radius="m"
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: insets.top + theme.padding.sm,
+              left: theme.padding.m,
+            }}
+          >
+            <Text variant="body.m" color={theme.content.dark}>
+              {radarNote}
+            </Text>
+          </Surface>
+        )}
 
         <View
           style={{
@@ -238,10 +188,10 @@ function MapWeatherScreen() {
             iconName="mode_heat"
             iconWidth={16}
             iconHeight={18}
-            active={showHeatmap}
+            active={showRadar}
             activeColor={theme.surface.warning}
-            accessibilityLabel="Heatmap"
-            onPress={() => setShowHeatmap((v) => !v)}
+            accessibilityLabel="Radar de chuva"
+            onPress={() => setShowRadar((v) => !v)}
             theme={theme}
           />
           <MapToggleButton
