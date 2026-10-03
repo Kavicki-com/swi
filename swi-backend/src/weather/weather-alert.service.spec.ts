@@ -23,7 +23,7 @@ interface Setup {
   alertsByLat?: Record<string, WeatherAlert[]>
   demo?: WeatherAlert[]
   seenById?: string[]
-  seenWindow?: { alertId: string; endsAt: Date } | null
+  seenWindow?: { alertId: string; endsAt: Date; severity?: string | null } | null
   createRejects?: boolean
 }
 
@@ -75,7 +75,13 @@ describe('WeatherAlertService.pollAndNotify', () => {
       targetId: alert().id,
     })
     expect(prisma.weatherAlertSeen.create).toHaveBeenCalledWith({
-      data: { alertId: `c1:${alert().id}`, scope: 'c1', kind: 'CHUVA_INTENSA', endsAt: new Date(alert().endsAt) },
+      data: {
+        alertId: `c1:${alert().id}`,
+        scope: 'c1',
+        kind: 'CHUVA_INTENSA',
+        endsAt: new Date(alert().endsAt),
+        severity: 'ATENCAO',
+      },
     })
   })
 
@@ -116,6 +122,95 @@ describe('WeatherAlertService.pollAndNotify', () => {
     })
     await svc.pollAndNotify(NOW)
     expect(prisma.weatherAlertSeen.update).not.toHaveBeenCalled()
+  })
+
+  describe('agravamento para perigo', () => {
+    const PERIGO = alert({ severity: 'PERIGO', description: 'Chuva forte prevista entre 10:00 e 13:00, com até 34 mm por hora.' })
+
+    it('alerta avisado como atenção que sobe para perigo avisa de novo e grava a gravidade', async () => {
+      const { svc, enqueueForMany, prisma } = mk({
+        alertsByLat: { '-3.1': [PERIGO] },
+        seenWindow: { alertId: 'c1:antigo', endsAt: new Date('2026-03-10T14:00:00.000Z'), severity: 'ATENCAO' },
+      })
+      await svc.pollAndNotify(NOW)
+      expect(enqueueForMany).toHaveBeenCalledTimes(1)
+      expect(enqueueForMany).toHaveBeenCalledWith(['u1', 'u2'], {
+        domain: 'weather',
+        title: 'Alerta Meteorológico agravado: Chuva intensa',
+        body: PERIGO.description,
+        targetId: PERIGO.id,
+      })
+      expect(prisma.weatherAlertSeen.update).toHaveBeenCalledWith({
+        where: { alertId: 'c1:antigo' },
+        data: { endsAt: new Date(PERIGO.endsAt), severity: 'PERIGO' },
+      })
+    })
+
+    it('registro anterior à gravidade (nulo) conta como atenção', async () => {
+      const { svc, enqueueForMany } = mk({
+        alertsByLat: { '-3.1': [PERIGO] },
+        seenWindow: { alertId: 'c1:antigo', endsAt: new Date('2026-03-10T18:00:00.000Z'), severity: null },
+      })
+      await svc.pollAndNotify(NOW)
+      expect(enqueueForMany).toHaveBeenCalledTimes(1)
+    })
+
+    it('alerta já avisado como perigo não avisa de novo', async () => {
+      const { svc, enqueueForMany, prisma } = mk({
+        alertsByLat: { '-3.1': [PERIGO] },
+        seenWindow: { alertId: 'c1:antigo', endsAt: new Date('2026-03-10T18:00:00.000Z'), severity: 'PERIGO' },
+      })
+      await svc.pollAndNotify(NOW)
+      expect(enqueueForMany).not.toHaveBeenCalled()
+      expect(prisma.weatherAlertSeen.update).not.toHaveBeenCalled()
+    })
+
+    it('alerta que desce de perigo para atenção não avisa, mas rebaixa o registro para a volta a perigo avisar', async () => {
+      const { svc, enqueueForMany, prisma } = mk({
+        seenWindow: { alertId: 'c1:antigo', endsAt: new Date('2026-03-10T18:00:00.000Z'), severity: 'PERIGO' },
+      })
+      await svc.pollAndNotify(NOW)
+      expect(enqueueForMany).not.toHaveBeenCalled()
+      expect(prisma.weatherAlertSeen.update).toHaveBeenCalledWith({
+        where: { alertId: 'c1:antigo' },
+        data: { severity: 'ATENCAO' },
+      })
+    })
+  })
+
+  describe('sol intenso', () => {
+    const sun = (severity: WeatherAlert['severity']) =>
+      alert({ id: 'wx:SOL_INTENSO:2026-03-10T13:00:00.000Z', kind: 'SOL_INTENSO', event: 'Sol intenso', severity })
+
+    it('em atenção não avisa nem grava: fica só na tela', async () => {
+      const { svc, enqueueForMany, prisma } = mk({ alertsByLat: { '-3.1': [sun('ATENCAO')] } })
+      await svc.pollAndNotify(NOW)
+      expect(enqueueForMany).not.toHaveBeenCalled()
+      expect(prisma.weatherAlertSeen.create).not.toHaveBeenCalled()
+    })
+
+    it('em atenção com registro de perigo anterior não avisa: estende a janela e rebaixa o registro', async () => {
+      const { svc, enqueueForMany, prisma } = mk({
+        alertsByLat: { '-3.1': [sun('ATENCAO')] },
+        seenWindow: { alertId: 'c1:antigo', endsAt: new Date('2026-03-10T14:00:00.000Z'), severity: 'PERIGO' },
+      })
+      await svc.pollAndNotify(NOW)
+      expect(enqueueForMany).not.toHaveBeenCalled()
+      expect(prisma.weatherAlertSeen.update).toHaveBeenCalledWith({
+        where: { alertId: 'c1:antigo' },
+        data: { endsAt: new Date(alert().endsAt), severity: 'ATENCAO' },
+      })
+    })
+
+    it('em perigo avisa uma vez, como alerta novo', async () => {
+      const { svc, enqueueForMany, prisma } = mk({ alertsByLat: { '-3.1': [sun('PERIGO')] } })
+      await svc.pollAndNotify(NOW)
+      expect(enqueueForMany).toHaveBeenCalledTimes(1)
+      expect(enqueueForMany).toHaveBeenCalledWith(['u1', 'u2'], expect.objectContaining({ title: 'Alerta Meteorológico: Sol intenso' }))
+      expect(prisma.weatherAlertSeen.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ kind: 'SOL_INTENSO', severity: 'PERIGO' }),
+      })
+    })
   })
 
   it('empresa sem funcionário aprovado não consulta o clima', async () => {

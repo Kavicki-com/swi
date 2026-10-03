@@ -454,6 +454,9 @@ model WeatherAlertSeen {
   scope      String?
   kind       String?
   endsAt     DateTime?
+  // Maior gravidade já avisada (ATENCAO ou PERIGO). Subir para PERIGO depois de
+  // avisar ATENCAO pede um segundo aviso; nula nos registros antigos.
+  severity   String?
 
   @@index([scope, kind, endsAt])
 }

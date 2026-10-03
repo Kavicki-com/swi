@@ -11,7 +11,12 @@ interface HourVerdict {
   severity: WeatherAlertSeverity
   /** Valor que entra no texto (mm por hora, índice UV), quando houver. */
   peak: number | null
+  /** Sensação térmica que entra no texto, só quando foi o calor que abriu. */
+  heatPeak?: number | null
 }
+
+const highest = (a: number | null, b: number | null | undefined): number | null =>
+  b === null || b === undefined ? a : a === null ? b : Math.max(a, b)
 
 const worst = (a: WeatherAlertSeverity, b: WeatherAlertSeverity): WeatherAlertSeverity =>
   a === 'PERIGO' || b === 'PERIGO' ? 'PERIGO' : 'ATENCAO'
@@ -45,7 +50,22 @@ function intenseSun(h: HazardHour): HourVerdict | null {
   const danger =
     (h.uvIndex !== null && h.uvIndex >= P.uvDanger) ||
     (h.apparentTempC !== null && h.apparentTempC >= P.apparentTempDangerC)
-  return { severity: danger ? 'PERIGO' : 'ATENCAO', peak: h.uvIndex }
+  // Cada número só entra no texto quando o próprio fator abriu o alerta.
+  return { severity: danger ? 'PERIGO' : 'ATENCAO', peak: uv ? h.uvIndex : null, heatPeak: heat ? h.apparentTempC : null }
+}
+
+function describeSun(from: string, to: string, uvPeak: number | null, heatPeak: number | null): string {
+  const subject =
+    uvPeak !== null && heatPeak !== null
+      ? 'Sol e calor intensos previstos'
+      : heatPeak !== null
+        ? 'Calor intenso previsto'
+        : 'Sol intenso previsto'
+  const figures = [
+    uvPeak === null ? null : `índice UV até ${Math.round(uvPeak)}`,
+    heatPeak === null ? null : `sensação térmica até ${Math.round(heatPeak)} °C`,
+  ].filter((f): f is string => f !== null)
+  return `${subject} entre ${from} e ${to}, com ${figures.join(' e ')}. Reforce hidratação, sombra e pausas.`
 }
 
 /** Hora local "HH:MM" de um instante, pelo deslocamento do fuso do local. */
@@ -60,7 +80,7 @@ interface KindRule {
   kind: WeatherAlertKind
   event: string
   verdict: (h: HazardHour) => HourVerdict | null
-  describe: (from: string, to: string, peak: number | null, severity: WeatherAlertSeverity) => string
+  describe: (from: string, to: string, peak: number | null, severity: WeatherAlertSeverity, heatPeak: number | null) => string
 }
 
 // A ordem aqui é a ordem dos alertas na resposta.
@@ -85,10 +105,7 @@ const RULES: readonly KindRule[] = [
     kind: 'SOL_INTENSO',
     event: 'Sol intenso',
     verdict: intenseSun,
-    describe: (from, to, peak) =>
-      `Sol e calor intensos previstos entre ${from} e ${to}` +
-      (peak === null ? '.' : `, com índice UV até ${Math.round(peak)}.`) +
-      ' Reforce hidratação, sombra e pausas.',
+    describe: (from, to, peak, _severity, heatPeak) => describeSun(from, to, peak, heatPeak),
   },
 ]
 
@@ -112,6 +129,7 @@ export function evaluateWeatherAlerts(hours: readonly HazardHour[], now: Date, u
     let last = 0
     let severity: WeatherAlertSeverity = 'ATENCAO'
     let peak: number | null = null
+    let heatPeak: number | null = null
     for (const { h, start } of inWindow) {
       const v = rule.verdict(h)
       // A primeira janela contínua termina na hora que não abre a regra ou num
@@ -121,7 +139,8 @@ export function evaluateWeatherAlerts(hours: readonly HazardHour[], now: Date, u
       severity = first === null ? v.severity : worst(severity, v.severity)
       if (first === null) first = start
       last = start
-      if (v.peak !== null) peak = peak === null ? v.peak : Math.max(peak, v.peak)
+      peak = highest(peak, v.peak)
+      heatPeak = highest(heatPeak, v.heatPeak)
     }
     if (first === null) continue
     const startsAt = new Date(first).toISOString()
@@ -131,7 +150,7 @@ export function evaluateWeatherAlerts(hours: readonly HazardHour[], now: Date, u
       kind: rule.kind,
       severity,
       event: rule.event,
-      description: rule.describe(localClock(first, utcOffsetSeconds), localClock(end, utcOffsetSeconds), peak, severity),
+      description: rule.describe(localClock(first, utcOffsetSeconds), localClock(end, utcOffsetSeconds), peak, severity, heatPeak),
       startsAt,
       endsAt: new Date(end).toISOString(),
     })
