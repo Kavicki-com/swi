@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule'
 import { PrismaService } from '../prisma/prisma.service'
 import { NotificationService } from '../notifications/notification.service'
 import { WeatherService } from './weather.service'
+import { WEATHER_ALERT_PROFILE as P } from './weather-alert-profile'
 import { locationOf } from './weather.types'
 import type { WeatherAlert } from './weather.types'
 
@@ -67,19 +68,35 @@ export class WeatherAlertService {
       orderBy: { endsAt: 'desc' },
     })
     if (seen) {
-      if (seen.endsAt && seen.endsAt < endsAt) {
-        await this.prisma.weatherAlertSeen.update({ where: { alertId: seen.alertId }, data: { endsAt } })
+      // Subir para PERIGO depois de um aviso de ATENCAO pede um segundo aviso.
+      // Descer não avisa, mas rebaixa o registro: se o alerta voltar a PERIGO
+      // horas depois, avisa de novo.
+      const worsened = alert.severity === 'PERIGO' && seen.severity !== 'PERIGO'
+      const eased = alert.severity !== 'PERIGO' && seen.severity === 'PERIGO'
+      const extended = seen.endsAt !== null && seen.endsAt < endsAt
+      if (worsened) await this.notify(workerIds, alert, 'Alerta Meteorológico agravado')
+      if (worsened || eased || extended) {
+        await this.prisma.weatherAlertSeen.update({
+          where: { alertId: seen.alertId },
+          data: { ...(extended ? { endsAt } : {}), ...(worsened || eased ? { severity: alert.severity } : {}) },
+        })
       }
       return
     }
-    await this.notifications.enqueueForMany(workerIds, {
+    // Sem registro de propósito: se o alerta subir para PERIGO, avisa como novo.
+    if (alert.severity !== 'PERIGO' && (P.notifyOnlyOnDanger as readonly string[]).includes(alert.kind)) return
+    await this.notify(workerIds, alert, 'Alerta Meteorológico')
+    await this.prisma.weatherAlertSeen.create({
+      data: { alertId: `${scope}:${alert.id}`, scope, kind: alert.kind, endsAt, severity: alert.severity },
+    })
+  }
+
+  private notify(workerIds: string[], alert: WeatherAlert, heading: string): Promise<void> {
+    return this.notifications.enqueueForMany(workerIds, {
       domain: 'weather',
-      title: `Alerta Meteorológico: ${alert.event}`,
+      title: `${heading}: ${alert.event}`,
       body: alert.description,
       targetId: alert.id,
-    })
-    await this.prisma.weatherAlertSeen.create({
-      data: { alertId: `${scope}:${alert.id}`, scope, kind: alert.kind, endsAt },
     })
   }
 

@@ -124,6 +124,46 @@ describe('evaluateWeatherAlerts', () => {
       expect(evaluateWeatherAlerts(withHour(1, { apparentTempC: P.apparentTempDangerC }), NOW, OFFSET)[0].severity).toBe('PERIGO')
     })
 
+    describe('texto', () => {
+      const text = (over: Partial<HazardHour>) => evaluateWeatherAlerts(withHour(1, over), NOW, OFFSET)[0].description
+
+      it('aberto só pelo calor fala de calor e não cita o índice UV', () => {
+        expect(text({ uvIndex: 5, apparentTempC: 35.4 })).toBe(
+          'Calor intenso previsto entre 10:00 e 11:00, com sensação térmica até 35 °C. Reforce hidratação, sombra e pausas.',
+        )
+      })
+
+      it('aberto só pelo índice UV fala de sol e não cita a sensação térmica', () => {
+        expect(text({ uvIndex: 9, apparentTempC: 28 })).toBe(
+          'Sol intenso previsto entre 10:00 e 11:00, com índice UV até 9. Reforce hidratação, sombra e pausas.',
+        )
+      })
+
+      it('aberto pelos dois cita os dois', () => {
+        expect(text({ uvIndex: 9, apparentTempC: 35.4 })).toBe(
+          'Sol e calor intensos previstos entre 10:00 e 11:00, com índice UV até 9 e sensação térmica até 35 °C. Reforce hidratação, sombra e pausas.',
+        )
+      })
+
+      it('cada pico só conta as horas em que o próprio fator passa do limiar', () => {
+        const hours = calm().map((h, i) =>
+          i === 1 ? hour(i, { uvIndex: 7, apparentTempC: 34 }) : i === 2 ? hour(i, { uvIndex: 7.9, apparentTempC: 36 }) : h,
+        )
+        expect(evaluateWeatherAlerts(hours, NOW, OFFSET)[0].description).toBe(
+          'Calor intenso previsto entre 10:00 e 12:00, com sensação térmica até 36 °C. Reforce hidratação, sombra e pausas.',
+        )
+      })
+    })
+
+    it('janela com uma hora só de UV e outra só de calor cita os dois, cada um com o próprio pico', () => {
+      const hours = calm().map((h, i) =>
+        i === 1 ? hour(i, { uvIndex: 9, apparentTempC: 28 }) : i === 2 ? hour(i, { uvIndex: 5, apparentTempC: 36 }) : h,
+      )
+      expect(evaluateWeatherAlerts(hours, NOW, OFFSET)[0].description).toBe(
+        'Sol e calor intensos previstos entre 10:00 e 12:00, com índice UV até 9 e sensação térmica até 36 °C. Reforce hidratação, sombra e pausas.',
+      )
+    })
+
     it('fora do período de sol não abre', () => {
       expect(kinds(withHour(1, { uvIndex: 12, apparentTempC: 45, isDay: false }))).toEqual([])
     })

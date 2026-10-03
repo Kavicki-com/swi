@@ -55,4 +55,11 @@ export const WEATHER_ALERT_PROFILE = Object.freeze({
    */
   apparentTempAttentionC: 32.8,
   apparentTempDangerC: 39.4,
+
+  /**
+   * Tipos que só viram notificação em PERIGO. Em região quente o sol intenso
+   * fica em ATENCAO quase todo dia: aviso diário deixa de ser lido. A ATENCAO
+   * desses tipos segue na resposta do clima, visível na tela.
+   */
+  notifyOnlyOnDanger: Object.freeze(['SOL_INTENSO'] as const),
 })
