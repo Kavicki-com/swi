@@ -22,7 +22,6 @@ jest.mock('expo-secure-store', () => {
 
 const API = 'https://api.exemplo';
 const TOKEN = 'token-do-funcionario';
-const ENROLLMENT_ID = 'enr-123';
 const CODE = '482910';
 
 // O segredo existe só aqui, no dublê do Swift, como no aparelho existe só no
@@ -70,7 +69,7 @@ function fakeControl(overrides: Partial<WatchControl> = {}) {
   return { control, request, hasDeviceCredential, clearDeviceCredential };
 }
 
-type Deps = NonNullable<Parameters<typeof completeEnrollment>[2]>;
+type Deps = NonNullable<Parameters<typeof completeEnrollment>[1]>;
 
 const deps = (control: WatchControl, extra: Partial<Deps> = {}): Deps => ({
   control,
@@ -88,14 +87,14 @@ beforeEach(async () => {
 });
 
 describe('completeEnrollment, caminho feliz', () => {
-  it('envia enrollmentId e code no corpo, bearer com o token lido e storeCredential ligado', async () => {
+  it('envia só o code no corpo, bearer com o token lido e storeCredential ligado', async () => {
     const { control, request } = fakeControl();
-    await completeEnrollment(ENROLLMENT_ID, CODE, deps(control));
+    await completeEnrollment(CODE, deps(control));
     expect(request).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledWith(
       `${API}/telemetry/v1/devices/enrollments/complete`,
       'POST',
-      JSON.stringify({ enrollmentId: ENROLLMENT_ID, code: CODE }),
+      JSON.stringify({ code: CODE }),
       { kind: 'bearer', token: TOKEN },
       true,
     );
@@ -104,12 +103,10 @@ describe('completeEnrollment, caminho feliz', () => {
   it('inclui o modelo quando o aparelho o informa', async () => {
     const { control, request } = fakeControl();
     await completeEnrollment(
-      ENROLLMENT_ID,
       CODE,
       deps(control, { deviceModel: () => 'iPhone 15' }),
     );
     expect(JSON.parse(request.mock.calls[0][2] as string)).toEqual({
-      enrollmentId: ENROLLMENT_ID,
       code: CODE,
       model: 'iPhone 15',
     });
@@ -120,7 +117,7 @@ describe('completeEnrollment, caminho feliz', () => {
   it('corta o modelo em 100 caracteres antes de montar o corpo', async () => {
     const { control, request } = fakeControl();
     const longo = 'x'.repeat(150);
-    await completeEnrollment(ENROLLMENT_ID, CODE, deps(control, { deviceModel: () => longo }));
+    await completeEnrollment(CODE, deps(control, { deviceModel: () => longo }));
     const corpo = JSON.parse(request.mock.calls[0][2] as string) as { model: string };
     expect(corpo.model).toHaveLength(100);
     expect(corpo.model).toBe('x'.repeat(100));
@@ -128,7 +125,7 @@ describe('completeEnrollment, caminho feliz', () => {
 
   it('2xx é pareado, e o segredo nunca passa pela função', async () => {
     const { control, request } = fakeControl();
-    const resultado = await completeEnrollment(ENROLLMENT_ID, CODE, deps(control));
+    const resultado = await completeEnrollment(CODE, deps(control));
     expect(resultado).toEqual({ paired: true });
 
     // O que o dublê entregou ao JavaScript trazia `true` no lugar do segredo.
@@ -142,7 +139,7 @@ describe('completeEnrollment, caminho feliz', () => {
   it('sem deps, lê o token pelo mesmo SecureStore e chave que http.ts e usa getApiUrl', async () => {
     await SecureStore.setItemAsync('swi.auth.token', 'tok-secure');
     const { control, request } = fakeControl();
-    await completeEnrollment(ENROLLMENT_ID, CODE, { control });
+    await completeEnrollment(CODE, { control });
     expect(request.mock.calls[0][0]).toBe(
       `${getApiUrl()}/telemetry/v1/devices/enrollments/complete`,
     );
@@ -156,7 +153,7 @@ describe('completeEnrollment, antes da rede', () => {
     const control = createWatchControl(null);
     const spy = jest.spyOn(control, 'request');
     await expect(
-      completeEnrollment(ENROLLMENT_ID, CODE, { control, readToken, apiUrl: () => API }),
+      completeEnrollment(CODE, { control, readToken, apiUrl: () => API }),
     ).resolves.toEqual({ paired: false, reason: 'unsupported' });
     expect(spy).not.toHaveBeenCalled();
     expect(readToken).not.toHaveBeenCalled();
@@ -165,7 +162,7 @@ describe('completeEnrollment, antes da rede', () => {
   it('sem token responde unauthorized sem chamar o nativo', async () => {
     const { control, request } = fakeControl();
     await expect(
-      completeEnrollment(ENROLLMENT_ID, CODE, deps(control, { readToken: async () => null })),
+      completeEnrollment(CODE, deps(control, { readToken: async () => null })),
     ).resolves.toEqual({ paired: false, reason: 'unauthorized' });
     expect(request).not.toHaveBeenCalled();
   });
@@ -174,7 +171,6 @@ describe('completeEnrollment, antes da rede', () => {
     const { control, request } = fakeControl();
     await expect(
       completeEnrollment(
-        ENROLLMENT_ID,
         CODE,
         deps(control, {
           readToken: async () => {
@@ -194,22 +190,43 @@ describe('completeEnrollment, status do backend', () => {
     return control;
   };
 
-  // O backend responde 400 para as três recusas; só a mensagem distingue.
+  // O backend responde 400 para as quatro recusas e as distingue pelo `code`,
+  // estável; a mensagem pode mudar sem mudar o conselho ao funcionário.
+  const recusa = (code: string, message: string) =>
+    JSON.stringify({ statusCode: 400, error: 'Bad Request', code, message });
+
   it.each<[string, EnrollmentFailure['reason']]>([
-    ['Código de pareamento inválido', 'invalid_code'],
-    ['Código de pareamento expirado', 'expired'],
-    ['Código de pareamento já utilizado', 'already_used'],
-  ])('400 com "%s" vira %s', async (mensagem, reason) => {
-    const control = respondendo(400, nestError(400, mensagem));
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    ['ENROLLMENT_INVALID', 'invalid_code'],
+    ['ENROLLMENT_EXPIRED', 'expired'],
+    ['ENROLLMENT_USED', 'already_used'],
+    ['ENROLLMENT_UNSUPPORTED_DEVICE', 'unsupported_device'],
+  ])('400 com code %s vira %s', async (code, reason) => {
+    const control = respondendo(400, recusa(code, 'qualquer texto'));
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason,
     });
   });
 
+  it('o texto da mensagem não decide nada: quem manda é o code', async () => {
+    const control = respondendo(400, recusa('ENROLLMENT_USED', 'Código de pareamento expirado'));
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
+      paired: false,
+      reason: 'already_used',
+    });
+  });
+
+  it('400 com code desconhecido é código inválido, o conselho mais conservador', async () => {
+    const control = respondendo(400, recusa('ENROLLMENT_NOVO', 'x'));
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
+      paired: false,
+      reason: 'invalid_code',
+    });
+  });
+
   it('400 do validador (mensagem em lista) é código inválido', async () => {
-    const control = respondendo(400, nestError(400, ['enrollmentId must be a string']));
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    const control = respondendo(400, nestError(400, ['Código de pareamento inválido']));
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'invalid_code',
     });
@@ -217,7 +234,7 @@ describe('completeEnrollment, status do backend', () => {
 
   it('400 com corpo que não é JSON é código inválido, sem lançar', async () => {
     const control = respondendo(400, '<html>');
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'invalid_code',
     });
@@ -225,7 +242,7 @@ describe('completeEnrollment, status do backend', () => {
 
   it('401 é unauthorized', async () => {
     const control = respondendo(401, nestError(401, 'Unauthorized'));
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'unauthorized',
     });
@@ -235,7 +252,7 @@ describe('completeEnrollment, status do backend', () => {
   // caso comum: a pessoa precisa ouvir "aguarde", não "erro inesperado".
   it('429 é rate_limited', async () => {
     const control = respondendo(429, nestError(429, 'ThrottlerException: Too Many Requests'));
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'rate_limited',
     });
@@ -244,7 +261,7 @@ describe('completeEnrollment, status do backend', () => {
   it('qualquer outro status é unexpected', async () => {
     for (const status of [500, 503]) {
       const control = respondendo(status, '{}');
-      await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+      await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
         paired: false,
         reason: 'unexpected',
       });
@@ -268,14 +285,14 @@ describe('completeEnrollment, rejeição do nativo', () => {
     ['E_NO_CREDENTIAL', 'unexpected'],
   ])('%s vira %s', async (code, reason) => {
     await expect(
-      completeEnrollment(ENROLLMENT_ID, CODE, deps(rejeitando(code))),
+      completeEnrollment(CODE, deps(rejeitando(code))),
     ).resolves.toEqual({ paired: false, reason });
   });
 
   it('rejeição sem código conhecido é unexpected, sem lançar', async () => {
     const { control, request } = fakeControl();
     request.mockRejectedValue(new Error('qualquer coisa'));
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'unexpected',
     });
@@ -302,7 +319,7 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
       hasDeviceCredential.mockReturnValue(true);
       throw rejeicao('E_NETWORK');
     });
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: true,
     });
     expect(warn).toHaveBeenCalledTimes(1);
@@ -316,7 +333,7 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
     const { control, request, hasDeviceCredential } = fakeControl();
     hasDeviceCredential.mockReturnValue(true);
     request.mockResolvedValue({ status: 400, body: nestError(400, 'Código de pareamento inválido') });
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'invalid_code',
     });
@@ -327,7 +344,7 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
     const { control, request, hasDeviceCredential } = fakeControl();
     hasDeviceCredential.mockReturnValue(true);
     request.mockRejectedValue(rejeicao('E_NETWORK'));
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'network',
     });
@@ -339,7 +356,7 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
     hasDeviceCredential.mockImplementation(() => {
       throw new Error('chaveiro indisponível');
     });
-    await expect(completeEnrollment(ENROLLMENT_ID, CODE, deps(control))).resolves.toEqual({
+    await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'unexpected',
     });
@@ -356,26 +373,26 @@ describe('completeEnrollment, chaveiro como fonte da verdade', () => {
       ordem.push('request');
       return { status: 500, body: '{}' };
     });
-    await completeEnrollment(ENROLLMENT_ID, CODE, deps(control));
+    await completeEnrollment(CODE, deps(control));
     expect(ordem).toEqual(['chaveiro', 'request', 'chaveiro']);
   });
 
   it('sem suporte não consulta o chaveiro', async () => {
     const control = createWatchControl(null);
     const spy = jest.spyOn(control, 'hasDeviceCredential');
-    await completeEnrollment(ENROLLMENT_ID, CODE, { control, readToken: async () => TOKEN });
+    await completeEnrollment(CODE, { control, readToken: async () => TOKEN });
     expect(spy).not.toHaveBeenCalled();
   });
 
   it('sem token não consulta o chaveiro', async () => {
     const { control, hasDeviceCredential } = fakeControl();
-    await completeEnrollment(ENROLLMENT_ID, CODE, deps(control, { readToken: async () => null }));
+    await completeEnrollment(CODE, deps(control, { readToken: async () => null }));
     expect(hasDeviceCredential).not.toHaveBeenCalled();
   });
 
   it('no caminho feliz só a foto é lida, e não há aviso', async () => {
     const { control, hasDeviceCredential } = fakeControl();
-    await completeEnrollment(ENROLLMENT_ID, CODE, deps(control));
+    await completeEnrollment(CODE, deps(control));
     expect(hasDeviceCredential).toHaveBeenCalledTimes(1);
     expect(warn).not.toHaveBeenCalled();
   });

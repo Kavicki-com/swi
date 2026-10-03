@@ -3,8 +3,9 @@ import { getApiUrl } from '../auth/apiConfig';
 import { nativeErrorCode, watchControl, type WatchControl } from '../../modules/swi-watch-control';
 
 // Conclusão do pareamento do iPhone. O administrador cria o convite no painel
-// e dita ao funcionário o identificador e um código de seis dígitos; aqui o
-// funcionário autenticado conclui. O backend responde com a credencial do
+// e dita ao funcionário um código de seis dígitos; aqui o funcionário
+// autenticado conclui. A tela só tem os seis dígitos: de quem é o convite o
+// backend sabe pelo token. O backend responde com a credencial do
 // aparelho, e ela NUNCA chega a este arquivo: o pedido vai pelo módulo nativo
 // com `storeCredential` ligado, o Swift guarda o valor no chaveiro e sobe o
 // corpo com `true` no lugar. O JavaScript só sabe que pareou.
@@ -22,6 +23,7 @@ export type EnrollmentFailureReason =
   | 'invalid_code'
   | 'expired'
   | 'already_used'
+  | 'unsupported_device'
   | 'keychain'
   | 'network'
   | 'rate_limited'
@@ -45,27 +47,29 @@ export interface EnrollmentDeps {
   deviceModel?: () => string | null;
 }
 
-// O backend responde 400 para as três recusas (device-auth.service.ts,
-// completeEnrollment), e só a mensagem distingue. Os trechos são estáveis por
-// serem a resposta ao funcionário; se mudarem lá, tudo cai em `invalid_code`,
-// que é o mais conservador: a tela pede para conferir o código.
+// O backend responde 400 para as quatro recusas e as distingue por `code`,
+// estável (enrollment-rejection.ts). O texto da mensagem não decide nada. Sem
+// `code`, ou com um que este app não conhece, cai em `invalid_code`, o mais
+// conservador: a tela pede para conferir o código. É também onde cai o 400 do
+// validador, que recusa o que não tem seis dígitos antes de chegar ao serviço.
+const REASON_BY_CODE: Record<string, EnrollmentFailureReason> = {
+  ENROLLMENT_INVALID: 'invalid_code',
+  ENROLLMENT_EXPIRED: 'expired',
+  ENROLLMENT_USED: 'already_used',
+  ENROLLMENT_UNSUPPORTED_DEVICE: 'unsupported_device',
+};
+
 function reasonForBadRequest(body: string): EnrollmentFailureReason {
-  const message = messageOf(body).toLowerCase();
-  if (message.includes('expirado')) return 'expired';
-  if (message.includes('utilizado')) return 'already_used';
-  return 'invalid_code';
+  return REASON_BY_CODE[codeOf(body)] ?? 'invalid_code';
 }
 
-// O Nest devolve `message` como string, ou como lista quando é o validador.
-// Corpo que não é JSON conta como sem mensagem, nunca como exceção.
-function messageOf(body: string): string {
+// Corpo que não é JSON conta como sem código, nunca como exceção.
+function codeOf(body: string): string {
   try {
     const parsed: unknown = JSON.parse(body);
     if (typeof parsed !== 'object' || parsed === null) return '';
-    const { message } = parsed as { message?: unknown };
-    if (typeof message === 'string') return message;
-    if (Array.isArray(message)) return message.filter((m) => typeof m === 'string').join(', ');
-    return '';
+    const { code } = parsed as { code?: unknown };
+    return typeof code === 'string' ? code : '';
   } catch {
     return '';
   }
@@ -119,7 +123,6 @@ function credentialStored(control: WatchControl): boolean {
  * sobre esta tentativa, e a falha é falha.
  */
 export async function completeEnrollment(
-  enrollmentId: string,
   code: string,
   deps: EnrollmentDeps = {},
 ): Promise<EnrollmentResult> {
@@ -142,7 +145,7 @@ export async function completeEnrollment(
   if (!token) return { paired: false, reason: 'unauthorized' };
 
   const model = deviceModel();
-  const payload: { enrollmentId: string; code: string; model?: string } = { enrollmentId, code };
+  const payload: { code: string; model?: string } = { code };
   if (model) payload.model = model.slice(0, MODEL_MAX_LENGTH);
 
   const storedBefore = credentialStored(control);

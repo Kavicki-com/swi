@@ -88,6 +88,11 @@ jest.mock('../../services/telemetry/useTelemetrySampler', () => ({
   useTelemetrySampler: (v: unknown, c: unknown) => mockSampler(v, c),
 }));
 const mockHeartbeat = jest.fn();
+// O envio da telemetria tem suíte própria; aqui só importa onde ele mora.
+const mockUploadProvider = ({ children }: { children: ReactNode }) => <>{children}</>;
+jest.mock('../../services/telemetry/TelemetryUploadProvider', () => ({
+  TelemetryUploadProvider: (props: { children: ReactNode }) => mockUploadProvider(props),
+}));
 jest.mock('../../services/positions/usePositionHeartbeat', () => ({
   usePositionHeartbeat: (g: unknown) => mockHeartbeat(g),
 }));
@@ -255,6 +260,18 @@ describe('RootLayout: telemetria e heartbeat de posição', () => {
 
     const getter = mockHeartbeat.mock.calls[0][0] as () => unknown;
     expect(getter()).toBeNull();
+  });
+});
+
+describe('RootLayout: envio da telemetria', () => {
+  // Na raiz, e não numa tela: o envio segue com qualquer tela aberta.
+  it('a árvore de navegação inteira fica dentro do provider de envio', async () => {
+    const tree = await render();
+    const provider = tree.root.findAll(
+      (n) => (n.type as { name?: string }).name === 'TelemetryUploadProvider',
+    );
+    expect(provider).toHaveLength(1);
+    expect(provider[0]!.findAll((n) => n.type === mockStack)).toHaveLength(1);
   });
 });
 

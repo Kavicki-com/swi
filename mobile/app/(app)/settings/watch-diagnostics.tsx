@@ -14,7 +14,7 @@ import {
   watchProtocolCopy,
 } from '../../../services/telemetry/telemetryCopy';
 import { useNow } from '../../../services/telemetry/useNow';
-import { useTelemetryUpload } from '../../../services/telemetry/useTelemetryUpload';
+import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUploadProvider';
 
 // Porta de reentrada do monitoramento. Quem tocou "Configurar depois" no
 // cadastro, ou negou na folha do sistema, volta por aqui. Mesmo vocabulário da
@@ -35,9 +35,9 @@ export default function WatchDiagnostics() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const estado = useWatchDiagnostics();
-  // Enquanto esta tela está montada, o batimento vai ao backend. É a tela que
-  // fica aberta durante a prova do piloto; as do primeiro uso são de passagem.
-  const envio = useTelemetryUpload();
+  // O envio ao backend mora na raiz do app; esta tela só mostra o estado dele
+  // e leva ao pareamento quem ainda não pareou.
+  const envio = useTelemetryUploadState();
   const [ativando, setAtivando] = useState(false);
 
   const disponibilidade = deriveTelemetryAvailability(estado, useNow());
@@ -120,12 +120,20 @@ export default function WatchDiagnostics() {
             </View>
           )}
 
-          {/* Só a prova de que o caminho até o backend existe; a tela de
-              produto vem com o pareamento. Sem suporte não há o que enviar. */}
+          {/* Sem suporte não há o que enviar nem o que parear. */}
           {estado.support === 'ready' && (
             <Text variant="body.s" color={theme.content.dark}>
               {telemetryUploadCopy(envio.paired)}
             </Text>
+          )}
+
+          {estado.support === 'ready' && !envio.paired && (
+            <Button
+              variant="outline"
+              label="Parear aparelho"
+              fullWidth
+              onPress={() => router.push('/(onboarding)/watch/pairing?origem=configuracoes')}
+            />
           )}
 
           {avisoDoRelogio !== null && (

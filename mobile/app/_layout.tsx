@@ -28,6 +28,7 @@ import { VitalsProvider, useVitals } from '../services/vitals/VitalsProvider';
 import { LocationProvider, useLocation } from '../services/location/LocationProvider';
 import { WeatherProvider } from '../services/weather/WeatherProvider';
 import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
+import { TelemetryUploadProvider } from '../services/telemetry/TelemetryUploadProvider';
 import { usePositionHeartbeat } from '../services/positions/usePositionHeartbeat';
 
 SplashScreen.preventAutoHideAsync();
@@ -199,6 +200,9 @@ function AppRoot() {
             <TelemetryRoot />
             <PositionsRoot />
             <WeatherProvider>
+            {/* Envio da telemetria ao backend, com qualquer tela aberta. Liga
+                com sessão e aparelho pareado; as telas leem o estado dele. */}
+            <TelemetryUploadProvider>
             <View style={mobileFrameStyle}>
               {/* freezeOnBlur: pausa renderização de telas cached no Stack
                   (useFrame do Smartwatch3D + setInterval do journey/task param
@@ -221,6 +225,7 @@ function AppRoot() {
                 <Stack.Screen name="modals/weather-alert" options={{ presentation: 'transparentModal' }} />
               </Stack>
             </View>
+            </TelemetryUploadProvider>
             </WeatherProvider>
             </LocationProvider>
             </VitalsProvider>

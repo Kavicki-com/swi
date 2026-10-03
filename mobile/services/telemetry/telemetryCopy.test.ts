@@ -1,4 +1,9 @@
-import { watchProtocolCopy, telemetryCopy, telemetryUploadCopy } from './telemetryCopy';
+import {
+  pairingFailureCopy,
+  watchProtocolCopy,
+  telemetryCopy,
+  telemetryUploadCopy,
+} from './telemetryCopy';
 import type { TelemetryAvailability } from './telemetryAvailability';
 
 // Fonte unica da copy: as duas superficies precisam dizer a mesma coisa sobre o
@@ -91,5 +96,41 @@ describe('aviso de relógio desatualizado', () => {
     // Ausência de informação não é problema do funcionário, e afirmar que o
     // relógio está desatualizado sem saber seria inventar.
     expect(watchProtocolCopy(null)).toBeNull();
+  });
+});
+
+describe('pairingFailureCopy', () => {
+  // As quatro recusas do backend, cada uma com o seu conselho.
+  it.each([
+    ['expired', 'Este código expirou. Peça um novo ao administrador.'],
+    [
+      'already_used',
+      'Este código já foi usado. Se este aparelho já está pareado, não é preciso repetir.',
+    ],
+    ['invalid_code', 'Código não confere. Confira os seis dígitos com o administrador.'],
+    ['unsupported_device', 'Este aparelho não pode ser pareado.'],
+  ] as const)('%s', (reason, frase) => {
+    expect(pairingFailureCopy(reason)).toBe(frase);
+  });
+
+  it('falha de rede e limite de tentativas não culpam o código', () => {
+    expect(pairingFailureCopy('network')).not.toMatch(/código/i);
+    expect(pairingFailureCopy('rate_limited')).toMatch(/aguarde/i);
+  });
+
+  it('todo motivo tem frase', () => {
+    const motivos = [
+      'unsupported',
+      'unauthorized',
+      'invalid_code',
+      'expired',
+      'already_used',
+      'unsupported_device',
+      'keychain',
+      'network',
+      'rate_limited',
+      'unexpected',
+    ] as const;
+    for (const m of motivos) expect(pairingFailureCopy(m).length).toBeGreaterThan(10);
   });
 });

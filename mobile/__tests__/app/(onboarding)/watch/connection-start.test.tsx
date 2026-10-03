@@ -7,6 +7,7 @@ import {
   useWatchDiagnostics,
   type WatchDiagnosticsState,
 } from '../../../../services/telemetry/watchDiagnostics';
+import { useTelemetryUploadState } from '../../../../services/telemetry/TelemetryUploadProvider';
 
 // Segunda tela do primeiro uso: espera a sessao espelhada ou a primeira
 // leitura. Substituiu uma barra que enchia sozinha em 3 segundos e nao
@@ -23,6 +24,10 @@ jest.mock('../../../../lib/featureFlags', () => ({
 
 jest.mock('../../../../services/telemetry/watchDiagnostics', () => ({
   useWatchDiagnostics: jest.fn(),
+}));
+
+jest.mock('../../../../services/telemetry/TelemetryUploadProvider', () => ({
+  useTelemetryUploadState: jest.fn(),
 }));
 
 // O visualizador baixa um .glb de ~4MB e roda WebGL; tem suite propria.
@@ -73,11 +78,18 @@ const avancar = async (ms: number) => {
 };
 
 const FIM = '/(onboarding)/watch/complete';
+// Depois de autorizar e ativar vem o pareamento, que o funcionario pode pular.
+const PAREAMENTO = '/(onboarding)/watch/pairing';
+
+const mockEnvio = useTelemetryUploadState as jest.MockedFunction<typeof useTelemetryUploadState>;
+const envio = (paired: boolean) =>
+  mockEnvio.mockReturnValue({ paired, lastOutcome: null, refreshPairing: jest.fn() });
 
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockGate.mockReturnValue(true);
+  envio(false);
 });
 
 afterEach(() => {
@@ -118,7 +130,7 @@ describe('primeiro uso, espera do relogio', () => {
         </SafeAreaProvider>,
       );
     });
-    expect(mockReplace).toHaveBeenCalledWith(FIM);
+    expect(mockReplace).toHaveBeenCalledWith(PAREAMENTO);
   });
 
   it('a primeira leitura tambem encerra a espera, mesmo sem sessao observada', async () => {
@@ -139,7 +151,7 @@ describe('primeiro uso, espera do relogio', () => {
         </SafeAreaProvider>,
       );
     });
-    expect(mockReplace).toHaveBeenCalledWith(FIM);
+    expect(mockReplace).toHaveBeenCalledWith(PAREAMENTO);
   });
 
   // Sem teto, quem nao autorizou ficaria olhando um relogio girando para sempre.
@@ -148,11 +160,20 @@ describe('primeiro uso, espera do relogio', () => {
     await avancar(29_999);
     expect(mockReplace).not.toHaveBeenCalled();
     await avancar(1);
-    expect(mockReplace).toHaveBeenCalledWith(FIM);
+    expect(mockReplace).toHaveBeenCalledWith(PAREAMENTO);
   });
 
   it('sem suporte nao espera nada: encerra de imediato', async () => {
     await render({ support: 'unsupported' });
+    expect(mockReplace).toHaveBeenCalledWith(FIM);
+  });
+
+  // Quem ja pareou (reinstalou sem apagar o chaveiro, por exemplo) nao ve a
+  // etapa de novo.
+  it('com o aparelho ja pareado, pula o pareamento', async () => {
+    envio(true);
+    await render();
+    await avancar(30_000);
     expect(mockReplace).toHaveBeenCalledWith(FIM);
   });
 
