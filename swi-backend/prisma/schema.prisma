@@ -129,6 +129,10 @@ model Company {
   number       String
   neighborhood String
   uf           String
+  // Localização da obra, para o clima e os alertas meteorológicos. Nula enquanto
+  // a empresa não informa: vale o local padrão do serviço de clima.
+  lat          Float?
+  lng          Float?
   members      User[]
   evacuations  Evacuation[]
   createdAt    DateTime @default(now())
@@ -444,6 +448,14 @@ model Notification {
 model WeatherAlertSeen {
   alertId    String   @id
   notifiedAt DateTime @default(now())
+  // Quem foi avisado (id da empresa, ou o balde dos sem empresa), de que tipo
+  // de alerta e até quando a janela avisada vale. Um alerta do mesmo tipo que
+  // encosta nessa janela é o mesmo alerta e não avisa de novo.
+  scope      String?
+  kind       String?
+  endsAt     DateTime?
+
+  @@index([scope, kind, endsAt])
 }
 
 // ---------------------------------------------------------------------------
