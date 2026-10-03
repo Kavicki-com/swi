@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common'
-import { Prisma, TelemetryDeviceKind } from '@prisma/client'
+import { Prisma, TelemetryDeviceKind, type TelemetryEnrollment } from '@prisma/client'
 import { generateCode, hash, verifyHash } from '../../auth/codes'
 import type { JwtUser } from '../../auth/current-user.decorator'
 import { enrollmentRejection } from './enrollment-rejection'
@@ -41,10 +41,25 @@ export interface CreateEnrollmentInput {
 }
 
 export interface CompleteEnrollmentInput {
-  enrollmentId: string
+  /** Sem ele, o convite é achado pelo código entre os do próprio funcionário. */
+  enrollmentId?: string
   code: string
   model?: string
 }
+
+/**
+ * Teto de convites comparados com o código quando o id não vem. Cada comparação
+ * é um bcrypt de centenas de milissegundos, e um funcionário só tem mais de um
+ * convite aberto se o administrador gerou outro sem esperar o primeiro vencer.
+ */
+export const CODE_MATCH_CANDIDATES = 5
+
+/**
+ * Por quanto tempo, depois de vencer, um convite ainda responde "expirado" a
+ * quem digita o código dele. Passada a janela ele sai da busca e o código vira
+ * só inválido: ninguém volta a um código ditado na semana anterior.
+ */
+export const EXPIRED_CODE_GRACE_MIN = 60
 
 /**
  * O que o painel precisa saber antes de agir. `device` é o aparelho ativo, se
@@ -154,8 +169,20 @@ export class DeviceAuthService {
   }
 
   async completeEnrollment(workerId: string, input: CompleteEnrollmentInput) {
+    const enrollment =
+      input.enrollmentId === undefined
+        ? await this.enrollmentByCode(workerId, input.code)
+        : await this.enrollmentById(workerId, input.enrollmentId, input.code)
+    return this.issueDevice(enrollment, input.model)
+  }
+
+  private async enrollmentById(
+    workerId: string,
+    enrollmentId: string,
+    code: string,
+  ): Promise<TelemetryEnrollment> {
     const enrollment = await this.prisma.telemetryEnrollment.findUnique({
-      where: { id: input.enrollmentId },
+      where: { id: enrollmentId },
     })
     // Inexistente e de outro funcionário dão a mesma resposta: sondar
     // identificadores não pode revelar quais existem.
@@ -168,12 +195,51 @@ export class DeviceAuthService {
     if (enrollment.expiresAt < new Date()) {
       throw enrollmentRejection('ENROLLMENT_EXPIRED', 'Código de pareamento expirado')
     }
-    if (!(await verifyHash(input.code, enrollment.codeHash))) {
+    if (!(await verifyHash(code, enrollment.codeHash))) {
       // A mensagem não repete o código tentado: resposta de erro e log são
       // lugares onde segredo vaza sem ninguém notar.
       throw enrollmentRejection('ENROLLMENT_INVALID', INVALID_CODE)
     }
+    return enrollment
+  }
 
+  /**
+   * O caminho do app, que só tem os seis dígitos ditados. A busca fica presa ao
+   * funcionário do token: um código certo de outra pessoa nunca é comparado,
+   * então não pareia nem distingue a resposta. Consumido fica de fora, porque
+   * só existe para quem já tem o código e não muda o conselho ao funcionário.
+   *
+   * Vencido há pouco entra na busca, mas só responde "expirado" quando o código
+   * abre aquele convite. Quem chuta recebe o inválido de sempre e não aprende
+   * se há convite aberto ou vencido; quem digitou o código certo tarde demais
+   * fica sabendo que precisa pedir outro, e não que errou a digitação.
+   */
+  private async enrollmentByCode(workerId: string, code: string): Promise<TelemetryEnrollment> {
+    const now = new Date()
+    const candidates = await this.prisma.telemetryEnrollment.findMany({
+      where: {
+        workerId,
+        consumedAt: null,
+        expiresAt: { gt: new Date(now.getTime() - EXPIRED_CODE_GRACE_MIN * 60_000) },
+      },
+      // Mais novos primeiro: o convite que o administrador acabou de gerar vem
+      // antes dos que ele deixou para trás, e o teto corta os velhos.
+      orderBy: { createdAt: 'desc' },
+      take: CODE_MATCH_CANDIDATES,
+    })
+    for (const candidate of candidates) {
+      if (!(await verifyHash(code, candidate.codeHash))) continue
+      if (candidate.expiresAt < now) {
+        throw enrollmentRejection('ENROLLMENT_EXPIRED', 'Código de pareamento expirado')
+      }
+      return candidate
+    }
+    // Mesma recusa do caminho com id, e sem repetir o código tentado.
+    throw enrollmentRejection('ENROLLMENT_INVALID', INVALID_CODE)
+  }
+
+  /** Consumo do convite e emissão da credencial, iguais nos dois caminhos. */
+  private async issueDevice(enrollment: TelemetryEnrollment, model: string | undefined) {
     const secret = randomBytes(32).toString('hex')
     let device
     try {
@@ -195,7 +261,7 @@ export class DeviceAuthService {
             // Do enrollment, nunca do corpo da requisição.
             workerId: enrollment.workerId,
             kind: enrollment.kind,
-            model: input.model ?? null,
+            model: model ?? null,
             credentialHash: hashCredential(secret),
           },
         })

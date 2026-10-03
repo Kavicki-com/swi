@@ -6,7 +6,10 @@ import { IsOptional, IsString, Length, Matches } from 'class-validator'
  * whitelist global, um workerId enviado à força é descartado antes do serviço.
  */
 export class CompleteEnrollmentDto {
-  @IsString() enrollmentId!: string
+  // Opcional: o painel mostra e o administrador dita só os seis dígitos, então
+  // o app conclui sem o id e o serviço acha o convite pelo código. Quem manda o
+  // id continua com o caminho direto de sempre.
+  @IsOptional() @IsString() enrollmentId?: string
 
   // Seis dígitos exatos, validado antes do serviço: assim uma tentativa
   // malformada não chega a custar um bcrypt.
