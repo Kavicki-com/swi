@@ -10,6 +10,7 @@ import { AlertsList } from './AlertsList'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 import type { AdminWorkersTelemetry } from '@/services/api/telemetry'
 import type { HeatCell } from '@/services/api/positionHeat'
+import type { UseWeatherAlertResult } from '@/hooks/useWeatherAlert'
 import { adminWorker, condition, neverReported, reporting } from '@/test-utils/telemetryFixtures'
 
 const h = vi.hoisted(() => ({
@@ -31,7 +32,11 @@ const h = vi.hoisted(() => ({
   // A cor dos pinos e o cartão saem desta leitura, não do pino do heartbeat.
   workers: null as AdminWorkersTelemetry | null,
   heatCells: [] as HeatCell[],
+  // Alerta meteorológico vigente da empresa (GET /weather), já escolhido pelo hook.
+  weather: { alert: null, demo: false } as UseWeatherAlertResult,
 }))
+
+vi.mock('@/hooks/useWeatherAlert', () => ({ useWeatherAlert: () => h.weather }))
 
 vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => h.positions }))
 vi.mock('@/hooks/useAdminTelemetry', () => ({
@@ -178,6 +183,7 @@ beforeEach(() => {
   h.navigations = []
   h.pins = []
   h.radar = null
+  h.weather = { alert: null, demo: false }
   h.start.mockClear()
   h.end.mockClear()
   mapState.layers.clear()
@@ -323,6 +329,39 @@ describe('AlertsList: camadas do mapa', () => {
     })
 
     await waitFor(() => expect(mapState.layers.has('meteo-layer')).toBe(false))
+  })
+})
+
+describe('AlertsList: alerta meteorológico', () => {
+  const rain = {
+    id: 'a1',
+    kind: 'CHUVA_INTENSA' as const,
+    severity: 'PERIGO' as const,
+    event: 'Chuva intensa',
+    description: 'Chuva forte prevista a partir das 14h.',
+    startsAt: '2026-10-03T17:00:00.000Z',
+    endsAt: '2026-10-03T19:00:00.000Z',
+  }
+
+  it('sem alerta vigente, a faixa não aparece', async () => {
+    await renderAlerts()
+    expect(screen.queryByTestId('weather-alert')).toBeNull()
+  })
+
+  it('com alerta vigente, a faixa traz o título e a frase do backend', async () => {
+    h.weather = { alert: rain, demo: false }
+    await renderAlerts()
+
+    expect(screen.getByTestId('weather-alert')).toBeTruthy()
+    expect(screen.getByText('Alerta de Chuva intensa')).toBeTruthy()
+    expect(screen.getByText('Chuva forte prevista a partir das 14h.')).toBeTruthy()
+    expect(screen.queryByTestId('alerts-demo-badge')).toBeNull()
+  })
+
+  it('alerta de demonstração leva o selo da tela', async () => {
+    h.weather = { alert: rain, demo: true }
+    await renderAlerts()
+    expect(screen.getByTestId('alerts-demo-badge')).toBeTruthy()
   })
 })
 
