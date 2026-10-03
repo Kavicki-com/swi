@@ -97,8 +97,52 @@ export function nativeErrorCode(error: unknown): NativeRequestErrorCode | null {
   return code as NativeRequestErrorCode;
 }
 
+/**
+ * Uma medição avulsa lida do app Saúde pelo iPhone. Não vem do relógio: quem
+ * grava é um aparelho de pressão ou termômetro com app próprio, ou o
+ * funcionário digitando. `id` é o identificador da amostra no HealthKit, em
+ * minúsculas; `measuredAt` é o fim da medição, em ISO-8601.
+ */
+export type HealthReading =
+  | {
+      kind: 'bloodPressure';
+      id: string;
+      measuredAt: string;
+      /** mmHg, como o HealthKit entrega; quem monta o evento arredonda. */
+      systolic: number;
+      diastolic: number;
+      /** Digitada à mão no app Saúde, em vez de gravada por um aparelho. */
+      userEntered: boolean;
+    }
+  | {
+      kind: 'bodyTemperature';
+      id: string;
+      measuredAt: string;
+      celsius: number;
+      userEntered: boolean;
+    };
+
+/** O pedaço do módulo nativo que lê o app Saúde. */
+export interface HealthReadingsNative {
+  /**
+   * Pressão e temperatura registradas no app Saúde desde `sinceMs` (epoch em
+   * milissegundos). Resolve uma lista de dicionários sem tipo; quem confere a
+   * forma é a fonte, deste lado. Sem autorização de leitura resolve vazio: o
+   * iOS não conta se o funcionário negou.
+   */
+  readHealthReadings(sinceMs: number): Promise<unknown>;
+}
+
+/** A leitura do app Saúde como os serviços a veem. */
+export interface HealthReadingsSource {
+  /** false em Android, web, Expo Go, Jest e binário anterior a esta leitura. */
+  readonly supported: boolean;
+  /** Nunca rejeita: falha de leitura é lista vazia. */
+  read(sinceMs: number): Promise<HealthReading[]>;
+}
+
 /** Superfície do módulo nativo que o wrapper consome (e que os testes dublam). */
-export interface WatchControlNative {
+export interface WatchControlNative extends Partial<HealthReadingsNative> {
   getStatus(): SwiWatchControlStatus;
   /** Autorizacao do HealthKit no iPhone; o sistema so pergunta uma vez. */
   requestAuthorization(): Promise<boolean>;

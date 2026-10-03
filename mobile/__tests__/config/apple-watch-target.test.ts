@@ -166,6 +166,58 @@ describe('módulo iPhone (modules/swi-watch-control)', () => {
     }
   });
 
+  // Pressão e temperatura não vêm do relógio: o iPhone lê a última medição
+  // registrada no app Saúde. Sem os três tipos na autorização a leitura volta
+  // vazia para sempre, e o iOS não avisa.
+  describe('leitura do app Saúde (pressão e temperatura)', () => {
+    const reader = () => read('modules/swi-watch-control/ios/HealthSpotReader.swift');
+
+    it('lê a correlação de pressão e a temperatura corporal', () => {
+      const source = reader();
+      expect(source).toContain('correlationType(forIdentifier: .bloodPressure)');
+      expect(source).toContain('.bloodPressureSystolic');
+      expect(source).toContain('.bloodPressureDiastolic');
+      expect(source).toContain('.bodyTemperature');
+      expect(source).toContain('HKMetadataKeyWasUserEntered');
+    });
+
+    // O HealthKit lança exceção se a autorização for pedida pela correlação: o
+    // pedido tem de ser pelas duas quantidades que a compõem.
+    it('pede autorização pelas quantidades, e a folha do iPhone inclui os três tipos', () => {
+      const source = reader();
+      const typesToRead = source.slice(source.indexOf('static var typesToRead'));
+      const block = typesToRead.slice(0, typesToRead.indexOf('\n  }'));
+      expect(block).toContain('.bloodPressureSystolic');
+      expect(block).toContain('.bloodPressureDiastolic');
+      expect(block).toContain('.bodyTemperature');
+      expect(block).not.toContain('correlationType');
+
+      const receiver = read('modules/swi-watch-control/ios/MirroredWorkoutReceiver.swift');
+      // A união com os tipos do relógio, e não só uma menção em comentário.
+      expect(receiver).toContain('typesToRead.union(HealthSpotReader.typesToRead)');
+      expect(receiver).toContain('read: allTypesToRead');
+    });
+
+    it('o módulo expõe a leitura ao JavaScript', () => {
+      const module = read('modules/swi-watch-control/ios/SwiWatchControlModule.swift');
+      expect(module).toContain('AsyncFunction("readHealthReadings")');
+      expect(module).toContain('HealthSpotReader.shared.read');
+    });
+
+    // O arquivo novo precisa passar pelo portão de Swift, que só compila o que
+    // não importa o Expo.
+    it('o leitor não depende do ExpoModulesCore', () => {
+      expect(reader()).not.toContain('ExpoModulesCore');
+    });
+
+    it('o texto de uso do iPhone cita pressão e temperatura', () => {
+      const share = app.ios.infoPlist?.NSHealthShareUsageDescription as string;
+      expect(share).toContain('pressão arterial');
+      expect(share).toContain('temperatura corporal');
+      expect(share).toContain('app Saúde');
+    });
+  });
+
   it('podspec depende do ExpoModulesCore e linka HealthKit', () => {
     const podspec = read('modules/swi-watch-control/ios/SwiWatchControl.podspec');
     expect(podspec).toContain("s.dependency 'ExpoModulesCore'");

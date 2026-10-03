@@ -483,6 +483,89 @@ describe('as sete medições do contrato', () => {
   });
 });
 
+describe('medições lidas do app Saúde', () => {
+  // Pressão e temperatura não vêm do relógio: o iPhone as lê do app Saúde e as
+  // manda com a origem que o backend aceita para cada uma (metric-state.ts).
+  const com = (measurements: OutboxEvent['measurements']): OutboxEvent => ({
+    ...evento('e1'),
+    measurements,
+  });
+  const pressao = (
+    source: 'EXTERNAL_CUFF' | 'MANUAL_HEALTHKIT',
+    value = { systolic: 128, diastolic: 82 },
+  ): OutboxEvent['measurements'] => ({ bloodPressure: { value, unit: 'mmHg', source } });
+
+  async function gravados(...events: OutboxEvent[]) {
+    const outbox = createTelemetryOutbox(memoryStorage().storage);
+    for (const event of events) await outbox.append(event);
+    return outbox.pending();
+  }
+
+  it('aceita pressão de aparelho externo e pressão digitada no app Saúde', async () => {
+    const deAparelho = com(pressao('EXTERNAL_CUFF'));
+    const digitada = { ...com(pressao('MANUAL_HEALTHKIT')), eventId: uid('e2') };
+    expect(await gravados(deAparelho, digitada)).toEqual([deAparelho, digitada]);
+  });
+
+  it('aceita temperatura corporal em graus Celsius vinda do app Saúde', async () => {
+    const event = com({ bodyTemperature: { value: 36.8, unit: '°C', source: 'MANUAL_HEALTHKIT' } });
+    expect(await gravados(event)).toEqual([event]);
+  });
+
+  it('recusa pressão e temperatura com origem do relógio, que não mede nenhuma das duas', async () => {
+    const pressaoDoRelogio = com(pressao('APPLE_WATCH' as 'EXTERNAL_CUFF'));
+    const temperaturaDoRelogio = com({
+      bodyTemperature: { value: 36.8, unit: '°C', source: 'APPLE_WATCH' as 'MANUAL_HEALTHKIT' },
+    });
+    expect(await gravados(pressaoDoRelogio, temperaturaDoRelogio)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('recusa pressão sem o par inteiro de sistólica e diastólica', async () => {
+    const semDiastolica = com(pressao('EXTERNAL_CUFF', { systolic: 128 } as never));
+    const fracionaria = com(pressao('EXTERNAL_CUFF', { systolic: 127.5, diastolic: 82 }));
+    const comoNumero = com({
+      bloodPressure: { value: 128 as never, unit: 'mmHg', source: 'EXTERNAL_CUFF' },
+    });
+    expect(await gravados(semDiastolica, fracionaria, comoNumero)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(3);
+  });
+
+  it('recusa unidade trocada nas duas', async () => {
+    const pressaoErrada = com({
+      bloodPressure: {
+        value: { systolic: 128, diastolic: 82 },
+        unit: 'kPa' as 'mmHg',
+        source: 'EXTERNAL_CUFF',
+      },
+    });
+    const temperaturaErrada = com({
+      bodyTemperature: { value: 98.6, unit: '°F' as '°C', source: 'MANUAL_HEALTHKIT' },
+    });
+    expect(await gravados(pressaoErrada, temperaturaErrada)).toEqual([]);
+  });
+
+  // `constructor` e `toString` existem em todo objeto. Uma linha torta do
+  // relógio com uma chave dessas tem de ser recusada como qualquer chave
+  // desconhecida: se o validador estourasse, o dreno pararia naquele arquivo.
+  it('recusa chave com nome herdado de objeto, sem estourar', async () => {
+    // Sem unidade nem origem, que é a forma que passava pelas conferências
+    // anteriores e chegava à lista de origens de uma regra que não existe.
+    const herdadas = ['constructor', 'toString', 'hasOwnProperty'].map((key) =>
+      com({ [key]: { value: 1 } } as OutboxEvent['measurements']),
+    );
+    expect(await gravados(...herdadas)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(3);
+  });
+
+  it('o relógio continua só podendo mandar as medições dele com a origem dele', async () => {
+    const batimentoDeOutraOrigem = com({
+      heartRate: { value: 72, unit: 'bpm', source: 'MANUAL_HEALTHKIT' as 'APPLE_WATCH' },
+    });
+    expect(await gravados(batimentoDeOutraOrigem)).toEqual([]);
+  });
+});
+
 describe('appendMany', () => {
   // O dreno do arquivo durável traz milhares de eventos de uma vez depois de um
   // turno em segundo plano. Um append por evento reescreveria o arquivo da

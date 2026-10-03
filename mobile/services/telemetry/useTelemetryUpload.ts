@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { watchControl, type WatchControl } from '../../modules/swi-watch-control';
+import { createHealthReadingsReader, type HealthReadingsReader } from './healthReadings';
 import { createMirroredSessionRecorder } from './mirroredSessionRecorder';
 import {
   createTelemetryInboxDrain,
@@ -58,6 +59,7 @@ export interface TelemetryUploadDeps {
   outbox?: TelemetryOutbox;
   uploader?: TelemetryUploader;
   inboxDrain?: TelemetryInboxDrain;
+  healthReader?: HealthReadingsReader;
 }
 
 export interface TelemetryUploadOptions {
@@ -118,6 +120,7 @@ export function useTelemetryUpload(
     const uploader = depsRef.current.uploader ?? createTelemetryUploader({ outbox, control });
     const inboxDrain =
       depsRef.current.inboxDrain ?? createTelemetryInboxDrain({ control, outbox });
+    const healthReader = depsRef.current.healthReader ?? createHealthReadingsReader({ outbox });
 
     let alive = true;
     // Vira true com o 401 ou com o desligamento: nada mais sai até a
@@ -153,6 +156,20 @@ export function useTelemetryUpload(
         } catch (error) {
           console.warn(
             `[useTelemetryUpload] dreno falhou: ${String(
+              (error as { message?: unknown })?.message ?? error,
+            )}`,
+          );
+        }
+        if (!alive || halted) return;
+
+        // Pressão e temperatura do app Saúde entram na fila aqui, para subir
+        // nesta mesma rodada. O leitor se limita sozinho a uma consulta por
+        // minuto, e uma falha dele não segura o envio, como a do dreno.
+        try {
+          await healthReader.run();
+        } catch (error) {
+          console.warn(
+            `[useTelemetryUpload] leitura do app Saúde falhou: ${String(
               (error as { message?: unknown })?.message ?? error,
             )}`,
           );

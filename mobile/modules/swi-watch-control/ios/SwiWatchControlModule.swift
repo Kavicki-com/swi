@@ -59,6 +59,18 @@ public class SwiWatchControlModule: Module {
       return TelemetryInbox.shared.rotate()
     }
 
+    // Pressao e temperatura registradas no app Saude desde `sinceMs` (epoch em
+    // milissegundos). A consulta nao depende da sessao espelhada, entao nao ha
+    // #available. Resolve sempre, com lista vazia quando nao ha o que ler ou
+    // quando a leitura nao foi autorizada: o iOS nao distingue as duas coisas.
+    // A autorizacao e a de `requestAuthorization`, acima.
+    AsyncFunction("readHealthReadings") { (sinceMs: Double, promise: Promise) in
+      let since = Date(timeIntervalSince1970: sinceMs / 1000)
+      HealthSpotReader.shared.read(since: since) { readings in
+        promise.resolve(readings)
+      }
+    }
+
     // Primitivo HTTP. Dois modos de autenticacao: `device` monta o cabecalho
     // com a credencial do chaveiro, sem que ela passe pelo JavaScript;
     // `bearer` usa o token que o JavaScript ja tem por desenho. Qualquer
