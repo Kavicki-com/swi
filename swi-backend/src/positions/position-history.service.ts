@@ -34,6 +34,16 @@ export interface HeatQuery {
   to?: string
 }
 
+export interface HeatOptions {
+  includeSim: boolean
+  /**
+   * O que ler quando quem pede não tem empresa. O administrador legado lê o
+   * balde sem empresa (o padrão, como a lista de posições); o funcionário sem
+   * empresa não tem obra e recebe o mapa vazio.
+   */
+  noCompany?: 'legacy-bucket' | 'empty'
+}
+
 export interface HeatResponse {
   cellSizeM: number
   /** ISO-8601 da janela efetivamente consultada. */
@@ -85,7 +95,7 @@ export class PositionHistoryService {
   async heat(
     companyId: string | null,
     query: HeatQuery,
-    options: { includeSim: boolean },
+    options: HeatOptions,
     now: Date,
   ): Promise<HeatResponse> {
     const to = query.to ? new Date(query.to) : now
@@ -99,6 +109,9 @@ export class PositionHistoryService {
     if (to.getTime() - from.getTime() > HEAT_MAX_WINDOW_MS) {
       throw new BadRequestException('A janela do mapa de calor vai até 30 dias')
     }
+
+    const window = { cellSizeM: HEAT_CELL_SIZE_M, from: from.toISOString(), to: to.toISOString() }
+    if (companyId === null && options.noCompany === 'empty') return { ...window, cells: [] }
 
     const sources: SampleSource[] = options.includeSim ? ['real', 'sim'] : ['real']
     const company =
@@ -129,7 +142,7 @@ export class PositionHistoryService {
       .map((r) => ({ ...cellCenter(Number(r.row), Number(r.col)), weight: Number(r.weight) }))
       .sort((a, b) => b.weight - a.weight)
 
-    return { cellSizeM: HEAT_CELL_SIZE_M, from: from.toISOString(), to: to.toISOString(), cells }
+    return { ...window, cells }
   }
 
   /** Apaga as amostras anteriores à janela, em lotes, até o orçamento de tempo. */

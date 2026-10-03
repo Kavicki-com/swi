@@ -6,6 +6,7 @@ import { parseTelemetryRetention } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
 import { monitoredDayRange } from '../domain/metric-state'
 import { closedDayCutoff, SUMMARIZER_SAMPLE_FIELDS } from '../lifecycle/telemetry-lifecycle.service'
+import { healthStatusOf, type HealthStatus } from './health-status'
 import { assembleSeries, seriesBuckets, type SeriesPeriod, type WorkerSeries } from './telemetry-series'
 import type {
   ConditionKind,
@@ -672,6 +673,46 @@ export class TelemetryQueryService {
     })
 
     return projectAdminWorkers(inputs, now)
+  }
+
+  /**
+   * Só o estado de saúde de cada pessoa pedida, para o mapa de colegas do app.
+   * Passa pela mesma projeção da leitura individual, para a atualidade do
+   * batimento e a origem das condições seguirem uma regra só, mas lê apenas
+   * snapshot e condição aberta: o estado não depende de série nem de avaliação.
+   * Quem chama decide de quem pode pedir; aqui não há recorte por empresa.
+   */
+  async healthStatusOfWorkers(
+    workerIds: readonly string[],
+    now = new Date(),
+  ): Promise<Map<string, HealthStatus>> {
+    if (workerIds.length === 0) return new Map()
+    const ids = { workerId: { in: [...workerIds] } }
+    const [snapshots, conditions] = await Promise.all([
+      this.prisma.telemetrySnapshot.findMany({ where: ids, select: SNAPSHOT_FIELDS }),
+      this.prisma.telemetryCondition.findMany({
+        where: { ...ids, status: 'ACTIVE' },
+        select: { workerId: true, ...CONDITION_FIELDS },
+      }),
+    ])
+    const snapshotBy = new Map(snapshots.map((s) => [s.workerId, s]))
+    return new Map(
+      workerIds.map((workerId) => {
+        const snapshot = snapshotBy.get(workerId)
+        const telemetry = projectWorker(
+          {
+            workerId,
+            snapshot: snapshot === undefined ? null : toProjectionSnapshot(snapshot),
+            windowSamples: [],
+            dayTotals: { steps: null, activeEnergy: null, distance: null },
+            assessment: null,
+            conditions: conditions.filter((c) => c.workerId === workerId).map(toProjectionCondition),
+          },
+          now,
+        )
+        return [workerId, healthStatusOf(telemetry)] as const
+      }),
+    )
   }
 
   /**

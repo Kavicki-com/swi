@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { MediaService } from '../media/media.service'
 import { PositionHistoryService } from './position-history.service'
+import { TelemetryQueryService } from '../telemetry/read-model/telemetry-query.service'
+import type { HealthStatus } from '../telemetry/read-model/health-status'
 import type { Profile, User, WorkerPosition } from '@prisma/client'
 
 /**
@@ -24,6 +26,14 @@ export interface PositionMarker {
   recordedAt: string
 }
 
+/**
+ * Colega no mapa do app: o marcador mais o estado de saúde. Só o estado sai do
+ * servidor; nenhum número de saúde de um funcionário chega a outro.
+ */
+export interface ColleagueMarker extends PositionMarker {
+  status: HealthStatus
+}
+
 type WorkerWithProfile = User & { profile: Profile | null }
 
 // Última posição por worker. O service é agnóstico à FONTE do sinal: em
@@ -38,6 +48,7 @@ export class PositionsService {
     private readonly realtime: RealtimeGateway,
     private readonly media: MediaService,
     private readonly history: PositionHistoryService,
+    private readonly telemetry: TelemetryQueryService,
   ) {}
 
   // source: 'real' = GPS do app (default — o controller não precisa saber que
@@ -98,13 +109,14 @@ export class PositionsService {
 
   /**
    * Colegas no mapa do app: a última posição recente dos outros funcionários
-   * ativos da mesma empresa, no mesmo formato de marcador do painel. Quem não
-   * tem empresa não tem colega, e o balde sem empresa não é compartilhado.
+   * ativos da mesma empresa, no mesmo formato de marcador do painel, mais o
+   * estado de saúde de cada um. Quem não tem empresa não tem colega, e o balde
+   * sem empresa não é compartilhado.
    */
   async listColleagues(
     user: { userId: string; companyId: string | null },
     now: Date,
-  ): Promise<PositionMarker[]> {
+  ): Promise<ColleagueMarker[]> {
     if (user.companyId === null) return []
     const rows = await this.prisma.workerPosition.findMany({
       where: {
@@ -114,8 +126,25 @@ export class PositionsService {
       },
       include: { worker: { include: { profile: true } } },
     })
+    if (rows.length === 0) return []
+
+    // A posição é o que o mapa mostra; o estado é complemento. Falha ao lê-lo
+    // fica no log e os colegas saem sem estado, que a tela pinta como sem
+    // leitura, nunca como "bom".
+    let statuses = new Map<string, HealthStatus>()
+    try {
+      statuses = await this.telemetry.healthStatusOfWorkers(
+        rows.map((r) => r.workerId),
+        now,
+      )
+    } catch (error) {
+      this.logger.warn(`Estado de saúde dos colegas não lido: ${(error as Error).message}`)
+    }
     return Promise.all(
-      rows.map((r: WorkerPosition & { worker: WorkerWithProfile }) => this.toMarker(r.worker, r)),
+      rows.map(async (r: WorkerPosition & { worker: WorkerWithProfile }) => ({
+        ...(await this.toMarker(r.worker, r)),
+        status: statuses.get(r.workerId) ?? 'unknown',
+      })),
     )
   }
 

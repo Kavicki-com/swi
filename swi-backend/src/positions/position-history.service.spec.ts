@@ -87,6 +87,27 @@ describe('PositionHistoryService.heat', () => {
     expect(db.$queryRaw.mock.calls[0][0].sql).toContain('"companyId" IS NULL')
   })
 
+  // O balde sem empresa é do administrador legado; funcionário sem empresa não
+  // tem obra, e não pode ler a presença de quem também está sem empresa.
+  it('funcionário sem empresa recebe o mapa vazio, sem consultar o banco', async () => {
+    const db = prisma()
+    const out = await new PositionHistoryService(db).heat(null, {}, { includeSim: false, noCompany: 'empty' }, NOW)
+    expect(out).toEqual({
+      cellSizeM: HEAT_CELL_SIZE_M,
+      from: new Date(NOW.getTime() - HEAT_DEFAULT_WINDOW_MS).toISOString(),
+      to: NOW.toISOString(),
+      cells: [],
+    })
+    expect(db.$queryRaw).not.toHaveBeenCalled()
+  })
+
+  it('funcionário com empresa lê a empresa dele', async () => {
+    const db = prisma()
+    db.$queryRaw.mockResolvedValue([])
+    await new PositionHistoryService(db).heat('org1', {}, { includeSim: false, noCompany: 'empty' }, NOW)
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1)
+  })
+
   it('células mais quentes primeiro', async () => {
     const db = prisma()
     db.$queryRaw.mockResolvedValue([
