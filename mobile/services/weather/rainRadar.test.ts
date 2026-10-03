@@ -1,6 +1,6 @@
 // Radar de chuva (IMERG via NASA GIBS). O que importa travar: o horário que a
 // tela afirma é o de uma observação que JÁ TEM tiles. O GIBS anuncia o horário
-// no domínio de tempo antes de os tiles existirem (medido em 2026-10-03: o
+// no domínio de tempo antes de os tiles existirem (medido no serviço real: o
 // domínio dizia 12:30, os tiles de 12:30 e 12:00 davam 404, o de 11:30 existia).
 import {
   latestRainRadarTime,
