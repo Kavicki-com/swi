@@ -512,6 +512,29 @@ export function assertMeasuresSomething(measurements: object): void {
 }
 
 /**
+ * Medições que não nascem no relógio: são lidas do app Saúde pelo iPhone e
+ * chegam com o horário em que foram medidas, que pode ser de horas atrás.
+ * Oxigenação é pontual também, mas fica de fora: quem a manda é o relógio,
+ * dentro do evento regular dele.
+ */
+const SPOT_READING_KEYS: ReadonlySet<string> = new Set<RawMeasurementKey>([
+  'bloodPressure',
+  'bodyTemperature',
+])
+
+/**
+ * Se o evento só carrega medição avulsa. Um evento assim não é sinal do
+ * relógio, tenha a idade que tiver: não vira o último evento do funcionário,
+ * não prova que o sinal voltou e não dispara avaliação. Em troca, a medição
+ * dele vale como "última medição" mesmo chegando como backlog, porque a régua
+ * dela é de horas e ninguém abre o app no minuto em que mede a pressão.
+ */
+export function isSpotReadingEvent(measurements: object): boolean {
+  const keys = Object.keys(measurements)
+  return keys.length > 0 && keys.every((key) => SPOT_READING_KEYS.has(key))
+}
+
+/**
  * Folga aceita para o relógio do aparelho estar adiantado. Passado disso, o
  * horário é do futuro e o evento é recusado.
  */

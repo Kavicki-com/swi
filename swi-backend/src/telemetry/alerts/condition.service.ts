@@ -5,7 +5,7 @@ import { RealtimeGateway } from '../../realtime/realtime.gateway'
 import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import { TelemetryHealthNotifier } from './health-notifier'
 import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../assessment/assessment-baseline'
-import { EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
+import { CLOCK_SKEW_MS, EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
 import { EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
 import {
   decideBattery,
@@ -148,12 +148,39 @@ export class TelemetryConditionService {
     return outcome
   }
 
+  /**
+   * Avalia as condições quando chega uma medição avulsa do app Saúde (pressão
+   * ou temperatura), que o iPhone manda numa sessão sem batimento e com o
+   * horário em que foi medida.
+   *
+   * O gatilho é `now`, e não o horário da medição: a pergunta é a mesma que o
+   * próximo evento do relógio faria, "qual é a última pressão conhecida dentro
+   * do prazo dela", só que feita na hora em que a medição chega, para a
+   * revisão não depender de haver relógio falando.
+   *
+   * Esta porta decide a revisão de pressão e MAIS NADA. O relógio não falou,
+   * então nada do que ele mede é reavaliado: perda de sinal ativa continua
+   * ativa, e batimento, bateria e desgaste ficam como o último evento dele
+   * deixou. Reavaliar a bateria aqui reabriria "bateria baixa" a partir de uma
+   * leitura velha de um relógio que já descarregou, a cada medição que chegasse.
+   */
+  async evaluateSpotReading(sessionId: string, now: Date): Promise<EvaluateOutcome> {
+    const changes: ConditionChange[] = []
+    const outcome = await this.prisma.$transaction((tx) =>
+      this.evaluateLocked(tx, sessionId, now, now, changes, { spotReading: true }),
+    )
+    await this.announce(changes)
+    await this.notifyHealth(changes)
+    return outcome
+  }
+
   private async evaluateLocked(
     tx: Prisma.TransactionClient,
     sessionId: string,
     triggerAt: Date,
     now: Date,
     changes: ConditionChange[],
+    { spotReading }: { spotReading: boolean } = { spotReading: false },
   ): Promise<EvaluateOutcome> {
     const outcome: EvaluateOutcome = { opened: [], recovered: [], alerts: 0 }
 
@@ -222,6 +249,12 @@ export class TelemetryConditionService {
     const batteryFrom = new Date(triggerAt.getTime() - FRESHNESS.BATTERY.staleMs)
     const pressureFrom = new Date(triggerAt.getTime() - FRESHNESS.BLOOD_PRESSURE.staleMs)
     const wearFrom = new Date(triggerAt.getTime() - FRESHNESS.VITAL.staleMs)
+    // No caminho do evento o teto é o próprio gatilho. Na medição avulsa o
+    // gatilho é o relógio do servidor, e a ingestão aceita horário até a folga
+    // de relógio adiantado: sem estender o teto, a medição que acabou de
+    // chegar carimbada alguns segundos à frente ficaria fora da conta que a
+    // chegada dela disparou, e a revisão não abriria.
+    const pressureUntil = spotReading ? new Date(triggerAt.getTime() + CLOCK_SKEW_MS) : triggerAt
     const [rows, batteryRow, pressureRow, wearRow, profile, summaries] = await Promise.all([
       // Fronteira de baixo fechada, como a do motor: aberta, a amostra que cai
       // exatamente no início da janela ficaria de fora e o trecho medido seria
@@ -255,7 +288,7 @@ export class TelemetryConditionService {
           origin: session.origin,
           systolicMmHg: { not: null },
           diastolicMmHg: { not: null },
-          eventTime: { gte: pressureFrom, lte: triggerAt },
+          eventTime: { gte: pressureFrom, lte: pressureUntil },
         },
         select: { systolicMmHg: true, diastolicMmHg: true },
         orderBy: { eventTime: 'desc' },
@@ -310,17 +343,27 @@ export class TelemetryConditionService {
         : { systolic: pressureRow.systolicMmHg, diastolic: pressureRow.diastolicMmHg }
 
     const nowMs = triggerAt.getTime()
-    const decisions: Decision[] = [
-      decideHeartRate('HEART_RATE_HIGH', samples, limits.high, activeByKind.has('HEART_RATE_HIGH'), this.profile, nowMs),
-      decideHeartRate('HEART_RATE_LOW', samples, limits.low, activeByKind.has('HEART_RATE_LOW'), this.profile, nowMs),
-      decideBattery(latestBattery, activeByKind.has('DEVICE_BATTERY_LOW'), this.profile),
-      decideBloodPressure(pressure, activeByKind.has('BLOOD_PRESSURE_REVIEW'), this.profile),
-      decideWear(latestWear, activeByKind.has('WEAR_HIGH'), this.profile),
-    ].flatMap((d) => (d === null ? [] : [d]))
+    const pressureDecision = decideBloodPressure(pressure, activeByKind.has('BLOOD_PRESSURE_REVIEW'), this.profile)
+    // A medição avulsa decide só a pressão. As leituras do relógio lidas acima
+    // ficam sem uso nesse caso, de propósito: o que elas dizem já foi decidido
+    // no último evento dele, e decidi-las de novo sem dado novo é o que
+    // reabriria bateria baixa de um relógio que parou de falar.
+    const decisions: Decision[] = (
+      spotReading
+        ? [pressureDecision]
+        : [
+            decideHeartRate('HEART_RATE_HIGH', samples, limits.high, activeByKind.has('HEART_RATE_HIGH'), this.profile, nowMs),
+            decideHeartRate('HEART_RATE_LOW', samples, limits.low, activeByKind.has('HEART_RATE_LOW'), this.profile, nowMs),
+            decideBattery(latestBattery, activeByKind.has('DEVICE_BATTERY_LOW'), this.profile),
+            pressureDecision,
+            decideWear(latestWear, activeByKind.has('WEAR_HIGH'), this.profile),
+          ]
+    ).flatMap((d) => (d === null ? [] : [d]))
 
     // Evento ao vivo é sinal de volta: perda de sinal ativa recupera aqui, e
-    // não na varredura, que só enxerga o silêncio.
-    if (activeByKind.has('DEVICE_SIGNAL_LOST')) {
+    // não na varredura, que só enxerga o silêncio. Medição avulsa do app Saúde
+    // não é o relógio falando, e por isso não recupera.
+    if (!spotReading && activeByKind.has('DEVICE_SIGNAL_LOST')) {
       decisions.push({ kind: 'DEVICE_SIGNAL_LOST', action: 'RECOVER', observedValue: null, threshold: null })
     }
 
@@ -372,6 +415,9 @@ export class TelemetryConditionService {
     const refreshBefore = new Date(now.getTime() - LAST_SEEN_REFRESH_MS)
     for (const row of active) {
       if (recoveredIds.has(row.id)) continue
+      // A medição avulsa só cobriu a pressão: o carimbo das condições do
+      // relógio não pode andar por causa de uma avaliação que não as olhou.
+      if (spotReading && row.kind !== 'BLOOD_PRESSURE_REVIEW') continue
       if (row.lastSeenAt > refreshBefore) continue
       await tx.telemetryCondition.update({ where: { id: row.id }, data: { lastSeenAt: now } })
     }

@@ -11,7 +11,7 @@ export type SaveOutcome = 'STORED' | 'DUPLICATE'
 export interface SaveEventResult {
   outcome: SaveOutcome
   sampleId: string
-  /** true somente quando o evento virou o estado atual do funcionário. */
+  /** true somente quando o evento mudou o estado atual do funcionário. */
   snapshotPromoted: boolean
 }
 
@@ -84,6 +84,11 @@ export interface TelemetryRepository {
    * Grava o evento e, quando ele é o mais recente ao vivo, promove o snapshot
    * do funcionário. "now" é obrigatório, como em todo o domínio: a fronteira
    * entre ao vivo e backlog não pode depender do relógio da máquina.
+   *
+   * Evento só de medição avulsa (pressão e temperatura do app Saúde) segue
+   * outra regra: atualiza apenas a própria medição no snapshot, em qualquer
+   * idade, quando é mais nova que a gravada, e não mexe em sessão nem em
+   * último evento.
    */
   saveEvent(event: TelemetryEvent, now: Date): Promise<SaveEventResult>
 }

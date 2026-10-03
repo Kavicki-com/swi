@@ -8,6 +8,7 @@ import {
   assertEventTimeUsable,
   assertMeasuresSomething,
   isBacklog,
+  isSpotReadingEvent,
   rejectWorkerIdAuthority,
   validateRawMeasurement,
 } from '../domain/metric-state'
@@ -16,7 +17,7 @@ import {
   InvalidTelemetryEventError,
   TelemetryOriginMismatchError,
 } from '../domain/telemetry.errors'
-import type { TelemetryEvent } from '../domain/telemetry.types'
+import type { TelemetryEvent, TelemetryOrigin } from '../domain/telemetry.types'
 import {
   TelemetryIntegrityConflictError,
   TelemetrySessionNotFoundError,
@@ -157,6 +158,11 @@ export class TelemetryIngestionService {
     const sessions = new Map<string, TelemetrySessionRef>()
     const sessionStarts = earliestEventTimeBySession(batch.events)
     const liveTriggers = new Map<string, Date>()
+    // Uma sessão por origem basta para a avaliação da medição avulsa: o lote é
+    // de um aparelho só, logo de um funcionário só, e a conta é por funcionário
+    // e origem. O iPhone manda cada medição numa sessão própria, e uma
+    // avaliação por sessão seria a mesma conta repetida dezenas de vezes.
+    const spotSessionByOrigin = new Map<TelemetryOrigin, string>()
     let promoted: PromotedEvent | null = null
 
     for (const raw of batch.events) {
@@ -176,7 +182,14 @@ export class TelemetryIngestionService {
 
         // Só evento ao vivo dispara avaliação; backlog vai ao histórico sem
         // tocar o atual, e avaliar o passado produziria uma cadeia fora de ordem.
-        if (!isBacklog(event.eventTime, now)) {
+        //
+        // Medição avulsa do app Saúde tem porta própria, em qualquer idade: ela
+        // chega pelo iPhone, numa sessão sem batimento, e contá-la como evento
+        // ao vivo recuperaria uma perda de sinal do relógio que continua
+        // acontecendo e avaliaria esforço onde não há o que avaliar.
+        if (isSpotReadingEvent(event.measurements)) {
+          spotSessionByOrigin.set(event.origin, event.monitoringSessionId)
+        } else if (!isBacklog(event.eventTime, now)) {
           const at = new Date(event.eventTime)
           const known = liveTriggers.get(event.monitoringSessionId)
           if (known === undefined || at > known) liveTriggers.set(event.monitoringSessionId, at)
@@ -223,6 +236,20 @@ export class TelemetryIngestionService {
         await this.conditions.evaluateSession(sessionId, triggerAt, now)
       } catch (error) {
         this.logger.error(`Falha ao avaliar as condições da sessão ${sessionId}: ${(error as Error).message}`)
+      }
+    }
+
+    // A medição avulsa é avaliada ao chegar, e não quando o relógio falar de
+    // novo: quem mediu a pressão de manhã e abriu o app depois precisa entrar
+    // na fila de revisão agora. Roda mesmo com evento ao vivo no lote: a
+    // avaliação de cima lê a pressão só até o horário do evento do relógio, e
+    // uma medição feita logo depois ficaria de fora. Falha aqui não derruba o
+    // ACK, pelo mesmo motivo das duas avaliações de cima.
+    for (const sessionId of spotSessionByOrigin.values()) {
+      try {
+        await this.conditions.evaluateSpotReading(sessionId, now)
+      } catch (error) {
+        this.logger.error(`Falha ao avaliar a medição avulsa da sessão ${sessionId}: ${(error as Error).message}`)
       }
     }
 

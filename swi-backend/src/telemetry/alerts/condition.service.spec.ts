@@ -669,6 +669,103 @@ describe('TelemetryConditionService.evaluateSession: recuperar', () => {
   })
 })
 
+// A porta da medição avulsa: pressão lida do app Saúde, que chega pelo iPhone
+// sem o relógio ter falado. Ela decide a revisão de pressão e mais nada: tudo
+// o que o relógio mede fica como o último evento dele deixou.
+describe('TelemetryConditionService.evaluateSpotReading', () => {
+  const HIGH = { systolicMmHg: 150, diastolicMmHg: 80 }
+  const NORMAL = { systolicMmHg: 120, diastolicMmHg: 78 }
+
+  it('pressão fora da faixa abre a revisão, com alerta', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findFirst = latestReadings({ pressure: HIGH })
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.opened).toEqual(['BLOOD_PRESSURE_REVIEW'])
+    expect(prisma.operationalAlert.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('medição nova dentro da banda recupera a revisão aberta', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-bp', 'BLOOD_PRESSURE_REVIEW')])
+    prisma.telemetrySample.findFirst = latestReadings({ pressure: NORMAL })
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.recovered).toEqual(['BLOOD_PRESSURE_REVIEW'])
+  })
+
+  // O relógio descarregou com 10% e parou de falar. A varredura já recuperou a
+  // bateria baixa por silêncio. Uma pressão que chega pelo iPhone não pode
+  // reabri-la a partir daquela leitura velha: ninguém mediu bateria de novo.
+  it('não decide bateria: leitura velha do relógio não reabre bateria baixa', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findFirst = latestReadings({ battery: { batteryPercent: 10 }, pressure: NORMAL })
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.opened).toEqual([])
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
+  })
+
+  it('não decide batimento nem desgaste', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 95 })
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.opened).toEqual([])
+  })
+
+  it('não recupera perda de sinal nem renova o carimbo de condição do relógio', async () => {
+    // Uma pressão digitada no app Saúde não é o relógio falando, e o carimbo
+    // das condições dele só anda quando uma avaliação DELE roda.
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      activeRow('c-sig', 'DEVICE_SIGNAL_LOST', minutesAgo(180)),
+      activeRow('c-hr', 'HEART_RATE_HIGH', minutesAgo(180)),
+    ])
+    prisma.telemetrySample.findFirst = latestReadings({ pressure: NORMAL })
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.recovered).toEqual([])
+    expect(prisma.telemetryCondition.update).not.toHaveBeenCalled()
+  })
+
+  it('renova o carimbo da revisão de pressão que segue aberta', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      activeRow('c-bp', 'BLOOD_PRESSURE_REVIEW', minutesAgo(180)),
+    ])
+    prisma.telemetrySample.findFirst = latestReadings({ pressure: HIGH })
+
+    await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(prisma.telemetryCondition.update).toHaveBeenCalledTimes(1)
+    expect(prisma.telemetryCondition.update).toHaveBeenCalledWith({
+      where: { id: 'c-bp' },
+      data: { lastSeenAt: NOW },
+    })
+  })
+
+  // A ingestão aceita horário até dois minutos à frente do servidor. Uma
+  // medição carimbada nessa folga já está gravada e à vista no painel, então
+  // tem de entrar na conta da revisão que a chegada dela dispara.
+  it('lê a pressão até a folga de relógio adiantado, e não só até agora', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findFirst = latestReadings({ pressure: HIGH })
+
+    await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    const { where } = readingCall(prisma.telemetrySample.findFirst, 'systolicMmHg')
+    expect(where.eventTime.lte).toEqual(new Date(NOW.getTime() + 2 * 60 * 1000))
+    expect(where.eventTime.gte).toEqual(hoursAgo(72))
+  })
+})
+
 // A porta da AUSÊNCIA. Perda de sinal não nasce de um valor que chegou, nasce
 // de nada ter chegado, e o caminho do evento é cego para isso por definição:
 // relógio calado não dispara chamada nenhuma. Estes casos protegem a varredura
