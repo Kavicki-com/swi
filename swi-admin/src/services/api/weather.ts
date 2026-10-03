@@ -20,8 +20,67 @@ export type WeatherSnapshotDto = {
   current: { tempC: number; condition: WeatherConditionDto; humidityPct: number; windKmh: number }
   daily: { minC: number; maxC: number }
   hourly?: WeatherHourlyDto[]
-  alerts: unknown[]
+  alerts: WeatherAlertDto[]
   fetchedAt: string
+  // Aditivos do backend; ausentes em payload antigo.
+  stale?: boolean
+  unavailable?: boolean
+  // Há alerta de demonstração na resposta. Nunca verdadeiro em produção.
+  demo?: boolean
+}
+
+export type WeatherAlertKindDto = 'CHUVA_INTENSA' | 'TEMPESTADE' | 'SOL_INTENSO'
+// ATENCAO pede cuidado; PERIGO pede interromper a atividade exposta.
+export type WeatherAlertSeverityDto = 'ATENCAO' | 'PERIGO'
+export type WeatherAlertDto = {
+  id: string
+  // kind e severity opcionais por tolerância a payload antigo.
+  kind?: WeatherAlertKindDto
+  severity?: WeatherAlertSeverityDto
+  event: string // título curto, pronto para a tela
+  description: string // frase pronta, já com o horário
+  startsAt: string
+  endsAt: string
+}
+
+// O que a tela de alertas lê do snapshot.
+export type WeatherAlertsView = { alerts: WeatherAlertDto[]; demo: boolean }
+
+const isAlert = (value: unknown): value is WeatherAlertDto => {
+  if (typeof value !== 'object' || value === null) return false
+  const a = value as Record<string, unknown>
+  return (
+    typeof a.id === 'string' &&
+    typeof a.event === 'string' &&
+    typeof a.description === 'string' &&
+    typeof a.startsAt === 'string' &&
+    typeof a.endsAt === 'string'
+  )
+}
+
+const severityRank = (a: WeatherAlertDto): number => (a.severity === 'PERIGO' ? 0 : 1)
+
+// Início ilegível vai para o fim da fila em vez de embaralhar a ordenação.
+const startMs = (a: WeatherAlertDto): number => {
+  const ms = Date.parse(a.startsAt)
+  return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms
+}
+
+/**
+ * Escolhe o alerta que a tela mostra: o vigente (ainda não expirado em
+ * `nowMs`), com PERIGO na frente e, no mesmo nível, o que começa antes. Alerta
+ * que ainda vai começar entra, porque a frase do backend já traz o horário.
+ * Puro e tolerante: entrada malformada ou fim ilegível é descartada.
+ */
+export function pickActiveAlert(alerts: unknown, nowMs: number): WeatherAlertDto | null {
+  if (!Array.isArray(alerts)) return null
+  const current = alerts.filter(isAlert).filter((a) => Date.parse(a.endsAt) > nowMs)
+  if (current.length === 0) return null
+  return current.reduce((best, a) => {
+    const bySeverity = severityRank(a) - severityRank(best)
+    if (bySeverity !== 0) return bySeverity < 0 ? a : best
+    return startMs(a) < startMs(best) ? a : best
+  })
 }
 
 type StripCondition = WeatherSlot['condition']
@@ -104,6 +163,19 @@ export const weatherApi = {
       return { data: toWeatherStrip(snap), error: null }
     } catch (e) {
       return { data: null, error: { message: errorMessage(e, 'Falha ao carregar clima') } }
+    }
+  },
+
+  // Alertas meteorológicos do local da empresa, do mesmo GET /weather. Devolve
+  // a lista crua (só o que tem formato de alerta): quem escolhe o vigente é
+  // `pickActiveAlert`, com o relógio de quem chama.
+  async alerts(): Promise<ServiceResponse<WeatherAlertsView>> {
+    try {
+      const snap = await apiFetch<Partial<WeatherSnapshotDto>>('/weather')
+      const alerts = Array.isArray(snap.alerts) ? snap.alerts.filter(isAlert) : []
+      return { data: { alerts, demo: snap.demo === true }, error: null }
+    } catch (e) {
+      return { data: null, error: { message: errorMessage(e, 'Falha ao carregar alertas') } }
     }
   },
 }

@@ -37,11 +37,13 @@ import {
   LocationPin,
   SearchInput,
   Text,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system'
 import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { useEvacuation } from '@/hooks/useEvacuation'
+import { useWeatherAlert } from '@/hooks/useWeatherAlert'
 
 const FILTER_CHIPS = [
   { value: 'all', label: 'Todos' },
@@ -86,10 +88,14 @@ export function AlertsList() {
   // cada funcionário. null (carregando) → [].
   const { markers: liveMarkers, entryFor } = useLiveMapMarkers()
   const markers = useMemo<DashboardMapMarker[]>(() => liveMarkers ?? [], [liveMarkers])
-  // Leitura de demonstração em algum pino: o selo avisa o operador.
+  // Alerta meteorológico real do local da empresa (GET /weather), relido a
+  // cada 5 minutos. null = sem alerta vigente: a tela fica sem a faixa.
+  const { alert: weatherAlert, demo: weatherDemo } = useWeatherAlert()
+  // Leitura de demonstração em algum pino, ou alerta de clima de demonstração:
+  // o selo avisa o operador.
   const hasDemo = useMemo(
-    () => markers.some((m) => entryFor(m.id)?.telemetry.origin === 'DEMO'),
-    [markers, entryFor],
+    () => weatherDemo || markers.some((m) => entryFor(m.id)?.telemetry.origin === 'DEMO'),
+    [weatherDemo, markers, entryFor],
   )
   // Evacuação real: dispatch/encerramento + progresso X/N ao vivo.
   const {
@@ -365,9 +371,7 @@ export function AlertsList() {
           ))}
           {/* Posição e cor do pino são reais. Só leitura de demonstração
               leva selo. */}
-          {hasDemo ? (
-            <DataOriginBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" />
-          ) : null}
+          {hasDemo ? <DataOriginBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" /> : null}
         </View>
 
         {/* Evacuação real: sem ativa → dispatch; ativa → progresso
@@ -477,6 +481,35 @@ export function AlertsList() {
           })}
         </View>
 
+        {/* Faixa do alerta meteorológico (frame alerts-metereologic-map, camada
+            "Toast"). É o Toast do DS como ele é: título e frase vêm prontos do
+            backend. O ícone de nuvem e o botão "Evacuar área" do desenho não
+            existem no Toast de hoje e dependem de bump do DS; a evacuação
+            segue no botão "Iniciar evacuação" acima do mapa. */}
+        {weatherAlert ? (
+          <View
+            style={{
+              // A faixa só informa: o clique atravessa para o mapa.
+              pointerEvents: 'none',
+              position: 'absolute',
+              left: theme.padding.m,
+              right: theme.padding.m,
+              bottom: theme.padding.xl,
+              alignItems: 'center',
+              zIndex: 2,
+            }}
+          >
+            <View style={{ width: '100%', maxWidth: 494 }}>
+              <Toast
+                testID="weather-alert"
+                variant="error"
+                title={`Alerta de ${weatherAlert.event}`}
+                message={weatherAlert.description}
+              />
+            </View>
+          </View>
+        ) : null}
+
         {/* Selected marker overlay. Tracked to its pin via
             map.project() so it follows pan/zoom. Os dados saem da leitura
             real do funcionário; sem leitura o cartão do DS mostra a ausência
@@ -517,10 +550,7 @@ export function AlertsList() {
               </Text>
             ) : null}
             {selectedVitals?.sourceBadge ? (
-              <DataOriginBadge
-                label={selectedVitals.sourceBadge}
-                testID="alerts-selected-demo"
-              />
+              <DataOriginBadge label={selectedVitals.sourceBadge} testID="alerts-selected-demo" />
             ) : null}
           </View>
         ) : null}

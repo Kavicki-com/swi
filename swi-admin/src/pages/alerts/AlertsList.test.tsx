@@ -33,6 +33,12 @@ vi.mock('@/hooks/useEvacuation', () => ({
   }),
 }))
 
+// O alerta de clima tem suíte própria (useWeatherAlert.test); o smoke não abre
+// fetch nem intervalo de releitura.
+vi.mock('@/hooks/useWeatherAlert', () => ({
+  useWeatherAlert: () => ({ alert: null, demo: false }),
+}))
+
 describe('AlertsList', () => {
   afterEach(clearSession)
 
