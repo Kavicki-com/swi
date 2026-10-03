@@ -1,7 +1,15 @@
 import { Injectable } from '@nestjs/common'
 import { httpGetJson } from '../common/httpGet'
-import type { WeatherCondition, WeatherCurrent, WeatherDaily, WeatherHourly } from './weather.types'
-import { SITE_LOCATION } from './weather.types'
+import type {
+  HazardHour,
+  SiteLocation,
+  WeatherCondition,
+  WeatherCurrent,
+  WeatherDaily,
+  WeatherHourly,
+  WeatherReading,
+} from './weather.types'
+import { DEFAULT_UTC_OFFSET_SECONDS, SITE_LOCATION } from './weather.types'
 
 // Códigos WMO (Open-Meteo): 0 limpo · 1-3 nuvens · 45/48 névoa · 51-67 e 80-82
 // chuva · 71-77 e 85-86 neve · 95-99 tempestade. Desconhecido → 'clouds' (neutro).
@@ -81,19 +89,82 @@ export function coerceOpenMeteo(payload: unknown): {
   return { current, daily, hourly }
 }
 
+// Número opcional: ausente, nulo ou ilegível vira null. A regra que dependeria
+// dele não abre, em vez de ler um zero que ninguém mediu.
+const optNum = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+
+type HazardRaw = {
+  utc_offset_seconds?: unknown
+  hourly?: {
+    time?: unknown[]
+    precipitation?: unknown[]
+    precipitation_probability?: unknown[]
+    weather_code?: unknown[]
+    uv_index?: unknown[]
+    apparent_temperature?: unknown[]
+    wind_gusts_10m?: unknown[]
+    is_day?: unknown[]
+  }
+}
+
+/**
+ * Previsão de risco por hora, para as regras de alerta. Tolerante de propósito:
+ * um payload sem estes campos não derruba a leitura do tempo, só deixa os
+ * alertas sem insumo. A hora do provedor vem no fuso do local, sem sufixo, e
+ * sai daqui em UTC.
+ */
+export function coerceHazards(payload: unknown): { hazards: HazardHour[]; utcOffsetSeconds: number } {
+  const raw = payload as HazardRaw | null | undefined
+  const utcOffsetSeconds = optNum(raw?.utc_offset_seconds) ?? DEFAULT_UTC_OFFSET_SECONDS
+  const h = raw?.hourly
+  const times = Array.isArray(h?.time) ? h.time : []
+  const hazards: HazardHour[] = []
+  times.forEach((time, i) => {
+    if (typeof time !== 'string') return
+    const localAsUtc = Date.parse(`${time}:00.000Z`)
+    if (!Number.isFinite(localAsUtc)) return
+    const day = optNum(h?.is_day?.[i])
+    hazards.push({
+      at: new Date(localAsUtc - utcOffsetSeconds * 1000).toISOString(),
+      precipitationMm: optNum(h?.precipitation?.[i]),
+      precipitationProbabilityPct: optNum(h?.precipitation_probability?.[i]),
+      weatherCode: optNum(h?.weather_code?.[i]),
+      uvIndex: optNum(h?.uv_index?.[i]),
+      apparentTempC: optNum(h?.apparent_temperature?.[i]),
+      windGustsKmh: optNum(h?.wind_gusts_10m?.[i]),
+      isDay: day === null ? null : day === 1,
+    })
+  })
+  return { hazards, utcOffsetSeconds }
+}
+
+const DEFAULT_BASE_URL = 'https://api.open-meteo.com'
+
+// A série horária da tela cobre ontem e hoje (past_days=1 mais um dia). O
+// segundo dia de previsão existe só para as regras de alerta enxergarem além
+// da meia-noite, e não entra na resposta da tela.
+const SCREEN_HOURLY_POINTS = 48
+
 @Injectable()
 export class OpenMeteoProvider {
-  // Sem chave. Unidades default do Open-Meteo já batem: °C, %, km/h.
-  async fetch(loc = SITE_LOCATION): Promise<{ current: WeatherCurrent; daily: WeatherDaily; hourly: WeatherHourly[] }> {
+  // Unidades default do Open-Meteo já batem: °C, %, km/h, mm. O endereço
+  // público dispensa chave; o plano contratado tem endereço e chave próprios,
+  // lidos do ambiente a cada chamada.
+  async fetch(loc: SiteLocation = SITE_LOCATION): Promise<WeatherReading> {
+    const base = (process.env.OPEN_METEO_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '')
+    const key = process.env.OPEN_METEO_API_KEY
     const url =
-      `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}` +
+      `${base}/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}` +
       `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code` +
       `&daily=temperature_2m_max,temperature_2m_min` +
-      `&hourly=temperature_2m,weather_code,is_day&past_days=1` +
-      `&timezone=auto&forecast_days=1`
+      `&hourly=temperature_2m,weather_code,is_day,precipitation,precipitation_probability,uv_index,apparent_temperature,wind_gusts_10m` +
+      `&past_days=1&timezone=auto&forecast_days=2` +
+      (key ? `&apikey=${encodeURIComponent(key)}` : '')
     // httpGetJson, nao fetch: o undici/Wasm derrubava o processo no host de 1 GB.
     const res = await httpGetJson(url, 5000)
     if (!res.ok) throw new Error(`open-meteo: HTTP ${res.status}`)
-    return coerceOpenMeteo(await res.json())
+    const payload = await res.json()
+    const basic = coerceOpenMeteo(payload)
+    return { ...basic, hourly: basic.hourly.slice(0, SCREEN_HOURLY_POINTS), ...coerceHazards(payload) }
   }
 }
