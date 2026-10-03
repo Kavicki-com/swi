@@ -908,6 +908,80 @@ describe('TelemetryQueryService.adminWorkers', () => {
   })
 })
 
+describe('TelemetryQueryService.healthStatusOfWorkers', () => {
+  const conditionRow = (workerId: string, over: Record<string, unknown> = {}) => ({
+    workerId,
+    kind: 'HEART_RATE_HIGH',
+    origin: 'REAL',
+    firstSeenAt: secondsAgo(120),
+    observedValue: 182,
+    thresholdValue: 167,
+    ...over,
+  })
+
+  it('sem ninguém para ler, não consulta nada', async () => {
+    const prisma = prismaDouble()
+    const result = await service(prisma).healthStatusOfWorkers([], NOW)
+    expect(result.size).toBe(0)
+    expect(prisma.telemetrySnapshot.findMany).not.toHaveBeenCalled()
+  })
+
+  it('devolve só o estado de cada pessoa, pela régua das condições abertas', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([
+      snapshotRow({ workerId: 'worker-1' }),
+      snapshotRow({ workerId: 'worker-2' }),
+      snapshotRow({ workerId: 'worker-3' }),
+    ])
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      conditionRow('worker-2'),
+      conditionRow('worker-3', { kind: 'WEAR_HIGH' }),
+    ])
+
+    const result = await service(prisma).healthStatusOfWorkers(
+      ['worker-1', 'worker-2', 'worker-3', 'worker-4'],
+      NOW,
+    )
+
+    expect(Object.fromEntries(result)).toEqual({
+      'worker-1': 'good',
+      'worker-2': 'low',
+      'worker-3': 'alert',
+      // Nunca reportou: sem estado, e não "bom".
+      'worker-4': 'unknown',
+    })
+  })
+
+  it('lê só snapshot e condição aberta dos ids pedidos, sem série nem avaliação', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+
+    await service(prisma).healthStatusOfWorkers(['worker-1'], NOW)
+
+    expect(prisma.telemetrySnapshot.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workerId: { in: ['worker-1'] } } }),
+    )
+    expect(prisma.telemetryCondition.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workerId: { in: ['worker-1'] }, status: 'ACTIVE' } }),
+    )
+    expect(prisma.telemetrySample.findMany).not.toHaveBeenCalled()
+    expect(prisma.telemetrySample.groupBy).not.toHaveBeenCalled()
+    expect(prisma.$queryRaw).not.toHaveBeenCalled()
+  })
+
+  it('condição de outra origem não pinta quem reporta na origem real', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow({ workerId: 'worker-1' })])
+    prisma.telemetryCondition.findMany.mockResolvedValue([conditionRow('worker-1', { origin: 'DEMO' })])
+
+    const result = await service(prisma).healthStatusOfWorkers(['worker-1'], NOW)
+
+    expect(result.get('worker-1')).toBe('good')
+  })
+})
+
 describe('TelemetryQueryService.seriesForWorker', () => {
   const SERIES_FIELDS_SAMPLE = {
     eventTime: true,

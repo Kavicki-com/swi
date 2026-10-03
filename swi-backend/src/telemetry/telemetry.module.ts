@@ -65,6 +65,8 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     DeviceAuthGuard,
     PrismaTelemetryRepository,
     TELEMETRY_REPOSITORY,
+    // O mapa de colegas (PositionsModule) lê daqui o estado de saúde.
+    TelemetryQueryService,
   ],
 })
 export class TelemetryModule {}

@@ -7,10 +7,12 @@ import { PositionRetentionJob } from './position-retention.job'
 import { RealtimeModule } from '../realtime/realtime.module'
 import { MediaModule } from '../media/media.module'
 import { EvacuationModule } from '../evacuation/evacuation.module'
+import { TelemetryModule } from '../telemetry/telemetry.module'
 
 @Module({
   // EvacuationModule: o simulador ack'a a evacuação na chegada ao muster.
-  imports: [RealtimeModule, MediaModule, EvacuationModule],
+  // TelemetryModule: o mapa de colegas lê dele o estado de saúde de cada um.
+  imports: [RealtimeModule, MediaModule, EvacuationModule, TelemetryModule],
   providers: [PositionsService, PositionSimulatorService, PositionHistoryService, PositionRetentionJob],
   controllers: [PositionsController],
   exports: [PositionsService],
