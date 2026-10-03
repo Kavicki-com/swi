@@ -52,7 +52,6 @@ export interface WeatherBackend {
   getWeather(): Promise<WeatherSnapshot>;
 }
 
-// Centroide do site (piloto SP) — objeto { lat, lng }, mesmo centroide do
-// USER_LOCATION (tupla [lng, lat]) que o mapa usa. Fonte da verdade de "onde é
-// a obra" pro clima.
+// Centroide do site (piloto SP), objeto { lat, lng }. Fonte da verdade de
+// "onde é a obra" pro clima.
 export const SITE_LOCATION: { lat: number; lng: number } = { lat: -23.55, lng: -46.63 };

@@ -14,6 +14,43 @@ type Pt = [number, number]; // [longitude, latitude] em graus, ordem do GeoJSON
 // a esfera basta: a diferenca pro elipsoide WGS84 fica na casa dos centimetros.
 const EARTH_RADIUS_M = 6371008.8;
 
+// Caixa geografica [oeste, sul, leste, norte] em graus, ordem do GeoJSON.
+export type Bounds = [west: number, south: number, east: number, north: number];
+
+// O Brasil inteiro, do Acre ao litoral e do Chui ao Oiapoque. E o que o mapa
+// enquadra quando nao ha posicao nenhuma para mostrar.
+export const BRAZIL_BOUNDS: Bounds = [-73.99, -33.75, -34.79, 5.27];
+
+// Menor lado da caixa, em graus (cerca de 2 km). Sem ele um ponto so, ou
+// pontos colados, dariam uma caixa de area zero e o mapa abriria no zoom maximo.
+const MIN_SPAN_DEG = 0.02;
+
+/**
+ * Caixa que contem todos os `points`, com folga minima em cada eixo. Devolve
+ * null para lista vazia: quem chama decide o que enquadrar no lugar.
+ */
+export function boundsAround(points: readonly Pt[]): Bounds | null {
+  if (points.length === 0) return null;
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const [lng, lat] of points) {
+    west = Math.min(west, lng);
+    east = Math.max(east, lng);
+    south = Math.min(south, lat);
+    north = Math.max(north, lat);
+  }
+  const padLng = Math.max(0, MIN_SPAN_DEG - (east - west)) / 2;
+  const padLat = Math.max(0, MIN_SPAN_DEG - (north - south)) / 2;
+  return [west - padLng, south - padLat, east + padLng, north + padLat];
+}
+
+/** Ponto central de uma caixa, em [longitude, latitude]. */
+export function boundsCenter([west, south, east, north]: Bounds): Pt {
+  return [(west + east) / 2, (south + north) / 2];
+}
+
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 const toDeg = (rad: number) => (rad * 180) / Math.PI;
 

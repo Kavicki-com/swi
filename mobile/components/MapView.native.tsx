@@ -34,10 +34,12 @@ export const MAP_CHILD_FLAG: unique symbol = Symbol('MapChild');
 export type MapChildComponent = React.FC<unknown> & { [MAP_CHILD_FLAG]?: true };
 
 export interface MapViewProps {
-  /** Initial center as [lng, lat]. */
-  center: [number, number];
-  /** Initial zoom. Defaults to 14. */
+  /** Initial center as [lng, lat]. Omit it and pass `bounds` to frame an area. */
+  center?: [number, number];
+  /** Initial zoom. Defaults to 14. Only applies together with `center`. */
   zoom?: number;
+  /** [west, south, east, north] box to frame when there is no `center`. */
+  bounds?: [number, number, number, number];
   /**
    * Legacy escape hatch from the web variant. Ignored on native — declarative
    * children are the only supported path here.
@@ -75,9 +77,13 @@ function partitionChildren(children: ReactNode): {
 // identically at runtime — both platforms parse the spec the same way.
 const NATIVE_STYLE_JSON = JSON.stringify(ESRI_SATELLITE_STYLE);
 
+// Breathing room, in points, between a framed `bounds` box and the screen edge.
+const FRAME_PADDING = { top: 48, right: 48, bottom: 48, left: 48 };
+
 export function MapView(props: MapViewProps): ReactElement {
-  const { center, zoom = 14, children, testID } = props;
+  const { center, zoom = 14, bounds, children, testID } = props;
   const { mapChildren, uiChildren } = partitionChildren(children);
+  const camera = center ? { center, zoom } : bounds ? { bounds, padding: FRAME_PADDING } : {};
 
   return (
     <View testID={testID} style={{ flex: 1, position: 'relative' }}>
@@ -95,7 +101,7 @@ export function MapView(props: MapViewProps): ReactElement {
         // Android. iOS ignora essa prop.
         androidView="texture"
       >
-        <Camera center={center} zoom={zoom} />
+        <Camera {...camera} />
         {mapChildren}
       </Map>
       <View pointerEvents="box-none" style={[StyleSheet.absoluteFillObject, { zIndex: 2 }]}>

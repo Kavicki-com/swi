@@ -1,4 +1,10 @@
-import { circleFeature, destinationPoint } from './mapGeometry';
+import {
+  BRAZIL_BOUNDS,
+  boundsAround,
+  boundsCenter,
+  circleFeature,
+  destinationPoint,
+} from './mapGeometry';
 
 type Pt = [number, number];
 
@@ -88,5 +94,59 @@ describe('circleFeature', () => {
     for (const v of f.geometry.coordinates) {
       expect(metrosEntre(outro, v as Pt)).toBeCloseTo(5000, 0);
     }
+  });
+});
+
+describe('boundsAround', () => {
+  it('lista vazia nao tem caixa', () => {
+    expect(boundsAround([])).toBeNull();
+  });
+
+  it('a caixa contem todos os pontos, na ordem oeste, sul, leste, norte', () => {
+    const pontos: Pt[] = [
+      [-48.5, -27.6],
+      [-48.3, -27.4],
+      [-48.4, -27.9],
+    ];
+    expect(boundsAround(pontos)).toEqual([-48.5, -27.9, -48.3, -27.4]);
+  });
+
+  // Caixa de area zero faria o mapa abrir no zoom maximo, colado no ponto.
+  it('um ponto so ganha folga em volta, centrada nele', () => {
+    const [oeste, sul, leste, norte] = boundsAround([[-43.9, -19.9]])!;
+
+    expect(leste - oeste).toBeCloseTo(0.02, 10);
+    expect(norte - sul).toBeCloseTo(0.02, 10);
+    expect((oeste + leste) / 2).toBeCloseTo(-43.9, 10);
+    expect((sul + norte) / 2).toBeCloseTo(-19.9, 10);
+  });
+
+  it('a folga entra so no eixo que ficou estreito', () => {
+    const [oeste, sul, leste, norte] = boundsAround([
+      [-44.0, -19.9],
+      [-43.0, -19.9],
+    ])!;
+
+    expect([oeste, leste]).toEqual([-44.0, -43.0]);
+    expect(norte - sul).toBeCloseTo(0.02, 10);
+  });
+});
+
+describe('boundsCenter', () => {
+  it('devolve o meio da caixa em [longitude, latitude]', () => {
+    expect(boundsCenter([-48.6, -27.7, -48.4, -27.5])).toEqual([-48.5, -27.6]);
+  });
+});
+
+describe('BRAZIL_BOUNDS', () => {
+  it('contem os extremos do pais', () => {
+    const [oeste, sul, leste, norte] = BRAZIL_BOUNDS;
+    const dentro = ([lng, lat]: Pt) => lng >= oeste && lng <= leste && lat >= sul && lat <= norte;
+
+    expect(dentro([-60.02, -3.1])).toBe(true); // Manaus
+    expect(dentro([-51.23, -30.03])).toBe(true); // Porto Alegre
+    expect(dentro([-34.86, -7.12])).toBe(true); // Joao Pessoa
+    expect(dentro([-67.81, -9.97])).toBe(true); // Rio Branco
+    expect(dentro([-58.38, -34.6])).toBe(false); // Buenos Aires
   });
 });

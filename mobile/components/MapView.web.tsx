@@ -25,11 +25,16 @@ export interface MapInstanceContextValue {
 
 export const MapInstanceContext = createContext<MapInstanceContextValue | null>(null);
 
+// Breathing room, in pixels, between a framed `bounds` box and the screen edge.
+const FRAME_PADDING = 48;
+
 export interface MapViewProps {
-  /** Initial center as [lng, lat]. */
-  center: [number, number];
-  /** Initial zoom. Defaults to 14. */
+  /** Initial center as [lng, lat]. Omit it and pass `bounds` to frame an area. */
+  center?: [number, number];
+  /** Initial zoom. Defaults to 14. Only applies together with `center`. */
   zoom?: number;
+  /** [west, south, east, north] box to frame when there is no `center`. */
+  bounds?: [number, number, number, number];
   /**
    * Legacy escape hatch: fired once after `load`. Use only when porting old
    * imperative screens; new code should prefer declarative children.
@@ -41,7 +46,7 @@ export interface MapViewProps {
 }
 
 export function MapView(props: MapViewProps): ReactElement {
-  const { center, zoom = 14, onReady, children, testID } = props;
+  const { center, zoom = 14, bounds, onReady, children, testID } = props;
   const lib = useMapLibre();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [instance, setInstance] = useState<MapInstanceContextValue | null>(null);
@@ -56,8 +61,11 @@ export function MapView(props: MapViewProps): ReactElement {
     const map = new lib.Map({
       container: containerRef.current,
       style: ESRI_SATELLITE_STYLE,
-      center,
-      zoom,
+      ...(center
+        ? { center, zoom }
+        : bounds
+          ? { bounds, fitBoundsOptions: { padding: FRAME_PADDING } }
+          : {}),
       attributionControl: false,
     });
 
@@ -75,6 +83,18 @@ export function MapView(props: MapViewProps): ReactElement {
     // on every prop change would destroy caller-added markers and layers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lib]);
+
+  // The one viewport change the map does follow after creation: the framed
+  // box changing, or a center showing up where there was none (first GPS fix).
+  // Later `center` updates stay ignored, as described above.
+  const hasCenter = center !== undefined;
+  const boundsKey = bounds?.join(',');
+  useEffect(() => {
+    if (!instance) return;
+    if (center) instance.map.jumpTo({ center, zoom });
+    else if (bounds) instance.map.fitBounds(bounds, { padding: FRAME_PADDING, animate: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instance, hasCenter, boundsKey]);
 
   return (
     <View testID={testID} style={{ flex: 1, position: 'relative' }}>

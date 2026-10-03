@@ -2,25 +2,29 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import MapWeather from '../../../app/(app)/map-weather';
-import { USER_LOCATION } from '../../../lib/mapMockData';
 
 // Tela de clima do mapa. O teste olha o que a tela MANDA para o mapa, nunca o
 // que o mapa desenha: a fronteira do MapLibre e dublada igual em map.test.tsx.
 //
-// Tres comportamentos aqui nao sao cosmeticos e por isso viram trava:
+// O que vira trava aqui:
 //
-// 1. O defer de 300ms do heatmap (Fix 9 do cliente). Montar as duas camadas de
-//    calor no mesmo frame da inicializacao do GL derrubava o libmaplibre.so em
-//    GPUs Android mid-range. Se alguem trocar o setTimeout por um estado
-//    inicial `true`, o crash volta em campo e nao no CI, entao o teste afirma o
+// 1. A chuva e observacao real (radar IMERG do NASA GIBS), nunca mancha
+//    sorteada. A tela ja desenhou tempestade e inundacao com Math.random em
+//    volta de um ponto fixo de Sao Paulo.
+// 2. O radar chega com horas de atraso, entao a camada so aparece junto da
+//    hora da observacao. Sem leitura, nao ha camada e a tela diz que o radar
+//    esta indisponivel.
+// 3. O defer de 300ms da camada (Fix 9 do cliente). Montar camada no mesmo
+//    frame da inicializacao do GL derrubava o libmaplibre.so em GPUs Android
+//    mid-range; o crash volta em campo e nao no CI, entao o teste afirma o
 //    frame de montagem VAZIO e a limpeza do timer no desmonte.
-// 2. O centro sai do GPS do provider, nao da constante de demo. Usar a
-//    constante faz as duas telas de mapa divergirem, e o clima abre numa
-//    cidade diferente daquela onde a pessoa esta.
-// 3. Os numeros de paint reduzidos pela metade. Sao a diferenca entre rodar e
-//    estourar a alocacao de textura.
+// 4. Sem GPS nao existe ponto de reserva: o mapa abre nos colegas ou no Brasil.
 
-const GPS: [number, number] = [-49.27, -25.43]; // Curitiba, longe da constante
+const GPS: [number, number] = [-49.27, -25.43]; // Curitiba
+const BRASIL = [-73.99, -33.75, -34.79, 5.27];
+const OBSERVACAO = '2026-10-03T11:30:00Z';
+const TILES_GIBS =
+  'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/IMERG_Precipitation_Rate_30min/default/';
 
 // --- Fronteiras dubladas -----------------------------------------------------
 
@@ -29,8 +33,26 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: jest.fn() }),
 }));
 
+let mockCoords: [number, number] | null = [-49.27, -25.43];
 jest.mock('../../../services/location/LocationProvider', () => ({
-  useLocation: () => ({ coords: [-49.27, -25.43], permission: 'granted' }),
+  useLocation: () => ({ coords: mockCoords, permission: 'granted' }),
+}));
+
+const mockListColleagues = jest.fn();
+jest.mock('../../../services/positions/getPositionsBackend', () => ({
+  getPositionsBackend: () => ({
+    heartbeat: jest.fn(),
+    listColleagues: () => mockListColleagues(),
+    heat: jest.fn(),
+  }),
+}));
+
+// So a consulta ao GIBS e dublada; o molde dos tiles e o texto da hora sao os
+// de verdade.
+const mockRadarTime = jest.fn();
+jest.mock('../../../services/weather/rainRadar', () => ({
+  ...jest.requireActual('../../../services/weather/rainRadar'),
+  latestRainRadarTime: () => mockRadarTime(),
 }));
 
 // O gate 'maps' so liga em build nativa; aqui ele e um botao do teste.
@@ -45,7 +67,11 @@ jest.mock('../../../components/MapView', () => {
   const { View } = require('react-native');
   return {
     MapView: (p: any) =>
-      React.createElement(View, { testID: 'mapview', center: p.center, zoom: p.zoom }, p.children),
+      React.createElement(
+        View,
+        { testID: 'mapview', center: p.center, bounds: p.bounds, zoom: p.zoom },
+        p.children,
+      ),
   };
 });
 jest.mock('../../../components/MapMarker', () => {
@@ -56,12 +82,11 @@ jest.mock('../../../components/MapMarker', () => {
       React.createElement(View, { testID: `marker-${p.id}`, coordinate: p.coordinate }, p.children),
   };
 });
-jest.mock('../../../components/MapHeatmapSource', () => {
+jest.mock('../../../components/MapRasterSource', () => {
   const React = require('react');
   const { View } = require('react-native');
   return {
-    MapHeatmapSource: (p: any) =>
-      React.createElement(View, { testID: `heat-${p.id}`, shape: p.shape, paint: p.paint }),
+    MapRasterSource: (p: any) => React.createElement(View, { testID: `raster-${p.id}`, ...p }),
   };
 });
 jest.mock('../../../components/NavFABs', () => {
@@ -79,6 +104,18 @@ const METRICS = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
+const colega = (id: string, lng: number, lat: number, status = 'good') => ({
+  id,
+  name: `Colega ${id}`,
+  lat,
+  lng,
+  sector: null,
+  avatar: `https://fotos.exemplo/${id}.jpg`,
+  recordedAt: '2026-10-03T12:00:00.000Z',
+  status,
+});
+
+let arvores: ReactTestRenderer[] = [];
 const montar = async () => {
   let tree!: ReactTestRenderer;
   await act(async () => {
@@ -90,15 +127,20 @@ const montar = async () => {
       </SafeAreaProvider>,
     );
   });
+  arvores.push(tree);
   return tree;
+};
+
+const avancar = async (ms: number) => {
+  await act(async () => {
+    jest.advanceTimersByTime(ms);
+  });
 };
 
 // Monta e deixa o defer de 300ms passar: estado normal da tela em uso.
 const montarPronto = async () => {
   const tree = await montar();
-  await act(async () => {
-    jest.advanceTimersByTime(300);
-  });
+  await avancar(300);
   return tree;
 };
 
@@ -134,13 +176,39 @@ const tocar = async (node: ReactTestInstance) => {
   });
 };
 
+const textos = (tree: ReactTestRenderer) =>
+  Array.from(
+    new Set(
+      tree.root
+        .findAll((n) => typeof n.props?.children === 'string')
+        .map((n) => n.props.children as string),
+    ),
+  );
+
+const HORA_DA_CHUVA = /^Chuva observada (às|em \d{2}\/\d{2} às) \d{2}h\d{2}$/;
+
+// O id da fonte leva o horario da observacao, entao so pode haver uma por vez.
+const RADAR = `raster-rain-radar-${OBSERVACAO}`;
+const radarDe = (tree: ReactTestRenderer) => {
+  const ids = idsCom(tree, 'raster-rain-radar-');
+  expect(ids).toHaveLength(1);
+  return porTestID(tree, ids[0]);
+};
+
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockMapsLigado = true;
+  mockCoords = [-49.27, -25.43];
+  mockListColleagues.mockReset().mockResolvedValue([]);
+  mockRadarTime.mockReset().mockResolvedValue(OBSERVACAO);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => {
+    arvores.forEach((t) => t.unmount());
+  });
+  arvores = [];
   jest.useRealTimers();
 });
 
@@ -153,31 +221,29 @@ describe('Mapa do clima: gate de build', () => {
 
     expect(porTestID(tree, 'mapview')).toBeUndefined();
     expect(idsCom(tree, 'marker-')).toHaveLength(0);
+    expect(mockRadarTime).not.toHaveBeenCalled();
   });
 });
 
-// --- Defer do heatmap (Fix 9) ------------------------------------------------
+// --- Defer do radar (Fix 9) --------------------------------------------------
 
-describe('Mapa do clima: defer do heatmap (Fix 9 do cliente)', () => {
-  it('nao monta camada de calor alguma no frame da montagem', async () => {
+describe('Mapa do clima: defer da camada (Fix 9 do cliente)', () => {
+  it('nao monta camada nem consulta o radar no frame da montagem', async () => {
     const tree = await montar();
 
     expect(porTestID(tree, 'mapview')).toBeDefined();
-    expect(idsCom(tree, 'heat-')).toHaveLength(0);
+    expect(idsCom(tree, 'raster-')).toHaveLength(0);
+    expect(mockRadarTime).not.toHaveBeenCalled();
   });
 
-  it('monta tempestade e inundacao juntas 300ms depois', async () => {
+  it('monta o radar 300ms depois', async () => {
     const tree = await montar();
 
-    await act(async () => {
-      jest.advanceTimersByTime(299);
-    });
-    expect(idsCom(tree, 'heat-')).toHaveLength(0);
+    await avancar(299);
+    expect(idsCom(tree, 'raster-')).toHaveLength(0);
 
-    await act(async () => {
-      jest.advanceTimersByTime(1);
-    });
-    expect(idsCom(tree, 'heat-').sort()).toEqual(['heat-flood-heatmap', 'heat-storm-heatmap']);
+    await avancar(1);
+    expect(idsCom(tree, 'raster-')).toEqual([RADAR]);
   });
 
   it('cancela o timer pendente quando a tela sai antes dos 300ms', async () => {
@@ -204,26 +270,134 @@ describe('Mapa do clima: defer do heatmap (Fix 9 do cliente)', () => {
   });
 });
 
-// --- Centro ------------------------------------------------------------------
+// --- Radar de chuva ----------------------------------------------------------
 
-describe('Mapa do clima: centro', () => {
-  it('centra no GPS do provider, nao na constante de demo (QA 2026-07-26)', async () => {
+describe('Mapa do clima: radar de chuva', () => {
+  it('desenha os tiles do IMERG no horario da observacao lida', async () => {
+    const tree = await montarPronto();
+    const radar = radarDe(tree);
+
+    expect(radar.props.tiles).toEqual([
+      `${TILES_GIBS}${OBSERVACAO}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
+    ]);
+    expect(radar.props.tileSize).toBe(256);
+    expect(radar.props.maxzoom).toBe(6);
+    expect(radar.props.opacity).toBeGreaterThan(0);
+    expect(radar.props.opacity).toBeLessThan(1); // o satelite segue visivel por baixo
+  });
+
+  it('nao existe mais camada de calor de clima, e nada e sorteado', async () => {
+    const sorteio = jest.spyOn(Math, 'random');
+    const tree = await montarPronto();
+
+    expect(idsCom(tree, 'heat-')).toHaveLength(0);
+    expect(sorteio).not.toHaveBeenCalled();
+    sorteio.mockRestore();
+  });
+
+  it('a camada vem acompanhada da hora da observacao', async () => {
+    const tree = await montarPronto();
+
+    expect(textos(tree).filter((t) => HORA_DA_CHUVA.test(t))).toHaveLength(1);
+  });
+
+  it('sem leitura do radar nao ha camada, e a tela diz que ele esta indisponivel', async () => {
+    mockRadarTime.mockRejectedValue(new Error('GIBS fora do ar'));
+    const tree = await montarPronto();
+
+    expect(idsCom(tree, 'raster-')).toHaveLength(0);
+    expect(textos(tree)).toContain('Radar de chuva indisponível');
+    expect(textos(tree).some((t) => HORA_DA_CHUVA.test(t))).toBe(false);
+  });
+
+  it('depois de uma falha, tenta de novo em um minuto, sem esperar a meia hora', async () => {
+    mockRadarTime.mockRejectedValueOnce(new Error('GIBS fora do ar')).mockResolvedValue(OBSERVACAO);
+    const tree = await montarPronto();
+    expect(idsCom(tree, 'raster-')).toHaveLength(0);
+
+    await avancar(60_000);
+
+    expect(idsCom(tree, 'raster-')).toEqual([RADAR]);
+    expect(textos(tree)).not.toContain('Radar de chuva indisponível');
+  });
+
+  it('enquanto a primeira leitura nao chega, nao mostra camada nem texto', async () => {
+    mockRadarTime.mockReturnValue(new Promise(() => {}));
+    const tree = await montarPronto();
+
+    expect(idsCom(tree, 'raster-')).toHaveLength(0);
+    expect(textos(tree).some((t) => t.includes('Chuva') || t.includes('Radar'))).toBe(false);
+  });
+
+  it('rele a cada 30 minutos e troca os tiles quando sai observacao nova', async () => {
+    const tree = await montarPronto();
+    expect(mockRadarTime).toHaveBeenCalledTimes(1);
+
+    mockRadarTime.mockResolvedValue('2026-10-03T12:00:00Z');
+    await avancar(30 * 60_000);
+
+    expect(mockRadarTime).toHaveBeenCalledTimes(2);
+    // Fonte nova, com id novo: a da observacao anterior saiu.
+    expect(idsCom(tree, 'raster-')).toEqual(['raster-rain-radar-2026-10-03T12:00:00Z']);
+    expect(radarDe(tree).props.tiles[0]).toContain('2026-10-03T12:00:00Z');
+  });
+
+  it('se a releitura falha, a ultima observacao segue na tela com a hora dela', async () => {
+    const tree = await montarPronto();
+
+    mockRadarTime.mockRejectedValue(new Error('sem rede'));
+    await avancar(30 * 60_000);
+
+    expect(radarDe(tree).props.tiles[0]).toContain(OBSERVACAO);
+    expect(textos(tree).filter((t) => HORA_DA_CHUVA.test(t))).toHaveLength(1);
+    expect(textos(tree)).not.toContain('Radar de chuva indisponível');
+  });
+
+  it('o botao desliga a camada junto com a hora, e religar le de novo', async () => {
+    const tree = await montarPronto();
+
+    await tocar(porRotulo(tree, 'Radar de chuva'));
+    expect(idsCom(tree, 'raster-')).toHaveLength(0);
+    expect(textos(tree).some((t) => HORA_DA_CHUVA.test(t))).toBe(false);
+
+    await tocar(porRotulo(tree, 'Radar de chuva'));
+    expect(idsCom(tree, 'raster-')).toEqual([RADAR]);
+    expect(mockRadarTime).toHaveBeenCalledTimes(2);
+  });
+});
+
+// --- Enquadramento -----------------------------------------------------------
+
+describe('Mapa do clima: enquadramento', () => {
+  it('centra no GPS do provider, em zoom regional', async () => {
     const tree = await montarPronto();
     const mapa = porTestID(tree, 'mapview');
 
     expect(mapa.props.center).toEqual(GPS);
-    expect(mapa.props.center).not.toEqual(USER_LOCATION);
-    expect(mapa.props.zoom).toBe(13);
+    expect(mapa.props.bounds).toBeUndefined();
+    // No zoom de rua a tela inteira cabe num quadrado do radar (cerca de 10 km).
+    expect(mapa.props.zoom).toBe(7);
   });
 
-  it('mantem os pontos de calor ancorados na constante de demo, longe do GPS', async () => {
+  it('sem GPS e sem colegas, enquadra o Brasil em vez de um ponto de reserva', async () => {
+    mockCoords = null;
     const tree = await montarPronto();
-    const storm = porTestID(tree, 'heat-storm-heatmap');
-    const [lng, lat] = storm.props.shape.features[0].geometry.coordinates as [number, number];
+    const mapa = porTestID(tree, 'mapview');
 
-    // Dado de clima fabricado, nao posicao do usuario: fica onde a demo manda.
-    expect(lng).toBeCloseTo(USER_LOCATION[0], 1);
-    expect(lat).toBeCloseTo(USER_LOCATION[1], 1);
+    expect(mapa.props.center).toBeUndefined();
+    expect(mapa.props.bounds).toEqual(BRASIL);
+  });
+
+  it('sem GPS e com colegas, centra onde eles estao sem fechar o zoom neles', async () => {
+    mockCoords = null;
+    mockListColleagues.mockResolvedValue([colega('a', -48.6, -27.7), colega('b', -48.4, -27.5)]);
+    const tree = await montarPronto();
+    const mapa = porTestID(tree, 'mapview');
+
+    expect(mapa.props.bounds).toBeUndefined();
+    expect(mapa.props.center[0]).toBeCloseTo(-48.5, 6);
+    expect(mapa.props.center[1]).toBeCloseTo(-27.6, 6);
+    expect(mapa.props.zoom).toBe(7);
   });
 });
 
@@ -237,9 +411,7 @@ describe('Mapa do clima: pinos de alerta', () => {
     const tree = await montar();
     expect(idsCom(tree, 'marker-alert-')).toHaveLength(0);
 
-    await act(async () => {
-      jest.advanceTimersByTime(300);
-    });
+    await avancar(300);
     expect(idsCom(tree, 'marker-alert-')).toHaveLength(0);
     expect(idsCom(tree, 'marker-')).toHaveLength(0);
   });
@@ -247,7 +419,7 @@ describe('Mapa do clima: pinos de alerta', () => {
   it('nada na tela leva a janela do alerta meteorologico', async () => {
     const tree = await montarPronto();
 
-    for (const rotulo of ['Operadores', 'Heatmap', 'Câmeras']) {
+    for (const rotulo of ['Operadores', 'Radar de chuva', 'Câmeras']) {
       await tocar(porRotulo(tree, rotulo));
     }
 
@@ -258,14 +430,33 @@ describe('Mapa do clima: pinos de alerta', () => {
 // --- Toggles -----------------------------------------------------------------
 
 describe('Mapa do clima: toggles dos overlays', () => {
-  it('operadores comecam escondidos, aparecem no primeiro toque e somem no segundo', async () => {
+  it('operadores sao os colegas do backend: aparecem no primeiro toque e somem no segundo', async () => {
+    mockListColleagues.mockResolvedValue([
+      colega('a', -49.3, -25.4),
+      colega('b', -49.2, -25.5, 'unknown'),
+    ]);
     const tree = await montarPronto();
     expect(idsCom(tree, 'marker-worker-')).toHaveLength(0);
+    expect(mockListColleagues).not.toHaveBeenCalled();
 
     await tocar(porRotulo(tree, 'Operadores'));
-    expect(idsCom(tree, 'marker-worker-')).toHaveLength(7);
+    expect(idsCom(tree, 'marker-worker-').sort()).toEqual(['marker-worker-a', 'marker-worker-b']);
+    expect(porTestID(tree, 'marker-worker-a').props.coordinate).toEqual([-49.3, -25.4]);
+    const pino = (id: string) =>
+      porTestID(tree, id).findAll((n) => n.props?.variant === 'avatar')[0].props;
+    expect(pino('marker-worker-a')).toMatchObject({ name: 'Colega a', status: 'good' });
+    expect(pino('marker-worker-b').status).toBe('offline'); // sem leitura de saude
 
     await tocar(porRotulo(tree, 'Operadores'));
+    expect(idsCom(tree, 'marker-worker-')).toHaveLength(0);
+  });
+
+  it('sem colega no backend, o botao liga e o mapa fica sem ninguem', async () => {
+    const tree = await montarPronto();
+
+    await tocar(porRotulo(tree, 'Operadores'));
+
+    expect(mockListColleagues).toHaveBeenCalledTimes(1);
     expect(idsCom(tree, 'marker-worker-')).toHaveLength(0);
   });
 
@@ -280,142 +471,19 @@ describe('Mapa do clima: toggles dos overlays', () => {
     expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
   });
 
-  it('o botao do heatmap desliga as DUAS camadas de uma vez e devolve as duas', async () => {
-    const tree = await montarPronto();
-    expect(idsCom(tree, 'heat-')).toHaveLength(2);
-
-    await tocar(porRotulo(tree, 'Heatmap'));
-    expect(idsCom(tree, 'heat-')).toHaveLength(0);
-
-    await tocar(porRotulo(tree, 'Heatmap'));
-    expect(idsCom(tree, 'heat-')).toHaveLength(2);
-  });
-
   it('cada botao anuncia o proprio estado, sem contaminar os vizinhos', async () => {
     const tree = await montarPronto();
     const estado = (rotulo: string) => estadoDoBotao(tree, rotulo);
 
     expect(estado('Operadores')).toBe(false);
-    expect(estado('Heatmap')).toBe(true); // ligado pelo defer
+    expect(estado('Radar de chuva')).toBe(true); // ligado pelo defer
     expect(estado('Câmeras')).toBe(false);
 
     await tocar(porRotulo(tree, 'Operadores'));
 
     expect(estado('Operadores')).toBe(true);
-    expect(estado('Heatmap')).toBe(true);
+    expect(estado('Radar de chuva')).toBe(true);
     expect(estado('Câmeras')).toBe(false);
-  });
-});
-
-// --- Dados das camadas de calor ----------------------------------------------
-
-describe('Mapa do clima: dados das camadas de calor', () => {
-  it('tempestade tem 250 pontos e inundacao 150 (contagens do Fix 9)', async () => {
-    const tree = await montarPronto();
-
-    expect(porTestID(tree, 'heat-storm-heatmap').props.shape.features).toHaveLength(250);
-    expect(porTestID(tree, 'heat-flood-heatmap').props.shape.features).toHaveLength(150);
-  });
-
-  it('todo ponto sai com peso dentro da faixa que a rampa de cor entende', async () => {
-    const tree = await montarPronto();
-
-    for (const id of ['heat-storm-heatmap', 'heat-flood-heatmap']) {
-      const features = porTestID(tree, id).props.shape.features as {
-        properties: { weight: number };
-        geometry: { coordinates: [number, number] };
-      }[];
-      for (const f of features) {
-        expect(f.properties.weight).toBeGreaterThanOrEqual(0.2);
-        expect(f.properties.weight).toBeLessThanOrEqual(1);
-        expect(Number.isFinite(f.geometry.coordinates[0])).toBe(true);
-        expect(Number.isFinite(f.geometry.coordinates[1])).toBe(true);
-      }
-    }
-  });
-
-  it('o cluster de inundacao nasce deslocado do de tempestade, para os dois nao virarem um so', async () => {
-    const tree = await montarPronto();
-    const media = (id: string, eixo: 0 | 1) => {
-      const fs = porTestID(tree, id).props.shape.features as {
-        geometry: { coordinates: [number, number] };
-      }[];
-      return fs.reduce((s, f) => s + f.geometry.coordinates[eixo], 0) / fs.length;
-    };
-
-    // Centro da inundacao: +0.004 em longitude, -0.008 em latitude.
-    expect(media('heat-flood-heatmap', 0)).toBeGreaterThan(media('heat-storm-heatmap', 0));
-    expect(media('heat-flood-heatmap', 1)).toBeLessThan(media('heat-storm-heatmap', 1));
-  });
-
-  it('a distribuicao nao e re-sorteada quando outro overlay liga', async () => {
-    const tree = await montarPronto();
-    const antes = porTestID(tree, 'heat-storm-heatmap').props.shape;
-
-    await tocar(porRotulo(tree, 'Operadores'));
-
-    expect(porTestID(tree, 'heat-storm-heatmap').props.shape).toBe(antes);
-  });
-
-  it('trava a intensidade, o raio e a opacidade reduzidos no Fix 9', async () => {
-    const tree = await montarPronto();
-
-    expect(porTestID(tree, 'heat-storm-heatmap').props.paint).toMatchObject({
-      intensity: 2.0,
-      radius: 70,
-      opacity: 0.82,
-      weightProperty: 'weight',
-    });
-    expect(porTestID(tree, 'heat-flood-heatmap').props.paint).toMatchObject({
-      intensity: 1.6,
-      radius: 55,
-      opacity: 0.78,
-      weightProperty: 'weight',
-    });
-  });
-
-  it('as duas rampas sobem de zero a um sem repetir parada e terminam no mesmo magenta', async () => {
-    const tree = await montarPronto();
-
-    for (const id of ['heat-storm-heatmap', 'heat-flood-heatmap']) {
-      const stops = porTestID(tree, id).props.paint.colorStops as [number, string][];
-      const posicoes = stops.map(([p]) => p);
-
-      expect(posicoes[0]).toBe(0);
-      expect(posicoes[posicoes.length - 1]).toBe(1);
-      expect([...posicoes].sort((a, b) => a - b)).toEqual(posicoes);
-      expect(new Set(posicoes).size).toBe(posicoes.length);
-      expect(stops[0][1]).toContain('rgba('); // primeira parada transparente
-      expect(stops[stops.length - 1][1]).toBe('rgb(159,18,57)');
-    }
-  });
-});
-
-// --- Box-Muller --------------------------------------------------------------
-
-describe('Mapa do clima: geracao dos pontos', () => {
-  // Oraculo independente: com sorteio fixo em 0.5 a transformada colapsa num
-  // unico ponto, e da para conferir o raio e o peso pela formula, na mao.
-  it('com sorteio fixo, o deslocamento e o peso saem da formula de Box-Muller', async () => {
-    const sorteio = jest.spyOn(Math, 'random').mockReturnValue(0.5);
-
-    const tree = await montarPronto();
-    const storm = porTestID(tree, 'heat-storm-heatmap').props.shape;
-
-    const spreadDoNucleo = 0.006;
-    const r = Math.sqrt(-2 * Math.log(0.5)) * spreadDoNucleo; // u = 1 - 0.5
-    const pesoEsperado = 1 - r / (spreadDoNucleo * 2.4); // theta = PI, distancia = r
-
-    const [lng, lat] = storm.features[0].geometry.coordinates as [number, number];
-    expect(lng).toBeCloseTo(USER_LOCATION[0] - r, 10); // cos(PI) = -1
-    expect(lat).toBeCloseTo(USER_LOCATION[1], 10); // sin(PI) = 0
-    expect(storm.features[0].properties.weight).toBeCloseTo(pesoEsperado, 10);
-
-    // Halo: mesmo sorteio, spread maior, entao cai mais longe que o nucleo.
-    const [lngHalo] = storm.features[249].geometry.coordinates as [number, number];
-    expect(Math.abs(lngHalo - USER_LOCATION[0])).toBeGreaterThan(Math.abs(lng - USER_LOCATION[0]));
-
-    sorteio.mockRestore();
   });
 });
 

@@ -3,13 +3,12 @@ import {
   type PropsWithChildren,
 } from 'react';
 import * as Location from 'expo-location';
-import { resolveCoords } from './resolveCoords';
 import type { LocationPermission, LocationState } from './types';
 
 const LocationContext = createContext<LocationState | null>(null);
 
-// Initial: fallback coords, permission not yet asked.
-const INITIAL: LocationState = { ...resolveCoords(null), permission: 'undetermined' };
+// Initial: no position, permission not yet asked.
+const INITIAL: LocationState = { coords: null, permission: 'undetermined' };
 
 export function LocationProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<LocationState>(INITIAL);
@@ -24,23 +23,16 @@ export function LocationProvider({ children }: PropsWithChildren) {
         const permission = status as LocationPermission;
         if (cancelled) return;
 
-        if (status !== 'granted') {
-          // Denied/undetermined → stay on the mock fallback, record the status.
-          setState({ ...resolveCoords(null), permission });
-          return;
-        }
+        // Reflect the permission immediately. Position stays null until the
+        // first fix lands (and for good when the permission was not granted).
+        setState({ coords: null, permission });
+        if (status !== 'granted') return;
 
-        // Reflect the granted permission immediately (fallback coords until the
-        // first fix lands), then stream real positions.
-        setState({ ...resolveCoords(null), permission });
         subscription = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
           (pos) => {
             if (cancelled) return;
-            setState({
-              ...resolveCoords([pos.coords.longitude, pos.coords.latitude]),
-              permission,
-            });
+            setState({ coords: [pos.coords.longitude, pos.coords.latitude], permission });
           },
         );
         // The watch may have started after unmount (async gap) — clean up.
@@ -49,9 +41,9 @@ export function LocationProvider({ children }: PropsWithChildren) {
           subscription = null;
         }
       } catch {
-        // No geolocation (e.g. web) or any runtime error → fallback, denied.
+        // No geolocation (e.g. web) or any runtime error → no position, denied.
         if (cancelled) return;
-        setState({ ...resolveCoords(null), permission: 'denied' });
+        setState({ coords: null, permission: 'denied' });
       }
     };
 
