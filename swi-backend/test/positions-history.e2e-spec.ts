@@ -148,8 +148,50 @@ describe('Positions history e2e', () => {
     expect(res.body.cells).toEqual([{ lat: expect.any(Number), lng: expect.any(Number), weight: 1 }])
   })
 
-  it('funcionário não lê o mapa de calor, e janela inválida é recusada', async () => {
-    await request(app.getHttpServer()).get('/positions/heat').set(bearer(ids.w1, 'WORKER')).expect(403)
+  it('funcionário lê o mapa de calor da própria empresa, igual ao do admin', async () => {
+    const admin = await request(app.getHttpServer()).get('/positions/heat').set(bearer(ids.adminA, 'ADMIN')).expect(200)
+    const w1 = await request(app.getHttpServer()).get('/positions/heat').set(bearer(ids.w1, 'WORKER')).expect(200)
+    expect(w1.body.cells).toEqual(admin.body.cells)
+    expect(w1.body.cells.length).toBeGreaterThan(0)
+    // Só células e peso: nada que identifique quem esteve onde.
+    for (const cell of w1.body.cells) expect(Object.keys(cell).sort()).toEqual(['lat', 'lng', 'weight'])
+
+    const other = await request(app.getHttpServer()).get('/positions/heat').set(bearer(ids.other, 'WORKER')).expect(200)
+    expect(other.body.cells).toEqual([{ lat: expect.any(Number), lng: expect.any(Number), weight: 1 }])
+  })
+
+  // Janela estreita desfaz a agregação: um minuto de uma empresa pequena é a
+  // posição de uma pessoa naquele minuto. O funcionário só lê a janela padrão.
+  it('funcionário não escolhe a janela do mapa de calor', async () => {
+    const from = new Date(Date.now() - 11 * 60_000).toISOString()
+    const to = new Date(Date.now() - 9 * 60_000).toISOString()
+    await request(app.getHttpServer()).get(`/positions/heat?from=${from}`).set(bearer(ids.w1, 'WORKER')).expect(403)
+    await request(app.getHttpServer()).get(`/positions/heat?to=${to}`).set(bearer(ids.w1, 'WORKER')).expect(403)
+    await request(app.getHttpServer())
+      .get(`/positions/heat?from=${from}&to=${to}`)
+      .set(bearer(ids.adminA, 'ADMIN'))
+      .expect(200)
+  })
+
+  it('funcionário não pede o simulador: recusa pelo papel, com a homologação ligada ou não', async () => {
+    await request(app.getHttpServer()).get('/positions/heat?source=all').set(bearer(ids.w1, 'WORKER')).expect(403)
+  })
+
+  it('funcionário não pede as posições do simulador nem com a homologação ligada', async () => {
+    const previous = process.env.POSITIONS_HEAT_INCLUDE_SIM
+    process.env.POSITIONS_HEAT_INCLUDE_SIM = '1'
+    try {
+      await request(app.getHttpServer())
+        .get('/positions/heat?source=all')
+        .set(bearer(ids.w1, 'WORKER'))
+        .expect(403)
+    } finally {
+      if (previous === undefined) delete process.env.POSITIONS_HEAT_INCLUDE_SIM
+      else process.env.POSITIONS_HEAT_INCLUDE_SIM = previous
+    }
+  })
+
+  it('janela inválida é recusada', async () => {
     await request(app.getHttpServer())
       .get('/positions/heat?from=ontem')
       .set(bearer(ids.adminA, 'ADMIN'))
@@ -195,7 +237,8 @@ describe('Positions history e2e', () => {
       .set(bearer(ids.w1, 'WORKER'))
       .expect(200)
     expect(res.body.map((m: { id: string }) => m.id)).toEqual([ids.w2])
-    expect(res.body[0]).toMatchObject({ lat: -23.56, lng: -46.64, recordedAt: fresh.toISOString() })
+    // Colega sem aparelho pareado: sem estado, e não "bom".
+    expect(res.body[0]).toMatchObject({ lat: -23.56, lng: -46.64, recordedAt: fresh.toISOString(), status: 'unknown' })
 
     await prisma.workerPosition.update({ where: { workerId: ids.w2 }, data: { recordedAt: old } })
     const stale = await request(app.getHttpServer())

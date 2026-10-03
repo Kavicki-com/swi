@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, ForbiddenException, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common'
 import { PositionsService } from './positions.service'
 import { PositionHistoryService } from './position-history.service'
 import { HeartbeatDto, HeatQueryDto } from './dto'
@@ -30,9 +30,17 @@ export class PositionsController {
     return this.positions.listForCompany(user.companyId)
   }
 
-  // Mapa de calor da empresa: células agregadas, nunca trilhas individuais.
-  @Roles('ADMIN') @Get('heat')
+  // Mapa de calor da empresa: células agregadas, nunca trilhas individuais. O
+  // funcionário lê o mesmo mapa no app, sempre da própria empresa.
+  @Roles('ADMIN', 'WORKER') @Get('heat')
   heat(@CurrentUser() user: JwtUser, @Query() query: HeatQueryDto) {
+    const isAdmin = user.role === 'ADMIN'
+    // O funcionário lê só a consulta padrão. Janela estreita desfaz a
+    // agregação (um minuto de uma empresa pequena é a posição de uma pessoa
+    // naquele minuto), e a chave de homologação é ferramenta do painel.
+    if (!isAdmin && (query.from !== undefined || query.to !== undefined || query.source === 'all')) {
+      throw new ForbiddenException('Só o administrador escolhe a janela e a origem do mapa de calor')
+    }
     // Lido a cada pedido, como as outras chaves de homologação: ligar ou
     // desligar no servidor não exige subir de novo.
     const simAllowed = parsePositionsHeatIncludeSim(process.env)
@@ -42,7 +50,7 @@ export class PositionsController {
     return this.history.heat(
       user.companyId,
       { from: query.from, to: query.to },
-      { includeSim: query.source === 'all' },
+      { includeSim: query.source === 'all', noCompany: isAdmin ? 'legacy-bucket' : 'empty' },
       new Date(),
     )
   }
