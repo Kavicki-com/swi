@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
 import { isFeatureEnabled } from '../../lib/featureFlags';
 import { useNotifications } from '../../services/notifications/NotificationProvider';
+import { useWeather } from '../../services/weather/WeatherProvider';
 import type { AppNotification, NotificationDomain } from '../../services/notifications/types';
 import { NotificationState } from '../../components/notifications/NotificationState';
 
@@ -20,7 +21,8 @@ import { NotificationState } from '../../components/notifications/NotificationSt
 // notificação. Todas as rotas existem; nenhuma cria 404.
 // - weather  → WeatherAlertModal in-place (visualização do fenômeno; o estado
 //   de "alerta ativo" do dashboard segue acessível pelo botão SOS no próprio
-//   dashboard). Caso especial: NÃO navega, abre modal. Ver R-5 em
+//   dashboard). Caso especial: NÃO navega, abre modal, e só com alerta
+//   vigente (sem alerta o toque apenas marca como lida). Ver R-5 em
 // - chat     → chat inbox (mensagens da equipe)
 // - reports  → lista de relatórios
 // - journey  → jornada (treinamento / tarefa / inspeção / cronograma)
@@ -139,6 +141,14 @@ function NotificationsScreen() {
   // "no alerta atual ainda esta trocando de tela, quero ele exatamente como
   // o meteorológico". Disparado pelo CTA do WeatherAlertModal.
   const [activeAlertVisible, setActiveAlertVisible] = useState(false);
+  // A janela "Local em Alerta!" só existe com alerta vigente. A notificação
+  // fica na lista depois que o alerta acaba, então o toque confere antes.
+  const { activeAlert } = useWeather();
+  const hasAlert = activeAlert !== null;
+  // Alerta que acaba com a janela aberta leva a janela junto.
+  useEffect(() => {
+    if (!hasAlert) setWeatherAlertVisible(false);
+  }, [hasAlert]);
 
   // T4.4: useCallback estabiliza a referência do handler — NotificationCard
   // memoizado consegue skipar re-render quando só o modal state muda.
@@ -148,12 +158,13 @@ function NotificationsScreen() {
       if (!n) return;
       markRead(id); // otimista; navega/abre em seguida
       if (n.domain === 'weather') {
-        setWeatherAlertVisible(true);
+        // Sem alerta vigente o toque só marca como lida: não abre nada.
+        if (hasAlert) setWeatherAlertVisible(true);
         return;
       }
       router.push(DOMAIN_ROUTE[n.domain]);
     },
-    [notifications, markRead, router],
+    [notifications, markRead, router, hasAlert],
   );
 
   const isStateView =
@@ -217,7 +228,7 @@ function NotificationsScreen() {
       <NavFABs />
 
       <Modal
-        visible={weatherAlertVisible}
+        visible={weatherAlertVisible && hasAlert}
         transparent
         animationType="fade"
         onRequestClose={() => setWeatherAlertVisible(false)}

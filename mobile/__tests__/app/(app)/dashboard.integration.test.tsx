@@ -60,10 +60,11 @@ jest.mock('../../../services/reports/ReportsProvider', () => ({
   useReports: () => ({ reports: mockReports, load: mockLoadReports }),
 }));
 
-// Sem snapshot: exercita o fallback estático do weatherDisplay, que é o
-// comportamento que a tela de segurança precisa ter quando o clima não carrega.
+// Sem snapshot e sem alerta: a tela de segurança abre inteira, com as medições
+// em '--' e sem texto de alerta, em vez de mostrar clima inventado.
+let mockClima: { snapshot: unknown; activeAlert: unknown } = { snapshot: null, activeAlert: null };
 jest.mock('../../../services/weather/WeatherProvider', () => ({
-  useWeather: () => ({ snapshot: null, activeAlert: null }),
+  useWeather: () => mockClima,
 }));
 
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
@@ -148,6 +149,7 @@ beforeEach(() => {
   mockVitalsState = { phase: 'ready', vitals: VITALS, status: 'good' };
   mockUnreadCount = 0;
   mockReports = [];
+  mockClima = { snapshot: null, activeAlert: null };
 });
 
 // --- Fases dos vitais --------------------------------------------------------
@@ -286,9 +288,34 @@ describe('dashboard: procedimento de evacuação (?alert=active)', () => {
     expect(texto).toContain('reporte imediatamente à central');
   });
 
-  it('sem clima carregado, cai no texto estático em vez de quebrar', async () => {
+  it('sem clima carregado, não inventa medição nem texto de alerta', async () => {
     const texto = textoDa(await render());
-    expect(texto).toContain('Risco de desabamentos');
+    expect(texto).toContain('--');
+    expect(texto).not.toContain('17ºC');
+    expect(texto).not.toContain('Chuva Intensa');
+    expect(texto).not.toContain('Risco de desabamentos');
+  });
+
+  it('com alerta vigente, mostra a leitura e a descrição que vieram do backend', async () => {
+    mockClima = {
+      snapshot: {
+        current: { tempC: 22.4, condition: 'storm', humidityPct: 88, windKmh: 47.6 },
+        daily: { maxC: 27, minC: 15 },
+        alerts: [],
+        fetchedAt: '2026-06-23T12:00:00.000Z',
+      },
+      activeAlert: {
+        id: 'wx-1',
+        event: 'Tempestade',
+        severity: 'PERIGO',
+        description: 'Raios e rajadas fortes na próxima hora.',
+        startsAt: '2026-06-23T11:00:00.000Z',
+        endsAt: '2026-06-23T18:00:00.000Z',
+      },
+    };
+    const texto = textoDa(await render());
+    expect(texto).toContain('22ºC');
+    expect(texto).toContain('Raios e rajadas fortes na próxima hora.');
   });
 
   it('ignora a fase dos vitais: a tela de segurança sempre aparece', async () => {

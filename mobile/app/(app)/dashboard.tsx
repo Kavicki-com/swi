@@ -41,6 +41,7 @@ import { useVitals } from '../../services/vitals/VitalsProvider';
 import { useProfile } from '../../services/profile/ProfileProvider';
 import { useNotifications } from '../../services/notifications/NotificationProvider';
 import { useReports } from '../../services/reports/ReportsProvider';
+import { useWeather } from '../../services/weather/WeatherProvider';
 import { formatEta } from '../../services/vitals/formatEta';
 import type { WorkerStatus } from '../../services/vitals/types';
 import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
@@ -135,7 +136,12 @@ export default function Dashboard() {
   //   em RED (`surface.danger` tint), e modal "Local em Alerta!" aparece
   //   com timeline cyan + botão "Traçar rota" verde.
   const { alert } = useLocalSearchParams<{ alert?: string }>();
-  const isAlertModal = alert === 'modal';
+  // A janela "Local em Alerta!" só existe com alerta vigente. O link pode
+  // chegar velho (notificação tocada depois que o alerta acabou): aí não há
+  // janela nem fundo vermelho, o dashboard abre normal.
+  const { activeAlert } = useWeather();
+  const hasAlert = activeAlert !== null;
+  const isAlertModal = alert === 'modal' && hasAlert;
   // Modal opens 800ms após mount, com dissolve fade-in 240ms ease-in-out
   // Animate Dissolve, Easing Ease in and out, Duration 240ms).
   const [modalVisible, setModalVisible] = useState(false);
@@ -156,6 +162,18 @@ export default function Dashboard() {
   // (push notifications, etc.).
   const [weatherModalOpen, setWeatherModalOpen] = useState(false);
   const [activeModalOpen, setActiveModalOpen] = useState(false);
+  // Alerta que acaba com a janela aberta leva a janela junto, e ela não
+  // reabre sozinha se outro alerta nascer depois.
+  useEffect(() => {
+    if (!hasAlert) setWeatherModalOpen(false);
+  }, [hasAlert]);
+  // Pedir ajuda não depende do clima: com alerta vigente a janela do clima vem
+  // primeiro; sem alerta ela não tem o que afirmar, e o botão abre direto o
+  // procedimento de evacuação.
+  const handlePressUrgentHelp = () => {
+    if (hasAlert) setWeatherModalOpen(true);
+    else setActiveModalOpen(true);
+  };
 
   if (alert === 'active') {
     return <AlertActiveView />;
@@ -556,7 +574,7 @@ export default function Dashboard() {
                 />
               }
               accessibilityLabel="Ajuda urgente"
-              onPress={() => setWeatherModalOpen(true)}
+              onPress={handlePressUrgentHelp}
             />
           </View>
         </View>
@@ -594,7 +612,7 @@ export default function Dashboard() {
           notifications.tsx); dashboard underneath não muda de cor. CTA
           "Instruções de segurança" → fecha esse e abre o ActiveAlertModal. */}
       <Modal
-        visible={weatherModalOpen}
+        visible={weatherModalOpen && hasAlert}
         transparent
         animationType="fade"
         onRequestClose={() => setWeatherModalOpen(false)}

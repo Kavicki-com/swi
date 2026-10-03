@@ -31,7 +31,12 @@ const SNAPSHOT = {
   alerts: [],
 };
 
-const ALERTA = { description: 'Tempestade severa a caminho, procure abrigo.' };
+const ALERTA = {
+  id: 'wx-1',
+  event: 'Tempestade',
+  severity: 'PERIGO',
+  description: 'Tempestade severa a caminho, procure abrigo.',
+};
 
 let onClose: jest.Mock;
 
@@ -139,18 +144,44 @@ describe('ActiveAlertModal, o clima que ele mostra', () => {
     expect(t).toContain('Tempestade severa a caminho, procure abrigo.');
   });
 
-  // Tela de segurança não pode ficar em branco: sem snapshot e sem alerta ela
-  // cai no texto estático em vez de mostrar buraco ou quebrar.
-  it('sem clima nenhum, ainda abre inteiro com o texto padrão', async () => {
+  // Tela de segurança não pode ficar em branco nem mentir: sem snapshot e sem
+  // alerta o procedimento abre inteiro, as medições viram '--' e não há texto
+  // de alerta inventado.
+  it('sem clima nenhum, ainda abre inteiro, sem medição nem texto inventados', async () => {
     mockUseWeather.mockReturnValue({ snapshot: null, activeAlert: null });
 
     const tree = await render();
 
     const t = texto(tree);
     expect(t).toContain('Procedimento de evacuação');
-    expect(t).toContain('17ºC');
-    expect(t).toContain('Chuva Intensa');
-    expect(t).toContain('Risco de desabamentos');
+    expect(t).toContain('Desloque-se para o local de resgate');
+    expect(t).toContain('"--"');
+    expect(t).not.toContain('17ºC');
+    expect(t).not.toContain('Chuva Intensa');
+    expect(t).not.toContain('Risco de desabamentos');
+  });
+
+  it('com clima mas sem alerta, mostra as medições e nenhuma descrição', async () => {
+    mockUseWeather.mockReturnValue({ snapshot: SNAPSHOT, activeAlert: null });
+
+    const t = texto(await render());
+
+    expect(t).toContain('22ºC');
+    expect(t).not.toContain('Tempestade severa a caminho');
+    expect(t).not.toContain('Risco de desabamentos');
+  });
+
+  it('leitura indisponível não é mostrada como medição', async () => {
+    mockUseWeather.mockReturnValue({
+      snapshot: { ...SNAPSHOT, unavailable: true },
+      activeAlert: ALERTA,
+    });
+
+    const t = texto(await render());
+
+    expect(t).not.toContain('22ºC');
+    expect(t).toContain('"--"');
+    expect(t).toContain('Tempestade severa a caminho, procure abrigo.');
   });
 });
 
