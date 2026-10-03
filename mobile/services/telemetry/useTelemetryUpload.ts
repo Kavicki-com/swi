@@ -17,13 +17,18 @@ import {
   type UploadOutcome,
 } from './telemetryUploader';
 
-// Fiação do envio: enquanto a tela de monitoramento está montada, o gravador
-// (mirroredSessionRecorder) põe cada amostra na fila (telemetryOutbox) e este
-// hook manda o uploader (telemetryUploader) drenar. Ao montar, drena o que
-// ficou de uma execução anterior: a fila é arquivo, e sobrevive ao app.
+// Fiação do envio: enquanto está ligado, o gravador (mirroredSessionRecorder)
+// põe cada amostra na fila (telemetryOutbox) e este hook manda o uploader
+// (telemetryUploader) drenar. Ao ligar, drena o que ficou de uma execução
+// anterior: a fila é arquivo, e sobrevive ao app. Quem o monta é a raiz do
+// app (TelemetryUploadProvider), para o envio não depender de tela aberta.
 //
 // Só faz alguma coisa com módulo nativo E credencial do aparelho. Sem os dois
 // não há como autenticar o envio, e tocar a rede seria um 401 por amostra.
+//
+// Limite conhecido: sem credencial nada é drenado, e o arquivo durável do
+// iPhone segue crescendo enquanto o relógio manda remessas. O módulo nativo
+// não expõe limpeza desse arquivo; o teto dele é assunto do lado nativo.
 
 /**
  * Teto de rodadas por drenagem. Cada rodada manda até MAX_BATCH_EVENTS, e um
@@ -55,8 +60,21 @@ export interface TelemetryUploadDeps {
   inboxDrain?: TelemetryInboxDrain;
 }
 
+export interface TelemetryUploadOptions {
+  /**
+   * Liga o envio. A raiz passa falso sem sessão aberta ou fora do piloto;
+   * desligado, nem o chaveiro é consultado. Padrão ligado.
+   */
+  enabled?: boolean;
+  /**
+   * Muda quando a credencial pode ter mudado (pareamento concluído). Cada
+   * valor novo relê o chaveiro e religa o envio, sem remontar nada.
+   */
+  recheckKey?: number;
+}
+
 export interface TelemetryUploadState {
-  /** Módulo nativo presente e credencial guardada ao montar; cai com o 401. */
+  /** Módulo nativo presente e credencial guardada na última leitura; cai com o 401. */
   paired: boolean;
   lastOutcome: UploadOutcome | null;
 }
@@ -69,15 +87,20 @@ const madeProgress = (outcome: UploadOutcome) =>
 export function useTelemetryUpload(
   control: WatchControl = watchControl,
   deps: TelemetryUploadDeps = {},
+  options: TelemetryUploadOptions = {},
 ): TelemetryUploadState {
-  // Lido uma vez por montagem, não a cada render: hasDeviceCredential consulta
-  // o chaveiro. Inicialização preguiçosa de ref, o padrão que o React aceita.
-  const pairedAtMount = useRef<boolean | null>(null);
-  if (pairedAtMount.current === null) {
-    pairedAtMount.current = control.supported && control.hasDeviceCredential();
+  const enabled = options.enabled ?? true;
+  const recheckKey = options.recheckKey ?? 0;
+  // Lido uma vez ao montar e depois só quando ligar ou a chave mudar, nunca a
+  // cada render: hasDeviceCredential consulta o chaveiro. A leitura da
+  // montagem fica guardada para o primeiro efeito não repetir a consulta.
+  const readAtMount = useRef<boolean | null>(null);
+  const mounted = useRef(false);
+  if (!mounted.current && readAtMount.current === null) {
+    readAtMount.current = enabled && control.supported && control.hasDeviceCredential();
   }
   const [state, setState] = useState<TelemetryUploadState>({
-    paired: pairedAtMount.current,
+    paired: readAtMount.current ?? false,
     lastOutcome: null,
   });
   // As dependências injetadas valem para a montagem; trocá-las depois não
@@ -85,14 +108,20 @@ export function useTelemetryUpload(
   const depsRef = useRef(deps);
 
   useEffect(() => {
-    if (!pairedAtMount.current) return undefined;
+    const paired =
+      readAtMount.current ?? (enabled && control.supported && control.hasDeviceCredential());
+    readAtMount.current = null;
+    mounted.current = true;
+    setState((prev) => (prev.paired === paired ? prev : { paired, lastOutcome: null }));
+    if (!paired) return undefined;
     const outbox = depsRef.current.outbox ?? createTelemetryOutbox(createFileOutboxStorage());
     const uploader = depsRef.current.uploader ?? createTelemetryUploader({ outbox, control });
     const inboxDrain =
       depsRef.current.inboxDrain ?? createTelemetryInboxDrain({ control, outbox });
 
-    let mounted = true;
-    // Vira true com o 401 ou com o desmonte: nada mais sai até remontar.
+    let alive = true;
+    // Vira true com o 401 ou com o desligamento: nada mais sai até a
+    // credencial ser relida.
     let halted = false;
     let stop: (() => void) | null = null;
     let draining = false;
@@ -128,11 +157,11 @@ export function useTelemetryUpload(
             )}`,
           );
         }
-        if (!mounted || halted) return;
+        if (!alive || halted) return;
 
         for (let round = 0; round < MAX_DRAIN_ROUNDS; round += 1) {
           const outcome = await uploader.uploadPending();
-          if (!mounted || halted) return;
+          if (!alive || halted) return;
           setState({ paired: outcome.outcome !== 'unpaired', lastOutcome: outcome });
           if (outcome.outcome === 'unpaired') {
             halt();
@@ -172,12 +201,12 @@ export function useTelemetryUpload(
     });
 
     return () => {
-      mounted = false;
+      alive = false;
       clearInterval(ticker);
       subscription.remove();
       halt();
     };
-  }, [control]);
+  }, [control, enabled, recheckKey]);
 
   return state;
 }

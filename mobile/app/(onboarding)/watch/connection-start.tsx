@@ -7,6 +7,7 @@ import { Smartwatch3D } from '../../../components/Smartwatch3D';
 import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
 import { useWatchDiagnostics } from '../../../services/telemetry/watchDiagnostics';
+import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUploadProvider';
 
 // Segunda tela do primeiro uso: espera a sessão espelhada ou a primeira
 // leitura chegar do relógio. Antes daqui havia uma barra que enchia sozinha em
@@ -30,6 +31,13 @@ function WatchConnectionStartScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const estado = useWatchDiagnostics();
+  const { paired } = useTelemetryUploadState();
+  // A etapa seguinte é o pareamento, que o funcionário pode pular. Sem suporte
+  // não há o que parear, e quem já está pareado não repete a etapa.
+  const destino =
+    estado.support === 'unsupported' || paired
+      ? '/(onboarding)/watch/complete'
+      : '/(onboarding)/watch/pairing';
 
   // A saída acontece uma vez só: a leitura pode chegar no mesmo instante em que
   // o teto vence, e duas navegações empilhariam telas.
@@ -37,8 +45,8 @@ function WatchConnectionStartScreen() {
   const seguir = useCallback(() => {
     if (saiu.current) return;
     saiu.current = true;
-    router.replace('/(onboarding)/watch/complete');
-  }, [router]);
+    router.replace(destino);
+  }, [router, destino]);
 
   const chegou =
     estado.support === 'unsupported' ||

@@ -1,3 +1,4 @@
+import type { EnrollmentFailureReason } from './deviceEnrollment';
 import type { WatchProtocol } from '../../modules/swi-watch-control';
 import type { TelemetryAvailability } from './telemetryAvailability';
 
@@ -63,8 +64,9 @@ export function telemetryCopy(
 
 /**
  * Linha de estado do envio ao backend, na tela de monitoramento. Sem
- * pareamento não é erro: parear é ação do administrador no painel, e o
- * funcionário só precisa saber que nada está saindo do aparelho.
+ * pareamento não é erro: o funcionário pareia com o código que o
+ * administrador gera no painel, e até lá só precisa saber que nada está
+ * saindo do aparelho.
  */
 export function telemetryUploadCopy(paired: boolean): string {
   return paired ? 'Enviando ao servidor' : 'Aparelho não pareado';
@@ -82,4 +84,33 @@ export function telemetryUploadCopy(paired: boolean): string {
 export function watchProtocolCopy(watchProtocol: WatchProtocol | null): string | null {
   if (watchProtocol !== 'legacy') return null;
   return 'O app do relógio ainda não atualizou. Abra o SWI no Apple Watch.';
+}
+
+/**
+ * Frase de cada desfecho do pareamento. As quatro recusas do backend têm
+ * conselho próprio; o resto diz o que o funcionário pode fazer, sem culpar o
+ * código quando o problema é outro.
+ */
+export function pairingFailureCopy(reason: EnrollmentFailureReason): string {
+  switch (reason) {
+    case 'expired':
+      return 'Este código expirou. Peça um novo ao administrador.';
+    case 'already_used':
+      return 'Este código já foi usado. Se este aparelho já está pareado, não é preciso repetir.';
+    case 'invalid_code':
+      return 'Código não confere. Confira os seis dígitos com o administrador.';
+    case 'unsupported_device':
+    case 'unsupported':
+      return 'Este aparelho não pode ser pareado.';
+    case 'rate_limited':
+      return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
+    case 'network':
+      return 'Sem conexão com o servidor. Verifique a internet e tente de novo.';
+    case 'unauthorized':
+      return 'Sua sessão expirou. Entre de novo no app para parear.';
+    case 'keychain':
+      return 'Não foi possível guardar o pareamento neste iPhone. Tente de novo.';
+    default:
+      return 'Não foi possível parear agora. Tente de novo em instantes.';
+  }
 }

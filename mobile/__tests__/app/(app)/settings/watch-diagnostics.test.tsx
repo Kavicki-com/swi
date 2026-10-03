@@ -7,14 +7,15 @@ import {
   useWatchDiagnostics,
   type WatchDiagnosticsState,
 } from '../../../../services/telemetry/watchDiagnostics';
-import { useTelemetryUpload } from '../../../../services/telemetry/useTelemetryUpload';
+import { useTelemetryUploadState } from '../../../../services/telemetry/TelemetryUploadProvider';
 
 // Porta de reentrada: quem tocou "Configurar depois" no cadastro, ou negou na
 // folha do sistema, volta por aqui. Mesmo vocabulario da tela final do
 // primeiro uso (CONTEXT.md).
 
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+  useRouter: () => ({ back: jest.fn(), push: mockPush }),
 }));
 
 jest.mock('../../../../services/telemetry/watchDiagnostics', () => ({
@@ -22,14 +23,15 @@ jest.mock('../../../../services/telemetry/watchDiagnostics', () => ({
   activateMonitoring: jest.fn(async () => true),
 }));
 
-// A fiação do envio tem teste próprio; aqui só o que a tela mostra.
-jest.mock('../../../../services/telemetry/useTelemetryUpload', () => ({
-  useTelemetryUpload: jest.fn(),
+// O envio mora na raiz do app e tem teste próprio; aqui só o que a tela
+// mostra do estado que ele publica.
+jest.mock('../../../../services/telemetry/TelemetryUploadProvider', () => ({
+  useTelemetryUploadState: jest.fn(),
 }));
 
 const mockEstado = useWatchDiagnostics as jest.MockedFunction<typeof useWatchDiagnostics>;
 const mockAtivar = activateMonitoring as jest.MockedFunction<typeof activateMonitoring>;
-const mockEnvio = useTelemetryUpload as jest.MockedFunction<typeof useTelemetryUpload>;
+const mockEnvio = useTelemetryUploadState as jest.MockedFunction<typeof useTelemetryUploadState>;
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -112,7 +114,7 @@ const ENCERRADO_COM_LEITURA = (): WatchDiagnosticsState => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockAtivar.mockResolvedValue(true);
-  mockEnvio.mockReturnValue({ paired: false, lastOutcome: null });
+  mockEnvio.mockReturnValue({ paired: false, lastOutcome: null, refreshPairing: jest.fn() });
 });
 
 describe('Configurações, Monitoramento', () => {
@@ -191,7 +193,7 @@ describe('Configurações, Monitoramento', () => {
   // A linha de envio ao backend. A tela de produto é outra; aqui só a prova
   // de que o caminho existe.
   it('pareado diz que está enviando ao servidor', async () => {
-    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null });
+    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null, refreshPairing: jest.fn() });
     expect(textoDe(await render(ATIVO()))).toContain('Enviando ao servidor');
   });
 
@@ -203,5 +205,29 @@ describe('Configurações, Monitoramento', () => {
     const t = textoDe(await render(SEM_SUPORTE));
     expect(t).not.toContain('Enviando ao servidor');
     expect(t).not.toContain('Aparelho não pareado');
+  });
+
+  const botaoParear = (tree: ReturnType<typeof create>) =>
+    tree.root
+      .findAllByType(Button as React.ComponentType<{ label: string; onPress: () => void }>)
+      .find((b) => b.props.label === 'Parear aparelho');
+
+  it('sem pareamento oferece parear, e o botão leva à tela do código', async () => {
+    const tree = await render(SEM_NADA);
+    const botao = botaoParear(tree);
+    expect(botao).toBeDefined();
+    await act(async () => {
+      botao!.props.onPress();
+    });
+    expect(mockPush).toHaveBeenCalledWith('/(onboarding)/watch/pairing?origem=configuracoes');
+  });
+
+  it('pareado não oferece parear de novo', async () => {
+    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null, refreshPairing: jest.fn() });
+    expect(botaoParear(await render(ATIVO()))).toBeUndefined();
+  });
+
+  it('sem suporte não oferece parear', async () => {
+    expect(botaoParear(await render(SEM_SUPORTE))).toBeUndefined();
   });
 });

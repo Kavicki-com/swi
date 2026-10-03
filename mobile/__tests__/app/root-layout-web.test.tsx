@@ -95,6 +95,9 @@ jest.mock('../../services/weather/WeatherProvider', () => ({
 jest.mock('../../services/telemetry/useTelemetrySampler', () => ({
   useTelemetrySampler: () => undefined,
 }));
+jest.mock('../../services/telemetry/TelemetryUploadProvider', () => ({
+  TelemetryUploadProvider: ({ children }: { children: ReactNode }) => children,
+}));
 jest.mock('../../services/positions/usePositionHeartbeat', () => ({
   usePositionHeartbeat: () => undefined,
 }));
