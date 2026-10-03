@@ -230,25 +230,28 @@ describe('Mapa do clima: centro', () => {
 // --- Pinos de alerta ---------------------------------------------------------
 
 describe('Mapa do clima: pinos de alerta', () => {
-  it('desenha os 11 pinos sem depender de toggle algum', async () => {
-    const tree = await montar(); // antes mesmo do defer
+  // Os 11 pinos eram posicoes fixas escritas a mao, sem alerta nenhum por tras,
+  // e todos abriam a janela "Local em Alerta!". Sairam: o mapa nao aponta risco
+  // onde ninguem mediu.
+  it('nao desenha pino de alerta algum, nem antes nem depois do defer', async () => {
+    const tree = await montar();
+    expect(idsCom(tree, 'marker-alert-')).toHaveLength(0);
 
-    expect(idsCom(tree, 'marker-alert-')).toHaveLength(11);
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(idsCom(tree, 'marker-alert-')).toHaveLength(0);
+    expect(idsCom(tree, 'marker-')).toHaveLength(0);
   });
 
-  it('tocar em qualquer pino abre o modal do alerta meteorologico', async () => {
+  it('nada na tela leva a janela do alerta meteorologico', async () => {
     const tree = await montarPronto();
-    const pino = tree.root.findAll(
-      (n) =>
-        typeof n.props?.accessibilityLabel === 'string' &&
-        n.props.accessibilityLabel.startsWith('Alerta ') &&
-        typeof n.props?.onPress === 'function',
-    )[0];
 
-    await tocar(pino);
+    for (const rotulo of ['Operadores', 'Heatmap', 'Câmeras']) {
+      await tocar(porRotulo(tree, rotulo));
+    }
 
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith('/modals/weather-alert');
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 

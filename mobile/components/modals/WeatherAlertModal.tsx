@@ -18,9 +18,8 @@ import { weatherDisplay } from '../../services/weather/weatherFormat';
 // title + row (weather-condition card + weather-data metrics) + body text +
 // "Instruções de segurança" CTA pink/coral.
 //
-// Reusable shape: a rota wrapper em `app/modals/weather-alert.tsx` provê
-// backdrop + animação; non-route call sites (push-notification handler etc.)
-// podem renderizar este body dentro do próprio container.
+// Reusable shape: quem chama (dashboard, notificações) provê backdrop e
+// animação e renderiza este body dentro do próprio container.
 //
 // Card de temperatura segue o mesmo padrão do dashboard-alert-active:
 // fundo `surface.high`, content `justify-end`, ícone de chuva flutuando
@@ -36,10 +35,12 @@ export interface WeatherAlertModalProps {
 export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
   const theme = useTheme();
 
-  // Clima real (Unit 2) com fallback pro texto estático de hoje em
-  // loading/error/sem-alerta — esta é tela de segurança e nunca pode quebrar.
+  // Tudo aqui sai do alerta vigente e da leitura do provider. Quem monta a
+  // janela só o faz com alerta; sem leitura as medições viram '--', e sem
+  // alerta não há nível nem descrição (nada de texto de reserva).
   const { snapshot, activeAlert } = useWeather();
-  const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
+  const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr, levelStr } =
+    weatherDisplay(snapshot, activeAlert);
 
   return (
     <View
@@ -54,9 +55,21 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
         alignItems: 'center',
       }}
     >
-      <Title variant="title.xs" color={theme.content.dark}>
-        Local em Alerta!
-      </Title>
+      {/* Título + nível do alerta ("Tempestade: perigo"), logo abaixo. */}
+      <View style={{ alignItems: 'center', gap: theme.gap.xs }}>
+        <Title variant="title.xs" color={theme.content.dark}>
+          Local em Alerta!
+        </Title>
+        {levelStr ? (
+          <Text
+            variant="body.m"
+            color={theme.content.dark}
+            style={{ textAlign: 'center' }}
+          >
+            {levelStr}
+          </Text>
+        ) : null}
+      </View>
 
       <View
         style={{
@@ -118,13 +131,15 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
       </View>
 
       <View style={{ width: '100%', gap: theme.gap.s }}>
-        <Text
-          variant="body.m"
-          color={theme.content.dark}
-          style={{ textAlign: 'center' }}
-        >
-          {descStr}
-        </Text>
+        {descStr ? (
+          <Text
+            variant="body.m"
+            color={theme.content.dark}
+            style={{ textAlign: 'center' }}
+          >
+            {descStr}
+          </Text>
+        ) : null}
 
         <Button
           variant="contained"

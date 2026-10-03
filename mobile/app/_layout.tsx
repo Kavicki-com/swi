@@ -222,7 +222,6 @@ function AppRoot() {
                 <Stack.Screen name="(app)" />
                 <Stack.Screen name="modals/support-form" options={{ presentation: 'transparentModal' }} />
                 <Stack.Screen name="modals/privacy-policy" options={{ presentation: 'transparentModal' }} />
-                <Stack.Screen name="modals/weather-alert" options={{ presentation: 'transparentModal' }} />
               </Stack>
             </View>
             </TelemetryUploadProvider>

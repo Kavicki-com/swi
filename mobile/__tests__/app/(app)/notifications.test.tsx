@@ -40,6 +40,13 @@ jest.mock('../../../services/notifications/NotificationProvider', () => ({
   useNotifications: () => mockEstado,
 }));
 
+// A janela do clima só abre com alerta vigente; cada teste liga ou desliga.
+const ALERTA = { id: 'wx-1', event: 'Tempestade', severity: 'PERIGO', description: 'Procure abrigo.' };
+let mockAlertaVigente: typeof ALERTA | null = ALERTA;
+jest.mock('../../../services/weather/WeatherProvider', () => ({
+  useWeather: () => ({ snapshot: null, activeAlert: mockAlertaVigente }),
+}));
+
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
 
 jest.mock('../../../components/modals/WeatherAlertModal', () => {
@@ -152,6 +159,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockNotificacoesLigadas = true;
   mockEstado = estado();
+  mockAlertaVigente = ALERTA;
 });
 
 // --- Gate --------------------------------------------------------------------
@@ -301,6 +309,52 @@ describe('Notificacoes: roteamento por dominio', () => {
     expect(mockMarkRead).toHaveBeenCalledWith('w');
     expect(mockPush).not.toHaveBeenCalled();
     expect(porTestID(tree, 'modal-clima')).toBeDefined();
+  });
+
+  // A notificacao fica na lista depois que o alerta acaba. Tocar nela entao
+  // so marca como lida: abrir "Local em Alerta!" sem alerta seria afirmar um
+  // risco que ja passou.
+  it('weather sem alerta vigente so marca lida: nao abre janela nem navega', async () => {
+    mockAlertaVigente = null;
+    mockEstado = estado({
+      notifications: [notif({ id: 'w', title: 'Tempestade', domain: 'weather' })],
+      unreadCount: 1,
+    });
+    const tree = await montar();
+
+    await tocar(porRotulo(tree, 'Tempestade (não lida)'));
+
+    expect(mockMarkRead).toHaveBeenCalledWith('w');
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(porTestID(tree, 'modal-clima')).toBeUndefined();
+    expect(porTestID(tree, 'modal-alerta-ativo').props.visible).toBe(false);
+  });
+
+  it('alerta que expira com a janela aberta fecha a janela', async () => {
+    mockEstado = estado({
+      notifications: [notif({ id: 'w', title: 'Tempestade', domain: 'weather' })],
+      unreadCount: 1,
+    });
+    const arvore = () => (
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <SwiThemeProvider>
+          <Notifications />
+        </SwiThemeProvider>
+      </SafeAreaProvider>
+    );
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(arvore());
+    });
+    await tocar(porRotulo(tree, 'Tempestade (não lida)'));
+    expect(porTestID(tree, 'modal-clima')).toBeDefined();
+
+    mockAlertaVigente = null;
+    await act(async () => {
+      tree.update(arvore());
+    });
+
+    expect(porTestID(tree, 'modal-clima')).toBeUndefined();
   });
 
   it('o icone de opcoes leva ao mesmo destino do card', async () => {

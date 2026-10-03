@@ -29,8 +29,9 @@ export function AlertActiveView() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  // Clima real (Unit 2) com fallback pro texto estático de hoje em
-  // loading/error/sem-alerta: esta é tela de segurança e nunca pode quebrar.
+  // Clima real do provider. Esta é tela de segurança e abre mesmo sem clima:
+  // sem leitura as medições viram '--', e sem alerta não há descrição. Nada de
+  // valor ou texto inventado.
   const { snapshot, activeAlert } = useWeather();
   const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
 
@@ -141,14 +142,16 @@ export function AlertActiveView() {
           </View>
         </View>
 
-        {/* Description */}
-        <Text
-          variant="body.s"
-          color={theme.content.dark}
-          style={{ textAlign: 'center' }}
-        >
-          {descStr}
-        </Text>
+        {/* Description: só existe com alerta vigente. */}
+        {descStr ? (
+          <Text
+            variant="body.s"
+            color={theme.content.dark}
+            style={{ textAlign: 'center' }}
+          >
+            {descStr}
+          </Text>
+        ) : null}
 
         {/* Instructions list */}
         <View style={{ gap: theme.gap.m }}>

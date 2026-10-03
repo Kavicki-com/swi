@@ -59,8 +59,11 @@ jest.mock('../../../services/notifications/NotificationProvider', () => ({
 jest.mock('../../../services/reports/ReportsProvider', () => ({
   useReports: () => ({ reports: [], load: jest.fn(async () => {}) }),
 }));
+// A janela do clima só existe com alerta vigente; cada teste liga ou desliga.
+const ALERTA = { id: 'wx-1', event: 'Tempestade', severity: 'PERIGO', description: 'Procure abrigo.' };
+let mockAlertaVigente: typeof ALERTA | null = ALERTA;
 jest.mock('../../../services/weather/WeatherProvider', () => ({
-  useWeather: () => ({ snapshot: null, activeAlert: null }),
+  useWeather: () => ({ snapshot: null, activeAlert: mockAlertaVigente }),
 }));
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
 
@@ -142,6 +145,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockSearchParams = {};
   mockVitalsState = { phase: 'ready', vitals: VITALS, status: 'good' };
+  mockAlertaVigente = ALERTA;
 });
 
 afterEach(() => {
@@ -225,6 +229,43 @@ describe('dashboard: alerta que chega pela rota (?alert=modal)', () => {
 
     expect(mockReplace).toHaveBeenCalledWith('/(app)/dashboard?alert=active');
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  // O link pode chegar velho: a notificacao foi tocada depois que o alerta
+  // acabou. Sem alerta vigente nao ha janela nem fundo vermelho.
+  it('sem alerta vigente, o link nao mostra a janela nem pinta o fundo', async () => {
+    const normal = primeiraParadaDoFundo(await montar());
+
+    mockAlertaVigente = null;
+    mockSearchParams = { alert: 'modal' };
+    const tree = await montar();
+    await act(async () => {
+      jest.advanceTimersByTime(800);
+    });
+
+    expect(porTestID(tree, 'modal-clima')).toBeUndefined();
+    expect(primeiraParadaDoFundo(tree)).toBe(normal);
+  });
+
+  it('alerta que expira com a janela aberta leva a janela e o vermelho embora', async () => {
+    const normal = primeiraParadaDoFundo(await montar());
+    mockSearchParams = { alert: 'modal' };
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(arvore());
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(800);
+    });
+    expect(porTestID(tree, 'modal-clima')).toBeDefined();
+
+    mockAlertaVigente = null;
+    await act(async () => {
+      tree.update(arvore());
+    });
+
+    expect(porTestID(tree, 'modal-clima')).toBeUndefined();
+    expect(primeiraParadaDoFundo(tree)).toBe(normal);
   });
 });
 
@@ -314,6 +355,36 @@ describe('dashboard: alerta pedido pelo botao de ajuda urgente', () => {
     });
 
     expect(porTestID(tree, 'modal-alerta-ativo').props.visible).toBe(false);
+  });
+
+  // Pedir ajuda nao depende do clima. Sem alerta vigente, a janela "Local em
+  // Alerta!" nao tem o que afirmar: o botao vai direto ao procedimento.
+  it('sem alerta vigente, pula a janela do clima e abre direto o procedimento', async () => {
+    mockAlertaVigente = null;
+    const tree = await montar();
+
+    await pedirAjuda(tree);
+
+    expect(porTestID(tree, 'modal-clima')).toBeUndefined();
+    expect(porTestID(tree, 'modal-alerta-ativo').props.visible).toBe(true);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('alerta que expira com a janela aberta fecha a janela', async () => {
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(arvore());
+    });
+    await pedirAjuda(tree);
+    expect(porTestID(tree, 'modal-clima')).toBeDefined();
+
+    mockAlertaVigente = null;
+    await act(async () => {
+      tree.update(arvore());
+    });
+
+    expect(porTestID(tree, 'modal-clima')).toBeUndefined();
   });
 });
 

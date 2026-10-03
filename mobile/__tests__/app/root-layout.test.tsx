@@ -287,7 +287,7 @@ describe('RootLayout: configuração do Stack', () => {
     });
   });
 
-  it('declara os três grupos de rota e os três modais', async () => {
+  it('declara os três grupos de rota e os dois modais', async () => {
     const tree = await render();
 
     expect(screens(tree).map((s) => s.name)).toEqual([
@@ -296,15 +296,14 @@ describe('RootLayout: configuração do Stack', () => {
       '(app)',
       'modals/support-form',
       'modals/privacy-policy',
-      'modals/weather-alert',
     ]);
   });
 
-  it('os três modais são apresentados por cima da tela, sem cobri-la', async () => {
+  it('os dois modais são apresentados por cima da tela, sem cobri-la', async () => {
     const tree = await render();
     const modais = screens(tree).filter((s) => s.name.startsWith('modals/'));
 
-    expect(modais).toHaveLength(3);
+    expect(modais).toHaveLength(2);
     modais.forEach((m) => expect(m.options?.presentation).toBe('transparentModal'));
   });
 });

@@ -131,30 +131,3 @@ export const CAMERA_LOCATIONS: readonly CameraMarker[] = [
   { id: 'cam-11', lng: -46.615, lat: -23.562, name: 'Câmera Sul Leste 2' },
   { id: 'cam-12', lng: -46.63, lat: -23.564, name: 'Câmera Sul Periferia' },
 ];
-
-// ----------------------------------------------------------------------
-// Weather alert pins — 11 pontos com distribuição determinística:
-// 6 good (success/green) + 2 alert
-// (warning/orange) + 3 low (error/pink). DS LocationPin badge variant
-// mapeia: good→#3EAB2E, alert→#EF8600, low→#F5667A.
-// ----------------------------------------------------------------------
-export interface WeatherAlertPin {
-  id: string;
-  lng: number;
-  lat: number;
-  status: PinStatus;
-}
-
-export const WEATHER_ALERT_PINS: readonly WeatherAlertPin[] = [
-  { id: 'wx-01', lng: -46.64, lat: -23.542, status: 'good' },
-  { id: 'wx-02', lng: -46.626, lat: -23.543, status: 'good' },
-  { id: 'wx-03', lng: -46.618, lat: -23.547, status: 'good' },
-  { id: 'wx-04', lng: -46.636, lat: -23.55, status: 'good' },
-  { id: 'wx-05', lng: -46.622, lat: -23.554, status: 'good' },
-  { id: 'wx-06', lng: -46.629, lat: -23.557, status: 'good' },
-  { id: 'wx-07', lng: -46.643, lat: -23.555, status: 'alert' },
-  { id: 'wx-08', lng: -46.615, lat: -23.558, status: 'alert' },
-  { id: 'wx-09', lng: -46.638, lat: -23.562, status: 'low' },
-  { id: 'wx-10', lng: -46.624, lat: -23.564, status: 'low' },
-  { id: 'wx-11', lng: -46.612, lat: -23.561, status: 'low' },
-];

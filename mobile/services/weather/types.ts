@@ -12,9 +12,22 @@ export interface WeatherCurrent {
   windKmh: number;
 }
 export interface WeatherDaily { minC: number; maxC: number; }
+export interface WeatherHourly {
+  at: string;                // ISO datetime da hora cheia
+  tempC: number;
+  condition: WeatherCondition;
+  isDay?: boolean;
+}
+export type WeatherAlertKind = 'CHUVA_INTENSA' | 'TEMPESTADE' | 'SOL_INTENSO';
+// ATENCAO pede cuidado; PERIGO pede interromper a atividade exposta.
+export type WeatherAlertSeverity = 'ATENCAO' | 'PERIGO';
 export interface WeatherAlert {
   id: string;
-  event: string;             // "Tempestade severa"
+  // kind e severity são opcionais aqui (no backend são obrigatórios): backend
+  // antigo e o mock podem não mandar, e a tela precisa seguir de pé.
+  kind?: WeatherAlertKind;
+  severity?: WeatherAlertSeverity;
+  event: string;             // título curto, pronto pra tela: "Tempestade"
   description: string;
   startsAt: string;          // ISO datetime
   endsAt: string;            // ISO datetime
@@ -22,8 +35,16 @@ export interface WeatherAlert {
 export interface WeatherSnapshot {
   current: WeatherCurrent;
   daily: WeatherDaily;
+  hourly?: WeatherHourly[];
   alerts: WeatherAlert[];    // vazio = sem alerta ativo
   fetchedAt: string;         // ISO datetime
+  // A fonte falhou agora e a resposta repete a última leitura boa.
+  stale?: boolean;
+  // A fonte falhou e não há leitura boa: current/daily/hourly são valores de
+  // reserva, que a tela NÃO mostra como medição.
+  unavailable?: boolean;
+  // Há alerta de demonstração na resposta. Nunca verdadeiro em produção.
+  demo?: boolean;
 }
 
 export interface WeatherBackend {

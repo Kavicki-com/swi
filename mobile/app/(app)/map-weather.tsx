@@ -12,7 +12,6 @@
 // screen visually consistent with the admin Dashboard MapBanner.
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import {
   Icon,
   LocationPin,
@@ -29,7 +28,6 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 import {
   CAMERA_LOCATIONS,
   USER_LOCATION,
-  WEATHER_ALERT_PINS,
   WORKER_LOCATIONS,
 } from '@/lib/mapMockData';
 
@@ -89,7 +87,6 @@ export default function MapWeather() {
 function MapWeatherScreen() {
   const theme = useTheme();
   const { coords } = useLocation();
-  const router = useRouter();
 
   // é simple toggle; tap liga, tap de novo desliga. `showHeatmap=true` por
   // useEffect (defer pattern). Sem o defer, 2 heatmap layers (storm + flood)
@@ -147,8 +144,6 @@ function MapWeatherScreen() {
     };
   }, []);
 
-  const openAlertModal = () => router.push('/modals/weather-alert');
-
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <MapView center={coords} zoom={13}>
@@ -188,29 +183,6 @@ function MapWeatherScreen() {
             }}
           />
         )}
-
-        {/* 11 geo-positioned alert pins (always visible, no toggle).
-            Pressable wrap dispara o /modals/weather-alert em qualquer tap. */}
-        {WEATHER_ALERT_PINS.map((p) => (
-          <MapMarker
-            key={p.id}
-            id={`alert-${p.id}`}
-            coordinate={[p.lng, p.lat]}
-          >
-              <Pressable
-                onPress={openAlertModal}
-                accessibilityRole="button"
-                accessibilityLabel={`Alerta ${p.status}`}
-              >
-                <LocationPin
-                  variant="badge"
-                  status={p.status}
-                  size={40}
-                  name={`Alerta ${p.status}`}
-                />
-              </Pressable>
-          </MapMarker>
-        ))}
 
         {/* Operators overlay — 7 WORKER_LOCATIONS quando toggle ligado. */}
         {showOperators &&
