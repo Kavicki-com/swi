@@ -1,8 +1,7 @@
 import { ActivityIndicator, View } from 'react-native';
 import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system';
 
-// State views for the Relatórios screens. Mirrors the vitals state views
-// (components/vitals/Vitals{Loading,Empty,Error}State.tsx): full-screen-ish
+// State views for the Relatórios screens: full-screen-ish
 // centered views that COMPOSE DS primitives (Title + Text + Button) + the RN
 // ActivityIndicator (no DS spinner primitive exists). All spacing/colors via
 // useTheme() — no hardcoded tokens. This orchestrates DS primitives; it does
