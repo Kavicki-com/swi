@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { describeError } from '../../common/describe-error'
 
 /**
  * Prazo do cache de destinatários. Curto de propósito: administrador recém
@@ -43,7 +44,7 @@ export class TelemetryAudienceService {
       const admins = await this.adminsOf(companyId)
       return [workerId, ...admins.filter((id) => id !== workerId)]
     } catch (error) {
-      this.logger.warn(`Falha ao resolver destinatários da telemetria: ${(error as Error).message}`)
+      this.logger.warn(`Falha ao resolver destinatários da telemetria: ${describeError(error)}`)
       return [workerId]
     }
   }

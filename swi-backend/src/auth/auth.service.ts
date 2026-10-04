@@ -5,6 +5,7 @@ import { UsersService } from '../users/users.service'
 import { MailService } from '../mail/mail.service'
 import { randomBytes } from 'node:crypto'
 import { generateCode, hash, verifyHash, DUMMY_HASH } from './codes'
+import { describeError } from '../common/describe-error'
 
 const CODE_TTL_MIN = 30
 
@@ -97,7 +98,7 @@ export class AuthService {
         await this.prisma.profile.deleteMany({ where: { userId: user.id } })
         await this.prisma.user.delete({ where: { id: user.id } })   // sem órfão
       } catch (delErr) {
-        this.logger.error(`falha ao reverter usuário órfão ${user.id}: ${String(delErr)}`)
+        this.logger.error(`falha ao reverter usuário órfão ${user.id}: ${describeError(delErr)}`)
       }
       throw err
     }
@@ -229,12 +230,12 @@ export class AuthService {
         await this.prisma.profile.deleteMany({ where: { userId: user.id } })
         await this.prisma.user.delete({ where: { id: user.id } })
       } catch (delErr) {
-        this.logger.error(`falha ao reverter admin órfão ${user.id}: ${String(delErr)}`)
+        this.logger.error(`falha ao reverter admin órfão ${user.id}: ${describeError(delErr)}`)
       }
       try {
         await this.prisma.company.delete({ where: { id: company.id } })
       } catch (delErr) {
-        this.logger.error(`falha ao reverter Company órfã ${company.id}: ${String(delErr)}`)
+        this.logger.error(`falha ao reverter Company órfã ${company.id}: ${describeError(delErr)}`)
       }
       throw err
     }

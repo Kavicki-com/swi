@@ -1,5 +1,6 @@
-import { IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Length, Matches, Max, Min, MinLength, ValidateIf } from 'class-validator'
+import { IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Length, Matches, Max, Min, ValidateIf } from 'class-validator'
 import { IsCalendarDate } from '../profile/is-calendar-date'
+import { IsNewPassword } from '../auth/password-rule'
 
 // Handle visível (@username no chat e no perfil). Formato fechado JÁ, antes de
 // qualquer login por username: minúsculas, dígitos, ponto e underscore, 3-30.
@@ -8,7 +9,8 @@ import { IsCalendarDate } from '../profile/is-calendar-date'
 const USERNAME_RE = /^[a-z0-9._]{3,30}$/
 
 
-// Cadastro de usuário pelo painel (ADMIN). Senha definida pelo admin (mín. 8);
+// Cadastro de usuário pelo painel (ADMIN). Senha definida pelo admin, na regra
+// única da senha nova (auth/password-rule.ts);
 // role restrito a WORKER/ADMIN. Campos de identidade opcionais vão pro Profile,
 // junto dos dados de saúde declaratórios que o formulário renderiza: sem eles
 // aqui, a whitelist do ValidationPipe os descartava e o cadastro jogava fora o
@@ -19,7 +21,7 @@ const USERNAME_RE = /^[a-z0-9._]{3,30}$/
 export class CreateUserDto {
   @IsString() @IsNotEmpty() name!: string
   @IsEmail() email!: string
-  @IsString() @MinLength(8) password!: string
+  @IsNewPassword() password!: string
   @IsIn(['WORKER', 'ADMIN']) role!: 'WORKER' | 'ADMIN'
   @IsOptional() @IsString() phone?: string
   @IsOptional() @IsString() cpf?: string

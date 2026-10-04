@@ -1,10 +1,12 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Logger, NotFoundException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { UsersService } from './users.service'
 
 const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn() }, exam: { create: jest.fn() } }) as any
 // Espelha a convenção do work-orders.service.spec: presignGet devolve 'signed:<key>'.
 const media = () => ({ presignGet: jest.fn((k: string) => Promise.resolve('signed:' + k)) }) as any
+// Só o que o service usa do gateway: derrubar as conexões de quem perde o acesso.
+const realtime = () => ({ disconnectUser: jest.fn() }) as any
 
 // Escopo por empresa: TODA leitura e mutação de usuário é escopada pela empresa
 // do requisitante, então uma empresa não enxerga nem mexe em usuários de outra.
@@ -15,7 +17,7 @@ describe('UsersService', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
     db.user.update.mockResolvedValue({ id: 'u1', approvalStatus: 'APPROVED' })
-    const svc = new UsersService(db, media())
+    const svc = new UsersService(db, media(), realtime())
     const r = await svc.approve('u1', 'org1')
     expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { approvalStatus: 'APPROVED' } })
     expect(r.approvalStatus).toBe('APPROVED')
@@ -24,20 +26,20 @@ describe('UsersService', () => {
   it('approve() lança NotFound quando usuário não existe', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
-    await expect(new UsersService(db, media()).approve('nope', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).approve('nope', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
 
   it('approve() de usuário de OUTRA empresa → NotFound sem tocar no update', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org2' })
-    await expect(new UsersService(db, media()).approve('u1', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).approve('u1', 'org1')).rejects.toBeInstanceOf(NotFoundException)
     expect(db.user.update).not.toHaveBeenCalled()
   })
 
   it('listPending() escopa por empresa além do PENDING', async () => {
     const db = prisma()
     db.user.findMany = jest.fn().mockResolvedValue([{ id: 'u1', email: 'a@b.c', name: 'A', createdAt: new Date(0) }])
-    const r = await new UsersService(db, media()).listPending('org1')
+    const r = await new UsersService(db, media(), realtime()).listPending('org1')
     const args = db.user.findMany.mock.calls[0][0]
     expect(args.where).toEqual({ approvalStatus: 'PENDING', companyId: 'org1' })
     expect(args.orderBy).toEqual({ createdAt: 'asc' })
@@ -59,7 +61,7 @@ describe('UsersService', () => {
         },
       },
     ])
-    const [row] = await new UsersService(db, media()).listPending('org1')
+    const [row] = await new UsersService(db, media(), realtime()).listPending('org1')
     expect(row).toMatchObject({
       cpf: '000.000.000-00',
       phone: '(41) 90000-0000',
@@ -77,7 +79,7 @@ describe('UsersService', () => {
     db.user.findMany = jest.fn().mockResolvedValue([
       { id: 'u1', email: 'a@b.c', name: 'A', createdAt: new Date(0), profile: { cpf: '', bloodType: null } },
     ])
-    const [row] = await new UsersService(db, media()).listPending('org1')
+    const [row] = await new UsersService(db, media(), realtime()).listPending('org1')
     expect(row.cpf).toBeNull()
     expect(row.bloodType).toBeNull()
     expect(row.avatar).toBe('')
@@ -87,7 +89,7 @@ describe('UsersService', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
     db.user.update.mockResolvedValue({ id: 'u1', approvalStatus: 'REJECTED' })
-    const r = await new UsersService(db, media()).reject('u1', 'org1')
+    const r = await new UsersService(db, media(), realtime()).reject('u1', 'org1')
     expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { approvalStatus: 'REJECTED' } })
     expect(r.approvalStatus).toBe('REJECTED')
   })
@@ -95,7 +97,7 @@ describe('UsersService', () => {
   it('reject() de usuário de outra empresa → NotFound', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org2' })
-    await expect(new UsersService(db, media()).reject('u1', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).reject('u1', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
 
   // ---------------- list ----------------
@@ -123,7 +125,7 @@ describe('UsersService', () => {
         },
       },
     ])
-    const svc = new UsersService(db, media())
+    const svc = new UsersService(db, media(), realtime())
     const r = await svc.list('org1', 'WORKER', 'APPROVED')
     expect(db.user.findMany).toHaveBeenCalledWith({
       where: { companyId: 'org1', role: 'WORKER', approvalStatus: 'APPROVED' },
@@ -152,7 +154,7 @@ describe('UsersService', () => {
   it('list() sem filtros ainda escopa pela empresa', async () => {
     const db = prisma()
     db.user.findMany.mockResolvedValue([])
-    await new UsersService(db, media()).list('org1')
+    await new UsersService(db, media(), realtime()).list('org1')
     expect(db.user.findMany).toHaveBeenCalledWith({
       where: { companyId: 'org1' },
       include: { profile: true },
@@ -164,7 +166,7 @@ describe('UsersService', () => {
   it('list() com companyId null escopa o balde legado (companyId IS NULL)', async () => {
     const db = prisma()
     db.user.findMany.mockResolvedValue([])
-    await new UsersService(db, media()).list(null)
+    await new UsersService(db, media(), realtime()).list(null)
     expect(db.user.findMany.mock.calls[0][0].where).toEqual({ companyId: null })
   })
 
@@ -184,7 +186,7 @@ describe('UsersService', () => {
         profile: null,
       },
     ])
-    const r = await new UsersService(db, media()).list('org1')
+    const r = await new UsersService(db, media(), realtime()).list('org1')
     expect(r[0]).toEqual({
       id: 'u2',
       name: 'W2',
@@ -206,7 +208,7 @@ describe('UsersService', () => {
 
   it('list() rejeita role inválido com BadRequest', async () => {
     const db = prisma()
-    await expect(new UsersService(db, media()).list('org1', 'BOSS' as any)).rejects.toBeInstanceOf(BadRequestException)
+    await expect(new UsersService(db, media(), realtime()).list('org1', 'BOSS' as any)).rejects.toBeInstanceOf(BadRequestException)
   })
 
   // ---------------- getOne ----------------
@@ -236,7 +238,7 @@ describe('UsersService', () => {
       company: { id: 'c1', name: 'ACME' },
       exams: [],
     })
-    const r = await new UsersService(db, media()).getOne('a1', 'c1')
+    const r = await new UsersService(db, media(), realtime()).getOne('a1', 'c1')
     expect(db.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'a1' },
       include: { profile: true, company: true, exams: { orderBy: { date: 'desc' } } },
@@ -296,7 +298,7 @@ describe('UsersService', () => {
         { id: 'e2', name: 'Audiometria', date: new Date('2026-11-02T00:00:00.000Z'), fileKey: 'exams/11111111-2222-3333-4444-555555555555.jpg' },
       ],
     })
-    const r = await new UsersService(db, media()).getOne('w1', 'c1')
+    const r = await new UsersService(db, media(), realtime()).getOne('w1', 'c1')
     // Mesma ordem do ProfileService.listExams, validade mais distante primeiro.
     // App e painel listando o MESMO histórico em ordens diferentes é problema
     // de confiança, não detalhe cosmético.
@@ -318,7 +320,7 @@ describe('UsersService', () => {
       username: null,
       createdAt: new Date(0), profile: null, company: null, exams: [],
     })
-    const r = await new UsersService(db, media()).getOne('w2', 'c1')
+    const r = await new UsersService(db, media(), realtime()).getOne('w2', 'c1')
     // toHaveProperty e não toMatchObject: undefined tem que reprovar, e não
     // passar despercebido como "campo opcional que a tela trata".
     expect(r).toHaveProperty('exams', [])
@@ -327,13 +329,13 @@ describe('UsersService', () => {
   it('getOne() lança NotFound quando usuário não existe', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
-    await expect(new UsersService(db, media()).getOne('nope', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).getOne('nope', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
 
   it('getOne() de usuário de outra empresa → NotFound (não vaza detalhe)', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'a1', companyId: 'org2', profile: null, company: null, createdAt: new Date(0) })
-    await expect(new UsersService(db, media()).getOne('a1', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).getOne('a1', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
 })
 
@@ -344,7 +346,7 @@ describe('UsersService.create', () => {
       .mockResolvedValueOnce(null)                          // findByEmail: não existe
       .mockResolvedValueOnce({ id: 'adm', companyId: 'c1' }) // findById(admin)
     db.user.create.mockResolvedValue({ id: 'new', name: 'Zé', email: 'ze@x.com', role: 'WORKER', approvalStatus: 'APPROVED', active: true, companyRole: null, createdAt: new Date(0), profile: null })
-    const svc = new UsersService(db, media())
+    const svc = new UsersService(db, media(), realtime())
     const created = await svc.create('adm', { name: 'Zé', email: 'ze@x.com', password: 'senha123', role: 'WORKER', phone: '11', cpf: '123', birthDate: '1990-05-04' })
     expect(created.active).toBe(true)
     const arg = db.user.create.mock.calls[0][0]
@@ -356,19 +358,19 @@ describe('UsersService.create', () => {
   })
   it('email já cadastrado → ConflictException', async () => {
     const db = prisma(); db.user.findUnique.mockResolvedValueOnce({ id: 'x' })
-    await expect(new UsersService(db, media()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })).rejects.toBeInstanceOf(ConflictException)
+    await expect(new UsersService(db, media(), realtime()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })).rejects.toBeInstanceOf(ConflictException)
   })
   it('corrida: P2002 do create vira ConflictException', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'adm', companyId: 'c1' })
     db.user.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'x' }))
-    await expect(new UsersService(db, media()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })).rejects.toBeInstanceOf(ConflictException)
+    await expect(new UsersService(db, media(), realtime()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })).rejects.toBeInstanceOf(ConflictException)
   })
   it('admin sem empresa → companyId null', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'adm', companyId: null })
     db.user.create.mockResolvedValue({ id: 'n', name: 'Z', email: 'z@x.com', role: 'WORKER', approvalStatus: 'APPROVED', active: true, companyRole: null, createdAt: new Date(0), profile: null })
-    await new UsersService(db, media()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })
+    await new UsersService(db, media(), realtime()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })
     expect(db.user.create.mock.calls[0][0].data.companyId).toBeNull()
   })
 })
@@ -390,7 +392,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(alvo)
     db.user.update.mockResolvedValue(salvo())
-    await new UsersService(db, media()).update('u1', { name: 'Ana Maria' }, 'admin', 'org1')
+    await new UsersService(db, media(), realtime()).update('u1', { name: 'Ana Maria' }, 'admin', 'org1')
     const arg = db.user.update.mock.calls[0][0]
     expect(arg.where).toEqual({ id: 'u1' })
     expect(arg.data.name).toBe('Ana Maria')
@@ -406,7 +408,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(alvo)
     db.user.update.mockResolvedValue(salvo())
-    await new UsersService(db, media()).update(
+    await new UsersService(db, media(), realtime()).update(
       'u1',
       { gender: 'Feminino', bloodType: 'O-', allergies: 'Dipirona', chronicConditions: 'Asma' },
       'admin',
@@ -421,7 +423,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(alvo)
     db.user.update.mockResolvedValue(salvo())
-    await new UsersService(db, media()).update('u1', { birthDate: '1990-05-04' }, 'admin', 'org1')
+    await new UsersService(db, media(), realtime()).update('u1', { birthDate: '1990-05-04' }, 'admin', 'org1')
     expect(db.user.update.mock.calls[0][0].data.profile.upsert.update.birthDate).toEqual(new Date('1990-05-04'))
   })
 
@@ -430,7 +432,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(alvo)
     db.user.update.mockResolvedValue(salvo({ active: false }))
-    const r = await new UsersService(db, media()).update('u1', { active: false }, 'admin', 'org1')
+    const r = await new UsersService(db, media(), realtime()).update('u1', { active: false }, 'admin', 'org1')
     const arg = db.user.update.mock.calls[0][0]
     expect(arg.data.active).toBe(false)
     expect(arg.data.profile).toBeUndefined() // nada de perfil quando nenhum campo de perfil veio
@@ -440,7 +442,7 @@ describe('UsersService.update', () => {
   it('desativar a si mesmo → BadRequest, sem tocar no banco', async () => {
     const db = prisma()
     await expect(
-      new UsersService(db, media()).update('me', { active: false }, 'me', 'org1'),
+      new UsersService(db, media(), realtime()).update('me', { active: false }, 'me', 'org1'),
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(db.user.update).not.toHaveBeenCalled()
   })
@@ -450,7 +452,7 @@ describe('UsersService.update', () => {
     db.user.findUnique.mockResolvedValue({ id: 'me', companyId: 'org1' })
     db.user.update.mockResolvedValue(salvo({ id: 'me', active: true }))
     await expect(
-      new UsersService(db, media()).update('me', { active: true }, 'me', 'org1'),
+      new UsersService(db, media(), realtime()).update('me', { active: true }, 'me', 'org1'),
     ).resolves.toEqual(expect.objectContaining({ active: true }))
   })
 
@@ -458,7 +460,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org2' })
     await expect(
-      new UsersService(db, media()).update('u1', { name: 'X' }, 'admin', 'org1'),
+      new UsersService(db, media(), realtime()).update('u1', { name: 'X' }, 'admin', 'org1'),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(db.user.update).not.toHaveBeenCalled()
   })
@@ -467,7 +469,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(alvo)
     db.user.update.mockResolvedValue(salvo())
-    await new UsersService(db, media()).update('u1', {}, 'admin', 'org1')
+    await new UsersService(db, media(), realtime()).update('u1', {}, 'admin', 'org1')
     expect(db.user.update.mock.calls[0][0].data.profile).toBeUndefined()
   })
 
@@ -479,7 +481,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(alvo)
     db.user.update.mockResolvedValue(salvo())
-    await new UsersService(db, media()).update('u1', { birthDate: null } as never, 'admin', 'org1')
+    await new UsersService(db, media(), realtime()).update('u1', { birthDate: null } as never, 'admin', 'org1')
     expect(db.user.update.mock.calls[0][0].data.profile).toBeUndefined()
   })
 
@@ -487,7 +489,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(alvo)
     db.user.update.mockResolvedValue(salvo())
-    await new UsersService(db, media()).update('u1', { allergies: null } as never, 'admin', 'org1')
+    await new UsersService(db, media(), realtime()).update('u1', { allergies: null } as never, 'admin', 'org1')
     expect(db.user.update.mock.calls[0][0].data.profile.upsert.update.allergies).toBeNull()
   })
 
@@ -495,7 +497,7 @@ describe('UsersService.update', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(alvo)
     db.user.update.mockResolvedValue(salvo())
-    await new UsersService(db, media()).update(
+    await new UsersService(db, media(), realtime()).update(
       'u1',
       { cep: '01310-100', street: 'Av. Paulista', number: '1000', complement: 'Bloco B', neighborhood: 'Bela Vista', city: 'São Paulo', uf: 'SP' },
       'admin',
@@ -518,7 +520,7 @@ describe('UsersService.create com dados de saúde', () => {
       id: 'u9', name: 'Ana', email: 'ana@empresa.com.br', role: 'WORKER', approvalStatus: 'APPROVED',
       active: true, companyRole: null, createdAt: new Date('2026-01-05T00:00:00Z'), profile: null,
     })
-    await new UsersService(db, media()).create('admin', {
+    await new UsersService(db, media(), realtime()).create('admin', {
       name: 'Ana', email: 'ana@empresa.com.br', password: 'senha-forte', role: 'WORKER',
       gender: 'Feminino', bloodType: 'O-', allergies: 'Dipirona', chronicConditions: 'Asma',
     })
@@ -535,19 +537,19 @@ describe('UsersService.update: herança do setActive', () => {
   it('id inexistente → NotFound', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
-    await expect(new UsersService(db, media()).update('ghost', { active: false }, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).update('ghost', { active: false }, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
   it('corrida: P2025 do update ainda vira NotFound', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
     db.user.update.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('nf', { code: 'P2025', clientVersion: 'x' }))
-    await expect(new UsersService(db, media()).update('u1', { active: false }, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).update('u1', { active: false }, 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
 })
 
 describe('UsersService.remove', () => {
   it('excluir a si mesmo → BadRequest', async () => {
-    await expect(new UsersService(prisma(), media()).remove('me', 'me', 'org1')).rejects.toBeInstanceOf(BadRequestException)
+    await expect(new UsersService(prisma(), media(), realtime()).remove('me', 'me', 'org1')).rejects.toBeInstanceOf(BadRequestException)
   })
   it('happy: apaga profile + user (mesma empresa)', async () => {
     const db = prisma()
@@ -555,7 +557,7 @@ describe('UsersService.remove', () => {
     db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
     db.$transaction = jest.fn(async (fn: any) => fn(db))
     db.user.delete = jest.fn().mockResolvedValue({ id: 'u1' })
-    await new UsersService(db, media()).remove('u1', 'admin', 'org1')
+    await new UsersService(db, media(), realtime()).remove('u1', 'admin', 'org1')
     expect(db.profile.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } })
     expect(db.user.delete).toHaveBeenCalledWith({ where: { id: 'u1' } })
   })
@@ -564,7 +566,7 @@ describe('UsersService.remove', () => {
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org2' })
     db.profile = { deleteMany: jest.fn() }
     db.$transaction = jest.fn(async (fn: any) => fn(db))
-    await expect(new UsersService(db, media()).remove('u1', 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).remove('u1', 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
     expect(db.profile.deleteMany).not.toHaveBeenCalled()
   })
   it('FK vinculada (P2003) → Conflict', async () => {
@@ -573,14 +575,14 @@ describe('UsersService.remove', () => {
     db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
     db.$transaction = jest.fn(async (fn: any) => fn(db))
     db.user.delete = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'x' }))
-    await expect(new UsersService(db, media()).remove('u1', 'admin', 'org1')).rejects.toBeInstanceOf(ConflictException)
+    await expect(new UsersService(db, media(), realtime()).remove('u1', 'admin', 'org1')).rejects.toBeInstanceOf(ConflictException)
   })
   it('id inexistente → NotFound', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
     db.profile = { deleteMany: jest.fn() }
     db.$transaction = jest.fn(async (fn: any) => fn(db))
-    await expect(new UsersService(db, media()).remove('ghost', 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
+    await expect(new UsersService(db, media(), realtime()).remove('ghost', 'admin', 'org1')).rejects.toBeInstanceOf(NotFoundException)
   })
 })
 
@@ -602,7 +604,7 @@ describe('UsersService.addExam', () => {
       fileKey: dto.fileKey,
     })
 
-    const r = await new UsersService(db, media()).addExam('u1', dto, 'org1')
+    const r = await new UsersService(db, media(), realtime()).addExam('u1', dto, 'org1')
 
     // userId sai da rota, e a validade vira Date porque a coluna é @db.Date.
     expect(db.exam.create).toHaveBeenCalledWith({
@@ -622,7 +624,7 @@ describe('UsersService.addExam', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org2' })
 
-    await expect(new UsersService(db, media()).addExam('u1', dto, 'org1')).rejects.toBeInstanceOf(
+    await expect(new UsersService(db, media(), realtime()).addExam('u1', dto, 'org1')).rejects.toBeInstanceOf(
       NotFoundException,
     )
     expect(db.exam.create).not.toHaveBeenCalled()
@@ -632,7 +634,7 @@ describe('UsersService.addExam', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
 
-    await expect(new UsersService(db, media()).addExam('nope', dto, 'org1')).rejects.toBeInstanceOf(
+    await expect(new UsersService(db, media(), realtime()).addExam('nope', dto, 'org1')).rejects.toBeInstanceOf(
       NotFoundException,
     )
     expect(db.exam.create).not.toHaveBeenCalled()
@@ -646,7 +648,7 @@ describe('UsersService: username', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
     db.user.create.mockResolvedValue({ id: 'n1', createdAt: new Date(), profile: null })
-    await new UsersService(db, media()).create('admin-1', {
+    await new UsersService(db, media(), realtime()).create('admin-1', {
       name: 'Zé', email: 'ze@x.com', password: 's3nh4!123', role: 'WORKER', username: 'ze.silva',
     } as never)
     expect(db.user.create.mock.calls[0][0].data.username).toBe('ze.silva')
@@ -656,7 +658,7 @@ describe('UsersService: username', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(null)
     db.user.create.mockResolvedValue({ id: 'n1', createdAt: new Date(), profile: null })
-    await new UsersService(db, media()).create('admin-1', {
+    await new UsersService(db, media(), realtime()).create('admin-1', {
       name: 'Zé', email: 'ze@x.com', password: 's3nh4!123', role: 'WORKER',
     } as never)
     expect(db.user.create.mock.calls[0][0].data).not.toHaveProperty('username')
@@ -671,7 +673,7 @@ describe('UsersService: username', () => {
       }),
     )
     await expect(
-      new UsersService(db, media()).create('admin-1', {
+      new UsersService(db, media(), realtime()).create('admin-1', {
         name: 'Zé', email: 'ze@x.com', password: 's3nh4!123', role: 'WORKER', username: 'ze.silva',
       } as never),
     ).rejects.toMatchObject({ message: 'Nome de usuário já em uso' })
@@ -681,7 +683,7 @@ describe('UsersService: username', () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
     db.user.update.mockResolvedValue({ id: 'u1', profile: null, createdAt: new Date() })
-    const svc = new UsersService(db, media())
+    const svc = new UsersService(db, media(), realtime())
     await svc.update('u1', { username: 'ana_2' }, 'admin-1', 'org1')
     expect(db.user.update.mock.calls[0][0].data.username).toBe('ana_2')
 
@@ -693,5 +695,84 @@ describe('UsersService: username', () => {
     await expect(svc.update('u1', { username: 'ana_2' }, 'admin-1', 'org1')).rejects.toMatchObject({
       message: 'Nome de usuário já em uso',
     })
+  })
+})
+
+// O REST barra o desativado a cada requisição; o socket só confere ao conectar.
+// Sem derrubar a conexão aberta, um admin desativado com o painel aberto
+// seguiria recebendo a telemetria de todos até o socket cair sozinho.
+describe('UsersService: conexões abertas de quem perde o acesso', () => {
+  const salvo = (over = {}) => ({ id: 'u1', name: 'Ana', email: 'a@b.c', role: 'WORKER', approvalStatus: 'APPROVED', active: true, companyRole: null, createdAt: new Date('2026-01-05T00:00:00Z'), profile: null, ...over })
+  const daMesmaEmpresa = () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
+    db.profile = { deleteMany: jest.fn().mockResolvedValue({}) }
+    db.$transaction = jest.fn(async (fn: any) => fn(db))
+    return db
+  }
+
+  it('desativar derruba as conexões do usuário, depois de gravar', async () => {
+    const db = daMesmaEmpresa()
+    db.user.update.mockResolvedValue(salvo({ active: false }))
+    const rt = realtime()
+    await new UsersService(db, media(), rt).update('u1', { active: false }, 'admin', 'org1')
+    expect(rt.disconnectUser).toHaveBeenCalledWith('u1')
+    expect(db.user.update.mock.invocationCallOrder[0]).toBeLessThan(rt.disconnectUser.mock.invocationCallOrder[0])
+  })
+
+  it('editar ou reativar não derruba ninguém', async () => {
+    const db = daMesmaEmpresa()
+    db.user.update.mockResolvedValue(salvo())
+    const rt = realtime()
+    const svc = new UsersService(db, media(), rt)
+    await svc.update('u1', { name: 'Ana B' }, 'admin', 'org1')
+    await svc.update('u1', { active: true }, 'admin', 'org1')
+    expect(rt.disconnectUser).not.toHaveBeenCalled()
+  })
+
+  it('desativação que o banco recusa não derruba', async () => {
+    const db = daMesmaEmpresa()
+    db.user.update.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('sumiu', { code: 'P2025', clientVersion: 'x' }))
+    const rt = realtime()
+    await expect(
+      new UsersService(db, media(), rt).update('u1', { active: false }, 'admin', 'org1'),
+    ).rejects.toBeInstanceOf(NotFoundException)
+    expect(rt.disconnectUser).not.toHaveBeenCalled()
+  })
+
+  it('excluir derruba as conexões do usuário, depois de apagar', async () => {
+    const db = daMesmaEmpresa()
+    db.user.delete.mockResolvedValue({ id: 'u1' })
+    const rt = realtime()
+    await new UsersService(db, media(), rt).remove('u1', 'admin', 'org1')
+    expect(rt.disconnectUser).toHaveBeenCalledWith('u1')
+    expect(db.user.delete.mock.invocationCallOrder[0]).toBeLessThan(rt.disconnectUser.mock.invocationCallOrder[0])
+  })
+
+  // A escrita já foi gravada quando o socket é derrubado. Responder 500 ali
+  // diria ao admin que a desativação falhou, com a pessoa já desativada.
+  it('falha ao derrubar o socket não desfaz nem reprova a desativação e a exclusão', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const db = daMesmaEmpresa()
+    db.user.update.mockResolvedValue(salvo({ active: false }))
+    db.user.delete.mockResolvedValue({ id: 'u1' })
+    const rt = { disconnectUser: jest.fn(() => { throw new Error('gateway fora') }) } as any
+    const svc = new UsersService(db, media(), rt)
+
+    await expect(svc.update('u1', { active: false }, 'admin', 'org1')).resolves.toEqual(
+      expect.objectContaining({ active: false }),
+    )
+    await expect(svc.remove('u1', 'admin', 'org1')).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(2)
+    warn.mockRestore()
+  })
+
+  // Quem tem histórico não é excluído (409) e continua ativo: a conexão fica.
+  it('exclusão recusada não derruba', async () => {
+    const db = daMesmaEmpresa()
+    db.user.delete.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'x' }))
+    const rt = realtime()
+    await expect(new UsersService(db, media(), rt).remove('u1', 'admin', 'org1')).rejects.toBeInstanceOf(ConflictException)
+    expect(rt.disconnectUser).not.toHaveBeenCalled()
   })
 })

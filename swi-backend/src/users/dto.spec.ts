@@ -84,7 +84,7 @@ describe('UpdateUserDto', () => {
 // descartava por whitelist: o buraco original da auditoria mora AQUI, no
 // create, não no patch.
 describe('CreateUserDto', () => {
-  const base = { name: 'Ana', email: 'ana@empresa.com.br', password: 'senha-forte', role: 'WORKER' }
+  const base = { name: 'Ana', email: 'ana@empresa.com.br', password: 'Senha@2026', role: 'WORKER' }
 
   it('aceita os dados de saúde declaratórios do cadastro', async () => {
     const { dto, errors } = await valid(CreateUserDto, {
@@ -127,13 +127,13 @@ describe('username (create e update)', () => {
 
   it('no create é opcional: cadastro sem username segue válido', async () => {
     const { errors } = await valid(CreateUserDto, {
-      name: 'Zé', email: 'ze@x.com', password: 'senha123!', role: 'WORKER',
+      name: 'Zé', email: 'ze@x.com', password: 'Senha@2026', role: 'WORKER',
     })
     expect(errors).toHaveLength(0)
   })
 
   it('create com username válido passa, com inválido não', async () => {
-    const base = { name: 'Zé', email: 'ze@x.com', password: 'senha123!', role: 'WORKER' }
+    const base = { name: 'Zé', email: 'ze@x.com', password: 'Senha@2026', role: 'WORKER' }
     expect((await valid(CreateUserDto, { ...base, username: 'ze.silva' })).errors).toHaveLength(0)
     expect((await valid(CreateUserDto, { ...base, username: 'Zé Silva' })).errors.length).toBeGreaterThan(0)
   })

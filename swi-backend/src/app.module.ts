@@ -1,5 +1,5 @@
 import { Module, ValidationPipe } from '@nestjs/common'
-import { APP_GUARD, APP_PIPE } from '@nestjs/core'
+import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core'
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'
 import { ScheduleModule } from '@nestjs/schedule'
 import { PrismaModule } from './prisma/prisma.module'
@@ -22,6 +22,7 @@ import { CompaniesModule } from './companies/companies.module'
 import { TelemetryModule } from './telemetry/telemetry.module'
 import { CamerasModule } from './cameras/cameras.module'
 import { HealthController } from './health.controller'
+import { UnhandledErrorFilter } from './common/unhandled-error.filter'
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { HealthController } from './health.controller'
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },
+    { provide: APP_FILTER, useClass: UnhandledErrorFilter },
   ],
 })
 export class AppModule {}

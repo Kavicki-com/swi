@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { NotificationService, type NotificationPayload } from '../../notifications/notification.service'
 import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import type { ConditionChange } from './condition.service'
+import { describeError } from '../../common/describe-error'
 
 /** O que a notificação precisa saber da condição que abriu. */
 export interface OpenedConditionFacts {
@@ -140,7 +141,7 @@ export class TelemetryHealthNotifier {
       })
       alreadyNotified = new Set(notified.map((n) => n.targetId).filter((id): id is string => id !== null))
     } catch (error) {
-      this.logger.warn(`Falha ao preparar notificação de saúde: ${(error as Error).message}`)
+      this.logger.warn(`Falha ao preparar notificação de saúde: ${describeError(error)}`)
       return
     }
 
@@ -149,7 +150,7 @@ export class TelemetryHealthNotifier {
       try {
         await this.notifyOne(row)
       } catch (error) {
-        this.logger.warn(`Falha ao notificar a condição ${row.id}: ${(error as Error).message}`)
+        this.logger.warn(`Falha ao notificar a condição ${row.id}: ${describeError(error)}`)
       }
     }
   }

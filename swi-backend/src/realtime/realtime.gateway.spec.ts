@@ -96,4 +96,15 @@ describe('RealtimeGateway', () => {
     expect(emit).toHaveBeenCalledWith('message', { id: 'm1' })
     expect(emit).toHaveBeenCalledTimes(2)
   })
+
+  // O handshake só confere o usuário ao conectar. Desativar ou excluir
+  // precisa alcançar a conexão que já estava aberta.
+  it('disconnectUser fecha todas as conexões da sala do usuário', () => {
+    const disconnectSockets = jest.fn()
+    const inRoom = jest.fn(() => ({ disconnectSockets }))
+    ;(g as any).server = { in: inRoom }
+    g.disconnectUser('u1')
+    expect(inRoom).toHaveBeenCalledWith('user:u1')
+    expect(disconnectSockets).toHaveBeenCalledWith(true)
+  })
 })

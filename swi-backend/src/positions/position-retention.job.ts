@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { parsePositionRetention } from '../config/runtime-env'
 import { PositionHistoryService } from './position-history.service'
+import { describeError } from '../common/describe-error'
 
 // Agendamento da retenção da trilha de posições, no padrão do ciclo de vida
 // da telemetria: o job só agenda e delega; a regra de apagar mora no serviço.
@@ -39,7 +40,7 @@ export class PositionRetentionJob {
       )
     } catch (error) {
       // Melhor esforço: o que ficou de fora entra na rodada de amanhã.
-      this.logger.warn(`Retenção de posições falhou: ${(error as Error).message}`)
+      this.logger.warn(`Retenção de posições falhou: ${describeError(error)}`)
     }
   }
 }
