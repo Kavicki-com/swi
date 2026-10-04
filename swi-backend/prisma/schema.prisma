@@ -135,6 +135,7 @@ model Company {
   lng          Float?
   members      User[]
   evacuations  Evacuation[]
+  cameras      Camera[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -182,6 +183,27 @@ enum NotificationDomain {
   faq
   evacuation
   health
+}
+
+// ---------------------------------------------------------------------------
+// Pontos de câmera da obra, cadastrados pelo administrador e mostrados nos
+// mapas. O endereço é a página da câmera no sistema do cliente: o SWI não
+// transmite vídeo, só aponta para ela. Nulo enquanto o cliente não informa.
+// ---------------------------------------------------------------------------
+
+model Camera {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  lat       Float
+  lng       Float
+  url       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Nome único na empresa: é por ele que o painel busca a câmera.
+  @@unique([companyId, name])
 }
 
 // ---------------------------------------------------------------------------

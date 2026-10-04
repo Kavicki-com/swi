@@ -20,6 +20,7 @@ import { SupportModule } from './support/support.module'
 import { PositionsModule } from './positions/positions.module'
 import { CompaniesModule } from './companies/companies.module'
 import { TelemetryModule } from './telemetry/telemetry.module'
+import { CamerasModule } from './cameras/cameras.module'
 import { HealthController } from './health.controller'
 
 @Module({
@@ -29,7 +30,7 @@ import { HealthController } from './health.controller'
       throttlers: [{ ttl: 60000, limit: 100 }],
       skipIf: () => process.env.NODE_ENV === 'test',
     }),
-    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, WorkOrdersModule, ChatModule, RealtimeModule, NotificationModule, WeatherModule, EvacuationModule, QueueModule, SupportModule, PositionsModule, CompaniesModule, TelemetryModule,
+    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, WorkOrdersModule, ChatModule, RealtimeModule, NotificationModule, WeatherModule, EvacuationModule, QueueModule, SupportModule, PositionsModule, CompaniesModule, TelemetryModule, CamerasModule,
   ],
   controllers: [HealthController],
   providers: [
