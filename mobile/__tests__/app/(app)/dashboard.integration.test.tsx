@@ -2,7 +2,13 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import Dashboard from '../../../app/(app)/dashboard';
-import type { Vitals, VitalsPhase, WorkerStatus } from '../../../services/vitals/types';
+import {
+  condition,
+  metric,
+  neverReported,
+  reporting,
+} from '../../../services/telemetry/myTelemetryFixtures';
+import type { MyTelemetryState } from '../../../services/vitals/useMyTelemetry';
 
 // Caracterização do dashboard.
 //
@@ -12,18 +18,18 @@ import type { Vitals, VitalsPhase, WorkerStatus } from '../../../services/vitals
 // `?alert=active` (procedimento de evacuação), porque a segunda é tela de
 // segurança e não pode regredir sem ninguém perceber.
 
-const VITALS: Vitals = {
-  heartRate: 82,
-  bloodPressureSys: 120,
-  bloodPressureDia: 80,
-  oxygenation: 97,
-  caloriesPerHour: 184.4,
-  steps: 4200,
-  distanceKm: 3.1,
-  effortPct: 42,
-  fatiguePct: 74.2,
-  fatigueEtaMin: 95,
-};
+// A leitura de me/current que a tela recebe. O padrão é o funcionário
+// reportando agora (112 bpm, 310 kcal/h, desgaste 38,4, 95 min até a fadiga),
+// com pressão medida, na origem real.
+const lendo = (telemetry: MyTelemetryState['telemetry']): MyTelemetryState => ({
+  telemetry,
+  failed: false,
+  loading: false,
+});
+const REPORTANDO = () =>
+  lendo(reporting({ bloodPressure: metric({ systolic: 120, diastolic: 80 }) }));
+const CARREGANDO: MyTelemetryState = { telemetry: null, failed: false, loading: true };
+const FALHOU: MyTelemetryState = { telemetry: null, failed: true, loading: false };
 
 // --- Fronteiras dubladas -----------------------------------------------------
 
@@ -36,13 +42,9 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockSearchParams,
 }));
 
-let mockVitalsState: { phase: VitalsPhase; vitals: Vitals | null; status: WorkerStatus } = {
-  phase: 'ready',
-  vitals: VITALS,
-  status: 'good',
-};
-jest.mock('../../../services/vitals/VitalsProvider', () => ({
-  useVitals: () => mockVitalsState,
+let mockTelemetryState: MyTelemetryState = REPORTANDO();
+jest.mock('../../../services/vitals/useMyTelemetry', () => ({
+  useMyTelemetry: () => mockTelemetryState,
 }));
 
 jest.mock('../../../services/profile/ProfileProvider', () => ({
@@ -146,57 +148,106 @@ beforeEach(() => {
   mockReplace.mockClear();
   mockLoadReports.mockClear();
   mockSearchParams = {};
-  mockVitalsState = { phase: 'ready', vitals: VITALS, status: 'good' };
+  mockTelemetryState = REPORTANDO();
   mockUnreadCount = 0;
   mockReports = [];
   mockClima = { snapshot: null, activeAlert: null };
 });
 
-// --- Fases dos vitais --------------------------------------------------------
+// --- Leitura da telemetria ---------------------------------------------------
 
-describe('dashboard: fases dos vitais', () => {
-  it('carregando: mostra o aviso de carregamento e nenhum número de vital', async () => {
-    mockVitalsState = { phase: 'loading', vitals: null, status: 'unknown' };
-    const texto = textoDa(await render());
-    expect(texto).toContain('Carregando seus dados');
-    expect(texto).not.toContain('BPM');
-  });
+/** A barra de fadiga, pelo rótulo acessível que a tela dá a ela. */
+const barraDeFadiga = (tree: ReactTestRenderer) =>
+  porRotulo(tree, 'Tempo até atingir fadiga total');
 
-  it('vazio: pede a smartband em vez de mostrar zeros', async () => {
-    mockVitalsState = { phase: 'empty', vitals: null, status: 'unknown' };
-    const texto = textoDa(await render());
-    expect(texto).toContain('Sem leituras ainda');
-    expect(texto).not.toContain('BPM');
-  });
+/** A condição entregue ao gráfico da silhueta. */
+const condicaoDoGrafico = (tree: ReactTestRenderer) =>
+  porRotulo(tree, 'Status de saúde').props.condition;
 
-  it('erro: admite a falha e oferece nova tentativa', async () => {
-    mockVitalsState = { phase: 'error', vitals: null, status: 'unknown' };
+describe('dashboard: leitura da telemetria', () => {
+  // Carregando, sem leitura e falha NÃO trocam a tela: o dashboard inteiro
+  // continua lá, com a ausência declarada, e a ajuda urgente ao alcance.
+  it.each([
+    ['carregando', CARREGANDO, 'Carregando leitura'],
+    ['quem nunca reportou', lendo(neverReported()), 'Sem leitura do aparelho'],
+    ['falha na leitura', FALHOU, 'Leitura indisponível no momento'],
+  ])('%s: a tela fica inteira, com a ausência declarada', async (_caso, estado, frase) => {
+    mockTelemetryState = estado;
     const tree = await render();
-    expect(textoDa(tree)).toContain('Não foi possível carregar');
-    expect(porRotulo(tree, 'Tentar de novo')).toBeDefined();
+    const texto = textoDa(tree);
+    expect(texto).toContain(frase);
+    expect(texto).toContain('BPM');
+    expect(texto).toContain('--');
+    expect(texto).toContain('Sem medição');
+    expect(texto).toContain('Tempo até atingir fadiga total: sem estimativa');
+    expect(porRotulo(tree, 'Ajuda urgente')).toBeDefined();
+    expect(porRotulo(tree, 'Chat')).toBeDefined();
   });
 
-  it('pronto: os três números saem dos vitais, não de literais', async () => {
+  it('sem leitura não aparece número nenhum, nem zero', async () => {
+    mockTelemetryState = lendo(neverReported());
     const texto = textoDa(await render());
-    expect(texto).toContain('82'); // heartRate
-    expect(texto).toContain('120/80'); // pressão sistólica/diastólica
-    expect(texto).toContain('184'); // caloriesPerHour arredondado
+    expect(texto).not.toMatch(/\d/);
   });
 
-  it('pronto: mostra a estimativa de tempo até a fadiga total', async () => {
-    const texto = textoDa(await render());
-    expect(texto).toContain('Tempo até atingir fadiga total:');
-  });
-
-  it('stale: esconde o selo de coração em vez de fingir um estado bom', async () => {
-    mockVitalsState = { phase: 'stale', vitals: VITALS, status: 'unknown' };
+  it('sem leitura a barra de fadiga fica vazia e a silhueta neutra, sem selo no peito', async () => {
+    mockTelemetryState = lendo(neverReported());
     const tree = await render();
+    expect(barraDeFadiga(tree).props.value).toBe(0);
+    expect(condicaoDoGrafico(tree)).toBe('neutral');
     expect(selosDeCoracao(tree)).toHaveLength(0);
   });
 
-  it('pronto e bom: o selo de coração aparece', async () => {
+  it('reportando: os três números saem da leitura, não de literais', async () => {
+    const texto = textoDa(await render());
+    expect(texto).toContain('112'); // batimento
+    expect(texto).toContain('120/80'); // pressão sistólica/diastólica
+    expect(texto).toContain('310'); // kcal por hora arredondado
+    expect(texto).toContain('Monitorando agora');
+  });
+
+  it('pressão é medição pontual: o rótulo traz o horário, nunca um juízo', async () => {
+    const texto = textoDa(await render());
+    expect(texto).toMatch(/Às \d{2}:\d{2}/);
+    expect(texto).not.toContain('Boa');
+  });
+
+  it('a barra de fadiga é o desgaste e o texto traz o tempo até a fadiga', async () => {
     const tree = await render();
+    expect(barraDeFadiga(tree).props.value).toBe(38);
+    expect(textoDa(tree)).toContain('Tempo até atingir fadiga total: 1h35m');
+  });
+
+  it('leitura velha mantém o valor, diz o horário e não afirma estado bom', async () => {
+    mockTelemetryState = lendo(
+      reporting({
+        heartRate: metric(98, { quality: 'STALE', measuredAt: '2026-10-01T14:20:00.000Z' }),
+      }),
+    );
+    const tree = await render();
+    expect(textoDa(tree)).toContain('98');
+    expect(textoDa(tree)).toMatch(/Última leitura às \d{2}:\d{2}/);
+    expect(condicaoDoGrafico(tree)).toBe('neutral');
+    expect(selosDeCoracao(tree)).toHaveLength(0);
+  });
+
+  it('reportando e sem condição aberta: silhueta boa e selo de coração', async () => {
+    const tree = await render();
+    expect(condicaoDoGrafico(tree)).toBe('good');
     expect(selosDeCoracao(tree).length).toBeGreaterThan(0);
+  });
+
+  it('condição só de aparelho não muda o estado de saúde', async () => {
+    mockTelemetryState = lendo({ ...reporting(), conditions: [condition('DEVICE')] });
+    expect(condicaoDoGrafico(await render())).toBe('good');
+  });
+
+  it('origem de demonstração é declarada na tela; a real não leva selo', async () => {
+    mockTelemetryState = lendo(reporting({}, 'DEMO'));
+    expect(textoDa(await render())).toContain('Dados de demonstração');
+
+    mockTelemetryState = REPORTANDO();
+    expect(textoDa(await render())).not.toContain('Dados de demonstração');
   });
 });
 
@@ -318,11 +369,11 @@ describe('dashboard: procedimento de evacuação (?alert=active)', () => {
     expect(texto).toContain('Raios e rajadas fortes na próxima hora.');
   });
 
-  it('ignora a fase dos vitais: a tela de segurança sempre aparece', async () => {
-    mockVitalsState = { phase: 'error', vitals: null, status: 'unknown' };
+  it('ignora o estado da leitura: a tela de segurança sempre aparece', async () => {
+    mockTelemetryState = FALHOU;
     const texto = textoDa(await render());
     expect(texto).toContain('Procedimento de evacuação');
-    expect(texto).not.toContain('Não foi possível carregar');
+    expect(texto).not.toContain('Leitura indisponível');
   });
 
   it.each([

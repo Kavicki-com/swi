@@ -1,6 +1,12 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import MapaGeral from '../../../app/(app)/map';
+import type { WorkerTelemetry } from '../../../services/telemetry/myTelemetry';
+import {
+  condition,
+  neverReported,
+  reporting,
+} from '../../../services/telemetry/myTelemetryFixtures';
 
 // Mapa geral. O teste olha o que a tela MANDA pro mapa, nao o que o mapa
 // desenha, e trava duas coisas:
@@ -22,8 +28,10 @@ jest.mock('@/services/location/LocationProvider', () => ({
 jest.mock('@/services/profile/ProfileProvider', () => ({
   useProfile: () => ({ profile: { avatarUrl: '' } }),
 }));
-jest.mock('@/services/vitals/VitalsProvider', () => ({
-  useVitals: () => ({ status: 'good' }),
+// O estado do pino próprio sai da leitura de me/current, não do simulador.
+let mockTelemetry: WorkerTelemetry | null = null;
+jest.mock('@/services/vitals/useMyTelemetry', () => ({
+  useMyTelemetry: () => ({ telemetry: mockTelemetry, failed: false, loading: false }),
 }));
 jest.mock('@/lib/featureFlags', () => ({
   ...jest.requireActual('@/lib/featureFlags'),
@@ -163,6 +171,7 @@ const pinoDe = (tree: ReactTestRenderer, id: string) =>
 beforeEach(() => {
   jest.useFakeTimers();
   mockCoords = [-43.9, -19.9];
+  mockTelemetry = reporting();
   mockListColleagues.mockReset().mockResolvedValue([]);
   mockHeat.mockReset().mockResolvedValue(calor([]));
 });
@@ -374,6 +383,20 @@ describe('Mapa geral: colegas', () => {
     expect(pinoDe(tree, 'marker-worker-a').props.status).toBe('alert');
     expect(pinoDe(tree, 'marker-worker-b').props.status).toBe('low');
     expect(pinoDe(tree, 'marker-worker-c').props.status).toBe('offline');
+  });
+
+  it('o pino proprio usa o estado da leitura real; sem leitura vira offline', async () => {
+    mockTelemetry = { ...reporting(), conditions: [condition('URGENT')] };
+    expect(pinoDe(await render(), 'marker-user-pin').props.status).toBe('low');
+
+    mockTelemetry = reporting();
+    expect(pinoDe(await render(), 'marker-user-pin').props.status).toBe('good');
+
+    mockTelemetry = neverReported();
+    expect(pinoDe(await render(), 'marker-user-pin').props.status).toBe('offline');
+
+    mockTelemetry = null;
+    expect(pinoDe(await render(), 'marker-user-pin').props.status).toBe('offline');
   });
 
   it('rele a cada 15 segundos e acompanha quem entrou e quem saiu', async () => {

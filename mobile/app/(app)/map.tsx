@@ -23,7 +23,8 @@ import { useLocation } from '@/services/location/LocationProvider';
 import { getPositionsBackend } from '@/services/positions/getPositionsBackend';
 import { usePolledRead } from '@/services/positions/usePolledRead';
 import { useProfile } from '@/services/profile/ProfileProvider';
-import { useVitals } from '@/services/vitals/VitalsProvider';
+import { workerStatusOf } from '@/services/vitals/dashboardVitalsView';
+import { useMyTelemetry } from '@/services/vitals/useMyTelemetry';
 import { MapView } from '@/components/MapView';
 import { MapMarker } from '@/components/MapMarker';
 import { MapLineSource } from '@/components/MapLineSource';
@@ -74,11 +75,11 @@ export default function MapViewGeneral() {
 
 function MapViewGeneralScreen() {
   const theme = useTheme();
-  // Posição do GPS (null sem permissão ou sem leitura) e estado de saúde vivo
-  // desenham o pino de quem usa. Sem posição não há pino próprio nem anéis.
+  // Posição do GPS (null sem permissão ou sem leitura) e estado de saúde lido
+  // de me/current desenham o pino de quem usa. Sem posição não há pino próprio nem anéis.
   const { coords } = useLocation();
   const { profile } = useProfile();
-  const { status } = useVitals();
+  const status = workerStatusOf(useMyTelemetry().telemetry);
 
   // Cada botão é um simple toggle: tap liga, tap de novo desliga.
   // O botão heatmap controla AMBAS sub-layers (produtividade + zonas-alerta)
