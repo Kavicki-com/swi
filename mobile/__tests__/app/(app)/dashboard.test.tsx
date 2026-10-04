@@ -2,9 +2,10 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import Dashboard from '../../../app/(app)/dashboard';
-import type { Vitals, VitalsPhase, WorkerStatus } from '../../../services/vitals/types';
+import { condition, reporting } from '../../../services/telemetry/myTelemetryFixtures';
+import type { MyTelemetryState } from '../../../services/vitals/useMyTelemetry';
 
-// Companheiro de dashboard.integration.test.tsx, que cobre fases dos vitais,
+// Companheiro de dashboard.integration.test.tsx, que cobre a leitura da telemetria,
 // badges, navegacao e a tela ?alert=active. Aqui ficam os dois caminhos de
 // alerta que sobraram, e eles nao sao o mesmo caminho:
 //
@@ -17,18 +18,11 @@ import type { Vitals, VitalsPhase, WorkerStatus } from '../../../services/vitals
 // Os dois modais sao dublados: a tela em teste e o dashboard, e o que importa
 // e quem os abre, quem os fecha e por qual caminho.
 
-const VITALS: Vitals = {
-  heartRate: 82,
-  bloodPressureSys: 120,
-  bloodPressureDia: 80,
-  oxygenation: 97,
-  caloriesPerHour: 184.4,
-  steps: 4200,
-  distanceKm: 3.1,
-  effortPct: 42,
-  fatiguePct: 74.2,
-  fatigueEtaMin: 95,
-};
+const lendo = (telemetry: MyTelemetryState['telemetry']): MyTelemetryState => ({
+  telemetry,
+  failed: false,
+  loading: false,
+});
 
 // --- Fronteiras dubladas -----------------------------------------------------
 
@@ -41,13 +35,9 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockSearchParams,
 }));
 
-let mockVitalsState: { phase: VitalsPhase; vitals: Vitals | null; status: WorkerStatus } = {
-  phase: 'ready',
-  vitals: VITALS,
-  status: 'good',
-};
-jest.mock('../../../services/vitals/VitalsProvider', () => ({
-  useVitals: () => mockVitalsState,
+let mockTelemetryState: MyTelemetryState = lendo(reporting());
+jest.mock('../../../services/vitals/useMyTelemetry', () => ({
+  useMyTelemetry: () => mockTelemetryState,
 }));
 
 jest.mock('../../../services/profile/ProfileProvider', () => ({
@@ -144,7 +134,7 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockSearchParams = {};
-  mockVitalsState = { phase: 'ready', vitals: VITALS, status: 'good' };
+  mockTelemetryState = lendo(reporting());
   mockAlertaVigente = ALERTA;
 });
 
@@ -391,10 +381,15 @@ describe('dashboard: alerta pedido pelo botao de ajuda urgente', () => {
 // --- Estado de saude ruim ----------------------------------------------------
 
 describe('dashboard: status fora do bom', () => {
-  it.each(['alert', 'low'] as const)(
-    '%s pinta o anel e o selo com a propria condicao, sem cair no verde',
-    async (status) => {
-      mockVitalsState = { phase: 'ready', vitals: VITALS, status };
+  // O estado vem das condicoes abertas no backend: urgencia e o pior (low),
+  // alerta de saude sem urgencia e alert.
+  it.each([
+    ['HEALTH', 'alert'],
+    ['URGENT', 'low'],
+  ] as const)(
+    'condicao %s pinta o anel e o selo de %s, sem cair no verde',
+    async (categoria, status) => {
+      mockTelemetryState = lendo({ ...reporting(), conditions: [condition(categoria)] });
 
       const tree = await montar();
 
@@ -435,21 +430,24 @@ describe('dashboard: atalhos dentro do grafico', () => {
   });
 });
 
-// --- Estado de erro ----------------------------------------------------------
+// --- Leitura ausente ---------------------------------------------------------
 
-describe('dashboard: estado de erro dos vitais', () => {
-  // O botao existe e nao refaz nada: o provider se re-consulta sozinho, entao
-  // o retry e so uma dica visual. O teste NOMEIA isso; se um dia o botao ganhar
-  // acao de verdade, ele cai e alguem escreve o teste certo.
-  it('tentar de novo e um botao de conforto: nao dispara acao nenhuma', async () => {
-    mockVitalsState = { phase: 'error', vitals: null, status: 'unknown' };
+describe('dashboard: ajuda urgente sem leitura', () => {
+  // A tela nao troca mais de cara quando a leitura falha, carrega ou nao
+  // existe. Era essa troca que escondia o botao de ajuda urgente justamente de
+  // quem estava sem monitoramento.
+  it.each([
+    ['falha', { telemetry: null, failed: true, loading: false }],
+    ['carregando', { telemetry: null, failed: false, loading: true }],
+    ['sem leitura', { telemetry: null, failed: false, loading: false }],
+  ] as const)('%s: o botao existe e abre o procedimento', async (_caso, estado) => {
+    mockTelemetryState = estado;
+    mockAlertaVigente = null;
     const tree = await montar();
 
-    const botao = tree.root.findAll(
-      (n) => n.props?.label === 'Tentar de novo' && typeof n.props?.onPress === 'function',
-    )[0];
-    await tocar(botao);
+    await tocar(porRotulo(tree, 'Ajuda urgente'));
 
+    expect(porTestID(tree, 'modal-alerta-ativo').props.visible).toBe(true);
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });

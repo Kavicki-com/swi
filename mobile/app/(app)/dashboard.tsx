@@ -37,16 +37,13 @@ import {
   BG_DECOR_W,
 } from '../../lib/dashboardDecor';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
-import { useVitals } from '../../services/vitals/VitalsProvider';
+import { useMyTelemetry } from '../../services/vitals/useMyTelemetry';
+import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
 import { useProfile } from '../../services/profile/ProfileProvider';
 import { useNotifications } from '../../services/notifications/NotificationProvider';
 import { useReports } from '../../services/reports/ReportsProvider';
 import { useWeather } from '../../services/weather/WeatherProvider';
-import { formatEta } from '../../services/vitals/formatEta';
 import type { WorkerStatus } from '../../services/vitals/types';
-import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
-import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
-import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
 
 // T4.6: memo wrap do StatusChart no nível de módulo. O componente é o mais
 // pesado da tree (3 feGaussianBlur filter chains + silhueta + ECG + dots).
@@ -55,17 +52,11 @@ import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
 // useCallback'd, primitivas literais).
 const StatusChart = memo(DSStatusChart);
 
-// Map the domain WorkerStatus to the DS StatusChart condition union
-// ('good' | 'alert' | 'low'). StatusChart has no neutral condition, so the
-// 'unknown' status (empty/stale/error) falls back to 'good' for the ring while
-// the chest heart badge is hidden entirely (see HeartStatus block below).
-// SAFETY: this 'good' ring fallback is reachable ONLY because the
-// loading/empty/error phases return early ABOVE the StatusChart render, so
-// `status` here is always good|alert|low, never 'unknown'. Do NOT render
-// StatusChart above the phase gate or 'unknown' would paint the silhouette
-// green (a fake-good). Drop the fallback once the DS gains a neutral condition.
-function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' {
-  return status === 'alert' || status === 'low' ? status : 'good';
+// Estado do funcionário para a condição do StatusChart do DS. Sem leitura
+// (carregando, nunca reportou, leitura velha ou falha) a silhueta fica neutra:
+// pintar de verde seria afirmar um "bom" que ninguém mediu.
+function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' | 'neutral' {
+  return status === 'unknown' ? 'neutral' : status;
 }
 
 // Map WorkerStatus to the DS HeartStatus condition ('check' | 'alert' | 'low').
@@ -92,7 +83,12 @@ function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | nul
 const CONTAINER_GAP_XL = 24;
 
 export default function Dashboard() {
-  const { phase, vitals, status } = useVitals();
+  // Leitura de me/current. Carregando, sem leitura e falha não trocam a tela:
+  // a visão devolve a ausência declarada ("--", "Sem medição") e o dashboard
+  // segue inteiro, com a ajuda urgente ao alcance de quem está sem monitoramento.
+  const { telemetry, failed, loading } = useMyTelemetry();
+  const view = dashboardVitalsView(telemetry, { failed, loading });
+  const status = view.workerStatus;
   const { profile } = useProfile();
   // literal "4". O contador não vinha de lugar nenhum, então prometia conteúdo
   // que a lista não tinha. Agora saem da contagem real, e somem quando é zero.
@@ -179,15 +175,6 @@ export default function Dashboard() {
     return <AlertActiveView />;
   }
 
-  // Vitals state takeovers (after all hooks; the route-driven alert-active
-  // emergency view above always wins). Full-screen views keep it DS + simple,
-  // consistent with my-stats. provider self-polls; retry is a hint.
-  if (phase === 'loading') return <VitalsLoadingState />;
-  if (phase === 'empty') return <VitalsEmptyState />;
-  if (phase === 'error') return <VitalsErrorState onRetry={() => {}} />;
-
-  // ready | stale — vitals is non-null here (computePhase guarantees it).
-  const v = vitals!;
   const heartCondition = toHeartCondition(status);
 
   return (
@@ -295,10 +282,12 @@ export default function Dashboard() {
           accessibilityLabel="Status de saúde"
         />
 
-        {Platform.OS === 'web' ? (
+        {Platform.OS === 'web' && status === 'good' ? (
           // Overlay web-only de propósito: poupa parse de SVG e uma camada
           // extra no native. Com a new arch (RN 0.76+) o native até suporta
           // mixBlendMode, mas o efeito só foi validado visualmente no web.
+          // Só no estado bom: o SVG é o verde da silhueta boa, e multiplicado
+          // sobre a neutra ou a de alerta pintaria um estado que não existe.
           <View
             pointerEvents="none"
             style={{
@@ -452,7 +441,7 @@ export default function Dashboard() {
                 color={theme.content.primary}
               />
             }
-            value={String(v.heartRate)}
+            value={view.heartRate ?? NO_VALUE}
             label="BPM"
             // a 140 BPM, então 3 dígitos são esperados, não exceção. 70 é a
             // mesma largura da coluna de Kcal, que já segura "184" — e segue o
@@ -470,8 +459,8 @@ export default function Dashboard() {
                 color={theme.content.primary}
               />
             }
-            value={`${v.bloodPressureSys}/${v.bloodPressureDia}`}
-            label="Boa"
+            value={view.pressure ?? NO_VALUE}
+            label={view.pressureLabel}
             width={80}
             theme={theme}
           />
@@ -485,16 +474,18 @@ export default function Dashboard() {
                 color={theme.content.primary}
               />
             }
-            value={String(Math.round(v.caloriesPerHour))}
-            label="Kcal/hora"
+            value={view.energyRate ?? NO_VALUE}
+            label={view.energyLabel}
             width={70}
             theme={theme}
           />
         </View>
 
         <View style={{ gap: theme.gap.s, width: '100%' }}>
+          {/* Sem avaliação de desgaste a barra fica vazia e o texto diz que não
+              há estimativa: barra vazia não é "zero de fadiga". */}
           <ProgressBar
-            value={Math.round(v.fatiguePct)}
+            value={view.fatigueProgress ?? 0}
             gradient={[
               theme.surface.success,
               theme.surface.warning,
@@ -506,7 +497,12 @@ export default function Dashboard() {
             accessibilityLabel="Tempo até atingir fadiga total"
           />
           <Text variant="body.m" color={theme.content.dark}>
-            Tempo até atingir fadiga total: {formatEta(v.fatigueEtaMin)}
+            {view.fatigueText}
+          </Text>
+          {/* Em que pé está a leitura e, quando não vem do relógio real, o
+              selo de origem. Linha de Text do DS: o Figma não tem esse slot. */}
+          <Text variant="caption.s" color={theme.content.dark}>
+            {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
           </Text>
         </View>
 
