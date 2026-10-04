@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { hash } from '../../auth/codes'
 import type { PrismaService } from '../../prisma/prisma.service'
@@ -527,6 +527,7 @@ describe('DeviceAuthService.authenticate', () => {
     workerId: 'worker-1',
     credentialHash: hashCredential(secret),
     revokedAt: null,
+    worker: { active: true },
     ...over,
   })
 
@@ -568,6 +569,31 @@ describe('DeviceAuthService.authenticate', () => {
     prisma.telemetryDevice.findUnique.mockResolvedValue(device({ revokedAt: new Date() }))
 
     await expect(service(prisma).authenticate(`Device device-1.${secret}`)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    )
+  })
+
+  // A credencial do aparelho não vence, e o JWT de quem foi desativado já é
+  // recusado: sem esta conferência, o relógio seguiria alimentando alertas e
+  // o painel em nome de quem perdeu o acesso. É 403 e não 401 de propósito: o
+  // app trata 401 como aparelho revogado e apaga o pareamento, e reativar a
+  // pessoa cobraria um pareamento novo.
+  it('recusa com 403 o aparelho de funcionário desativado, sem marcar contato', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryDevice.findUnique.mockResolvedValue(device({ worker: { active: false } }))
+
+    await expect(service(prisma).authenticate(`Device device-1.${secret}`)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    )
+    expect(prisma.telemetryDevice.updateMany).not.toHaveBeenCalled()
+  })
+
+  // Só quem prova a credencial descobre que o dono está desativado.
+  it('segredo errado segue 401, mesmo com o funcionário desativado', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryDevice.findUnique.mockResolvedValue(device({ worker: { active: false } }))
+
+    await expect(service(prisma).authenticate(`Device device-1.${'b'.repeat(64)}`)).rejects.toBeInstanceOf(
       UnauthorizedException,
     )
   })
