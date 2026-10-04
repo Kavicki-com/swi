@@ -47,6 +47,11 @@ jest.mock('../../../services/positions/getPositionsBackend', () => ({
   }),
 }));
 
+const mockListCameras = jest.fn();
+jest.mock('../../../services/cameras/getCamerasBackend', () => ({
+  getCamerasBackend: () => ({ list: () => mockListCameras() }),
+}));
+
 // So a consulta ao GIBS e dublada; o molde dos tiles e o texto da hora sao os
 // de verdade.
 const mockRadarTime = jest.fn();
@@ -114,6 +119,8 @@ const colega = (id: string, lng: number, lat: number, status = 'good') => ({
   recordedAt: '2026-10-03T12:00:00.000Z',
   status,
 });
+
+const camera = (id: string, lng: number, lat: number) => ({ id, name: `Câmera ${id}`, lat, lng });
 
 let arvores: ReactTestRenderer[] = [];
 const montar = async () => {
@@ -202,6 +209,7 @@ beforeEach(() => {
   mockCoords = [-49.27, -25.43];
   mockListColleagues.mockReset().mockResolvedValue([]);
   mockRadarTime.mockReset().mockResolvedValue(OBSERVACAO);
+  mockListCameras.mockReset().mockResolvedValue([]);
 });
 
 afterEach(async () => {
@@ -460,13 +468,28 @@ describe('Mapa do clima: toggles dos overlays', () => {
     expect(idsCom(tree, 'marker-worker-')).toHaveLength(0);
   });
 
-  it('cameras comecam escondidas, aparecem no primeiro toque e somem no segundo', async () => {
+  it('cameras sao as do cadastro: aparecem no primeiro toque e somem no segundo', async () => {
+    mockListCameras.mockResolvedValue([camera('a', -49.3, -25.4), camera('b', -49.2, -25.5)]);
     const tree = await montarPronto();
+    expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
+    expect(mockListCameras).not.toHaveBeenCalled();
+
+    await tocar(porRotulo(tree, 'Câmeras'));
+    expect(idsCom(tree, 'marker-camera-').sort()).toEqual(['marker-camera-a', 'marker-camera-b']);
+    expect(porTestID(tree, 'marker-camera-a').props.coordinate).toEqual([-49.3, -25.4]);
+
+    await tocar(porRotulo(tree, 'Câmeras'));
+    expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
+  });
+
+  it('sem camera cadastrada, ou com a leitura falhando, o mapa fica sem pino de camera', async () => {
+    const tree = await montarPronto();
+    await tocar(porRotulo(tree, 'Câmeras'));
+    expect(mockListCameras).toHaveBeenCalledTimes(1);
     expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
 
     await tocar(porRotulo(tree, 'Câmeras'));
-    expect(idsCom(tree, 'marker-camera-')).toHaveLength(12);
-
+    mockListCameras.mockRejectedValue(new Error('sem rede'));
     await tocar(porRotulo(tree, 'Câmeras'));
     expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
   });

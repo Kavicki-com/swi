@@ -33,7 +33,7 @@ import { NavFABs } from '@/components/NavFABs';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { circleFeature, destinationPoint } from '@/lib/mapGeometry';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { CAMERA_LOCATIONS } from '@/lib/mapMockData';
+import { useCameraPoints } from '@/services/cameras/useCameraPoints';
 import { toPinStatus } from '@/lib/mapPins';
 import { heatShapeFromCells } from '@/lib/positionHeat';
 import { useMapViewport } from '@/lib/useMapViewport';
@@ -93,6 +93,8 @@ function MapViewGeneralScreen() {
   const { viewport, colleagues } = useMapViewport(coords, showOperators);
   // Presença agregada da empresa nas últimas 24 horas, em células.
   const heat = usePolledRead(showHeatmap, readHeat, HEAT_REFRESH_MS, HEAT_RETRY_MS);
+  // Pontos de câmera cadastrados no painel, lidos quando a camada liga.
+  const cameras = useCameraPoints(showCameras);
 
   // A forma só muda quando chega leitura nova: religar outro overlay não
   // refaz a camada de calor.
@@ -186,9 +188,9 @@ function MapViewGeneralScreen() {
             </MapMarker>
           ))}
 
-        {/* Camera pins overlay — 12 CAMERA_LOCATIONS quando toggle ligado. */}
+        {/* Camera pins overlay: as câmeras cadastradas da empresa, quando ligado. */}
         {showCameras &&
-          CAMERA_LOCATIONS.map((c) => (
+          cameras.data?.map((c) => (
             <MapMarker
               key={c.id}
               id={`camera-${c.id}`}
