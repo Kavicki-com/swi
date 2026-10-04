@@ -15,20 +15,19 @@ import {
   ProgressBar,
   StatusChart,
   Text,
-  TimeStamp,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
-import { useVitals } from '../../services/vitals/VitalsProvider';
+import { useMyTelemetry } from '../../services/vitals/useMyTelemetry';
+import { useMySeries } from '../../services/vitals/useMySeries';
+import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
+import { caloriesChartView, statsDonutsView } from '../../services/vitals/statsView';
+import type { SeriesPeriod } from '../../services/telemetry/mySeries';
 import type { WorkerStatus } from '../../services/vitals/types';
-import { formatEta } from '../../services/vitals/formatEta';
 import { listExams, type Exam } from '../../services/api/exams';
 import { abrirMidiaOuAvisar } from '../../lib/media/trustedMediaUrl';
 import { examCardParts } from '../../services/api/examCard';
-import { VitalsLoadingState } from '../../components/vitals/VitalsLoadingState';
-import { VitalsEmptyState } from '../../components/vitals/VitalsEmptyState';
-import { VitalsErrorState } from '../../components/vitals/VitalsErrorState';
 import {
   BPM_HEART_SVG,
   FLAME_DONUT_SVG,
@@ -106,39 +105,18 @@ function Divider() {
   );
 }
 
-// Calories chart points are now derived from the live vitals `history` (last 3
-// well-spaced markers per period, which the 3-sample window mirrors.
-
-const PERIOD_OPTIONS = [
-  { label: 'Hoje', value: 'today' },
+// O valor de cada opção é o período que a rota de série do backend aceita
+// (me/series?period=): o gráfico de gasto calórico relê a série a cada troca.
+const PERIOD_OPTIONS: { label: string; value: SeriesPeriod }[] = [
+  { label: 'Hoje', value: 'day' },
   { label: 'Esta semana', value: 'week' },
   { label: 'Este mês', value: 'month' },
 ];
 
-// 342:9911 — não muta cores, só sinaliza exame futuro/agendado.
-// Comma-decimal percent string (pt-BR): 62.5 → "62,5%".
-function pct(value: number): string {
-  return `${value.toFixed(1).replace('.', ',')}%`;
-}
-
-// Relative "atualizado há…" label from a lastUpdated epoch (ms). NOTE: once the
-// provider reaches 'stale' its context value memo is frozen, so this shows the
-// elapsed time at the moment 'stale' was entered and does NOT count up. That's
-// acceptable — staleness is already signalled by the dimming + this label; a
-// live counter would need a local 1s tick in this screen.
-function formatAgo(lastUpdated: number | null, now: number): string {
-  if (lastUpdated == null) return 'atualizado agora';
-  const secs = Math.max(0, Math.floor((now - lastUpdated) / 1000));
-  if (secs < 60) return `atualizado há ${secs}s`;
-  const mins = Math.floor(secs / 60);
-  return `atualizado há ${mins}min`;
-}
-
-// Mesmas conversoes do dashboard: 'unknown' cai em 'good' pro grafico (que
-// precisa de UMA cor), mas devolve null pro badge — sem dado, o peito fica
-// vazio em vez de exibir um check que ninguem mediu.
-function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' {
-  return status === 'alert' || status === 'low' ? status : 'good';
+// Mesmas conversoes do dashboard: sem leitura a silhueta fica neutra e o badge
+// some. Nem cor nem check podem afirmar um estado que ninguem mediu.
+function toChartCondition(status: WorkerStatus): 'good' | 'alert' | 'low' | 'neutral' {
+  return status === 'unknown' ? 'neutral' : status;
 }
 
 function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | null {
@@ -150,7 +128,16 @@ function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | nul
 
 export default function MyStats() {
   const router = useRouter();
-  const { phase, vitals, status, lastUpdated, history } = useVitals();
+  // Sinais de me/current e gasto calórico de me/series. Carregando, sem leitura
+  // e falha não trocam a tela: as visões devolvem a ausência declarada, e
+  // alergias e exames (dado real do cadastro) seguem à vista.
+  const { telemetry, failed, loading } = useMyTelemetry();
+  const view = dashboardVitalsView(telemetry, { failed, loading });
+  const donuts = statsDonutsView(telemetry);
+  const status = view.workerStatus;
+  const [period, setPeriod] = useState<SeriesPeriod>('day');
+  const seriesState = useMySeries(period);
+  const chart = caloriesChartView(seriesState.series, seriesState);
   // Exames REAIS. Eram 4 inventados aqui e os MESMOS 4 duplicados no
   // settings, onde ficam os campos de nome e validade — um formulário só.
   const [exams, setExams] = useState<Exam[]>([]);
@@ -177,7 +164,6 @@ export default function MyStats() {
   const heartbeatBlueXml = useUniqueSvg(HEARTBEAT_BLUE_SVG);
   const footprintXml = useUniqueSvg(FOOTPRINT_SVG);
   const flameDonutXml = useUniqueSvg(FLAME_DONUT_SVG);
-  const [period, setPeriod] = useState('today');
 
   // T5.3: gradient arrays memoizados — antes alocavam array nova por render
   // (mudança de period quebrava memoização dos 4 DonutCharts). Theme é
@@ -201,25 +187,6 @@ export default function MyStats() {
     () => [theme.surface.error, theme.surface.warning],
     [theme.surface.error, theme.surface.warning],
   );
-
-  // State-driven takeovers (placed AFTER all hooks to respect Rules of Hooks).
-  // provider self-polls; retry is a hint — see VitalsErrorState note.
-  if (phase === 'loading') return <VitalsLoadingState />;
-  if (phase === 'empty') return <VitalsEmptyState />;
-  if (phase === 'error') return <VitalsErrorState onRetry={() => {}} />;
-
-  // ready | stale — vitals is non-null here (computePhase guarantees it).
-  const v = vitals!;
-  const isStale = phase === 'stale';
-  // Calories chart points derived from the last 3 history samples (caloriesPerHour
-  // over time). No per-sample timestamp is stored, so the X label is a simple
-  // relative index (kept simple per spec). Falls back to the current value when
-  // history is still warming up (<1 entry) so the chart never renders empty.
-  const recent = history.slice(-3);
-  const caloriesPoints =
-    recent.length > 0
-      ? recent.map((h, i) => ({ time: `-${recent.length - 1 - i}`, kcal: h.caloriesPerHour }))
-      : [{ time: '0', kcal: v.caloriesPerHour }];
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -284,21 +251,12 @@ export default function MyStats() {
       </View>
 
       <View style={{ gap: theme.gap.l, marginTop: theme.gap.l }}>
-        {/* Stale freshness chip — only when the latest sample aged past the
-            stale window. DS TimeStamp ("atualizado há…"). */}
-        {isStale ? (
-          <View style={{ alignItems: 'flex-start' }}>
-            <TimeStamp time={formatAgo(lastUpdated, Date.now())} />
-          </View>
-        ) : null}
-
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-evenly',
             width: '100%',
-            opacity: isStale ? 0.5 : 1,
           }}
         >
           <View
@@ -320,7 +278,7 @@ export default function MyStats() {
               style={{ textAlign: 'center' }}
               numberOfLines={1}
             >
-              {v.heartRate}
+              {view.heartRate ?? NO_VALUE}
             </Title>
             <Text
               variant="caption.s"
@@ -351,14 +309,14 @@ export default function MyStats() {
               style={{ textAlign: 'center' }}
               numberOfLines={1}
             >
-              {`${v.bloodPressureSys}/${v.bloodPressureDia}`}
+              {view.pressure ?? NO_VALUE}
             </Title>
             <Text
               variant="caption.s"
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
             >
-              Boa
+              {view.pressureLabel}
             </Text>
           </View>
 
@@ -383,24 +341,25 @@ export default function MyStats() {
               style={{ textAlign: 'center' }}
               numberOfLines={1}
             >
-              {v.caloriesPerHour}
+              {view.energyRate ?? NO_VALUE}
             </Title>
             <Text
               variant="caption.s"
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
             >
-              Kcal/hora
+              {view.energyLabel}
             </Text>
           </View>
         </View>
 
-        <View style={{ gap: theme.gap.s, width: '100%', opacity: isStale ? 0.5 : 1 }}>
-          {/* value is rounded to int — DS ProgressBar accessibilityValue.now
-              é int64; floats triggam Fabric HostFunction precision error e a barra
-              não renderiza. Mesmo padrão do dashboard.tsx:331. */}
+        <View style={{ gap: theme.gap.s, width: '100%' }}>
+          {/* O valor chega inteiro da visão: o accessibilityValue.now do
+              ProgressBar do DS é int64, e float dispara erro de precisão no
+              Fabric e a barra não renderiza. Sem avaliação de desgaste a barra
+              fica vazia e o texto diz que não há estimativa. */}
           <ProgressBar
-            value={Math.round(v.fatiguePct)}
+            value={view.fatigueProgress ?? 0}
             bordered
             trackHeight={22}
             gradient={[
@@ -413,7 +372,12 @@ export default function MyStats() {
             accessibilityLabel="Tempo até fadiga total"
           />
           <Text variant="body.m" color={theme.content.dark}>
-            {`Tempo até atingir fadiga total: ${formatEta(v.fatigueEtaMin)}`}
+            {view.fatigueText}
+          </Text>
+          {/* Em que pé está a leitura e, quando não vem do relógio real, o
+              selo de origem. Mesma linha do dashboard. */}
+          <Text variant="caption.s" color={theme.content.dark}>
+            {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
           </Text>
         </View>
 
@@ -423,7 +387,6 @@ export default function MyStats() {
             flexWrap: 'wrap',
             gap: theme.gap.m,
             justifyContent: 'center',
-            opacity: isStale ? 0.5 : 1,
           }}
         >
           <View style={{ position: 'relative' }}>
@@ -433,16 +396,17 @@ export default function MyStats() {
               title=""
               icon="heartbeat"
               iconColor="transparent"
-              value={pct(v.effortPct)}
-              label="Esforço feito"
-              progress={v.effortPct}
+              value={donuts.effort.value}
+              label={donuts.effort.label}
+              progress={donuts.effort.progress}
               progressGradient={gradientGreen}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={heartbeatGreenXml} width={35} height={28} />
             </View>
           </View>
-          {/* Donut 2 — Oxigenação (vitals.oxygenation). Blue gradient heartbeat asset. */}
+          {/* Donut 2: Oxigenação (medição pontual de me/current; o horário da
+              última vai na nota abaixo dos anéis). Blue gradient heartbeat asset. */}
           <View style={{ position: 'relative' }}>
             <DonutChart
               size="small"
@@ -450,17 +414,18 @@ export default function MyStats() {
               title=""
               icon="heartbeat"
               iconColor="transparent"
-              value={pct(v.oxygenation)}
-              label="Oxigenação"
-              progress={v.oxygenation}
+              value={donuts.oxygen.value}
+              label={donuts.oxygen.label}
+              progress={donuts.oxygen.progress}
               progressGradient={gradientBlue}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={heartbeatBlueXml} width={35} height={28} />
             </View>
           </View>
-          {/* Donut 3 — Steps (vitals.steps) + distance label. Orange gradient
-              footprint asset. progress kept static (no steps-goal % in Vitals). */}
+          {/* Donut 3: Passos + distância do dia no rótulo. Orange gradient
+              footprint asset. Não há meta de passos: o arco fica cheio com
+              leitura e vazio sem ela, sem sugerir fração de meta nenhuma. */}
           <View style={{ position: 'relative' }}>
             <DonutChart
               size="small"
@@ -468,17 +433,18 @@ export default function MyStats() {
               title=""
               icon="footprint"
               iconColor="transparent"
-              value={String(v.steps)}
-              label={`${v.distanceKm.toFixed(2).replace('.', ',')}km`}
-              progress={45}
+              value={donuts.steps.value}
+              label={donuts.steps.label}
+              progress={donuts.steps.progress}
               progressGradient={gradientOrange}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
               <SvgXml xml={footprintXml} width={20} height={22} />
             </View>
           </View>
-          {/* Donut 4 — Kcal (vitals.caloriesPerHour). Multi-stop flame asset
-              (red→orange→green). progress kept static (no kcal-goal % in Vitals). */}
+          {/* Donut 4: Gasto por hora. Multi-stop flame asset
+              (red→orange→green). Sem meta de calorias: arco cheio com leitura,
+              vazio sem ela, como o de passos. */}
           <View style={{ position: 'relative' }}>
             <DonutChart
               size="small"
@@ -486,9 +452,9 @@ export default function MyStats() {
               title=""
               icon="local_fire_department"
               iconColor="transparent"
-              value={`${v.caloriesPerHour} kcal`}
-              label="por hora"
-              progress={70}
+              value={donuts.energy.value}
+              label={donuts.energy.label}
+              progress={donuts.energy.progress}
               progressGradient={gradientFlame}
             />
             <View pointerEvents="none" style={DONUT_ICON_SLOT}>
@@ -498,9 +464,22 @@ export default function MyStats() {
 
         </View>
 
+        {/* Linhas de Text do DS para o que o Figma não desenhou: de quando é a
+            oxigenação (medição pontual) e a bateria do aparelho. */}
+        <View style={{ gap: theme.gap.s, width: '100%' }}>
+          {donuts.oxygenNote ? (
+            <Text variant="body.s" color={theme.content.dark}>
+              {donuts.oxygenNote}
+            </Text>
+          ) : null}
+          <Text variant="body.s" color={theme.content.dark}>
+            {donuts.battery}
+          </Text>
+        </View>
+
         <View style={{ height: 2, backgroundColor: theme.surface.standard }} />
 
-        <View style={{ width: '100%', gap: theme.gap.m, opacity: isStale ? 0.5 : 1 }}>
+        <View style={{ width: '100%', gap: theme.gap.m }}>
           <View style={{ gap: 10, zIndex: 1 }}>
             <Title variant="title.xs" color={theme.content.dark}>
               Gasto calórico
@@ -508,20 +487,35 @@ export default function MyStats() {
             <Combobox
               options={PERIOD_OPTIONS}
               value={period}
-              onChange={setPeriod}
+              onChange={(value) =>
+                setPeriod(PERIOD_OPTIONS.find((o) => o.value === value)?.value ?? 'day')
+              }
               placeholder="Hoje"
               accessibilityLabel="Filtrar período"
             />
           </View>
-          <View
-            style={{
-              backgroundColor: theme.surface.medium,
-              borderRadius: theme.border.radius.m,
-              paddingHorizontal: 28,
-            }}
-          >
-            <LineCaloriesChart points={caloriesPoints} fullWidth />
-          </View>
+          {chart.sourceBadge ? (
+            <Text variant="caption.s" color={theme.content.dark}>
+              {chart.sourceBadge}
+            </Text>
+          ) : null}
+          {/* Sem série para desenhar (carregando, falha ou período sem
+              medição) entra a frase no lugar do gráfico, nunca um ponto. */}
+          {chart.emptyText ? (
+            <Text variant="body.s" color={theme.content.dark}>
+              {chart.emptyText}
+            </Text>
+          ) : (
+            <View
+              style={{
+                backgroundColor: theme.surface.medium,
+                borderRadius: theme.border.radius.m,
+                paddingHorizontal: 28,
+              }}
+            >
+              <LineCaloriesChart points={chart.points} unit={chart.unit} fullWidth />
+            </View>
+          )}
         </View>
 
         <View style={{ width: '100%', gap: theme.gap.m }}>
