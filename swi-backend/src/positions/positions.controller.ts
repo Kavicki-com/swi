@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ForbiddenException, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common'
 import { PositionsService } from './positions.service'
 import { PositionHistoryService } from './position-history.service'
-import { HeartbeatDto, HeatQueryDto } from './dto'
+import { HeartbeatDto, HeatQueryDto, PositionBatchDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
@@ -23,6 +23,14 @@ export class PositionsController {
   @Roles('WORKER') @Post('heartbeat') @HttpCode(204)
   heartbeat(@CurrentUser() user: JwtUser, @Body() dto: HeartbeatDto) {
     return this.positions.heartbeat(user.userId, dto.lat, dto.lng)
+  }
+
+  // Reenvio das posições que o app guardou sem rede, cada uma com a hora em
+  // que foi medida. O heartbeat carimba a hora da chegada e por isso não serve
+  // para posição atrasada.
+  @Roles('WORKER') @Post('batch') @HttpCode(200)
+  batch(@CurrentUser() user: JwtUser, @Body() dto: PositionBatchDto) {
+    return this.positions.backfill(user.userId, dto.points, new Date())
   }
 
   @Roles('ADMIN') @Get()
