@@ -38,7 +38,8 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -60,7 +61,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "O SWI usa sua localização para monitorar sua segurança em campo."
+          "locationWhenInUsePermission": "O SWI usa sua localização para monitorar sua segurança em campo.",
+          "locationAlwaysAndWhenInUsePermission": "O SWI envia sua localização durante a jornada, mesmo com o app fechado, para a equipe de segurança localizar você em uma emergência. O envio termina junto com a jornada.",
+          "locationAlwaysPermission": "O SWI envia sua localização durante a jornada, mesmo com o app fechado, para a equipe de segurança localizar você em uma emergência. O envio termina junto com a jornada.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "expo-secure-store",

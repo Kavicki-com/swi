@@ -30,6 +30,8 @@ import { WeatherProvider } from '../services/weather/WeatherProvider';
 import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
 import { TelemetryUploadProvider } from '../services/telemetry/TelemetryUploadProvider';
 import { usePositionHeartbeat } from '../services/positions/usePositionHeartbeat';
+import { useTrackingActive } from '../services/positions/positionTracking';
+import { useTrackingSession } from '../services/positions/useTrackingLifecycle';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -73,11 +75,17 @@ function TelemetryRoot() {
 // GPS pro backend (upsert + WS pros admins). Null-render; gated no login
 // (sem token o POST só viraria 401 a cada batida).
 function PositionsRoot() {
-  const { user } = useAuth();
+  const { user, restoring } = useAuth();
   const { coords } = useLocation();
+  // Logout ou sessão que não vale mais desligam o rastreio em segundo plano,
+  // e a fila guardada tenta sair ao abrir o app e a cada volta ao primeiro plano.
+  useTrackingSession(user?.id ?? null, restoring);
+  // Com a jornada rastreada a posição já sai pela tarefa, com a hora de cada
+  // leitura; o heartbeat se cala para não mandar a mesma posição duas vezes.
+  const tracking = useTrackingActive();
   // Sem leitura do GPS `coords` é null e a batida é pulada: o mapa do admin só
   // recebe posição medida.
-  usePositionHeartbeat(() => (user ? coords : null));
+  usePositionHeartbeat(() => (user && !tracking ? coords : null));
   return null;
 }
 

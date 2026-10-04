@@ -1,4 +1,10 @@
-import type { Colleague, ColleagueStatus, PositionHeat, PositionsBackend } from './types';
+import type {
+  Colleague,
+  ColleagueStatus,
+  PositionBatchResult,
+  PositionHeat,
+  PositionsBackend,
+} from './types';
 import { apiRequest } from '../api/http';
 
 const KNOWN_STATUSES: readonly ColleagueStatus[] = ['good', 'alert', 'low', 'unknown'];
@@ -13,6 +19,14 @@ function toColleagueStatus(raw: string | undefined): ColleagueStatus {
 export const apiPositionsBackend: PositionsBackend = {
   async heartbeat(lat: number, lng: number): Promise<void> {
     await apiRequest<void>('/positions/heartbeat', { method: 'POST', auth: true, body: { lat, lng } });
+  },
+  // POST /positions/batch: o reenvio do rastreio, cada ponto com a sua hora.
+  async sendBatch(points) {
+    return apiRequest<PositionBatchResult>('/positions/batch', {
+      method: 'POST',
+      auth: true,
+      body: { points },
+    });
   },
   // GET /positions/colleagues. O backend anterior ao campo `status` não o
   // manda: o colega sai sem leitura, nunca como "bom".

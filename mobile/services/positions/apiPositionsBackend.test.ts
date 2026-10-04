@@ -16,6 +16,17 @@ describe('apiPositionsBackend', () => {
     });
   });
 
+  it('sendBatch → POST /positions/batch autenticado com a hora de cada ponto', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ recorded: 1, ignored: 0 });
+    const points = [{ lat: -23.55, lng: -46.63, recordedAt: '2026-10-04T12:00:00.000Z' }];
+    await expect(apiPositionsBackend.sendBatch(points)).resolves.toEqual({ recorded: 1, ignored: 0 });
+    expect(apiRequest).toHaveBeenCalledWith('/positions/batch', {
+      method: 'POST',
+      auth: true,
+      body: { points },
+    });
+  });
+
   it('listColleagues → GET /positions/colleagues autenticado, com o estado de cada colega', async () => {
     const colega = {
       id: 'w2', name: 'Ana', lat: -19.9, lng: -43.9, sector: 'Leste',

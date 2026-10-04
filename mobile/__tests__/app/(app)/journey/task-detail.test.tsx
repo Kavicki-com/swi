@@ -45,6 +45,12 @@ const mockJourney = {
 jest.mock('../../../../services/journey/JourneyProvider', () => ({
   useJourney: () => mockJourney,
 }));
+const mockPermission = jest.fn();
+const mockAlways = jest.fn();
+jest.mock('../../../../services/positions/trackingPermission', () => ({
+  requestTrackingPermission: () => mockPermission(),
+  requestAlwaysPermission: () => mockAlways(),
+}));
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -117,6 +123,9 @@ beforeEach(() => {
   mockJourney.cancelTask.mockResolvedValue(undefined);
   mockJourney.addTaskPhoto.mockResolvedValue(undefined);
   mockShowPicker.mockResolvedValue(null);
+  mockPermission.mockResolvedValue('granted');
+  mockAlways.mockResolvedValue(undefined);
+  mockJourney.startTask.mockResolvedValue(undefined);
 });
 
 describe('Detalhe da tarefa: máquina de carregamento', () => {
@@ -331,6 +340,80 @@ describe('Detalhe da tarefa: CTA quando a tarefa não é a ativa', () => {
 
     expect(acao(tree, 'Iniciar Jornada e começar tarefa')).toBeDefined();
     expect(acao(tree, 'Cancelar tarefa')).toBeUndefined();
+  });
+});
+
+describe('Detalhe da tarefa: localização ao iniciar a jornada', () => {
+  const AVISO = 'Localização desligada: sua posição não será enviada durante a jornada.';
+
+  it('pede a permissão do rastreio antes de iniciar', async () => {
+    const tree = await render();
+    await tocar(tree, 'Iniciar Jornada e começar tarefa');
+
+    expect(mockPermission).toHaveBeenCalledTimes(1);
+    expect(mockPermission.mock.invocationCallOrder[0]).toBeLessThan(
+      mockJourney.startTask.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('localização negada: a jornada inicia do mesmo jeito, com o aviso', async () => {
+    mockPermission.mockResolvedValue('denied');
+    const tree = await render();
+    await tocar(tree, 'Iniciar Jornada e começar tarefa');
+
+    expect(mockJourney.startTask).toHaveBeenCalledWith('t1');
+    expect(textos(tree)).toContain(AVISO);
+  });
+
+  it('o aviso fecha', async () => {
+    mockPermission.mockResolvedValue('denied');
+    const tree = await render();
+    await tocar(tree, 'Iniciar Jornada e começar tarefa');
+    const fechar = tree.root.findAll(
+      (n) => typeof n.props?.onClose === 'function' && n.props?.title === AVISO,
+    )[0];
+    await act(async () => fechar.props.onClose());
+
+    expect(textos(tree)).not.toContain(AVISO);
+  });
+
+  it('com a permissão de uso, ou onde não há rastreio, sem aviso', async () => {
+    for (const permissao of ['granted', 'unsupported']) {
+      mockPermission.mockResolvedValue(permissao);
+      const tree = await render();
+      await tocar(tree, 'Iniciar Jornada e começar tarefa');
+      expect(textos(tree)).not.toContain(AVISO);
+    }
+  });
+
+  // O pedido de "Sempre" do iPhone pode levar mais de um segundo para voltar
+  // sem mostrar nada. Ele vem depois de a jornada começar e não a segura.
+  it('o "Sempre" é pedido depois de iniciar, e iniciar não espera por ele', async () => {
+    mockAlways.mockReturnValue(new Promise(() => undefined));
+    const tree = await render();
+    await tocar(tree, 'Iniciar Jornada e começar tarefa');
+
+    expect(mockJourney.startTask).toHaveBeenCalledWith('t1');
+    expect(mockAlways).toHaveBeenCalledTimes(1);
+    expect(mockJourney.startTask.mock.invocationCallOrder[0]).toBeLessThan(
+      mockAlways.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('um segundo toque enquanto a permissão é pedida não inicia duas vezes', async () => {
+    let responder!: (permissao: string) => void;
+    mockPermission.mockReturnValue(
+      new Promise((resolve) => {
+        responder = resolve;
+      }),
+    );
+    const tree = await render();
+    await tocar(tree, 'Iniciar Jornada e começar tarefa');
+    await tocar(tree, 'Iniciar Jornada e começar tarefa');
+    await act(async () => responder('granted'));
+
+    expect(mockPermission).toHaveBeenCalledTimes(1);
+    expect(mockJourney.startTask).toHaveBeenCalledTimes(1);
   });
 });
 
