@@ -41,6 +41,8 @@ export function MapsGeneral() {
     setHeatmapOptions,
     showCameras,
     setShowCameras,
+    cameraSearch,
+    setCameraSearch,
     isLocating,
     handleLocate,
     backBtnPanResponder,
@@ -192,7 +194,13 @@ export function MapsGeneral() {
             )
           }
         />
-        <MapControl variant="cameras" expanded={showCameras} onExpandedChange={setShowCameras} />
+        <MapControl
+          variant="cameras"
+          expanded={showCameras}
+          onExpandedChange={setShowCameras}
+          searchValue={cameraSearch}
+          onSearchChange={setCameraSearch}
+        />
       </View>
 
       {/* Minha localização — bottom-left round button. Asks the browser for

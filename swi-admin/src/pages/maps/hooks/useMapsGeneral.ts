@@ -19,7 +19,8 @@ import { formatBadgeCount, withBadges } from '@/app/nav'
 import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { reportsApi } from '@/services/api/reports'
-import { CAMERA_LOCATIONS, type CameraLocation } from '@/services/cameras'
+import { camerasApi, type Camera } from '@/services/api/cameras'
+import { filterCameras } from '@/pages/cameras/cameraSearch'
 import { buildPin, buildCameraPin } from '../pinBuilders'
 
 export function useMapsGeneral() {
@@ -113,7 +114,32 @@ export function useMapsGeneral() {
   // desenha o ponto azul. Deslocar os pinos em volta do usuário desenharia o
   // GPS de cada funcionário num lugar onde ele não está.
   const operatorMarkers = useMemo<DashboardMapMarker[]>(() => mapMarkers ?? [], [mapMarkers])
-  const cameraLocations: ReadonlyArray<CameraLocation> = CAMERA_LOCATIONS
+  // Pontos cadastrados da empresa, lidos quando a camada liga. Cada vez que ela
+  // liga a lista é relida, para refletir câmera criada na seção Câmeras.
+  const [cameras, setCameras] = useState<ReadonlyArray<Camera>>([])
+  // "Buscar câmera" do controle: deixa no mapa só as câmeras que casam com o nome.
+  const [cameraSearch, setCameraSearch] = useState('')
+  const visibleCameras = useMemo(
+    () => filterCameras(cameras, cameraSearch),
+    [cameras, cameraSearch],
+  )
+  useEffect(() => {
+    if (!showCameras) return
+    let cancelled = false
+    camerasApi
+      .list()
+      .then((data) => {
+        if (!cancelled) setCameras(data)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setCameras([])
+        showToast('Câmeras indisponíveis', 'Não foi possível carregar as câmeras cadastradas.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showCameras, showToast])
 
   // Conservative over-estimate of button bbox (measured ~285×71 at 1920w, ~204×52 at 1366w).
   // Used only for clamping during drag; CSS handles initial anchored layout.
@@ -257,18 +283,15 @@ export function useMapsGeneral() {
     }
   }, [mapReady, operatorMarkers, showOperators, lib, navigate])
 
-  // Camera pins: rendered when the "Câmeras" MapControl is expanded.
-  // Mirrors the operator-pin useEffect; uses the same PinHandle/cleanup
-  // pattern. CAMERA_LOCATIONS is a module-level constant (no dependency
-  // on summary), so the only triggers are mapReady + showCameras.
+  // Pinos de câmera, com a camada "Câmeras" ligada. Mesmo padrão de
+  // PinHandle/cleanup dos pinos de operador. O clique abre a câmera na seção
+  // Câmeras, onde fica a imagem dela.
   useEffect(() => {
     const map = mapRef.current
     if (!lib || !map || !mapReady || !showCameras) return
 
-    const handles = cameraLocations.map((c) =>
-      buildCameraPin(c, map, lib, () =>
-        showToast('Câmera selecionada', `Stream ao vivo de ${c.name}`),
-      ),
+    const handles = visibleCameras.map((c) =>
+      buildCameraPin(c, map, lib, () => navigate(`/cameras?camera=${encodeURIComponent(c.id)}`)),
     )
 
     return () => {
@@ -282,7 +305,7 @@ export function useMapsGeneral() {
         })
       })
     }
-  }, [mapReady, showCameras, cameraLocations, lib, showToast])
+  }, [mapReady, showCameras, visibleCameras, lib, navigate])
 
   // Camada de calor "Produtividade": a trilha real de posições das últimas 24
   // horas, agregada em células pelo backend. Sem trilha no período não há
@@ -464,6 +487,8 @@ export function useMapsGeneral() {
     setHeatmapOptions,
     showCameras,
     setShowCameras,
+    cameraSearch,
+    setCameraSearch,
     isLocating,
     handleLocate,
     backBtnPanResponder,

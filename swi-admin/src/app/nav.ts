@@ -24,6 +24,8 @@ export const NAV_ITEMS: NavItem[] = [
   // chat. O ícone é `assignment_filled` (clipboard preenchido, do DS 0.1.117):
   // a sidebar inteira usa a variante preenchida.
   { value: '/tasks', label: 'Tarefas', icon: 'assignment_filled' },
+  // Câmeras logo abaixo de Tarefas: cadastro dos pontos de câmera da obra.
+  { value: '/cameras', label: 'Câmeras', icon: 'video_camera_filled' },
 ]
 
 // Contagem REAL → texto do badge. `undefined` (zero/negativo/NaN) some com o

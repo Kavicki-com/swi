@@ -17,13 +17,16 @@ vi.mock('./workOrders', () => ({
 vi.mock('./weather', () => ({
   weatherApi: { get: vi.fn() },
 }))
+vi.mock('./cameras', () => ({
+  countCameras: vi.fn(),
+}))
 
 import { dashboardApi } from './dashboard'
 import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi } from './workOrders'
 import { weatherApi } from './weather'
-import { ACTIVE_CAMERAS } from '@/services/cameras'
+import { countCameras } from './cameras'
 
 // Funcionários sintéticos COM identidade — os vitais simulados derivam do id.
 const list = (n: number) =>
@@ -76,6 +79,7 @@ beforeEach(() => {
   } as never)
   vi.mocked(workOrdersApi.list).mockResolvedValue(WO_ROWS as never)
   vi.mocked(weatherApi.get).mockResolvedValue({ data: [weatherSlot], error: null } as never)
+  vi.mocked(countCameras).mockResolvedValue(7)
 })
 
 describe('dashboardApi.summary', () => {
@@ -131,9 +135,15 @@ describe('dashboardApi.summary', () => {
       'emp-4': undefined,
     })
     expect(data!.employees.total).toBe(5)
-    // Câmeras: o KPI conta a MESMA frota que o mapa desenha (services/cameras),
+    // Câmeras: o KPI conta o MESMO cadastro que o mapa desenha (GET /cameras),
     // senão o número da tela diverge da quantidade de pinos.
-    expect(data!.kpis.activeCameras).toBe(ACTIVE_CAMERAS)
+    expect(data!.kpis.activeCameras).toBe(7)
+  })
+
+  it('câmeras que não carregaram viram null, nunca zero', async () => {
+    vi.mocked(countCameras).mockResolvedValue(null)
+    const { data } = await dashboardApi.summary()
+    expect(data!.kpis.activeCameras).toBeNull()
   })
 
   it('passes the real weather strip through', async () => {

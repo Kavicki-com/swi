@@ -137,7 +137,7 @@ const nomesVisiveis = () =>
 
 beforeEach(() => {
   directoryMock.mockResolvedValue({
-    data: { admins: 3, pendingReports: 2, employees: POPULACAO },
+    data: { admins: 3, pendingReports: 2, cameras: 4, employees: POPULACAO },
     error: null,
   })
   queueMock.mockResolvedValue({ data: FILA, error: null })
@@ -346,7 +346,7 @@ describe('MonitoringLayout: estados', () => {
 
   it('a lista sobrevive a um cadastro vazio', async () => {
     directoryMock.mockResolvedValue({
-      data: { admins: 0, pendingReports: 0, employees: [] },
+      data: { admins: 0, pendingReports: 0, cameras: 0, employees: [] },
       error: null,
     })
     await renderAt('/monitoring/alerts')

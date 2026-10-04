@@ -11,6 +11,9 @@ vi.mock('./reports', () => ({
 vi.mock('./telemetry', () => ({
   telemetryApi: { alerts: vi.fn() },
 }))
+vi.mock('./cameras', () => ({
+  countCameras: vi.fn(),
+}))
 
 import {
   alertDetailFrom,
@@ -22,6 +25,7 @@ import {
 import { adminsApi, employeesApi, type Employee } from './users'
 import { reportsApi } from './reports'
 import { telemetryApi } from './telemetry'
+import { countCameras } from './cameras'
 import {
   adminSummary,
   adminWorker,
@@ -207,6 +211,7 @@ describe('buildKpis', () => {
       admins: 3,
       workers: 5,
       pendingReports: 2,
+      cameras: 4,
       fatigueCount: 1,
       summary: adminSummary(),
     })
@@ -215,6 +220,7 @@ describe('buildKpis', () => {
       admins: '3',
       workers: '5',
       reports: '2',
+      cameras: '4',
       fatigue: '1',
       pressure: '124/80',
       movements: (1840).toLocaleString('pt-BR'),
@@ -223,12 +229,32 @@ describe('buildKpis', () => {
 
   it('sem resumo, pressão e movimentos são ausência, nunca zero', () => {
     const byId = Object.fromEntries(
-      buildKpis({ admins: 0, workers: 0, pendingReports: 0, fatigueCount: 0, summary: null }).map(
-        (k) => [k.id, k.value],
-      ),
+      buildKpis({
+        admins: 0,
+        workers: 0,
+        pendingReports: 0,
+        cameras: 0,
+        fatigueCount: 0,
+        summary: null,
+      }).map((k) => [k.id, k.value]),
     )
     expect(byId.pressure).toBe('--')
     expect(byId.movements).toBe('--')
+    expect(byId.cameras).toBe('0')
+  })
+
+  it('câmeras que não carregaram são ausência, nunca zero', () => {
+    const byId = Object.fromEntries(
+      buildKpis({
+        admins: 0,
+        workers: 0,
+        pendingReports: 0,
+        cameras: null,
+        fatigueCount: 0,
+        summary: null,
+      }).map((k) => [k.id, k.value]),
+    )
+    expect(byId.cameras).toBe('--')
   })
 })
 
@@ -266,8 +292,9 @@ describe('monitoringApi', () => {
   })
 
   it('diretório traz as contagens e os funcionários do cadastro', async () => {
+    vi.mocked(countCameras).mockResolvedValue(6)
     const { data } = await monitoringApi.directory()
-    expect(data).toMatchObject({ admins: 3, pendingReports: 2 })
+    expect(data).toMatchObject({ admins: 3, pendingReports: 2, cameras: 6 })
     expect(data?.employees.map((e) => e.id)).toEqual(['w1'])
   })
 

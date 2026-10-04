@@ -3,11 +3,10 @@
 // assertions live in dedicated tests; this guard catches regressions
 // from DS bumps, route refactors, and import-graph changes.
 // vitest globals (describe/it/expect/afterEach) are available via globals: true
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
-import { CAMERA_LOCATIONS } from '@/services/cameras'
 import { MapsGeneral } from './MapsGeneral'
 import { clearSession, renderPage, seedSession, settled } from '@/test-utils/renderPage'
 
@@ -68,6 +67,19 @@ vi.mock('@/services/api/positionHeat', () => ({
 // `radar.value`.
 const radar = vi.hoisted(() => ({ value: null as { host: string; path: string } | null }))
 vi.mock('@/lib/rainViewer', () => ({ getRainViewerLatestRadar: async () => radar.value }))
+
+// Câmeras cadastradas da empresa; o teste do caminho de falha liga `fail`.
+const cameras = vi.hoisted(() => ({
+  fail: false,
+  value: [
+    { id: 'cam-a', name: 'Portaria', lat: -23.54, lng: -46.63, url: null },
+    { id: 'cam-b', name: 'Pátio', lat: -23.56, lng: -46.62, url: null },
+  ],
+}))
+const failed = () => Promise.reject(new Error('fora do ar'))
+vi.mock('@/services/api/cameras', () => ({
+  camerasApi: { list: () => (cameras.fail ? failed() : Promise.resolve(cameras.value)) },
+}))
 
 // Sem o provider real, useDemoToast devolve um no-op com identidade NOVA a cada
 // chamada, o que faria o efeito das câmeras reexecutar a cada render. O espião
@@ -220,6 +232,11 @@ function EmployeeProbe() {
   return <div data-testid="employee-route">{id}</div>
 }
 
+function CamerasProbe() {
+  const [params] = useSearchParams()
+  return <div data-testid="cameras-route">{params.get('camera')}</div>
+}
+
 /**
  * Monta a página com uma TABELA de rotas, ao contrário do `renderPage`, que
  * monta um componente só. Os quatro testes originais não precisavam disso;
@@ -236,6 +253,7 @@ async function renderMaps(route = '/maps/general') {
               <Route path="/maps/general" element={<MapsGeneral />} />
               <Route path="/" element={<div data-testid="dashboard-route" />} />
               <Route path="/employees/:id" element={<EmployeeProbe />} />
+              <Route path="/cameras" element={<CamerasProbe />} />
             </Routes>
           </MemoryRouter>
         </AuthProvider>
@@ -250,6 +268,11 @@ async function drain() {
   await act(async () => {
     await new Promise((r) => setTimeout(r, 0))
   })
+}
+
+/** Botão da camada de câmeras (o menu lateral também tem um item "Câmeras"). */
+function cameraLayerToggle() {
+  return within(screen.getByTestId('maps-controls')).getByRole('button', { name: 'Câmeras' })
 }
 
 /** Pinos de conteúdo (operador/câmera): têm elemento próprio. O pino azul da
@@ -437,28 +460,54 @@ describe('MapsGeneral', () => {
 
   // -------------------------------------------------------------- câmeras
 
-  it('ligar Câmeras desenha a frota inteira e o clique anuncia o stream', async () => {
+  it('ligar Câmeras desenha as câmeras cadastradas e o clique abre a câmera na seção', async () => {
     const view = await renderMaps()
-    fireEvent.click(screen.getByRole('button', { name: 'Câmeras' }))
+    fireEvent.click(cameraLayerToggle())
     await drain()
 
-    // A frota vem de services/cameras, a MESMA lista que alimenta o KPI
-    // "Câmeras ativas". Cravar 12 aqui deixaria o teste passar com o mapa e o
-    // KPI divergindo de novo.
-    expect(contentPins()).toHaveLength(CAMERA_LOCATIONS.length)
-    const primeira = CAMERA_LOCATIONS[0]
+    // Os pontos vêm do cadastro (GET /cameras), a MESMA fonte do KPI.
+    expect(contentPins()).toHaveLength(cameras.value.length)
+    const primeira = cameras.value[0]
     expect(contentPins()[0]?.lngLats[0]).toEqual([primeira?.lng, primeira?.lat])
 
     await act(async () => {
       contentPins()[0]?.element?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
+    expect(screen.getByTestId('cameras-route')).toHaveTextContent('cam-a')
+    await act(async () => view.unmount())
+  })
+
+  // "Buscar câmera" do controle filtra os pinos pelo nome, como no Figma.
+  it('buscar câmera deixa no mapa só as que casam com o nome', async () => {
+    const view = await renderMaps()
+    fireEvent.click(cameraLayerToggle())
+    await drain()
+    expect(contentPins().filter((p) => !p.removed)).toHaveLength(2)
+
+    fireEvent.change(screen.getByPlaceholderText('Buscar câmera'), { target: { value: 'patio' } })
+    await drain()
+
+    const vivos = contentPins().filter((p) => !p.removed)
+    expect(vivos).toHaveLength(1)
+    expect(vivos[0]?.lngLats[0]).toEqual([-46.62, -23.56])
+    await act(async () => view.unmount())
+  })
+
+  // Falha ao ler o cadastro não pode virar mapa vazio em silêncio: sem aviso,
+  // o operador entenderia que a obra não tem câmera.
+  it('falha ao ler as câmeras avisa e não desenha pino', async () => {
+    cameras.fail = true
+    const view = await renderMaps()
+    fireEvent.click(cameraLayerToggle())
+    await drain()
+
+    expect(contentPins()).toHaveLength(0)
     expect(toast.show).toHaveBeenCalledWith(
-      'Câmera selecionada',
-      `Stream ao vivo de ${primeira?.name}`,
+      'Câmeras indisponíveis',
+      'Não foi possível carregar as câmeras cadastradas.',
     )
-    await act(async () => {
-      view.unmount()
-    })
+    cameras.fail = false
+    await act(async () => view.unmount())
   })
 
   // -------------------------------------------------------------- heatmap
@@ -551,7 +600,7 @@ describe('MapsGeneral', () => {
     )
     const view = await renderMaps()
     fireEvent.click(screen.getByRole('button', { name: 'Operador' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Câmeras' }))
+    fireEvent.click(cameraLayerToggle())
     await drain()
     const antes = contentPins().length
 

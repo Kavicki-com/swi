@@ -6,7 +6,7 @@ import type * as maplibregl from 'maplibre-gl'
 import { LocationPin } from '@kavicki/swi-design-system'
 import { createPinElement, type PinElement } from '@/lib/pinFactory'
 import { type DashboardMapMarker } from '@/services/dashboard'
-import { type CameraLocation } from '@/services/cameras'
+import { type Camera } from '@/services/api/cameras'
 
 export type PinHandle = PinElement & { marker: maplibregl.Marker }
 
@@ -24,11 +24,9 @@ export function buildPin(
   return { marker, root, el }
 }
 
-// Frota de câmeras: importada de services/cameras, a MESMA lista que alimenta
-// o KPI "Câmeras ativas" (antes o mapa desenhava 12 e o KPI cravava 564).
-
+// Ponto de câmera cadastrado (GET /cameras), a MESMA fonte do KPI "Câmeras ativas".
 export function buildCameraPin(
-  c: CameraLocation,
+  c: Camera,
   map: maplibregl.Map,
   lib: typeof maplibregl,
   onClick: () => void,

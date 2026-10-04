@@ -22,7 +22,7 @@ import {
   type ConditionCategory,
 } from './telemetry'
 import { NO_VALUE } from '@/services/vitals/vitalsView'
-import { ACTIVE_CAMERAS } from '@/services/cameras'
+import { countCameras } from './cameras'
 
 export type {
   MonitoringAlertDetail,
@@ -207,6 +207,8 @@ export type KpiInput = {
   admins: number
   workers: number
   pendingReports: number
+  /** Câmeras cadastradas; null quando a leitura falhou. */
+  cameras: number | null
   /** Quantos estão na aba de alerta agora: o mesmo número do badge da régua. */
   fatigueCount: number
   summary: AdminTelemetrySummary | null
@@ -234,11 +236,11 @@ export function buildKpis(input: KpiInput): MonitoringKpi[] {
       value: String(input.pendingReports),
       label: 'Novos relatórios',
     },
-    // Câmeras: conta a MESMA frota que o mapa desenha (services/cameras).
+    // Câmeras: o MESMO cadastro que o mapa desenha. Falha é ausência, nunca zero.
     {
       id: 'cameras',
       icon: 'video_camera_filled',
-      value: num(ACTIVE_CAMERAS),
+      value: input.cameras === null ? NO_VALUE : num(input.cameras),
       label: 'Câmeras ativas',
     },
     {
@@ -315,6 +317,7 @@ export function buildGoodConditions(
 export type MonitoringDirectory = {
   admins: number
   pendingReports: number
+  cameras: number | null
   employees: ReadonlyArray<Employee>
 }
 
@@ -322,15 +325,17 @@ export const monitoringApi = {
   // Cadastro da org. Falha degrada para listas vazias: o monitoramento continua
   // de pé mostrando o que der, em vez de quebrar a tela inteira.
   async directory(): Promise<ServiceResponse<MonitoringDirectory>> {
-    const [admins, reports, employees] = await Promise.all([
+    const [admins, reports, employees, cameras] = await Promise.all([
       adminsApi.list(),
       reportsApi.list(),
       employeesApi.list(),
+      countCameras(),
     ])
     return {
       data: {
         admins: admins.data?.length ?? 0,
         pendingReports: (reports.data ?? []).filter((r) => r.status === 'pending').length,
+        cameras,
         employees: employees.data ?? [],
       },
       error: null,

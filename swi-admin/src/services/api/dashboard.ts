@@ -10,7 +10,7 @@ import { adminsApi, employeesApi } from './users'
 import { reportsApi } from './reports'
 import { workOrdersApi, type WorkOrderRow, type WorkOrderStatus } from './workOrders'
 import { weatherApi } from './weather'
-import { ACTIVE_CAMERAS } from '@/services/cameras'
+import { countCameras } from './cameras'
 
 export type DashboardActivityStatus = 'em-curso' | 'concluida' | 'a-fazer'
 
@@ -69,7 +69,8 @@ export type DashboardSummary = {
     admins: number
     totalEmployees: number
     newReports: number
-    activeCameras: number
+    /** Câmeras cadastradas; null quando a leitura falhou (a tela mostra "--"). */
+    activeCameras: number | null
   }
   mapMarkers: DashboardMapMarker[]
   activities: DashboardActivity[]
@@ -111,19 +112,19 @@ async function fetchActivities(): Promise<DashboardActivity[]> {
   }
 }
 
-// Câmeras: MESMA frota que o mapa desenha (services/cameras). Era 564 fixo
-// contra 12 pinos no mapa — número que não correspondia a nada.
-
 export const dashboardApi = {
   summary: async (): Promise<ServiceResponse<DashboardSummary>> => {
     // Cada fachada envelope nunca rejeita; workOrders é isolado no helper. Um
     // erro degrada só a própria seção: o summary nunca propaga erro total.
-    const [admins, employees, reports, activities, weather] = await Promise.all([
+    // Câmeras: o MESMO cadastro que o mapa desenha (GET /cameras). countCameras
+    // nunca rejeita; falha vira null.
+    const [admins, employees, reports, activities, weather, cameras] = await Promise.all([
       adminsApi.list(),
       employeesApi.list(),
       reportsApi.list(),
       fetchActivities(),
       weatherApi.get(),
+      countCameras(),
     ])
 
     const workers = employees.data ?? []
@@ -141,7 +142,7 @@ export const dashboardApi = {
           admins: admins.data?.length ?? 0,
           totalEmployees: workers.length,
           newReports,
-          activeCameras: ACTIVE_CAMERAS,
+          activeCameras: cameras,
         },
         // Posições agora são REAIS (GET /positions + WS): o Dashboard splica
         // useLivePositions() sobre o summary no render. Vazio aqui de propósito.
