@@ -100,6 +100,10 @@ export const mockReportsBackend: ReportsBackend = {
     const found = store.find((r) => r.id === id);
     return found ? { ...found } : null;
   },
+  // Sem servidor não há o que subir: a referência da foto é a própria uri.
+  async uploadImage(localUri: string) {
+    return localUri;
+  },
   async create(input) {
     await tick();
     const report: Report = {
@@ -115,7 +119,7 @@ export const mockReportsBackend: ReportsBackend = {
       sector: SECTOR,
       responsibles: input.responsibles,
       details: input.details,
-      images: input.imageUris,
+      images: input.imageKeys,
       activities: [],
     };
     store = [report, ...store];

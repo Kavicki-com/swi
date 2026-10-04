@@ -10,8 +10,11 @@ import {
   Input,
   JourneyTheme,
   Title,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { errorMessage } from '../../../lib/errors/errorMessage';
+import { QUEUE_FULL_TITLE } from '../../../services/outbox/sendCopy';
 import {
   responsiblesSelection,
   type ResponsiblePick,
@@ -34,6 +37,11 @@ export default function NewReport() {
   const router = useRouter();
   const { create } = useReports();
   const [saving, setSaving] = useState(false);
+  // Relatório que não entrou na fila de envios: fila cheia, ou foto recusada
+  // na entrada. A tela fica aberta e a pessoa não perde o que escreveu.
+  const [notice, setNotice] = useState<{ variant: 'warning' | 'error'; title: string } | null>(
+    null,
+  );
 
   const titulo = useField({ validator: (v) => validateRequired(v, 'Título') });
   const resumo = useField({ validator: (v) => validateRequired(v, 'Resumo') });
@@ -125,16 +133,29 @@ export default function NewReport() {
     // GRAVADA como responsável no banco de verdade.
     const responsibleNames = responsibles.map((r) => r.name);
     setSaving(true);
+    setNotice(null);
     try {
-      await create({
+      // O relatório entra na fila de envios e a tela volta para a lista na
+      // hora, com sinal ou sem: lá ele aparece como "Aguardando envio" até o
+      // servidor confirmar.
+      const result = await create({
         title: titulo.value,
         summary: resumo.value,
         details: detalhes.value,
         responsibles: responsibleNames,
         imageUris: attachments.filter(Boolean) as string[],
       });
+      if (result === 'full') {
+        setNotice({ variant: 'warning', title: QUEUE_FULL_TITLE });
+        return;
+      }
       responsiblesSelection.clear();
       router.back();
+    } catch (e) {
+      setNotice({
+        variant: 'error',
+        title: errorMessage(e, 'Não foi possível salvar o relatório.'),
+      });
     } finally {
       setSaving(false);
     }
@@ -294,6 +315,10 @@ export default function NewReport() {
           value={null}
           onPickFile={pickFileForUploader}
         />
+
+        {notice ? (
+          <Toast variant={notice.variant} title={notice.title} onClose={() => setNotice(null)} />
+        ) : null}
 
         {/* CTAs */}
         <Button

@@ -4,6 +4,7 @@ import { JourneyProvider, useJourney } from '../../services/journey/JourneyProvi
 import { EvacuationProvider } from '../../services/evacuation/EvacuationProvider';
 import { NotificationProvider } from '../../services/notifications/NotificationProvider';
 import { useJourneyTracking } from '../../services/positions/useTrackingLifecycle';
+import { SendQueueRoot } from '../../components/outbox/SendQueueRoot';
 
 // GPS em segundo plano: liga com a jornada em andamento ou pausada e desliga
 // quando ela encerra. Null-render, dentro do JourneyProvider para ler a
@@ -43,6 +44,7 @@ export default function AppLayout() {
       <EvacuationProvider>
         <NotificationProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
+          <SendQueueRoot userId={user.id} />
         </NotificationProvider>
       </EvacuationProvider>
     </JourneyProvider>

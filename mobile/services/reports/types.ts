@@ -50,10 +50,25 @@ export interface ReportInput {
   imageUris: string[];
 }
 
+/** O relatório como vai ao backend: as fotos já subidas, pela referência. */
+export interface ReportPayload {
+  title: string;
+  summary: string;
+  details: string;
+  responsibles: string[];
+  imageKeys: string[];
+}
+
 export interface ReportsBackend {
   list(): Promise<Report[]>;
   get(id: string): Promise<Report | null>;
-  create(input: ReportInput): Promise<Report>;
+  /**
+   * Sobe uma foto e devolve a referência que o `create` aceita em `imageKeys`.
+   * Passo à parte para a fila de envios subir uma vez só e repetir só o POST.
+   */
+  uploadImage(localUri: string): Promise<string>;
+  /** `idempotencyKey`: a mesma em toda tentativa do mesmo relatório. */
+  create(payload: ReportPayload, idempotencyKey?: string): Promise<Report>;
   /** Comenta num relatorio. Devolve o comentario criado, ja pronto pra lista. */
-  addComment(reportId: string, body: string): Promise<ReportComment>;
+  addComment(reportId: string, body: string, idempotencyKey?: string): Promise<ReportComment>;
 }

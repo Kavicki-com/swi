@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,12 +22,17 @@ import type { Report } from '../../../services/reports/types';
 
 // T5.2: ReportRow memoizado pra impedir que os 10 cards re-renderizem quando
 // search/currentPage mudam. onPress(id) é estável via useCallback no parent.
+// `onPress` ausente = cartão que não abre: é o relatório ainda na fila de
+// envios, que não existe no servidor e não tem detalhe para mostrar.
 type ReportRowProps = {
   report: Report;
-  onPress: (id: string) => void;
+  onPress?: (id: string) => void;
 };
 const ReportRow = memo(function ReportRow({ report, onPress }: ReportRowProps) {
-  const handlePress = useCallback(() => onPress(report.id), [report.id, onPress]);
+  const handlePress = useMemo(
+    () => (onPress ? () => onPress(report.id) : undefined),
+    [report.id, onPress],
+  );
   return (
     <ReportCard
       status={report.status}
@@ -48,7 +53,7 @@ export default function Reports() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { reports, status, load } = useReports();
+  const { reports, pendingReports, status, load } = useReports();
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -75,7 +80,7 @@ export default function Reports() {
 
       {status === 'loading' || status === 'idle' ? (
         <ReportsListState kind="loading" />
-      ) : status === 'empty' ? (
+      ) : status === 'empty' && pendingReports.length === 0 ? (
         <ReportsListState kind="empty" />
       ) : status === 'error' ? (
         <ReportsListState kind="error" onRetry={load} />
@@ -115,6 +120,10 @@ export default function Reports() {
             }}
             showsVerticalScrollIndicator={false}
           >
+            {/* Os relatórios na fila de envios vêm primeiro: são os mais novos. */}
+            {pendingReports.map((report) => (
+              <ReportRow key={report.id} report={report} />
+            ))}
             {reports.map((report) => (
               <ReportRow
                 key={report.id}

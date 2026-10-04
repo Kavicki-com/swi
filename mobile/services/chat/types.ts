@@ -44,13 +44,23 @@ export interface Contact {
   gender?: string | null;           // código: 'male' | 'female' | 'other'
 }
 
+export interface SendMessageOptions {
+  /** Referência do anexo, devolvida pelo `uploadImage` do mesmo backend. */
+  imageKey?: string;
+  /** Chave do envio: a mesma em toda tentativa da mesma mensagem. */
+  idempotencyKey?: string;
+}
+
 export interface ChatBackend {
   readonly myId: string;            // sub do worker logado (mock = 'me')
   listConversations(): Promise<Conversation[]>;
   listMessages(conversationId: string): Promise<Message[]>;
   listDirectory(): Promise<Contact[]>;
   // cria-ou-anexa: se a conversa (id determinístico) não existe, cria do diretório
-  sendMessage(conversationId: string, body: string, imageUri?: string): Promise<Message>;
+  sendMessage(conversationId: string, body: string, opts?: SendMessageOptions): Promise<Message>;
+  // Sobe o anexo e devolve a referência que o sendMessage aceita em `imageKey`.
+  // Passo à parte para a fila de envios subir uma vez só e repetir só o POST.
+  uploadImage(localUri: string): Promise<string>;
   markRead(conversationId: string): Promise<void>;
   // conversationId === null ⇒ canal global (inbox); senão a thread daquela conversa
   subscribe(conversationId: string | null, cb: (msg: Message) => void): () => void;

@@ -22,6 +22,15 @@ jest.mock('../../../../services/reports/getReportsBackend', () => ({
     require('../../../../services/reports/apiReportsBackend').apiReportsBackend,
 }));
 
+// O provider assina os envios pendentes com o nome e a foto de quem esta
+// logado. A sessao nao e o assunto daqui: entra pronta.
+jest.mock('../../../../services/auth/AuthProvider', () => ({
+  useAuth: () => ({ user: { id: 'u1', email: 'josue@example.test', name: 'Josue Oliveira' } }),
+}));
+jest.mock('../../../../services/profile/ProfileProvider', () => ({
+  useProfile: () => ({ profile: null }),
+}));
+
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'r1' }),
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),

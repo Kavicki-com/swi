@@ -269,7 +269,12 @@ export const mockChatBackend: ChatBackend = {
     return DIRECTORY.map((d) => ({ ...d }));
   },
 
-  async sendMessage(conversationId, body, imageUri) {
+  // Sem servidor não há o que subir: a referência do anexo é a própria uri.
+  async uploadImage(localUri) {
+    return localUri;
+  },
+
+  async sendMessage(conversationId, body, opts = {}) {
     await tick();
     let conv = conversations.find((c) => c.id === conversationId);
     if (!conv) conv = createLazy(conversationId);
@@ -280,7 +285,7 @@ export const mockChatBackend: ChatBackend = {
       participants: [...conv.participants],
       senderId: MY_ID,
       body,
-      imageUri: imageUri ?? null,
+      imageUri: opts.imageKey ?? null,
       sentAt: new Date().toISOString(),
     };
     messages.push(m);

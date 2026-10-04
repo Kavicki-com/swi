@@ -1,14 +1,15 @@
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { SwiThemeProvider } from '@kavicki/swi-design-system';
+import { SwiThemeProvider, Toast } from '@kavicki/swi-design-system';
 import NovoRelatorio from '../../../../app/(app)/reports/new';
 import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
 import { useReports } from '../../../../services/reports/ReportsProvider';
 
 jest.mock('../../../../lib/media/useMediaPicker', () => ({ useMediaPicker: jest.fn() }));
 jest.mock('../../../../services/reports/ReportsProvider', () => ({ useReports: jest.fn() }));
+const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+  useRouter: () => ({ back: mockBack, push: jest.fn() }),
   useFocusEffect: jest.fn(),
 }));
 
@@ -87,7 +88,8 @@ let criarRelatorio: jest.Mock;
 beforeEach(() => {
   pickFromGallery = jest.fn(async () => FOTO);
   showPicker = jest.fn(async () => FOTO);
-  criarRelatorio = jest.fn(async () => ({}));
+  criarRelatorio = jest.fn(async () => 'queued');
+  mockBack.mockClear();
   mockUseMediaPicker.mockReturnValue({ showPicker, pickFromGallery });
   mockUseReports.mockReturnValue({ create: criarRelatorio });
 });
@@ -240,6 +242,80 @@ describe('Novo relatório, remover anexo', () => {
 // `onPress={disabled ? undefined : onPress}` no Pressable interno, então
 // chamar onPress() do elemento externo CONTORNA o disabled e passaria mesmo
 // com a regressão presente. Sem ela o teste não tem dente.
+// Salvar põe o relatório na fila de envios e volta para a lista na hora, com
+// sinal ou sem. A tela só fica quando o relatório NÃO entrou na fila.
+describe('Novo relatório: salvar pela fila de envios', () => {
+  const avisos = (tree: ReturnType<typeof create>) => tree.root.findAllByType(Toast);
+
+  it('relatório que entrou na fila volta para a lista, sem aviso', async () => {
+    const tree = await render();
+    await preencher(tree);
+
+    await salvar(tree);
+
+    expect(criarRelatorio).toHaveBeenCalledTimes(1);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(avisos(tree)).toHaveLength(0);
+  });
+
+  it('fila cheia: avisa, fica na tela e guarda o que a pessoa escreveu', async () => {
+    criarRelatorio.mockResolvedValue('full');
+    const tree = await render();
+    await preencher(tree);
+
+    await salvar(tree);
+
+    const [aviso] = avisos(tree);
+    expect(aviso.props.variant).toBe('warning');
+    expect(aviso.props.title).toBe(
+      'Há muitos envios aguardando conexão. Tente de novo quando o sinal voltar.',
+    );
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(campo(tree, 'Título do relatório').props.value).toBe('x');
+    expect(botaoSalvar(tree).props.disabled).toBeFalsy();
+  });
+
+  // Foto que sumiu ou passa de 15 MB é recusada na entrada da fila, com a
+  // tela ainda aberta para a pessoa trocar a foto.
+  it('foto recusada na entrada: mostra o motivo, fica na tela e libera o botão', async () => {
+    criarRelatorio.mockRejectedValue(new Error('A imagem passa de 15 MB. Escolha uma imagem menor.'));
+    const tree = await render();
+    await preencher(tree);
+
+    await salvar(tree);
+
+    const [aviso] = avisos(tree);
+    expect(aviso.props.variant).toBe('error');
+    expect(aviso.props.title).toBe('A imagem passa de 15 MB. Escolha uma imagem menor.');
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(botaoSalvar(tree).props.disabled).toBeFalsy();
+  });
+
+  it('o aviso some na tentativa seguinte que entra na fila', async () => {
+    criarRelatorio.mockResolvedValueOnce('full');
+    const tree = await render();
+    await preencher(tree);
+    await salvar(tree);
+    expect(avisos(tree)).toHaveLength(1);
+
+    await salvar(tree);
+
+    expect(avisos(tree)).toHaveLength(0);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('o aviso fecha no X', async () => {
+    criarRelatorio.mockResolvedValue('full');
+    const tree = await render();
+    await preencher(tree);
+    await salvar(tree);
+
+    await act(async () => { avisos(tree)[0].props.onClose(); });
+
+    expect(avisos(tree)).toHaveLength(0);
+  });
+});
+
 describe('Novo relatório: Salvar com formulário incompleto', () => {
   it('mantém o botão habilitado para que o toque chegue à validação', async () => {
     const tree = await render();

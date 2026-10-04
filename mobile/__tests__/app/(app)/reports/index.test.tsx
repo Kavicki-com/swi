@@ -1,7 +1,7 @@
 import { act, create } from 'react-test-renderer';
 import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Pagination, SwiThemeProvider } from '@kavicki/swi-design-system';
+import { Pagination, ReportCard, SwiThemeProvider } from '@kavicki/swi-design-system';
 import Reports from '../../../../app/(app)/reports/index';
 import { useReports } from '../../../../services/reports/ReportsProvider';
 import type { Report } from '../../../../services/reports/types';
@@ -40,11 +40,13 @@ const relatorio = (id: string, title: string): Report => ({
   comments: [],
 });
 
-const render = async () => {
+const render = async (over: Record<string, unknown> = {}) => {
   (useReports as jest.Mock).mockReturnValue({
     reports: [relatorio('r1', 'Socorro'), relatorio('r2', 'teste novo relatorio')],
+    pendingReports: [],
     status: 'ready',
     load: jest.fn(),
+    ...over,
   });
   let tree!: ReturnType<typeof create>;
   await act(async () => {
@@ -63,6 +65,47 @@ const render = async () => {
 // altura 56 → o topo dele fica a insets.bottom + 127 da base. É o mínimo que o
 // rodapé da lista precisa reservar pra paginação nunca ficar atrás dos FABs.
 const TOPO_DOS_FABS = 127;
+
+// O relatório escrito sem sinal entra na fila de envios e aparece na lista na
+// hora. O Figma não desenha esse estado: o cartão é o ReportCard do DS, com o
+// texto aprovado no rótulo da tag.
+describe('Reports (lista): relatórios na fila de envios', () => {
+  const pendente = (): Report => ({
+    ...relatorio('chave-1', 'Novo sem sinal'),
+    statusLabel: 'Aguardando envio',
+  });
+
+  it('o pendente aparece antes dos relatórios do servidor, com a tag de aguardando envio', async () => {
+    const tree = await render({ pendingReports: [pendente()] });
+    const cards = tree.root.findAllByType(ReportCard);
+
+    expect(cards.map((c) => c.props.title)).toEqual(['Novo sem sinal', 'Socorro', 'teste novo relatorio']);
+    expect(cards[0].props.status).toBe('pending');
+    expect(cards[0].props.statusLabel).toBe('Aguardando envio');
+  });
+
+  // O relatório ainda não existe no servidor: não há detalhe para abrir.
+  it('o cartão pendente não abre detalhe; os do servidor continuam abrindo', async () => {
+    const tree = await render({ pendingReports: [pendente()] });
+    const cards = tree.root.findAllByType(ReportCard);
+
+    expect(cards[0].props.onPress).toBeUndefined();
+    expect(typeof cards[1].props.onPress).toBe('function');
+  });
+
+  it('servidor sem relatório nenhum, mas com um pendente: mostra o cartão, não o vazio', async () => {
+    const tree = await render({ reports: [], status: 'empty', pendingReports: [pendente()] });
+    const cards = tree.root.findAllByType(ReportCard);
+
+    expect(cards.map((c) => c.props.title)).toEqual(['Novo sem sinal']);
+  });
+
+  it('sem pendentes, a lista vazia continua mostrando o estado vazio', async () => {
+    const tree = await render({ reports: [], status: 'empty' });
+
+    expect(tree.root.findAllByType(ReportCard)).toHaveLength(0);
+  });
+});
 
 describe('Reports (lista), vão do QA Mobile #8', () => {
   it('a área de cards é elástica: cresce com a tela em vez de parar num teto fixo', async () => {

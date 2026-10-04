@@ -53,6 +53,43 @@ describe('apiRequest', () => {
     expect(headers.Authorization).toBeUndefined();
   });
 
+  // A fila de envios manda a mesma chave em toda tentativa do mesmo item: é o
+  // que deixa o backend reconhecer o reenvio e não gravar duas vezes.
+  it('idempotencyKey vira o cabeçalho Idempotency-Key', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({}));
+    await apiRequest('/reports', { body: { title: 'x' }, auth: true, idempotencyKey: 'chave-1' });
+    const headers = (global.fetch as jest.Mock).mock.calls[0][1].headers;
+    expect(headers['Idempotency-Key']).toBe('chave-1');
+  });
+
+  it('sem idempotencyKey o cabeçalho não existe', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({}));
+    await apiRequest('/reports', { body: { title: 'x' }, auth: true });
+    const headers = (global.fetch as jest.Mock).mock.calls[0][1].headers;
+    expect('Idempotency-Key' in headers).toBe(false);
+  });
+
+  // Um 4xx pode vir de quem está no caminho (proxy, túnel parado, página de
+  // manutenção), e não da API. A fila de envios só descarta um item quando a
+  // recusa é da API: o corpo de erro do Nest sempre traz `statusCode`.
+  it('erro com o corpo da API vem marcado com apiError', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      errJson(422, { statusCode: 422, message: 'Chave já usada com outro conteúdo' }),
+    );
+    await expect(apiRequest('/reports', { body: {} })).rejects.toMatchObject({
+      status: 422,
+      apiError: true,
+    });
+  });
+
+  it('erro sem o corpo da API (resposta de proxy) não vem marcado', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(errJson(404, {}));
+    await expect(apiRequest('/reports', { body: {} })).rejects.toMatchObject({
+      status: 404,
+      apiError: false,
+    });
+  });
+
   it('quando !res.ok lança com a message do backend', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(errJson(400, { message: 'CPF inválido' }));
     await expect(apiRequest('/profile/me', { method: 'PUT', body: {} }))

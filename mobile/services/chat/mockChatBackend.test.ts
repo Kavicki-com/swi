@@ -36,6 +36,14 @@ describe('mockChatBackend', () => {
     expect(cs.find((c) => c.id === first.id)?.lastMessageBody).toBe('olá real-time');
     unsub();
   });
+  // No mock a "key" do anexo é a própria uri local: a foto aparece sem servidor.
+  it('uploadImage devolve a própria uri e sendMessage a usa como anexo', async () => {
+    const [first] = await mockChatBackend.listConversations();
+    const key = await mockChatBackend.uploadImage('file:///foto.jpg');
+    expect(key).toBe('file:///foto.jpg');
+    const sent = await mockChatBackend.sendMessage(first.id, '', { imageKey: key });
+    expect(sent.imageUri).toBe('file:///foto.jpg');
+  });
   it('subscriber global (null) recebe mensagem de qualquer conversa', async () => {
     const [first] = await mockChatBackend.listConversations();
     const seen: string[] = [];

@@ -73,15 +73,38 @@ describe('apiReportsBackend', () => {
     await expect(apiReportsBackend.get('x')).rejects.toThrow('boom');
   });
 
-  it('create: sobe cada imagem e POSTa com imageKeys', async () => {
-    (uploadImage as jest.Mock).mockResolvedValueOnce('reports/a.jpg').mockResolvedValueOnce('reports/b.jpg');
+  // Subir a foto é um passo à parte: a fila de envios sobe cada uma uma vez só,
+  // guarda a key no item e repete o POST com o mesmo corpo.
+  it('uploadImage sobe com o prefixo reports e devolve a key', async () => {
+    (uploadImage as jest.Mock).mockResolvedValue('reports/a.jpg');
+    await expect(apiReportsBackend.uploadImage('file://a')).resolves.toBe('reports/a.jpg');
+    expect(uploadImage).toHaveBeenCalledWith('file://a', 'reports');
+  });
+
+  it('create POSTa as keys recebidas, sem subir nada, e leva a chave do envio', async () => {
     (apiRequest as jest.Mock).mockResolvedValue({ id: 'novo', title: 'T' });
-    await apiReportsBackend.create({ title: 'T', summary: 'S', details: 'D', responsibles: ['Ana'], imageUris: ['file://a', 'file://b'] });
-    expect(uploadImage).toHaveBeenCalledTimes(2);
+    const out = await apiReportsBackend.create(
+      { title: 'T', summary: 'S', details: 'D', responsibles: ['Ana'], imageKeys: ['reports/a.jpg', 'reports/b.jpg'] },
+      'chave-1',
+    );
+    expect(uploadImage).not.toHaveBeenCalled();
     expect(apiRequest).toHaveBeenCalledWith('/reports', {
       method: 'POST',
       body: { title: 'T', summary: 'S', details: 'D', responsibles: ['Ana'], imageKeys: ['reports/a.jpg', 'reports/b.jpg'] },
       auth: true,
+      idempotencyKey: 'chave-1',
+    });
+    expect(out.comments).toEqual([]);
+  });
+
+  it('addComment POSTa o texto e leva a chave do envio', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'c1', body: 'oi' });
+    await apiReportsBackend.addComment('r1', 'oi', 'chave-2');
+    expect(apiRequest).toHaveBeenCalledWith('/reports/r1/comments', {
+      method: 'POST',
+      body: { body: 'oi' },
+      auth: true,
+      idempotencyKey: 'chave-2',
     });
   });
 });
