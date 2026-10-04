@@ -27,6 +27,7 @@ import {
   type TelemetrySessionRef,
 } from '../persistence/telemetry.repository'
 import type { TelemetryBatchDto, TelemetryEventDto } from './dto/telemetry-batch.dto'
+import { describeError } from '../../common/describe-error'
 
 // Ingestão do piloto. Um evento entra, é conferido, gravado e só então
 // confirmado. A avaliação de esforço e desgaste e a avaliação de condições
@@ -215,7 +216,7 @@ export class TelemetryIngestionService {
       try {
         await this.assessment.assessSession(sessionId, triggerAt, now)
       } catch (error) {
-        this.logger.error(`Falha ao avaliar a sessão ${sessionId}: ${(error as Error).message}`)
+        this.logger.error(`Falha ao avaliar a sessão ${sessionId}: ${describeError(error)}`)
       }
 
       // try/catch PRÓPRIO, e não o de cima: alerta é segurança. Um erro na
@@ -235,7 +236,7 @@ export class TelemetryIngestionService {
       try {
         await this.conditions.evaluateSession(sessionId, triggerAt, now)
       } catch (error) {
-        this.logger.error(`Falha ao avaliar as condições da sessão ${sessionId}: ${(error as Error).message}`)
+        this.logger.error(`Falha ao avaliar as condições da sessão ${sessionId}: ${describeError(error)}`)
       }
     }
 
@@ -249,7 +250,7 @@ export class TelemetryIngestionService {
       try {
         await this.conditions.evaluateSpotReading(sessionId, now)
       } catch (error) {
-        this.logger.error(`Falha ao avaliar a medição avulsa da sessão ${sessionId}: ${(error as Error).message}`)
+        this.logger.error(`Falha ao avaliar a medição avulsa da sessão ${sessionId}: ${describeError(error)}`)
       }
     }
 
@@ -357,7 +358,7 @@ export class TelemetryIngestionService {
       // O evento já está gravado e já foi confirmado. Derrubar a resposta agora
       // faria o cliente reenviar o que está salvo; quando o socket falha, o
       // cliente reconcilia pelo REST.
-      this.logger.warn(`Falha ao anunciar telemetria: ${(error as Error).message}`)
+      this.logger.warn(`Falha ao anunciar telemetria: ${describeError(error)}`)
     }
   }
 }

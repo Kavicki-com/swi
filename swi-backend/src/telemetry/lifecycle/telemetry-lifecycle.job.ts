@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { TelemetryLifecycleService } from './telemetry-lifecycle.service'
+import { describeError } from '../../common/describe-error'
 
 // Agendamento do ciclo de vida, no padrão do alerta de clima. Este arquivo é
 // de propósito a camada mais fina do módulo: ele não decide o que resumir nem
@@ -62,7 +63,7 @@ export class TelemetryLifecycleJob {
       // Melhor esforço, como o alerta de clima: o job roda sem ninguém olhando,
       // e uma exceção solta viraria rejeição não tratada no processo. O que
       // ficou de fora entra na rodada de amanhã.
-      this.logger.warn(`Ciclo de vida falhou: ${(error as Error).message}`)
+      this.logger.warn(`Ciclo de vida falhou: ${describeError(error)}`)
     }
   }
 }

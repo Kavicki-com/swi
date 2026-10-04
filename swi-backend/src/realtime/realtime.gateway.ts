@@ -47,6 +47,14 @@ export class RealtimeGateway implements OnGatewayConnection {
     for (const id of userIds) this.server.to(this.room(id)).emit(event, payload)
   }
 
+  // Derruba as conexões abertas de quem foi desativado ou excluído. O handshake
+  // só confere o usuário ao conectar: sem isto, um socket já aberto seguiria
+  // recebendo chat, notificação e telemetria até cair sozinho. Quem tentar
+  // reconectar é recusado pelo handleConnection.
+  disconnectUser(userId: string): void {
+    this.server.in(this.room(userId)).disconnectSockets(true)
+  }
+
   private room(userId: string): string { return `user:${userId}` }
 
   private extractToken(client: Socket): string {

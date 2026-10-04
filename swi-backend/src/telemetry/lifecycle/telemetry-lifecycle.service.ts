@@ -11,6 +11,7 @@ import {
 } from '../domain/metric-state'
 import type { TelemetryOrigin } from '../domain/telemetry.types'
 import { summarizeDay, SUMMARIZER_VERSION } from './telemetry-summarizer'
+import { describeError } from '../../common/describe-error'
 
 // Serviço do ciclo de vida do dado de telemetria. Ele decide QUAIS dias resumir
 // e fala com o banco; a conta é do resumidor, que é puro. O job só delega, e
@@ -128,7 +129,7 @@ export class TelemetryLifecycleService {
         // Sem valor de saúde na mensagem: log é lugar onde dado sensível vaza
         // sem ninguém notar. Só a tripla, que é o que permite repetir a mão.
         this.logger.warn(
-          `Resumo do dia falhou para ${candidate.workerId} em ${candidate.day.toISOString()} (${candidate.origin}): ${(error as Error).message}`,
+          `Resumo do dia falhou para ${candidate.workerId} em ${candidate.day.toISOString()} (${candidate.origin}): ${describeError(error)}`,
         )
       }
     }

@@ -1,6 +1,8 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
+import { RealtimeGateway } from '../realtime/realtime.gateway'
+import { describeError } from '../common/describe-error'
 import { hash } from '../auth/codes'
 import { Prisma, Role } from '@prisma/client'
 import type { ApprovalStatus, Company, Exam, Profile, User } from '@prisma/client'
@@ -23,9 +25,12 @@ const LIST_CAP = 200
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly realtime: RealtimeGateway,
   ) {}
 
   findByEmail(email: string) { return this.prisma.user.findUnique({ where: { email } }) }
@@ -238,9 +243,13 @@ export class UsersService {
         },
         include: { profile: true },
       })
+      // O REST já barra o desativado a cada requisição (JwtStrategy); o socket
+      // só confere ao conectar, então a conexão aberta cai aqui.
+      if (dto.active === false) this.dropConnections(id)
       return this.toSummaryDto(u)
     } catch (e) {
-      // sem exception filter global: sem isto, P2025 (id sumiu no meio) vira 500.
+      // O filtro global só troca o registro do 500, não traduz erro do banco:
+      // sem isto, P2025 (id sumiu no meio) vira 500.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') throw new NotFoundException('Usuário não encontrado')
       this.traduzirUnique(e)
       throw e
@@ -258,12 +267,24 @@ export class UsersService {
         await tx.profile.deleteMany({ where: { userId: id } })
         await tx.user.delete({ where: { id } })
       })
+      this.dropConnections(id)
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
         if (e.code === 'P2025') throw new NotFoundException('Usuário não encontrado')
         if (e.code === 'P2003') throw new ConflictException('Usuário possui registros vinculados; desative-o em vez de excluir')
       }
       throw e
+    }
+  }
+
+  // Chamado depois de a escrita ter sido gravada. Uma falha ao derrubar o
+  // socket não pode virar 500 para quem desativou ou excluiu: o REST segue
+  // barrando a pessoa, e a conexão que sobrou é recusada ao reconectar.
+  private dropConnections(userId: string): void {
+    try {
+      this.realtime.disconnectUser(userId)
+    } catch (error) {
+      this.logger.warn(`Conexões de ${userId} não derrubadas: ${describeError(error)}`)
     }
   }
 

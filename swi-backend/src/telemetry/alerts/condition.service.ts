@@ -16,6 +16,7 @@ import {
   type Decision,
   type EngineSample,
 } from './condition-engine'
+import { describeError } from '../../common/describe-error'
 
 // Serviço de condições: decide QUAIS LINHAS entram na conta e grava o
 // resultado; a conta é do motor, que é puro. Condição e alerta são máquinas
@@ -441,7 +442,9 @@ export class TelemetryConditionService {
 
     if (outcome.opened.length > 0 || outcome.recovered.length > 0) {
       this.logger.debug(
-        `Condições da sessão ${session.id}: abriu ${outcome.opened.join(',') || 'nada'}, recuperou ${outcome.recovered.join(',') || 'nada'}, ${outcome.alerts} alerta(s)`,
+        // Quantas, e não quais: o tipo da condição é dado de saúde de quem
+        // está na sessão, e fica só no banco.
+        `Condições da sessão ${session.id}: ${outcome.opened.length} aberta(s), ${outcome.recovered.length} recuperada(s), ${outcome.alerts} alerta(s)`,
       )
     }
     return outcome
@@ -533,7 +536,7 @@ export class TelemetryConditionService {
         // Sem valor de saúde na mensagem, como no ciclo de vida: log é lugar
         // onde dado sensível vaza sem ninguém notar. Só a sessão, que é o que
         // permite repetir a mão.
-        this.logger.warn(`Varredura de silêncio falhou para a sessão ${sessionId}: ${(error as Error).message}`)
+        this.logger.warn(`Varredura de silêncio falhou para a sessão ${sessionId}: ${describeError(error)}`)
       }
     }
     return outcome
@@ -654,7 +657,7 @@ export class TelemetryConditionService {
     try {
       await this.healthNotifier.notifyOpened(changes)
     } catch (error) {
-      this.logger.warn(`Falha ao notificar condições: ${(error as Error).message}`)
+      this.logger.warn(`Falha ao notificar condições: ${describeError(error)}`)
     }
   }
 
@@ -670,7 +673,7 @@ export class TelemetryConditionService {
         }
         this.realtime.emitToUsers(recipients, CONDITION_CHANGED_EVENT, change)
       } catch (error) {
-        this.logger.warn(`Falha ao anunciar condição ${change.conditionId}: ${(error as Error).message}`)
+        this.logger.warn(`Falha ao anunciar condição ${change.conditionId}: ${describeError(error)}`)
       }
     }
   }
@@ -764,7 +767,7 @@ export class TelemetryConditionService {
     const createdId = inserted[0]?.id ?? null
     if (createdId === null) {
       this.logger.debug(
-        `Condição ${opening.kind} de ${session.workerId} (${session.origin}) já estava aberta por outro escritor`,
+        `Condição da sessão ${session.id} (${session.origin}) já estava aberta por outro escritor`,
       )
     }
     return createdId

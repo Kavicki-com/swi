@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import {
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -89,6 +90,7 @@ export function hashCredential(secret: string): string {
 
 /** Mesma mensagem para todo caminho de recusa: quem sonda não aprende nada. */
 const INVALID_CREDENTIAL = 'Credencial de dispositivo inválida'
+const WORKER_INACTIVE = 'Funcionário desativado'
 /** Também única: enrollment inexistente e de outra pessoa respondem igual. */
 const INVALID_CODE = 'Código de pareamento inválido'
 
@@ -291,7 +293,13 @@ export class DeviceAuthService {
 
     const device = await this.prisma.telemetryDevice.findUnique({
       where: { id: credential.deviceId },
-      select: { id: true, workerId: true, credentialHash: true, revokedAt: true },
+      select: {
+        id: true,
+        workerId: true,
+        credentialHash: true,
+        revokedAt: true,
+        worker: { select: { active: true } },
+      },
     })
     // Revogação vale na hora: não há token com validade própria para esperar.
     if (device === null || device.revokedAt !== null) {
@@ -300,6 +308,13 @@ export class DeviceAuthService {
     if (!digestsMatch(device.credentialHash, hashCredential(credential.secret))) {
       throw new UnauthorizedException(INVALID_CREDENTIAL)
     }
+    // A credencial não vence, e o JWT de quem foi desativado já é recusado:
+    // sem isto o aparelho seguiria alimentando alertas e o painel em nome de
+    // quem perdeu o acesso. Depois da prova do segredo, para só o dono da
+    // credencial descobrir o motivo. 403 e não 401 de propósito: o app trata
+    // 401 como aparelho revogado e apaga o pareamento; com 403 ele descarta o
+    // lote e, reativada a pessoa, o mesmo aparelho volta a ser aceito.
+    if (!device.worker.active) throw new ForbiddenException(WORKER_INACTIVE)
 
     await this.prisma.telemetryDevice.updateMany({
       where: { id: device.id },

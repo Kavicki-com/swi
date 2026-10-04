@@ -101,6 +101,23 @@ describe('Telemetry ingestion e2e', () => {
 
       await post(headers, { events: [event()] }).expect(401)
     })
+
+    // 403 e não 401: o app trata 401 como aparelho revogado e apaga o
+    // pareamento. Com 403 o lote é descartado e, reativada a pessoa, o mesmo
+    // aparelho volta a ser aceito sem parear de novo.
+    it('recusa o aparelho de funcionário desativado e volta a aceitar ao reativar', async () => {
+      const headers = await enroll(workerB)
+      await prisma.user.update({ where: { id: workerB }, data: { active: false } })
+      try {
+        const recusado = event()
+        await post(headers, { events: [recusado] }).expect(403)
+        expect(await prisma.telemetrySample.count({ where: { eventId: recusado.eventId } })).toBe(0)
+      } finally {
+        await prisma.user.update({ where: { id: workerB }, data: { active: true } })
+      }
+      // Lote vazio é 400 do envelope: a credencial passou pelo guard de novo.
+      await post(headers, { events: [] }).expect(400)
+    })
   })
 
   describe('envelope', () => {

@@ -3,6 +3,7 @@ import { existsSync, unlinkSync } from 'node:fs'
 import { Logger } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
+import { logLevelsFor } from './config/log-levels'
 import { parseRuntimeEnv } from './config/runtime-env'
 import { applyCors } from './cors'
 
@@ -10,7 +11,7 @@ async function bootstrap() {
   // Antes de qualquer coisa: um ambiente de produção incompleto tem que
   // derrubar o boot aqui, e não depois de abrir conexão de banco e porta.
   const env = parseRuntimeEnv(process.env)
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create(AppModule, { logger: logLevelsFor(env.nodeEnv) })
   applyCors(app)
   if (env.nodeEnv === 'test') {
     new Logger('Bootstrap').warn('Rate limiting DESLIGADO (NODE_ENV=test) — nunca rode a API real com NODE_ENV=test.')

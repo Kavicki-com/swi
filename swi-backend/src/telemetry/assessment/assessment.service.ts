@@ -233,8 +233,10 @@ export class TelemetryAssessmentService {
       select: { id: true },
     })
 
+    // Sem esforço nem desgaste na mensagem: são dado de saúde, e log não é
+    // lugar deles. O id da avaliação basta para achar os valores no banco.
     this.logger.debug(
-      `Avaliação ${created.id}: sessão ${session.id}, esforço ${result.effortPercent ?? 'indisponível'}, desgaste ${result.wearPercent ?? 'indisponível'}${result.unavailableReason ? ` (${result.unavailableReason})` : ''}`,
+      `Avaliação ${created.id}: sessão ${session.id}${result.unavailableReason ? `, esforço indisponível (${result.unavailableReason})` : ''}`,
     )
     return { outcome: 'assessed', assessmentId: created.id }
   }

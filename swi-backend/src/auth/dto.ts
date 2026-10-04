@@ -1,6 +1,7 @@
 import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Length, Max, Min, MinLength, ValidateNested } from 'class-validator'
 import { IsCalendarDate } from '../profile/is-calendar-date'
 import { Type } from 'class-transformer'
+import { IsNewPassword } from './password-rule'
 // companyId: a empresa que o usuário escolhe na tela de cadastro do app. Sem
 // ele o WORKER nasce sem vínculo e fica INVISÍVEL na fila de aprovação do
 // painel, que é escopada por empresa, e o fluxo de cadastro até aprovação morre
@@ -34,7 +35,7 @@ export class SignupProfileDto {
 
 export class SignupDto {
   @IsEmail() email!: string
-  @MinLength(6) password!: string
+  @IsNewPassword() password!: string
   @IsString() name!: string
   @IsOptional() @IsString() companyId?: string
   @IsOptional() @ValidateNested() @Type(() => SignupProfileDto) profile?: SignupProfileDto
@@ -43,9 +44,9 @@ export class ConfirmDto { @IsEmail() email!: string; @IsString() code!: string }
 export class LoginDto { @IsEmail() email!: string; @IsString() password!: string }
 export class ForgotDto { @IsEmail() email!: string }
 export class ResendDto { @IsEmail() email!: string }
-export class ResetDto { @IsEmail() email!: string; @IsString() code!: string; @MinLength(6) newPassword!: string }
+export class ResetDto { @IsEmail() email!: string; @IsString() code!: string; @IsNewPassword() newPassword!: string }
 // Troca de senha autenticada (settings): exige a senha atual.
-export class ChangePasswordDto { @IsString() currentPassword!: string; @MinLength(6) newPassword!: string }
+export class ChangePasswordDto { @IsString() currentPassword!: string; @IsNewPassword() newPassword!: string }
 
 // Onboarding de empresa (painel). Aninhado (company/responsible) pra casar com
 // o payload da SignUp.tsx e com SignupCompanyInput do service. Validação

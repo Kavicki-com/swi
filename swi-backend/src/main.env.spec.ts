@@ -24,6 +24,8 @@ jest.mock('./cors', () => ({
 }))
 jest.mock('./config/runtime-env', () => ({ parseRuntimeEnv }))
 
+import { logLevelsFor } from './config/log-levels'
+
 describe('bootstrap: contrato de ambiente', () => {
   it('valida o ambiente antes de criar a aplicação', async () => {
     await import('./main')
@@ -41,5 +43,15 @@ describe('bootstrap: contrato de ambiente', () => {
     await new Promise(setImmediate)
 
     expect(listen).toHaveBeenCalledWith(3000)
+  })
+
+  // Prova de fiação: sem a lista, o Nest liga todos os níveis em qualquer
+  // ambiente, e a depuração do motor de saúde iria para o log de produção.
+  it('cria a aplicação com os níveis de log do ambiente validado', async () => {
+    await import('./main')
+    await new Promise(setImmediate)
+
+    const options = (create.mock.calls[0] as unknown[])[1]
+    expect(options).toEqual({ logger: logLevelsFor('test') })
   })
 })

@@ -8,6 +8,7 @@ import { CLOCK_SKEW_MS } from '../telemetry/domain/metric-state'
 import { TelemetryQueryService } from '../telemetry/read-model/telemetry-query.service'
 import type { HealthStatus } from '../telemetry/read-model/health-status'
 import type { Profile, User, WorkerPosition } from '@prisma/client'
+import { describeError } from '../common/describe-error'
 
 /**
  * Posição de colega mais velha que isto não aparece no mapa do app: quem
@@ -77,7 +78,7 @@ export class PositionsService {
         pos.recordedAt,
       )
     } catch (error) {
-      this.logger.warn(`Trilha de posição não gravada: ${(error as Error).message}`)
+      this.logger.warn(`Trilha de posição não gravada: ${describeError(error)}`)
     }
 
     await this.pushToAdmins(worker, pos)
@@ -211,7 +212,7 @@ export class PositionsService {
         now,
       )
     } catch (error) {
-      this.logger.warn(`Estado de saúde dos colegas não lido: ${(error as Error).message}`)
+      this.logger.warn(`Estado de saúde dos colegas não lido: ${describeError(error)}`)
     }
     return Promise.all(
       rows.map(async (r: WorkerPosition & { worker: WorkerWithProfile }) => ({

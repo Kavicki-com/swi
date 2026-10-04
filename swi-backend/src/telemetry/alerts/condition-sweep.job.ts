@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { TelemetryConditionService } from './condition.service'
+import { describeError } from '../../common/describe-error'
 
 // Agendamento da varredura de silêncio, no molde do job do ciclo de vida. Este
 // arquivo é de propósito a camada mais fina do módulo: ele não decide o que é
@@ -82,7 +83,7 @@ export class TelemetryConditionSweepJob {
       // Melhor esforço, como o ciclo de vida: o job roda sem ninguém olhando, e
       // uma exceção solta viraria rejeição não tratada no processo. O que ficou
       // de fora entra na rodada de daqui a 30 s, e o silêncio não some sozinho.
-      this.logger.warn(`Varredura de silêncio falhou: ${(error as Error).message}`)
+      this.logger.warn(`Varredura de silêncio falhou: ${describeError(error)}`)
     } finally {
       // No finally, e não no fim do caminho feliz: uma rodada que estourasse
       // deixaria a marca em pé e pararia a varredura para sempre, em silêncio.

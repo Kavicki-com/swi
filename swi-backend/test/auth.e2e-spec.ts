@@ -4,6 +4,7 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { MailService } from '../src/mail/mail.service'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { PASSWORD_RULE_MESSAGE } from '../src/auth/password-rule'
 
 describe('Auth e2e', () => {
   let app: INestApplication, prisma: PrismaService
@@ -41,18 +42,35 @@ describe('Auth e2e', () => {
 
   it('fluxo completo até /me', async () => {
     const http = app.getHttpServer()
-    await request(http).post('/auth/signup').send({ email: 'e2e@ex.com', password: 'senha123', name: 'E2E' }).expect(201)
+    await request(http).post('/auth/signup').send({ email: 'e2e@ex.com', password: 'Senha@123', name: 'E2E' }).expect(201)
     await request(http).post('/auth/confirm').send({ email: 'e2e@ex.com', code: codes['e2e@ex.com'] }).expect(200)
-    await request(http).post('/auth/login').send({ email: 'e2e@ex.com', password: 'senha123' }).expect(403)  // não aprovado
+    await request(http).post('/auth/login').send({ email: 'e2e@ex.com', password: 'Senha@123' }).expect(403)  // não aprovado
 
     const admin = await request(http).post('/auth/login').send({ email: 'admin-e2e@ex.com', password: 'admin123' }).expect(200)
     const created = await prisma.user.findUnique({ where: { email: 'e2e@ex.com' } })
     await request(http).post(`/users/${created!.id}/approve`).set('Authorization', `Bearer ${admin.body.accessToken}`).expect(200)
 
-    const login = await request(http).post('/auth/login').send({ email: 'e2e@ex.com', password: 'senha123' }).expect(200)
+    const login = await request(http).post('/auth/login').send({ email: 'e2e@ex.com', password: 'Senha@123' }).expect(200)
     expect(login.body.accessToken).toBeDefined()
     const me = await request(http).get('/auth/me').set('Authorization', `Bearer ${login.body.accessToken}`).expect(200)
     expect(me.body.email).toBe('e2e@ex.com')
+  })
+
+  // A regra vale para a senha NOVA. O login acima, com a senha fraca do admin
+  // criado direto no banco, prova o outro lado: senha antiga continua entrando.
+  it('senha fraca é recusada no cadastro, com a regra na resposta, e não cria conta', async () => {
+    const http = app.getHttpServer()
+    const r = await request(http).post('/auth/signup').send({ email: 'fraca-e2e@ex.com', password: 'senha123', name: 'Fraca' }).expect(400)
+    expect(r.body.message).toEqual([PASSWORD_RULE_MESSAGE])
+    expect(await prisma.user.findUnique({ where: { email: 'fraca-e2e@ex.com' } })).toBeNull()
+  })
+
+  it('senha fraca é recusada na troca autenticada', async () => {
+    const http = app.getHttpServer()
+    const admin = await request(http).post('/auth/login').send({ email: 'admin-e2e@ex.com', password: 'admin123' }).expect(200)
+    const r = await request(http).post('/auth/password/change').set('Authorization', `Bearer ${admin.body.accessToken}`)
+      .send({ currentPassword: 'admin123', newPassword: 'admin1234' }).expect(400)
+    expect(r.body.message).toEqual([PASSWORD_RULE_MESSAGE])
   })
 
   // Orçamento explícito porque a duração deste teste é dominada por trabalho
@@ -83,7 +101,7 @@ describe('Auth e2e', () => {
     const admin = await request(http).post('/auth/login').send({ email: 'admin-e2e@ex.com', password: 'admin123' }).expect(200)
     const token = admin.body.accessToken
 
-    await request(http).post('/auth/signup').send({ email: 'reject-e2e@ex.com', password: 'senha123', name: 'RejectMe' }).expect(201)
+    await request(http).post('/auth/signup').send({ email: 'reject-e2e@ex.com', password: 'Senha@123', name: 'RejectMe' }).expect(201)
 
     const pending = await request(http).get('/users/pending').set('Authorization', `Bearer ${token}`).expect(200)
     const target = pending.body.find((u: any) => u.email === 'reject-e2e@ex.com')
@@ -95,7 +113,7 @@ describe('Auth e2e', () => {
 
   it('reenvia o código de confirmação; o novo código confirma a conta', async () => {
     const http = app.getHttpServer()
-    await request(http).post('/auth/signup').send({ email: 'resend-e2e@ex.com', password: 'senha123', name: 'Resend' }).expect(201)
+    await request(http).post('/auth/signup').send({ email: 'resend-e2e@ex.com', password: 'Senha@123', name: 'Resend' }).expect(201)
     await request(http).post('/auth/confirm/resend').send({ email: 'resend-e2e@ex.com' }).expect(200)
     const resent = codes['resend-e2e@ex.com']
     expect(resent).toBeDefined()
