@@ -1,5 +1,7 @@
-import { NotFoundException } from '@nestjs/common'
+import { randomUUID } from 'node:crypto'
+import { NotFoundException, UnprocessableEntityException } from '@nestjs/common'
 import { ReportsService } from './reports.service'
+import { requestHash } from '../idempotency/idempotency-key'
 
 const media = () =>
   ({
@@ -24,7 +26,8 @@ const prisma = () => {
     // Resolve nome do responsável → foto do Profile (o DTO devolve
     // responsibleAvatars). Default vazio: sem match, avatar ''.
     profile: { findMany: jest.fn().mockResolvedValue([]) },
-    comment: { create: jest.fn() },
+    comment: { create: jest.fn(), findUnique: jest.fn() },
+    idempotencyKey: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
   }
   // O update roda em transação (o diff de anexos precisa sair da MESMA leitura
   // que o write); o mock executa o callback direto sobre o próprio db.
@@ -326,6 +329,116 @@ describe('ReportsService', () => {
     const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Oi' })
     expect(out.authorName).toBe('Fallback')
     expect(out.authorAvatarUri).toBe('')
+  })
+
+  // Fila offline do app: o mesmo relatório ou comentário pode chegar duas
+  // vezes. Com a chave, o segundo devolve o registro do primeiro.
+  describe('com chave de envio', () => {
+    const KEY = randomUUID()
+    const reportRequest = { title: 'R9', summary: undefined, details: undefined, responsibles: [], imageKeys: [] }
+    const knownKey = (scope: string, request: unknown, resourceId: string) => ({
+      id: 'k1', userId: 'author-1', key: KEY, scope, resourceId, createdAt: new Date(),
+      requestHash: requestHash(scope as never, request),
+    })
+    const commentRow = { id: 'c1', reportId: 'r1', authorId: 'u1', body: 'Oi', createdAt: new Date('2026-01-02T00:00:00Z') }
+
+    // Transação própria, separada do `db`: prova que o relatório e a chave
+    // são gravados DENTRO dela, e não no prisma de fora.
+    const txOf = (db: any) => {
+      const tx = {
+        report: { create: jest.fn() },
+        comment: { create: jest.fn() },
+        idempotencyKey: { create: jest.fn().mockResolvedValue({}) },
+      }
+      db.$transaction.mockImplementation(async (cb: any) => cb(tx))
+      return tx
+    }
+
+    it('relatório novo é criado e tem a chave gravada na mesma transação, e os colegas são avisados', async () => {
+      const db = prisma()
+      const tx = txOf(db)
+      db.user.findUnique.mockResolvedValue({ name: 'A', companyId: 'org1', profile: null })
+      tx.report.create.mockResolvedValue(row({ id: 'r9', title: 'R9' }))
+      db.user.findMany.mockResolvedValue([{ id: 'w2' }])
+      const notif = notifications()
+      const out = await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' }, KEY)
+      expect(out.id).toBe('r9')
+      expect(tx.report.create).toHaveBeenCalledTimes(1)
+      expect(db.report.create).not.toHaveBeenCalled()
+      expect(tx.idempotencyKey.create.mock.calls[0][0].data).toMatchObject({ userId: 'author-1', key: KEY, scope: 'report', resourceId: 'r9' })
+      expect(notif.enqueueForMany).toHaveBeenCalledTimes(1)
+    })
+
+    // Avisar de novo faria os colegas receberem "Novo relatório" duas vezes
+    // para um relatório só.
+    it('reenvio do relatório devolve o existente sem criar e sem avisar os colegas', async () => {
+      const db = prisma()
+      db.user.findUnique.mockResolvedValue({ name: 'A', companyId: 'org1', profile: null })
+      db.idempotencyKey.findUnique.mockResolvedValue(knownKey('report', reportRequest, 'r9'))
+      db.report.findUnique.mockResolvedValue(row({ id: 'r9', title: 'R9' }))
+      const notif = notifications()
+      const out = await new ReportsService(db, media(), notif).create('author-1', { title: 'R9' }, KEY)
+      expect(out.id).toBe('r9')
+      expect(db.report.findUnique).toHaveBeenCalledWith({ where: { id: 'r9' } })
+      expect(db.report.create).not.toHaveBeenCalled()
+      expect(notif.enqueueForMany).not.toHaveBeenCalled()
+    })
+
+    // Lista ausente e lista vazia são o mesmo relatório: o app pode mandar
+    // `responsibles: []` numa tentativa e omitir na outra.
+    it('reenvio com as listas vazias explícitas ainda é o mesmo relatório', async () => {
+      const db = prisma()
+      db.user.findUnique.mockResolvedValue({ name: 'A', companyId: 'org1', profile: null })
+      db.idempotencyKey.findUnique.mockResolvedValue(knownKey('report', reportRequest, 'r9'))
+      db.report.findUnique.mockResolvedValue(row({ id: 'r9', title: 'R9' }))
+      const out = await new ReportsService(db, media(), notifications())
+        .create('author-1', { title: 'R9', responsibles: [], imageKeys: [] }, KEY)
+      expect(out.id).toBe('r9')
+    })
+
+    it('reenvio de relatório que foi apagado → 404', async () => {
+      const db = prisma()
+      db.user.findUnique.mockResolvedValue({ name: 'A', companyId: 'org1', profile: null })
+      db.idempotencyKey.findUnique.mockResolvedValue(knownKey('report', reportRequest, 'r9'))
+      db.report.findUnique.mockResolvedValue(null)
+      await expect(new ReportsService(db, media(), notifications()).create('author-1', { title: 'R9' }, KEY))
+        .rejects.toBeInstanceOf(NotFoundException)
+    })
+
+    it('mesma chave com outro título → 422', async () => {
+      const db = prisma()
+      db.user.findUnique.mockResolvedValue({ name: 'A', companyId: 'org1', profile: null })
+      db.idempotencyKey.findUnique.mockResolvedValue(knownKey('report', reportRequest, 'r9'))
+      await expect(new ReportsService(db, media(), notifications()).create('author-1', { title: 'Outro' }, KEY))
+        .rejects.toBeInstanceOf(UnprocessableEntityException)
+      expect(db.report.create).not.toHaveBeenCalled()
+    })
+
+    it('comentário novo é criado e tem a chave gravada na mesma transação', async () => {
+      const db = prisma()
+      const tx = txOf(db)
+      db.report.findUnique.mockResolvedValue({ id: 'r1', author: { companyId: 'org1' } })
+      db.user.findUnique.mockResolvedValue({ name: 'Fallback', companyId: 'org1', profile: null })
+      tx.comment.create.mockResolvedValue(commentRow)
+      const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Oi' }, KEY)
+      expect(out.id).toBe('c1')
+      expect(db.comment.create).not.toHaveBeenCalled()
+      expect(tx.idempotencyKey.create.mock.calls[0][0].data).toMatchObject({ userId: 'u1', key: KEY, scope: 'report.comment', resourceId: 'c1' })
+    })
+
+    it('reenvio do comentário devolve o existente sem criar', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue({ id: 'r1', author: { companyId: 'org1' } })
+      db.user.findUnique.mockResolvedValue({ name: 'Fallback', companyId: 'org1', profile: null })
+      db.idempotencyKey.findUnique.mockResolvedValue({
+        ...knownKey('report.comment', { reportId: 'r1', body: 'Oi' }, 'c1'), userId: 'u1',
+      })
+      db.comment.findUnique.mockResolvedValue(commentRow)
+      const out = await new ReportsService(db, media(), notifications()).addComment('r1', 'u1', { body: 'Oi' }, KEY)
+      expect(out).toMatchObject({ id: 'c1', body: 'Oi', authorName: 'Fallback' })
+      expect(db.comment.findUnique).toHaveBeenCalledWith({ where: { id: 'c1' } })
+      expect(db.comment.create).not.toHaveBeenCalled()
+    })
   })
 
   it('addComment em relatório inexistente → NotFoundException', async () => {

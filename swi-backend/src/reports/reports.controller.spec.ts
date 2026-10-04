@@ -1,4 +1,5 @@
-import { NotFoundException } from '@nestjs/common'
+import { randomUUID } from 'node:crypto'
+import { BadRequestException, NotFoundException } from '@nestjs/common'
 import type { Response } from 'express'
 import { ReportsController } from './reports.controller'
 import type { ReportsService } from './reports.service'
@@ -61,9 +62,32 @@ describe('ReportsController', () => {
     await c.update('r1', user, { title: 'T2' })
     await c.addComment('r1', 'u1', { body: 'oi' })
 
-    expect(s.create).toHaveBeenCalledWith('u1', { title: 'T' })
+    expect(s.create).toHaveBeenCalledWith('u1', { title: 'T' }, undefined)
     expect(s.update).toHaveBeenCalledWith('r1', 'u1', { title: 'T2' }, 'empresa-1')
-    expect(s.addComment).toHaveBeenCalledWith('r1', 'u1', { body: 'oi' })
+    expect(s.addComment).toHaveBeenCalledWith('r1', 'u1', { body: 'oi' }, undefined)
+  })
+
+  // Chave de idempotência da fila offline do app: lida do cabeçalho e
+  // normalizada aqui, para o serviço receber sempre a mesma forma.
+  it('criar e comentar repassam a chave de envio do cabeçalho, normalizada', async () => {
+    const s = service()
+    const c = new ReportsController(s)
+    const key = randomUUID()
+
+    await c.create('u1', { title: 'T' }, key.toUpperCase())
+    await c.addComment('r1', 'u1', { body: 'oi' }, ` ${key} `)
+
+    expect(s.create).toHaveBeenCalledWith('u1', { title: 'T' }, key)
+    expect(s.addComment).toHaveBeenCalledWith('r1', 'u1', { body: 'oi' }, key)
+  })
+
+  it('chave de envio fora do formato → 400 sem criar nem comentar', async () => {
+    const s = service()
+    const c = new ReportsController(s)
+    expect(() => c.create('u1', { title: 'T' }, 'nao-e-uuid')).toThrow(BadRequestException)
+    expect(() => c.addComment('r1', 'u1', { body: 'oi' }, 'nao-e-uuid')).toThrow(BadRequestException)
+    expect(s.create).not.toHaveBeenCalled()
+    expect(s.addComment).not.toHaveBeenCalled()
   })
 
   // Quem pode excluir é decisão do serviço (autor ou ADMIN), mas o controller

@@ -5,6 +5,7 @@ import { MediaModule } from '../media/media.module'
 import { RealtimeModule } from '../realtime/realtime.module'
 import { NotificationModule } from '../notifications/notification.module'
 import { MailModule } from '../mail/mail.module'
+import { IdempotencyModule } from '../idempotency/idempotency.module'
 
-@Module({ imports: [MediaModule, RealtimeModule, NotificationModule, MailModule], providers: [ChatService], controllers: [ChatController] })
+@Module({ imports: [MediaModule, RealtimeModule, NotificationModule, MailModule, IdempotencyModule], providers: [ChatService], controllers: [ChatController] })
 export class ChatModule {}

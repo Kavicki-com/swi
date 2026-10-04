@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import { ChatService } from './chat.service'
 import { EditMessageDto, ReportMessageDto, SendMessageDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
+import { parseIdempotencyKey } from '../idempotency/idempotency-key'
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
@@ -19,10 +20,18 @@ export class ChatController {
   @Get('conversations/:id/messages')
   listMessages(@CurrentUserId() userId: string, @Param('id') id: string) { return this.chat.listMessages(userId, id) }
 
+  // `Idempotency-Key` é opcional: a fila offline do app manda para o reenvio
+  // não duplicar a mensagem; sem ele, o envio segue como sempre.
   @Post('conversations/:id/messages')
-  send(@CurrentUserId() userId: string, @Param('id') id: string, @Body() dto: SendMessageDto) {
+  send(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Body() dto: SendMessageDto,
+    @Headers('idempotency-key') rawKey?: string,
+  ) {
+    const key = parseIdempotencyKey(rawKey)
     if (!dto.body?.trim() && !dto.imageKey) throw new BadRequestException('Mensagem vazia')
-    return this.chat.sendMessage(userId, id, dto)
+    return this.chat.sendMessage(userId, id, dto, key)
   }
 
   // Editar e excluir mensagem. Só o autor, e exclusão deixa marca.

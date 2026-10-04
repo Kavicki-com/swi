@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { NotificationService } from '../notifications/notification.service'
+import { writeOnce } from '../idempotency/write-once'
 import type { Comment, Profile, Report, ReportStatus, User } from '@prisma/client'
 import type { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
 import { formatBrtDate } from '../common/brazil-time'
@@ -122,24 +123,45 @@ export class ReportsService {
     }))
   }
 
-  async create(authorId: string, dto: CreateReportDto) {
+  async create(authorId: string, dto: CreateReportDto, idempotencyKey?: string) {
     const author = await this.prisma.user.findUnique({ where: { id: authorId }, include: { profile: true } })
-    const r = await this.prisma.report.create({
-      data: {
-        authorId,
-        title: dto.title,
-        summary: dto.summary,
-        details: dto.details,
-        responsibles: dto.responsibles ?? [],
-        imageKeys: dto.imageKeys ?? [],
-        status: 'pending',
-        statusLabel: 'Em Revisão',
-        authorName: author?.profile?.fullName ?? author?.name ?? null,
-        authorAvatarKey: author?.profile?.avatarKey ?? null,
-        sector: author?.profile?.sector ?? null,
-        activities: [],
+    const fields = {
+      title: dto.title,
+      summary: dto.summary,
+      details: dto.details,
+      responsibles: dto.responsibles ?? [],
+      imageKeys: dto.imageKeys ?? [],
+    }
+    // Com chave (fila offline do app), o reenvio devolve o relatório do
+    // primeiro envio em vez de criar outro.
+    const { value: r, replayed } = await writeOnce(this.prisma, {
+      userId: authorId,
+      key: idempotencyKey,
+      scope: 'report',
+      request: fields,
+      create: async (db) => {
+        const created = await db.report.create({
+          data: {
+            authorId,
+            ...fields,
+            status: 'pending',
+            statusLabel: 'Em Revisão',
+            authorName: author?.profile?.fullName ?? author?.name ?? null,
+            authorAvatarKey: author?.profile?.avatarKey ?? null,
+            sector: author?.profile?.sector ?? null,
+            activities: [],
+          },
+        })
+        return { id: created.id, value: created }
+      },
+      replay: async (id) => {
+        const found = await this.prisma.report.findUnique({ where: { id } })
+        if (!found) throw new NotFoundException('Relatório não encontrado')
+        return found
       },
     })
+    // Reenvio: os colegas já foram avisados no primeiro envio.
+    if (replayed) return this.toDto(r)
     // Cross-domain best-effort: relatório novo notifica os OUTROS workers aprovados
     // (inbox de relatórios é org-wide). Falha aqui não quebra a criação.
     try {
@@ -246,7 +268,7 @@ export class ReportsService {
     await this.media.deleteObjects(existing.imageKeys)
   }
 
-  async addComment(reportId: string, authorId: string, dto: CreateCommentDto) {
+  async addComment(reportId: string, authorId: string, dto: CreateCommentDto, idempotencyKey?: string) {
     const exists = await this.prisma.report.findUnique({
       where: { id: reportId },
       select: { id: true, author: { select: { companyId: true } } },
@@ -255,7 +277,21 @@ export class ReportsService {
     const author = await this.prisma.user.findUnique({ where: { id: authorId }, include: { profile: true } })
     // Comentar exige pertencer à mesma empresa do relatório (org-scoping).
     if (exists.author.companyId !== (author?.companyId ?? null)) throw new NotFoundException('Relatório não encontrado')
-    const c = await this.prisma.comment.create({ data: { reportId, authorId, body: dto.body } })
+    const { value: c } = await writeOnce(this.prisma, {
+      userId: authorId,
+      key: idempotencyKey,
+      scope: 'report.comment',
+      request: { reportId, body: dto.body },
+      create: async (db) => {
+        const created = await db.comment.create({ data: { reportId, authorId, body: dto.body } })
+        return { id: created.id, value: created }
+      },
+      replay: async (id) => {
+        const found = await this.prisma.comment.findUnique({ where: { id } })
+        if (!found) throw new NotFoundException('Comentário não encontrado')
+        return found
+      },
+    })
     return this.toCommentDto(c, author)
   }
 
