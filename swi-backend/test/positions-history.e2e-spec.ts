@@ -251,4 +251,99 @@ describe('Positions history e2e', () => {
   it('colegas exigem login', async () => {
     await request(app.getHttpServer()).get('/positions/colleagues').expect(401)
   })
+
+  describe('reenvio em lote', () => {
+    const minute = 60_000
+    const clearW1 = async () => {
+      await prisma.workerPositionSample.deleteMany({ where: { workerId: ids.w1 } })
+      await prisma.workerPosition.deleteMany({ where: { workerId: ids.w1 } })
+    }
+    const sampleTimes = async () =>
+      (
+        await prisma.workerPositionSample.findMany({ where: { workerId: ids.w1 }, orderBy: { recordedAt: 'asc' } })
+      ).map((s) => s.recordedAt.toISOString())
+
+    it('grava a trilha com a hora da medição, espaçada, e a última posição com a hora do ponto mais novo', async () => {
+      await clearW1()
+      const base = Date.now() - 30 * minute
+      const t1 = new Date(base).toISOString()
+      const t2 = new Date(base + 20_000).toISOString()
+      const t3 = new Date(base + 2 * minute).toISOString()
+      const points = [
+        { lat: -23.55, lng: -46.63, recordedAt: t3 },
+        { lat: -23.55, lng: -46.63, recordedAt: t1 },
+        // Parado, 20 s depois do primeiro: não traz movimento nem tempo novo.
+        { lat: -23.55, lng: -46.63, recordedAt: t2 },
+      ]
+      const res = await request(app.getHttpServer())
+        .post('/positions/batch')
+        .set(bearer(ids.w1, 'WORKER'))
+        .send({ points })
+        .expect(200)
+      expect(res.body).toEqual({ recorded: 2, ignored: 0 })
+      expect(await sampleTimes()).toEqual([t1, t3])
+      const samples = await prisma.workerPositionSample.findMany({ where: { workerId: ids.w1 } })
+      const companyA = (await prisma.user.findUniqueOrThrow({ where: { id: ids.w1 } })).companyId
+      for (const s of samples) expect(s).toMatchObject({ source: 'real', companyId: companyA })
+      const last = await prisma.workerPosition.findUniqueOrThrow({ where: { workerId: ids.w1 } })
+      expect(last.recordedAt.toISOString()).toBe(t3)
+      expect(last.source).toBe('real')
+
+      // O mesmo lote de novo, como depois de uma resposta perdida: nada duplica.
+      const again = await request(app.getHttpServer())
+        .post('/positions/batch')
+        .set(bearer(ids.w1, 'WORKER'))
+        .send({ points })
+        .expect(200)
+      expect(again.body).toEqual({ recorded: 0, ignored: 0 })
+      expect(await sampleTimes()).toEqual([t1, t3])
+    })
+
+    it('ponto atrasado entra na trilha mas não puxa para trás a posição de agora', async () => {
+      await clearW1()
+      await request(app.getHttpServer())
+        .post('/positions/heartbeat')
+        .set(bearer(ids.w1, 'WORKER'))
+        .send({ lat: -23.6, lng: -46.7 })
+        .expect(204)
+      const live = await prisma.workerPosition.findUniqueOrThrow({ where: { workerId: ids.w1 } })
+      const old = new Date(Date.now() - 10 * minute).toISOString()
+
+      const res = await request(app.getHttpServer())
+        .post('/positions/batch')
+        .set(bearer(ids.w1, 'WORKER'))
+        .send({ points: [{ lat: -23.55, lng: -46.63, recordedAt: old }] })
+        .expect(200)
+      expect(res.body).toEqual({ recorded: 1, ignored: 0 })
+      expect((await sampleTimes())[0]).toBe(old)
+      const after = await prisma.workerPosition.findUniqueOrThrow({ where: { workerId: ids.w1 } })
+      expect(after).toMatchObject({ lat: -23.6, lng: -46.7 })
+      expect(after.recordedAt.toISOString()).toBe(live.recordedAt.toISOString())
+    })
+
+    it('ponto adiantado além da folga de relógio é ignorado sem derrubar os demais', async () => {
+      await clearW1()
+      const ok = new Date(Date.now() - minute).toISOString()
+      const future = new Date(Date.now() + 60 * minute).toISOString()
+      const res = await request(app.getHttpServer())
+        .post('/positions/batch')
+        .set(bearer(ids.w1, 'WORKER'))
+        .send({ points: [{ lat: -23.55, lng: -46.63, recordedAt: ok }, { lat: -23.55, lng: -46.63, recordedAt: future }] })
+        .expect(200)
+      expect(res.body).toEqual({ recorded: 1, ignored: 1 })
+      expect(await sampleTimes()).toEqual([ok])
+    })
+
+    it('exige login de funcionário e corpo válido', async () => {
+      const points = [{ lat: -23.55, lng: -46.63, recordedAt: new Date().toISOString() }]
+      await request(app.getHttpServer()).post('/positions/batch').send({ points }).expect(401)
+      await request(app.getHttpServer()).post('/positions/batch').set(bearer(ids.adminA, 'ADMIN')).send({ points }).expect(403)
+      await request(app.getHttpServer()).post('/positions/batch').set(bearer(ids.w1, 'WORKER')).send({ points: [] }).expect(400)
+      await request(app.getHttpServer())
+        .post('/positions/batch')
+        .set(bearer(ids.w1, 'WORKER'))
+        .send({ points: [{ lat: -23.55, lng: -46.63 }] })
+        .expect(400)
+    })
+  })
 })

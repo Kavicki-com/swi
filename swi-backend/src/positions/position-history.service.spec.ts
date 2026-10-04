@@ -11,7 +11,7 @@ const DAY = 24 * 60 * 60 * 1000
 
 const prisma = () =>
   ({
-    workerPositionSample: { findFirst: jest.fn(), create: jest.fn() },
+    workerPositionSample: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), createMany: jest.fn() },
     $queryRaw: jest.fn(),
     $executeRaw: jest.fn(),
   }) as any
@@ -49,6 +49,52 @@ describe('PositionHistoryService.record: só movimento vira amostra', () => {
     db.workerPositionSample.findFirst.mockResolvedValue(null)
     await new PositionHistoryService(db).record(worker, -23.55, -46.63, 'sim', NOW)
     expect(db.workerPositionSample.create.mock.calls[0][0].data.source).toBe('sim')
+  })
+})
+
+describe('PositionHistoryService.recordBackfill: pontos atrasados entram com a hora da medição', () => {
+  const at = (ms: number) => new Date(NOW.getTime() + ms)
+  const point = (ms: number) => ({ lat: -23.55, lng: -46.63, recordedAt: at(ms) })
+  const select = { lat: true, lng: true, recordedAt: true }
+
+  it('lote vazio não consulta nem grava', async () => {
+    const db = prisma()
+    expect(await new PositionHistoryService(db).recordBackfill(worker, [])).toBe(0)
+    expect(db.workerPositionSample.findFirst).not.toHaveBeenCalled()
+    expect(db.workerPositionSample.createMany).not.toHaveBeenCalled()
+  })
+
+  it('lê a amostra anterior ao lote e as de dentro da janela dele, e grava o que sobra do espaçamento', async () => {
+    const db = prisma()
+    db.workerPositionSample.findFirst.mockResolvedValue(null)
+    db.workerPositionSample.findMany.mockResolvedValue([])
+    const points = [point(-600_000), point(-590_000), point(-540_000)]
+    const recorded = await new PositionHistoryService(db).recordBackfill(worker, points)
+    expect(db.workerPositionSample.findFirst).toHaveBeenCalledWith({
+      where: { workerId: 'w1', recordedAt: { lt: at(-600_000) } },
+      orderBy: { recordedAt: 'desc' },
+      select,
+    })
+    expect(db.workerPositionSample.findMany).toHaveBeenCalledWith({
+      where: { workerId: 'w1', recordedAt: { gte: at(-600_000), lte: at(-540_000) } },
+      orderBy: { recordedAt: 'asc' },
+      select,
+    })
+    expect(db.workerPositionSample.createMany).toHaveBeenCalledWith({
+      data: [
+        { workerId: 'w1', companyId: 'org1', lat: -23.55, lng: -46.63, source: 'real', recordedAt: at(-600_000) },
+        { workerId: 'w1', companyId: 'org1', lat: -23.55, lng: -46.63, source: 'real', recordedAt: at(-540_000) },
+      ],
+    })
+    expect(recorded).toBe(2)
+  })
+
+  it('lote que já está inteiro na trilha não grava nada', async () => {
+    const db = prisma()
+    db.workerPositionSample.findFirst.mockResolvedValue(null)
+    db.workerPositionSample.findMany.mockResolvedValue([point(-600_000)])
+    expect(await new PositionHistoryService(db).recordBackfill(worker, [point(-600_000)])).toBe(0)
+    expect(db.workerPositionSample.createMany).not.toHaveBeenCalled()
   })
 })
 

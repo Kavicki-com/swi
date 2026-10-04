@@ -7,8 +7,10 @@ import {
   HEAT_CELL_SIZE_M,
   latStepDeg,
   METERS_PER_DEGREE,
+  selectBackfillSamples,
   shouldRecordSample,
   type HeatCell,
+  type TimedPoint,
 } from './position-history'
 
 // Trilha de posições: grava a amostra do heartbeat, monta o mapa de calor da
@@ -19,6 +21,11 @@ import {
 export const HEAT_DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Maior janela aceita numa consulta: o mesmo prazo da retenção padrão. */
 export const HEAT_MAX_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+/**
+ * Idade máxima de um ponto reenviado pelo app. Além do prazo da retenção
+ * padrão ele seria apagado na rodada seguinte, então nem entra.
+ */
+export const BACKFILL_MAX_AGE_MS = HEAT_MAX_WINDOW_MS
 /**
  * Quanto tempo uma rodada de retenção pode gastar apagando, como na telemetria:
  * o que sobra entra na rodada seguinte.
@@ -83,6 +90,47 @@ export class PositionHistoryService {
     await this.prisma.workerPositionSample.create({
       data: { workerId: worker.id, companyId: worker.companyId, lat, lng, source, recordedAt: now },
     })
+  }
+
+  /**
+   * Grava na trilha as posições que o app guardou sem rede, cada uma com a
+   * hora em que foi medida. `points` vem em ordem de hora. Devolve quantas
+   * viraram amostra; as demais já estavam na trilha ou não trazem movimento
+   * nem tempo novo.
+   */
+  async recordBackfill(
+    worker: { id: string; companyId: string | null },
+    points: readonly TimedPoint[],
+  ): Promise<number> {
+    if (points.length === 0) return 0
+    const first = points[0].recordedAt
+    const last = points[points.length - 1].recordedAt
+    const select = { lat: true, lng: true, recordedAt: true }
+    const [before, inside] = await Promise.all([
+      this.prisma.workerPositionSample.findFirst({
+        where: { workerId: worker.id, recordedAt: { lt: first } },
+        orderBy: { recordedAt: 'desc' },
+        select,
+      }),
+      this.prisma.workerPositionSample.findMany({
+        where: { workerId: worker.id, recordedAt: { gte: first, lte: last } },
+        orderBy: { recordedAt: 'asc' },
+        select,
+      }),
+    ])
+    const fresh = selectBackfillSamples(before, inside, points)
+    if (fresh.length === 0) return 0
+    await this.prisma.workerPositionSample.createMany({
+      data: fresh.map((p) => ({
+        workerId: worker.id,
+        companyId: worker.companyId,
+        lat: p.lat,
+        lng: p.lng,
+        source: 'real',
+        recordedAt: p.recordedAt,
+      })),
+    })
+    return fresh.length
   }
 
   /**

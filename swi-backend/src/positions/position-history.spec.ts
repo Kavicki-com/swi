@@ -7,6 +7,7 @@ import {
   latStepDeg,
   SAMPLE_MIN_DISTANCE_M,
   SAMPLE_MIN_INTERVAL_MS,
+  selectBackfillSamples,
   shouldRecordSample,
 } from './position-history'
 
@@ -49,6 +50,45 @@ describe('shouldRecordSample: a trilha guarda movimento, não repetição', () =
   it('os limites são os declarados', () => {
     expect(SAMPLE_MIN_INTERVAL_MS).toBe(60_000)
     expect(SAMPLE_MIN_DISTANCE_M).toBe(25)
+  })
+})
+
+describe('selectBackfillSamples: o que chega atrasado entra na trilha pela hora em que foi medido', () => {
+  const here = { lat: -23.55, lng: -46.63 }
+  const sample = (ms: number, over: Partial<typeof here> = {}) => ({ ...here, ...over, recordedAt: at(ms) })
+
+  it('sem trilha nenhuma, o primeiro ponto entra e os seguintes seguem o espaçamento', () => {
+    const points = [sample(0), sample(20_000), sample(60_000), sample(70_000)]
+    expect(selectBackfillSamples(null, [], points)).toEqual([sample(0), sample(60_000)])
+  })
+
+  it('movimento dentro do intervalo entra', () => {
+    // 0,0003 grau de latitude é cerca de 33 m.
+    const moved = sample(10_000, { lat: -23.5503 })
+    expect(selectBackfillSamples(null, [], [sample(0), moved])).toEqual([sample(0), moved])
+  })
+
+  it('a amostra gravada antes do lote é o ponto de partida do espaçamento', () => {
+    const before = sample(-30_000)
+    expect(selectBackfillSamples(before, [], [sample(0), sample(30_000)])).toEqual([sample(30_000)])
+  })
+
+  // Reenvio depois de uma resposta perdida: os mesmos pontos chegam de novo.
+  it('ponto com a hora de uma amostra já gravada não duplica', () => {
+    const inside = [sample(0), sample(60_000)]
+    const points = [sample(0), sample(60_000), sample(120_000)]
+    expect(selectBackfillSamples(null, inside, points)).toEqual([sample(120_000)])
+  })
+
+  it('a amostra já gravada no meio do lote espaça os pontos que vêm depois dela', () => {
+    const inside = [sample(60_000)]
+    const points = [sample(0), sample(70_000), sample(120_000)]
+    expect(selectBackfillSamples(null, inside, points)).toEqual([sample(0), sample(120_000)])
+  })
+
+  it('dois pontos com a mesma hora no lote viram um', () => {
+    const twin = sample(0, { lat: -23.56 })
+    expect(selectBackfillSamples(null, [], [sample(0), twin])).toEqual([sample(0)])
   })
 })
 

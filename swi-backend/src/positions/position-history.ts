@@ -17,6 +17,11 @@ export interface HeatCell extends LatLng {
   weight: number
 }
 
+/** Uma posição com a hora em que foi medida. */
+export interface TimedPoint extends LatLng {
+  recordedAt: Date
+}
+
 /**
  * Espaçamento mínimo entre amostras do mesmo funcionário. O heartbeat chega a
  * cada 10 s; gravar todos encheria a tabela de pontos repetidos de quem está
@@ -52,6 +57,40 @@ export function shouldRecordSample(
   if (last === null) return true
   if (now.getTime() - last.recordedAt.getTime() >= SAMPLE_MIN_INTERVAL_MS) return true
   return distanceM(last, next) >= SAMPLE_MIN_DISTANCE_M
+}
+
+/**
+ * Quais pontos de um reenvio viram amostra. O reenvio traz posições antigas,
+ * então o espaçamento se mede pela hora de cada ponto contra o que a trilha já
+ * tem em volta dele, e não contra a amostra mais recente do funcionário.
+ *
+ * `before` é a última amostra anterior ao lote, `inside` as que já existem na
+ * janela do lote e `points` o lote; os dois últimos em ordem de hora. Ponto com
+ * a hora exata de uma amostra existente é o mesmo ponto chegando de novo e não
+ * entra: é o que torna repetir um lote inofensivo.
+ */
+export function selectBackfillSamples<T extends TimedPoint>(
+  before: TimedPoint | null,
+  inside: readonly TimedPoint[],
+  points: readonly T[],
+): T[] {
+  const taken = new Set(inside.map((s) => s.recordedAt.getTime()))
+  const fresh: T[] = []
+  let last = before
+  let next = 0
+  for (const point of points) {
+    const time = point.recordedAt.getTime()
+    while (next < inside.length && inside[next].recordedAt.getTime() <= time) {
+      last = inside[next]
+      next += 1
+    }
+    if (taken.has(time)) continue
+    if (!shouldRecordSample(last, point, point.recordedAt)) continue
+    fresh.push(point)
+    taken.add(time)
+    last = point
+  }
+  return fresh
 }
 
 /** Altura da célula em graus de latitude: constante no globo inteiro. */

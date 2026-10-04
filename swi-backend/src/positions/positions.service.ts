@@ -2,7 +2,9 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { MediaService } from '../media/media.service'
-import { PositionHistoryService } from './position-history.service'
+import { BACKFILL_MAX_AGE_MS, PositionHistoryService } from './position-history.service'
+import type { TimedPoint } from './position-history'
+import { CLOCK_SKEW_MS } from '../telemetry/domain/metric-state'
 import { TelemetryQueryService } from '../telemetry/read-model/telemetry-query.service'
 import type { HealthStatus } from '../telemetry/read-model/health-status'
 import type { Profile, User, WorkerPosition } from '@prisma/client'
@@ -55,11 +57,7 @@ export class PositionsService {
   // existe simulador); 'sim' = PositionSimulatorService. O simulador usa a
   // marca pra CEDER o pino a quem tem heartbeat real recente.
   async heartbeat(workerId: string, lat: number, lng: number, source: 'real' | 'sim' = 'real'): Promise<void> {
-    const worker = (await this.prisma.user.findUnique({
-      where: { id: workerId },
-      include: { profile: true },
-    }))
-    if (!worker || worker.role !== 'WORKER') throw new NotFoundException('Worker não encontrado')
+    const worker = await this.findWorker(workerId)
 
     const pos = await this.prisma.workerPosition.upsert({
       where: { workerId },
@@ -82,9 +80,84 @@ export class PositionsService {
       this.logger.warn(`Trilha de posição não gravada: ${(error as Error).message}`)
     }
 
-    // Push é derivado do write (que já commitou): falha de emit não pode
-    // rejeitar o heartbeat. Só os admins da MESMA empresa recebem (org-scoping;
-    // companyId null = balde legado, null só casa com null).
+    await this.pushToAdmins(worker, pos)
+  }
+
+  /**
+   * Reenvio do que o app guardou enquanto não conseguia enviar. Cada ponto
+   * entra na trilha com a hora em que foi medido. A última posição só avança
+   * se o ponto mais novo do lote for mais recente que a gravada: o pino do
+   * painel mostra onde a pessoa está agora e não volta no tempo.
+   *
+   * Ponto adiantado além da folga de relógio ou mais velho que a retenção é
+   * ignorado, sem derrubar os demais. Ao contrário do heartbeat, a falha ao
+   * gravar a trilha rejeita o pedido: o app mantém os pontos e tenta de novo,
+   * e a repetição não duplica nada.
+   */
+  async backfill(
+    workerId: string,
+    points: readonly { lat: number; lng: number; recordedAt: string }[],
+    now: Date,
+  ): Promise<{ recorded: number; ignored: number }> {
+    const worker = await this.findWorker(workerId)
+
+    const earliest = now.getTime() - BACKFILL_MAX_AGE_MS
+    const latest = now.getTime() + CLOCK_SKEW_MS
+    const valid: TimedPoint[] = points
+      .map((p) => ({ lat: p.lat, lng: p.lng, recordedAt: new Date(p.recordedAt) }))
+      .filter((p) => p.recordedAt.getTime() >= earliest && p.recordedAt.getTime() <= latest)
+      .sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime())
+    const ignored = points.length - valid.length
+    if (valid.length === 0) return { recorded: 0, ignored }
+
+    const recorded = await this.history.recordBackfill(
+      { id: worker.id, companyId: worker.companyId },
+      valid,
+    )
+    const pos = await this.advanceLastPosition(workerId, valid[valid.length - 1])
+    if (pos) await this.pushToAdmins(worker, pos)
+    return { recorded, ignored }
+  }
+
+  private async findWorker(workerId: string): Promise<WorkerWithProfile> {
+    const worker = await this.prisma.user.findUnique({
+      where: { id: workerId },
+      include: { profile: true },
+    })
+    if (!worker || worker.role !== 'WORKER') throw new NotFoundException('Worker não encontrado')
+    return worker
+  }
+
+  /**
+   * Avança a última posição para o ponto, se ele for mais novo que a gravada.
+   * Devolve a posição nova, ou null quando a gravada fica.
+   */
+  private async advanceLastPosition(workerId: string, point: TimedPoint): Promise<WorkerPosition | null> {
+    const data = { lat: point.lat, lng: point.lng, source: 'real', recordedAt: point.recordedAt }
+    const current = await this.prisma.workerPosition.findUnique({ where: { workerId } })
+    if (!current) {
+      // upsert com update vazio: um heartbeat que crie a linha entre a leitura
+      // e esta escrita é mais novo que qualquer ponto reenviado e fica.
+      const row = await this.prisma.workerPosition.upsert({
+        where: { workerId },
+        create: { workerId, ...data },
+        update: {},
+      })
+      return row.recordedAt.getTime() === point.recordedAt.getTime() ? row : null
+    }
+    if (current.recordedAt.getTime() >= point.recordedAt.getTime()) return null
+    // A guarda de hora repete a comparação dentro da escrita, pelo mesmo motivo.
+    const { count } = await this.prisma.workerPosition.updateMany({
+      where: { workerId, recordedAt: { lt: point.recordedAt } },
+      data,
+    })
+    return count === 0 ? null : { ...current, ...data }
+  }
+
+  // Push é derivado do write (que já commitou): falha de emit não pode
+  // rejeitar quem gravou. Só os admins da MESMA empresa recebem (org-scoping;
+  // companyId null = balde legado, null só casa com null).
+  private async pushToAdmins(worker: WorkerWithProfile, pos: WorkerPosition): Promise<void> {
     const admins = await this.prisma.user.findMany({
       where: { role: 'ADMIN', companyId: worker.companyId },
       select: { id: true },
