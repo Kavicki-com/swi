@@ -22,6 +22,7 @@ describe('Telemetry repository e2e', () => {
   let deviceId = ''
   const realSessionId = `real-${randomUUID()}`
   const demoSessionId = `demo-${randomUUID()}`
+  const healthSessionId = `saude-${randomUUID()}`
 
   // "Agora" fixo: a fronteira entre promover e arquivar é a distância até este
   // instante, então o relógio da máquina deixaria o teste dependente da hora em
@@ -84,9 +85,17 @@ describe('Telemetry repository e2e', () => {
     deviceId = device.id
 
     // Duas sessões do mesmo dispositivo, uma por origem: a incompatibilidade
-    // REAL/DEMO precisa ser exercitada nos dois sentidos.
+    // REAL/DEMO precisa ser exercitada nos dois sentidos. A terceira é a do
+    // iPhone, por onde chegam as medições lidas do app Saúde.
     await prisma.telemetrySession.createMany({
       data: [
+        {
+          id: healthSessionId,
+          deviceId,
+          workerId,
+          origin: 'REAL',
+          startedAt: new Date(now.getTime() - 3_600_000),
+        },
         {
           id: realSessionId,
           deviceId,
@@ -264,6 +273,122 @@ describe('Telemetry repository e2e', () => {
     expect(snapshot?.bodyTemperatureAt).toEqual(medidoEm)
     // Evento que só traz temperatura não apaga o BPM promovido antes.
     expect(snapshot?.heartRateBpm).toBe(82)
+  })
+
+  // Pressão e temperatura lidas do app Saúde chegam pelo iPhone, numa sessão
+  // própria, com o horário em que foram medidas. A última medição precisa
+  // aparecer mesmo lida horas depois, e sem se passar por sinal do relógio.
+  describe('medição avulsa do app Saúde', () => {
+    const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000)
+    const pressure = (systolic: number, diastolic: number) =>
+      ({ value: { systolic, diastolic }, unit: 'mmHg', source: 'EXTERNAL_CUFF' }) as const
+    const temperature = (value: number) =>
+      ({ value, unit: '°C', source: 'MANUAL_HEALTHKIT' }) as const
+    const spot = (at: Date, measurements: TelemetryEvent['measurements']) =>
+      event({ monitoringSessionId: healthSessionId, eventTime: at.toISOString(), measurements })
+
+    it('medida há horas vira a última medição sem tomar o lugar do relógio', async () => {
+      const doRelogio = event()
+      await repo.saveEvent(doRelogio, now)
+
+      const result = await repo.saveEvent(spot(hoursAgo(3), { bloodPressure: pressure(128, 82) }), now)
+
+      expect(result.outcome).toBe('STORED')
+      expect(result.snapshotPromoted).toBe(true)
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.systolicMmHg).toBe(128)
+      expect(snapshot?.diastolicMmHg).toBe(82)
+      expect(snapshot?.bloodPressureSource).toBe('EXTERNAL_CUFF')
+      expect(snapshot?.bloodPressureAt).toEqual(hoursAgo(3))
+      // Sessão, último evento e batimento continuam sendo os do relógio: é por
+      // eles que a varredura mede silêncio e que o painel acha a sessão.
+      expect(snapshot?.sessionId).toBe(realSessionId)
+      expect(snapshot?.lastEventId).toBe(doRelogio.eventId)
+      expect(snapshot?.lastEventTime).toEqual(liveAt)
+      expect(snapshot?.heartRateBpm).toBe(82)
+    })
+
+    it('recém-medida também não toma a sessão nem o último evento', async () => {
+      const doRelogio = event()
+      await repo.saveEvent(doRelogio, now)
+      const medidoEm = new Date(now.getTime() - 5_000)
+
+      await repo.saveEvent(spot(medidoEm, { bodyTemperature: temperature(36.8) }), now)
+
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.bodyTemperatureC).toBe(36.8)
+      expect(snapshot?.bodyTemperatureAt).toEqual(medidoEm)
+      expect(snapshot?.sessionId).toBe(realSessionId)
+      expect(snapshot?.lastEventId).toBe(doRelogio.eventId)
+      expect(snapshot?.lastEventTime).toEqual(liveAt)
+    })
+
+    it('mais antiga que a já gravada entra no histórico e não sobrescreve', async () => {
+      await repo.saveEvent(event(), now)
+      await repo.saveEvent(spot(hoursAgo(1), { bloodPressure: pressure(128, 82) }), now)
+
+      const result = await repo.saveEvent(spot(hoursAgo(3), { bloodPressure: pressure(150, 95) }), now)
+
+      expect(result.outcome).toBe('STORED')
+      expect(result.snapshotPromoted).toBe(false)
+      expect(await prisma.telemetrySample.count({ where: { workerId } })).toBe(3)
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.systolicMmHg).toBe(128)
+      expect(snapshot?.bloodPressureAt).toEqual(hoursAgo(1))
+    })
+
+    it('pressão e temperatura decidem cada uma pelo próprio horário', async () => {
+      await repo.saveEvent(event(), now)
+      await repo.saveEvent(spot(hoursAgo(1), { bodyTemperature: temperature(37.2) }), now)
+
+      const result = await repo.saveEvent(
+        spot(hoursAgo(2), { bloodPressure: pressure(128, 82), bodyTemperature: temperature(36.1) }),
+        now,
+      )
+
+      // A pressão não tinha medição e entra; a temperatura já tinha uma mais nova.
+      expect(result.snapshotPromoted).toBe(true)
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.systolicMmHg).toBe(128)
+      expect(snapshot?.bloodPressureAt).toEqual(hoursAgo(2))
+      expect(snapshot?.bodyTemperatureC).toBe(37.2)
+      expect(snapshot?.bodyTemperatureAt).toEqual(hoursAgo(1))
+    })
+
+    it('sem snapshot, cria um sem sessão, e o relógio assume depois sem perder a medição', async () => {
+      const result = await repo.saveEvent(spot(hoursAgo(3), { bloodPressure: pressure(128, 82) }), now)
+
+      expect(result.snapshotPromoted).toBe(true)
+      const criado = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(criado?.origin).toBe('REAL')
+      expect(criado?.systolicMmHg).toBe(128)
+      // Sem sessão de propósito: a varredura de silêncio só olha snapshot com
+      // sessão, e quem nunca mandou sinal do relógio não tem sinal a perder.
+      expect(criado?.sessionId).toBeNull()
+      expect(criado?.lastEventId).toBeNull()
+
+      const doRelogio = event()
+      await repo.saveEvent(doRelogio, now)
+
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.sessionId).toBe(realSessionId)
+      expect(snapshot?.lastEventId).toBe(doRelogio.eventId)
+      expect(snapshot?.heartRateBpm).toBe(82)
+      expect(snapshot?.systolicMmHg).toBe(128)
+      expect(snapshot?.bloodPressureAt).toEqual(hoursAgo(3))
+    })
+
+    it('de origem diferente da do snapshot fica só no histórico', async () => {
+      await repo.saveEvent(event({ monitoringSessionId: demoSessionId, origin: 'DEMO' }), now)
+
+      const result = await repo.saveEvent(spot(hoursAgo(1), { bloodPressure: pressure(128, 82) }), now)
+
+      expect(result.outcome).toBe('STORED')
+      expect(result.snapshotPromoted).toBe(false)
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.origin).toBe('DEMO')
+      expect(snapshot?.systolicMmHg).toBeNull()
+    })
   })
 
   it('não deixa um evento ao vivo mais antigo sobrescrever o snapshot mais novo', async () => {

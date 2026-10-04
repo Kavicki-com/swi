@@ -44,6 +44,7 @@ const assessmentDouble = () => ({
 
 const conditionsDouble = () => ({
   evaluateSession: jest.fn().mockResolvedValue({ opened: [], recovered: [], alerts: 0 }),
+  evaluateSpotReading: jest.fn().mockResolvedValue({ opened: [], recovered: [], alerts: 0 }),
 })
 
 /** Por padrão só o próprio funcionário, como quem não tem empresa. */
@@ -608,5 +609,101 @@ describe('avaliação de condições no caminho do evento', () => {
     await service.ingest(DEVICE, { events: [event({ sequence: 1 }), event({ sequence: 2 })] })
 
     expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Pressão e temperatura lidas do app Saúde chegam pelo iPhone, numa sessão que
+// não é a do relógio. Mesmo medidas há segundos, não são sinal do relógio: se
+// contassem como evento ao vivo, recuperariam uma perda de sinal que continua
+// acontecendo e avaliariam esforço numa sessão sem batimento.
+describe('medição avulsa do app Saúde', () => {
+  const pressure = {
+    bloodPressure: { value: { systolic: 128, diastolic: 82 }, unit: 'mmHg', source: 'EXTERNAL_CUFF' },
+  }
+  const temperature = {
+    bodyTemperature: { value: 36.8, unit: '°C', source: 'MANUAL_HEALTHKIT' },
+  }
+
+  const fiveHoursAgo = () => new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+
+  it('recém-medida não conta como evento ao vivo do relógio', async () => {
+    const { service, assessment, conditions } = build()
+    const aceito = event({ measurements: { ...pressure, ...temperature } })
+
+    const ack = await service.ingest(DEVICE, { events: [aceito] })
+
+    expect(ack.acceptedEventIds).toEqual([aceito.eventId])
+    expect(assessment.assessSession).not.toHaveBeenCalled()
+    expect(conditions.evaluateSession).not.toHaveBeenCalled()
+  })
+
+  // A revisão de pressão não pode esperar o relógio falar: quem mediu de manhã
+  // e abriu o app depois precisa cair na fila de revisão na hora em que a
+  // medição chega, e não quando o monitoramento começar.
+  it('avalia a medição ao chegar, tenha ela segundos ou horas', async () => {
+    for (const eventTime of [new Date(Date.now() - 5_000).toISOString(), fiveHoursAgo()]) {
+      const { service, conditions } = build()
+      const aceito = event({ eventTime, measurements: pressure })
+
+      const ack = await service.ingest(DEVICE, { events: [aceito] })
+
+      expect(ack.acceptedEventIds).toEqual([aceito.eventId])
+      expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
+      const [sessionId, now] = conditions.evaluateSpotReading.mock.calls[0]
+      expect(sessionId).toBe(SESSION)
+      expect(now).toBeInstanceOf(Date)
+    }
+  })
+
+  // O iPhone manda cada medição numa sessão própria, e na primeira leitura
+  // chegam dezenas de uma vez. A avaliação é por funcionário e origem, então
+  // uma por lote basta: uma por medição seria a mesma conta repetida.
+  it('várias medições no lote, cada uma na sua sessão, avaliam uma vez só; repetição não avalia', async () => {
+    const { service, conditions, repository } = build()
+
+    await service.ingest(DEVICE, {
+      events: [
+        event({ monitoringSessionId: randomUUID(), sequence: 0, eventTime: fiveHoursAgo(), measurements: pressure }),
+        event({ monitoringSessionId: randomUUID(), sequence: 0, eventTime: fiveHoursAgo(), measurements: temperature }),
+        event({ monitoringSessionId: randomUUID(), sequence: 0, measurements: pressure }),
+      ],
+    })
+    expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
+
+    conditions.evaluateSpotReading.mockClear()
+    repository.saveEvent.mockResolvedValue(stored({ outcome: 'DUPLICATE', snapshotPromoted: false }))
+    await service.ingest(DEVICE, { events: [event({ measurements: pressure })] })
+    expect(conditions.evaluateSpotReading).not.toHaveBeenCalled()
+  })
+
+  it('falha na avaliação da medição não derruba o ACK', async () => {
+    const { service, conditions } = build()
+    conditions.evaluateSpotReading.mockRejectedValue(new Error('motor estourou'))
+    const aceito = event({ measurements: pressure })
+
+    const ack = await service.ingest(DEVICE, { events: [aceito] })
+
+    expect(ack.acceptedEventIds).toEqual([aceito.eventId])
+    expect(ack.conflicts).toEqual([])
+  })
+
+  // Com o relógio falando no mesmo lote, a medição avulsa ainda tem a sua
+  // avaliação: a do relógio lê a pressão só até o horário do evento dele, e
+  // uma medição feita um segundo depois ficaria de fora.
+  it('no mesmo lote, o evento do relógio avalia a sessão dele e a medição avulsa tem a sua', async () => {
+    const { service, conditions } = build()
+    const healthSession = randomUUID()
+
+    await service.ingest(DEVICE, {
+      events: [
+        event({ sequence: 1 }),
+        event({ monitoringSessionId: healthSession, sequence: 0, measurements: pressure }),
+      ],
+    })
+
+    expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateSession.mock.calls[0][0]).toBe(SESSION)
+    expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateSpotReading.mock.calls[0][0]).toBe(healthSession)
   })
 })

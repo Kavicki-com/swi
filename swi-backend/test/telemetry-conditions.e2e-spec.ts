@@ -716,4 +716,72 @@ describe('Telemetry conditions e2e', () => {
     const alheia = await lista(bearer(outroAdmin.id, 'ADMIN')).expect(200)
     expect(alheia.body.workers).toEqual([])
   })
+
+  it('14. pressão do app Saúde medida há horas abre a revisão ao chegar, sem devolver o sinal do relógio', async () => {
+    // O caso 9 deixou neste funcionário uma revisão de pressão inserida à mão,
+    // sem valor observado. Com ela ativa o motor não abriria outra.
+    await prisma.telemetryCondition.deleteMany({
+      where: { workerId: workerSemNascimento, kind: 'BLOOD_PRESSURE_REVIEW' },
+    })
+
+    // O relógio avisa 10% de bateria e para de falar. Essa leitura fica dentro
+    // do prazo da bateria (30 min) quando a pressão chegar, logo abaixo.
+    await post(headersSemNascimento, {
+      events: [event({ measurements: { battery: { value: 10, unit: '%', source: 'APPLE_WATCH' } } })],
+    }).expect(200)
+
+    // Relógio calado: mesma simulação de silêncio do caso 6.
+    await prisma.telemetrySnapshot.update({
+      where: { workerId: workerSemNascimento },
+      data: { lastEventTime: new Date(Date.now() - 5 * 60 * 1000) },
+    })
+    await conditions.sweepSilentSessions(new Date())
+    const perdaDeSinal = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerSemNascimento, kind: 'DEVICE_SIGNAL_LOST', status: 'ACTIVE' },
+    })
+    const antes = await prisma.telemetrySnapshot.findUniqueOrThrow({ where: { workerId: workerSemNascimento } })
+
+    // Medida de manhã, lida pelo iPhone só agora, numa sessão que não é a do relógio.
+    const medidaEm = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+    await post(headersSemNascimento, {
+      events: [
+        event({
+          eventTime: medidaEm,
+          measurements: {
+            bloodPressure: { value: { systolic: 150, diastolic: 95 }, unit: 'mmHg', source: 'MANUAL_HEALTHKIT' },
+          },
+        }),
+      ],
+    }).expect(200)
+
+    const revisao = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerSemNascimento, kind: 'BLOOD_PRESSURE_REVIEW', status: 'ACTIVE' },
+    })
+    expect(revisao.observedValue).toBe(150)
+    expect(await prisma.operationalAlert.findUnique({ where: { conditionId: revisao.id } })).toMatchObject({
+      status: 'OPEN',
+    })
+
+    // Uma pressão digitada no app Saúde não é o relógio falando: a perda de
+    // sinal continua aberta, e a sessão e o último evento continuam os dele.
+    expect((await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: perdaDeSinal.id } })).status).toBe('ACTIVE')
+    const depois = await prisma.telemetrySnapshot.findUniqueOrThrow({ where: { workerId: workerSemNascimento } })
+    expect(depois.sessionId).toBe(antes.sessionId)
+    expect(depois.lastEventTime).toEqual(antes.lastEventTime)
+    // A varredura recuperou a bateria baixa por silêncio, e a chegada da
+    // pressão não a reabre a partir da leitura velha do relógio.
+    expect((await ativas(workerSemNascimento)).map((c) => c.kind).sort()).toEqual([
+      'BLOOD_PRESSURE_REVIEW',
+      'DEVICE_SIGNAL_LOST',
+    ])
+
+    // E a leitura traz a última medição com a hora em que foi medida.
+    const leitura = await query.currentForWorker(workerSemNascimento)
+    expect(leitura.metrics.bloodPressure).toMatchObject({
+      value: { systolic: 150, diastolic: 95 },
+      quality: 'CURRENT',
+      measuredAt: medidaEm,
+      source: 'MANUAL_HEALTHKIT',
+    })
+  }, 30_000)
 })

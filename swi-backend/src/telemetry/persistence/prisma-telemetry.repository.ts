@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
-import { assertOriginCompatible, isBacklog } from '../domain/metric-state'
+import { assertOriginCompatible, isBacklog, isSpotReadingEvent } from '../domain/metric-state'
 import type { MeasurementSource, TelemetryEvent, TelemetryOrigin } from '../domain/telemetry.types'
 import {
   TelemetryIntegrityConflictError,
@@ -229,6 +229,82 @@ async function promote(
   return true
 }
 
+/**
+ * Promoção da medição avulsa: pressão e temperatura lidas do app Saúde, que
+ * chegam pelo iPhone com o horário em que foram medidas.
+ *
+ * Cada medição decide sozinha, contra o próprio horário gravado: entra se o
+ * snapshot não tem aquela medição ou tem uma mais antiga. A idade do evento não
+ * conta, porque a régua dessas duas é de horas e o app só as lê quando abre.
+ *
+ * Sessão, último evento e horário do último evento ficam como estão. São eles
+ * que dizem quando o relógio falou pela última vez, e a varredura de silêncio
+ * mede por eles: uma pressão digitada no app Saúde não é o relógio falando.
+ *
+ * A comparação vai no WHERE da própria escrita, e não numa leitura anterior:
+ * duas medições chegando juntas não podem deixar a mais antiga por cima.
+ */
+async function promoteSpotReading(
+  tx: Prisma.TransactionClient,
+  workerId: string,
+  origin: TelemetryOrigin,
+  measured: NormalizedMeasurements,
+  eventTime: Date,
+): Promise<boolean> {
+  const current = await tx.telemetrySnapshot.findUnique({
+    where: { workerId },
+    select: { origin: true },
+  })
+  // Snapshot de outra origem não recebe a medição: misturar real e
+  // demonstração é o que a decisão congelada proíbe, e uma medição avulsa não
+  // tem autoridade para trocar a origem de quem falou por último.
+  if (current !== null && current.origin !== origin) return false
+  if (current === null) {
+    // Sem sessão de propósito: quem nunca mandou sinal do relógio não tem sinal
+    // a perder, e a varredura de silêncio só olha snapshot com sessão. O
+    // primeiro evento ao vivo do relógio assume a linha pelo caminho normal.
+    await tx.telemetrySnapshot.upsert({
+      where: { workerId },
+      create: { workerId, origin, lastEventTime: eventTime },
+      update: {},
+    })
+  }
+
+  let promoted = false
+  if (measured.systolicMmHg !== null && measured.diastolicMmHg !== null) {
+    const { count } = await tx.telemetrySnapshot.updateMany({
+      where: {
+        workerId,
+        origin,
+        OR: [{ bloodPressureAt: null }, { bloodPressureAt: { lt: eventTime } }],
+      },
+      data: {
+        systolicMmHg: measured.systolicMmHg,
+        diastolicMmHg: measured.diastolicMmHg,
+        bloodPressureSource: measured.bloodPressureSource,
+        bloodPressureAt: eventTime,
+      },
+    })
+    if (count > 0) promoted = true
+  }
+  if (measured.bodyTemperatureC !== null) {
+    const { count } = await tx.telemetrySnapshot.updateMany({
+      where: {
+        workerId,
+        origin,
+        OR: [{ bodyTemperatureAt: null }, { bodyTemperatureAt: { lt: eventTime } }],
+      },
+      data: {
+        bodyTemperatureC: measured.bodyTemperatureC,
+        bodyTemperatureSource: measured.bodyTemperatureSource,
+        bodyTemperatureAt: eventTime,
+      },
+    })
+    if (count > 0) promoted = true
+  }
+  return promoted
+}
+
 @Injectable()
 export class PrismaTelemetryRepository implements TelemetryRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -283,6 +359,9 @@ export class PrismaTelemetryRepository implements TelemetryRepository {
     // Backlog e histórico entram na trilha sem tocar no estado atual: um evento
     // de duas horas atrás não é "o que está acontecendo agora".
     const live = !isBacklog(event.eventTime, now)
+    // Medição avulsa do app Saúde tem promoção própria, em qualquer idade, e
+    // nunca passa pela do relógio, nem quando acabou de ser medida.
+    const spot = isSpotReadingEvent(event.measurements)
 
     try {
       // Amostra e promoção no mesmo commit: um snapshot promovido sem a amostra
@@ -308,9 +387,22 @@ export class PrismaTelemetryRepository implements TelemetryRepository {
           },
         })
 
-        const snapshotPromoted = live
-          ? await promote(tx, session.workerId, buildSnapshotPatch(event, measured, eventTime))
-          : false
+        let snapshotPromoted = false
+        if (spot) {
+          snapshotPromoted = await promoteSpotReading(
+            tx,
+            session.workerId,
+            event.origin,
+            measured,
+            eventTime,
+          )
+        } else if (live) {
+          snapshotPromoted = await promote(
+            tx,
+            session.workerId,
+            buildSnapshotPatch(event, measured, eventTime),
+          )
+        }
 
         return { outcome: 'STORED' as const, sampleId: sample.id, snapshotPromoted }
       })

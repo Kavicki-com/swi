@@ -6,6 +6,7 @@ import {
   EVENT_AGE,
   FRESHNESS,
   isBacklog,
+  isSpotReadingEvent,
   METRICS,
   metricState,
   monitoredDayOf,
@@ -478,6 +479,38 @@ describe('validateRawMeasurement', () => {
     expect(() =>
       validateRawMeasurement('motionCount', { value: -1, unit: 'count', source: 'APPLE_WATCH' }),
     ).toThrow(InvalidMeasurementError)
+  })
+})
+
+// Pressão e temperatura chegam do app Saúde, pelo iPhone, com o horário em que
+// foram medidas. O evento que só traz essas duas não é sinal do relógio, e é
+// esta pergunta que separa os dois caminhos na gravação e na ingestão.
+describe('evento só de medição avulsa', () => {
+  const pressure = { value: { systolic: 128, diastolic: 82 }, unit: 'mmHg', source: 'EXTERNAL_CUFF' }
+  const temperature = { value: 36.8, unit: '°C', source: 'MANUAL_HEALTHKIT' }
+  const heartRate = { value: 82, unit: 'bpm', source: 'APPLE_WATCH' }
+
+  it('só pressão, só temperatura ou as duas juntas é medição avulsa', () => {
+    expect(isSpotReadingEvent({ bloodPressure: pressure })).toBe(true)
+    expect(isSpotReadingEvent({ bodyTemperature: temperature })).toBe(true)
+    expect(isSpotReadingEvent({ bloodPressure: pressure, bodyTemperature: temperature })).toBe(true)
+  })
+
+  it('qualquer medição do relógio junto faz o evento ser do relógio', () => {
+    expect(isSpotReadingEvent({ bloodPressure: pressure, heartRate })).toBe(false)
+    expect(isSpotReadingEvent({ heartRate })).toBe(false)
+  })
+
+  // Oxigenação também é pontual, mas quem a manda é o relógio, dentro do
+  // evento regular dele: um evento só com ela continua sendo sinal do relógio.
+  it('oxigenação sozinha não é medição avulsa', () => {
+    expect(
+      isSpotReadingEvent({ oxygenSaturation: { value: 97, unit: '%', source: 'APPLE_WATCH' } }),
+    ).toBe(false)
+  })
+
+  it('evento sem medição nenhuma não é medição avulsa', () => {
+    expect(isSpotReadingEvent({})).toBe(false)
   })
 })
 
