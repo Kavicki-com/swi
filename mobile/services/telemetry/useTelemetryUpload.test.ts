@@ -314,3 +314,53 @@ describe('dreno do arquivo durável', () => {
     expect(u.uploadPending).toHaveBeenCalled();
   });
 });
+
+describe('medições do app Saúde', () => {
+  it('lê o app Saúde antes de enviar, ao montar', async () => {
+    // A medição lida agora precisa subir nesta mesma rodada, e não na próxima.
+    const ordem: string[] = [];
+    const c = fakeControl();
+    const u = fakeUploader();
+    u.uploadPending.mockImplementation(async () => {
+      ordem.push('upload');
+      return { outcome: 'idle' as const };
+    });
+    const healthReader = { run: jest.fn(async () => {
+      ordem.push('saude');
+      return 1;
+    }) };
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const p = probe(c.control, { outbox, uploader: u.uploader, healthReader });
+
+    montadas.push(await mount(p.Probe));
+
+    expect(ordem[0]).toBe('saude');
+    expect(ordem).toContain('upload');
+  });
+
+  it('não lê o app Saúde sem credencial do aparelho', async () => {
+    const c = fakeControl({ hasDeviceCredential: () => false });
+    const u = fakeUploader();
+    const healthReader = { run: jest.fn(async () => 0) };
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const p = probe(c.control, { outbox, uploader: u.uploader, healthReader });
+
+    montadas.push(await mount(p.Probe));
+
+    expect(healthReader.run).not.toHaveBeenCalled();
+  });
+
+  it('uma falha na leitura não impede o envio do que já estava na fila', async () => {
+    const c = fakeControl();
+    const u = fakeUploader();
+    const healthReader = { run: jest.fn(async () => { throw new Error('banco de saúde trancado'); }) };
+    const outbox = createTelemetryOutbox(memoryStorage());
+    const p = probe(c.control, { outbox, uploader: u.uploader, healthReader });
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    montadas.push(await mount(p.Probe));
+
+    expect(u.uploadPending).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

@@ -176,7 +176,11 @@ final class MirroredWorkoutReceiver: NSObject {
       HKQuantityType(.oxygenSaturation),
     ]
     let typesToShare: Set<HKSampleType> = [HKWorkoutType.workoutType()]
-    healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead) { granted, _ in
+    // Mais os tres que o iPhone le sozinho do app Saude: pressao (sistolica e
+    // diastolica) e temperatura corporal. Entram na mesma folha, e quem ja
+    // tinha autorizado os outros ve a folha de novo so com estes.
+    let allTypesToRead = typesToRead.union(HealthSpotReader.typesToRead)
+    healthStore.requestAuthorization(toShare: typesToShare, read: allTypesToRead) { granted, _ in
       DispatchQueue.main.async {
         completion(granted)
       }

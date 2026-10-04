@@ -1,6 +1,9 @@
 import { Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import type {
+  HealthReading,
+  HealthReadingsNative,
+  HealthReadingsSource,
   HeartRateSampleEvent,
   SwiWatchControlStatus,
   WatchControl,
@@ -115,4 +118,68 @@ export function createWatchControl(native: WatchControlNative | null): WatchCont
   };
 }
 
-export const watchControl: WatchControl = createWatchControl(loadNativeWatchControl(Platform.OS));
+// O mesmo regex da fila (telemetryOutbox): o identificador da amostra vira o
+// identificador do evento, e a fila recusa o que não for UUID.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+// O Swift entrega dicionário sem tipo. Só passa o que tem a forma do contrato:
+// uma medição torta é descartada aqui, e não vira número inventado adiante.
+function sanitizeHealthReading(raw: unknown): HealthReading | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const { kind, id, measuredAt, systolic, diastolic, celsius, userEntered } = raw as Record<
+    string,
+    unknown
+  >;
+  if (typeof id !== 'string' || !UUID.test(id)) return null;
+  if (typeof measuredAt !== 'string' || Number.isNaN(Date.parse(measuredAt))) return null;
+  const base = { id: id.toLowerCase(), measuredAt, userEntered: userEntered === true };
+  if (kind === 'bloodPressure') {
+    if (!isFiniteNumber(systolic) || !isFiniteNumber(diastolic)) return null;
+    return { kind, ...base, systolic, diastolic };
+  }
+  if (kind === 'bodyTemperature') {
+    if (!isFiniteNumber(celsius)) return null;
+    return { kind, ...base, celsius };
+  }
+  return null;
+}
+
+const NO_HEALTH_READINGS: HealthReadingsSource = { supported: false, read: async () => [] };
+
+/**
+ * Leitura do app Saúde (pressão e temperatura). Separada do `WatchControl` de
+ * propósito: não tem a ver com a sessão espelhada do relógio, e um binário
+ * sem a função nova segue funcionando, só sem estas duas medições.
+ */
+export function createHealthReadingsSource(
+  native: Partial<HealthReadingsNative> | null,
+): HealthReadingsSource {
+  if (!native || typeof native.readHealthReadings !== 'function') return NO_HEALTH_READINGS;
+  const readNative = native.readHealthReadings.bind(native);
+  return {
+    supported: true,
+    async read(sinceMs) {
+      try {
+        const raw = await readNative(sinceMs);
+        if (!Array.isArray(raw)) return [];
+        return raw.flatMap((item) => {
+          const reading = sanitizeHealthReading(item);
+          return reading === null ? [] : [reading];
+        });
+      } catch {
+        // Leitura negada, banco de saúde trancado com o iPhone bloqueado ou iOS
+        // sem HealthKit: não há medição a mandar, e o envio do resto segue.
+        return [];
+      }
+    },
+  };
+}
+
+const nativeModule = loadNativeWatchControl(Platform.OS);
+
+export const watchControl: WatchControl = createWatchControl(nativeModule);
+
+export const healthReadingsSource: HealthReadingsSource = createHealthReadingsSource(nativeModule);

@@ -11,19 +11,30 @@ import { File, Paths } from 'expo-file-system';
 // mesmo estado fariam a segunda escrita apagar a primeira.
 
 /**
- * Uma medição do evento. `source` é sempre APPLE_WATCH aqui: pressão arterial,
- * que tem outras origens, não vem do relógio e não passa por esta fila.
+ * Uma medição do evento. A origem padrão é APPLE_WATCH, que é quem produz as
+ * sete medições do monitoramento; pressão e temperatura declaram as delas.
  */
-export interface OutboxMeasurement<U extends string> {
-  value: number;
+export interface OutboxMeasurement<
+  U extends string,
+  S extends string = 'APPLE_WATCH',
+  V = number,
+> {
+  value: V;
   unit: U;
-  source: 'APPLE_WATCH';
+  source: S;
+}
+
+/** O par da pressão, em mmHg inteiro, como o backend exige. */
+export interface OutboxBloodPressure {
+  systolic: number;
+  diastolic: number;
 }
 
 /**
- * As sete medições que o relógio produz, todas opcionais. Nem todo retorno do
- * HealthKit traz batimento: um evento pode ser só passos, ou só bateria, e
- * exigir batimento descartaria leitura real.
+ * As sete medições que o relógio produz, mais as duas que o iPhone lê do app
+ * Saúde, todas opcionais. Nem todo retorno do HealthKit traz batimento: um
+ * evento pode ser só passos, ou só bateria, e exigir batimento descartaria
+ * leitura real.
  *
  * CONTRATO DE VARIAÇÃO: `stepDelta`, `distanceDeltaM`, `activeEnergyKcal` e
  * `motionCount` são a mudança desde o evento anterior da mesma sessão, nunca o
@@ -32,6 +43,10 @@ export interface OutboxMeasurement<U extends string> {
  *
  * `oxygenSaturation` é medição pontual: o relógio só mede em repouso, e a
  * medição sai no evento seguinte à entrega dela pelo HealthKit.
+ *
+ * `bloodPressure` e `bodyTemperature` não vêm do relógio: são a última medição
+ * registrada no app Saúde, e saem num evento só delas, com o horário em que
+ * foram medidas (healthReadings.ts).
  */
 export interface OutboxMeasurements {
   heartRate?: OutboxMeasurement<'bpm'>;
@@ -41,6 +56,8 @@ export interface OutboxMeasurements {
   battery?: OutboxMeasurement<'%'>;
   distanceDeltaM?: OutboxMeasurement<'m'>;
   oxygenSaturation?: OutboxMeasurement<'%'>;
+  bloodPressure?: OutboxMeasurement<'mmHg', 'EXTERNAL_CUFF' | 'MANUAL_HEALTHKIT', OutboxBloodPressure>;
+  bodyTemperature?: OutboxMeasurement<'°C', 'MANUAL_HEALTHKIT'>;
 }
 
 /** Exatamente a forma que POST /telemetry/v1/batches aceita (telemetry-batch.dto.ts). */
@@ -53,23 +70,59 @@ export interface OutboxEvent {
   measurements: OutboxMeasurements;
 }
 
+interface MeasurementRule {
+  unit: string;
+  /** Origens que o backend aceita para esta medição, e que este app produz. */
+  sources: readonly string[];
+  integer?: true;
+  min?: number;
+  max?: number;
+  /** Pressão é a única que chega como par, e não como um número. */
+  pair?: true;
+}
+
+const FROM_WATCH = ['APPLE_WATCH'] as const;
+
 /**
- * Unidade e restrição de cada medição, do domínio do backend
+ * Unidade, origem e restrição de cada medição, do domínio do backend
  * (`metric-state.ts`). O Record cobre a chave inteira de propósito: uma
  * medição nova no contrato não compila até alguém dizer como é validada.
  */
-const MEASUREMENT_RULES: Record<
-  keyof OutboxMeasurements,
-  { unit: string; integer?: true; min?: number; max?: number }
-> = {
-  heartRate: { unit: 'bpm' },
-  stepDelta: { unit: 'steps', integer: true, min: 0 },
-  activeEnergyKcal: { unit: 'kcal', min: 0 },
-  motionCount: { unit: 'count', min: 0 },
-  battery: { unit: '%', min: 0, max: 100 },
-  distanceDeltaM: { unit: 'm', min: 0 },
-  oxygenSaturation: { unit: '%', min: 0, max: 100 },
+const MEASUREMENT_RULES: Record<keyof OutboxMeasurements, MeasurementRule> = {
+  heartRate: { unit: 'bpm', sources: FROM_WATCH },
+  stepDelta: { unit: 'steps', sources: FROM_WATCH, integer: true, min: 0 },
+  activeEnergyKcal: { unit: 'kcal', sources: FROM_WATCH, min: 0 },
+  motionCount: { unit: 'count', sources: FROM_WATCH, min: 0 },
+  battery: { unit: '%', sources: FROM_WATCH, min: 0, max: 100 },
+  distanceDeltaM: { unit: 'm', sources: FROM_WATCH, min: 0 },
+  oxygenSaturation: { unit: '%', sources: FROM_WATCH, min: 0, max: 100 },
+  bloodPressure: { unit: 'mmHg', sources: ['EXTERNAL_CUFF', 'MANUAL_HEALTHKIT'], pair: true },
+  bodyTemperature: { unit: '°C', sources: ['MANUAL_HEALTHKIT'] },
 };
+
+/** O que há de errado com um número de medição, ou null. */
+function numberProblem(label: string, value: unknown, rule: MeasurementRule): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return `${label} não é número finito`;
+  if (rule.integer && !Number.isInteger(value)) return `${label} não é inteiro`;
+  if (rule.min !== undefined && value < rule.min) return `${label} abaixo de ${rule.min}`;
+  if (rule.max !== undefined && value > rule.max) return `${label} acima de ${rule.max}`;
+  return null;
+}
+
+/** O par da pressão: dois inteiros. A faixa plausível fica com o backend. */
+function pairProblem(key: string, value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return `${key}.value não é o par da pressão`;
+  const { systolic, diastolic } = value as Partial<OutboxBloodPressure>;
+  for (const [name, part] of [
+    ['systolic', systolic],
+    ['diastolic', diastolic],
+  ] as const) {
+    if (typeof part !== 'number' || !Number.isInteger(part)) {
+      return `${key}.value.${name} não é inteiro`;
+    }
+  }
+  return null;
+}
 
 export interface OutboxState {
   /** Na ordem em que entraram. */
@@ -229,7 +282,11 @@ export function outboxEventProblem(event: OutboxEvent): string | null {
 
   const keys = Object.keys(measurements);
   // Chave fora do contrato dá 400 no lote inteiro, então não pode entrar.
-  const unknown = keys.find((key) => !(key in MEASUREMENT_RULES));
+  // Pela chave própria, e não por `in`: `constructor` e `toString` existem em
+  // todo objeto, passariam por conhecidas e a regra lida adiante seria lixo.
+  const unknown = keys.find(
+    (key) => !Object.prototype.hasOwnProperty.call(MEASUREMENT_RULES, key),
+  );
   if (unknown !== undefined) return `medição desconhecida: ${unknown}`;
   // Evento sem medição nenhuma não tem por que existir e ocuparia sequência.
   if (keys.length === 0) return 'sem nenhuma medição';
@@ -238,20 +295,14 @@ export function outboxEventProblem(event: OutboxEvent): string | null {
     const measurement = measurements[key];
     const rule = MEASUREMENT_RULES[key];
     if (typeof measurement !== 'object' || measurement === null) return `${key} não é objeto`;
-    if (typeof measurement.value !== 'number' || !Number.isFinite(measurement.value)) {
-      return `${key}.value não é número finito`;
-    }
-    if (rule.integer && !Number.isInteger(measurement.value)) {
-      return `${key}.value não é inteiro`;
-    }
-    if (rule.min !== undefined && measurement.value < rule.min) {
-      return `${key}.value abaixo de ${rule.min}`;
-    }
-    if (rule.max !== undefined && measurement.value > rule.max) {
-      return `${key}.value acima de ${rule.max}`;
-    }
+    const valueProblem = rule.pair
+      ? pairProblem(key, measurement.value)
+      : numberProblem(`${key}.value`, measurement.value, rule);
+    if (valueProblem !== null) return valueProblem;
     if (measurement.unit !== rule.unit) return `${key}.unit não é ${rule.unit}`;
-    if (measurement.source !== 'APPLE_WATCH') return `${key}.source não é APPLE_WATCH`;
+    if (!rule.sources.includes(measurement.source)) {
+      return `${key}.source não é ${rule.sources.join(' nem ')}`;
+    }
   }
   return null;
 }
