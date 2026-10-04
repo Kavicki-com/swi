@@ -114,13 +114,13 @@ describe('authApi.requestPasswordReset', () => {
 
 describe('authApi.resetPassword', () => {
   it('accepts any non-empty token + password', async () => {
-    const result = await authApi.resetPassword({ token: 'tok123', newPassword: 'novo1234' })
+    const result = await authApi.resetPassword({ token: 'tok123', newPassword: 'Novo@1234' })
     expect(result.error).toBeNull()
     expect(result.data).toEqual({ reset: true })
   })
 
   it('rejects empty token', async () => {
-    const result = await authApi.resetPassword({ token: '', newPassword: 'novo1234' })
+    const result = await authApi.resetPassword({ token: '', newPassword: 'Novo@1234' })
     expect(result.data).toBeNull()
     expect(result.error?.message).toMatch(/token/i)
   })
@@ -128,6 +128,6 @@ describe('authApi.resetPassword', () => {
   it('rejects short password', async () => {
     const result = await authApi.resetPassword({ token: 'tok', newPassword: '123' })
     expect(result.data).toBeNull()
-    expect(result.error?.message).toMatch(/password/i)
+    expect(result.error?.message).toMatch(/8 caracteres/i)
   })
 })

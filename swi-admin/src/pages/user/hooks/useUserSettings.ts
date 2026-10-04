@@ -15,6 +15,7 @@ import { uploadImage } from '@/services/api/upload'
 import { examsApi, type Exam } from '@/services/api/exams'
 import { toCalendarDate } from '@/services/api/examCard'
 import { maskCpf, maskPhone, onlyDigits } from '@/lib/masks'
+import { newPasswordProblem } from '@/lib/validators'
 
 // Exportado: a página monta o Combobox de Gênero com a MESMA lista que o
 // readGender abaixo usa para traduzir o que veio do backend. Duas cópias
@@ -243,8 +244,9 @@ export function useUserSettings() {
       setPwError('Preencha a senha atual, a nova e a repetição.')
       return
     }
-    if (newPw.length < 6) {
-      setPwError('A nova senha precisa de pelo menos 6 caracteres.')
+    const problem = newPasswordProblem(newPw)
+    if (problem) {
+      setPwError(problem)
       return
     }
     if (newPw !== confirmPw) {

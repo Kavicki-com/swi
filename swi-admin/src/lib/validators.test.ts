@@ -1,4 +1,12 @@
-import { isEmail, minLength, requiredText, matches } from './validators'
+import {
+  isEmail,
+  minLength,
+  requiredText,
+  matches,
+  newPasswordProblem,
+  PASSWORD_LENGTH_MESSAGE,
+  PASSWORD_RULE_MESSAGE,
+} from './validators'
 
 describe('isEmail', () => {
   it('accepts a normal email', () => {
@@ -58,5 +66,43 @@ describe('matches', () => {
   })
   it('returns true when both are empty', () => {
     expect(matches('', '')).toBe(true)
+  })
+})
+
+// Espelho de swi-backend/src/auth/password-rule.ts. A tela recusa o que o
+// servidor recusaria, com a mesma mensagem, e aprova o que ele aprova.
+describe('newPasswordProblem', () => {
+  it('aceita a senha que cumpre a regra inteira', () => {
+    expect(newPasswordProblem('Senha@2026')).toBeNull()
+  })
+
+  it('aceita senha sem letra minúscula', () => {
+    expect(newPasswordProblem('ABCDEF1@')).toBeNull()
+  })
+
+  it.each(['Senha!2026', 'Senha&2026', 'Senha-2026', 'Senha_2026', 'Senha.2026'])(
+    'aceita símbolo fora da lista do quadro: %s',
+    (senha) => {
+      expect(newPasswordProblem(senha)).toBeNull()
+    },
+  )
+
+  it.each([
+    ['curta', 'Se@2026'],
+    ['sem número', 'Senha@abcd'],
+    ['sem maiúscula', 'senha@2026'],
+    ['sem símbolo', 'Senha12026'],
+    ['espaço não vale como símbolo', 'Senha 2026'],
+    ['letra acentuada no lugar do símbolo', 'Senhaã2026'],
+    ['vazia', ''],
+  ])('recusa senha %s', (_caso, senha) => {
+    expect(newPasswordProblem(senha)).toBe(PASSWORD_RULE_MESSAGE)
+  })
+
+  // O servidor guarda só os primeiros 72 bytes; acento ocupa dois.
+  it('aceita 72 bytes e recusa 73', () => {
+    expect(newPasswordProblem('A1@' + 'a'.repeat(69))).toBeNull()
+    expect(newPasswordProblem('A1@' + 'a'.repeat(70))).toBe(PASSWORD_LENGTH_MESSAGE)
+    expect(newPasswordProblem('A1@' + 'ã'.repeat(35))).toBe(PASSWORD_LENGTH_MESSAGE)
   })
 })

@@ -3,6 +3,7 @@ import type { User } from '../types'
 import { SEED_ADMIN } from './seed'
 import { sleep } from './sleep'
 import type { MockResponse } from './types'
+import { newPasswordProblem } from '../../lib/validators'
 
 export const SESSION_STORAGE_KEY = 'swi.admin.session'
 
@@ -108,8 +109,9 @@ export const authApi = {
     if (!token) {
       return { data: null, error: { message: 'Invalid token' } }
     }
-    if (newPassword.length < 8) {
-      return { data: null, error: { message: 'Password must have at least 8 characters' } }
+    const problem = newPasswordProblem(newPassword)
+    if (problem) {
+      return { data: null, error: { message: problem } }
     }
     return { data: { reset: true }, error: null }
   },
