@@ -9,6 +9,21 @@ import { distributeMinutes } from '../src/work-orders/order-status'
 import { assertSeedAllowed } from '../src/config/seed-guard'
 const prisma = new PrismaClient()
 
+const SEED_CAMERAS = [
+  { name: 'Câmera Norte 1', lat: -23.541, lng: -46.638 },
+  { name: 'Câmera Norte 2', lat: -23.544, lng: -46.625 },
+  { name: 'Câmera Centro Oeste', lat: -23.547, lng: -46.642 },
+  { name: 'Câmera Central', lat: -23.548, lng: -46.628 },
+  { name: 'Câmera Leste 1', lat: -23.549, lng: -46.615 },
+  { name: 'Câmera Sul Oeste', lat: -23.552, lng: -46.635 },
+  { name: 'Câmera Sul Central', lat: -23.554, lng: -46.622 },
+  { name: 'Câmera Sul Leste', lat: -23.553, lng: -46.61 },
+  { name: 'Câmera Periferia SW', lat: -23.558, lng: -46.64 },
+  { name: 'Câmera Sul 2', lat: -23.56, lng: -46.626 },
+  { name: 'Câmera Sul Leste 2', lat: -23.562, lng: -46.615 },
+  { name: 'Câmera Sul Periferia', lat: -23.564, lng: -46.63 },
+]
+
 async function main() {
   // Primeira linha, antes de qualquer escrita: este seed cria conta
   // administrativa com senha de demonstração. Contra um banco que não seja
@@ -27,6 +42,16 @@ async function main() {
       neighborhood: 'Centro', uf: 'MG',
     },
   })
+
+  // Pontos de câmera da demonstração, para os mapas não abrirem vazios na
+  // homologação. Sem endereço: não há sistema de câmeras de verdade por trás.
+  // Upsert pelo nome, que é único na empresa.
+  for (const cam of SEED_CAMERAS) {
+    await prisma.camera.upsert({
+      where: { companyId_name: { companyId: company.id, name: cam.name } }, update: {},
+      create: { companyId: company.id, ...cam },
+    })
+  }
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@swi.local' }, update: { companyId: company.id },
