@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { BadRequestException } from '@nestjs/common'
 import { ChatController } from './chat.controller'
 import type { ChatService } from './chat.service'
@@ -48,7 +49,22 @@ describe('ChatController', () => {
   it('aceita mensagem sem texto quando tem imagem', async () => {
     const s = service()
     await new ChatController(s).send('u1', 'conv-1', { body: '  ', imageKey: 'chat/abc.jpg' })
-    expect(s.sendMessage).toHaveBeenCalledWith('u1', 'conv-1', { body: '  ', imageKey: 'chat/abc.jpg' })
+    expect(s.sendMessage).toHaveBeenCalledWith('u1', 'conv-1', { body: '  ', imageKey: 'chat/abc.jpg' }, undefined)
+  })
+
+  // Chave de idempotência da fila offline do app: lida do cabeçalho e
+  // normalizada aqui, para o serviço receber sempre a mesma forma.
+  it('repassa a chave de envio do cabeçalho, normalizada', async () => {
+    const s = service()
+    const key = randomUUID()
+    await new ChatController(s).send('u1', 'conv-1', { body: 'oi' }, ` ${key.toUpperCase()} `)
+    expect(s.sendMessage).toHaveBeenCalledWith('u1', 'conv-1', { body: 'oi' }, key)
+  })
+
+  it('chave de envio fora do formato → 400 sem enviar', async () => {
+    const s = service()
+    expect(() => new ChatController(s).send('u1', 'conv-1', { body: 'oi' }, 'nao-e-uuid')).toThrow(BadRequestException)
+    expect(s.sendMessage).not.toHaveBeenCalled()
   })
 
   it('editar, excluir, marcar lida e denunciar carregam autor, conversa e mensagem', async () => {

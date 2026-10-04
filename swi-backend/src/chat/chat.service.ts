@@ -4,6 +4,7 @@ import { MediaService } from '../media/media.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
 import { MailService } from '../mail/mail.service'
+import { writeOnce } from '../idempotency/write-once'
 import { Prisma } from '@prisma/client'
 import type { Conversation, Message, User, Profile } from '@prisma/client'
 
@@ -61,7 +62,7 @@ export class ChatService {
     return Promise.all(rows.map((m) => this.toMsgDto(m)))
   }
 
-  async sendMessage(userId: string, convId: string, dto: { body?: string; imageKey?: string }) {
+  async sendMessage(userId: string, convId: string, dto: { body?: string; imageKey?: string }, idempotencyKey?: string) {
     // O id é o contrato determinístico [a,b].sort().join('#'): exige exatamente 2
     // partes, forma canônica e comigo dentro — senão 404. Impede criar thread
     // paralela por id invertido, self-conversa (a#a) ou id malformado.
@@ -91,26 +92,43 @@ export class ChatService {
       }
     }
 
-    const now = new Date()
-    const msg = await this.prisma.message.create({
-      data: { conversationId: convId, senderId: userId, body: dto.body ?? null, imageKey: dto.imageKey ?? null, sentAt: now },
+    // Com chave (fila offline do app), mensagem, contador e chave entram na
+    // mesma transação, e o reenvio devolve a mensagem do primeiro envio.
+    const { value: msg, replayed } = await writeOnce(this.prisma, {
+      userId,
+      key: idempotencyKey,
+      scope: 'chat.message',
+      request: { conversationId: convId, body: dto.body ?? null, imageKey: dto.imageKey ?? null },
+      create: async (db) => {
+        const now = new Date()
+        const created = await db.message.create({
+          data: { conversationId: convId, senderId: userId, body: dto.body ?? null, imageKey: dto.imageKey ?? null, sentAt: now },
+        })
+        // Destinatário já resolvido (guarded) a partir do id validado: conversa de duas pessoas.
+        const lastBody = dto.body || (dto.imageKey ? '📷 Imagem' : '')
+        // UPDATE atômico: incrementa o contador do destinatário sem read-modify-write (fecha o lost-update).
+        await db.$executeRaw`
+          UPDATE "Conversation"
+          SET "lastMessageBody" = ${lastBody},
+              "lastMessageAt"   = ${now},
+              "unreadByJson"    = jsonb_set(
+                COALESCE("unreadByJson", '{}'::jsonb),
+                ARRAY[${recipientId}],
+                to_jsonb(COALESCE(("unreadByJson"->>${recipientId})::int, 0) + 1),
+                true)
+          WHERE id = ${convId}`
+        return { id: created.id, value: created }
+      },
+      replay: async (id) => {
+        const found = await this.prisma.message.findUnique({ where: { id } })
+        if (!found) throw new NotFoundException('Mensagem não encontrada')
+        return found
+      },
     })
 
-    // Destinatário já resolvido (guarded) a partir do id validado — 2-party.
-    const lastBody = dto.body || (dto.imageKey ? '📷 Imagem' : '')
-    // UPDATE atômico: incrementa o contador do destinatário sem read-modify-write (fecha o lost-update).
-    await this.prisma.$executeRaw`
-      UPDATE "Conversation"
-      SET "lastMessageBody" = ${lastBody},
-          "lastMessageAt"   = ${now},
-          "unreadByJson"    = jsonb_set(
-            COALESCE("unreadByJson", '{}'::jsonb),
-            ARRAY[${recipientId}],
-            to_jsonb(COALESCE(("unreadByJson"->>${recipientId})::int, 0) + 1),
-            true)
-      WHERE id = ${convId}`
-
     const out = await this.toMsgDto(msg)
+    // Reenvio: quem recebe já ganhou o socket e a notificação no primeiro envio.
+    if (replayed) return out
     this.realtime.emitToUsers(conv.participants, 'message', out)
     // Cross-domain best-effort: notifica o(s) destinatário(s). Falha aqui NUNCA
     // quebra o envio da mensagem — a notificação é derivada do write-fonte.
