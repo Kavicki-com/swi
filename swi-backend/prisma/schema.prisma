@@ -362,10 +362,13 @@ model Journey {
   activeTaskId       String? // ponteiro soft de propósito, sem FK: a consistência é responsabilidade da Jornada
   startedAt          DateTime?
   accumulatedSeconds Int          @default(0)
+  // Quando saiu de ociosa; nula ao encerrar. Turno aberto num dia anterior só
+  // continua valendo se abriu há pouco (ver journey-day.ts).
+  openedAt           DateTime?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
-  @@unique([workerId, date]) // turno por worker/dia
+  @@unique([workerId, date]) // turno por worker/dia de Brasília
 }
 
 // Pai criado pelo admin: dona da atribuição (N responsáveis), dos anexos e do

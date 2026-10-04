@@ -7,6 +7,7 @@ import { DEMO_STORM_ALERT_ID } from '../src/weather/weather.types'
 import { hash } from '../src/auth/codes'
 import { distributeMinutes } from '../src/work-orders/order-status'
 import { assertSeedAllowed } from '../src/config/seed-guard'
+import { journeyDayOf } from '../src/journey/journey-day'
 const prisma = new PrismaClient()
 
 const SEED_CAMERAS = [
@@ -69,9 +70,10 @@ async function main() {
       city: 'São Paulo', uf: 'SP', sector: 'Operações', jobTitle: 'Operador de escavadeira' },
   })
 
-  // UTC-midnight de hoje (paridade com o mock e o JourneyService.today()).
-  const now = new Date()
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  // Hoje no calendário de Brasília, o mesmo dia que a jornada usa para mostrar
+  // as ordens. Pelo dia de UTC, um seed rodado entre 21h e meia-noite gravaria
+  // o início das ordens como amanhã, e o funcionário não veria tarefa nenhuma.
+  const today = journeyDayOf(new Date())
   const dueIn = (days: number) => new Date(today.getTime() + days * 86_400_000)
 
   // ===== Fatia 4 (Chat): diretório + conversas/mensagens demo (Opção A) =====
