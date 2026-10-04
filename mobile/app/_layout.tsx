@@ -24,10 +24,9 @@ import { deveMostrarAvisoWeb, RUNTIME_ENV } from '../lib/featureFlags';
 import { AuthProvider, useAuth } from '../services/auth/AuthProvider';
 import { ProfileProvider } from '../services/profile/ProfileProvider';
 import { ReportsProvider } from '../services/reports/ReportsProvider';
-import { VitalsProvider, useVitals } from '../services/vitals/VitalsProvider';
+import { MyTelemetryProvider } from '../services/vitals/MyTelemetryProvider';
 import { LocationProvider, useLocation } from '../services/location/LocationProvider';
 import { WeatherProvider } from '../services/weather/WeatherProvider';
-import { useTelemetrySampler } from '../services/telemetry/useTelemetrySampler';
 import { TelemetryUploadProvider } from '../services/telemetry/TelemetryUploadProvider';
 import { usePositionHeartbeat } from '../services/positions/usePositionHeartbeat';
 import { useTrackingActive } from '../services/positions/positionTracking';
@@ -60,17 +59,6 @@ const mobileFrameStyle = IS_WEB
 // em vez de pendurar no splash. T5.4 reduziu de 5s → 2s pra acelerar
 // first-paint em conexões lentas / cache invalidado.
 const FONT_LOAD_TIMEOUT_MS = 2000;
-
-// Bridges the Vitals + Location providers into the telemetry sampler. Rendered
-// inside both providers (alongside the Stack) so it can read the live vitals /
-// coords getters; renders nothing. The sampler self-batches + uploads on its
-// own cadence.
-function TelemetryRoot() {
-  const { vitals } = useVitals();
-  const { coords } = useLocation();
-  useTelemetrySampler(() => vitals, () => coords);
-  return null;
-}
 
 // GPS pro backend (upsert + WS pros admins). Null-render; gated no login
 // (sem token o POST só viraria 401 a cada batida).
@@ -201,11 +189,10 @@ function AppRoot() {
           <AuthProvider>
             <ProfileProvider>
             <ReportsProvider>
-            <VitalsProvider>
+            {/* Leitura da telemetria do próprio funcionário, uma só para o app
+                inteiro. Liga com sessão; as telas leem o estado dela. */}
+            <MyTelemetryProvider>
             <LocationProvider>
-            {/* Feeds live vitals + coords into the telemetry sampler. Renders
-                null; sits alongside the Stack inside both providers. */}
-            <TelemetryRoot />
             <PositionsRoot />
             <WeatherProvider>
             {/* Envio da telemetria ao backend, com qualquer tela aberta. Liga
@@ -235,7 +222,7 @@ function AppRoot() {
             </TelemetryUploadProvider>
             </WeatherProvider>
             </LocationProvider>
-            </VitalsProvider>
+            </MyTelemetryProvider>
             </ReportsProvider>
             </ProfileProvider>
           </AuthProvider>

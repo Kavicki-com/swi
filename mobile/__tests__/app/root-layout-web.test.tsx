@@ -81,9 +81,8 @@ jest.mock('../../services/profile/ProfileProvider', () => ({
 jest.mock('../../services/reports/ReportsProvider', () => ({
   ReportsProvider: ({ children }: { children: ReactNode }) => children,
 }));
-jest.mock('../../services/vitals/VitalsProvider', () => ({
-  VitalsProvider: ({ children }: { children: ReactNode }) => children,
-  useVitals: () => ({ vitals: null }),
+jest.mock('../../services/vitals/MyTelemetryProvider', () => ({
+  MyTelemetryProvider: ({ children }: { children: ReactNode }) => children,
 }));
 jest.mock('../../services/location/LocationProvider', () => ({
   LocationProvider: ({ children }: { children: ReactNode }) => children,
@@ -91,9 +90,6 @@ jest.mock('../../services/location/LocationProvider', () => ({
 }));
 jest.mock('../../services/weather/WeatherProvider', () => ({
   WeatherProvider: ({ children }: { children: ReactNode }) => children,
-}));
-jest.mock('../../services/telemetry/useTelemetrySampler', () => ({
-  useTelemetrySampler: () => undefined,
 }));
 jest.mock('../../services/telemetry/TelemetryUploadProvider', () => ({
   TelemetryUploadProvider: ({ children }: { children: ReactNode }) => children,

@@ -24,7 +24,7 @@ import { getPositionsBackend } from '@/services/positions/getPositionsBackend';
 import { usePolledRead } from '@/services/positions/usePolledRead';
 import { useProfile } from '@/services/profile/ProfileProvider';
 import { workerStatusOf } from '@/services/vitals/dashboardVitalsView';
-import { useMyTelemetry } from '@/services/vitals/useMyTelemetry';
+import { useMyTelemetry } from '@/services/vitals/MyTelemetryProvider';
 import { MapView } from '@/components/MapView';
 import { MapMarker } from '@/components/MapMarker';
 import { MapLineSource } from '@/components/MapLineSource';

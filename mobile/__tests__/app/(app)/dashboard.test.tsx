@@ -3,7 +3,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import Dashboard from '../../../app/(app)/dashboard';
 import { condition, reporting } from '../../../services/telemetry/myTelemetryFixtures';
-import type { MyTelemetryState } from '../../../services/vitals/useMyTelemetry';
+import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
 
 // Companheiro de dashboard.integration.test.tsx, que cobre a leitura da telemetria,
 // badges, navegacao e a tela ?alert=active. Aqui ficam os dois caminhos de
@@ -36,7 +36,7 @@ jest.mock('expo-router', () => ({
 }));
 
 let mockTelemetryState: MyTelemetryState = lendo(reporting());
-jest.mock('../../../services/vitals/useMyTelemetry', () => ({
+jest.mock('../../../services/vitals/MyTelemetryProvider', () => ({
   useMyTelemetry: () => mockTelemetryState,
 }));
 

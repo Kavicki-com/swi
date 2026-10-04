@@ -4,9 +4,9 @@ import { act, create } from 'react-test-renderer';
 // Raiz do app (`app/_layout.tsx`). É a única tela cuja falha aparece como
 // "app pendurado no splash": ela segura o render inteiro até as fontes
 // chegarem, e o que estes testes cercam é justamente o desbloqueio, por
-// sucesso, por erro de fonte, ou pelo prazo de 2s. Junto vão as duas raízes
-// null-render (telemetria e heartbeat de posição), que decidem o que sai do
-// aparelho, e a configuração do Stack.
+// sucesso, por erro de fonte, ou pelo prazo de 2s. Junto vão a raiz
+// null-render do heartbeat de posição, que decide o que sai do aparelho, os
+// providers de telemetria e a configuração do Stack.
 //
 // Plataforma: este arquivo cobre o caminho NATIVE. `IS_WEB` é calculado no
 // módulo, durante o import, então o caminho web (FontFace API) mora em
@@ -55,7 +55,6 @@ const mockStack = Object.assign(
 jest.mock('expo-router', () => ({ Stack: mockStack }));
 
 let mockAuth: { user: unknown; restoring: boolean } = { user: { id: 'u-1' }, restoring: false };
-let mockVitals: unknown = { heartRate: 72 };
 let mockLocation: { coords: [number, number] | null } = { coords: [-46.6, -23.5] };
 
 jest.mock('../../services/auth/AuthProvider', () => ({
@@ -68,9 +67,10 @@ jest.mock('../../services/profile/ProfileProvider', () => ({
 jest.mock('../../services/reports/ReportsProvider', () => ({
   ReportsProvider: ({ children }: { children: ReactNode }) => children,
 }));
-jest.mock('../../services/vitals/VitalsProvider', () => ({
-  VitalsProvider: ({ children }: { children: ReactNode }) => children,
-  useVitals: () => ({ vitals: mockVitals }),
+// A leitura da telemetria tem suíte própria; aqui só importa onde ela mora.
+const mockReadProvider = ({ children }: { children: ReactNode }) => <>{children}</>;
+jest.mock('../../services/vitals/MyTelemetryProvider', () => ({
+  MyTelemetryProvider: (props: { children: ReactNode }) => mockReadProvider(props),
 }));
 jest.mock('../../services/location/LocationProvider', () => ({
   LocationProvider: ({ children }: { children: ReactNode }) => children,
@@ -80,10 +80,6 @@ jest.mock('../../services/weather/WeatherProvider', () => ({
   WeatherProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
-const mockSampler = jest.fn();
-jest.mock('../../services/telemetry/useTelemetrySampler', () => ({
-  useTelemetrySampler: (v: unknown, c: unknown) => mockSampler(v, c),
-}));
 const mockHeartbeat = jest.fn();
 // O envio da telemetria tem suíte própria; aqui só importa onde ele mora.
 const mockUploadProvider = ({ children }: { children: ReactNode }) => <>{children}</>;
@@ -142,7 +138,6 @@ beforeEach(() => {
   mockFontsLoaded = true;
   mockFontError = null;
   mockAuth = { user: { id: 'u-1' }, restoring: false };
-  mockVitals = { heartRate: 72 };
   mockLocation = { coords: [-46.6, -23.5] };
   mockTrackingActive = false;
 });
@@ -233,15 +228,7 @@ describe('RootLayout: pré-carga de assets', () => {
   });
 });
 
-describe('RootLayout: telemetria e heartbeat de posição', () => {
-  it('entrega getters vivos de vitais e coordenadas ao amostrador', async () => {
-    await render();
-
-    const [getVitals, getCoords] = mockSampler.mock.calls[0] as [() => unknown, () => unknown];
-    expect(getVitals()).toEqual({ heartRate: 72 });
-    expect(getCoords()).toEqual([-46.6, -23.5]);
-  });
-
+describe('RootLayout: heartbeat de posição', () => {
   it('logado e com GPS real, o heartbeat recebe a coordenada', async () => {
     await render();
 
@@ -258,16 +245,14 @@ describe('RootLayout: telemetria e heartbeat de posição', () => {
     expect(getter()).toBeNull();
   });
 
-  // Sem leitura do GPS não existe posição de reserva: nem o mapa do admin nem
-  // a telemetria recebem um ponto que ninguém mediu.
-  it('sem leitura do GPS, o heartbeat e o amostrador não recebem posição', async () => {
+  // Sem leitura do GPS não existe posição de reserva: o mapa do admin não
+  // recebe um ponto que ninguém mediu.
+  it('sem leitura do GPS, o heartbeat não recebe posição', async () => {
     mockLocation = { coords: null };
     await render();
 
     const getter = mockHeartbeat.mock.calls[0][0] as () => unknown;
     expect(getter()).toBeNull();
-    const [, getCoords] = mockSampler.mock.calls[0] as [() => unknown, () => unknown];
-    expect(getCoords()).toBeNull();
   });
 
   // Com a jornada rastreada, a posição já sai pela tarefa em segundo plano. O
@@ -297,6 +282,19 @@ describe('RootLayout: telemetria e heartbeat de posição', () => {
     mockAuth = { user: null, restoring: true };
     await render();
     expect(mockTrackingSession).toHaveBeenLastCalledWith(null, true);
+  });
+});
+
+describe('RootLayout: leitura da telemetria', () => {
+  // Um leitor só para o app inteiro: as telas que mostram o estado do
+  // funcionário leem daqui em vez de cada uma pedir a própria leitura.
+  it('a árvore de navegação inteira fica dentro do provider de leitura', async () => {
+    const tree = await render();
+    const provider = tree.root.findAll(
+      (n) => (n.type as { name?: string }).name === 'MyTelemetryProvider',
+    );
+    expect(provider).toHaveLength(1);
+    expect(provider[0]!.findAll((n) => n.type === mockStack)).toHaveLength(1);
   });
 });
 

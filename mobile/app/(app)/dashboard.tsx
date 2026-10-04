@@ -37,7 +37,7 @@ import {
   BG_DECOR_W,
 } from '../../lib/dashboardDecor';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
-import { useMyTelemetry } from '../../services/vitals/useMyTelemetry';
+import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
 import { useProfile } from '../../services/profile/ProfileProvider';
 import { useNotifications } from '../../services/notifications/NotificationProvider';
@@ -494,7 +494,7 @@ export default function Dashboard() {
             gradientStops={[43.75, 79.253, 100]}
             gradientDirection="rtl"
             bordered
-            accessibilityLabel="Tempo até atingir fadiga total"
+            accessibilityLabel="Tempo até o alerta de fadiga"
           />
           <Text variant="body.m" color={theme.content.dark}>
             {view.fatigueText}
