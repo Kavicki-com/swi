@@ -3,12 +3,13 @@ import { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { journeyDayOf } from '../src/journey/journey-day'
 
 describe('Journey e2e', () => {
   let app: INestApplication, prisma: PrismaService
-  const eA = 'journey-a@ex.com', eB = 'journey-b@ex.com'
-  const emails = [eA, eB]
-  let aId = '', bId = ''
+  const eA = 'journey-a@ex.com', eB = 'journey-b@ex.com', eC = 'journey-c@ex.com'
+  const emails = [eA, eB, eC]
+  let aId = '', bId = '', cId = ''
   // Ordem principal (responsável = A) com 2 itens; ordem alheia (responsável = B)
   // com 1 item — prova de ownership (item cujo pai não me lista → 404).
   let item1Id = '', item2Id = '', foreignItemId = ''
@@ -39,7 +40,7 @@ describe('Journey e2e', () => {
     const hash = await bcrypt.hash('test1234', 10)
     const mk = async (email: string, name: string) =>
       (await prisma.user.create({ data: { email, name, passwordHash: hash, role: 'WORKER', emailVerified: true, approvalStatus: 'APPROVED' } })).id
-    aId = await mk(eA, 'Journey A'); bId = await mk(eB, 'Journey B')
+    aId = await mk(eA, 'Journey A'); bId = await mk(eB, 'Journey B'); cId = await mk(eC, 'Journey C')
 
     // Item agora é filho de um WorkOrder; membership vem de order.responsibles.
     const order = await prisma.workOrder.create({
@@ -165,5 +166,106 @@ describe('Journey e2e', () => {
   it('photo rejeita imageKey de outro prefixo → 400', async () => {
     const auth = await login(eA)
     await request(app.getHttpServer()).post(`/journey/tasks/${item1Id}/photo`).set(auth).send({ imageKey: 'reports/x.jpg' }).expect(400)
+  })
+
+  // Virada do dia: a jornada é a do dia de Brasília, e um turno aberto num dia
+  // anterior continua valendo por até 14 h depois de aberto. O relógio do
+  // servidor não é controlável aqui, então o turno "de ontem" é gravado direto
+  // no banco; a virada das 21h em si fica nos unitários, com relógio fixo.
+  describe('virada do dia', () => {
+    const HOUR = 60 * 60 * 1000
+    const yesterday = () => new Date(journeyDayOf(new Date()).getTime() - 24 * HOUR)
+    const seedYesterday = (openedAgoMs: number | null) => {
+      const openedAt = openedAgoMs == null ? null : new Date(Date.now() - openedAgoMs)
+      return prisma.journey.create({
+        data: { workerId: cId, date: yesterday(), state: 'ongoing', startedAt: openedAt ?? new Date(), accumulatedSeconds: 0, openedAt },
+      })
+    }
+
+    beforeEach(() => prisma.journey.deleteMany({ where: { workerId: cId } }))
+
+    it('turno aberto ontem há 2 h continua, e encerrar fecha ESSA jornada', async () => {
+      const carried = await seedYesterday(2 * HOUR)
+      const auth = await login(eC)
+
+      const { body: j } = await request(app.getHttpServer()).get('/journey').set(auth).expect(200)
+      expect(j.state).toBe('ongoing')
+
+      const { body: e } = await request(app.getHttpServer()).post('/journey/end').set(auth).expect(201)
+      expect(e.state).toBe('idle')
+
+      const row = await prisma.journey.findUniqueOrThrow({ where: { id: carried.id } })
+      expect(row.state).toBe('idle')
+      expect(row.openedAt).toBeNull()
+      expect(await prisma.journey.count({ where: { workerId: cId } })).toBe(1) // nenhuma ociosa nova no meio do turno
+    })
+
+    it('turno de ontem aberto há 13h50 ainda continua', async () => {
+      await seedYesterday(13 * HOUR + 50 * 60 * 1000)
+      const auth = await login(eC)
+      const { body: j } = await request(app.getHttpServer()).get('/journey').set(auth).expect(200)
+      expect(j.state).toBe('ongoing')
+    })
+
+    it('turno de ontem aberto há 14h10 não volta: a jornada é a ociosa de hoje', async () => {
+      const stale = await seedYesterday(14 * HOUR + 10 * 60 * 1000)
+      const auth = await login(eC)
+
+      const { body: j } = await request(app.getHttpServer()).get('/journey').set(auth).expect(200)
+      expect(j.state).toBe('idle')
+
+      // Busca pela linha nova sem recalcular o dia: o teste não quebra se a
+      // meia-noite de Brasília cair entre a requisição e a conferência.
+      const fresh = await prisma.journey.findFirstOrThrow({ where: { workerId: cId, id: { not: stale.id } } })
+      expect(fresh.state).toBe('idle')
+      expect((await prisma.journey.findUniqueOrThrow({ where: { id: stale.id } })).state).toBe('ongoing') // não mexe na antiga
+    })
+
+    it('encerrar o turno trazido e iniciar uma tarefa abre a jornada de hoje', async () => {
+      const carried = await seedYesterday(2 * HOUR)
+      const order = await prisma.workOrder.create({
+        data: {
+          authorId: cId, title: 'Ordem C2', responsibles: { connect: [{ id: cId }] },
+          items: { create: [{ title: 'Item C2', position: 0 }] },
+        },
+        include: { items: true },
+      })
+      const auth = await login(eC)
+      await request(app.getHttpServer()).post('/journey/end').set(auth).expect(201)
+      const { body: s } = await request(app.getHttpServer()).post(`/journey/tasks/${order.items[0].id}/start`).set(auth).expect(201)
+      expect(s.journey.state).toBe('ongoing')
+
+      const today = await prisma.journey.findFirstOrThrow({ where: { workerId: cId, id: { not: carried.id } } })
+      expect(today.state).toBe('ongoing')
+      expect(today.openedAt).not.toBeNull()
+      expect((await prisma.journey.findUniqueOrThrow({ where: { id: carried.id } })).state).toBe('idle') // a trazida segue encerrada
+    })
+
+    it('jornada aberta sem openedAt (gravada antes da correção) não volta', async () => {
+      await seedYesterday(null)
+      const auth = await login(eC)
+      const { body: j } = await request(app.getHttpServer()).get('/journey').set(auth).expect(200)
+      expect(j.state).toBe('idle')
+    })
+
+    it('iniciar grava openedAt na jornada de hoje, e encerrar limpa', async () => {
+      const order = await prisma.workOrder.create({
+        data: {
+          authorId: cId, title: 'Ordem C', responsibles: { connect: [{ id: cId }] },
+          items: { create: [{ title: 'Item C', position: 0 }] },
+        },
+        include: { items: true },
+      })
+      const auth = await login(eC)
+      const before = Date.now()
+      await request(app.getHttpServer()).post(`/journey/tasks/${order.items[0].id}/start`).set(auth).expect(201)
+
+      const row = await prisma.journey.findFirstOrThrow({ where: { workerId: cId } }) // única linha de C
+      expect(row.openedAt).not.toBeNull()
+      expect(row.openedAt!.getTime()).toBeGreaterThanOrEqual(before - 1000)
+
+      await request(app.getHttpServer()).post('/journey/end').set(auth).expect(201)
+      expect((await prisma.journey.findUniqueOrThrow({ where: { id: row.id } })).openedAt).toBeNull()
+    })
   })
 })
