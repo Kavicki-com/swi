@@ -226,6 +226,10 @@ describe('AppLayout', () => {
       expect(resolveActiveNavValue('/tasks/abc/edit')).toBe('/tasks')
     })
 
+    it('marca Câmeras na rota da seção', () => {
+      expect(resolveActiveNavValue('/cameras')).toBe('/cameras')
+    })
+
     it('não deixa Tarefas vazar pra outras seções', () => {
       expect(resolveActiveNavValue('/alerts')).toBe('/alerts')
       expect(resolveActiveNavValue('/')).toBe('/')

@@ -278,6 +278,7 @@ export function MonitoringLayout() {
     admins: directory?.admins ?? 0,
     workers: directory?.employees.length ?? 0,
     pendingReports: directory?.pendingReports ?? 0,
+    cameras: directory?.cameras ?? null,
     fatigueCount,
     summary: telemetry.summary,
   })

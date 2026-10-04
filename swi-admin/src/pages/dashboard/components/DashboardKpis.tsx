@@ -5,6 +5,7 @@
 import { View } from 'react-native'
 import { Icon, Text, Title, useTheme, type IconName } from '@kavicki/swi-design-system'
 import type { DashboardSummary } from '@/services/dashboard'
+import { NO_VALUE } from '@/services/vitals/vitalsView'
 
 function KpiTile({
   icon,
@@ -52,7 +53,9 @@ export function FuncionariosKpi({
   layout?: '2x2' | '1x4'
 }) {
   const theme = useTheme()
-  const { admins, totalEmployees, newReports, activeCameras } = summary.kpis
+  const { admins, totalEmployees, newReports } = summary.kpis
+  // Câmeras que não carregaram são ausência ("--"), nunca zero.
+  const activeCameras = summary.kpis.activeCameras ?? NO_VALUE
   if (layout === '1x4') {
     // Wide variant: no surface wrapper around the strip, tiles sit
     // directly on the page background to match the spec.

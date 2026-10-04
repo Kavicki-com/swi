@@ -91,6 +91,9 @@ const TaskForm = lazy(() => import('@/pages/tasks/TaskForm').then((m) => ({ defa
 const TaskDetails = lazy(() =>
   import('@/pages/tasks/TaskDetails').then((m) => ({ default: m.TaskDetails })),
 )
+const CamerasPage = lazy(() =>
+  import('@/pages/cameras/CamerasPage').then((m) => ({ default: m.CamerasPage })),
+)
 const UserSettings = lazy(() =>
   import('@/pages/user/UserSettings').then((m) => ({ default: m.UserSettings })),
 )
@@ -198,6 +201,9 @@ export function App() {
                     <Route path="/tasks/new" element={<TaskForm />} />
                     <Route path="/tasks/:id" element={<TaskDetails />} />
                     <Route path="/tasks/:id/edit" element={<TaskForm />} />
+                    {/* A câmera selecionada vai na query (?camera=<id>), que o
+                        pino do mapa geral usa para abrir direto nela. */}
+                    <Route path="/cameras" element={<CamerasPage />} />
                     <Route path="/user/settings" element={<UserSettings />} />
                     <Route path="/user/profile" element={<UserProfile />} />
                     {ADMIN_ROUTES.filter(

@@ -14,11 +14,18 @@ describe('NAV_ITEMS', () => {
     }
   })
 
-  // Tarefas é o ÚLTIMO item da sidebar, logo depois
-  // de Configurações e imediatamente acima da seção de chat.
-  it('Tarefas é o último item, depois de Configurações (ordem especificada)', () => {
+  it('tem Câmeras apontando pra /cameras, com o ícone de câmera', () => {
+    const cameras = NAV_ITEMS.find((i) => i.label === 'Câmeras')
+    expect(cameras?.value).toBe('/cameras')
+    expect(cameras?.icon).toBe('video_camera_filled')
+  })
+
+  // Tarefas vem logo depois de Configurações, e Câmeras logo abaixo de
+  // Tarefas, como último item, imediatamente acima da seção de chat.
+  it('Câmeras é o último item, depois de Tarefas, que vem depois de Configurações', () => {
     const labels = NAV_ITEMS.map((i) => i.label)
-    expect(labels[labels.length - 1]).toBe('Tarefas')
+    expect(labels[labels.length - 1]).toBe('Câmeras')
+    expect(labels.indexOf('Câmeras')).toBe(labels.indexOf('Tarefas') + 1)
     expect(labels.indexOf('Tarefas')).toBe(labels.indexOf('Configurações') + 1)
   })
 })
