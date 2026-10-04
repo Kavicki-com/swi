@@ -19,7 +19,7 @@ export interface MySeriesState {
 const LOADING: MySeriesState = { series: null, failed: false, loading: true };
 
 // Série do próprio funcionário no período escolhido, relida em intervalo fixo.
-// Como em useMyTelemetry, uma falha limpa a série anterior em vez de mantê-la.
+// Uma falha limpa a série anterior em vez de mantê-la.
 export function useMySeries(period: SeriesPeriod): MySeriesState {
   const [state, setState] = useState<MySeriesState & { period: SeriesPeriod }>({
     ...LOADING,

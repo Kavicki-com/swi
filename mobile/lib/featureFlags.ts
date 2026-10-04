@@ -155,11 +155,6 @@ export const AUTH_BACKEND: AuthBackendKind = resolveAuthBackend(
   RUNTIME_ENV,
 );
 
-// Dev-only: lets the mock vitals backend exercise the empty/loading/stale/error
-// UIs that production will hit. 'streaming' = normal simulated data.
-export type VitalsScenario = 'streaming' | 'empty' | 'loading' | 'stale' | 'error';
-export const VITALS_SCENARIO: VitalsScenario = 'streaming';
-
 // Dev-only: exercita os estados da fatia Clima no mock. 'alert' (default) traz
 // um alerta vigente; 'normal' sem alerta; 'loading' nunca resolve; 'error' rejeita.
 export type WeatherScenario = 'alert' | 'normal' | 'loading' | 'error';

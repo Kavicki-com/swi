@@ -1,7 +1,7 @@
 // Matemática PURA de âncoras de tempo, compartilhada por Task + Journey, pelo
 // mock backend (grava nas transições) e pelo tick do cliente (display). Tempos
 // em segundos; `startedAt`/`nowMs` em epoch ms pra ser determinístico e
-// injetável em teste. Espelha o estilo puro de services/vitals/deriveStatus.ts.
+// injetável em teste.
 
 export interface Anchors {
   startedAt: number | null;   // epoch ms; null quando parado

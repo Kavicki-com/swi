@@ -13,7 +13,7 @@ import {
   reporting,
 } from '../../../services/telemetry/myTelemetryFixtures';
 import type { MySeriesState } from '../../../services/vitals/useMySeries';
-import type { MyTelemetryState } from '../../../services/vitals/useMyTelemetry';
+import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
 
 // Meus dados (app/(app)/my-stats.tsx). Tela de leitura clínica: o que ela mostra
 // tem que ser o que foi MEDIDO. Os sinais saem de me/current e o gasto calórico
@@ -43,7 +43,7 @@ const CARREGANDO: MyTelemetryState = { telemetry: null, failed: false, loading: 
 const FALHOU: MyTelemetryState = { telemetry: null, failed: true, loading: false };
 
 let mockTelemetryState: MyTelemetryState = CARREGANDO;
-jest.mock('../../../services/vitals/useMyTelemetry', () => ({
+jest.mock('../../../services/vitals/MyTelemetryProvider', () => ({
   useMyTelemetry: () => mockTelemetryState,
 }));
 
@@ -120,7 +120,7 @@ const grafico = (tree: ReturnType<typeof create>) =>
   };
 
 const barraDeFadiga = (tree: ReturnType<typeof create>) =>
-  tree.root.findAll((n) => n.props?.accessibilityLabel === 'Tempo até fadiga total')[0].props as {
+  tree.root.findAll((n) => n.props?.accessibilityLabel === 'Tempo até o alerta de fadiga')[0].props as {
     value: number;
   };
 
@@ -166,7 +166,7 @@ describe('Meus dados: leitura ausente', () => {
     expect(t).toContain(frase);
     expect(t).toContain('--');
     expect(t).toContain('Sem medição');
-    expect(t).toContain('Tempo até atingir fadiga total: sem estimativa');
+    expect(t).toContain('Tempo até o alerta de fadiga: sem estimativa');
     expect(t).toContain('Bateria do aparelho: sem leitura');
     expect(t).toContain('Alergias');
     expect(t).toContain('Histórico Médico');
@@ -257,7 +257,7 @@ describe('Meus dados: sinais vitais e fadiga', () => {
     mockTelemetryState = lendo(reporting({ fatigueEtaMin: metric(105) }));
     const tree = await render();
 
-    expect(textos(tree)).toContain('Tempo até atingir fadiga total: 1h45m');
+    expect(textos(tree)).toContain('Tempo até o alerta de fadiga: 1h45m');
   });
 
   it('esforço, oxigenação e distância saem da leitura, com vírgula decimal', async () => {

@@ -19,7 +19,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
-import { useMyTelemetry } from '../../services/vitals/useMyTelemetry';
+import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { useMySeries } from '../../services/vitals/useMySeries';
 import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
 import { caloriesChartView, statsDonutsView } from '../../services/vitals/statsView';
@@ -369,7 +369,7 @@ export default function MyStats() {
             ]}
             gradientStops={[43.75, 79.253, 100]}
             gradientDirection="rtl"
-            accessibilityLabel="Tempo até fadiga total"
+            accessibilityLabel="Tempo até o alerta de fadiga"
           />
           <Text variant="body.m" color={theme.content.dark}>
             {view.fatigueText}

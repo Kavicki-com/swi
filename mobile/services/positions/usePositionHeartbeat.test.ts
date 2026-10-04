@@ -1,10 +1,9 @@
 // getPositionsBackend cai no mock com DATA_BACKEND default, o hook exercita o
-// mockPositionsBackend (log em memória), sem rede. Espelha useTelemetrySampler.test.
+// mockPositionsBackend (log em memória), sem rede.
 import { createElement, type ComponentType } from 'react';
 import { usePositionHeartbeat } from './usePositionHeartbeat';
 import { mockHeartbeatLog } from './mockPositionsBackend';
-// react-test-renderer ships no type declarations, tipa localmente (mesma nota
-// do useTelemetrySampler.test.ts).
+// react-test-renderer ships no type declarations, tipa localmente.
 const TestRenderer: {
   create: (el: unknown) => { unmount: () => void };
   act: (cb: () => void | Promise<void>) => void | Promise<void>;

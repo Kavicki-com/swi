@@ -8,7 +8,7 @@ import {
   neverReported,
   reporting,
 } from '../../../services/telemetry/myTelemetryFixtures';
-import type { MyTelemetryState } from '../../../services/vitals/useMyTelemetry';
+import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
 
 // Caracterização do dashboard.
 //
@@ -43,7 +43,7 @@ jest.mock('expo-router', () => ({
 }));
 
 let mockTelemetryState: MyTelemetryState = REPORTANDO();
-jest.mock('../../../services/vitals/useMyTelemetry', () => ({
+jest.mock('../../../services/vitals/MyTelemetryProvider', () => ({
   useMyTelemetry: () => mockTelemetryState,
 }));
 
@@ -158,7 +158,7 @@ beforeEach(() => {
 
 /** A barra de fadiga, pelo rótulo acessível que a tela dá a ela. */
 const barraDeFadiga = (tree: ReactTestRenderer) =>
-  porRotulo(tree, 'Tempo até atingir fadiga total');
+  porRotulo(tree, 'Tempo até o alerta de fadiga');
 
 /** A condição entregue ao gráfico da silhueta. */
 const condicaoDoGrafico = (tree: ReactTestRenderer) =>
@@ -179,7 +179,7 @@ describe('dashboard: leitura da telemetria', () => {
     expect(texto).toContain('BPM');
     expect(texto).toContain('--');
     expect(texto).toContain('Sem medição');
-    expect(texto).toContain('Tempo até atingir fadiga total: sem estimativa');
+    expect(texto).toContain('Tempo até o alerta de fadiga: sem estimativa');
     expect(porRotulo(tree, 'Ajuda urgente')).toBeDefined();
     expect(porRotulo(tree, 'Chat')).toBeDefined();
   });
@@ -215,7 +215,7 @@ describe('dashboard: leitura da telemetria', () => {
   it('a barra de fadiga é o desgaste e o texto traz o tempo até a fadiga', async () => {
     const tree = await render();
     expect(barraDeFadiga(tree).props.value).toBe(38);
-    expect(textoDa(tree)).toContain('Tempo até atingir fadiga total: 1h35m');
+    expect(textoDa(tree)).toContain('Tempo até o alerta de fadiga: 1h35m');
   });
 
   it('leitura velha mantém o valor, diz o horário e não afirma estado bom', async () => {

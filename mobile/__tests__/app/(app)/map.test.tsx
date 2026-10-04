@@ -30,7 +30,7 @@ jest.mock('@/services/profile/ProfileProvider', () => ({
 }));
 // O estado do pino próprio sai da leitura de me/current, não do simulador.
 let mockTelemetry: WorkerTelemetry | null = null;
-jest.mock('@/services/vitals/useMyTelemetry', () => ({
+jest.mock('@/services/vitals/MyTelemetryProvider', () => ({
   useMyTelemetry: () => ({ telemetry: mockTelemetry, failed: false, loading: false }),
 }));
 jest.mock('@/lib/featureFlags', () => ({

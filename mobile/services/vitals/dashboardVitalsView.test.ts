@@ -42,7 +42,7 @@ describe('dashboardVitalsView', () => {
     expect(view.pressureLabel).toBe('Sem medição');
     expect(view.energyRate).toBeNull();
     expect(view.fatigueProgress).toBeNull();
-    expect(view.fatigueText).toBe('Tempo até atingir fadiga total: sem estimativa');
+    expect(view.fatigueText).toBe('Tempo até o alerta de fadiga: sem estimativa');
     expect(view.status).toBe('Sem leitura do aparelho');
   });
 
@@ -58,6 +58,28 @@ describe('dashboardVitalsView', () => {
     expect(view.status).toBe('Carregando leitura');
     expect(view.heartRate).toBeNull();
     expect(view.workerStatus).toBe('unknown');
+  });
+
+  // Depois do prazo da última resposta sobra só a condição aberta, sem valor.
+  describe('leitura vencida que só guarda a condição aberta', () => {
+    const held = () => ({
+      ...neverReported(),
+      origin: 'REAL' as const,
+      conditions: [condition('URGENT')],
+    });
+
+    it('com falha diz que a leitura está indisponível e mantém o estado', () => {
+      const view = dashboardVitalsView(held(), { failed: true });
+      expect(view.status).toBe('Leitura indisponível no momento');
+      expect(view.workerStatus).toBe('low');
+      expect(view.heartRate).toBeNull();
+    });
+
+    it('esperando a leitura nova diz que está carregando', () => {
+      const view = dashboardVitalsView(held(), { loading: true });
+      expect(view.status).toBe('Carregando leitura');
+      expect(view.workerStatus).toBe('low');
+    });
   });
 
   it('workerStatusOf dá o mesmo estado da visão, para quem só precisa da cor', () => {
@@ -88,7 +110,25 @@ describe('dashboardVitalsView', () => {
   it('a barra de fadiga é o desgaste 0-100 e o texto traz o tempo até a fadiga', () => {
     const view = dashboardVitalsView(reporting());
     expect(view.fatigueProgress).toBe(38);
-    expect(view.fatigueText).toBe('Tempo até atingir fadiga total: 1h35m');
+    expect(view.fatigueText).toBe('Tempo até o alerta de fadiga: 1h35m');
+  });
+
+  // O tempo do backend vai até o limiar do alerta de desgaste. Com o alerta
+  // aberto ele é zero, e "0h00m" não diz que o limiar já foi passado.
+  it('com o alerta de desgaste aberto, o texto diz que o alerta foi atingido', () => {
+    const view = dashboardVitalsView({
+      ...reporting({ wear: metric(85), fatigueEtaMin: metric(0) }),
+      conditions: [condition('HEALTH', 'WEAR_HIGH')],
+    });
+    expect(view.fatigueText).toBe('Alerta de fadiga atingido');
+  });
+
+  it('outra condição de saúde aberta não fala em alerta de fadiga', () => {
+    const view = dashboardVitalsView({
+      ...reporting(),
+      conditions: [condition('HEALTH', 'BLOOD_PRESSURE_REVIEW')],
+    });
+    expect(view.fatigueText).toBe('Tempo até o alerta de fadiga: 1h35m');
   });
 
   it('sem estimativa com desgaste presente: o ritmo atual não leva à fadiga', () => {
@@ -118,7 +158,7 @@ describe('dashboardVitalsView', () => {
     expect(view.energyRate).toBeNull();
     expect(view.energyLabel).toBe('Kcal/hora');
     expect(view.fatigueProgress).toBeNull();
-    expect(view.fatigueText).toBe('Tempo até atingir fadiga total: sem estimativa');
+    expect(view.fatigueText).toBe('Tempo até o alerta de fadiga: sem estimativa');
     expect(view.status).toBe(
       `Última leitura em ${dayMonth(FIXTURE_OTHER_DAY)} às ${clock(FIXTURE_OTHER_DAY)}`,
     );

@@ -69,7 +69,14 @@ export const whenLabel = (measuredAt: string, observedAt: string) =>
 export const liveValue = <T,>(state: Pick<MetricState<T>, 'value' | 'quality'>): T | null =>
   state.quality === 'UNAVAILABLE' ? null : state.value;
 
-const FATIGUE_PREFIX = 'Tempo até atingir fadiga total:';
+// O tempo que o backend manda vai até o limiar do alerta de desgaste, não até
+// o desgaste total.
+const FATIGUE_PREFIX = 'Tempo até o alerta de fadiga:';
+const FATIGUE_ALERT_REACHED = 'Alerta de fadiga atingido';
+const WEAR_ALERT_KIND = 'WEAR_HIGH';
+
+const UNAVAILABLE_STATUS = 'Leitura indisponível no momento';
+const LOADING_STATUS = 'Carregando leitura';
 
 const EMPTY: Omit<DashboardVitalsView, 'status'> = {
   heartRate: null,
@@ -103,9 +110,9 @@ export function dashboardVitalsView(
     // Antes da primeira resposta a tela ainda não sabe se há leitura: dizer
     // "sem leitura" seria afirmar uma ausência que ninguém conferiu.
     const status = options.failed
-      ? 'Leitura indisponível no momento'
+      ? UNAVAILABLE_STATUS
       : options.loading && telemetry === null
-        ? 'Carregando leitura'
+        ? LOADING_STATUS
         : 'Sem leitura do aparelho';
     return { ...EMPTY, status };
   }
@@ -119,17 +126,24 @@ export function dashboardVitalsView(
 
   // A qualidade já chega decidida pelo backend contra o instante da leitura;
   // a tela não recalcula frescor com o próprio relógio.
-  const status =
-    heartRate.value !== null && heartRate.quality === 'CURRENT'
+  // Com falha ou ainda carregando, o que chega aqui é só a condição aberta
+  // que sobrou da última leitura: a frase fala da leitura que falta.
+  const status = options.failed
+    ? UNAVAILABLE_STATUS
+    : heartRate.value !== null && heartRate.quality === 'CURRENT'
       ? 'Monitorando agora'
       : heartRate.value !== null && heartRate.measuredAt
         ? `Última leitura ${whenLabel(heartRate.measuredAt, observedAt)}`
-        : 'Sem leitura recente';
+        : options.loading
+          ? LOADING_STATUS
+          : 'Sem leitura recente';
 
-  // Avaliação presente sem estimativa quer dizer que o ritmo recente não leva
-  // ao limiar do alerta dentro do horizonte da fórmula.
-  const fatigueText =
-    fatigueEta !== null
+  // Com o alerta aberto o limiar já ficou para trás: o tempo até ele seria um
+  // zero que não diz isso. Avaliação presente sem estimativa quer dizer que o
+  // ritmo recente não leva ao limiar dentro do horizonte da fórmula.
+  const fatigueText = telemetry.conditions.some((c) => c.kind === WEAR_ALERT_KIND)
+    ? FATIGUE_ALERT_REACHED
+    : fatigueEta !== null
       ? `${FATIGUE_PREFIX} ${formatEta(fatigueEta)}`
       : wear !== null
         ? 'Sem previsão de fadiga no ritmo atual'

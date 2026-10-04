@@ -2,8 +2,7 @@ import type { PositionsBackend } from './types';
 import type { QueuedPoint } from './positionOutbox';
 
 // Caminho demo: nenhum backend pra receber posição — o heartbeat é no-op.
-// O log em memória existe SÓ pros testes do hook observarem as chamadas
-// (mesmo padrão do mockTelemetrySink).
+// O log em memória existe SÓ pros testes do hook observarem as chamadas.
 export const mockHeartbeatLog: { lat: number; lng: number }[] = [];
 export const mockBatchLog: QueuedPoint[] = [];
 
