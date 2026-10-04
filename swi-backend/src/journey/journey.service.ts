@@ -4,6 +4,7 @@ import { MediaService } from '../media/media.service'
 import { Prisma } from '@prisma/client'
 import type { Journey, TaskStatus } from '@prisma/client'
 import { startAnchors, pauseAnchors, resumeAnchors, endAnchors, progressPct, type Anchors } from './time-anchors'
+import { carryOverSince, journeyDayOf } from './journey-day'
 import { lockOrder, recomputeOrder } from '../work-orders/order-lock'
 
 type Db = PrismaService | Prisma.TransactionClient
@@ -21,14 +22,22 @@ type TaskWithOrder = Prisma.TaskGetPayload<{ include: typeof taskWithOrderInclud
 export class JourneyService {
   constructor(private readonly prisma: PrismaService, private readonly media: MediaService) {}
 
-  // Data-só em UTC-midnight (paridade com o mock: new Date().toISOString().slice(0,10)).
+  // Dia de Brasília, não de UTC: pelo de UTC a jornada virava às 21h.
   private today(): Date {
-    const n = new Date()
-    return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()))
+    return journeyDayOf(new Date())
   }
 
-  private async getOrCreateToday(workerId: string, db: Db = this.prisma): Promise<Journey> {
-    const date = this.today()
+  // A jornada de agora: um turno aberto num dia anterior, enquanto estiver
+  // dentro do prazo de journey-day.ts, senão a do dia de Brasília. Sem isso a
+  // virada do dia cortaria o turno de quem trabalha à noite.
+  private async getOrCreateCurrent(workerId: string, db: Db = this.prisma): Promise<Journey> {
+    const now = new Date()
+    const date = journeyDayOf(now)
+    const carried = await db.journey.findFirst({
+      where: { workerId, date: { lt: date }, state: { in: ['ongoing', 'paused'] }, openedAt: { gt: carryOverSince(now) } },
+      orderBy: { openedAt: 'desc' },
+    })
+    if (carried) return carried
     return db.journey.upsert({
       where: { workerId_date: { workerId, date } },
       update: {},
@@ -57,7 +66,7 @@ export class JourneyService {
   }
 
   async getJourney(workerId: string) {
-    return this.journeyToDto(await this.getOrCreateToday(workerId))
+    return this.journeyToDto(await this.getOrCreateCurrent(workerId))
   }
 
   // Lista os itens dos WorkOrders onde eu sou responsável, o pai não está done e
@@ -103,11 +112,14 @@ export class JourneyService {
         include: taskWithOrderInclude,
       })
       await recomputeOrder(tx, task.orderId)
-      const journey = await this.getOrCreateToday(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx)
       const ja = startAnchors(this.journeyAnchors(journey), now)
       const savedJourney = await tx.journey.update({
         where: { id: journey.id },
-        data: { state: 'ongoing', activeTaskId: taskId, startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+        data: {
+          state: 'ongoing', activeTaskId: taskId, startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds,
+          openedAt: this.openedAt(journey, now),
+        },
       })
       return { savedTask, savedJourney }
     })
@@ -139,7 +151,7 @@ export class JourneyService {
         savedTask = (await tx.task.findUnique({ where: { id: task.id }, include: taskWithOrderInclude })) ?? { ...task, ...fresh }
       }
       await recomputeOrder(tx, task.orderId)
-      const journey = await this.getOrCreateToday(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx)
       let savedJourney = journey
       if (journey.activeTaskId === taskId) {
         savedJourney = await tx.journey.update({ where: { id: journey.id }, data: { activeTaskId: null } })
@@ -171,7 +183,7 @@ export class JourneyService {
         include: taskWithOrderInclude,
       })
       await recomputeOrder(tx, task.orderId)
-      const journey = await this.getOrCreateToday(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx)
       let savedJourney = journey
       if (journey.activeTaskId === taskId) {
         savedJourney = await tx.journey.update({ where: { id: journey.id }, data: { activeTaskId: null } })
@@ -184,7 +196,7 @@ export class JourneyService {
   async pauseJourney(workerId: string) {
     const now = Date.now()
     const saved = await this.prisma.$transaction(async (tx) => {
-      const journey = await this.getOrCreateToday(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx)
       if (journey.activeTaskId) {
         const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
         if (active) {
@@ -210,7 +222,7 @@ export class JourneyService {
       const ja = pauseAnchors(this.journeyAnchors(journey), now)
       return tx.journey.update({
         where: { id: journey.id },
-        data: { state: 'paused', startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+        data: { state: 'paused', startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds, openedAt: this.openedAt(journey, now) },
       })
     })
     return this.journeyToDto(saved)
@@ -219,7 +231,7 @@ export class JourneyService {
   async resumeJourney(workerId: string) {
     const now = Date.now()
     const saved = await this.prisma.$transaction(async (tx) => {
-      const journey = await this.getOrCreateToday(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx)
       if (journey.activeTaskId) {
         const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
         if (active) {
@@ -240,7 +252,7 @@ export class JourneyService {
       const ja = resumeAnchors(this.journeyAnchors(journey), now)
       return tx.journey.update({
         where: { id: journey.id },
-        data: { state: 'ongoing', startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds },
+        data: { state: 'ongoing', startedAt: this.iso(ja.startedAt), accumulatedSeconds: ja.accumulatedSeconds, openedAt: this.openedAt(journey, now) },
       })
     })
     return this.journeyToDto(saved)
@@ -249,7 +261,7 @@ export class JourneyService {
   async endJourney(workerId: string) {
     const now = Date.now()
     const saved = await this.prisma.$transaction(async (tx) => {
-      const journey = await this.getOrCreateToday(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx)
       if (journey.activeTaskId) {
         const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
         if (active) {
@@ -283,7 +295,7 @@ export class JourneyService {
       // próprio objeto.
       return tx.journey.update({
         where: { id: journey.id },
-        data: { state: 'idle', activeTaskId: null, startedAt: null, accumulatedSeconds: 0 },
+        data: { state: 'idle', activeTaskId: null, startedAt: null, accumulatedSeconds: 0, openedAt: null },
       })
     })
     return this.journeyToDto(saved)
@@ -312,6 +324,14 @@ export class JourneyService {
   }
   private iso(ms: number | null): Date | null {
     return ms == null ? null : new Date(ms)
+  }
+  // Hora em que o turno abriu: nasce na saída do ocioso e vale até encerrar.
+  // Jornada já aberta sem ela foi gravada antes da coluna existir; ganha a
+  // hora da ação, para quem está em turno não ser cortado na virada. Só a
+  // jornada de hoje chega aqui assim: as de dias anteriores sem a hora nunca
+  // são trazidas de volta.
+  private openedAt(j: Journey, nowMs: number): Date | null {
+    return j.state === 'idle' ? new Date(nowMs) : (j.openedAt ?? new Date(nowMs))
   }
 
   private async taskToDto(t: TaskWithOrder) {
