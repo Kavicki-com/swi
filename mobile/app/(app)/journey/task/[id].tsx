@@ -11,8 +11,13 @@ import {
   ProgressBar,
   Text,
   Title,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system';
+import {
+  requestAlwaysPermission,
+  requestTrackingPermission,
+} from '../../../../services/positions/trackingPermission';
 
 import type { Task } from '../../../../services/journey/types';
 import { elapsedSeconds, progressPct } from '../../../../services/journey/progress';
@@ -110,6 +115,7 @@ export default function TaskDetails() {
   // voltava pra /journey achando que concluiu (a ação real não aconteceu).
   const [submitting, setSubmitting] = useState(false);
   const [ctaError, setCtaError] = useState<string | null>(null);
+  const [locationOff, setLocationOff] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -207,6 +213,25 @@ export default function TaskDetails() {
     } finally {
       setSubmitting(false);
     }
+  };
+  // A jornada liga o GPS em segundo plano (useJourneyTracking), então a
+  // permissão é pedida aqui, antes. Negada, a jornada inicia do mesmo jeito:
+  // o trabalho não pode depender do GPS. O aviso sai só sem a permissão de
+  // uso; sem o "Sempre" o iPhone ainda rastreia enquanto o app não fecha.
+  // `submitting` trava o segundo toque enquanto o sistema pergunta.
+  const startJourney = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const permission = await requestTrackingPermission();
+      setLocationOff(permission === 'denied');
+      await startTask(id ?? task.id);
+    } finally {
+      setSubmitting(false);
+    }
+    // O "Sempre" vem com a jornada já iniciada e sem segurar o botão: para
+    // quem já respondeu, o pedido só volta depois de um prazo do sistema.
+    void requestAlwaysPermission();
   };
   const finishTask = () => runCta(() => completeTask(liveTask.id), 'Não foi possível finalizar a tarefa. Tente novamente.');
   const cancelCurrentTask = () => runCta(() => cancelTask(liveTask.id), 'Não foi possível cancelar a tarefa. Tente novamente.');
@@ -422,9 +447,17 @@ export default function TaskDetails() {
             // startTask escreve no JourneyProvider: state='ongoing',
             // activeTaskId=id. Sem navegação. Quando user volta pra
             // /journey, lê o context e renderiza o layout ongoing.
-            onPress={() => startTask(id ?? task.id)}
+            disabled={submitting}
+            onPress={startJourney}
           />
         )}
+        {locationOff ? (
+          <Toast
+            variant="warning"
+            title="Localização desligada: sua posição não será enviada durante a jornada."
+            onClose={() => setLocationOff(false)}
+          />
+        ) : null}
       </ScrollView>
     </View>
   );

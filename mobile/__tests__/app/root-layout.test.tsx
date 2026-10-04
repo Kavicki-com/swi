@@ -54,7 +54,7 @@ const mockStack = Object.assign(
 );
 jest.mock('expo-router', () => ({ Stack: mockStack }));
 
-let mockAuth: { user: unknown } = { user: { id: 'u-1' } };
+let mockAuth: { user: unknown; restoring: boolean } = { user: { id: 'u-1' }, restoring: false };
 let mockVitals: unknown = { heartRate: 72 };
 let mockLocation: { coords: [number, number] | null } = { coords: [-46.6, -23.5] };
 
@@ -92,6 +92,14 @@ jest.mock('../../services/telemetry/TelemetryUploadProvider', () => ({
 }));
 jest.mock('../../services/positions/usePositionHeartbeat', () => ({
   usePositionHeartbeat: (g: unknown) => mockHeartbeat(g),
+}));
+let mockTrackingActive = false;
+const mockTrackingSession = jest.fn();
+jest.mock('../../services/positions/positionTracking', () => ({
+  useTrackingActive: () => mockTrackingActive,
+}));
+jest.mock('../../services/positions/useTrackingLifecycle', () => ({
+  useTrackingSession: (userId: unknown, restoring: unknown) => mockTrackingSession(userId, restoring),
 }));
 
 // `import` é içado para ANTES destes dublês, e o módulo da raiz chama
@@ -133,9 +141,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockFontsLoaded = true;
   mockFontError = null;
-  mockAuth = { user: { id: 'u-1' } };
+  mockAuth = { user: { id: 'u-1' }, restoring: false };
   mockVitals = { heartRate: 72 };
   mockLocation = { coords: [-46.6, -23.5] };
+  mockTrackingActive = false;
 });
 
 afterEach(desmontarTudo);
@@ -242,7 +251,7 @@ describe('RootLayout: telemetria e heartbeat de posição', () => {
 
   // Sem login o POST só viraria 401 a cada batida.
   it('deslogado, o heartbeat não recebe posição', async () => {
-    mockAuth = { user: null };
+    mockAuth = { user: null, restoring: false };
     await render();
 
     const getter = mockHeartbeat.mock.calls[0][0] as () => unknown;
@@ -259,6 +268,35 @@ describe('RootLayout: telemetria e heartbeat de posição', () => {
     expect(getter()).toBeNull();
     const [, getCoords] = mockSampler.mock.calls[0] as [() => unknown, () => unknown];
     expect(getCoords()).toBeNull();
+  });
+
+  // Com a jornada rastreada, a posição já sai pela tarefa em segundo plano. O
+  // heartbeat mandaria a mesma posição de novo, com outra leitura de GPS.
+  it('com o rastreio em segundo plano ligado, o heartbeat se cala', async () => {
+    mockTrackingActive = true;
+    await render();
+
+    const getter = mockHeartbeat.mock.calls[0][0] as () => unknown;
+    expect(getter()).toBeNull();
+  });
+
+  it('o rastreio acompanha a sessão de quem está logado', async () => {
+    await render();
+    expect(mockTrackingSession).toHaveBeenCalledWith('u-1', false);
+  });
+
+  it('deslogado, o rastreio vê a sessão vazia (é assim que o logout o desliga)', async () => {
+    mockAuth = { user: null, restoring: false };
+    await render();
+    expect(mockTrackingSession).toHaveBeenLastCalledWith(null, false);
+  });
+
+  // Enquanto a sessão restaura ainda não se sabe se há usuário: o rastreio
+  // precisa saber disso para não desligar à toa.
+  it('o rastreio sabe quando a sessão ainda está restaurando', async () => {
+    mockAuth = { user: null, restoring: true };
+    await render();
+    expect(mockTrackingSession).toHaveBeenLastCalledWith(null, true);
   });
 });
 

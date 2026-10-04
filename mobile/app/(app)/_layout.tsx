@@ -1,8 +1,18 @@
 import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '../../services/auth/AuthProvider';
-import { JourneyProvider } from '../../services/journey/JourneyProvider';
+import { JourneyProvider, useJourney } from '../../services/journey/JourneyProvider';
 import { EvacuationProvider } from '../../services/evacuation/EvacuationProvider';
 import { NotificationProvider } from '../../services/notifications/NotificationProvider';
+import { useJourneyTracking } from '../../services/positions/useTrackingLifecycle';
+
+// GPS em segundo plano: liga com a jornada em andamento ou pausada e desliga
+// quando ela encerra. Null-render, dentro do JourneyProvider para ler a
+// jornada; a jornada só conta depois de carregada do backend.
+function JourneyTrackingRoot({ userId }: { userId: string }) {
+  const { state, loadStatus } = useJourney();
+  useJourneyTracking(userId, state, loadStatus === 'ready' || loadStatus === 'empty');
+  return null;
+}
 
 // Auth gate: rotas em `(app)/*` exigem usuário autenticado. Enquanto o
 // AuthProvider restaura a sessão guardada, segura o julgamento: redirecionar
@@ -29,6 +39,7 @@ export default function AppLayout() {
   // o badge seriam estados independentes e o badge não zeraria ao ler.
   return (
     <JourneyProvider>
+      <JourneyTrackingRoot userId={user.id} />
       <EvacuationProvider>
         <NotificationProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />

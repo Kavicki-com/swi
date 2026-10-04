@@ -12,8 +12,14 @@ jest.mock('../../../services/auth/AuthProvider', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+let mockJourney: { state: string; loadStatus: string } = { state: 'ongoing', loadStatus: 'ready' };
 jest.mock('../../../services/journey/JourneyProvider', () => ({
   JourneyProvider: ({ children }: { children: React.ReactNode }) => children,
+  useJourney: () => mockJourney,
+}));
+const mockJourneyTracking = jest.fn();
+jest.mock('../../../services/positions/useTrackingLifecycle', () => ({
+  useJourneyTracking: (...args: unknown[]) => mockJourneyTracking(...args),
 }));
 jest.mock('../../../services/evacuation/EvacuationProvider', () => ({
   EvacuationProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -52,5 +58,32 @@ describe('(app)/_layout — auth gate com sessão persistida', () => {
     const tree = render();
     expect(achados(tree, Stack)).toHaveLength(1);
     expect(achados(tree, Redirect)).toHaveLength(0);
+  });
+});
+
+describe('(app)/_layout: rastreio em segundo plano', () => {
+  beforeEach(() => {
+    mockJourneyTracking.mockClear();
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+  });
+
+  it('a jornada carregada decide o rastreio da pessoa logada', () => {
+    mockJourney = { state: 'paused', loadStatus: 'ready' };
+    render();
+    expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'paused', true);
+  });
+
+  it('jornada carregada sem tarefas também conta como conhecida', () => {
+    mockJourney = { state: 'idle', loadStatus: 'empty' };
+    render();
+    expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'idle', true);
+  });
+
+  it('jornada ainda carregando, ou que falhou, não é conhecida', () => {
+    for (const loadStatus of ['idle', 'loading', 'error']) {
+      mockJourney = { state: 'idle', loadStatus };
+      render();
+      expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'idle', false);
+    }
   });
 });

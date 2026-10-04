@@ -2,8 +2,13 @@ import { apiAuthBackend } from './apiAuthBackend'
 import { getUserId, clearUserId } from '../api/session'
 
 jest.mock('expo-secure-store', () => {
-  let v: string | null = null
-  return { setItemAsync: jest.fn(async (_k, x) => { v = x }), getItemAsync: jest.fn(async () => v), deleteItemAsync: jest.fn(async () => { v = null }) }
+  const itens = new Map<string, string>()
+  return {
+    AFTER_FIRST_UNLOCK: 'afterFirstUnlock',
+    setItemAsync: jest.fn(async (k: string, x: string) => { itens.set(k, x) }),
+    getItemAsync: jest.fn(async (k: string) => itens.get(k) ?? null),
+    deleteItemAsync: jest.fn(async (k: string) => { itens.delete(k) }),
+  }
 })
 
 const okJson = (body: any) => ({ ok: true, status: 200, json: async () => body })
@@ -18,7 +23,7 @@ describe('apiAuthBackend', () => {
     const u = await apiAuthBackend.signIn({ email: 'j@ex.com', password: 'senha123' })
     expect(u).toEqual({ id: 'u1', email: 'j@ex.com', name: 'J' })
     const store = require('expo-secure-store')
-    expect(store.setItemAsync).toHaveBeenCalledWith(expect.any(String), 't1')
+    expect(store.setItemAsync).toHaveBeenCalledWith(expect.any(String), 't1', expect.anything())
     expect(getUserId()).toBe('u1')
   })
 
@@ -51,7 +56,7 @@ describe('apiAuthBackend', () => {
   })
 
   it('getCurrentUser sem token = null', async () => {
-    const store = require('expo-secure-store'); await store.deleteItemAsync('x')
+    const store = require('expo-secure-store'); await store.deleteItemAsync('swi.auth.token')
     expect(await apiAuthBackend.getCurrentUser()).toBeNull()
   })
 
@@ -114,5 +119,76 @@ describe('getCurrentUser: token invalido nao pode sobreviver', () => {
 
     expect(await apiAuthBackend.getCurrentUser()).toBeNull()
     expect(await store().getItemAsync('swi.auth.token')).toBe('token-do-joao')
+  })
+})
+
+// O GPS em segundo plano envia com o iPhone bloqueado. Token gravado com o
+// padrão (WHEN_UNLOCKED) não pode ser lido nessa hora, e todo envio falharia.
+describe('token legível com o aparelho bloqueado', () => {
+  const store = () => require('expo-secure-store')
+  const AFU = { keychainAccessible: 'afterFirstUnlock' }
+
+  const MARCA = 'swi.auth.token.afu'
+  const eu = { id: 'u1', email: 'j@ex.com', name: 'J' }
+
+  // Estado de quem instalou antes desta versão: token gravado com o padrão,
+  // sem a marca de conversão.
+  const sessaoAntiga = async () => {
+    await store().deleteItemAsync(MARCA)
+    await store().setItemAsync('swi.auth.token', 'token-antigo')
+    jest.clearAllMocks()
+    ;(global.fetch as jest.Mock).mockResolvedValue(okJson(eu))
+  }
+
+  beforeEach(() => {
+    (global as any).fetch = jest.fn()
+    jest.clearAllMocks()
+  })
+
+  it('signIn grava o token com AFTER_FIRST_UNLOCK, apagando antes o anterior', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({ accessToken: 't1', user: eu }))
+    await apiAuthBackend.signIn({ email: 'j@ex.com', password: 'senha123' })
+    // Gravar por cima de um item existente só troca o valor, nunca a
+    // acessibilidade: por isso o apagar vem antes.
+    expect(store().deleteItemAsync).toHaveBeenCalledWith('swi.auth.token')
+    expect(store().setItemAsync).toHaveBeenCalledWith('swi.auth.token', 't1', AFU)
+    const apagou = store().deleteItemAsync.mock.invocationCallOrder[0]
+    const gravou = store().setItemAsync.mock.invocationCallOrder[0]
+    expect(apagou).toBeLessThan(gravou)
+    expect(await store().getItemAsync(MARCA)).toBe('1')
+  })
+
+  it('a sessão restaurada regrava o token antigo com AFTER_FIRST_UNLOCK, uma vez', async () => {
+    await sessaoAntiga()
+    expect(await apiAuthBackend.getCurrentUser()).toEqual(eu)
+    expect(store().setItemAsync).toHaveBeenCalledWith('swi.auth.token', 'token-antigo', AFU)
+    expect(await store().getItemAsync('swi.auth.token')).toBe('token-antigo')
+
+    // Já convertido: as aberturas seguintes não apagam nem regravam o token,
+    // e a sessão não fica à mercê de o app morrer entre os dois passos.
+    jest.clearAllMocks()
+    ;(global.fetch as jest.Mock).mockResolvedValue(okJson(eu))
+    expect(await apiAuthBackend.getCurrentUser()).toEqual(eu)
+    expect(store().deleteItemAsync).not.toHaveBeenCalled()
+    expect(store().setItemAsync).not.toHaveBeenCalled()
+  })
+
+  it('se a regravação falhar, o token volta como estava e a conversão fica para depois', async () => {
+    await sessaoAntiga()
+    store().setItemAsync.mockRejectedValueOnce(new Error('keychain'))
+    expect(await apiAuthBackend.getCurrentUser()).toEqual(eu)
+    expect(await store().getItemAsync('swi.auth.token')).toBe('token-antigo')
+    expect(await store().getItemAsync(MARCA)).toBeNull()
+  })
+
+  it('falha ao ler a marca não derruba a sessão', async () => {
+    await sessaoAntiga()
+    const ler = store().getItemAsync.getMockImplementation()
+    store().getItemAsync.mockImplementation(async (k: string) => {
+      if (k === MARCA) throw new Error('keychain')
+      return ler(k)
+    })
+    expect(await apiAuthBackend.getCurrentUser()).toEqual(eu)
+    store().getItemAsync.mockImplementation(ler)
   })
 })
