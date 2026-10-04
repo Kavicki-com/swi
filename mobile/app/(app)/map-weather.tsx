@@ -33,7 +33,7 @@ import { NavFABs } from '@/components/NavFABs';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { BRAZIL_BOUNDS, boundsCenter } from '@/lib/mapGeometry';
-import { CAMERA_LOCATIONS } from '@/lib/mapMockData';
+import { useCameraPoints } from '@/services/cameras/useCameraPoints';
 import { toPinStatus } from '@/lib/mapPins';
 import { useMapViewport } from '@/lib/useMapViewport';
 
@@ -79,6 +79,9 @@ function MapWeatherScreen() {
   // releitura falha, a última observação lida segue na tela com a hora dela.
   const radar = usePolledRead(showRadar, readRadarTime, RADAR_REFRESH_MS, RADAR_RETRY_MS);
   const radarTiles = useMemo(() => (radar.data ? [rainRadarTiles(radar.data)] : null), [radar.data]);
+
+  // Pontos de câmera cadastrados no painel, lidos quando a camada liga.
+  const cameras = useCameraPoints(showCameras);
 
   // Mesma regra do mapa geral: sem GPS, são os colegas que dão o enquadramento.
   const { viewport: frame, colleagues } = useMapViewport(coords, showOperators);
@@ -131,9 +134,9 @@ function MapWeatherScreen() {
             </MapMarker>
           ))}
 
-        {/* Camera pins overlay: 12 CAMERA_LOCATIONS quando toggle ligado. */}
+        {/* Camera pins overlay: as câmeras cadastradas da empresa, quando ligado. */}
         {showCameras &&
-          CAMERA_LOCATIONS.map((c) => (
+          cameras.data?.map((c) => (
             <MapMarker
               key={c.id}
               id={`camera-${c.id}`}

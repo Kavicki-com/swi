@@ -13,7 +13,8 @@ import {
 //
 // 1. Os aneis de distancia sao geometria em METROS em volta da posicao real
 //    (medidos aqui com haversine propria), nao circulos de pixel.
-// 2. Nada na tela e inventado. Colegas e calor vem do backend de posicoes; sem
+// 2. Nada na tela e inventado. Colegas e calor vem do backend de posicoes, e
+//    as cameras vem do cadastro da empresa; sem
 //    GPS nao existe pino proprio nem anel, e o mapa enquadra os colegas ou o
 //    Brasil. A tela ja desenhou sete pessoas fixas e um calor sorteado em volta
 //    de um ponto de Sao Paulo, para qualquer usuario em qualquer lugar.
@@ -46,6 +47,11 @@ jest.mock('@/services/positions/getPositionsBackend', () => ({
     listColleagues: () => mockListColleagues(),
     heat: () => mockHeat(),
   }),
+}));
+
+const mockListCameras = jest.fn();
+jest.mock('@/services/cameras/getCamerasBackend', () => ({
+  getCamerasBackend: () => ({ list: () => mockListCameras() }),
 }));
 
 // Fronteira do MapLibre dublada: MapView vira um passa-children que guarda o
@@ -112,6 +118,8 @@ const colega = (id: string, lng: number, lat: number, extra: object = {}) => ({
   ...extra,
 });
 
+const camera = (id: string, lng: number, lat: number) => ({ id, name: `Câmera ${id}`, lat, lng });
+
 const calor = (cells: { lat: number; lng: number; weight: number }[]) => ({
   cellSizeM: 50,
   from: '2026-10-02T12:00:00.000Z',
@@ -164,6 +172,10 @@ const avancar = async (ms: number) => {
   });
 };
 
+// O pino de camera do DS dentro de um marcador.
+const pinoDeCamera = (tree: ReactTestRenderer, id: string) =>
+  porTestID(tree, id).findAll((n) => n.props?.variant === 'camera')[0];
+
 // O pino do DS dentro de um marcador: e ele quem recebe nome, foto e estado.
 const pinoDe = (tree: ReactTestRenderer, id: string) =>
   porTestID(tree, id).findAll((n) => n.props?.variant === 'avatar')[0];
@@ -174,6 +186,7 @@ beforeEach(() => {
   mockTelemetry = reporting();
   mockListColleagues.mockReset().mockResolvedValue([]);
   mockHeat.mockReset().mockResolvedValue(calor([]));
+  mockListCameras.mockReset().mockResolvedValue([]);
 });
 
 afterEach(async () => {
@@ -243,6 +256,13 @@ describe('Mapa geral: com GPS', () => {
     expect(mapa.props.bounds).toBeUndefined();
     expect(mapa.props.zoom).toBe(14);
     expect(porTestID(tree, 'marker-user-pin').props.coordinate).toEqual(MINA);
+  });
+
+  it('nao le as cameras enquanto a camada esta desligada', async () => {
+    await render();
+    await avancar(10 * 60_000);
+
+    expect(mockListCameras).not.toHaveBeenCalled();
   });
 
   it('nao le colega nem calor enquanto as camadas estao desligadas', async () => {
@@ -510,14 +530,68 @@ describe('Mapa geral: calor', () => {
 });
 
 describe('Mapa geral: cameras', () => {
-  it('comecam escondidas, aparecem no primeiro toque e somem no segundo', async () => {
+  it('a camada liga com as cameras cadastradas, cada uma no proprio ponto e com o proprio nome', async () => {
+    mockListCameras.mockResolvedValue([camera('a', -43.91, -19.91), camera('b', -43.92, -19.92)]);
     const tree = await render();
     expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
 
     await tocar(porRotulo(tree, 'Câmeras'));
-    expect(idsCom(tree, 'marker-camera-')).toHaveLength(12);
 
+    expect(idsCom(tree, 'marker-camera-').sort()).toEqual(['marker-camera-a', 'marker-camera-b']);
+    expect(porTestID(tree, 'marker-camera-a').props.coordinate).toEqual([-43.91, -19.91]);
+    expect(porTestID(tree, 'marker-camera-b').props.coordinate).toEqual([-43.92, -19.92]);
+    expect(pinoDeCamera(tree, 'marker-camera-a').props.name).toBe('Câmera a');
+  });
+
+  it('sem camera cadastrada, o botao liga e o mapa fica sem pino de camera', async () => {
+    const tree = await render();
+    await tocar(porRotulo(tree, 'Câmeras'));
+
+    expect(mockListCameras).toHaveBeenCalledTimes(1);
+    expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
+  });
+
+  it('rele a cada 5 minutos e acompanha camera criada e camera excluida', async () => {
+    mockListCameras.mockResolvedValueOnce([camera('a', -43.91, -19.91)]);
+    const tree = await render();
+    await tocar(porRotulo(tree, 'Câmeras'));
+    expect(idsCom(tree, 'marker-camera-')).toEqual(['marker-camera-a']);
+
+    mockListCameras.mockResolvedValue([camera('b', -43.92, -19.92)]);
+    await avancar(5 * 60_000);
+
+    expect(idsCom(tree, 'marker-camera-')).toEqual(['marker-camera-b']);
+  });
+
+  it('falha na leitura deixa o mapa sem camera, nunca com pontos inventados', async () => {
+    mockListCameras.mockRejectedValue(new Error('sem rede'));
+    const tree = await render();
+    await tocar(porRotulo(tree, 'Câmeras'));
+
+    expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
+  });
+
+  it('depois de uma falha, tenta de novo em 30 segundos, sem esperar os 5 minutos', async () => {
+    mockListCameras
+      .mockRejectedValueOnce(new Error('sem rede'))
+      .mockResolvedValue([camera('a', -43.91, -19.91)]);
+    const tree = await render();
     await tocar(porRotulo(tree, 'Câmeras'));
     expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
+
+    await avancar(30_000);
+
+    expect(idsCom(tree, 'marker-camera-')).toEqual(['marker-camera-a']);
+  });
+
+  it('desligar tira os pinos e para de ler', async () => {
+    mockListCameras.mockResolvedValue([camera('a', -43.91, -19.91)]);
+    const tree = await render();
+    await tocar(porRotulo(tree, 'Câmeras'));
+    await tocar(porRotulo(tree, 'Câmeras'));
+
+    expect(idsCom(tree, 'marker-camera-')).toHaveLength(0);
+    await avancar(10 * 60_000);
+    expect(mockListCameras).toHaveBeenCalledTimes(1);
   });
 });
