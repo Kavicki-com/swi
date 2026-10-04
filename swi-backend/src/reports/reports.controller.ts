@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common'
 import type { Response } from 'express'
 import { ReportsService } from './reports.service'
 import { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
+import { parseIdempotencyKey } from '../idempotency/idempotency-key'
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
@@ -49,9 +50,11 @@ export class ReportsController {
     return r
   }
 
+  // `Idempotency-Key` é opcional (aqui e no comentário): a fila offline do app
+  // manda para o reenvio não duplicar; sem ele, o envio segue como sempre.
   @Post()
-  create(@CurrentUserId() userId: string, @Body() dto: CreateReportDto) {
-    return this.reports.create(userId, dto)
+  create(@CurrentUserId() userId: string, @Body() dto: CreateReportDto, @Headers('idempotency-key') rawKey?: string) {
+    return this.reports.create(userId, dto, parseIdempotencyKey(rawKey))
   }
 
   @Patch(':id')
@@ -68,7 +71,12 @@ export class ReportsController {
   }
 
   @Post(':id/comments')
-  addComment(@Param('id') id: string, @CurrentUserId() userId: string, @Body() dto: CreateCommentDto) {
-    return this.reports.addComment(id, userId, dto)
+  addComment(
+    @Param('id') id: string,
+    @CurrentUserId() userId: string,
+    @Body() dto: CreateCommentDto,
+    @Headers('idempotency-key') rawKey?: string,
+  ) {
+    return this.reports.addComment(id, userId, dto, parseIdempotencyKey(rawKey))
   }
 }

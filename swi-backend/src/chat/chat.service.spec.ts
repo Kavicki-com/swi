@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import { ChatService } from './chat.service'
-import { BadRequestException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, NotFoundException, ServiceUnavailableException, UnprocessableEntityException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import { requestHash } from '../idempotency/idempotency-key'
 
 const media = () => ({
   presignGet: jest.fn(async (k: string) => `signed:${k}`),
@@ -12,7 +14,9 @@ const prisma = () => ({
   conversation: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
   message: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
   user: { findMany: jest.fn(), findUnique: jest.fn() },
+  idempotencyKey: { findUnique: jest.fn().mockResolvedValue(null) },
   $executeRaw: jest.fn().mockResolvedValue(1),
+  $transaction: jest.fn(),
 }) as any
 
 const A = 'aaaa', B = 'bbbb'
@@ -200,6 +204,80 @@ describe('ChatService', () => {
     const out = await new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'novo' })
     expect(out.body).toBe('novo')
     expect(db.conversation.findUnique).toHaveBeenCalledTimes(2) // re-buscou após a colisão
+  })
+
+  // Fila offline do app: o mesmo envio pode chegar duas vezes (o primeiro
+  // passou, mas a resposta se perdeu). Com a chave, o segundo devolve a
+  // mensagem do primeiro.
+  describe('com chave de envio', () => {
+    const KEY = randomUUID()
+    const knownKey = (body: string) => ({
+      id: 'k1', userId: A, key: KEY, scope: 'chat.message', resourceId: 'm1', createdAt: new Date(),
+      requestHash: requestHash('chat.message', { conversationId: CONV, body, imageKey: null }),
+    })
+
+    // A mensagem, o contador do destinatário e a chave andam juntos: uma queda
+    // no meio não pode deixar a mensagem sem chave (o reenvio a criaria de novo)
+    // nem o contador somado sem mensagem.
+    it('envio novo cria a mensagem, soma o contador e grava a chave na mesma transação', async () => {
+      const db = prisma()
+      db.conversation.findUnique.mockResolvedValue(convRow({ unreadByJson: {} }))
+      db.user.findUnique.mockResolvedValue(userRow(A))
+      const tx = {
+        message: { create: jest.fn().mockResolvedValue(msgRow({ senderId: A, body: 'oi' })) },
+        $executeRaw: jest.fn().mockResolvedValue(1),
+        idempotencyKey: { create: jest.fn().mockResolvedValue({}) },
+      }
+      db.$transaction.mockImplementation(async (fn: (t: unknown) => unknown) => fn(tx))
+      const rt = realtime(), notif = notifications()
+      const out = await new ChatService(db, media(), rt, notif).sendMessage(A, CONV, { body: 'oi' }, KEY)
+      expect(out.id).toBe('m1')
+      expect(tx.message.create).toHaveBeenCalledTimes(1)
+      expect(tx.$executeRaw).toHaveBeenCalledTimes(1)
+      expect(tx.idempotencyKey.create.mock.calls[0][0].data).toMatchObject({ userId: A, key: KEY, scope: 'chat.message', resourceId: 'm1' })
+      expect(db.message.create).not.toHaveBeenCalled()
+      expect(db.$executeRaw).not.toHaveBeenCalled()
+      expect(rt.emitToUsers).toHaveBeenCalledTimes(1)
+      expect(notif.enqueueForMany).toHaveBeenCalledTimes(1)
+    })
+
+    // Repetir o socket e a notificação seria o mesmo que duplicar a mensagem
+    // para quem recebe: o celular do colega tocaria duas vezes.
+    it('reenvio devolve a mensagem existente sem criar, sem somar o contador, sem socket e sem notificação', async () => {
+      const db = prisma()
+      db.conversation.findUnique.mockResolvedValue(convRow())
+      db.idempotencyKey.findUnique.mockResolvedValue(knownKey('oi'))
+      db.message.findUnique.mockResolvedValue(msgRow({ senderId: A, body: 'oi' }))
+      const rt = realtime(), notif = notifications()
+      const out = await new ChatService(db, media(), rt, notif).sendMessage(A, CONV, { body: 'oi' }, KEY)
+      expect(out).toMatchObject({ id: 'm1', body: 'oi' })
+      expect(db.message.findUnique).toHaveBeenCalledWith({ where: { id: 'm1' } })
+      expect(db.message.create).not.toHaveBeenCalled()
+      expect(db.$transaction).not.toHaveBeenCalled()
+      expect(db.$executeRaw).not.toHaveBeenCalled()
+      expect(rt.emitToUsers).not.toHaveBeenCalled()
+      expect(notif.enqueueForMany).not.toHaveBeenCalled()
+    })
+
+    it('mesma chave com outro texto → 422', async () => {
+      const db = prisma()
+      db.conversation.findUnique.mockResolvedValue(convRow())
+      db.idempotencyKey.findUnique.mockResolvedValue(knownKey('oi'))
+      await expect(
+        new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'outro' }, KEY),
+      ).rejects.toThrow(UnprocessableEntityException)
+      expect(db.message.create).not.toHaveBeenCalled()
+    })
+
+    it('reenvio de mensagem que não existe mais → 404', async () => {
+      const db = prisma()
+      db.conversation.findUnique.mockResolvedValue(convRow())
+      db.idempotencyKey.findUnique.mockResolvedValue(knownKey('oi'))
+      db.message.findUnique.mockResolvedValue(null)
+      await expect(
+        new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'oi' }, KEY),
+      ).rejects.toThrow(NotFoundException)
+    })
   })
 })
 

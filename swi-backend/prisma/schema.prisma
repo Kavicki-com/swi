@@ -56,6 +56,7 @@ model User {
   journeys      Journey[]
   messages      Message[]
   notifications Notification[]
+  idempotencyKeys IdempotencyKey[]
 
   authoredWorkOrders WorkOrder[] @relation("authoredWorkOrders")
   responsibleFor     WorkOrder[] @relation("workOrderResponsibles")
@@ -450,6 +451,26 @@ model Message {
   deletedAt      DateTime?
 
   @@index([conversationId, sentAt])
+}
+
+// Chave de idempotência dos envios do app (fila offline). Gravada na MESMA
+// transação do registro que o envio criou, então chave e registro existem
+// juntos ou nenhum dos dois. O reenvio com a mesma chave relê o registro por
+// `resourceId` em vez de criar outro. `requestHash` é a impressão do conteúdo:
+// mesma chave com outro conteúdo é recusada. A chave vale por usuário e fica
+// 30 dias (idempotency-retention.job.ts).
+model IdempotencyKey {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String
+  scope       String
+  requestHash String
+  resourceId  String
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([createdAt])
 }
 
 model Notification {
