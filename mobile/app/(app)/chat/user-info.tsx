@@ -6,15 +6,18 @@ import {
   Avatar,
   Button,
   Icon,
-  ProgressBar,
   Text,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { useChat } from '../../../services/chat/ChatProvider';
-import { formatEta } from '../../../services/vitals/formatEta';
+import { colleagueStatusLabel } from '../../../services/positions/colleagueStatusLabel';
+import { getPositionsBackend } from '../../../services/positions/getPositionsBackend';
+import { usePolledRead } from '../../../services/positions/usePolledRead';
 import { ageFrom } from '../../../lib/age';
-import { simulatedFatigueFor } from '../../../services/vitals/simulatedContactFatigue';
+import { COLLEAGUES_REFRESH_MS } from '../../../lib/useMapViewport';
+
+const readColleagues = () => getPositionsBackend().listColleagues();
 
 // Rótulos de gênero a partir do CÓDIGO que o backend guarda ('male'/'female'/
 // 'other') — mesma convenção do painel.
@@ -40,8 +43,9 @@ export default function ChatUserInfo() {
   const gender = contact?.gender ? GENDER_LABEL[contact.gender] : undefined;
   const age = ageFrom(contact?.birthDate);
   const roleLine = [contact?.role, contact?.sector].filter(Boolean).join('\n');
-  // Fadiga é dado de smartband → simulado, mas por PESSOA (era 62% pra todos).
-  const fatigue = simulatedFatigueFor(contact?.workerId ?? '');
+  // Da saúde do colega o app só conhece o estado, o mesmo do pino no mapa.
+  // Sem contato não há de quem ler.
+  const colleagues = usePolledRead(contact !== null, readColleagues, COLLEAGUES_REFRESH_MS);
 
   return (
     <View
@@ -172,24 +176,16 @@ export default function ChatUserInfo() {
         </View>
       </View>
 
-      <View style={{ gap: theme.gap.m, width: '100%' }}>
-        <Title variant="title.xs" color={theme.content.dark}>
-          Tempo até a fadiga total
-        </Title>
-        <ProgressBar
-          value={fatigue.pct}
-          trackColor={theme.surface.secondaryLight}
-          gradient={[
-            theme.surface.success,
-            theme.surface.warning,
-            theme.surface.error,
-          ]}
-          accessibilityLabel="Tempo até fadiga"
-        />
-        <Title variant="title.xs" color={theme.content.dark}>
-          {formatEta(fatigue.etaMin)}
-        </Title>
-      </View>
+      {contact ? (
+        <View style={{ gap: theme.gap.xs, width: '100%' }}>
+          <Title variant="title.xs" color={theme.content.dark}>
+            Estado atual
+          </Title>
+          <Text variant="body.m" color={theme.content.dark}>
+            {colleagueStatusLabel(colleagues, contact.workerId)}
+          </Text>
+        </View>
+      ) : null}
 
       <View
         style={{
