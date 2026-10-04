@@ -226,9 +226,14 @@ describe('useUserSettings: salvar cadastro', () => {
 
 describe('useUserSettings: troca de senha', () => {
   it.each([
-    ['campo em branco', { cur: '', novo: 'novasenha', conf: 'novasenha' }, /Preencha/],
-    ['nova curta demais', { cur: 'atual1', novo: '123', conf: '123' }, /6 caracteres/],
-    ['repetição diferente', { cur: 'atual1', novo: 'novasenha', conf: 'outra' }, /não conferem/],
+    ['campo em branco', { cur: '', novo: 'Nova@senha1', conf: 'Nova@senha1' }, /Preencha/],
+    ['nova curta demais', { cur: 'atual1', novo: 'N@1', conf: 'N@1' }, /8 caracteres/],
+    [
+      'nova fora da regra',
+      { cur: 'atual1', novo: 'novasenha1', conf: 'novasenha1' },
+      /1 letra maiúscula e 1 símbolo/,
+    ],
+    ['repetição diferente', { cur: 'atual1', novo: 'Nova@senha1', conf: 'outra' }, /não conferem/],
   ])('recusa antes de chamar a API: %s', async (_caso, campos, esperado) => {
     const { result } = await setup()
     await act(async () => {
@@ -249,8 +254,8 @@ describe('useUserSettings: troca de senha', () => {
     const { result } = await setup()
     await act(async () => {
       result.current.setCurrentPw('atual123')
-      result.current.setNewPw('novasenha')
-      result.current.setConfirmPw('novasenha')
+      result.current.setNewPw('Nova@senha1')
+      result.current.setConfirmPw('Nova@senha1')
     })
 
     await act(async () => {
@@ -259,7 +264,7 @@ describe('useUserSettings: troca de senha', () => {
 
     expect(h.changePassword).toHaveBeenCalledWith({
       currentPassword: 'atual123',
-      newPassword: 'novasenha',
+      newPassword: 'Nova@senha1',
     })
     expect(result.current.currentPw).toBe('')
     expect(result.current.newPw).toBe('')
@@ -271,8 +276,8 @@ describe('useUserSettings: troca de senha', () => {
     const { result } = await setup()
     await act(async () => {
       result.current.setCurrentPw('errada')
-      result.current.setNewPw('novasenha')
-      result.current.setConfirmPw('novasenha')
+      result.current.setNewPw('Nova@senha1')
+      result.current.setConfirmPw('Nova@senha1')
     })
 
     await act(async () => {

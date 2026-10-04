@@ -38,7 +38,7 @@ export const Sent: StoryObj<typeof RecoveryNewPassword> = {
     docs: {
       description: {
         story:
-          'Painel de confirmação após reset bem-sucedido. Para visualizar, preencher um par válido (ex.: "novo1234" / "novo1234") e clicar em "Alterar senha"; o painel troca para o estado "sent" com a cópia em PT-BR e o link de voltar para login.',
+          'Painel de confirmação após reset bem-sucedido. Para visualizar, preencher um par válido (ex.: "Novo@1234" / "Novo@1234") e clicar em "Alterar senha"; o painel troca para o estado "sent" com a cópia em PT-BR e o link de voltar para login.',
       },
     },
   },

@@ -6,7 +6,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { View } from 'react-native'
 import { Button, Input, Text, Title, Toast, useTheme } from '@kavicki/swi-design-system'
 import { authApi } from '@/services/auth'
-import { matches, minLength } from '@/lib/validators'
+import { matches, newPasswordProblem } from '@/lib/validators'
 import { FormError } from '@/components/FormError'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
 
@@ -31,8 +31,9 @@ export function RecoveryNewPassword() {
 
   const onSubmit = async () => {
     setError(null)
-    if (!minLength(newPassword, 8)) {
-      setError('Senha deve ter pelo menos 8 caracteres')
+    const problem = newPasswordProblem(newPassword)
+    if (problem) {
+      setError(problem)
       return
     }
     if (!matches(newPassword, confirmPassword)) {
@@ -78,16 +79,14 @@ export function RecoveryNewPassword() {
             <Text variant="body.m" color={theme.content.dark}>
               Escolha uma senha segura para o seu acesso, ela deve seguir os padrões abaixo:
             </Text>
-            {/* A regra anunciada tem que ser a regra APLICADA: o backend valida
-                @MinLength(6) em signup/reset/troca (swi-backend/src/auth/dto.ts)
-                e não exige letra+número nem símbolo. Anunciar aqui uma regra
-                mais forte que a do servidor promete uma proteção que não
-                existe. Se o produto quiser a regra forte, ela sobe no DTO
-                primeiro, e só então esta copy cresce junto. */}
+            {/* A regra anunciada é a regra APLICADA: a mesma do backend
+                (swi-backend/src/auth/password-rule.ts), conferida aqui por
+                newPasswordProblem antes do envio. O texto é o do desenho,
+                igual ao que o app mostra. */}
             <Toast
               variant="info"
-              title="Sua senha precisa ter no mínimo 6 caracteres"
-              message="Use uma combinação difícil de adivinhar — evite datas e sequências."
+              title="Sua senha precisa ter 8 caracteres incluindo letras e números"
+              message={'1 símbolo @#$%ˆ\n1 Letras maiúscula'}
             />
             <Input
               label="Nova Senha"

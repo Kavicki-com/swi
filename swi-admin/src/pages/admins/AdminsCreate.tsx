@@ -24,6 +24,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDemoToast } from '@/lib/demoToast'
 import { maskCpf, maskDate, maskPhone, onlyDigits } from '@/lib/masks'
+import { newPasswordProblem } from '@/lib/validators'
 import { ExamsSection } from '@/pages/user/components/ExamsSection'
 import { useExamAttachments } from './hooks/useExamAttachments'
 
@@ -392,8 +393,9 @@ export function AdminsCreate({
       setError('Informe um e-mail válido.')
       return
     }
-    if (!isEdit && form.senha.length < 8) {
-      setError('A senha deve ter no mínimo 8 caracteres.')
+    const senhaProblem = isEdit ? null : newPasswordProblem(form.senha)
+    if (senhaProblem) {
+      setError(senhaProblem)
       return
     }
     // Responder "Sim" sem descrever é uma declaração que não cabe no campo: o

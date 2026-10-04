@@ -55,7 +55,7 @@ describe('AdminsCreate — submit', () => {
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
     typeIn('admins-create-telefone', '11999999999')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
     // O username SOBE no payload junto com o resto. O que este caso prova é que
     // saúde em branco não gera chave de saúde.
     typeIn('admins-create-usuario', 'zedasilva')
@@ -67,7 +67,7 @@ describe('AdminsCreate — submit', () => {
     expect(payload).toEqual({
       name: 'Zé da Silva',
       email: 'ze@x.com',
-      password: 'senha123',
+      password: 'Senha@123',
       phone: '11999999999',
       username: 'zedasilva',
     })
@@ -84,7 +84,7 @@ describe('AdminsCreate — submit', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'abc')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
 
     finalizar()
 
@@ -92,18 +92,21 @@ describe('AdminsCreate — submit', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/e-mail válido/i)
   })
 
-  it('senha com menos de 8 caracteres não chama create', async () => {
+  it.each([
+    ['com menos de 8 caracteres', 'sete123', /8 caracteres/i],
+    ['fora da regra', 'senha1234', /1 letra maiúscula e 1 símbolo/i],
+  ])('senha %s não chama create', async (_caso, senha, esperado) => {
     const create = vi.spyOn(employeesApi, 'create')
     await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'sete123')
+    typeIn('admins-create-senha', senha)
 
     finalizar()
 
     expect(create).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert')).toHaveTextContent(/8 caracteres/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(esperado)
   })
 
   it('admin usa adminsApi.create', async () => {
@@ -114,7 +117,7 @@ describe('AdminsCreate — submit', () => {
 
     typeIn('admins-create-nome', 'Ana Admin')
     typeIn('admins-create-email', 'ana@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
 
     finalizar()
 
@@ -131,7 +134,7 @@ describe('AdminsCreate — submit', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
 
     finalizar()
 
@@ -149,7 +152,7 @@ describe('AdminsCreate — submit', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
 
     finalizar()
 
@@ -162,7 +165,7 @@ describe('AdminsCreate: data de nascimento e CPF', () => {
   const preencherObrigatorios = () => {
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
   }
 
   const digitar = (placeholder: string, value: string) => {
@@ -262,7 +265,7 @@ describe('AdminsCreate: campos de saúde e rodapé', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
     fireEvent.click(screen.getAllByText('Sim')[0]!)
 
     finalizar()
@@ -277,7 +280,7 @@ describe('AdminsCreate: campos de saúde e rodapé', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
     fireEvent.click(screen.getAllByText('Sim')[1]!)
 
     finalizar()
@@ -296,7 +299,7 @@ describe('AdminsCreate: campos de saúde e rodapé', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
     fireEvent.click(screen.getAllByText('Sim')[0]!)
     fireEvent.change(descricaoAlergias(), { target: { value: 'Penicilina' } })
 
@@ -616,7 +619,7 @@ describe('AdminsCreate: exames clínicos', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
     preencherExame('Hemograma', '14/03/2027')
     escolherArquivo()
 
@@ -650,7 +653,7 @@ describe('AdminsCreate: exames clínicos', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
     preencherExame('Hemograma', '14/03/2027')
     escolherArquivo()
     finalizar()
@@ -722,7 +725,7 @@ describe('AdminsCreate: nome do usuário (fase 1)', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
     typeIn('admins-create-usuario', 'Ze.Silva')
 
     finalizar()
@@ -739,7 +742,7 @@ describe('AdminsCreate: nome do usuário (fase 1)', () => {
 
     typeIn('admins-create-nome', 'Zé da Silva')
     typeIn('admins-create-email', 'ze@x.com')
-    typeIn('admins-create-senha', 'senha123')
+    typeIn('admins-create-senha', 'Senha@123')
 
     finalizar()
 

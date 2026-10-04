@@ -213,7 +213,7 @@ describe('UserSettings', () => {
     await renderSettings()
 
     typeIn('settings-current-pw', 'atual123')
-    typeIn('settings-new-pw', 'nova1234')
+    typeIn('settings-new-pw', 'Nova@1234')
     typeIn('settings-confirm-pw', 'outra999')
     fireEvent.click(screen.getByRole('button', { name: 'Alterar senha' }))
 
@@ -227,14 +227,14 @@ describe('UserSettings', () => {
     await renderSettings()
 
     typeIn('settings-current-pw', 'atual123')
-    typeIn('settings-new-pw', 'nova1234')
-    typeIn('settings-confirm-pw', 'nova1234')
+    typeIn('settings-new-pw', 'Nova@1234')
+    typeIn('settings-confirm-pw', 'Nova@1234')
     fireEvent.click(screen.getByRole('button', { name: 'Alterar senha' }))
 
     await waitFor(() =>
       expect(changePwMock).toHaveBeenCalledWith({
         currentPassword: 'atual123',
-        newPassword: 'nova1234',
+        newPassword: 'Nova@1234',
       }),
     )
   })
