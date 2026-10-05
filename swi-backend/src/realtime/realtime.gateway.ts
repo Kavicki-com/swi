@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt'
 import { requireJwtSecret } from '../auth/jwt-secret'
 import { wsCorsOptions } from '../cors'
 import { PrismaService } from '../prisma/prisma.service'
+import { socketServerOptions } from './socket-options'
 
 // Gateway WS único (chat agora; notificações na Fatia 5). Mesma porta HTTP (3000).
 // Autentica no handshake com o MESMO segredo JWT do REST e confere no banco que
@@ -14,8 +15,8 @@ import { PrismaService } from '../prisma/prisma.service'
 // header Origin no handshake, então o mobile não é afetado; browser (admin) só
 // conecta das origins liberadas.
 // No modo proxy (Cloudez) o cors sai undefined: o socket.io emitindo ACAO
-// duplicaria o `*` que o nginx do host injeta — ver cors.ts.
-@WebSocketGateway({ cors: wsCorsOptions(process.env) })
+// duplicaria o `*` que o nginx do host injeta (ver cors.ts).
+@WebSocketGateway({ cors: wsCorsOptions(process.env), ...socketServerOptions(process.env) })
 export class RealtimeGateway implements OnGatewayConnection {
   @WebSocketServer() server!: Server
   constructor(

@@ -207,6 +207,37 @@ export interface RuntimeEnv {
   readonly telemetryAlertsIncludeDemo: boolean
   /** Servidores de conexão da transmissão ao vivo (STUN agora, TURN depois). */
   readonly liveIceServers: readonly LiveIceServer[]
+  /** Intervalo do ping do socket.io, quando a hospedagem pede um menor que o padrão. */
+  readonly socketPingIntervalMs?: number
+}
+
+export const SOCKET_PING_MIN_MS = 1_000
+/** O padrão da biblioteca: a variável só existe para encurtar o intervalo. */
+export const SOCKET_PING_MAX_MS = 25_000
+
+/**
+ * Intervalo do ping do socket.io, em milissegundos. Sem a variável vale o
+ * padrão da biblioteca (25 s).
+ *
+ * Existe por causa de hospedagem que não repassa WebSocket e limita as
+ * conexões simultâneas com o processo: aí todo socket fica em long-polling, e
+ * cada um segura uma conexão até o próximo ping. Com poucas vagas, as outras
+ * requisições esperam esse tempo na fila do proxy. Um intervalo curto faz as
+ * vagas girarem, ao custo de mais tráfego; onde o WebSocket passa, não ligar.
+ *
+ * As vagas giram, não sobram: a espera de uma requisição fica perto de
+ * (sockets - vagas) x intervalo / vagas. É alívio para poucos clientes, não
+ * substitui aumentar o limite da hospedagem.
+ */
+export function parseSocketPingInterval(source: NodeJS.ProcessEnv, problems: string[]): number | undefined {
+  const raw = source.SOCKET_PING_INTERVAL_MS
+  if (raw === undefined || raw === '') return undefined
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < SOCKET_PING_MIN_MS || value > SOCKET_PING_MAX_MS) {
+    problems.push(`SOCKET_PING_INTERVAL_MS precisa ser um inteiro entre ${SOCKET_PING_MIN_MS} e ${SOCKET_PING_MAX_MS}`)
+    return undefined
+  }
+  return value
 }
 
 /**
@@ -311,6 +342,7 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
   const telemetryRetention = parseTelemetryRetention(source, problems)
   const positionRetention = parsePositionRetention(source, problems)
   const liveIceServers = parseLiveIceServers(source, problems)
+  const socketPingIntervalMs = parseSocketPingInterval(source, problems)
 
   const smtpPort = Number(source.SMTP_PORT ?? 1025)
   if (!Number.isInteger(smtpPort) || smtpPort <= 0 || smtpPort > 65535) {
@@ -356,5 +388,6 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
     simPositions: source.SIM_POSITIONS === '1',
     telemetryAlertsIncludeDemo: parseAlertsIncludeDemo(source),
     liveIceServers,
+    socketPingIntervalMs,
   })
 }

@@ -3,6 +3,7 @@ import {
   parseAlertsIncludeDemo,
   parseLiveIceServers,
   parseRuntimeEnv,
+  parseSocketPingInterval,
   RETENTION_DEFAULT_BATCH,
 } from './runtime-env'
 
@@ -107,6 +108,28 @@ describe('parseRuntimeEnv: trilha de posições', () => {
     expect(parseRuntimeEnv({ NODE_ENV: 'development' }).positionsHeatIncludeSim).toBe(false)
     expect(parseRuntimeEnv(validProd({ POSITIONS_HEAT_INCLUDE_SIM: 'true' })).positionsHeatIncludeSim).toBe(false)
     expect(parseRuntimeEnv(validProd({ POSITIONS_HEAT_INCLUDE_SIM: '1' })).positionsHeatIncludeSim).toBe(true)
+  })
+})
+
+describe('parseRuntimeEnv: intervalo do ping do socket', () => {
+  it('sem variável, o socket.io segue com o padrão dele', () => {
+    expect(parseRuntimeEnv(validProd()).socketPingIntervalMs).toBeUndefined()
+    expect(parseSocketPingInterval({}, [])).toBeUndefined()
+    expect(parseSocketPingInterval({ SOCKET_PING_INTERVAL_MS: '' }, [])).toBeUndefined()
+  })
+
+  // O teto é o padrão da biblioteca: a variável só existe para encurtar.
+  it('aceita um inteiro entre 1 e 25 segundos, em milissegundos', () => {
+    expect(parseRuntimeEnv(validProd({ SOCKET_PING_INTERVAL_MS: '2000' })).socketPingIntervalMs).toBe(2000)
+    expect(parseSocketPingInterval({ SOCKET_PING_INTERVAL_MS: '1000' }, [])).toBe(1000)
+    expect(parseSocketPingInterval({ SOCKET_PING_INTERVAL_MS: '25000' }, [])).toBe(25000)
+  })
+
+  it.each(['abc', '1500.5', '999', '25001', '-2000'])('valor inválido (%s) impede o boot e diz qual variável', (raw) => {
+    const problems: string[] = []
+    expect(parseSocketPingInterval({ SOCKET_PING_INTERVAL_MS: raw }, problems)).toBeUndefined()
+    expect(problems).toEqual(['SOCKET_PING_INTERVAL_MS precisa ser um inteiro entre 1000 e 25000'])
+    expect(() => parseRuntimeEnv(validProd({ SOCKET_PING_INTERVAL_MS: raw }))).toThrow('SOCKET_PING_INTERVAL_MS')
   })
 })
 
