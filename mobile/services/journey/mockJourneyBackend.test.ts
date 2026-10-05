@@ -45,10 +45,13 @@ describe('mockJourneyBackend', () => {
     expect(ended.state).toBe('idle');
     expect(ended.accumulatedSeconds).toBe(0); // turno seguinte começa do zero
   });
-  it('addTaskPhoto anexa a uri à task', async () => {
+  it('a foto "sobe" como a própria uri e entra na tarefa uma vez só', async () => {
     const [first] = await mockJourneyBackend.listTasks();
-    const updated = await mockJourneyBackend.addTaskPhoto(first.id, 'file:///foto.jpg');
-    expect(updated.images).toContain('file:///foto.jpg');
+    const key = await mockJourneyBackend.uploadImage('file:///foto.jpg');
+    expect(key).toBe('file:///foto.jpg');
+    await mockJourneyBackend.addTaskPhoto(first.id, key);
+    const updated = await mockJourneyBackend.addTaskPhoto(first.id, key);
+    expect(updated.images.filter((uri) => uri === key)).toHaveLength(1);
   });
   it('seed carrega objective da ordem + responsáveis (novo contrato WorkOrder)', async () => {
     const [first] = await mockJourneyBackend.listTasks();
@@ -107,5 +110,34 @@ describe('mockJourneyBackend', () => {
     expect(ended.state).toBe('idle');
     const after = await mockJourneyBackend.getTask(target.id);
     expect(after?.status).toBe('paused'); // Decision E: pausa, não conclui
+  });
+
+  // A ação vinda da fila vale na hora do toque, como no servidor.
+  it('ação com a hora do toque vale nessa hora', async () => {
+    const tasks = await mockJourneyBackend.listTasks();
+    const target = tasks[2];
+    const occurredAt = '2026-10-04T12:00:00.000Z';
+    const { task, journey } = await mockJourneyBackend.startTask(target.id, { idempotencyKey: 'k1', occurredAt });
+    expect(task.startedAt).toBe(occurredAt);
+    expect(journey.startedAt).toBe(occurredAt);
+    await mockJourneyBackend.endJourney({ idempotencyKey: 'k2', occurredAt: '2026-10-04T12:01:00.000Z' });
+    expect((await mockJourneyBackend.getTask(target.id))?.accumulatedSeconds).toBeGreaterThanOrEqual(60);
+  });
+
+  // Erros com status, como os da API: a fila descarta o item recusado em vez de
+  // esperar 72 h por ele.
+  it('iniciar ou cancelar tarefa concluída é recusado com 409', async () => {
+    const tasks = await mockJourneyBackend.listTasks();
+    const target = tasks[0];
+    await mockJourneyBackend.completeTask(target.id);
+    await expect(mockJourneyBackend.startTask(target.id)).rejects.toMatchObject({ status: 409, apiError: true });
+    await expect(mockJourneyBackend.cancelTask(target.id)).rejects.toMatchObject({ status: 409, apiError: true });
+    expect((await mockJourneyBackend.getTask(target.id))?.status).toBe('done');
+  });
+
+  it('tarefa desconhecida é recusada com 404', async () => {
+    await expect(mockJourneyBackend.startTask('inexistente')).rejects.toMatchObject({ status: 404, apiError: true });
+    await expect(mockJourneyBackend.completeTask('inexistente')).rejects.toMatchObject({ status: 404 });
+    await expect(mockJourneyBackend.addTaskPhoto('inexistente', 'file:///x.jpg')).rejects.toMatchObject({ status: 404 });
   });
 });

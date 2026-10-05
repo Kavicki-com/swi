@@ -115,6 +115,10 @@ beforeEach(async () => {
     transport: createSendTransport({
       chat: { uploadImage: jest.fn(), sendMessage: jest.fn() },
       reports: mockBackend,
+      journey: {
+        uploadImage: jest.fn(), addTaskPhoto: jest.fn(), startTask: jest.fn(), completeTask: jest.fn(),
+        cancelTask: jest.fn(), pauseJourney: jest.fn(), resumeJourney: jest.fn(), endJourney: jest.fn(),
+      },
     }),
     now: () => AGORA.getTime(),
     newId: () => `chave-${(id += 1)}`,

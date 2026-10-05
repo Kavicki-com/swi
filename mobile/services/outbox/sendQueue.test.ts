@@ -72,6 +72,51 @@ describe('createSendQueue', () => {
       expect(mudou).toHaveBeenCalled();
     });
 
+    // A hora do toque é o `createdAt` do item: o mesmo texto vai ao servidor
+    // em toda tentativa.
+    it('ações da jornada entram com a hora do toque, sem foto', async () => {
+      const a = aparelho();
+      a.send.mockReturnValue(new Promise(() => {}));
+      const queue = a.abrir();
+      await queue.start('u1');
+
+      await queue.enqueue({ kind: 'journey.task.start', taskId: 't1', taskTitle: 'Inspeção' });
+      await queue.enqueue({ kind: 'journey.pause' });
+
+      expect(queue.getState().items).toEqual([
+        {
+          id: 'id-1',
+          kind: 'journey.task.start',
+          createdAt: '2026-10-04T12:00:00.000Z',
+          taskId: 't1',
+          taskTitle: 'Inspeção',
+          images: [],
+        },
+        { id: 'id-2', kind: 'journey.pause', createdAt: '2026-10-04T12:00:00.000Z', images: [] },
+      ]);
+    });
+
+    it('a foto da tarefa é copiada antes de entrar na fila', async () => {
+      const a = aparelho();
+      a.send.mockReturnValue(new Promise(() => {}));
+      const queue = a.abrir();
+      await queue.start('u1');
+
+      await queue.enqueue({
+        kind: 'journey.task.photo',
+        taskId: 't1',
+        taskTitle: 'Inspeção',
+        imageUri: 'file:///f.jpg',
+      });
+
+      expect(a.stage).toHaveBeenCalledWith('file:///f.jpg');
+      expect(queue.getState().items[0]).toMatchObject({
+        kind: 'journey.task.photo',
+        taskId: 't1',
+        images: [{ localUri: 'copia:file:///f.jpg', key: null }],
+      });
+    });
+
     it('cada envio tem a própria chave', async () => {
       const a = aparelho();
       a.send.mockReturnValue(new Promise(() => {}));
@@ -493,7 +538,7 @@ describe('createSendQueue', () => {
       queue.stop();
       await queue.kick();
 
-      expect(queue.getState()).toEqual({ items: [], refused: [] });
+      expect(queue.getState()).toEqual({ items: [], refused: [], open: false, stalled: false });
       expect(a.send).not.toHaveBeenCalled();
 
       await queue.start('u1');
@@ -519,7 +564,84 @@ describe('createSendQueue', () => {
       await new Promise((r) => setTimeout(r, 0));
 
       expect(eventos).toEqual([]);
-      expect(queue.getState()).toEqual({ items: [], refused: [] });
+      expect(queue.getState()).toEqual({ items: [], refused: [], open: true, stalled: false });
+    });
+  });
+
+  // A tela da jornada só confia no próprio estado depois de saber o que a fila
+  // guardou, e só diz "sem conexão" depois de uma tentativa falhar.
+  describe('abertura e envio parado', () => {
+    it('a fila só conta como aberta depois de ler o que estava guardado', async () => {
+      const a = aparelho();
+      a.send.mockRejectedValue(semRede());
+      const antes = a.abrir();
+      await antes.start('u1');
+      await antes.enqueue({ kind: 'journey.end' });
+      await antes.kick();
+
+      const queue = a.abrir();
+      expect(queue.getState().open).toBe(false);
+      const abrindo = queue.start('u1');
+      expect(queue.getState().open).toBe(false);
+      await abrindo;
+
+      expect(queue.getState().open).toBe(true);
+      expect(queue.getState().items.map((i) => i.kind)).toEqual(['journey.end']);
+      queue.stop();
+      expect(queue.getState().open).toBe(false);
+    });
+
+    it('falha ao abrir a fila ainda conta como aberta, vazia', async () => {
+      const a = aparelho();
+      const queue = a.abrir();
+      a.storage.write = jest.fn().mockRejectedValueOnce(new Error('disco'));
+      a.storage.read = async () => JSON.stringify({ owner: 'outra-pessoa', items: [] });
+
+      await expect(queue.start('u1')).rejects.toThrow('disco');
+
+      expect(queue.getState()).toMatchObject({ items: [], open: true });
+    });
+
+    it('a tentativa que falha deixa a fila parada; a que passa solta', async () => {
+      const a = aparelho();
+      a.send.mockRejectedValue(semRede());
+      const queue = a.abrir();
+      await queue.start('u1');
+
+      await queue.enqueue({ kind: 'journey.pause' });
+      await queue.kick();
+      expect(queue.getState().stalled).toBe(true);
+
+      a.send.mockResolvedValue({ state: 'paused' });
+      await queue.kick();
+      expect(queue.getState()).toMatchObject({ items: [], stalled: false });
+    });
+
+    it('com sinal o envio sai e a fila nunca fica parada', async () => {
+      const a = aparelho();
+      const queue = a.abrir();
+      await queue.start('u1');
+      const parada: boolean[] = [];
+      queue.subscribe(() => parada.push(queue.getState().stalled));
+
+      await queue.enqueue({ kind: 'journey.pause' });
+      await queue.kick();
+
+      expect(parada).not.toContain(true);
+      expect(queue.getState().items).toEqual([]);
+    });
+
+    it('sessão vencida (401) não conta como falta de sinal', async () => {
+      const a = aparelho();
+      a.send.mockRejectedValue(comStatus(401));
+      const queue = a.abrir();
+      await queue.start('u1');
+
+      await queue.enqueue({ kind: 'journey.pause' });
+      await queue.kick();
+
+      expect(queue.getState()).toMatchObject({ stalled: false });
+      expect(queue.getState().items).toHaveLength(1);
     });
   });
 

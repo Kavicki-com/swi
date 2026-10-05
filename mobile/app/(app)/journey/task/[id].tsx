@@ -22,17 +22,27 @@ import {
 import type { Task } from '../../../../services/journey/types';
 import { elapsedSeconds, progressPct } from '../../../../services/journey/progress';
 import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
+import { errorMessage } from '../../../../lib/errors/errorMessage';
 import { TaskDetailState } from '../../../../components/journey/JourneyState';
+import { JOURNEY_WAITING_TITLE, QUEUE_FULL_TITLE } from '../../../../services/outbox/sendCopy';
+import type { EnqueueResult } from '../../../../services/outbox/sendQueue';
 
 // (Jornada > <task>) + task summary card + ProgressBar + Objetivo +
 // Fotos + Tempo estimado + Interessados + CTA.
 //
-// Task data vem do JourneyProvider (services/journey, backed pelo backend),
+// Task data vem do JourneyProvider (services/journey, backed pelo backend). A
+// tarefa que já está na lista da jornada abre por ela, sem ir ao servidor: é o
+// que deixa iniciar e concluir sem sinal. Fora da lista (link direto), é
 // carregada por getTask(id) em local state. A "ativa" é só a activeTaskId do
 // journey; senão renderiza idle mesmo que outra task esteja ongoing em paralelo.
 // O progresso deriva das âncoras reais da task via progress.ts.
+//
+// As ações passam pela fila de envios e valem na tela na hora do toque.
 
 type DetailStatus = 'loading' | 'ready' | 'empty' | 'error';
+
+type Notice = { variant: 'warning' | 'error'; title: string };
+const QUEUE_FULL: Notice = { variant: 'warning', title: QUEUE_FULL_TITLE };
 
 // T4.1: Sub-componente memoizado que owns o tick do `now` + o cálculo de
 // progresso. Antes, o setInterval rodava no TaskDetails e re-renderizava a tela
@@ -104,6 +114,8 @@ export default function TaskDetails() {
     addTaskPhoto,
     state: journeyState,
     activeTaskId,
+    waitingForSignal,
+    dismissWaiting,
   } = useJourney();
 
   const [task, setTask] = useState<Task | null>(null);
@@ -115,7 +127,10 @@ export default function TaskDetails() {
   // voltava pra /journey achando que concluiu (a ação real não aconteceu).
   const [submitting, setSubmitting] = useState(false);
   const [ctaError, setCtaError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [locationOff, setLocationOff] = useState(false);
+
+  const listed = id ? tasks.some((t) => t.id === id) : false;
 
   useEffect(() => {
     let active = true;
@@ -124,6 +139,14 @@ export default function TaskDetails() {
     // encontrada") em vez de chamar getTask(undefined).
     if (!id) {
       setStatus('empty');
+      return () => {
+        active = false;
+      };
+    }
+    // Na lista da jornada: abre por ela, com ou sem sinal. Se a tarefa sair da
+    // lista depois (a pessoa saiu da ordem), a busca roda e diz o que houve.
+    if (listed) {
+      setStatus('ready');
       return () => {
         active = false;
       };
@@ -141,7 +164,7 @@ export default function TaskDetails() {
     return () => {
       active = false;
     };
-  }, [id, getTask, reloadKey]);
+  }, [id, getTask, reloadKey, listed]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -154,7 +177,11 @@ export default function TaskDetails() {
 
   const media = useMediaPicker();
 
-  if (status !== 'ready' || !task) {
+  // A cópia viva do provider manda: iniciar, pausar e finalizar nesta tela
+  // aparecem na hora. O snapshot local só serve à tarefa que não está na lista.
+  const liveTask = (id ? tasks.find((t) => t.id === id) : undefined) ?? task;
+
+  if (status !== 'ready' || !liveTask) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         <JourneyTheme
@@ -169,12 +196,6 @@ export default function TaskDetails() {
     );
   }
 
-  // task (local) drives the load/empty/error machine; once ready, render from
-  // the provider's live copy so status/anchors/progress reflect start/pause/
-  // finish done on THIS screen (the local snapshot is load-once). Falls back to
-  // the local task if the provider list hasn't got it (shouldn't happen).
-  const liveTask = (id ? tasks.find((t) => t.id === id) : undefined) ?? task;
-
   // O backend faz append em task.images; o slot tocado é informativo (a11y),
   // não posiciona a foto — por isso showPicker não precisa do índice.
   // Com os 5 slots cheios, um append viraria images[5] que nunca renderiza
@@ -184,9 +205,17 @@ export default function TaskDetails() {
   const showPicker = async () => {
     if (photosFull) return;
     const uri = await media.showPicker();
-    // addTaskPhoto atualiza o provider → liveTask reflete a nova foto; sem
-    // setTask local (o snapshot load-once não precisa mais ser tocado).
-    if (uri && id) await addTaskPhoto(id, uri);
+    if (!uri) return;
+    // A foto entra na fila e aparece na hora pela cópia local; sobe quando
+    // houver sinal. Recusada na entrada (sumiu, passa de 15 MB), diz o motivo.
+    try {
+      if ((await addTaskPhoto(liveTask, uri)) === 'full') setNotice(QUEUE_FULL);
+    } catch (e) {
+      setNotice({
+        variant: 'error',
+        title: errorMessage(e, `Não foi possível enviar a foto da tarefa "${liveTask.title}".`),
+      });
+    }
   };
 
   // ordem (uris). O caption deriva do responsibleCount ("<1º nome> e mais N-1
@@ -198,15 +227,18 @@ export default function TaskDetails() {
 
   // Finalizar/Cancelar operam SÓ neste item — o turno segue rodando (o backend
   // não encerra o turno). Concluir marca done; cancelar devolve pra pending.
-  // A mutação é AGUARDADA: só navega pra /journey se o backend confirmar; se
-  // falhar (rede/token), fica na tela e mostra o erro (a ação é auditada — não
+  // A ação entra na fila e vale na hora; só navega pra /journey se ela entrou.
+  // Fila cheia ou sessão fechada: fica na tela e avisa (a ação é auditada, não
   // pode falhar em silêncio). `submitting` trava re-toque durante o voo.
-  const runCta = async (mutate: () => Promise<void>, failMsg: string) => {
+  const runCta = async (mutate: () => Promise<EnqueueResult>, failMsg: string) => {
     if (submitting) return;
     setSubmitting(true);
     setCtaError(null);
     try {
-      await mutate();
+      if ((await mutate()) === 'full') {
+        setNotice(QUEUE_FULL);
+        return;
+      }
       router.push('/(app)/journey');
     } catch {
       setCtaError(failMsg);
@@ -225,7 +257,13 @@ export default function TaskDetails() {
     try {
       const permission = await requestTrackingPermission();
       setLocationOff(permission === 'denied');
-      await startTask(id ?? task.id);
+      if ((await startTask(liveTask)) === 'full') {
+        setNotice(QUEUE_FULL);
+        return;
+      }
+    } catch {
+      // Sem sessão aberta a ação não entra na fila e a tela não muda.
+      return;
     } finally {
       setSubmitting(false);
     }
@@ -233,8 +271,19 @@ export default function TaskDetails() {
     // quem já respondeu, o pedido só volta depois de um prazo do sistema.
     void requestAlwaysPermission();
   };
-  const finishTask = () => runCta(() => completeTask(liveTask.id), 'Não foi possível finalizar a tarefa. Tente novamente.');
-  const cancelCurrentTask = () => runCta(() => cancelTask(liveTask.id), 'Não foi possível cancelar a tarefa. Tente novamente.');
+  const finishTask = () => runCta(() => completeTask(liveTask), 'Não foi possível finalizar a tarefa. Tente novamente.');
+  const cancelCurrentTask = () => runCta(() => cancelTask(liveTask), 'Não foi possível cancelar a tarefa. Tente novamente.');
+  const toggleShift = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if ((await (isPaused ? resumeJourney() : pauseJourney())) === 'full') setNotice(QUEUE_FULL);
+    } catch {
+      // Sem sessão aberta a ação não entra na fila e a tela não muda.
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -420,7 +469,7 @@ export default function TaskDetails() {
               // mesmo Button, label/handler trocam por state.
               label={isPaused ? 'Retomar' : 'Fazer pausa'}
               accessibilityLabel={isPaused ? 'Retomar tarefa' : 'Fazer pausa'}
-              onPress={() => (isPaused ? resumeJourney() : pauseJourney())}
+              onPress={toggleShift}
             />
             <Button
               variant="ghost"
@@ -451,6 +500,12 @@ export default function TaskDetails() {
             onPress={startJourney}
           />
         )}
+        {notice ? (
+          <Toast variant={notice.variant} title={notice.title} onClose={() => setNotice(null)} />
+        ) : null}
+        {waitingForSignal ? (
+          <Toast variant="warning" title={JOURNEY_WAITING_TITLE} onClose={dismissWaiting} />
+        ) : null}
         {locationOff ? (
           <Toast
             variant="warning"

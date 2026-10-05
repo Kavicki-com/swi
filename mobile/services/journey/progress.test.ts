@@ -55,4 +55,20 @@ describe('progress: transições (reducers puros)', () => {
     const a = endAnchors({ startedAt: T0, accumulatedSeconds: 5, running: true }, T0 + 15_000);
     expect(a).toEqual({ startedAt: null, accumulatedSeconds: 20, running: false });
   });
+
+  // Igual ao servidor (swi-backend/src/journey/time-anchors.ts): iniciar ou
+  // retomar o que já está correndo não mexe em nada. A fila reaplica ações que o
+  // servidor talvez já tenha aplicado, e o resultado tem de ser o mesmo.
+  it('start no que já está rodando mantém as âncoras', () => {
+    const running: Anchors = { startedAt: T0, accumulatedSeconds: 40, running: true };
+    expect(startAnchors(running, T0 + 60_000)).toBe(running);
+  });
+  it('resume no que já está rodando mantém as âncoras', () => {
+    const running: Anchors = { startedAt: T0, accumulatedSeconds: 40, running: true };
+    expect(resumeAnchors(running, T0 + 60_000)).toBe(running);
+  });
+  it('pause no que já está parado não muda o banco', () => {
+    const stopped: Anchors = { startedAt: null, accumulatedSeconds: 40, running: false };
+    expect(pauseAnchors(stopped, T0 + 60_000)).toEqual(stopped);
+  });
 });

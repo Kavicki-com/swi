@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { uuid } from 'expo-modules-core';
 import { DATA_BACKEND } from '../../lib/featureFlags';
 import { getChatBackend } from '../chat/getChatBackend';
+import { getJourneyBackend } from '../journey/getJourneyBackend';
 import { getReportsBackend } from '../reports/getReportsBackend';
 import { createStagedSendFiles, passthroughSendFiles } from './sendFiles';
 import { createFileSendStorage, createMemorySendStorage, createSendOutbox } from './sendOutbox';
@@ -25,7 +26,11 @@ export function getSendQueue(): SendQueue {
   instance = createSendQueue({
     outbox: createSendOutbox(durable ? createFileSendStorage() : createMemorySendStorage()),
     files: durable ? createStagedSendFiles(newId) : passthroughSendFiles,
-    transport: createSendTransport({ chat: getChatBackend(), reports: getReportsBackend() }),
+    transport: createSendTransport({
+      chat: getChatBackend(),
+      reports: getReportsBackend(),
+      journey: getJourneyBackend(),
+    }),
     now: Date.now,
     newId,
   });

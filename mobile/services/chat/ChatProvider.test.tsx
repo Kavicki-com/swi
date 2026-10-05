@@ -103,6 +103,10 @@ beforeEach(async () => {
     transport: createSendTransport({
       chat: mockBackend,
       reports: { uploadImage: jest.fn(), create: jest.fn(), addComment: jest.fn() },
+      journey: {
+        uploadImage: jest.fn(), addTaskPhoto: jest.fn(), startTask: jest.fn(), completeTask: jest.fn(),
+        cancelTask: jest.fn(), pauseJourney: jest.fn(), resumeJourney: jest.fn(), endJourney: jest.fn(),
+      },
     }),
     now: () => Date.parse('2026-10-04T12:00:00.000Z'),
     newId: () => `chave-${(id += 1)}`,

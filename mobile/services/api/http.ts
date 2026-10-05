@@ -28,6 +28,12 @@ export interface ApiRequestOptions {
    * de envios. O backend devolve o registro já criado em vez de criar outro.
    */
   idempotencyKey?: string;
+  /**
+   * Hora do envio no relógio do aparelho (ISO-8601), carimbada a cada
+   * tentativa. Vai com a hora do toque das ações da jornada: o backend usa só
+   * a diferença entre as duas, que é quanto o envio esperou na fila.
+   */
+  sentAt?: string;
 }
 
 // Prazo padrão de QUALQUER chamada à API.
@@ -91,9 +97,10 @@ export function apiRequest<T = any>(path: string, opts: ApiRequestOptions = {}):
 }
 
 async function send<T>(path: string, opts: ApiRequestOptions, signal: AbortSignal): Promise<T> {
-  const { method, body, auth = false, idempotencyKey } = opts;
+  const { method, body, auth = false, idempotencyKey, sentAt } = opts;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  if (sentAt) headers['X-Sent-At'] = sentAt;
   if (auth) {
     const t = await readToken();
     if (t) headers.Authorization = `Bearer ${t}`;

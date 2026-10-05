@@ -15,6 +15,13 @@ export const REFUSED_LABEL = 'Não enviada';
 export const QUEUE_FULL_TITLE =
   'Há muitos envios aguardando conexão. Tente de novo quando o sinal voltar.';
 
+/**
+ * Toast único nas telas da jornada enquanto houver ação dela esperando o
+ * sinal: a tela já mudou, o servidor ainda não sabe.
+ */
+export const JOURNEY_WAITING_TITLE =
+  'Sem conexão. Suas ações serão enviadas quando o sinal voltar.';
+
 /** Título do Toast de recusa: diz o que não foi enviado. */
 export function refusalTitle(item: SendItem): string {
   switch (item.kind) {
@@ -24,6 +31,20 @@ export function refusalTitle(item: SendItem): string {
       return `Não foi possível enviar o relatório "${item.title}".`;
     case 'report.comment':
       return 'Não foi possível enviar o comentário.';
+    case 'journey.task.start':
+      return `Não foi possível iniciar a tarefa "${item.taskTitle}".`;
+    case 'journey.task.complete':
+      return `Não foi possível finalizar a tarefa "${item.taskTitle}".`;
+    case 'journey.task.cancel':
+      return `Não foi possível cancelar a tarefa "${item.taskTitle}".`;
+    case 'journey.pause':
+      return 'Não foi possível pausar a jornada.';
+    case 'journey.resume':
+      return 'Não foi possível retomar a jornada.';
+    case 'journey.end':
+      return 'Não foi possível finalizar a jornada.';
+    case 'journey.task.photo':
+      return `Não foi possível enviar a foto da tarefa "${item.taskTitle}".`;
   }
 }
 

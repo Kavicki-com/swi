@@ -45,6 +45,18 @@ function comentario(id: string): SendItem {
   return { id, kind: 'report.comment', createdAt: hora(0), reportId: 'r1', body: 'oi', images: [] };
 }
 
+function acaoDaTarefa(id: string, over: Record<string, unknown> = {}): SendItem {
+  return {
+    id,
+    kind: 'journey.task.start',
+    createdAt: hora(0),
+    taskId: 't1',
+    taskTitle: 'Inspeção',
+    images: [],
+    ...over,
+  } as SendItem;
+}
+
 describe('createSendOutbox', () => {
   it('fila vazia sem arquivo', async () => {
     const { storage } = memoryStorage();
@@ -60,6 +72,30 @@ describe('createSendOutbox', () => {
     expect(await outbox.append('u1', comentario('c1'))).toBe(true);
 
     expect((await outbox.pending('u1')).map((i) => i.id)).toEqual(['m1', 'r1', 'c1']);
+  });
+
+  it('guarda as ações da jornada e a foto da tarefa, que sobrevivem ao reinício', async () => {
+    const { storage } = memoryStorage();
+    const itens: SendItem[] = [
+      acaoDaTarefa('j1'),
+      acaoDaTarefa('j2', { kind: 'journey.task.complete' }),
+      acaoDaTarefa('j3', { kind: 'journey.task.cancel' }),
+      { id: 'j4', kind: 'journey.pause', createdAt: hora(1), images: [] },
+      { id: 'j5', kind: 'journey.resume', createdAt: hora(2), images: [] },
+      { id: 'j6', kind: 'journey.end', createdAt: hora(3), images: [] },
+      {
+        id: 'j7',
+        kind: 'journey.task.photo',
+        createdAt: hora(4),
+        taskId: 't1',
+        taskTitle: 'Inspeção',
+        images: [{ localUri: 'file:///f.jpg', key: null }],
+      },
+    ];
+    const outbox = createSendOutbox(storage);
+    for (const item of itens) await outbox.append('u1', item);
+
+    expect(await createSendOutbox(storage).pending('u1')).toEqual(itens);
   });
 
   it('a fila sobrevive ao reinício do app', async () => {
@@ -243,6 +279,24 @@ describe('createSendOutbox', () => {
       const itens = await createSendOutbox(storage).pending('u1');
 
       expect(itens.map((i) => i.id)).toEqual(['m1', 'c1']);
+    });
+
+    it('ação da jornada mal formada é ignorada, as outras seguem', async () => {
+      const texto = JSON.stringify({
+        owner: 'u1',
+        items: [
+          acaoDaTarefa('ok'),
+          acaoDaTarefa('sem-tarefa', { taskId: undefined }),
+          acaoDaTarefa('sem-titulo', { taskTitle: 3 }),
+          { id: 'foto-sem-foto', kind: 'journey.task.photo', createdAt: hora(0), taskId: 't1', taskTitle: 'X', images: [] },
+          { id: 'turno', kind: 'journey.end', createdAt: hora(0), images: [] },
+        ],
+      });
+      const { storage } = memoryStorage(texto);
+
+      const itens = await createSendOutbox(storage).pending('u1');
+
+      expect(itens.map((i) => i.id)).toEqual(['ok', 'turno']);
     });
 
     it('falha de leitura vale como fila vazia', async () => {

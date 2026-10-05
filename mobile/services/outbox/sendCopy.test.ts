@@ -1,4 +1,5 @@
 import {
+  JOURNEY_WAITING_TITLE,
   PENDING_LABEL,
   QUEUE_FULL_TITLE,
   REFUSED_LABEL,
@@ -38,6 +39,33 @@ describe('textos da fila de envios', () => {
     expect(refusalTitle(mensagem)).toBe('Não foi possível enviar a mensagem.');
     expect(refusalTitle(relatorio)).toBe('Não foi possível enviar o relatório "Inspeção das máquinas".');
     expect(refusalTitle(comentario)).toBe('Não foi possível enviar o comentário.');
+  });
+
+  it('aviso da jornada com ação esperando o sinal', () => {
+    expect(JOURNEY_WAITING_TITLE).toBe('Sem conexão. Suas ações serão enviadas quando o sinal voltar.');
+  });
+
+  it('título da recusa de uma ação da jornada diz o que não valeu', () => {
+    const tarefa = { ...base, taskId: 't1', taskTitle: 'Inspeção de Equipamentos' };
+    const titulos = [
+      refusalTitle({ ...tarefa, kind: 'journey.task.start' }),
+      refusalTitle({ ...tarefa, kind: 'journey.task.complete' }),
+      refusalTitle({ ...tarefa, kind: 'journey.task.cancel' }),
+      refusalTitle({ ...base, kind: 'journey.pause' }),
+      refusalTitle({ ...base, kind: 'journey.resume' }),
+      refusalTitle({ ...base, kind: 'journey.end' }),
+      refusalTitle({ ...tarefa, kind: 'journey.task.photo' }),
+    ];
+
+    expect(titulos).toEqual([
+      'Não foi possível iniciar a tarefa "Inspeção de Equipamentos".',
+      'Não foi possível finalizar a tarefa "Inspeção de Equipamentos".',
+      'Não foi possível cancelar a tarefa "Inspeção de Equipamentos".',
+      'Não foi possível pausar a jornada.',
+      'Não foi possível retomar a jornada.',
+      'Não foi possível finalizar a jornada.',
+      'Não foi possível enviar a foto da tarefa "Inspeção de Equipamentos".',
+    ]);
   });
 
   it('a mensagem da recusa diz o motivo', () => {

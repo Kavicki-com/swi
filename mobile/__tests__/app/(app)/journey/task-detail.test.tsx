@@ -3,10 +3,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import TaskDetails from '../../../../app/(app)/journey/task/[id]';
 import type { Task } from '../../../../services/journey/types';
+import { JOURNEY_WAITING_TITLE, QUEUE_FULL_TITLE } from '../../../../services/outbox/sendCopy';
 
 // Detalhe da tarefa (app/(app)/journey/task/[id].tsx). É a tela onde o worker
-// FINALIZA e CANCELA tarefa, e essas duas ações são auditadas no backend: se a
-// mutação falha, a tela não pode navegar como se tivesse dado certo. Boa parte
+// FINALIZA e CANCELA tarefa, e essas duas ações são auditadas no backend. Elas
+// passam pela fila de envios: se a ação não entra na fila (fila cheia, sessão
+// fechada), a tela não pode navegar como se tivesse dado certo. Boa parte
 // desta suíte cerca exatamente isso, junto com:
 //   - a máquina de estados de carregamento (loading / não encontrada / erro)
 //   - a cópia viva do provider ganhando do snapshot carregado uma vez
@@ -41,6 +43,8 @@ const mockJourney = {
   addTaskPhoto: jest.fn(),
   state: 'idle' as 'idle' | 'ongoing' | 'paused',
   activeTaskId: null as string | null,
+  waitingForSignal: false,
+  dismissWaiting: jest.fn(),
 };
 jest.mock('../../../../services/journey/JourneyProvider', () => ({
   useJourney: () => mockJourney,
@@ -77,6 +81,9 @@ const tarefa = (over: Partial<Task> = {}): Task => ({
   ],
   ...over,
 });
+
+// A fila recebe a tarefa: o id vai ao servidor, o título ao aviso de recusa.
+const comTarefa = expect.objectContaining({ id: 't1', title: 'Inspeção da correia' });
 
 const render = async () => {
   let tree!: ReturnType<typeof create>;
@@ -118,14 +125,17 @@ beforeEach(() => {
   mockJourney.tasks = [];
   mockJourney.state = 'idle';
   mockJourney.activeTaskId = null;
+  mockJourney.waitingForSignal = false;
   mockJourney.getTask.mockResolvedValue(tarefa());
-  mockJourney.completeTask.mockResolvedValue(undefined);
-  mockJourney.cancelTask.mockResolvedValue(undefined);
-  mockJourney.addTaskPhoto.mockResolvedValue(undefined);
+  mockJourney.completeTask.mockResolvedValue('queued');
+  mockJourney.cancelTask.mockResolvedValue('queued');
+  mockJourney.pauseJourney.mockResolvedValue('queued');
+  mockJourney.resumeJourney.mockResolvedValue('queued');
+  mockJourney.addTaskPhoto.mockResolvedValue('queued');
   mockShowPicker.mockResolvedValue(null);
   mockPermission.mockResolvedValue('granted');
   mockAlways.mockResolvedValue(undefined);
-  mockJourney.startTask.mockResolvedValue(undefined);
+  mockJourney.startTask.mockResolvedValue('queued');
 });
 
 describe('Detalhe da tarefa: máquina de carregamento', () => {
@@ -176,6 +186,18 @@ describe('Detalhe da tarefa: máquina de carregamento', () => {
     const tree = await render();
 
     expect(acao(tree, 'Tentar carregar a tarefa de novo')).toBeUndefined();
+  });
+
+  // Sem sinal a busca falharia, e a pessoa não conseguiria iniciar nem
+  // concluir a tarefa que está vendo na lista.
+  it('abre pela tarefa que já está na lista da jornada, sem ir ao servidor', async () => {
+    mockJourney.tasks = [tarefa()];
+    mockJourney.getTask.mockRejectedValue(new Error('Network request failed'));
+    const tree = await render();
+
+    expect(mockJourney.getTask).not.toHaveBeenCalled();
+    expect(textos(tree)).toContain('Verificar desgaste e alinhamento');
+    expect(acao(tree, 'Iniciar Jornada e começar tarefa')).toBeDefined();
   });
 });
 
@@ -297,7 +319,27 @@ describe('Detalhe da tarefa: fotos da solicitação', () => {
 
     await tocar(tree, 'Adicionar foto 1');
 
-    expect(mockJourney.addTaskPhoto).toHaveBeenCalledWith('t1', 'file:///nova.jpg');
+    expect(mockJourney.addTaskPhoto).toHaveBeenCalledWith(comTarefa, 'file:///nova.jpg');
+  });
+
+  it('foto recusada na entrada diz o motivo', async () => {
+    mockShowPicker.mockResolvedValue('file:///grande.jpg');
+    mockJourney.addTaskPhoto.mockRejectedValue(new Error('A imagem passa de 15 MB. Escolha uma imagem menor.'));
+    const tree = await render();
+
+    await tocar(tree, 'Adicionar foto 1');
+
+    expect(textos(tree)).toContain('A imagem passa de 15 MB. Escolha uma imagem menor.');
+  });
+
+  it('foto com a fila cheia avisa', async () => {
+    mockShowPicker.mockResolvedValue('file:///nova.jpg');
+    mockJourney.addTaskPhoto.mockResolvedValue('full');
+    const tree = await render();
+
+    await tocar(tree, 'Adicionar foto 1');
+
+    expect(textos(tree)).toContain(QUEUE_FULL_TITLE);
   });
 
   it('cancelar o seletor não manda nada', async () => {
@@ -328,8 +370,28 @@ describe('Detalhe da tarefa: CTA quando a tarefa não é a ativa', () => {
     const tree = await render();
     await tocar(tree, 'Iniciar Jornada e começar tarefa');
 
-    expect(mockJourney.startTask).toHaveBeenCalledWith('t1');
+    expect(mockJourney.startTask).toHaveBeenCalledWith(comTarefa);
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('iniciar com a fila cheia avisa', async () => {
+    mockJourney.startTask.mockResolvedValue('full');
+    const tree = await render();
+    await tocar(tree, 'Iniciar Jornada e começar tarefa');
+
+    expect(textos(tree)).toContain(QUEUE_FULL_TITLE);
+  });
+
+  it('com ação esperando o sinal mostra o aviso único, que fecha', async () => {
+    mockJourney.waitingForSignal = true;
+    const tree = await render();
+
+    expect(textos(tree)).toContain(JOURNEY_WAITING_TITLE);
+    const fechar = tree.root.findAll(
+      (n) => typeof n.props?.onClose === 'function' && n.props?.title === JOURNEY_WAITING_TITLE,
+    )[0];
+    await act(async () => fechar.props.onClose());
+    expect(mockJourney.dismissWaiting).toHaveBeenCalledTimes(1);
   });
 
   // Outra tarefa em andamento não faz ESTA parecer ativa.
@@ -361,7 +423,7 @@ describe('Detalhe da tarefa: localização ao iniciar a jornada', () => {
     const tree = await render();
     await tocar(tree, 'Iniciar Jornada e começar tarefa');
 
-    expect(mockJourney.startTask).toHaveBeenCalledWith('t1');
+    expect(mockJourney.startTask).toHaveBeenCalledWith(comTarefa);
     expect(textos(tree)).toContain(AVISO);
   });
 
@@ -393,7 +455,7 @@ describe('Detalhe da tarefa: localização ao iniciar a jornada', () => {
     const tree = await render();
     await tocar(tree, 'Iniciar Jornada e começar tarefa');
 
-    expect(mockJourney.startTask).toHaveBeenCalledWith('t1');
+    expect(mockJourney.startTask).toHaveBeenCalledWith(comTarefa);
     expect(mockAlways).toHaveBeenCalledTimes(1);
     expect(mockJourney.startTask.mock.invocationCallOrder[0]).toBeLessThan(
       mockAlways.mock.invocationCallOrder[0],
@@ -442,6 +504,26 @@ describe('Detalhe da tarefa: CTA da tarefa ativa', () => {
     expect(mockJourney.resumeJourney).toHaveBeenCalledTimes(1);
   });
 
+  it('um segundo toque enquanto a pausa entra na fila não manda outra', async () => {
+    let soltar!: () => void;
+    mockJourney.pauseJourney.mockReturnValue(new Promise((resolve) => (soltar = () => resolve('queued'))));
+    const tree = await render();
+
+    await tocar(tree, 'Fazer pausa');
+    await tocar(tree, 'Fazer pausa');
+    await act(async () => soltar());
+
+    expect(mockJourney.pauseJourney).toHaveBeenCalledTimes(1);
+  });
+
+  it('pausar com a fila cheia avisa', async () => {
+    mockJourney.pauseJourney.mockResolvedValue('full');
+    const tree = await render();
+    await tocar(tree, 'Fazer pausa');
+
+    expect(textos(tree)).toContain(QUEUE_FULL_TITLE);
+  });
+
   // Pausado não finaliza: quem parou precisa retomar antes de concluir.
   it('pausado desabilita o finalizar e diz o motivo no rótulo', async () => {
     mockJourney.state = 'paused';
@@ -452,11 +534,11 @@ describe('Detalhe da tarefa: CTA da tarefa ativa', () => {
     ).toBe(true);
   });
 
-  it('finalizar espera o backend antes de voltar para a jornada', async () => {
+  it('finalizar entra na fila antes de voltar para a jornada', async () => {
     const tree = await render();
     await tocar(tree, 'Finalizar tarefa');
 
-    expect(mockJourney.completeTask).toHaveBeenCalledWith('t1');
+    expect(mockJourney.completeTask).toHaveBeenCalledWith(comTarefa);
     expect(mockPush).toHaveBeenCalledWith('/(app)/journey');
   });
 
@@ -464,8 +546,17 @@ describe('Detalhe da tarefa: CTA da tarefa ativa', () => {
     const tree = await render();
     await tocar(tree, 'Cancelar tarefa');
 
-    expect(mockJourney.cancelTask).toHaveBeenCalledWith('t1');
+    expect(mockJourney.cancelTask).toHaveBeenCalledWith(comTarefa);
     expect(mockPush).toHaveBeenCalledWith('/(app)/journey');
+  });
+
+  it('finalizar com a fila cheia fica na tela e avisa', async () => {
+    mockJourney.completeTask.mockResolvedValue('full');
+    const tree = await render();
+    await tocar(tree, 'Finalizar tarefa');
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(textos(tree)).toContain(QUEUE_FULL_TITLE);
   });
 
   // O que o `submitting` fecha: sem ele a falha é engolida e o worker volta
@@ -497,7 +588,7 @@ describe('Detalhe da tarefa: CTA da tarefa ativa', () => {
   it('re-toque durante o voo não duplica a mutação', async () => {
     let liberar!: () => void;
     mockJourney.completeTask.mockImplementation(
-      () => new Promise<void>((res) => { liberar = res; }),
+      () => new Promise<string>((res) => { liberar = () => res('queued'); }),
     );
     const tree = await render();
 

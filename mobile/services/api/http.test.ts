@@ -69,6 +69,20 @@ describe('apiRequest', () => {
     expect('Idempotency-Key' in headers).toBe(false);
   });
 
+  it('sentAt vira o cabeçalho X-Sent-At', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({}));
+    await apiRequest('/journey/pause', { method: 'POST', auth: true, sentAt: '2026-10-04T12:00:05.000Z' });
+    const headers = (global.fetch as jest.Mock).mock.calls[0][1].headers;
+    expect(headers['X-Sent-At']).toBe('2026-10-04T12:00:05.000Z');
+  });
+
+  it('sem sentAt o cabeçalho X-Sent-At não existe', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({}));
+    await apiRequest('/journey/pause', { method: 'POST', auth: true });
+    const headers = (global.fetch as jest.Mock).mock.calls[0][1].headers;
+    expect('X-Sent-At' in headers).toBe(false);
+  });
+
   // Um 4xx pode vir de quem está no caminho (proxy, túnel parado, página de
   // manutenção), e não da API. A fila de envios só descarta um item quando a
   // recusa é da API: o corpo de erro do Nest sempre traz `statusCode`.
