@@ -26,6 +26,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { useMyVitals } from '@/hooks/useMyVitals'
+import { NotificationBell } from '@/components/NotificationBell'
 import { ContactInfoPanel } from './components/ContactInfoPanel'
 import { ConversationList } from './components/ConversationList'
 import { MessageThread } from './components/MessageThread'
@@ -93,6 +94,8 @@ export function ChatInbox() {
           alignItems: 'center',
           paddingHorizontal: theme.padding.xxl,
           paddingVertical: theme.padding.sm,
+          // Acima das colunas: a lista do sino abre por cima delas.
+          zIndex: 1,
         }}
       >
         <Pressable
@@ -103,16 +106,19 @@ export function ChatInbox() {
         >
           <Logo type="complete" size="m" />
         </Pressable>
-        <HeaderUserInfo
-          bpm={myVitals.bpm}
-          pressure={myVitals.pressure}
-          progress={myVitals.progress}
-          avatarUri={user?.avatarUri ?? workerA}
-          heartIconName="heart_filled"
-          pressureIconName="vitals_pulse"
-          borderColor={theme.background}
-          testID="chat-header-user-info"
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
+          <NotificationBell />
+          <HeaderUserInfo
+            bpm={myVitals.bpm}
+            pressure={myVitals.pressure}
+            progress={myVitals.progress}
+            avatarUri={user?.avatarUri ?? workerA}
+            heartIconName="heart_filled"
+            pressureIconName="vitals_pulse"
+            borderColor={theme.background}
+            testID="chat-header-user-info"
+          />
+        </View>
       </View>
 
       <View

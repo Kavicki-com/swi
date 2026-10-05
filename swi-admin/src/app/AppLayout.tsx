@@ -34,6 +34,7 @@ import { resolveContact, unreadFor } from '@/services/chat/chatReducers'
 import { useMyVitals } from '@/hooks/useMyVitals'
 import { UserDetailsMenu } from '@/components/UserDetailsMenu'
 import { ApiTargetBadge } from '@/components/ApiTargetBadge'
+import { NotificationBell } from '@/components/NotificationBell'
 import workerA from '@/assets/avatars/worker-a.png'
 
 // DS module is shimmed to `any`; mirror the types we need locally.
@@ -135,6 +136,14 @@ export function AppLayout() {
     </Pressable>
   )
 
+  // O sino fica à esquerda do avatar, nos dois cabeçalhos.
+  const headerActions = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
+      <NotificationBell />
+      {headerUserInfo}
+    </View>
+  )
+
   if (breakpoint === 'tablet') {
     return (
       <View
@@ -154,6 +163,8 @@ export function AppLayout() {
             paddingVertical: theme.padding.m,
             backgroundColor: theme.background,
             gap: theme.gap.m,
+            // Acima da página: a lista do sino abre por cima do conteúdo.
+            zIndex: 1,
           }}
         >
           <Pressable
@@ -176,7 +187,7 @@ export function AppLayout() {
             accessibilityLabel="Abrir menu de navegação"
             testID="app-topbar-hamburger"
           />
-          {headerUserInfo}
+          {headerActions}
         </View>
         <View style={{ flex: 1, paddingHorizontal: 24, paddingVertical: 24 }}>
           {/* As páginas chegam por React.lazy (ver App.tsx). A fronteira fica
@@ -357,9 +368,11 @@ export function AppLayout() {
             justifyContent: 'flex-end',
             paddingHorizontal: theme.padding.l,
             paddingVertical: theme.padding.m,
+            // Acima da página: a lista do sino abre por cima do conteúdo.
+            zIndex: 1,
           }}
         >
-          {headerUserInfo}
+          {headerActions}
         </View>
         <View style={{ flex: 1, padding: 24 }}>
           {/* Mesma fronteira do layout mobile, pelo mesmo motivo: a sidebar e o

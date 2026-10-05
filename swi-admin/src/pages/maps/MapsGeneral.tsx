@@ -8,6 +8,7 @@
 import { Pressable, View } from 'react-native'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { MapAttribution } from '@/components/MapAttribution'
+import { NotificationBell } from '@/components/NotificationBell'
 import {
   HeaderUserInfo,
   Icon,
@@ -122,16 +123,19 @@ export function MapsGeneral() {
         }}
       >
         <Logo type="complete" size="m" />
-        <HeaderUserInfo
-          bpm={myVitals.bpm}
-          pressure={myVitals.pressure}
-          progress={myVitals.progress}
-          avatarUri={user?.avatarUri ?? workerA}
-          heartIconName="heart_filled"
-          pressureIconName="vitals_pulse"
-          borderColor={theme.background}
-          testID="maps-header-user-info"
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
+          <NotificationBell />
+          <HeaderUserInfo
+            bpm={myVitals.bpm}
+            pressure={myVitals.pressure}
+            progress={myVitals.progress}
+            avatarUri={user?.avatarUri ?? workerA}
+            heartIconName="heart_filled"
+            pressureIconName="vitals_pulse"
+            borderColor={theme.background}
+            testID="maps-header-user-info"
+          />
+        </View>
       </View>
 
       {/* Compact SideMenu: outer at left:24 + inner left:14 = absolute left:38 */}
