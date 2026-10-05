@@ -118,6 +118,7 @@ export function useChatInbox() {
         const entry = selectedEntry
         return {
           ...selectedContact,
+          workerId: entry?.workerId,
           role: entry?.role ?? '',
           // Gênero REAL do cadastro, pela MESMA tradução do diretório. O
           // ternário anterior só reconhecia 'female' e mandava todo o resto pra

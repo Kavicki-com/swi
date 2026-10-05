@@ -76,6 +76,8 @@ export type ChatContact = {
   fatigueRemaining?: string
   /** Selo de origem do tempo até a fadiga, quando a leitura é de demonstração. */
   fatigueSourceBadge?: string
+  /** Id do usuário do contato, vindo do diretório (o `id` é o da conversa). */
+  workerId?: string
   // Histórico já resolvido. O inbox recebe as mensagens junto do contato ativo
   // em vez de disparar uma segunda chamada ao selecionar.
   messages?: ReadonlyArray<ChatMessage>
