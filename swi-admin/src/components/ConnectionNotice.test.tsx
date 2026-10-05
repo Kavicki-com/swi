@@ -25,6 +25,6 @@ describe('ConnectionNotice', () => {
   it('o aviso fica enquanto durar a queda: não tem botão de fechar', async () => {
     h.lost = true
     await renderPage(<ConnectionNotice />, { route: '/' })
-    expect(screen.queryByLabelText('Close')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Fechar' })).toBeNull()
   })
 })
