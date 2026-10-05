@@ -72,6 +72,11 @@ export type WorkerDetailsLayoutProps = {
    * declara "Sem posição ao vivo" em vez de pinar numa coordenada default.
    */
   position?: { lat: number; lng: number } | null
+  /**
+   * Hora da posição quando ela está velha ("Última posição às 14:32"), junto
+   * do mini-mapa; o pino não muda. Ausente com posição atual.
+   */
+  positionNote?: string | null
   testID: string
   onBack: () => void
   backA11yLabel: string
@@ -283,6 +288,7 @@ function InlineStat({
 export function WorkerDetailsLayout({
   worker,
   position,
+  positionNote,
   testID,
   onBack,
   backA11yLabel,
@@ -442,6 +448,11 @@ export function WorkerDetailsLayout({
 
           {/* Mini map with location */}
           <MiniMap worker={worker} position={position} onOpenFullMap={onOpenFullMap} />
+          {positionNote ? (
+            <Text variant="body.s" color={theme.content.medium}>
+              {positionNote}
+            </Text>
+          ) : null}
 
           {deviceSection}
 

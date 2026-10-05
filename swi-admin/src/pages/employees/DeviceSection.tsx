@@ -7,11 +7,16 @@
 // de recarregar a página o painel sabe que há um código válido, e até quando,
 // mas não qual; gerar outro é permitido e o anterior continua valendo até
 // expirar.
-import { useCallback, useEffect, useState } from 'react'
+//
+// Pareado, o bloco também mostra o estado do relógio que chega na telemetria
+// da página: bateria e as condições de aparelho (bateria baixa, sem sinal).
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { Button, StatusTag, Text, TimeStamp, Title, useTheme } from '@kavicki/swi-design-system'
 import { telemetryDevicesApi, type WorkerDevice } from '@/services/api/telemetryDevices'
+import type { MetricState, WorkerTelemetry } from '@/services/api/telemetry'
 import { useDemoToast } from '@/lib/demoToast'
+import { whenLabel } from '@/lib/whenLabel'
 
 type Phase =
   | { kind: 'loading' }
@@ -31,10 +36,33 @@ const dayAndClock = (iso: string): string =>
     minute: '2-digit',
   })
 
-export function DeviceSection({ workerId }: { workerId: string }) {
+// Leitura que não é atual leva a hora dela, para não parecer de agora.
+function batteryLine(battery: MetricState<number>): string {
+  if (battery.value === null) return 'Bateria do relógio: sem leitura'
+  const pct = `${Math.round(battery.value)}%`
+  const when =
+    battery.quality !== 'CURRENT' && battery.measuredAt
+      ? whenLabel(battery.measuredAt, Date.now())
+      : null
+  return `Bateria do relógio: ${when ? `${pct} ${when}` : pct}`
+}
+
+export function DeviceSection({
+  workerId,
+  telemetry,
+  onPairedChange,
+}: {
+  workerId: string
+  /** A leitura que a página já faz; dela saem a bateria e as condições do relógio. */
+  telemetry?: WorkerTelemetry | null
+  /** Avisa a página se há aparelho pareado, para os vitais dizerem "Sem aparelho". */
+  onPairedChange?: (paired: boolean) => void
+}) {
   const theme = useTheme()
   const { show: showToast } = useDemoToast()
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
   const [busy, setBusy] = useState(false)
   // Relógio local só para a validade do código: um tick por segundo enquanto
   // houver código na tela, e nenhum fora disso.
@@ -76,6 +104,35 @@ export function DeviceSection({ workerId }: { workerId: string }) {
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [phase.kind])
+
+  // Cada leitura nova da telemetria relê o aparelho, para o "Último contato"
+  // andar junto. Só com o bloco em "Pareado": nas outras fases a releitura
+  // apagaria o código que está na tela. Falha mantém o bloco como está.
+  useEffect(() => {
+    if (!telemetry || phaseRef.current.kind !== 'paired') return
+    let cancelled = false
+    telemetryDevicesApi.stateOf(workerId).then(({ data, error }) => {
+      if (cancelled || error || !data) return
+      setPhase((cur) => {
+        if (cur.kind !== 'paired') return cur
+        // Revogado em outra sessão do painel.
+        if (!data.device) {
+          return { kind: 'unpaired', pendingUntil: data.pendingEnrollment?.expiresAt ?? null }
+        }
+        return { ...cur, device: data.device }
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [telemetry, workerId])
+
+  // Carregando ou com erro, o bloco não sabe; a página não recebe aviso.
+  const paired =
+    phase.kind === 'paired' ? true : phase.kind === 'unpaired' || phase.kind === 'code' ? false : null
+  useEffect(() => {
+    if (paired !== null) onPairedChange?.(paired)
+  }, [paired, onPairedChange])
 
   const pair = async () => {
     setBusy(true)
@@ -201,16 +258,28 @@ export function DeviceSection({ workerId }: { workerId: string }) {
   }
 
   const { device, confirming } = phase
+  const deviceConditions = telemetry?.conditions ?? []
+  const batteryLow = deviceConditions.some((c) => c.kind === 'DEVICE_BATTERY_LOW')
+  const signalLost = deviceConditions.some((c) => c.kind === 'DEVICE_SIGNAL_LOST')
+  // Contato de outro dia leva a data, para não parecer de hoje.
+  const lastSeen = device.lastSeenAt ? whenLabel(device.lastSeenAt, Date.now()) : null
   return (
     <View testID="device-section-paired" style={{ gap: theme.gap.s }}>
       {heading}
       <StatusTag status="accept" label="Pareado" />
+      {batteryLow ? <StatusTag status="pending" label="Bateria do relógio baixa" /> : null}
+      {signalLost ? <StatusTag status="pending" label="Sem sinal do relógio" /> : null}
       <Text variant="body.s" color={theme.content.dark}>
         {`Desde ${dayAndClock(device.pairedAt)}${device.model ? `, ${device.model}` : ''}`}
       </Text>
       <Text variant="body.s" color={theme.content.medium}>
-        {device.lastSeenAt ? `Último contato às ${clock(device.lastSeenAt)}` : 'Sem contato ainda'}
+        {lastSeen ? `Último contato ${lastSeen}` : 'Sem contato ainda'}
       </Text>
+      {telemetry ? (
+        <Text variant="body.s" color={theme.content.medium}>
+          {batteryLine(telemetry.metrics.battery)}
+        </Text>
+      ) : null}
       {confirming ? (
         <>
           <Text variant="body.s" color={theme.content.dark}>

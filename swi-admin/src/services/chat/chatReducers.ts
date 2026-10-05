@@ -71,6 +71,16 @@ export function upsertMessage(list: Message[], msg: Message): Message[] {
   return next
 }
 
+// Retrato do servidor de uma conversa, somado às mensagens que chegaram pelo
+// socket depois dele: elas não somem só porque a resposta veio atrasada.
+export function withLaterArrivals(snapshot: Message[], current: Message[]): Message[] {
+  const newest = snapshot.reduce((max, m) => (m.sentAt > max ? m.sentAt : max), '')
+  const known = new Set(snapshot.map((m) => m.id))
+  return current
+    .filter((m) => !known.has(m.id) && m.sentAt > newest)
+    .reduce(upsertMessage, snapshot)
+}
+
 export function applyMessage(cs: Conversation[], msg: Message): Conversation[] {
   // Revisão não toca na caixa de entrada, por duas razões: o contador de não
   // lidas já foi incrementado quando a mensagem estreou, e usar o sentAt de uma

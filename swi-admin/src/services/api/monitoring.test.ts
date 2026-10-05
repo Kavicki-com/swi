@@ -183,7 +183,8 @@ describe('buildUserAlerts', () => {
     ]
     const row = buildUserAlerts(employees, workers, queue).find((r) => r.id === 'w-ok')
     expect(row?.tier).toBe('alerta-fadiga')
-    expect(row?.alerts.map((a) => a.id)).toEqual(['a1'])
+    // Primeiro o alerta da fila, depois a linha da condição do aparelho.
+    expect(row?.alerts.map((a) => a.id)).toEqual(['a1', 'w-ok:DEVICE_BATTERY_LOW'])
   })
 
   it('alerta resolvido não segura ninguém na aba', () => {
@@ -192,7 +193,7 @@ describe('buildUserAlerts', () => {
     ]
     const row = buildUserAlerts(employees, workers, queue).find((r) => r.id === 'w-ok')
     expect(row?.tier).toBe('excelente')
-    expect(row?.alerts).toHaveLength(1)
+    expect(row?.alerts.map((a) => a.id)).toEqual(['a1', 'w-ok:DEVICE_BATTERY_LOW'])
   })
 
   it('ordem: urgentes, atenção, excelentes e sem leitura, por nome dentro de cada grupo', () => {
@@ -202,6 +203,84 @@ describe('buildUserAlerts', () => {
 
   it('sem telemetria carregada ninguém é avaliado', () => {
     expect(buildUserAlerts(employees, null, []).every((r) => r.tier === 'sem-leitura')).toBe(true)
+  })
+})
+
+// Bateria baixa e sem sinal não viram alerta da fila no servidor: chegam só
+// como condição aberta na telemetria. O cartão as mostra como informação, sem
+// botão de triagem, e a aba da pessoa não muda por elas.
+describe('buildUserAlerts: condição do aparelho', () => {
+  const people = [employee('w-bat', 'Bateria Baixa'), employee('w-sig', 'Sem Sinal')]
+  const batteryLow = condition('DEVICE', {
+    kind: 'DEVICE_BATTERY_LOW',
+    observedValue: 12,
+    openedAt: OLD,
+  })
+  const signalLost = condition('DEVICE', { kind: 'DEVICE_SIGNAL_LOST', openedAt: OLD })
+  const entries = [
+    adminWorker('w-bat', 'Bateria Baixa', {
+      telemetry: { ...reporting({}, 'REAL', 'w-bat'), conditions: [batteryLow] },
+    }),
+    adminWorker('w-sig', 'Sem Sinal', {
+      telemetry: {
+        ...reporting({ heartRate: metric(90, { quality: 'STALE' }) }, 'REAL', 'w-sig'),
+        conditions: [signalLost],
+      },
+    }),
+  ]
+  const rowOf = (id: string, workers = entries) =>
+    buildUserAlerts(people, workers, []).find((r) => r.id === id)
+
+  it('bateria baixa aberta vira linha informativa, sem triagem', () => {
+    expect(rowOf('w-bat')?.alerts).toEqual([
+      {
+        id: 'w-bat:DEVICE_BATTERY_LOW',
+        icon: 'warning',
+        title: 'Bateria do relógio baixa',
+        description: 'Bateria em 12%',
+        tone: 'info',
+        notes: [`Aparelho, aberto às ${clock(OLD)}`],
+      },
+    ])
+  })
+
+  it('sem sinal do relógio aberto vira linha informativa, sem triagem', () => {
+    expect(rowOf('w-sig')?.alerts).toEqual([
+      {
+        id: 'w-sig:DEVICE_SIGNAL_LOST',
+        icon: 'warning',
+        title: 'Sem sinal do relógio',
+        description: 'O monitoramento parou de receber dados',
+        tone: 'info',
+        notes: [`Aparelho, aberto às ${clock(OLD)}`],
+      },
+    ])
+  })
+
+  it('a linha do aparelho não muda a aba da pessoa', () => {
+    expect(rowOf('w-bat')?.tier).toBe('excelente')
+    expect(rowOf('w-sig')?.tier).toBe('sem-leitura')
+  })
+
+  it('condição de leitura de demonstração leva a nota de demonstração', () => {
+    const demo = [
+      adminWorker('w-bat', 'Bateria Baixa', {
+        telemetry: { ...reporting({}, 'DEMO', 'w-bat'), conditions: [batteryLow] },
+      }),
+    ]
+    expect(rowOf('w-bat', demo)?.alerts[0]?.notes).toEqual([
+      `Aparelho, aberto às ${clock(OLD)}`,
+      'Dados de demonstração',
+    ])
+  })
+
+  it('condição de saúde continua vindo só pela fila, sem linha duplicada', () => {
+    const health = [
+      adminWorker('w-bat', 'Bateria Baixa', {
+        telemetry: { ...reporting({}, 'REAL', 'w-bat'), conditions: [condition('URGENT')] },
+      }),
+    ]
+    expect(rowOf('w-bat', health)?.alerts).toEqual([])
   })
 })
 

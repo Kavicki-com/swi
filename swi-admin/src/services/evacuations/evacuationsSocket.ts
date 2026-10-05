@@ -3,6 +3,7 @@ import type { EvacuationProgressDto } from '../api/evacuations'
 import { readToken } from '../api/http'
 
 import { getApiUrl } from '../api/apiConfig'
+import { connectionStatus } from '../realtime/connectionStatus'
 
 export type EvacuationAckEvent = {
   evacuationId: string
@@ -30,7 +31,9 @@ export function subscribeEvacuationEvents(handlers: EvacuationHandlers): () => v
   socket.on('evacuation', handlers.onStarted)
   socket.on('evacuation-ack', handlers.onAck)
   socket.on('evacuation-ended', handlers.onEnded)
+  const unwatch = connectionStatus.watch(socket)
   return () => {
+    unwatch()
     socket.close()
   }
 }

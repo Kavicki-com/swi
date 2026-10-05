@@ -15,10 +15,12 @@ export function buildPin(
   map: maplibregl.Map,
   lib: typeof maplibregl,
   onClick: () => void,
+  title?: string,
 ): PinHandle {
   const { el, root } = createPinElement({
     onClick,
     content: <LocationPin avatarUri={m.avatarUri} status={m.status} name={m.name} />,
+    title,
   })
   const marker = new lib.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map)
   return { marker, root, el }

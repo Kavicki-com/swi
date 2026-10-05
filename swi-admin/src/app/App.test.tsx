@@ -1,13 +1,29 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { App } from './App'
-import { settleAuth } from '@/test-utils/renderPage'
+import { seedSession, settleAuth } from '@/test-utils/renderPage'
 
 // Dublê marcável: o componente real só injeta CSS, que não deixa rastro
 // observável no jsdom (ver o teste do autofill abaixo).
 vi.mock('./GlobalStyles', () => ({
   GlobalStyles: () => <div data-testid="global-styles" />,
 }))
+
+// Dublês para montar a área logada sem rede: o aviso de conexão vira um
+// marcador, o chat só repassa os filhos e o mapa geral é uma tela vazia.
+vi.mock('@/components/ConnectionNotice', () => ({
+  ConnectionNotice: () => <div data-testid="connection-notice-mount" />,
+}))
+vi.mock('@/services/chat/ChatProvider', () => ({
+  ChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}))
+vi.mock('@/pages/maps/MapsGeneral', () => ({
+  MapsGeneral: () => <div data-testid="maps-general-stub" />,
+}))
+
+afterEach(() => {
+  window.localStorage.clear()
+})
 
 describe('App', () => {
   it('renders inside SwiThemeProvider without crashing', async () => {
@@ -38,5 +54,29 @@ describe('App', () => {
     )
     await settleAuth()
     expect(screen.getByTestId('global-styles')).toBeInTheDocument()
+  })
+
+  // O aviso de sem conexão mora no ChatShell, que envolve também as telas de
+  // tela cheia (Mapas e Chat), fora do AppLayout.
+  it('monta o aviso de sem conexão na área logada, inclusive no mapa geral', async () => {
+    seedSession()
+    render(
+      <MemoryRouter initialEntries={['/maps/general']}>
+        <App />
+      </MemoryRouter>,
+    )
+    await settleAuth()
+    expect(await screen.findByTestId('maps-general-stub')).toBeInTheDocument()
+    expect(screen.getByTestId('connection-notice-mount')).toBeInTheDocument()
+  })
+
+  it('fora da área logada não há aviso de conexão', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    )
+    await settleAuth()
+    expect(screen.queryByTestId('connection-notice-mount')).toBeNull()
   })
 })

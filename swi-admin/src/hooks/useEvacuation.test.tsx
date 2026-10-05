@@ -3,6 +3,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { EvacuationProgressDto } from '@/services/api/evacuations'
 import { useEvacuation } from './useEvacuation'
+import { simulateReconnect } from '@/test-utils/simulateReconnect'
 
 const dto = (over: Partial<EvacuationProgressDto> = {}): EvacuationProgressDto => ({
   id: 'ev1',
@@ -124,5 +125,117 @@ describe('useEvacuation', () => {
     const before = unsubscribeMock.mock.calls.length
     unmount()
     expect(unsubscribeMock.mock.calls.length).toBe(before + 1)
+  })
+})
+
+describe('useEvacuation: volta da conexão', () => {
+  beforeEach(() => {
+    subscribeMock.mockReturnValue(unsubscribeMock)
+  })
+
+  it('relê a evacuação ativa quando a conexão volta', async () => {
+    activeMock.mockResolvedValueOnce({ data: dto(), error: null })
+    const { result } = renderHook(() => useEvacuation())
+    await waitFor(() => expect(result.current.evacuation?.acked).toBe(0))
+
+    activeMock.mockResolvedValueOnce({ data: dto({ acked: 1 }), error: null })
+    act(() => simulateReconnect())
+
+    await waitFor(() => expect(result.current.evacuation?.acked).toBe(1))
+  })
+
+  it('evacuação encerrada durante a queda some da tela na releitura', async () => {
+    activeMock.mockResolvedValueOnce({ data: dto(), error: null })
+    const { result } = renderHook(() => useEvacuation())
+    await waitFor(() => expect(result.current.evacuation).not.toBeNull())
+
+    activeMock.mockResolvedValueOnce({ data: null, error: null })
+    act(() => simulateReconnect())
+
+    await waitFor(() => expect(result.current.evacuation).toBeNull())
+  })
+
+  it('falha na releitura mantém a evacuação na tela', async () => {
+    activeMock.mockResolvedValueOnce({ data: dto(), error: null })
+    const { result } = renderHook(() => useEvacuation())
+    await waitFor(() => expect(result.current.evacuation).not.toBeNull())
+
+    activeMock.mockResolvedValueOnce({ data: null, error: { message: 'falhou' } })
+    await act(async () => simulateReconnect())
+
+    expect(activeMock).toHaveBeenCalledTimes(2)
+    expect(result.current.evacuation?.id).toBe('ev1')
+  })
+
+  it('depois de sair da tela, a volta da conexão não relê', async () => {
+    activeMock.mockResolvedValue({ data: null, error: null })
+    const { unmount } = renderHook(() => useEvacuation())
+    await waitFor(() => expect(activeMock).toHaveBeenCalledTimes(1))
+    unmount()
+
+    act(() => simulateReconnect())
+    expect(activeMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+// A releitura da volta da conexão não pode desfazer o que mudou enquanto a
+// resposta vinha: um clique em iniciar ou encerrar, ou um aviso do socket.
+describe('useEvacuation: releitura atrasada', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void
+    const promise = new Promise<T>((r) => (resolve = r))
+    return { promise, resolve }
+  }
+
+  beforeEach(() => {
+    subscribeMock.mockReturnValue(unsubscribeMock)
+  })
+
+  it('iniciar durante a releitura não é desfeito pela resposta antiga "nenhuma ativa"', async () => {
+    activeMock.mockResolvedValueOnce({ data: null, error: null })
+    const { result } = renderHook(() => useEvacuation())
+    await waitFor(() => expect(activeMock).toHaveBeenCalledTimes(1))
+
+    const late = deferred<{ data: EvacuationProgressDto | null; error: null }>()
+    activeMock.mockReturnValueOnce(late.promise)
+    act(() => simulateReconnect())
+    startMock.mockResolvedValueOnce({ data: dto(), error: null })
+    await act(async () => {
+      await result.current.start()
+    })
+
+    await act(async () => late.resolve({ data: null, error: null }))
+    expect(result.current.evacuation?.id).toBe('ev1')
+  })
+
+  it('encerrar durante a releitura não traz de volta a evacuação encerrada', async () => {
+    activeMock.mockResolvedValueOnce({ data: dto(), error: null })
+    const { result } = renderHook(() => useEvacuation())
+    await waitFor(() => expect(result.current.evacuation).not.toBeNull())
+
+    const late = deferred<{ data: EvacuationProgressDto | null; error: null }>()
+    activeMock.mockReturnValueOnce(late.promise)
+    act(() => simulateReconnect())
+    endMock.mockResolvedValueOnce({ data: null, error: null })
+    await act(async () => {
+      await result.current.end()
+    })
+
+    await act(async () => late.resolve({ data: dto(), error: null }))
+    expect(result.current.evacuation).toBeNull()
+  })
+
+  it('aviso do socket durante a releitura também vale mais que a resposta antiga', async () => {
+    activeMock.mockResolvedValueOnce({ data: null, error: null })
+    const { result } = renderHook(() => useEvacuation())
+    await waitFor(() => expect(activeMock).toHaveBeenCalledTimes(1))
+
+    const late = deferred<{ data: EvacuationProgressDto | null; error: null }>()
+    activeMock.mockReturnValueOnce(late.promise)
+    act(() => simulateReconnect())
+    act(() => capturedHandlers().onStarted(dto()))
+
+    await act(async () => late.resolve({ data: null, error: null }))
+    expect(result.current.evacuation?.id).toBe('ev1')
   })
 })

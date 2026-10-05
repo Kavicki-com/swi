@@ -3,6 +3,7 @@ import type { ConditionKind } from '../api/telemetry'
 import { readToken } from '../api/http'
 
 import { getApiUrl } from '../api/apiConfig'
+import { connectionStatus } from '../realtime/connectionStatus'
 
 export const SNAPSHOT_UPDATED_EVENT = 'telemetry.snapshot.updated'
 export const CONDITION_CHANGED_EVENT = 'telemetry.condition.changed'
@@ -34,7 +35,7 @@ export interface TelemetryHandlers {
 // pelo último. Cada tela que acompanha telemetria (dashboard, detalhe, mapas)
 // abriria a sua; aqui todas dividem uma, e cada assinante tira os próprios
 // handlers ao sair, para nunca receber aviso depois disso.
-let shared: { socket: Socket; subscribers: number } | null = null
+let shared: { socket: Socket; subscribers: number; unwatch: () => void } | null = null
 
 function acquire(): Socket {
   if (!shared) {
@@ -46,7 +47,7 @@ function acquire(): Socket {
       // WS puro morre no handshake; o upgrade para WS vem quando o caminho deixa.
       transports: ['polling', 'websocket'],
     })
-    shared = { socket, subscribers: 0 }
+    shared = { socket, subscribers: 0, unwatch: connectionStatus.watch(socket) }
   }
   shared.subscribers += 1
   return shared.socket
@@ -56,6 +57,7 @@ function release(socket: Socket): void {
   if (!shared || shared.socket !== socket) return
   shared.subscribers -= 1
   if (shared.subscribers === 0) {
+    shared.unwatch()
     shared = null
     socket.close()
   }

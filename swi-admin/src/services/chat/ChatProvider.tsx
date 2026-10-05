@@ -21,10 +21,12 @@ import {
   applyMessage,
   markRead as markReadReducer,
   upsertMessage,
+  withLaterArrivals,
   conversationKey,
   sortByRecent,
 } from './chatReducers'
 import { subscribeMessages } from './chatSocket'
+import { connectionStatus } from '../realtime/connectionStatus'
 import { chatsApi } from '../api/chats'
 import { uploadImage } from '../api/upload'
 import { useAuth } from '@/hooks/useAuth'
@@ -92,6 +94,28 @@ export function ChatProvider({ children }: PropsWithChildren) {
     setLoadStatus(cs.length ? 'ready' : 'empty')
   }, [applyConversations])
 
+  // Releitura na volta da conexão, sem passar por "carregando": as mensagens
+  // que chegaram durante a queda do socket se perderam. A lista na tela fica
+  // até a resposta chegar, e uma falha a mantém. A conversa aberta também é
+  // relida e marcada como lida, como faria o socket se estivesse de pé.
+  const refresh = useCallback(async () => {
+    const [cRes, dRes] = await Promise.all([chatsApi.listConversations(), chatsApi.listDirectory()])
+    if (!cRes.error && !dRes.error) {
+      const cs = sortByRecent(cRes.data ?? [])
+      applyConversations(cs)
+      setDirectory(dRes.data ?? [])
+      setLoadStatus(cs.length ? 'ready' : 'empty')
+    }
+    const open = openConvRef.current
+    if (!open || !conversationsRef.current.some((c) => c.id === open)) return
+    const { data, error } = await chatsApi.listMessages(open)
+    // A pessoa pode ter trocado de conversa enquanto a resposta vinha.
+    if (error || !data || openConvRef.current !== open) return
+    setMessagesByConv((prev) => ({ ...prev, [open]: withLaterArrivals(data, prev[open] ?? []) }))
+    await chatsApi.markRead(open)
+    applyConversations(markReadReducer(conversationsRef.current, open, myIdRef.current))
+  }, [applyConversations])
+
   const onMessage = useCallback(
     (msg: Message) => {
       const me = myIdRef.current
@@ -129,8 +153,12 @@ export function ChatProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     load()
     const stop = subscribeMessages(onMessage)
-    return stop
-    // Registra uma vez no mount; onMessage/load são estáveis e leem refs.
+    const stopReconnect = connectionStatus.onReconnect(() => void refresh())
+    return () => {
+      stop()
+      stopReconnect()
+    }
+    // Registra uma vez no mount; onMessage/load/refresh são estáveis e leem refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

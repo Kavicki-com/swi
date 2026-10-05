@@ -9,6 +9,7 @@ import { vi } from 'vitest'
 import { act, fireEvent, screen } from '@testing-library/react'
 import { MonitoringLayout, QUEUE_REFETCH_DEBOUNCE_MS } from './MonitoringLayout'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
+import { simulateReconnect } from '@/test-utils/simulateReconnect'
 import { monitoringApi } from '@/services/monitoring'
 import { telemetryApi, type AlertQueueItem } from '@/services/api/telemetry'
 import { notificationsApi } from '@/services/api/notifications'
@@ -171,6 +172,33 @@ describe('MonitoringLayout: abas e lista', () => {
   it('/monitoring/good-conditions lista SÓ quem tem leitura atual e nenhuma condição', async () => {
     await renderAt('/monitoring/good-conditions')
     expect(nomesVisiveis()).toEqual(['Excelente Um', 'Excelente Dois'])
+  })
+
+  // Bateria baixa e sem sinal chegam como condição aberta, não como alerta da
+  // fila: o cartão mostra a linha, sem botão de triagem.
+  it('condição do aparelho aparece no cartão como informação, sem triagem', async () => {
+    const semSinal = adminWorker('u-exc-1', 'Excelente Um', {
+      telemetry: {
+        ...reporting({}, 'REAL', 'u-exc-1'),
+        conditions: [condition('DEVICE', { kind: 'DEVICE_SIGNAL_LOST' })],
+      },
+    })
+    telemetryMock.mockReturnValue(
+      telemetria({
+        workers: {
+          observedAt: '2026-10-01T15:00:00.000Z',
+          workers: WORKERS.map((w) => (w.worker.id === 'u-exc-1' ? semSinal : w)),
+        },
+      }),
+    )
+    await renderAt('/monitoring/good-conditions')
+    fireEvent.click(screen.getByRole('button', { name: /expandir alertas de excelente um/i }))
+    await act(async () => {})
+
+    expect(screen.getByText('Sem sinal do relógio')).toBeTruthy()
+    expect(screen.getByText('O monitoramento parou de receber dados')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /reconhecer alerta/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /resolver alerta/i })).toBeNull()
   })
 
   it('quem não tem leitura não aparece como excelente; só no "Ver Todos"', async () => {
@@ -481,5 +509,22 @@ describe('MonitoringLayout: pausa e tempo real', () => {
     const { unmount } = await renderAt('/monitoring/alerts')
     unmount()
     expect(socket.unsubscribe).toHaveBeenCalled()
+  })
+
+  // Avisos de condição que chegaram durante a queda se perderam: a fila é
+  // relida inteira quando a conexão volta.
+  it('a volta da conexão relê a fila de alertas', async () => {
+    await renderAt('/monitoring/alerts')
+    expect(queueMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => simulateReconnect())
+    expect(queueMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('depois de sair da tela, a volta da conexão não relê a fila', async () => {
+    const { unmount } = await renderAt('/monitoring/alerts')
+    unmount()
+    await act(async () => simulateReconnect())
+    expect(queueMock).toHaveBeenCalledTimes(1)
   })
 })
