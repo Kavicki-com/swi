@@ -9,11 +9,16 @@ jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(async () => 'tok')
 const on = jest.fn(); const close = jest.fn()
 const mockIo = jest.fn((..._a: any[]) => ({ on, close }))
 jest.mock('socket.io-client', () => ({ io: (...a: any[]) => mockIo(...a) }))
+const mockUnwatch = jest.fn()
+const mockWatch = jest.fn((..._a: any[]) => mockUnwatch)
+jest.mock('../realtime/connectionStatus', () => ({
+  connectionStatus: { watch: (...a: any[]) => mockWatch(...a) },
+}))
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
 describe('apiChatBackend', () => {
-  beforeEach(() => { (apiRequest as jest.Mock).mockReset(); (uploadImage as jest.Mock).mockReset(); mockIo.mockClear(); on.mockClear(); close.mockClear() })
+  beforeEach(() => { (apiRequest as jest.Mock).mockReset(); (uploadImage as jest.Mock).mockReset(); mockIo.mockClear(); on.mockClear(); close.mockClear(); mockWatch.mockClear(); mockUnwatch.mockClear() })
 
   it('myId vem do singleton de sessão', () => { expect(apiChatBackend.myId).toBe('me') })
 
@@ -88,5 +93,24 @@ describe('apiChatBackend', () => {
     expect(cb).not.toHaveBeenCalled()
     handler({ conversationId: 'a#b', body: 'z' })
     expect(cb).toHaveBeenCalledTimes(1)
+  })
+
+  it('subscribe registra o socket no estado da conexão e tira ao sair, antes de fechar', async () => {
+    const unsub = apiChatBackend.subscribe(null, jest.fn())
+    await flush()
+    expect(mockWatch).toHaveBeenCalledTimes(1)
+    expect(mockWatch.mock.calls[0][0]).toBe(mockIo.mock.results[0].value)
+
+    unsub()
+    expect(mockUnwatch).toHaveBeenCalledTimes(1)
+    expect(mockUnwatch.mock.invocationCallOrder[0]).toBeLessThan(close.mock.invocationCallOrder[0])
+  })
+
+  it('quem sai antes de o socket abrir não registra nada', async () => {
+    const unsub = apiChatBackend.subscribe(null, jest.fn())
+    unsub()
+    await flush()
+    expect(mockIo).not.toHaveBeenCalled()
+    expect(mockWatch).not.toHaveBeenCalled()
   })
 })

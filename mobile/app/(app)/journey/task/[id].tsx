@@ -24,7 +24,7 @@ import { elapsedSeconds, progressPct } from '../../../../services/journey/progre
 import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
 import { errorMessage } from '../../../../lib/errors/errorMessage';
 import { TaskDetailState } from '../../../../components/journey/JourneyState';
-import { JOURNEY_WAITING_TITLE, QUEUE_FULL_TITLE } from '../../../../services/outbox/sendCopy';
+import { QUEUE_FULL_TITLE } from '../../../../services/outbox/sendCopy';
 import type { EnqueueResult } from '../../../../services/outbox/sendQueue';
 
 // (Jornada > <task>) + task summary card + ProgressBar + Objetivo +
@@ -114,8 +114,6 @@ export default function TaskDetails() {
     addTaskPhoto,
     state: journeyState,
     activeTaskId,
-    waitingForSignal,
-    dismissWaiting,
   } = useJourney();
 
   const [task, setTask] = useState<Task | null>(null);
@@ -502,9 +500,6 @@ export default function TaskDetails() {
         )}
         {notice ? (
           <Toast variant={notice.variant} title={notice.title} onClose={() => setNotice(null)} />
-        ) : null}
-        {waitingForSignal ? (
-          <Toast variant="warning" title={JOURNEY_WAITING_TITLE} onClose={dismissWaiting} />
         ) : null}
         {locationOff ? (
           <Toast
