@@ -155,7 +155,8 @@ describe('Journey e2e', () => {
     const { body: before } = await request(app.getHttpServer()).get(`/journey/tasks/${item1Id}`).set(auth).expect(200)
     const base = before.images.length
     const N = 6
-    const mk = (i: number) => `task/${String(i).padStart(8, '0')}-0000-0000-0000-000000000000.jpg`
+    // A partir de 1: a chave 0 é a foto do teste anterior, e foto repetida não entra de novo.
+    const mk = (i: number) => `task/${String(i + 1).padStart(8, '0')}-0000-0000-0000-000000000000.jpg`
     await Promise.all(Array.from({ length: N }, (_, i) =>
       request(app.getHttpServer()).post(`/journey/tasks/${item1Id}/photo`).set(auth).send({ imageKey: mk(i) }).expect(201),
     ))

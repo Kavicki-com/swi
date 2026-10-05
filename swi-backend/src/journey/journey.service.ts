@@ -5,9 +5,25 @@ import { Prisma } from '@prisma/client'
 import type { Journey, TaskStatus } from '@prisma/client'
 import { startAnchors, pauseAnchors, resumeAnchors, endAnchors, progressPct, type Anchors } from './time-anchors'
 import { carryOverSince, journeyDayOf } from './journey-day'
+import { effectiveActionTime } from './action-time'
 import { lockOrder, recomputeOrder } from '../work-orders/order-lock'
+import { writeOnce } from '../idempotency/write-once'
+import type { IdempotencyScope } from '../idempotency/idempotency-key'
 
 type Db = PrismaService | Prisma.TransactionClient
+
+/**
+ * O que acompanha uma ação vinda da fila offline do app. Tudo opcional: sem
+ * nada, a ação vale agora e não tem proteção contra repetição, como sempre.
+ */
+export interface JourneySend {
+  /** Chave do envio, já lida por `parseIdempotencyKey`. */
+  key?: string
+  /** Hora do toque no relógio do aparelho. Entra no que identifica o envio. */
+  occurredAt?: string | null
+  /** Hora do envio no relógio do aparelho. Muda a cada tentativa. */
+  sentAt?: string
+}
 
 // Item + o pai (WorkOrder) com os responsáveis e seus profiles — tudo que o
 // taskToDto precisa (objetivo=summary, anexos=order.imageKeys, avatares dos
@@ -17,6 +33,8 @@ const taskWithOrderInclude = {
 } satisfies Prisma.TaskInclude
 
 type TaskWithOrder = Prisma.TaskGetPayload<{ include: typeof taskWithOrderInclude }>
+
+type TaskAndJourney = { savedTask: TaskWithOrder; savedJourney: Journey }
 
 @Injectable()
 export class JourneyService {
@@ -30,8 +48,12 @@ export class JourneyService {
   // A jornada de agora: um turno aberto num dia anterior, enquanto estiver
   // dentro do prazo de journey-day.ts, senão a do dia de Brasília. Sem isso a
   // virada do dia cortaria o turno de quem trabalha à noite.
-  private async getOrCreateCurrent(workerId: string, db: Db = this.prisma): Promise<Journey> {
-    const now = new Date()
+  //
+  // "Agora" é a hora em que a ação vale. Numa ação que esperou na fila do app
+  // é a hora do toque: o "encerrar" de ontem enviado hoje acha a jornada de
+  // ontem, e não a ociosa de hoje.
+  private async getOrCreateCurrent(workerId: string, db: Db = this.prisma, nowMs: number = Date.now()): Promise<Journey> {
+    const now = new Date(nowMs)
     const date = journeyDayOf(now)
     const carried = await db.journey.findFirst({
       where: { workerId, date: { lt: date }, state: { in: ['ongoing', 'paused'] }, openedAt: { gt: carryOverSince(now) } },
@@ -65,6 +87,79 @@ export class JourneyService {
     return fresh
   }
 
+  private actionTime(send: JourneySend): number {
+    return effectiveActionTime(send.occurredAt, send.sentAt, Date.now())
+  }
+
+  // Aplica a transição uma vez só por chave de envio: a transição e a chave
+  // são gravadas na mesma transação, e o reenvio relê o estado em vez de
+  // aplicar de novo. Sem chave é a transação de sempre.
+  //
+  // O reenvio devolve o estado de AGORA, não o de quando a ação foi aplicada:
+  // outras ações podem ter vindo depois dela.
+  //
+  // `run` recebe a hora em que a ação vale. Com chave, essa hora só é
+  // calculada (e o teto de espera só é cobrado) quando a ação vai mesmo ser
+  // aplicada: a nova tentativa de uma ação que já valeu devolve o estado, em
+  // vez de ser recusada porque a espera cresceu até passar do teto.
+  private async once<T>(
+    workerId: string,
+    send: JourneySend,
+    scope: IdempotencyScope,
+    target: { taskId?: string },
+    run: (tx: Prisma.TransactionClient, now: number) => Promise<{ id: string; value: T }>,
+    replay: () => Promise<T>,
+  ): Promise<T> {
+    if (!send.key) {
+      const now = this.actionTime(send)
+      return (await this.prisma.$transaction((tx) => run(tx, now))).value
+    }
+    const { value } = await writeOnce(this.prisma, {
+      userId: workerId,
+      key: send.key,
+      scope,
+      // A hora do envio fica de fora: ela muda a cada tentativa.
+      request: { ...target, occurredAt: send.occurredAt ?? null },
+      create: (tx) => run(tx, this.actionTime(send)),
+      replay,
+    })
+    return value
+  }
+
+  private taskAction(
+    workerId: string,
+    taskId: string,
+    send: JourneySend,
+    scope: IdempotencyScope,
+    run: (tx: Prisma.TransactionClient, now: number) => Promise<TaskAndJourney>,
+  ): Promise<TaskAndJourney> {
+    return this.once(
+      workerId, send, scope, { taskId },
+      async (tx, now) => ({ id: taskId, value: await run(tx, now) }),
+      async () => {
+        const task = await this.findMyTask(workerId, taskId)
+        if (!task) throw new NotFoundException('Tarefa não encontrada')
+        return { savedTask: task, savedJourney: await this.getOrCreateCurrent(workerId) }
+      },
+    )
+  }
+
+  private journeyAction(
+    workerId: string,
+    send: JourneySend,
+    scope: IdempotencyScope,
+    run: (tx: Prisma.TransactionClient, now: number) => Promise<Journey>,
+  ): Promise<Journey> {
+    return this.once(
+      workerId, send, scope, {},
+      async (tx, now) => {
+        const saved = await run(tx, now)
+        return { id: saved.id, value: saved }
+      },
+      () => this.getOrCreateCurrent(workerId),
+    )
+  }
+
   async getJourney(workerId: string) {
     return this.journeyToDto(await this.getOrCreateCurrent(workerId))
   }
@@ -92,9 +187,8 @@ export class JourneyService {
     return t ? this.taskToDto(t) : null
   }
 
-  async startTask(workerId: string, taskId: string) {
-    const now = Date.now()
-    const { savedTask, savedJourney } = await this.prisma.$transaction(async (tx) => {
+  async startTask(workerId: string, taskId: string, send: JourneySend = {}) {
+    const { savedTask, savedJourney } = await this.taskAction(workerId, taskId, send, 'journey.task.start', async (tx, now) => {
       const task = await this.findMyTask(workerId, taskId, tx)
       if (!task) throw new NotFoundException('Tarefa não encontrada')
       await lockOrder(tx, task.orderId)
@@ -112,7 +206,7 @@ export class JourneyService {
         include: taskWithOrderInclude,
       })
       await recomputeOrder(tx, task.orderId)
-      const journey = await this.getOrCreateCurrent(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx, now)
       const ja = startAnchors(this.journeyAnchors(journey), now)
       const savedJourney = await tx.journey.update({
         where: { id: journey.id },
@@ -129,9 +223,8 @@ export class JourneyService {
   // Decisão A: worker conclui o item explicitamente (marca done; NÃO encerra o
   // turno). Idempotente: um item já done não re-banca o tempo. Limpa o ponteiro
   // activeTaskId se era o ativo, mas deixa state/relógio do turno intactos.
-  async completeTask(workerId: string, taskId: string) {
-    const now = Date.now()
-    const { savedTask, savedJourney } = await this.prisma.$transaction(async (tx) => {
+  async completeTask(workerId: string, taskId: string, send: JourneySend = {}) {
+    const { savedTask, savedJourney } = await this.taskAction(workerId, taskId, send, 'journey.task.complete', async (tx, now) => {
       const task = await this.findMyTask(workerId, taskId, tx)
       if (!task) throw new NotFoundException('Tarefa não encontrada')
       await lockOrder(tx, task.orderId)
@@ -151,7 +244,7 @@ export class JourneyService {
         savedTask = (await tx.task.findUnique({ where: { id: task.id }, include: taskWithOrderInclude })) ?? { ...task, ...fresh }
       }
       await recomputeOrder(tx, task.orderId)
-      const journey = await this.getOrCreateCurrent(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx, now)
       let savedJourney = journey
       if (journey.activeTaskId === taskId) {
         savedJourney = await tx.journey.update({ where: { id: journey.id }, data: { activeTaskId: null } })
@@ -163,9 +256,8 @@ export class JourneyService {
 
   // Decisão A: worker larga o item de volta pra pending mantendo o tempo bancado
   // (pauseAnchors). O turno segue correndo; só limpa activeTaskId se era o ativo.
-  async cancelTask(workerId: string, taskId: string) {
-    const now = Date.now()
-    const { savedTask, savedJourney } = await this.prisma.$transaction(async (tx) => {
+  async cancelTask(workerId: string, taskId: string, send: JourneySend = {}) {
+    const { savedTask, savedJourney } = await this.taskAction(workerId, taskId, send, 'journey.task.cancel', async (tx, now) => {
       const task = await this.findMyTask(workerId, taskId, tx)
       if (!task) throw new NotFoundException('Tarefa não encontrada')
       await lockOrder(tx, task.orderId)
@@ -183,7 +275,7 @@ export class JourneyService {
         include: taskWithOrderInclude,
       })
       await recomputeOrder(tx, task.orderId)
-      const journey = await this.getOrCreateCurrent(workerId, tx)
+      const journey = await this.getOrCreateCurrent(workerId, tx, now)
       let savedJourney = journey
       if (journey.activeTaskId === taskId) {
         savedJourney = await tx.journey.update({ where: { id: journey.id }, data: { activeTaskId: null } })
@@ -193,10 +285,9 @@ export class JourneyService {
     return { journey: this.journeyToDto(savedJourney), task: await this.taskToDto(savedTask) }
   }
 
-  async pauseJourney(workerId: string) {
-    const now = Date.now()
-    const saved = await this.prisma.$transaction(async (tx) => {
-      const journey = await this.getOrCreateCurrent(workerId, tx)
+  async pauseJourney(workerId: string, send: JourneySend = {}) {
+    const saved = await this.journeyAction(workerId, send, 'journey.pause', async (tx, now) => {
+      const journey = await this.getOrCreateCurrent(workerId, tx, now)
       if (journey.activeTaskId) {
         const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
         if (active) {
@@ -228,10 +319,9 @@ export class JourneyService {
     return this.journeyToDto(saved)
   }
 
-  async resumeJourney(workerId: string) {
-    const now = Date.now()
-    const saved = await this.prisma.$transaction(async (tx) => {
-      const journey = await this.getOrCreateCurrent(workerId, tx)
+  async resumeJourney(workerId: string, send: JourneySend = {}) {
+    const saved = await this.journeyAction(workerId, send, 'journey.resume', async (tx, now) => {
+      const journey = await this.getOrCreateCurrent(workerId, tx, now)
       if (journey.activeTaskId) {
         const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
         if (active) {
@@ -258,10 +348,9 @@ export class JourneyService {
     return this.journeyToDto(saved)
   }
 
-  async endJourney(workerId: string) {
-    const now = Date.now()
-    const saved = await this.prisma.$transaction(async (tx) => {
-      const journey = await this.getOrCreateCurrent(workerId, tx)
+  async endJourney(workerId: string, send: JourneySend = {}) {
+    const saved = await this.journeyAction(workerId, send, 'journey.end', async (tx, now) => {
+      const journey = await this.getOrCreateCurrent(workerId, tx, now)
       if (journey.activeTaskId) {
         const active = await this.findMyTask(workerId, journey.activeTaskId, tx)
         if (active) {
@@ -306,10 +395,17 @@ export class JourneyService {
     if (!task) throw new NotFoundException('Tarefa não encontrada')
     // Decisão F: a foto pertence ao PAI (WorkOrder.imageKeys). Resolve item→pai e
     // faz array_append atômico no pai; re-busca o item pra montar o DTO.
-    await this.prisma.workOrder.update({
-      where: { id: task.orderId },
-      data: { imageKeys: { push: imageKey } },
-    })
+    //
+    // Só entra se ainda não estiver lá: a fila offline do app reenvia a mesma
+    // foto quando a resposta do primeiro envio se perde. A condição vai no
+    // próprio UPDATE, então dois envios iguais ao mesmo tempo gravam uma vez.
+    // SQL direto porque a coluna é nula na ordem que nunca teve foto, e o
+    // filtro de lista do Prisma não casa com nulo: a primeira foto não entraria.
+    await this.prisma.$executeRaw`
+      UPDATE "WorkOrder"
+      SET "imageKeys" = array_append("imageKeys", ${imageKey}), "updatedAt" = ${new Date()}
+      WHERE id = ${task.orderId}
+        AND NOT (${imageKey} = ANY(COALESCE("imageKeys", ARRAY[]::text[])))`
     const fresh = await this.findMyTask(workerId, taskId)
     if (!fresh) throw new NotFoundException('Tarefa não encontrada') // order/task apagado no meio → 404, não 500
     return this.taskToDto(fresh)
