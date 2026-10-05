@@ -2,6 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { getSendQueue } from './getSendQueue';
 import type { SendQueueEvent, SendQueueState } from './sendQueue';
+import { connectionStatus } from '../realtime/connectionStatus';
 
 // A ponte entre a fila de envios e o React.
 
@@ -28,8 +29,8 @@ export function useSendQueueEvent(handler: (event: SendQueueEvent) => void): voi
 
 /**
  * Liga a fila à sessão de quem está logado: abre a fila, tenta enviar a cada
- * 15 s e ao voltar ao primeiro plano, e fecha ao sair. Montado uma vez, na
- * raiz da área autenticada.
+ * 15 s, ao voltar ao primeiro plano e quando a conexão volta, e fecha ao sair.
+ * Montado uma vez, na raiz da área autenticada.
  */
 export function useSendQueueSession(userId: string): void {
   useEffect(() => {
@@ -41,9 +42,13 @@ export function useSendQueueSession(userId: string): void {
     const subscription = AppState.addEventListener('change', (status) => {
       if (status === 'active') void queue.kick();
     });
+    // A fila só deixa de estar parada depois de uma tentativa: sem tentar na
+    // volta da conexão, o aviso de sem conexão ficaria até a próxima rodada.
+    const offReconnect = connectionStatus.onReconnect(() => void queue.kick());
     return () => {
       clearInterval(timer);
       subscription.remove();
+      offReconnect();
       queue.stop();
     };
   }, [userId]);

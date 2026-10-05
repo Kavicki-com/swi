@@ -1,6 +1,7 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import type { SendQueueEvent, SendQueueState } from './sendQueue';
+import { connectionStatus } from '../realtime/connectionStatus';
 import {
   SEND_RETRY_INTERVAL_MS,
   useSendQueueEvent,
@@ -153,6 +154,52 @@ describe('useSendQueueSession', () => {
 
     appStateHandler?.('active');
     expect(mockQueue.kick).toHaveBeenCalledTimes(1);
+  });
+
+  // Socket de mentira no armazém de verdade: cair e voltar avisa a volta.
+  function socketQueVolta() {
+    const handlers = new Map<string, (reason?: unknown) => void>();
+    const unwatch = connectionStatus.watch({
+      on: (event: string, h: (reason?: unknown) => void) => handlers.set(event, h),
+      off: (event: string) => handlers.delete(event),
+    });
+    handlers.get('connect')?.();
+    return {
+      unwatch,
+      reconectar: () => {
+        handlers.get('disconnect')?.('transport close');
+        handlers.get('connect')?.();
+      },
+    };
+  }
+
+  // Sem isso o aviso "Sem conexão" ficaria até a próxima rodada de 15 s com a
+  // conexão já de volta: a fila só sai de parada depois de uma tentativa.
+  it('tenta enviar quando a conexão volta depois de uma queda', () => {
+    const socket = socketQueVolta();
+    try {
+      montar(<Sessao userId="u1" />);
+      expect(mockQueue.kick).not.toHaveBeenCalled();
+
+      socket.reconectar();
+      expect(mockQueue.kick).toHaveBeenCalledTimes(1);
+    } finally {
+      socket.unwatch();
+    }
+  });
+
+  it('ao sair, para de ouvir a volta da conexão', () => {
+    const socket = socketQueVolta();
+    try {
+      const tree = montar(<Sessao userId="u1" />);
+      act(() => tree.unmount());
+      montadas.length = 0;
+
+      socket.reconectar();
+      expect(mockQueue.kick).not.toHaveBeenCalled();
+    } finally {
+      socket.unwatch();
+    }
   });
 
   it('ao sair, fecha a fila e para o relógio', () => {

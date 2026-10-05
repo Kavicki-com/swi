@@ -93,7 +93,8 @@ export default function ChatThread() {
   const scrollRef = useRef<ScrollView>(null);
 
   const {
-    myId, keyFor, messagesFor, outgoingFor, openConversation, send, conversations, directory,
+    myId, keyFor, messagesFor, outgoingFor, openConversation, closeConversation, send,
+    conversations, directory,
   } = useChat();
   const convId = keyFor(userId);
 
@@ -113,6 +114,9 @@ export default function ChatThread() {
   useEffect(() => {
     load();
   }, [load]);
+  // A conversa fica aberta só enquanto esta tela existe: de volta à lista, a
+  // mensagem nova do contato conta como não lida.
+  useEffect(() => () => closeConversation(convId), [convId, closeConversation]);
 
   // Cabeçalho do contato: conversa existente → resolveContact; conversa nova
   // (ainda sem registro) → cai no diretório pelo workerId. Avatar "me" vem do

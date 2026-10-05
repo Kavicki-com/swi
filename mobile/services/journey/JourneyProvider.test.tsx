@@ -8,6 +8,7 @@ import { createMemorySendStorage, createSendOutbox, type SendItem } from '../out
 import type { SendFiles } from '../outbox/sendFiles';
 import type { OutboxStorage } from '../telemetry/telemetryOutbox';
 import type { JourneySession, Task } from './types';
+import { connectionStatus } from '../realtime/connectionStatus';
 
 jest.mock('./getJourneyBackend', () => ({ getJourneyBackend: jest.fn() }));
 jest.mock('../notifications/getNotificationBackend', () => ({
@@ -146,6 +147,33 @@ describe('JourneyProvider', () => {
       });
 
       expect(text(tree)).toContain('teste');
+    });
+
+    // A atribuição que chegou com o socket caído se perdeu: a volta da
+    // conexão relê. É recarga de fundo, nunca `load()`, que piscaria o
+    // esqueleto e o GPS.
+    it('recarrega em silêncio quando a conexão volta depois de uma queda', async () => {
+      const handlers = new Map<string, (reason?: unknown) => void>();
+      const unwatch = connectionStatus.watch({
+        on: (event: string, h: (reason?: unknown) => void) => handlers.set(event, h),
+        off: (event: string) => handlers.delete(event),
+      });
+      handlers.get('connect')?.();
+      try {
+        const tree = await render();
+        renders = [];
+        listTasks.mockResolvedValue([task('t1', 'teste')]);
+
+        await act(async () => {
+          handlers.get('disconnect')?.('transport close');
+          handlers.get('connect')?.();
+        });
+
+        expect(text(tree)).toContain('ready|idle|teste');
+        expect(renders.some((r) => r.startsWith('loading'))).toBe(false);
+      } finally {
+        unwatch();
+      }
     });
 
     it('ignora notificação de outro domínio (não vale um round-trip)', async () => {
@@ -472,65 +500,6 @@ describe('JourneyProvider', () => {
       expect(mockQueue.getState().items).toEqual([]);
       expect(getJourney.mock.calls.length).toBeGreaterThan(leiturasAntes);
       expect(text(tree)).toContain('ready|idle|Inspeção:done');
-    });
-  });
-
-  describe('aviso de sem conexão', () => {
-    beforeEach(() => {
-      listTasks.mockResolvedValue([task('t1', 'Inspeção')]);
-    });
-
-    it('não aparece enquanto o envio está saindo', async () => {
-      await render();
-      await act(async () => {
-        await ctx.pauseJourney();
-      });
-      expect(ctx.waitingForSignal).toBe(false);
-    });
-
-    it('aparece depois de uma tentativa falhar, fecha, e volta só numa próxima espera', async () => {
-      send.mockRejectedValue(semRede());
-      await render();
-
-      await act(async () => {
-        await ctx.pauseJourney();
-      });
-      await flush();
-      expect(ctx.waitingForSignal).toBe(true);
-
-      act(() => ctx.dismissWaiting());
-      expect(ctx.waitingForSignal).toBe(false);
-      await act(async () => {
-        await ctx.resumeJourney();
-      });
-      await flush();
-      expect(ctx.waitingForSignal).toBe(false);
-
-      // O sinal volta e a fila esvazia; a próxima falta de sinal avisa de novo.
-      send.mockResolvedValue({ state: 'ongoing' });
-      await act(async () => {
-        await mockQueue.kick();
-      });
-      await flush();
-      send.mockRejectedValue(semRede());
-      await act(async () => {
-        await ctx.pauseJourney();
-      });
-      await flush();
-      expect(ctx.waitingForSignal).toBe(true);
-    });
-
-    it('envio de outro tipo parado não acende o aviso da jornada', async () => {
-      send.mockRejectedValue(semRede());
-      await render();
-
-      await act(async () => {
-        await mockQueue.enqueue({ kind: 'report.comment', reportId: 'r1', body: 'oi' });
-      });
-      await flush();
-
-      expect(mockQueue.getState().stalled).toBe(true);
-      expect(ctx.waitingForSignal).toBe(false);
     });
   });
 });

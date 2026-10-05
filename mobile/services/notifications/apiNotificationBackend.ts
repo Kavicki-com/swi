@@ -4,6 +4,7 @@ import type { AppNotification, NotificationBackend } from './types';
 import { apiRequest } from '../api/http';
 import { getUserId } from '../api/session';
 import { getApiUrl } from '../auth/apiConfig';
+import { connectionStatus } from '../realtime/connectionStatus';
 
 const TOKEN_KEY = 'swi.auth.token';
 
@@ -29,6 +30,7 @@ export const apiNotificationBackend: NotificationBackend = {
 
   subscribe(cb) {
     let socket: Socket | null = null;
+    let unwatch: (() => void) | null = null;
     let closed = false;
     (async () => {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
@@ -41,8 +43,11 @@ export const apiNotificationBackend: NotificationBackend = {
         auth: { token },
         transports: ['polling', 'websocket'],
       });
+      // A evacuação e as tarefas novas chegam por aqui: o aviso de sem
+      // conexão do app lê o estado deste socket.
+      unwatch = connectionStatus.watch(socket);
       socket.on('notification', (n: AppNotification) => { cb(n); });
     })();
-    return () => { closed = true; socket?.close(); };
+    return () => { closed = true; unwatch?.(); socket?.close(); };
   },
 };

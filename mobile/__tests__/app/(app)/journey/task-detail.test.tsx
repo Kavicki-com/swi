@@ -3,7 +3,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import TaskDetails from '../../../../app/(app)/journey/task/[id]';
 import type { Task } from '../../../../services/journey/types';
-import { JOURNEY_WAITING_TITLE, QUEUE_FULL_TITLE } from '../../../../services/outbox/sendCopy';
+import { QUEUE_FULL_TITLE } from '../../../../services/outbox/sendCopy';
 
 // Detalhe da tarefa (app/(app)/journey/task/[id].tsx). É a tela onde o worker
 // FINALIZA e CANCELA tarefa, e essas duas ações são auditadas no backend. Elas
@@ -43,8 +43,6 @@ const mockJourney = {
   addTaskPhoto: jest.fn(),
   state: 'idle' as 'idle' | 'ongoing' | 'paused',
   activeTaskId: null as string | null,
-  waitingForSignal: false,
-  dismissWaiting: jest.fn(),
 };
 jest.mock('../../../../services/journey/JourneyProvider', () => ({
   useJourney: () => mockJourney,
@@ -125,7 +123,6 @@ beforeEach(() => {
   mockJourney.tasks = [];
   mockJourney.state = 'idle';
   mockJourney.activeTaskId = null;
-  mockJourney.waitingForSignal = false;
   mockJourney.getTask.mockResolvedValue(tarefa());
   mockJourney.completeTask.mockResolvedValue('queued');
   mockJourney.cancelTask.mockResolvedValue('queued');
@@ -382,16 +379,19 @@ describe('Detalhe da tarefa: CTA quando a tarefa não é a ativa', () => {
     expect(textos(tree)).toContain(QUEUE_FULL_TITLE);
   });
 
-  it('com ação esperando o sinal mostra o aviso único, que fecha', async () => {
-    mockJourney.waitingForSignal = true;
+  // Decisão D4 do 5.5: o aviso geral (SendQueueRoot) mostra a falta de
+  // conexão em todas as telas; a tarefa não tem aviso próprio.
+  it('a tela não tem aviso próprio de sem conexão', async () => {
+    // O estado que acendia o aviso antigo: a tela não pode voltar a lê-lo.
+    const legado = mockJourney as Record<string, unknown>;
+    legado.waitingForSignal = true;
     const tree = await render();
+    delete legado.waitingForSignal;
 
-    expect(textos(tree)).toContain(JOURNEY_WAITING_TITLE);
-    const fechar = tree.root.findAll(
-      (n) => typeof n.props?.onClose === 'function' && n.props?.title === JOURNEY_WAITING_TITLE,
-    )[0];
-    await act(async () => fechar.props.onClose());
-    expect(mockJourney.dismissWaiting).toHaveBeenCalledTimes(1);
+    const avisos = tree.root.findAll(
+      (n) => n.props?.variant === 'warning' && typeof n.props?.onClose === 'function',
+    );
+    expect(avisos).toHaveLength(0);
   });
 
   // Outra tarefa em andamento não faz ESTA parecer ativa.
