@@ -8,7 +8,7 @@ import { Pressable, StyleSheet, View } from 'react-native'
 import type * as maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
-import { useDemoToast } from '@/lib/demoToast'
+import { useOpenLiveCamera } from '@/hooks/useOpenLiveCamera'
 import { DataOriginBadge } from '@/components/DataOriginBadge'
 import { formatAge } from '@/lib/formatAge'
 import type { Gender } from '@/services/types/directory'
@@ -59,8 +59,9 @@ export type WorkerDetailsData = {
   allergies?: ReadonlyArray<string>
   examHistory?: ReadonlyArray<WorkerExamEntry>
   /**
-   * Funcionário cuja série de gasto calórico o gráfico lê. Ausente para quem
-   * não pareia aparelho (administrador): o gráfico diz "Sem aparelho".
+   * Funcionário cuja série de gasto calórico o gráfico lê, e cuja transmissão
+   * o botão de câmera do minimapa procura. Ausente para quem não pareia
+   * aparelho nem transmite (administrador): o gráfico diz "Sem aparelho".
    */
   seriesWorkerId?: string
 }
@@ -128,7 +129,7 @@ function MiniMap({
 }) {
   const theme = useTheme()
   const lib = useMapLibre()
-  const { show: showToast } = useDemoToast()
+  const openLiveCamera = useOpenLiveCamera()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markerRef = useRef<maplibregl.Marker | null>(null)
@@ -247,7 +248,7 @@ function MiniMap({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ver câmera da posição"
-        onPress={() => showToast('Câmera da posição', `Stream ao vivo de ${worker.name}`)}
+        onPress={() => void openLiveCamera(worker.seriesWorkerId, worker.name)}
         style={{
           position: 'absolute',
           right: 12,

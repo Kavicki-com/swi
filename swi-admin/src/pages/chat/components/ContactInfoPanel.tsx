@@ -16,7 +16,7 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system'
-import { useDemoToast } from '@/lib/demoToast'
+import { useOpenLiveCamera } from '@/hooks/useOpenLiveCamera'
 import type { ChatContact } from '@/services/chats'
 import { DataOriginBadge } from '@/components/DataOriginBadge'
 import { NO_VALUE } from '@/services/vitals/vitalsView'
@@ -58,7 +58,7 @@ function ContactMiniMap({
 }) {
   const theme = useTheme()
   const lib = useMapLibre()
-  const { show: showToast } = useDemoToast()
+  const openLiveCamera = useOpenLiveCamera()
   const containerRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!lib || !containerRef.current) return
@@ -136,7 +136,7 @@ function ContactMiniMap({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ver câmera da posição"
-        onPress={() => showToast('Câmera da posição', `Stream ao vivo de ${contact.name}`)}
+        onPress={() => void openLiveCamera(contact.workerId, contact.name)}
         style={{
           position: 'absolute',
           right: 12,
