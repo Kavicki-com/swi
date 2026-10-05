@@ -7,7 +7,16 @@ import { isUUID } from 'class-validator'
 // devolver o registro já criado em vez de criar outro.
 
 /** O que a chave protege. Entra no conteúdo: a mesma chave em outra rota é outro envio. */
-export type IdempotencyScope = 'chat.message' | 'report' | 'report.comment'
+export type IdempotencyScope =
+  | 'chat.message'
+  | 'report'
+  | 'report.comment'
+  | 'journey.task.start'
+  | 'journey.task.complete'
+  | 'journey.task.cancel'
+  | 'journey.pause'
+  | 'journey.resume'
+  | 'journey.end'
 
 /**
  * Lê o cabeçalho `Idempotency-Key`. Ausente ou em branco é `undefined`: o

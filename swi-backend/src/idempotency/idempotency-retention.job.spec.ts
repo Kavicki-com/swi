@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { IDEMPOTENCY_KEY_RETENTION_MS, IdempotencyRetentionJob, purgeExpiredKeys } from './idempotency-retention.job'
 
 const NOW = new Date('2026-10-04T07:00:00Z')
@@ -35,5 +36,19 @@ describe('IdempotencyRetentionJob.run', () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     await expect(new IdempotencyRetentionJob({ idempotencyKey: { deleteMany } } as never).run()).resolves.toBeUndefined()
     expect(warn).toHaveBeenCalled()
+  })
+
+  // A mensagem de um erro do Prisma repete a chamada que falhou. No log só
+  // entram o tipo e o código.
+  it('erro do banco entra no log só com tipo e código', async () => {
+    const failure = new Prisma.PrismaClientKnownRequestError('Invalid `prisma.idempotencyKey.deleteMany()` invocation: linha recusada', {
+      code: 'P2024', clientVersion: 'test',
+    })
+    const deleteMany = jest.fn().mockRejectedValue(failure)
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    await new IdempotencyRetentionJob({ idempotencyKey: { deleteMany } } as never).run()
+    const logged = String(warn.mock.calls.at(-1)?.[0])
+    expect(logged).toContain('P2024')
+    expect(logged).not.toContain('linha recusada')
   })
 })

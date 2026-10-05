@@ -1,4 +1,15 @@
-import { IsString, Matches } from 'class-validator'
+import { IsOptional, IsString, Matches, MaxLength } from 'class-validator'
+
+// Corpo das seis ações da jornada. Opcional por inteiro: o app instalado não
+// manda corpo, e a ação vale na hora em que chega.
+export class JourneyActionDto {
+  // Hora do toque no relógio do aparelho, ISO-8601 com fuso. O formato é
+  // conferido em action-time.ts, junto com a hora do envio.
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  occurredAt?: string | null
+}
 
 export class AddTaskPhotoDto {
   @IsString()

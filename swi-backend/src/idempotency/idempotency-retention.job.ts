@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import type { PrismaClient } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
+import { describeError } from '../common/describe-error'
 
 // Retenção das chaves de idempotência. A chave só serve enquanto o aparelho
 // ainda pode reenviar o mesmo envio; depois disso é peso morto na tabela.
@@ -35,7 +36,7 @@ export class IdempotencyRetentionJob {
       this.logger.log(`Retenção de chaves de envio: ${deleted} apagadas`)
     } catch (error) {
       // Melhor esforço: o que ficou de fora entra na rodada de amanhã.
-      this.logger.warn(`Retenção de chaves de envio falhou: ${(error as Error).message}`)
+      this.logger.warn(`Retenção de chaves de envio falhou: ${describeError(error)}`)
     }
   }
 }

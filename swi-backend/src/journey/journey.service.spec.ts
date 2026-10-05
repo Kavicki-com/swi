@@ -11,6 +11,7 @@ const prisma = () => {
     task: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     workOrder: { update: jest.fn().mockResolvedValue({}) },
     $queryRaw: jest.fn().mockResolvedValue([]),
+    $executeRaw: jest.fn().mockResolvedValue(1),
   }
   db.$transaction = jest.fn(async (cb: any) => cb(db))
   return db
@@ -365,8 +366,10 @@ describe('JourneyService', () => {
     const db = prisma()
     db.task.findFirst.mockResolvedValue(taskRow()) // orderId 'o1'; order.imageKeys ['order/a.jpg']
     const out = await new JourneyService(db, media()).addTaskPhoto('u1', 't1', 'task/b.jpg')
-    expect(db.workOrder.update.mock.calls[0][0].where).toEqual({ id: 'o1' })
-    expect(db.workOrder.update.mock.calls[0][0].data.imageKeys).toEqual({ push: 'task/b.jpg' }) // atômico no pai
+    // UPDATE único no pai, com a foto e o id da ordem como parâmetros (o SQL em si é provado no e2e).
+    expect(db.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(db.$executeRaw.mock.calls[0].slice(1)).toEqual(['task/b.jpg', expect.any(Date), 'o1', 'task/b.jpg'])
+    expect(db.workOrder.update).not.toHaveBeenCalled()
     expect(db.task.update).not.toHaveBeenCalled()   // o item NÃO recebe imageKeys
     expect(out.images).toEqual(['signed:order/a.jpg']) // DTO presigna os anexos do pai
   })
