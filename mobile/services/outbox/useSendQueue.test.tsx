@@ -12,7 +12,7 @@ import {
 // com o React (assinatura, relógio, primeiro plano), não a fila.
 const stateListeners = new Set<() => void>();
 const eventListeners = new Set<(event: SendQueueEvent) => void>();
-let mockState: SendQueueState = { items: [], refused: [] };
+let mockState: SendQueueState = { items: [], refused: [], open: true, stalled: false };
 const mockQueue = {
   start: jest.fn(async (_owner: string) => undefined),
   stop: jest.fn(),
@@ -46,7 +46,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   stateListeners.clear();
   eventListeners.clear();
-  mockState = { items: [], refused: [] };
+  mockState = { items: [], refused: [], open: true, stalled: false };
   appStateHandler = null;
   jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
     appStateHandler = handler as (status: AppStateStatus) => void;
@@ -84,7 +84,7 @@ describe('useSendQueueState', () => {
     const tree = montar(<Tela />);
 
     act(() => {
-      mockState = { items: [mensagem], refused: [] };
+      mockState = { items: [mensagem], refused: [], open: true, stalled: false };
       for (const listener of stateListeners) listener();
     });
 

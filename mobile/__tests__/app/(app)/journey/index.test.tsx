@@ -3,6 +3,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import Journey from '../../../../app/(app)/journey/index';
 import type { Task } from '../../../../services/journey/types';
+import { JOURNEY_WAITING_TITLE, QUEUE_FULL_TITLE } from '../../../../services/outbox/sendCopy';
 
 // Lista da jornada (app/(app)/journey/index.tsx). Três layouts saem do mesmo
 // componente conforme o state do provider (idle / ongoing / paused), e o que
@@ -35,6 +36,8 @@ const mockJourney = {
   endJourney: jest.fn(),
   load: jest.fn(),
   refresh: jest.fn(),
+  waitingForSignal: false,
+  dismissWaiting: jest.fn(),
 };
 jest.mock('../../../../services/journey/JourneyProvider', () => ({
   useJourney: () => mockJourney,
@@ -141,6 +144,10 @@ beforeEach(() => {
   mockJourney.activeTaskId = null;
   mockJourney.startedAt = null;
   mockJourney.accumulatedSeconds = 0;
+  mockJourney.waitingForSignal = false;
+  mockJourney.pauseJourney.mockResolvedValue('queued');
+  mockJourney.resumeJourney.mockResolvedValue('queued');
+  mockJourney.endJourney.mockResolvedValue('queued');
   mockProfile.profile = null;
 });
 
@@ -365,5 +372,69 @@ describe('Jornada: CTAs de sessão', () => {
     expect(
       desabilitado(tree, 'Finalizar Jornada (indisponível enquanto pausado)'),
     ).toBe(true);
+  });
+
+  // Fila cheia: a ação não entrou e a tela não mudou; quem tocou precisa saber.
+  it.each([
+    ['ongoing', 'Finalizar Jornada', 'endJourney'],
+    ['ongoing', 'Fazer pausa', 'pauseJourney'],
+    ['paused', 'Retomar jornada', 'resumeJourney'],
+  ] as const)('%s, "%s" com a fila cheia avisa', async (estado, rotulo, metodo) => {
+    mockJourney.state = estado;
+    mockJourney[metodo].mockResolvedValue('full');
+    const tree = await render();
+
+    await tocar(tree, rotulo);
+
+    expect(textos(tree)).toContain(QUEUE_FULL_TITLE);
+  });
+});
+
+describe('Jornada: toque duplo', () => {
+  // Finalizar e logo pausar no intervalo da gravação poria [encerrar, pausar]
+  // na fila: o servidor e a tela levariam o turno de ocioso a pausado.
+  it('um segundo toque enquanto a ação entra na fila não manda outra', async () => {
+    mockJourney.state = 'ongoing';
+    let soltar!: () => void;
+    mockJourney.endJourney.mockReturnValue(new Promise((resolve) => (soltar = () => resolve('queued'))));
+    const tree = await render();
+
+    await tocar(tree, 'Finalizar Jornada');
+    await tocar(tree, 'Fazer pausa');
+    await act(async () => soltar());
+
+    expect(mockJourney.endJourney).toHaveBeenCalledTimes(1);
+    expect(mockJourney.pauseJourney).not.toHaveBeenCalled();
+  });
+});
+
+describe('Jornada: ação esperando o sinal', () => {
+  it('mostra o aviso único logo abaixo do cabeçalho', async () => {
+    mockJourney.state = 'ongoing';
+    mockJourney.tasks = [tarefa()];
+    mockJourney.waitingForSignal = true;
+    const tree = await render();
+
+    const t = textos(tree);
+    expect(t).toContain(JOURNEY_WAITING_TITLE);
+    expect(t.indexOf('Hoje')).toBeLessThan(t.indexOf(JOURNEY_WAITING_TITLE));
+    expect(t.indexOf(JOURNEY_WAITING_TITLE)).toBeLessThan(t.indexOf('Próximas tarefas'));
+  });
+
+  it('o aviso fecha pelo provider', async () => {
+    mockJourney.waitingForSignal = true;
+    const tree = await render();
+    const fechar = tree.root.findAll(
+      (n) => typeof n.props?.onClose === 'function' && n.props?.title === JOURNEY_WAITING_TITLE,
+    )[0];
+
+    await act(async () => fechar.props.onClose());
+
+    expect(mockJourney.dismissWaiting).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem ação esperando, sem aviso', async () => {
+    const tree = await render();
+    expect(textos(tree)).not.toContain(JOURNEY_WAITING_TITLE);
   });
 });

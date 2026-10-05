@@ -1,18 +1,15 @@
 import { Asset } from 'expo-asset';
 import type {
   JourneyBackend,
-  JourneySession,
+  JourneySend,
   Task,
 } from './types';
 import {
-  startAnchors,
-  pauseAnchors,
-  resumeAnchors,
-  endAnchors,
-  elapsedSeconds,
-  progressPct,
-  type Anchors,
-} from './progress';
+  applyJourneyAction,
+  journeyActionProblem,
+  type JourneyAction,
+  type JourneySnapshot,
+} from './journeyTransitions';
 
 // Backend demo in-memory pra slice Jornada/Tarefas. Mirrors
 // services/reports/mockReportsBackend.ts: um store mutável module-level semeado
@@ -27,9 +24,9 @@ import {
 // o mesmo `objective` (summary da ordem), `images` e `responsible*`. Espelha
 // `taskToDto` de swi-backend/src/journey/journey.service.ts.
 //
-// As transições usam os reducers puros de progress.ts; convertemos entre o
-// domínio (`startedAt` ISO string + status/state) e `Anchors` (epoch ms +
-// `running` derivado) na fronteira. `Date.now()` é a fonte de `nowMs` em runtime.
+// As transições são as de journeyTransitions.ts, as mesmas que a tela usa para
+// aplicar na hora do toque o que espera na fila. A ação vinda da fila vale na
+// hora do toque (`occurredAt`), como no servidor; sem ela, `Date.now()`.
 
 // Campos herdados da WorkOrder pai — compartilhados pelas 4 tasks do checklist.
 // `objective` = summary da ordem; `responsibleNames`/`responsibleCount` = os
@@ -104,53 +101,57 @@ function seedTask(base: SeedBase): Task {
   };
 }
 
-// ---- Boundary: domínio (ISO string + status) ↔ Anchors (epoch ms) ----
-
-function taskAnchors(t: Task): Anchors {
-  return {
-    startedAt: t.startedAt ? new Date(t.startedAt).getTime() : null,
-    accumulatedSeconds: t.accumulatedSeconds,
-    running: t.status === 'in_progress',
-  };
-}
-
-function journeyAnchors(j: JourneySession): Anchors {
-  return {
-    startedAt: j.startedAt ? new Date(j.startedAt).getTime() : null,
-    accumulatedSeconds: j.accumulatedSeconds,
-    running: j.state === 'ongoing',
-  };
-}
-
-function isoOrNull(ms: number | null): string | null {
-  return ms == null ? null : new Date(ms).toISOString();
-}
-
 // ---- Store mutável module-level ----
 
-let tasks: Task[] = SEED_BASE.map(seedTask);
-let journey: JourneySession = {
-  state: 'idle',
-  activeTaskId: null,
-  startedAt: null,
-  accumulatedSeconds: 0,
+let store: JourneySnapshot = {
+  journey: {
+    state: 'idle',
+    activeTaskId: null,
+    startedAt: null,
+    accumulatedSeconds: 0,
+  },
+  tasks: SEED_BASE.map(seedTask),
 };
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function findTask(id: string): Task | undefined {
-  return tasks.find((t) => t.id === id);
+  return store.tasks.find((t) => t.id === id);
+}
+
+/** A hora em que a ação vale: a do toque, quando veio da fila. */
+function actionTime(send?: JourneySend): number {
+  const touched = send ? Date.parse(send.occurredAt) : NaN;
+  return Number.isNaN(touched) ? Date.now() : touched;
+}
+
+/** O erro como a API o devolve: com status e marcado como dela. */
+function apiError(status: 404 | 409, message: string): Error {
+  return Object.assign(new Error(message), { status, apiError: true });
+}
+
+/** Aplica a ação no store, ou recusa como o servidor recusaria. */
+function act(action: JourneyAction): JourneySnapshot {
+  const problem = journeyActionProblem(store, action);
+  if (problem === 'not_found') throw apiError(404, 'Tarefa não encontrada');
+  if (problem === 'done') throw apiError(409, 'Tarefa já concluída');
+  store = applyJourneyAction(store, action);
+  return store;
+}
+
+function taskResult(taskId: string) {
+  return { journey: { ...store.journey }, task: { ...findTask(taskId)! } };
 }
 
 export const mockJourneyBackend: JourneyBackend = {
   async getJourney() {
     await tick();
-    return { ...journey };
+    return { ...store.journey };
   },
 
   async listTasks() {
     await tick();
-    return tasks.map((t) => ({ ...t }));
+    return store.tasks.map((t) => ({ ...t }));
   },
 
   async getTask(id) {
@@ -159,146 +160,47 @@ export const mockJourneyBackend: JourneyBackend = {
     return found ? { ...found } : null;
   },
 
-  async startTask(taskId) {
+  async startTask(taskId, send) {
     await tick();
-    const task = findTask(taskId);
-    if (!task) throw new Error(`mockJourneyBackend.startTask: task ${taskId} não encontrada`);
-    const now = Date.now();
-
-    // Modelo single-active-task: uma task previamente ativa NÃO é auto-pausada
-    // aqui (caveat aceito no design — só uma task ativa por vez na prática).
-    const ta = startAnchors(taskAnchors(task), now);
-    task.status = 'in_progress';
-    task.startedAt = isoOrNull(ta.startedAt);
-    task.accumulatedSeconds = ta.accumulatedSeconds;
-
-    const ja = startAnchors(journeyAnchors(journey), now);
-    journey = {
-      state: 'ongoing',
-      activeTaskId: taskId,
-      startedAt: isoOrNull(ja.startedAt),
-      accumulatedSeconds: ja.accumulatedSeconds,
-    };
-
-    return { journey: { ...journey }, task: { ...task } };
+    act({ type: 'task.start', taskId, at: actionTime(send) });
+    return taskResult(taskId);
   },
 
-  async completeTask(taskId) {
+  async completeTask(taskId, send) {
     await tick();
-    const task = findTask(taskId);
-    if (!task) throw new Error(`mockJourneyBackend.completeTask: task ${taskId} não encontrada`);
-    const now = Date.now();
-
-    // Conclui o item: banca o tempo corrido e crava 100% (concluído = pleno,
-    // independente do estimado). O turno segue rodando — só o slot ativo libera.
-    const ta = endAnchors(taskAnchors(task), now);
-    task.status = 'done';
-    task.startedAt = isoOrNull(ta.startedAt);
-    task.accumulatedSeconds = ta.accumulatedSeconds;
-    task.progressPct = 100;
-
-    if (journey.activeTaskId === taskId) {
-      journey = { ...journey, activeTaskId: null };
-    }
-
-    return { journey: { ...journey }, task: { ...task } };
+    act({ type: 'task.complete', taskId, at: actionTime(send) });
+    return taskResult(taskId);
   },
 
-  async cancelTask(taskId) {
+  async cancelTask(taskId, send) {
     await tick();
-    const task = findTask(taskId);
-    if (!task) throw new Error(`mockJourneyBackend.cancelTask: task ${taskId} não encontrada`);
-    const now = Date.now();
-
-    // Devolve o item pro pool de pendentes preservando os segundos bancados
-    // (pauseAnchors banca o segmento corrente). O turno segue rodando.
-    const ta = pauseAnchors(taskAnchors(task), now);
-    task.status = 'pending';
-    task.startedAt = isoOrNull(ta.startedAt);
-    task.accumulatedSeconds = ta.accumulatedSeconds;
-
-    if (journey.activeTaskId === taskId) {
-      journey = { ...journey, activeTaskId: null };
-    }
-
-    return { journey: { ...journey }, task: { ...task } };
+    act({ type: 'task.cancel', taskId, at: actionTime(send) });
+    return taskResult(taskId);
   },
 
-  async pauseJourney() {
+  async pauseJourney(send) {
     await tick();
-    const now = Date.now();
-    const active = journey.activeTaskId ? findTask(journey.activeTaskId) : undefined;
-    if (active) {
-      const ta = pauseAnchors(taskAnchors(active), now);
-      active.progressPct = progressPct(
-        elapsedSeconds(taskAnchors(active), now),
-        active.estimatedMinutes,
-      );
-      active.status = 'paused';
-      active.startedAt = isoOrNull(ta.startedAt);
-      active.accumulatedSeconds = ta.accumulatedSeconds;
-    }
-    const ja = pauseAnchors(journeyAnchors(journey), now);
-    journey = {
-      ...journey,
-      state: 'paused',
-      startedAt: isoOrNull(ja.startedAt),
-      accumulatedSeconds: ja.accumulatedSeconds,
-    };
-    return { ...journey };
+    return { ...act({ type: 'pause', at: actionTime(send) }).journey };
   },
 
-  async resumeJourney() {
+  async resumeJourney(send) {
     await tick();
-    const now = Date.now();
-    const active = journey.activeTaskId ? findTask(journey.activeTaskId) : undefined;
-    if (active) {
-      const ta = resumeAnchors(taskAnchors(active), now);
-      active.status = 'in_progress';
-      active.startedAt = isoOrNull(ta.startedAt);
-      active.accumulatedSeconds = ta.accumulatedSeconds;
-    }
-    const ja = resumeAnchors(journeyAnchors(journey), now);
-    journey = {
-      ...journey,
-      state: 'ongoing',
-      startedAt: isoOrNull(ja.startedAt),
-      accumulatedSeconds: ja.accumulatedSeconds,
-    };
-    return { ...journey };
+    return { ...act({ type: 'resume', at: actionTime(send) }).journey };
   },
 
-  async endJourney() {
+  async endJourney(send) {
     await tick();
-    const now = Date.now();
-    const active = journey.activeTaskId ? findTask(journey.activeTaskId) : undefined;
-    if (active) {
-      // Decision E (espelha o backend): encerrar o turno PAUSA o item ativo —
-      // não o conclui. Concluir é ação explícita via completeTask.
-      const ta = endAnchors(taskAnchors(active), now);
-      active.progressPct = progressPct(ta.accumulatedSeconds, active.estimatedMinutes);
-      active.status = 'paused';
-      active.startedAt = isoOrNull(ta.startedAt);
-      active.accumulatedSeconds = ta.accumulatedSeconds;
-    }
-    // Turno encerrado zera o relógio: o próximo turno (idle→ongoing via
-    // startTask) preserva o accumulatedSeconds da jornada, então qualquer
-    // tempo banked aqui vazaria pro donut do turno seguinte. O banking de
-    // tarefa é separado (cada task é seu próprio objeto) e não é afetado.
-    journey = {
-      state: 'idle',
-      activeTaskId: null,
-      startedAt: null,
-      accumulatedSeconds: 0,
-    };
-    return { ...journey };
+    return { ...act({ type: 'end', at: actionTime(send) }).journey };
   },
 
-  async addTaskPhoto(taskId, uri) {
+  // Sem servidor, a "key" da foto é a própria uri local, que a tela mostra.
+  async uploadImage(localUri) {
+    return localUri;
+  },
+
+  async addTaskPhoto(taskId, imageKey) {
     await tick();
-    const task = findTask(taskId);
-    if (!task) throw new Error(`mockJourneyBackend.addTaskPhoto: task ${taskId} não encontrada`);
-    task.images = [...task.images, uri];
-    return { ...task };
+    act({ type: 'task.photo', taskId, uri: imageKey });
+    return { ...findTask(taskId)! };
   },
 };

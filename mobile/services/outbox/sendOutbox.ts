@@ -2,9 +2,9 @@ import { File, Paths } from 'expo-file-system';
 import type { OutboxStorage } from '../telemetry/telemetryOutbox';
 
 // Fila dos envios que a pessoa faz no app (mensagem do chat, relatório,
-// comentário), persistida em arquivo no padrão do positionOutbox: o arquivo é
-// a única verdade, sem cache entre chamadas, e as operações são serializadas
-// por uma corrente de promessas.
+// comentário, ações da jornada e foto da tarefa), persistida em arquivo no
+// padrão do positionOutbox: o arquivo é a única verdade, sem cache entre
+// chamadas, e as operações são serializadas por uma corrente de promessas.
 //
 // O envio entra aqui antes de qualquer tentativa de rede e só sai quando o
 // backend confirmar ou recusar de vez (sendDrain.ts). O `id` do item é a
@@ -21,7 +21,11 @@ export interface QueuedImage {
 interface SendItemBase {
   /** UUID v4. É também o cabeçalho Idempotency-Key do envio. */
   id: string;
-  /** Quando a pessoa enviou, em ISO-8601. Régua da validade do item. */
+  /**
+   * Quando a pessoa enviou (a hora do toque), em ISO-8601. Régua da validade
+   * do item. Nas ações da jornada vai ao servidor como `occurredAt`, com este
+   * mesmo texto em toda tentativa.
+   */
   createdAt: string;
   images: QueuedImage[];
 }
@@ -46,8 +50,41 @@ export interface ReportCommentItem extends SendItemBase {
   body: string;
 }
 
-export type SendItem = ChatMessageItem | ReportItem | ReportCommentItem;
+export type JourneyTaskActionKind =
+  | 'journey.task.start'
+  | 'journey.task.complete'
+  | 'journey.task.cancel';
+
+export type JourneyShiftKind = 'journey.pause' | 'journey.resume' | 'journey.end';
+
+/** Iniciar, concluir ou cancelar uma tarefa. */
+export interface JourneyTaskActionItem extends SendItemBase {
+  kind: JourneyTaskActionKind;
+  taskId: string;
+  /** Só para o aviso de recusa: não vai ao servidor. */
+  taskTitle: string;
+}
+
+/** Pausar, retomar ou encerrar o turno. */
+export interface JourneyShiftItem extends SendItemBase {
+  kind: JourneyShiftKind;
+}
+
+/** Foto da tarefa: uma por item. */
+export interface JourneyTaskPhotoItem extends SendItemBase {
+  kind: 'journey.task.photo';
+  taskId: string;
+  /** Só para o aviso de recusa: não vai ao servidor. */
+  taskTitle: string;
+}
+
+export type JourneyItem = JourneyTaskActionItem | JourneyShiftItem | JourneyTaskPhotoItem;
+
+export type SendItem = ChatMessageItem | ReportItem | ReportCommentItem | JourneyItem;
 export type SendKind = SendItem['kind'];
+
+export const isJourneyItem = (item: SendItem): item is JourneyItem =>
+  item.kind.startsWith('journey.');
 
 export interface SendOutbox {
   /**
@@ -121,6 +158,16 @@ function isSendItem(value: unknown): value is SendItem {
       );
     case 'report.comment':
       return isString(value.reportId) && isString(value.body);
+    case 'journey.task.start':
+    case 'journey.task.complete':
+    case 'journey.task.cancel':
+      return isString(value.taskId) && isString(value.taskTitle);
+    case 'journey.pause':
+    case 'journey.resume':
+    case 'journey.end':
+      return true;
+    case 'journey.task.photo':
+      return isString(value.taskId) && isString(value.taskTitle) && value.images.length === 1;
     default:
       return false;
   }

@@ -28,13 +28,19 @@ export function formatDuration(totalSec: number): string {
   return `${h}:${pad(m)}:${pad(sec)}`;
 }
 
+// Iniciar ou retomar o que já está correndo não mexe em nada, igual ao
+// servidor (swi-backend/src/journey/time-anchors.ts). A fila de envios reaplica
+// na tela ações que o servidor talvez já tenha aplicado; reiniciar o segmento
+// aqui jogaria fora o tempo corrido.
 export function startAnchors(a: Anchors, nowMs: number): Anchors {
+  if (a.running && a.startedAt != null) return a;
   return { startedAt: nowMs, accumulatedSeconds: a.accumulatedSeconds, running: true };
 }
 export function pauseAnchors(a: Anchors, nowMs: number): Anchors {
   return { startedAt: null, accumulatedSeconds: elapsedSeconds(a, nowMs), running: false };
 }
 export function resumeAnchors(a: Anchors, nowMs: number): Anchors {
+  if (a.running && a.startedAt != null) return a;
   return { startedAt: nowMs, accumulatedSeconds: a.accumulatedSeconds, running: true };
 }
 export function endAnchors(a: Anchors, nowMs: number): Anchors {

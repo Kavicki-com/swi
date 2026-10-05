@@ -11,8 +11,20 @@ const mockReports = {
   create: jest.fn(async () => ({ id: 'r-servidor' })),
   addComment: jest.fn(async () => ({ id: 'c-servidor' })),
 };
+const mockSession = { state: 'paused', activeTaskId: null, startedAt: null, accumulatedSeconds: 0 };
+const mockJourney = {
+  uploadImage: jest.fn(async (uri: string) => `task-key:${uri}`),
+  addTaskPhoto: jest.fn(async () => ({ id: 't1' })),
+  startTask: jest.fn(async () => ({ journey: mockSession, task: { id: 't1' } })),
+  completeTask: jest.fn(async () => ({ journey: mockSession, task: { id: 't1' } })),
+  cancelTask: jest.fn(async () => ({ journey: mockSession, task: { id: 't1' } })),
+  pauseJourney: jest.fn(async () => mockSession),
+  resumeJourney: jest.fn(async () => mockSession),
+  endJourney: jest.fn(async () => mockSession),
+};
 jest.mock('../chat/getChatBackend', () => ({ getChatBackend: () => mockChat }));
 jest.mock('../reports/getReportsBackend', () => ({ getReportsBackend: () => mockReports }));
+jest.mock('../journey/getJourneyBackend', () => ({ getJourneyBackend: () => mockJourney }));
 
 // Disco de mentira: uri → conteúdo (texto do arquivo da fila, ou os bytes da foto).
 const mockDisk = new Map<string, string>();
@@ -126,6 +138,21 @@ describe('getSendQueue', () => {
     expect(chaveDoRelatorio).toMatch(UUID_V4);
     expect(chaveDoComentario).toMatch(UUID_V4);
     expect(chaveDoComentario).not.toBe(chaveDoRelatorio);
+  });
+
+  it('ação da jornada sai pelo backend da jornada com a chave e a hora do toque', async () => {
+    const queue = novaFila()();
+    await queue.start('u1');
+
+    await queue.enqueue({ kind: 'journey.pause' });
+    await queue.kick();
+
+    expect(mockJourney.pauseJourney).toHaveBeenCalledTimes(1);
+    const [send] = mockJourney.pauseJourney.mock.calls[0] as unknown as [
+      { idempotencyKey: string; occurredAt: string },
+    ];
+    expect(send.idempotencyKey).toMatch(UUID_V4);
+    expect(new Date(send.occurredAt).toISOString()).toBe(send.occurredAt);
   });
 
   describe('no aparelho, com servidor de verdade', () => {

@@ -5,7 +5,13 @@ import {
   type SendTransport,
 } from './sendDrain';
 import type { SendFiles } from './sendFiles';
-import { MAX_QUEUED_SENDS, type SendItem, type SendOutbox } from './sendOutbox';
+import {
+  MAX_QUEUED_SENDS,
+  type JourneyShiftKind,
+  type JourneyTaskActionKind,
+  type SendItem,
+  type SendOutbox,
+} from './sendOutbox';
 
 // O controle da fila de envios: um só para o app. As telas enfileiram por
 // aqui, leem daqui o que está aguardando e ouvem daqui o que foi confirmado ou
@@ -27,7 +33,10 @@ export type SendDraft =
       responsibles: string[];
       imageUris: string[];
     }
-  | { kind: 'report.comment'; reportId: string; body: string };
+  | { kind: 'report.comment'; reportId: string; body: string }
+  | { kind: JourneyTaskActionKind; taskId: string; taskTitle: string }
+  | { kind: JourneyShiftKind }
+  | { kind: 'journey.task.photo'; taskId: string; taskTitle: string; imageUri: string };
 
 /** `full`: a fila está no teto e o envio não entrou. */
 export type EnqueueResult = 'queued' | 'full';
@@ -42,6 +51,16 @@ export interface SendQueueState {
   items: readonly SendItem[];
   /** Recusados nesta sessão. Só na memória: somem ao fechar o app. */
   refused: readonly RefusedSend[];
+  /**
+   * A fila da pessoa já foi lida do arquivo. Antes disso `items` está vazio
+   * por não se saber, e não por não haver nada.
+   */
+  open: boolean;
+  /**
+   * A última tentativa parou numa falha passageira (sem sinal, prazo, 5xx) e
+   * há itens esperando. Volta a false quando um envio passa.
+   */
+  stalled: boolean;
 }
 
 export type SendQueueEvent =
@@ -75,7 +94,7 @@ interface SendQueueDeps {
   newId(): string;
 }
 
-const EMPTY_STATE: SendQueueState = { items: [], refused: [] };
+const EMPTY_STATE: SendQueueState = { items: [], refused: [], open: false, stalled: false };
 
 const localUris = (items: readonly SendItem[]) =>
   items.flatMap((item) => item.images.map((image) => image.localUri));
@@ -83,6 +102,7 @@ const localUris = (items: readonly SendItem[]) =>
 const draftImageUris = (draft: SendDraft): string[] => {
   if (draft.kind === 'report') return draft.imageUris;
   if (draft.kind === 'chat.message' && draft.imageUri) return [draft.imageUri];
+  if (draft.kind === 'journey.task.photo') return [draft.imageUri];
   return [];
 };
 
@@ -120,12 +140,19 @@ export function createSendQueue(deps: SendQueueDeps): SendQueue {
     void files.discard(uris).catch(() => undefined);
   };
 
-  /** O item saiu da fila (confirmado ou recusado): some do estado antes do aviso. */
+  /**
+   * O item saiu da fila (confirmado ou recusado): some do estado antes do aviso.
+   * O aviso sai logo depois do estado, no mesmo passo: quem ouve os dois (a
+   * jornada) os recebe juntos, e não vê um instante sem o item e sem o aviso.
+   */
   function settle(token: number, item: SendItem, event: SendQueueEvent, refusal?: RefusedSend) {
     if (token !== session) return;
     setState({
+      ...state,
       items: state.items.filter((queued) => queued.id !== item.id),
       refused: refusal ? [...state.refused, refusal] : state.refused,
+      // Teve resposta: o sinal está lá.
+      stalled: false,
     });
     discard(localUris([item]));
     emit(event);
@@ -154,7 +181,10 @@ export function createSendQueue(deps: SendQueueDeps): SendQueue {
     if (!owner || !current || halted) return;
     try {
       const outcome = await current.drain(owner);
-      if (outcome === 'unauthorized' && token === session) halted = true;
+      if (token !== session) return;
+      if (outcome === 'unauthorized') halted = true;
+      const stalled = outcome === 'waiting' && state.items.length > 0;
+      if (stalled !== state.stalled) setState({ ...state, stalled });
     } catch {
       // Falha de disco no meio da rodada. O item que estava saindo continua na
       // fila e a próxima rodada repete o envio, que o backend reconhece.
@@ -182,6 +212,15 @@ export function createSendQueue(deps: SendQueueDeps): SendQueue {
         };
       case 'report.comment':
         return { ...base, kind: draft.kind, reportId: draft.reportId, body: draft.body };
+      case 'journey.task.start':
+      case 'journey.task.complete':
+      case 'journey.task.cancel':
+      case 'journey.task.photo':
+        return { ...base, kind: draft.kind, taskId: draft.taskId, taskTitle: draft.taskTitle };
+      case 'journey.pause':
+      case 'journey.resume':
+      case 'journey.end':
+        return { ...base, kind: draft.kind };
     }
   }
 
@@ -190,7 +229,7 @@ export function createSendQueue(deps: SendQueueDeps): SendQueue {
     discard(localUris(dropped));
     const items = await outbox.pending(nextOwner);
     if (token !== session) return;
-    setState(items.length > 0 ? { items, refused: [] } : EMPTY_STATE);
+    setState({ items, refused: [], open: true, stalled: false });
     await files.sweep(localUris(items)).catch(() => undefined);
   }
 
@@ -204,7 +243,13 @@ export function createSendQueue(deps: SendQueueDeps): SendQueue {
 
       const run = open(token, nextOwner);
       opening = run.catch(() => undefined);
-      await run;
+      try {
+        await run;
+      } finally {
+        // Falha de disco ao abrir: a fila segue vazia na memória, e quem
+        // espera a abertura não pode esperar para sempre.
+        if (token === session && !state.open) setState({ ...state, open: true });
+      }
       if (token === session) void kick();
     },
 
@@ -247,7 +292,7 @@ export function createSendQueue(deps: SendQueueDeps): SendQueue {
         return 'full';
       }
       if (token === session) {
-        setState({ items: [...state.items, item], refused: state.refused });
+        setState({ ...state, items: [...state.items, item] });
         void kick();
       }
       return 'queued';

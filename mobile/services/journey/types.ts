@@ -36,15 +36,29 @@ export interface JourneySession {
   accumulatedSeconds: number;
 }
 
+/**
+ * O que a fila de envios manda junto de uma ação da jornada. Sem ele a ação
+ * vale na hora em que chega ao servidor e não tem proteção contra repetição.
+ */
+export interface JourneySend {
+  /** UUID v4 do item da fila, igual em toda tentativa. */
+  idempotencyKey: string;
+  /** Hora do toque, ISO-8601 com fuso, com o mesmo texto em toda tentativa. */
+  occurredAt: string;
+}
+
 export interface JourneyBackend {
   getJourney(): Promise<JourneySession>;
   listTasks(): Promise<Task[]>;
   getTask(id: string): Promise<Task | null>;
-  startTask(taskId: string): Promise<{ journey: JourneySession; task: Task }>;
-  completeTask(taskId: string): Promise<{ journey: JourneySession; task: Task }>;
-  cancelTask(taskId: string): Promise<{ journey: JourneySession; task: Task }>;
-  pauseJourney(): Promise<JourneySession>;
-  resumeJourney(): Promise<JourneySession>;
-  endJourney(): Promise<JourneySession>;
-  addTaskPhoto(taskId: string, uri: string): Promise<Task>;
+  startTask(taskId: string, send?: JourneySend): Promise<{ journey: JourneySession; task: Task }>;
+  completeTask(taskId: string, send?: JourneySend): Promise<{ journey: JourneySession; task: Task }>;
+  cancelTask(taskId: string, send?: JourneySend): Promise<{ journey: JourneySession; task: Task }>;
+  pauseJourney(send?: JourneySend): Promise<JourneySession>;
+  resumeJourney(send?: JourneySend): Promise<JourneySession>;
+  endJourney(send?: JourneySend): Promise<JourneySession>;
+  /** Sobe a foto e devolve a key dela. A fila guarda a key: a foto sobe uma vez só. */
+  uploadImage(localUri: string): Promise<string>;
+  /** Anexa a foto já enviada. A mesma key enviada de novo não duplica. */
+  addTaskPhoto(taskId: string, imageKey: string): Promise<Task>;
 }

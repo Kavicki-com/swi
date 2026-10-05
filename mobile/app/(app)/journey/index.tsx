@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import {
   JourneyTheme,
   Text,
   Title,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../../components/NavFABs';
@@ -17,6 +18,8 @@ import { JourneyListState } from '../../../components/journey/JourneyState';
 import { useJourney } from '../../../services/journey/JourneyProvider';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { elapsedSeconds, formatDuration } from '../../../services/journey/progress';
+import { JOURNEY_WAITING_TITLE, QUEUE_FULL_TITLE } from '../../../services/outbox/sendCopy';
+import type { EnqueueResult } from '../../../services/outbox/sendQueue';
 
 // Journey planner com 3 layouts conditional via JourneyProvider state:
 //   - idle:    DonutChart "8h / Não iniciadas" + 4 task cards
@@ -30,6 +33,10 @@ import { elapsedSeconds, formatDuration } from '../../../services/journey/progre
 // Quando user starta uma task em task/[id], o context flipa pra ongoing — ao
 // voltar pra /journey, esta tela renderiza o layout ongoing automaticamente.
 // O donut deriva o tempo real via progress.ts (âncoras epoch ms da sessão).
+//
+// Finalizar, pausar e retomar passam pela fila de envios e valem na hora do
+// toque. Com ação esperando o sinal, o aviso único fica logo abaixo do
+// cabeçalho.
 
 // "Hoje" é hoje de verdade. Antes era a string '27/04/2026' cravada do mockup:
 const formatToday = (d: Date): string =>
@@ -51,8 +58,27 @@ export default function Journey() {
     endJourney,
     load,
     refresh,
+    waitingForSignal,
+    dismissWaiting,
   } = useJourney();
   const { profile } = useProfile();
+
+  // Fila cheia: a ação não entrou e a tela não mudou.
+  const [queueFull, setQueueFull] = useState(false);
+  // Um toque por vez: finalizar e logo pausar, no intervalo em que a primeira
+  // ação entra na fila, levaria o turno de ocioso a pausado.
+  const busy = useRef(false);
+  const shift = async (action: () => Promise<EnqueueResult>) => {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      if ((await action()) === 'full') setQueueFull(true);
+    } catch {
+      // Sem sessão aberta a ação não entra na fila e a tela não muda.
+    } finally {
+      busy.current = false;
+    }
+  };
 
   // 3) foco da tela: o worker volta pra jornada e vê o estado de agora. Cobre
   //    o caso do socket calado (túnel caído) sem depender de nada externo.
@@ -191,6 +217,13 @@ export default function Journey() {
             />
           </View>
 
+          {waitingForSignal ? (
+            <Toast variant="warning" title={JOURNEY_WAITING_TITLE} onClose={dismissWaiting} />
+          ) : null}
+          {queueFull ? (
+            <Toast variant="warning" title={QUEUE_FULL_TITLE} onClose={() => setQueueFull(false)} />
+          ) : null}
+
           {/* Em andamento — só aparece em ongoing/paused, com a active task
               destacada (filled radio teal #8AD2E2 vs unfilled outline nas
               Próximas). Tap segue pra task/[id] mesmo já estando ativa. */}
@@ -319,7 +352,7 @@ export default function Journey() {
                     ? 'Finalizar Jornada (indisponível enquanto pausado)'
                     : 'Finalizar Jornada'
                 }
-                onPress={() => endJourney()}
+                onPress={() => shift(endJourney)}
               />
               <Button
                 variant="outline"
@@ -327,7 +360,7 @@ export default function Journey() {
                 labelColor={theme.surface.accent}
                 label={isPaused ? 'Retomar' : 'Fazer pausa'}
                 accessibilityLabel={isPaused ? 'Retomar jornada' : 'Fazer pausa'}
-                onPress={() => (isPaused ? resumeJourney() : pauseJourney())}
+                onPress={() => shift(isPaused ? resumeJourney : pauseJourney)}
               />
             </View>
           ) : null}
