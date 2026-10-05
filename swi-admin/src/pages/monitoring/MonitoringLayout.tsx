@@ -32,6 +32,7 @@ import {
 import { telemetryApi, type AlertQueueItem } from '@/services/api/telemetry'
 import { notificationsApi } from '@/services/api/notifications'
 import { subscribeTelemetryEvents } from '@/services/telemetry/telemetrySocket'
+import { connectionStatus } from '@/services/realtime/connectionStatus'
 import { useAdminTelemetry } from '@/hooks/useAdminTelemetry'
 import { chatPathTo } from '@/services/chat/chatReducers'
 import { useAuth } from '@/hooks/useAuth'
@@ -255,9 +256,13 @@ export function MonitoringLayout() {
         }, QUEUE_REFETCH_DEBOUNCE_MS)
       },
     })
+    // Avisos de condição que chegaram durante uma queda do socket se perderam:
+    // a volta da conexão relê a fila inteira.
+    const stopReconnect = connectionStatus.onReconnect(() => void loadQueue())
     return () => {
       if (debounce.current) clearTimeout(debounce.current)
       unsubscribe()
+      stopReconnect()
     }
   }, [loadQueue])
 

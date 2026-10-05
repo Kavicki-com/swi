@@ -31,6 +31,7 @@ export function toDashboardMarker(dto: PositionMarkerDto): DashboardMapMarker {
     lng: dto.lng,
     status: 'offline',
     avatarUri: dto.avatar,
+    recordedAt: dto.recordedAt,
   }
 }
 

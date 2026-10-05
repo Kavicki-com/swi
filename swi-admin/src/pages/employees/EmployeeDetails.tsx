@@ -13,6 +13,8 @@ import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { DeviceSection } from '@/pages/employees/DeviceSection'
 import { vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { useLivePositions } from '@/hooks/useLivePositions'
+import { useNow } from '@/hooks/useNow'
+import { POSITION_CLOCK_MS, stalePositionNote } from '@/services/positions/positionAge'
 import { useWorkerTelemetry } from '@/hooks/useWorkerTelemetry'
 import { useDemoToast } from '@/lib/demoToast'
 
@@ -28,8 +30,13 @@ export function EmployeeDetails() {
   // todo mundo no mesmo ponto.
   const positions = useLivePositions()
   const position = positions?.find((p) => p.id === id) ?? null
+  // Relógio de tela para a hora da posição velha envelhecer sem recarregar.
+  const now = useNow(POSITION_CLOCK_MS)
   // Vitais do aparelho pareado, relidos sozinhos enquanto a página está aberta.
   const { telemetry, failed } = useWorkerTelemetry(id)
+  // Quem sabe se há aparelho é o bloco Aparelho; sem ele os vitais dizem
+  // "Sem aparelho". null enquanto o bloco não sabe.
+  const [paired, setPaired] = useState<boolean | null>(null)
 
   // POST real: o worker recebe a notificação de journey no app, e erro do
   // backend aparece no toast.
@@ -83,14 +90,17 @@ export function EmployeeDetails() {
         ...employee,
         // O gráfico de gasto calórico lê a série deste funcionário.
         seriesWorkerId: employee.id,
-        vitals: vitalsViewFrom(telemetry, { failed }),
+        vitals: vitalsViewFrom(telemetry, { failed, noDevice: paired === false }),
       }}
       position={position ? { lat: position.lat, lng: position.lng } : null}
+      positionNote={position ? stalePositionNote(position.recordedAt, now) : null}
       testID="employee-details"
       onBack={() => navigate('/employees')}
       backA11yLabel="Voltar para a lista de funcionários"
       onOpenFullMap={() => navigate('/maps/general')}
-      deviceSection={<DeviceSection workerId={employee.id} />}
+      deviceSection={
+        <DeviceSection workerId={employee.id} telemetry={telemetry} onPairedChange={setPaired} />
+      }
       topRightAction={
         <Button
           label={pausing ? 'Solicitando…' : 'Solicitar Pausa'}

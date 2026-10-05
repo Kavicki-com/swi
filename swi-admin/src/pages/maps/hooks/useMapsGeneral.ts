@@ -21,7 +21,8 @@ import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { reportsApi } from '@/services/api/reports'
 import { camerasApi, type Camera } from '@/services/api/cameras'
 import { filterCameras } from '@/pages/cameras/cameraSearch'
-import { buildPin, buildCameraPin } from '../pinBuilders'
+import { buildPin, buildCameraPin, type PinHandle } from '../pinBuilders'
+import { useStalePinTitles } from './useStalePinTitles'
 
 export function useMapsGeneral() {
   const navigate = useNavigate()
@@ -114,6 +115,13 @@ export function useMapsGeneral() {
   // desenha o ponto azul. Deslocar os pinos em volta do usuário desenharia o
   // GPS de cada funcionário num lugar onde ele não está.
   const operatorMarkers = useMemo<DashboardMapMarker[]>(() => mapMarkers ?? [], [mapMarkers])
+  // Hora da posição velha ao passar o mouse no pino; a cor não muda. O pino
+  // nasce com o texto do momento, e quando um texto muda só o título do
+  // elemento é trocado, sem refazer os pinos.
+  const pinTitles = useStalePinTitles(operatorMarkers)
+  const pinTitlesRef = useRef(pinTitles)
+  pinTitlesRef.current = pinTitles
+  const operatorPinsRef = useRef<PinHandle[]>([])
   // Pontos cadastrados da empresa, lidos quando a camada liga. Cada vez que ela
   // liga a lista é relida, para refletir câmera criada na seção Câmeras.
   const [cameras, setCameras] = useState<ReadonlyArray<Camera>>([])
@@ -264,11 +272,13 @@ export function useMapsGeneral() {
     const map = mapRef.current
     if (!lib || !map || !mapReady || !showOperators || operatorMarkers.length === 0) return
 
-    const handles = operatorMarkers.map((m) =>
-      buildPin(m, map, lib, () => navigate(`/employees/${m.id}`)),
+    const handles = operatorMarkers.map((m, i) =>
+      buildPin(m, map, lib, () => navigate(`/employees/${m.id}`), pinTitlesRef.current[i]),
     )
+    operatorPinsRef.current = handles
 
     return () => {
+      operatorPinsRef.current = []
       handles.forEach((h) => {
         h.marker.remove()
       })
@@ -282,6 +292,14 @@ export function useMapsGeneral() {
       })
     }
   }, [mapReady, operatorMarkers, showOperators, lib, navigate])
+
+  useEffect(() => {
+    operatorPinsRef.current.forEach((h, i) => {
+      const title = pinTitles[i]
+      if (title) h.el.title = title
+      else h.el.removeAttribute('title')
+    })
+  }, [pinTitles])
 
   // Pinos de câmera, com a camada "Câmeras" ligada. Mesmo padrão de
   // PinHandle/cleanup dos pinos de operador. O clique abre a câmera na seção

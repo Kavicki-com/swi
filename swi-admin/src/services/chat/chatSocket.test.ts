@@ -2,17 +2,26 @@ import { vi } from 'vitest'
 
 // vi.mock é hoistado pro topo do arquivo; os mocks têm que existir antes dele —
 // por isso vi.hoisted (padrão do repo, ver Login.test.tsx / TasksList.test.tsx).
-const { onMock, closeMock, ioMock } = vi.hoisted(() => {
+const { onMock, offMock, closeMock, ioMock } = vi.hoisted(() => {
   const onMock = vi.fn()
+  const offMock = vi.fn()
   const closeMock = vi.fn()
-  return { onMock, closeMock, ioMock: vi.fn(() => ({ on: onMock, close: closeMock })) }
+  return {
+    onMock,
+    offMock,
+    closeMock,
+    ioMock: vi.fn(() => ({ on: onMock, off: offMock, close: closeMock })),
+  }
 })
 vi.mock('socket.io-client', () => ({ io: ioMock }))
 
 import { subscribeMessages } from './chatSocket'
+import { CONNECTION_GRACE_MS, connectionStatus } from '../realtime/connectionStatus'
 
 afterEach(() => {
+  vi.useRealTimers()
   onMock.mockClear()
+  offMock.mockClear()
   closeMock.mockClear()
   ioMock.mockClear()
   window.localStorage.clear()
@@ -39,5 +48,23 @@ it('conecta com auth.token vindo do readToken e transports websocket, assina mes
   // Trava que o cb do caller é o próprio handler — não um wrapper vazio.
   expect(onCall[1]).toBe(cb)
   stop()
+  expect(closeMock).toHaveBeenCalled()
+})
+
+it('a conexão entra no estado de conexão do painel e sai dele ao fechar', () => {
+  vi.useFakeTimers()
+  const stop = subscribeMessages(vi.fn())
+  const handlerOf = (event: string) =>
+    (onMock.mock.calls as unknown as [string, (reason?: unknown) => void][]).find(
+      ([name]) => name === event,
+    )![1]
+
+  handlerOf('disconnect')('transport close')
+  vi.advanceTimersByTime(CONNECTION_GRACE_MS)
+  expect(connectionStatus.isLost()).toBe(true)
+
+  stop()
+  expect(connectionStatus.isLost()).toBe(false)
+  expect(offMock).toHaveBeenCalledWith('disconnect', handlerOf('disconnect'))
   expect(closeMock).toHaveBeenCalled()
 })

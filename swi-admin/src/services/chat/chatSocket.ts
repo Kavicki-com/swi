@@ -3,6 +3,7 @@ import type { Message } from './types'
 import { readToken } from '../api/http'
 
 import { getApiUrl } from '../api/apiConfig'
+import { connectionStatus } from '../realtime/connectionStatus'
 
 // Assina o canal global de mensagens ao vivo. Retorna cleanup. O server só
 // emite 'message'; toda escrita é REST (ver design).
@@ -17,7 +18,9 @@ export function subscribeMessages(cb: (m: Message) => void): () => void {
     transports: ['polling', 'websocket'],
   })
   socket.on('message', cb)
+  const unwatch = connectionStatus.watch(socket)
   return () => {
+    unwatch()
     socket.close()
   }
 }

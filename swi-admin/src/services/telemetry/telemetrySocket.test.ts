@@ -39,6 +39,7 @@ import {
   SNAPSHOT_UPDATED_EVENT,
   subscribeTelemetryEvents,
 } from './telemetrySocket'
+import { CONNECTION_GRACE_MS, connectionStatus } from '../realtime/connectionStatus'
 
 const SNAPSHOT = { workerId: 'w1', monitoringSessionId: 's', eventId: 'e', revision: 'r' }
 const CONDITION = {
@@ -128,4 +129,23 @@ it('assinar depois do fechamento abre uma conexão nova', () => {
   sockets[1]!.emit(SNAPSHOT_UPDATED_EVENT, SNAPSHOT)
   expect(c.onSnapshot).toHaveBeenCalledWith(SNAPSHOT)
   stopC()
+})
+
+it('a conexão compartilhada entra no estado de conexão do painel e sai quando o último assinante fecha', () => {
+  vi.useFakeTimers()
+  try {
+    const stopA = subscribeTelemetryEvents(subscriber())
+    const stopB = subscribeTelemetryEvents(subscriber())
+    sockets[0]!.emit('disconnect', 'transport close')
+    vi.advanceTimersByTime(CONNECTION_GRACE_MS)
+    expect(connectionStatus.isLost()).toBe(true)
+
+    stopA()
+    expect(connectionStatus.isLost()).toBe(true)
+    stopB()
+    expect(connectionStatus.isLost()).toBe(false)
+    expect(sockets[0]!.handlers.get('disconnect')?.size ?? 0).toBe(0)
+  } finally {
+    vi.useRealTimers()
+  }
 })

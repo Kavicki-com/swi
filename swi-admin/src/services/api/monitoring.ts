@@ -16,6 +16,7 @@ import { adminsApi, employeesApi, type Employee } from './users'
 import { reportsApi } from './reports'
 import {
   telemetryApi,
+  type ActiveCondition,
   type AdminTelemetrySummary,
   type AdminWorkerEntry,
   type AlertQueueItem,
@@ -62,8 +63,10 @@ const round = (n: number) => Math.round(n)
 
 // Título, ícone e frase de cada tipo de condição. Sem valor gravado a frase sai
 // sem número, nunca com um valor inventado.
-function describe(item: AlertQueueItem): { title: string; icon: IconName; description: string } {
-  const { kind, observedValue: obs, thresholdValue: thr } = item.condition
+function describe(
+  condition: Pick<ActiveCondition, 'kind' | 'observedValue' | 'thresholdValue'>,
+): { title: string; icon: IconName; description: string } {
+  const { kind, observedValue: obs, thresholdValue: thr } = condition
   switch (kind) {
     case 'HEART_RATE_HIGH':
     case 'HEART_RATE_LOW': {
@@ -121,7 +124,7 @@ function triageLine(item: AlertQueueItem): string | null {
 
 /** Um alerta da fila como a linha do card o mostra, com o que dá para fazer com ele. */
 export function alertDetailFrom(item: AlertQueueItem): MonitoringAlertDetail {
-  const { title, icon, description } = describe(item)
+  const { title, icon, description } = describe(item.condition)
   const notes = [
     `${CATEGORY_LABEL[item.condition.category]}, aberto às ${clock(item.condition.openedAt)}`,
   ]
@@ -144,6 +147,24 @@ export function alertDetailFrom(item: AlertQueueItem): MonitoringAlertDetail {
       canResolve: item.status === 'OPEN' || item.status === 'ACKNOWLEDGED',
     },
   }
+}
+
+// Bateria baixa e sem sinal não viram alerta da fila no servidor: chegam só
+// como condição aberta na telemetria. No cartão são informação, sem triagem.
+function deviceLinesFrom(entry: AdminWorkerEntry | undefined): MonitoringAlertDetail[] {
+  if (!entry) return []
+  return entry.telemetry.conditions
+    .filter((c) => c.category === 'DEVICE')
+    .map((c) => {
+      const notes = [`${CATEGORY_LABEL.DEVICE}, aberto às ${clock(c.openedAt)}`]
+      if (entry.telemetry.origin === 'DEMO') notes.push('Dados de demonstração')
+      return {
+        id: `${entry.worker.id}:${c.kind}`,
+        ...describe(c),
+        tone: CATEGORY_TONE.DEVICE,
+        notes,
+      }
+    })
 }
 
 const UNRESOLVED = new Set<AlertQueueItem['status']>(['OPEN', 'ACKNOWLEDGED'])
@@ -184,7 +205,8 @@ export function buildUserAlerts(
   const byWorker = new Map((workers ?? []).map((w) => [w.worker.id, w]))
   const rows = employees.map((e) => {
     const alerts = queue.filter((a) => a.worker.id === e.id)
-    const tier = tierFor(byWorker.get(e.id), alerts)
+    const entry = byWorker.get(e.id)
+    const tier = tierFor(entry, alerts)
     return {
       id: e.id,
       name: e.name,
@@ -195,7 +217,7 @@ export function buildUserAlerts(
       avatarUri: e.avatarUri,
       active: e.active ?? true,
       tier,
-      alerts: alerts.map(alertDetailFrom),
+      alerts: [...alerts.map(alertDetailFrom), ...deviceLinesFrom(entry)],
     }
   })
   return rows.sort(

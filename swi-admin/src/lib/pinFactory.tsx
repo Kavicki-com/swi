@@ -14,12 +14,16 @@ export type PinElement = { el: HTMLDivElement; root: Root }
 export function createPinElement({
   onClick,
   content,
+  title,
 }: {
   onClick: () => void
   content: ReactNode
+  /** Texto nativo de passar o mouse; sem ele o pino fica sem título. */
+  title?: string
 }): PinElement {
   const el = document.createElement('div')
   el.style.cursor = 'pointer'
+  if (title) el.title = title
   el.addEventListener('click', onClick)
   const root = createRoot(el)
   root.render(<SwiThemeProvider>{content}</SwiThemeProvider>)

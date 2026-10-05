@@ -3,7 +3,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { PositionMarkerDto } from '@/services/api/positions'
 import type { DashboardMapMarker } from '@/services/api/dashboard'
-import { applyMarker, useLivePositions } from './useLivePositions'
+import { applyMarker, mergeSnapshot, useLivePositions } from './useLivePositions'
+import { simulateReconnect } from '@/test-utils/simulateReconnect'
 
 const marker = (over: Partial<DashboardMapMarker> = {}): DashboardMapMarker => ({
   id: 'w1',
@@ -60,6 +61,25 @@ describe('applyMarker', () => {
   })
 })
 
+describe('mergeSnapshot', () => {
+  it('vale a lista do servidor: quem saiu dela sai do mapa, quem entrou entra', () => {
+    const next = mergeSnapshot([marker({ id: 'w2' })], [marker()])
+    expect(next.map((m) => m.id)).toEqual(['w2'])
+  })
+
+  it('pino que chegou pelo socket depois do retrato fica, para não voltar para trás', () => {
+    const fromSocket = marker({ lat: -23.6, recordedAt: '2026-07-25T12:00:10.000Z' })
+    const snapshot = marker({ lat: -23.5, recordedAt: '2026-07-25T12:00:05.000Z' })
+    expect(mergeSnapshot([snapshot], [fromSocket])[0]?.lat).toBe(-23.6)
+  })
+
+  it('retrato mais novo que o pino da tela substitui o pino', () => {
+    const onScreen = marker({ lat: -23.6, recordedAt: '2026-07-25T12:00:00.000Z' })
+    const snapshot = marker({ lat: -23.5, recordedAt: '2026-07-25T12:00:05.000Z' })
+    expect(mergeSnapshot([snapshot], [onScreen])[0]?.lat).toBe(-23.5)
+  })
+})
+
 describe('useLivePositions', () => {
   it('carrega a lista inicial via REST e aplica updates do socket ao vivo', async () => {
     listMock.mockResolvedValue({ data: [marker()], error: null })
@@ -91,5 +111,47 @@ describe('useLivePositions', () => {
     const before = unsubscribeMock.mock.calls.length
     unmount()
     expect(unsubscribeMock.mock.calls.length).toBe(before + 1)
+  })
+})
+
+describe('useLivePositions: volta da conexão', () => {
+  it('relê as posições pela API quando a conexão volta', async () => {
+    listMock.mockResolvedValueOnce({ data: [marker()], error: null })
+    subscribeMock.mockReturnValue(unsubscribeMock)
+    const { result } = renderHook(() => useLivePositions())
+    await waitFor(() => expect(result.current).toHaveLength(1))
+
+    listMock.mockResolvedValueOnce({
+      data: [marker({ lat: -23.6 }), marker({ id: 'w2' })],
+      error: null,
+    })
+    act(() => simulateReconnect())
+
+    await waitFor(() => expect(result.current).toHaveLength(2))
+    expect(result.current?.[0]?.lat).toBe(-23.6)
+  })
+
+  it('falha na releitura mantém os pinos que já estavam na tela', async () => {
+    listMock.mockResolvedValueOnce({ data: [marker()], error: null })
+    subscribeMock.mockReturnValue(unsubscribeMock)
+    const { result } = renderHook(() => useLivePositions())
+    await waitFor(() => expect(result.current).toHaveLength(1))
+
+    listMock.mockResolvedValueOnce({ data: null, error: { message: 'falhou' } })
+    await act(async () => simulateReconnect())
+
+    expect(listMock).toHaveBeenCalledTimes(2)
+    expect(result.current).toHaveLength(1)
+  })
+
+  it('depois de sair da tela, a volta da conexão não relê', async () => {
+    listMock.mockResolvedValue({ data: [], error: null })
+    subscribeMock.mockReturnValue(unsubscribeMock)
+    const { unmount } = renderHook(() => useLivePositions())
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1))
+    unmount()
+
+    act(() => simulateReconnect())
+    expect(listMock).toHaveBeenCalledTimes(1)
   })
 })

@@ -46,6 +46,11 @@ export type DashboardMapMarker = {
   lng: number
   status: Employee['status']
   avatarUri: string
+  /**
+   * ISO-8601 de quando o celular registrou a posição. Só os pinos que vêm de
+   * GET /positions trazem; é dele que sai o "última posição às".
+   */
+  recordedAt?: string
 }
 
 // Slot da tira de clima (weather-section). api/weather.ts produz

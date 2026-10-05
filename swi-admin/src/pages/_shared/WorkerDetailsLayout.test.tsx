@@ -189,4 +189,27 @@ describe('WorkerDetailsLayout', () => {
     await renderLayout({}, null)
     expect(screen.getByText('Sem posição ao vivo')).toBeInTheDocument()
   })
+
+  // Posição velha não muda o pino: a hora aparece em texto junto do minimapa.
+  it('mostra a hora da posição velha junto do minimapa quando recebe o texto', async () => {
+    await renderPage(
+      <WorkerDetailsLayout
+        worker={BASE}
+        position={{ lat: -23.55, lng: -46.63 }}
+        positionNote="Última posição às 14:32"
+        testID="worker-details"
+        onBack={() => {}}
+        backA11yLabel="Voltar"
+        onOpenFullMap={() => {}}
+        topRightAction={null}
+      />,
+      { route: '/employees/w1', path: '/employees/:id' },
+    )
+    expect(screen.getByText('Última posição às 14:32')).toBeInTheDocument()
+  })
+
+  it('sem o texto, nada de hora junto do minimapa', async () => {
+    await renderLayout({})
+    expect(screen.queryByText(/Última posição/)).toBeNull()
+  })
 })

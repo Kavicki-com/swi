@@ -3,6 +3,7 @@ import type { PositionMarkerDto } from '../api/positions'
 import { readToken } from '../api/http'
 
 import { getApiUrl } from '../api/apiConfig'
+import { connectionStatus } from '../realtime/connectionStatus'
 
 // Assina o canal de posições ao vivo (mesmo gateway do chat; o server emite
 // 'position' pros admins da org a cada heartbeat). Retorna cleanup — espelho
@@ -16,7 +17,9 @@ export function subscribePositions(cb: (m: PositionMarkerDto) => void): () => vo
     transports: ['polling', 'websocket'],
   })
   socket.on('position', cb)
+  const unwatch = connectionStatus.watch(socket)
   return () => {
+    unwatch()
     socket.close()
   }
 }

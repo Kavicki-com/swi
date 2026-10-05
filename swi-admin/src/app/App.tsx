@@ -19,6 +19,7 @@ import { RequireAuth } from './RequireAuth'
 import { AppLayout } from './AppLayout'
 import { RouteFallback } from './RouteFallback'
 import { ChatProvider } from '@/services/chat/ChatProvider'
+import { ConnectionNotice } from '@/components/ConnectionNotice'
 import { Placeholder } from './Placeholder'
 import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { Login } from '@/pages/auth/Login'
@@ -113,12 +114,16 @@ const UserProfile = lazy(() =>
 // chrome. As telas com sidebar suspendem na fronteira de dentro do AppLayout,
 // que é a mais próxima, então lá o menu e o header ficam na tela durante a
 // troca de página.
+//
+// O aviso de sem conexão também mora aqui, fora do Suspense: assim cobre as
+// telas com menu e as de tela cheia, e segue na tela durante a troca de página.
 function ChatShell() {
   return (
     <ChatProvider>
       <Suspense fallback={<RouteFallback />}>
         <Outlet />
       </Suspense>
+      <ConnectionNotice />
     </ChatProvider>
   )
 }

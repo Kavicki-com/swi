@@ -34,7 +34,9 @@ afterEach(() => {
 describe('toDashboardMarker', () => {
   // A posição chega sozinha do heartbeat; quem sabe a saúde é a telemetria.
   // Sem ela o pino é neutro, nunca verde por padrão.
-  it('mapeia o dto do backend e nasce neutro até a telemetria dizer o estado', () => {
+  // A hora em que o celular registrou a posição acompanha o pino: é dela que
+  // sai o "última posição às" do mapa e do detalhe.
+  it('mapeia o dto do backend com a hora da posição e nasce neutro até a telemetria dizer o estado', () => {
     expect(toDashboardMarker(dto())).toEqual({
       id: 'w1',
       name: 'João Silva',
@@ -42,6 +44,7 @@ describe('toDashboardMarker', () => {
       lng: -46.6333,
       status: 'offline',
       avatarUri: 'http://minio/presigned/w1.jpg',
+      recordedAt: '2026-07-25T12:00:00.000Z',
     })
   })
 })
@@ -108,6 +111,17 @@ describe('withHealthStatus', () => {
     })
     expect(result.map((m) => m.status)).toEqual(['good', 'low'])
     expect(result[1]).toMatchObject({ lat: -23.6, lng: -46.6333 })
+  })
+
+  // A idade da posição é informação neutra: posição de ontem com leitura atual
+  // segue com a cor do estado de saúde (decisão D2).
+  it('posição velha não muda a cor do pino', () => {
+    const old = toDashboardMarker(dto({ recordedAt: '2020-01-01T00:00:00.000Z' }))
+    const telemetry = {
+      observedAt: '2026-10-01T15:00:00.000Z',
+      workers: [adminWorker('w1', 'João Silva')],
+    }
+    expect(withHealthStatus([old], telemetry)[0]?.status).toBe('good')
   })
 
   it('sem a lista da telemetria todos ficam neutros', () => {

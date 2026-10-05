@@ -15,7 +15,12 @@ const {
 } = vi.hoisted(() => ({
   listConversations: vi.fn(),
   listDirectory: vi.fn(async () => ({ data: [], error: null })),
-  listMessages: vi.fn(async () => ({ data: [], error: null })),
+  listMessages: vi.fn(
+    async (): Promise<{ data: unknown[] | null; error: { message: string } | null }> => ({
+      data: [],
+      error: null,
+    }),
+  ),
   sendMessage: vi.fn(async () => ({ data: null, error: null })),
   markRead: vi.fn(async () => ({ data: null, error: null })),
   uploadImage: vi.fn(async () => 'chat/x.jpg'),
@@ -35,6 +40,7 @@ vi.mock('../api/upload', () => ({ uploadImage }))
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
 
 import { ChatProvider, useChat } from './ChatProvider'
+import { simulateReconnect } from '@/test-utils/simulateReconnect'
 
 // Sem clearMocks no config → limpa histórico entre testes (mantém impls default)
 // pra que not.toHaveBeenCalled / toHaveBeenCalledWith não vazem de um teste pro outro.
@@ -234,4 +240,118 @@ it('send com File: upload que lança → resolve { error }, sem rejeição', asy
   })
   expect(result).toEqual({ error: { message: 'boom' } })
   expect(sendMessage).not.toHaveBeenCalled()
+})
+
+describe('volta da conexão', () => {
+  const msg = (id: string) => ({
+    id,
+    conversationId: 'me#w1',
+    participants: ['me', 'w1'],
+    senderId: 'w1',
+    body: id,
+    imageUri: null,
+    sentAt: '2026-10-05T12:00:00.000Z',
+  })
+
+  it('relê as conversas sem passar por "carregando"', async () => {
+    listConversations.mockResolvedValueOnce({ data: [conv('me#w1')], error: null })
+    setup()
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+
+    listConversations.mockResolvedValueOnce({
+      data: [conv('me#w1'), conv('me#w2')],
+      error: null,
+    })
+    act(() => simulateReconnect())
+    expect(screen.getByTestId('status').textContent).toBe('ready')
+
+    await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('2'))
+    expect(screen.getByTestId('status').textContent).toBe('ready')
+  })
+
+  it('carga que falhou ao abrir se recupera quando a conexão volta', async () => {
+    listConversations.mockResolvedValueOnce({ data: null, error: { message: 'x' } })
+    setup()
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('error'))
+
+    listConversations.mockResolvedValueOnce({ data: [conv('me#w1')], error: null })
+    act(() => simulateReconnect())
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+    expect(screen.getByTestId('count').textContent).toBe('1')
+  })
+
+  it('falha na releitura mantém as conversas na tela', async () => {
+    listConversations.mockResolvedValueOnce({ data: [conv('me#w1')], error: null })
+    setup()
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+
+    listConversations.mockResolvedValueOnce({ data: null, error: { message: 'x' } })
+    await act(async () => simulateReconnect())
+
+    expect(listConversations).toHaveBeenCalledTimes(2)
+    expect(screen.getByTestId('status').textContent).toBe('ready')
+    expect(screen.getByTestId('count').textContent).toBe('1')
+  })
+
+  it('relê as mensagens da conversa aberta e marca como lidas', async () => {
+    listConversations.mockResolvedValue({ data: [conv('me#w1')], error: null })
+    setup()
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+    listMessages.mockResolvedValueOnce({ data: [msg('m1')], error: null })
+    await act(async () => {
+      await ctx.openConversation('me#w1')
+    })
+    markRead.mockClear()
+
+    listMessages.mockResolvedValueOnce({ data: [msg('m1'), msg('m2')], error: null })
+    act(() => simulateReconnect())
+
+    await waitFor(() => expect(ctx.messagesByConv['me#w1']).toHaveLength(2))
+    expect(markRead).toHaveBeenCalledWith('me#w1')
+  })
+
+  it('falha ao reler a conversa aberta não apaga as mensagens que estão na tela', async () => {
+    listConversations.mockResolvedValue({ data: [conv('me#w1')], error: null })
+    setup()
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+    listMessages.mockResolvedValueOnce({ data: [msg('m1')], error: null })
+    await act(async () => {
+      await ctx.openConversation('me#w1')
+    })
+
+    listMessages.mockResolvedValueOnce({ data: null, error: { message: 'x' } })
+    await act(async () => simulateReconnect())
+
+    expect(listMessages).toHaveBeenCalledTimes(2)
+    expect(ctx.messagesByConv['me#w1']).toHaveLength(1)
+  })
+
+  it('mensagem que chega pelo socket enquanto a releitura vem não some da conversa aberta', async () => {
+    listConversations.mockResolvedValue({ data: [conv('me#w1')], error: null })
+    setup()
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+    listMessages.mockResolvedValueOnce({ data: [msg('m1')], error: null })
+    await act(async () => {
+      await ctx.openConversation('me#w1')
+    })
+
+    let resolveLate!: (v: { data: unknown[]; error: null }) => void
+    listMessages.mockReturnValueOnce(new Promise((r) => (resolveLate = r)))
+    act(() => simulateReconnect())
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2))
+    act(() => socketCb({ ...msg('m2'), sentAt: '2026-10-05T12:01:00.000Z' }))
+
+    await act(async () => resolveLate({ data: [msg('m1')], error: null }))
+    expect(ctx.messagesByConv['me#w1']?.map((m) => m.id)).toEqual(['m1', 'm2'])
+  })
+
+  it('sem conversa aberta, a volta não relê mensagens', async () => {
+    listConversations.mockResolvedValue({ data: [conv('me#w1')], error: null })
+    setup()
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ready'))
+
+    await act(async () => simulateReconnect())
+    expect(listMessages).not.toHaveBeenCalled()
+  })
 })
