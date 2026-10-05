@@ -4,6 +4,7 @@ import { JourneyProvider, useJourney } from '../../services/journey/JourneyProvi
 import { EvacuationProvider } from '../../services/evacuation/EvacuationProvider';
 import { NotificationProvider } from '../../services/notifications/NotificationProvider';
 import { useJourneyTracking } from '../../services/positions/useTrackingLifecycle';
+import { useEndLiveOnLeave } from '../../services/live/useLiveBroadcast';
 import { SendQueueRoot } from '../../components/outbox/SendQueueRoot';
 
 // GPS em segundo plano: liga com a jornada em andamento ou pausada e desliga
@@ -12,6 +13,13 @@ import { SendQueueRoot } from '../../components/outbox/SendQueueRoot';
 function JourneyTrackingRoot({ userId }: { userId: string }) {
   const { state, loadStatus } = useJourney();
   useJourneyTracking(userId, state, loadStatus === 'ready' || loadStatus === 'empty');
+  return null;
+}
+
+// Câmera ao vivo: segue em qualquer tela da área autenticada e acaba ao sair
+// da conta, quando esta árvore desmonta. Null-render.
+function LiveBroadcastRoot() {
+  useEndLiveOnLeave();
   return null;
 }
 
@@ -41,6 +49,7 @@ export default function AppLayout() {
   return (
     <JourneyProvider>
       <JourneyTrackingRoot userId={user.id} />
+      <LiveBroadcastRoot />
       <EvacuationProvider>
         <NotificationProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />

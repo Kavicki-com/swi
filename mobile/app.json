@@ -18,7 +18,7 @@
       "appleTeamId": "822T2N8RMU",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Permite tirar fotos para anexar a tarefas e relatórios.",
+        "NSCameraUsageDescription": "Permite tirar fotos para anexar a tarefas e relatórios e, quando você liga a câmera na tela inicial, transmitir a imagem ao vivo para os administradores da sua empresa.",
         "NSPhotoLibraryUsageDescription": "Permite selecionar fotos da galeria para anexar a tarefas e relatórios.",
         "NSHealthShareUsageDescription": "O SWI lê frequência cardíaca, energia ativa, passos, distância e oxigenação do sangue do Apple Watch, e a última medição de pressão arterial e de temperatura corporal registrada no app Saúde, para o monitoramento de segurança em campo.",
         "NSHealthUpdateUsageDescription": "O SWI registra a sessão de monitoramento do Apple Watch como um treino para manter a coleta contínua."
@@ -40,6 +40,10 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {
@@ -55,7 +59,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Permite selecionar fotos da galeria para anexar a tarefas e relatórios.",
-          "cameraPermission": "Permite tirar fotos para anexar a tarefas e relatórios."
+          "cameraPermission": "Permite tirar fotos para anexar a tarefas e relatórios e, quando você liga a câmera na tela inicial, transmitir a imagem ao vivo para os administradores da sua empresa."
         }
       ],
       [
@@ -69,7 +73,14 @@
         }
       ],
       "expo-secure-store",
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Permite tirar fotos para anexar a tarefas e relatórios e, quando você liga a câmera na tela inicial, transmitir a imagem ao vivo para os administradores da sua empresa.",
+          "microphonePermission": "O SWI não usa o microfone. A transmissão ao vivo da câmera é só de imagem."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

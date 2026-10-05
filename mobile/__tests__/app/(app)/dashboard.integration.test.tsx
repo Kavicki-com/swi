@@ -71,6 +71,15 @@ jest.mock('../../../services/weather/WeatherProvider', () => ({
 
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
 
+// A câmera ao vivo é um serviço próprio, testado à parte. Aqui importa o que a
+// tela mostra com cada estado dele e para onde vão os toques.
+let mockLive: { live: boolean; notice: 'no-permission' | 'failed' | null } = { live: false, notice: null };
+const mockToggleLive = jest.fn();
+const mockDismissLive = jest.fn();
+jest.mock('../../../services/live/useLiveBroadcast', () => ({
+  useLiveBroadcast: () => ({ ...mockLive, toggle: mockToggleLive, dismissNotice: mockDismissLive }),
+}));
+
 // --- Helpers -----------------------------------------------------------------
 
 // Mesmas métricas das outras suítes de tela (reports, chat): iPhone com notch.
@@ -152,6 +161,9 @@ beforeEach(() => {
   mockUnreadCount = 0;
   mockReports = [];
   mockClima = { snapshot: null, activeAlert: null };
+  mockLive = { live: false, notice: null };
+  mockToggleLive.mockClear();
+  mockDismissLive.mockClear();
 });
 
 // --- Leitura da telemetria ---------------------------------------------------
@@ -302,19 +314,82 @@ describe('dashboard: navegação', () => {
     expect(mockPush).toHaveBeenCalledWith(rota);
   });
 
-  it('a câmera alterna o próprio estado sem navegar', async () => {
-    const tree = await render();
-    expect(porRotulo(tree, 'Câmera ativa')).toBeDefined();
-    await tocar(tree, 'Câmera ativa');
-    expect(porRotulo(tree, 'Câmera inativa')).toBeDefined();
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
   it('ajuda urgente abre o modal sem trocar de rota', async () => {
     const tree = await render();
     await tocar(tree, 'Ajuda urgente');
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+// --- Câmera ao vivo ----------------------------------------------------------
+
+const SEM_PERMISSAO = 'Sem acesso à câmera. Libere a câmera para o SWI nos ajustes do aparelho.';
+const FALHA_AO_LIGAR = 'Não foi possível ligar a câmera ao vivo. Confira a conexão e tente de novo.';
+
+/** Os nós nativos rotulados "Câmera ativa": o botão (papel de botão) e o ponto verde. */
+const marcadosAtivos = (tree: ReactTestRenderer) =>
+  tree.root.findAll((n) => n.props?.accessibilityLabel === 'Câmera ativa' && typeof n.type === 'string');
+
+/** O ponto verde: o nó nativo rotulado "Câmera ativa" que não é o botão. */
+const pontoVerde = (tree: ReactTestRenderer) =>
+  marcadosAtivos(tree).filter((n) => n.props.accessibilityRole !== 'button');
+
+/** O Toast do DS com o título dado. */
+const toastCom = (tree: ReactTestRenderer, title: string) =>
+  tree.root.findAll((n) => n.props?.title === title && typeof n.props?.onClose === 'function')[0];
+
+describe('dashboard: câmera ao vivo', () => {
+  it('sem transmissão, a câmera aparece inativa e sem ponto verde', async () => {
+    const tree = await render();
+    expect(porRotulo(tree, 'Câmera inativa')).toBeDefined();
+    expect(marcadosAtivos(tree)).toHaveLength(0);
+    expect(pontoVerde(tree)).toHaveLength(0);
+  });
+
+  it('tocar a câmera liga ou desliga a transmissão, sem navegar', async () => {
+    const tree = await render();
+    await tocar(tree, 'Câmera inativa');
+    expect(mockToggleLive).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('com a transmissão aceita pelo servidor, a câmera aparece ativa com o ponto verde', async () => {
+    mockLive = { live: true, notice: null };
+    const tree = await render();
+    expect(porRotulo(tree, 'Câmera inativa')).toBeUndefined();
+    expect(pontoVerde(tree)).toHaveLength(1);
+    await tocar(tree, 'Câmera ativa');
+    expect(mockToggleLive).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem aviso, nenhum Toast da câmera', async () => {
+    const tree = await render();
+    expect(toastCom(tree, SEM_PERMISSAO)).toBeUndefined();
+    expect(toastCom(tree, FALHA_AO_LIGAR)).toBeUndefined();
+  });
+
+  it('sem permissão, o Toast pede para liberar a câmera nos ajustes', async () => {
+    mockLive = { live: false, notice: 'no-permission' };
+    const tree = await render();
+    expect(toastCom(tree, SEM_PERMISSAO).props.variant).toBe('warning');
+    expect(textoDa(tree)).toContain(SEM_PERMISSAO);
+  });
+
+  it('falha ao ligar, o Toast pede para conferir a conexão', async () => {
+    mockLive = { live: false, notice: 'failed' };
+    const tree = await render();
+    expect(toastCom(tree, FALHA_AO_LIGAR).props.variant).toBe('error');
+    expect(textoDa(tree)).toContain(FALHA_AO_LIGAR);
+  });
+
+  it('fechar o Toast tira o aviso pelo serviço', async () => {
+    mockLive = { live: false, notice: 'failed' };
+    const tree = await render();
+    await act(async () => {
+      toastCom(tree, FALHA_AO_LIGAR).props.onClose();
+    });
+    expect(mockDismissLive).toHaveBeenCalledTimes(1);
   });
 });
 
