@@ -16,11 +16,14 @@ export const QUEUE_FULL_TITLE =
   'Há muitos envios aguardando conexão. Tente de novo quando o sinal voltar.';
 
 /**
- * Toast único nas telas da jornada enquanto houver ação dela esperando o
- * sinal: a tela já mudou, o servidor ainda não sabe.
+ * Aviso geral de sem conexão com envio esperando o sinal: a tela já mudou, o
+ * servidor ainda não sabe.
  */
-export const JOURNEY_WAITING_TITLE =
+export const OFFLINE_PENDING_TITLE =
   'Sem conexão. Suas ações serão enviadas quando o sinal voltar.';
+
+/** Aviso geral de sem conexão sem envio esperando. */
+export const OFFLINE_TITLE = 'Sem conexão. As informações na tela podem estar desatualizadas.';
 
 /** Título do Toast de recusa: diz o que não foi enviado. */
 export function refusalTitle(item: SendItem): string {

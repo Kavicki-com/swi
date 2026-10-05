@@ -51,6 +51,27 @@ export function applyMessage(cs: Conversation[], msg: Message): Conversation[] {
   return sortByRecent(next);
 }
 
+// Retrato do servidor de uma conversa, somado às mensagens que chegaram pelo
+// socket depois dele: elas não somem só porque a resposta veio atrasada. O que
+// o retrato já traz vale como ele traz (edição incluída).
+export function withLaterArrivals(snapshot: Message[], current: Message[]): Message[] {
+  const newest = snapshot.reduce((max, m) => (m.sentAt > max ? m.sentAt : max), '');
+  const known = new Set(snapshot.map((m) => m.id));
+  return [...snapshot, ...current.filter((m) => !known.has(m.id) && m.sentAt > newest)];
+}
+
+// A lista do servidor, com o cartão da tela onde ele é mais novo: o socket o
+// atualizou enquanto a resposta vinha. A lista de conversas é a do servidor.
+export function withNewerCards(snapshot: Conversation[], current: Conversation[]): Conversation[] {
+  const onScreen = new Map(current.map((c) => [c.id, c]));
+  return sortByRecent(
+    snapshot.map((c) => {
+      const mine = onScreen.get(c.id);
+      return mine && (mine.lastMessageAt ?? '') > (c.lastMessageAt ?? '') ? mine : c;
+    }),
+  );
+}
+
 export function markRead(cs: Conversation[], conversationId: string, myId: string): Conversation[] {
   return cs.map((c) =>
     c.id === conversationId ? { ...c, unreadBy: { ...c.unreadBy, [myId]: 0 } } : c,

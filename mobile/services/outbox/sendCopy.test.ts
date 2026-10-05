@@ -1,5 +1,6 @@
 import {
-  JOURNEY_WAITING_TITLE,
+  OFFLINE_PENDING_TITLE,
+  OFFLINE_TITLE,
   PENDING_LABEL,
   QUEUE_FULL_TITLE,
   REFUSED_LABEL,
@@ -41,8 +42,12 @@ describe('textos da fila de envios', () => {
     expect(refusalTitle(comentario)).toBe('Não foi possível enviar o comentário.');
   });
 
-  it('aviso da jornada com ação esperando o sinal', () => {
-    expect(JOURNEY_WAITING_TITLE).toBe('Sem conexão. Suas ações serão enviadas quando o sinal voltar.');
+  it('aviso de sem conexão com envio esperando o sinal', () => {
+    expect(OFFLINE_PENDING_TITLE).toBe('Sem conexão. Suas ações serão enviadas quando o sinal voltar.');
+  });
+
+  it('aviso de sem conexão sem envio esperando', () => {
+    expect(OFFLINE_TITLE).toBe('Sem conexão. As informações na tela podem estar desatualizadas.');
   });
 
   it('título da recusa de uma ação da jornada diz o que não valeu', () => {

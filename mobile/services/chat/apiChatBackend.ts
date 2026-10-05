@@ -5,6 +5,7 @@ import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 import { getUserId } from '../api/session';
 import { getApiUrl } from '../auth/apiConfig';
+import { connectionStatus } from '../realtime/connectionStatus';
 
 const TOKEN_KEY = 'swi.auth.token';
 // Ids de conversa contêm '#' (a#b): em URL isso é fragmento — precisa encodar.
@@ -38,6 +39,7 @@ export const apiChatBackend: ChatBackend = {
 
   subscribe(conversationId, cb) {
     let socket: Socket | null = null;
+    let unwatch: (() => void) | null = null;
     let closed = false;
     (async () => {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
@@ -49,10 +51,11 @@ export const apiChatBackend: ChatBackend = {
         auth: { token },
         transports: ['polling', 'websocket'],
       });
+      unwatch = connectionStatus.watch(socket);
       socket.on('message', (m: Message) => {
         if (conversationId === null || m.conversationId === conversationId) cb(m);
       });
     })();
-    return () => { closed = true; socket?.close(); };
+    return () => { closed = true; unwatch?.(); socket?.close(); };
   },
 };

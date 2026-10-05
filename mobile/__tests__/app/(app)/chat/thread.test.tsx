@@ -37,6 +37,7 @@ const mockChat = {
   keyFor: (id: string) => `c-me-${id}`,
   messagesFor: jest.fn(),
   openConversation: jest.fn(),
+  closeConversation: jest.fn(),
   send: jest.fn(),
   outgoingFor: jest.fn(),
   conversations: [] as Conversation[],
@@ -184,6 +185,16 @@ describe('Thread do chat: estados de carregamento', () => {
   it('abre a conversa pelo id derivado do contato', async () => {
     await render();
     expect(mockChat.openConversation).toHaveBeenCalledWith('c-me-w1');
+  });
+
+  // Sem isso a conversa seguia "aberta" com a pessoa já na lista, e a
+  // mensagem nova dela era marcada como lida sem ninguém ver.
+  it('sair da tela fecha a conversa, e só ao sair', async () => {
+    const tree = await render();
+    expect(mockChat.closeConversation).not.toHaveBeenCalled();
+
+    act(() => tree.unmount());
+    expect(mockChat.closeConversation).toHaveBeenCalledWith('c-me-w1');
   });
 });
 

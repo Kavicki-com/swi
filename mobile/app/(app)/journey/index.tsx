@@ -18,7 +18,7 @@ import { JourneyListState } from '../../../components/journey/JourneyState';
 import { useJourney } from '../../../services/journey/JourneyProvider';
 import { useProfile } from '../../../services/profile/ProfileProvider';
 import { elapsedSeconds, formatDuration } from '../../../services/journey/progress';
-import { JOURNEY_WAITING_TITLE, QUEUE_FULL_TITLE } from '../../../services/outbox/sendCopy';
+import { QUEUE_FULL_TITLE } from '../../../services/outbox/sendCopy';
 import type { EnqueueResult } from '../../../services/outbox/sendQueue';
 
 // Journey planner com 3 layouts conditional via JourneyProvider state:
@@ -58,8 +58,6 @@ export default function Journey() {
     endJourney,
     load,
     refresh,
-    waitingForSignal,
-    dismissWaiting,
   } = useJourney();
   const { profile } = useProfile();
 
@@ -217,9 +215,6 @@ export default function Journey() {
             />
           </View>
 
-          {waitingForSignal ? (
-            <Toast variant="warning" title={JOURNEY_WAITING_TITLE} onClose={dismissWaiting} />
-          ) : null}
           {queueFull ? (
             <Toast variant="warning" title={QUEUE_FULL_TITLE} onClose={() => setQueueFull(false)} />
           ) : null}

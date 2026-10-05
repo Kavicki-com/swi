@@ -1,5 +1,7 @@
+import { AppState, type AppStateStatus } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { ChatProvider, useChat } from './ChatProvider';
+import { connectionStatus } from '../realtime/connectionStatus';
 import type { Conversation, Message } from './types';
 import { createSendQueue, type SendQueue } from '../outbox/sendQueue';
 import { createMemorySendStorage, createSendOutbox, MAX_QUEUED_SENDS } from '../outbox/sendOutbox';
@@ -63,6 +65,9 @@ function Sonda() {
   return null;
 }
 
+// Toda árvore montada é desmontada ao fim do teste: uma árvore viva segue
+// ouvindo a volta da conexão e trocaria o `chat` do teste seguinte.
+const montadas: ReturnType<typeof create>[] = [];
 async function montar() {
   let tree!: ReturnType<typeof create>;
   await act(async () => {
@@ -72,8 +77,15 @@ async function montar() {
       </ChatProvider>,
     );
   });
+  montadas.push(tree);
   return tree;
 }
+
+afterEach(() => {
+  act(() => {
+    for (const tree of montadas.splice(0)) tree.unmount();
+  });
+});
 
 /** Deixa a rodada de envio em andamento terminar e o React assentar. */
 const assentar = () =>
@@ -420,5 +432,276 @@ describe('ChatProvider: abrir a conversa', () => {
     await act(async () => {
       await expect(chat.openConversation(CONV)).rejects.toThrow();
     });
+  });
+});
+
+describe('ChatProvider: fechar a conversa', () => {
+  // Antes a conversa nunca fechava: de volta à lista, a mensagem nova da
+  // última conversa aberta era marcada como lida sem ninguém ver.
+  it('mensagem que chega depois de a tela sair da conversa conta como não lida', async () => {
+    await montar();
+    await act(async () => {
+      await chat.openConversation(CONV);
+    });
+    mockBackend.markRead.mockClear();
+
+    act(() => chat.closeConversation(CONV));
+    act(() => socket(doServidor('m9', 'tudo certo?', 'w1')));
+
+    expect(mockBackend.markRead).not.toHaveBeenCalled();
+    expect(chat.conversations[0].unreadBy.me).toBe(1);
+  });
+
+  // Ao trocar de conversa a tela nova abre antes de a antiga sair.
+  it('fechar uma conversa que não é mais a aberta não fecha a outra', async () => {
+    await montar();
+    await act(async () => {
+      await chat.openConversation('me#w2');
+      await chat.openConversation(CONV);
+    });
+    mockBackend.markRead.mockClear();
+
+    act(() => chat.closeConversation('me#w2'));
+    act(() => socket(doServidor('m9', 'tudo certo?', 'w1')));
+
+    expect(mockBackend.markRead).toHaveBeenCalledWith(CONV);
+  });
+});
+
+describe('ChatProvider: releitura', () => {
+  let appStateHandler: ((status: AppStateStatus) => void) | null;
+  let reconectar: () => Promise<void>;
+  let unwatch: () => void;
+
+  beforeEach(() => {
+    // Os testes daqui trocam as respostas do backend; cada um começa das padrão.
+    mockBackend.listConversations.mockImplementation(async () => [conversa()]);
+    mockBackend.listDirectory.mockImplementation(async () => []);
+    mockBackend.listMessages.mockImplementation(async () => []);
+    appStateHandler = null;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
+      appStateHandler = handler as (status: AppStateStatus) => void;
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+    // Socket de mentira no armazém de verdade: cair e voltar avisa a volta.
+    const handlers = new Map<string, (reason?: unknown) => void>();
+    unwatch = connectionStatus.watch({
+      on: (event: string, h: (reason?: unknown) => void) => handlers.set(event, h),
+      off: (event: string) => handlers.delete(event),
+    });
+    handlers.get('connect')?.();
+    reconectar = () =>
+      act(async () => {
+        handlers.get('disconnect')?.('transport close');
+        handlers.get('connect')?.();
+      });
+  });
+
+  afterEach(() => {
+    unwatch();
+    jest.restoreAllMocks();
+  });
+
+  const estados: string[] = [];
+  function Estados() {
+    estados.push(useChat().loadStatus);
+    return null;
+  }
+
+  it('a conexão que volta relê a lista e o diretório sem passar por "carregando"', async () => {
+    await act(async () => {
+      montadas.push(
+        create(
+          <ChatProvider>
+            <Estados />
+            <Sonda />
+          </ChatProvider>,
+        ),
+      );
+    });
+    estados.length = 0;
+    mockBackend.listConversations.mockResolvedValue([conversa({ lastMessageBody: 'depois da queda' })]);
+    mockBackend.listDirectory.mockResolvedValue([]);
+
+    await reconectar();
+
+    expect(chat.conversations[0].lastMessageBody).toBe('depois da queda');
+    expect(estados).not.toContain('loading');
+  });
+
+  it('a volta ao primeiro plano relê a lista', async () => {
+    await montar();
+    mockBackend.listConversations.mockResolvedValue([conversa({ lastMessageBody: 'na volta' })]);
+
+    await act(async () => appStateHandler?.('active'));
+
+    expect(chat.conversations[0].lastMessageBody).toBe('na volta');
+  });
+
+  it('releitura que falha deixa a lista como está', async () => {
+    await montar();
+    mockBackend.listConversations.mockRejectedValueOnce(semRede());
+
+    await reconectar();
+
+    expect(chat.loadStatus).toBe('ready');
+    expect(chat.conversations[0].lastMessageBody).toBe('antes');
+  });
+
+  it('cartão atualizado pelo socket enquanto a lista vinha não volta atrás', async () => {
+    await montar();
+    let responder!: (cs: Conversation[]) => void;
+    mockBackend.listConversations.mockReturnValueOnce(new Promise((r) => (responder = r)));
+
+    await reconectar();
+    act(() => socket(doServidor('m9', 'chegou no meio', 'w1')));
+    await act(async () => responder([conversa()]));
+
+    expect(chat.conversations[0].lastMessageBody).toBe('chegou no meio');
+  });
+
+  it('relê a conversa na tela e marca como lida o que chegou durante a queda', async () => {
+    await montar();
+    await act(async () => {
+      await chat.openConversation(CONV);
+    });
+    mockBackend.markRead.mockClear();
+    mockBackend.listConversations.mockResolvedValue([conversa({ unreadBy: { me: 1 } })]);
+    mockBackend.listMessages.mockResolvedValueOnce([doServidor('m2', 'durante a queda', 'w1')]);
+
+    await reconectar();
+
+    expect(corpos()).toEqual(['durante a queda']);
+    expect(mockBackend.markRead).toHaveBeenCalledWith(CONV);
+    expect(chat.conversations[0].unreadBy.me).toBe(0);
+  });
+
+  it('a mensagem que o socket entregou enquanto o histórico vinha não some', async () => {
+    mockBackend.listMessages.mockResolvedValueOnce([doServidor('m1', 'oi', 'w1')]);
+    await montar();
+    await act(async () => {
+      await chat.openConversation(CONV);
+    });
+
+    let responder!: (ms: Message[]) => void;
+    mockBackend.listMessages.mockReturnValueOnce(new Promise((r) => (responder = r)));
+    await reconectar();
+    act(() => socket({ ...doServidor('m3', 'no meio', 'w1'), sentAt: '2026-10-04T12:05:00.000Z' }));
+    await act(async () =>
+      responder([doServidor('m1', 'oi', 'w1'), doServidor('m2', 'durante a queda', 'w1')]),
+    );
+
+    expect(corpos()).toEqual(['oi', 'durante a queda', 'no meio']);
+  });
+
+  it('a mensagem relida não entra de novo quando o socket a repete', async () => {
+    await montar();
+    await act(async () => {
+      await chat.openConversation(CONV);
+    });
+    mockBackend.listMessages.mockResolvedValueOnce([doServidor('m2', 'durante a queda', 'w1')]);
+
+    await reconectar();
+    act(() => socket(doServidor('m2', 'durante a queda', 'w1')));
+
+    expect(corpos()).toEqual(['durante a queda']);
+  });
+
+  it('releitura mais antiga que chega depois da mais nova é descartada', async () => {
+    await montar();
+    let primeira!: (cs: Conversation[]) => void;
+    mockBackend.listConversations
+      .mockReturnValueOnce(new Promise((r) => (primeira = r)))
+      .mockResolvedValueOnce([conversa({ lastMessageBody: 'mais nova' })]);
+
+    await reconectar();
+    await reconectar();
+    await act(async () => primeira([conversa({ lastMessageBody: 'mais antiga' })]));
+
+    expect(chat.conversations[0].lastMessageBody).toBe('mais nova');
+  });
+
+  it('releitura mais nova que falha não joga fora a resposta da anterior', async () => {
+    await montar();
+    let primeira!: (cs: Conversation[]) => void;
+    mockBackend.listConversations
+      .mockReturnValueOnce(new Promise((r) => (primeira = r)))
+      .mockRejectedValueOnce(semRede());
+
+    await reconectar();
+    await reconectar();
+    await act(async () => primeira([conversa({ lastMessageBody: 'da primeira' })]));
+
+    expect(chat.conversations[0].lastMessageBody).toBe('da primeira');
+  });
+
+  // A volta ao primeiro plano e a volta da conexão disparam duas releituras.
+  it('histórico mais velho que chega depois do mais novo não desfaz a edição', async () => {
+    await montar();
+    await act(async () => {
+      await chat.openConversation(CONV);
+    });
+    let primeira!: (ms: Message[]) => void;
+    mockBackend.listMessages
+      .mockReturnValueOnce(new Promise((r) => (primeira = r)))
+      .mockResolvedValueOnce([doServidor('m1', 'editada', 'w1')]);
+
+    await reconectar();
+    await reconectar();
+    await act(async () => primeira([doServidor('m1', 'original', 'w1')]));
+
+    expect(corpos()).toEqual(['editada']);
+  });
+
+  it('abrir a conversa não apaga o histórico mais novo que a releitura já trouxe', async () => {
+    await montar();
+    let doAbrir!: (ms: Message[]) => void;
+    mockBackend.listMessages
+      .mockReturnValueOnce(new Promise((r) => (doAbrir = r)))
+      .mockResolvedValueOnce([doServidor('m1', 'oi', 'w1'), doServidor('m2', 'mais nova', 'w1')]);
+
+    let aberta!: Promise<void>;
+    act(() => {
+      aberta = chat.openConversation(CONV);
+    });
+    await reconectar();
+    await act(async () => {
+      doAbrir([doServidor('m1', 'oi', 'w1')]);
+      await aberta;
+    });
+
+    expect(corpos()).toEqual(['oi', 'mais nova']);
+  });
+
+  it('conversa que a tela fechou não é relida nem marcada como lida', async () => {
+    await montar();
+    await act(async () => {
+      await chat.openConversation(CONV);
+    });
+    act(() => chat.closeConversation(CONV));
+    mockBackend.listMessages.mockClear();
+    mockBackend.markRead.mockClear();
+
+    await reconectar();
+
+    expect(mockBackend.listMessages).not.toHaveBeenCalled();
+    expect(mockBackend.markRead).not.toHaveBeenCalled();
+  });
+
+  it('a pessoa trocou de conversa enquanto o histórico vinha: a resposta não entra', async () => {
+    await montar();
+    await act(async () => {
+      await chat.openConversation(CONV);
+    });
+    let responder!: (ms: Message[]) => void;
+    mockBackend.listMessages.mockReturnValueOnce(new Promise((r) => (responder = r)));
+
+    await reconectar();
+    act(() => chat.closeConversation(CONV));
+    mockBackend.markRead.mockClear();
+    await act(async () => responder([doServidor('m2', 'durante a queda', 'w1')]));
+
+    expect(corpos()).toEqual([]);
+    expect(mockBackend.markRead).not.toHaveBeenCalled();
   });
 });

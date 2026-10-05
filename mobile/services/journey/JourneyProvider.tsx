@@ -21,6 +21,7 @@ import { getSendQueue } from '../outbox/getSendQueue';
 import { isJourneyItem, type JourneyItem } from '../outbox/sendOutbox';
 import type { EnqueueResult, SendDraft } from '../outbox/sendQueue';
 import { useSendQueueEvent, useSendQueueState } from '../outbox/useSendQueue';
+import { useOnReconnect } from '../realtime/useConnection';
 
 // Shared journey state, agora backed pelo backend (services/journey). Consumido
 // por:
@@ -74,10 +75,6 @@ interface JourneyContextValue {
   endJourney: () => Promise<EnqueueResult>;
   /** Rejeita quando a foto é recusada na entrada (sumiu, ou passa de 15 MB). */
   addTaskPhoto: (task: TaskRef, uri: string) => Promise<EnqueueResult>;
-  /** Há ação da jornada esperando o sinal, e a pessoa não fechou o aviso. */
-  waitingForSignal: boolean;
-  /** Fecha o aviso de sem conexão até a fila esvaziar. */
-  dismissWaiting: () => void;
 }
 
 const JourneyContext = createContext<JourneyContextValue | null>(null);
@@ -133,7 +130,6 @@ export function JourneyProvider({ children }: PropsWithChildren) {
   const [fetchStatus, setFetchStatus] = useState<LoadStatus>('idle');
   const [snapshot, setSnapshot] = useState<JourneySnapshot>({ journey: IDLE_SESSION, tasks: [] });
   const [settled, setSettled] = useState<SettledAction[]>([]);
-  const [waitingDismissed, setWaitingDismissed] = useState(false);
   const queue = useSendQueueState();
 
   // `settleSeq` numera as confirmações; `loadSeq` numera as leituras, e
@@ -208,6 +204,10 @@ export function JourneyProvider({ children }: PropsWithChildren) {
     return () => sub.remove();
   }, [refresh]);
 
+  // 2b) conexão que volta com o app aberto: a notificação de jornada que o
+  //     servidor mandou com o socket caído se perdeu.
+  useOnReconnect(() => { void refresh(); });
+
   // Confirmada, a ação sai da fila, mas a leitura que está na tela ainda não a
   // traz: ela continua valendo até a próxima leitura. Sem isso a tela voltaria
   // ao estado de antes por um instante, e o GPS desligaria e religaria.
@@ -243,7 +243,6 @@ export function JourneyProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (hadPending.current && !hasPending) void refresh();
     hadPending.current = hasPending;
-    if (!hasPending) setWaitingDismissed(false);
   }, [hasPending, refresh]);
 
   const view = useMemo(() => {
@@ -284,11 +283,6 @@ export function JourneyProvider({ children }: PropsWithChildren) {
     [enqueue],
   );
 
-  // O aviso só sai depois de uma tentativa falhar: com sinal a ação também
-  // passa pela fila, e o aviso piscaria a cada toque.
-  const waitingForSignal = hasPending && queue.stalled && !waitingDismissed;
-  const dismissWaiting = useCallback(() => setWaitingDismissed(true), []);
-
   const value = useMemo<JourneyContextValue>(
     () => ({
       loadStatus,
@@ -307,8 +301,6 @@ export function JourneyProvider({ children }: PropsWithChildren) {
       resumeJourney,
       endJourney,
       addTaskPhoto,
-      waitingForSignal,
-      dismissWaiting,
     }),
     [
       loadStatus,
@@ -323,8 +315,6 @@ export function JourneyProvider({ children }: PropsWithChildren) {
       resumeJourney,
       endJourney,
       addTaskPhoto,
-      waitingForSignal,
-      dismissWaiting,
     ],
   );
 

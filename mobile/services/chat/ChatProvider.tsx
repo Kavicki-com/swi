@@ -2,9 +2,17 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
   type PropsWithChildren,
 } from 'react';
+import { AppState } from 'react-native';
 import type { Conversation, Contact, Message } from './types';
 import { getChatBackend } from './getChatBackend';
-import { applyMessage, markRead as markReadReducer, conversationKey } from './chatReducers';
+import {
+  applyMessage,
+  markRead as markReadReducer,
+  conversationKey,
+  withLaterArrivals,
+  withNewerCards,
+} from './chatReducers';
+import { useOnReconnect } from '../realtime/useConnection';
 import { getSendQueue } from '../outbox/getSendQueue';
 import type { EnqueueResult } from '../outbox/sendQueue';
 import { useSendQueueEvent, useSendQueueState } from '../outbox/useSendQueue';
@@ -29,6 +37,8 @@ interface ChatContextValue {
   load: () => Promise<void>;
   messagesFor: (conversationId: string) => Message[];
   openConversation: (conversationId: string) => Promise<void>;
+  /** A tela saiu da conversa: o que chegar dela volta a contar como não lido. */
+  closeConversation: (conversationId: string) => void;
   /** Põe a mensagem na fila de envios. `full`: a fila está no teto e ela não entrou. */
   send: (conversationId: string, body: string, imageUri?: string) => Promise<EnqueueResult>;
   /** As minhas mensagens da conversa que ainda não são do servidor, na ordem. */
@@ -158,11 +168,85 @@ export function ChatProvider({ children }: PropsWithChildren) {
     if (event.type === 'sent') receive(event.result as Message);
   });
 
+  // A conversa só fica aberta enquanto a tela dela estiver montada. Ao trocar
+  // de conversa a tela nova abre antes de a antiga sair: fechar a antiga não
+  // fecha a nova.
+  const closeConversation = useCallback((conversationId: string) => {
+    if (openConvRef.current === conversationId) openConvRef.current = null;
+  }, []);
+
+  // Releitura de fundo (conexão que volta, volta ao primeiro plano): o que o
+  // socket entregaria nesse intervalo se perdeu. Não passa por "carregando", e
+  // uma falha deixa a tela como está. O que o socket entregou enquanto a
+  // resposta vinha fica: cartão mais novo que o do servidor e mensagem
+  // posterior ao histórico relido.
+  // O histórico da conversa na tela é lido por dois caminhos, abrir e reler, e
+  // a volta ao primeiro plano junto com a volta da conexão dispara duas
+  // releituras. As leituras são numeradas: a mais velha que chega depois da
+  // mais nova é descartada, senão traria de volta o texto antes da edição. A
+  // que vale ainda soma o que o socket entregou depois dela.
+  const historyIssued = useRef(0);
+  const historyApplied = useRef(0);
+  const applyHistory = useCallback((conversationId: string, seq: number, msgs: Message[]) => {
+    if (seq < historyApplied.current) return;
+    historyApplied.current = seq;
+    for (const m of msgs) seenRef.current.add(m.id);
+    setMessagesByConv((prev) => ({
+      ...prev,
+      [conversationId]: withLaterArrivals(msgs, prev[conversationId] ?? []),
+    }));
+  }, []);
+
+  // Resposta de releitura mais antiga que a última aplicada é descartada: ela
+  // traria a lista de antes.
+  const listIssued = useRef(0);
+  const listApplied = useRef(0);
+  const refresh = useCallback(async () => {
+    const seq = (listIssued.current += 1);
+    try {
+      const [cs, dir] = await Promise.all([backend.listConversations(), backend.listDirectory()]);
+      if (seq < listApplied.current) return;
+      listApplied.current = seq;
+      setConversations((prev) => withNewerCards(cs, prev));
+      setDirectory(dir);
+      setLoadStatus(cs.length ? 'ready' : 'empty');
+    } catch {
+      // Fica a lista que está na tela.
+    }
+
+    const open = openConvRef.current;
+    if (!open) return;
+    const historySeq = (historyIssued.current += 1);
+    let msgs: Message[];
+    try {
+      msgs = await backend.listMessages(open);
+    } catch {
+      return;
+    }
+    // A pessoa saiu da conversa enquanto a resposta vinha.
+    if (openConvRef.current !== open) return;
+    applyHistory(open, historySeq, msgs);
+    try {
+      await backend.markRead(open);
+      setConversations((prev) => markReadReducer(prev, open, myId));
+    } catch {
+      // A próxima abertura tenta de novo.
+    }
+  }, [backend, myId, applyHistory]);
+
+  useOnReconnect(() => { void refresh(); });
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (status) => {
+      if (status === 'active') void refresh();
+    });
+    return () => sub.remove();
+  }, [refresh]);
+
   const openConversation = useCallback(async (conversationId: string) => {
     openConvRef.current = conversationId;
+    const seq = (historyIssued.current += 1);
     const msgs = await backend.listMessages(conversationId);
-    for (const m of msgs) seenRef.current.add(m.id);
-    setMessagesByConv((prev) => ({ ...prev, [conversationId]: msgs }));
+    applyHistory(conversationId, seq, msgs);
     // Marcar como lida é melhor esforço: se falhar, a conversa já carregada
     // continua na tela e só o contador de não lidas fica como está.
     try {
@@ -171,7 +255,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
     } catch {
       // A próxima abertura tenta de novo.
     }
-  }, [backend, myId]);
+  }, [backend, myId, applyHistory]);
 
   const send = useCallback(
     (conversationId: string, body: string, imageUri?: string) =>
@@ -206,10 +290,10 @@ export function ChatProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<ChatContextValue>(() => ({
     myId, loadStatus, conversations, directory,
-    load, messagesFor, openConversation, send, outgoingFor, keyFor,
+    load, messagesFor, openConversation, closeConversation, send, outgoingFor, keyFor,
   }), [
     myId, loadStatus, conversations, directory,
-    load, messagesFor, openConversation, send, outgoingFor, keyFor,
+    load, messagesFor, openConversation, closeConversation, send, outgoingFor, keyFor,
   ]);
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
