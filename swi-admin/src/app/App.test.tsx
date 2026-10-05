@@ -17,6 +17,19 @@ vi.mock('@/components/ConnectionNotice', () => ({
 vi.mock('@/services/chat/ChatProvider', () => ({
   ChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
+vi.mock('@/services/notifications/NotificationsProvider', () => ({
+  NotificationsProvider: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="notifications-provider">{children}</div>
+  ),
+  useNotifications: () => null,
+}))
+vi.mock('@/services/alerts/UrgentAlertsProvider', () => ({
+  URGENT_ALERTS_PATH: '/monitoring/alerts',
+  UrgentAlertsProvider: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="urgent-alerts-provider">{children}</div>
+  ),
+  useUrgentAlerts: () => null,
+}))
 vi.mock('@/pages/maps/MapsGeneral', () => ({
   MapsGeneral: () => <div data-testid="maps-general-stub" />,
 }))
@@ -68,6 +81,21 @@ describe('App', () => {
     await settleAuth()
     expect(await screen.findByTestId('maps-general-stub')).toBeInTheDocument()
     expect(screen.getByTestId('connection-notice-mount')).toBeInTheDocument()
+  })
+
+  // O sino e o aviso de alerta urgente valem em toda a área logada, inclusive
+  // nas telas de tela cheia.
+  it('monta as notificações e o aviso de alerta urgente na área logada', async () => {
+    seedSession()
+    render(
+      <MemoryRouter initialEntries={['/maps/general']}>
+        <App />
+      </MemoryRouter>,
+    )
+    await settleAuth()
+    expect(await screen.findByTestId('maps-general-stub')).toBeInTheDocument()
+    expect(screen.getByTestId('notifications-provider')).toBeInTheDocument()
+    expect(screen.getByTestId('urgent-alerts-provider')).toBeInTheDocument()
   })
 
   it('fora da área logada não há aviso de conexão', async () => {

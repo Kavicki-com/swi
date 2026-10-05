@@ -4,6 +4,7 @@
 // ausência é null, nunca zero.
 import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
+import { notifyAlertTriaged } from '@/services/alerts/alertTriage'
 
 export type TelemetryOrigin = 'REAL' | 'DEMO'
 
@@ -215,6 +216,13 @@ async function call<T>(work: () => Promise<T>, fallback: string): Promise<Servic
 
 const id = (value: string) => encodeURIComponent(value)
 
+// Triagem que deu certo avisa o aviso de alerta urgente, que relê a fila.
+async function triaged<T>(work: Promise<ServiceResponse<T>>): Promise<ServiceResponse<T>> {
+  const res = await work
+  if (!res.error) notifyAlertTriaged()
+  return res
+}
+
 export const telemetryApi = {
   // Quem nunca reportou volta como leitura vazia, não como erro: erro aqui é
   // funcionário fora da empresa, sessão caída ou backend fora do ar.
@@ -255,21 +263,25 @@ export const telemetryApi = {
   },
 
   acknowledgeAlert: (alertId: string): Promise<ServiceResponse<AlertQueueItem>> =>
-    call(
-      () =>
-        apiFetch<AlertQueueItem>(`/telemetry/v1/admin/alerts/${id(alertId)}/acknowledge`, {
-          method: 'POST',
-        }),
-      'Falha ao reconhecer o alerta',
+    triaged(
+      call(
+        () =>
+          apiFetch<AlertQueueItem>(`/telemetry/v1/admin/alerts/${id(alertId)}/acknowledge`, {
+            method: 'POST',
+          }),
+        'Falha ao reconhecer o alerta',
+      ),
     ),
 
   resolveAlert: (alertId: string, note?: string): Promise<ServiceResponse<AlertQueueItem>> =>
-    call(
-      () =>
-        apiFetch<AlertQueueItem>(`/telemetry/v1/admin/alerts/${id(alertId)}/resolve`, {
-          method: 'POST',
-          body: JSON.stringify(note ? { note } : {}),
-        }),
-      'Falha ao resolver o alerta',
+    triaged(
+      call(
+        () =>
+          apiFetch<AlertQueueItem>(`/telemetry/v1/admin/alerts/${id(alertId)}/resolve`, {
+            method: 'POST',
+            body: JSON.stringify(note ? { note } : {}),
+          }),
+        'Falha ao resolver o alerta',
+      ),
     ),
 }

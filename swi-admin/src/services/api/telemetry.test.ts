@@ -2,6 +2,7 @@
 import { vi } from 'vitest'
 import { apiFetch } from './http'
 import { telemetryApi } from './telemetry'
+import { onAlertTriaged } from '@/services/alerts/alertTriage'
 
 vi.mock('./http', () => ({ apiFetch: vi.fn() }))
 
@@ -118,6 +119,33 @@ describe('telemetryApi: fila de alertas', () => {
       method: 'POST',
       body: JSON.stringify({}),
     })
+  })
+
+  // O aviso de alerta urgente relê a fila quando alguém triou aqui, sem
+  // esperar a próxima releitura dele.
+  it('reconhecer ou resolver com sucesso avisa quem acompanha a triagem', async () => {
+    const heard = vi.fn()
+    const stop = onAlertTriaged(heard)
+    fetchMock.mockResolvedValue({ id: 'a1', status: 'ACKNOWLEDGED' })
+    await telemetryApi.acknowledgeAlert('a1')
+    fetchMock.mockResolvedValue({ id: 'a1', status: 'RESOLVED' })
+    await telemetryApi.resolveAlert('a1')
+    expect(heard).toHaveBeenCalledTimes(2)
+    stop()
+    await telemetryApi.acknowledgeAlert('a1')
+    expect(heard).toHaveBeenCalledTimes(2)
+  })
+
+  it('falha de triagem não avisa', async () => {
+    const heard = vi.fn()
+    const stop = onAlertTriaged(heard)
+    fetchMock.mockImplementation(async () => {
+      throw new Error('Alerta já resolvido')
+    })
+    await telemetryApi.acknowledgeAlert('a1')
+    await telemetryApi.resolveAlert('a1')
+    expect(heard).not.toHaveBeenCalled()
+    stop()
   })
 
   it('falha de triagem chega com a mensagem do backend', async () => {
