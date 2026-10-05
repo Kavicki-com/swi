@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io'
 import { describeError } from '../common/describe-error'
 import { wsCorsOptions } from '../cors'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
+import { socketServerOptions } from '../realtime/socket-options'
 import { LiveRateLimit, type LiveEventKind } from './live-rate-limit'
 import { LiveService, type LiveDelivery, type LiveOutcome, type LiveReply } from './live.service'
 import { socketToken } from './socket-token'
@@ -32,7 +33,7 @@ type GatewayReply = LiveReply | { ok: false; error: 'internal' | 'rate-limited' 
  * passam por uma fila: um parar enviado logo depois de ligar, ou a queda do
  * socket, só rodam quando o que veio antes terminou.
  */
-@WebSocketGateway({ cors: wsCorsOptions(process.env) })
+@WebSocketGateway({ cors: wsCorsOptions(process.env), ...socketServerOptions(process.env) })
 export class LiveGateway implements OnGatewayDisconnect {
   @WebSocketServer() server!: Server
   private readonly logger = new Logger(LiveGateway.name)
