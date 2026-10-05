@@ -31,6 +31,10 @@ const mockSendQueueRoot = jest.fn((_props: { userId: string }) => null);
 jest.mock('../../../components/outbox/SendQueueRoot', () => ({
   SendQueueRoot: (props: { userId: string }) => mockSendQueueRoot(props),
 }));
+const mockStopLive = jest.fn();
+jest.mock('../../../services/live/liveBroadcast', () => ({
+  liveBroadcast: { stop: () => mockStopLive() },
+}));
 
 const render = () => {
   let tree!: ReturnType<typeof create>;
@@ -107,5 +111,20 @@ describe('(app)/_layout: rastreio em segundo plano', () => {
       render();
       expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'idle', false);
     }
+  });
+});
+
+// A câmera ao vivo segue em qualquer tela da área autenticada e acaba junto
+// com a sessão.
+describe('(app)/_layout: câmera ao vivo', () => {
+  beforeEach(() => mockStopLive.mockClear());
+
+  it('a transmissão segue com a sessão e acaba ao sair da conta', () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    const tree = render();
+    expect(mockStopLive).not.toHaveBeenCalled();
+    mockUseAuth.mockReturnValue({ user: null, restoring: false });
+    act(() => tree.update(<AppLayout />));
+    expect(mockStopLive).toHaveBeenCalledTimes(1);
   });
 });

@@ -71,6 +71,15 @@
     },
     {
       "projeto": "mobile",
+      "pacote": "@config-plugins/react-native-webrtc",
+      "advisories": ["depende de expo vulnerável"],
+      "justificativa": "Plugin de configuração que grava as permissões da câmera ao vivo na criação do projeto nativo, na máquina de build. Marcado em cascata pelo expo, que traz o node-forge sem correção publicada. Não vai no app instalado. A correção que o npm sugere é a 3.0.0, versão antiga feita para outro SDK do Expo.",
+      "responsavel": "Gabriel Fernandes <design@kavicki.com>",
+      "declaradaEm": "2026-10-05",
+      "expiraEm": "2026-12-31"
+    },
+    {
+      "projeto": "mobile",
       "pacote": "braces",
       "advisories": ["braces vulnerable to stack-exhaustion denial of service through deeply nested patterns"],
       "justificativa": "Não há versão corrigida publicada: a 3.0.3 é a mais recente e é a afetada. O braces entra só pelo micromatch, que o metro (empacotador) e o jest (testes) usam para ler padrões de arquivo da configuração do próprio repositório, não entrada de usuário. Não vai dentro do app instalado: os pacotes exportados para iOS, Android e web não o contêm. Rever assim que sair a versão corrigida.",

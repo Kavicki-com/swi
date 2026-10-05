@@ -13,6 +13,7 @@ import {
   ProgressBar,
   StatusChart as DSStatusChart,
   Text,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
@@ -43,6 +44,8 @@ import { useProfile } from '../../services/profile/ProfileProvider';
 import { useNotifications } from '../../services/notifications/NotificationProvider';
 import { useReports } from '../../services/reports/ReportsProvider';
 import { useWeather } from '../../services/weather/WeatherProvider';
+import { useLiveBroadcast } from '../../services/live/useLiveBroadcast';
+import { liveNoticeTitle } from '../../services/live/liveCopy';
 import type { WorkerStatus } from '../../services/vitals/types';
 
 // T4.6: memo wrap do StatusChart no nível de módulo. O componente é o mais
@@ -112,9 +115,11 @@ export default function Dashboard() {
   // que a de my-stats apesar das stops idênticas (#3EAB2E → #B7E9A4).
   const silhouetteMultiplyXml = useUniqueSvg(SILHOUETTE_BODY_SVG);
   const bgDecorGradId = useUniqueId('bg-decor-grad');
-  // Demo-only: camera starts on; tapping the camera button toggles the
-  // green status dot. Production wiring would mirror live worker state.
-  const [cameraActive, setCameraActive] = useState(true);
+  // A câmera ao vivo para os administradores. A transmissão vive fora da tela
+  // e segue em qualquer outra; o ponto verde só acende quando o servidor a
+  // aceita.
+  const camera = useLiveBroadcast();
+  const cameraActive = camera.live;
 
   // T4.6: handlers estáveis pra StatusChart memoizado (acima). Sem useCallback,
   // cada re-render do Dashboard criaria nova função e invalidaria o memo.
@@ -371,7 +376,7 @@ export default function Dashboard() {
               </View>
             }
             accessibilityLabel={`Câmera ${cameraActive ? 'ativa' : 'inativa'}`}
-            onPress={() => setCameraActive((on) => !on)}
+            onPress={camera.toggle}
           />
           {cameraActive ? (
             <View
@@ -576,6 +581,26 @@ export default function Dashboard() {
         </View>
       </View>
       </View>
+
+      {/* Aviso da câmera ao vivo, no mesmo lugar do aviso geral do app. O
+          Toast é o do DS, como está; `box-none` deixa o toque passar. */}
+      {camera.notice ? (
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            top: insets.top + theme.padding.s,
+            left: theme.padding.m,
+            right: theme.padding.m,
+          }}
+        >
+          <Toast
+            variant={camera.notice === 'no-permission' ? 'warning' : 'error'}
+            title={liveNoticeTitle(camera.notice)}
+            onClose={camera.dismissNotice}
+          />
+        </View>
+      ) : null}
 
       {isAlertModal ? (
         <View
