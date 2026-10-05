@@ -124,6 +124,65 @@ export function parsePositionsHeatIncludeSim(source: NodeJS.ProcessEnv): boolean
   return source.POSITIONS_HEAT_INCLUDE_SIM === '1'
 }
 
+/**
+ * Um servidor de conexão no formato que o navegador e o react-native-webrtc
+ * recebem em `iceServers`. STUN só descobre o endereço externo; TURN, quando
+ * vier, retransmite o vídeo e traz usuário e senha.
+ */
+export interface LiveIceServer {
+  readonly urls: string | readonly string[]
+  readonly username?: string
+  readonly credential?: string
+}
+
+/**
+ * STUN público e gratuito: sem ele a conexão direta só fecha com o celular e o
+ * painel na mesma rede. Não passa vídeo, só responde o endereço externo.
+ */
+export const LIVE_DEFAULT_ICE_SERVERS: readonly LiveIceServer[] = Object.freeze([
+  Object.freeze({ urls: 'stun:stun.l.google.com:19302' }),
+])
+
+const ICE_URL = /^(stun|stuns|turn|turns):\S+$/
+const TURN_URL = /^turns?:/
+
+function isIceServer(value: unknown): value is LiveIceServer {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const { urls, username, credential } = value as Record<string, unknown>
+  const list = Array.isArray(urls) ? urls : [urls]
+  if (list.length === 0 || !list.every((url) => typeof url === 'string' && ICE_URL.test(url))) return false
+  if (username !== undefined && typeof username !== 'string') return false
+  if (credential !== undefined && typeof credential !== 'string') return false
+  // O navegador recusa o RTCPeerConnection inteiro diante de TURN sem
+  // credencial; aqui isso vira problema de boot.
+  const turn = list.some((url) => TURN_URL.test(url as string))
+  if (turn && (typeof username !== 'string' || typeof credential !== 'string')) return false
+  return true
+}
+
+/**
+ * Lista JSON em `LIVE_ICE_SERVERS`; ausente ou vazia usa o STUN padrão, e `[]`
+ * desliga até ele. Lista inválida é problema declarado, que derruba o boot, e
+ * a mensagem nunca traz o valor: o TURN carrega senha.
+ */
+export function parseLiveIceServers(source: NodeJS.ProcessEnv, problems: string[]): readonly LiveIceServer[] {
+  const raw = source.LIVE_ICE_SERVERS
+  if (raw === undefined || raw.trim() === '') return LIVE_DEFAULT_ICE_SERVERS
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    parsed = undefined
+  }
+  if (!Array.isArray(parsed) || !parsed.every(isIceServer)) {
+    problems.push(
+      'LIVE_ICE_SERVERS precisa ser uma lista JSON de servidores com urls stun: ou turn:, e TURN com username e credential',
+    )
+    return LIVE_DEFAULT_ICE_SERVERS
+  }
+  return parsed
+}
+
 export interface RuntimeEnv {
   readonly nodeEnv: NodeEnv
   readonly isProduction: boolean
@@ -146,6 +205,8 @@ export interface RuntimeEnv {
   readonly simPositions: boolean
   /** Fila de alertas também com origem de demonstração. Só homologação. */
   readonly telemetryAlertsIncludeDemo: boolean
+  /** Servidores de conexão da transmissão ao vivo (STUN agora, TURN depois). */
+  readonly liveIceServers: readonly LiveIceServer[]
 }
 
 /**
@@ -249,6 +310,7 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
 
   const telemetryRetention = parseTelemetryRetention(source, problems)
   const positionRetention = parsePositionRetention(source, problems)
+  const liveIceServers = parseLiveIceServers(source, problems)
 
   const smtpPort = Number(source.SMTP_PORT ?? 1025)
   if (!Number.isInteger(smtpPort) || smtpPort <= 0 || smtpPort > 65535) {
@@ -293,5 +355,6 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
     positionsHeatIncludeSim: parsePositionsHeatIncludeSim(source),
     simPositions: source.SIM_POSITIONS === '1',
     telemetryAlertsIncludeDemo: parseAlertsIncludeDemo(source),
+    liveIceServers,
   })
 }

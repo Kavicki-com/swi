@@ -1,4 +1,10 @@
-import { parseAlertsIncludeDemo, parseRuntimeEnv, RETENTION_DEFAULT_BATCH } from './runtime-env'
+import {
+  LIVE_DEFAULT_ICE_SERVERS,
+  parseAlertsIncludeDemo,
+  parseLiveIceServers,
+  parseRuntimeEnv,
+  RETENTION_DEFAULT_BATCH,
+} from './runtime-env'
 
 // Ambiente de produção mínimo e válido. Cada teste sobrescreve só a chave que
 // está sendo exercitada, para que a falha aponte a variável e não o setup.
@@ -101,6 +107,59 @@ describe('parseRuntimeEnv: trilha de posições', () => {
     expect(parseRuntimeEnv({ NODE_ENV: 'development' }).positionsHeatIncludeSim).toBe(false)
     expect(parseRuntimeEnv(validProd({ POSITIONS_HEAT_INCLUDE_SIM: 'true' })).positionsHeatIncludeSim).toBe(false)
     expect(parseRuntimeEnv(validProd({ POSITIONS_HEAT_INCLUDE_SIM: '1' })).positionsHeatIncludeSim).toBe(true)
+  })
+})
+
+// Servidores que o navegador e o celular usam para achar o caminho da conexão
+// direta da transmissão ao vivo. O TURN entra depois só por esta variável, com
+// credencial, então a mensagem de erro nunca pode ecoar o valor.
+describe('parseRuntimeEnv: servidores de conexão da transmissão ao vivo', () => {
+  it('sem variável, usa o STUN público padrão', () => {
+    expect(parseRuntimeEnv(validProd()).liveIceServers).toEqual(LIVE_DEFAULT_ICE_SERVERS)
+    expect(parseLiveIceServers({}, [])).toEqual([{ urls: 'stun:stun.l.google.com:19302' }])
+    expect(parseLiveIceServers({ LIVE_ICE_SERVERS: '' }, [])).toEqual(LIVE_DEFAULT_ICE_SERVERS)
+  })
+
+  it('aceita STUN e TURN com credencial, em url única ou lista', () => {
+    const raw = JSON.stringify([
+      { urls: 'stun:stun.exemplo.com:3478' },
+      { urls: ['turn:turn.exemplo.com:3478?transport=udp', 'turns:turn.exemplo.com:5349'], username: 'swi', credential: 'segredo' },
+    ])
+    expect(parseRuntimeEnv(validProd({ LIVE_ICE_SERVERS: raw })).liveIceServers).toEqual(JSON.parse(raw))
+  })
+
+  it('lista vazia vale: só conexão na mesma rede', () => {
+    expect(parseLiveIceServers({ LIVE_ICE_SERVERS: '[]' }, [])).toEqual([])
+  })
+
+  it.each([
+    ['JSON quebrado', '[{urls:'],
+    ['objeto em vez de lista', '{"urls":"stun:a.com"}'],
+    ['sem urls', '[{"username":"x"}]'],
+    ['esquema que não é stun nem turn', '[{"urls":"https://a.com"}]'],
+    ['credencial que não é texto', '[{"urls":"turn:a.com","username":"x","credential":1}]'],
+    // O navegador recusa o RTCPeerConnection inteiro com TURN sem credencial:
+    // melhor o processo não subir do que todo painel quebrar ao assistir.
+    ['TURN sem usuário e senha', '[{"urls":"turn:a.com"}]'],
+    ['TURN no meio da lista sem senha', '[{"urls":["stun:a.com","turns:b.com"],"username":"x"}]'],
+  ])('recusa %s com mensagem fixa, sem ecoar o valor', (_caso, raw) => {
+    const problems: string[] = []
+    expect(parseLiveIceServers({ LIVE_ICE_SERVERS: raw }, problems)).toEqual(LIVE_DEFAULT_ICE_SERVERS)
+    expect(problems).toEqual([
+      'LIVE_ICE_SERVERS precisa ser uma lista JSON de servidores com urls stun: ou turn:, e TURN com username e credential',
+    ])
+    expect(() => parseRuntimeEnv(validProd({ LIVE_ICE_SERVERS: raw }))).toThrow(/LIVE_ICE_SERVERS/)
+  })
+
+  it('não ecoa a credencial do TURN quando a lista é recusada', () => {
+    const raw = '[{"urls":"turn:a.com","username":"swi","credential":"senha-do-turn"},{"urls":"ftp:b.com"}]'
+    try {
+      parseRuntimeEnv(validProd({ LIVE_ICE_SERVERS: raw }))
+      throw new Error('deveria recusar')
+    } catch (erro) {
+      expect((erro as Error).message).toMatch(/LIVE_ICE_SERVERS/)
+      expect((erro as Error).message).not.toContain('senha-do-turn')
+    }
   })
 })
 
