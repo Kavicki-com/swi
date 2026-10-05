@@ -90,6 +90,17 @@ describe('uploadMedia', () => {
     expect(apiRequest).not.toHaveBeenCalled();
   });
 
+  // A fila de envios lê o código: foto que sumiu nunca vai subir, então o item
+  // sai da fila em vez de esperar a rede para sempre.
+  it('arquivo vazio falha com o código FILE_MISSING', async () => {
+    (File as unknown as jest.Mock).mockImplementationOnce((uri: string) => ({
+      uri,
+      size: 0,
+      arrayBuffer: jest.fn(),
+    }));
+    await expect(uploadImage('file:///a/vazio.jpg')).rejects.toMatchObject({ code: 'FILE_MISSING' });
+  });
+
   it('propaga falha do PUT com status e detalhe', async () => {
     (apiRequest as jest.Mock).mockResolvedValue({ url: 'u', key: 'k' });
     (global as any).fetch.mockResolvedValueOnce({

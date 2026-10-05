@@ -15,8 +15,10 @@ import {
   SearchInput,
   Text,
   Title,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { QUEUE_FULL_TITLE } from '../../../services/outbox/sendCopy';
 import { ReportDetailState } from '../../../components/reports/ReportsListState';
 import { useReports } from '../../../services/reports/ReportsProvider';
 import { useSubmitOnce } from '../../../lib/forms/useSubmitOnce';
@@ -35,7 +37,7 @@ export default function ReportDetails() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { loadOne, addComment } = useReports();
+  const { loadOne, addComment, commentsFor } = useReports();
 
   const [report, setReport] = useState<Report | null>(null);
   const [status, setStatus] = useState<DetailStatus>('loading');
@@ -44,6 +46,8 @@ export default function ReportDetails() {
 
   const [search, setSearch] = useState('');
   const [comment, setComment] = useState('');
+  // Comentário que não entrou na fila de envios porque ela está no teto.
+  const [queueFull, setQueueFull] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -83,8 +87,12 @@ export default function ReportDetails() {
     const texto = comment.trim();
     if (!texto || !id) return;
     try {
-      const criado = await addComment(id, texto);
-      setReport((prev) => (prev ? { ...prev, comments: [...prev.comments, criado] } : prev));
+      // O comentário entra na fila de envios e aparece na lista na hora, como
+      // "Aguardando envio" (commentsFor); confirmado, vem com autor e data do
+      // servidor. Só não entra com a fila no teto, e aí o texto fica no campo.
+      const result = await addComment(id, texto);
+      setQueueFull(result === 'full');
+      if (result === 'full') return;
       setComment('');
     } catch (e) {
       Alert.alert('Erro', errorMessage(e, 'Nao foi possivel enviar o comentario.'));
@@ -112,6 +120,15 @@ export default function ReportDetails() {
       </View>
     );
   }
+
+  // Os comentários do servidor, depois os meus confirmados nesta sessão que o
+  // relatório carregado ainda não trouxe, e por fim os que aguardam envio.
+  const own = commentsFor(report.id);
+  const comments = [
+    ...report.comments,
+    ...own.sent.filter((sent) => !report.comments.some((c) => c.id === sent.id)),
+    ...own.pending,
+  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -307,12 +324,12 @@ export default function ReportDetails() {
         {/* Comentarios ja feitos. A tela nao listava NENHUM — nem os que o
             admin escrevia pelo painel. Mesmo shape que o painel exibe
             (ReportDetails.tsx): autor, avatar e data. */}
-        {report.comments.length > 0 ? (
+        {comments.length > 0 ? (
           <View style={{ gap: theme.gap.m }}>
             <Title variant="title.xs" color={theme.content.primary}>
               Comentários
             </Title>
-            {report.comments.map((c) => (
+            {comments.map((c) => (
               <View
                 key={c.id}
                 style={{ flexDirection: 'row', gap: theme.gap.sm, alignItems: 'flex-start' }}
@@ -346,6 +363,10 @@ export default function ReportDetails() {
           multiline
           numberOfLines={6}
         />
+
+        {queueFull ? (
+          <Toast variant="warning" title={QUEUE_FULL_TITLE} onClose={() => setQueueFull(false)} />
+        ) : null}
 
         <Button
           variant="contained"

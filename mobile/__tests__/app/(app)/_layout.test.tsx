@@ -27,6 +27,10 @@ jest.mock('../../../services/evacuation/EvacuationProvider', () => ({
 jest.mock('../../../services/notifications/NotificationProvider', () => ({
   NotificationProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
+const mockSendQueueRoot = jest.fn((_props: { userId: string }) => null);
+jest.mock('../../../components/outbox/SendQueueRoot', () => ({
+  SendQueueRoot: (props: { userId: string }) => mockSendQueueRoot(props),
+}));
 
 const render = () => {
   let tree!: ReturnType<typeof create>;
@@ -58,6 +62,24 @@ describe('(app)/_layout — auth gate com sessão persistida', () => {
     const tree = render();
     expect(achados(tree, Stack)).toHaveLength(1);
     expect(achados(tree, Redirect)).toHaveLength(0);
+  });
+});
+
+// A fila de envios (chat, relatório, comentário) vive na raiz da área
+// autenticada: o envio segue com qualquer tela aberta e para ao sair.
+describe('(app)/_layout: fila de envios', () => {
+  beforeEach(() => mockSendQueueRoot.mockClear());
+
+  it('com sessão, a fila é montada para a pessoa logada', () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    render();
+    expect(mockSendQueueRoot).toHaveBeenCalledWith({ userId: 'u1' });
+  });
+
+  it('sem sessão, a fila não é montada', () => {
+    mockUseAuth.mockReturnValue({ user: null, restoring: false });
+    render();
+    expect(mockSendQueueRoot).not.toHaveBeenCalled();
   });
 });
 

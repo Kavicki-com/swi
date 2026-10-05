@@ -17,10 +17,15 @@ describe('mockReportsBackend', () => {
     expect(await mockReportsBackend.get('inexistente')).toBeNull();
   });
   it('create prepende um relatório recuperável por list/get', async () => {
-    const created = await mockReportsBackend.create({ title: 'Teste', summary: 'Resumo', details: 'Detalhe', responsibles: ['Fulano'], imageUris: [] });
+    const created = await mockReportsBackend.create({ title: 'Teste', summary: 'Resumo', details: 'Detalhe', responsibles: ['Fulano'], imageKeys: ['file:///foto.jpg'] });
     expect(created.id).toBeTruthy();
+    // No mock a "key" é a própria uri local: a foto aparece sem servidor.
+    expect(created.images).toEqual(['file:///foto.jpg']);
     const list = await mockReportsBackend.list();
     expect(list.find((r) => r.id === created.id)).toBeTruthy();
     expect((await mockReportsBackend.get(created.id))?.title).toBe('Teste');
+  });
+  it('uploadImage devolve a própria uri (não há servidor para subir)', async () => {
+    await expect(mockReportsBackend.uploadImage('file:///foto.jpg')).resolves.toBe('file:///foto.jpg');
   });
 });

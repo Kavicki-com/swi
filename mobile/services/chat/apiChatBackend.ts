@@ -20,10 +20,16 @@ export const apiChatBackend: ChatBackend = {
   listMessages(conversationId) { return apiRequest<Message[]>(`${conv(conversationId)}/messages`, { auth: true }); },
   listDirectory() { return apiRequest<Contact[]>('/chat/directory', { auth: true }); },
 
-  async sendMessage(conversationId, body, imageUri) {
-    const imageKey = imageUri ? await uploadImage(imageUri, 'chat') : undefined;
+  uploadImage(localUri) { return uploadImage(localUri, 'chat'); },
+
+  // O corpo sai só do que foi recebido: o reenvio da fila leva o mesmo corpo, e
+  // o backend recusa (422) a mesma chave com conteúdo diferente.
+  async sendMessage(conversationId, body, opts = {}) {
+    const { imageKey, idempotencyKey } = opts;
     const payload = imageKey ? { body, imageKey } : { body };
-    return apiRequest<Message>(`${conv(conversationId)}/messages`, { method: 'POST', body: payload, auth: true });
+    return apiRequest<Message>(`${conv(conversationId)}/messages`, {
+      method: 'POST', body: payload, auth: true, idempotencyKey,
+    });
   },
 
   async markRead(conversationId) {

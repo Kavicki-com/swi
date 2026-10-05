@@ -41,12 +41,25 @@ describe('apiChatBackend', () => {
     expect(apiRequest).toHaveBeenCalledWith('/chat/conversations/a%23b/messages', { method: 'POST', body: { body: 'oi' }, auth: true })
   })
 
-  it('sendMessage com imagem sobe (prefixo chat) e manda a key', async () => {
+  // Subir o anexo é um passo à parte: a fila de envios sobe uma vez só, guarda
+  // a key no item e repete o POST com o mesmo corpo quantas vezes precisar.
+  it('uploadImage sobe com o prefixo chat e devolve a key', async () => {
     (uploadImage as jest.Mock).mockResolvedValue('chat/k.jpg')
-    ;(apiRequest as jest.Mock).mockResolvedValue({ id: 'm1' })
-    await apiChatBackend.sendMessage('a#b', '', 'file:///x.jpg')
+    await expect(apiChatBackend.uploadImage('file:///x.jpg')).resolves.toBe('chat/k.jpg')
     expect(uploadImage).toHaveBeenCalledWith('file:///x.jpg', 'chat')
+  })
+
+  it('sendMessage com a key do anexo manda a key e não sobe nada', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'm1' })
+    await apiChatBackend.sendMessage('a#b', '', { imageKey: 'chat/k.jpg' })
+    expect(uploadImage).not.toHaveBeenCalled()
     expect(apiRequest).toHaveBeenCalledWith('/chat/conversations/a%23b/messages', { method: 'POST', body: { body: '', imageKey: 'chat/k.jpg' }, auth: true })
+  })
+
+  it('sendMessage repassa a chave do envio ao apiRequest', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'm1' })
+    await apiChatBackend.sendMessage('a#b', 'oi', { idempotencyKey: 'chave-1' })
+    expect(apiRequest).toHaveBeenCalledWith('/chat/conversations/a%23b/messages', { method: 'POST', body: { body: 'oi' }, auth: true, idempotencyKey: 'chave-1' })
   })
 
   it('markRead → POST /read (path encodado)', async () => {

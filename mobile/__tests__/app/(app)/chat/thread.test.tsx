@@ -1,7 +1,8 @@
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { SwiThemeProvider } from '@kavicki/swi-design-system';
+import { SwiThemeProvider, Toast } from '@kavicki/swi-design-system';
 import ChatThread from '../../../../app/(app)/chat/[userId]';
+import type { OutgoingMessage } from '../../../../services/chat/ChatProvider';
 import type { Contact, Conversation, Message } from '../../../../services/chat/types';
 
 // Thread do chat (app/(app)/chat/[userId].tsx).
@@ -37,6 +38,7 @@ const mockChat = {
   messagesFor: jest.fn(),
   openConversation: jest.fn(),
   send: jest.fn(),
+  outgoingFor: jest.fn(),
   conversations: [] as Conversation[],
   directory: [] as Contact[],
 };
@@ -126,9 +128,20 @@ beforeEach(() => {
   mockChat.conversations = [];
   mockChat.directory = [];
   mockChat.messagesFor.mockReturnValue([]);
+  mockChat.outgoingFor.mockReturnValue([]);
   mockChat.openConversation.mockResolvedValue(undefined);
+  mockChat.send.mockResolvedValue('queued');
   mockShowPicker.mockResolvedValue(null);
 });
+
+const saida = (over: Partial<OutgoingMessage> = {}): OutgoingMessage => ({
+  id: 'o1',
+  body: 'Ainda saindo',
+  state: 'pending',
+  ...over,
+});
+
+const avisos = (tree: ReturnType<typeof create>) => tree.root.findAllByType(Toast);
 
 describe('Thread do chat: estados de carregamento', () => {
   it('mostra o carregando enquanto a conversa não abre', async () => {
@@ -330,6 +343,109 @@ describe('Thread do chat: envio', () => {
     await tocar(tree, 'Enviar');
 
     expect(mockChat.send).not.toHaveBeenCalled();
+  });
+});
+
+// Nenhuma tela do Figma desenha envio pendente ou recusado. O estado entra no
+// campo de hora do ChatBubble do DS, com os textos aprovados.
+describe('Thread do chat: mensagens na fila de envios', () => {
+  it('a mensagem que ainda não saiu aparece depois do histórico, como aguardando envio', async () => {
+    mockChat.directory = [contato({ workerId: 'me', avatarUri: 'https://example.test/me.png' })];
+    mockChat.messagesFor.mockReturnValue([mensagem({ body: 'Bom dia' })]);
+    mockChat.outgoingFor.mockReturnValue([saida()]);
+    const tree = await render();
+    const b = bolhas(tree);
+
+    expect(b.map((x) => x.message)).toEqual(['Bom dia', 'Ainda saindo']);
+    expect(b[1].time).toBe('Aguardando envio');
+    expect(b[1].position).toBe('left');
+    expect(b[1].avatarUri).toBe('https://example.test/me.png');
+    expect(mockChat.outgoingFor).toHaveBeenCalledWith('c-me-w1');
+  });
+
+  it('a mensagem que o servidor recusou fica marcada como não enviada', async () => {
+    mockChat.outgoingFor.mockReturnValue([saida({ state: 'refused' })]);
+    const tree = await render();
+
+    expect(bolhas(tree)[0].time).toBe('Não enviada');
+  });
+
+  // Conversa nova, primeira mensagem sem sinal: a tela não pode dizer
+  // "Nenhuma mensagem ainda" com a mensagem da pessoa esperando para sair.
+  it('conversa só com mensagem pendente mostra a mensagem, não o vazio', async () => {
+    mockChat.outgoingFor.mockReturnValue([saida()]);
+    const tree = await render();
+
+    expect(bolhas(tree).map((x) => x.message)).toEqual(['Ainda saindo']);
+    expect(textos(tree)).not.toContain('Nenhuma mensagem ainda');
+  });
+
+  it('fila cheia: avisa e devolve o texto e o anexo ao campo', async () => {
+    mockChat.send.mockResolvedValue('full');
+    mockShowPicker.mockResolvedValue('file:///foto.jpg');
+    const tree = await render();
+    await digitar(tree, 'Bom dia');
+    await tocar(tree, 'Anexar arquivo');
+    await tocar(tree, 'Enviar');
+
+    const [aviso] = avisos(tree);
+    expect(aviso.props.variant).toBe('warning');
+    expect(aviso.props.title).toBe(
+      'Há muitos envios aguardando conexão. Tente de novo quando o sinal voltar.',
+    );
+    expect(entrada(tree).props.value).toBe('Bom dia');
+    expect(porLabel(tree, 'Remover anexo')).toBeDefined();
+  });
+
+  // Foto que sumiu ou passa de 15 MB é recusada na entrada da fila, com a
+  // tela ainda aberta para a pessoa trocar a foto.
+  it('foto recusada na entrada: mostra o motivo e devolve o texto e o anexo', async () => {
+    mockChat.send.mockRejectedValue(new Error('A imagem passa de 15 MB. Escolha uma imagem menor.'));
+    mockShowPicker.mockResolvedValue('file:///enorme.jpg');
+    const tree = await render();
+    await digitar(tree, 'Olha isso');
+    await tocar(tree, 'Anexar arquivo');
+    await tocar(tree, 'Enviar');
+
+    const [aviso] = avisos(tree);
+    expect(aviso.props.variant).toBe('error');
+    expect(aviso.props.title).toBe('A imagem passa de 15 MB. Escolha uma imagem menor.');
+    expect(entrada(tree).props.value).toBe('Olha isso');
+    expect(porLabel(tree, 'Remover anexo')).toBeDefined();
+  });
+
+  it('o aviso fecha no X e some no próximo envio que entra', async () => {
+    mockChat.send.mockResolvedValueOnce('full');
+    const tree = await render();
+    await digitar(tree, 'Bom dia');
+    await tocar(tree, 'Enviar');
+    expect(avisos(tree)).toHaveLength(1);
+
+    await act(async () => { avisos(tree)[0].props.onClose(); });
+    expect(avisos(tree)).toHaveLength(0);
+
+    mockChat.send.mockResolvedValueOnce('full');
+    await tocar(tree, 'Enviar');
+    expect(avisos(tree)).toHaveLength(1);
+    await tocar(tree, 'Enviar');
+    expect(avisos(tree)).toHaveLength(0);
+  });
+
+  it('envio que entrou na fila não mostra aviso', async () => {
+    const tree = await render();
+    await digitar(tree, 'Bom dia');
+    await tocar(tree, 'Enviar');
+
+    expect(avisos(tree)).toHaveLength(0);
+    expect(entrada(tree).props.value).toBe('');
+  });
+
+  // O servidor recusa mensagem acima de 4000 caracteres. O campo não deixa
+  // passar disso, e a recusa nunca chega a acontecer.
+  it('o campo limita a mensagem ao teto do servidor', async () => {
+    const tree = await render();
+
+    expect(entrada(tree).props.maxLength).toBe(4000);
   });
 });
 

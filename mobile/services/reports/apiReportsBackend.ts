@@ -1,4 +1,4 @@
-import type { Report, ReportActivity, ReportComment, ReportInput, ReportsBackend } from './types';
+import type { Report, ReportActivity, ReportComment, ReportPayload, ReportsBackend } from './types';
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 
@@ -64,31 +64,36 @@ export const apiReportsBackend: ReportsBackend = {
       throw e;
     }
   },
-  async create(input: ReportInput) {
-    // Uploads em paralelo; Promise.all preserva a ordem das imagens.
-    const imageKeys = await Promise.all(input.imageUris.map((uri) => uploadImage(uri)));
+  uploadImage(localUri: string) {
+    return uploadImage(localUri, 'reports');
+  },
+  // O corpo sai só do que foi recebido, campo a campo: o reenvio da fila leva
+  // o mesmo corpo, e o backend recusa (422) a mesma chave com outro conteúdo.
+  async create(payload: ReportPayload, idempotencyKey?: string) {
     // Mesma normalizacao do list/get: a resposta do POST nem sequer traz
     // `comments`, e o relatorio recem-criado vai direto pra lista em memoria.
     const criado = await apiRequest<WireReport>('/reports', {
       method: 'POST',
       body: {
-        title: input.title,
-        summary: input.summary,
-        details: input.details,
-        responsibles: input.responsibles,
-        imageKeys,
+        title: payload.title,
+        summary: payload.summary,
+        details: payload.details,
+        responsibles: payload.responsibles,
+        imageKeys: payload.imageKeys,
       },
       auth: true,
+      idempotencyKey,
     });
     return fromApi(criado);
   },
   /** POST /reports/:id/comments — o backend devolve o comentario ja resolvido
    *  (autor, avatar presigned, data DD/MM/AAAA), pronto pra entrar na lista. */
-  async addComment(reportId: string, body: string) {
+  async addComment(reportId: string, body: string, idempotencyKey?: string) {
     return apiRequest<ReportComment>(`/reports/${reportId}/comments`, {
       method: 'POST',
       body: { body },
       auth: true,
+      idempotencyKey,
     });
   },
 };

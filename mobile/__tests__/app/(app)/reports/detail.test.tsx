@@ -1,7 +1,7 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { SwiThemeProvider } from '@kavicki/swi-design-system';
+import { SwiThemeProvider, Toast } from '@kavicki/swi-design-system';
 import ReportDetails from '../../../../app/(app)/reports/[id]';
 import type { Report, ReportComment } from '../../../../services/reports/types';
 
@@ -29,8 +29,13 @@ jest.mock('expo-router', () => ({
 
 const mockLoadOne = jest.fn();
 const mockAddComment = jest.fn();
+const mockCommentsFor = jest.fn();
 jest.mock('../../../../services/reports/ReportsProvider', () => ({
-  useReports: () => ({ loadOne: mockLoadOne, addComment: mockAddComment }),
+  useReports: () => ({
+    loadOne: mockLoadOne,
+    addComment: mockAddComment,
+    commentsFor: mockCommentsFor,
+  }),
 }));
 
 // --- Dados sinteticos --------------------------------------------------------
@@ -144,7 +149,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockId = 'r1';
   mockLoadOne.mockResolvedValue(relatorio());
-  mockAddComment.mockResolvedValue(comentario());
+  mockAddComment.mockResolvedValue('queued');
+  mockCommentsFor.mockReturnValue({ sent: [], pending: [] });
   alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
 
@@ -353,19 +359,95 @@ describe('Detalhe do relatorio: envio de comentario', () => {
     expect(cta(tree).props.disabled).toBe(true);
   });
 
-  it('envia o texto aparado, junta o comentario na lista e so entao limpa o campo', async () => {
+  it('envia o texto aparado para a fila e so entao limpa o campo', async () => {
     const tree = await montar();
-    mockAddComment.mockResolvedValue(
-      comentario({ id: 'novo', body: 'Refazer a medicao.', authorName: 'Maria Souza' }),
-    );
 
     await digitar(tree, '  Refazer a medicao.  ');
     await tocar(cta(tree));
 
     expect(mockAddComment).toHaveBeenCalledWith('r1', 'Refazer a medicao.');
+    expect(campoComentario(tree).props.value).toBe('');
+    expect(tree.root.findAllByType(Toast)).toHaveLength(0);
+  });
+
+  // O comentario entra na fila de envios e aparece na hora. O Figma nao
+  // desenha esse estado: o texto aprovado entra no lugar da data.
+  it('o comentario na fila aparece depois dos do servidor, como aguardando envio', async () => {
+    mockLoadOne.mockResolvedValue(relatorio({ comments: [comentario()] }));
+    mockCommentsFor.mockReturnValue({
+      sent: [],
+      pending: [
+        comentario({ id: 'chave-1', body: 'Ainda saindo.', authorName: 'Maria Souza', createdAt: 'Aguardando envio' }),
+      ],
+    });
+    const tree = await montar();
+    const texto = textoDa(tree);
+
+    expect(mockCommentsFor).toHaveBeenCalledWith('r1');
+    expect(texto).toContain('Ainda saindo.');
+    expect(texto).toContain('Aguardando envio');
+    expect(texto.indexOf('Confirmado em campo.')).toBeLessThan(texto.indexOf('Ainda saindo.'));
+  });
+
+  it('relatorio sem comentario do servidor mostra a secao quando ha um na fila', async () => {
+    mockCommentsFor.mockReturnValue({
+      sent: [],
+      pending: [comentario({ id: 'chave-1', body: 'Ainda saindo.', createdAt: 'Aguardando envio' })],
+    });
+    const tree = await montar();
+
+    expect(textoDa(tree)).toContain('Comentários');
+    expect(textoDa(tree)).toContain('Ainda saindo.');
+  });
+
+  it('o comentario confirmado nesta sessao entra na lista com autor e data do servidor', async () => {
+    mockCommentsFor.mockReturnValue({
+      sent: [comentario({ id: 'novo', body: 'Refazer a medicao.', authorName: 'Maria Souza' })],
+      pending: [],
+    });
+    const tree = await montar();
+
     expect(textoDa(tree)).toContain('Refazer a medicao.');
     expect(textoDa(tree)).toContain('Maria Souza');
-    expect(campoComentario(tree).props.value).toBe('');
+  });
+
+  // O relatorio foi recarregado e ja trouxe o comentario confirmado: ele nao
+  // aparece duas vezes.
+  it('comentario confirmado que o relatorio ja trouxe nao aparece de novo', async () => {
+    // `textoDa` enxerga o mesmo texto em mais de uma camada do componente,
+    // entao a regua e a contagem da tela sem o confirmado.
+    const vezes = (tree: ReactTestRenderer) => textoDa(tree).split('Uma vez so.').length - 1;
+    mockLoadOne.mockResolvedValue(relatorio({ comments: [comentario({ id: 'novo', body: 'Uma vez so.' })] }));
+    const base = vezes(await montar());
+
+    mockCommentsFor.mockReturnValue({
+      sent: [comentario({ id: 'novo', body: 'Uma vez so.' })],
+      pending: [],
+    });
+    const tree = await montar();
+
+    expect(base).toBeGreaterThan(0);
+    expect(vezes(tree)).toBe(base);
+  });
+
+  it('fila cheia: avisa e PRESERVA o texto digitado', async () => {
+    mockAddComment.mockResolvedValue('full');
+    const tree = await montar();
+
+    await digitar(tree, 'Texto que nao pode sumir');
+    await tocar(cta(tree));
+
+    const [aviso] = tree.root.findAllByType(Toast);
+    expect(aviso.props.variant).toBe('warning');
+    expect(aviso.props.title).toBe(
+      'Há muitos envios aguardando conexão. Tente de novo quando o sinal voltar.',
+    );
+    expect(campoComentario(tree).props.value).toBe('Texto que nao pode sumir');
+
+    await act(async () => {
+      aviso.props.onClose();
+    });
+    expect(tree.root.findAllByType(Toast)).toHaveLength(0);
   });
 
   it('falha no envio avisa o motivo e PRESERVA o texto digitado', async () => {
@@ -381,7 +463,7 @@ describe('Detalhe do relatorio: envio de comentario', () => {
   });
 
   it('enquanto o envio esta no ar o botao avisa e nao aceita segundo toque', async () => {
-    const envio = adiar<ReportComment>();
+    const envio = adiar<string>();
     mockAddComment.mockReturnValue(envio.promessa);
     const tree = await montar();
 
@@ -398,7 +480,7 @@ describe('Detalhe do relatorio: envio de comentario', () => {
     expect(mockAddComment).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      envio.resolver(comentario({ id: 'novo', body: 'Primeiro toque' }));
+      envio.resolver('queued');
       await emVoo;
     });
 

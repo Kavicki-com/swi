@@ -23,6 +23,11 @@ export interface ApiRequestOptions {
   auth?: boolean;
   /** Prazo desta chamada. Só suba para operações longas (upload). */
   timeoutMs?: number;
+  /**
+   * Chave do envio (UUID v4), repetida em toda tentativa do mesmo item da fila
+   * de envios. O backend devolve o registro já criado em vez de criar outro.
+   */
+  idempotencyKey?: string;
 }
 
 // Prazo padrão de QUALQUER chamada à API.
@@ -86,8 +91,9 @@ export function apiRequest<T = any>(path: string, opts: ApiRequestOptions = {}):
 }
 
 async function send<T>(path: string, opts: ApiRequestOptions, signal: AbortSignal): Promise<T> {
-  const { method, body, auth = false } = opts;
+  const { method, body, auth = false, idempotencyKey } = opts;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
   if (auth) {
     const t = await readToken();
     if (t) headers.Authorization = `Bearer ${t}`;
@@ -107,6 +113,9 @@ async function send<T>(path: string, opts: ApiRequestOptions, signal: AbortSigna
     const message = Array.isArray(raw) ? raw.join(', ') : raw;
     const err = new Error(message ?? 'Erro na requisição');
     (err as any).status = res.status;
+    // O corpo de erro do Nest sempre traz `statusCode`. Sem ele, quem respondeu
+    // foi algo no caminho (proxy, túnel), e não a API.
+    (err as any).apiError = typeof data?.statusCode === 'number';
     throw err;
   }
   return data as T;

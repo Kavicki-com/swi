@@ -9,10 +9,13 @@ import {
   ChatBubble,
   Icon,
   JourneyTheme,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system';
+import { errorMessage } from '../../../lib/errors/errorMessage';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
-import { useChat } from '../../../services/chat/ChatProvider';
+import { useChat, type OutgoingMessage } from '../../../services/chat/ChatProvider';
+import { PENDING_LABEL, QUEUE_FULL_TITLE, REFUSED_LABEL } from '../../../services/outbox/sendCopy';
 import { resolveContact } from '../../../services/chat/chatReducers';
 import { ChatThreadState } from '../../../components/chat/ChatState';
 import type { Message } from '../../../services/chat/types';
@@ -59,6 +62,29 @@ const MessageItem = memo(function MessageItem({
   );
 });
 
+// Mensagem minha que ainda não é do servidor: aguardando envio na fila, ou
+// recusada. O Figma não desenha esses estados; o texto aprovado entra no campo
+// de hora do ChatBubble, que o DS já tem.
+type OutgoingItemProps = { outgoing: OutgoingMessage; myAvatar: string | undefined };
+const OutgoingItem = memo(function OutgoingItem({ outgoing, myAvatar }: OutgoingItemProps) {
+  return (
+    <ChatBubble
+      message={outgoing.body}
+      time={outgoing.state === 'pending' ? PENDING_LABEL : REFUSED_LABEL}
+      position="left"
+      avatarUri={myAvatar}
+      onMenuPress={noop}
+      fullWidth
+    />
+  );
+});
+
+// O teto do corpo da mensagem no backend (SendMessageDto). O campo não deixa
+// passar, então o servidor nunca recusa um envio por tamanho.
+const MAX_MESSAGE_LENGTH = 4000;
+
+type SendNotice = { variant: 'warning' | 'error'; title: string };
+
 export default function ChatThread() {
   const router = useRouter();
   const theme = useTheme();
@@ -66,8 +92,9 @@ export default function ChatThread() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const scrollRef = useRef<ScrollView>(null);
 
-  const { myId, keyFor, messagesFor, openConversation, send, conversations, directory } =
-    useChat();
+  const {
+    myId, keyFor, messagesFor, outgoingFor, openConversation, send, conversations, directory,
+  } = useChat();
   const convId = keyFor(userId);
 
   // Carrega o histórico da conversa ao abrir. `status` tem três valores para
@@ -103,11 +130,14 @@ export default function ChatThread() {
   );
 
   const messages = messagesFor(convId);
+  const outgoing = outgoingFor(convId);
 
   // Anexo selecionado via attach_file no input — agora enviado de verdade via
   // send(...) como imageUri (mock = uri local; a API real sobe o arquivo e devolve a uri).
   const [pendingAttachment, setPendingAttachment] = useState<string | null>(null);
   const [text, setText] = useState('');
+  // Envio que não entrou na fila: fila cheia, ou foto recusada na entrada.
+  const [notice, setNotice] = useState<SendNotice | null>(null);
 
   const media = useMediaPicker();
   const showAttachmentPicker = async () => {
@@ -121,11 +151,32 @@ export default function ChatThread() {
     // (ou após falha) descartaria a mensagem silenciosamente.
     if (status !== 'ready') return;
     const body = text.trim();
-    if (!body && !pendingAttachment) return;
-    send(convId, body, pendingAttachment ?? undefined);
+    const attachment = pendingAttachment;
+    if (!body && !attachment) return;
+    // O campo limpa na hora, sem esperar a fila gravar: esperar deixaria um
+    // segundo toque mandar a mesma mensagem duas vezes.
     setText('');
     setPendingAttachment(null);
-    // A mensagem aparece ao vivo via a subscription do provider (não anexar à mão).
+    setNotice(null);
+    // Se a mensagem não entrou na fila, o que a pessoa escreveu volta ao campo
+    // (a não ser que ela já tenha começado outra).
+    const giveBack = (next: SendNotice) => {
+      setText((current) => (current === '' ? body : current));
+      setPendingAttachment((current) => current ?? attachment);
+      setNotice(next);
+    };
+    send(convId, body, attachment ?? undefined).then(
+      (result) => {
+        if (result === 'full') giveBack({ variant: 'warning', title: QUEUE_FULL_TITLE });
+      },
+      (e) =>
+        giveBack({
+          variant: 'error',
+          title: errorMessage(e, 'Não foi possível enviar a mensagem.'),
+        }),
+    );
+    // A mensagem aparece na hora como pendente (outgoingFor) e, confirmada,
+    // entra no histórico pelo provider (não anexar à mão).
   };
 
   return (
@@ -190,7 +241,7 @@ export default function ChatThread() {
             <ChatThreadState kind="loading" />
           ) : status === 'error' ? (
             <ChatThreadState kind="error" onRetry={load} />
-          ) : messages.length === 0 ? (
+          ) : messages.length === 0 && outgoing.length === 0 ? (
             <ChatThreadState kind="empty" />
           ) : (
             <ScrollView
@@ -220,8 +271,21 @@ export default function ChatThread() {
                   theirAvatar={theirAvatar}
                 />
               ))}
+              {outgoing.map((o) => (
+                <OutgoingItem key={o.id} outgoing={o} myAvatar={myAvatar} />
+              ))}
             </ScrollView>
           )}
+
+          {notice ? (
+            <View style={{ marginTop: theme.gap.sm }}>
+              <Toast
+                variant={notice.variant}
+                title={notice.title}
+                onClose={() => setNotice(null)}
+              />
+            </View>
+          ) : null}
 
           {/* Pending attachment preview — surge acima do input quando user
               anexa foto via attach_file. Tap para remover. É enviado de verdade
@@ -281,6 +345,7 @@ export default function ChatThread() {
                 placeholderTextColor={theme.content.dark}
                 value={text}
                 onChangeText={setText}
+                maxLength={MAX_MESSAGE_LENGTH}
                 onSubmitEditing={onSend}
                 returnKeyType="send"
               />

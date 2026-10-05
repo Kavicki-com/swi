@@ -37,7 +37,11 @@ export async function uploadImage(uri: string, prefix = 'reports'): Promise<stri
   // por exemplo). Sem esta guarda o presign levaria 0 e voltaria 400: erro
   // certo, mensagem ruim, e uma ida à rede desperdiçada.
   if (!file.size) {
-    throw new Error('Arquivo vazio ou não encontrado. Selecione a imagem novamente.');
+    // O código distingue esta falha das de rede: a fila de envios descarta o
+    // item em vez de tentar de novo um arquivo que não existe mais.
+    throw Object.assign(new Error('Arquivo vazio ou não encontrado. Selecione a imagem novamente.'), {
+      code: 'FILE_MISSING',
+    });
   }
   const { url, key } = await apiRequest<{ url: string; key: string }>('/media/presign', {
     method: 'POST',
