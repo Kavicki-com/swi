@@ -131,9 +131,11 @@ function MiniMap({
   const { show: showToast } = useDemoToast()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
+  const markerRef = useRef<maplibregl.Marker | null>(null)
+  const avatarRef = useRef<HTMLDivElement | null>(null)
   const lngLat: [number, number] | null = position ? [position.lng, position.lat] : null
   useEffect(() => {
-    if (!lib || !containerRef.current || !lngLat) return
+    if (!lib || !containerRef.current || !lngLat || mapRef.current) return
     const map = new lib.Map({
       container: containerRef.current,
       style: ESRI_SATELLITE_STYLE,
@@ -154,6 +156,7 @@ function MiniMap({
     wrapper.style.alignItems = 'center'
 
     const avatarEl = document.createElement('div')
+    avatarRef.current = avatarEl
     avatarEl.style.width = '40px'
     avatarEl.style.height = '40px'
     avatarEl.style.borderRadius = '999px'
@@ -177,17 +180,29 @@ function MiniMap({
     wrapper.appendChild(avatarEl)
     wrapper.appendChild(tail)
 
-    new lib.Marker({ element: wrapper, anchor: 'bottom' }).setLngLat(lngLat).addTo(map)
+    const marker = new lib.Marker({ element: wrapper, anchor: 'bottom' })
+    markerRef.current = marker.setLngLat(lngLat).addTo(map)
+    // Nasce uma vez por página: `worker` chega novo a cada render, e posição e
+    // foto seguem pelos efeitos abaixo. O tema é fixo (modo escuro) e fica de fora.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lib, lngLat === null])
+  // Posição nova move o pino e recentraliza, sem recriar o mapa.
+  useEffect(() => {
+    if (!lngLat) return
+    markerRef.current?.setLngLat(lngLat)
+    mapRef.current?.setCenter(lngLat)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lngLat?.[0], lngLat?.[1]])
+  useEffect(() => {
+    if (avatarRef.current) avatarRef.current.style.backgroundImage = `url("${worker.avatarUri}")`
+  }, [worker.avatarUri])
+  // Sem posição o mapa segue vivo sob o aviso; só sai junto com a página.
+  useEffect(() => {
     return () => {
-      map.remove()
+      mapRef.current?.remove()
       mapRef.current = null
     }
-    // Intentionally excludes `theme.surface.secondary`: this effect mounts a
-    // maplibre map + a DOM marker. Re-running on every theme reference change
-    // would tear down and rebuild the map for an essentially-static colour
-    // that never changes at runtime (the SWI theme is fixed dark mode).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worker, lib, lngLat?.[0], lngLat?.[1]])
+  }, [])
   return (
     <View
       style={{
