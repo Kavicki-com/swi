@@ -24,7 +24,8 @@ export interface LocationUpdates {
   hasStarted(): Promise<boolean>;
 }
 
-export type StartResult = 'tracking' | 'expired' | 'failed' | 'unsupported';
+/** `skipped`: retomar sem janela aberta da pessoa, e nada foi ligado. */
+export type StartResult = 'tracking' | 'expired' | 'failed' | 'unsupported' | 'skipped';
 
 export interface PositionTracking {
   /**
@@ -32,6 +33,12 @@ export interface PositionTracking {
    * sistema recusa, em geral por falta da permissão de uso.
    */
   start(userId: string): Promise<StartResult>;
+  /**
+   * Religa só a janela que já estava aberta, da pessoa e dentro das 12 h; sem
+   * ela, `skipped` e nada muda. É o que a jornada vinda da cópia guardada pode
+   * pedir: abrir janela nova fica para quem leu o servidor.
+   */
+  resume(userId: string): Promise<StartResult>;
   /** Fim da jornada ou logout: fecha a janela e desliga. */
   stop(): Promise<void>;
   /** As 12 h vencidas vistas pela tarefa: desliga e mantém a janela. */
@@ -104,6 +111,19 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
     return 'tracking';
   }
 
+  async function resume(userId: string): Promise<StartResult> {
+    const current = await window.read();
+    if (current?.userId !== userId || !isWindowOpen(current, now())) return 'skipped';
+    try {
+      if (!(await updates.hasStarted())) await updates.start();
+    } catch {
+      setActive(false);
+      return 'failed';
+    }
+    setActive(true);
+    return 'tracking';
+  }
+
   async function stop(): Promise<void> {
     try {
       await window.close();
@@ -121,6 +141,7 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
 
   return {
     start: (userId) => (supported ? queued(() => start(userId)) : Promise.resolve('unsupported')),
+    resume: (userId) => (supported ? queued(() => resume(userId)) : Promise.resolve('unsupported')),
     stop: () => queued(stop),
     halt: () => queued(halt),
 

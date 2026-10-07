@@ -1,6 +1,7 @@
 import type { User } from '../types';
+import type { StoredSession } from './storedSession';
 
-export type { User };
+export type { User, StoredSession };
 
 // companyId: empresa escolhida no cadastro (GET /companies). Opcional no tipo
 // porque o mock não usa, mas a tela de sign-up da api sempre manda: sem ele o
@@ -27,6 +28,16 @@ export interface SignUpResult {
   nextStep: 'CONFIRM' | 'DONE';
 }
 
+/** O que o servidor disse da sessão guardada. */
+export type SessionCheck =
+  | { status: 'valid'; user: User }
+  /** 401 ou 403 da própria API: token e cópia da sessão já foram apagados. */
+  | { status: 'revoked' }
+  /** Sem rede, prazo, 5xx, ou alguém no caminho respondendo: nada muda. */
+  | { status: 'unreachable' }
+  /** Não há token guardado. */
+  | { status: 'none' };
+
 export interface AuthBackend {
   signIn(p: SignInParams): Promise<User>;
   signUp(p: SignUpParams): Promise<SignUpResult>;
@@ -36,5 +47,8 @@ export interface AuthBackend {
   resetPassword(p: ResetPasswordParams): Promise<void>;
   confirmReset(p: ConfirmResetParams): Promise<void>;
   changePassword(p: ChangePasswordParams): Promise<void>;
-  getCurrentUser(): Promise<User | null>;
+  /** Só local: a cópia da sessão, se ela é do token guardado e tem menos de 72 h. */
+  restoreSession(): Promise<StoredSession | null>;
+  /** Pergunta ao servidor se a sessão guardada ainda vale. */
+  confirmSession(): Promise<SessionCheck>;
 }

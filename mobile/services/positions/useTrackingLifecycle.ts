@@ -12,14 +12,19 @@ const defaultTracking = () => getPositionRuntime().tracking;
 
 /**
  * Segue a jornada. Montado dentro do JourneyProvider. `journeyKnown` é falso
- * até a jornada carregar do backend: o estado inicial do provider é ocioso, e
- * agir sobre ele desligaria o rastreio a cada abertura do app.
+ * até a jornada carregar: o estado inicial do provider é ocioso, e agir sobre
+ * ele desligaria o rastreio a cada abertura do app.
+ *
+ * `source`: jornada vinda da cópia guardada (app aberto sem sinal) desliga o
+ * rastreio quando ociosa, mas só RETOMA a janela que já estava aberta. Abrir
+ * janela nova, e com ela 12 h de rastreio, fica para a leitura do servidor.
  */
 export function useJourneyTracking(
   userId: string | null,
   journeyState: JourneyState,
   journeyKnown: boolean,
   tracking: PositionTracking = defaultTracking(),
+  source: 'server' | 'cache' = 'server',
 ): void {
   const tracks = journeyState !== 'idle';
   useEffect(() => {
@@ -28,17 +33,18 @@ export function useJourneyTracking(
       void tracking.stop();
       return;
     }
-    void tracking.start(userId);
+    const turnOn = () => (source === 'cache' ? tracking.resume(userId) : tracking.start(userId));
+    void turnOn();
     // Ligar pode falhar por falta de permissão, e quem a libera nos ajustes
     // volta ao app pelo primeiro plano: é a hora de tentar de novo. Com as
     // leituras já ligadas, o pedido não faz nada.
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void tracking.start(userId);
+      if (state === 'active') void turnOn();
     });
     // Desmontar não desliga: o layout autenticado desmonta no logout, e quem
     // desliga ali é a sessão (useTrackingSession), que vê o logout de fato.
     return () => sub.remove();
-  }, [userId, tracks, journeyKnown, tracking]);
+  }, [userId, tracks, journeyKnown, tracking, source]);
 }
 
 /**

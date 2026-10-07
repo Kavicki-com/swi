@@ -1,6 +1,7 @@
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { SwiThemeProvider } from '@kavicki/swi-design-system';
+import { SwiThemeProvider, Toast } from '@kavicki/swi-design-system';
+import { Redirect } from 'expo-router';
 import Login from '../../../app/(auth)/login';
 import { useAuth } from '../../../services/auth/AuthProvider';
 import { useProfile } from '../../../services/profile/ProfileProvider';
@@ -8,6 +9,7 @@ import { useProfile } from '../../../services/profile/ProfileProvider';
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
+  Redirect: jest.fn(() => null),
 }));
 jest.mock('../../../services/auth/AuthProvider', () => ({ useAuth: jest.fn() }));
 jest.mock('../../../services/profile/ProfileProvider', () => ({ useProfile: jest.fn() }));
@@ -22,6 +24,20 @@ const METRICS = {
 
 let signIn: jest.Mock;
 let loadProfile: jest.Mock;
+let stopResume: jest.Mock;
+let dismissSessionEnded: jest.Mock;
+
+// O estado da sessão que a tela lê, com o padrão de quem chega ao login.
+const sessao = (estado: Record<string, unknown> = {}) =>
+  mockUseAuth.mockReturnValue({
+    signIn,
+    user: null,
+    resumed: false,
+    sessionEnded: false,
+    stopResume,
+    dismissSessionEnded,
+    ...estado,
+  });
 
 const render = async () => {
   let tree!: ReturnType<typeof create>;
@@ -61,8 +77,67 @@ beforeEach(() => {
   mockReplace.mockReset();
   signIn = jest.fn().mockResolvedValue({ id: 'u1', email: 'fulana@empresa.com', name: 'Fulana' });
   loadProfile = jest.fn();
-  mockUseAuth.mockReturnValue({ signIn });
+  stopResume = jest.fn();
+  dismissSessionEnded = jest.fn();
+  sessao();
   mockUseProfile.mockReturnValue({ loadProfile });
+});
+
+describe('login: sessão guardada', () => {
+  const avisos = (tree: ReturnType<typeof create>) => tree.root.findAllByType(Toast);
+
+  it('avisa quando o servidor encerrou a sessão, e fechar esconde', async () => {
+    sessao({ sessionEnded: true });
+    const tree = await render();
+
+    const [aviso] = avisos(tree);
+    expect(aviso.props.variant).toBe('warning');
+    expect(aviso.props.title).toBe('Sua sessão terminou. Entre de novo para continuar.');
+    act(() => aviso.props.onClose());
+    expect(dismissSessionEnded).toHaveBeenCalled();
+  });
+
+  it('sem sessão encerrada, nenhum aviso', async () => {
+    const tree = await render();
+    expect(avisos(tree)).toHaveLength(0);
+  });
+
+  it('sessão que voltou sozinha segue para o dashboard', async () => {
+    sessao({ user: { id: 'u1', email: 'a@b.com', name: 'A' }, resumed: true });
+    const tree = await render();
+
+    const [ir] = tree.root.findAllByType(Redirect as unknown as React.ComponentType);
+    expect(ir.props.href).toBe('/(app)/dashboard');
+  });
+
+  it('login em andamento não redireciona: quem navega é o próprio login', async () => {
+    sessao({ user: { id: 'u1', email: 'a@b.com', name: 'A' } });
+    const tree = await render();
+
+    expect(tree.root.findAllByType(Redirect as unknown as React.ComponentType)).toHaveLength(0);
+  });
+
+  // Quem vai ao cadastro ou à recuperação de senha pode ser outra pessoa: na
+  // volta ao login, a sessão guardada não pode puxá-la para o dashboard.
+  it.each(['Primeiro acesso', 'Recuperar senha'])('%s para de tentar retomar a sessão guardada', async (rotulo) => {
+    const tree = await render();
+
+    await act(async () => {
+      botao(tree, rotulo).props.onPress();
+    });
+
+    expect(stopResume).toHaveBeenCalled();
+  });
+
+  it.each(['Login', 'Senha'])('digitar em %s para de tentar retomar a sessão guardada', async (rotulo) => {
+    const tree = await render();
+
+    await act(async () => {
+      field(tree, rotulo).props.onChangeText('a');
+    });
+
+    expect(stopResume).toHaveBeenCalled();
+  });
 });
 
 // O primeiro login depois da aprovação do admin desvia pro wizard de

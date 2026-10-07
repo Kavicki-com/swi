@@ -17,6 +17,12 @@ jest.mock('../notifications/getNotificationBackend', () => ({
 // A fila é a de verdade, em memória; o teste controla só a resposta do envio.
 let mockQueue: SendQueue;
 jest.mock('../outbox/getSendQueue', () => ({ getSendQueue: () => mockQueue }));
+// A cópia da jornada é a de verdade, num armazenamento em memória por teste.
+let mockCacheStorage: OutboxStorage;
+jest.mock('./journeyCache', () => {
+  const actual = jest.requireActual('./journeyCache');
+  return { ...actual, getJourneyCache: () => actual.createJourneyCache(mockCacheStorage) };
+});
 
 const mockJourneyBackend = getJourneyBackend as jest.Mock;
 const mockNotificationBackend = getNotificationBackend as jest.Mock;
@@ -110,6 +116,7 @@ describe('JourneyProvider', () => {
     send = jest.fn(() => new Promise(() => {}));
     mockQueue = novaFila(send);
     await mockQueue.start('u1');
+    mockCacheStorage = createMemorySendStorage();
   });
 
   // Árvore que fica montada continua ouvindo a fila e o AppState, e o Probe
@@ -500,6 +507,208 @@ describe('JourneyProvider', () => {
       expect(mockQueue.getState().items).toEqual([]);
       expect(getJourney.mock.calls.length).toBeGreaterThan(leiturasAntes);
       expect(text(tree)).toContain('ready|idle|Inspeção:done');
+    });
+  });
+
+  // Abrir o app sem sinal: a jornada vem da última leitura guardada, de quem
+  // está logado, e as ações seguem pela fila como com o app aberto.
+  describe('cópia da jornada', () => {
+    const { createJourneyCache } = jest.requireActual('./journeyCache');
+    const copia = () => createJourneyCache(mockCacheStorage);
+    // A cópia só aceita tarefa inteira, como o servidor manda.
+    const inteira = (id: string, title: string, over: Partial<Task> = {}) =>
+      task(id, title, {
+        description: '',
+        objective: '',
+        responsibleCount: 1,
+        responsibleNames: ['Ana'],
+        responsibleAvatars: [],
+        ...over,
+      });
+    const emAndamento = () => [
+      inteira('t1', 'Inspeção', { status: 'in_progress', startedAt: ONGOING_SESSION.startedAt }),
+      inteira('t2', 'Reparo'),
+    ];
+
+    const renderDe = async (userId: string) => {
+      let tree!: ReturnType<typeof create>;
+      await act(async () => {
+        tree = create(
+          <JourneyProvider userId={userId}>
+            <Probe />
+          </JourneyProvider>,
+        );
+      });
+      mounted.push(tree);
+      await flush();
+      return tree;
+    };
+
+    it('sem rede, abre pela cópia de quem está logado', async () => {
+      await copia().write('u1', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      getJourney.mockRejectedValue(semRede());
+
+      const tree = await renderDe('u1');
+
+      expect(text(tree)).toContain('ready|ongoing|Inspeção:in_progress,Reparo:pending');
+      expect(ctx.source).toBe('cache');
+    });
+
+    it('a ação feita sem sinal entra na fila e vale na tela', async () => {
+      await copia().write('u1', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      getJourney.mockRejectedValue(semRede());
+      await renderDe('u1');
+
+      await act(async () => {
+        await ctx.pauseJourney();
+      });
+
+      expect(ctx.loadStatus).toBe('ready');
+      expect(ctx.source).toBe('cache');
+      expect(ctx.state).toBe('paused');
+      expect(ctx.activeTaskId).toBe('t1');
+      expect(mockQueue.getState().items.map((i) => i.kind)).toEqual(['journey.pause']);
+    });
+
+    it('as ações que ficaram na fila são reaplicadas sobre a cópia', async () => {
+      await copia().write('u1', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      getJourney.mockRejectedValue(semRede());
+      const disco = createMemorySendStorage();
+      const antes = novaFila(jest.fn().mockRejectedValue(semRede()), disco);
+      await antes.start('u1');
+      await antes.enqueue({ kind: 'journey.pause' });
+      await antes.kick();
+      antes.stop();
+      mockQueue.stop();
+      mockQueue = novaFila(jest.fn().mockRejectedValue(semRede()), disco);
+
+      await renderDe('u1');
+      await act(async () => {
+        await mockQueue.start('u1');
+      });
+
+      expect(ctx.loadStatus).toBe('ready');
+      expect(ctx.state).toBe('paused');
+    });
+
+    it('a leitura do servidor troca a cópia', async () => {
+      await copia().write('u1', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      const leitura = deferred<JourneySession>();
+      getJourney.mockReturnValueOnce(leitura.promise);
+      listTasks.mockResolvedValue([task('t1', 'Inspeção', { status: 'done' })]);
+      const tree = await renderDe('u1');
+      expect(ctx.source).toBe('cache');
+
+      await act(async () => {
+        leitura.resolve(IDLE_SESSION);
+      });
+      await flush();
+
+      expect(ctx.source).toBe('server');
+      expect(text(tree)).toContain('ready|idle|Inspeção:done');
+    });
+
+    it('a leitura do servidor que chega antes vale mais que a cópia', async () => {
+      await copia().write('u1', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      const leituraDaCopia = deferred<string | null>();
+      const guardado = await mockCacheStorage.read();
+      mockCacheStorage = { read: () => leituraDaCopia.promise, write: async () => undefined };
+      listTasks.mockResolvedValue([task('t1', 'Inspeção', { status: 'done' })]);
+
+      const tree = await renderDe('u1');
+      await act(async () => {
+        leituraDaCopia.resolve(guardado);
+      });
+      await flush();
+
+      expect(ctx.source).toBe('server');
+      expect(text(tree)).toContain('ready|idle|Inspeção:done');
+    });
+
+    it('a cópia de outra pessoa não vale', async () => {
+      await copia().write('u2', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      getJourney.mockRejectedValue(semRede());
+
+      const tree = await renderDe('u1');
+
+      expect(text(tree)).toContain('error|idle|');
+    });
+
+    it('sem cópia e sem rede continua o erro de carregar', async () => {
+      getJourney.mockRejectedValue(semRede());
+
+      const tree = await renderDe('u1');
+
+      expect(text(tree)).toContain('error|idle|');
+    });
+
+    it('a tentativa de recarregar sem rede não troca a cópia por erro', async () => {
+      await copia().write('u1', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      getJourney.mockRejectedValue(semRede());
+      const tree = await renderDe('u1');
+
+      await act(async () => {
+        await ctx.load();
+      });
+
+      expect(text(tree)).toContain('ready|ongoing|');
+    });
+
+    it('grava a cópia a cada leitura do servidor, sem as fotos', async () => {
+      getJourney.mockResolvedValue(ONGOING_SESSION);
+      listTasks.mockResolvedValue([
+        inteira('t1', 'Inspeção', { status: 'in_progress', images: ['https://cdn/f.jpg?Signature=x'] }),
+      ]);
+
+      await renderDe('u1');
+
+      const guardada = await copia().read('u1');
+      expect(guardada?.journey).toEqual(ONGOING_SESSION);
+      expect(guardada?.tasks[0]).toMatchObject({ id: 't1', status: 'in_progress' });
+      // A leitura sempre devolve as fotos vazias: quem prova é o texto gravado.
+      expect(await mockCacheStorage.read()).not.toContain('https://');
+    });
+
+    it('grava a cópia com a ação confirmada antes da releitura', async () => {
+      getJourney.mockResolvedValue(ONGOING_SESSION);
+      listTasks.mockResolvedValue(emAndamento());
+      const resposta = deferred<unknown>();
+      send.mockImplementationOnce(() => resposta.promise);
+      await renderDe('u1');
+      getJourney.mockReturnValue(new Promise(() => {}));
+
+      await act(async () => {
+        await ctx.pauseJourney();
+      });
+      await act(async () => {
+        resposta.resolve({ state: 'paused' });
+      });
+      await flush();
+
+      expect((await copia().read('u1'))?.journey.state).toBe('paused');
+    });
+
+    it('sem dono, não lê a cópia', async () => {
+      await copia().write('u1', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      getJourney.mockRejectedValue(semRede());
+
+      const tree = await render();
+      await flush();
+
+      expect(text(tree)).toContain('error|idle|');
+      expect(ctx.source).toBeNull();
+    });
+
+    it('sem dono, a leitura do servidor não grava cópia', async () => {
+      await copia().write('u1', { journey: ONGOING_SESSION, tasks: emAndamento() });
+      const antes = await mockCacheStorage.read();
+      listTasks.mockResolvedValue([inteira('t9', 'Outra')]);
+
+      await render();
+      await flush();
+
+      expect(ctx.source).toBe('server');
+      expect(await mockCacheStorage.read()).toBe(antes);
     });
   });
 });

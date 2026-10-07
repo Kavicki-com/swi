@@ -12,9 +12,16 @@ jest.mock('../../../services/auth/AuthProvider', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-let mockJourney: { state: string; loadStatus: string } = { state: 'ongoing', loadStatus: 'ready' };
+let mockJourney: { state: string; loadStatus: string; source?: string | null } = {
+  state: 'ongoing',
+  loadStatus: 'ready',
+};
+const mockJourneyProvider = jest.fn();
 jest.mock('../../../services/journey/JourneyProvider', () => ({
-  JourneyProvider: ({ children }: { children: React.ReactNode }) => children,
+  JourneyProvider: ({ children, userId }: { children: React.ReactNode; userId?: string }) => {
+    mockJourneyProvider({ userId });
+    return children;
+  },
   useJourney: () => mockJourney,
 }));
 const mockJourneyTracking = jest.fn();
@@ -94,23 +101,37 @@ describe('(app)/_layout: rastreio em segundo plano', () => {
   });
 
   it('a jornada carregada decide o rastreio da pessoa logada', () => {
-    mockJourney = { state: 'paused', loadStatus: 'ready' };
+    mockJourney = { state: 'paused', loadStatus: 'ready', source: 'server' };
     render();
-    expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'paused', true);
+    expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'paused', true, undefined, 'server');
   });
 
   it('jornada carregada sem tarefas também conta como conhecida', () => {
-    mockJourney = { state: 'idle', loadStatus: 'empty' };
+    mockJourney = { state: 'idle', loadStatus: 'empty', source: 'server' };
     render();
-    expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'idle', true);
+    expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'idle', true, undefined, 'server');
   });
 
   it('jornada ainda carregando, ou que falhou, não é conhecida', () => {
     for (const loadStatus of ['idle', 'loading', 'error']) {
-      mockJourney = { state: 'idle', loadStatus };
+      mockJourney = { state: 'idle', loadStatus, source: null };
       render();
-      expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'idle', false);
+      expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'idle', false, undefined, 'server');
     }
+  });
+
+  // Abrir sem sinal: a jornada vem da cópia, e o rastreio sabe disso para só
+  // retomar a janela que já estava aberta.
+  it('jornada vinda da cópia leva a origem ao rastreio', () => {
+    mockJourney = { state: 'ongoing', loadStatus: 'ready', source: 'cache' };
+    render();
+    expect(mockJourneyTracking).toHaveBeenLastCalledWith('u1', 'ongoing', true, undefined, 'cache');
+  });
+
+  it('a jornada recebe a pessoa logada como dona da cópia', () => {
+    mockJourneyProvider.mockClear();
+    render();
+    expect(mockJourneyProvider).toHaveBeenCalledWith({ userId: 'u1' });
   });
 });
 

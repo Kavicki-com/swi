@@ -1,4 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from 'react';
+import {
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren,
+} from 'react';
+import { AppState } from 'react-native';
 import type { Report, ReportComment, ReportInput } from './types';
 import { getReportsBackend } from './getReportsBackend';
 import { useAuth } from '../auth/AuthProvider';
@@ -7,6 +10,7 @@ import { getSendQueue } from '../outbox/getSendQueue';
 import { PENDING_LABEL } from '../outbox/sendCopy';
 import type { EnqueueResult } from '../outbox/sendQueue';
 import { useSendQueueEvent, useSendQueueState } from '../outbox/useSendQueue';
+import { connectionStatus } from '../realtime/connectionStatus';
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
@@ -50,30 +54,72 @@ export function ReportsProvider({ children }: PropsWithChildren) {
   const [reports, setReports] = useState<Report[]>([]);
   const [status, setStatus] = useState<LoadStatus>('idle');
   const backend = useMemo(() => getReportsBackend(), []);
+  const { user } = useAuth();
+  // Comentários confirmados nesta sessão, por relatório. A tela de detalhe
+  // guarda o relatório que carregou; é daqui que ela recebe o comentário novo.
+  const [sentComments, setSentComments] = useState<Record<string, ReportComment[]>>({});
 
-  const load = useCallback(async () => {
-    setStatus('loading');
+  // O provider mora acima do login: a lista é de quem está logado. Trocou a
+  // pessoa, tudo volta ao começo, e leitura de quem saiu é descartada.
+  const ownerId = user?.id ?? null;
+  const [owner, setOwner] = useState(ownerId);
+  if (owner !== ownerId) {
+    setOwner(ownerId);
+    setReports([]);
+    setStatus('idle');
+    setSentComments({});
+  }
+  const ownerRef = useRef(ownerId);
+  ownerRef.current = ownerId;
+
+  // `silent`: a releitura depois de uma falha não pisca o carregando; falhando
+  // de novo, o erro continua. Só a leitura mais recente vale: a conexão que
+  // volta e o primeiro plano costumam chegar juntos, e a resposta de uma
+  // leitura anterior não pode desfazer a de uma posterior.
+  const issued = useRef(0);
+  const fetchList = useCallback(async (silent: boolean) => {
+    const mine = ownerRef.current;
+    const seq = (issued.current += 1);
+    const current = () => ownerRef.current === mine && issued.current === seq;
+    if (!silent) setStatus('loading');
     try {
       const r = await backend.list();
+      if (!current()) return;
       setReports(r);
       setStatus(r.length ? 'ready' : 'empty');
     } catch {
+      if (!current()) return;
       setStatus('error');
     }
   }, [backend]);
+  const load = useCallback(() => fetchList(false), [fetchList]);
   const loadOne = useCallback((id: string) => backend.get(id), [backend]);
+
+  // Lista que falhou (o app abriu sem sinal) relê sozinha quando a conexão
+  // volta e quando o app volta ao primeiro plano.
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  useEffect(() => {
+    const retry = () => {
+      if (statusRef.current === 'error') void fetchList(true);
+    };
+    const offReconnect = connectionStatus.onReconnect(retry);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') retry();
+    });
+    return () => {
+      offReconnect();
+      sub.remove();
+    };
+  }, [fetchList]);
 
   // Relatório e comentário saem pela fila de envios: entram nela na hora, com
   // ou sem sinal, e a confirmação do servidor chega depois, pelo evento.
   const queueState = useSendQueueState();
-  const { user } = useAuth();
   const { profile } = useProfile();
   const authorName = user?.name ?? '';
   const authorAvatarUri = profile?.avatarUrl ?? '';
   const sector = profile?.sector ?? '';
-  // Comentários confirmados nesta sessão, por relatório. A tela de detalhe
-  // guarda o relatório que carregou; é daqui que ela recebe o comentário novo.
-  const [sentComments, setSentComments] = useState<Record<string, ReportComment[]>>({});
 
   const create = useCallback(
     (input: ReportInput) => getSendQueue().enqueue({ kind: 'report', ...input }),

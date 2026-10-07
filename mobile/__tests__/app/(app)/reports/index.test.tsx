@@ -107,6 +107,47 @@ describe('Reports (lista): relatórios na fila de envios', () => {
   });
 });
 
+// O app aberto sem sinal: a lista do servidor falhou, mas os pendentes e o
+// "Novo relatório" continuam na tela, com a falha dita no lugar da lista.
+describe('Reports (lista): sem a lista do servidor', () => {
+  const pendente = (): Report => ({
+    ...relatorio('chave-1', 'Feito sem sinal'),
+    statusLabel: 'Aguardando envio',
+  });
+  const comRotulo = (tree: ReturnType<typeof create>, label: string) =>
+    tree.root.findAll((n) => n.props?.label === label && typeof n.props?.onPress === 'function');
+
+  it('mostra Novo relatório, os pendentes e o aviso de falha', async () => {
+    const tree = await render({ status: 'error', reports: [], pendingReports: [pendente()] });
+
+    expect(comRotulo(tree, 'Novo relatório').length).toBeGreaterThan(0);
+    expect(tree.root.findAllByType(ReportCard).map((c) => c.props.title)).toEqual(['Feito sem sinal']);
+    expect(JSON.stringify(tree.toJSON())).toContain('Não foi possível carregar');
+  });
+
+  it('sem pendentes, ainda dá para criar relatório', async () => {
+    const tree = await render({ status: 'error', reports: [], pendingReports: [] });
+
+    expect(comRotulo(tree, 'Novo relatório').length).toBeGreaterThan(0);
+    expect(tree.root.findAllByType(ReportCard)).toHaveLength(0);
+  });
+
+  it('Tentar novamente relê a lista', async () => {
+    const load = jest.fn();
+    const tree = await render({ status: 'error', reports: [], pendingReports: [], load });
+
+    act(() => comRotulo(tree, 'Tentar novamente')[0].props.onPress());
+
+    expect(load).toHaveBeenCalled();
+  });
+
+  it('sem a lista, a paginação não aparece', async () => {
+    const tree = await render({ status: 'error', reports: [], pendingReports: [pendente()] });
+
+    expect(tree.root.findAllByType(Pagination)).toHaveLength(0);
+  });
+});
+
 describe('Reports (lista), vão do QA Mobile #8', () => {
   it('a área de cards é elástica: cresce com a tela em vez de parar num teto fixo', async () => {
     const tree = await render();

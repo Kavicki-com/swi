@@ -1,4 +1,5 @@
 import { act, create } from 'react-test-renderer';
+import { AppState, type AppStateStatus } from 'react-native';
 import { ReportsProvider, useReports } from './ReportsProvider';
 import type { Report, ReportComment, ReportInput } from './types';
 import { createSendQueue, type SendQueue } from '../outbox/sendQueue';
@@ -47,8 +48,21 @@ jest.mock('./getReportsBackend', () => ({ getReportsBackend: () => mockBackend }
 let mockQueue: SendQueue;
 jest.mock('../outbox/getSendQueue', () => ({ getSendQueue: () => mockQueue }));
 
+const JOSUE = { id: 'u1', email: 'josue@example.test', name: 'Josué Oliveira' };
+let mockUser: { id: string; email: string; name: string } | null = JOSUE;
 jest.mock('../auth/AuthProvider', () => ({
-  useAuth: () => ({ user: { id: 'u1', email: 'josue@example.test', name: 'Josué Oliveira' } }),
+  useAuth: () => ({ user: mockUser }),
+}));
+let mockReconnect: (() => void) | null = null;
+jest.mock('../realtime/connectionStatus', () => ({
+  connectionStatus: {
+    onReconnect: (listener: () => void) => {
+      mockReconnect = listener;
+      return () => {
+        mockReconnect = null;
+      };
+    },
+  },
 }));
 let mockProfile: { avatarUrl?: string; sector?: string } | null = null;
 jest.mock('../profile/ProfileProvider', () => ({
@@ -74,14 +88,27 @@ function Sonda() {
   return null;
 }
 
+// Árvores montadas no teste, desmontadas no fim: montadas, seguiriam ouvindo
+// a conexão e o primeiro plano no teste seguinte.
+let montadas: ReturnType<typeof create>[] = [];
+afterEach(() => {
+  act(() => {
+    montadas.forEach((tree) => tree.unmount());
+  });
+  montadas = [];
+});
+
 async function montar() {
+  let tree!: ReturnType<typeof create>;
   await act(async () => {
-    create(
+    tree = create(
       <ReportsProvider>
         <Sonda />
       </ReportsProvider>,
     );
   });
+  montadas.push(tree);
+  return tree;
 }
 
 /** Deixa a rodada de envio em andamento terminar e o React assentar. */
@@ -124,6 +151,7 @@ beforeEach(async () => {
     newId: () => `chave-${(id += 1)}`,
   });
   await mockQueue.start('u1');
+  mockUser = JOSUE;
 });
 
 describe('ReportsProvider: novo relatório pela fila', () => {
@@ -397,5 +425,156 @@ describe('ReportsProvider: leitura', () => {
     await montar();
 
     await expect(reports.loadOne('r1')).resolves.toMatchObject({ id: 'r1' });
+  });
+});
+
+// O provider mora acima do login: a lista é de quem está logado.
+describe('ReportsProvider: troca de conta', () => {
+  const montarArvore = montar;
+  const rerender = (tree: ReturnType<typeof create>) =>
+    act(async () => {
+      tree.update(
+        <ReportsProvider>
+          <Sonda />
+        </ReportsProvider>,
+      );
+    });
+
+  it('quem entra depois não vê a lista nem os comentários de quem saiu', async () => {
+    const tree = await montarArvore();
+    mockBackend.list.mockResolvedValueOnce([doServidor('r1', 'De Josué')]);
+    await act(async () => {
+      await reports.load();
+    });
+    await act(async () => {
+      await reports.addComment('r1', 'ok');
+    });
+    await assentar();
+    expect(reports.commentsFor('r1').sent).toHaveLength(1);
+
+    mockUser = { id: 'u2', email: 'bia@example.test', name: 'Bia' };
+    await rerender(tree);
+
+    expect(reports.reports).toEqual([]);
+    expect(reports.status).toBe('idle');
+    expect(reports.commentsFor('r1').sent).toEqual([]);
+  });
+
+  it('leitura de quem saiu que chega depois da troca é descartada', async () => {
+    const tree = await montarArvore();
+    let responder!: (r: Report[]) => void;
+    mockBackend.list.mockReturnValueOnce(new Promise<Report[]>((r) => { responder = r; }));
+    let lendo!: Promise<void>;
+    act(() => {
+      lendo = reports.load();
+    });
+
+    mockUser = { id: 'u2', email: 'bia@example.test', name: 'Bia' };
+    await rerender(tree);
+    await act(async () => {
+      responder([doServidor('r1', 'De Josué')]);
+      await lendo;
+    });
+
+    expect(reports.reports).toEqual([]);
+    expect(reports.status).toBe('idle');
+  });
+});
+
+// O app aberto sem sinal mostra a falha da lista: quando a conexão volta, ou o
+// app volta ao primeiro plano, ela relê sozinha, sem piscar o carregando.
+describe('ReportsProvider: releitura depois de falha', () => {
+  let appState: ((s: AppStateStatus) => void) | null;
+
+  beforeEach(() => {
+    appState = null;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((
+      _type: string,
+      cb: (s: AppStateStatus) => void,
+    ) => {
+      appState = cb;
+      return { remove: () => { appState = null; } };
+    }) as unknown as typeof AppState.addEventListener);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const comFalha = async () => {
+    await montar();
+    mockBackend.list.mockRejectedValueOnce(semRede());
+    await act(async () => {
+      await reports.load();
+    });
+    expect(reports.status).toBe('error');
+  };
+
+  it('relê quando a conexão volta', async () => {
+    await comFalha();
+    mockBackend.list.mockResolvedValueOnce([doServidor('r1', 'Um')]);
+
+    await act(async () => mockReconnect?.());
+    await assentar();
+
+    expect(reports.status).toBe('ready');
+    expect(reports.reports.map((r) => r.id)).toEqual(['r1']);
+  });
+
+  it('relê ao voltar ao primeiro plano', async () => {
+    await comFalha();
+    mockBackend.list.mockResolvedValueOnce([]);
+
+    await act(async () => appState?.('active'));
+    await assentar();
+
+    expect(reports.status).toBe('empty');
+  });
+
+  it('a releitura que falha de novo continua no erro, sem passar pelo carregando', async () => {
+    await comFalha();
+    let falhar!: (e: unknown) => void;
+    mockBackend.list.mockReturnValueOnce(new Promise<Report[]>((_r, reject) => { falhar = reject; }));
+
+    await act(async () => mockReconnect?.());
+    // Com a releitura no ar, a tela segue com a falha, sem o carregando.
+    expect(mockBackend.list).toHaveBeenCalledTimes(2);
+    expect(reports.status).toBe('error');
+
+    await act(async () => falhar(semRede()));
+    await assentar();
+    expect(reports.status).toBe('error');
+  });
+
+  // Conexão e primeiro plano costumam chegar juntos: só a leitura mais nova vale.
+  it('a falha de uma releitura antiga não desfaz a lista que chegou depois', async () => {
+    await comFalha();
+    let falharAntiga!: (e: unknown) => void;
+    let responderNova!: (r: Report[]) => void;
+    mockBackend.list
+      .mockReturnValueOnce(new Promise<Report[]>((_r, reject) => { falharAntiga = reject; }))
+      .mockReturnValueOnce(new Promise<Report[]>((resolve) => { responderNova = resolve; }));
+
+    await act(async () => mockReconnect?.());
+    await act(async () => appState?.('active'));
+    expect(mockBackend.list).toHaveBeenCalledTimes(3);
+
+    await act(async () => responderNova([doServidor('r1', 'Um')]));
+    await act(async () => falharAntiga(semRede()));
+    await assentar();
+
+    expect(reports.status).toBe('ready');
+    expect(reports.reports.map((r) => r.id)).toEqual(['r1']);
+  });
+
+  it('com a lista carregada não relê', async () => {
+    await montar();
+    mockBackend.list.mockResolvedValueOnce([doServidor('r1', 'Um')]);
+    await act(async () => {
+      await reports.load();
+    });
+    mockBackend.list.mockClear();
+
+    await act(async () => mockReconnect?.());
+    await act(async () => appState?.('active'));
+
+    expect(mockBackend.list).not.toHaveBeenCalled();
   });
 });

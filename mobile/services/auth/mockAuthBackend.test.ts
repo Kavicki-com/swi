@@ -14,6 +14,10 @@ describe('mockAuthBackend', () => {
     await expect(mockAuthBackend.resetPassword({ email: 'a@b.com' })).resolves.toBeUndefined();
     await expect(mockAuthBackend.confirmReset({ email: 'a@b.com', code: '1', newPassword: 'x' })).resolves.toBeUndefined();
   });
+  it('não guarda sessão: nada a restaurar nem a confirmar', async () => {
+    await expect(mockAuthBackend.restoreSession()).resolves.toBeNull();
+    await expect(mockAuthBackend.confirmSession()).resolves.toEqual({ status: 'none' });
+  });
   it('resendConfirmation resolves without throwing (no-op)', async () => {
     await expect(mockAuthBackend.resendConfirmation({ email: 'a@b.com' })).resolves.toBeUndefined();
   });

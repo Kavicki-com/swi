@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { getApiUrl } from '../auth/apiConfig';
+import { notifyUnauthorized } from './unauthorized';
 
 const TOKEN_KEY = 'swi.auth.token';
 
@@ -123,6 +124,10 @@ async function send<T>(path: string, opts: ApiRequestOptions, signal: AbortSigna
     // O corpo de erro do Nest sempre traz `statusCode`. Sem ele, quem respondeu
     // foi algo no caminho (proxy, túnel), e não a API.
     (err as any).apiError = typeof data?.statusCode === 'number';
+    // Token recusado pela API: a sessão confere com o servidor se ainda vale.
+    // O 401 de um proxy ou portal de rede não avisa; avisaria a cada nova
+    // confirmação, que receberia o mesmo 401.
+    if (auth && res.status === 401 && (err as any).apiError) notifyUnauthorized();
     throw err;
   }
   return data as T;

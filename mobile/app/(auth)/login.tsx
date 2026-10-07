@@ -1,21 +1,25 @@
 import { useState } from 'react';
 import { useSubmitOnce } from '../../lib/forms/useSubmitOnce';
 import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Icon, Input, Logo, useTheme } from '@kavicki/swi-design-system';
+import { Button, Icon, Input, Logo, Toast, useTheme } from '@kavicki/swi-design-system';
 import { useAuth } from '../../services/auth/AuthProvider';
 import { useProfile } from '../../services/profile/ProfileProvider';
 import { onboardingPendente } from '../../services/profile/onboarding';
-import { useField } from '../../lib/forms/useField';
+import { useField, type FieldBindProps } from '../../lib/forms/useField';
 import { validateEmail, validateRequired } from '../../lib/validation/validators';
 import { errorMessage } from '../../lib/errors/errorMessage';
+
+// O servidor recusou a sessão guardada. O Figma não desenha esse estado; o
+// texto é o aprovado para ele.
+const SESSION_ENDED_TITLE = 'Sua sessão terminou. Entre de novo para continuar.';
 
 export default function Login() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { signIn } = useAuth();
+  const { signIn, user, resumed, sessionEnded, dismissSessionEnded, stopResume } = useAuth();
   const { loadProfile } = useProfile();
   const email = useField({ validator: validateEmail });
   // Senha só precisa ser não-vazia (login usa credencial existente; regras de
@@ -59,6 +63,21 @@ export default function Login() {
   // 409 de e-mail ja existente enquanto o 1o ja tinha criado a conta e
   // navegado). O `disabled` do botao nunca fez parte desta trava.
   const { run: enviar } = useSubmitOnce(handleLogin);
+
+  // Digitar, ou ir ao cadastro ou à recuperação de senha, é sinal de que
+  // alguém vai entrar, talvez com outra conta: a sessão guardada para de
+  // voltar sozinha.
+  const typed = (bind: FieldBindProps): FieldBindProps => ({
+    ...bind,
+    onChangeText: (v) => {
+      stopResume();
+      bind.onChangeText(v);
+    },
+  });
+
+  // A sessão guardada voltou sozinha (o app abriu sem sinal e o servidor
+  // confirmou depois): segue como na abertura com sinal.
+  if (user && resumed) return <Redirect href="/(app)/dashboard" />;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -107,7 +126,7 @@ export default function Login() {
         <View style={{ gap: theme.gap.l }}>
           <View style={{ gap: theme.gap.l }}>
             <Input
-              {...email.bind()}
+              {...typed(email.bind())}
               label="Login"
               placeholder="seu@email.com"
               keyboardType="email-address"
@@ -116,7 +135,7 @@ export default function Login() {
             />
 
             <Input
-              {...password.bind()}
+              {...typed(password.bind())}
               label="Senha"
               placeholder="*********"
               secureTextEntry={!showPassword}
@@ -140,7 +159,10 @@ export default function Login() {
             <Button
               variant="ghost"
               label="Recuperar senha"
-              onPress={() => router.push('/(auth)/password-recovery/email')}
+              onPress={() => {
+                stopResume();
+                router.push('/(auth)/password-recovery/email');
+              }}
             />
           </View>
 
@@ -155,7 +177,10 @@ export default function Login() {
               variant="outline"
               label="Primeiro acesso"
               fullWidth
-              onPress={() => router.push('/(auth)/sign-up')}
+              onPress={() => {
+                stopResume();
+                router.push('/(auth)/sign-up');
+              }}
             />
           </View>
 
@@ -168,6 +193,22 @@ export default function Login() {
         </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Toast do DS por cima do formulário, como o aviso geral da área
+          logada; `box-none` deixa o toque passar para o que está embaixo. */}
+      {sessionEnded ? (
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            top: insets.top + theme.padding.s,
+            left: theme.padding.m,
+            right: theme.padding.m,
+          }}
+        >
+          <Toast variant="warning" title={SESSION_ENDED_TITLE} onClose={dismissSessionEnded} />
+        </View>
+      ) : null}
     </View>
   );
 }

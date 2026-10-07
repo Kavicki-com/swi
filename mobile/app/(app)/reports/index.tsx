@@ -82,8 +82,6 @@ export default function Reports() {
         <ReportsListState kind="loading" />
       ) : status === 'empty' && pendingReports.length === 0 ? (
         <ReportsListState kind="empty" />
-      ) : status === 'error' ? (
-        <ReportsListState kind="error" onRetry={load} />
       ) : (
         <>
           <View
@@ -124,13 +122,20 @@ export default function Reports() {
             {pendingReports.map((report) => (
               <ReportRow key={report.id} report={report} />
             ))}
-            {reports.map((report) => (
-              <ReportRow
-                key={report.id}
-                report={report}
-                onPress={handleReportPress}
-              />
-            ))}
+            {/* Sem a lista do servidor (o app abriu sem sinal), a falha fica
+                no lugar dela: a busca, o "Novo relatório" e os pendentes
+                continuam usáveis. */}
+            {status === 'error' ? (
+              <ReportsListState kind="error" onRetry={load} />
+            ) : (
+              reports.map((report) => (
+                <ReportRow
+                  key={report.id}
+                  report={report}
+                  onPress={handleReportPress}
+                />
+              ))
+            )}
           </ScrollView>
 
           <View
@@ -140,10 +145,12 @@ export default function Reports() {
               paddingBottom: insets.bottom + 127 + theme.gap.m,
             }}
           >
-            <Pagination
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-            />
+            {status === 'error' ? null : (
+              <Pagination
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+              />
+            )}
           </View>
         </>
       )}
