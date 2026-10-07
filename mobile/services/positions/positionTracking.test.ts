@@ -198,6 +198,67 @@ describe('createPositionTracking', () => {
   });
 });
 
+// A jornada que veio da cópia guardada (app aberto sem sinal) só retoma o
+// rastreio que já estava em curso, por exemplo depois de o celular reiniciar.
+// Abrir janela nova é decisão de quem leu o servidor.
+describe('createPositionTracking, retomar', () => {
+  it('com a janela da pessoa aberta, liga as leituras', async () => {
+    const { tracking, updates, window } = setup();
+    await window.open('u1', new Date(T0));
+
+    await expect(tracking.resume('u1')).resolves.toBe('tracking');
+
+    expect(updates.start).toHaveBeenCalledTimes(1);
+    expect(tracking.isActive()).toBe(true);
+  });
+
+  it('sem janela, não abre janela nem liga', async () => {
+    const { tracking, updates, window } = setup();
+
+    await expect(tracking.resume('u1')).resolves.toBe('skipped');
+
+    expect(updates.start).not.toHaveBeenCalled();
+    expect(await window.read()).toBeNull();
+    expect(tracking.isActive()).toBe(false);
+  });
+
+  it('com a janela de outra pessoa, não liga', async () => {
+    const { tracking, updates, window } = setup();
+    await window.open('u2', new Date(T0));
+
+    await expect(tracking.resume('u1')).resolves.toBe('skipped');
+
+    expect(updates.start).not.toHaveBeenCalled();
+    expect(await window.read()).toEqual({ userId: 'u2', startedAt: new Date(T0).toISOString() });
+  });
+
+  it('depois das 12 h, não liga', async () => {
+    const { tracking, updates, window, avancar } = setup();
+    await window.open('u1', new Date(T0));
+    avancar(TRACKING_MAX_MS);
+
+    await expect(tracking.resume('u1')).resolves.toBe('skipped');
+
+    expect(updates.start).not.toHaveBeenCalled();
+  });
+
+  it('o sistema recusando as leituras devolve falha', async () => {
+    const { tracking, updates, window } = setup();
+    await window.open('u1', new Date(T0));
+    updates.start.mockRejectedValueOnce(new Error('sem permissão'));
+
+    await expect(tracking.resume('u1')).resolves.toBe('failed');
+    expect(tracking.isActive()).toBe(false);
+  });
+
+  it('sem suporte (web), não toca nas leituras', async () => {
+    const { tracking, updates } = setup({ supported: false });
+
+    await expect(tracking.resume('u1')).resolves.toBe('unsupported');
+    expect(updates.start).not.toHaveBeenCalled();
+  });
+});
+
 describe('LOCATION_TASK_OPTIONS', () => {
   it('precisão alta, iPhone sem pausa automática, Android por serviço que sobrevive ao app fechado', () => {
     expect(LOCATION_TASK_OPTIONS).toMatchObject({

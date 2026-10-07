@@ -13,6 +13,7 @@ const act = TestRenderer.act;
 function fakeTracking(): jest.Mocked<PositionTracking> {
   return {
     start: jest.fn(async (_userId: string): Promise<StartResult> => 'tracking'),
+    resume: jest.fn(async (_userId: string): Promise<StartResult> => 'tracking'),
     stop: jest.fn(async () => undefined),
     halt: jest.fn(async () => undefined),
     drain: jest.fn(async (_userId: string) => undefined),
@@ -43,9 +44,10 @@ interface JourneyProps {
   journeyState: JourneyState;
   journeyKnown: boolean;
   tracking: PositionTracking;
+  source?: 'server' | 'cache';
 }
-function JourneyHarness({ userId, journeyState, journeyKnown, tracking }: JourneyProps) {
-  useJourneyTracking(userId, journeyState, journeyKnown, tracking);
+function JourneyHarness({ userId, journeyState, journeyKnown, tracking, source }: JourneyProps) {
+  useJourneyTracking(userId, journeyState, journeyKnown, tracking, source);
   return null;
 }
 const journey = (props: JourneyProps) => createElement(JourneyHarness as ComponentType<any>, props);
@@ -149,6 +151,53 @@ describe('useJourneyTracking', () => {
     await act(async () => root.unmount());
     expect(tracking.stop).not.toHaveBeenCalled();
     expect(remove).toHaveBeenCalled();
+  });
+
+  // App aberto sem sinal: a jornada vem da cópia guardada da última leitura.
+  // Ela pode desligar o rastreio (encerrar sem sinal) e retomar a janela que
+  // já estava aberta, mas não abre janela nova.
+  describe('com a jornada vinda da cópia', () => {
+    it('em andamento ou pausada só retoma, sem abrir janela', async () => {
+      for (const journeyState of ['ongoing', 'paused'] as const) {
+        const tracking = fakeTracking();
+        await act(async () => {
+          TestRenderer.create(journey({ userId: 'u1', journeyState, journeyKnown: true, tracking, source: 'cache' }));
+        });
+        expect(tracking.resume).toHaveBeenCalledWith('u1');
+        expect(tracking.start).not.toHaveBeenCalled();
+      }
+    });
+
+    it('ociosa desliga', async () => {
+      const tracking = fakeTracking();
+      await act(async () => {
+        TestRenderer.create(journey({ userId: 'u1', journeyState: 'idle', journeyKnown: true, tracking, source: 'cache' }));
+      });
+      expect(tracking.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('a volta ao primeiro plano retoma de novo, sem abrir janela', async () => {
+      const tracking = fakeTracking();
+      await act(async () => {
+        TestRenderer.create(journey({ userId: 'u1', journeyState: 'ongoing', journeyKnown: true, tracking, source: 'cache' }));
+      });
+      await appState('active');
+      expect(tracking.resume).toHaveBeenCalledTimes(2);
+      expect(tracking.start).not.toHaveBeenCalled();
+    });
+
+    it('quando a leitura do servidor chega, liga como sempre', async () => {
+      const tracking = fakeTracking();
+      let root!: ReturnType<typeof TestRenderer.create>;
+      const props = { userId: 'u1', journeyState: 'ongoing' as const, journeyKnown: true, tracking };
+      await act(async () => {
+        root = TestRenderer.create(journey({ ...props, source: 'cache' }));
+      });
+      await act(async () => {
+        root.update(journey({ ...props, source: 'server' }));
+      });
+      expect(tracking.start).toHaveBeenCalledWith('u1');
+    });
   });
 });
 

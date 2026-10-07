@@ -1,4 +1,5 @@
 import { apiRequest, readToken, REQUEST_TIMEOUT_MS } from './http';
+import { onUnauthorized } from './unauthorized';
 import { getApiUrl } from '../auth/apiConfig';
 import * as SecureStore from 'expo-secure-store';
 
@@ -123,10 +124,61 @@ describe('apiRequest', () => {
   });
 });
 
-// Toda tela que carrega dados depende da requisição resolver ou rejeitar.
-// O prazo cobre conexões e leituras de token que não retornam.
-// O RN não salva: o OkHttp que ele monta vem com todos os timeouts em 0. Por
-// isso o prazo cobre o apiRequest inteiro, não só o fetch.
+// O 401 numa chamada autenticada avisa a sessão, que confirma com o servidor
+// antes de sair: 401 também é resposta legítima de rota (senha atual errada).
+describe('apiRequest, aviso de 401', () => {
+  let ouvinte: jest.Mock;
+  let parar: () => void;
+
+  beforeEach(async () => {
+    (global as any).fetch = jest.fn();
+    await SecureStore.setItemAsync('swi.auth.token', 'tok1');
+    ouvinte = jest.fn();
+    parar = onUnauthorized(ouvinte);
+  });
+  afterEach(() => parar());
+
+  it('401 de chamada autenticada avisa e o erro segue o mesmo', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(errJson(401, { statusCode: 401, message: 'Unauthorized' }));
+
+    await expect(apiRequest('/telemetry/v1/me/current', { auth: true })).rejects.toMatchObject({
+      status: 401,
+      message: 'Unauthorized',
+    });
+    expect(ouvinte).toHaveBeenCalledTimes(1);
+  });
+
+  // Quem respondeu foi um proxy ou o portal de uma rede, não a API. Avisar
+  // faria a sessão confirmar de novo a cada resposta dessas, sem fim.
+  it('401 sem o corpo da API não avisa', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(errJson(401, {}));
+
+    await expect(apiRequest('/auth/me', { auth: true })).rejects.toMatchObject({ status: 401 });
+    expect(ouvinte).not.toHaveBeenCalled();
+  });
+
+  it('401 sem auth (login com senha errada) não avisa', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(errJson(401, { statusCode: 401, message: 'Credenciais inválidas' }));
+
+    await expect(apiRequest('/auth/login', { body: { email: 'a', password: 'b' } })).rejects.toBeTruthy();
+    expect(ouvinte).not.toHaveBeenCalled();
+  });
+
+  it.each([403, 404, 500])('%i não avisa', async (status) => {
+    (global.fetch as jest.Mock).mockResolvedValue(errJson(status, { statusCode: status, message: 'x' }));
+
+    await expect(apiRequest('/notifications', { auth: true })).rejects.toBeTruthy();
+    expect(ouvinte).not.toHaveBeenCalled();
+  });
+
+  it('sucesso não avisa', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({}));
+
+    await apiRequest('/notifications', { auth: true });
+    expect(ouvinte).not.toHaveBeenCalled();
+  });
+});
+
 describe('readToken', () => {
   beforeEach(async () => {
     await SecureStore.deleteItemAsync('swi.auth.token');
@@ -142,6 +194,10 @@ describe('readToken', () => {
   });
 });
 
+// Toda tela que carrega dados depende da requisição resolver ou rejeitar.
+// O prazo cobre conexões e leituras de token que não retornam.
+// O RN não salva: o OkHttp que ele monta vem com todos os timeouts em 0. Por
+// isso o prazo cobre o apiRequest inteiro, não só o fetch.
 describe('apiRequest, prazo', () => {
   beforeEach(() => {
     (global as any).fetch = jest.fn();

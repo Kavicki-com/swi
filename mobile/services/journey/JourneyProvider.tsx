@@ -11,6 +11,7 @@ import {
 import { AppState } from 'react-native';
 import type { JourneyState, JourneySession, Task } from './types';
 import { getJourneyBackend } from './getJourneyBackend';
+import { getJourneyCache } from './journeyCache';
 import {
   replayJourneyActions,
   type JourneyAction,
@@ -51,11 +52,18 @@ import { useOnReconnect } from '../realtime/useConnection';
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
+/**
+ * De onde veio a jornada na tela: da leitura do servidor, ou da cópia guardada
+ * da última leitura (o app abriu sem sinal). null antes de qualquer uma.
+ */
+export type JourneySource = 'server' | 'cache' | null;
+
 /** O que a fila precisa da tarefa: o id vai ao servidor, o título ao aviso de recusa. */
 export type TaskRef = Pick<Task, 'id' | 'title'>;
 
 interface JourneyContextValue {
   loadStatus: LoadStatus;
+  source: JourneySource;
   tasks: Task[];
   state: JourneyState;
   activeTaskId: string | null;
@@ -125,12 +133,23 @@ function imagesOf(result: unknown, taskId: string): string[] | null {
   return task.images.every((uri) => typeof uri === 'string') ? (task.images as string[]) : null;
 }
 
-export function JourneyProvider({ children }: PropsWithChildren) {
+/**
+ * `userId`: dono da cópia guardada da jornada. Sem ele, a jornada vem só do
+ * servidor.
+ */
+export function JourneyProvider({ userId, children }: PropsWithChildren<{ userId?: string }>) {
   const backend = useMemo(() => getJourneyBackend(), []);
   const [fetchStatus, setFetchStatus] = useState<LoadStatus>('idle');
   const [snapshot, setSnapshot] = useState<JourneySnapshot>({ journey: IDLE_SESSION, tasks: [] });
   const [settled, setSettled] = useState<SettledAction[]>([]);
   const queue = useSendQueueState();
+  const [source, setSource] = useState<JourneySource>(null);
+  // Espelho síncrono para a leitura do servidor, que termina fora do render.
+  const sourceRef = useRef<JourneySource>(null);
+  const markSource = useCallback((next: JourneySource) => {
+    sourceRef.current = next;
+    setSource(next);
+  }, []);
 
   // `settleSeq` numera as confirmações; `loadSeq` numera as leituras, e
   // `appliedLoad` guarda a última leitura que valeu. A leitura sabe quais
@@ -144,9 +163,11 @@ export function JourneyProvider({ children }: PropsWithChildren) {
   // esqueleto de loading nem apagar a lista que já está na tela — só troca o
   // conteúdo quando a resposta chega. Falha silenciosa mantém o que havia:
   // perder a lista por uma falha de rede momentânea é pior que dado velho.
+  // Com a cópia na tela, a leitura também não pisca nem vira erro: a cópia
+  // continua até o servidor responder.
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const seq = (loadSeq.current += 1);
-    if (!opts?.silent) setFetchStatus('loading');
+    if (!opts?.silent && sourceRef.current !== 'cache') setFetchStatus('loading');
     try {
       // Uma ação confirmada enquanto a leitura ia e voltava deixa a leitura
       // com até duas ações que a tela ainda reaplica: a confirmada e a
@@ -165,18 +186,36 @@ export function JourneyProvider({ children }: PropsWithChildren) {
       setSnapshot({ journey: j, tasks: t });
       setSettled((prev) => prev.filter((s) => s.seq > settledBefore));
       setFetchStatus(t.length ? 'ready' : 'empty');
+      markSource('server');
     } catch {
       // Uma leitura mais nova já valeu: a falha desta não apaga a tela.
       if (seq < appliedLoad.current) return;
-      if (!opts?.silent) setFetchStatus('error');
+      if (!opts?.silent && sourceRef.current !== 'cache') setFetchStatus('error');
     }
-  }, [backend]);
+  }, [backend, markSource]);
 
   const refresh = useCallback(() => load({ silent: true }), [load]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Abrir sem sinal: a cópia da última leitura aparece enquanto o servidor não
+  // responde, e fica se ele falhar. Leitura do servidor que já chegou vale
+  // mais que ela.
+  useEffect(() => {
+    if (!userId) return;
+    let alive = true;
+    void getJourneyCache().read(userId).then((cached) => {
+      if (!alive || !cached || appliedLoad.current > 0) return;
+      setSnapshot(cached);
+      setFetchStatus(cached.tasks.length ? 'ready' : 'empty');
+      markSource('cache');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [userId, markSource]);
 
   // Tarefa nova tem que aparecer sozinha. Buscar a lista uma única vez, no
   // mount, faria o worker só ver a atribuição depois de deslogar e logar, que é
@@ -252,6 +291,21 @@ export function JourneyProvider({ children }: PropsWithChildren) {
     return replayJourneyActions(snapshot, actions);
   }, [snapshot, settled, pending]);
 
+  // A cópia guarda o que o servidor já tem: a última leitura mais as ações
+  // confirmadas depois dela. As que esperam envio ficam no arquivo da fila e
+  // são reaplicadas por cima na abertura.
+  useEffect(() => {
+    if (!userId || source === null) return;
+    // A cópia recém-aberta, sem nada confirmado depois, é ela mesma.
+    if (source === 'cache' && settled.length === 0) return;
+    const confirmed = settled
+      .map((s) => toAction(s.item))
+      .filter((a): a is JourneyAction => a !== null);
+    void getJourneyCache()
+      .write(userId, replayJourneyActions(snapshot, confirmed))
+      .catch(() => undefined);
+  }, [userId, source, snapshot, settled]);
+
   // A jornada só conta como carregada depois de a fila ler o que estava
   // guardado: antes disso uma ação pendente (um "encerrar" feito sem sinal)
   // ainda não foi reaplicada, e quem segue a jornada agiria sobre o estado
@@ -286,6 +340,7 @@ export function JourneyProvider({ children }: PropsWithChildren) {
   const value = useMemo<JourneyContextValue>(
     () => ({
       loadStatus,
+      source,
       tasks: view.tasks,
       state: view.journey.state,
       activeTaskId: view.journey.activeTaskId,
@@ -304,6 +359,7 @@ export function JourneyProvider({ children }: PropsWithChildren) {
     }),
     [
       loadStatus,
+      source,
       view,
       load,
       refresh,

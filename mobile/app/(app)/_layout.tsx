@@ -9,10 +9,17 @@ import { SendQueueRoot } from '../../components/outbox/SendQueueRoot';
 
 // GPS em segundo plano: liga com a jornada em andamento ou pausada e desliga
 // quando ela encerra. Null-render, dentro do JourneyProvider para ler a
-// jornada; a jornada só conta depois de carregada do backend.
+// jornada; a jornada só conta depois de carregada, do servidor ou da cópia
+// guardada (app aberto sem sinal), e da cópia só retoma a janela já aberta.
 function JourneyTrackingRoot({ userId }: { userId: string }) {
-  const { state, loadStatus } = useJourney();
-  useJourneyTracking(userId, state, loadStatus === 'ready' || loadStatus === 'empty');
+  const { state, loadStatus, source } = useJourney();
+  useJourneyTracking(
+    userId,
+    state,
+    loadStatus === 'ready' || loadStatus === 'empty',
+    undefined,
+    source === 'cache' ? 'cache' : 'server',
+  );
   return null;
 }
 
@@ -47,7 +54,7 @@ export default function AppLayout() {
   // Precisa ser UMA instância só: com um provider aninhado na tela, a lista e
   // o badge seriam estados independentes e o badge não zeraria ao ler.
   return (
-    <JourneyProvider>
+    <JourneyProvider userId={user.id}>
       <JourneyTrackingRoot userId={user.id} />
       <LiveBroadcastRoot />
       <EvacuationProvider>
