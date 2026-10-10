@@ -88,7 +88,10 @@ export default function Settings() {
             <HorizontalCard label="Permissões"      onPress={go('/(app)/settings/preferences')} />
             <HorizontalCard label="Suporte"         onPress={go('/(app)/settings/support')} />
             <HorizontalCard label="FAQ"             onPress={go('/(app)/settings/faq')} />
-            {isFeatureEnabled('appleWatchPilot') && (
+            {/* Mesmo menu no iPhone e no Android: a tela de Monitoramento é
+                quem explica, em cada aparelho, se o relógio lê ou por que
+                não lê. Só a demo (Expo Go, prévia web) esconde o item. */}
+            {isFeatureEnabled('watchOnboarding') && (
               <HorizontalCard
                 label="Monitoramento"
                 onPress={go('/(app)/settings/watch-diagnostics')}

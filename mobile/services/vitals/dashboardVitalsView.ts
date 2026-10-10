@@ -77,6 +77,9 @@ const WEAR_ALERT_KIND = 'WEAR_HIGH';
 
 const UNAVAILABLE_STATUS = 'Leitura indisponível no momento';
 const LOADING_STATUS = 'Carregando leitura';
+// Não usa "indisponível": no glossário a palavra nomeia o estado de quem tem
+// suporte e não recebeu leitura, que pede outro conselho.
+const UNSUPPORTED_STATUS = 'Monitoramento só com iPhone e Apple Watch';
 
 const EMPTY: Omit<DashboardVitalsView, 'status'> = {
   heartRate: null,
@@ -104,16 +107,23 @@ export function workerStatusOf(telemetry: WorkerTelemetry | null): WorkerStatus 
 
 export function dashboardVitalsView(
   telemetry: WorkerTelemetry | null,
-  options: { failed?: boolean; loading?: boolean } = {},
+  options: { failed?: boolean; loading?: boolean; unsupported?: boolean } = {},
 ): DashboardVitalsView {
   if (telemetry === null || telemetry.origin === null) {
+    // Aparelho sem o módulo do relógio (Android, iPhone sem a build do piloto)
+    // nunca vai ler: a frase diz onde o monitoramento funciona e vale acima de
+    // carregando e de falha, porque esses dois prometem uma leitura que não
+    // vem. Leitura que já existe no servidor (outro aparelho do mesmo
+    // funcionário, demonstração) continua aparecendo pelo caminho de baixo.
     // Antes da primeira resposta a tela ainda não sabe se há leitura: dizer
     // "sem leitura" seria afirmar uma ausência que ninguém conferiu.
-    const status = options.failed
-      ? UNAVAILABLE_STATUS
-      : options.loading && telemetry === null
-        ? LOADING_STATUS
-        : 'Sem leitura do aparelho';
+    const status = options.unsupported
+      ? UNSUPPORTED_STATUS
+      : options.failed
+        ? UNAVAILABLE_STATUS
+        : options.loading && telemetry === null
+          ? LOADING_STATUS
+          : 'Sem leitura do aparelho';
     return { ...EMPTY, status };
   }
 

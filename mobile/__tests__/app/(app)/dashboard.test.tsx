@@ -4,6 +4,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import Dashboard from '../../../app/(app)/dashboard';
 import { condition, reporting } from '../../../services/telemetry/myTelemetryFixtures';
 import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
+import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
 
 // Companheiro de dashboard.integration.test.tsx, que cobre a leitura da telemetria,
 // badges, navegacao e a tela ?alert=active. Aqui ficam os dois caminhos de
@@ -25,6 +26,15 @@ const lendo = (telemetry: MyTelemetryState['telemetry']): MyTelemetryState => ({
 });
 
 // --- Fronteiras dubladas -----------------------------------------------------
+
+
+// A tela pergunta ao módulo do relógio se este aparelho faz monitoramento.
+// Em Jest o módulo não existe; o dublê diz "pronto" por padrão para os casos
+// antigos, e "sem suporte" só onde o teste pede.
+let mockSuporte: WatchDiagnosticsState = { support: 'ready' } as WatchDiagnosticsState;
+jest.mock('../../../services/telemetry/watchDiagnostics', () => ({
+  useWatchDiagnostics: () => mockSuporte,
+}));
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -131,6 +141,7 @@ const tocar = async (node: ReactTestInstance) => {
 };
 
 beforeEach(() => {
+  mockSuporte = { support: 'ready' } as WatchDiagnosticsState;
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockSearchParams = {};
@@ -450,5 +461,31 @@ describe('dashboard: ajuda urgente sem leitura', () => {
     expect(porTestID(tree, 'modal-alerta-ativo').props.visible).toBe(true);
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe('dashboard: aparelho sem o módulo do relógio', () => {
+  const SEM_RELOGIO = 'Monitoramento só com iPhone e Apple Watch';
+  const frases = (tree: ReactTestRenderer) =>
+    tree.root
+      .findAll((n) => typeof n.props.children === 'string')
+      .map((n) => n.props.children as string);
+
+  it('a linha de estado diz onde o monitoramento funciona, e a tela fica inteira', async () => {
+    mockSuporte = { support: 'unsupported' };
+    mockTelemetryState = { telemetry: null, failed: false, loading: false };
+    const tree = await montar();
+
+    expect(frases(tree)).toContain(SEM_RELOGIO);
+    expect(frases(tree)).not.toContain('Sem leitura do aparelho');
+    expect(porRotulo(tree, 'Ajuda urgente')).toBeTruthy();
+  });
+
+  it('com o módulo presente a frase não aparece', async () => {
+    mockTelemetryState = { telemetry: null, failed: false, loading: false };
+    const tree = await montar();
+
+    expect(frases(tree)).toContain('Sem leitura do aparelho');
+    expect(frases(tree)).not.toContain(SEM_RELOGIO);
   });
 });

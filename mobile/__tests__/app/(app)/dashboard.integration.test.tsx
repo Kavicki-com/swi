@@ -9,6 +9,7 @@ import {
   reporting,
 } from '../../../services/telemetry/myTelemetryFixtures';
 import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
+import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
 
 // Caracterização do dashboard.
 //
@@ -43,6 +44,13 @@ jest.mock('expo-router', () => ({
 }));
 
 let mockTelemetryState: MyTelemetryState = REPORTANDO();
+// A tela pergunta ao modulo do relogio se este aparelho faz monitoramento.
+// Em Jest o modulo nao existe; o duble diz "pronto", que e o cenario do iPhone
+// que esta suite cobre. O caso sem suporte vive em dashboard.test.tsx.
+jest.mock('../../../services/telemetry/watchDiagnostics', () => ({
+  useWatchDiagnostics: (): WatchDiagnosticsState => ({ support: 'ready' }) as WatchDiagnosticsState,
+}));
+
 jest.mock('../../../services/vitals/MyTelemetryProvider', () => ({
   useMyTelemetry: () => mockTelemetryState,
 }));
