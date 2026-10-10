@@ -230,3 +230,30 @@ describe('dashboardVitalsView', () => {
     expect(dashboardVitalsView(reporting({}, 'DEMO')).sourceBadge).toBe('Dados de demonstração');
   });
 });
+
+describe('aparelho sem o módulo do relógio', () => {
+  // Android e iPhone sem o módulo compilado nunca vão ler: a linha de estado
+  // diz onde o monitoramento funciona, em vez de "sem leitura", que soa como
+  // defeito. Mesma linha de Text, nenhum pixel muda de lugar.
+  const SEM_RELOGIO = 'Monitoramento só com iPhone e Apple Watch';
+
+  it('sem leitura, a linha de estado diz onde o monitoramento funciona', () => {
+    expect(dashboardVitalsView(null, { unsupported: true }).status).toBe(SEM_RELOGIO);
+    expect(dashboardVitalsView(neverReported(), { unsupported: true }).status).toBe(SEM_RELOGIO);
+  });
+
+  it('vale acima de carregando e de falha: este aparelho não vai ler nunca', () => {
+    expect(dashboardVitalsView(null, { unsupported: true, loading: true }).status).toBe(SEM_RELOGIO);
+    expect(dashboardVitalsView(null, { unsupported: true, failed: true }).status).toBe(SEM_RELOGIO);
+  });
+
+  it('leitura que já existe no servidor continua aparecendo', () => {
+    const view = dashboardVitalsView(reporting(), { unsupported: true });
+    expect(view.status).toBe('Monitorando agora');
+    expect(view.heartRate).not.toBeNull();
+  });
+
+  it('com suporte, nada muda', () => {
+    expect(dashboardVitalsView(null, { unsupported: false }).status).toBe('Sem leitura do aparelho');
+  });
+});

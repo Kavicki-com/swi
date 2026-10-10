@@ -14,6 +14,7 @@ import {
 } from '../../../services/telemetry/myTelemetryFixtures';
 import type { MySeriesState } from '../../../services/vitals/useMySeries';
 import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
+import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
 
 // Meus dados (app/(app)/my-stats.tsx). Tela de leitura clínica: o que ela mostra
 // tem que ser o que foi MEDIDO. Os sinais saem de me/current e o gasto calórico
@@ -41,6 +42,15 @@ const lendo = (telemetry: MyTelemetryState['telemetry']): MyTelemetryState => ({
 });
 const CARREGANDO: MyTelemetryState = { telemetry: null, failed: false, loading: true };
 const FALHOU: MyTelemetryState = { telemetry: null, failed: true, loading: false };
+
+
+// A tela pergunta ao módulo do relógio se este aparelho faz monitoramento.
+// Em Jest o módulo não existe; o dublê diz "pronto" por padrão para os casos
+// antigos, e "sem suporte" só onde o teste pede.
+let mockSuporte: WatchDiagnosticsState = { support: 'ready' } as WatchDiagnosticsState;
+jest.mock('../../../services/telemetry/watchDiagnostics', () => ({
+  useWatchDiagnostics: () => mockSuporte,
+}));
 
 let mockTelemetryState: MyTelemetryState = CARREGANDO;
 jest.mock('../../../services/vitals/MyTelemetryProvider', () => ({
@@ -144,6 +154,7 @@ const filtroDePeriodo = (tree: ReturnType<typeof create>) =>
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSuporte = { support: 'ready' } as WatchDiagnosticsState;
   mockTelemetryState = lendo(reporting());
   mockSeriesState = serie(series('day', [120, 80, 200]));
   mockProfile.profile = null;
@@ -180,6 +191,19 @@ describe('Meus dados: leitura ausente', () => {
       expect(anel(tree, rotulo)).toMatchObject({ value: '--', progress: 0 });
     }
     expect(barraDeFadiga(tree).value).toBe(0);
+  });
+
+  it('aparelho sem o módulo do relógio: a linha de estado diz onde o monitoramento funciona', async () => {
+    mockSuporte = { support: 'unsupported' };
+    mockTelemetryState = lendo(neverReported());
+    mockSeriesState = serie(emptySeries('day', 3));
+    const tree = await render();
+    const t = textos(tree);
+
+    expect(t).toContain('Monitoramento só com iPhone e Apple Watch');
+    expect(t).not.toContain('Sem leitura do aparelho');
+    expect(t).toContain('Alergias');
+    expect(t).toContain('Histórico Médico');
   });
 });
 

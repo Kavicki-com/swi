@@ -19,6 +19,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
+import { useWatchDiagnostics } from '../../services/telemetry/watchDiagnostics';
 import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { useMySeries } from '../../services/vitals/useMySeries';
 import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
@@ -132,7 +133,10 @@ export default function MyStats() {
   // e falha não trocam a tela: as visões devolvem a ausência declarada, e
   // alergias e exames (dado real do cadastro) seguem à vista.
   const { telemetry, failed, loading } = useMyTelemetry();
-  const view = dashboardVitalsView(telemetry, { failed, loading });
+  // Sem o módulo do relógio a linha de estado diz onde o monitoramento
+  // funciona, no mesmo Text, para a tela ficar igual à do iPhone.
+  const unsupported = useWatchDiagnostics().support === 'unsupported';
+  const view = dashboardVitalsView(telemetry, { failed, loading, unsupported });
   const donuts = statsDonutsView(telemetry);
   const status = view.workerStatus;
   const [period, setPeriod] = useState<SeriesPeriod>('day');

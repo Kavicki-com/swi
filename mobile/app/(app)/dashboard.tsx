@@ -38,6 +38,7 @@ import {
   BG_DECOR_W,
 } from '../../lib/dashboardDecor';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
+import { useWatchDiagnostics } from '../../services/telemetry/watchDiagnostics';
 import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
 import { useProfile } from '../../services/profile/ProfileProvider';
@@ -90,7 +91,10 @@ export default function Dashboard() {
   // a visão devolve a ausência declarada ("--", "Sem medição") e o dashboard
   // segue inteiro, com a ajuda urgente ao alcance de quem está sem monitoramento.
   const { telemetry, failed, loading } = useMyTelemetry();
-  const view = dashboardVitalsView(telemetry, { failed, loading });
+  // Sem o módulo do relógio a linha de estado diz onde o monitoramento
+  // funciona, no mesmo Text, para a tela ficar igual à do iPhone.
+  const unsupported = useWatchDiagnostics().support === 'unsupported';
+  const view = dashboardVitalsView(telemetry, { failed, loading, unsupported });
   const status = view.workerStatus;
   const { profile } = useProfile();
   // literal "4". O contador não vinha de lugar nenhum, então prometia conteúdo
