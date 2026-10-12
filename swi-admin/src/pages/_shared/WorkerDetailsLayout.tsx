@@ -14,7 +14,7 @@ import { formatAge } from '@/lib/formatAge'
 import type { Gender } from '@/services/types/directory'
 import { PERIOD_FROM_OPTION } from '@/services/vitals/caloriesSeries'
 import { useWorkerSeries } from '@/hooks/useWorkerSeries'
-import { NO_VALUE, type WorkerVitalsView } from '@/services/vitals/vitalsView'
+import { NO_DEVICE_LABEL, NO_VALUE, type WorkerVitalsView } from '@/services/vitals/vitalsView'
 import {
   Avatar,
   Button,
@@ -351,7 +351,7 @@ export function WorkerDetailsLayout({
   const calories = useWorkerSeries(worker.seriesWorkerId, PERIOD_FROM_OPTION[caloriesPeriod])
   // Estado do gráfico quando não há curva a desenhar: a frase diz o porquê.
   const caloriesEmpty = calories.noDevice
-    ? 'Sem relógio pareado'
+    ? NO_DEVICE_LABEL
     : calories.loading
       ? 'Carregando…'
       : calories.failed
