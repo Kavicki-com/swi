@@ -112,6 +112,26 @@ describe('TaskForm: criação', () => {
     expect(payload.items[0]).not.toHaveProperty('id')
   })
 
+  // Título salvava o card sozinho, mas só o texto curto descartava o card sem
+  // aviso. Regra única: o título é obrigatório, e o aviso aparece no card.
+  it('card só com texto curto não salva e avisa no próprio card', async () => {
+    await renderAt('/tasks/new')
+    typeIn('task-title', 'Trocar filtro')
+    await pickResponsible('Carlos Silva', 'Setor Leste')
+    fireEvent.click(screen.getByRole('switch', { name: 'Check List' }))
+    await waitFor(() => expect(screen.getByTestId('checklist-title-0')).toBeInTheDocument())
+    typeIn('checklist-description-0', 'Chave geral')
+
+    save()
+
+    expect(await screen.findByText('Informe o título do item.')).toBeInTheDocument()
+    expect(screen.getByTestId('task-form-error')).toHaveTextContent(/título de cada item/i)
+    expect(createMock).not.toHaveBeenCalled()
+
+    typeIn('checklist-title-0', 'Desligar a máquina')
+    await waitFor(() => expect(screen.queryByText('Informe o título do item.')).toBeNull())
+  })
+
   // Na criação nada está travado: o toggle liga e desliga a seção normalmente.
   it('o toggle liga e desliga a seção do Check List', async () => {
     await renderAt('/tasks/new')

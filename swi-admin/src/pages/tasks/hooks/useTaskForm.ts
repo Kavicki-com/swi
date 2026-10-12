@@ -102,6 +102,8 @@ export function useTaskForm() {
   // pendurar a explicação: o usuário procuraria o toggle em vez de entender.
   const [checklistLocked, setChecklistLocked] = useState(false)
   const [drafts, setDrafts] = useState<ReadonlyArray<ChecklistDraft>>([emptyDraft()])
+  // Cards com texto curto e sem título, marcados no submit para o aviso no card.
+  const [untitledDrafts, setUntitledDrafts] = useState<ReadonlySet<string>>(new Set())
   const [files, setFiles] = useState<ReadonlyArray<File>>([])
   // Anexos já gravados: key crua (o que o PATCH aceita) + URL assinada (preview).
   // `removedExisting` marca a fileira como suja, sem mudança, o PATCH omite
@@ -219,6 +221,14 @@ export function useTaskForm() {
 
   const updateDraft = (key: string, patch: Partial<ChecklistDraft>) => {
     setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)))
+    if (patch.title?.trim()) {
+      setUntitledDrafts((prev) => {
+        if (!prev.has(key)) return prev
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
   }
 
   const onFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
@@ -292,6 +302,15 @@ export function useTaskForm() {
     const estimatedMinutes = displayTimeToMinutes(estimatedTime)
     if (estimatedMinutes === undefined) {
       setError('Use o formato hh:mm no tempo estimado.')
+      return
+    }
+
+    // O título é o que o funcionário marca no app: card com texto curto e sem
+    // título não vira item calado, ele para o envio e avisa no próprio card.
+    const untitled = drafts.filter((d) => !d.title.trim() && d.description.trim())
+    setUntitledDrafts(new Set(untitled.map((d) => d.key)))
+    if (checklistOn && untitled.length > 0) {
+      setError('Informe o título de cada item do Check List.')
       return
     }
 
@@ -435,6 +454,7 @@ export function useTaskForm() {
     drafts,
     setDrafts,
     updateDraft,
+    untitledDrafts,
     files,
     setFiles,
     existingAttachments,

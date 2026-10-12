@@ -62,6 +62,7 @@ export function TaskForm() {
     drafts,
     setDrafts,
     updateDraft,
+    untitledDrafts,
     files,
     setFiles,
     existingAttachments,
@@ -268,6 +269,10 @@ export function TaskForm() {
                   value={draft.title}
                   onChangeText={(next) => updateDraft(draft.key, { title: next })}
                   placeholder="Título do item"
+                  description={
+                    untitledDrafts.has(draft.key) ? 'Informe o título do item.' : undefined
+                  }
+                  descriptionVariant="error"
                   accessibilityLabel={`Título do item ${index + 1} do Check List`}
                 />
                 <Input
