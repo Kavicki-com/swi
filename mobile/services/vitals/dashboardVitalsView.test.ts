@@ -234,7 +234,7 @@ describe('dashboardVitalsView', () => {
 describe('aparelho sem o módulo do relógio', () => {
   // Android e iPhone sem o módulo compilado nunca vão ler: a linha de estado
   // diz onde o monitoramento funciona, em vez de "sem leitura", que soa como
-  // defeito. Mesma linha de Text, nenhum pixel muda de lugar.
+  // falha. Mesma linha de Text, nenhum pixel muda de lugar.
   const SEM_RELOGIO = 'Monitoramento só com iPhone e Apple Watch';
 
   it('sem leitura, a linha de estado diz onde o monitoramento funciona', () => {
