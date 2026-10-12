@@ -7,12 +7,15 @@ import {
   Button,
   Combobox,
   Icon,
+  ImageViewer,
   Input,
+  Modal,
   Radio,
   Text,
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
+import { downloadFile } from '@/lib/attachments'
 import {
   adminsApi,
   employeesApi,
@@ -325,6 +328,28 @@ export function AdminsCreate({
   const { definirGravados } = exames
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Exame aberto no visualizador (imagem) e exame gravado aguardando a
+  // confirmação de exclusão (irreversível).
+  const [viewing, setViewing] = useState<{ uri: string; title: string } | null>(null)
+  const [confirmandoExame, setConfirmandoExame] = useState<{ id: string; name: string } | null>(
+    null,
+  )
+
+  // Imagem abre no visualizador em tamanho grande; PDF (laudo típico) o
+  // visualizador não desenha, então abre numa aba nova.
+  const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp)(\?|$)/i
+  const abrirAnexo = (uri: string, title: string, isImage: boolean) => {
+    if (isImage) setViewing({ uri, title })
+    else window.open(uri, '_blank', 'noopener,noreferrer')
+  }
+  // Exame da fila: o arquivo local vira uma object URL só pra abrir.
+  const verPendente = (index: number) => {
+    const file = exames.pendentes[index]?.file
+    if (!file) return
+    abrirAnexo(URL.createObjectURL(file), file.name, file.type.startsWith('image/'))
+  }
+  const verGravado = (exam: { fileUrl: string; name: string }) =>
+    abrirAnexo(exam.fileUrl, exam.name, IMAGE_EXT.test(exam.fileUrl))
   const [form, setForm] = useState<FormState>({
     nomeCompleto: '',
     email: '',
@@ -673,6 +698,12 @@ export function AdminsCreate({
         onPickFile={exames.pedirArquivo}
         exams={exames.gravados}
         pending={exames.pendentes}
+        onPendingView={verPendente}
+        onPendingRemove={exames.removerPendente}
+        onExamView={verGravado}
+        onExamDownload={(exam) => void downloadFile(exam.fileUrl, exam.name)}
+        onExamRemove={(exam) => setConfirmandoExame({ id: exam.id, name: exam.name })}
+        examsRemoving={exames.removendoIds}
       />
       {/* O DS não tem (nem deve ter) seletor de arquivo: o host abre o diálogo
           nativo. Mesmo padrão do NewReport e do settings. */}
@@ -729,6 +760,35 @@ export function AdminsCreate({
           />
         </View>
       </View>
+
+      {/* Visualizador do exame (imagem) em tamanho grande, com Baixar. */}
+      <ImageViewer
+        visible={viewing !== null}
+        uri={viewing?.uri ?? null}
+        title={viewing?.title ?? ''}
+        onClose={() => setViewing(null)}
+        onDownload={() => {
+          if (viewing) void downloadFile(viewing.uri, viewing.title)
+        }}
+        testID="admins-create-exam-viewer"
+      />
+
+      {/* Exclusão de exame gravado é irreversível: confirma no Modal EXCLUIR. */}
+      <Modal
+        visible={confirmandoExame !== null}
+        title="EXCLUIR"
+        description={
+          confirmandoExame
+            ? `O exame "${confirmandoExame.name}" será excluído de forma permanente. Deseja continuar?`
+            : ''
+        }
+        onConfirm={() => {
+          const alvo = confirmandoExame
+          setConfirmandoExame(null)
+          if (alvo) void exames.removerGravado(alvo.id)
+        }}
+        onCancel={() => setConfirmandoExame(null)}
+      />
     </View>
   )
 }

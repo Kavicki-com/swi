@@ -86,6 +86,34 @@ export function useExamAttachments({ isEdit, editandoId, subject, showToast }: O
     setExamsBusy(false)
   }
 
+  // Tira um exame da fila (ainda não gravado) sem sair do formulário. Reversível
+  // (basta reanexar), então vai direto, sem confirmação.
+  const removerPendente = (index: number) => {
+    setPendentes((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // Ids de exames gravados cuja exclusão está em voo: a seção desabilita o
+  // cluster da linha enquanto isso.
+  const [removendoIds, setRemovendoIds] = useState<readonly string[]>([])
+
+  // Exclui um exame JÁ gravado (edição). Só na edição existe id a quem o exame
+  // pertence; a confirmação (irreversível) fica a cargo da tela. Devolve true
+  // no sucesso pra quem chamou decidir o que fazer com o foco/toast.
+  const removerGravado = async (examId: string): Promise<boolean> => {
+    if (!editandoId) return false
+    setRemovendoIds((prev) => [...prev, examId])
+    const api = subject === 'funcionário' ? employeesApi : adminsApi
+    const { error: erro } = await api.removeExam(editandoId, examId)
+    setRemovendoIds((prev) => prev.filter((id) => id !== examId))
+    if (erro) {
+      setExamError(erro.message)
+      showToast('Falha ao excluir o exame', erro.message)
+      return false
+    }
+    setGravados((prev) => prev.filter((e) => e.id !== examId))
+    return true
+  }
+
   // Descarga da fila, chamada só depois do create ter dado certo. Best-effort:
   // o cadastro JÁ existe, então falha de anexo não pode desfazê-lo nem virar
   // erro de cadastro. O que falhar é dito no toast, com o cadastro de pé.
@@ -125,5 +153,8 @@ export function useExamAttachments({ isEdit, editandoId, subject, showToast }: O
     pedirArquivo,
     onArquivoEscolhido,
     enviarPendentes,
+    removerPendente,
+    removerGravado,
+    removendoIds,
   }
 }

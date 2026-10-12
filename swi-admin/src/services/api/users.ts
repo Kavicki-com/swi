@@ -337,6 +337,19 @@ const addUserExam = async (
   }
 }
 
+// Exclui um exame do cadastro de OUTRA pessoa (DELETE /users/:id/exams/:examId).
+// Par da addUserExam: o /profile/exams/:id só apaga do usuário da sessão. 204
+// sem corpo; o backend devolve 404 (não 403) pra exame de outra empresa ou
+// inexistente, mesma semântica de escopo do resto da API.
+const removeUserExam = async (id: string, examId: string): Promise<ServiceResponse<null>> => {
+  try {
+    await apiFetch<null>(`/users/${id}/exams/${examId}`, { method: 'DELETE' })
+    return { data: null, error: null }
+  } catch (e) {
+    return { data: null, error: { message: errorMessage(e, 'Falha ao excluir o exame') } }
+  }
+}
+
 // Ativar/desativar e excluir batem em /users/:id, então moram ACIMA dos dois
 // diretórios: declaradas depois de employeesApi, o const cai na temporal dead
 // zone e o módulo inteiro explode no import.
@@ -381,6 +394,7 @@ export const employeesApi = {
   getForEdit: getForEditUser,
   update: updateUser,
   addExam: addUserExam,
+  removeExam: removeUserExam,
   setActive: setUserActive,
   remove: removeUser,
 }
@@ -392,6 +406,7 @@ export const adminsApi = {
   getForEdit: getForEditUser,
   update: updateUser,
   addExam: addUserExam,
+  removeExam: removeUserExam,
   setActive: setUserActive,
   remove: removeUser,
 }
