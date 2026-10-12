@@ -24,7 +24,7 @@ import { useMapLibre } from '@/lib/useMapLibre'
 import { SATELLITE_STYLE } from '@/lib/mapStyles'
 import { heatPointsFromCells, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
 import { positionHeatApi } from '@/services/api/positionHeat'
-import { DEMO_DATA_LABEL, vitalsViewFrom } from '@/services/vitals/vitalsView'
+import { DEMO_DATA_LABEL, NO_DEVICE_LABEL, vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { createPinElement, type PinElement } from '@/lib/pinFactory'
 import { MapAttribution } from '@/components/MapAttribution'
 import { DataOriginBadge } from '@/components/DataOriginBadge'
@@ -152,6 +152,9 @@ export function AlertsList() {
   // Batimento como número para o cartão do DS; null mostra a ausência.
   const selectedHeartRate =
     selectedVitals?.heartRate == null ? null : Number(selectedVitals.heartRate)
+  // Sem relógio pareado, a frase toma a coluna de saúde do cartão (no lugar
+  // do "-- Bpm"), e a linha de estado abaixo não a repete.
+  const selectedNoDevice = selectedEntry?.device.state === 'NONE'
   // A borda acompanha o estado real; sem condição, o cartão fica com a borda padrão.
   const selectedBorder =
     selectedMarker?.status === 'low'
@@ -539,6 +542,7 @@ export function AlertsList() {
               progress={selectedVitals?.wearPct ?? undefined}
               bpm={selectedHeartRate}
               pressure={selectedVitals?.pressure ?? null}
+              absenceLabel={selectedNoDevice ? NO_DEVICE_LABEL : undefined}
               borderColor={selectedBorder}
               actionElement={
                 <Button
@@ -548,7 +552,7 @@ export function AlertsList() {
                 />
               }
             />
-            {selectedHeartRate === null ? (
+            {selectedHeartRate === null && !selectedNoDevice ? (
               <Text testID="alerts-selected-status" variant="body.s" color={theme.content.medium}>
                 {selectedVitals?.status ?? 'Sem leitura do aparelho'}
               </Text>

@@ -409,7 +409,10 @@ describe('AlertsList: seleção de pino', () => {
       workers: [adminWorker('w1', 'Ana Lima', { device: { state: 'NONE', lastSeenAt: null } })],
     }
     await renderAlerts('/alerts/w1')
-    expect(await screen.findByText('Sem relógio pareado')).toBeTruthy()
+    // A frase ocupa a coluna de saúde do cartão (uma vez só), no lugar do
+    // "-- Bpm", e não repetida numa linha abaixo.
+    expect(await screen.findAllByText('Sem relógio pareado')).toHaveLength(1)
+    expect(screen.queryByText('-- Bpm')).toBeNull()
     expect(screen.queryByText(/112/)).toBeNull()
     expect(screen.getByText('Criar rota de socorro')).toBeTruthy()
   })

@@ -11,6 +11,7 @@ import {
   Button,
   Icon,
   SearchInput,
+  SkeletonList,
   Tabs,
   Text,
   Title,
@@ -370,9 +371,9 @@ export function AdminsList({
           }}
         />
       ) : loadState === 'loading' ? (
-        <Text variant="body.m" color={theme.content.medium}>
-          Carregando…
-        </Text>
+        // Skeleton no formato da linha (avatar + três linhas de texto) em vez
+        // do texto "Carregando…": a espera da lista passa a ter forma visual.
+        <SkeletonList rows={6} lines={3} avatarSize={64} accessibilityLabel="Carregando" />
       ) : loadState === 'failed' ? (
         <View style={{ gap: theme.gap.s, alignItems: 'flex-start' }}>
           <Text variant="body.m" color={theme.content.medium}>
