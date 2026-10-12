@@ -11,6 +11,7 @@ import { employeesApi, type Employee } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { DeviceSection } from '@/pages/employees/DeviceSection'
+import { fullMapPath } from '@/pages/maps/mapFocus'
 import { vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { useLivePositions } from '@/hooks/useLivePositions'
 import { useNow } from '@/hooks/useNow'
@@ -97,7 +98,7 @@ export function EmployeeDetails() {
       testID="employee-details"
       onBack={() => navigate('/employees')}
       backA11yLabel="Voltar para a lista de funcionários"
-      onOpenFullMap={() => navigate('/maps/general')}
+      onOpenFullMap={() => navigate(fullMapPath(employee.id))}
       deviceSection={
         <DeviceSection workerId={employee.id} telemetry={telemetry} onPairedChange={setPaired} />
       }

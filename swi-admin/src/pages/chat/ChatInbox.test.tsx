@@ -137,6 +137,13 @@ function setChat(over: Record<string, unknown> = {}) {
 
 // A conversation route so useParams resolves the (decoded) selection.
 const CONV_ROUTE = { route: '/chat/me%23w1', path: '/chat/:contactId' }
+// Conversa com w9, que ESTÁ no directory (w1 não está).
+const CONV9 = {
+  ...CONV,
+  id: 'me#w9',
+  participants: ['me', 'w9'] as [string, string],
+  participantNames: ['Eu', 'Beatriz Ramos'] as [string, string],
+}
 
 describe('ChatInbox', () => {
   beforeEach(() => {
@@ -179,24 +186,21 @@ describe('ChatInbox', () => {
   it('mostra o @handle do contato que tem um e nenhum @ de quem não tem', async () => {
     // Conversa ativa com w9, que ESTÁ no directory (com handle). O caso sem
     // handle é o CONV_ROUTE padrão: w1 não tem entrada no directory.
-    const CONV9 = {
-      ...CONV,
-      id: 'me#w9',
-      participants: ['me', 'w9'] as [string, string],
-      participantNames: ['Eu', 'Beatriz Ramos'] as [string, string],
-    }
     setChat({ conversations: [CONV, CONV9], messagesByConv: { 'me#w1': [MSG], 'me#w9': [] } })
     await renderPage(<ChatInbox />, { route: '/chat/me%23w9', path: '/chat/:contactId' })
     expect(await screen.findByText('@bea.ramos')).toBeInTheDocument()
   })
 
+  it('Mapa completo do painel abre o mapa centrado no contato', async () => {
+    setChat({ conversations: [CONV, CONV9], messagesByConv: { 'me#w1': [MSG], 'me#w9': [] } })
+    await renderPage(<ChatInbox />, { route: '/chat/me%23w9', path: '/chat/:contactId' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver mapa completo' }))
+
+    expect(nav.spy).toHaveBeenCalledWith('/maps/general?focus=w9')
+  })
+
   describe('tempo até a fadiga do contato', () => {
-    const CONV9 = {
-      ...CONV,
-      id: 'me#w9',
-      participants: ['me', 'w9'] as [string, string],
-      participantNames: ['Eu', 'Beatriz Ramos'] as [string, string],
-    }
 
     beforeEach(() => {
       telemetry.stateOf.mockReset()

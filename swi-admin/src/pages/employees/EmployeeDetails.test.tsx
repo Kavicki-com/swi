@@ -47,6 +47,13 @@ vi.mock('@/services/telemetry/telemetrySocket', () => ({
 const live = vi.hoisted(() => ({ value: null as Array<Record<string, unknown>> | null }))
 vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => live.value }))
 
+// Espião de navegação: o MemoryRouter fica, só o useNavigate é observado.
+const nav = vi.hoisted(() => ({ spy: vi.fn() }))
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return { ...actual, useNavigate: () => nav.spy }
+})
+
 const getMock = vi.mocked(employeesApi.get)
 const pauseMock = vi.mocked(notificationsApi.requestPause)
 const currentMock = vi.mocked(telemetryApi.workerCurrent)
@@ -94,6 +101,15 @@ describe('EmployeeDetails', () => {
     await expect(
       renderPage(<EmployeeDetails />, { route: '/employees/seed_id', path: '/employees/:id' }),
     ).resolves.toBeDefined()
+  })
+
+  it('Mapa completo abre o mapa centrado no funcionário', async () => {
+    getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver mapa completo' }))
+
+    expect(nav.spy).toHaveBeenCalledWith('/maps/general?focus=w1')
   })
 
   // O "Solicitar Pausa" dispara o POST real, que é a notificação de journey pro

@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/api/users'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
+import { fullMapPath } from '@/pages/maps/mapFocus'
 import { vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { useLivePositions } from '@/hooks/useLivePositions'
 
@@ -73,7 +74,7 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
       testID="admin-details"
       onBack={() => navigate('/admins')}
       backA11yLabel="Voltar para a lista de administradores"
-      onOpenFullMap={() => navigate('/maps/general')}
+      onOpenFullMap={() => navigate(fullMapPath(id))}
       topRightAction={
         <Pressable
           accessibilityRole="button"

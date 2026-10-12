@@ -22,6 +22,7 @@ import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/s
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 import { ancoraDe, reinserirAncorado } from '@/pages/_shared/optimisticList'
+import { fullMapPath } from '@/pages/maps/mapFocus'
 import { chatPathTo } from '@/services/chat/chatReducers'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
@@ -648,9 +649,7 @@ export function EmployeesList({
                 // um pin sem destino cai num mapa vazio e exige um clique extra
                 // em "Operadores". O `focus` resolve os dois: liga a camada e
                 // centraliza neste funcionario.
-                onLocation={() =>
-                  navigate(`/maps/general?focus=${encodeURIComponent(employee.id)}`)
-                }
+                onLocation={() => navigate(fullMapPath(employee.id))}
                 onDelete={setRemoving}
                 onToggle={handleToggle}
                 isTablet={isTablet}
