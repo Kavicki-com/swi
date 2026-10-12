@@ -4,11 +4,27 @@
 // página, junto com o da foto, no bloco do cabeçalho de perfil (padrão house,
 // mesmo do NewReport); daqui sai só o pedido de abrir o seletor.
 import { View } from 'react-native'
-import { Button, ExamInfoCard, Input, Text, Title, useTheme } from '@kavicki/swi-design-system'
+import {
+  Button,
+  ExamInfoCard,
+  Input,
+  Text,
+  Title,
+  useTheme,
+  type ExamAction,
+} from '@kavicki/swi-design-system'
 import { FormError } from '@/components/FormError'
 import type { Exam } from '@/services/api/exams'
 import { examCardParts } from '@/services/api/examCard'
 import { maskDate } from '@/lib/masks'
+
+// Mantém só as ações que têm handler, na ordem view, download, remove.
+function enabledActions(
+  order: readonly ExamAction[],
+  handlers: Partial<Record<ExamAction, unknown>>,
+): ExamAction[] {
+  return order.filter((action) => Boolean(handlers[action]))
+}
 
 export function ExamsSection({
   examName,
@@ -21,6 +37,12 @@ export function ExamsSection({
   exams,
   pending = [],
   testIDPrefix = 'settings',
+  onPendingView,
+  onPendingRemove,
+  onExamView,
+  onExamDownload,
+  onExamRemove,
+  examsRemoving = [],
 }: {
   examName: string
   onExamNameChange: (value: string) => void
@@ -38,6 +60,15 @@ export function ExamsSection({
    *  formulário de cadastro; um id dizendo 'settings' numa tela de cadastro
    *  manda o próximo leitor procurar no arquivo errado. */
   testIDPrefix?: string
+  /** Ações dos exames. Sem elas, o card fica como era (só Baixar nos gravados,
+   *  nada nos pendentes): o settings, que não as passa, não muda. */
+  onPendingView?: (index: number) => void
+  onPendingRemove?: (index: number) => void
+  onExamView?: (exam: Exam) => void
+  onExamDownload?: (exam: Exam) => void
+  onExamRemove?: (exam: Exam) => void
+  /** Ids de exames gravados cuja exclusão está em voo: desabilita o cluster. */
+  examsRemoving?: readonly string[]
 }) {
   const theme = useTheme()
   return (
@@ -84,6 +115,12 @@ export function ExamsSection({
           </Text>
           {pending.map((p, i) => {
             const parts = examCardParts(p.date)
+            // Sem baixar: o arquivo só sobe no submit. Com os handlers, dá pra
+            // visualizar e tirar da fila; sem eles, o card fica desabilitado.
+            const actions = enabledActions(['view', 'remove'], {
+              view: onPendingView,
+              remove: onPendingRemove,
+            })
             return (
               <ExamInfoCard
                 key={`pendente-${i}`}
@@ -92,8 +129,10 @@ export function ExamsSection({
                 year={parts.year}
                 date={parts.date}
                 examName={p.name}
-                // Nada pra baixar antes de existir: o arquivo só sobe no submit.
                 actionDisabled
+                actions={actions.length > 0 ? actions : undefined}
+                onView={onPendingView ? () => onPendingView(i) : undefined}
+                onRemove={onPendingRemove ? () => onPendingRemove(i) : undefined}
               />
             )
           })}
@@ -106,6 +145,30 @@ export function ExamsSection({
       ) : (
         exams.map((exam) => {
           const parts = examCardParts(exam.date)
+          const actions = enabledActions(['view', 'download', 'remove'], {
+            view: onExamView,
+            download: onExamDownload,
+            remove: onExamRemove,
+          })
+          // Com os handlers de ação, o cluster (visualizar, baixar, excluir);
+          // sem eles, o botão único de Baixar de antes (o settings não muda).
+          if (actions.length > 0) {
+            return (
+              <ExamInfoCard
+                key={exam.id}
+                compact
+                fullWidth
+                year={parts.year}
+                date={parts.date}
+                examName={exam.name}
+                actions={actions}
+                actionsBusy={examsRemoving.includes(exam.id)}
+                onView={onExamView ? () => onExamView(exam) : undefined}
+                onDownload={onExamDownload ? () => onExamDownload(exam) : undefined}
+                onRemove={onExamRemove ? () => onExamRemove(exam) : undefined}
+              />
+            )
+          }
           return (
             <ExamInfoCard
               key={exam.id}
