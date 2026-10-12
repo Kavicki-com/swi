@@ -223,3 +223,38 @@ describe('AdminsList', () => {
     ).not.toBe('true')
   })
 })
+
+// Enquanto a lista não chegava, a tela afirmava "Você tem (0) administradores"
+// e parecia travada; uma falha também virava lista vazia, sem aviso.
+describe('AdminsList: carregamento', () => {
+  afterEach(() => {
+    clearSession()
+    vi.restoreAllMocks()
+  })
+
+  it('enquanto carrega, diz que está carregando e não afirma zero', async () => {
+    vi.spyOn(adminsApi, 'list').mockReturnValue(new Promise(() => {}))
+    await renderPage(<AdminsList />, { route: '/admins' })
+
+    expect(screen.getByText('Carregando…')).toBeInTheDocument()
+    expect(screen.queryByText(/\(0\)/)).toBeNull()
+  })
+
+  it('falha ao carregar avisa e tenta de novo pelo botão', async () => {
+    const list = vi
+      .spyOn(adminsApi, 'list')
+      .mockResolvedValueOnce({ data: null, error: { message: 'rede caiu' } })
+      .mockResolvedValueOnce({ data: [ELISA], error: null })
+    await renderPage(<AdminsList />, { route: '/admins' })
+
+    expect(
+      await screen.findByText('Não foi possível carregar os administradores.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/\(0\)/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+
+    expect(await screen.findByText('Elisa Jordão')).toBeInTheDocument()
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+})
