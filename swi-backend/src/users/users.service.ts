@@ -319,6 +319,16 @@ export class UsersService {
     return this.toExamDto(exam)
   }
 
+  // Exclusão do laudo PELO ADMIN do cadastro de outra pessoa. deleteMany com id
+  // E userId no filtro (como o ProfileService.removeExam): o id de um exame de
+  // outra pessoa não apaga nada, em vez de apagar o laudo alheio. `false` sem
+  // apagar vira 404 no controller.
+  async removeExam(id: string, examId: string, companyId: string | null): Promise<boolean> {
+    await this.requireSameCompany(id, companyId)
+    const { count } = await this.prisma.exam.deleteMany({ where: { id: examId, userId: id } })
+    return count > 0
+  }
+
   // Identidade + display (fullName ↔ name fallback, jobTitle/sector vazios quando
   // sem profile). birthDate em ISO (paridade com o Profile cru do wire, igual ao
   // toWorkerDto de work-orders); avatar assinado ('' sem key).

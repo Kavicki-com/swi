@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Logger, NotFoundException } fro
 import { Prisma } from '@prisma/client'
 import { UsersService } from './users.service'
 
-const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn() }, exam: { create: jest.fn() } }) as any
+const prisma = () => ({ user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn() }, exam: { create: jest.fn(), deleteMany: jest.fn() } }) as any
 // Espelha a convenção do work-orders.service.spec: presignGet devolve 'signed:<key>'.
 const media = () => ({ presignGet: jest.fn((k: string) => Promise.resolve('signed:' + k)) }) as any
 // Só o que o service usa do gateway: derrubar as conexões de quem perde o acesso.
@@ -638,6 +638,43 @@ describe('UsersService.addExam', () => {
       NotFoundException,
     )
     expect(db.exam.create).not.toHaveBeenCalled()
+  })
+})
+
+// Exclusão de exame PELO ADMIN do cadastro de outra pessoa. Até aqui só existia
+// DELETE /profile/exams/:id, que apaga no usuário da sessão: o admin não tinha
+// como tirar um laudo do cadastro de quem edita.
+describe('UsersService.removeExam', () => {
+  it('apaga o exame do usuário da rota e diz que apagou', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
+    db.exam.deleteMany.mockResolvedValue({ count: 1 })
+
+    const ok = await new UsersService(db, media(), realtime()).removeExam('u1', 'e1', 'org1')
+
+    // deleteMany com id E userId no filtro: um exame de outra pessoa não é
+    // apagado nem por engano (mesma defesa do ProfileService.removeExam).
+    expect(db.exam.deleteMany).toHaveBeenCalledWith({ where: { id: 'e1', userId: 'u1' } })
+    expect(ok).toBe(true)
+  })
+
+  it('exame inexistente (ou de outro usuário) devolve false', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org1' })
+    db.exam.deleteMany.mockResolvedValue({ count: 0 })
+
+    const ok = await new UsersService(db, media(), realtime()).removeExam('u1', 'nope', 'org1')
+    expect(ok).toBe(false)
+  })
+
+  it('usuário de OUTRA empresa → NotFound sem apagar nada', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ id: 'u1', companyId: 'org2' })
+
+    await expect(
+      new UsersService(db, media(), realtime()).removeExam('u1', 'e1', 'org1'),
+    ).rejects.toBeInstanceOf(NotFoundException)
+    expect(db.exam.deleteMany).not.toHaveBeenCalled()
   })
 })
 

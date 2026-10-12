@@ -18,6 +18,7 @@ const service = () =>
     update: jest.fn().mockResolvedValue({ id: 'u1' }),
     remove: jest.fn().mockResolvedValue(undefined),
     addExam: jest.fn().mockResolvedValue({ id: 'e1' }),
+    removeExam: jest.fn().mockResolvedValue(true),
   }) as unknown as jest.Mocked<UsersService>
 
 const admin = { userId: 'admin-1', companyId: 'empresa-1', role: 'ADMIN' } as unknown as JwtUser
@@ -88,4 +89,21 @@ it('anexa exame no usuário da rota, escopado pela empresa do token', async () =
   await new UsersController(s).addExam('u1', dto, admin)
 
   expect(s.addExam).toHaveBeenCalledWith('u1', dto, 'empresa-1')
+})
+
+// Exclusão do laudo, escopada pela empresa do token: sem isso um admin tiraria
+// exame do cadastro de outra empresa trocando o id da URL.
+it('exclui o exame do usuário da rota, escopado pela empresa do token', async () => {
+  const s = service()
+
+  await new UsersController(s).removeExam('u1', 'e1', admin)
+
+  expect(s.removeExam).toHaveBeenCalledWith('u1', 'e1', 'empresa-1')
+})
+
+it('exame inexistente na exclusão vira NotFound (404)', async () => {
+  const s = service()
+  ;(s.removeExam as jest.Mock).mockResolvedValue(false)
+
+  await expect(new UsersController(s).removeExam('u1', 'nope', admin)).rejects.toThrow(/não encontrado/i)
 })
