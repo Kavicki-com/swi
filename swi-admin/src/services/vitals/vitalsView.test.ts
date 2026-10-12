@@ -54,6 +54,21 @@ describe('vitalsViewFrom', () => {
     expect(view.status).toBe('Sem relógio pareado')
   })
 
+  // Enquanto não se sabe se há relógio, a leitura guardada pode ser de quem já
+  // despareou: não aparece como atual.
+  it('sem saber se há relógio, esconde a leitura e diz que está verificando', () => {
+    const view = vitalsViewFrom(reporting(), { deviceUnknown: true })
+    expect(view.heartRate).toBeNull()
+    expect(view.pressure).toBeNull()
+    expect(view.status).toBe('Verificando o relógio…')
+  })
+
+  it('sem conseguir saber se há relógio, esconde a leitura e diz que está indisponível', () => {
+    const view = vitalsViewFrom(reporting(), { deviceUnknown: true, failed: true })
+    expect(view.heartRate).toBeNull()
+    expect(view.status).toBe('Leitura indisponível no momento')
+  })
+
   it('batimento indisponível de quem já reportou diz que não há leitura recente', () => {
     const view = vitalsViewFrom(reporting({ heartRate: none('bpm') }))
     expect(view.heartRate).toBeNull()

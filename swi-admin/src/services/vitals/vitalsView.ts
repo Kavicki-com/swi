@@ -47,11 +47,19 @@ const EMPTY: Omit<WorkerVitalsView, 'status'> = {
 
 export function vitalsViewFrom(
   telemetry: WorkerTelemetry | null,
-  options: { noDevice?: boolean; failed?: boolean } = {},
+  options: { noDevice?: boolean; deviceUnknown?: boolean; failed?: boolean } = {},
 ): WorkerVitalsView {
   // Sem aparelho pareado, a leitura guardada não vale: desparear não apaga o
   // último snapshot no backend, e mostrá-lo seria apresentar dado velho como atual.
   if (options.noDevice) return { ...EMPTY, status: NO_DEVICE_LABEL }
+  // Sem saber ainda se há relógio, a leitura guardada pode ser de quem já
+  // despareou: ela espera a resposta, ou some se a resposta não vier.
+  if (options.deviceUnknown) {
+    return {
+      ...EMPTY,
+      status: options.failed ? 'Leitura indisponível no momento' : 'Verificando o relógio…',
+    }
+  }
 
   if (telemetry === null || telemetry.origin === null) {
     return {

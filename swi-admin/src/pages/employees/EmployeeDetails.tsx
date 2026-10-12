@@ -10,7 +10,7 @@ import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { employeesApi, type Employee } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
-import { DeviceSection } from '@/pages/employees/DeviceSection'
+import { DeviceSection, type DeviceState } from '@/pages/employees/DeviceSection'
 import { fullMapPath } from '@/pages/maps/mapFocus'
 import { vitalsViewFrom } from '@/services/vitals/vitalsView'
 import { useLivePositions } from '@/hooks/useLivePositions'
@@ -35,9 +35,9 @@ export function EmployeeDetails() {
   const now = useNow(POSITION_CLOCK_MS)
   // Vitais do aparelho pareado, relidos sozinhos enquanto a página está aberta.
   const { telemetry, failed } = useWorkerTelemetry(id)
-  // Quem sabe se há aparelho é o bloco Aparelho; sem ele os vitais dizem
-  // "Sem relógio pareado". null enquanto o bloco não sabe.
-  const [paired, setPaired] = useState<boolean | null>(null)
+  // Quem sabe se há aparelho é o bloco Aparelho. Até ele responder, os vitais
+  // não mostram a leitura guardada, que pode ser de quem já despareou.
+  const [deviceState, setDeviceState] = useState<DeviceState | null>(null)
 
   // POST real: o worker recebe a notificação de journey no app, e erro do
   // backend aparece no toast.
@@ -91,7 +91,11 @@ export function EmployeeDetails() {
         ...employee,
         // O gráfico de gasto calórico lê a série deste funcionário.
         seriesWorkerId: employee.id,
-        vitals: vitalsViewFrom(telemetry, { failed, noDevice: paired === false }),
+        vitals: vitalsViewFrom(telemetry, {
+          failed: failed || deviceState === 'failed',
+          noDevice: deviceState === 'unpaired',
+          deviceUnknown: deviceState !== 'paired',
+        }),
       }}
       position={position ? { lat: position.lat, lng: position.lng } : null}
       positionNote={position ? stalePositionNote(position.recordedAt, now) : null}
@@ -100,7 +104,11 @@ export function EmployeeDetails() {
       backA11yLabel="Voltar para a lista de funcionários"
       onOpenFullMap={() => navigate(fullMapPath(employee.id))}
       deviceSection={
-        <DeviceSection workerId={employee.id} telemetry={telemetry} onPairedChange={setPaired} />
+        <DeviceSection
+          workerId={employee.id}
+          telemetry={telemetry}
+          onDeviceStateChange={setDeviceState}
+        />
       }
       topRightAction={
         <Button
