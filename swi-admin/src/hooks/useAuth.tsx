@@ -17,6 +17,9 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+// A URL assinada da foto vale 1 h no backend; relê com folga antes disso.
+const AVATAR_REFRESH_MS = 45 * 60_000
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -56,19 +59,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // A foto vem do cadastro, não do login, e é URL assinada que expira: por isso
-  // é lida a cada sessão e não vai para o localStorage. Sem foto, ou se a
-  // leitura falhar, a sessão fica sem foto, nunca com a de outra pessoa.
+  // A foto vem do cadastro, não do login, e é URL assinada que vale 1 h: por
+  // isso não vai para o localStorage e é relida antes de expirar, senão a
+  // miniatura quebra no meio da sessão. Sem foto, ou se a leitura falhar, a
+  // sessão fica sem foto, nunca com a de outra pessoa.
   const userId = user?.id
   useEffect(() => {
     if (!userId) return
     let cancelled = false
-    void authApi.avatarOf(userId).then((avatarUri) => {
-      if (cancelled || !avatarUri) return
-      setUser((u) => (u?.id === userId ? { ...u, avatarUri } : u))
-    })
+    const load = () =>
+      void authApi.avatarOf(userId).then((avatarUri) => {
+        if (cancelled || !avatarUri) return
+        setUser((u) => (u?.id === userId ? { ...u, avatarUri } : u))
+      })
+    load()
+    const timer = window.setInterval(load, AVATAR_REFRESH_MS)
     return () => {
       cancelled = true
+      window.clearInterval(timer)
     }
   }, [userId])
 
