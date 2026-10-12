@@ -79,6 +79,18 @@ export const authApi = {
     }
   },
 
+  // Foto do admin logado, URL assinada. Vem do /users/:id dele, que responde
+  // mesmo sem perfil preenchido; o /profile/me devolve 404 nesse caso e o
+  // navegador registra erro no console. Sem foto ou com falha: null.
+  avatarOf: async (userId: string): Promise<string | null> => {
+    try {
+      const u = await apiFetch<{ avatar?: string | null }>(`/users/${encodeURIComponent(userId)}`)
+      return u?.avatar || null
+    } catch {
+      return null
+    }
+  },
+
   // Onboarding de empresa (POST /auth/signup-company). NÃO cria sessão: o admin
   // nasce APPROVED porém não-verificado — só entra depois de definir a senha
   // pelo link. A tela mostra "confirme seu e-mail", não navega pro painel.

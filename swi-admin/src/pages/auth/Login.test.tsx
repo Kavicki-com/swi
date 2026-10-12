@@ -15,6 +15,7 @@ vi.mock('@/services/auth', () => ({
     signIn: signInMock,
     getSession: vi.fn(async () => ({ data: null, error: null })),
     signOut: vi.fn(async () => ({ data: null, error: null })),
+    avatarOf: vi.fn(async () => null),
   },
 }))
 

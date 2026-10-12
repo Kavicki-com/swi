@@ -1,7 +1,6 @@
 // src/hooks/useAuth.tsx
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { authApi } from '@/services/auth'
-import { profileApi } from '@/services/api/profile'
 import { SESSION_CLEARED_EVENT, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import type { User } from '@/services/types'
 
@@ -57,15 +56,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // A foto vem do perfil, não do login, e é URL assinada que expira: por isso
+  // A foto vem do cadastro, não do login, e é URL assinada que expira: por isso
   // é lida a cada sessão e não vai para o localStorage. Sem foto, ou se a
   // leitura falhar, a sessão fica sem foto, nunca com a de outra pessoa.
   const userId = user?.id
   useEffect(() => {
     if (!userId) return
     let cancelled = false
-    void profileApi.me().then(({ data }) => {
-      const avatarUri = data?.avatarUrl
+    void authApi.avatarOf(userId).then((avatarUri) => {
       if (cancelled || !avatarUri) return
       setUser((u) => (u?.id === userId ? { ...u, avatarUri } : u))
     })

@@ -196,7 +196,9 @@ describe('useAuth (hydration)', () => {
 })
 
 // A miniatura do cabeçalho mostrava uma foto fixa de banco de imagens: a sessão
-// nunca carregava a foto do perfil. Agora ela vem do /profile/me.
+// nunca carregava a foto do perfil. Agora ela vem do cadastro do próprio admin
+// (/users/:id), e não do /profile/me, que responde 404 a quem não preencheu o
+// perfil e suja o console do navegador.
 describe('useAuth: foto do perfil', () => {
   const seedSession = () => {
     window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
@@ -218,7 +220,7 @@ describe('useAuth: foto do perfil', () => {
       vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ id: 'p1', userId: 'u1', avatarUrl, examKeys: [], examUrls: [] }),
+        json: async () => ({ id: 'u1', name: 'Admin Seed', avatar: avatarUrl ?? '' }),
       } as Response),
     )
 
@@ -235,6 +237,9 @@ describe('useAuth: foto do perfil', () => {
     stubProfile('https://cdn.test/avatar.png')
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
     await waitFor(() => expect(result.current.user?.avatarUri).toBe('https://cdn.test/avatar.png'))
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url))
+    expect(urls.some((u) => u.endsWith('/users/u1'))).toBe(true)
+    expect(urls.some((u) => u.includes('/profile/me'))).toBe(false)
   })
 
   it('sem foto no perfil, a sessão fica sem foto', async () => {

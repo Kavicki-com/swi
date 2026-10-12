@@ -54,11 +54,10 @@ import { settled } from '@/test-utils/renderPage'
 
 // Foto do perfil do admin logado; cada teste escolhe a sua.
 const profile = vi.hoisted(() => ({ avatarUrl: null as string | null }))
-vi.mock('@/services/api/profile', () => ({
-  profileApi: {
-    me: async () => ({ data: { avatarUrl: profile.avatarUrl }, error: null }),
-  },
-}))
+vi.mock('@/services/api/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api/auth')>()
+  return { ...actual, authApi: { ...actual.authApi, avatarOf: async () => profile.avatarUrl } }
+})
 
 beforeEach(() => {
   // getSession real exige token + sessão.

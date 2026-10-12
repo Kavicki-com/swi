@@ -11,6 +11,7 @@ export const authApi = {
   signIn: realAuthApi.signIn,
   signOut: realAuthApi.signOut,
   getSession: realAuthApi.getSession,
+  avatarOf: realAuthApi.avatarOf,
   signUpCompany: realAuthApi.signUpCompany,
   changePassword: realAuthApi.changePassword,
   requestPasswordReset: realAuthApi.requestPasswordReset,
