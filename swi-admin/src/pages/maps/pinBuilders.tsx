@@ -10,18 +10,31 @@ import { type Camera } from '@/services/api/cameras'
 
 export type PinHandle = PinElement & { marker: maplibregl.Marker }
 
+// Pino de quem o mapa foi aberto para mostrar: maior que os 40 px padrão do DS.
+const FOCUSED_PIN_SIZE = 56
+
 export function buildPin(
   m: DashboardMapMarker,
   map: maplibregl.Map,
   lib: typeof maplibregl,
   onClick: () => void,
   title?: string,
+  { focused = false }: { focused?: boolean } = {},
 ): PinHandle {
   const { el, root } = createPinElement({
     onClick,
-    content: <LocationPin avatarUri={m.avatarUri} status={m.status} name={m.name} />,
+    content: (
+      <LocationPin
+        avatarUri={m.avatarUri}
+        status={m.status}
+        name={m.name}
+        size={focused ? FOCUSED_PIN_SIZE : undefined}
+      />
+    ),
     title,
   })
+  // Pino em foco por cima dos vizinhos, senão some atrás de quem está perto.
+  if (focused) el.style.zIndex = '1'
   const marker = new lib.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map)
   return { marker, root, el }
 }

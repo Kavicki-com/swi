@@ -27,6 +27,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useDemoToast } from '@/lib/demoToast'
 import { useMyVitals } from '@/hooks/useMyVitals'
 import { NotificationBell } from '@/components/NotificationBell'
+import { fullMapPath } from '@/pages/maps/mapFocus'
 import { ContactInfoPanel } from './components/ContactInfoPanel'
 import { ConversationList } from './components/ConversationList'
 import { MessageThread } from './components/MessageThread'
@@ -324,7 +325,7 @@ export function ChatInbox() {
               {panelContact ? (
                 <ContactInfoPanel
                   contact={panelContact}
-                  onOpenFullMap={() => navigate('/maps/general')}
+                  onOpenFullMap={() => navigate(fullMapPath(panelContact.workerId))}
                 />
               ) : (
                 <View

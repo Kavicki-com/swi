@@ -156,3 +156,18 @@ describe('MapsGeneral: hora da posição no pino', () => {
     await close(unmount)
   })
 })
+
+describe('MapsGeneral: funcionário em foco', () => {
+  it('o pino de quem veio no ?focus fica por cima dos outros', async () => {
+    live.value = [
+      ...pinOf(60_000),
+      { ...pinOf(60_000)[0]!, id: 'w2', name: 'Bruno Lima', lng: -46.64 },
+    ]
+    const result = await renderPage(<MapsGeneral />, { route: '/maps/general?focus=w1' })
+    await waitFor(() => expect(maplibre.elements).toHaveLength(2))
+
+    expect(maplibre.elements[0]!.style.zIndex).toBe('1')
+    expect(maplibre.elements[1]!.style.zIndex).toBe('')
+    await close(result.unmount)
+  })
+})

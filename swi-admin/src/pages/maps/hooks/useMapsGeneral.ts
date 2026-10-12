@@ -273,7 +273,9 @@ export function useMapsGeneral() {
     if (!lib || !map || !mapReady || !showOperators || operatorMarkers.length === 0) return
 
     const handles = operatorMarkers.map((m, i) =>
-      buildPin(m, map, lib, () => navigate(`/employees/${m.id}`), pinTitlesRef.current[i]),
+      buildPin(m, map, lib, () => navigate(`/employees/${m.id}`), pinTitlesRef.current[i], {
+        focused: m.id === focusId,
+      }),
     )
     operatorPinsRef.current = handles
 
@@ -291,7 +293,7 @@ export function useMapsGeneral() {
         })
       })
     }
-  }, [mapReady, operatorMarkers, showOperators, lib, navigate])
+  }, [mapReady, operatorMarkers, showOperators, lib, navigate, focusId])
 
   useEffect(() => {
     operatorPinsRef.current.forEach((h, i) => {

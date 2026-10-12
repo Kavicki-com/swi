@@ -54,6 +54,25 @@ describe('AdminDetails: vitais', () => {
   })
 })
 
+// Administrador não tem posição ao vivo, e o mapa cai na visão geral; o pedido
+// de foco vai mesmo assim, para o mapa centrar se um dia houver posição.
+describe('AdminDetails: mapa completo', () => {
+  afterEach(clearSession)
+
+  it('abre o mapa pedindo foco no administrador', async () => {
+    nav.spy.mockClear()
+    vi.spyOn(adminsApi, 'get').mockResolvedValue({
+      data: { id: 'admin-7', name: 'Elisa Jordão', avatarUri: '', active: true } as never,
+      error: null,
+    })
+    await renderPage(<AdminDetails />, { route: '/admins/admin-7', path: '/admins/:id' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver mapa completo' }))
+
+    expect(nav.spy).toHaveBeenCalledWith('/maps/general?focus=admin-7')
+  })
+})
+
 // O CTA existia e navegava pra /user/settings, que são as configurações de quem
 // está LOGADO. Editar o perfil de OUTRA pessoa a partir do detalhe dela levava
 // o admin pro próprio cadastro, e salvar ali alterava a pessoa errada.
