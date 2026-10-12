@@ -194,3 +194,71 @@ describe('useAuth (hydration)', () => {
     expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull()
   })
 })
+
+// A miniatura do cabeçalho mostrava uma foto fixa de banco de imagens: a sessão
+// nunca carregava a foto do perfil. Agora ela vem do cadastro do próprio admin
+// (/users/:id), e não do /profile/me, que responde 404 a quem não preencheu o
+// perfil e suja o console do navegador.
+describe('useAuth: foto do perfil', () => {
+  const seedSession = () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        id: 'u1',
+        email: 'admin@swi.test',
+        full_name: 'Admin Seed',
+        role: 'admin',
+        consent_given_at: null,
+        created_at: new Date().toISOString(),
+      }),
+    )
+  }
+  const stubProfile = (avatarUrl: string | null) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'u1', name: 'Admin Seed', avatar: avatarUrl ?? '' }),
+      } as Response),
+    )
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('a sessão carrega a foto do perfil', async () => {
+    seedSession()
+    stubProfile('https://cdn.test/avatar.png')
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() => expect(result.current.user?.avatarUri).toBe('https://cdn.test/avatar.png'))
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url))
+    expect(urls.some((u) => u.endsWith('/users/u1'))).toBe(true)
+    expect(urls.some((u) => u.includes('/profile/me'))).toBe(false)
+  })
+
+  it('sem foto no perfil, a sessão fica sem foto', async () => {
+    seedSession()
+    stubProfile(null)
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() => expect(result.current.user?.email).toBe('admin@swi.test'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(result.current.user?.avatarUri).toBeUndefined()
+  })
+
+  it('trocar a foto atualiza a sessão na hora', async () => {
+    seedSession()
+    stubProfile(null)
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() => expect(result.current.user?.email).toBe('admin@swi.test'))
+    act(() => result.current.setAvatarUri('blob:nova-foto'))
+    expect(result.current.user?.avatarUri).toBe('blob:nova-foto')
+  })
+})

@@ -1,5 +1,5 @@
 // src/hooks/useAuth.tsx
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { authApi } from '@/services/auth'
 import { SESSION_CLEARED_EVENT, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import type { User } from '@/services/types'
@@ -11,6 +11,8 @@ type AuthContextValue = {
   loading: boolean
   signIn: (email: string, password: string) => Promise<Result>
   signOut: () => Promise<void>
+  /** Foto nova escolhida em Configurações: o cabeçalho troca na hora. */
+  setAvatarUri: (avatarUri: string) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -54,6 +56,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // A foto vem do cadastro, não do login, e é URL assinada que expira: por isso
+  // é lida a cada sessão e não vai para o localStorage. Sem foto, ou se a
+  // leitura falhar, a sessão fica sem foto, nunca com a de outra pessoa.
+  const userId = user?.id
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    void authApi.avatarOf(userId).then((avatarUri) => {
+      if (cancelled || !avatarUri) return
+      setUser((u) => (u?.id === userId ? { ...u, avatarUri } : u))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  const setAvatarUri = useCallback((avatarUri: string) => {
+    setUser((u) => (u ? { ...u, avatarUri } : u))
+  }, [])
+
   const signIn: AuthContextValue['signIn'] = async (email, password) => {
     const { data, error } = await authApi.signIn({ email, password })
     if (data) {
@@ -69,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, setAvatarUri }}>
       {children}
     </AuthContext.Provider>
   )

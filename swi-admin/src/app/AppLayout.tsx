@@ -35,7 +35,6 @@ import { useMyVitals } from '@/hooks/useMyVitals'
 import { UserDetailsMenu } from '@/components/UserDetailsMenu'
 import { ApiTargetBadge } from '@/components/ApiTargetBadge'
 import { NotificationBell } from '@/components/NotificationBell'
-import workerA from '@/assets/avatars/worker-a.png'
 
 // DS module is shimmed to `any`; mirror the types we need locally.
 type ChatSectionUser = {
@@ -127,7 +126,7 @@ export function AppLayout() {
         bpm={myVitals.bpm}
         pressure={myVitals.pressure}
         progress={myVitals.progress}
-        avatarUri={user?.avatarUri ?? workerA}
+        avatarUri={user?.avatarUri}
         heartIconName="heart_filled"
         pressureIconName="vitals_pulse"
         borderColor={theme.background}

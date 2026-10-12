@@ -17,7 +17,7 @@ import {
 import { useDemoToast } from '@/lib/demoToast'
 import type { ChatContact, ChatMessage } from '@/services/chats'
 import { useChat } from '@/services/chat/ChatProvider'
-import workerA from '@/assets/avatars/worker-a.png'
+import { useAuth } from '@/hooks/useAuth'
 
 // Inline attachment thumbnail layout box. The wrapper View clips the DS Image
 // to radius.m, so both must share the exact same dimensions, keep them here.
@@ -49,6 +49,7 @@ export function ChatBubble({
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const { deleteMessage } = useChat()
+  const { user } = useAuth()
   const isMe = message.sender === 'me'
   const isDeleted = Boolean(message.deleted)
   const closeMenu = () => {
@@ -64,9 +65,15 @@ export function ChatBubble({
     })
   }
   const bubbleBorderColor = isMe ? theme.content.secondaryLight : theme.content.primaryLight
-  const avatarUri = isMe ? workerA : contact.avatarUri
+  // A minha bolha leva a foto do meu perfil; sem foto, as iniciais do DS.
+  const avatarUri = isMe ? user?.avatarUri : contact.avatarUri
   const avatar = (
-    <Avatar uri={avatarUri} customSize={40} accessibilityLabel={isMe ? 'Você' : contact.name} />
+    <Avatar
+      uri={avatarUri}
+      name={isMe ? user?.full_name : contact.name}
+      customSize={40}
+      accessibilityLabel={isMe ? 'Você' : contact.name}
+    />
   )
   // O more_vert abre um menu, não um botão único de copiar: editar e excluir
   // existem de ponta a ponta (PATCH e DELETE no backend,

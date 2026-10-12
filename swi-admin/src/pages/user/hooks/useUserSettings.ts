@@ -83,7 +83,7 @@ const fromDob = (dob: string): string | null => {
 }
 
 export function useUserSettings() {
-  const { user } = useAuth()
+  const { user, setAvatarUri } = useAuth()
   const { show: showToast } = useDemoToast()
   const [name, setName] = useState(user?.full_name ?? '')
   const [dob, setDob] = useState('')
@@ -281,8 +281,13 @@ export function useUserSettings() {
       if (error) {
         showToast('Falha ao atualizar a foto', error.message)
       } else {
-        // Preview imediato local; o presign de view chega no próximo load.
-        if (typeof URL.createObjectURL === 'function') setAvatarUrl(URL.createObjectURL(file))
+        // Preview imediato local; o presign de view chega no próximo load. A
+        // sessão recebe a mesma imagem para a miniatura do cabeçalho trocar junto.
+        if (typeof URL.createObjectURL === 'function') {
+          const preview = URL.createObjectURL(file)
+          setAvatarUrl(preview)
+          setAvatarUri(preview)
+        }
         showToast('Foto atualizada', 'Sua foto de perfil foi salva')
       }
     } catch (err) {
