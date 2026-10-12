@@ -46,14 +46,14 @@ export function vitalsViewFrom(
   telemetry: WorkerTelemetry | null,
   options: { noDevice?: boolean; failed?: boolean } = {},
 ): WorkerVitalsView {
+  // Sem aparelho pareado, a leitura guardada não vale: desparear não apaga o
+  // último snapshot no backend, e mostrá-lo seria apresentar dado velho como atual.
+  if (options.noDevice) return { ...EMPTY, status: 'Sem relógio pareado' }
+
   if (telemetry === null || telemetry.origin === null) {
     return {
       ...EMPTY,
-      status: options.noDevice
-        ? 'Sem aparelho'
-        : options.failed
-          ? 'Leitura indisponível no momento'
-          : 'Sem leitura do aparelho',
+      status: options.failed ? 'Leitura indisponível no momento' : 'Sem leitura do aparelho',
     }
   }
 

@@ -9,7 +9,7 @@ export function pairedFatigue(state: PairedTelemetryState): {
   sourceBadge: string | null
 } {
   if (state.failed) return { label: 'Leitura indisponível no momento', sourceBadge: null }
-  if (state.device === 'none') return { label: 'Sem aparelho', sourceBadge: null }
+  if (state.device === 'none') return { label: 'Sem relógio pareado', sourceBadge: null }
   if (state.device === 'loading' || state.telemetry === null) {
     return { label: NO_VALUE, sourceBadge: null }
   }

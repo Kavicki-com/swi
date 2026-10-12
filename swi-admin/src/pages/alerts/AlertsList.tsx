@@ -144,7 +144,11 @@ export function AlertsList() {
   )
   // Leitura real do funcionário selecionado, para o cartão sobre o pino.
   const selectedEntry = selectedMarker ? entryFor(selectedMarker.id) : undefined
-  const selectedVitals = selectedMarker ? vitalsViewFrom(selectedEntry?.telemetry ?? null) : null
+  const selectedVitals = selectedMarker
+    ? vitalsViewFrom(selectedEntry?.telemetry ?? null, {
+        noDevice: selectedEntry?.device.state === 'NONE',
+      })
+    : null
   // Batimento como número para o cartão do DS; null mostra a ausência.
   const selectedHeartRate =
     selectedVitals?.heartRate == null ? null : Number(selectedVitals.heartRate)
