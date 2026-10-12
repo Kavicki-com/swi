@@ -2,7 +2,7 @@
 //
 // Nada aqui é inventado: cargo e setor vêm do cadastro do próprio admin, e os
 // vitais só aparecem quando ele tem aparelho pareado. Hoje só funcionário
-// pareia, então na prática o menu diz "Sem aparelho"; se um admin parear, a
+// pareia, então na prática o menu diz "Sem relógio pareado"; se um admin parear, a
 // mesma leitura do detalhe do funcionário passa a valer aqui.
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'

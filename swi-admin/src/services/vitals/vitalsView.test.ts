@@ -35,9 +35,23 @@ describe('vitalsViewFrom', () => {
 
   it('sem leitura alguma (falha ou admin) usa a frase pedida', () => {
     expect(vitalsViewFrom(null).status).toBe('Sem leitura do aparelho')
-    expect(vitalsViewFrom(null, { noDevice: true }).status).toBe('Sem aparelho')
+    expect(vitalsViewFrom(null, { noDevice: true }).status).toBe('Sem relógio pareado')
     // Falha de rede não é ausência de aparelho: a frase não pode culpar o relógio.
     expect(vitalsViewFrom(null, { failed: true }).status).toBe('Leitura indisponível no momento')
+  })
+
+  it('sem aparelho pareado esconde a leitura que o backend guardou', () => {
+    // Desparear não apaga o último snapshot: mostrar o batimento antigo seria dado falso.
+    const view = vitalsViewFrom(
+      reporting({ heartRate: metric(86, { quality: 'STALE', measuredAt: OLD }) }),
+      { noDevice: true },
+    )
+    expect(view.heartRate).toBeNull()
+    expect(view.pressure).toBeNull()
+    expect(view.wearPct).toBeNull()
+    expect(view.effortPct).toBeNull()
+    expect(view.fatigueEta).toEqual({ minutes: null, label: 'Sem estimativa' })
+    expect(view.status).toBe('Sem relógio pareado')
   })
 
   it('batimento indisponível de quem já reportou diz que não há leitura recente', () => {

@@ -131,7 +131,7 @@ describe('WorkerDetailsLayout', () => {
     it('sem funcionário com aparelho não busca série e diz que não há aparelho', async () => {
       await renderLayout({ vitals: READING })
       expect(seriesMock).not.toHaveBeenCalled()
-      expect(screen.getByTestId('calories-empty')).toHaveTextContent('Sem aparelho')
+      expect(screen.getByTestId('calories-empty')).toHaveTextContent('Sem relógio pareado')
     })
   })
 

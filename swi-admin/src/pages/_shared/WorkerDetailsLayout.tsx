@@ -61,7 +61,7 @@ export type WorkerDetailsData = {
   /**
    * Funcionário cuja série de gasto calórico o gráfico lê, e cuja transmissão
    * o botão de câmera do minimapa procura. Ausente para quem não pareia
-   * aparelho nem transmite (administrador): o gráfico diz "Sem aparelho".
+   * aparelho nem transmite (administrador): o gráfico diz "Sem relógio pareado".
    */
   seriesWorkerId?: string
 }
@@ -351,7 +351,7 @@ export function WorkerDetailsLayout({
   const calories = useWorkerSeries(worker.seriesWorkerId, PERIOD_FROM_OPTION[caloriesPeriod])
   // Estado do gráfico quando não há curva a desenhar: a frase diz o porquê.
   const caloriesEmpty = calories.noDevice
-    ? 'Sem aparelho'
+    ? 'Sem relógio pareado'
     : calories.loading
       ? 'Carregando…'
       : calories.failed

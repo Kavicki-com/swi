@@ -35,7 +35,7 @@ export function EmployeeDetails() {
   // Vitais do aparelho pareado, relidos sozinhos enquanto a página está aberta.
   const { telemetry, failed } = useWorkerTelemetry(id)
   // Quem sabe se há aparelho é o bloco Aparelho; sem ele os vitais dizem
-  // "Sem aparelho". null enquanto o bloco não sabe.
+  // "Sem relógio pareado". null enquanto o bloco não sabe.
   const [paired, setPaired] = useState<boolean | null>(null)
 
   // POST real: o worker recebe a notificação de journey no app, e erro do

@@ -401,6 +401,19 @@ describe('AlertsList: seleção de pino', () => {
     expect(screen.getByText('Criar rota de socorro')).toBeTruthy()
   })
 
+  // Desparear não apaga o último snapshot no backend; o cartão não pode
+  // mostrar esse batimento como se ainda houvesse relógio.
+  it('sem aparelho pareado, o cartão esconde o batimento guardado', async () => {
+    h.workers = {
+      observedAt: '2026-10-01T15:00:00.000Z',
+      workers: [adminWorker('w1', 'Ana Lima', { device: { state: 'NONE', lastSeenAt: null } })],
+    }
+    await renderAlerts('/alerts/w1')
+    expect(await screen.findByText('Sem relógio pareado')).toBeTruthy()
+    expect(screen.queryByText(/112/)).toBeNull()
+    expect(screen.getByText('Criar rota de socorro')).toBeTruthy()
+  })
+
   // O alerta de chuva era um texto fixo com um nome inventado. Sem alerta
   // meteorológico real, nada aparece no lugar do cartão.
   it('no basemap meteo, o cartão real continua e nenhum alerta de chuva é inventado', async () => {

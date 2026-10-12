@@ -198,4 +198,17 @@ describe('wearRows', () => {
       ['n', false],
     ])
   })
+
+  it('sem aparelho pareado, a linha não mostra a leitura que o backend guardou', () => {
+    // Desparear não apaga o último snapshot: batimento, pressão e desgaste dele
+    // seriam dado velho apresentado como atual.
+    const [row] = wearRows(
+      list(adminWorker('n', 'Despareado', { device: { state: 'NONE', lastSeenAt: null } })),
+      {},
+    )
+    expect(row?.id).toBe('n')
+    expect(row?.bpm).toBeNull()
+    expect(row?.pressure).toBeNull()
+    expect(row?.progress).toBeUndefined()
+  })
 })

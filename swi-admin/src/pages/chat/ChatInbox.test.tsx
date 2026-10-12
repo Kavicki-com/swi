@@ -212,7 +212,7 @@ describe('ChatInbox', () => {
         error: null,
       })
       await renderPage(<ChatInbox />, { route: '/chat/me%23w9', path: '/chat/:contactId' })
-      expect(await screen.findByText('Sem aparelho')).toBeInTheDocument()
+      expect(await screen.findByText('Sem relógio pareado')).toBeInTheDocument()
       expect(screen.queryByTestId('simulated-data-badge')).not.toBeInTheDocument()
       expect(telemetry.current).not.toHaveBeenCalled()
     })

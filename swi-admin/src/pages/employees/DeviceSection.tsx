@@ -55,7 +55,7 @@ export function DeviceSection({
   workerId: string
   /** A leitura que a página já faz; dela saem a bateria e as condições do relógio. */
   telemetry?: WorkerTelemetry | null
-  /** Avisa a página se há aparelho pareado, para os vitais dizerem "Sem aparelho". */
+  /** Avisa a página se há aparelho pareado, para os vitais dizerem "Sem relógio pareado". */
   onPairedChange?: (paired: boolean) => void
 }) {
   const theme = useTheme()

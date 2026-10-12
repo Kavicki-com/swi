@@ -128,21 +128,26 @@ export function wearRows(
   // resto por nome.
   return workers.workers.map(({ worker, device, telemetry }) => {
     const { wear, bloodPressure } = telemetry.metrics
+    // Desparear não apaga o último snapshot no backend: sem aparelho pareado,
+    // batimento, pressão e desgaste guardados seriam dado velho como atual.
+    const paired = device.state === 'PAIRED'
     return {
       id: worker.id,
       employeeName: worker.name,
       sector: worker.sector ?? '',
       avatarUri: avatars[worker.id] || undefined,
       progress:
-        wear.value === null ? undefined : Math.round(Math.min(100, Math.max(0, wear.value))),
-      bpm: bpmOf(telemetry),
+        !paired || wear.value === null
+          ? undefined
+          : Math.round(Math.min(100, Math.max(0, wear.value))),
+      bpm: paired ? bpmOf(telemetry) : null,
       pressure:
-        bloodPressure.value === null
+        !paired || bloodPressure.value === null
           ? null
           : `${bloodPressure.value.systolic}/${bloodPressure.value.diastolic}`,
       tier: tierOf(telemetry),
       demo: telemetry.origin === 'DEMO',
-      paired: device.state === 'PAIRED',
+      paired,
     }
   })
 }

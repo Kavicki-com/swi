@@ -113,7 +113,7 @@ describe('EmployeeDetails', () => {
 
 describe('EmployeeDetails: vitais do aparelho', () => {
   // Os vitais abaixo são de quem tem aparelho pareado; sem ele a tela diz
-  // "Sem aparelho" (caso no fim deste bloco).
+  // "Sem relógio pareado" (caso no fim deste bloco).
   beforeEach(() => {
     stateOfMock.mockResolvedValue(PAIRED)
   })
@@ -167,13 +167,13 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     await waitFor(() => expect(currentMock.mock.calls.length).toBe(before + 1))
   })
 
-  it('sem aparelho pareado, os vitais dizem "Sem aparelho" em vez de "sem leitura"', async () => {
+  it('sem aparelho pareado, os vitais dizem "Sem relógio pareado" em vez de "sem leitura"', async () => {
     stateOfMock.mockResolvedValue(UNPAIRED)
     getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
     currentMock.mockResolvedValue({ data: neverReported(), error: null })
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
-    expect(await screen.findByText('Sem aparelho')).toBeInTheDocument()
+    expect(await screen.findByText('Sem relógio pareado')).toBeInTheDocument()
     expect(screen.queryByText('Sem leitura do aparelho')).not.toBeInTheDocument()
   })
 

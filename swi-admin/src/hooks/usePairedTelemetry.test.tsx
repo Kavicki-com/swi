@@ -65,7 +65,7 @@ describe('usePairedTelemetry', () => {
     expect(result.current.telemetry?.metrics.heartRate.value).toBe(112)
   })
 
-  // Sem saber se há aparelho, a tela não afirma nem "Sem aparelho".
+  // Sem saber se há aparelho, a tela não afirma nem "Sem relógio pareado".
   it('falha ao consultar o aparelho marca a falha', async () => {
     stateOfMock.mockResolvedValue({ data: null, error: { message: 'offline' } })
     const { result } = renderHook(() => usePairedTelemetry('u1'))
