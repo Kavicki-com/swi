@@ -18,26 +18,25 @@
 // responsáveis é montado AQUI (não é uma rota), então o formulário
 // meio-preenchido não desmonta na ida e volta.
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { Image as RNImage, Modal, Pressable, View } from 'react-native'
+import { Modal, Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
+  AttachmentList,
   Button,
   Combobox,
   Icon,
   ImageUploader,
+  ImageViewer,
   Input,
   Text,
   Title,
   useTheme,
+  type AttachmentItem,
 } from '@kavicki/swi-design-system'
 import { uploadImage } from '@/services/api/upload'
 import { reportsApi, type ReportStatus } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
 import { ResponsablesModal } from '@/pages/modals/ResponsablesModal'
-
-// Quantos quadros de anexo a fileira mostra. É layout, NÃO limite:
-// quem limita a contagem é LIMIT_IMAGE_KEYS (o ArrayMaxSize(20) do backend).
-const ATTACHMENT_SLOTS = 4
 
 // Espelha o @ArrayMaxSize(20) de imageKeys no CreateReportDto (swi-backend/src/
 // reports/dto.ts). Barrar na SELEÇÃO evita subir 25 arquivos pro S3 no submit e
@@ -62,53 +61,25 @@ const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.l
   string
 >
 
-// Anexo escolhido. `preview` é uma object URL só pro thumbnail; pode faltar em
-// ambiente sem URL.createObjectURL (jsdom) — aí o quadro cai no rótulo com o
-// nome do arquivo. `uploadedKey` guarda a key devolvida pelo presign depois que
-// o arquivo já subiu, pra que um retry de save (ex.: create falhou com 4xx)
-// REAPROVEITE a key em vez de subir o arquivo de novo (e mintar key órfã).
-type PickedImage = { file: File; preview?: string; uploadedKey?: string }
+// Anexo escolhido. `id` é estável na sessão (não muda com remoções), para a
+// linha da lista e a remoção. `preview` é uma object URL só pro thumbnail; pode
+// faltar em ambiente sem URL.createObjectURL (jsdom); aí a linha cai no clipe.
+// `uploadedKey` guarda a key devolvida pelo presign depois que o arquivo já
+// subiu, pra que um retry de save (ex.: create falhou com 4xx) REAPROVEITE a
+// key em vez de subir o arquivo de novo (e mintar key órfã).
+type PickedImage = { id: string; file: File; preview?: string; uploadedKey?: string }
 
-// Quadro da fileira de anexos. Vazio = glifo de foto; com
-// anexo escolhido = thumbnail (ou nome do arquivo quando não há preview); com
-// `uri` = anexo já gravado (edição), exibido como thumbnail read-only.
-function AttachmentSlot({ entry, uri }: { entry?: PickedImage; uri?: string }) {
-  const theme = useTheme()
-  const previewUri = uri ?? entry?.preview
-  return (
-    <View
-      style={{
-        width: 165,
-        height: 132,
-        borderRadius: theme.border.radius.m,
-        backgroundColor: theme.surface.high,
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-        padding: theme.padding.s,
-        gap: theme.gap.xs,
-      }}
-    >
-      {previewUri ? (
-        <RNImage
-          source={{ uri: previewUri }}
-          style={{ width: '100%', height: '100%' }}
-          resizeMode="cover"
-          accessibilityRole="image"
-          accessibilityLabel={entry?.file.name ?? 'Anexo do relatório'}
-        />
-      ) : (
-        <>
-          <Icon name="add_a_photo" size={32} color={theme.content.medium} />
-          {entry ? (
-            <Text variant="body.s" color={theme.content.medium} numberOfLines={1}>
-              {entry.file.name}
-            </Text>
-          ) : null}
-        </>
-      )}
-    </View>
-  )
+// Nome do arquivo a partir da URL presigned (último segmento, sem query), só
+// pra rotular a linha de um anexo já gravado. Sem segmento usável, cai no
+// "Anexo N" de quem chama.
+function fileNameFromUrl(url: string): string | undefined {
+  try {
+    const path = url.split('?')[0] ?? url
+    const last = path.split('/').pop()
+    return last ? decodeURIComponent(last) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function NewReport() {
@@ -139,8 +110,13 @@ export function NewReport() {
   // na montagem, então remontar a cada abertura é o que re-semeia a seleção.
   const [responsablesOpen, setResponsablesOpen] = useState(false)
   const [responsablesOpenings, setResponsablesOpenings] = useState(0)
+  // Anexo aberto no visualizador em tamanho grande; null = fechado.
+  const [viewing, setViewing] = useState<{ uri: string; title: string } | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  // Contador pra ids estáveis dos anexos escolhidos: o índice mudaria a cada
+  // remoção e remover o errado.
+  const pickSeqRef = useRef(0)
 
   // `true` depois que a tela sai da árvore. Um save pode estar em voo quando o
   // usuário desiste e sai: sem esta guarda, o navigate do sucesso o arrastaria
@@ -211,9 +187,23 @@ export function NewReport() {
           ? URL.createObjectURL(file)
           : undefined
       if (preview) createdUrlsRef.current.push(preview)
-      return { file, preview }
+      return { id: `pick_${pickSeqRef.current++}`, file, preview }
     })
     setImages((prev) => [...prev, ...entries])
+  }
+
+  // Tira um anexo escolhido da lista sem sair do formulário: o resto do que foi
+  // preenchido fica. A object URL do preview é revogada aqui.
+  const removePicked = (id: string) => {
+    setError(null)
+    setImages((prev) => {
+      const gone = prev.find((entry) => entry.id === id)
+      if (gone?.preview) {
+        URL.revokeObjectURL(gone.preview)
+        createdUrlsRef.current = createdUrlsRef.current.filter((url) => url !== gone.preview)
+      }
+      return prev.filter((entry) => entry.id !== id)
+    })
   }
 
   const handleSave = async () => {
@@ -319,7 +309,32 @@ export function NewReport() {
         ? `1 responsável: ${responsibles[0]}`
         : `${responsibles.length} responsáveis: ${responsibles.join(', ')}`
 
-  const emptySlots = Math.max(0, ATTACHMENT_SLOTS - images.length - existingImages.length)
+  // Linhas da lista de anexos: primeiro os já gravados (edição), só
+  // visualizáveis (remover anexo existente segue fora de escopo), depois os
+  // escolhidos agora, que dá pra visualizar e remover.
+  const attachmentItems: AttachmentItem[] = [
+    ...existingImages.map((uri, index) => ({
+      id: `existing_${index}`,
+      name: fileNameFromUrl(uri) ?? `Anexo ${index + 1}`,
+      kind: 'image' as const,
+      thumbnailUri: uri,
+      actions: ['view'] as const,
+    })),
+    ...images.map((entry) => ({
+      id: entry.id,
+      name: entry.file.name,
+      kind: 'image' as const,
+      thumbnailUri: entry.preview,
+      actions: ['view', 'remove'] as const,
+    })),
+  ]
+
+  const openViewer = (item: AttachmentItem) => {
+    const existing = existingImages.find((_, index) => `existing_${index}` === item.id)
+    const picked = images.find((entry) => entry.id === item.id)
+    const uri = existing ?? picked?.preview
+    if (uri) setViewing({ uri, title: item.name })
+  }
 
   // Onde Voltar/Cancelar levam: na edição, de volta ao detalhe; na criação, à
   // lista.
@@ -469,39 +484,27 @@ export function NewReport() {
         />
       </View>
 
-      {/* Section 4 — Anexos: quadros (thumbnails) + ImageUploader. */}
+      {/* Section 4, Anexos: lista (visualizar/remover) + ImageUploader. */}
       <View style={{ gap: theme.gap.m }}>
         <Title variant="title.xs" color={theme.content.primary}>
           Anexos
         </Title>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'stretch',
-            gap: theme.gap.m,
-            flexWrap: 'wrap',
-          }}
-        >
-          {/* Anexos já gravados (edição) — thumbnails read-only. Remover está
-              fora de escopo; só preservamos e adicionamos. */}
-          {existingImages.map((uri, index) => (
-            <AttachmentSlot key={`existing_${index}`} uri={uri} />
-          ))}
-          {images.map((entry, index) => (
-            <AttachmentSlot key={`${entry.file.name}_${index}`} entry={entry} />
-          ))}
-          {Array.from({ length: emptySlots }, (_, i) => (
-            <AttachmentSlot key={`empty_${i}`} />
-          ))}
-          <View style={{ flex: 1, minWidth: 240 }}>
-            <ImageUploader
-              helperText="Selecione arquivos do tipo: JPG ou PNG"
-              pickFileLabel="Enviar arquivo"
-              accentColor={theme.content.primary}
-              showTakePhoto={false}
-              onPickFile={() => fileInputRef.current?.click()}
-            />
-          </View>
+        {attachmentItems.length > 0 ? (
+          <AttachmentList
+            items={attachmentItems}
+            onView={openViewer}
+            onRemove={(item) => removePicked(item.id)}
+            testID="new-report-attachments"
+          />
+        ) : null}
+        <View style={{ maxWidth: 420 }}>
+          <ImageUploader
+            helperText="Selecione arquivos do tipo: JPG ou PNG"
+            pickFileLabel="Enviar arquivo"
+            accentColor={theme.content.primary}
+            showTakePhoto={false}
+            onPickFile={() => fileInputRef.current?.click()}
+          />
         </View>
         {/* O DS não tem (nem deve ter) um seletor de arquivo: o ImageUploader
             expõe `onPickFile` justamente pro host abrir o diálogo nativo. Este
@@ -561,6 +564,16 @@ export function NewReport() {
           onClose={() => setResponsablesOpen(false)}
         />
       </Modal>
+
+      {/* Visualizador do anexo em tamanho grande. Sem Baixar: no formulário o
+          anexo escolhido ainda não subiu, e o já gravado se baixa no detalhe. */}
+      <ImageViewer
+        visible={viewing !== null}
+        uri={viewing?.uri ?? null}
+        title={viewing?.title ?? ''}
+        onClose={() => setViewing(null)}
+        testID="new-report-viewer"
+      />
     </View>
   )
 }

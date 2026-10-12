@@ -260,6 +260,34 @@ describe('NewReport — anexos', () => {
     expect(createMock.mock.calls[1]?.[0].imageKeys).toEqual(['reports/aaa.jpg'])
   })
 
+  it('remove um anexo escolhido sem sair do formulário nem perder o título', async () => {
+    uploadMock.mockResolvedValueOnce('reports/b.png')
+    renderAt()
+    typeIn('new-report-title', 'Com dois anexos')
+
+    const input = screen.getByTestId('new-report-file-input')
+    fireEvent.change(input, { target: { files: [jpeg('a.jpg')] } })
+    fireEvent.change(input, { target: { files: [jpeg('b.png')] } })
+
+    // A lista de anexos mostra os dois, cada um com botão de excluir.
+    expect(screen.getByText('a.jpg')).toBeInTheDocument()
+    expect(screen.getByText('b.png')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir a.jpg' }))
+
+    // O anexo removido some; o outro e o título continuam.
+    await waitFor(() => expect(screen.queryByText('a.jpg')).not.toBeInTheDocument())
+    expect(screen.getByText('b.png')).toBeInTheDocument()
+    expect(screen.getByTestId('new-report-title')).toHaveValue('Com dois anexos')
+
+    save()
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
+    // Só o anexo que ficou subiu e entrou no payload.
+    expect(uploadMock).toHaveBeenCalledTimes(1)
+    expect(createMock.mock.calls[0]?.[0].imageKeys).toEqual(['reports/b.png'])
+  })
+
   it('recusa mais de 20 anexos sem subir NENHUM arquivo nem criar o relatório', async () => {
     renderAt()
     typeIn('new-report-title', 'Muitos anexos')
