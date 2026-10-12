@@ -26,6 +26,9 @@ export const DEMO_DATA_LABEL = 'Dados de demonstração'
 /** Marcador de valor ausente na tela. */
 export const NO_VALUE = '--'
 
+/** Frase de quem não tem relógio pareado, a mesma em todas as telas. */
+export const NO_DEVICE_LABEL = 'Sem relógio pareado'
+
 const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
@@ -48,7 +51,7 @@ export function vitalsViewFrom(
 ): WorkerVitalsView {
   // Sem aparelho pareado, a leitura guardada não vale: desparear não apaga o
   // último snapshot no backend, e mostrá-lo seria apresentar dado velho como atual.
-  if (options.noDevice) return { ...EMPTY, status: 'Sem relógio pareado' }
+  if (options.noDevice) return { ...EMPTY, status: NO_DEVICE_LABEL }
 
   if (telemetry === null || telemetry.origin === null) {
     return {
