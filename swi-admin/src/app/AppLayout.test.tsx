@@ -52,6 +52,14 @@ vi.mock('@/services/chat/ChatProvider', () => ({
 import { AppLayout, resolveActiveNavValue } from './AppLayout'
 import { settled } from '@/test-utils/renderPage'
 
+// Foto do perfil do admin logado; cada teste escolhe a sua.
+const profile = vi.hoisted(() => ({ avatarUrl: null as string | null }))
+vi.mock('@/services/api/profile', () => ({
+  profileApi: {
+    me: async () => ({ data: { avatarUrl: profile.avatarUrl }, error: null }),
+  },
+}))
+
 beforeEach(() => {
   // getSession real exige token + sessão.
   window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
@@ -100,6 +108,36 @@ const renderTree = async () =>
       </AuthProvider>
     </SwiThemeProvider>,
   ))
+
+// A miniatura do cabeçalho mostrava uma foto fixa de banco de imagens, que não
+// batia com a de Configurações.
+describe('AppLayout: foto do cabeçalho', () => {
+  const imageUrls = () =>
+    [...document.querySelectorAll<HTMLElement>('[data-testid="app-header-user-info"] *')]
+      .flatMap((n) => [n.getAttribute('src') ?? '', n.style.backgroundImage])
+      .filter(Boolean)
+      .join(' ')
+
+  afterEach(() => {
+    profile.avatarUrl = null
+  })
+
+  it('mostra a foto do perfil de quem está logado', async () => {
+    profile.avatarUrl = 'https://cdn.test/minha-foto.png'
+    await renderTree()
+    await waitFor(() => expect(imageUrls()).toContain('https://cdn.test/minha-foto.png'))
+  })
+
+  it('sem foto no perfil, não mostra a foto de outra pessoa', async () => {
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({ id: 'u_seed_1', email: 'admin@swi.test', full_name: 'Admin Seed', role: 'admin' }),
+    )
+    await renderTree()
+    await screen.findByTestId('app-header-user-info')
+    expect(imageUrls()).not.toMatch(/worker-a/)
+  })
+})
 
 describe('AppLayout', () => {
   it('renders outlet content for authenticated user', async () => {

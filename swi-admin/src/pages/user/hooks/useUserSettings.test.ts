@@ -16,10 +16,14 @@ const h = vi.hoisted(() => ({
   examsList: vi.fn(),
   examsCreate: vi.fn(),
   toast: vi.fn(),
+  setAvatarUri: vi.fn(),
 }))
 
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { full_name: 'Nome da Sessão', email: 'ana@exemplo.test' } }),
+  useAuth: () => ({
+    user: { full_name: 'Nome da Sessão', email: 'ana@exemplo.test' },
+    setAvatarUri: h.setAvatarUri,
+  }),
 }))
 vi.mock('@/lib/demoToast', () => ({ useDemoToast: () => ({ show: h.toast }) }))
 vi.mock('@/services/api/profile', () => ({
@@ -336,6 +340,23 @@ describe('useUserSettings: foto de perfil', () => {
     })
 
     expect(h.toast).toHaveBeenCalledWith('Falha ao atualizar a foto', 'Arquivo recusado')
+    expect(h.setAvatarUri).not.toHaveBeenCalled()
+  })
+
+  // A miniatura do cabeçalho tem que trocar junto com a foto de Configurações.
+  it('foto salva chega à sessão na hora, e o cabeçalho troca junto', async () => {
+    h.setAvatarUri.mockClear()
+    const original = URL.createObjectURL
+    URL.createObjectURL = () => 'blob:foto-nova'
+    const { result } = await setup()
+
+    await act(async () => {
+      await result.current.onAvatarSelected(fileEvent(file()))
+    })
+
+    expect(h.setAvatarUri).toHaveBeenCalledWith('blob:foto-nova')
+    expect(result.current.avatarUrl).toBe('blob:foto-nova')
+    URL.createObjectURL = original
   })
 })
 

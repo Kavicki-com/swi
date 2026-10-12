@@ -20,7 +20,6 @@ import { Avatar, Logo, ProgressBar, Text, Title, useTheme } from '@kavicki/swi-d
 import { useAuth } from '@/hooks/useAuth'
 import { useAdminVitals } from '@/services/vitals/adminVitals'
 import { HeartPulseCanvas } from '@/components/HeartPulseCanvas'
-import workerA from '@/assets/avatars/worker-a.png'
 
 export interface UserDetailsMenuProps {
   open: boolean
@@ -204,9 +203,8 @@ export function UserDetailsMenu({ open, onClose }: UserDetailsMenuProps) {
               overflow: 'hidden',
             }}
           >
-            {/* Mesmo fallback do widget do header: sem ele o círculo abre
-                vazio quando a sessão não traz avatarUri. */}
-            <Avatar uri={user?.avatarUri ?? workerA} customSize={140} />
+            {/* Sem foto no perfil, as iniciais do DS; nunca a foto de outra pessoa. */}
+            <Avatar uri={user?.avatarUri} name={user?.full_name} customSize={140} />
           </Pressable>
 
           {/* Content column to the right of the avatar — everything else

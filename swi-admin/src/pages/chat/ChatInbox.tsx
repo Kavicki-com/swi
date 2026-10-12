@@ -32,7 +32,6 @@ import { ConversationList } from './components/ConversationList'
 import { MessageThread } from './components/MessageThread'
 import { useChatInbox } from './hooks/useChatInbox'
 import { ReportMessageModal } from './ReportMessageModal'
-import workerA from '@/assets/avatars/worker-a.png'
 
 export function ChatInbox() {
   const { user } = useAuth()
@@ -112,7 +111,7 @@ export function ChatInbox() {
             bpm={myVitals.bpm}
             pressure={myVitals.pressure}
             progress={myVitals.progress}
-            avatarUri={user?.avatarUri ?? workerA}
+            avatarUri={user?.avatarUri}
             heartIconName="heart_filled"
             pressureIconName="vitals_pulse"
             borderColor={theme.background}

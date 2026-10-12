@@ -20,7 +20,6 @@ import {
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { useMyVitals } from '@/hooks/useMyVitals'
-import workerA from '@/assets/avatars/worker-a.png'
 import { useMapsGeneral } from './hooks/useMapsGeneral'
 import { HeatmapLegend } from './components/HeatmapLegend'
 import { BackToDashboardButton } from './components/BackToDashboardButton'
@@ -129,7 +128,7 @@ export function MapsGeneral() {
             bpm={myVitals.bpm}
             pressure={myVitals.pressure}
             progress={myVitals.progress}
-            avatarUri={user?.avatarUri ?? workerA}
+            avatarUri={user?.avatarUri}
             heartIconName="heart_filled"
             pressureIconName="vitals_pulse"
             borderColor={theme.background}
