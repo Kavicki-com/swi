@@ -5,7 +5,7 @@
 import { vi } from 'vitest'
 import { useState } from 'react'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { DeviceSection } from './DeviceSection'
+import { DeviceSection, type DeviceState } from './DeviceSection'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 import { telemetryDevicesApi } from '@/services/api/telemetryDevices'
 import type { WorkerTelemetry } from '@/services/api/telemetry'
@@ -163,7 +163,9 @@ describe('DeviceSection: pareado', () => {
 
 describe('DeviceSection: erro ao carregar', () => {
   it('diz que não carregou e oferece tentar de novo', async () => {
-    stateOf.mockResolvedValueOnce({ data: null, error: { message: 'offline' } }).mockResolvedValueOnce(UNPAIRED)
+    stateOf
+      .mockResolvedValueOnce({ data: null, error: { message: 'offline' } })
+      .mockResolvedValueOnce(UNPAIRED)
     await mount()
 
     expect(await screen.findByTestId('device-section-error')).toBeTruthy()
@@ -183,9 +185,12 @@ const pairedSeenAt = (lastSeenAt: string) => ({
   data: { device: { ...DEVICE, lastSeenAt }, pendingEnrollment: null },
   error: null,
 })
-const mountWith = (telemetry: WorkerTelemetry | null, onPairedChange?: (p: boolean) => void) =>
+const mountWith = (
+  telemetry: WorkerTelemetry | null,
+  onDeviceStateChange?: (state: DeviceState) => void,
+) =>
   renderPage(
-    <DeviceSection workerId="w1" telemetry={telemetry} onPairedChange={onPairedChange} />,
+    <DeviceSection workerId="w1" telemetry={telemetry} onDeviceStateChange={onDeviceStateChange} />,
     { route: '/x', path: '/x' },
   )
 
@@ -349,23 +354,25 @@ describe('DeviceSection: último contato relido com a telemetria', () => {
 describe('DeviceSection: aviso à página', () => {
   it('avisa que há aparelho pareado', async () => {
     stateOf.mockResolvedValue(PAIRED)
-    const onPairedChange = vi.fn()
-    await mountWith(null, onPairedChange)
-    await waitFor(() => expect(onPairedChange).toHaveBeenLastCalledWith(true))
+    const onDeviceStateChange = vi.fn()
+    await mountWith(null, onDeviceStateChange)
+    await waitFor(() => expect(onDeviceStateChange).toHaveBeenLastCalledWith('paired'))
   })
 
   it('avisa que não há aparelho pareado', async () => {
     stateOf.mockResolvedValue(UNPAIRED)
-    const onPairedChange = vi.fn()
-    await mountWith(null, onPairedChange)
-    await waitFor(() => expect(onPairedChange).toHaveBeenLastCalledWith(false))
+    const onDeviceStateChange = vi.fn()
+    await mountWith(null, onDeviceStateChange)
+    await waitFor(() => expect(onDeviceStateChange).toHaveBeenLastCalledWith('unpaired'))
   })
 
-  it('erro ao carregar não afirma nada', async () => {
+  // A página precisa saber da falha: sem o aviso, os vitais ficariam esperando
+  // para sempre ou mostrariam a leitura guardada como atual.
+  it('erro ao carregar avisa a falha, sem afirmar se há aparelho', async () => {
     stateOf.mockResolvedValue({ data: null, error: { message: 'offline' } })
-    const onPairedChange = vi.fn()
-    await mountWith(null, onPairedChange)
+    const onDeviceStateChange = vi.fn()
+    await mountWith(null, onDeviceStateChange)
     await screen.findByTestId('device-section-error')
-    expect(onPairedChange).not.toHaveBeenCalled()
+    expect(onDeviceStateChange).toHaveBeenLastCalledWith('failed')
   })
 })

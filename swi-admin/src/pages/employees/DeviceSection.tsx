@@ -18,6 +18,9 @@ import type { MetricState, WorkerTelemetry } from '@/services/api/telemetry'
 import { useDemoToast } from '@/lib/demoToast'
 import { whenLabel } from '@/lib/whenLabel'
 
+/** O que o bloco sabe do aparelho: pareado, sem aparelho, ou não deu para saber. */
+export type DeviceState = 'paired' | 'unpaired' | 'failed'
+
 type Phase =
   | { kind: 'loading' }
   | { kind: 'error' }
@@ -50,13 +53,16 @@ function batteryLine(battery: MetricState<number>): string {
 export function DeviceSection({
   workerId,
   telemetry,
-  onPairedChange,
+  onDeviceStateChange,
 }: {
   workerId: string
   /** A leitura que a página já faz; dela saem a bateria e as condições do relógio. */
   telemetry?: WorkerTelemetry | null
-  /** Avisa a página se há aparelho pareado, para os vitais dizerem "Sem relógio pareado". */
-  onPairedChange?: (paired: boolean) => void
+  /**
+   * Avisa a página se há aparelho pareado, ou se não deu para saber, para os
+   * vitais nunca mostrarem a leitura guardada de quem já despareou.
+   */
+  onDeviceStateChange?: (state: DeviceState) => void
 }) {
   const theme = useTheme()
   const { show: showToast } = useDemoToast()
@@ -127,12 +133,18 @@ export function DeviceSection({
     }
   }, [telemetry, workerId])
 
-  // Carregando ou com erro, o bloco não sabe; a página não recebe aviso.
-  const paired =
-    phase.kind === 'paired' ? true : phase.kind === 'unpaired' || phase.kind === 'code' ? false : null
+  // Carregando, o bloco ainda não sabe e a página não recebe aviso.
+  const deviceState: DeviceState | null =
+    phase.kind === 'paired'
+      ? 'paired'
+      : phase.kind === 'unpaired' || phase.kind === 'code'
+        ? 'unpaired'
+        : phase.kind === 'error'
+          ? 'failed'
+          : null
   useEffect(() => {
-    if (paired !== null) onPairedChange?.(paired)
-  }, [paired, onPairedChange])
+    if (deviceState !== null) onDeviceStateChange?.(deviceState)
+  }, [deviceState, onDeviceStateChange])
 
   const pair = async () => {
     setBusy(true)
@@ -195,7 +207,10 @@ export function DeviceSection({
   if (phase.kind === 'code') {
     const expired = Date.parse(phase.expiresAt) <= now
     return (
-      <View testID={expired ? 'device-section-code-expired' : 'device-section-code'} style={{ gap: theme.gap.s }}>
+      <View
+        testID={expired ? 'device-section-code-expired' : 'device-section-code'}
+        style={{ gap: theme.gap.s }}
+      >
         {heading}
         {expired ? (
           <>
@@ -243,7 +258,8 @@ export function DeviceSection({
           </Text>
         ) : (
           <Text variant="body.s" color={theme.content.medium}>
-            Gere um código de seis dígitos e leia para o funcionário. Ele digita no app, em Parear aparelho.
+            Gere um código de seis dígitos e leia para o funcionário. Ele digita no app, em Parear
+            aparelho.
           </Text>
         )}
         <Button

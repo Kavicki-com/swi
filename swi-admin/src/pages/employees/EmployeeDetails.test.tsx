@@ -158,6 +158,30 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     expect(screen.queryByText('0 minutos')).not.toBeInTheDocument()
   })
 
+  // Desparear não apaga a leitura guardada no backend: enquanto o bloco Aparelho
+  // não diz se há relógio, os vitais não podem apresentá-la como atual.
+  it('enquanto não se sabe se há relógio, a leitura guardada não aparece', async () => {
+    stateOfMock.mockReturnValueOnce(new Promise(() => {}) as never)
+    getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
+    currentMock.mockResolvedValue({ data: reporting(), error: null })
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+
+    expect(await screen.findByText('Verificando o relógio…')).toBeInTheDocument()
+    await waitFor(() => expect(currentMock).toHaveBeenCalled())
+    expect(screen.queryByText('Monitorando agora')).toBeNull()
+  })
+
+  it('sem conseguir saber se há relógio, a leitura guardada não aparece', async () => {
+    stateOfMock.mockResolvedValueOnce({ data: null, error: { message: 'offline' } } as never)
+    getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
+    currentMock.mockResolvedValue({ data: reporting(), error: null })
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+
+    await screen.findByTestId('device-section-error')
+    expect(await screen.findByText('Leitura indisponível no momento')).toBeInTheDocument()
+    expect(screen.queryByText('Monitorando agora')).toBeNull()
+  })
+
   it('falha na leitura não derruba a página nem inventa valor', async () => {
     getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
     currentMock.mockResolvedValue({ data: null, error: { message: 'offline' } })
