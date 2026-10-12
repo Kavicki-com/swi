@@ -8,6 +8,7 @@ import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
   Avatar,
+  Button,
   Icon,
   SearchInput,
   Tabs,
@@ -219,6 +220,8 @@ export function AdminsList({
   const { user } = useAuth()
   const currentUserId = user?.id
   const [admins, setAdmins] = useState<Admin[]>([])
+  // Até a lista chegar não há número a afirmar; falha não pode parecer lista vazia.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [removing, setRemoving] = useState<Admin | null>(null)
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
@@ -234,8 +237,18 @@ export function AdminsList({
 
   useEffect(() => {
     let cancelled = false
+    // Recarregar com a lista já na tela não a esconde; só a nova tentativa
+    // depois de uma falha volta a dizer "Carregando…".
+    setLoadState((s) => (s === 'failed' ? 'loading' : s))
     adminsApi.list().then(({ data }) => {
-      if (!cancelled && data) setAdmins(data.filter((a) => !removidosRef.current.has(a.id)))
+      if (cancelled) return
+      if (!data) {
+        // Falha num recarregamento mantém a lista que já está visível.
+        setLoadState((s) => (s === 'ready' ? s : 'failed'))
+        return
+      }
+      setAdmins(data.filter((a) => !removidosRef.current.has(a.id)))
+      setLoadState('ready')
     })
     return () => {
       cancelled = true
@@ -287,7 +300,9 @@ export function AdminsList({
       <Title variant="title.s" color={theme.content.dark}>
         {isCreating
           ? 'Cadastrar novo administrador'
-          : `Você tem (${admins.length}) ${pluralize(
+          : loadState !== 'ready'
+            ? 'Administradores cadastrados'
+            : `Você tem (${admins.length}) ${pluralize(
               admins.length,
               'administrador cadastrado',
               'administradores cadastrados',
@@ -354,6 +369,21 @@ export function AdminsList({
             setReloadKey((k) => k + 1)
           }}
         />
+      ) : loadState === 'loading' ? (
+        <Text variant="body.m" color={theme.content.medium}>
+          Carregando…
+        </Text>
+      ) : loadState === 'failed' ? (
+        <View style={{ gap: theme.gap.s, alignItems: 'flex-start' }}>
+          <Text variant="body.m" color={theme.content.medium}>
+            Não foi possível carregar os administradores.
+          </Text>
+          <Button
+            label="Tentar novamente"
+            variant="outline"
+            onPress={() => setReloadKey((k) => k + 1)}
+          />
+        </View>
       ) : (
         <View style={{ gap: theme.gap.m }}>
           {filtered.map((admin) => (
