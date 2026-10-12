@@ -135,6 +135,8 @@ describe('AppLayout: foto do cabeçalho', () => {
     await renderTree()
     await screen.findByTestId('app-header-user-info')
     expect(imageUrls()).not.toMatch(/worker-a/)
+    // Sem foto, o cabeçalho mostra as iniciais do nome, como Configurações.
+    expect(screen.getByTestId('app-header-user-info')).toHaveTextContent('AS')
   })
 })
 

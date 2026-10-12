@@ -583,4 +583,32 @@ describe('Dashboard: saúde da frota pela telemetria', () => {
     expect(card).toHaveTextContent('-- Bpm')
     expect(card).not.toHaveTextContent('0 Bpm')
   })
+
+  // Despareado com condição ainda aberta na telemetria velha: enquanto houver
+  // alguém pareado na frota, o cartão dele aparece na aba, e a coluna de saúde
+  // diz "Sem relógio pareado" no lugar do bpm.
+  it('sem relógio pareado, o cartão mostra a frase no lugar do batimento', async () => {
+    telemetry.state = {
+      ...telemetry.state,
+      workers: {
+        observedAt: '2026-10-01T15:00:00.000Z',
+        workers: [
+          adminWorker('p1', 'Com Relógio', {
+            telemetry: { ...reporting({}, 'REAL', 'p1'), conditions: [condition('HEALTH')] },
+          }),
+          adminWorker('n1', 'Sem Relógio', {
+            device: { state: 'NONE', lastSeenAt: null },
+            telemetry: {
+              ...reporting({}, 'REAL', 'n1'),
+              conditions: [condition('HEALTH')],
+            },
+          }),
+        ],
+      },
+    }
+    await renderReady()
+    const card = screen.getByTestId('wear-alert-n1')
+    expect(card).toHaveTextContent('Sem relógio pareado')
+    expect(card).not.toHaveTextContent('Bpm')
+  })
 })

@@ -127,6 +127,7 @@ export function AppLayout() {
         pressure={myVitals.pressure}
         progress={myVitals.progress}
         avatarUri={user?.avatarUri}
+        name={user?.full_name}
         heartIconName="heart_filled"
         pressureIconName="vitals_pulse"
         borderColor={theme.background}

@@ -232,11 +232,11 @@ describe('AdminsList: carregamento', () => {
     vi.restoreAllMocks()
   })
 
-  it('enquanto carrega, diz que está carregando e não afirma zero', async () => {
+  it('enquanto carrega, mostra o skeleton da lista e não afirma zero', async () => {
     vi.spyOn(adminsApi, 'list').mockReturnValue(new Promise(() => {}))
     await renderPage(<AdminsList />, { route: '/admins' })
 
-    expect(screen.getByText('Carregando…')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Carregando' })).toBeInTheDocument()
     expect(screen.queryByText(/\(0\)/)).toBeNull()
   })
 
