@@ -253,6 +253,33 @@ describe('useAuth: foto do perfil', () => {
     expect(result.current.user?.avatarUri).toBeUndefined()
   })
 
+  // A URL da foto é assinada e vale 1 h: lida uma vez só, a miniatura quebrava
+  // no meio da sessão.
+  it('relê a foto antes de a URL assinada expirar', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    seedSession()
+    const profileWith = (avatar: string) =>
+      ({ ok: true, status: 200, json: async () => ({ id: 'u1', avatar }) }) as Response
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(profileWith('https://cdn.test/avatar.png?assinatura=1'))
+        .mockResolvedValue(profileWith('https://cdn.test/avatar.png?assinatura=2')),
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await waitFor(() =>
+      expect(result.current.user?.avatarUri).toBe('https://cdn.test/avatar.png?assinatura=1'),
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50 * 60_000)
+    })
+
+    expect(result.current.user?.avatarUri).toBe('https://cdn.test/avatar.png?assinatura=2')
+    vi.useRealTimers()
+  })
+
   it('trocar a foto atualiza a sessão na hora', async () => {
     seedSession()
     stubProfile(null)
