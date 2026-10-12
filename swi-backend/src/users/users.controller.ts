@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { UsersService } from './users.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
@@ -53,6 +53,20 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN') @Post(':id/exams') @HttpCode(201)
   addExam(@Param('id') id: string, @Body() dto: CreateExamDto, @CurrentUser() user: JwtUser) {
     return this.users.addExam(id, dto, user.companyId)
+  }
+
+  // Exclusão do laudo do cadastro de outra pessoa (204). Par do Post acima; o
+  // /profile/exams/:id só apaga do usuário da sessão. Exame de outra empresa é
+  // invisível (404, não 403), mesma semântica de escopo do resto do backend.
+  @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN') @Delete(':id/exams/:examId') @HttpCode(204)
+  async removeExam(
+    @Param('id') id: string,
+    @Param('examId') examId: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!(await this.users.removeExam(id, examId, user.companyId))) {
+      throw new NotFoundException('Exame não encontrado')
+    }
   }
 
   // Exclusão dura (204). requesterId barra auto-exclusão no service.
