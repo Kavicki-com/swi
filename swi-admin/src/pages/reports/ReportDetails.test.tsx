@@ -260,12 +260,24 @@ describe('ReportDetails: imagens e atividades', () => {
     ...over,
   })
 
-  it('renderiza uma miniatura por imagem, rotulada pela posição', async () => {
-    await renderAt([], { images: ['u1', 'u2', 'u3'] })
+  it('lista cada imagem com visualizar e baixar', async () => {
+    await renderAt([], { images: ['https://cdn/r/foto-1.jpg', 'https://cdn/r/foto-2.jpg'] })
     await screen.findByTestId('report-details')
 
-    expect(screen.getByLabelText('Imagem 1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Imagem 3')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Visualizar foto-1.jpg' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Baixar foto-1.jpg' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Visualizar foto-2.jpg' })).toBeInTheDocument()
+  })
+
+  it('visualizar abre o anexo em tamanho grande, com o nome do arquivo', async () => {
+    await renderAt([], { images: ['https://cdn/r/foto-1.jpg'] })
+    await screen.findByTestId('report-details')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Visualizar foto-1.jpg' }))
+
+    const viewer = await screen.findByTestId('report-details-viewer')
+    expect(viewer).toHaveTextContent('foto-1.jpg')
+    expect(screen.getByRole('button', { name: 'Baixar' })).toBeInTheDocument()
   })
 
   it('cada atividade mostra título, setor e equipe nomeada', async () => {
