@@ -19,7 +19,7 @@ export function AttachmentSlot({
   return (
     <View
       style={{
-        flex: 1,
+        width: 160,
         aspectRatio: 5 / 4,
         borderRadius: theme.border.radius.m,
         backgroundColor: theme.surface.high,
