@@ -31,6 +31,16 @@ describe('AdminsCreate — submit', () => {
     expect(screen.getByTestId('admins-create-email')).not.toHaveAttribute('readonly')
   })
 
+  it('o olho da senha alterna entre mostrar e ocultar', async () => {
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    // Começa oferecendo revelar a senha, que entra oculta.
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }))
+    // Depois do clique, passa a oferecer ocultar.
+    expect(screen.getByRole('button', { name: 'Ocultar senha' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Mostrar senha' })).toBeNull()
+  })
+
   it('sem obrigatórios não chama a api', async () => {
     const create = vi.spyOn(employeesApi, 'create')
     await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)

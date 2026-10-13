@@ -1,16 +1,13 @@
 // src/pages/user/components/PasswordSection.tsx
 // Coluna "Senha de acesso". Extraída de UserSettings.tsx.
 //
-// As três visibilidades (o olho de cada campo) viraram estado DESTE
-// componente: nunca foram lidas fora dos próprios olhos, e a seção é
-// renderizada incondicionalmente, então o estado tem exatamente o mesmo ciclo
-// de vida que tinha na página. Os três valores continuam vindo por prop
-// porque changePassword os limpa depois do sucesso.
-import { useState } from 'react'
+// Os três campos usam o olho embutido do Input do DS (passwordToggle): cada um
+// guarda e alterna a própria visibilidade internamente, então a seção não
+// precisa mais de estado nem de um campo de senha local. Os três valores
+// continuam vindo por prop porque changePassword os limpa depois do sucesso.
 import { View } from 'react-native'
-import { Button, Title, useTheme } from '@kavicki/swi-design-system'
+import { Button, Input, Title, useTheme } from '@kavicki/swi-design-system'
 import { FormError } from '@/components/FormError'
-import { PasswordInput } from './PasswordInput'
 
 export function PasswordSection({
   currentPw,
@@ -34,43 +31,30 @@ export function PasswordSection({
   onChangePassword: () => void
 }) {
   const theme = useTheme()
-  const [showCurrent, setShowCurrent] = useState(false)
-  const [showNew, setShowNew] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
   return (
-    // NOTE: DS Input's iconRight overflows the text-area horizontally
-    // when the input is narrow (≤245px), flex:1 on the inner
-    // TextInput pushes the iconRight out by ~32px. Work around it by:
-    // pass `secureTextEntry` to the Input *without* iconRight, then
-    // overlay the visibility Pressable absolutely so it stays inside
-    // the input box no matter how narrow the column is. Bump DS
-    // later to clip iconRight properly.
     <View style={{ flex: 1, gap: theme.gap.s }}>
       <Title variant="title.xs" color={theme.content.primary}>
         Senha de acesso
       </Title>
-      <PasswordInput
+      <Input
         label="Senha atual"
         value={currentPw}
         onChangeText={onCurrentPwChange}
-        visible={showCurrent}
-        onToggleVisible={() => setShowCurrent((v) => !v)}
+        passwordToggle
         testID="settings-current-pw"
       />
-      <PasswordInput
+      <Input
         label="Nova senha"
         value={newPw}
         onChangeText={onNewPwChange}
-        visible={showNew}
-        onToggleVisible={() => setShowNew((v) => !v)}
+        passwordToggle
         testID="settings-new-pw"
       />
-      <PasswordInput
+      <Input
         label="Repetir nova senha"
         value={confirmPw}
         onChangeText={onConfirmPwChange}
-        visible={showConfirm}
-        onToggleVisible={() => setShowConfirm((v) => !v)}
+        passwordToggle
         testID="settings-confirm-pw"
       />
       <FormError message={pwError} />

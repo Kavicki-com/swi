@@ -6,7 +6,6 @@ import { View } from 'react-native'
 import {
   Button,
   Combobox,
-  Icon,
   ImageViewer,
   Input,
   Modal,
@@ -596,10 +595,9 @@ export function AdminsCreate({
                 placeholder="digite aqui"
                 value={form.senha}
                 onChangeText={(v) => update('senha', v)}
-                secureTextEntry
+                passwordToggle
                 // "off" nos dois campos quebra o par usuário+senha do login.
                 autoComplete="off"
-                iconRight={<Icon name="visibility" size={20} color={theme.content.dark} />}
               />
             </View>
           ) : null}
