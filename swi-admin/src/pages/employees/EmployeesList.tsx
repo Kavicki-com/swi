@@ -630,11 +630,7 @@ export function EmployeesList({
               />
             </View>
             <View style={{ width: 360 }}>
-              <Pagination
-                currentPage={currentPage}
-                pageCount={pageCount}
-                onPageChange={setPage}
-              />
+              <Pagination currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} />
             </View>
             {/* Espaçador da mesma largura do seletor: mantém o Pagination centrado. */}
             <View style={{ width: 150 }} />
