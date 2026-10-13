@@ -10,7 +10,10 @@ export type MyVitals = { bpm: number | null; pressure: string | null; progress: 
  * logado. Sem aparelho pareado tudo é ausência (null), e o HeaderUserInfo do
  * DS mostra o marcador de sem leitura em vez de um número que ninguém mediu.
  */
-export function myVitalsFrom(device: PairedDeviceState, telemetry: WorkerTelemetry | null): MyVitals {
+export function myVitalsFrom(
+  device: PairedDeviceState,
+  telemetry: WorkerTelemetry | null,
+): MyVitals {
   const view = vitalsViewFrom(device === 'paired' ? telemetry : null)
   return {
     bpm: view.heartRate === null ? null : Number(view.heartRate),

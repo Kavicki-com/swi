@@ -7,19 +7,21 @@ import { SignUp } from './SignUp'
 import { settled } from '@/test-utils/renderPage'
 
 const renderAt = async () =>
-  settled(render(
-    <SwiThemeProvider>
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/sign-up']}>
-          <Routes>
-            <Route path="/sign-up" element={<SignUp />} />
-            <Route path="/" element={<div data-testid="home" />} />
-            <Route path="/login" element={<div data-testid="login" />} />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>
-    </SwiThemeProvider>,
-  ))
+  settled(
+    render(
+      <SwiThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sign-up']}>
+            <Routes>
+              <Route path="/sign-up" element={<SignUp />} />
+              <Route path="/" element={<div data-testid="home" />} />
+              <Route path="/login" element={<div data-testid="login" />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </SwiThemeProvider>,
+    ),
+  )
 
 beforeEach(() => window.localStorage.clear())
 afterEach(() => vi.unstubAllGlobals())

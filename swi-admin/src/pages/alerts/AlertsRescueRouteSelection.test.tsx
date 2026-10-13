@@ -74,7 +74,13 @@ beforeEach(() => {
   // Ana sem condição (sem incidentes); Bruno com desgaste alto (risco).
   h.workers = [
     adminWorker('w2', 'Ana Lima'),
-    { ...adminWorker('w3', 'Bruno Souza'), telemetry: { ...adminWorker('w3', 'Bruno Souza').telemetry, conditions: [condition('HEALTH')] } },
+    {
+      ...adminWorker('w3', 'Bruno Souza'),
+      telemetry: {
+        ...adminWorker('w3', 'Bruno Souza').telemetry,
+        conditions: [condition('HEALTH')],
+      },
+    },
   ]
 })
 

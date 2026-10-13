@@ -4,7 +4,13 @@ import { Icon, Text, useTheme } from '@kavicki/swi-design-system'
 // Selo discreto de origem do dado. Marca a leitura que não vem do aparelho
 // real (hoje, a de demonstração), para o operador nunca confundi-la com sinal
 // do relógio. Composição DS (Icon + Text).
-export function DataOriginBadge({ label, testID = 'data-origin-badge' }: { label: string; testID?: string }) {
+export function DataOriginBadge({
+  label,
+  testID = 'data-origin-badge',
+}: {
+  label: string
+  testID?: string
+}) {
   const theme = useTheme()
   return (
     <View

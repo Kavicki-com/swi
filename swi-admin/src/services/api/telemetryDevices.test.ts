@@ -15,7 +15,13 @@ const fails = (status: number, message: string) =>
 describe('telemetryDevicesApi.stateOf', () => {
   it('GET /telemetry/v1/devices/workers/:id devolve o estado como veio', async () => {
     const state = {
-      device: { id: 'd1', kind: 'IPHONE', model: 'iPhone 15', pairedAt: '2026-09-14T12:00:00.000Z', lastSeenAt: null },
+      device: {
+        id: 'd1',
+        kind: 'IPHONE',
+        model: 'iPhone 15',
+        pairedAt: '2026-09-14T12:00:00.000Z',
+        lastSeenAt: null,
+      },
       pendingEnrollment: null,
     }
     const f = ok(state)

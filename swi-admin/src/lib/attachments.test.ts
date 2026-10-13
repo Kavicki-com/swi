@@ -29,7 +29,10 @@ describe('downloadFile', () => {
 
   it('baixa via blob: busca a URL e dispara uma âncora com o nome', async () => {
     const blob = new Blob(['x'], { type: 'image/jpeg' })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(blob) }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(blob) }),
+    )
     const createObjectURL = vi.fn().mockReturnValue('blob:obj')
     const revokeObjectURL = vi.fn()
     vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })

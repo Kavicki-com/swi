@@ -161,7 +161,13 @@ function ContactMiniMap({
 // pra quem não tem cadastro clínico nenhum. Mesmos rótulos da tela de detalhe
 // (WorkerDetailsLayout), que mostra o mesmo campo do mesmo cadastro.
 const generoRotulo = (g: ChatContact['gender']) =>
-  g === 'male' ? 'Masculino' : g === 'female' ? 'Feminino' : g === 'other' ? 'Outro' : 'Não informado'
+  g === 'male'
+    ? 'Masculino'
+    : g === 'female'
+      ? 'Feminino'
+      : g === 'other'
+        ? 'Outro'
+        : 'Não informado'
 
 // Glifo neutro pra 'other' e pra ausência: os ícones `male`/`female` do DS
 // afirmam um gênero, e afirmá-lo ao lado de "Não informado" desmente o rótulo.

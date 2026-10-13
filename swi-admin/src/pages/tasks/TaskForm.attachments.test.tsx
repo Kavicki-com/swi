@@ -8,7 +8,16 @@ import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { ApiError } from '@/services/api/http'
 import { clearSession } from '@/test-utils/renderPage'
-import { CARLOS, MARIA, detail, renderAt, typeIn, pickResponsible, save, jpeg } from './TaskForm.testKit'
+import {
+  CARLOS,
+  MARIA,
+  detail,
+  renderAt,
+  typeIn,
+  pickResponsible,
+  save,
+  jpeg,
+} from './TaskForm.testKit'
 
 const { createMock, updateMock, getMock, assignableMock, uploadMock } = vi.hoisted(() => ({
   createMock: vi.fn(),

@@ -92,21 +92,23 @@ function TaskDetailsProbe() {
 
 async function renderAt(route = '/tasks') {
   seedSession()
-  return settled(render(
-    <SwiThemeProvider>
-      <AuthProvider>
-        <MemoryRouter initialEntries={[route]}>
-          <Routes>
-            <Route path="/tasks" element={<TasksList />} />
-            <Route path="/tasks/new" element={<div data-testid="task-form-route" />} />
-            <Route path="/tasks/:id" element={<TaskDetailsProbe />} />
-            <Route path="/maps/general" element={<div data-testid="maps-route" />} />
-            <Route path="/" element={<div data-testid="dashboard-route" />} />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>
-    </SwiThemeProvider>,
-  ))
+  return settled(
+    render(
+      <SwiThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[route]}>
+            <Routes>
+              <Route path="/tasks" element={<TasksList />} />
+              <Route path="/tasks/new" element={<div data-testid="task-form-route" />} />
+              <Route path="/tasks/:id" element={<TaskDetailsProbe />} />
+              <Route path="/maps/general" element={<div data-testid="maps-route" />} />
+              <Route path="/" element={<div data-testid="dashboard-route" />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </SwiThemeProvider>,
+    ),
+  )
 }
 
 beforeEach(() => {

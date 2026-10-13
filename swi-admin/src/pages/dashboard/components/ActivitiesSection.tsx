@@ -122,10 +122,7 @@ export function ActivitiesSection({ activities }: { activities: DashboardActivit
   }, [activities, filter])
 
   return (
-    <View
-      testID="activities-section"
-      style={{ gap: theme.gap.m }}
-    >
+    <View testID="activities-section" style={{ gap: theme.gap.m }}>
       <Title variant="title.s">Atividades em andamento</Title>
       <View
         style={{

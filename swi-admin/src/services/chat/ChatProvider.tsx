@@ -43,13 +43,20 @@ interface ChatContextValue {
   load: () => Promise<void>
   openConversation: (conversationId: string) => Promise<void>
   closeConversation: () => void
-  send: (conversationId: string, body: string, file?: File) => Promise<{ error: ServiceError | null }>
+  send: (
+    conversationId: string,
+    body: string,
+    file?: File,
+  ) => Promise<{ error: ServiceError | null }>
   editMessage: (
     conversationId: string,
     messageId: string,
     body: string,
   ) => Promise<{ error: ServiceError | null }>
-  deleteMessage: (conversationId: string, messageId: string) => Promise<{ error: ServiceError | null }>
+  deleteMessage: (
+    conversationId: string,
+    messageId: string,
+  ) => Promise<{ error: ServiceError | null }>
   keyFor: (workerId: string) => string
 }
 

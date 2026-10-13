@@ -18,7 +18,11 @@ describe('myVitalsFrom', () => {
     const telemetry = reporting({
       bloodPressure: metric({ systolic: 128, diastolic: 82 }, { source: 'EXTERNAL_CUFF' }),
     })
-    expect(myVitalsFrom('paired', telemetry)).toEqual({ bpm: 112, pressure: '128/82', progress: 38.4 })
+    expect(myVitalsFrom('paired', telemetry)).toEqual({
+      bpm: 112,
+      pressure: '128/82',
+      progress: 38.4,
+    })
   })
 
   // Leitura que sobrou de antes de o aparelho sair não vale para quem não tem aparelho.

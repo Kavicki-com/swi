@@ -165,19 +165,21 @@ function isFilled(radio: { firstElementChild: { childElementCount: number } | nu
 
 async function renderAt(id = 'wo_1') {
   seedSession()
-  return settled(render(
-    <SwiThemeProvider>
-      <AuthProvider>
-        <MemoryRouter initialEntries={[`/tasks/${id}`]}>
-          <Routes>
-            <Route path="/tasks" element={<div data-testid="tasks-list-route" />} />
-            <Route path="/tasks/:id" element={<TaskDetails />} />
-            <Route path="/tasks/:id/edit" element={<div data-testid="task-edit-route" />} />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>
-    </SwiThemeProvider>,
-  ))
+  return settled(
+    render(
+      <SwiThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[`/tasks/${id}`]}>
+            <Routes>
+              <Route path="/tasks" element={<div data-testid="tasks-list-route" />} />
+              <Route path="/tasks/:id" element={<TaskDetails />} />
+              <Route path="/tasks/:id/edit" element={<div data-testid="task-edit-route" />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </SwiThemeProvider>,
+    ),
+  )
 }
 
 beforeEach(() => {

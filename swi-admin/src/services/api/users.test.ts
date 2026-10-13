@@ -446,9 +446,28 @@ describe('getForEdit / update (real)', () => {
   })
 
   it('campos nulos viram string vazia, que é o que o formulário sabe editar', async () => {
-    vi.stubGlobal('fetch', okJson(detail({ phone: null, cpf: null, birthDate: null, gender: null, bloodType: null, allergies: null })))
+    vi.stubGlobal(
+      'fetch',
+      okJson(
+        detail({
+          phone: null,
+          cpf: null,
+          birthDate: null,
+          gender: null,
+          bloodType: null,
+          allergies: null,
+        }),
+      ),
+    )
     const { data } = await employeesApi.getForEdit('u1')
-    expect(data).toMatchObject({ phone: '', cpf: '', birthDate: '', gender: '', bloodType: '', allergies: '' })
+    expect(data).toMatchObject({
+      phone: '',
+      cpf: '',
+      birthDate: '',
+      gender: '',
+      bloodType: '',
+      allergies: '',
+    })
   })
 
   it('update → PATCH /users/:id com o corpo recebido', async () => {
@@ -513,7 +532,11 @@ describe('addExam / exames na carga de edição', () => {
         json: async () => ({ message: 'fileKey inválida' }),
       } as Response),
     )
-    const { data, error } = await adminsApi.addExam('a1', { name: 'X', date: '2027-01-01', fileKey: 'k' })
+    const { data, error } = await adminsApi.addExam('a1', {
+      name: 'X',
+      date: '2027-01-01',
+      fileKey: 'k',
+    })
     expect(data).toBeNull()
     expect(error?.message).toBe('fileKey inválida')
   })
@@ -541,7 +564,18 @@ describe('addExam / exames na carga de edição', () => {
   })
 
   it('backend sem o campo exams devolve lista vazia, não undefined', async () => {
-    vi.stubGlobal('fetch', okJson({ ...summary(), phone: null, cpf: null, company: null, gender: null, allergies: null, chronicConditions: null }))
+    vi.stubGlobal(
+      'fetch',
+      okJson({
+        ...summary(),
+        phone: null,
+        cpf: null,
+        company: null,
+        gender: null,
+        allergies: null,
+        chronicConditions: null,
+      }),
+    )
     const { data } = await employeesApi.getForEdit('u1')
     expect(data?.exams).toEqual([])
   })
@@ -552,10 +586,33 @@ describe('addExam / exames na carga de edição', () => {
 // no chat.
 describe('username no wire', () => {
   it('a carga de edição traz o username, e ausência vira string vazia', async () => {
-    vi.stubGlobal('fetch', okJson({ ...summary(), username: 'ze.silva', phone: null, cpf: null, company: null, gender: null, allergies: null, chronicConditions: null }))
+    vi.stubGlobal(
+      'fetch',
+      okJson({
+        ...summary(),
+        username: 'ze.silva',
+        phone: null,
+        cpf: null,
+        company: null,
+        gender: null,
+        allergies: null,
+        chronicConditions: null,
+      }),
+    )
     expect((await employeesApi.getForEdit('u1')).data?.username).toBe('ze.silva')
 
-    vi.stubGlobal('fetch', okJson({ ...summary(), phone: null, cpf: null, company: null, gender: null, allergies: null, chronicConditions: null }))
+    vi.stubGlobal(
+      'fetch',
+      okJson({
+        ...summary(),
+        phone: null,
+        cpf: null,
+        company: null,
+        gender: null,
+        allergies: null,
+        chronicConditions: null,
+      }),
+    )
     expect((await employeesApi.getForEdit('u1')).data?.username).toBe('')
   })
 

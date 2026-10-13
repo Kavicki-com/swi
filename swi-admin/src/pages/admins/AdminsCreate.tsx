@@ -756,7 +756,9 @@ export function AdminsCreate({
             disabled={submitting}
             backgroundColor={theme.surface.primary}
             onPress={handleSubmit}
-            accessibilityLabel={isEdit ? `Salvar alterações do ${subject}` : `Finalizar cadastro do ${subject}`}
+            accessibilityLabel={
+              isEdit ? `Salvar alterações do ${subject}` : `Finalizar cadastro do ${subject}`
+            }
           />
         </View>
       </View>

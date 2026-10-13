@@ -55,7 +55,9 @@ afterEach(() => {
 })
 
 const render = async (onClose = () => {}) =>
-  await renderPage(<ReportMessageModal conversationId="me#w1" message={MESSAGE} onClose={onClose} />)
+  await renderPage(
+    <ReportMessageModal conversationId="me#w1" message={MESSAGE} onClose={onClose} />,
+  )
 
 describe('ReportMessageModal', () => {
   it('submit válido → reportMessage com o LABEL do motivo + detalhe, e mostra sucesso', async () => {

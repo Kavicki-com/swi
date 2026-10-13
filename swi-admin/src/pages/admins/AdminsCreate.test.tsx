@@ -7,12 +7,7 @@ import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderPage, clearSession } from '@/test-utils/renderPage'
 import { employeesApi, adminsApi } from '@/services/api/users'
-import {
-  AdminsCreate,
-  dadosDeSaude,
-  formDoUsuario,
-  patchDoFormulario,
-} from './AdminsCreate'
+import { AdminsCreate, dadosDeSaude, formDoUsuario, patchDoFormulario } from './AdminsCreate'
 
 afterEach(() => {
   vi.restoreAllMocks()

@@ -28,7 +28,9 @@ vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => live.value 
 // "sem aparelho" para o teste não falar com o backend.
 vi.mock('@/services/api/telemetryDevices', () => ({
   telemetryDevicesApi: {
-    stateOf: vi.fn().mockResolvedValue({ data: { device: null, pendingEnrollment: null }, error: null }),
+    stateOf: vi
+      .fn()
+      .mockResolvedValue({ data: { device: null, pendingEnrollment: null }, error: null }),
   },
 }))
 
