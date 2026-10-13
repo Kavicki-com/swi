@@ -390,6 +390,28 @@ describe('AlertsList: seleção de pino', () => {
     expect(screen.queryByText('Setor Leste')).toBeNull()
   })
 
+  // O card só fechava clicando de novo no mesmo pino. Agora há um botão de
+  // fechar e o clique no mapa vazio também tira o card.
+  it('o botão de fechar navega de volta para /alerts (desseleciona)', async () => {
+    await renderAlerts('/alerts/w2')
+    expect(await screen.findByTestId('alerts-selected-worker')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar leitura do funcionário' }))
+
+    expect(h.navigations).toEqual(['/alerts'])
+  })
+
+  it('clicar no mapa vazio desseleciona (navega para /alerts)', async () => {
+    await renderAlerts('/alerts/w2')
+    await screen.findByTestId('alerts-selected-worker')
+
+    act(() => {
+      mapState.handlers.click?.forEach((fn) => fn())
+    })
+
+    expect(h.navigations).toContain('/alerts')
+  })
+
   // Sem leitura o cartão do DS mostraria 0 bpm; a tela diz que não há leitura.
   it('sem leitura do aparelho, o aviso substitui o cartão e mantém a rota de socorro', async () => {
     h.workers = {

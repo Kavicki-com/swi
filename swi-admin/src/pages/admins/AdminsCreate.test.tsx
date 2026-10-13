@@ -659,3 +659,14 @@ describe('AdminsCreate: nome do usuário (fase 1)', () => {
     expect(update.mock.calls[0]?.[1]).not.toHaveProperty('username')
   })
 })
+
+// O navegador preenchia "Nome do usuário" e "Senha" com o login salvo do
+// admin, porque um campo de texto seguido de senha parece tela de login.
+describe('AdminsCreate: autofill', () => {
+  it('os campos de usuário e senha barram o autofill do login salvo', async () => {
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    expect(screen.getByTestId('admins-create-usuario')).toHaveAttribute('autocomplete', 'off')
+    expect(screen.getByTestId('admins-create-senha')).toHaveAttribute('autocomplete', 'off')
+  })
+})

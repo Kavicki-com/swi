@@ -11,8 +11,8 @@
 //   5. Atividades — 3 rows each with build icon + title/sector + 3–4 chained
 //      StatusTags + chevron.
 //   6. Adicionar comentário — textarea + green "Fazer Comentário" CTA.
-import { useEffect, useState } from 'react'
-import { Pressable, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { Pressable, View, type TextInput } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   AttachmentList,
@@ -308,6 +308,15 @@ export function ReportDetails() {
   const [deleting, setDeleting] = useState(false)
   // Anexo aberto no visualizador em tamanho grande; null = fechado.
   const [viewing, setViewing] = useState<{ uri: string; title: string } | null>(null)
+  // O botão "Fazer comentário" do topo rola até o campo lá embaixo e o foca,
+  // em vez de só pedir ao usuário para achá-lo.
+  const commentRef = useRef<TextInput>(null)
+  const focusComment = () => {
+    // No web o ref do TextInput é o próprio nó DOM: scrollIntoView e focus.
+    const node = commentRef.current as unknown as HTMLElement | null
+    node?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    commentRef.current?.focus()
+  }
 
   useEffect(() => {
     if (!id) return
@@ -420,7 +429,7 @@ export function ReportDetails() {
           variant="outline"
           iconLeft={<Icon name="chat_bubble" size={20} color={theme.content.primaryLight} />}
           accessibilityLabel="Adicionar comentário"
-          onPress={() => showToast('Foque no campo Adicionar comentário abaixo')}
+          onPress={focusComment}
         />
         <Button
           label="Revisar relatório"
@@ -604,6 +613,7 @@ export function ReportDetails() {
         ) : null}
 
         <Input
+          ref={commentRef}
           value={comment}
           onChangeText={setComment}
           placeholder="Digite aqui o seu comentário"

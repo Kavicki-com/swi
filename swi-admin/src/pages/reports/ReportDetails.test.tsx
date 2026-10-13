@@ -359,13 +359,15 @@ describe('ReportDetails: barra de topo', () => {
     await waitFor(() => expect(screen.getByTestId('reports-route')).toBeInTheDocument())
   })
 
-  it('"Fazer comentário" do topo aponta para o campo lá embaixo', async () => {
+  it('"Fazer comentário" do topo foca o campo lá embaixo', async () => {
     await renderAt()
     await screen.findByTestId('report-details')
+    const field = screen.getByPlaceholderText('Digite aqui o seu comentário')
+    expect(field).not.toHaveFocus()
 
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar comentário' }))
 
-    expect(toastShow).toHaveBeenCalledWith('Foque no campo Adicionar comentário abaixo')
+    expect(field).toHaveFocus()
   })
 
   it('a busca do relatório aceita texto e limpa', async () => {

@@ -335,8 +335,7 @@ export function AdminsCreate({
     null,
   )
 
-  // Imagem abre no visualizador em tamanho grande; PDF (laudo típico) o
-  // visualizador não desenha, então abre numa aba nova.
+  // Imagem abre no visualizador; PDF (laudo típico) abre numa aba nova.
   const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp)(\?|$)/i
   const abrirAnexo = (uri: string, title: string, isImage: boolean) => {
     if (isImage) setViewing({ uri, title })
@@ -582,6 +581,8 @@ export function AdminsCreate({
               value={form.nomeUsuario}
               onChangeText={(v) => update('nomeUsuario', v)}
               autoCapitalize="none"
+              // Barra o autofill do login salvo do admin (campo + senha = login).
+              autoComplete="off"
             />
           </View>
           {/* Senha só existe no cadastro. O PATCH /users/:id não aceita
@@ -596,6 +597,9 @@ export function AdminsCreate({
                 value={form.senha}
                 onChangeText={(v) => update('senha', v)}
                 secureTextEntry
+                // "off" nos dois campos quebra o par usuário+senha que o
+                // navegador lia como login e preenchia com a conta do admin.
+                autoComplete="off"
                 iconRight={<Icon name="visibility" size={20} color={theme.content.dark} />}
               />
             </View>

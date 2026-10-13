@@ -4,6 +4,7 @@
 // frase de estado descreve a leitura, não a saúde: juízo de saúde depende das
 // condições do backend, que esta leitura ainda não traz.
 import type { WorkerTelemetry } from '@/services/api/telemetry'
+import { whenLabel } from '@/lib/whenLabel'
 
 export type WorkerVitalsView = {
   /** Batimento já formatado, ou null sem leitura. */
@@ -29,9 +30,6 @@ export const NO_VALUE = '--'
 /** Frase de quem não tem relógio pareado, a mesma em todas as telas. */
 export const NO_DEVICE_LABEL = 'Sem relógio pareado'
 
-const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-
 const oneDecimal = (n: number) => Math.round(Math.min(100, Math.max(0, n)) * 10) / 10
 
 const NO_ESTIMATE = { minutes: null, label: 'Sem estimativa' }
@@ -47,7 +45,7 @@ const EMPTY: Omit<WorkerVitalsView, 'status'> = {
 
 export function vitalsViewFrom(
   telemetry: WorkerTelemetry | null,
-  options: { noDevice?: boolean; deviceUnknown?: boolean; failed?: boolean } = {},
+  options: { noDevice?: boolean; deviceUnknown?: boolean; failed?: boolean; now?: number } = {},
 ): WorkerVitalsView {
   // Sem aparelho pareado, a leitura guardada não vale: desparear não apaga o
   // último snapshot no backend, e mostrá-lo seria apresentar dado velho como atual.
@@ -78,7 +76,10 @@ export function vitalsViewFrom(
       : heartRate.quality === 'CURRENT'
         ? 'Monitorando agora'
         : heartRate.measuredAt
-          ? `Última leitura às ${clock(heartRate.measuredAt)}`
+          ? // Com a data ("em dd/mm às HH:mm") fora do dia: o backend guarda o
+            // último bpm para sempre, e só a hora faria uma leitura de dias
+            // atrás parecer de agora.
+            `Última leitura ${whenLabel(heartRate.measuredAt, options.now ?? Date.now())}`
           : 'Sem leitura recente'
 
   // Avaliação presente sem estimativa quer dizer que o ritmo recente não leva
