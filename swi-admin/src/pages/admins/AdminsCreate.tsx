@@ -597,8 +597,7 @@ export function AdminsCreate({
                 value={form.senha}
                 onChangeText={(v) => update('senha', v)}
                 secureTextEntry
-                // "off" nos dois campos quebra o par usuário+senha que o
-                // navegador lia como login e preenchia com a conta do admin.
+                // "off" nos dois campos quebra o par usuário+senha do login.
                 autoComplete="off"
                 iconRight={<Icon name="visibility" size={20} color={theme.content.dark} />}
               />
