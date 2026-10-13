@@ -49,6 +49,42 @@ describe('EmployeesList', () => {
     await expect(renderPage(<EmployeesList />, { route: '/employees' })).resolves.toBeDefined()
   })
 
+  const makeEmployees = (n: number): Employee[] =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `w${i}`,
+      name: `Func ${String(i).padStart(2, '0')}`,
+      age: 30,
+      bloodType: 'A+',
+      role: 'Operador',
+      specialization: 'Setor',
+      avatarUri: '',
+      sector: 'Setor',
+      vitalsStatus: 'good',
+      active: true,
+    }))
+
+  it('pagina de verdade: 25 por página e a página 2 traz o resto (MEL-03)', async () => {
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: makeEmployees(30), error: null })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Func 00'))
+
+    // Página 1 de 25: do 00 ao 24, e o 25 ainda não aparece.
+    expect(screen.getByText('Func 24')).toBeTruthy()
+    expect(screen.queryByText('Func 25')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Página 2' }))
+
+    expect(screen.getByText('Func 25')).toBeTruthy()
+    expect(screen.queryByText('Func 24')).toBeNull()
+  })
+
+  it('cadastrados vazio mostra aviso, não uma lista em branco', async () => {
+    vi.spyOn(employeesApi, 'list').mockResolvedValue({ data: [], error: null })
+    await renderPage(<EmployeesList />, { route: '/employees' })
+    await waitFor(() => screen.getByText('Nenhum funcionário cadastrado'))
+    expect(screen.getByText('Nenhum funcionário cadastrado')).toBeTruthy()
+  })
+
   // O ícone de chat precisa dizer QUEM. Mandar pra /chat sem destino faz o
   // inbox abrir a conversa mais recente, a mesma pessoa em qualquer clique. O
   // destino certo é a conversa determinística com o clicado.
