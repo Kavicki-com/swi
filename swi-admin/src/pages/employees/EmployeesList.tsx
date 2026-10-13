@@ -9,7 +9,9 @@ import { useNavigate } from 'react-router-dom'
 import {
   Avatar,
   Button,
+  Combobox,
   Icon,
+  Pagination,
   SearchInput,
   Tabs,
   Text,
@@ -18,6 +20,13 @@ import {
   type IconName,
   useTheme,
 } from '@kavicki/swi-design-system'
+import {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+  clampPage,
+  pageCountOf,
+  pageSlice,
+} from './pagination'
 import { approvalsApi, employeesApi, type Employee, type PendingUser } from '@/services/api/users'
 import { AdminsCreate } from '@/pages/admins/AdminsCreate'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
@@ -181,83 +190,6 @@ function EmployeeRow({
   )
 }
 
-// Pagination footer. Compact numbered buttons centered
-// below the list, plus a forward-arrow CTA in surface.primary. Local
-// implementation (no Pagination component in the DS yet); page state is
-// purely visual since the mock seed has only 10 entries.
-function Pagination({
-  current,
-  total,
-  onChange,
-}: {
-  current: number
-  total: number
-  onChange: (page: number) => void
-}) {
-  const theme = useTheme()
-  // Show up to 5 page numbers centered around `current`. For a tiny seed
-  // (total <= 5) just show all pages.
-  const window = 5
-  const start = Math.max(1, Math.min(current - Math.floor(window / 2), total - window + 1))
-  const pages = Array.from({ length: Math.min(window, total) }, (_, i) => start + i)
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: theme.gap.xs,
-        paddingVertical: theme.padding.m,
-      }}
-    >
-      {pages.map((p) => {
-        const isActive = p === current
-        return (
-          <Pressable
-            key={p}
-            accessibilityRole="button"
-            accessibilityLabel={`Página ${p}`}
-            onPress={() => onChange(p)}
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: theme.border.radius.s,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: isActive ? theme.surface.high : 'transparent',
-            }}
-          >
-            <Text
-              variant="body.m"
-              color={isActive ? theme.content.dark : theme.content.medium}
-              style={{ fontWeight: isActive ? '700' : '400' }}
-            >
-              {p}
-            </Text>
-          </Pressable>
-        )
-      })}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Próxima página"
-        onPress={() => onChange(Math.min(current + 1, total))}
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: theme.border.radius.s,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: theme.surface.primary,
-        }}
-      >
-        <View style={{ transform: [{ rotate: '-90deg' }] }}>
-          <Icon name="keyboard_arrow_down" size={16} color={theme.content.dark} />
-        </View>
-      </Pressable>
-    </View>
-  )
-}
-
 function ActionIcon({
   icon,
   label,
@@ -415,6 +347,7 @@ export function EmployeesList({
   const [tab, setTab] = useState<string>(initialTab)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE)
   // Bump pra forçar o refetch da lista "cadastrados" após um cadastro novo:
   // ao voltar do form, o incremento reexecuta o useEffect e a lista já mostra
   // o usuário recém-criado.
@@ -536,6 +469,11 @@ export function EmployeesList({
   const filtered = employees.filter((e) =>
     search.trim() ? e.name.toLowerCase().includes(search.toLowerCase()) : true,
   )
+  // Paginação no cliente sobre o que já veio (teto de 200 do backend). A página
+  // atual é saneada porque buscar ou excluir pode encolher a lista.
+  const pageCount = pageCountOf(filtered.length, pageSize)
+  const currentPage = clampPage(page, pageCount)
+  const pageItems = pageSlice(filtered, page, pageSize)
 
   const isCreating = tab === 'cadastrar'
   const isPending = tab === 'pendentes'
@@ -595,9 +533,15 @@ export function EmployeesList({
           <View style={{ flex: 1, maxWidth: 548 }}>
             <SearchInput
               value={search}
-              onChangeText={setSearch}
+              onChangeText={(v) => {
+                setSearch(v)
+                setPage(1)
+              }}
               placeholder="Pesquisar funcionários"
-              onClear={() => setSearch('')}
+              onClear={() => {
+                setSearch('')
+                setPage(1)
+              }}
             />
           </View>
         ) : null}
@@ -636,32 +580,65 @@ export function EmployeesList({
         <>
           {/* Gap entre cards em theme.gap.m. */}
           <View style={{ gap: theme.gap.m }}>
-            {filtered.map((employee) => (
-              <EmployeeRow
-                key={employee.id}
-                employee={employee}
-                onOpen={(id) => navigate(`/employees/${id}`)}
-                // /chat sem destino faz o inbox abrir a conversa mais recente,
-                // a mesma pessoa em qualquer clique. O destino é a conversa
-                // determinística com o clicado.
-                onChat={(e) => navigate(chatPathTo(myId, e.id))}
-                // O mapa geral abre com a camada de operadores desligada, entao
-                // um pin sem destino cai num mapa vazio e exige um clique extra
-                // em "Operadores". O `focus` resolve os dois: liga a camada e
-                // centraliza neste funcionario.
-                onLocation={() => navigate(fullMapPath(employee.id))}
-                onDelete={setRemoving}
-                onToggle={handleToggle}
-                isTablet={isTablet}
-              />
-            ))}
+            {pageItems.length ? (
+              pageItems.map((employee) => (
+                <EmployeeRow
+                  key={employee.id}
+                  employee={employee}
+                  onOpen={(id) => navigate(`/employees/${id}`)}
+                  // /chat sem destino faz o inbox abrir a conversa mais recente,
+                  // a mesma pessoa em qualquer clique. O destino é a conversa
+                  // determinística com o clicado.
+                  onChat={(e) => navigate(chatPathTo(myId, e.id))}
+                  // O mapa geral abre com a camada de operadores desligada, entao
+                  // um pin sem destino cai num mapa vazio e exige um clique extra
+                  // em "Operadores". O `focus` resolve os dois: liga a camada e
+                  // centraliza neste funcionario.
+                  onLocation={() => navigate(fullMapPath(employee.id))}
+                  onDelete={setRemoving}
+                  onToggle={handleToggle}
+                  isTablet={isTablet}
+                />
+              ))
+            ) : (
+              <Text variant="body.m" color={theme.content.medium}>
+                {search.trim()
+                  ? 'Nenhum funcionário encontrado para a busca'
+                  : 'Nenhum funcionário cadastrado'}
+              </Text>
+            )}
           </View>
-          <Pagination
-            current={page}
-            // 10 por página sobre o total real carregado do backend.
-            total={Math.max(1, Math.ceil(employees.length / 10))}
-            onChange={setPage}
-          />
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: theme.gap.m,
+              paddingVertical: theme.padding.m,
+            }}
+          >
+            <View style={{ width: 150 }}>
+              <Combobox
+                label="Por página"
+                value={String(pageSize)}
+                options={PAGE_SIZE_OPTIONS.map((n) => ({ label: String(n), value: String(n) }))}
+                onChange={(v) => {
+                  setPageSize(Number(v))
+                  setPage(1)
+                }}
+                accessibilityLabel="Funcionários por página"
+              />
+            </View>
+            <View style={{ width: 360 }}>
+              <Pagination
+                currentPage={currentPage}
+                pageCount={pageCount}
+                onPageChange={setPage}
+              />
+            </View>
+            {/* Espaçador da mesma largura do seletor: mantém o Pagination centrado. */}
+            <View style={{ width: 150 }} />
+          </View>
         </>
       )}
 
