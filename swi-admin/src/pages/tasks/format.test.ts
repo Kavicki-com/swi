@@ -149,6 +149,13 @@ describe('displayTimeToMinutes', () => {
     expect(displayTimeToMinutes('   ')).toBeNull()
   })
 
+  // Zero é o placeholder "h 00:00": tratar como "sem estimativa" (null) em vez
+  // de mandar 0 ao backend, que recusa com mensagem em inglês (MEL-17).
+  it('trata 00:00 como sem estimativa (null), não como zero', () => {
+    expect(displayTimeToMinutes('00:00')).toBeNull()
+    expect(displayTimeToMinutes('0:00')).toBeNull()
+  })
+
   it('rejeita minuto fora de 0-59', () => {
     expect(displayTimeToMinutes('99:99')).toBeUndefined()
     expect(displayTimeToMinutes('01:60')).toBeUndefined()
@@ -167,8 +174,11 @@ describe('displayTimeToMinutes', () => {
 })
 
 describe('tempo — ida e volta', () => {
+  // 0 fica de fora de propósito: "00:00" agora é "sem estimativa" (null), não
+  // zero, para não mandar 0 ao backend (MEL-17). O caso 00:00 → null é coberto
+  // acima, em displayTimeToMinutes.
   it('minutos → campo → minutos preserva o valor', () => {
-    for (const minutes of [0, 5, 45, 90, 150, 1500]) {
+    for (const minutes of [5, 45, 90, 150, 1500]) {
       expect(displayTimeToMinutes(minutesToDisplayTime(minutes))).toBe(minutes)
     }
   })

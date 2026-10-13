@@ -296,6 +296,19 @@ describe('TaskForm: criação', () => {
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
     expect(createMock.mock.calls[0]?.[0].estimatedMinutes).toBe(150)
   })
+
+  it('tempo estimado 00:00 não vira erro: cria sem estimativa (MEL-17)', async () => {
+    await renderAt('/tasks/new')
+    typeIn('task-title', 'Trocar filtro')
+    typeIn('task-estimated-time', '00:00')
+    await pickResponsible('Carlos Silva', 'Setor Leste')
+
+    save()
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
+    // 00:00 é "sem estimativa": não vai 0 no payload (o backend recusaria).
+    expect(createMock.mock.calls[0]?.[0]).not.toHaveProperty('estimatedMinutes')
+  })
 })
 
 // Os limites do CreateWorkOrderDto/UpdateWorkOrderDto (swi-backend/src/
