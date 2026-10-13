@@ -57,10 +57,8 @@ const belongsInBell = (n: NotificationDto) => n.domain !== 'chat'
 const newestFirst = (a: NotificationDto, b: NotificationDto) =>
   Date.parse(b.createdAt) - Date.parse(a.createdAt)
 
-const withPendingReads = (
-  items: NotificationDto[],
-  pending: ReadonlyMap<string, number | null>,
-) => items.map((n) => (pending.has(n.id) && !n.read ? { ...n, read: true } : n))
+const withPendingReads = (items: NotificationDto[], pending: ReadonlyMap<string, number | null>) =>
+  items.map((n) => (pending.has(n.id) && !n.read ? { ...n, read: true } : n))
 
 export function withResponse(
   state: NotificationsState,
@@ -81,7 +79,9 @@ export function withResponse(
   // Marca confirmada sai quando a resposta vem de leitura pedida depois da
   // confirmação: essa já viu a gravação.
   const pendingRead = new Map(
-    [...state.pendingRead].filter(([, settledAt]) => settledAt === null || response.request <= settledAt),
+    [...state.pendingRead].filter(
+      ([, settledAt]) => settledAt === null || response.request <= settledAt,
+    ),
   )
   return {
     ...state,

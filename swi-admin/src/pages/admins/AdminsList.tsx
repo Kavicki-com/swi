@@ -304,10 +304,10 @@ export function AdminsList({
           : loadState !== 'ready'
             ? 'Administradores cadastrados'
             : `Você tem (${admins.length}) ${pluralize(
-              admins.length,
-              'administrador cadastrado',
-              'administradores cadastrados',
-            )}`}
+                admins.length,
+                'administrador cadastrado',
+                'administradores cadastrados',
+              )}`}
       </Title>
 
       <View

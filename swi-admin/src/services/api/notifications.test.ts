@@ -108,13 +108,11 @@ describe('notificationsApi.requestPause', () => {
   it('worker de outra empresa (404) → { data: null, error } com mensagem do backend', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue({
-          ok: false,
-          status: 404,
-          json: async () => ({ message: 'Funcionário não encontrado' }),
-        } as Response),
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({ message: 'Funcionário não encontrado' }),
+      } as Response),
     )
     const { data, error } = await notificationsApi.requestPause('ghost')
     expect(data).toBeNull()

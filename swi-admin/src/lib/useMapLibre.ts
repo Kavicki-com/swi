@@ -31,17 +31,15 @@ function load(): Promise<MapLibreModule> {
     import('maplibre-gl'),
     import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'),
     import('maplibre-gl/dist/maplibre-gl.css'),
-  ]).then(
-    ([mod, worker]) => {
-      // A 6 monta o endereço do worker em tempo de execução, com um nome que o
-      // Vite não enxerga, então o build não emitiria o arquivo e o mapa ficaria
-      // sem camadas em produção. O import ?worker&url faz o Vite emitir o
-      // worker, e setWorkerUrl aponta a biblioteca para ele.
-      mod.setWorkerUrl(worker.default)
-      cached = mod
-      return cached
-    },
-  )
+  ]).then(([mod, worker]) => {
+    // A 6 monta o endereço do worker em tempo de execução, com um nome que o
+    // Vite não enxerga, então o build não emitiria o arquivo e o mapa ficaria
+    // sem camadas em produção. O import ?worker&url faz o Vite emitir o
+    // worker, e setWorkerUrl aponta a biblioteca para ele.
+    mod.setWorkerUrl(worker.default)
+    cached = mod
+    return cached
+  })
   return inFlight
 }
 

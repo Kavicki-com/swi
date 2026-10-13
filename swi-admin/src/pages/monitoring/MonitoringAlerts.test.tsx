@@ -10,6 +10,8 @@ describe('MonitoringAlerts', () => {
   afterEach(clearSession)
 
   it('renders without crashing', async () => {
-    await expect(renderPage(<MonitoringAlerts />, { route: '/monitoring/alerts' })).resolves.toBeDefined()
+    await expect(
+      renderPage(<MonitoringAlerts />, { route: '/monitoring/alerts' }),
+    ).resolves.toBeDefined()
   })
 })

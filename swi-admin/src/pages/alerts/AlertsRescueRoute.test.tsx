@@ -10,6 +10,11 @@ describe('AlertsRescueRoute', () => {
   afterEach(clearSession)
 
   it('renders without crashing', async () => {
-    await expect(renderPage(<AlertsRescueRoute />, { route: '/alerts/e1/rescue/r1', path: '/alerts/:employeeId/rescue/:rescuerId' })).resolves.toBeDefined()
+    await expect(
+      renderPage(<AlertsRescueRoute />, {
+        route: '/alerts/e1/rescue/r1',
+        path: '/alerts/:employeeId/rescue/:rescuerId',
+      }),
+    ).resolves.toBeDefined()
   })
 })

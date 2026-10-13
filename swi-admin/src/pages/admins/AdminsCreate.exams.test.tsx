@@ -119,12 +119,10 @@ describe('AdminsCreate: exames clínicos', () => {
 
   it('na edição o exame sobe na hora, porque o cadastro já existe', async () => {
     vi.spyOn(employeesApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
-    const addExam = vi
-      .spyOn(employeesApi, 'addExam')
-      .mockResolvedValue({
-        data: { id: 'e9', name: 'Hemograma', date: '2027-03-14', fileUrl: 'signed:k' },
-        error: null,
-      })
+    const addExam = vi.spyOn(employeesApi, 'addExam').mockResolvedValue({
+      data: { id: 'e9', name: 'Hemograma', date: '2027-03-14', fileUrl: 'signed:k' },
+      error: null,
+    })
     vi.spyOn(uploadMod, 'uploadImage').mockResolvedValue('exams/k.pdf')
     await renderPage(<AdminsCreate subject="funcionário" />, {
       route: '/employees/u1/edit',
@@ -135,11 +133,13 @@ describe('AdminsCreate: exames clínicos', () => {
     preencherExame('Hemograma', '14/03/2027')
     escolherArquivo()
 
-    await waitFor(() => expect(addExam).toHaveBeenCalledWith('u1', {
-      name: 'Hemograma',
-      date: '2027-03-14',
-      fileKey: 'exams/k.pdf',
-    }))
+    await waitFor(() =>
+      expect(addExam).toHaveBeenCalledWith('u1', {
+        name: 'Hemograma',
+        date: '2027-03-14',
+        fileKey: 'exams/k.pdf',
+      }),
+    )
   })
 
   it('no cadastro, dá pra tirar um exame da fila sem perder o resto', async () => {

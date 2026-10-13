@@ -13,7 +13,9 @@ import { SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 // "sem aparelho" para o teste não falar com o backend.
 vi.mock('@/services/api/telemetryDevices', () => ({
   telemetryDevicesApi: {
-    stateOf: vi.fn().mockResolvedValue({ data: { device: null, pendingEnrollment: null }, error: null }),
+    stateOf: vi
+      .fn()
+      .mockResolvedValue({ data: { device: null, pendingEnrollment: null }, error: null }),
   },
 }))
 vi.mock('@/services/telemetry/telemetrySocket', () => ({
@@ -89,24 +91,26 @@ function LocationProbe() {
 }
 
 const renderTree = async () =>
-  settled(render(
-    <SwiThemeProvider>
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/page']}>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/page" element={<div data-testid="page-content">hello</div>} />
-              <Route
-                path="/user/profile"
-                element={<div data-testid="profile-content">profile</div>}
-              />
-              <Route path="/chat/:conversationId" element={<LocationProbe />} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>
-    </SwiThemeProvider>,
-  ))
+  settled(
+    render(
+      <SwiThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/page']}>
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route path="/page" element={<div data-testid="page-content">hello</div>} />
+                <Route
+                  path="/user/profile"
+                  element={<div data-testid="profile-content">profile</div>}
+                />
+                <Route path="/chat/:conversationId" element={<LocationProbe />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </SwiThemeProvider>,
+    ),
+  )
 
 // A miniatura do cabeçalho mostrava uma foto fixa de banco de imagens, que não
 // batia com a de Configurações.
@@ -130,7 +134,12 @@ describe('AppLayout: foto do cabeçalho', () => {
   it('sem foto no perfil, não mostra a foto de outra pessoa', async () => {
     window.localStorage.setItem(
       SESSION_STORAGE_KEY,
-      JSON.stringify({ id: 'u_seed_1', email: 'admin@swi.test', full_name: 'Admin Seed', role: 'admin' }),
+      JSON.stringify({
+        id: 'u_seed_1',
+        email: 'admin@swi.test',
+        full_name: 'Admin Seed',
+        role: 'admin',
+      }),
     )
     await renderTree()
     await screen.findByTestId('app-header-user-info')

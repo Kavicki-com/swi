@@ -42,7 +42,9 @@ describe('resolveApiUrl', () => {
   // A recíproca não vale: página local apontando para a API pública é alguém
   // rodando o painel na própria máquina contra api.kavicki.com. Legítimo.
   it('aceita API pública mesmo com a página servida de local', () => {
-    expect(resolveApiUrl('https://api.kavicki.com', PROD, PAGINA_LOCAL)).toBe('https://api.kavicki.com')
+    expect(resolveApiUrl('https://api.kavicki.com', PROD, PAGINA_LOCAL)).toBe(
+      'https://api.kavicki.com',
+    )
   })
 
   it('recusa URL relativa ou protocolo não suportado', () => {
@@ -51,9 +53,15 @@ describe('resolveApiUrl', () => {
   })
 
   it('aceita o endereço público e remove a barra final', () => {
-    expect(resolveApiUrl('https://api.kavicki.com', PROD, PAGINA_PUBLICA)).toBe('https://api.kavicki.com')
-    expect(resolveApiUrl('https://api.kavicki.com/', PROD, PAGINA_PUBLICA)).toBe('https://api.kavicki.com')
-    expect(resolveApiUrl('https://api.kavicki.com///', PROD, PAGINA_PUBLICA)).toBe('https://api.kavicki.com')
+    expect(resolveApiUrl('https://api.kavicki.com', PROD, PAGINA_PUBLICA)).toBe(
+      'https://api.kavicki.com',
+    )
+    expect(resolveApiUrl('https://api.kavicki.com/', PROD, PAGINA_PUBLICA)).toBe(
+      'https://api.kavicki.com',
+    )
+    expect(resolveApiUrl('https://api.kavicki.com///', PROD, PAGINA_PUBLICA)).toBe(
+      'https://api.kavicki.com',
+    )
   })
 
   // Origem desconhecida (sem `window`, como num render fora do navegador) cai no
@@ -63,7 +71,9 @@ describe('resolveApiUrl', () => {
   })
 
   it('em dev aceita localhost e cai no default quando a variável falta', () => {
-    expect(resolveApiUrl('http://localhost:3000', DEV, PAGINA_PUBLICA)).toBe('http://localhost:3000')
+    expect(resolveApiUrl('http://localhost:3000', DEV, PAGINA_PUBLICA)).toBe(
+      'http://localhost:3000',
+    )
     expect(resolveApiUrl(undefined, DEV, PAGINA_PUBLICA)).toBe('http://localhost:3000')
   })
 })

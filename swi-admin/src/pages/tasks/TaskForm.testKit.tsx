@@ -75,20 +75,22 @@ function TaskDetailsProbe() {
 
 export async function renderAt(route: string) {
   seedSession()
-  return settled(render(
-    <SwiThemeProvider>
-      <AuthProvider>
-        <MemoryRouter initialEntries={[route]}>
-          <Routes>
-            <Route path="/tasks" element={<div data-testid="tasks-route" />} />
-            <Route path="/tasks/new" element={<TaskForm />} />
-            <Route path="/tasks/:id/edit" element={<TaskForm />} />
-            <Route path="/tasks/:id" element={<TaskDetailsProbe />} />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>
-    </SwiThemeProvider>,
-  ))
+  return settled(
+    render(
+      <SwiThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[route]}>
+            <Routes>
+              <Route path="/tasks" element={<div data-testid="tasks-route" />} />
+              <Route path="/tasks/new" element={<TaskForm />} />
+              <Route path="/tasks/:id/edit" element={<TaskForm />} />
+              <Route path="/tasks/:id" element={<TaskDetailsProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </SwiThemeProvider>,
+    ),
+  )
 }
 
 export function typeIn(testID: string, value: string) {

@@ -201,7 +201,6 @@ describe('ChatInbox', () => {
   })
 
   describe('tempo até a fadiga do contato', () => {
-
     beforeEach(() => {
       telemetry.stateOf.mockReset()
       telemetry.current.mockReset()

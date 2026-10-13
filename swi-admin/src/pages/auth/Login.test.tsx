@@ -29,19 +29,21 @@ const adminUser = {
 }
 
 const renderAt = async (path = '/login', state?: object) =>
-  settled(render(
-    <SwiThemeProvider>
-      <AuthProvider>
-        <MemoryRouter initialEntries={[{ pathname: path, state }]}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={<div data-testid="home" />} />
-            <Route path="/employees" element={<div data-testid="employees" />} />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>
-    </SwiThemeProvider>,
-  ))
+  settled(
+    render(
+      <SwiThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[{ pathname: path, state }]}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/" element={<div data-testid="home" />} />
+              <Route path="/employees" element={<div data-testid="employees" />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </SwiThemeProvider>,
+    ),
+  )
 
 beforeEach(() => {
   window.localStorage.clear()

@@ -64,7 +64,9 @@ afterEach(clearSession)
 
 describe('ResponsablesModal', () => {
   it('renders without crashing (modo rota)', async () => {
-    await expect(renderPage(<ResponsablesModal />, { route: '/modals/responsables' })).resolves.toBeDefined()
+    await expect(
+      renderPage(<ResponsablesModal />, { route: '/modals/responsables' }),
+    ).resolves.toBeDefined()
   })
 
   it('no modo controlado, Continuar devolve os NOMES marcados via onConfirm', async () => {

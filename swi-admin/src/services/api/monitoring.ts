@@ -63,9 +63,11 @@ const round = (n: number) => Math.round(n)
 
 // Título, ícone e frase de cada tipo de condição. Sem valor gravado a frase sai
 // sem número, nunca com um valor inventado.
-function describe(
-  condition: Pick<ActiveCondition, 'kind' | 'observedValue' | 'thresholdValue'>,
-): { title: string; icon: IconName; description: string } {
+function describe(condition: Pick<ActiveCondition, 'kind' | 'observedValue' | 'thresholdValue'>): {
+  title: string
+  icon: IconName
+  description: string
+} {
   const { kind, observedValue: obs, thresholdValue: thr } = condition
   switch (kind) {
     case 'HEART_RATE_HIGH':

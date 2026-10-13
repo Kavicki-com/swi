@@ -24,9 +24,9 @@ export function useExamAttachments({ isEdit, editandoId, subject, showToast }: O
   // `pendentes` são os escolhidos antes do usuário existir, que esperam o
   // create pra ter a quem ser anexados.
   const [gravados, setGravados] = useState<readonly Exam[]>([])
-  const [pendentes, setPendentes] = useState<
-    readonly { name: string; date: string; file: File }[]
-  >([])
+  const [pendentes, setPendentes] = useState<readonly { name: string; date: string; file: File }[]>(
+    [],
+  )
   const [examName, setExamName] = useState('')
   const [examDate, setExamDate] = useState('')
   const [examError, setExamError] = useState<string | null>(null)
@@ -134,10 +134,12 @@ export function useExamAttachments({ isEdit, editandoId, subject, showToast }: O
       }
     }
     if (falhas > 0) {
-      showToast('Cadastro salvo, exames pendentes', `${falhas} exame(s) não subiram. Anexe pela edição.`)
+      showToast(
+        'Cadastro salvo, exames pendentes',
+        `${falhas} exame(s) não subiram. Anexe pela edição.`,
+      )
     }
   }
-
 
   return {
     gravados,
