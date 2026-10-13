@@ -19,11 +19,9 @@ import {
   Avatar,
   Button,
   Chip,
-  Combobox,
   DonutChart,
   ExamInfoCard,
   Icon,
-  LineCaloriesChart,
   Silhouette,
   Text,
   Title,
@@ -31,6 +29,7 @@ import {
   useTheme,
   type IconName,
 } from '@kavicki/swi-design-system'
+import { WorkerCaloriesSection } from './WorkerCaloriesSection'
 
 export type WorkerExamEntry = {
   id: string
@@ -735,64 +734,14 @@ export function WorkerDetailsLayout({
         </View>
       </View>
 
-      {/* BOTTOM: Caloric expenditure timeline. The section title + period
-          combobox sit above the chart card as
-          siblings, not wrapped in their own surface. The LineCaloriesChart
-          already renders its own surface.medium + radius.l container. */}
-      <View style={{ gap: theme.gap.m }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'flex-start',
-            alignItems: 'center',
-            gap: theme.gap.s,
-            // Lift the title row above the chart card sibling so the open
-            // Combobox panel can float over it instead of being painted under.
-            position: 'relative',
-            zIndex: 10,
-          }}
-        >
-          <Title variant="title.s" color={theme.content.dark}>
-            Gasto calórico
-          </Title>
-          <View style={{ width: 227 }}>
-            <Combobox
-              options={[
-                { label: 'Hoje', value: 'today' },
-                { label: 'Esta semana', value: 'week' },
-                { label: 'Este mês', value: 'month' },
-              ]}
-              value={caloriesPeriod}
-              onChange={(value) => {
-                if (value in PERIOD_FROM_OPTION)
-                  setCaloriesPeriod(value as keyof typeof PERIOD_FROM_OPTION)
-              }}
-              accessibilityLabel="Período do gasto calórico"
-            />
-          </View>
-        </View>
-        {/* A curva sai da série do backend. Balde sem medição fica fora da
-            curva, e período sem nenhuma medição vira frase, nunca zeros. */}
-        {caloriesEmpty === null ? (
-          <View testID="calories-chart">
-            <LineCaloriesChart points={calories.points} unit="kcal" fullWidth />
-          </View>
-        ) : (
-          <View
-            testID="calories-empty"
-            style={{
-              backgroundColor: theme.surface.medium,
-              borderRadius: theme.border.radius.l,
-              padding: theme.padding.m,
-              alignItems: 'center',
-            }}
-          >
-            <Text variant="body.m" color={theme.content.medium}>
-              {caloriesEmpty}
-            </Text>
-          </View>
-        )}
-      </View>
+      {/* BOTTOM: gasto calórico (título + seletor de período + gráfico de
+          linha). Extraído para WorkerCaloriesSection. */}
+      <WorkerCaloriesSection
+        points={calories.points}
+        period={caloriesPeriod}
+        onPeriodChange={setCaloriesPeriod}
+        emptyMessage={caloriesEmpty}
+      />
     </View>
   )
 }
