@@ -19,6 +19,7 @@ import { Modal, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
   Button,
+  Carousel,
   Combobox,
   Icon,
   ImageUploader,
@@ -252,52 +253,60 @@ export function TaskForm() {
           <Title variant="title.xs" color={theme.content.primary}>
             Check List
           </Title>
-          <View style={{ flexDirection: 'row', gap: theme.gap.m, flexWrap: 'wrap' }}>
-            {drafts.map((draft, index) => (
-              <View
-                key={draft.key}
-                style={{
-                  flex: 1,
-                  gap: theme.gap.s,
-                  padding: theme.padding.m,
-                  borderRadius: theme.border.radius.m,
-                  backgroundColor: theme.surface.standard,
-                }}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Carousel
+                itemMinWidth={280}
+                gap={theme.gap.m}
+                accessibilityLabel="Itens do Check List"
               >
-                <Input
-                  label="Título"
-                  testID={`checklist-title-${index}`}
-                  value={draft.title}
-                  onChangeText={(next) => updateDraft(draft.key, { title: next })}
-                  placeholder="Título do item"
-                  description={
-                    untitledDrafts.has(draft.key) ? 'Informe o título do item.' : undefined
-                  }
-                  descriptionVariant="error"
-                  accessibilityLabel={`Título do item ${index + 1} do Check List`}
-                />
-                <Input
-                  label="Texto curto"
-                  testID={`checklist-description-${index}`}
-                  value={draft.description}
-                  onChangeText={(next) => updateDraft(draft.key, { description: next })}
-                  placeholder="Texto curto"
-                  accessibilityLabel={`Texto curto do item ${index + 1} do Check List`}
-                />
-                {/* Sem remover, um card só dava pra esvaziar — o submit filtra
+                {drafts.map((draft, index) => (
+                  <View
+                    key={draft.key}
+                    style={{
+                      width: 280,
+                      gap: theme.gap.s,
+                      padding: theme.padding.m,
+                      borderRadius: theme.border.radius.m,
+                      backgroundColor: theme.surface.standard,
+                    }}
+                  >
+                    <Input
+                      label="Título"
+                      testID={`checklist-title-${index}`}
+                      value={draft.title}
+                      onChangeText={(next) => updateDraft(draft.key, { title: next })}
+                      placeholder="Título do item"
+                      description={
+                        untitledDrafts.has(draft.key) ? 'Informe o título do item.' : undefined
+                      }
+                      descriptionVariant="error"
+                      accessibilityLabel={`Título do item ${index + 1} do Check List`}
+                    />
+                    <Input
+                      label="Texto curto"
+                      testID={`checklist-description-${index}`}
+                      value={draft.description}
+                      onChangeText={(next) => updateDraft(draft.key, { description: next })}
+                      placeholder="Texto curto"
+                      accessibilityLabel={`Texto curto do item ${index + 1} do Check List`}
+                    />
+                    {/* Sem remover, um card só dava pra esvaziar — o submit filtra
                     título vazio, mas o card ficava na tela pra sempre. Em item
                     vindo do backend isto é mais que cosmético: ausente da lista
                     do PATCH é a ÚNICA forma de apagar o item (reconciliação). */}
-                <View style={{ alignSelf: 'flex-end' }}>
-                  <Button
-                    variant="ghost"
-                    onPress={() => setDrafts((prev) => prev.filter((d) => d.key !== draft.key))}
-                    iconLeft={<Icon name="delete_icon" size={20} color={theme.content.error} />}
-                    accessibilityLabel={`Remover item ${index + 1} do Check List`}
-                  />
-                </View>
-              </View>
-            ))}
+                    <View style={{ alignSelf: 'flex-end' }}>
+                      <Button
+                        variant="ghost"
+                        onPress={() => setDrafts((prev) => prev.filter((d) => d.key !== draft.key))}
+                        iconLeft={<Icon name="delete_icon" size={20} color={theme.content.error} />}
+                        accessibilityLabel={`Remover item ${index + 1} do Check List`}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </Carousel>
+            </View>
             <View style={{ justifyContent: 'center' }}>
               <Button
                 variant="outline"
@@ -317,40 +326,37 @@ export function TaskForm() {
         <Title variant="title.xs" color={theme.content.primary}>
           Anexos
         </Title>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'stretch',
-            gap: theme.gap.m,
-            flexWrap: 'wrap',
-          }}
-        >
-          {/* Anexos já gravados: quadro rotulado + remoção. O DS `Image` exige
+        <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: theme.gap.m }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Carousel itemMinWidth={160} gap={theme.gap.m} accessibilityLabel="Anexos">
+              {/* Anexos já gravados: quadro rotulado + remoção. O DS `Image` exige
               width/height numéricos (fora do sistema de tokens), então o
               preview real segue de fora — a key é o que o PATCH precisa. */}
-          {existingAttachments.map((att, index) => (
-            <AttachmentSlot
-              key={att.key}
-              label={`Anexo ${index + 1}`}
-              removeLabel={`Remover anexo ${index + 1}`}
-              onRemove={() => {
-                setRemovedExisting(true)
-                setExistingAttachments((prev) => prev.filter((a) => a.key !== att.key))
-              }}
-            />
-          ))}
-          {files.map((file, index) => (
-            <AttachmentSlot
-              key={`${file.name}_${index}`}
-              label={file.name}
-              removeLabel={`Remover arquivo ${file.name}`}
-              onRemove={() => setFiles((prev) => prev.filter((f) => f !== file))}
-            />
-          ))}
-          {Array.from({ length: emptySlots }, (_, i) => (
-            <AttachmentSlot key={`empty_${i}`} />
-          ))}
-          <View style={{ flex: 1 }}>
+              {existingAttachments.map((att, index) => (
+                <AttachmentSlot
+                  key={att.key}
+                  label={`Anexo ${index + 1}`}
+                  removeLabel={`Remover anexo ${index + 1}`}
+                  onRemove={() => {
+                    setRemovedExisting(true)
+                    setExistingAttachments((prev) => prev.filter((a) => a.key !== att.key))
+                  }}
+                />
+              ))}
+              {files.map((file, index) => (
+                <AttachmentSlot
+                  key={`${file.name}_${index}`}
+                  label={file.name}
+                  removeLabel={`Remover arquivo ${file.name}`}
+                  onRemove={() => setFiles((prev) => prev.filter((f) => f !== file))}
+                />
+              ))}
+              {Array.from({ length: emptySlots }, (_, i) => (
+                <AttachmentSlot key={`empty_${i}`} />
+              ))}
+            </Carousel>
+          </View>
+          <View style={{ width: 300 }}>
             <ImageUploader
               helperText="Selecione arquivos do tipo: JPG ou PNG"
               pickFileLabel="Enviar arquivo"
