@@ -26,6 +26,27 @@ const withKcal = (kcal: number | null) =>
       period: 'day',
     },
   )
+
+// Série com um buraco no meio (medido, sem medição, medido) para o gráfico ter
+// de decidir se liga os pontos por cima do vazio (MEL-06).
+const withGap = () =>
+  series(
+    [
+      {
+        ...emptyPoint('2026-10-01T10:00:00.000Z', '2026-10-01T11:00:00.000Z'),
+        activeEnergyKcal: 40,
+      },
+      {
+        ...emptyPoint('2026-10-01T11:00:00.000Z', '2026-10-01T12:00:00.000Z'),
+        activeEnergyKcal: null,
+      },
+      {
+        ...emptyPoint('2026-10-01T12:00:00.000Z', '2026-10-01T13:00:00.000Z'),
+        activeEnergyKcal: 60,
+      },
+    ],
+    { bucket: 'hour', period: 'day' },
+  )
 import { vitalsViewFrom, type WorkerVitalsView } from '@/services/vitals/vitalsView'
 import { WorkerDetailsLayout, type WorkerDetailsData } from './WorkerDetailsLayout'
 
@@ -112,6 +133,19 @@ describe('WorkerDetailsLayout', () => {
       expect(seriesMock).toHaveBeenCalledWith('w1', 'day')
       expect(await screen.findByTestId('calories-chart')).toBeInTheDocument()
       expect(screen.queryByTestId('simulated-data-badge')).not.toBeInTheDocument()
+    })
+
+    // MEL-06: a linha liga os pontos por cima das horas sem leitura, para
+    // mostrar a tendência. Uma curva contínua tem um só "M"; quebrada no buraco
+    // teria dois.
+    it('liga os pontos por cima das horas sem medição', async () => {
+      seriesMock.mockResolvedValue({ data: withGap(), error: null })
+      await renderLayout({ vitals: READING, seriesWorkerId: 'w1' })
+      const chart = await screen.findByTestId('calories-chart')
+      const path = chart.querySelector('path')
+      expect(path).not.toBeNull()
+      const ms = path?.getAttribute('d')?.match(/M/g) ?? []
+      expect(ms).toHaveLength(1)
     })
 
     it('período sem medição declara a ausência em vez de desenhar zeros', async () => {
