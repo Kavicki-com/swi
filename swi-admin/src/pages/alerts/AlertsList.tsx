@@ -196,6 +196,9 @@ export function AlertsList() {
       }
       setMapReady(true)
     })
+    // Clique no mapa vazio fecha o card: o pino é um elemento DOM por cima do
+    // canvas, então o clique nele não chega aqui; só o clique fora dele.
+    map.on('click', () => navigateRef.current('/alerts'))
     return () => {
       map.remove()
       mapRef.current = null
@@ -552,6 +555,27 @@ export function AlertsList() {
                 />
               }
             />
+            {/* Fechar o card: além do clique no mapa e no próprio pino, um X no
+                canto do cartão. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Fechar leitura do funcionário"
+              onPress={() => navigate('/alerts')}
+              style={{
+                position: 'absolute',
+                top: -10,
+                right: -10,
+                width: 28,
+                height: 28,
+                borderRadius: theme.border.radius.pill,
+                backgroundColor: theme.surface.standard,
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 4,
+              }}
+            >
+              <Icon name="close" size={18} color={theme.content.dark} />
+            </Pressable>
             {selectedHeartRate === null && !selectedNoDevice ? (
               <Text testID="alerts-selected-status" variant="body.s" color={theme.content.medium}>
                 {selectedVitals?.status ?? 'Sem leitura do aparelho'}

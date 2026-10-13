@@ -1,11 +1,9 @@
 // describe/it/expect vêm dos globals do Vitest; importar de 'vitest' duplica a instância.
 import { metric, neverReported, noMetric as none, reporting } from '@/test-utils/telemetryFixtures'
 import { vitalsViewFrom } from './vitalsView'
+import { whenLabel } from '@/lib/whenLabel'
 
 const OLD = '2026-10-01T14:20:00.000Z'
-
-const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
 describe('vitalsViewFrom', () => {
   it('leitura atual mostra o batimento e diz que está monitorando agora', () => {
@@ -15,12 +13,25 @@ describe('vitalsViewFrom', () => {
     expect(view.sourceBadge).toBeNull()
   })
 
-  it('leitura desatualizada mantém o valor e diz o horário da última', () => {
+  it('leitura desatualizada do mesmo dia mantém o valor e diz o horário', () => {
+    const now = new Date('2026-10-01T20:00:00.000Z').getTime()
     const view = vitalsViewFrom(
       reporting({ heartRate: metric(98, { quality: 'STALE', measuredAt: OLD }) }),
+      { now },
     )
     expect(view.heartRate).toBe('98')
-    expect(view.status).toBe(`Última leitura às ${clock(OLD)}`)
+    expect(view.status).toBe(`Última leitura ${whenLabel(OLD, now)}`)
+  })
+
+  // Sem a data, uma leitura de dias atrás parecia de hoje (o backend guarda o
+  // último bpm para sempre). whenLabel mostra "em dd/mm às HH:mm" fora do dia.
+  it('leitura desatualizada de outro dia mostra a data junto do horário', () => {
+    const now = new Date('2026-10-05T10:00:00.000Z').getTime()
+    const view = vitalsViewFrom(
+      reporting({ heartRate: metric(98, { quality: 'STALE', measuredAt: OLD }) }),
+      { now },
+    )
+    expect(view.status).toMatch(/^Última leitura em 01\/10 às \d{2}:\d{2}$/)
   })
 
   it('quem nunca reportou não vira zero: tudo é ausência declarada', () => {

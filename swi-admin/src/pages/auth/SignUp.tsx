@@ -260,7 +260,7 @@ export function SignUp() {
                       onChangeText={(v: string) => setAddress((a) => ({ ...a, cep: maskCep(v) }))}
                     />
                   </View>
-                  <View style={{ width: 477, flexGrow: 1 }}>
+                  <View style={{ width: 477, maxWidth: '100%', flexGrow: 1 }}>
                     <Input
                       label="Logradouro"
                       accessibilityLabel="Logradouro"
@@ -278,7 +278,7 @@ export function SignUp() {
                       onChangeText={(v: string) => setAddress((a) => ({ ...a, number: v }))}
                     />
                   </View>
-                  <View style={{ width: 353, flexGrow: 1 }}>
+                  <View style={{ width: 353, maxWidth: '100%', flexGrow: 1 }}>
                     <Input
                       label="Bairro"
                       accessibilityLabel="Bairro"
