@@ -97,7 +97,10 @@ export function displayTimeToMinutes(display: string): number | null | undefined
   if (!match) return undefined
   const [, hours, minutes] = match
   if (!hours || !minutes) return undefined
-  return Number(hours) * 60 + Number(minutes)
+  const total = Number(hours) * 60 + Number(minutes)
+  // "00:00" (o próprio placeholder) é "sem estimativa", não zero: mandar 0 ao
+  // backend faz ele recusar com mensagem em inglês (MEL-17).
+  return total === 0 ? null : total
 }
 
 // birthDate é ISO datetime: o backend materializa uma data de CALENDÁRIO como

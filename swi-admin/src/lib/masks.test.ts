@@ -1,6 +1,6 @@
 // vitest globals (describe/it/expect) via globals: true — importar de 'vitest'
 // duplicaria a instância e quebraria o registro do suite (ver weather.test.ts).
-import { maskCep, maskCnpj, maskCpf, maskDate, maskPhone, onlyDigits } from './masks'
+import { maskCep, maskCnpj, maskCpf, maskDate, maskPhone, maskTime, onlyDigits } from './masks'
 
 describe('onlyDigits', () => {
   it('remove tudo que não é dígito', () => {
@@ -85,5 +85,26 @@ describe('maskCnpj', () => {
   it('formata progressivamente e é idempotente', () => {
     expect(maskCnpj('00000')).toBe('00.000')
     expect(maskCnpj('00.000.000/0001-91')).toBe('00.000.000/0001-91')
+  })
+})
+
+// Tempo estimado hh:mm: os dois últimos dígitos são minutos, o resto (até 3)
+// são horas, porque é duração (não relógio) e pode passar de 24h (MEL-17).
+describe('maskTime', () => {
+  it('os dois últimos dígitos viram minutos', () => {
+    expect(maskTime('130')).toBe('1:30')
+    expect(maskTime('0130')).toBe('01:30')
+    expect(maskTime('10030')).toBe('100:30')
+  })
+
+  it('poucos dígitos ainda não fecham o separador', () => {
+    expect(maskTime('')).toBe('')
+    expect(maskTime('0')).toBe('0')
+    expect(maskTime('00')).toBe('00')
+  })
+
+  it('ignora excesso e é idempotente', () => {
+    expect(maskTime('1234567')).toBe('123:45')
+    expect(maskTime('01:30')).toBe('01:30')
   })
 })

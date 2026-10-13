@@ -31,6 +31,7 @@ import {
 import { ResponsiblePicker } from './ResponsiblePicker'
 import { AttachmentSlot } from './components/AttachmentSlot'
 import { emptyDraft, useTaskForm } from './hooks/useTaskForm'
+import { maskDate, maskTime } from '@/lib/masks'
 
 export function TaskForm() {
   const theme = useTheme()
@@ -160,7 +161,7 @@ export function TaskForm() {
             label="Tempo estimado"
             testID="task-estimated-time"
             value={estimatedTime}
-            onChangeText={setEstimatedTime}
+            onChangeText={(v) => setEstimatedTime(maskTime(v))}
             placeholder="h 00:00"
             accessibilityLabel="Tempo estimado"
           />
@@ -170,7 +171,7 @@ export function TaskForm() {
             label="Data de início"
             testID="task-start-date"
             value={startDate}
-            onChangeText={setStartDate}
+            onChangeText={(v) => setStartDate(maskDate(v))}
             placeholder="00/00/0000"
             accessibilityLabel="Data de início"
           />
@@ -180,7 +181,7 @@ export function TaskForm() {
             label="Data de conclusão"
             testID="task-due-date"
             value={dueDate}
-            onChangeText={setDueDate}
+            onChangeText={(v) => setDueDate(maskDate(v))}
             placeholder="00/00/0000"
             accessibilityLabel="Data de conclusão"
           />

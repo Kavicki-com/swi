@@ -46,6 +46,14 @@ export const maskDate = (value: string): string =>
     [4, '/'],
   ])
 
+// Tempo estimado hh:mm. É duração, não relógio: pode passar de 24h, então os
+// dois últimos dígitos são minutos e o resto (até 3 dígitos) são horas.
+export const maskTime = (value: string): string => {
+  const d = onlyDigits(value).slice(0, 5)
+  if (d.length <= 2) return d
+  return `${d.slice(0, -2)}:${d.slice(-2)}`
+}
+
 export const maskCep = (value: string): string =>
   applyTemplate(onlyDigits(value).slice(0, 8), [
     [5, ''],
