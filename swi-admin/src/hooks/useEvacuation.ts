@@ -5,12 +5,14 @@ import {
   type EvacuationAckEvent,
 } from '@/services/evacuations/evacuationsSocket'
 import { connectionStatus } from '@/services/realtime/connectionStatus'
+import type { AreaVertex } from '@/lib/evacuationArea'
 
 export interface UseEvacuationResult {
   // null = sem evacuação ativa (ou ainda carregando o snapshot inicial).
   evacuation: EvacuationProgressDto | null
   error: string | null
-  start: () => Promise<void>
+  // `area` é o polígono desenhado no mapa; sem ele, dispara sem recorte visual.
+  start: (area?: AreaVertex[]) => Promise<void>
   end: () => Promise<void>
 }
 
@@ -74,9 +76,9 @@ export function useEvacuation(): UseEvacuationResult {
     }
   }, [])
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (area?: AreaVertex[]) => {
     setError(null)
-    const res = await evacuationsApi.start()
+    const res = await evacuationsApi.start(area)
     if (res.data) {
       revision.current += 1
       setEvacuation(res.data)

@@ -2,6 +2,7 @@
 // (/evacuations, ADMIN org-scoped). O ack é do worker (app mobile ou simulador
 // dev), o admin só observa o X/N subir.
 import type { ServiceResponse } from '@/services/types'
+import type { AreaVertex } from '@/lib/evacuationArea'
 import { apiFetch, ApiError } from './http'
 
 export type EvacuationWorkerEntry = {
@@ -19,6 +20,9 @@ export type EvacuationProgressDto = {
   total: number
   acked: number
   workers: EvacuationWorkerEntry[]
+  // Polígono da área demarcada ao iniciar (anel fechado [lng, lat]), ou null
+  // quando a evacuação foi disparada sem recorte visual.
+  area: AreaVertex[] | null
 }
 
 const asError = (err: unknown) => ({
@@ -37,9 +41,14 @@ export const evacuationsApi = {
     }
   },
 
-  start: async (): Promise<ServiceResponse<EvacuationProgressDto>> => {
+  // `area` é o polígono [[lng,lat],...] desenhado no mapa ao iniciar. Sem área,
+  // dispara sem corpo (demarcação visual é opcional).
+  start: async (area?: AreaVertex[]): Promise<ServiceResponse<EvacuationProgressDto>> => {
     try {
-      const dto = await apiFetch<EvacuationProgressDto>('/evacuations', { method: 'POST' })
+      const dto = await apiFetch<EvacuationProgressDto>('/evacuations', {
+        method: 'POST',
+        ...(area ? { body: JSON.stringify({ area }) } : {}),
+      })
       return { data: dto, error: null }
     } catch (err) {
       return { data: null, error: asError(err) }
