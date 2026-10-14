@@ -1,5 +1,6 @@
-import { Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
 import { EvacuationEventsService } from './evacuation-events.service'
+import { StartEvacuationDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
@@ -15,8 +16,8 @@ export class EvacuationsController {
   constructor(private readonly events: EvacuationEventsService) {}
 
   @Roles('ADMIN') @Post()
-  start(@CurrentUser() user: JwtUser) {
-    return this.events.start(user.userId, user.companyId)
+  start(@CurrentUser() user: JwtUser, @Body() dto: StartEvacuationDto) {
+    return this.events.start(user.userId, user.companyId, dto.area)
   }
 
   // WORKER também lê: o app mobile precisa da ativa da PRÓPRIA org pra saber

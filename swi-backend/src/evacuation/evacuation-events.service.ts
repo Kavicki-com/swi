@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
+import { normalizeEvacuationArea, type AreaVertex } from './evacuation-area'
 import type { Evacuation } from '@prisma/client'
 
 // Evacuação real. O admin dispara, os workers
@@ -25,6 +26,9 @@ export interface EvacuationProgress {
   total: number
   acked: number
   workers: EvacuationWorkerEntry[]
+  // Polígono da área demarcada ao iniciar (anel fechado [lng, lat]), ou null
+  // quando a evacuação foi disparada sem recorte visual.
+  area: AreaVertex[] | null
 }
 
 @Injectable()
@@ -35,14 +39,23 @@ export class EvacuationEventsService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async start(adminId: string, companyId: string | null): Promise<EvacuationProgress> {
+  async start(adminId: string, companyId: string | null, area?: unknown): Promise<EvacuationProgress> {
+    // Valida e fecha o anel antes de tocar o banco: área inválida vira 400 sem
+    // criar nada.
+    const normalizedArea = normalizeEvacuationArea(area)
+
     const existing = await this.prisma.evacuation.findFirst({
       where: { companyId, status: 'ACTIVE' },
     })
     if (existing) throw new ConflictException('Já existe uma evacuação ativa')
 
     const evac = await this.prisma.evacuation.create({
-      data: { companyId, startedById: adminId },
+      data: {
+        companyId,
+        startedById: adminId,
+        // Sem área, deixa a coluna em NULL (default); com área, grava o anel.
+        ...(normalizedArea ? { area: normalizedArea } : {}),
+      },
     })
     const workers = await this.orgWorkers(companyId)
 
@@ -174,6 +187,7 @@ export class EvacuationEventsService {
         acked: ackByWorker.has(w.id),
         ackAt: ackByWorker.get(w.id)?.toISOString() ?? null,
       })),
+      area: (evac.area as AreaVertex[] | null) ?? null,
     }
   }
 }
