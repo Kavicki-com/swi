@@ -22,11 +22,13 @@ export const StatCol = memo(function StatCol({
       <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
         {iconNode}
       </View>
-      {/* Mantém a altura da coluna estável para não deslocar os controles do rodapé. */}
+      {/* Valor e rótulo ficam em uma linha: a altura da coluna tem que ser
+          estável para não deslocar os controles do rodapé. O rótulo "Sem
+          medição" do estado sem leitura é o que mais tende a quebrar. */}
       <Title variant="title.l" color={theme.content.dark} numberOfLines={1}>
         {value}
       </Title>
-      <Text variant="body.s" color={theme.content.dark}>
+      <Text variant="body.s" color={theme.content.dark} numberOfLines={1}>
         {label}
       </Text>
     </View>
