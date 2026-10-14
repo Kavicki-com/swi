@@ -20,8 +20,10 @@ coverage/
 .tsbuild/
 swi-admin/.tsbuild/
 
-# Figma REST API dumps (contain internal node IDs / image refs)
-docs/audits/figma-export/*.json
+# Documentação interna de desenvolvimento (planos, auditorias, runbooks).
+# Fica no disco, fora do repositório: é material de trabalho, não documentação
+# de entrega. A documentação do produto vive no README e no CHANGELOG.
+/docs/
 
 # Local debug artifacts at repo root (screenshots, scratch files, tooling output)
 /*.png
@@ -29,10 +31,6 @@ docs/audits/figma-export/*.json
 /*.jpeg
 /.playwright-mcp/
 /finalizar-bg.txt
-
-# Local audit reports (kept on disk, not in git)
-docs/audits/*-audit-*.md
-docs/audits/health-check-*.md
 
 # Build outputs (Android bundles/apks — built locally, never versioned)
 *.aab
