@@ -4,10 +4,10 @@ import { useEndLiveOnLeave, useLiveBroadcast } from './useLiveBroadcast';
 
 // Serviço de mentira com a mesma superfície do de verdade: o hook só lê o
 // estado e repassa os toques.
-function fakeStore(initial: LiveBroadcastState = { status: 'idle', notice: null }) {
-  let state = initial;
+function fakeStore(initial: Partial<LiveBroadcastState> = {}) {
+  let state: LiveBroadcastState = { status: 'idle', notice: null, previewUrl: null, ...initial };
   const listeners = new Set<() => void>();
-  const store: LiveBroadcast & { set: (next: LiveBroadcastState) => void } = {
+  const store: LiveBroadcast & { set: (next: Partial<LiveBroadcastState>) => void } = {
     getState: () => state,
     subscribe: (listener) => {
       listeners.add(listener);
@@ -20,7 +20,7 @@ function fakeStore(initial: LiveBroadcastState = { status: 'idle', notice: null 
     toggle: jest.fn(),
     dismissNotice: jest.fn(),
     set(next) {
-      state = next;
+      state = { ...state, ...next };
       for (const listener of [...listeners]) listener();
     },
   };
@@ -55,6 +55,14 @@ describe('useLiveBroadcast', () => {
     expect(last().live).toBe(false);
     act(() => store.set({ status: 'live', notice: null }));
     expect(last().live).toBe(true);
+  });
+
+  it('expõe a URL do preview para o self-view do worker', () => {
+    const store = fakeStore();
+    const { last } = render(store);
+    expect(last().previewUrl).toBeNull();
+    act(() => store.set({ status: 'live', previewUrl: 'rtc://local' }));
+    expect(last().previewUrl).toBe('rtc://local');
   });
 
   it('o aviso acompanha o serviço', () => {

@@ -9,6 +9,10 @@ export function useLiveBroadcast(store: LiveBroadcast = liveBroadcast) {
   return {
     /** A transmissão foi aceita pelo servidor: só então o ponto verde acende. */
     live: state.status === 'live',
+    /** A câmera está no ar (ligando ou aceita): o self-view pode aparecer. */
+    broadcasting: state.status !== 'idle',
+    /** URL do stream local para o self-view do worker; null fora do ar. */
+    previewUrl: state.previewUrl,
     notice: state.notice,
     toggle: store.toggle,
     dismissNotice: store.dismissNotice,

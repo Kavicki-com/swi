@@ -32,6 +32,8 @@ export type LiveNotice = 'no-permission' | 'failed';
 export interface LiveBroadcastState {
   status: LiveStatus;
   notice: LiveNotice | null;
+  /** URL do stream local para o self-view do worker; null fora do ar. */
+  previewUrl: string | null;
 }
 
 export interface LiveBroadcastDeps {
@@ -81,13 +83,20 @@ interface Run {
 }
 
 export function createLiveBroadcast(deps: LiveBroadcastDeps): LiveBroadcast {
-  let state: LiveBroadcastState = { status: 'idle', notice: null };
+  let state: LiveBroadcastState = { status: 'idle', notice: null, previewUrl: null };
   const listeners = new Set<() => void>();
   let run: Run | null = null;
 
-  const publish = (next: LiveBroadcastState) => {
-    if (next.status === state.status && next.notice === state.notice) return;
-    state = next;
+  const publish = (next: Partial<LiveBroadcastState>) => {
+    const merged = { ...state, ...next };
+    if (
+      merged.status === state.status &&
+      merged.notice === state.notice &&
+      merged.previewUrl === state.previewUrl
+    ) {
+      return;
+    }
+    state = merged;
     for (const listener of [...listeners]) listener();
   };
 
@@ -118,7 +127,7 @@ export function createLiveBroadcast(deps: LiveBroadcastDeps): LiveBroadcast {
       current.socket?.close();
       current.camera?.stop();
     }
-    publish({ status: 'idle', notice });
+    publish({ status: 'idle', notice, previewUrl: null });
   };
 
   const armDeadline = (current: Run, ms: number) => {
@@ -301,6 +310,9 @@ export function createLiveBroadcast(deps: LiveBroadcastDeps): LiveBroadcast {
         return;
       }
       current.camera = camera;
+      // A imagem local já existe: libera o self-view do worker mesmo antes do
+      // servidor aceitar.
+      publish({ previewUrl: camera.previewUrl });
       const [iceServers, token] = await Promise.all([deps.iceServers(), deps.readToken()]);
       if (run !== current) return;
       current.iceServers = iceServers;
