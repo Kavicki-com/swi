@@ -6,6 +6,7 @@ import { NotificationProvider } from '../../services/notifications/NotificationP
 import { useJourneyTracking } from '../../services/positions/useTrackingLifecycle';
 import { useEndLiveOnLeave } from '../../services/live/useLiveBroadcast';
 import { SendQueueRoot } from '../../components/outbox/SendQueueRoot';
+import { LiveSelfView } from '../../components/LiveSelfView';
 
 // GPS em segundo plano: liga com a jornada em andamento ou pausada e desliga
 // quando ela encerra. Null-render, dentro do JourneyProvider para ler a
@@ -61,6 +62,9 @@ export default function AppLayout() {
         <NotificationProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
           <SendQueueRoot userId={user.id} />
+          {/* Self-view da câmera: miniatura flutuante sobre qualquer tela
+              enquanto a transmissão está no ar. Null-render fora do ar. */}
+          <LiveSelfView />
         </NotificationProvider>
       </EvacuationProvider>
     </JourneyProvider>

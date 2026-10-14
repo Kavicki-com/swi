@@ -65,6 +65,8 @@ export const liveMedia: LiveMedia | null = {
     const stream = await mediaDevices.getUserMedia({ audio: false, video: { ...LIVE_VIDEO } });
     return {
       connect: (options) => connect(stream, options),
+      // A mesma imagem que vai para o painel, para o self-view do worker.
+      previewUrl: stream.toURL(),
       stop() {
         for (const track of stream.getTracks()) track.stop();
         stream.release();

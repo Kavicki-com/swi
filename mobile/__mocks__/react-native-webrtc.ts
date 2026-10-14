@@ -42,9 +42,18 @@ export class MediaStream {
   getTracks() {
     return [...this.tracks];
   }
+  toURL() {
+    return 'rtc://local-stream';
+  }
   release() {
     this.released = true;
   }
+}
+
+// A view nativa que desenha o stream. No Jest não há imagem; o dublê só
+// precisa ser um componente para o teste encontrar e ler as props (streamURL).
+export function RTCView(_props: Record<string, unknown>): null {
+  return null;
 }
 
 export class RTCSessionDescription {

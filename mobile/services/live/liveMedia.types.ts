@@ -36,6 +36,11 @@ export interface LivePeer {
 /** A câmera ligada: uma só, compartilhada por todas as conexões. */
 export interface LiveCamera {
   connect(options: LivePeerOptions): LivePeer;
+  /**
+   * URL do stream local para o self-view do worker (RTCView). Null onde não há
+   * imagem para mostrar na própria tela (web, sem câmera).
+   */
+  previewUrl: string | null;
   /** Desliga a câmera e libera o recurso nativo. */
   stop(): void;
 }

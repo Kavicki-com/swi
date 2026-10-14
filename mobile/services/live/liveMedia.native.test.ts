@@ -46,6 +46,12 @@ describe('câmera', () => {
     ]);
   });
 
+  it('expõe a URL do stream local para o self-view', async () => {
+    const camera = await media.openCamera();
+    const [stream] = fake.streams;
+    expect(camera.previewUrl).toBe(stream.toURL());
+  });
+
   it('desligar para cada trilha e libera o recurso nativo', async () => {
     const camera = await media.openCamera();
     camera.stop();

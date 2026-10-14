@@ -38,6 +38,10 @@ const mockSendQueueRoot = jest.fn((_props: { userId: string }) => null);
 jest.mock('../../../components/outbox/SendQueueRoot', () => ({
   SendQueueRoot: (props: { userId: string }) => mockSendQueueRoot(props),
 }));
+const mockLiveSelfView = jest.fn(() => null);
+jest.mock('../../../components/LiveSelfView', () => ({
+  LiveSelfView: () => mockLiveSelfView(),
+}));
 const mockStopLive = jest.fn();
 jest.mock('../../../services/live/liveBroadcast', () => ({
   liveBroadcast: { stop: () => mockStopLive() },
@@ -147,5 +151,12 @@ describe('(app)/_layout: câmera ao vivo', () => {
     mockUseAuth.mockReturnValue({ user: null, restoring: false });
     act(() => tree.update(<AppLayout />));
     expect(mockStopLive).toHaveBeenCalledTimes(1);
+  });
+
+  it('o self-view da câmera é montado na área autenticada', () => {
+    mockLiveSelfView.mockClear();
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    render();
+    expect(mockLiveSelfView).toHaveBeenCalled();
   });
 });

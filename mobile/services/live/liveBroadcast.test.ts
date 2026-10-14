@@ -77,6 +77,7 @@ function setup(
   const makeCamera = (): FakeCamera => {
     const camera: FakeCamera = {
       stopped: false,
+      previewUrl: 'preview://fake',
       connect(options) {
         if (control.connectError) throw control.connectError;
         const n = peers.length + 1;
@@ -220,7 +221,7 @@ afterEach(() => {
 describe('ligar', () => {
   it('começa em repouso, sem aviso', () => {
     const t = setup();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null, previewUrl: null });
   });
 
   it('pede a permissão, liga a câmera e só então abre o socket com o token', async () => {
@@ -242,7 +243,11 @@ describe('ligar', () => {
     expect(status(t)).toBe('starting');
     socket.replies[0].resolve(true);
     await flush();
-    expect(t.broadcast.getState()).toEqual({ status: 'live', notice: null });
+    expect(t.broadcast.getState()).toEqual({
+      status: 'live',
+      notice: null,
+      previewUrl: 'preview://fake',
+    });
   });
 
   it('permissão negada não liga a câmera nem abre socket, e avisa', async () => {
@@ -250,14 +255,18 @@ describe('ligar', () => {
     await t.broadcast.start();
     expect(t.openCamera).not.toHaveBeenCalled();
     expect(t.openSocket).not.toHaveBeenCalled();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'no-permission' });
+    expect(t.broadcast.getState()).toEqual({
+      status: 'idle',
+      notice: 'no-permission',
+      previewUrl: null,
+    });
   });
 
   it('sem câmera, como na web, é falha ao ligar', async () => {
     const t = setup({ noMedia: true });
     await t.broadcast.start();
     expect(t.openSocket).not.toHaveBeenCalled();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed' });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed', previewUrl: null });
   });
 
   it('erro ao pedir a permissão é falha ao ligar', async () => {
@@ -271,7 +280,7 @@ describe('ligar', () => {
     const t = setup({ openCamera: async () => Promise.reject(new Error('ocupada')) });
     await t.broadcast.start();
     expect(t.openSocket).not.toHaveBeenCalled();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed' });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed', previewUrl: null });
   });
 
   it('falha ao buscar os servidores de conexão solta a câmera e avisa', async () => {
@@ -288,7 +297,7 @@ describe('ligar', () => {
     socket.events.onConnect();
     socket.replies[0].resolve(false);
     await flush();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed' });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed', previewUrl: null });
     expect(t.cameras[0].stopped).toBe(true);
     expect(socket.closed).toBe(true);
   });
@@ -300,7 +309,7 @@ describe('ligar', () => {
     jest.advanceTimersByTime(LIVE_ACCEPT_TIMEOUT_MS - 1);
     expect(status(t)).toBe('starting');
     jest.advanceTimersByTime(1);
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed' });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed', previewUrl: null });
     expect(t.cameras[0].stopped).toBe(true);
     expect(socket.closed).toBe(true);
   });
@@ -312,7 +321,7 @@ describe('ligar', () => {
     await flush();
     expect(t.cameras).toHaveLength(1);
     jest.advanceTimersByTime(LIVE_ACCEPT_TIMEOUT_MS);
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed' });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed', previewUrl: null });
     expect(t.cameras[0].stopped).toBe(true);
     servers.resolve(ICE);
     await flush();
@@ -337,7 +346,8 @@ describe('ligar', () => {
     expect(notice(t)).toBe('no-permission');
     granted = true;
     void t.broadcast.start();
-    expect(t.broadcast.getState()).toEqual({ status: 'starting', notice: null });
+    // Sem flush, a câmera ainda não abriu: não há preview.
+    expect(t.broadcast.getState()).toEqual({ status: 'starting', notice: null, previewUrl: null });
   });
 
   it('ligar duas vezes seguidas não abre duas câmeras', async () => {
@@ -355,7 +365,7 @@ describe('ligar', () => {
     void t.broadcast.start();
     await flush();
     t.broadcast.toggle();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null, previewUrl: null });
     const late = t.makeCamera();
     camera.resolve(late);
     await flush();
@@ -590,7 +600,7 @@ describe('queda e volta do socket', () => {
     jest.advanceTimersByTime(LIVE_RECONNECT_TIMEOUT_MS - 1);
     expect(status(t)).toBe('starting');
     jest.advanceTimersByTime(1);
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed' });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed', previewUrl: null });
     expect(t.cameras[0].stopped).toBe(true);
     expect(socket.closed).toBe(true);
   });
@@ -624,7 +634,12 @@ describe('queda e volta do socket', () => {
     socket.events.onConnect();
     socket.replies[0].resolve(false);
     await flush();
-    expect(t.broadcast.getState()).toEqual({ status: 'starting', notice: null });
+    // A câmera abriu antes da queda: o preview segue no ar durante a reconexão.
+    expect(t.broadcast.getState()).toEqual({
+      status: 'starting',
+      notice: null,
+      previewUrl: 'preview://fake',
+    });
     socket.replies[1].resolve(true);
     await flush();
     expect(status(t)).toBe('live');
@@ -634,7 +649,7 @@ describe('queda e volta do socket', () => {
     const t = setup();
     const socket = await t.goLive();
     socket.events.onDisconnect(true);
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed' });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: 'failed', previewUrl: null });
     expect(t.cameras[0].stopped).toBe(true);
     expect(socket.closed).toBe(true);
   });
@@ -644,7 +659,7 @@ describe('queda e volta do socket', () => {
     const socket = await t.goLive();
     const peer = await t.viewer(socket, 's1');
     socket.events.onClosed();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null, previewUrl: null });
     expect(peer.closed).toBe(true);
     expect(t.cameras[0].stopped).toBe(true);
     expect(socket.closed).toBe(true);
@@ -657,7 +672,7 @@ describe('desligar', () => {
     const socket = await t.goLive();
     const peer = await t.viewer(socket, 's1');
     t.broadcast.toggle();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null, previewUrl: null });
     expect(peer.closed).toBe(true);
     expect(t.cameras[0].stopped).toBe(true);
     expect(socket.closed).toBe(true);
@@ -674,14 +689,14 @@ describe('desligar', () => {
     const t = setup({ permission: async () => false });
     await t.broadcast.start();
     t.broadcast.stop();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null, previewUrl: null });
   });
 
   it('fechar o aviso o tira sem mexer no resto', async () => {
     const t = setup({ permission: async () => false });
     await t.broadcast.start();
     t.broadcast.dismissNotice();
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null, previewUrl: null });
   });
 
   it('avisos do socket depois de desligar não mexem em nada', async () => {
@@ -695,7 +710,7 @@ describe('desligar', () => {
     await flush();
     expect(t.peers).toHaveLength(0);
     expect(socket.replies).toHaveLength(1);
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null, previewUrl: null });
   });
 
   it('em repouso o estado do app deixa de ser ouvido', async () => {
@@ -712,7 +727,7 @@ describe('segundo plano', () => {
     const t = setup();
     const socket = await t.goLive();
     t.goTo('background');
-    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null });
+    expect(t.broadcast.getState()).toEqual({ status: 'idle', notice: null, previewUrl: null });
     expect(t.cameras[0].stopped).toBe(true);
     expect(socket.closed).toBe(true);
   });
@@ -772,5 +787,28 @@ describe('assinatura', () => {
     t.broadcast.stop();
     t.broadcast.dismissNotice();
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+// O self-view do worker lê a URL do stream local do estado da transmissão.
+describe('liveBroadcast: preview do self-view', () => {
+  const preview = (t: ReturnType<typeof setup>) => t.broadcast.getState().previewUrl;
+
+  it('sem transmissão, não há preview', () => {
+    const t = setup();
+    expect(preview(t)).toBeNull();
+  });
+
+  it('com a câmera no ar, o estado expõe a URL do stream local', async () => {
+    const t = setup();
+    await t.goLive();
+    expect(preview(t)).toBe('preview://fake');
+  });
+
+  it('ao encerrar, o preview volta a null', async () => {
+    const t = setup();
+    await t.goLive();
+    t.broadcast.stop();
+    expect(preview(t)).toBeNull();
   });
 });
