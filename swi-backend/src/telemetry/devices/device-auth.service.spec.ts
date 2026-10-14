@@ -35,6 +35,7 @@ const prismaDouble = () =>
       update: jest.fn(),
       updateMany: jest.fn(),
     },
+    telemetrySnapshot: { updateMany: jest.fn() },
     $transaction: jest.fn(),
   }) as any
 
@@ -628,6 +629,7 @@ describe('DeviceAuthService.revoke', () => {
   it('revoga o dispositivo dentro do escopo do administrador', async () => {
     const prisma = prismaDouble()
     prisma.telemetryDevice.updateMany.mockResolvedValue({ count: 1 })
+    prisma.telemetryDevice.findUnique.mockResolvedValue({ workerId: 'worker-1' })
 
     await service(prisma).revoke(ADMIN, 'device-1')
 
@@ -635,6 +637,36 @@ describe('DeviceAuthService.revoke', () => {
     expect(where.id).toBe('device-1')
     expect(where.worker).toEqual({ companyId: 'company-1' })
     expect(data.revokedAt).toBeInstanceOf(Date)
+  })
+
+  // Revogar não apaga o snapshot, e o batimento guardado seguiria aparecendo
+  // como o último registrado: dado falso para quem já não tem relógio.
+  it('sem outro aparelho ativo, descarta o último batimento do funcionário', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryDevice.updateMany.mockResolvedValue({ count: 1 })
+    prisma.telemetryDevice.findUnique.mockResolvedValue({ workerId: 'worker-1' })
+    prisma.telemetryDevice.findFirst.mockResolvedValue(null)
+
+    await service(prisma).revoke(ADMIN, 'device-1')
+
+    expect(prisma.telemetrySnapshot.updateMany).toHaveBeenCalledWith({
+      where: { workerId: 'worker-1' },
+      data: { heartRateBpm: null, heartRateAt: null },
+    })
+  })
+
+  it('com outro aparelho ativo, o batimento dele continua valendo', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryDevice.updateMany.mockResolvedValue({ count: 1 })
+    prisma.telemetryDevice.findUnique.mockResolvedValue({ workerId: 'worker-1' })
+    prisma.telemetryDevice.findFirst.mockResolvedValue({ id: 'device-2' })
+
+    await service(prisma).revoke(ADMIN, 'device-1')
+
+    expect(prisma.telemetryDevice.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workerId: 'worker-1', revokedAt: null } }),
+    )
+    expect(prisma.telemetrySnapshot.updateMany).not.toHaveBeenCalled()
   })
 
   it('recusa revogar dispositivo de outra empresa como se ele não existisse', async () => {
