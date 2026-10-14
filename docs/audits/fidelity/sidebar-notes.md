@@ -1,1 +1,0 @@
-Na side bar, existe um padding entre o chat selection e o sidemenu. alem disso o button "Sair" fica dentro da tela settings, retire ele.  quando retirar ele vai eliminar esse fundo cinza que esta se extendendo até a parte de baixo escondendo boa parte do BG. 
