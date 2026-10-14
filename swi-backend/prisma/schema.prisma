@@ -76,6 +76,9 @@ model User {
   operationalAlerts    OperationalAlert[]    @relation("alertedWorker")
   triagedAlerts        OperationalAlert[]    @relation("triagedAlerts")
   positionSamples      WorkerPositionSample[]
+
+  rescuesAsInjured Rescue[] @relation("rescueInjured")
+  rescuesAsRescuer Rescue[] @relation("rescueRescuer")
 }
 
 // Última posição conhecida de cada worker. SÓ a última: upsert por worker, sem
@@ -137,6 +140,7 @@ model Company {
   members      User[]
   evacuations  Evacuation[]
   cameras      Camera[]
+  rescues      Rescue[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -184,6 +188,7 @@ enum NotificationDomain {
   faq
   evacuation
   health
+  rescue
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +210,40 @@ model Camera {
 
   // Nome único na empresa: é por ele que o painel busca a câmera.
   @@unique([companyId, name])
+}
+
+// ---------------------------------------------------------------------------
+// Resgate. O admin despacha um socorrista para um ferido a partir de Alertas:
+// grava o resgate, pausa a jornada do socorrista e o notifica. A jornada volta
+// quando o socorrista chega (arrived); encerrado (ended) fecha o atendimento.
+// Uma numeração própria (number) dá o identificador curto que aparece no topo
+// da tela ("Resgate em tempo real ID 1849"). Empresa anulável como em
+// Evacuation: a baldeação legada sem empresa casa só com nulo.
+// ---------------------------------------------------------------------------
+
+enum RescueStatus {
+  dispatched
+  arrived
+  ended
+}
+
+model Rescue {
+  id        String       @id @default(uuid())
+  number    Int          @unique @default(autoincrement())
+  companyId String?
+  company   Company?     @relation(fields: [companyId], references: [id])
+  injuredId String
+  injured   User         @relation("rescueInjured", fields: [injuredId], references: [id])
+  rescuerId String
+  rescuer   User         @relation("rescueRescuer", fields: [rescuerId], references: [id])
+  status    RescueStatus @default(dispatched)
+  startedAt DateTime     @default(now())
+  arrivedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([companyId, status])
 }
 
 // ---------------------------------------------------------------------------
