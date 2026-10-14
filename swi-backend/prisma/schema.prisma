@@ -205,6 +205,9 @@ model Camera {
   lat       Float
   lng       Float
   url       String?
+  // Player embutido (iframe) de domínio liberado pela allowlist do servidor,
+  // separado do endereço acima. Também só o administrador o recebe.
+  embedUrl  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

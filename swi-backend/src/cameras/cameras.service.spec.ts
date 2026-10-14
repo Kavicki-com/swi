@@ -11,6 +11,7 @@ const row = {
   lat: -3.1,
   lng: -60.02,
   url: 'https://cameras.exemplo.com.br/portaria',
+  embedUrl: null,
   createdAt: new Date('2026-01-01T12:00:00Z'),
   updatedAt: new Date('2026-01-01T12:00:00Z'),
 }
@@ -37,6 +38,7 @@ describe('CamerasService', () => {
       expect(args.where).toEqual({ companyId: 'empresa-1' })
       expect(args.orderBy).toEqual({ name: 'asc' })
       expect(args.select.url).toBe(true)
+      expect(args.select.embedUrl).toBe(true)
       expect(args.select.companyId).toBeUndefined()
       expect(out).toEqual([row])
     })
@@ -56,12 +58,23 @@ describe('CamerasService', () => {
   })
 
   describe('create', () => {
-    it('grava na empresa do token, endereço ausente vira nulo', async () => {
+    it('grava na empresa do token, endereço e player ausentes viram nulo', async () => {
       const db = prisma()
       await new CamerasService(db).create('empresa-1', { name: 'Portaria', lat: -3.1, lng: -60.02 })
       expect(db.camera.create.mock.calls[0][0].data).toEqual({
-        companyId: 'empresa-1', name: 'Portaria', lat: -3.1, lng: -60.02, url: null,
+        companyId: 'empresa-1', name: 'Portaria', lat: -3.1, lng: -60.02, url: null, embedUrl: null,
       })
+    })
+
+    it('grava o player embutido quando ele vem no corpo', async () => {
+      const db = prisma()
+      await new CamerasService(db).create('empresa-1', {
+        name: 'Portaria', lat: -3.1, lng: -60.02, embedUrl: 'https://player.exemplo.com.br/cam/1',
+      })
+      expect(db.camera.create.mock.calls[0][0].data).toMatchObject({
+        embedUrl: 'https://player.exemplo.com.br/cam/1',
+      })
+      expect(db.camera.create.mock.calls[0][0].select.embedUrl).toBe(true)
     })
 
     it('sem empresa → 403', async () => {
@@ -93,6 +106,16 @@ describe('CamerasService', () => {
         data: { name: 'Pátio', url: null },
       })
       expect(out).toEqual(row)
+    })
+
+    it('grava o player embutido e o apaga com null, sem tocar no resto', async () => {
+      const db = prisma()
+      await new CamerasService(db).update('cam-1', 'empresa-1', { embedUrl: 'https://player.exemplo.com.br/cam/1' })
+      expect(db.camera.updateMany.mock.calls[0][0].data).toEqual({ embedUrl: 'https://player.exemplo.com.br/cam/1' })
+
+      const db2 = prisma()
+      await new CamerasService(db2).update('cam-1', 'empresa-1', { embedUrl: null })
+      expect(db2.camera.updateMany.mock.calls[0][0].data).toEqual({ embedUrl: null })
     })
 
     it('câmera de outra empresa ou inexistente → 404', async () => {

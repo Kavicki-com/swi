@@ -3,6 +3,9 @@ process.env.MINIO_PUBLIC_URL ??= 'http://localhost:9000'
 process.env.MINIO_ACCESS_KEY ??= 'minioadmin'
 process.env.MINIO_SECRET_KEY ??= 'minioadmin'
 process.env.MINIO_BUCKET ??= 'swi-media'
+// Domínio liberado para o player embutido: a validação lê esta lista; sem ela
+// nenhum embedUrl entraria, que é o padrão seguro.
+process.env.CAMERA_EMBED_ALLOWED_HOSTS = 'player.exemplo.com.br'
 
 import { Test } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
@@ -120,6 +123,33 @@ describe('Cameras e2e', () => {
 
     await request(server).delete(`/cameras/${id}`).set(a).expect(204)
     await request(server).delete(`/cameras/${id}`).set(a).expect(404)
+    expect(await prisma.camera.count({ where: { companyId } })).toBe(0)
+  })
+
+  it('player embutido: só https de domínio liberado, visível ao administrador, apagável com null', async () => {
+    const a = await login(emails.admin)
+    const server = app.getHttpServer()
+    const embed = 'https://player.exemplo.com.br/cam/portaria'
+
+    // Domínio fora da lista e http de domínio liberado não entram.
+    await request(server).post('/cameras').set(a).send({ ...portaria, name: 'Fora da lista', embedUrl: 'https://outro.com/cam' }).expect(400)
+    await request(server).post('/cameras').set(a).send({ ...portaria, name: 'Sem https', embedUrl: 'http://player.exemplo.com.br/cam' }).expect(400)
+
+    const { body: created } = await request(server).post('/cameras').set(a).send({ ...portaria, name: 'Com player', embedUrl: embed }).expect(201)
+    expect(created.embedUrl).toBe(embed)
+    const id = created.id as string
+
+    // O funcionário vê o ponto, nunca o player (como o endereço).
+    const w = await login(emails.worker)
+    const { body: workerList } = await request(server).get('/cameras').set(w).expect(200)
+    const seen = workerList.find((c: { id: string }) => c.id === id)
+    expect(seen).toBeDefined()
+    expect('embedUrl' in seen).toBe(false)
+
+    const { body: cleared } = await request(server).patch(`/cameras/${id}`).set(a).send({ embedUrl: null }).expect(200)
+    expect(cleared.embedUrl).toBeNull()
+
+    await request(server).delete(`/cameras/${id}`).set(a).expect(204)
     expect(await prisma.camera.count({ where: { companyId } })).toBe(0)
   })
 })
