@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, View } from 'react-native';
+import { Modal, Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -86,6 +86,13 @@ function toHeartCondition(status: WorkerStatus): 'check' | 'alert' | 'low' | nul
 // that overflow so the bottom action row sits within the frame curve as the
 const CONTAINER_GAP_XL = 24;
 
+// Proporção do hero (largura/altura) e piso de largura. Numa tela sem altura
+// para tudo, o hero é escalado pela altura disponível para o bloco de baixo
+// (sinais + fadiga + ações), para a fileira de ações do rodapé caber sempre em
+// vez de ser empurrada para fora. Numa tela alta ele fica no tamanho cheio.
+const HERO_RATIO = 360 / 431;
+const HERO_MIN_WIDTH = 220;
+
 export default function Dashboard() {
   // Leitura de me/current. Carregando, sem leitura e falha não trocam a tela:
   // a visão devolve a ausência declarada ("--", "Sem medição") e o dashboard
@@ -110,6 +117,22 @@ export default function Dashboard() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { height: windowHeight } = useWindowDimensions();
+  // Altura real do bloco de baixo (sinais + fadiga + ações), medida no layout.
+  const [bottomBlockHeight, setBottomBlockHeight] = useState(0);
+  // Largura do hero: cheia (360) por padrão; quando a tela não tem altura para
+  // o hero inteiro mais o bloco de baixo, encolhe proporcionalmente até o piso,
+  // para o rodapé nunca ser empurrado para fora. Em telas altas nada muda.
+  const heroMaxWidth =
+    bottomBlockHeight > 0 && windowHeight > 0
+      ? Math.max(
+          HERO_MIN_WIDTH,
+          Math.min(
+            360,
+            (windowHeight - insets.top - insets.bottom - bottomBlockHeight) * HERO_RATIO,
+          ),
+        )
+      : 360;
   // SVGs com <defs> precisam de IDs únicos por instância — caso contrário
   // colidem com cópias renderizadas em outras telas montadas em background.
   const gaugeXml = useUniqueSvg(GAUGE_ICON_SVG);
@@ -262,7 +285,7 @@ export default function Dashboard() {
         <View
           style={{
             width: '100%',
-            maxWidth: 360,
+            maxWidth: heroMaxWidth,
             aspectRatio: 360 / 431,
             alignSelf: 'center',
             overflow: 'visible',
@@ -424,6 +447,7 @@ export default function Dashboard() {
       </View>
 
       <View
+        onLayout={(e) => setBottomBlockHeight(e.nativeEvent.layout.height)}
         style={{
           width: '100%',
           maxWidth: 360,
