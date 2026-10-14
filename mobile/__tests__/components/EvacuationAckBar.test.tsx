@@ -2,6 +2,7 @@ import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import { EvacuationAckBar } from '../../components/EvacuationAckBar';
+import { NAV_FABS_HEIGHT } from '../../components/NavFABs';
 import type { ActiveEvacuationView } from '../../services/evacuation/types';
 
 // Barra de confirmação de presença da evacuação real. Overlay do rodapé
@@ -87,6 +88,17 @@ describe('EvacuationAckBar: quando não deve aparecer', () => {
   it('consulta o backend uma única vez por montagem', async () => {
     await render();
     expect(mockGetActive).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('EvacuationAckBar: posição acima dos FABs (MEL-14)', () => {
+  // O Home FAB (central) e o Chat FAB ficam presos no rodapé das mesmas telas.
+  // A barra tem que flutuar ACIMA do cluster, senão o círculo cobre o botão.
+  it('ancora o bottom acima do cluster de FABs', async () => {
+    mockGetActive.mockResolvedValue(ativa());
+    const tree = await render();
+    const bottom = barra(tree).props.style.bottom as number;
+    expect(bottom).toBeGreaterThanOrEqual(METRICS.insets.bottom + NAV_FABS_HEIGHT);
   });
 });
 

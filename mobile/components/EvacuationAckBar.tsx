@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Text, useTheme } from '@kavicki/swi-design-system';
+import { Button, StatusTag, Text, useTheme } from '@kavicki/swi-design-system';
 import { getEvacuationBackend } from '@/services/evacuation/getEvacuationBackend';
 import type { ActiveEvacuationView } from '@/services/evacuation/types';
+import { NAV_FABS_HEIGHT } from './NavFABs';
 
 // das telas de evacuação; só aparece quando existe evacuação ATIVA na org
 // (DATA_BACKEND=api). No mock, getActive() → null e a tela fica como sempre.
@@ -50,24 +51,19 @@ export function EvacuationAckBar() {
         position: 'absolute',
         left: theme.gap.m,
         right: theme.gap.m,
-        bottom: insets.bottom + theme.gap.l,
+        // Flutua acima do cluster de FABs (Home central + Chat), senão o
+        // círculo do Home cobre o meio da barra.
+        bottom: insets.bottom + NAV_FABS_HEIGHT + theme.gap.m,
         gap: theme.gap.s,
       }}
     >
       {active.myAck ? (
-        <View
-          style={{
-            backgroundColor: theme.surface.successLight,
-            borderRadius: theme.border.radius.m,
-            paddingVertical: theme.padding.s,
-            paddingHorizontal: theme.padding.m,
-            alignItems: 'center',
-          }}
-        >
-          <Text variant="body.s" color={theme.content.dark} style={{ fontWeight: '700' as const }}>
-            Presença confirmada no ponto de encontro
-          </Text>
-        </View>
+        <StatusTag
+          status="accept"
+          fullWidth
+          numberOfLines={2}
+          label="Presença confirmada no ponto de encontro"
+        />
       ) : (
         <Button
           label={busy ? 'Confirmando…' : 'Confirmar chegada ao ponto de encontro'}
