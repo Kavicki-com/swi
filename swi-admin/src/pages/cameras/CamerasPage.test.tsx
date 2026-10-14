@@ -221,6 +221,17 @@ describe('CamerasPage, visualização', () => {
     await renderAt('/cameras?camera=c1')
     await waitFor(() => expect(screen.getByTitle('Câmera Portaria')).toBeInTheDocument())
   })
+
+  it('player embutido tem prioridade sobre o endereço no quadro', async () => {
+    api.list.mockResolvedValue([{ ...PORTARIA, embedUrl: 'https://player.exemplo.com.br/cam/1' }])
+    await renderAt()
+    await waitFor(() => expect(row('Portaria')).toBeInTheDocument())
+    fireEvent.click(row('Portaria'))
+    const frame = screen.getByTitle('Câmera Portaria')
+    expect(frame.tagName).toBe('IFRAME')
+    // Mesmo com url https cadastrado, o quadro mostra o player.
+    expect(frame.getAttribute('src')).toBe('https://player.exemplo.com.br/cam/1')
+  })
 })
 
 describe('CamerasPage, cadastro', () => {
@@ -249,6 +260,7 @@ describe('CamerasPage, cadastro', () => {
         lat: -3.15,
         lng: -60.05,
         url: 'https://cam.exemplo.com.br/g',
+        embedUrl: null,
       }),
     )
     await waitFor(() => expect(row('Guarita')).toBeInTheDocument())
@@ -287,8 +299,62 @@ describe('CamerasPage, cadastro', () => {
     await clickMapAt(-60.2, -3.3)
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith({ name: 'Rampa', lat: -3.3, lng: -60.2, url: null }),
+      expect(api.create).toHaveBeenCalledWith({
+        name: 'Rampa',
+        lat: -3.3,
+        lng: -60.2,
+        url: null,
+        embedUrl: null,
+      }),
     )
+  })
+
+  it('cola o código <iframe> do player e manda o src como embedUrl', async () => {
+    const nova: Camera = {
+      id: 'c9',
+      name: 'Guarita',
+      lat: -3.15,
+      lng: -60.05,
+      url: null,
+      embedUrl: 'https://player.exemplo.com.br/g',
+    }
+    api.create.mockResolvedValue(nova)
+    await renderAt()
+    await waitFor(() => expect(row('Portaria')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nova câmera' }))
+    type('camera-form-name', 'Guarita')
+    type(
+      'camera-form-embed',
+      '<iframe src="https://player.exemplo.com.br/g" allowfullscreen></iframe>',
+    )
+    await clickMapAt(-60.05, -3.15)
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+
+    await waitFor(() =>
+      expect(api.create).toHaveBeenCalledWith({
+        name: 'Guarita',
+        lat: -3.15,
+        lng: -60.05,
+        url: null,
+        embedUrl: 'https://player.exemplo.com.br/g',
+      }),
+    )
+  })
+
+  it('player que não é https não envia e avisa', async () => {
+    await renderAt()
+    await waitFor(() => expect(row('Portaria')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Nova câmera' }))
+    type('camera-form-name', 'Guarita')
+    type('camera-form-embed', 'http://player.exemplo.com.br/g')
+    await clickMapAt(-60.05, -3.15)
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    const form = screen.getByTestId('camera-form')
+    expect(
+      within(form).getByText('Informe um endereço https do player ou cole o código iframe.'),
+    ).toBeInTheDocument()
+    expect(api.create).not.toHaveBeenCalled()
   })
 
   it('nome repetido mostra a mensagem do servidor e mantém o formulário', async () => {

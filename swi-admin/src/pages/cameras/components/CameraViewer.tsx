@@ -29,7 +29,9 @@ export function CameraViewer({ camera }: { camera: Camera | null }) {
     )
   }
 
-  const view = cameraViewOf(camera.url)
+  // O player embutido tem prioridade: quando cadastrado, é ele que entra no
+  // quadro. Sem player, cai no endereço da página da câmera, como antes.
+  const view = cameraViewOf(camera.embedUrl ?? camera.url)
 
   return (
     <View testID="camera-viewer" style={{ gap: theme.gap.s }}>
