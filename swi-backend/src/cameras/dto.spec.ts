@@ -1,6 +1,6 @@
 import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'
-import { CreateCameraDto, UpdateCameraDto } from './dto'
+import { CreateCameraDto, UpdateCameraDto, embedAllowedHosts, isEmbedUrlAllowed } from './dto'
 
 const valid = { name: 'Portaria', lat: -3.1, lng: -60.02, url: 'https://cameras.exemplo.com.br/portaria' }
 
@@ -69,5 +69,90 @@ describe('UpdateCameraDto', () => {
     expect((await check(UpdateCameraDto, { name: ' ' })).errors.length).toBeGreaterThan(0)
     expect((await check(UpdateCameraDto, { lat: 91 })).errors.length).toBeGreaterThan(0)
     expect((await check(UpdateCameraDto, { url: 'javascript:alert(1)' })).errors.length).toBeGreaterThan(0)
+  })
+})
+
+// O player por iframe é separado do endereço: o painel embute esta origem na
+// própria página, então ela entra só se o domínio estiver na lista liberada
+// por CAMERA_EMBED_ALLOWED_HOSTS. Lista vazia recusa tudo, que é o padrão.
+describe('embedAllowedHosts', () => {
+  it('quebra por vírgula, apara, ignora vazios e normaliza a caixa', () => {
+    expect([...embedAllowedHosts(' Player.Exemplo.com.br , cftv.exemplo.com ,, ')]).toEqual([
+      'player.exemplo.com.br',
+      'cftv.exemplo.com',
+    ])
+    expect(embedAllowedHosts('').size).toBe(0)
+    expect(embedAllowedHosts(undefined).size).toBe(0)
+  })
+})
+
+describe('isEmbedUrlAllowed', () => {
+  const hosts = new Set(['player.exemplo.com.br'])
+
+  it('exige string, https, host exato e lista não vazia', () => {
+    expect(isEmbedUrlAllowed('https://player.exemplo.com.br/cam/1', hosts)).toBe(true)
+    expect(isEmbedUrlAllowed('https://PLAYER.exemplo.com.br/cam/1', hosts)).toBe(true)
+    expect(isEmbedUrlAllowed(42, hosts)).toBe(false)
+    expect(isEmbedUrlAllowed('não é endereço', hosts)).toBe(false)
+    expect(isEmbedUrlAllowed('http://player.exemplo.com.br/cam/1', hosts)).toBe(false)
+    expect(isEmbedUrlAllowed('https://player.exemplo.com.br/cam/1', new Set())).toBe(false)
+  })
+
+  it('casa o host inteiro: nem domínio de fora nem sufixo enganoso entram', () => {
+    expect(isEmbedUrlAllowed('https://outro.com/cam', hosts)).toBe(false)
+    expect(isEmbedUrlAllowed('https://player.exemplo.com.br.evil.com/cam', hosts)).toBe(false)
+    expect(isEmbedUrlAllowed('https://exemplo.com.br/cam', hosts)).toBe(false)
+  })
+})
+
+describe('embedUrl no DTO', () => {
+  const saved = process.env.CAMERA_EMBED_ALLOWED_HOSTS
+  afterEach(() => {
+    if (saved === undefined) delete process.env.CAMERA_EMBED_ALLOWED_HOSTS
+    else process.env.CAMERA_EMBED_ALLOWED_HOSTS = saved
+  })
+
+  it('lista vazia recusa qualquer player: o padrão seguro é não embutir nada', async () => {
+    delete process.env.CAMERA_EMBED_ALLOWED_HOSTS
+    expect(
+      (await check(CreateCameraDto, { ...valid, embedUrl: 'https://player.exemplo.com.br/cam/1' })).errors.length,
+    ).toBeGreaterThan(0)
+    process.env.CAMERA_EMBED_ALLOWED_HOSTS = ''
+    expect(
+      (await check(CreateCameraDto, { ...valid, embedUrl: 'https://player.exemplo.com.br/cam/1' })).errors.length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('aceita https de domínio liberado e apara o espaço colado', async () => {
+    process.env.CAMERA_EMBED_ALLOWED_HOSTS = 'player.exemplo.com.br, cftv.exemplo.com'
+    const { dto, errors } = await check(CreateCameraDto, {
+      ...valid,
+      embedUrl: '  https://player.exemplo.com.br/cam/1  ',
+    })
+    expect(errors).toHaveLength(0)
+    expect(dto.embedUrl).toBe('https://player.exemplo.com.br/cam/1')
+  })
+
+  it('recusa domínio fora da lista, http e trecho de iframe colado', async () => {
+    process.env.CAMERA_EMBED_ALLOWED_HOSTS = 'player.exemplo.com.br'
+    expect((await check(CreateCameraDto, { ...valid, embedUrl: 'https://outro.com/cam' })).errors.length).toBeGreaterThan(0)
+    expect((await check(CreateCameraDto, { ...valid, embedUrl: 'http://player.exemplo.com.br/cam' })).errors.length).toBeGreaterThan(0)
+    expect(
+      (await check(CreateCameraDto, { ...valid, embedUrl: '<iframe src="https://player.exemplo.com.br/cam"></iframe>' })).errors.length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('recusa endereço longo demais', async () => {
+    process.env.CAMERA_EMBED_ALLOWED_HOSTS = 'player.exemplo.com.br'
+    expect(
+      (await check(CreateCameraDto, { ...valid, embedUrl: `https://player.exemplo.com.br/${'a'.repeat(2048)}` })).errors.length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('null limpa o player; ausente é aceito, inclusive na edição parcial', async () => {
+    process.env.CAMERA_EMBED_ALLOWED_HOSTS = 'player.exemplo.com.br'
+    expect((await check(CreateCameraDto, { ...valid, embedUrl: null })).errors).toHaveLength(0)
+    expect((await check(UpdateCameraDto, { embedUrl: null })).errors).toHaveLength(0)
+    expect((await check(UpdateCameraDto, { embedUrl: 'https://player.exemplo.com.br/cam' })).errors).toHaveLength(0)
   })
 })

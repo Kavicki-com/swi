@@ -3,9 +3,9 @@ import { Prisma } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateCameraDto, UpdateCameraDto } from './dto'
 
-// O endereço da câmera pode carregar acesso ao sistema do cliente, então só o
-// administrador o recebe. O funcionário vê o ponto no mapa e o nome.
-const adminSelect = { id: true, name: true, lat: true, lng: true, url: true, createdAt: true, updatedAt: true } as const
+// O endereço e o player da câmera podem carregar acesso ao sistema do cliente,
+// então só o administrador os recebe. O funcionário vê o ponto no mapa e o nome.
+const adminSelect = { id: true, name: true, lat: true, lng: true, url: true, embedUrl: true, createdAt: true, updatedAt: true } as const
 const pointSelect = { id: true, name: true, lat: true, lng: true } as const
 
 @Injectable()
@@ -25,7 +25,7 @@ export class CamerasService {
     const id = this.requireCompany(companyId)
     try {
       return await this.prisma.camera.create({
-        data: { companyId: id, name: dto.name, lat: dto.lat, lng: dto.lng, url: dto.url ?? null },
+        data: { companyId: id, name: dto.name, lat: dto.lat, lng: dto.lng, url: dto.url ?? null, embedUrl: dto.embedUrl ?? null },
         select: adminSelect,
       })
     } catch (e) {
@@ -42,6 +42,7 @@ export class CamerasService {
     if (dto.lat !== undefined) data.lat = dto.lat
     if (dto.lng !== undefined) data.lng = dto.lng
     if (dto.url !== undefined) data.url = dto.url
+    if (dto.embedUrl !== undefined) data.embedUrl = dto.embedUrl
     let count: number
     try {
       ;({ count } = await this.prisma.camera.updateMany({ where: { id, companyId: company }, data }))
