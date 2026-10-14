@@ -449,89 +449,90 @@ export function AlertsList() {
           {hasDemo ? <DataOriginBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" /> : null}
         </View>
 
-        {/* Evacuação real: sem ativa → desenhar a área e disparar; ativa →
+        {/* Evacuação e, logo abaixo e na mesma largura, o atalho de Resgates. */}
+        <View style={{ gap: theme.gap.s, alignItems: 'flex-end' }}>
+          {/* Evacuação real: sem ativa → desenhar a área e disparar; ativa →
             progresso X/N ao vivo (WS evacuation-ack) + encerramento. */}
-        {drawing ? (
-          <View
-            testID="evacuation-draw-toolbar"
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: theme.gap.s,
-              flexWrap: 'wrap',
-            }}
-          >
-            <Text variant="body.s" color={theme.content.medium}>
-              Toque no mapa para marcar a área ({draftVertices.length}{' '}
-              {draftVertices.length === 1 ? 'ponto' : 'pontos'})
-            </Text>
-            <Button
-              label="Desfazer"
-              variant="outline"
-              onPress={() => setDraftVertices((cur) => cur.slice(0, -1))}
-              disabled={draftVertices.length === 0}
-            />
-            <Button label="Cancelar" variant="outline" onPress={cancelDraw} />
-            <Button
-              label="Confirmar e iniciar"
-              backgroundColor={theme.surface.error}
-              disabled={draftVertices.length < 3}
-              onPress={confirmDraw}
-            />
-          </View>
-        ) : evacuation ? (
-          <View
-            testID="evacuation-banner"
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: theme.gap.m,
-              paddingHorizontal: theme.padding.s,
-              paddingVertical: theme.padding.xs,
-              borderRadius: theme.border.radius.m,
-              backgroundColor: theme.surface.errorLight,
-            }}
-          >
-            <Icon name="notifications" size={18} color={theme.content.light} />
-            <Text
-              variant="body.s"
-              color={theme.content.light}
-              style={{ fontWeight: '700' as const }}
+          {drawing ? (
+            <View
+              testID="evacuation-draw-toolbar"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: theme.gap.s,
+                flexWrap: 'wrap',
+              }}
             >
-              Evacuação em andamento — {evacuation.acked}/{evacuation.total} confirmados
-            </Text>
-            {savedArea ? (
+              <Text variant="body.s" color={theme.content.medium}>
+                Toque no mapa para marcar a área ({draftVertices.length}{' '}
+                {draftVertices.length === 1 ? 'ponto' : 'pontos'})
+              </Text>
+              <Button
+                label="Desfazer"
+                variant="outline"
+                onPress={() => setDraftVertices((cur) => cur.slice(0, -1))}
+                disabled={draftVertices.length === 0}
+              />
+              <Button label="Cancelar" variant="outline" onPress={cancelDraw} />
+              <Button
+                label="Confirmar e iniciar"
+                backgroundColor={theme.surface.error}
+                disabled={draftVertices.length < 3}
+                onPress={confirmDraw}
+              />
+            </View>
+          ) : evacuation ? (
+            <View
+              testID="evacuation-banner"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: theme.gap.m,
+                paddingHorizontal: theme.padding.s,
+                paddingVertical: theme.padding.xs,
+                borderRadius: theme.border.radius.m,
+                backgroundColor: theme.surface.errorLight,
+              }}
+            >
+              <Icon name="notifications" size={18} color={theme.content.light} />
               <Text
-                testID="evacuation-in-area"
                 variant="body.s"
                 color={theme.content.light}
                 style={{ fontWeight: '700' as const }}
               >
-                {workersInArea} dentro da área
+                Evacuação em andamento — {evacuation.acked}/{evacuation.total} confirmados
               </Text>
-            ) : null}
+              {savedArea ? (
+                <Text
+                  testID="evacuation-in-area"
+                  variant="body.s"
+                  color={theme.content.light}
+                  style={{ fontWeight: '700' as const }}
+                >
+                  {workersInArea} dentro da área
+                </Text>
+              ) : null}
+              <Button
+                label="Encerrar evacuação"
+                backgroundColor={theme.surface.error}
+                onPress={() => void endEvacuation()}
+              />
+            </View>
+          ) : (
             <Button
-              label="Encerrar evacuação"
+              label="Iniciar evacuação"
               backgroundColor={theme.surface.error}
-              onPress={() => void endEvacuation()}
+              onPress={beginDraw}
             />
-          </View>
-        ) : (
+          )}
+          {/* Mesma largura do botão de evacuação (fullWidth na coluna), texto ao centro. */}
           <Button
-            label="Iniciar evacuação"
-            backgroundColor={theme.surface.error}
-            onPress={beginDraw}
+            label="Resgates"
+            fullWidth
+            backgroundColor={theme.surface.secondary}
+            onPress={() => navigate('/alerts/rescues')}
           />
-        )}
-      </View>
-
-      {/* Atalho para o histórico de resgates (MEL-12), logo abaixo da evacuação. */}
-      <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-        <Button
-          label="Resgates"
-          backgroundColor={theme.surface.secondary}
-          onPress={() => navigate('/alerts/rescues')}
-        />
+        </View>
       </View>
 
       {evacError ? (
