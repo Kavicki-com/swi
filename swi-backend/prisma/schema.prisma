@@ -226,6 +226,9 @@ model Evacuation {
   startedById String
   startedBy   User             @relation("startedEvacuations", fields: [startedById], references: [id])
   status      EvacuationStatus @default(ACTIVE)
+  // Polígono da área demarcada ao iniciar: anel fechado [[lng,lat],...]. Null =
+  // disparada sem recorte visual (a notificação segue valendo pra org inteira).
+  area        Json?
   createdAt   DateTime         @default(now())
   endedAt     DateTime?
   acks        EvacuationAck[]

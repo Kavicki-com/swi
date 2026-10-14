@@ -71,9 +71,23 @@ describe('Evacuations e2e', () => {
     const w1 = await login(emails.w1)
     const outsider = await login(emails.outsider)
 
-    // Dispatch: cria a ativa da org com os 2 workers.
-    const { body: started } = await request(app.getHttpServer()).post('/evacuations').set(admin).expect(201)
+    // Dispatch com a área desenhada no painel (pentágono [lng, lat]); o
+    // servidor fecha o anel e devolve.
+    const drawnArea: [number, number][] = [
+      [-46.64, -23.53],
+      [-46.6, -23.52],
+      [-46.58, -23.55],
+      [-46.61, -23.57],
+      [-46.65, -23.56],
+    ]
+    const closedArea = [...drawnArea, drawnArea[0]]
+    const { body: started } = await request(app.getHttpServer())
+      .post('/evacuations')
+      .set(admin)
+      .send({ area: drawnArea })
+      .expect(201)
     expect(started).toMatchObject({ status: 'ACTIVE', total: 2, acked: 0 })
+    expect(started.area).toEqual(closedArea)
     expect(started.workers.map((w: { id: string }) => w.id).sort()).toEqual([ids.w1, ids.w2].sort())
 
     // Segunda ativa na mesma org → 409.
@@ -91,6 +105,7 @@ describe('Evacuations e2e', () => {
 
     const { body: active } = await request(app.getHttpServer()).get('/evacuations/active').set(admin).expect(200)
     expect(active).toMatchObject({ id: started.id, total: 2, acked: 1 })
+    expect(active.area).toEqual(closedArea)
     const w1Entry = active.workers.find((w: { id: string }) => w.id === ids.w1)
     expect(w1Entry.acked).toBe(true)
     expect(typeof w1Entry.ackAt).toBe('string')
@@ -110,4 +125,15 @@ describe('Evacuations e2e', () => {
     expect(after?.id ?? null).toBeNull()
     await request(app.getHttpServer()).post(`/evacuations/${started.id}/ack`).set(w1).expect(409)
   }, 20000)
+
+  it('área com menos de 3 vértices → 400 e não cria evacuação', async () => {
+    const admin = await login(emails.admin)
+    await request(app.getHttpServer())
+      .post('/evacuations')
+      .set(admin)
+      .send({ area: [[-46.6, -23.5], [-46.5, -23.4]] })
+      .expect(400)
+    const { body: after } = await request(app.getHttpServer()).get('/evacuations/active').set(admin).expect(200)
+    expect(after?.id ?? null).toBeNull()
+  })
 })
