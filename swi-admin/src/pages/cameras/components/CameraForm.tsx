@@ -7,7 +7,7 @@ import { Button, Input, Text, Title, useTheme } from '@kavicki/swi-design-system
 import type { Camera, CameraInput } from '@/services/api/cameras'
 import { PositionPicker, type LatLng } from './PositionPicker'
 
-type Errors = { name?: string; position?: string; url?: string }
+type Errors = { name?: string; position?: string; url?: string; embed?: string }
 
 // Endereço completo (o navegador consegue abrir), só http ou https: o
 // "https://" sozinho, ou com espaço no meio, não passa.
@@ -20,6 +20,26 @@ function isHttpUrl(text: string): boolean {
   }
 }
 
+// Player: o administrador cola o endereço do player ou o código <iframe ...>
+// inteiro. Deste último tiramos o src; sem src, ou vazio, não há player.
+function isHttpsUrl(text: string): boolean {
+  try {
+    return new URL(text).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+export function extractEmbedUrl(text: string): string | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  const src = trimmed.match(/<iframe[^>]*\ssrc=["']([^"']+)["']/i)?.[1]
+  if (src) return src.trim()
+  // Veio um iframe sem src: não há endereço a aproveitar.
+  if (/^<iframe/i.test(trimmed)) return null
+  return trimmed
+}
+
 export function changesFrom(initial: Camera, next: CameraInput): Partial<CameraInput> {
   const patch: Partial<CameraInput> = {}
   if (next.name !== initial.name) patch.name = next.name
@@ -28,6 +48,8 @@ export function changesFrom(initial: Camera, next: CameraInput): Partial<CameraI
     patch.lng = next.lng
   }
   if (next.url !== initial.url) patch.url = next.url
+  const nextEmbed = next.embedUrl ?? null
+  if (nextEmbed !== (initial.embedUrl ?? null)) patch.embedUrl = nextEmbed
   return patch
 }
 
@@ -46,6 +68,7 @@ export function CameraForm({
   const theme = useTheme()
   const [name, setName] = useState(initial?.name ?? '')
   const [url, setUrl] = useState(initial?.url ?? '')
+  const [embed, setEmbed] = useState(initial?.embedUrl ?? '')
   const [position, setPosition] = useState<LatLng | null>(
     initial ? { lat: initial.lat, lng: initial.lng } : null,
   )
@@ -56,14 +79,20 @@ export function CameraForm({
   const submit = async () => {
     const trimmedName = name.trim()
     const trimmedUrl = url.trim()
+    const extractedEmbed = extractEmbedUrl(embed)
     const next: Errors = {}
     if (!trimmedName) next.name = 'Informe o nome da câmera.'
     if (!position) next.position = 'Clique no mapa para marcar a posição.'
     if (trimmedUrl && !isHttpUrl(trimmedUrl)) {
       next.url = 'Informe o endereço completo, começando com http:// ou https://'
     }
+    // O player roda embutido no painel: exige https. O domínio liberado é
+    // conferido pelo servidor, que devolve o erro se não estiver na lista.
+    if (embed.trim() && (!extractedEmbed || !isHttpsUrl(extractedEmbed))) {
+      next.embed = 'Informe um endereço https do player ou cole o código iframe.'
+    }
     setErrors(next)
-    if (next.name || next.position || next.url || !position) return
+    if (next.name || next.position || next.url || next.embed || !position) return
 
     setSaving(true)
     setSubmitError(null)
@@ -73,6 +102,7 @@ export function CameraForm({
         lat: position.lat,
         lng: position.lng,
         url: trimmedUrl || null,
+        embedUrl: extractedEmbed,
       })
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : 'Não foi possível salvar a câmera')
@@ -111,6 +141,20 @@ export function CameraForm({
         autoCorrect={false}
         description={errors.url ?? 'Página da câmera no sistema de monitoramento da obra.'}
         descriptionVariant={errors.url ? 'error' : 'default'}
+      />
+      <Input
+        testID="camera-form-embed"
+        label="Player da câmera (iframe, opcional)"
+        placeholder='<iframe src="https://..."></iframe>'
+        value={embed}
+        onChangeText={setEmbed}
+        autoCapitalize="none"
+        autoCorrect={false}
+        description={
+          errors.embed ??
+          'Cole o endereço do player ou o código iframe. O domínio precisa estar liberado pelo servidor.'
+        }
+        descriptionVariant={errors.embed ? 'error' : 'default'}
       />
       {submitError ? (
         <Text testID="camera-form-error" variant="body.m" color={theme.content.error}>

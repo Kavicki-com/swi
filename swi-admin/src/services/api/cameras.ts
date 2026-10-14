@@ -9,6 +9,9 @@ export type Camera = {
   lat: number
   lng: number
   url: string | null
+  // Player embutido (iframe) de domínio liberado pelo servidor. Como o `url`,
+  // só o administrador recebe; ausente nas respostas de funcionário.
+  embedUrl?: string | null
 }
 
 export type CameraInput = {
@@ -16,6 +19,7 @@ export type CameraInput = {
   lat: number
   lng: number
   url: string | null
+  embedUrl?: string | null
 }
 
 export const camerasApi = {
