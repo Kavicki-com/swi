@@ -120,10 +120,7 @@ export function AlertsList() {
   // Polígono salvo da evacuação ativa (anel fechado [lng, lat]), ou null.
   const savedArea = evacuation?.area ?? null
   // Quantos funcionários estão dentro da área salva, sobre as posições ao vivo.
-  const workersInArea = useMemo(
-    () => countWorkersInArea(markers, savedArea),
-    [markers, savedArea],
-  )
+  const workersInArea = useMemo(() => countWorkersInArea(markers, savedArea), [markers, savedArea])
   // Contorno vermelho do tema; magenta dos vértices como no print (sem token).
   const areaColors = useMemo(
     () => ({ line: theme.content.error, fill: theme.content.error, vertex: AREA_VERTEX_COLOR }),
@@ -450,6 +447,12 @@ export function AlertsList() {
           {/* Posição e cor do pino são reais. Só leitura de demonstração
               leva selo. */}
           {hasDemo ? <DataOriginBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" /> : null}
+          {/* Histórico de resgates (MEL-12), alcançado a partir de Alertas. */}
+          <Button
+            label="Histórico de resgates"
+            backgroundColor={theme.surface.secondary}
+            onPress={() => navigate('/alerts/rescues')}
+          />
         </View>
 
         {/* Evacuação real: sem ativa → desenhar a área e disparar; ativa →

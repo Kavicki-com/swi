@@ -17,6 +17,8 @@ import { SATELLITE_STYLE } from '@/lib/mapStyles'
 import { MapAttribution } from '@/components/MapAttribution'
 import { useRescueRoute } from '@/hooks/useRescueRoute'
 import { useLivePositions } from '@/hooks/useLivePositions'
+import { rescuesApi } from '@/services/api/rescues'
+import { errorMessage } from './hooks/useRescues'
 import { lngLatAlongLineString, totalLineLength } from '@/lib/lineString'
 import { formatDuration, formatDistance } from '@/lib/formatRoute'
 import { useDemoToast } from '@/lib/demoToast'
@@ -86,7 +88,13 @@ export function AlertsRescueRoute() {
   const [searchParams, setSearchParams] = useSearchParams()
   const dispatched = searchParams.get('dispatched') === 'true'
   const [modalVisible, setModalVisible] = useState(!dispatched)
+  const [dispatching, setDispatching] = useState(false)
   const routeStroke = dispatched ? '#8B5CF6' : '#2BA8C9'
+  // MEL-11: título no topo com o ID do resgate. O número vem do despacho e fica
+  // na URL (?n=), então um refresh do estado despachado mantém o título.
+  const rescueNumber = searchParams.get('n')
+  const headerTitle =
+    dispatched && rescueNumber ? `Resgate em tempo real ID ${rescueNumber}` : 'Rota de socorro'
 
   // Pontas REAIS do socorro: as posições ao vivo do ferido (:employeeId) e do
   // socorrista escolhido (:rescuerId), nunca coordenadas fixas. É o que mantém
@@ -120,6 +128,26 @@ export function AlertsRescueRoute() {
   // real ETA/distance values. Loading + error states are handled below.
   const { route, loading, error } = useRescueRoute(ends?.rescuer ?? null, ends?.injured ?? null)
   const { show: showToast } = useDemoToast()
+
+  // "Continuar" grava o resgate: o backend pausa a jornada do socorrista e o
+  // notifica. Só então o estado vira despachado, com o número no título. Se a
+  // gravação falhar, o modal fica aberto e avisa, em vez de prometer sem gravar.
+  const handleDispatch = async () => {
+    if (!employeeId || !rescuerId || dispatching) return
+    setDispatching(true)
+    try {
+      const rescue = await rescuesApi.dispatch(employeeId, rescuerId)
+      setModalVisible(false)
+      setSearchParams({ dispatched: 'true', n: String(rescue.number) }, { replace: true })
+    } catch (e) {
+      showToast(
+        'Não foi possível enviar a rota de socorro',
+        errorMessage(e, 'Tente novamente em instantes.'),
+      )
+    } finally {
+      setDispatching(false)
+    }
+  }
 
   // Surface the error to the user once per occurrence (no re-toast on
   // re-renders). The fallback geometry + euclidean-distance labels
@@ -314,6 +342,25 @@ export function AlertsRescueRoute() {
       {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
       <MapAttribution />
 
+      {/* MEL-11: título no topo com o ID do resgate (sobre a imagem de satélite,
+          num cartão para legibilidade). */}
+      <View
+        style={{
+          position: 'absolute',
+          top: theme.padding.m,
+          left: theme.padding.m,
+          zIndex: 3,
+          backgroundColor: theme.surface.standard,
+          borderRadius: theme.border.radius.m,
+          paddingHorizontal: theme.padding.m,
+          paddingVertical: theme.padding.xs,
+        }}
+      >
+        <Title variant="title.xs" color={theme.content.dark}>
+          {headerTitle}
+        </Title>
+      </View>
+
       {/* Sem posição conhecida das duas pontas não existe rota: dizer isso é
           melhor que desenhar um trajeto plausível entre coordenadas erradas. */}
       {!ends && positions ? (
@@ -395,10 +442,8 @@ export function AlertsRescueRoute() {
               label="Continuar"
               labelFamily="title"
               backgroundColor={theme.surface.success}
-              onPress={() => {
-                setModalVisible(false)
-                setSearchParams({ dispatched: 'true' }, { replace: true })
-              }}
+              disabled={dispatching}
+              onPress={() => void handleDispatch()}
             />
           </View>
         </View>

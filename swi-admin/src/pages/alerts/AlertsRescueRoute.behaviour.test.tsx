@@ -6,6 +6,7 @@
 // de camada, pino ou label roda, que é justamente o que precisa de teste.
 import { act, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AlertsRescueRoute } from './AlertsRescueRoute'
+import { ApiError } from '@/services/api/http'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 
 type LngLat = [number, number]
@@ -51,6 +52,10 @@ vi.mock('@/lib/demoToast', () => {
 vi.mock('react-dom/client', () => ({
   createRoot: () => ({ render: () => {}, unmount: () => {} }),
 }))
+// Despachar grava o resgate no backend; aqui o cliente é um dublê para a tela
+// não bater em rede. O número volta para o título "Resgate em tempo real ID N".
+const rescuesApiMock = vi.hoisted(() => ({ dispatch: vi.fn() }))
+vi.mock('@/services/api/rescues', () => ({ rescuesApi: rescuesApiMock }))
 
 const mapState = {
   layers: new Set<string>(),
@@ -148,6 +153,16 @@ beforeEach(() => {
   mapState.handlers = {}
   mapState.fitBounds = 0
   currentLib = makeLib()
+  rescuesApiMock.dispatch.mockReset().mockResolvedValue({
+    id: 'r1',
+    number: 1849,
+    status: 'dispatched',
+    startedAt: '2026-10-14T12:00:00.000Z',
+    arrivedAt: null,
+    endedAt: null,
+    injured: { id: 'w1', name: 'Ferido' },
+    rescuer: { id: 'w2', name: 'Socorrista' },
+  })
 })
 
 afterEach(clearSession)
@@ -260,22 +275,41 @@ describe('AlertsRescueRoute: despacho', () => {
     expect(h.markers.map((m) => m.anchor)).toEqual(['bottom', 'bottom'])
   })
 
-  it('"Continuar" fecha o modal e registra o despacho na URL', async () => {
+  it('"Continuar" grava o resgate, fecha o modal, fica violeta e mostra o ID no topo', async () => {
     await renderRoute()
 
     await act(async () => {
       fireEvent.click(screen.getByText('Continuar'))
     })
 
+    await waitFor(() => expect(rescuesApiMock.dispatch).toHaveBeenCalledWith('w1', 'w2'))
     expect(screen.queryByText('Enviar rota de socorro')).toBeNull()
     await waitFor(() => expect(mapState.paint['line-color']).toBe('#8B5CF6'))
+    expect(screen.getByText('Resgate em tempo real ID 1849')).toBeTruthy()
   })
 
-  it('recarregar já despachado abre sem modal, com rota violeta e marcador em movimento', async () => {
-    await renderRoute('?dispatched=true')
+  it('falha ao despachar mantém o modal aberto e avisa', async () => {
+    rescuesApiMock.dispatch.mockRejectedValueOnce(
+      new ApiError('Ferido ou socorrista não encontrado', 404),
+    )
+    await renderRoute()
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Continuar'))
+    })
+
+    await waitFor(() =>
+      expect(h.toasts.some(([t]) => t === 'Não foi possível enviar a rota de socorro')).toBe(true),
+    )
+    expect(screen.getByText('Enviar rota de socorro')).toBeTruthy()
+  })
+
+  it('recarregar já despachado abre sem modal, violeta, com o ID no topo e marcador em movimento', async () => {
+    await renderRoute('?dispatched=true&n=1849')
 
     expect(screen.queryByText('Enviar rota de socorro')).toBeNull()
     await waitFor(() => expect(mapState.paint['line-color']).toBe('#8B5CF6'))
+    expect(screen.getByText('Resgate em tempo real ID 1849')).toBeTruthy()
     expect(h.markers.map((m) => m.anchor)).toEqual(['center', 'bottom'])
   })
 })
