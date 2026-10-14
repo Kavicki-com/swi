@@ -4,5 +4,10 @@ import { JourneyController } from './journey.controller'
 import { MediaModule } from '../media/media.module'
 import { IdempotencyModule } from '../idempotency/idempotency.module'
 
-@Module({ imports: [MediaModule, IdempotencyModule], providers: [JourneyService], controllers: [JourneyController] })
+@Module({
+  imports: [MediaModule, IdempotencyModule],
+  providers: [JourneyService],
+  controllers: [JourneyController],
+  exports: [JourneyService],
+})
 export class JourneyModule {}
