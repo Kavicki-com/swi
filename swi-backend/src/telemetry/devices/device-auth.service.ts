@@ -378,5 +378,23 @@ export class DeviceAuthService {
       data: { revokedAt: new Date() },
     })
     if (count === 0) throw new NotFoundException('Dispositivo não encontrado')
+
+    // Revogar não apaga o snapshot. Sem outro aparelho ativo, o batimento
+    // guardado apareceria como o último registrado de quem já não tem relógio.
+    // O histórico continua nas amostras; só a leitura "atual" sai.
+    const revoked = await this.prisma.telemetryDevice.findUnique({
+      where: { id: deviceId },
+      select: { workerId: true },
+    })
+    if (revoked === null) return
+    const stillPaired = await this.prisma.telemetryDevice.findFirst({
+      where: { workerId: revoked.workerId, revokedAt: null },
+      select: { id: true },
+    })
+    if (stillPaired !== null) return
+    await this.prisma.telemetrySnapshot.updateMany({
+      where: { workerId: revoked.workerId },
+      data: { heartRateBpm: null, heartRateAt: null },
+    })
   }
 }
