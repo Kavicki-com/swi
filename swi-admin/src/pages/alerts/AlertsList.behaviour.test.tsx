@@ -19,9 +19,10 @@ const h = vi.hoisted(() => ({
     acked: number
     total: number
     workers: Array<{ id: string; acked: boolean }>
+    area?: [number, number][] | null
   },
   evacError: null as string | null,
-  start: vi.fn(async () => {}),
+  start: vi.fn(async (_area?: [number, number][]) => {}),
   end: vi.fn(async () => {}),
   navigations: [] as string[],
   // Cada pino criado: guarda o status pedido e o onClick, para provar a cor do
@@ -130,11 +131,18 @@ function makeLib() {
     },
   }
   class Marker {
+    constructor(_opts?: unknown) {}
     setLngLat() {
       return this
     }
     addTo() {
       return this
+    }
+    on() {
+      return this
+    }
+    getLngLat() {
+      return { lng: 0, lat: 0 }
     }
     remove() {}
   }
@@ -226,15 +234,81 @@ describe('AlertsList: filtros e busca', () => {
   })
 })
 
+// Dispara os handlers de clique do mapa com uma coordenada, como o maplibre faz.
+const clickMapAt = (lng: number, lat: number) =>
+  (mapState.handlers.click ?? []).forEach((cb) =>
+    (cb as unknown as (e: { lngLat: { lng: number; lat: number } }) => void)({
+      lngLat: { lng, lat },
+    }),
+  )
+
 describe('AlertsList: evacuação real', () => {
-  it('sem evacuação ativa, o botão dispara o início', async () => {
+  it('"Iniciar evacuação" abre o modo de desenho; confirmar dispara com a área', async () => {
     await renderAlerts()
+    await waitFor(() => expect(h.pins).toHaveLength(2))
 
     await act(async () => {
       fireEvent.click(screen.getByText('Iniciar evacuação'))
     })
+    // Entrou no desenho: a barra aparece e o início ainda não foi disparado.
+    expect(screen.getByTestId('evacuation-draw-toolbar')).toBeTruthy()
+    expect(h.start).not.toHaveBeenCalled()
 
+    // Três cliques no mapa marcam a área.
+    await act(async () => {
+      clickMapAt(-46.64, -23.53)
+      clickMapAt(-46.6, -23.52)
+      clickMapAt(-46.58, -23.55)
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Confirmar e iniciar'))
+    })
     expect(h.start).toHaveBeenCalledTimes(1)
+    expect(h.start.mock.calls[0]![0]).toEqual([
+      [-46.64, -23.53],
+      [-46.6, -23.52],
+      [-46.58, -23.55],
+    ])
+  })
+
+  it('cancelar o desenho não dispara e volta ao botão de iniciar', async () => {
+    await renderAlerts()
+    await waitFor(() => expect(h.pins).toHaveLength(2))
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Iniciar evacuação'))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Cancelar'))
+    })
+
+    expect(h.start).not.toHaveBeenCalled()
+    expect(screen.getByText('Iniciar evacuação')).toBeTruthy()
+  })
+
+  it('evacuação ativa com área desenha o polígono e conta quem está dentro', async () => {
+    h.evacuation = {
+      acked: 0,
+      total: 2,
+      workers: [
+        { id: 'w1', acked: false },
+        { id: 'w2', acked: false },
+      ],
+      // Caixa larga em torno das posições do fixture (-46.63, -23.55).
+      area: [
+        [-47, -24],
+        [-46, -24],
+        [-46, -23],
+        [-47, -23],
+      ],
+    }
+    await renderAlerts()
+
+    await waitFor(() => expect(mapState.sources.has('evac-area')).toBe(true))
+    expect(mapState.layers.has('evac-area-line')).toBe(true)
+    expect(screen.getByTestId('evacuation-in-area')).toBeTruthy()
+    expect(screen.getByText('2 dentro da área')).toBeTruthy()
   })
 
   it('com evacuação ativa, mostra o progresso X/N e encerra', async () => {

@@ -13,6 +13,7 @@ const dto = (over: Partial<EvacuationProgressDto> = {}): EvacuationProgressDto =
     { id: 'w1', name: 'Worker Um', acked: true, ackAt: '2026-07-25T18:05:00.000Z' },
     { id: 'w2', name: 'Worker Dois', acked: false, ackAt: null },
   ],
+  area: null,
   ...over,
 })
 
@@ -71,6 +72,28 @@ describe('evacuationsApi.start', () => {
     expect(String(url)).toContain('/evacuations')
     expect(init.method).toBe('POST')
     expect(res.data?.acked).toBe(0)
+  })
+
+  it('com área desenhada envia o polígono no corpo', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okJson(dto({ acked: 0 })))
+    vi.stubGlobal('fetch', fetchMock)
+    const area: [number, number][] = [
+      [-46.64, -23.53],
+      [-46.6, -23.52],
+      [-46.58, -23.55],
+    ]
+    await evacuationsApi.start(area)
+    const [, init] = fetchMock.mock.calls[0]!
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({ area })
+  })
+
+  it('sem área não envia corpo', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okJson(dto({ acked: 0 })))
+    vi.stubGlobal('fetch', fetchMock)
+    await evacuationsApi.start()
+    const [, init] = fetchMock.mock.calls[0]!
+    expect(init.body).toBeUndefined()
   })
 
   it('409 (já existe ativa) vira erro de negócio no envelope', async () => {

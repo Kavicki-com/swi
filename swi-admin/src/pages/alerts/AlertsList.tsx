@@ -44,6 +44,8 @@ import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { useEvacuation } from '@/hooks/useEvacuation'
 import { useWeatherAlert } from '@/hooks/useWeatherAlert'
+import { countWorkersInArea, type AreaVertex } from '@/lib/evacuationArea'
+import { drawAreaLayer, AREA_VERTEX_COLOR } from '@/pages/maps/evacuationAreaLayer'
 
 const FILTER_CHIPS = [
   { value: 'all', label: 'Todos' },
@@ -111,6 +113,42 @@ export function AlertsList() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [mapMode, setMapMode] = useState<'pins' | 'heat' | 'meteo'>('pins')
+  // Fluxo de demarcação da área (MEL-13): "Iniciar evacuação" entra em modo de
+  // desenho; cada clique no mapa põe um vértice; confirmar dispara com a área.
+  const [drawing, setDrawing] = useState(false)
+  const [draftVertices, setDraftVertices] = useState<AreaVertex[]>([])
+  // Polígono salvo da evacuação ativa (anel fechado [lng, lat]), ou null.
+  const savedArea = evacuation?.area ?? null
+  // Quantos funcionários estão dentro da área salva, sobre as posições ao vivo.
+  const workersInArea = useMemo(
+    () => countWorkersInArea(markers, savedArea),
+    [markers, savedArea],
+  )
+  // Contorno vermelho do tema; magenta dos vértices como no print (sem token).
+  const areaColors = useMemo(
+    () => ({ line: theme.content.error, fill: theme.content.error, vertex: AREA_VERTEX_COLOR }),
+    [theme],
+  )
+  const beginDraw = () => {
+    setDraftVertices([])
+    setDrawing(true)
+  }
+  const cancelDraw = () => {
+    setDrawing(false)
+    setDraftVertices([])
+  }
+  const confirmDraw = () => {
+    const area = draftVertices
+    setDrawing(false)
+    setDraftVertices([])
+    void startEvacuation(area)
+  }
+  // O handler de clique do mapa é instalado uma vez; estes refs deixam ele ver
+  // o estado atual de desenho sem reinstalar e recriar o mapa.
+  const drawingRef = useRef(drawing)
+  drawingRef.current = drawing
+  const appendVertexRef = useRef<(v: AreaVertex) => void>(() => {})
+  appendVertexRef.current = (v: AreaVertex) => setDraftVertices((cur) => [...cur, v])
 
   const lib = useMapLibre()
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -196,9 +234,16 @@ export function AlertsList() {
       }
       setMapReady(true)
     })
-    // Clique no mapa vazio fecha o card: o pino é um elemento DOM por cima do
-    // canvas, então o clique nele não chega aqui; só o clique fora dele.
-    map.on('click', () => navigateRef.current('/alerts'))
+    // Em modo de desenho, o clique no mapa põe um vértice da área; fora dele,
+    // o clique no mapa vazio fecha o card (o pino é um elemento DOM por cima do
+    // canvas, então o clique nele não chega aqui; só o clique fora dele).
+    map.on('click', (e: maplibregl.MapMouseEvent) => {
+      if (drawingRef.current) {
+        appendVertexRef.current([e.lngLat.lng, e.lngLat.lat])
+        return
+      }
+      navigateRef.current('/alerts')
+    })
     return () => {
       map.remove()
       mapRef.current = null
@@ -328,6 +373,29 @@ export function AlertsList() {
     }
   }, [mapReady, mapMode])
 
+  // Traçado em edição: redesenha a cada vértice adicionado ou arrastado. Os
+  // vértices são arrastáveis; soltar um atualiza o anel.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!lib || !map || !mapReady || !drawing) return
+    const dispose = drawAreaLayer(map, lib, draftVertices, {
+      colors: areaColors,
+      draggable: true,
+      onVertexDrag: (index, vertex) =>
+        setDraftVertices((cur) => cur.map((p, k) => (k === index ? vertex : p))),
+    })
+    return dispose
+  }, [lib, mapReady, drawing, draftVertices, areaColors])
+
+  // Área salva da evacuação ativa: polígono vermelho com vértices magenta, só
+  // leitura. Enquanto o admin redesenha (drawing), o traçado acima tem a vez.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!lib || !map || !mapReady || drawing || !savedArea) return
+    const dispose = drawAreaLayer(map, lib, savedArea, { colors: areaColors })
+    return dispose
+  }, [lib, mapReady, drawing, savedArea, areaColors])
+
   // Selected marker → screen position tracker. Runs whenever the selected
   // marker changes and re-runs on every map move/zoom so the overlay card
   // stays glued to its pin.
@@ -384,9 +452,37 @@ export function AlertsList() {
           {hasDemo ? <DataOriginBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" /> : null}
         </View>
 
-        {/* Evacuação real: sem ativa → dispatch; ativa → progresso
-            X/N ao vivo (WS evacuation-ack) + encerramento. */}
-        {evacuation ? (
+        {/* Evacuação real: sem ativa → desenhar a área e disparar; ativa →
+            progresso X/N ao vivo (WS evacuation-ack) + encerramento. */}
+        {drawing ? (
+          <View
+            testID="evacuation-draw-toolbar"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: theme.gap.s,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Text variant="body.s" color={theme.content.medium}>
+              Toque no mapa para marcar a área ({draftVertices.length}{' '}
+              {draftVertices.length === 1 ? 'ponto' : 'pontos'})
+            </Text>
+            <Button
+              label="Desfazer"
+              variant="outline"
+              onPress={() => setDraftVertices((cur) => cur.slice(0, -1))}
+              disabled={draftVertices.length === 0}
+            />
+            <Button label="Cancelar" variant="outline" onPress={cancelDraw} />
+            <Button
+              label="Confirmar e iniciar"
+              backgroundColor={theme.surface.error}
+              disabled={draftVertices.length < 3}
+              onPress={confirmDraw}
+            />
+          </View>
+        ) : evacuation ? (
           <View
             testID="evacuation-banner"
             style={{
@@ -407,6 +503,16 @@ export function AlertsList() {
             >
               Evacuação em andamento — {evacuation.acked}/{evacuation.total} confirmados
             </Text>
+            {savedArea ? (
+              <Text
+                testID="evacuation-in-area"
+                variant="body.s"
+                color={theme.content.light}
+                style={{ fontWeight: '700' as const }}
+              >
+                {workersInArea} dentro da área
+              </Text>
+            ) : null}
             <Button
               label="Encerrar evacuação"
               backgroundColor={theme.surface.error}
@@ -417,7 +523,7 @@ export function AlertsList() {
           <Button
             label="Iniciar evacuação"
             backgroundColor={theme.surface.error}
-            onPress={() => void startEvacuation()}
+            onPress={beginDraw}
           />
         )}
       </View>

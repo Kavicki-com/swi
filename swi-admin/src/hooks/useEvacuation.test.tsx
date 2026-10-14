@@ -16,6 +16,7 @@ const dto = (over: Partial<EvacuationProgressDto> = {}): EvacuationProgressDto =
     { id: 'w1', name: 'Worker Um', acked: false, ackAt: null },
     { id: 'w2', name: 'Worker Dois', acked: false, ackAt: null },
   ],
+  area: null,
   ...over,
 })
 
@@ -102,6 +103,21 @@ describe('useEvacuation', () => {
       await result.current.start()
     })
     expect(result.current.error).toBe('Já existe uma evacuação ativa')
+  })
+
+  it('start(area) repassa o polígono desenhado pra API', async () => {
+    startMock.mockResolvedValue({ data: dto(), error: null })
+    const { result } = renderHook(() => useEvacuation())
+    await waitFor(() => expect(subscribeMock).toHaveBeenCalled())
+    const area: [number, number][] = [
+      [-46.64, -23.53],
+      [-46.6, -23.52],
+      [-46.58, -23.55],
+    ]
+    await act(async () => {
+      await result.current.start(area)
+    })
+    expect(startMock).toHaveBeenCalledWith(area)
   })
 
   it('end() chama a API com o id da ativa e zera o estado', async () => {
