@@ -97,6 +97,9 @@ const TaskDetails = lazy(() =>
 const CamerasPage = lazy(() =>
   import('@/pages/cameras/CamerasPage').then((m) => ({ default: m.CamerasPage })),
 )
+const RescueHistoryPage = lazy(() =>
+  import('@/pages/alerts/RescueHistoryPage').then((m) => ({ default: m.RescueHistoryPage })),
+)
 const UserSettings = lazy(() =>
   import('@/pages/user/UserSettings').then((m) => ({ default: m.UserSettings })),
 )
@@ -198,6 +201,9 @@ export function App() {
                     <Route path="/reports/:id/edit" element={<NewReport />} />
                     <Route path="/modals/responsables" element={<ResponsablesModal />} />
                     <Route path="/alerts" element={<AlertsList />} />
+                    {/* Histórico de resgates (MEL-12). Estática, vence o
+                        :employeeId pelo ranking do React Router. */}
+                    <Route path="/alerts/rescues" element={<RescueHistoryPage />} />
                     <Route path="/alerts/:employeeId" element={<AlertsList />} />
                     <Route
                       path="/alerts/:employeeId/rescue"
