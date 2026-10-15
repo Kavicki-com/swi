@@ -90,11 +90,11 @@ describe('Segurança e2e', () => {
 
   describe('política de upload', () => {
     it('nega content-type fora da política do prefixo', async () => {
-      // PDF é legítimo em exame e não em relatório: a política é por prefixo.
+      // PDF é legítimo em exame e em relatório, não em chat: a política é por prefixo.
       await request(app.getHttpServer())
         .post('/media/presign')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ contentType: 'application/pdf', contentLength: 1024, prefix: 'reports' })
+        .send({ contentType: 'application/pdf', contentLength: 1024, prefix: 'chat' })
         .expect(400)
     })
 
