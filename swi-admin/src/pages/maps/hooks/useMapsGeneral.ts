@@ -16,6 +16,7 @@ import { positionHeatApi } from '@/services/api/positionHeat'
 import { getRainViewerLatestRadar } from '@/lib/rainViewer'
 import { useDemoToast } from '@/lib/demoToast'
 import { formatBadgeCount, withBadges } from '@/app/nav'
+import { useAuth } from '@/hooks/useAuth'
 import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { reportsApi } from '@/services/api/reports'
@@ -48,9 +49,10 @@ export function useMapsGeneral() {
       cancelled = true
     }
   }, [])
+  const level = useAuth().user?.level
   const navItems = useMemo(
-    () => withBadges({ '/reports': formatBadgeCount(pendingReports) }),
-    [pendingReports],
+    () => withBadges({ '/reports': formatBadgeCount(pendingReports) }, level),
+    [pendingReports, level],
   )
   const [mapReady, setMapReady] = useState(false)
   // The neutral state hides employee pins (opacity 0).

@@ -70,6 +70,18 @@ describe('employeesApi.list (real)', () => {
 })
 
 describe('adminsApi.list (real)', () => {
+  // A lista de administradores é a equipe do painel: os dois níveis numa chamada.
+  it('pede ADMIN e SUPERVISOR e traz o nível de cada um', async () => {
+    const f = okJson([summary({ role: 'ADMIN' }), summary({ id: 'u2', role: 'SUPERVISOR' })])
+    vi.stubGlobal('fetch', f)
+
+    const { data } = await adminsApi.list()
+
+    expect(data?.map((a) => a.level)).toEqual(['ADMIN', 'SUPERVISOR'])
+    const [url] = f.mock.calls[0] as [string]
+    expect(url).toContain('/users?role=ADMIN,SUPERVISOR&approvalStatus=APPROVED')
+  })
+
   it('GET /users?role=ADMIN; status deriva do approvalStatus, active vem do campo real', async () => {
     const f = okJson([
       summary({
@@ -90,7 +102,7 @@ describe('adminsApi.list (real)', () => {
     expect(a.active).toBe(false) // reflete o DTO (active:false), não o approvalStatus
     expect(a.status).toBe('pending')
     const [url] = f.mock.calls[0] as [string]
-    expect(url).toContain('/users?role=ADMIN&approvalStatus=APPROVED')
+    expect(url).toContain('/users?role=ADMIN,SUPERVISOR&approvalStatus=APPROVED')
   })
 
   it('active vem do campo real mesmo com approvalStatus APPROVED', async () => {
@@ -281,6 +293,14 @@ describe('create (real)', () => {
       phone: '11',
     })
   })
+  it('adminsApi.create com nível Supervisor manda role SUPERVISOR', async () => {
+    const f = okJson({ id: 'n' })
+    vi.stubGlobal('fetch', f)
+    await adminsApi.create({ name: 'S', email: 's@x.com', password: 'senha123', role: 'SUPERVISOR' })
+    expect(JSON.parse((f.mock.calls[0] as [string, RequestInit])[1].body as string).role).toBe(
+      'SUPERVISOR',
+    )
+  })
   it('adminsApi.create → role ADMIN', async () => {
     const f = okJson({ id: 'n' })
     vi.stubGlobal('fetch', f)
@@ -430,10 +450,20 @@ describe('getForEdit / update (real)', () => {
       allergies: 'Penicilina',
       chronicConditions: '',
       username: '',
+      role: 'WORKER',
       // Cadastro sem exame nenhum: lista vazia, que é o que a seção sabe
       // renderizar como "Nenhum exame enviado".
       exams: [],
     })
+  })
+
+  it('PATCH leva o nível quando a tela o troca', async () => {
+    const f = okJson(summary({ role: 'SUPERVISOR' }))
+    vi.stubGlobal('fetch', f)
+    await adminsApi.update('a1', { role: 'SUPERVISOR' })
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/users/a1')
+    expect(JSON.parse(init.body as string)).toEqual({ role: 'SUPERVISOR' })
   })
 
   // O nascimento chega como datetime com fuso em alguns registros. Cortar no

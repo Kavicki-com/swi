@@ -196,6 +196,21 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('app-sidebar-nav')).toBeInTheDocument()
   })
 
+  // Supervisor não vê a gestão de usuários e administradores no menu.
+  it('o menu do Supervisor não tem Administradores nem Funcionários', async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      `x.${btoa(JSON.stringify({ sub: 'u_seed_1', role: 'SUPERVISOR' }))}.y`,
+    )
+    await renderTree()
+    await waitFor(() => {
+      expect(screen.getByTestId('page-content')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Monitoramento')).toBeInTheDocument()
+    expect(screen.queryByText('Administradores')).toBeNull()
+    expect(screen.queryByText('Funcionários')).toBeNull()
+  })
+
   // O avatar do header abre o menu fullscreen com vídeo e vitais, em vez de
   // navegar direto. A página de perfil continua alcançável pelo avatar grande
   // DENTRO do menu.

@@ -1,3 +1,5 @@
+import type { PanelLevel } from './index'
+
 // Contratos de view do diretório (Colaboradores e Admins): consumidos pelas
 // telas e produzidos tanto por api/users.ts (backend real) quanto pelas
 // simulações de mockApi/. Módulo neutro de propósito: o caminho de produção
@@ -66,7 +68,9 @@ export type Admin = {
   name: string
   age: number
   bloodType: string
+  /** Cargo de exibição (jobTitle). O nível de acesso é `level`. */
   role: string
+  level?: PanelLevel
   specialization: string
   avatarUri: string
   active: boolean

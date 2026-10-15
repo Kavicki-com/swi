@@ -6,6 +6,7 @@ import type { BrowserNoticesView } from '@/hooks/useBrowserNotices'
 const h = vi.hoisted(() => ({ view: null as unknown }))
 vi.mock('@/hooks/useBrowserNotices', () => ({ useBrowserNotices: () => h.view }))
 
+import { authApi } from '@/services/auth'
 import { PermissionsSection } from './PermissionsSection'
 
 const withNotices = (over: Partial<BrowserNoticesView>) => {
@@ -25,7 +26,13 @@ const withNotices = (over: Partial<BrowserNoticesView>) => {
 // pelo que o clique faz (desligado pede a permissão, ligado desliga).
 const toggle = () => screen.getByRole('switch', { name: 'Notificações' })
 
-afterEach(() => clearSession())
+beforeEach(() => {
+  vi.spyOn(authApi, 'me').mockResolvedValue({ data: { role: 'ADMIN', permissions: [] }, error: null })
+})
+afterEach(() => {
+  clearSession()
+  vi.restoreAllMocks()
+})
 
 describe('PermissionsSection: Notificações', () => {
   it('desligado, ligar pede a permissão ao navegador', async () => {
@@ -61,12 +68,42 @@ describe('PermissionsSection: Notificações', () => {
     expect(screen.getByText('Este navegador não mostra avisos do SWI.')).toBeTruthy()
     expect(toggle().getAttribute('aria-disabled')).toBe('true')
   })
+})
 
-  it('as outras três permissões seguem na seção', async () => {
+// O nível e o que ele permite vêm do backend (GET /auth/me), não de uma cópia
+// da matriz no painel.
+describe('PermissionsSection: nível de acesso', () => {
+  it('mostra o nível e as permissões que o backend devolve', async () => {
+    withNotices({})
+    vi.spyOn(authApi, 'me').mockResolvedValue({
+      data: { role: 'SUPERVISOR', permissions: ['monitoring.read', 'alerts.operate'] },
+      error: null,
+    })
+    await renderPage(<PermissionsSection />)
+
+    expect(await screen.findByText('Nível: Supervisor')).toBeTruthy()
+    expect(screen.getByText('Acompanhar o monitoramento e a transmissão ao vivo')).toBeTruthy()
+    expect(screen.getByText('Tratar alertas e pedir pausa')).toBeTruthy()
+  })
+
+  it('falha ao ler avisa, sem lista inventada', async () => {
+    withNotices({})
+    vi.spyOn(authApi, 'me').mockResolvedValue({ data: null, error: { message: 'x' } })
+    await renderPage(<PermissionsSection />)
+
+    expect(await screen.findByText('Não foi possível carregar suas permissões.')).toBeTruthy()
+    expect(screen.queryByText(/^Nível:/)).toBeNull()
+  })
+
+  // Os três toggles não salvavam em lugar nenhum e o perfil não tem onde
+  // guardá-los; na entrega não fica estado fictício.
+  it('não tem mais os toggles de Localização, Arquivos e Ligações', async () => {
     withNotices({})
     await renderPage(<PermissionsSection />)
-    expect(screen.getByText('Localização')).toBeTruthy()
-    expect(screen.getByText('Acessar pastas e arquivos')).toBeTruthy()
-    expect(screen.getByText('Ligações telefônicas')).toBeTruthy()
+
+    expect(screen.queryByText('Localização')).toBeNull()
+    expect(screen.queryByText('Acessar pastas e arquivos')).toBeNull()
+    expect(screen.queryByText('Ligações telefônicas')).toBeNull()
+    expect(screen.getAllByRole('switch')).toHaveLength(1)
   })
 })

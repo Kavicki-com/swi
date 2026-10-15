@@ -4,7 +4,7 @@
 // de UserSettings.tsx, que passou a ser layout.
 //
 // Fica de fora de propósito o estado puramente local de dois blocos: as três
-// visibilidades de senha e as quatro permissões nunca são lidas fora dos
+// visibilidades de senha e o toggle de notificações nunca são lidos fora dos
 // próprios controles, então moram em PasswordSection e PermissionsSection.
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useAuth } from '@/hooks/useAuth'

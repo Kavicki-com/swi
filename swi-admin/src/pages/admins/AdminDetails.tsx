@@ -8,6 +8,7 @@ import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/api/users'
+import { levelLabel } from '@/app/levels'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { fullMapPath } from '@/pages/maps/mapFocus'
 import { vitalsViewFrom } from '@/services/vitals/vitalsView'
@@ -76,33 +77,38 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
       backA11yLabel="Voltar para a lista de administradores"
       onOpenFullMap={() => navigate(fullMapPath(id))}
       topRightAction={
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Editar perfil do administrador"
-          // Dois contextos, dois destinos. Vindo do diretório (/admins/:id) o
-          // perfil é de OUTRA pessoa e o destino é a edição dela; mandar pra
-          // /user/settings levava o admin pro próprio cadastro, onde salvar
-          // alteraria a pessoa errada. Montada pelo UserProfile (adminId), a
-          // página é o próprio perfil, e aí as configurações da sessão seguem
-          // sendo o lugar certo: é lá que moram senha e avatar.
-          onPress={() => navigate(adminId ? '/user/settings' : `/admins/${id}/edit`)}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: theme.padding.s,
-            paddingVertical: theme.padding.s,
-          }}
-        >
-          <Text
-            variant="body.m"
-            color={theme.content.primary}
-            style={{ fontFamily: theme.fontFamily.title, fontWeight: '700' }}
-          >
-            Editar perfil
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.m }}>
+          <Text testID="admin-details-level" variant="body.m" color={theme.content.dark}>
+            Nível: {levelLabel(admin.level)}
           </Text>
-          <Icon name="edit" size={16} color={theme.content.primary} />
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Editar perfil do administrador"
+            // Dois contextos, dois destinos. Vindo do diretório (/admins/:id) o
+            // perfil é de OUTRA pessoa e o destino é a edição dela; mandar pra
+            // /user/settings levava o admin pro próprio cadastro, onde salvar
+            // alteraria a pessoa errada. Montada pelo UserProfile (adminId), a
+            // página é o próprio perfil, e aí as configurações da sessão seguem
+            // sendo o lugar certo: é lá que moram senha e avatar.
+            onPress={() => navigate(adminId ? '/user/settings' : `/admins/${id}/edit`)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              paddingHorizontal: theme.padding.s,
+              paddingVertical: theme.padding.s,
+            }}
+          >
+            <Text
+              variant="body.m"
+              color={theme.content.primary}
+              style={{ fontFamily: theme.fontFamily.title, fontWeight: '700' }}
+            >
+              Editar perfil
+            </Text>
+            <Icon name="edit" size={16} color={theme.content.primary} />
+          </Pressable>
+        </View>
       }
     />
   )

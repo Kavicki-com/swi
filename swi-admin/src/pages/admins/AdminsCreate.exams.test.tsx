@@ -34,6 +34,7 @@ const GRAVADO = {
   allergies: 'Penicilina',
   chronicConditions: '',
   username: 'carlos.m',
+  role: 'ADMIN',
   exams: [],
 }
 

@@ -4,7 +4,7 @@
 // services/api/auth.ts). Só campos de IDENTIDADE vêm do backend — vitais/tipo
 // sanguíneo/exames dependem da smartband e ficam como placeholder no mapeamento
 // até o hardware existir (decisão do roadmap: saúde fica mock até a smartband).
-import type { ServiceResponse } from '@/services/types'
+import type { PanelLevel, ServiceResponse } from '@/services/types'
 import type { Admin, Employee, ExamEntry, Gender } from '@/services/types/directory'
 import type { Exam } from './exams'
 import { examCardParts } from './examCard'
@@ -17,7 +17,7 @@ export type UserSummaryDto = {
   id: string
   name: string
   email: string
-  role: 'WORKER' | 'ADMIN'
+  role: 'WORKER' | PanelLevel
   approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED'
   // Flag de ativação real (independente do approvalStatus): o admin liga/desliga
   // o acesso pelo toggle sem mexer no fluxo de aprovação.
@@ -149,6 +149,8 @@ function toAdmin(u: UserSummaryDto | UserDetailDto): Admin {
     specialization: u.sector,
     avatarUri: u.avatar,
     active: u.active,
+    // Nível de acesso (o `role` acima é o cargo de exibição, não o papel).
+    level: u.role === 'SUPERVISOR' ? 'SUPERVISOR' : 'ADMIN',
     status: APPROVAL_TO_STATUS[u.approvalStatus],
     username: u.username ?? undefined,
     gender: toGender(detail.gender),
@@ -159,8 +161,9 @@ function toAdmin(u: UserSummaryDto | UserDetailDto): Admin {
 
 const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)
 
+// `role` aceita vários níveis separados por vírgula (ADMIN,SUPERVISOR).
 async function listMapped<T>(
-  role: 'WORKER' | 'ADMIN',
+  role: string,
   map: (u: UserSummaryDto) => T,
 ): Promise<ServiceResponse<T[]>> {
   try {
@@ -190,7 +193,8 @@ async function getMapped<T>(
 }
 
 // Cadastro pelo painel (POST /users). Identidade mais a saúde DECLARATÓRIA que
-// o formulário coleta; o role separa funcionário (WORKER) de admin (ADMIN).
+// o formulário coleta; o role separa funcionário (WORKER) da equipe do painel
+// (ADMIN ou SUPERVISOR, que o cadastro de administrador escolhe em `role`).
 // Campos opcionais ausentes NÃO entram no corpo (JSON.stringify já descarta
 // `undefined`), pra não mandar chave vazia.
 export type CreateUserInput = {
@@ -208,16 +212,18 @@ export type CreateUserInput = {
   bloodType?: string
   allergies?: string
   chronicConditions?: string
+  /** Só no cadastro de administrador; o de funcionário sempre grava WORKER. */
+  role?: PanelLevel
 }
 
 async function createUser(
-  role: 'WORKER' | 'ADMIN',
+  role: 'WORKER' | PanelLevel,
   input: CreateUserInput,
 ): Promise<ServiceResponse<UserSummaryDto>> {
   try {
     const created = await apiFetch<UserSummaryDto>('/users', {
       method: 'POST',
-      body: JSON.stringify({ role, ...input }),
+      body: JSON.stringify({ ...input, role }),
     })
     return { data: created, error: null }
   } catch (e) {
@@ -243,6 +249,8 @@ export type EditableUser = {
   allergies: string
   chronicConditions: string
   username: string
+  /** Papel no backend (WORKER, ADMIN ou SUPERVISOR): a edição de admin troca o nível. */
+  role: string
   // Exames JÁ gravados. A tela precisa mostrá-los antes de deixar anexar mais,
   // senão o admin reanexa em duplicata o laudo que já estava lá.
   exams: readonly Exam[]
@@ -265,6 +273,7 @@ const toEditable = (u: UserDetailDto): EditableUser => ({
   allergies: u.allergies ?? '',
   chronicConditions: u.chronicConditions ?? '',
   username: u.username ?? '',
+  role: u.role,
   // `?? []` porque backend anterior ao PR de exames não manda o campo, e a
   // seção lendo undefined quebraria em vez de mostrar o vazio honesto.
   exams: u.exams ?? [],
@@ -288,6 +297,8 @@ const getForEditUser = async (id: string): Promise<ServiceResponse<EditableUser 
  * calada, que é como um formulário passa a mentir sobre o que salvou.
  */
 export type UpdateUserInput = {
+  /** Nível, só entre ADMIN e SUPERVISOR; o backend recusa outro alvo e o próprio. */
+  role?: PanelLevel
   name?: string
   username?: string
   phone?: string
@@ -400,9 +411,9 @@ export const employeesApi = {
 }
 
 export const adminsApi = {
-  list: () => listMapped('ADMIN', toAdmin),
+  list: () => listMapped('ADMIN,SUPERVISOR', toAdmin),
   get: (id: string) => getMapped(id, toAdmin),
-  create: (input: CreateUserInput) => createUser('ADMIN', input),
+  create: (input: CreateUserInput) => createUser(input.role ?? 'ADMIN', input),
   getForEdit: getForEditUser,
   update: updateUser,
   addExam: addUserExam,
