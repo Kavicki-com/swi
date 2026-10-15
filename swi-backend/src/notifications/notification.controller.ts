@@ -4,7 +4,7 @@ import { NotificationService } from './notification.service'
 import { PauseRequestDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
-import { Roles } from '../auth/roles.decorator'
+import { Can } from '../auth/roles.decorator'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 
 @ApiTags('notifications')
@@ -18,7 +18,7 @@ export class NotificationController {
   list(@CurrentUserId() userId: string) { return this.notifications.list(userId) }
 
   // "Solicitar Pausa" real: ADMIN pede, o worker recebe a notificação.
-  @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN') @Post('pause-request') @HttpCode(204)
+  @UseGuards(JwtAuthGuard, RolesGuard) @Can('alerts.operate') @Post('pause-request') @HttpCode(204)
   pauseRequest(@CurrentUser() user: JwtUser, @Body() dto: PauseRequestDto) {
     return this.notifications.requestPause(dto.workerId, user.companyId)
   }

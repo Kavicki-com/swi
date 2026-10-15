@@ -728,6 +728,15 @@ describe('TelemetryQueryService.sessionHistory', () => {
     ).rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it('o supervisor da empresa audita a sessão de um funcionário dela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySession.findUnique.mockResolvedValue(sessionRow())
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(1)])
+
+    const page = await service(prisma).sessionHistory({ ...ADMIN, userId: 'supervisor-1', role: 'SUPERVISOR' }, 'session-1', {})
+    expect(page.session.id).toBe('session-1')
+  })
+
   it('sessão de outra empresa responde igual a inexistente para o administrador', async () => {
     const prisma = prismaDouble()
     prisma.telemetrySession.findUnique.mockResolvedValue(

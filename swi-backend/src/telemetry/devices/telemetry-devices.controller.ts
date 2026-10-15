@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
-import { Roles } from '../../auth/roles.decorator'
+import { Can } from '../../auth/roles.decorator'
 import { RolesGuard } from '../../auth/roles.guard'
 import { DeviceAuthService } from './device-auth.service'
 import { CompleteEnrollmentDto } from './dto/complete-enrollment.dto'
@@ -20,7 +20,7 @@ import { CreateEnrollmentDto } from './dto/create-enrollment.dto'
 export class TelemetryDevicesController {
   constructor(private readonly devices: DeviceAuthService) {}
 
-  @Roles('ADMIN')
+  @Can('devices.manage')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('enrollments')
   createEnrollment(@CurrentUser() admin: JwtUser, @Body() dto: CreateEnrollmentDto) {
@@ -37,7 +37,7 @@ export class TelemetryDevicesController {
     return this.devices.completeEnrollment(workerId, dto)
   }
 
-  @Roles('ADMIN')
+  @Can('devices.manage')
   @Post(':id/revoke')
   @HttpCode(204)
   revoke(@CurrentUser() admin: JwtUser, @Param('id') deviceId: string) {
@@ -49,7 +49,7 @@ export class TelemetryDevicesController {
    * e Revogar. Por funcionário, e não por aparelho: é o funcionário que o
    * administrador está olhando, e o aparelho ativo é no máximo um.
    */
-  @Roles('ADMIN')
+  @Can('monitoring.read')
   @Get('workers/:workerId')
   deviceOfWorker(@CurrentUser() admin: JwtUser, @Param('workerId') workerId: string) {
     return this.devices.deviceStateForAdmin(admin, workerId)

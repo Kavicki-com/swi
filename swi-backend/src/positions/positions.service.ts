@@ -9,6 +9,7 @@ import { TelemetryQueryService } from '../telemetry/read-model/telemetry-query.s
 import type { HealthStatus } from '../telemetry/read-model/health-status'
 import type { Profile, User, WorkerPosition } from '@prisma/client'
 import { describeError } from '../common/describe-error'
+import { PANEL_ROLES } from '../auth/permissions'
 
 /**
  * Posição de colega mais velha que isto não aparece no mapa do app: quem
@@ -156,11 +157,11 @@ export class PositionsService {
   }
 
   // Push é derivado do write (que já commitou): falha de emit não pode
-  // rejeitar quem gravou. Só os admins da MESMA empresa recebem (org-scoping;
+  // rejeitar quem gravou. Só a equipe do painel da MESMA empresa recebe (org-scoping;
   // companyId null = balde legado, null só casa com null).
   private async pushToAdmins(worker: WorkerWithProfile, pos: WorkerPosition): Promise<void> {
     const admins = await this.prisma.user.findMany({
-      where: { role: 'ADMIN', companyId: worker.companyId },
+      where: { role: { in: [...PANEL_ROLES] }, companyId: worker.companyId },
       select: { id: true },
     })
     const marker = await this.toMarker(worker, pos)

@@ -60,7 +60,7 @@ describe('AuthController', () => {
     })
   })
 
-  it('/me devolve só id, email e nome do usuário do token', async () => {
+  it('/me devolve só id, email, nome, nível e permissões do usuário do token', async () => {
     const users = usersService()
     users.findById.mockResolvedValue({
       id: 'u1',
@@ -71,8 +71,20 @@ describe('AuthController', () => {
     } as never)
     const c = new AuthController(authService(), users)
 
-    await expect(c.me('u1')).resolves.toEqual({ id: 'u1', email: 'a@ex.com', name: 'A' })
+    await expect(c.me('u1')).resolves.toEqual({ id: 'u1', email: 'a@ex.com', name: 'A', role: 'WORKER', permissions: ['chat.use'] })
     expect(users.findById).toHaveBeenCalledWith('u1')
+  })
+
+  // O painel lê daqui o que mostrar ao Supervisor; a matriz é a do backend,
+  // nunca uma cópia no front.
+  it('/me do supervisor traz as permissões dele, sem as de gestão', async () => {
+    const users = usersService()
+    users.findById.mockResolvedValue({ id: 's1', email: 's@ex.com', name: 'S', role: 'SUPERVISOR' } as never)
+
+    const me = await new AuthController(authService(), users).me('s1')
+    expect(me?.role).toBe('SUPERVISOR')
+    expect(me?.permissions).toContain('alerts.operate')
+    expect(me?.permissions).not.toContain('users.manage')
   })
 
   it('/me devolve null quando o usuário do token não existe mais', async () => {

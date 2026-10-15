@@ -15,8 +15,8 @@ const serviceDouble = () =>
   }) as unknown as jest.Mocked<AlertQueueService>
 
 describe('AlertQueueController', () => {
-  it('a fila inteira é só de administrador', () => {
-    expect(Reflect.getMetadata('roles', AlertQueueController)).toEqual(['ADMIN'])
+  it('a fila inteira é da equipe do painel (Administrador e Supervisor)', () => {
+    expect(Reflect.getMetadata('roles', AlertQueueController)).toEqual(['ADMIN', 'SUPERVISOR'])
   })
 
   it('lista com o administrador do token e os filtros da query', async () => {

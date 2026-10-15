@@ -11,7 +11,7 @@ const USERNAME_RE = /^[a-z0-9._]{3,30}$/
 
 // Cadastro de usuário pelo painel (ADMIN). Senha definida pelo admin, na regra
 // única da senha nova (auth/password-rule.ts);
-// role restrito a WORKER/ADMIN. Campos de identidade opcionais vão pro Profile,
+// role é um dos três níveis (Funcionário, Supervisor, Administrador). Campos de identidade opcionais vão pro Profile,
 // junto dos dados de saúde declaratórios que o formulário renderiza: sem eles
 // aqui, a whitelist do ValidationPipe os descartava e o cadastro jogava fora o
 // que a pessoa digitou.
@@ -22,7 +22,7 @@ export class CreateUserDto {
   @IsString() @IsNotEmpty() name!: string
   @IsEmail() email!: string
   @IsNewPassword() password!: string
-  @IsIn(['WORKER', 'ADMIN']) role!: 'WORKER' | 'ADMIN'
+  @IsIn(['WORKER', 'SUPERVISOR', 'ADMIN']) role!: 'WORKER' | 'SUPERVISOR' | 'ADMIN'
   @IsOptional() @IsString() phone?: string
   @IsOptional() @IsString() cpf?: string
   @IsOptional() @IsCalendarDate() birthDate?: string
@@ -46,13 +46,17 @@ export class CreateUserDto {
  * dois DTOs escrevendo na mesma tabela com limites diferentes fariam o painel
  * salvar o que o settings do worker rejeita.
  *
- * `email` e `role` estão FORA de propósito. O ValidationPipe global roda com
- * whitelist, então esses campos são removidos do corpo antes de chegar ao
- * service: e-mail é a identidade de login (trocar exige reconfirmação) e papel
- * é autorização (promover alguém a ADMIN não pode ser efeito colateral de um
- * formulário de cadastro).
+ * `email` está FORA de propósito: o ValidationPipe global roda com whitelist e
+ * o remove do corpo, porque e-mail é a identidade de login (trocar exige
+ * reconfirmação).
+ *
+ * `role` entra só entre os dois níveis do painel (Administrador e Supervisor).
+ * Funcionário não vira administrador por um formulário de edição, nem o
+ * contrário; o service ainda confere que o ALVO é do painel e que ninguém muda
+ * o próprio nível.
  */
 export class UpdateUserDto {
+  @ValidateIf((o: UpdateUserDto) => o.role !== undefined) @IsIn(['ADMIN', 'SUPERVISOR']) role?: 'ADMIN' | 'SUPERVISOR'
   @ValidateIf((o: UpdateUserDto) => o.active !== undefined) @IsBoolean() active?: boolean
   @ValidateIf((o: UpdateUserDto) => o.name !== undefined) @IsString() @IsNotEmpty() name?: string
   // @ValidateIf e não @IsOptional: null explícito precisa REPROVAR (limpar o

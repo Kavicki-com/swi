@@ -2,9 +2,10 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateCameraDto, UpdateCameraDto } from './dto'
+import { can } from '../auth/permissions'
 
 // O endereço e o player da câmera podem carregar acesso ao sistema do cliente,
-// então só o administrador os recebe. O funcionário vê o ponto no mapa e o nome.
+// então só a equipe do painel (Administrador e Supervisor) os recebe. O funcionário vê o ponto no mapa e o nome.
 const adminSelect = { id: true, name: true, lat: true, lng: true, url: true, embedUrl: true, createdAt: true, updatedAt: true } as const
 const pointSelect = { id: true, name: true, lat: true, lng: true } as const
 
@@ -16,7 +17,7 @@ export class CamerasService {
     if (!companyId) return []
     return this.prisma.camera.findMany({
       where: { companyId },
-      select: role === 'ADMIN' ? adminSelect : pointSelect,
+      select: can(role, 'cameras.read') ? adminSelect : pointSelect,
       orderBy: { name: 'asc' },
     })
   }

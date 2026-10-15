@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { CurrentUser, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
-import { Roles } from '../../auth/roles.decorator'
+import { Can } from '../../auth/roles.decorator'
 import { RolesGuard } from '../../auth/roles.guard'
 import { AlertQueueService } from './alert-queue.service'
 import { AlertQueueQueryDto, AlertTriageDto } from './dto/alert-queue.dto'
@@ -13,7 +13,7 @@ import { AlertQueueQueryDto, AlertTriageDto } from './dto/alert-queue.dto'
 @ApiBearerAuth()
 @Controller('telemetry/v1/admin/alerts')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Can('alerts.operate')
 export class AlertQueueController {
   constructor(private readonly alerts: AlertQueueService) {}
 

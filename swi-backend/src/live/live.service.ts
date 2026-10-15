@@ -4,6 +4,7 @@ import { requireJwtSecret } from '../auth/jwt-secret'
 import { describeError } from '../common/describe-error'
 import { PrismaService } from '../prisma/prisma.service'
 import { LiveRegistry, type LiveBroadcastSummary, type LiveEnded } from './live-registry'
+import { can, PANEL_ROLES } from '../auth/permissions'
 
 /** SDP de vídeo fica em poucos KB; o teto só barra lixo. */
 export const LIVE_MAX_SDP_LENGTH = 64 * 1024
@@ -134,7 +135,7 @@ export class LiveService {
     if (!isRecord(payload) || !isId(payload.workerId)) return refuse('invalid')
     const speaker = await this.identify(token)
     if (!speaker) return refuse('unauthorized')
-    if (speaker.role !== 'ADMIN') return refuse('forbidden')
+    if (!can(speaker.role, 'monitoring.read')) return refuse('forbidden')
     // Administrador sem empresa não lê telemetria de ninguém; aqui também não.
     if (speaker.companyId === null) return refuse('not-live')
 
@@ -225,7 +226,7 @@ export class LiveService {
   private async toAdmins(companyId: string, event: string, payload: unknown): Promise<LiveDelivery[]> {
     try {
       const rows = await this.prisma.user.findMany({
-        where: { role: 'ADMIN', companyId, active: true },
+        where: { role: { in: [...PANEL_ROLES] }, companyId, active: true },
         select: { id: true },
       })
       const userIds = rows.map((row) => row.id)

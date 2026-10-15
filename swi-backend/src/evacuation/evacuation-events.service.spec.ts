@@ -57,6 +57,11 @@ describe('EvacuationEventsService.start', () => {
       where: { role: 'WORKER', active: true, companyId: 'org1' },
       select: { id: true, name: true },
     })
+    // A equipe do painel (Administrador e Supervisor) acompanha a evacuação.
+    expect(db.user.findMany.mock.calls[1][0]).toEqual({
+      where: { role: { in: ['ADMIN', 'SUPERVISOR'] }, companyId: 'org1' },
+      select: { id: true },
+    })
     // Notificação real (domain evacuation) pra TODOS os workers da org.
     const [ids, payload] = notif.enqueueForMany.mock.calls[0]
     expect(ids).toEqual(['w1', 'w2'])

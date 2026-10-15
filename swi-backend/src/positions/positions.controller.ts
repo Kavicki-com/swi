@@ -5,12 +5,13 @@ import { PositionHistoryService } from './position-history.service'
 import { HeartbeatDto, HeatQueryDto, PositionBatchDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
-import { Roles } from '../auth/roles.decorator'
+import { Can, Roles } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 import { parsePositionsHeatIncludeSim } from '../config/runtime-env'
+import { isPanelRole } from '../auth/permissions'
 
 // Localização em tempo real. O heartbeat é do WORKER, ou seja, o app mobile (ou
-// o simulador de dev) posta a própria posição; a listagem é do ADMIN, escopada
+// o simulador de dev) posta a própria posição; a listagem é da equipe do painel, escopada
 // na empresa dele. O throttle global de 100 por minuto comporta um heartbeat a
 // cada 5 segundos.
 @ApiTags('positions')
@@ -36,21 +37,21 @@ export class PositionsController {
     return this.positions.backfill(user.userId, dto.points, new Date())
   }
 
-  @Roles('ADMIN') @Get()
+  @Can('positions.read') @Get()
   list(@CurrentUser() user: JwtUser) {
     return this.positions.listForCompany(user.companyId)
   }
 
   // Mapa de calor da empresa: células agregadas, nunca trilhas individuais. O
   // funcionário lê o mesmo mapa no app, sempre da própria empresa.
-  @Roles('ADMIN', 'WORKER') @Get('heat')
+  @Roles('ADMIN', 'SUPERVISOR', 'WORKER') @Get('heat')
   heat(@CurrentUser() user: JwtUser, @Query() query: HeatQueryDto) {
-    const isAdmin = user.role === 'ADMIN'
+    const isPanel = isPanelRole(user.role)
     // O funcionário lê só a consulta padrão. Janela estreita desfaz a
     // agregação (um minuto de uma empresa pequena é a posição de uma pessoa
     // naquele minuto), e a chave de homologação é ferramenta do painel.
-    if (!isAdmin && (query.from !== undefined || query.to !== undefined || query.source === 'all')) {
-      throw new ForbiddenException('Só o administrador escolhe a janela e a origem do mapa de calor')
+    if (!isPanel && (query.from !== undefined || query.to !== undefined || query.source === 'all')) {
+      throw new ForbiddenException('Só a equipe do painel escolhe a janela e a origem do mapa de calor')
     }
     // Lido a cada pedido, como as outras chaves de homologação: ligar ou
     // desligar no servidor não exige subir de novo.
@@ -61,7 +62,7 @@ export class PositionsController {
     return this.history.heat(
       user.companyId,
       { from: query.from, to: query.to },
-      { includeSim: query.source === 'all', noCompany: isAdmin ? 'legacy-bucket' : 'empty' },
+      { includeSim: query.source === 'all', noCompany: isPanel ? 'legacy-bucket' : 'empty' },
       new Date(),
     )
   }

@@ -31,6 +31,7 @@ import {
   type ProjectionSnapshot,
   type WorkerTelemetry,
 } from './telemetry-projector'
+import { can } from '../../auth/permissions'
 
 // Consultas do read model. Este serviço decide QUAIS LINHAS entram na conta; o
 // que se faz com elas é do projetor, que é puro. A separação é o que permite
@@ -787,7 +788,7 @@ export class TelemetryQueryService {
     if (session === null) throw notFound
     const isOwner = session.workerId === user.userId
     const sameCompany =
-      user.role === 'ADMIN' &&
+      can(user.role, 'monitoring.read') &&
       user.companyId !== null &&
       session.worker.companyId === user.companyId
     if (!isOwner && !sameCompany) throw notFound

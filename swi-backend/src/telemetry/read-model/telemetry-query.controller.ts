@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
-import { Roles } from '../../auth/roles.decorator'
+import { Can } from '../../auth/roles.decorator'
 import { RolesGuard } from '../../auth/roles.guard'
 import { SeriesQueryDto } from './dto/series.dto'
 import { SessionHistoryQueryDto } from './dto/session-history.dto'
@@ -32,7 +32,7 @@ export class TelemetryQueryController {
   }
 
   /** Estado de um funcionário no painel, dentro da empresa do administrador. */
-  @Roles('ADMIN')
+  @Can('monitoring.read')
   @Get('workers/:id/current')
   worker(@CurrentUser() admin: JwtUser, @Param('id') workerId: string) {
     return this.query.currentForAdmin(admin, workerId)
@@ -48,7 +48,7 @@ export class TelemetryQueryController {
   }
 
   /** A série de um funcionário no painel, dentro da empresa do administrador. */
-  @Roles('ADMIN')
+  @Can('monitoring.read')
   @Get('workers/:id/series')
   workerSeries(
     @CurrentUser() admin: JwtUser,
@@ -58,7 +58,7 @@ export class TelemetryQueryController {
     return this.query.seriesForAdmin(admin, workerId, query.period)
   }
 
-  @Roles('ADMIN')
+  @Can('monitoring.read')
   @Get('admin/summary')
   summary(@CurrentUser() admin: JwtUser) {
     return this.query.adminSummary(admin)
@@ -68,7 +68,7 @@ export class TelemetryQueryController {
    * Todos os funcionários da empresa numa leitura, para dashboard,
    * monitoramento e mapa não fazerem uma chamada por pessoa.
    */
-  @Roles('ADMIN')
+  @Can('monitoring.read')
   @Get('admin/workers')
   workers(@CurrentUser() admin: JwtUser) {
     return this.query.adminWorkers(admin)

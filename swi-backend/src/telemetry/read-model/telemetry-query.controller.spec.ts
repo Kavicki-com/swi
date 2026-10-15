@@ -38,8 +38,8 @@ describe('TelemetryQueryController: fiação de autorização', () => {
     expect(guards).toEqual([JwtAuthGuard, RolesGuard])
   })
 
-  it.each(['worker', 'summary', 'workers', 'workerSeries'] as const)('%s exige ADMIN', (method) => {
-    expect(rolesOf(TelemetryQueryController.prototype[method])).toEqual(['ADMIN'])
+  it.each(['worker', 'summary', 'workers', 'workerSeries'] as const)('%s exige a equipe do painel', (method) => {
+    expect(rolesOf(TelemetryQueryController.prototype[method])).toEqual(['ADMIN', 'SUPERVISOR'])
   })
 
   it.each(['me', 'history', 'mySeries'] as const)(

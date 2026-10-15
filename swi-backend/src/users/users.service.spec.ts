@@ -206,6 +206,20 @@ describe('UsersService', () => {
     })
   })
 
+  // A tela de administradores lista os dois níveis do painel numa chamada só.
+  it('list() aceita vários níveis separados por vírgula', async () => {
+    const db = prisma()
+    db.user.findMany.mockResolvedValue([])
+    await new UsersService(db, media(), realtime()).list('org1', 'ADMIN,SUPERVISOR')
+    expect(db.user.findMany.mock.calls[0][0].where).toEqual({ companyId: 'org1', role: { in: ['ADMIN', 'SUPERVISOR'] } })
+  })
+
+  it('list() com um nível inválido na lista → BadRequest', async () => {
+    const db = prisma()
+    await expect(new UsersService(db, media(), realtime()).list('org1', 'ADMIN,BOSS')).rejects.toBeInstanceOf(BadRequestException)
+    expect(db.user.findMany).not.toHaveBeenCalled()
+  })
+
   it('list() rejeita role inválido com BadRequest', async () => {
     const db = prisma()
     await expect(new UsersService(db, media(), realtime()).list('org1', 'BOSS' as any)).rejects.toBeInstanceOf(BadRequestException)
@@ -356,6 +370,15 @@ describe('UsersService.create', () => {
     expect(arg.data.passwordHash).toMatch(/^\$2[aby]\$/)     // formato bcrypt
     expect(arg.data.profile.create).toMatchObject({ fullName: 'Zé', phone: '11', cpf: '123', birthDate: new Date('1990-05-04') })
   })
+  it('cria supervisor com o nível pedido', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'adm', companyId: 'c1' })
+    db.user.create.mockResolvedValue({ id: 'new', name: 'Sil', email: 's@x.com', role: 'SUPERVISOR', approvalStatus: 'APPROVED', active: true, companyRole: null, createdAt: new Date(0), profile: null })
+    const created = await new UsersService(db, media(), realtime()).create('adm', { name: 'Sil', email: 's@x.com', password: 'Senha@2026', role: 'SUPERVISOR' })
+    expect(db.user.create.mock.calls[0][0].data.role).toBe('SUPERVISOR')
+    expect(created.role).toBe('SUPERVISOR')
+  })
+
   it('email já cadastrado → ConflictException', async () => {
     const db = prisma(); db.user.findUnique.mockResolvedValueOnce({ id: 'x' })
     await expect(new UsersService(db, media(), realtime()).create('adm', { name: 'Z', email: 'z@x.com', password: 'senha123', role: 'WORKER' })).rejects.toBeInstanceOf(ConflictException)
@@ -454,6 +477,44 @@ describe('UsersService.update', () => {
     await expect(
       new UsersService(db, media(), realtime()).update('me', { active: true }, 'me', 'org1'),
     ).resolves.toEqual(expect.objectContaining({ active: true }))
+  })
+
+  // ---- nível (Administrador ↔ Supervisor) ----
+  it('troca o nível de um administrador para supervisor', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ ...alvo, role: 'ADMIN' })
+    db.user.update.mockResolvedValue(salvo({ role: 'SUPERVISOR' }))
+    const out = await new UsersService(db, media(), realtime()).update('u1', { role: 'SUPERVISOR' }, 'admin', 'org1')
+    expect(db.user.update.mock.calls[0][0].data).toEqual({ role: 'SUPERVISOR' })
+    expect(out.role).toBe('SUPERVISOR')
+  })
+
+  it('troca o nível de um supervisor para administrador', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ ...alvo, role: 'SUPERVISOR' })
+    db.user.update.mockResolvedValue(salvo({ role: 'ADMIN' }))
+    await new UsersService(db, media(), realtime()).update('u1', { role: 'ADMIN' }, 'admin', 'org1')
+    expect(db.user.update.mock.calls[0][0].data).toEqual({ role: 'ADMIN' })
+  })
+
+  it('funcionário não ganha nível do painel pela edição → BadRequest, sem gravar', async () => {
+    const db = prisma()
+    db.user.findUnique.mockResolvedValue({ ...alvo, role: 'WORKER' })
+    await expect(
+      new UsersService(db, media(), realtime()).update('u1', { role: 'ADMIN' }, 'admin', 'org1'),
+    ).rejects.toBeInstanceOf(BadRequestException)
+    expect(db.user.update).not.toHaveBeenCalled()
+  })
+
+  // Sem esta guarda o único administrador se rebaixaria e a empresa ficaria
+  // sem ninguém que gerencie usuários.
+  it('mudar o próprio nível → BadRequest, sem tocar no banco', async () => {
+    const db = prisma()
+    await expect(
+      new UsersService(db, media(), realtime()).update('me', { role: 'SUPERVISOR' }, 'me', 'org1'),
+    ).rejects.toBeInstanceOf(BadRequestException)
+    expect(db.user.findUnique).not.toHaveBeenCalled()
+    expect(db.user.update).not.toHaveBeenCalled()
   })
 
   it('alvo de OUTRA empresa → NotFound sem tocar no update', async () => {
