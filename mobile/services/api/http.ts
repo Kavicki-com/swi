@@ -48,11 +48,6 @@ export interface ApiRequestOptions {
 // 20 s: folgado para 3G ruim e curto o bastante para virar erro acionável.
 export const REQUEST_TIMEOUT_MS = 20_000;
 
-/** Distingue "estourou o prazo" de erro do backend (que vem com `status`). */
-export function isTimeoutError(e: unknown): boolean {
-  return !!e && typeof e === 'object' && (e as { code?: string }).code === 'TIMEOUT';
-}
-
 /**
  * Roda `work` com prazo. Duas garantias, de propósito:
  *
