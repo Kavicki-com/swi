@@ -8,7 +8,8 @@
 //      responsáveis" CTA.
 //   3. Status do relatório (SÓ na edição): Combobox com os 4 status.
 //   4. Inputs: Título / Resumo / Detalhes (tall).
-//   5. "Anexos" section: image slots (thumbnails dos anexos) + DS ImageUploader.
+//   5. "Anexos" section: lista de anexos (imagem, vídeo, áudio e PDF, com tipo
+//      e tamanho) + DS ImageUploader.
 //   6. Actions: Cancelar (outline) + Salvar relatório (contained green).
 //
 // "Salvar relatório" cria (reportsApi.create) ou salva a revisão
@@ -33,8 +34,14 @@ import {
   useTheme,
   type AttachmentItem,
 } from '@kavicki/swi-design-system'
-import { uploadImage } from '@/services/api/upload'
-import { reportsApi, type ReportStatus } from '@/services/api/reports'
+import {
+  checkReportFile,
+  reportFileInfo,
+  uploadImage,
+  type ReportFileKind,
+} from '@/services/api/upload'
+import { reportsApi, type ReportAttachment, type ReportStatus } from '@/services/api/reports'
+import { attachmentItems, pickedDescription, toAttachmentKind } from './reportAttachments'
 import { useDemoToast } from '@/lib/demoToast'
 import { ResponsablesModal } from '@/pages/modals/ResponsablesModal'
 
@@ -62,25 +69,39 @@ const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.l
 >
 
 // Anexo escolhido. `id` é estável na sessão (não muda com remoções), para a
-// linha da lista e a remoção. `preview` é uma object URL só pro thumbnail; pode
-// faltar em ambiente sem URL.createObjectURL (jsdom); aí a linha cai no clipe.
-// `uploadedKey` guarda a key devolvida pelo presign depois que o arquivo já
-// subiu, pra que um retry de save (ex.: create falhou com 4xx) REAPROVEITE a
-// key em vez de subir o arquivo de novo (e mintar key órfã).
-type PickedImage = { id: string; file: File; preview?: string; uploadedKey?: string }
-
-// Nome do arquivo a partir da URL presigned (último segmento, sem query), só
-// pra rotular a linha de um anexo já gravado. Sem segmento usável, cai no
-// "Anexo N" de quem chama.
-function fileNameFromUrl(url: string): string | undefined {
-  try {
-    const path = url.split('?')[0] ?? url
-    const last = path.split('/').pop()
-    return last ? decodeURIComponent(last) : undefined
-  } catch {
-    return undefined
-  }
+// linha da lista e a remoção. `kind` sai da validação da escolha (imagem,
+// vídeo, áudio ou PDF). `preview` é uma object URL só pro thumbnail de imagem;
+// pode faltar em ambiente sem URL.createObjectURL (jsdom); aí a linha cai no
+// ícone do tipo. `uploadedKey` guarda a key devolvida pelo presign depois que
+// o arquivo já subiu, pra que um retry de save (ex.: create falhou com 4xx)
+// REAPROVEITE a key em vez de subir o arquivo de novo (e mintar key órfã).
+type PickedImage = {
+  id: string
+  file: File
+  kind: ReportFileKind
+  preview?: string
+  uploadedKey?: string
 }
+
+// Tipos que o seletor do navegador oferece, os mesmos que o backend aceita em
+// reports. As extensões entram junto porque alguns sistemas não associam
+// .m4a, .mov ou .wav ao MIME, e o filtro esconderia o arquivo.
+const ACCEPT = [
+  'image/jpeg',
+  'image/png',
+  'video/mp4',
+  'video/quicktime',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/wav',
+  'audio/x-wav',
+  'application/pdf',
+  '.mov',
+  '.m4a',
+  '.wav',
+  '.mp3',
+].join(',')
 
 export function NewReport() {
   const theme = useTheme()
@@ -96,10 +117,12 @@ export function NewReport() {
   const [responsibles, setResponsibles] = useState<ReadonlyArray<string>>([])
   const [images, setImages] = useState<ReadonlyArray<PickedImage>>([])
   // Anexos já gravados (edição). `existingImageKeys` = keys crus preservadas no
-  // PATCH; `existingImages` = URLs presigned só pro thumbnail read-only. Remover
-  // um anexo existente está FORA de escopo — a edição só preserva e ADICIONA.
+  // PATCH; `existingAttachments` = URL presigned e tipo, só pra linha read-only.
+  // Remover um anexo existente está FORA de escopo: a edição só preserva e ADICIONA.
   const [existingImageKeys, setExistingImageKeys] = useState<ReadonlyArray<string>>([])
-  const [existingImages, setExistingImages] = useState<ReadonlyArray<string>>([])
+  const [existingAttachments, setExistingAttachments] = useState<ReadonlyArray<ReportAttachment>>(
+    [],
+  )
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -155,7 +178,7 @@ export function NewReport() {
       setStatus(data.status)
       setResponsibles([...data.responsibleNames])
       setExistingImageKeys(data.imageKeys ?? [])
-      setExistingImages(data.images ?? [])
+      setExistingAttachments(data.attachments ?? [])
       setLoading(false)
     })
     return () => {
@@ -180,16 +203,29 @@ export function NewReport() {
       setError(`Anexe no máximo ${LIMIT_IMAGE_KEYS} arquivos por relatório.`)
       return
     }
-    setError(null)
-    const entries: PickedImage[] = picked.map((file) => {
+    // Tipo e tamanho recusados NA ESCOLHA, com a mesma frase do servidor e o
+    // nome do arquivo na frente. Os válidos do mesmo lote entram mesmo assim:
+    // recusar o lote inteiro por um arquivo obrigaria a escolher tudo de novo.
+    const refused: string[] = []
+    const entries: PickedImage[] = []
+    for (const file of picked) {
+      const reason = checkReportFile(file)
+      const info = reportFileInfo(file)
+      if (reason || !info) {
+        refused.push(`${file.name}: ${reason}`)
+        continue
+      }
       const preview =
-        typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+        info.kind === 'image' &&
+        typeof URL !== 'undefined' &&
+        typeof URL.createObjectURL === 'function'
           ? URL.createObjectURL(file)
           : undefined
       if (preview) createdUrlsRef.current.push(preview)
-      return { id: `pick_${pickSeqRef.current++}`, file, preview }
-    })
-    setImages((prev) => [...prev, ...entries])
+      entries.push({ id: `pick_${pickSeqRef.current++}`, file, kind: info.kind, preview })
+    }
+    setError(refused.length > 0 ? refused.join('\n') : null)
+    if (entries.length > 0) setImages((prev) => [...prev, ...entries])
   }
 
   // Tira um anexo escolhido da lista sem sair do formulário: o resto do que foi
@@ -312,27 +348,30 @@ export function NewReport() {
   // Linhas da lista de anexos: primeiro os já gravados (edição), só
   // visualizáveis (remover anexo existente segue fora de escopo), depois os
   // escolhidos agora, que dá pra visualizar e remover.
-  const attachmentItems: AttachmentItem[] = [
-    ...existingImages.map((uri, index) => ({
-      id: `existing_${index}`,
-      name: fileNameFromUrl(uri) ?? `Anexo ${index + 1}`,
-      kind: 'image' as const,
-      thumbnailUri: uri,
-      actions: ['view'] as const,
-    })),
+  // Os escolhidos mostram tipo e tamanho junto do nome, antes de enviar. Só a
+  // imagem tem o que visualizar antes de subir; os outros tipos só se removem.
+  const existingItems = attachmentItems(existingAttachments, ['view'])
+  const listItems: AttachmentItem[] = [
+    ...existingItems,
     ...images.map((entry) => ({
       id: entry.id,
-      name: entry.file.name,
-      kind: 'image' as const,
+      name: pickedDescription(entry.file.name, entry.kind, entry.file.size),
+      kind: toAttachmentKind(entry.kind),
       thumbnailUri: entry.preview,
-      actions: ['view', 'remove'] as const,
+      actions: entry.kind === 'image' ? (['view', 'remove'] as const) : (['remove'] as const),
     })),
   ]
 
+  // Imagem abre no visualizador; anexo gravado de outro tipo abre em nova aba
+  // (o navegador toca o vídeo e o áudio e mostra o PDF).
   const openViewer = (item: AttachmentItem) => {
-    const existing = existingImages.find((_, index) => `existing_${index}` === item.id)
+    const existing = existingAttachments[existingItems.findIndex((i) => i.id === item.id)]
+    if (existing && existing.kind !== 'image') {
+      window.open(existing.url, '_blank', 'noopener')
+      return
+    }
     const picked = images.find((entry) => entry.id === item.id)
-    const uri = existing ?? picked?.preview
+    const uri = existing?.url ?? picked?.preview
     if (uri) setViewing({ uri, title: item.name })
   }
 
@@ -489,9 +528,9 @@ export function NewReport() {
         <Title variant="title.xs" color={theme.content.primary}>
           Anexos
         </Title>
-        {attachmentItems.length > 0 ? (
+        {listItems.length > 0 ? (
           <AttachmentList
-            items={attachmentItems}
+            items={listItems}
             onView={openViewer}
             onRemove={(item) => removePicked(item.id)}
             testID="new-report-attachments"
@@ -499,7 +538,7 @@ export function NewReport() {
         ) : null}
         <View style={{ maxWidth: 420 }}>
           <ImageUploader
-            helperText="Selecione arquivos do tipo: JPG ou PNG"
+            helperText="Selecione arquivos do tipo: JPG, PNG, MP4, MOV, MP3, M4A, WAV ou PDF. Vídeo até 100 MB, áudio até 25 MB, os demais até 15 MB."
             pickFileLabel="Enviar arquivo"
             accentColor={theme.content.primary}
             showTakePhoto={false}
@@ -513,7 +552,7 @@ export function NewReport() {
           ref={fileInputRef}
           data-testid="new-report-file-input"
           type="file"
-          accept="image/jpeg,image/png"
+          accept={ACCEPT}
           multiple
           style={{ display: 'none' }}
           onChange={onFilesSelected}

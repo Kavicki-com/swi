@@ -10,7 +10,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
-import { seedSession, clearSession } from '@/test-utils/renderPage'
+import { seedSession, clearSession, settled } from '@/test-utils/renderPage'
 import { NewReport } from './NewReport'
 
 const { createMock, updateMock, getMock, uploadMock, listMock } = vi.hoisted(() => ({
@@ -25,9 +25,12 @@ vi.mock('@/services/api/reports', () => ({
   reportsApi: { create: createMock, update: updateMock, get: getMock },
 }))
 
-vi.mock('@/services/api/upload', () => ({
+// Só o upload é mockado: a validação de tipo e tamanho (checkReportFile) é a
+// real, porque a tela a usa na ESCOLHA do arquivo e é isso que estes testes
+// exercitam.
+vi.mock('@/services/api/upload', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/api/upload')>()),
   uploadImage: uploadMock,
-  MAX_UPLOAD_BYTES: 15 * 1024 * 1024,
 }))
 
 vi.mock('@/services/admins', () => ({
@@ -94,6 +97,20 @@ const EDIT_REPORT = {
   responsibleTotalCount: 2,
   details: 'Detalhes existentes',
   images: ['https://presigned/existing-1.jpg'],
+  attachments: [
+    {
+      key: 'reports/existing-1.jpg',
+      url: 'https://presigned/existing-1.jpg',
+      contentType: 'image/jpeg',
+      kind: 'image' as const,
+    },
+    {
+      key: 'reports/existing-2.mp4',
+      url: 'https://presigned/existing-2.mp4',
+      contentType: 'video/mp4',
+      kind: 'video' as const,
+    },
+  ],
   activities: [],
   comments: [],
   imageKeys: ['reports/existing-1.jpg', 'reports/existing-2.jpg'],
@@ -200,6 +217,116 @@ describe('NewReport — criação', () => {
   })
 })
 
+// Arquivo com tamanho forjado: alocar 100 MB de verdade travaria o runner.
+function fileOf(name: string, type: string, bytes = 3) {
+  const file = new File([new Uint8Array([1, 2, 3])], name, { type })
+  Object.defineProperty(file, 'size', { value: bytes })
+  return file
+}
+
+const MB = 1024 * 1024
+
+describe('NewReport — anexos multimídia', () => {
+  it('o seletor oferece imagem, vídeo, áudio e PDF', async () => {
+    // settled: espera a sessão assentar antes de o teste acabar.
+    await settled(renderAt())
+    const accept = screen.getByTestId('new-report-file-input').getAttribute('accept') ?? ''
+    for (const type of [
+      'image/jpeg',
+      'video/mp4',
+      'video/quicktime',
+      'audio/mpeg',
+      'audio/mp4',
+      'audio/wav',
+      'application/pdf',
+    ]) {
+      expect(accept).toContain(type)
+    }
+  })
+
+  it('mostra nome, tipo e tamanho de cada arquivo antes de enviar, e sobe todos no salvar', async () => {
+    uploadMock
+      .mockResolvedValueOnce('reports/v.mp4')
+      .mockResolvedValueOnce('reports/a.m4a')
+      .mockResolvedValueOnce('reports/d.pdf')
+    renderAt()
+    typeIn('new-report-title', 'Multimídia')
+
+    fireEvent.change(screen.getByTestId('new-report-file-input'), {
+      target: {
+        files: [
+          fileOf('campo.mp4', 'video/mp4', 12.3 * MB),
+          fileOf('relato.m4a', 'audio/x-m4a', 3.24 * MB),
+          fileOf('laudo.pdf', 'application/pdf', 850 * 1024),
+        ],
+      },
+    })
+
+    expect(await screen.findByText('campo.mp4 · Vídeo · 12,3 MB')).toBeInTheDocument()
+    expect(screen.getByText('relato.m4a · Áudio · 3,2 MB')).toBeInTheDocument()
+    expect(screen.getByText('laudo.pdf · PDF · 850 KB')).toBeInTheDocument()
+    expect(uploadMock).not.toHaveBeenCalled()
+
+    save()
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
+    expect(uploadMock).toHaveBeenCalledTimes(3)
+    expect(createMock.mock.calls[0]?.[0].imageKeys).toEqual([
+      'reports/v.mp4',
+      'reports/a.m4a',
+      'reports/d.pdf',
+    ])
+  })
+
+  it('recusa na escolha o tipo que o relatório não aceita, com a mensagem do servidor', async () => {
+    renderAt()
+    typeIn('new-report-title', 'Com txt')
+
+    fireEvent.change(screen.getByTestId('new-report-file-input'), {
+      target: { files: [fileOf('nota.txt', 'text/plain')] },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-error')).toHaveTextContent(
+        'nota.txt: Tipo de arquivo não aceito. Selecione JPG, PNG, MP4, MOV, MP3, M4A, WAV ou PDF.',
+      )
+    })
+    expect(screen.queryByText(/nota\.txt ·/)).toBeNull()
+
+    save()
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
+    expect(uploadMock).not.toHaveBeenCalled()
+  })
+
+  it('recusa na escolha o vídeo acima de 100 MB e mantém o arquivo válido do mesmo lote', async () => {
+    renderAt()
+    typeIn('new-report-title', 'Vídeo grande')
+
+    fireEvent.change(screen.getByTestId('new-report-file-input'), {
+      target: {
+        files: [
+          fileOf('grande.mp4', 'video/mp4', 100 * MB + 1),
+          fileOf('ok.mp3', 'audio/mpeg', 1 * MB),
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-report-error')).toHaveTextContent(
+        'grande.mp4: O arquivo excede o limite de 100 MB para vídeo.',
+      )
+    })
+    expect(screen.queryByText(/grande\.mp4 ·/)).toBeNull()
+    expect(screen.getByText('ok.mp3 · Áudio · 1,0 MB')).toBeInTheDocument()
+  })
+
+  it('na edição, os anexos gravados aparecem com o tipo certo', async () => {
+    renderAt('/reports/r_9/edit')
+    expect(await screen.findByText('existing-2.mp4')).toBeInTheDocument()
+    expect(screen.getByText('existing-1.jpg')).toBeInTheDocument()
+  })
+})
+
 describe('NewReport — anexos', () => {
   it('só sobe o arquivo no submit, com prefix "reports", e manda a key', async () => {
     renderAt()
@@ -269,15 +396,16 @@ describe('NewReport — anexos', () => {
     fireEvent.change(input, { target: { files: [jpeg('a.jpg')] } })
     fireEvent.change(input, { target: { files: [jpeg('b.png')] } })
 
-    // A lista de anexos mostra os dois, cada um com botão de excluir.
-    expect(screen.getByText('a.jpg')).toBeInTheDocument()
-    expect(screen.getByText('b.png')).toBeInTheDocument()
+    // A lista de anexos mostra os dois, com tipo e tamanho, cada um com botão
+    // de excluir.
+    expect(screen.getByText('a.jpg · Imagem · 1 KB')).toBeInTheDocument()
+    expect(screen.getByText('b.png · Imagem · 1 KB')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir a.jpg' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir a.jpg · Imagem · 1 KB' }))
 
     // O anexo removido some; o outro e o título continuam.
-    await waitFor(() => expect(screen.queryByText('a.jpg')).not.toBeInTheDocument())
-    expect(screen.getByText('b.png')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('a.jpg · Imagem · 1 KB')).not.toBeInTheDocument())
+    expect(screen.getByText('b.png · Imagem · 1 KB')).toBeInTheDocument()
     expect(screen.getByTestId('new-report-title')).toHaveValue('Com dois anexos')
 
     save()

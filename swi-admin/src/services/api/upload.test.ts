@@ -2,7 +2,15 @@
 // importar hooks de 'vitest' aqui duplica a instância (deps.inline) e quebra o runner.
 import { vi } from 'vitest'
 import { ApiError } from './http'
-import { MAX_UPLOAD_BYTES, uploadImage, uploadOrderImage } from './upload'
+import {
+  MAX_AUDIO_BYTES,
+  MAX_UPLOAD_BYTES,
+  MAX_VIDEO_BYTES,
+  checkReportFile,
+  reportFileInfo,
+  uploadImage,
+  uploadOrderImage,
+} from './upload'
 import { permitirConsoleError } from '@/test-setup'
 
 // O caminho de erro do upload registra o status recusado pelo storage de
@@ -282,5 +290,129 @@ describe('uploadImage — tipos aceitos por prefixo', () => {
     )
     expect((err as Error).message).toMatch(/PDF/)
     expect((err as Error).message).toMatch(/TXT/)
+  })
+})
+
+// Anexo multimídia do relatório. Espelha o backend (allowed-content-types.ts):
+// em 'reports' entram imagem, vídeo, áudio e PDF, com teto por tipo (vídeo
+// 100 MB, áudio 25 MB, o resto 15 MB). A mensagem é a mesma do app.
+describe('uploadImage — anexo multimídia de relatório', () => {
+  const MB = 1024 * 1024
+  const fileOf = (type: string, name: string, bytes = 10) => {
+    const file = new File([new Uint8Array([1])], name, { type })
+    Object.defineProperty(file, 'size', { value: bytes })
+    return file
+  }
+
+  it('tetos espelham o backend', () => {
+    expect(MAX_VIDEO_BYTES).toBe(100 * MB)
+    expect(MAX_AUDIO_BYTES).toBe(25 * MB)
+  })
+
+  it.each([
+    ['video/mp4', 'campo.mp4'],
+    ['video/quicktime', 'campo.mov'],
+    ['audio/mpeg', 'relato.mp3'],
+    ['audio/mp4', 'relato.m4a'],
+    ['audio/x-m4a', 'relato.m4a'],
+    ['audio/wav', 'relato.wav'],
+    ['audio/x-wav', 'relato.wav'],
+    ['application/pdf', 'laudo.pdf'],
+  ])('aceita %s e assina o mesmo content-type', async (type, name) => {
+    const f = stubUpload({ ok: true, status: 200 })
+    await expect(uploadImage(fileOf(type, name), 'reports')).resolves.toBeDefined()
+    const presign = JSON.parse((f.mock.calls[0]?.[1] as RequestInit).body as string)
+    expect(presign.contentType).toBe(type)
+    expect(presign.prefix).toBe('reports')
+    const put = f.mock.calls[1]?.[1] as RequestInit
+    expect((put.headers as Record<string, string>)['Content-Type']).toBe(type)
+  })
+
+  // Navegador que não reconhece a extensão manda type vazio. Sem inferir pela
+  // extensão, um .m4a legítimo seria recusado por "tipo não aceito".
+  it('type vazio: deduz pela extensão e assina o tipo deduzido', async () => {
+    const f = stubUpload({ ok: true, status: 200 })
+    await expect(uploadImage(fileOf('', 'relato.M4A'), 'reports')).resolves.toBeDefined()
+    expect(JSON.parse((f.mock.calls[0]?.[1] as RequestInit).body as string).contentType).toBe(
+      'audio/mp4',
+    )
+    expect(
+      ((f.mock.calls[1]?.[1] as RequestInit).headers as Record<string, string>)['Content-Type'],
+    ).toBe('audio/mp4')
+  })
+
+  it('recusa txt no relatório, listando o que passa', async () => {
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    await expect(uploadImage(fileOf('text/plain', 'nota.txt'), 'reports')).rejects.toThrow(
+      'Tipo de arquivo não aceito. Selecione JPG, PNG, MP4, MOV, MP3, M4A, WAV ou PDF.',
+    )
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['video/mp4', 'campo.mp4', 100 * MB + 1, 'O arquivo excede o limite de 100 MB para vídeo.'],
+    ['audio/mpeg', 'relato.mp3', 25 * MB + 1, 'O arquivo excede o limite de 25 MB para áudio.'],
+    ['application/pdf', 'laudo.pdf', 15 * MB + 1, 'O arquivo excede o limite de 15 MB para PDF.'],
+    ['image/jpeg', 'foto.jpg', 15 * MB + 1, 'O arquivo excede o limite de 15 MB para imagem.'],
+  ])('%s acima do teto é recusado antes da rede', async (type, name, bytes, message) => {
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    await expect(uploadImage(fileOf(type, name, bytes), 'reports')).rejects.toThrow(message)
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('vídeo de 100 MB exatos passa', async () => {
+    stubUpload({ ok: true, status: 200 })
+    await expect(
+      uploadImage(fileOf('video/mp4', 'campo.mp4', 100 * MB), 'reports'),
+    ).resolves.toBeDefined()
+  })
+
+  // Vídeo continua fora dos outros prefixos: a regra nova é só do relatório.
+  it('vídeo segue recusado em chat', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    await expect(uploadImage(fileOf('video/mp4', 'campo.mp4'), 'chat')).rejects.toThrow(
+      /JPG ou PNG/,
+    )
+  })
+})
+
+// A tela usa as mesmas funções na ESCOLHA do arquivo, para recusar na hora
+// em vez de só no salvar.
+describe('reportFileInfo e checkReportFile', () => {
+  const MB = 1024 * 1024
+  const fileOf = (type: string, name: string, bytes = 10) => {
+    const file = new File([new Uint8Array([1])], name, { type })
+    Object.defineProperty(file, 'size', { value: bytes })
+    return file
+  }
+
+  it.each([
+    ['image/png', 'a.png', 'image/png', 'image'],
+    ['video/quicktime', 'a.mov', 'video/quicktime', 'video'],
+    ['audio/x-wav', 'a.wav', 'audio/x-wav', 'audio'],
+    ['application/pdf', 'a.pdf', 'application/pdf', 'document'],
+    ['', 'a.mp4', 'video/mp4', 'video'],
+    // Tipo informado fora da lista: a extensão decide.
+    ['audio/vnd.wave', 'a.wav', 'audio/wav', 'audio'],
+  ])('%s %s → %s (%s)', (type, name, contentType, kind) => {
+    expect(reportFileInfo(fileOf(type, name))).toEqual({ contentType, kind })
+  })
+
+  it('tipo fora da lista devolve null', () => {
+    expect(reportFileInfo(fileOf('text/plain', 'a.txt'))).toBeNull()
+    expect(reportFileInfo(fileOf('', 'a.exe'))).toBeNull()
+  })
+
+  it('checkReportFile devolve null para arquivo válido e a mensagem para o recusado', () => {
+    expect(checkReportFile(fileOf('video/mp4', 'a.mp4', 50 * MB))).toBeNull()
+    expect(checkReportFile(fileOf('audio/mpeg', 'a.mp3', 30 * MB))).toBe(
+      'O arquivo excede o limite de 25 MB para áudio.',
+    )
+    expect(checkReportFile(fileOf('', 'a.txt'))).toBe(
+      'Tipo de arquivo não aceito. Selecione JPG, PNG, MP4, MOV, MP3, M4A, WAV ou PDF.',
+    )
+    expect(checkReportFile(fileOf('image/png', 'a.png', 0))).toBe('O arquivo está vazio')
   })
 })

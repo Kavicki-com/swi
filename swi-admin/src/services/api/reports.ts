@@ -28,6 +28,16 @@ export type ReportActivity = {
   overflowCount?: number
 }
 
+// Anexo do relatório como o backend devolve em `attachments`. O tipo sai da
+// extensão da key no servidor; `kind` decide imagem, player ou documento.
+export type ReportAttachmentKind = 'image' | 'video' | 'audio' | 'document'
+export type ReportAttachment = {
+  key: string
+  url: string
+  contentType: string
+  kind: ReportAttachmentKind
+}
+
 export type Report = {
   id: string
   title: string
@@ -49,8 +59,10 @@ export type Report = {
   responsibleTotalCount?: number
   // Corpo dos detalhes exibido em /reports/:id ("Detalhes do relatório").
   details?: string
-  // Thumbnails de imagem da seção "Imagens".
+  // URLs só das imagens (o backend tira vídeo, áudio e PDF daqui).
   images?: ReadonlyArray<string>
+  // Todo anexo com o tipo, na ordem gravada: é o que a seção "Anexos" lê.
+  attachments: ReadonlyArray<ReportAttachment>
   // Lista de atividades da seção "Atividades".
   activities?: ReadonlyArray<ReportActivity>
 }
@@ -82,8 +94,10 @@ export type ReportDto = {
   // antigo não manda o campo e a UI cai no placeholder.
   responsibleAvatars?: string[]
   details?: string
-  images?: string[] // urls presigned (exibição)
-  imageKeys?: string[] // keys crus (edição preserva/mescla anexos)
+  images?: string[] // urls presigned, só imagens (exibição)
+  imageKeys?: string[] // keys crus de TODO anexo (edição preserva/mescla anexos)
+  // Opcional: backend anterior ao anexo multimídia não manda o campo.
+  attachments?: ReportAttachment[]
   activities?: RawActivity[]
 }
 
@@ -166,6 +180,15 @@ function toReport(dto: ReportDto): Report {
     responsibleTotalCount: (dto.responsibles ?? []).length,
     details: dto.details,
     images: dto.images ?? [],
+    // Backend sem `attachments` só tinha imagem: cada URL vira anexo de imagem.
+    attachments:
+      dto.attachments ??
+      (dto.images ?? []).map((url) => ({
+        key: '',
+        url,
+        contentType: 'image/jpeg',
+        kind: 'image' as const,
+      })),
     activities,
   }
 }
