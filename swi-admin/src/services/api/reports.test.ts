@@ -55,6 +55,28 @@ describe('reportsApi.list (real)', () => {
     expect(url).toContain('/reports')
   })
 
+  // Anexo multimídia: o backend devolve `attachments` com o tipo de cada um, e
+  // é por ele que a tela escolhe imagem, player ou cartão de documento.
+  it('attachments do DTO passam adiante com url, contentType e kind', async () => {
+    const attachments = [
+      { key: 'reports/a.jpg', url: 'signed:a', contentType: 'image/jpeg', kind: 'image' },
+      { key: 'reports/v.mp4', url: 'signed:v', contentType: 'video/mp4', kind: 'video' },
+      { key: 'reports/d.pdf', url: 'signed:d', contentType: 'application/pdf', kind: 'document' },
+    ]
+    vi.stubGlobal('fetch', okJson([dto({ images: ['signed:a'], attachments })]))
+    const { data } = await reportsApi.list()
+    expect(data![0]!.attachments).toEqual(attachments)
+  })
+
+  // Backend anterior ao campo: cada imagem vira um anexo de imagem, sem key.
+  it('attachments ausente no DTO → derivado de images', async () => {
+    vi.stubGlobal('fetch', okJson([dto({ images: ['signed:img1'] })]))
+    const { data } = await reportsApi.list()
+    expect(data![0]!.attachments).toEqual([
+      { key: '', url: 'signed:img1', contentType: 'image/jpeg', kind: 'image' },
+    ])
+  })
+
   it('images ausente no DTO → [] no mapeamento', async () => {
     vi.stubGlobal('fetch', okJson([dto({ images: undefined })]))
     const { data } = await reportsApi.list()

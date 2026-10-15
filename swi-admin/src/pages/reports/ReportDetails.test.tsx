@@ -13,7 +13,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import type { ReactNode } from 'react'
 import { AuthProvider } from '@/hooks/useAuth'
 import { seedSession, clearSession, settled } from '@/test-utils/renderPage'
-import type { ReportActivity } from '@/services/api/reports'
+import type { ReportActivity, ReportAttachment } from '@/services/api/reports'
 import { ReportDetails } from './ReportDetails'
 
 const { getMock, addCommentMock, removeMock, toastShow } = vi.hoisted(() => ({
@@ -49,8 +49,17 @@ const BASE_REPORT = {
   responsibleAvatars: [] as string[],
   details: 'Detalhes longos.',
   images: [] as string[],
+  attachments: [] as ReportAttachment[],
   activities: [] as ReportActivity[],
 }
+
+// Anexo como o backend devolve em `attachments`.
+const anexo = (kind: ReportAttachment['kind'], url: string): ReportAttachment => ({
+  key: '',
+  url,
+  contentType: '',
+  kind,
+})
 
 const COMMENT_A = {
   id: 'c_1',
@@ -261,7 +270,12 @@ describe('ReportDetails: imagens e atividades', () => {
   })
 
   it('lista cada imagem com visualizar e baixar', async () => {
-    await renderAt([], { images: ['https://cdn/r/foto-1.jpg', 'https://cdn/r/foto-2.jpg'] })
+    await renderAt([], {
+      attachments: [
+        anexo('image', 'https://cdn/r/foto-1.jpg'),
+        anexo('image', 'https://cdn/r/foto-2.jpg'),
+      ],
+    })
     await screen.findByTestId('report-details')
 
     expect(screen.getByRole('button', { name: 'Visualizar foto-1.jpg' })).toBeInTheDocument()
@@ -270,7 +284,7 @@ describe('ReportDetails: imagens e atividades', () => {
   })
 
   it('visualizar abre o anexo em tamanho grande, com o nome do arquivo', async () => {
-    await renderAt([], { images: ['https://cdn/r/foto-1.jpg'] })
+    await renderAt([], { attachments: [anexo('image', 'https://cdn/r/foto-1.jpg')] })
     await screen.findByTestId('report-details')
 
     fireEvent.click(screen.getByRole('button', { name: 'Visualizar foto-1.jpg' }))
@@ -278,6 +292,64 @@ describe('ReportDetails: imagens e atividades', () => {
     const viewer = await screen.findByTestId('report-details-viewer')
     expect(viewer).toHaveTextContent('foto-1.jpg')
     expect(screen.getByRole('button', { name: 'Baixar' })).toBeInTheDocument()
+  })
+
+  // Anexo multimídia: cada tipo abre do seu jeito. Vídeo e áudio tocam no
+  // MediaPlayer do DS, abaixo da lista; PDF abre em nova aba; todos baixam.
+  describe('anexos multimídia', () => {
+    const multimidia = [
+      anexo('video', 'https://cdn/r/campo.mp4?sig=1'),
+      anexo('audio', 'https://cdn/r/relato.m4a?sig=1'),
+      anexo('document', 'https://cdn/r/laudo.pdf?sig=1'),
+    ]
+
+    it('seção Anexos lista vídeo, áudio e PDF com visualizar e baixar', async () => {
+      await renderAt([], { attachments: multimidia })
+      await screen.findByTestId('report-details')
+
+      expect(screen.getByText('Anexos')).toBeInTheDocument()
+      for (const nome of ['campo.mp4', 'relato.m4a', 'laudo.pdf']) {
+        expect(screen.getByRole('button', { name: `Visualizar ${nome}` })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: `Baixar ${nome}` })).toBeInTheDocument()
+      }
+    })
+
+    it('visualizar vídeo abre o player de vídeo com a URL do anexo', async () => {
+      await renderAt([], { attachments: multimidia })
+      await screen.findByTestId('report-details')
+
+      expect(screen.queryByTestId('report-details-player')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Visualizar campo.mp4' }))
+
+      const player = await screen.findByTestId('report-details-player')
+      expect(player.querySelector('video')?.getAttribute('src')).toBe(
+        'https://cdn/r/campo.mp4?sig=1',
+      )
+    })
+
+    it('visualizar áudio abre o player de áudio', async () => {
+      await renderAt([], { attachments: multimidia })
+      await screen.findByTestId('report-details')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Visualizar relato.m4a' }))
+
+      const player = await screen.findByTestId('report-details-player')
+      expect(player.querySelector('audio')?.getAttribute('src')).toBe(
+        'https://cdn/r/relato.m4a?sig=1',
+      )
+    })
+
+    it('visualizar PDF abre o arquivo em nova aba', async () => {
+      const open = vi.spyOn(window, 'open').mockReturnValue(null)
+      await renderAt([], { attachments: multimidia })
+      await screen.findByTestId('report-details')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Visualizar laudo.pdf' }))
+
+      expect(open).toHaveBeenCalledWith('https://cdn/r/laudo.pdf?sig=1', '_blank', 'noopener')
+      expect(screen.queryByTestId('report-details-player')).toBeNull()
+      open.mockRestore()
+    })
   })
 
   it('cada atividade mostra título, setor e equipe nomeada', async () => {

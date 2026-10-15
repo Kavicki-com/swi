@@ -15,20 +15,17 @@ import { useEffect, useRef, useState } from 'react'
 import { Pressable, View, type TextInput } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  AttachmentList,
   Avatar,
   Button,
   Icon,
-  ImageViewer,
   Input,
   SearchInput,
   StatusTag,
   Text,
   Title,
   useTheme,
-  type AttachmentItem,
 } from '@kavicki/swi-design-system'
-import { downloadFile, fileNameFromUrl } from '@/lib/attachments'
+import { ReportAttachments } from './components/ReportAttachments'
 import {
   reportsApi,
   type Report,
@@ -306,8 +303,6 @@ export function ReportDetails() {
   // tem UM relatório carregado, e o alvo nunca é ambíguo como numa lista.
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  // Anexo aberto no visualizador em tamanho grande; null = fechado.
-  const [viewing, setViewing] = useState<{ uri: string; title: string } | null>(null)
   // O botão "Fazer comentário" do topo rola até o campo lá embaixo e o foca,
   // em vez de só pedir ao usuário para achá-lo.
   const commentRef = useRef<TextInput>(null)
@@ -374,19 +369,6 @@ export function ReportDetails() {
       </View>
     )
   }
-
-  // As imagens do relatório já chegam com URL assinada: dá pra visualizar em
-  // tamanho grande e baixar. O nome vem da própria URL, com um rótulo por
-  // posição como reserva.
-  const imageItems: AttachmentItem[] = (report.images ?? []).map((uri, index) => ({
-    id: `img_${index}`,
-    name: fileNameFromUrl(uri) ?? `Imagem ${index + 1}`,
-    kind: 'image' as const,
-    thumbnailUri: uri,
-    actions: ['view', 'download'] as const,
-  }))
-  const uriOf = (item: AttachmentItem) =>
-    (report.images ?? []).find((_, index) => `img_${index}` === item.id)
 
   return (
     <View testID="report-details" style={{ gap: theme.gap.l }}>
@@ -556,26 +538,9 @@ export function ReportDetails() {
         </Text>
       </View>
 
-      {/* Section 4, Imagens: lista com visualizar e baixar por anexo. */}
-      {imageItems.length > 0 ? (
-        <View style={{ gap: theme.gap.s }}>
-          <Title variant="title.s" color={theme.content.primary}>
-            Imagens
-          </Title>
-          <AttachmentList
-            items={imageItems}
-            onView={(item) => {
-              const uri = uriOf(item)
-              if (uri) setViewing({ uri, title: item.name })
-            }}
-            onDownload={(item) => {
-              const uri = uriOf(item)
-              if (uri) void downloadFile(uri, item.name)
-            }}
-            testID="report-details-attachments"
-          />
-        </View>
-      ) : null}
+      {/* Section 4, Anexos: imagem, vídeo, áudio e PDF, cada um aberto do
+          seu jeito, todos com baixar. Some quando não há anexo. */}
+      <ReportAttachments attachments={report.attachments} testID="report-details" />
 
       {/* Section 5 — Atividades. */}
       <View style={{ gap: theme.gap.s }}>
@@ -641,18 +606,6 @@ export function ReportDetails() {
           onCancel={() => setConfirmingDelete(false)}
         />
       )}
-
-      {/* Visualizador do anexo em tamanho grande, com Baixar. */}
-      <ImageViewer
-        visible={viewing !== null}
-        uri={viewing?.uri ?? null}
-        title={viewing?.title ?? ''}
-        onClose={() => setViewing(null)}
-        onDownload={() => {
-          if (viewing) void downloadFile(viewing.uri, viewing.title)
-        }}
-        testID="report-details-viewer"
-      />
     </View>
   )
 }
