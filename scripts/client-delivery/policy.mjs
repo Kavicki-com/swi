@@ -6,9 +6,14 @@
  * A segunda é o mínimo de raiz sem o qual o pacote é código morto: o duplo
  * clique, os scripts que ele chama e o compose que sobe a stack.
  *
- * O que a entrega NÃO é: documentação. Nem a interna (planos, auditorias,
- * runbooks, capturas de tela de inspeção), nem a de uso. Markdown fica de fora
- * por regra, com uma exceção única e declarada, o aviso de propriedade.
+ * A documentação exigida pelo contrato acompanha o código: os READMEs de
+ * instalação, build e deploy, o registro de versões, o anexo de licenças, o
+ * manual do algoritmo e a especificação OpenAPI. Ela entra por lista fechada,
+ * caminho a caminho, e não por extensão.
+ *
+ * O que a entrega NÃO é: documentação interna (planos, auditorias, runbooks,
+ * capturas de tela de inspeção). Fora da lista acima, markdown continua de
+ * fora por regra, com a exceção do aviso de propriedade.
  *
  * Allowlist, e não blocklist, de propósito: um caminho só entra quando alguma
  * regra o inclui. Arquivo novo que ninguém previu fica de fora e aparece no
@@ -31,6 +36,23 @@ const ARQUIVOS_RAIZ = new Set([
   'NOTICE.md',
   '.nvmrc',
   '.node-version',
+])
+
+/**
+ * Documentação do contrato, por caminho exato. É consultada antes das regras
+ * que excluem markdown e a pasta docs/, porque cada item aqui é uma exceção
+ * deliberada a elas: um README novo em outra pasta continua de fora até
+ * alguém decidir incluí-lo nesta lista.
+ */
+const DOCUMENTACAO_ENTREGUE = new Set([
+  'README.md',
+  'CHANGELOG.md',
+  'ANEXO-III-LICENCAS.md',
+  'MANUAL-PREDICAO-DE-FADIGA-E-DADOS-BIOMETRICOS.md',
+  'swi-admin/README.md',
+  'swi-backend/README.md',
+  'mobile/README.md',
+  'swi-backend/docs/openapi.json',
 ])
 
 /** De scripts/, só o que o duplo clique executa. O resto é ferramenta interna. */
@@ -101,6 +123,7 @@ export function classify(caminho) {
   const nome = seg[seg.length - 1]
 
   if (AGENTE.has(seg[0]) || AGENTE.has(caminho)) return 'excluded-agent'
+  if (DOCUMENTACAO_ENTREGUE.has(caminho)) return 'payload'
   if (seg[0] === 'docs') return 'excluded-docs'
 
   // Raiz: allowlist fechada. Qualquer outro arquivo solto na raiz fica fora.
