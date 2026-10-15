@@ -42,8 +42,9 @@ const PROJETO = {
   'START-SWI.cmd': '@echo off\n',
   'scripts/client/start-swi.ps1': 'Write-Output "up"\n',
   'NOTICE.md': 'proprietario\n',
+  'README.md': 'documentacao do contrato\n',
   // Tudo abaixo tem que ficar de fora.
-  'README.md': 'documentacao\n',
+  'ROADMAP.md': 'planejamento interno\n',
   [`${['CLAU', 'DE'].join('')}.md`]: 'instrucao interna\n',
   'docs/plans/plano.md': 'plano interno\n',
   '.github/workflows/ci.yml': 'name: ci\n',
@@ -65,13 +66,14 @@ test('o pacote contem o codigo das frentes e o minimo de raiz, e nada alem disso
 
     assert.deepEqual(dentro, [
       'NOTICE.md',
+      'README.md',
       'START-SWI.cmd',
       'mobile/app/index.tsx',
       'scripts/client/start-swi.ps1',
       'swi-admin/src/main.tsx',
       'swi-backend/src/main.ts',
     ])
-    assert.equal(manifesto.totais.arquivos, 6)
+    assert.equal(manifesto.totais.arquivos, 7)
   })
 })
 
@@ -110,7 +112,7 @@ test('o manifesto registra commit, contagem e o sha256 de cada arquivo', async (
     const { manifesto } = await exporta({ repo: raiz, out, commit: 'HEAD', versao: '9.9.9', listarEntradas })
 
     assert.equal(manifesto.commit, git('rev-parse', 'HEAD').trim())
-    assert.equal(manifesto.arquivos.length, 6)
+    assert.equal(manifesto.arquivos.length, 7)
 
     const notice = manifesto.arquivos.find((a) => a.caminho === 'NOTICE.md')
     assert.equal(notice.sha256, createHash('sha256').update('proprietario\n').digest('hex'))

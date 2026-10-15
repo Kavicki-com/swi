@@ -195,6 +195,10 @@ jobs:
           scripts/client-delivery/policy.test.mjs
           scripts/client-delivery/zip.test.mjs
           scripts/client-delivery/export.test.mjs
+      # O gerador do Anexo III decide o que o cliente lê sobre licenças de
+      # terceiros. Licença restritiva sem marca, ou linha sem versão, é erro de
+      # documento contratual.
+      - run: node --test scripts/licenses/generate-anexo-iii.test.mjs
       # Portão de higiene do código entregue ao cliente, agora sobre o
       # repositório inteiro. Migrations aplicadas ficam fora da varredura, e a
       # razão está no próprio script.
@@ -220,6 +224,10 @@ jobs:
       - run: npm ci
         working-directory: swi-backend
       - run: node scripts/security/check-audit.mjs
+      # O Anexo III versionado tem de bater com as dependências instaladas acima.
+      # Mudou dependência sem regerar o anexo, o job para aqui com o comando que
+      # resolve: node scripts/licenses/generate-anexo-iii.mjs
+      - run: node scripts/licenses/generate-anexo-iii.mjs --check
       # Os testes do portão. Rodam aqui porque é onde a falha importa: um
       # portão quebrado passa tudo.
       - run: node --test scripts/security/check-audit.test.mjs

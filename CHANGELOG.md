@@ -29,9 +29,12 @@ Versão de entrega. Reúne o painel de gestão, o app do trabalhador e o backend
 - Telemetria: enrolamento de dispositivo revogável, ingestão idempotente em lote e modelos de leitura canônicos.
 - CRUD de usuários, relatórios e ordens de serviço.
 
-### Privacidade e segurança (LGPD)
+### Privacidade e segurança
 
-- Regras de senha, registro de acesso e tratamento de dados pessoais conforme a LGPD.
+- Regra mínima de senha em toda senha nova (cadastro pelo app, cadastro pelo painel, redefinição e troca): ao menos 8 caracteres, com número, letra maiúscula e símbolo.
+- O canal em tempo real recusa usuário desativado, e desativar ou excluir um usuário derruba as conexões que ele tinha abertas.
+- Logs sem dado biométrico: em produção a API registra só os níveis fatal, error, warn e log, e erros de banco vão para o log só com tipo e código, sem os valores da consulta.
+- Política de privacidade disponível no app e no painel.
 
 ### Smartband (piloto Apple Watch)
 

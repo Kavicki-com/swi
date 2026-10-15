@@ -49,11 +49,39 @@ test('o minimo de raiz que faz o duplo clique subir entra', () => {
   }
 })
 
-test('o aviso de propriedade entra, e e a unica excecao de markdown', () => {
+test('o aviso de propriedade entra', () => {
   assert.equal(classify('NOTICE.md'), 'payload')
-  assert.equal(classify('README.md'), 'excluded-scope')
-  assert.equal(classify('swi-backend/README.md'), 'excluded-docs')
-  assert.equal(classify('mobile/README.md'), 'excluded-docs')
+})
+
+// O contrato exige READMEs de build, deploy, variáveis e endpoints, o anexo de
+// licenças e o manual do algoritmo. Eles entram por caminho exato, como
+// exceção deliberada à regra que deixa markdown e docs/ de fora.
+test('a documentacao do contrato entra, caminho a caminho', () => {
+  for (const caminho of [
+    'README.md',
+    'CHANGELOG.md',
+    'ANEXO-III-LICENCAS.md',
+    'MANUAL-PREDICAO-DE-FADIGA-E-DADOS-BIOMETRICOS.md',
+    'swi-admin/README.md',
+    'swi-backend/README.md',
+    'mobile/README.md',
+    'swi-backend/docs/openapi.json',
+  ]) {
+    assert.equal(classify(caminho), 'payload', caminho)
+  }
+})
+
+test('markdown fora da lista do contrato continua de fora', () => {
+  assert.equal(classify('ROADMAP.md'), 'excluded-scope')
+  assert.equal(classify('swi-backend/src/README.md'), 'excluded-docs')
+  assert.equal(classify('mobile/CHANGELOG.md'), 'excluded-docs')
+  assert.equal(classify('swi-admin/docs/README.md'), 'excluded-docs')
+})
+
+test('da pasta docs do backend so a especificacao OpenAPI entra', () => {
+  assert.equal(classify('swi-backend/docs/notas.md'), 'excluded-docs')
+  assert.equal(classify('swi-backend/docs/openapi.yaml'), 'excluded-docs')
+  assert.equal(classify('docs/openapi.json'), 'excluded-docs')
 })
 
 test('documentacao interna nao acompanha a entrega', () => {
