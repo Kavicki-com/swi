@@ -73,7 +73,7 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 
 | Pacote | Versão | Licença | Observação |
 | --- | --- | --- | --- |
-| `@kavicki/swi-design-system` | 0.1.139 | Proprietária (Kavicki) | Biblioteca própria da Kavicki |
+| `@kavicki/swi-design-system` | 0.1.141 | Proprietária (Kavicki) | Biblioteca própria da Kavicki |
 | `maplibre-gl` | 6.11.2 | BSD-3-Clause |  |
 | `react` | 18.3.1 | MIT |  |
 | `react-dom` | 18.3.1 | MIT |  |
@@ -128,7 +128,7 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 | `@expo-google-fonts/inter` | 0.4.2 | MIT AND OFL-1.1 | **Atenção: licença fora de MIT, ISC, BSD e Apache-2.0** |
 | `@expo-google-fonts/montserrat` | 0.4.2 | MIT AND OFL-1.1 | **Atenção: licença fora de MIT, ISC, BSD e Apache-2.0** |
 | `@expo/vector-icons` | 15.1.1 | MIT |  |
-| `@kavicki/swi-design-system` | 0.1.140 | Proprietária (Kavicki) | Biblioteca própria da Kavicki |
+| `@kavicki/swi-design-system` | 0.1.141 | Proprietária (Kavicki) | Biblioteca própria da Kavicki |
 | `@maplibre/maplibre-react-native` | 11.3.6 | MIT |  |
 | `@react-navigation/native` | 7.2.4 | MIT |  |
 | `@react-three/fiber` | 9.6.1 | MIT |  |
