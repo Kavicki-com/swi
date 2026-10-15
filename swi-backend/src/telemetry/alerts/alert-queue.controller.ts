@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { CurrentUser, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Roles } from '../../auth/roles.decorator'
@@ -8,6 +9,8 @@ import { AlertQueueQueryDto, AlertTriageDto } from './dto/alert-queue.dto'
 
 // Fila de alertas do painel. Só administrador, e o escopo de empresa é do
 // serviço: o id do alerta vem da URL, e quem triou vem do token, nunca do corpo.
+@ApiTags('telemetry/alerts')
+@ApiBearerAuth()
 @Controller('telemetry/v1/admin/alerts')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')

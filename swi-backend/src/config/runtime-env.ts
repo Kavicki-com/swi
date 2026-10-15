@@ -209,6 +209,8 @@ export interface RuntimeEnv {
   readonly liveIceServers: readonly LiveIceServer[]
   /** Intervalo do ping do socket.io, quando a hospedagem pede um menor que o padrão. */
   readonly socketPingIntervalMs?: number
+  /** Swagger (UI em /docs e JSON em /docs-json) ligado. API_DOCS=0 desliga. */
+  readonly apiDocs: boolean
 }
 
 export const SOCKET_PING_MIN_MS = 1_000
@@ -248,6 +250,17 @@ export function parseSocketPingInterval(source: NodeJS.ProcessEnv, problems: str
  */
 export function parseAlertsIncludeDemo(source: NodeJS.ProcessEnv): boolean {
   return source.TELEMETRY_ALERTS_INCLUDE_DEMO === '1'
+}
+
+/**
+ * Documentação OpenAPI servida pela própria API (UI em /docs, JSON em
+ * /docs-json). Ligada por padrão, em todo ambiente: a entrega do contrato pede
+ * o Swagger publicado junto da API, e o documento só descreve rotas, nunca
+ * expõe dado. Só o valor exato '0' desliga, para a hospedagem que não quiser
+ * a página pública.
+ */
+export function parseApiDocs(source: NodeJS.ProcessEnv): boolean {
+  return source.API_DOCS !== '0'
 }
 
 const DEV_CORS_ORIGIN = 'http://localhost:5173'
@@ -389,5 +402,6 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
     telemetryAlertsIncludeDemo: parseAlertsIncludeDemo(source),
     liveIceServers,
     socketPingIntervalMs,
+    apiDocs: parseApiDocs(source),
   })
 }

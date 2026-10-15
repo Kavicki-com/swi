@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { UsersService } from './users.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
@@ -8,6 +9,8 @@ import { CreateUserDto, UpdateUserDto } from './dto'
 import { CreateExamDto } from '../profile/dto'
 import type { ApprovalStatus, Role } from '@prisma/client'
 
+@ApiTags('users')
+@ApiBearerAuth()
 @Controller('users')
 export class UsersController {
   constructor(private readonly users: UsersService) {}

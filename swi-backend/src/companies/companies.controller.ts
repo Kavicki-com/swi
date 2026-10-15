@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common'
+import { ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { PrismaService } from '../prisma/prisma.service'
 
@@ -10,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service'
 // Expõe SÓ id + nome. CNPJ, endereço e telefone do responsável ficam de fora:
 // são dados da empresa, não precisam para escolher numa lista. O throttle
 // evita que a rota vire enumeração barata da carteira de clientes.
+@ApiTags('companies')
 @Controller('companies')
 export class CompaniesController {
   constructor(private readonly prisma: PrismaService) {}

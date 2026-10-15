@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
@@ -12,6 +13,8 @@ import { CreateEnrollmentDto } from './dto/create-enrollment.dto'
 // conclui no próprio iPhone, autenticado como ele mesmo. As duas rotas de
 // enrollment têm teto de taxa próprio: o teto global de 100 por minuto seria
 // generoso demais para quem estivesse adivinhando um código de seis dígitos.
+@ApiTags('telemetry/devices')
+@ApiBearerAuth()
 @Controller('telemetry/v1/devices')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TelemetryDevicesController {

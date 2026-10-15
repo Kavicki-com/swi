@@ -1,3 +1,4 @@
+import { ApiHideProperty } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   ArrayMaxSize,
@@ -75,7 +76,9 @@ export class TelemetryEventDto {
    * mandando um workerId que nunca é lido nem recusado. Com o decorador, o
    * campo sobrevive à limpeza e reprova a validação.
    */
-  @IsEmpty({ message: 'workerId não é aceito no evento' }) workerId?: never
+  // @ApiHideProperty: o campo existe para ser recusado, não para ser enviado, e
+  // o plugin do Swagger não tem esquema para `never`.
+  @ApiHideProperty() @IsEmpty({ message: 'workerId não é aceito no evento' }) workerId?: never
 }
 
 export class TelemetryBatchDto {

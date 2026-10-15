@@ -1,4 +1,5 @@
 import { Controller, Get, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
@@ -6,6 +7,8 @@ import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 import { parseLiveIceServers } from '../config/runtime-env'
 import { LiveService } from './live.service'
 
+@ApiTags('live')
+@ApiBearerAuth()
 @Controller('live')
 @UseGuards(JwtAuthGuard)
 export class LiveController {

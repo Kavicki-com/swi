@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { RescueService } from './rescue.service'
 import { CreateRescueDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -9,6 +10,8 @@ import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 // Resgate a partir de Alertas. Qualquer usuário logado lê o histórico da própria
 // empresa; despachar, registrar chegada e encerrar são do ADMIN. A empresa sai
 // sempre do token; o ferido vem no caminho e o socorrista no corpo.
+@ApiTags('alerts')
+@ApiBearerAuth()
 @Controller('alerts')
 @UseGuards(JwtAuthGuard)
 export class RescueController {

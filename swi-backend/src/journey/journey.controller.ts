@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Headers, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { JourneyService, type JourneySend } from './journey.service'
 import { AddTaskPhotoDto, JourneyActionDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -13,6 +14,8 @@ function sendOf(dto: JourneyActionDto | undefined, rawKey: string | undefined, s
   return { key: parseIdempotencyKey(rawKey), occurredAt: dto?.occurredAt, sentAt }
 }
 
+@ApiTags('journey')
+@ApiBearerAuth()
 @Controller('journey')
 @UseGuards(JwtAuthGuard)
 export class JourneyController {

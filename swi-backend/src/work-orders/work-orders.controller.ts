@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { WorkOrdersService } from './work-orders.service'
 import { CreateWorkOrderDto, ListWorkOrdersQueryDto, UpdateWorkOrderDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -6,6 +7,8 @@ import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 
+@ApiTags('work-orders')
+@ApiBearerAuth()
 @Controller('work-orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')

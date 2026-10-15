@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import type { Response } from 'express'
 import { ReportsService } from './reports.service'
 import { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
@@ -6,6 +7,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 import { parseIdempotencyKey } from '../idempotency/idempotency-key'
 
+@ApiTags('reports')
+@ApiBearerAuth()
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
 export class ReportsController {

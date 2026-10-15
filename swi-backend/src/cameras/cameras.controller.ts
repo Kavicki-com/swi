@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { CamerasService } from './cameras.service'
 import { CreateCameraDto, UpdateCameraDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -8,6 +9,8 @@ import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 
 // Qualquer usuário logado lê os pontos da própria empresa, para os mapas do
 // painel e do app. Cadastrar, alterar e excluir é do ADMIN.
+@ApiTags('cameras')
+@ApiBearerAuth()
 @Controller('cameras')
 @UseGuards(JwtAuthGuard)
 export class CamerasController {

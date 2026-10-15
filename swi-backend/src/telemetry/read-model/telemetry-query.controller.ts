@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Roles } from '../../auth/roles.decorator'
@@ -14,6 +15,8 @@ import { TelemetryQueryService } from './telemetry-query.service'
 // Este é o único caminho por onde valor de saúde sai do backend. O socket da
 // ingestão anuncia apenas identificadores justamente porque o controle de
 // acesso mora aqui, num lugar só.
+@ApiTags('telemetry/query')
+@ApiBearerAuth()
 @Controller('telemetry/v1')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TelemetryQueryController {

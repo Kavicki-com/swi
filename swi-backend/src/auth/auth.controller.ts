@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { AuthService } from './auth.service'
 import { UsersService } from '../users/users.service'
@@ -6,6 +7,7 @@ import { JwtAuthGuard } from './jwt-auth.guard'
 import { CurrentUserId } from './current-user.decorator'
 import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto, ResendDto, SignupCompanyDto, ChangePasswordDto } from './dto'
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService, private readonly users: UsersService) {}
@@ -17,7 +19,7 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/forgot') @HttpCode(200) forgot(@Body() b: ForgotDto) { return this.auth.forgotPassword(b) }
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/reset') @HttpCode(200) reset(@Body() b: ResetDto) { return this.auth.resetPassword(b) }
   // Troca de senha autenticada do settings: exige a senha atual.
-  @UseGuards(JwtAuthGuard) @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/change') @HttpCode(200)
+  @ApiBearerAuth() @UseGuards(JwtAuthGuard) @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/change') @HttpCode(200)
   change(@CurrentUserId() userId: string, @Body() b: ChangePasswordDto) { return this.auth.changePassword(userId, b) }
 
   // Onboarding do painel: cria empresa + admin responsável e manda link de senha.
@@ -25,7 +27,7 @@ export class AuthController {
   // Recuperação do admin: mesmo /forgot, mas manda LINK (o /password/forgot segue code-based pro mobile).
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/forgot-admin') @HttpCode(200) forgotAdmin(@Body() b: ForgotDto) { return this.auth.forgotPasswordAdmin(b) }
 
-  @UseGuards(JwtAuthGuard) @Get('me')
+  @ApiBearerAuth() @UseGuards(JwtAuthGuard) @Get('me')
   async me(@CurrentUserId() userId: string) {
     const u = await this.users.findById(userId)
     return u ? { id: u.id, email: u.email, name: u.name } : null
