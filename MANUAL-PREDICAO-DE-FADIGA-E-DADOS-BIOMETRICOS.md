@@ -518,19 +518,20 @@ Código: `swi-backend/src/telemetry/lifecycle/`. Um job diário roda às **06:30
 
 ### 6.4 Quem acessa, por papel
 
-O sistema tem dois papéis: `WORKER` (funcionário) e `ADMIN` (administrador).
+O sistema tem três papéis: `WORKER` (funcionário), `SUPERVISOR` (supervisor) e `ADMIN` (administrador). A matriz completa fica em `swi-backend/src/auth/permissions.ts`, e o teste `route-access.spec.ts` lista, rota a rota, quem passa.
 
-| Ação | Funcionário | Administrador |
-| --- | --- | --- |
-| Ver o próprio estado atual e as próprias séries | sim | não se aplica |
-| Ver estado e séries de um funcionário | não | sim, só de funcionários da **própria empresa** |
-| Ver a trilha de auditoria de uma sessão | só das próprias sessões | sessões de funcionários da própria empresa |
-| Ver e triar a fila de alertas | não | sim, só da própria empresa |
-| Gerar código de pareamento e revogar aparelho | não | sim, só da própria empresa |
-| Concluir o pareamento | sim, só o próprio | não |
-| Receber notificações de saúde | as próprias | as dos funcionários da própria empresa |
+| Ação | Funcionário | Supervisor | Administrador |
+| --- | --- | --- | --- |
+| Ver o próprio estado atual e as próprias séries | sim | não se aplica | não se aplica |
+| Ver estado e séries de um funcionário | não | sim, só de funcionários da **própria empresa** | sim, só de funcionários da **própria empresa** |
+| Ver a trilha de auditoria de uma sessão | só das próprias sessões | sessões de funcionários da própria empresa | sessões de funcionários da própria empresa |
+| Ver e triar a fila de alertas | não | sim, só da própria empresa | sim, só da própria empresa |
+| Gerar código de pareamento e revogar aparelho | não | não | sim, só da própria empresa |
+| Concluir o pareamento | sim, só o próprio | não | não |
+| Cadastrar, editar, desativar e excluir usuários; mudar o nível de acesso | não | não | sim, só da própria empresa |
+| Receber notificações de saúde | as próprias | as dos funcionários da própria empresa | as dos funcionários da própria empresa |
 
-Um administrador sem empresa não lê telemetria de ninguém. Fora do escopo, o servidor responde como se o recurso não existisse. O aparelho pareado só escreve, nunca lê.
+Um administrador ou supervisor sem empresa não lê telemetria de ninguém. Fora do escopo, o servidor responde como se o recurso não existisse. O aparelho pareado só escreve, nunca lê.
 
 ### 6.5 Configurações de ambiente relevantes
 
