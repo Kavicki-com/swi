@@ -1,5 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { pickExamDocument } from './pickDocument';
+import { pickExamDocument, pickReportDocument } from './pickDocument';
 
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn(),
@@ -61,5 +61,33 @@ describe('pickExamDocument', () => {
       new Error('boom nativo'),
     );
     await expect(pickExamDocument()).resolves.toBeNull();
+  });
+});
+
+// Anexo de áudio ou PDF do relatório. Vídeo e foto vêm pela galeria
+// (useMediaPicker); aqui entra o que a galeria não mostra.
+describe('pickReportDocument', () => {
+  it('pede áudio e PDF, com cópia pro cache e um arquivo só', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///cache/relato.m4a' }],
+    });
+
+    await expect(pickReportDocument()).resolves.toBe('file:///cache/relato.m4a');
+
+    expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith({
+      // Mesma lista do backend pro prefixo reports (allowed-content-types.ts),
+      // menos imagem e vídeo, que entram pela galeria.
+      type: ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/wav', 'audio/x-wav', 'application/pdf'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+  });
+
+  it('cancelado ou erro nativo devolve null', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValueOnce({ canceled: true });
+    await expect(pickReportDocument()).resolves.toBeNull();
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+    await expect(pickReportDocument()).resolves.toBeNull();
   });
 });

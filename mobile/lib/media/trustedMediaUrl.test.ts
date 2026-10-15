@@ -1,5 +1,10 @@
-import { resolveTrustedMediaUrl } from './trustedMediaUrl';
+import * as WebBrowser from 'expo-web-browser';
+import { openTrustedMediaInBrowser, resolveTrustedMediaUrl } from './trustedMediaUrl';
 import type { RuntimeEnv } from '../featureFlags';
+
+jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })) }));
+
+beforeEach(() => (WebBrowser.openBrowserAsync as jest.Mock).mockClear());
 
 const PROD: RuntimeEnv = { isDev: false, isTest: false, allowDemoMocks: false };
 const DEV: RuntimeEnv = { isDev: true, isTest: false, allowDemoMocks: false };
@@ -101,5 +106,23 @@ describe('resolveTrustedMediaUrl', () => {
     expect(() =>
       resolveTrustedMediaUrl('http://invasor.test/e.pdf', opts({ env: DEV })),
     ).toThrow(/origem/i);
+  });
+});
+
+// Anexo do relatório (vídeo, áudio, PDF) abre no navegador INTERNO, não no
+// externo: a pessoa fica no app, e o navegador toca a mídia e mostra o PDF.
+// Passa pela mesma validação de origem do exame antes de abrir qualquer coisa.
+describe('openTrustedMediaInBrowser', () => {
+  it('abre no navegador interno a URL que passou na validação', async () => {
+    const url = `${API}/media/campo.mp4`;
+    await openTrustedMediaInBrowser(url, opts());
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(url);
+  });
+
+  it('não abre nada quando a origem não é autorizada', async () => {
+    await expect(openTrustedMediaInBrowser('https://invasor.test/v.mp4', opts())).rejects.toThrow(
+      /origem/i,
+    );
+    expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
   });
 });

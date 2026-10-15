@@ -9,6 +9,7 @@ import {
   ImageUploader,
   Input,
   JourneyTheme,
+  Text,
   Title,
   Toast,
   useTheme,
@@ -22,6 +23,14 @@ import {
 import { useField } from '../../../lib/forms/useField';
 import { validateRequired } from '../../../lib/validation/validators';
 import { useMediaPicker } from '../../../lib/media/useMediaPicker';
+import { pickReportDocument } from '../../../lib/media/pickDocument';
+import { localFileSize } from '../../../lib/media/localFileSize';
+import { attachmentIcon, formatBytes, kindLabel } from '../../../lib/media/attachmentLabels';
+import {
+  checkReportAttachment,
+  reportAttachmentInfo,
+  type ReportAttachmentKind,
+} from '../../../services/api/uploadMedia';
 import { useReports } from '../../../services/reports/ReportsProvider';
 
 // 3 inputs (Título / Resumo / Detalhes multiline) + Atribuir
@@ -30,6 +39,18 @@ import { useReports } from '../../../services/reports/ReportsProvider';
 // Backend slice: salvar vai pelo provider via useReports().create() (o mock
 // persiste in-memory na sessão). Seleção de
 // responsáveis volta do modal via singleton `responsiblesSelection`.
+//
+// Anexo multimídia (Anexo I): além da foto, vídeo pela galeria e áudio ou PDF
+// pelo seletor de documento. O quadrado mostra o tipo e o tamanho, e o que o
+// servidor recusaria (tipo fora da lista, tamanho acima do teto do tipo) é
+// recusado aqui, na escolha, com a mesma frase do painel.
+
+// Um quadrado preenchido. `size` null quando o arquivo não pôde ser lido: a
+// fila de envios refaz a checagem com o tamanho real na entrada.
+type SlotAttachment = { uri: string; kind: ReportAttachmentKind; size: number | null };
+
+const HELPER_TEXT =
+  'Selecione JPG, PNG, MP4, MOV, MP3, M4A, WAV ou PDF. Vídeo até 100 MB, áudio até 25 MB, os demais até 15 MB.';
 
 export default function NewReport() {
   const theme = useTheme();
@@ -37,7 +58,7 @@ export default function NewReport() {
   const router = useRouter();
   const { create } = useReports();
   const [saving, setSaving] = useState(false);
-  // Relatório que não entrou na fila de envios: fila cheia, ou foto recusada
+  // Relatório que não entrou na fila de envios: fila cheia, ou anexo recusado
   // na entrada. A tela fica aberta e a pessoa não perde o que escreveu.
   const [notice, setNotice] = useState<{ variant: 'warning' | 'error'; title: string } | null>(
     null,
@@ -55,19 +76,19 @@ export default function NewReport() {
   // Anexos — 4 placeholders + 1 "Enviar arquivo" via ImageUploader. As URIs
   // escolhidas entram no submit como `imageUris` e sobem no create do
   // ReportsProvider; o estado local é só a grade em edição.
-  const [attachments, setAttachments] = useState<(string | undefined)[]>(
+  const [attachments, setAttachments] = useState<(SlotAttachment | undefined)[]>(
     [undefined, undefined, undefined, undefined],
   );
-  const setAttachmentAt = (index: number, uri: string) => {
+  const setAttachmentAt = (index: number, attachment: SlotAttachment) => {
     setAttachments((prev) => {
       const next = [...prev];
-      next[index] = uri;
+      next[index] = attachment;
       return next;
     });
   };
 
   // Esvazia o slot NO LUGAR, sem compactar o array: a pessoa está olhando pra
-  // grade, e puxar as fotos seguintes uma casa pra cima mexeria na posição do
+  // grade, e puxar os anexos seguintes uma casa pra cima mexeria na posição do
   // que ela decidiu manter.
   const clearAttachmentAt = (index: number) => {
     setAttachments((prev) => {
@@ -77,14 +98,32 @@ export default function NewReport() {
     });
   };
 
-  const media = useMediaPicker();
-  // não havia caminho de volta. `onRemove` só vai quando há o que remover; em
-  // slot vazio o menu segue com as três opções de sempre.
+  // Tipo e tamanho conferidos NA ESCOLHA. Recusa com a frase do servidor e
+  // deixa o quadrado como estava; aceito, o quadrado mostra tipo e tamanho.
+  const acceptPicked = (uri: string): SlotAttachment | null => {
+    const size = localFileSize(uri);
+    const refused = checkReportAttachment(uri, size);
+    const info = reportAttachmentInfo(uri);
+    if (refused || !info) {
+      setNotice({ variant: 'error', title: refused ?? 'Tipo de arquivo não aceito.' });
+      return null;
+    }
+    setNotice(null);
+    return { uri, kind: info.kind, size };
+  };
+
+  // A galeria mostra foto e vídeo; a câmera segue tirando foto.
+  const media = useMediaPicker({ mediaTypes: ['images', 'videos'] });
+  // `onRemove` só vai quando há o que remover; em slot vazio o menu segue sem
+  // essa opção. `onPickDocument` põe "Escolher áudio ou PDF" no menu.
   const showPicker = async (index: number) => {
-    const uri = await media.showPicker(
-      attachments[index] ? { onRemove: () => clearAttachmentAt(index) } : undefined,
-    );
-    if (uri) setAttachmentAt(index, uri);
+    const uri = await media.showPicker({
+      onPickDocument: pickReportDocument,
+      ...(attachments[index] ? { onRemove: () => clearAttachmentAt(index) } : {}),
+    });
+    if (!uri) return;
+    const accepted = acceptPicked(uri);
+    if (accepted) setAttachmentAt(index, accepted);
   };
 
   // "Enviar arquivo" alimenta a GRADE, não a si mesmo. A tela mantinha dois
@@ -95,10 +134,12 @@ export default function NewReport() {
   const primeiroSlotLivre = attachments.findIndex((a) => !a);
   const pickFileForUploader = async () => {
     // Cheio: nem abre o seletor. Sem isto o 5º toque sobrescreveria o primeiro
-    // anexo em silêncio, e a pessoa perderia uma foto já escolhida.
+    // anexo em silêncio, e a pessoa perderia um anexo já escolhido.
     if (primeiroSlotLivre === -1) return;
     const uri = await media.pickFromGallery();
-    if (uri) setAttachmentAt(primeiroSlotLivre, uri);
+    if (!uri) return;
+    const accepted = acceptPicked(uri);
+    if (accepted) setAttachmentAt(primeiroSlotLivre, accepted);
   };
 
   // Rehidrata seleção ao reentrar (modal de responsáveis fecha via router.back).
@@ -143,7 +184,7 @@ export default function NewReport() {
         summary: resumo.value,
         details: detalhes.value,
         responsibles: responsibleNames,
-        imageUris: attachments.filter(Boolean) as string[],
+        imageUris: attachments.flatMap((a) => (a ? [a.uri] : [])),
       });
       if (result === 'full') {
         setNotice({ variant: 'warning', title: QUEUE_FULL_TITLE });
@@ -247,14 +288,14 @@ export default function NewReport() {
               style={{ flexDirection: 'row', gap: theme.gap.sm }}
             >
               {row.map((i) => {
-                const uri = attachments[i];
+                const attachment = attachments[i];
                 return (
                   <Pressable
                     key={i}
                     onPress={() => showPicker(i)}
                     accessibilityRole="button"
                     accessibilityLabel={
-                      uri
+                      attachment
                         ? `Anexo ${i + 1} (toque para trocar ou remover)`
                         : `Adicionar anexo ${i + 1}`
                     }
@@ -268,12 +309,26 @@ export default function NewReport() {
                       overflow: 'hidden',
                     }}
                   >
-                    {uri ? (
+                    {attachment?.kind === 'image' ? (
                       <Image
-                        source={{ uri }}
+                        source={{ uri: attachment.uri }}
                         style={{ width: '100%', height: '100%' }}
                         resizeMode="cover"
                       />
+                    ) : attachment ? (
+                      // Vídeo, áudio e PDF não têm miniatura: ícone do tipo,
+                      // o tipo e o tamanho, para a pessoa conferir antes de enviar.
+                      <View style={{ alignItems: 'center', gap: theme.gap.xs }}>
+                        <Icon name={attachmentIcon(attachment.kind)} size={32} color={theme.content.dark} />
+                        <Text variant="label.m" color={theme.content.dark}>
+                          {kindLabel(attachment.kind)}
+                        </Text>
+                        {attachment.size !== null ? (
+                          <Text variant="caption.s" color={theme.content.medium}>
+                            {formatBytes(attachment.size)}
+                          </Text>
+                        ) : null}
+                      </View>
                     ) : (
                       <Icon name="add_a_photo" size={32} color={theme.content.medium} />
                     )}
@@ -305,9 +360,10 @@ export default function NewReport() {
 
         {/* ImageUploader (Enviar arquivo) — wired ao expo-image-picker.
             showTakePhoto=false na spec original, então onPickFile dispara
-            só galeria. `value` mostra a preview quando user já selecionou. */}
+            só galeria (foto e vídeo). `value` mostra a preview quando user já
+            selecionou. */}
         <ImageUploader
-          helperText="Selecione arquivos do tipo: JPG ou PNG"
+          helperText={HELPER_TEXT}
           pickFileLabel="Enviar arquivo"
           showTakePhoto={false}
           accentColor={theme.content.primary}

@@ -13,9 +13,16 @@ import { useCallback, useMemo } from 'react';
 import { Alert, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
+export type PickerMediaType = 'images' | 'videos';
+
 export interface UseMediaPickerOptions {
   quality?: number;
   allowsEditing?: boolean;
+  /**
+   * O que a galeria mostra. Padrão só imagens. O anexo do relatório passa
+   * `['images', 'videos']`; a câmera segue tirando foto nos dois casos.
+   */
+  mediaTypes?: PickerMediaType[];
 }
 
 export interface ShowPickerOptions {
@@ -25,6 +32,11 @@ export interface ShowPickerOptions {
    * slot vazio segue com o menu de três botões.
    */
   onRemove?: () => void;
+  /**
+   * Quando passado, o menu fala em "anexo" e ganha "Escolher áudio ou PDF",
+   * que delega ao seletor de documento de quem chama (o anexo do relatório).
+   */
+  onPickDocument?: () => Promise<string | null>;
 }
 
 export interface UseMediaPickerReturn {
@@ -44,9 +56,18 @@ function alertPermissionDenied(kind: 'galeria' | 'câmera') {
   );
 }
 
+const ONLY_IMAGES: PickerMediaType[] = ['images'];
+
 export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPickerReturn {
   const quality = opts.quality ?? 0.8;
   const allowsEditing = opts.allowsEditing ?? true;
+  // Memo pela lista serializada: quem chama costuma passar um literal novo a
+  // cada render, e sem isto os callbacks mudariam de identidade toda vez.
+  const mediaTypesKey = (opts.mediaTypes ?? ONLY_IMAGES).join(',');
+  const mediaTypes = useMemo(
+    () => mediaTypesKey.split(',') as PickerMediaType[],
+    [mediaTypesKey],
+  );
 
   const pickFromGallery = useCallback(async (): Promise<string | null> => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -55,13 +76,13 @@ export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPicker
       return null;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes,
       allowsEditing,
       quality,
     });
     if (result.canceled || !result.assets[0]) return null;
     return result.assets[0].uri;
-  }, [allowsEditing, quality]);
+  }, [allowsEditing, mediaTypes, quality]);
 
   const takePhoto = useCallback(async (): Promise<string | null> => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -70,7 +91,7 @@ export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPicker
       return null;
     }
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ONLY_IMAGES,
       allowsEditing,
       quality,
     });
@@ -86,10 +107,13 @@ export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPicker
   const showPicker = useCallback(
     (opts: ShowPickerOptions = {}): Promise<string | null> =>
       new Promise((resolve) => {
-        const onRemove = opts.onRemove;
-        // Com foto já escolhida o menu não adiciona nada: troca ou remove.
-        // Chamá-lo de "Adicionar imagem" contradiz as próprias opções.
-        Alert.alert(onRemove ? 'Alterar imagem' : 'Adicionar imagem', undefined, [
+        const { onRemove, onPickDocument } = opts;
+        // Com anexo já escolhido o menu não adiciona nada: troca ou remove.
+        // Chamá-lo de "Adicionar" ali contradiz as próprias opções. Com
+        // documento no menu, o substantivo é "anexo", porque pode não ser foto.
+        const coisa = onPickDocument ? 'anexo' : 'imagem';
+        const removerRotulo = onPickDocument ? 'Remover anexo' : 'Remover foto';
+        Alert.alert(onRemove ? `Alterar ${coisa}` : `Adicionar ${coisa}`, undefined, [
           {
             text: 'Tirar foto',
             onPress: async () => resolve(await takePhoto()),
@@ -98,10 +122,18 @@ export function useMediaPicker(opts: UseMediaPickerOptions = {}): UseMediaPicker
             text: 'Escolher da galeria',
             onPress: async () => resolve(await pickFromGallery()),
           },
+          ...(onPickDocument
+            ? [
+                {
+                  text: 'Escolher áudio ou PDF',
+                  onPress: async () => resolve(await onPickDocument()),
+                },
+              ]
+            : []),
           ...(onRemove
             ? [
                 {
-                  text: 'Remover foto',
+                  text: removerRotulo,
                   style: 'destructive' as const,
                   onPress: () => {
                     onRemove();

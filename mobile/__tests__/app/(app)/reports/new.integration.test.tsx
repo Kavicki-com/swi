@@ -28,6 +28,9 @@ jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(),
 }));
 jest.mock('../../../../services/reports/ReportsProvider', () => ({ useReports: jest.fn() }));
+// Fronteiras nativas do anexo multimídia, fora do assunto deste arquivo.
+jest.mock('../../../../lib/media/localFileSize', () => ({ localFileSize: () => 3 * 1024 }));
+jest.mock('../../../../lib/media/pickDocument', () => ({ pickReportDocument: jest.fn() }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
   useFocusEffect: jest.fn(),
@@ -100,10 +103,13 @@ describe('Novo relatório, anexo de ponta a ponta (tela + hook reais)', () => {
 
     await tocar(tree, 'Adicionar anexo 1');
 
-    expect(tituloDoMenu()).toBe('Adicionar imagem');
+    // O relatório aceita vídeo, áudio e PDF: o menu fala em "anexo" e ganha a
+    // entrada de documento.
+    expect(tituloDoMenu()).toBe('Adicionar anexo');
     expect(botoesDoMenu().map((b) => b.text)).toEqual([
       'Tirar foto',
       'Escolher da galeria',
+      'Escolher áudio ou PDF',
       'Cancelar',
     ]);
   });
@@ -117,17 +123,18 @@ describe('Novo relatório, anexo de ponta a ponta (tela + hook reais)', () => {
     await tocar(tree, 'Anexo 1 (toque para trocar ou remover)');
     const botoes = botoesDoMenu();
     // Com foto, o menu troca ou remove; nao adiciona nada.
-    expect(tituloDoMenu()).toBe('Alterar imagem');
+    expect(tituloDoMenu()).toBe('Alterar anexo');
     expect(botoes.map((b) => b.text)).toEqual([
       'Tirar foto',
       'Escolher da galeria',
-      'Remover foto',
+      'Escolher áudio ou PDF',
+      'Remover anexo',
       'Cancelar',
     ]);
 
     // Toca no botão do action sheet, como o dedo do usuário faria.
     await act(async () => {
-      botoes.find((b) => b.text === 'Remover foto')!.onPress!();
+      botoes.find((b) => b.text === 'Remover anexo')!.onPress!();
     });
 
     expect(existe(tree, 'Anexo 1 (toque para trocar ou remover)')).toBe(false);
@@ -140,7 +147,7 @@ describe('Novo relatório, anexo de ponta a ponta (tela + hook reais)', () => {
 
     await tocar(tree, 'Anexo 1 (toque para trocar ou remover)');
     await act(async () => {
-      botoesDoMenu().find((b) => b.text === 'Remover foto')!.onPress!();
+      botoesDoMenu().find((b) => b.text === 'Remover anexo')!.onPress!();
     });
 
     (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({

@@ -25,6 +25,16 @@ export interface ReportComment {
   createdAt: string;
 }
 
+// Anexo do relatorio como o backend devolve em `attachments`: o tipo sai da
+// extensao da key no servidor, e `kind` decide como a tela abre cada um.
+export type ReportAttachmentKind = 'image' | 'video' | 'audio' | 'document';
+export interface ReportAttachment {
+  key: string;
+  url: string;
+  contentType: string;
+  kind: ReportAttachmentKind;
+}
+
 export interface Report {
   id: string;
   title: string;
@@ -37,7 +47,10 @@ export interface Report {
   sector: string;
   responsibles: string[];
   details: string;
+  /** Só as imagens (urls presigned). Video, audio e PDF ficam em `attachments`. */
   images: string[];
+  /** Todo anexo com o tipo, na ordem gravada. */
+  attachments: ReportAttachment[];
   activities: ReportActivity[];
   comments: ReportComment[];
 }
