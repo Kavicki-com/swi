@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Image as RNImage, ScrollView, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  AttachmentList,
   Avatar,
   AvatarGroup,
   Button,
   Icon,
   Input,
   JourneyTheme,
+  MediaPlayer,
   ProgressBar,
   ReportCard,
   SearchInput,
@@ -23,6 +25,8 @@ import { ReportDetailState } from '../../../components/reports/ReportsListState'
 import { useReports } from '../../../services/reports/ReportsProvider';
 import { useSubmitOnce } from '../../../lib/forms/useSubmitOnce';
 import { errorMessage } from '../../../lib/errors/errorMessage';
+import { abrirAnexoOuAvisar } from '../../../lib/media/trustedMediaUrl';
+import { attachmentTitles } from '../../../lib/media/attachmentLabels';
 import type { Report } from '../../../services/reports/types';
 
 // Fazer comentário + Revisar) + ReportCard + Detalhes + Imagens
@@ -76,6 +80,16 @@ export default function ReportDetails() {
   }, [id, loadOne, reloadKey]);
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Vídeo, áudio e PDF com o título numerado por tipo ("Vídeo 1"): o nome
+  // original não é guardado (a key é um uuid). Imagem fica na faixa de cima.
+  const extras = useMemo(() => {
+    const all = report?.attachments ?? [];
+    const titles = attachmentTitles(all);
+    return all
+      .map((attachment, i) => ({ attachment, title: titles[i] ?? '' }))
+      .filter(({ attachment }) => attachment.kind !== 'image');
+  }, [report]);
 
   // campo e DESCARTAVA o texto. O comentario do worker nunca saia do aparelho,
   // e por isso tambem nunca aparecia no painel — o backend
@@ -263,6 +277,45 @@ export default function ReportDetails() {
                 />
               ))}
             </ScrollView>
+          </>
+        )}
+
+        {/* Anexos que não são imagem (Anexo I: vídeo, áudio, PDF). Sem player
+            embutido por decisão do projeto: vídeo e áudio viram o cartão do
+            MediaPlayer do DS, e Reproduzir abre no navegador interno; o PDF
+            vai na lista de anexos do DS, e Visualizar abre do mesmo jeito.
+            Imagem segue na faixa de Imagens acima. */}
+        {extras.length > 0 && (
+          <>
+            <Title variant="title.xs" color={theme.content.dark}>
+              Anexos
+            </Title>
+            <View style={{ gap: theme.gap.s }}>
+              {extras.map(({ attachment, title }, i) =>
+                attachment.kind === 'document' ? null : (
+                  <MediaPlayer
+                    key={`${attachment.url}-${i}`}
+                    kind={attachment.kind === 'audio' ? 'audio' : 'video'}
+                    uri={attachment.url}
+                    title={title}
+                    onOpenExternal={() => void abrirAnexoOuAvisar(attachment.url, title)}
+                    testID={`report-attachment-${i}`}
+                  />
+                ),
+              )}
+              <AttachmentList
+                items={extras.flatMap(({ attachment, title }, i) =>
+                  attachment.kind === 'document'
+                    ? [{ id: `att-${i}`, name: title, kind: 'file' as const, actions: ['view' as const] }]
+                    : [],
+                )}
+                onView={(item) => {
+                  const found = extras[Number(item.id.slice('att-'.length))];
+                  if (found) void abrirAnexoOuAvisar(found.attachment.url, found.title);
+                }}
+                testID="report-attachments"
+              />
+            </View>
           </>
         )}
 

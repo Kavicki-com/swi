@@ -2,7 +2,12 @@ import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 import { apiReportsBackend } from './apiReportsBackend';
 jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
-jest.mock('../api/uploadMedia', () => ({ uploadImage: jest.fn() }));
+// Só o upload é dublado: as regras de tipo (contentTypeFor) são as reais,
+// porque é com elas que o adaptador deriva os anexos de um servidor antigo.
+jest.mock('../api/uploadMedia', () => ({
+  ...jest.requireActual('../api/uploadMedia'),
+  uploadImage: jest.fn(),
+}));
 
 describe('apiReportsBackend', () => {
   beforeEach(() => {
@@ -106,5 +111,31 @@ describe('apiReportsBackend', () => {
       auth: true,
       idempotencyKey: 'chave-2',
     });
+  });
+
+  // Anexo multimídia: o servidor devolve `attachments` com o tipo de cada um,
+  // e `images` só com as imagens. Servidor antigo sem o campo: cada imagem
+  // vira anexo de imagem, e a tela segue funcionando.
+  it('get passa os attachments do servidor adiante', async () => {
+    const attachments = [
+      { key: 'reports/a.jpg', url: 'signed:a', contentType: 'image/jpeg', kind: 'image' },
+      { key: 'reports/v.mp4', url: 'signed:v', contentType: 'video/mp4', kind: 'video' },
+    ];
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', images: ['signed:a'], attachments });
+
+    const out = await apiReportsBackend.get('r1');
+
+    expect(out?.attachments).toEqual(attachments);
+    expect(out?.images).toEqual(['signed:a']);
+  });
+
+  it('get sem attachments deriva um anexo de imagem por url de images', async () => {
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'r1', images: ['signed:a.jpg'] });
+
+    const out = await apiReportsBackend.get('r1');
+
+    expect(out?.attachments).toEqual([
+      { key: '', url: 'signed:a.jpg', contentType: 'image/jpeg', kind: 'image' },
+    ]);
   });
 });

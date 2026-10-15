@@ -1,5 +1,7 @@
 import { Asset } from 'expo-asset';
 import type { Report, ReportActivity, ReportsBackend, ReportStatus, ReportComment } from './types';
+import { contentTypeFor } from '../api/uploadMedia';
+import { attachmentsFromUrls } from './attachments';
 
 // In-memory demo backend for the Relatórios slice. Mirrors
 // services/profile/mockProfileBackend.ts: a module-level mutable store seeded at
@@ -34,6 +36,7 @@ const DETAIL_ACTIVITIES: ReportActivity[] = [
 const SHARED_DETAIL = {
   details: DETAIL_TEXT,
   images: DETAIL_IMAGES,
+  attachments: attachmentsFromUrls(DETAIL_IMAGES),
   activities: DETAIL_ACTIVITIES,
 };
 
@@ -119,7 +122,10 @@ export const mockReportsBackend: ReportsBackend = {
       sector: SECTOR,
       responsibles: input.responsibles,
       details: input.details,
-      images: input.imageKeys,
+      // Sem servidor a "key" é a própria uri local: imagem vai em images e
+      // todo anexo vai em attachments, com o tipo pela extensão.
+      images: input.imageKeys.filter((uri) => contentTypeFor(uri).startsWith('image/')),
+      attachments: attachmentsFromUrls(input.imageKeys),
       activities: [],
     };
     store = [report, ...store];

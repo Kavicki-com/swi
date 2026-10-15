@@ -1,21 +1,22 @@
 import { Directory, File, Paths } from 'expo-file-system';
-import { contentTypeFor } from '../api/uploadMedia';
+import { contentTypeFor, extensionFor, MAX_UPLOAD_BYTES, sizeLimitError } from '../api/uploadMedia';
 
-// As fotos dos envios da fila. A uri que o seletor devolve aponta para o
-// cache, que o sistema limpa quando quer; um envio pode esperar horas pelo
-// sinal. Por isso a foto é copiada para o armazenamento do app ao entrar na
-// fila, e a cópia só sai quando o envio sai.
+// Os anexos dos envios da fila (foto, e no relatório também vídeo, áudio e
+// PDF). A uri que o seletor devolve aponta para o cache, que o sistema limpa
+// quando quer; um envio pode esperar horas pelo sinal. Por isso o arquivo é
+// copiado para o armazenamento do app ao entrar na fila, e a cópia só sai
+// quando o envio sai.
 
-/** O teto do presign no backend (MAX_UPLOAD_BYTES). */
-export const MAX_SEND_IMAGE_BYTES = 15 * 1024 * 1024;
+/** O teto de imagem do presign no backend (MAX_UPLOAD_BYTES). Vídeo e áudio têm o seu. */
+export const MAX_SEND_IMAGE_BYTES = MAX_UPLOAD_BYTES;
 
 export const SEND_FILES_DIR_NAME = 'send-outbox';
 
 export interface SendFiles {
   /**
-   * Copia a foto para o armazenamento do app e devolve a uri da cópia. Recusa
-   * aqui o que o servidor recusaria depois: arquivo que sumiu (erro com
-   * `code: 'FILE_MISSING'`) e foto acima de 15 MB.
+   * Copia o arquivo para o armazenamento do app e devolve a uri da cópia.
+   * Recusa aqui o que o servidor recusaria depois: arquivo que sumiu (erro com
+   * `code: 'FILE_MISSING'`) e arquivo acima do teto do tipo.
    */
   stage(uri: string): Promise<string>;
   /**
@@ -55,14 +56,16 @@ export function createStagedSendFiles(
           { code: 'FILE_MISSING' },
         );
       }
-      if (source.size > MAX_SEND_IMAGE_BYTES) {
-        throw new Error('A imagem passa de 15 MB. Escolha uma imagem menor.');
-      }
+      const contentType = contentTypeFor(uri);
+      // Teto do tipo (vídeo 100 MB, áudio 25 MB, o resto 15 MB), com a mesma
+      // frase que o painel mostra.
+      const refused = sizeLimitError(contentType, source.size);
+      if (refused) throw new Error(refused);
       const dir = directory();
       if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-      // A extensão da cópia é a que o upload usa para inferir o content-type.
-      const extension = contentTypeFor(uri) === 'image/png' ? 'png' : 'jpg';
-      const copy = new File(dir, `${newName()}.${extension}`);
+      // A extensão da cópia é a que o upload usa para inferir o content-type:
+      // um vídeo copiado como .jpg subiria assinado como imagem.
+      const copy = new File(dir, `${newName()}.${extensionFor(contentType)}`);
       source.copy(copy);
       return copy.uri;
     },

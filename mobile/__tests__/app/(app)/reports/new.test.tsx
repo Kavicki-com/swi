@@ -3,10 +3,16 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider, Toast } from '@kavicki/swi-design-system';
 import NovoRelatorio from '../../../../app/(app)/reports/new';
 import { useMediaPicker } from '../../../../lib/media/useMediaPicker';
+import { localFileSize } from '../../../../lib/media/localFileSize';
+import { pickReportDocument } from '../../../../lib/media/pickDocument';
 import { useReports } from '../../../../services/reports/ReportsProvider';
 
 jest.mock('../../../../lib/media/useMediaPicker', () => ({ useMediaPicker: jest.fn() }));
 jest.mock('../../../../services/reports/ReportsProvider', () => ({ useReports: jest.fn() }));
+// Fronteiras nativas do anexo multimídia: o tamanho do arquivo (expo-file-system)
+// e o seletor de documento (expo-document-picker).
+jest.mock('../../../../lib/media/localFileSize', () => ({ localFileSize: jest.fn() }));
+jest.mock('../../../../lib/media/pickDocument', () => ({ pickReportDocument: jest.fn() }));
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack, push: jest.fn() }),
@@ -92,6 +98,108 @@ beforeEach(() => {
   mockBack.mockClear();
   mockUseMediaPicker.mockReturnValue({ showPicker, pickFromGallery });
   mockUseReports.mockReturnValue({ create: criarRelatorio });
+  (localFileSize as jest.Mock).mockReset().mockReturnValue(3 * 1024);
+  (pickReportDocument as jest.Mock).mockReset().mockResolvedValue('file:///cache/laudo.pdf');
+});
+
+// Anexo multimídia (Anexo I): além da foto, vídeo pela galeria e áudio ou PDF
+// pelo seletor de documento. A tela mostra tipo e tamanho no quadrado e recusa
+// na escolha o que o servidor recusaria, com a mesma frase do painel.
+describe('Novo relatório: anexo multimídia', () => {
+  const MB = 1024 * 1024;
+  const textoDa = (tree: ReturnType<typeof create>) =>
+    tree.root
+      .findAll((n) => typeof n.props?.children === 'string')
+      .map((n) => n.props.children as string)
+      .join('\n');
+
+  it('a galeria do relatório pede foto e vídeo', async () => {
+    await render();
+    expect(mockUseMediaPicker).toHaveBeenCalledWith({ mediaTypes: ['images', 'videos'] });
+  });
+
+  it('o texto de ajuda lista os tipos e os tetos', async () => {
+    const tree = await render();
+    expect(uploader(tree).props.helperText).toBe(
+      'Selecione JPG, PNG, MP4, MOV, MP3, M4A, WAV ou PDF. Vídeo até 100 MB, áudio até 25 MB, os demais até 15 MB.',
+    );
+  });
+
+  it('vídeo escolhido vai pro quadrado com o tipo e o tamanho', async () => {
+    pickFromGallery.mockResolvedValue('file:///tmp/campo.mp4');
+    (localFileSize as jest.Mock).mockReturnValue(12.3 * MB);
+    const tree = await render();
+
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+
+    expect(slotPreenchido(tree, 1)).toBe(true);
+    expect(textoDa(tree)).toContain('Vídeo');
+    expect(textoDa(tree)).toContain('12,3 MB');
+  });
+
+  it('o menu do quadrado oferece áudio ou PDF pelo seletor de documento', async () => {
+    const tree = await render();
+    await tocarNoSlot(tree, 'Adicionar anexo 1');
+
+    const opcoes = showPicker.mock.calls[0][0];
+    await expect(opcoes.onPickDocument()).resolves.toBe('file:///cache/laudo.pdf');
+    expect(pickReportDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('PDF escolhido mostra PDF e o tamanho no quadrado', async () => {
+    showPicker.mockResolvedValue('file:///cache/laudo.pdf');
+    (localFileSize as jest.Mock).mockReturnValue(850 * 1024);
+    const tree = await render();
+
+    await tocarNoSlot(tree, 'Adicionar anexo 1');
+
+    expect(slotPreenchido(tree, 1)).toBe(true);
+    expect(textoDa(tree)).toContain('PDF');
+    expect(textoDa(tree)).toContain('850 KB');
+  });
+
+  it('arquivo acima do teto é recusado na escolha, com a frase do servidor, e o quadrado fica vazio', async () => {
+    pickFromGallery.mockResolvedValue('file:///tmp/grande.mp4');
+    (localFileSize as jest.Mock).mockReturnValue(100 * MB + 1);
+    const tree = await render();
+
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+
+    const [aviso] = tree.root.findAllByType(Toast);
+    expect(aviso.props.variant).toBe('error');
+    expect(aviso.props.title).toBe('O arquivo excede o limite de 100 MB para vídeo.');
+    expect(slotVazio(tree, 1)).toBe(true);
+  });
+
+  it('tipo fora da lista é recusado na escolha', async () => {
+    showPicker.mockResolvedValue('file:///cache/nota.txt');
+    const tree = await render();
+
+    await tocarNoSlot(tree, 'Adicionar anexo 1');
+
+    const [aviso] = tree.root.findAllByType(Toast);
+    expect(aviso.props.title).toBe(
+      'Tipo de arquivo não aceito. Selecione JPG, PNG, MP4, MOV, MP3, M4A, WAV ou PDF.',
+    );
+    expect(slotVazio(tree, 1)).toBe(true);
+  });
+
+  it('o anexo de qualquer tipo vai no relatório salvo pela uri', async () => {
+    pickFromGallery
+      .mockResolvedValueOnce('file:///tmp/campo.mp4')
+      .mockResolvedValueOnce('file:///tmp/foto.jpg');
+    const tree = await render();
+    await preencher(tree);
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+    await act(async () => { await uploader(tree).props.onPickFile(); });
+
+    await salvar(tree);
+
+    expect(criarRelatorio.mock.calls[0][0].imageUris).toEqual([
+      'file:///tmp/campo.mp4',
+      'file:///tmp/foto.jpg',
+    ]);
+  });
 });
 
 describe('Novo relatório: anexos', () => {

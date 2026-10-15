@@ -114,3 +114,74 @@ describe('useMediaPicker.showPicker', () => {
     expect(onRemove).not.toHaveBeenCalled();
   });
 });
+
+// Anexo multimídia do relatório: a galeria passa a mostrar vídeo junto da
+// foto, e o menu ganha a entrada de áudio ou PDF (seletor de documento, que
+// quem chama passa). Chat, jornada e avatar não passam nada e seguem iguais.
+describe('useMediaPicker: anexo de relatório', () => {
+  const pickerComVideo = (): UseMediaPickerReturn => {
+    let api!: UseMediaPickerReturn;
+    const Sonda = () => {
+      api = useMediaPicker({ mediaTypes: ['images', 'videos'] });
+      return null;
+    };
+    act(() => {
+      create(createElement(Sonda));
+    });
+    return api;
+  };
+
+  it('por padrão a galeria e a câmera pedem só imagens', async () => {
+    await picker().pickFromGallery();
+    expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaTypes: ['images'] }),
+    );
+  });
+
+  it('com mediaTypes a galeria mostra vídeo; a câmera segue só na foto', async () => {
+    (ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValue({ canceled: true });
+    const api = pickerComVideo();
+    await api.pickFromGallery();
+    await api.takePhoto();
+    expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaTypes: ['images', 'videos'] }),
+    );
+    expect(ImagePicker.launchCameraAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaTypes: ['images'] }),
+    );
+  });
+
+  it('com onPickDocument o menu vira "anexo" e ganha a entrada de áudio ou PDF', () => {
+    void picker().showPicker({ onPickDocument: jest.fn() });
+    expect(titulo()).toBe('Adicionar anexo');
+    expect(botoes().map((b) => b.text)).toEqual([
+      'Tirar foto',
+      'Escolher da galeria',
+      'Escolher áudio ou PDF',
+      'Cancelar',
+    ]);
+  });
+
+  it('com onPickDocument e onRemove: "Alterar anexo" e "Remover anexo"', () => {
+    void picker().showPicker({ onPickDocument: jest.fn(), onRemove: jest.fn() });
+    expect(titulo()).toBe('Alterar anexo');
+    expect(botoes().map((b) => b.text)).toEqual([
+      'Tirar foto',
+      'Escolher da galeria',
+      'Escolher áudio ou PDF',
+      'Remover anexo',
+      'Cancelar',
+    ]);
+  });
+
+  it('tocar em "Escolher áudio ou PDF" resolve com o que o seletor devolver', async () => {
+    const onPickDocument = jest.fn(async () => 'file:///cache/laudo.pdf');
+    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockClear();
+    const p = picker().showPicker({ onPickDocument });
+
+    botao('Escolher áudio ou PDF')!.onPress!();
+
+    await expect(p).resolves.toBe('file:///cache/laudo.pdf');
+    expect(ImagePicker.launchImageLibraryAsync).not.toHaveBeenCalled();
+  });
+});

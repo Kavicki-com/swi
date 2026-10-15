@@ -24,6 +24,7 @@ const doServidor = (id: string, title: string): Report => ({
   responsibles: ['Ana'],
   details: 'Detalhes',
   images: [],
+  attachments: [],
   activities: [],
   comments: [],
 });
@@ -180,6 +181,7 @@ describe('ReportsProvider: novo relatório pela fila', () => {
         responsibles: ['Ana'],
         details: 'Tudo conferido.',
         images: [],
+        attachments: [],
         activities: [],
         comments: [],
       },

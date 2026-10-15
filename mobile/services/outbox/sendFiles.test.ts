@@ -184,3 +184,38 @@ describe('passthroughSendFiles', () => {
     expect(mockDisk.has('file:///cache/foto.jpg')).toBe(true);
   });
 });
+
+// Anexo multimídia do relatório: a cópia na fila preserva a extensão (é dela
+// que o upload deduz o content-type) e o teto é o do tipo, como no servidor.
+describe('createStagedSendFiles: anexo multimídia', () => {
+  const MB = 1024 * 1024;
+
+  it('vídeo e áudio copiam com a própria extensão', async () => {
+    mockDisk.set('file:///cache/campo.mp4', 50 * MB);
+    mockDisk.set('file:///cache/relato.m4a', 3 * MB);
+    mockDisk.set('file:///cache/laudo.pdf', 1 * MB);
+    const a = arquivos();
+
+    await expect(a.stage('file:///cache/campo.mp4')).resolves.toBe(`${DIR}/id-1.mp4`);
+    await expect(a.stage('file:///cache/relato.m4a')).resolves.toBe(`${DIR}/id-2.m4a`);
+    await expect(a.stage('file:///cache/laudo.pdf')).resolves.toBe(`${DIR}/id-3.pdf`);
+  });
+
+  it('vídeo de 50 MB entra; acima de 100 MB é recusado com a frase do tipo', async () => {
+    mockDisk.set('file:///cache/grande.mp4', 100 * MB + 1);
+    await expect(arquivos().stage('file:///cache/grande.mp4')).rejects.toThrow(
+      'O arquivo excede o limite de 100 MB para vídeo.',
+    );
+  });
+
+  it('áudio acima de 25 MB é recusado; imagem segue nos 15 MB', async () => {
+    mockDisk.set('file:///cache/longo.mp3', 25 * MB + 1);
+    mockDisk.set('file:///cache/enorme.jpg', 15 * MB + 1);
+    await expect(arquivos().stage('file:///cache/longo.mp3')).rejects.toThrow(
+      'O arquivo excede o limite de 25 MB para áudio.',
+    );
+    await expect(arquivos().stage('file:///cache/enorme.jpg')).rejects.toThrow(
+      'O arquivo excede o limite de 15 MB para imagem.',
+    );
+  });
+});

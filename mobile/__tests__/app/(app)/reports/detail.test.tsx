@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider, Toast } from '@kavicki/swi-design-system';
 import ReportDetails from '../../../../app/(app)/reports/[id]';
-import type { Report, ReportComment } from '../../../../services/reports/types';
+import type { Report, ReportAttachment, ReportComment } from '../../../../services/reports/types';
 
 // Companheiro de detail.integration.test.tsx. La a tela roda com o provider e o
 // adaptador REAIS e so o HTTP e dublado; e um
@@ -25,6 +25,13 @@ let mockId: string | undefined = 'r1';
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: mockId }),
   useRouter: () => mockRouter,
+}));
+
+// O anexo abre no navegador interno por lib/media/trustedMediaUrl, que valida
+// a origem; aqui só interessa que a tela chame com a url do anexo.
+const mockAbrirAnexo = jest.fn();
+jest.mock('../../../../lib/media/trustedMediaUrl', () => ({
+  abrirAnexoOuAvisar: (...args: unknown[]) => mockAbrirAnexo(...args),
 }));
 
 const mockLoadOne = jest.fn();
@@ -62,6 +69,7 @@ const relatorio = (over: Partial<Report> = {}): Report => ({
   responsibles: ['Ezequiel Almeida'],
   details: 'Inspecao realizada nas maquinas pesadas.',
   images: [],
+  attachments: [],
   activities: [],
   comments: [],
   ...over,
@@ -291,6 +299,67 @@ describe('Detalhe do relatorio: secoes condicionais', () => {
 
     expect(textoDa(tree)).toContain('Imagens');
     expect(uris).toEqual(['https://ex/1.jpg', 'https://ex/2.jpg']);
+  });
+
+  // Anexo multimídia: imagem segue na faixa de Imagens; vídeo e áudio viram o
+  // cartão do MediaPlayer do DS com Reproduzir; PDF vira linha com Visualizar.
+  // Todos abrem no navegador interno (sem player embutido, por decisão do projeto).
+  describe('anexos multimidia', () => {
+    const anexo = (kind: ReportAttachment['kind'], url: string): ReportAttachment => ({
+      key: '',
+      url,
+      contentType: '',
+      kind,
+    });
+
+    it('esconde a secao Anexos quando so ha imagens', async () => {
+      mockLoadOne.mockResolvedValue(
+        relatorio({ images: ['https://ex/1.jpg'], attachments: [anexo('image', 'https://ex/1.jpg')] }),
+      );
+      const tree = await montar();
+      expect(textoDa(tree)).not.toContain('Anexos');
+    });
+
+    it('video e audio viram player com Reproduzir; PDF vira linha com Visualizar', async () => {
+      mockLoadOne.mockResolvedValue(
+        relatorio({
+          attachments: [
+            anexo('video', 'https://ex/v.mp4'),
+            anexo('audio', 'https://ex/a.m4a'),
+            anexo('document', 'https://ex/d.pdf'),
+          ],
+        }),
+      );
+      const tree = await montar();
+      const texto = textoDa(tree);
+
+      expect(texto).toContain('Anexos');
+      expect(texto).toContain('Vídeo 1');
+      expect(texto).toContain('Áudio 1');
+      expect(texto).toContain('PDF 1');
+      const players = tree.root.findAll(
+        (n) => typeof n.props?.onOpenExternal === 'function' && typeof n.props?.kind === 'string',
+      );
+      expect(players.map((p) => p.props.kind)).toEqual(['video', 'audio']);
+      expect(tree.root.findAll((n) => n.props?.accessibilityLabel === 'Visualizar PDF 1').length).toBeGreaterThan(0);
+    });
+
+    it('Reproduzir e Visualizar abrem o anexo no navegador interno', async () => {
+      mockLoadOne.mockResolvedValue(
+        relatorio({ attachments: [anexo('video', 'https://ex/v.mp4'), anexo('document', 'https://ex/d.pdf')] }),
+      );
+      const tree = await montar();
+
+      const [player] = tree.root.findAll((n) => typeof n.props?.onOpenExternal === 'function');
+      await act(async () => { player.props.onOpenExternal(); });
+      expect(mockAbrirAnexo).toHaveBeenCalledWith('https://ex/v.mp4', 'Vídeo 1');
+
+      const [ver] = tree.root.findAll(
+        (n) => n.props?.accessibilityLabel === 'Visualizar PDF 1' && typeof n.props?.onPress === 'function',
+      );
+      await act(async () => { ver.props.onPress(); });
+      expect(mockAbrirAnexo).toHaveBeenCalledWith('https://ex/d.pdf', 'PDF 1');
+    });
   });
 
   it('o tom da atividade escolhe a cor da barra, e cada tom tem a sua', async () => {

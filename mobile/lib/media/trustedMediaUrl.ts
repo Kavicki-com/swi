@@ -1,4 +1,5 @@
 import { Alert, Linking } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { isRelaxedEnv, RUNTIME_ENV, type RuntimeEnv } from '../featureFlags';
 import { getApiUrl } from '../../services/auth/apiConfig';
 import { errorMessage } from '../errors/errorMessage';
@@ -96,15 +97,40 @@ export function resolveTrustedMediaUrl(
  * `Linking` com URL que não passou pela validação acima.
  */
 export async function openTrustedMediaUrl(bruta: string | undefined): Promise<void> {
-  const url = resolveTrustedMediaUrl(bruta, {
-    apiUrl: getApiUrl(),
-    // Literal, não acesso dinâmico: o Babel do Expo substitui a expressão
-    // inteira pelo valor no bundle, e `process.env[nome]` resolveria para
-    // undefined em produção.
-    origensExtras: process.env.EXPO_PUBLIC_MEDIA_ORIGINS,
-    env: RUNTIME_ENV,
-  });
-  await Linking.openURL(url);
+  await Linking.openURL(resolveTrustedMediaUrl(bruta, opcoesDoApp()));
+}
+
+const opcoesDoApp = (): OpcoesMidiaConfiavel => ({
+  apiUrl: getApiUrl(),
+  // Literal, não acesso dinâmico: o Babel do Expo substitui a expressão
+  // inteira pelo valor no bundle, e `process.env[nome]` resolveria para
+  // undefined em produção.
+  origensExtras: process.env.EXPO_PUBLIC_MEDIA_ORIGINS,
+  env: RUNTIME_ENV,
+});
+
+/**
+ * Anexo do relatório (vídeo, áudio, PDF) no navegador INTERNO, com a mesma
+ * validação de origem. Interno, e não o `Linking` do exame, porque a pessoa
+ * fica no app: o navegador toca a mídia e mostra o PDF, e volta num toque.
+ * Sem player embutido por decisão do projeto (nenhuma dependência nativa nova
+ * perto da entrega).
+ */
+export async function openTrustedMediaInBrowser(
+  bruta: string | undefined,
+  opcoes: OpcoesMidiaConfiavel = opcoesDoApp(),
+): Promise<void> {
+  const url = resolveTrustedMediaUrl(bruta, opcoes);
+  await WebBrowser.openBrowserAsync(url);
+}
+
+/** O que a tela do relatório chama: abre, ou avisa o motivo. */
+export async function abrirAnexoOuAvisar(bruta: string | undefined, descricao: string): Promise<void> {
+  try {
+    await openTrustedMediaInBrowser(bruta);
+  } catch (e) {
+    Alert.alert('Erro', errorMessage(e, `Não foi possível abrir ${descricao}.`));
+  }
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { Report, ReportActivity, ReportComment, ReportPayload, ReportsBackend } from './types';
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
+import { attachmentsFromUrls } from './attachments';
 
 // As ATIVIDADES exigem conversão: a linha que o servidor manda chega com
 // `responsibleNames` e `responsibleAvatars` e SEM `id`, enquanto a tela lê
@@ -36,6 +37,9 @@ function fromApi(dto: WireReport): Report {
     responsibles: dto.responsibles ?? [],
     details: dto.details ?? '',
     images: dto.images ?? [],
+    // Servidor anterior ao anexo multimídia não manda `attachments`: cada
+    // imagem vira anexo de imagem, e a seção de anexos segue coerente.
+    attachments: dto.attachments ?? attachmentsFromUrls(dto.images ?? []),
     activities: (dto.activities ?? []).map((a, i) => ({
       id: a.id ?? `act-${i}`, // o servidor não manda id → sintetiza um estável por posição
       title: a.title ?? '',

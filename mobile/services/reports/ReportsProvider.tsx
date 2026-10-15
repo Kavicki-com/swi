@@ -167,6 +167,7 @@ export function ReportsProvider({ children }: PropsWithChildren) {
                   responsibles: item.responsibles,
                   details: item.details,
                   images: [],
+                  attachments: [],
                   activities: [],
                   comments: [],
                 },
