@@ -7,7 +7,8 @@ import { vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderPage, clearSession } from '@/test-utils/renderPage'
 import { employeesApi, adminsApi } from '@/services/api/users'
-import { AdminsCreate, dadosDeSaude, formDoUsuario, patchDoFormulario } from './AdminsCreate'
+import { AdminsCreate } from './AdminsCreate'
+import { dadosDeSaude, formDoUsuario, patchDoFormulario } from './components/adminForm'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -424,6 +425,7 @@ const GRAVADO = {
   allergies: 'Penicilina',
   chronicConditions: '',
   username: 'carlos.m',
+  role: 'ADMIN',
   exams: [],
 }
 
@@ -678,5 +680,107 @@ describe('AdminsCreate: autofill', () => {
 
     expect(screen.getByTestId('admins-create-usuario')).toHaveAttribute('autocomplete', 'off')
     expect(screen.getByTestId('admins-create-senha')).toHaveAttribute('autocomplete', 'off')
+  })
+})
+
+// Nível de acesso (Administrador ou Supervisor). Só existe no cadastro de
+// administrador: funcionário não escolhe nível, é sempre WORKER.
+describe('AdminsCreate: nível de acesso', () => {
+  function preencherObrigatorios() {
+    typeIn('admins-create-nome', 'Sil Souza')
+    typeIn('admins-create-email', 'sil@x.com')
+    typeIn('admins-create-senha', 'Senha@123')
+  }
+
+  it('cadastro de administrador nasce Administrador e mostra o que o nível faz', async () => {
+    await renderPage(<AdminsCreate subject="administrador" onBack={vi.fn()} />)
+
+    // O rádio do DS não expõe aria-checked no navegador; a descrição do grupo
+    // acompanha o nível escolhido e é o que a pessoa lê.
+    expect(screen.getByRole('radio', { name: 'Administrador' })).toBeInTheDocument()
+    expect(screen.getByText(/Acesso completo/)).toBeInTheDocument()
+  })
+
+  it('escolher Supervisor troca a descrição e cadastra com role SUPERVISOR', async () => {
+    const create = vi
+      .spyOn(adminsApi, 'create')
+      .mockResolvedValue({ data: { id: 'n' } as never, error: null })
+    await renderPage(<AdminsCreate subject="administrador" onBack={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Supervisor' }))
+    expect(screen.getByText(/Não gerencia usuários/)).toBeInTheDocument()
+    preencherObrigatorios()
+    finalizar()
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ role: 'SUPERVISOR' })
+  })
+
+  it('cadastro de funcionário não tem nível nem manda role', async () => {
+    const create = vi
+      .spyOn(employeesApi, 'create')
+      .mockResolvedValue({ data: { id: 'n' } as never, error: null })
+    await renderPage(<AdminsCreate subject="funcionário" onBack={vi.fn()} />)
+
+    expect(screen.queryByRole('radio', { name: 'Supervisor' })).toBeNull()
+    preencherObrigatorios()
+    finalizar()
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('role')
+  })
+
+  it('a edição abre no nível gravado e manda o nível novo quando ele muda', async () => {
+    vi.spyOn(adminsApi, 'getForEdit').mockResolvedValue({
+      data: { ...GRAVADO, role: 'SUPERVISOR' },
+      error: null,
+    })
+    const update = vi
+      .spyOn(adminsApi, 'update')
+      .mockResolvedValue({ data: { id: 'u1' } as never, error: null })
+    await renderPage(<AdminsCreate subject="administrador" />, {
+      route: '/admins/u1/edit',
+      path: '/admins/:id/edit',
+    })
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+    expect(screen.getByText(/Não gerencia usuários/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Administrador' }))
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[1]).toMatchObject({ role: 'ADMIN' })
+  })
+
+  // O backend recusa trocar o próprio nível mesmo para o mesmo valor; mandar
+  // o nível sem mudança faria a edição de si mesmo falhar à toa.
+  it('a edição sem troca de nível não manda role', async () => {
+    vi.spyOn(adminsApi, 'getForEdit').mockResolvedValue({ data: GRAVADO, error: null })
+    const update = vi
+      .spyOn(adminsApi, 'update')
+      .mockResolvedValue({ data: { id: 'u1' } as never, error: null })
+    await renderPage(<AdminsCreate subject="administrador" />, {
+      route: '/admins/u1/edit',
+      path: '/admins/:id/edit',
+    })
+    await waitFor(() => screen.getByDisplayValue('Carlos Mendes'))
+
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[1]).not.toHaveProperty('role')
+  })
+})
+
+describe('nível nas funções do formulário', () => {
+  it('formDoUsuario traz o nível do painel e deixa vazio para funcionário', () => {
+    expect(formDoUsuario({ ...GRAVADO, role: 'SUPERVISOR' }).nivel).toBe('SUPERVISOR')
+    expect(formDoUsuario({ ...GRAVADO, role: 'WORKER' }).nivel).toBe('')
+  })
+
+  it('patchDoFormulario só leva o nível quando ele mudou', () => {
+    const form = formDoUsuario({ ...GRAVADO, role: 'SUPERVISOR' })
+    expect(patchDoFormulario(form, 'SUPERVISOR')).not.toHaveProperty('role')
+    expect(patchDoFormulario({ ...form, nivel: 'ADMIN' }, 'SUPERVISOR')).toMatchObject({ role: 'ADMIN' })
   })
 })

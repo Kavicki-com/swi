@@ -1,4 +1,4 @@
-import { formatBadgeCount, NAV_ITEMS, withBadges } from './nav'
+import { formatBadgeCount, NAV_ITEMS, navItemsFor, withBadges } from './nav'
 
 describe('NAV_ITEMS', () => {
   it('tem Tarefas apontando pra /tasks', () => {
@@ -61,5 +61,25 @@ describe('withBadges', () => {
     const items = withBadges({ '/reports': '3' })
     expect(items.find((i) => i.value === '/reports')?.badge).toBe('3')
     expect(items.find((i) => i.value === '/alerts')?.badge).toBeUndefined()
+  })
+})
+
+// Supervisor não vê a gestão de usuários e administradores (decisão de 04/10).
+describe('navItemsFor', () => {
+  it('Administrador vê o menu inteiro', () => {
+    expect(navItemsFor('ADMIN').map((i) => i.value)).toEqual(NAV_ITEMS.map((i) => i.value))
+  })
+
+  it('Supervisor não vê Administradores nem Funcionários, e mantém o resto na ordem', () => {
+    const values = navItemsFor('SUPERVISOR').map((i) => i.value)
+    expect(values).toEqual(
+      NAV_ITEMS.map((i) => i.value).filter((v) => v !== '/admins' && v !== '/employees'),
+    )
+  })
+
+  it('withBadges filtra pelo nível também (menu do mapa geral)', () => {
+    const items = withBadges({ '/reports': '3' }, 'SUPERVISOR')
+    expect(items.some((i) => i.value === '/admins')).toBe(false)
+    expect(items.find((i) => i.value === '/reports')?.badge).toBe('3')
   })
 })

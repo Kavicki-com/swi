@@ -5,6 +5,7 @@ import { AuthProvider } from '@/hooks/useAuth'
 import { clearSession, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from '@/services/api/http'
 import { RequireAuth } from './RequireAuth'
 import { GuestOnly } from './GuestOnly'
+import { AdminOnly } from './AdminOnly'
 
 const Protected = () => <div data-testid="protected" />
 const Guest = () => <div data-testid="guest" />
@@ -140,5 +141,54 @@ describe('GuestOnly', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-stub')).toBeInTheDocument()
     })
+  })
+})
+
+// Gestão de usuários e administradores é só do Administrador. O Supervisor que
+// abrir o endereço direto volta para a home, sem tela de erro.
+describe('AdminOnly', () => {
+  const jwtOf = (role: string) => `x.${btoa(JSON.stringify({ sub: 'u1', role }))}.y`
+  const seedAs = (role: string) => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, jwtOf(role))
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        id: 'u1',
+        email: 'a',
+        full_name: 'a',
+        role: 'admin',
+        consent_given_at: null,
+        created_at: '',
+      }),
+    )
+  }
+  const renderAdminOnly = () =>
+    render(
+      <SwiThemeProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/admins']}>
+            <Routes>
+              <Route path="/" element={<HomeStub />} />
+              <Route element={<AdminOnly />}>
+                <Route path="/admins" element={<Protected />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </SwiThemeProvider>,
+    )
+  afterEach(() => window.localStorage.clear())
+
+  it('Administrador entra', async () => {
+    seedAs('ADMIN')
+    renderAdminOnly()
+    await waitFor(() => expect(screen.getByTestId('protected')).toBeInTheDocument())
+  })
+
+  it('Supervisor volta para a home', async () => {
+    seedAs('SUPERVISOR')
+    renderAdminOnly()
+    await waitFor(() => expect(screen.getByTestId('home-stub')).toBeInTheDocument())
+    expect(screen.queryByTestId('protected')).toBeNull()
   })
 })

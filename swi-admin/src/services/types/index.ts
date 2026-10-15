@@ -13,11 +13,19 @@ export type ServiceResponse<T> = {
   count?: number
 }
 
+/** Nível de quem opera o painel. Funcionário (WORKER) não entra no painel. */
+export type PanelLevel = 'ADMIN' | 'SUPERVISOR'
+
 export type User = {
   id: ID
   email: string
   full_name: string
   role: 'admin' | 'super_admin'
+  /**
+   * Nível de acesso, lido do token. Ausente só em dados de demonstração, e aí
+   * vale Administrador; a sessão real sempre traz o campo.
+   */
+  level?: PanelLevel
   consent_given_at: ISODateString | null
   created_at: ISODateString
   // Mock biometrics for dashboard Header. S2 will source from real device.

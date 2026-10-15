@@ -16,6 +16,7 @@ import { DemoToastProvider } from '@/lib/demoToast'
 import { GlobalStyles } from './GlobalStyles'
 import { GuestOnly } from './GuestOnly'
 import { RequireAuth } from './RequireAuth'
+import { AdminOnly } from './AdminOnly'
 import { AppLayout } from './AppLayout'
 import { RouteFallback } from './RouteFallback'
 import { ChatProvider } from '@/services/chat/ChatProvider'
@@ -164,26 +165,32 @@ export function App() {
                   <Route path="/chat/:contactId" element={<ChatInbox />} />
                   <Route element={<AppLayout />}>
                     <Route path="/" element={<Dashboard />} />
-                    <Route path="/admins" element={<AdminsList />} />
-                    <Route path="/admins/new" element={<AdminsList initialTab="cadastrar" />} />
-                    <Route path="/admins/:id" element={<AdminDetails />} />
-                    {/* Edição reusa o formulário do cadastro, do mesmo jeito que
-                        /reports/:id/edit reusa o NewReport: o `:id` do useParams
-                        é o que separa criar de editar. */}
-                    <Route
-                      path="/admins/:id/edit"
-                      element={<AdminsCreate subject="administrador" />}
-                    />
-                    <Route path="/employees" element={<EmployeesList />} />
-                    <Route
-                      path="/employees/new"
-                      element={<EmployeesList initialTab="cadastrar" />}
-                    />
+                    {/* Gestão de usuários e administradores: só o Administrador.
+                        O Supervisor volta pra home. A ficha /employees/:id fica
+                        de fora de propósito: não tem ação de gestão e é para
+                        onde o mapa e o monitoramento levam. */}
+                    <Route element={<AdminOnly />}>
+                      <Route path="/admins" element={<AdminsList />} />
+                      <Route path="/admins/new" element={<AdminsList initialTab="cadastrar" />} />
+                      <Route path="/admins/:id" element={<AdminDetails />} />
+                      {/* Edição reusa o formulário do cadastro, do mesmo jeito que
+                          /reports/:id/edit reusa o NewReport: o `:id` do useParams
+                          é o que separa criar de editar. */}
+                      <Route
+                        path="/admins/:id/edit"
+                        element={<AdminsCreate subject="administrador" />}
+                      />
+                      <Route path="/employees" element={<EmployeesList />} />
+                      <Route
+                        path="/employees/new"
+                        element={<EmployeesList initialTab="cadastrar" />}
+                      />
+                      <Route
+                        path="/employees/:id/edit"
+                        element={<AdminsCreate subject="funcionário" />}
+                      />
+                    </Route>
                     <Route path="/employees/:id" element={<EmployeeDetails />} />
-                    <Route
-                      path="/employees/:id/edit"
-                      element={<AdminsCreate subject="funcionário" />}
-                    />
                     {/* /monitoring/* is a nested layout: MonitoringLayout owns
                     KPIs/title/tabs/search/userlist; child views render the
                     unique row that goes between KPIs and title. */}

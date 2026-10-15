@@ -28,6 +28,7 @@ import { useDemoToast } from '@/lib/demoToast'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { formatAge } from '@/lib/formatAge'
 import { pluralize } from '@/lib/pluralize'
+import { levelLabel } from '@/app/levels'
 import { AdminsCreate } from './AdminsCreate'
 
 type AdminRowProps = {
@@ -128,6 +129,10 @@ function AdminRow({
           </Text>
           <Text variant="body.m" color={theme.content.dark}>
             {admin.specialization}
+          </Text>
+          {/* Nível de acesso, distinto do cargo acima. */}
+          <Text testID={`admin-level-${admin.id}`} variant="body.s" color={theme.content.primary}>
+            {levelLabel(admin.level)}
           </Text>
         </View>
         {/* Vertical divider */}

@@ -28,7 +28,7 @@ import {
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
-import { NAV_ITEMS } from '@/app/nav'
+import { NAV_ITEMS, navItemsFor } from '@/app/nav'
 import { useChat } from '@/services/chat/ChatProvider'
 import { resolveContact, unreadFor } from '@/services/chat/chatReducers'
 import { useMyVitals } from '@/hooks/useMyVitals'
@@ -77,6 +77,8 @@ export function resolveActiveNavValue(pathname: string): string {
 
 export function AppLayout() {
   const { user } = useAuth()
+  // Menu do nível: o Supervisor não vê a gestão de usuários e administradores.
+  const navItems = navItemsFor(user?.level)
   const myVitals = useMyVitals()
   const navigate = useNavigate()
   const location = useLocation()
@@ -240,7 +242,7 @@ export function AppLayout() {
               <SideMenu
                 testID="app-drawer-nav"
                 accessibilityLabel="Navegação principal"
-                items={NAV_ITEMS}
+                items={navItems}
                 value={activeNavValue}
                 onChange={(v: string) => navigate(v)}
                 fullWidth
@@ -330,7 +332,7 @@ export function AppLayout() {
         <SideMenu
           testID="app-sidebar-nav"
           accessibilityLabel="Navegação principal"
-          items={NAV_ITEMS}
+          items={navItems}
           value={activeNavValue}
           onChange={(v: string) => navigate(v)}
           fullWidth

@@ -1,14 +1,14 @@
 // Auth real contra o backend Nest (POST /auth/login). Mantém o envelope
 // ServiceResponse pra que useAuth e as telas não precisem mudar na migração.
-import type { User } from '@/services/types'
+import type { PanelLevel, User } from '@/services/types'
 import type { ServiceResponse } from '@/services/types'
 import { ApiError, apiFetch, clearSession, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from './http'
 
 type LoginResponse = { accessToken: string; user: { id: string; email: string; name: string } }
 
 // Lê a role do payload do JWT. NÃO é validação de segurança (quem valida é o
-// backend em toda rota) — serve pra barrar cedo um worker que tentou o painel,
-// com mensagem clara em vez de 403 em cada tela.
+// backend em toda rota): serve pra barrar cedo um worker que tentou o painel,
+// com mensagem clara em vez de 403 em cada tela, e pra saber o nível da sessão.
 const roleOf = (token: string): string => {
   try {
     // JWT usa base64url; atob só entende base64 clássico.
@@ -19,14 +19,24 @@ const roleOf = (token: string): string => {
   }
 }
 
+/** Nível do painel pelo papel do token; qualquer outro papel não entra. */
+const levelOf = (token: string): PanelLevel | null => {
+  const role = roleOf(token)
+  return role === 'ADMIN' || role === 'SUPERVISOR' ? role : null
+}
+
+/** O que o usuário logado pode fazer, calculado no backend (GET /auth/me). */
+export type MyAccess = { role: string; permissions: string[] }
+
 // O backend devolve { id, email, name }; o painel consome o shape User.
 // created_at é sintético (timestamp do login, não da criação da conta): não
 // usar pra exibir "membro desde".
-const toAdminUser = (u: LoginResponse['user']): User => ({
+const toAdminUser = (u: LoginResponse['user'], level: PanelLevel): User => ({
   id: u.id,
   email: u.email,
   full_name: u.name,
   role: 'admin',
+  level,
   consent_given_at: null,
   created_at: new Date().toISOString(),
 })
@@ -49,15 +59,33 @@ export const authApi = {
       if (!res?.accessToken) {
         return { data: null, error: { message: 'Resposta inesperada do servidor.' } }
       }
-      if (roleOf(res.accessToken) !== 'ADMIN') {
-        return { data: null, error: { message: 'Acesso restrito a administradores.' } }
+      const level = levelOf(res.accessToken)
+      if (!level) {
+        return {
+          data: null,
+          error: { message: 'Acesso restrito a administradores e supervisores.' },
+        }
       }
-      const user = toAdminUser(res.user)
+      const user = toAdminUser(res.user, level)
       window.localStorage.setItem(TOKEN_STORAGE_KEY, res.accessToken)
       window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user))
       return { data: user, error: null }
     } catch (e) {
       return { data: null, error: { message: e instanceof Error ? e.message : 'Falha no login' } }
+    }
+  },
+
+  // Nível e permissões do usuário logado, da matriz do backend. A coluna
+  // "Permissões" das configurações mostra isto; o painel não tem cópia da matriz.
+  me: async (): Promise<ServiceResponse<MyAccess>> => {
+    try {
+      const u = await apiFetch<{ role: string; permissions?: string[] }>('/auth/me')
+      return { data: { role: u.role, permissions: u.permissions ?? [] }, error: null }
+    } catch (e) {
+      return {
+        data: null,
+        error: { message: e instanceof Error ? e.message : 'Falha ao carregar' },
+      }
     }
   },
 
@@ -68,12 +96,18 @@ export const authApi = {
 
   getSession: async (): Promise<ServiceResponse<User | null>> => {
     const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+    const token = window.localStorage.getItem(TOKEN_STORAGE_KEY)
     // Sessão sem token é órfã (ex.: 401 do apiFetch derruba as duas chaves,
     // mas estado antigo pode ter só a sessão) — trata como deslogado pra não
     // renderizar o painel com credencial morta.
-    if (!raw || !window.localStorage.getItem(TOKEN_STORAGE_KEY)) return { data: null, error: null }
+    if (!raw || !token) return { data: null, error: null }
     try {
-      return { data: JSON.parse(raw) as User, error: null }
+      // O nível vem do token, não do JSON gravado: sessão anterior aos níveis
+      // não tem o campo, e o token é o que o backend assinou.
+      return {
+        data: { ...(JSON.parse(raw) as User), level: levelOf(token) ?? 'ADMIN' },
+        error: null,
+      }
     } catch {
       return { data: null, error: null }
     }

@@ -130,3 +130,31 @@ describe('AdminDetails: editar perfil', () => {
     expect(nav.spy).toHaveBeenCalledWith('/user/settings')
   })
 })
+
+describe('AdminDetails: nível de acesso', () => {
+  afterEach(() => {
+    clearSession()
+    vi.restoreAllMocks()
+  })
+
+  it('mostra o nível de quem está sendo visto', async () => {
+    vi.spyOn(adminsApi, 'get').mockResolvedValue({
+      data: {
+        id: 'admin-8',
+        name: 'Sil Souza',
+        age: 30,
+        bloodType: 'A+',
+        role: 'Coordenadora',
+        specialization: 'Operações',
+        avatarUri: '',
+        active: true,
+        status: 'accept',
+        level: 'SUPERVISOR',
+      } as never,
+      error: null,
+    })
+    await renderPage(<AdminDetails />, { route: '/admins/admin-8', path: '/admins/:id' })
+
+    expect(await screen.findByTestId('admin-details-level')).toHaveTextContent('Supervisor')
+  })
+})

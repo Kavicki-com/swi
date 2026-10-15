@@ -4,6 +4,7 @@
 // counts on /reports and /alerts in the map view) apply them via
 // `withBadges`.
 import type { IconName } from '@kavicki/swi-design-system'
+import type { PanelLevel } from '@/services/types'
 
 export type NavItem = {
   value: string
@@ -28,6 +29,17 @@ export const NAV_ITEMS: NavItem[] = [
   { value: '/cameras', label: 'Câmeras', icon: 'video_camera_filled' },
 ]
 
+// Gestão de usuários e de administradores: só o Administrador vê. A rota em si
+// é barrada pelo AdminOnly; aqui o item só some do menu.
+const ADMIN_ONLY_ITEMS = new Set(['/admins', '/employees'])
+
+/** Menu do nível. Ausente vale Administrador (sessão de demonstração). */
+export function navItemsFor(level: PanelLevel = 'ADMIN'): NavItem[] {
+  return level === 'ADMIN'
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => !ADMIN_ONLY_ITEMS.has(item.value))
+}
+
 // Contagem REAL → texto do badge. `undefined` (zero/negativo/NaN) some com o
 // badge: um número inventado num console de emergência é pior que nenhum.
 export function formatBadgeCount(count: number): string | undefined {
@@ -35,8 +47,11 @@ export function formatBadgeCount(count: number): string | undefined {
   return count > 9 ? '+9' : String(count)
 }
 
-export function withBadges(overrides: Record<string, string | undefined>): NavItem[] {
-  return NAV_ITEMS.map((item) => {
+export function withBadges(
+  overrides: Record<string, string | undefined>,
+  level: PanelLevel = 'ADMIN',
+): NavItem[] {
+  return navItemsFor(level).map((item) => {
     const badge = overrides[item.value]
     return badge ? { ...item, badge } : { ...item }
   })

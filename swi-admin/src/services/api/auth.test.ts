@@ -72,7 +72,23 @@ describe('authApi.signIn (real)', () => {
     expect(data?.role).toBe('admin')
   })
 
-  it('rejeita WORKER — o painel é só de administradores', async () => {
+  it('o nível da sessão sai do token: ADMIN entra como Administrador', async () => {
+    vi.stubGlobal('fetch', okLogin(jwt({ sub: 'u1', role: 'ADMIN' })))
+    const { data } = await authApi.signIn({ email: 'admin@swi.local', password: 'admin123' })
+    expect(data?.level).toBe('ADMIN')
+  })
+
+  it('aceita SUPERVISOR e grava a sessão com o nível dele', async () => {
+    vi.stubGlobal('fetch', okLogin(jwt({ sub: 'u1', role: 'SUPERVISOR' })))
+
+    const { data, error } = await authApi.signIn({ email: 'sup@swi.local', password: 'x' })
+
+    expect(error).toBeNull()
+    expect(data?.level).toBe('SUPERVISOR')
+    expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeTruthy()
+  })
+
+  it('rejeita WORKER — o painel é só de administradores e supervisores', async () => {
     vi.stubGlobal('fetch', okLogin(jwt({ sub: 'u1', role: 'WORKER' })))
 
     const { data, error } = await authApi.signIn({
@@ -138,6 +154,20 @@ describe('authApi.getSession (real)', () => {
 
     expect(error).toBeNull()
     expect(data?.full_name).toBe('Admin Demo')
+    expect(data?.level).toBe('ADMIN')
+  })
+
+  // Sessão gravada antes dos níveis não tem `level`: quem manda é o token.
+  it('lê o nível do token, mesmo em sessão gravada sem ele', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, jwt({ sub: 'u1', role: 'SUPERVISOR' }))
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({ id: 'u1', email: 's@swi.local', full_name: 'Sup', level: 'ADMIN' }),
+    )
+
+    const { data } = await authApi.getSession()
+
+    expect(data?.level).toBe('SUPERVISOR')
   })
 
   it('devolve null quando falta o token (sessão órfã)', async () => {
@@ -380,4 +410,38 @@ it('401 de senha errada NÃO derruba a sessão local', async () => {
   expect(error?.message).toMatch(/senha atual/i)
   expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-vivo')
   expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBe('{"id":"u1"}')
+})
+
+describe('authApi.me (real)', () => {
+  it('GET /auth/me devolve o nível e as permissões que o backend calcula', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, jwt({ sub: 'u1', role: 'SUPERVISOR' }))
+    const f = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'u1',
+        email: 's@swi.local',
+        name: 'Sup',
+        role: 'SUPERVISOR',
+        permissions: ['monitoring.read', 'alerts.operate'],
+      }),
+    } as Response)
+    vi.stubGlobal('fetch', f)
+
+    const { data, error } = await authApi.me()
+
+    expect(error).toBeNull()
+    expect(data).toEqual({ role: 'SUPERVISOR', permissions: ['monitoring.read', 'alerts.operate'] })
+    expect((f.mock.calls[0] as [string])[0]).toContain('/auth/me')
+  })
+
+  it('falha de rede vira erro, sem permissões inventadas', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, jwt({ sub: 'u1', role: 'ADMIN' }))
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    const { data, error } = await authApi.me()
+
+    expect(data).toBeNull()
+    expect(error).not.toBeNull()
+  })
 })

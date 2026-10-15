@@ -43,6 +43,21 @@ describe('AdminsList', () => {
 
   // O ícone precisa navegar para a conversa daquele admin: `/chat` sem destino
   // abre sempre a conversa mais recente, não a pessoa clicada.
+  it('cada linha mostra o nível de acesso, além do cargo', async () => {
+    vi.spyOn(adminsApi, 'list').mockResolvedValue({
+      data: [
+        { ...ELISA, level: 'ADMIN' },
+        { ...ELISA, id: 'admin-02', name: 'Sil Souza', level: 'SUPERVISOR' },
+      ],
+      error: null,
+    })
+    await renderPage(<AdminsList />, { route: '/admins' })
+    await waitFor(() => screen.getByText('Sil Souza'))
+
+    expect(screen.getByTestId('admin-level-admin-01')).toHaveTextContent('Administrador')
+    expect(screen.getByTestId('admin-level-admin-02')).toHaveTextContent('Supervisor')
+  })
+
   it('ícone de chat abre a conversa do admin clicado, não /chat solto', async () => {
     vi.spyOn(adminsApi, 'list').mockResolvedValue({ data: [ELISA], error: null })
     await renderPage(<AdminsList />, { route: '/admins' })
