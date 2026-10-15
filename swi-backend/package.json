@@ -113,6 +113,10 @@
     "maxWorkers": "50%"
   },
   "overrides": {
-    "multer": "2.4.0"
+    "multer": "2.4.0",
+    "@nestjs/swagger": {
+      "js-yaml": "4.3.2",
+      "lodash": "4.18.1"
+    }
   }
 }
