@@ -55,10 +55,6 @@ function hashCanonical(content: CanonicalContent): string {
   return createHash('sha256').update(JSON.stringify(canonicalize(content))).digest('hex')
 }
 
-export function canonicalPayloadHash(event: TelemetryEvent): string {
-  return hashCanonical(canonicalContent(event))
-}
-
 interface NormalizedMeasurements {
   heartRateBpm: number | null
   stepDelta: number | null

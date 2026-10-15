@@ -1,4 +1,4 @@
-import { HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT } from './history-limits'
+import { HISTORY_DEFAULT_LIMIT } from './history-limits'
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma, type TelemetrySessionStatus } from '@prisma/client'
 import type { JwtUser } from '../../auth/current-user.decorator'
@@ -100,11 +100,6 @@ export const WINDOW_MAX_SAMPLES = 2_000
  * isso com folga e existe para um produtor acelerado não virar varredura.
  */
 export const SERIES_MAX_SAMPLES = 60_000
-
-// Os limites moram em history-limits para que o DTO da rota os leia sem
-// carregar este serviço, e com ele o cliente do Prisma. Reexportados porque
-// chamadores de fora da rota já os importam daqui.
-export { HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT }
 
 export interface SessionHistoryQuery {
   limit?: number
