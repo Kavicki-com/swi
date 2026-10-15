@@ -28,6 +28,7 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 | `@nestjs/platform-express` | 10.4.22 | MIT |  |
 | `@nestjs/platform-socket.io` | 10.4.22 | MIT |  |
 | `@nestjs/schedule` | 6.1.3 | MIT |  |
+| `@nestjs/swagger` | 7.4.2 | MIT |  |
 | `@nestjs/throttler` | 6.5.0 | MIT |  |
 | `@nestjs/websockets` | 10.4.22 | MIT |  |
 | `@prisma/client` | 5.22.0 | Apache-2.0 |  |
