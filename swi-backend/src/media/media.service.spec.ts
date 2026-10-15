@@ -80,6 +80,54 @@ describe('MediaService', () => {
     ).resolves.toBeDefined()
   })
 
+  // Anexo multimídia do relatório: o teto depende do tipo. Vídeo e áudio
+  // passam dos 15 MB da imagem, mas cada um tem limite próprio, e PDF segue
+  // nos 15 MB. A checagem roda ANTES de assinar, como a de sempre.
+  describe('teto por tipo no relatório', () => {
+    const MB = 1024 * 1024
+
+    it.each([
+      ['video/mp4', 100 * MB],
+      ['video/quicktime', 100 * MB],
+      ['audio/mpeg', 25 * MB],
+      ['audio/wav', 25 * MB],
+      ['application/pdf', 15 * MB],
+    ])('%s aceita exatamente o teto (%i bytes)', async (contentType, bytes) => {
+      await expect(new MediaService().presignPut(contentType, bytes, 'reports')).resolves.toBeDefined()
+    })
+
+    it.each([
+      ['video/mp4', 100 * MB + 1],
+      ['audio/mpeg', 25 * MB + 1],
+      ['application/pdf', 15 * MB + 1],
+    ])('%s recusa um byte acima do teto com 400, sem assinar', async (contentType, bytes) => {
+      await expect(new MediaService().presignPut(contentType, bytes, 'reports')).rejects.toMatchObject({
+        status: 400,
+      })
+      expect(getSignedUrl).not.toHaveBeenCalled()
+    })
+
+    // A mensagem do 400 informa o teto DO TIPO, não o global: quem mandou um
+    // áudio de 30 MB precisa ler 25 MB, não 100 MB.
+    it('mensagem do 400 informa o teto do tipo recusado', async () => {
+      await expect(
+        new MediaService().presignPut('audio/mpeg', 30 * MB, 'reports'),
+      ).rejects.toThrow(String(25 * MB))
+    })
+
+    it.each([
+      ['video/mp4', 'mp4'],
+      ['video/quicktime', 'mov'],
+      ['audio/mpeg', 'mp3'],
+      ['audio/x-m4a', 'm4a'],
+      ['audio/x-wav', 'wav'],
+      ['application/pdf', 'pdf'],
+    ])('%s grava a key como .%s sob reports/', async (contentType, ext) => {
+      const { key } = await new MediaService().presignPut(contentType, 1234, 'reports')
+      expect(key).toMatch(new RegExp(`^reports/[0-9a-f-]{36}\\.${ext}$`))
+    })
+  })
+
   // A extensão da key TEM que sair do content-type. Com pdf/txt liberados em
   // exames, um ternário png/jpg gravaria o PDF como `exams/<uuid>.jpg`: arquivo
   // com nome mentiroso no bucket, que o regex do CreateExamDto engoliria sem

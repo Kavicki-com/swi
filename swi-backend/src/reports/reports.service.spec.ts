@@ -112,6 +112,44 @@ describe('ReportsService', () => {
     expect(out!.images).toEqual(['signed:reports/a.jpg', 'signed:reports/b.jpg']) // urls presigned coexistem
   })
 
+  // Anexo multimídia. O banco guarda só a key; o tipo sai da extensão dela.
+  // `attachments` é o campo NOVO que diz a cada cliente como renderizar.
+  // `images` continua só com imagem: o app já instalado desenha cada item de
+  // `images` como foto, e um MP4 ali viraria quadro quebrado na tela dele.
+  describe('anexos multimídia na leitura', () => {
+    const keys = ['reports/a.jpg', 'reports/v.mp4', 'reports/s.m4a', 'reports/d.pdf']
+
+    it('attachments devolve key, url, contentType e kind de cada anexo, na ordem', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(row({ imageKeys: keys, comments: [] }))
+      const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1')
+      expect(out!.attachments).toEqual([
+        { key: 'reports/a.jpg', url: 'signed:reports/a.jpg', contentType: 'image/jpeg', kind: 'image' },
+        { key: 'reports/v.mp4', url: 'signed:reports/v.mp4', contentType: 'video/mp4', kind: 'video' },
+        { key: 'reports/s.m4a', url: 'signed:reports/s.m4a', contentType: 'audio/mp4', kind: 'audio' },
+        { key: 'reports/d.pdf', url: 'signed:reports/d.pdf', contentType: 'application/pdf', kind: 'document' },
+      ])
+    })
+
+    it('images fica só com as imagens e imageKeys segue com todas as keys', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(row({ imageKeys: keys, comments: [] }))
+      const out = await new ReportsService(db, media(), notifications()).get('r1', 'org1')
+      expect(out!.images).toEqual(['signed:reports/a.jpg'])
+      expect(out!.imageKeys).toEqual(keys)
+    })
+
+    // Uma assinatura por key, não duas: images e attachments saem do mesmo lote.
+    it('assina cada key uma vez só', async () => {
+      const db = prisma()
+      const m = media()
+      db.report.findUnique.mockResolvedValue(row({ imageKeys: keys, comments: [] }))
+      await new ReportsService(db, m, notifications()).get('r1', 'org1')
+      expect(m.presignGetMany).toHaveBeenCalledTimes(1)
+      expect(m.presignGetMany).toHaveBeenCalledWith(keys)
+    })
+  })
+
   // O DTO resolve nome para foto real. Sem isso o painel exibe rostos
   // decorativos ao lado de "Responsáveis:" que não são das pessoas listadas.
   it('resolve a foto de cada responsável pelo nome, na mesma ordem', async () => {

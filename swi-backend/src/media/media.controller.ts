@@ -13,7 +13,8 @@ export class MediaController {
   constructor(private readonly media: MediaService) {}
 
   // 30/min cobre o pior caso legítimo (submit com 20 anexos presigna em rajada)
-  // e corta abuso do endpoint como fábrica de URLs de upload (15 MB cada).
+  // e corta abuso do endpoint como fábrica de URLs de upload (15 MB cada, até
+  // 100 MB quando é vídeo de relatório).
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('presign')
   presign(@Body() dto: PresignDto, @Req() req: { user?: { role?: string } }) {

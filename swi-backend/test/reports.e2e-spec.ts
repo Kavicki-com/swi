@@ -53,9 +53,41 @@ describe('Reports e2e', () => {
     expect(body.key).toMatch(/^reports\/[0-9a-f-]{36}\.jpg$/)
   })
 
+  // PDF virou anexo válido de relatório; txt continua só em exames.
   it('presign rejeita content-type inválido → 400', async () => {
     const auth = await login()
-    await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType: 'application/pdf', contentLength: 1024 }).expect(400)
+    await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType: 'text/plain', contentLength: 1024 }).expect(400)
+  })
+
+  // Anexo multimídia: vídeo, áudio e pdf sobem sob reports/, cada um com teto
+  // próprio validado antes de assinar. Vídeo e áudio passam dos 15 MB da imagem.
+  it('presign aceita vídeo, áudio e pdf no relatório, com a extensão certa', async () => {
+    const auth = await login()
+    const MB = 1024 * 1024
+    const casos: Array<[string, number, string]> = [
+      ['video/mp4', 90 * MB, 'mp4'],
+      ['audio/mpeg', 20 * MB, 'mp3'],
+      ['application/pdf', 10 * MB, 'pdf'],
+    ]
+    for (const [contentType, contentLength, ext] of casos) {
+      const { body } = await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType, contentLength }).expect(201)
+      expect(body.key).toMatch(new RegExp(`^reports/[0-9a-f-]{36}\\.${ext}$`))
+    }
+  })
+
+  it('presign recusa áudio acima de 25 MB → 400', async () => {
+    const auth = await login()
+    await request(app.getHttpServer()).post('/media/presign').set(auth).send({ contentType: 'audio/mpeg', contentLength: 25 * 1024 * 1024 + 1 }).expect(400)
+  })
+
+  it('relatório com vídeo devolve o anexo em attachments e fora de images', async () => {
+    const auth = await login()
+    const video = 'reports/123e4567-e89b-12d3-a456-426614174000.mp4'
+    const { body: r } = await request(app.getHttpServer()).post('/reports').set(auth).send({ title: 'Com vídeo', imageKeys: [video] }).expect(201)
+    const { body: one } = await request(app.getHttpServer()).get(`/reports/${r.id}`).set(auth).expect(200)
+    expect(one.images).toEqual([])
+    expect(one.imageKeys).toEqual([video])
+    expect(one.attachments).toEqual([expect.objectContaining({ key: video, contentType: 'video/mp4', kind: 'video' })])
   })
 
   it('create → list newest-first + get by id', async () => {

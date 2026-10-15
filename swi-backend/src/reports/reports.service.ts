@@ -7,6 +7,7 @@ import type { Comment, Profile, Report, ReportStatus, User } from '@prisma/clien
 import type { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
 import { formatBrtDate } from '../common/brazil-time'
 import { isStaffJobTitle } from '../common/staff'
+import { attachmentKindOf, contentTypeOfKey } from '../media/allowed-content-types'
 
 const LIST_CAP = 200
 
@@ -310,6 +311,7 @@ export class ReportsService {
   // Devolve exatamente o shape mobile `Report` (keys→urls presigned, date
   // dd/mm/yyyy, null→'' nos campos string que as telas exigem).
   private async toDto(r: Report) {
+    const attachments = await this.attachmentsFor(r.imageKeys)
     return {
       id: r.id,
       title: r.title,
@@ -327,10 +329,27 @@ export class ReportsService {
       // valor vai vazio e a UI cai no placeholder, que é honesto.
       responsibleAvatars: await this.avatarsForNames(r.responsibles),
       details: r.details ?? '',
-      images: await this.media.presignGetMany(r.imageKeys),
+      // `images` fica só com imagem: o app já instalado desenha cada item como
+      // foto, e um vídeo ali viraria quadro quebrado. O anexo de qualquer tipo
+      // vai em `attachments`, que é o que os clientes novos leem.
+      images: attachments.filter((a) => a.kind === 'image').map((a) => a.url),
       imageKeys: r.imageKeys, // keys crus (não-presigned) pro form de edição preservar/mesclar anexos
+      attachments,
       activities: (r.activities as unknown) ?? [],
     }
+  }
+
+  /**
+   * Cada key vira { key, url, contentType, kind }, na ordem gravada. O banco
+   * guarda só a key, então o tipo sai da extensão dela (que o presign deriva do
+   * content-type validado). Nome original não existe: a key é um UUID.
+   */
+  private async attachmentsFor(keys: string[]) {
+    const urls = await this.media.presignGetMany(keys)
+    return keys.map((key, i) => {
+      const contentType = contentTypeOfKey(key)
+      return { key, url: urls[i] ?? '', contentType, kind: attachmentKindOf(contentType) }
+    })
   }
 
   /**
