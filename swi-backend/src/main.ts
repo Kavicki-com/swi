@@ -6,6 +6,7 @@ import { AppModule } from './app.module'
 import { logLevelsFor } from './config/log-levels'
 import { parseRuntimeEnv } from './config/runtime-env'
 import { applyCors } from './cors'
+import { setupApiDocs } from './docs/api-docs'
 
 async function bootstrap() {
   // Antes de qualquer coisa: um ambiente de produção incompleto tem que
@@ -13,6 +14,9 @@ async function bootstrap() {
   const env = parseRuntimeEnv(process.env)
   const app = await NestFactory.create(AppModule, { logger: logLevelsFor(env.nodeEnv) })
   applyCors(app)
+  // Swagger em /docs e /docs-json. Antes de escutar, como o CORS: a página só
+  // vale se existir desde a primeira requisição.
+  setupApiDocs(app, env)
   if (env.nodeEnv === 'test') {
     new Logger('Bootstrap').warn('Rate limiting DESLIGADO (NODE_ENV=test) — nunca rode a API real com NODE_ENV=test.')
   }

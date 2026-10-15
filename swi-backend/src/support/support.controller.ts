@@ -1,4 +1,5 @@
 import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common'
+import { ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { SupportService } from './support.service'
 import { CreateSupportRequestDto } from './dto'
@@ -8,6 +9,7 @@ import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard'
 // (usuário sem sessão precisa conseguir pedir ajuda). Throttle apertado
 // compensa a ausência de auth. O OptionalJwtAuthGuard nunca bloqueia — só
 // popula req.user quando o Authorization vem válido, vinculando o userId.
+@ApiTags('support')
 @Controller('support')
 export class SupportController {
   constructor(private readonly support: SupportService) {}

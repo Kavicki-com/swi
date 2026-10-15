@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { EvacuationEventsService } from './evacuation-events.service'
 import { StartEvacuationDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -10,6 +11,8 @@ import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 // empresa; o ack é do WORKER, vindo do app mobile ou do simulador de dev.
 // Plural /evacuations de propósito: /evacuation/route (passthrough da rota
 // de fuga pro mobile) é outro recurso e continua intocado.
+@ApiTags('evacuations')
+@ApiBearerAuth()
 @Controller('evacuations')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EvacuationsController {

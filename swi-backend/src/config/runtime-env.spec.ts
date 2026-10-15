@@ -1,6 +1,7 @@
 import {
   LIVE_DEFAULT_ICE_SERVERS,
   parseAlertsIncludeDemo,
+  parseApiDocs,
   parseLiveIceServers,
   parseRuntimeEnv,
   parseSocketPingInterval,
@@ -34,6 +35,22 @@ describe('parseRuntimeEnv: alertas de demonstração na fila', () => {
     expect(parseRuntimeEnv(validProd({ TELEMETRY_ALERTS_INCLUDE_DEMO: '1' })).telemetryAlertsIncludeDemo).toBe(true)
     expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: 'true' })).toBe(false)
     expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: '0' })).toBe(false)
+  })
+})
+
+describe('parseRuntimeEnv: documentação da API (Swagger)', () => {
+  it('ligada por padrão, em todo ambiente, inclusive produção', () => {
+    expect(parseRuntimeEnv(validProd()).apiDocs).toBe(true)
+    expect(parseRuntimeEnv({ NODE_ENV: 'development' }).apiDocs).toBe(true)
+    expect(parseApiDocs({})).toBe(true)
+    expect(parseApiDocs({ API_DOCS: '' })).toBe(true)
+  })
+
+  it("só '0' desliga; qualquer outro valor mantém ligada", () => {
+    expect(parseRuntimeEnv(validProd({ API_DOCS: '0' })).apiDocs).toBe(false)
+    expect(parseApiDocs({ API_DOCS: '0' })).toBe(false)
+    expect(parseApiDocs({ API_DOCS: 'false' })).toBe(true)
+    expect(parseApiDocs({ API_DOCS: '1' })).toBe(true)
   })
 })
 

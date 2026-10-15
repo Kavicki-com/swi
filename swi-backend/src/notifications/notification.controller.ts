@@ -1,14 +1,14 @@
 import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
-import { IsString, MinLength } from 'class-validator'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { NotificationService } from './notification.service'
+import { PauseRequestDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 
-// Payload do "Solicitar Pausa" do detalhe do funcionário.
-export class PauseRequestDto { @IsString() @MinLength(1) workerId!: string }
-
+@ApiTags('notifications')
+@ApiBearerAuth()
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationController {

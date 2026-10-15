@@ -1,4 +1,5 @@
 import { BadRequestException, Body, ForbiddenException, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { PositionsService } from './positions.service'
 import { PositionHistoryService } from './position-history.service'
 import { HeartbeatDto, HeatQueryDto, PositionBatchDto } from './dto'
@@ -12,6 +13,8 @@ import { parsePositionsHeatIncludeSim } from '../config/runtime-env'
 // o simulador de dev) posta a própria posição; a listagem é do ADMIN, escopada
 // na empresa dele. O throttle global de 100 por minuto comporta um heartbeat a
 // cada 5 segundos.
+@ApiTags('positions')
+@ApiBearerAuth()
 @Controller('positions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PositionsController {

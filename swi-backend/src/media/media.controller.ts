@@ -1,9 +1,12 @@
 import { Body, Controller, ForbiddenException, Post, Req, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { MediaService } from './media.service'
 import { PresignDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 
+@ApiTags('media')
+@ApiBearerAuth()
 @Controller('media')
 @UseGuards(JwtAuthGuard)
 export class MediaController {

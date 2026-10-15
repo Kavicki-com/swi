@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { ChatService } from './chat.service'
 import { EditMessageDto, ReportMessageDto, SendMessageDto } from './dto'
@@ -6,6 +7,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 import { parseIdempotencyKey } from '../idempotency/idempotency-key'
 
+@ApiTags('chat')
+@ApiBearerAuth()
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
 export class ChatController {

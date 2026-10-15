@@ -1,10 +1,13 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { ProfileService } from './profile.service'
 import { CreateExamDto, UpdateProfileDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CurrentUserId } from '../auth/current-user.decorator'
 import { MediaService } from '../media/media.service'
 
+@ApiTags('profile')
+@ApiBearerAuth()
 @Controller('profile')
 @UseGuards(JwtAuthGuard)
 export class ProfileController {

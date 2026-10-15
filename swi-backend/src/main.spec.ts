@@ -19,7 +19,12 @@ jest.mock('./cors', () => ({
   wsCorsOptions: jest.fn(() => ({ origin: ['http://localhost:5173'] })),
 }))
 
+// setupApiDocs é o outro alvo: sem esta prova, o Swagger poderia existir, ter
+// spec própria e nunca ser montado pelo main real.
+jest.mock('./docs/api-docs', () => ({ setupApiDocs: jest.fn() }))
+
 import { applyCors } from './cors'
+import { setupApiDocs } from './docs/api-docs'
 
 describe('bootstrap', () => {
   it('habilita CORS no app antes de escutar', async () => {
@@ -29,5 +34,10 @@ describe('bootstrap', () => {
     expect(applyCors).toHaveBeenCalledWith(fakeApp)
     expect(listen).toHaveBeenCalled()
     expect((applyCors as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(listen.mock.invocationCallOrder[0])
+  })
+
+  it('monta a documentação da API com o ambiente validado, antes de escutar', () => {
+    expect(setupApiDocs).toHaveBeenCalledWith(fakeApp, expect.objectContaining({ apiDocs: expect.any(Boolean) }))
+    expect((setupApiDocs as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(listen.mock.invocationCallOrder[0])
   })
 })

@@ -1,4 +1,6 @@
 import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common'
+import { ApiSecurity, ApiTags } from '@nestjs/swagger'
+import { DEVICE_SCHEME } from '../../docs/api-docs'
 import { Throttle } from '@nestjs/throttler'
 import { CurrentDevice } from '../devices/current-device.decorator'
 import { DeviceAuthGuard } from '../devices/device-auth.guard'
@@ -9,6 +11,8 @@ import { TelemetryIngestionService } from './telemetry-ingestion.service'
 // Rota que o aparelho chama sozinho, sem JWT de pessoa: o DeviceAuthGuard troca
 // a credencial do pareamento por identidade verificada, e é dela que saem o
 // funcionário e o dispositivo de cada evento.
+@ApiTags('telemetry/ingestion')
+@ApiSecurity(DEVICE_SCHEME)
 @Controller('telemetry/v1')
 @UseGuards(DeviceAuthGuard)
 export class TelemetryIngestionController {

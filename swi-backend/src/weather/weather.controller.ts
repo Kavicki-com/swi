@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Put, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { WeatherService } from './weather.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
@@ -9,6 +10,8 @@ import { WeatherLocationDto } from './dto'
 // GET /weather segue aberto a qualquer usuário logado, agora no local da
 // empresa do token. O local em si é do ADMIN da empresa: lê, grava e limpa
 // (volta ao padrão do serviço).
+@ApiTags('weather')
+@ApiBearerAuth()
 @Controller('weather')
 @UseGuards(JwtAuthGuard)
 export class WeatherController {
