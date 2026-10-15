@@ -4,6 +4,7 @@ import {
   parseApiDocs,
   parseLiveIceServers,
   parseRuntimeEnv,
+  parseSmtpSecure,
   parseSocketPingInterval,
   RETENTION_DEFAULT_BATCH,
 } from './runtime-env'
@@ -35,6 +36,21 @@ describe('parseRuntimeEnv: alertas de demonstração na fila', () => {
     expect(parseRuntimeEnv(validProd({ TELEMETRY_ALERTS_INCLUDE_DEMO: '1' })).telemetryAlertsIncludeDemo).toBe(true)
     expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: 'true' })).toBe(false)
     expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: '0' })).toBe(false)
+  })
+})
+
+describe('parseRuntimeEnv: SMTP_SECURE', () => {
+  it('desligado sem a variável ou com valor vazio', () => {
+    expect(parseRuntimeEnv(validProd()).smtp.secure).toBe(false)
+    expect(parseSmtpSecure({ SMTP_SECURE: '' })).toBe(false)
+    expect(parseSmtpSecure({ SMTP_SECURE: '0' })).toBe(false)
+    expect(parseSmtpSecure({ SMTP_SECURE: 'false' })).toBe(false)
+  })
+
+  it("liga com '1' e com 'true', como o README e o .env.example descrevem", () => {
+    expect(parseRuntimeEnv(validProd({ SMTP_SECURE: '1' })).smtp.secure).toBe(true)
+    expect(parseSmtpSecure({ SMTP_SECURE: 'true' })).toBe(true)
+    expect(parseSmtpSecure({ SMTP_SECURE: 'TRUE ' })).toBe(true)
   })
 })
 

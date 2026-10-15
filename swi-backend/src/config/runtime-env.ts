@@ -259,6 +259,12 @@ export function parseAlertsIncludeDemo(source: NodeJS.ProcessEnv): boolean {
  * expõe dado. Só o valor exato '0' desliga, para a hospedagem que não quiser
  * a página pública.
  */
+/** SMTP_SECURE liga o TLS desde a conexão (porta 465). Aceita '1' e 'true'; qualquer outro valor usa STARTTLS. */
+export function parseSmtpSecure(source: NodeJS.ProcessEnv): boolean {
+  const value = (source.SMTP_SECURE ?? '').trim().toLowerCase()
+  return value === '1' || value === 'true'
+}
+
 export function parseApiDocs(source: NodeJS.ProcessEnv): boolean {
   return source.API_DOCS !== '0'
 }
@@ -379,7 +385,7 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
     smtp: Object.freeze<SmtpEnv>({
       host: source.SMTP_HOST,
       port: Number.isInteger(smtpPort) ? smtpPort : 1025,
-      secure: source.SMTP_SECURE === 'true',
+      secure: parseSmtpSecure(source),
       user: source.SMTP_USER,
       pass: source.SMTP_PASS,
       from: mailFrom,
