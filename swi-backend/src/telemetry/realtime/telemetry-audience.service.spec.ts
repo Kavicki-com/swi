@@ -20,12 +20,12 @@ const audience = (prisma: ReturnType<typeof prismaDouble>) =>
 describe('TelemetryAudienceService.recipientsFor', () => {
   afterEach(() => jest.restoreAllMocks())
 
-  it('entrega ao funcionário e aos administradores ativos da empresa dele', async () => {
+  it('entrega ao funcionário e à equipe ativa do painel (Administrador e Supervisor) da empresa dele', async () => {
     const prisma = prismaDouble()
 
     await expect(audience(prisma).recipientsFor('worker-1')).resolves.toEqual(['worker-1', 'admin-1', 'admin-2'])
     expect(prisma.user.findMany).toHaveBeenCalledWith({
-      where: { role: 'ADMIN', companyId: 'company-1', active: true },
+      where: { role: { in: ['ADMIN', 'SUPERVISOR'] }, companyId: 'company-1', active: true },
       select: { id: true },
     })
   })

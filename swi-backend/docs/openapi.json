@@ -3534,6 +3534,7 @@
             "type": "string",
             "enum": [
               "WORKER",
+              "SUPERVISOR",
               "ADMIN"
             ]
           },
@@ -3573,6 +3574,13 @@
       "UpdateUserDto": {
         "type": "object",
         "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SUPERVISOR"
+            ]
+          },
           "active": {
             "type": "boolean"
           },

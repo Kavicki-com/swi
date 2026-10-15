@@ -40,7 +40,7 @@ describe('PositionsService.heartbeat', () => {
     expect(arg.update.recordedAt).toBeInstanceOf(Date)
   })
 
-  it('empurra o marker ao vivo SÓ pros admins da MESMA empresa', async () => {
+  it('empurra o marker ao vivo SÓ pra equipe do painel (Administrador e Supervisor) da MESMA empresa', async () => {
     const db = prisma()
     db.user.findUnique.mockResolvedValue(worker())
     db.user.findMany.mockResolvedValue([{ id: 'a1' }, { id: 'a2' }])
@@ -48,7 +48,7 @@ describe('PositionsService.heartbeat', () => {
     const rt = realtime()
     await new PositionsService(db, rt, media(), history(), telemetry()).heartbeat('w1', -23.55, -46.63)
     expect(db.user.findMany).toHaveBeenCalledWith({
-      where: { role: 'ADMIN', companyId: 'org1' },
+      where: { role: { in: ['ADMIN', 'SUPERVISOR'] }, companyId: 'org1' },
       select: { id: true },
     })
     const [ids, event, marker] = rt.emitToUsers.mock.calls[0]

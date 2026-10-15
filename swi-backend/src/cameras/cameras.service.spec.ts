@@ -43,6 +43,14 @@ describe('CamerasService', () => {
       expect(out).toEqual([row])
     })
 
+    it('supervisor vê as câmeras com o endereço do player, como o administrador', async () => {
+      const db = prisma()
+      await new CamerasService(db).list('empresa-1', 'SUPERVISOR')
+      const { select } = db.camera.findMany.mock.calls[0][0]
+      expect(select.url).toBe(true)
+      expect(select.embedUrl).toBe(true)
+    })
+
     it('funcionário lê só nome e posição: o endereço pode carregar acesso', async () => {
       const db = prisma()
       await new CamerasService(db).list('empresa-1', 'WORKER')

@@ -10,7 +10,7 @@ import { LIVE_MAX_SDP_LENGTH, LiveService } from './live.service'
 
 const secret = 'test-secret-live'
 
-type UserRow = { id: string; role: 'WORKER' | 'ADMIN'; companyId: string | null; active: boolean; name: string }
+type UserRow = { id: string; role: 'WORKER' | 'ADMIN' | 'SUPERVISOR'; companyId: string | null; active: boolean; name: string }
 
 const users: Record<string, UserRow> = {
   w1: { id: 'w1', role: 'WORKER', companyId: 'c1', active: true, name: 'Ana' },
@@ -21,6 +21,7 @@ const users: Record<string, UserRow> = {
   a2: { id: 'a2', role: 'ADMIN', companyId: 'c1', active: true, name: 'Admin 2' },
   outra: { id: 'outra', role: 'ADMIN', companyId: 'c2', active: true, name: 'Outra empresa' },
   adminSemEmpresa: { id: 'adminSemEmpresa', role: 'ADMIN', companyId: null, active: true, name: 'Solto' },
+  s1: { id: 's1', role: 'SUPERVISOR', companyId: 'c1', active: true, name: 'Supervisora' },
 }
 
 // Nome exibido segue o resto do sistema: o do perfil, e na falta dele o do cadastro.
@@ -33,9 +34,9 @@ const prismaDouble = () => ({
       if (!user) return null
       return { ...user, profile: fullNames[user.id] ? { fullName: fullNames[user.id] } : null }
     }),
-    findMany: jest.fn(async ({ where }: { where: { companyId: string } }) =>
+    findMany: jest.fn(async ({ where }: { where: { companyId: string; role: { in: string[] } } }) =>
       Object.values(users)
-        .filter((u) => u.role === 'ADMIN' && u.active && u.companyId === where.companyId)
+        .filter((u) => where.role.in.includes(u.role) && u.active && u.companyId === where.companyId)
         .map((u) => ({ id: u.id })),
     ),
   },
@@ -61,15 +62,15 @@ describe('LiveService', () => {
   const watchAna = (socketId = 'painel-1', who = 'a1') => live.watch(socketId, token(who), { workerId: 'w1' })
 
   describe('ligar', () => {
-    it('funcionário com empresa liga e os administradores ativos da empresa são avisados', async () => {
+    it('funcionário com empresa liga e a equipe ativa do painel da empresa é avisada', async () => {
       const outcome = await startAna()
       expect(outcome.reply).toEqual({ ok: true })
       expect(outcome.deliveries).toEqual([
-        { userIds: ['a1', 'a2'], event: 'live.started', payload: { workerId: 'w1', name: 'Ana', startedAt: expect.any(String) } },
+        { userIds: ['a1', 'a2', 's1'], event: 'live.started', payload: { workerId: 'w1', name: 'Ana', startedAt: expect.any(String) } },
       ])
       expect(live.list('c1').map((b) => b.workerId)).toEqual(['w1'])
       expect(prisma.user.findMany).toHaveBeenCalledWith({
-        where: { role: 'ADMIN', companyId: 'c1', active: true },
+        where: { role: { in: ['ADMIN', 'SUPERVISOR'] }, companyId: 'c1', active: true },
         select: { id: true },
       })
     })
@@ -94,6 +95,7 @@ describe('LiveService', () => {
       ['usuário inativo', 'inativo', 'unauthorized'],
       ['usuário que não existe', 'fantasma', 'unauthorized'],
       ['administrador', 'a1', 'forbidden'],
+      ['supervisor', 's1', 'forbidden'],
       ['funcionário sem empresa', 'semEmpresa', 'no-company'],
     ])('%s não liga', async (_caso, who, error) => {
       const outcome = await live.start('cel-x', who === 'lixo' || who === '' ? who : token(who))
@@ -114,7 +116,7 @@ describe('LiveService', () => {
       expect(outcome.deliveries).toEqual([
         { socketId: 'cel-1', event: 'live.closed', payload: { workerId: 'w1' } },
         { socketId: 'painel-1', event: 'live.ended', payload: { sessionId: 'sessao-1', workerId: 'w1' } },
-        { userIds: ['a1', 'a2'], event: 'live.started', payload: { workerId: 'w1', name: 'Ana', startedAt: expect.any(String) } },
+        { userIds: ['a1', 'a2', 's1'], event: 'live.started', payload: { workerId: 'w1', name: 'Ana', startedAt: expect.any(String) } },
       ])
     })
 
@@ -142,7 +144,7 @@ describe('LiveService', () => {
         reply: { ok: true },
         deliveries: [
           { socketId: 'painel-1', event: 'live.ended', payload: { sessionId: 'sessao-1', workerId: 'w1' } },
-          { userIds: ['a1', 'a2'], event: 'live.stopped', payload: { workerId: 'w1' } },
+          { userIds: ['a1', 'a2', 's1'], event: 'live.stopped', payload: { workerId: 'w1' } },
         ],
       })
       expect(live.list('c1')).toEqual([])
@@ -159,7 +161,7 @@ describe('LiveService', () => {
       await startAna()
       expect((await live.stop('cel-2', 'w1')).deliveries).toEqual([
         { socketId: 'cel-1', event: 'live.closed', payload: { workerId: 'w1' } },
-        { userIds: ['a1', 'a2'], event: 'live.stopped', payload: { workerId: 'w1' } },
+        { userIds: ['a1', 'a2', 's1'], event: 'live.stopped', payload: { workerId: 'w1' } },
       ])
       expect(live.list('c1')).toEqual([])
     })
@@ -191,6 +193,11 @@ describe('LiveService', () => {
     ])('%s não assiste', async (_caso, who, error) => {
       await startAna()
       expect(await watchAna('painel-x', who)).toEqual({ reply: { ok: false, error }, deliveries: [] })
+    })
+
+    it('o supervisor da empresa assiste, como o administrador', async () => {
+      await startAna()
+      expect((await watchAna('painel-s', 's1')).reply).toMatchObject({ ok: true })
     })
 
     it('funcionário que não transmite responde not-live', async () => {
@@ -301,7 +308,7 @@ describe('LiveService', () => {
       await watchAna()
       expect(await live.leave('cel-1')).toEqual([
         { socketId: 'painel-1', event: 'live.ended', payload: { sessionId: 'sessao-1', workerId: 'w1' } },
-        { userIds: ['a1', 'a2'], event: 'live.stopped', payload: { workerId: 'w1' } },
+        { userIds: ['a1', 'a2', 's1'], event: 'live.stopped', payload: { workerId: 'w1' } },
       ])
     })
 

@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { WeatherService } from './weather.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
-import { Roles } from '../auth/roles.decorator'
+import { Can } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 import { WeatherLocationDto } from './dto'
 
@@ -22,17 +22,17 @@ export class WeatherController {
     return this.weather.getSnapshot(user.companyId)
   }
 
-  @UseGuards(RolesGuard) @Roles('ADMIN') @Get('location')
+  @UseGuards(RolesGuard) @Can('weather.read') @Get('location')
   location(@CurrentUser() user: JwtUser) {
     return this.weather.getLocation(user.companyId)
   }
 
-  @UseGuards(RolesGuard) @Roles('ADMIN') @Put('location')
+  @UseGuards(RolesGuard) @Can('company.manage') @Put('location')
   setLocation(@CurrentUser() user: JwtUser, @Body() body: WeatherLocationDto) {
     return this.weather.setLocation(user.companyId, { lat: body.lat, lng: body.lng })
   }
 
-  @UseGuards(RolesGuard) @Roles('ADMIN') @Delete('location')
+  @UseGuards(RolesGuard) @Can('company.manage') @Delete('location')
   resetLocation(@CurrentUser() user: JwtUser) {
     return this.weather.resetLocation(user.companyId)
   }

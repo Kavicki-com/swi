@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import { describeError } from '../../common/describe-error'
+import { PANEL_ROLES } from '../../auth/permissions'
 
 /**
  * Prazo do cache de destinatários. Curto de propósito: administrador recém
@@ -62,7 +63,7 @@ export class TelemetryAudienceService {
     const hit = this.fresh(this.adminsByCompany.get(companyId))
     if (hit !== undefined) return hit
     const rows = await this.prisma.user.findMany({
-      where: { role: 'ADMIN', companyId, active: true },
+      where: { role: { in: [...PANEL_ROLES] }, companyId, active: true },
       select: { id: true },
     })
     const ids = rows.map((row) => row.id)

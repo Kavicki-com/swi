@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service'
 import { JwtAuthGuard } from './jwt-auth.guard'
 import { CurrentUserId } from './current-user.decorator'
 import { SignupDto, ConfirmDto, LoginDto, ForgotDto, ResetDto, ResendDto, SignupCompanyDto, ChangePasswordDto } from './dto'
+import { permissionsOf } from './permissions'
 
 @ApiTags('auth')
 @Controller('auth')
@@ -27,9 +28,11 @@ export class AuthController {
   // Recuperação do admin: mesmo /forgot, mas manda LINK (o /password/forgot segue code-based pro mobile).
   @Throttle({ default: { limit: 5, ttl: 60000 } }) @Post('password/forgot-admin') @HttpCode(200) forgotAdmin(@Body() b: ForgotDto) { return this.auth.forgotPasswordAdmin(b) }
 
+  // Nível e permissões vêm da matriz (auth/permissions.ts) e do papel atual no
+  // banco, não do token: o painel decide o que mostrar a partir daqui.
   @ApiBearerAuth() @UseGuards(JwtAuthGuard) @Get('me')
   async me(@CurrentUserId() userId: string) {
     const u = await this.users.findById(userId)
-    return u ? { id: u.id, email: u.email, name: u.name } : null
+    return u ? { id: u.id, email: u.email, name: u.name, role: u.role, permissions: permissionsOf(u.role) } : null
   }
 }

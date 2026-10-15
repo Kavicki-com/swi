@@ -7,6 +7,7 @@ import { hash } from '../auth/codes'
 import { Prisma, Role } from '@prisma/client'
 import type { ApprovalStatus, Company, Exam, Profile, User } from '@prisma/client'
 import type { UpdateUserDto } from './dto'
+import { isPanelRole } from '../auth/permissions'
 
 type UserWithProfile = User & { profile: Profile | null }
 // exams OBRIGATÓRIO. O Prisma não tipa relação incluída como opcional: o
@@ -161,15 +162,17 @@ export class UsersService {
     return this.prisma.user.update({ where: { id }, data: { approvalStatus: 'REJECTED' } })
   }
 
-  // Lista o diretório do painel (Colaboradores = role WORKER, Admins = role
-  // ADMIN). Filtros opcionais; sem filtro devolve todos. Só campos de identidade
-  // — vitais/saúde ficam por conta da smartband (mock no front até o hardware).
-  async list(companyId: string | null, role?: Role, approvalStatus?: ApprovalStatus) {
-    if (role !== undefined && !(role in Role)) throw new BadRequestException('role inválido')
+  // Lista o diretório do painel (Colaboradores = role WORKER, Administradores =
+  // ADMIN,SUPERVISOR). `role` aceita um nível ou vários separados por vírgula.
+  // Filtros opcionais; sem filtro devolve todos. Só campos de identidade, sem
+  // vitais/saúde (essas vêm da smartband).
+  async list(companyId: string | null, role?: string, approvalStatus?: ApprovalStatus) {
+    const roles = role?.split(',')
+    if (roles?.some((r) => !(r in Role))) throw new BadRequestException('role inválido')
     const users = await this.prisma.user.findMany({
       where: {
         companyId,
-        ...(role !== undefined ? { role } : {}),
+        ...(roles === undefined ? {} : roles.length === 1 ? { role: roles[0] as Role } : { role: { in: roles as Role[] } }),
         ...(approvalStatus !== undefined ? { approvalStatus } : {}),
       },
       include: { profile: true },
@@ -197,7 +200,12 @@ export class UsersService {
     // Mesma guarda do setActive: o admin não pode se auto-trancar (reativar a
     // si mesmo segue permitido).
     if (id === requesterId && dto.active === false) throw new BadRequestException('Não é possível desativar a si mesmo')
-    await this.requireSameCompany(id, companyId)
+    // Rebaixar a si mesmo pode deixar a empresa sem administrador.
+    if (id === requesterId && dto.role !== undefined) throw new BadRequestException('Não é possível mudar o próprio nível')
+    const target = await this.requireSameCompany(id, companyId)
+    if (dto.role !== undefined && !isPanelRole(target.role)) {
+      throw new BadRequestException('O nível só muda entre Administrador e Supervisor')
+    }
 
     const profile: Prisma.ProfileUpdateWithoutUserInput = {}
     if (dto.name !== undefined) profile.fullName = dto.name
@@ -230,6 +238,7 @@ export class UsersService {
       const u = await this.prisma.user.update({
         where: { id },
         data: {
+          ...(dto.role !== undefined ? { role: dto.role } : {}),
           ...(dto.active !== undefined ? { active: dto.active } : {}),
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           // No User e não no Profile: o handle é identidade de conta, como o

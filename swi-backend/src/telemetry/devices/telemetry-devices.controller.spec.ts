@@ -69,7 +69,7 @@ describe('TelemetryDevicesController', () => {
     expect(devices.deviceStateForAdmin).toHaveBeenCalledWith(ADMIN, 'worker-1')
   })
 
-  it('reserva a criação de enrollment, a revogação e a leitura do aparelho ao administrador', () => {
+  it('reserva a criação de enrollment e a revogação ao administrador; a leitura do aparelho é da equipe do painel', () => {
     const roles = (method: 'createEnrollment' | 'complete' | 'revoke' | 'deviceOfWorker') =>
       Reflect.getMetadata('roles', TelemetryDevicesController.prototype[method]) as
         | string[]
@@ -77,7 +77,7 @@ describe('TelemetryDevicesController', () => {
 
     expect(roles('createEnrollment')).toEqual(['ADMIN'])
     expect(roles('revoke')).toEqual(['ADMIN'])
-    expect(roles('deviceOfWorker')).toEqual(['ADMIN'])
+    expect(roles('deviceOfWorker')).toEqual(['ADMIN', 'SUPERVISOR'])
     // Concluir o pareamento é do funcionário dono do enrollment, não do admin.
     expect(roles('complete')).toBeUndefined()
   })

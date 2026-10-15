@@ -4,7 +4,7 @@ import { EvacuationEventsService } from './evacuation-events.service'
 import { StartEvacuationDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
-import { Roles } from '../auth/roles.decorator'
+import { Can, Roles } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 
 // Evacuação real. Disparo, encerramento e progresso são do ADMIN, escopados por
@@ -18,14 +18,14 @@ import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 export class EvacuationsController {
   constructor(private readonly events: EvacuationEventsService) {}
 
-  @Roles('ADMIN') @Post()
+  @Can('evacuation.operate') @Post()
   start(@CurrentUser() user: JwtUser, @Body() dto: StartEvacuationDto) {
     return this.events.start(user.userId, user.companyId, dto.area)
   }
 
   // WORKER também lê: o app mobile precisa da ativa da PRÓPRIA org pra saber
   // o que confirmar (ack) — org-scoping idêntico ao do admin.
-  @Roles('ADMIN', 'WORKER') @Get('active')
+  @Roles('ADMIN', 'SUPERVISOR', 'WORKER') @Get('active')
   active(@CurrentUser() user: JwtUser) {
     return this.events.active(user.companyId)
   }
@@ -35,7 +35,7 @@ export class EvacuationsController {
     return this.events.ack(user.userId, id)
   }
 
-  @Roles('ADMIN') @Post(':id/end') @HttpCode(204)
+  @Can('evacuation.operate') @Post(':id/end') @HttpCode(204)
   end(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.events.end(user.companyId, id)
   }

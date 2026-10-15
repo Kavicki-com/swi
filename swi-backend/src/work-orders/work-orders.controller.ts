@@ -4,14 +4,14 @@ import { WorkOrdersService } from './work-orders.service'
 import { CreateWorkOrderDto, ListWorkOrdersQueryDto, UpdateWorkOrderDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
-import { Roles } from '../auth/roles.decorator'
+import { Can } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 
 @ApiTags('work-orders')
 @ApiBearerAuth()
 @Controller('work-orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Can('workOrders.operate')
 export class WorkOrdersController {
   constructor(private readonly workOrders: WorkOrdersService) {}
 

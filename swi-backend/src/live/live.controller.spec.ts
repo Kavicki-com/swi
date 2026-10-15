@@ -22,8 +22,8 @@ describe('LiveController', () => {
     expect(live.list).toHaveBeenCalledWith('c1')
   })
 
-  it('a lista é só do administrador; os servidores de conexão, de qualquer logado', () => {
-    expect(Reflect.getMetadata('roles', LiveController.prototype.list)).toEqual(['ADMIN'])
+  it('a lista é da equipe do painel (Administrador e Supervisor); os servidores de conexão, de qualquer logado', () => {
+    expect(Reflect.getMetadata('roles', LiveController.prototype.list)).toEqual(['ADMIN', 'SUPERVISOR'])
     expect(Reflect.getMetadata('roles', LiveController.prototype.iceServers)).toBeUndefined()
   })
 

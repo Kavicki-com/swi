@@ -4,6 +4,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
 import { normalizeEvacuationArea, type AreaVertex } from './evacuation-area'
 import type { Evacuation } from '@prisma/client'
+import { PANEL_ROLES } from '../auth/permissions'
 
 // Evacuação real. O admin dispara, os workers
 // da org são notificados (fila durável) e confirmam presença (ack idempotente);
@@ -144,7 +145,7 @@ export class EvacuationEventsService {
 
   private orgAdmins(companyId: string | null) {
     return this.prisma.user.findMany({
-      where: { role: 'ADMIN', companyId },
+      where: { role: { in: [...PANEL_ROLES] }, companyId },
       select: { id: true },
     })
   }

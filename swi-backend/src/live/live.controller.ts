@@ -2,7 +2,7 @@ import { Controller, Get, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
-import { Roles } from '../auth/roles.decorator'
+import { Can } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 import { parseLiveIceServers } from '../config/runtime-env'
 import { LiveService } from './live.service'
@@ -15,7 +15,7 @@ export class LiveController {
   constructor(private readonly live: LiveService) {}
 
   /** Quem está transmitindo agora na empresa do administrador. */
-  @UseGuards(RolesGuard) @Roles('ADMIN') @Get()
+  @UseGuards(RolesGuard) @Can('monitoring.read') @Get()
   list(@CurrentUser() user: JwtUser) {
     return this.live.list(user.companyId)
   }

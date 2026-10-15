@@ -7,9 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Nível de acesso. A matriz do que cada um pode está em src/auth/permissions.ts.
+// SUPERVISOR veio por último porque o ALTER TYPE ... ADD VALUE só acrescenta no
+// fim; a ordem aqui espelha a do banco.
 enum Role {
   WORKER
   ADMIN
+  SUPERVISOR
 }
 
 enum ApprovalStatus {

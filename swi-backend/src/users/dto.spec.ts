@@ -14,6 +14,19 @@ const valid = async <T extends object>(cls: new () => T, body: Record<string, un
 // de perfil validam IGUAL ao UpdateProfileDto: dois DTOs escrevendo na mesma
 // tabela com réguas diferentes é como o painel salva o que o app rejeita.
 describe('UpdateUserDto', () => {
+  // O nível muda só entre os dois do painel. Promover funcionário a
+  // administrador (ou o contrário) não é edição de nível: é outro cadastro.
+  it.each(['ADMIN', 'SUPERVISOR'])('role: aceita %s', async (role) => {
+    const { dto, errors } = await valid(UpdateUserDto, { role })
+    expect(errors).toHaveLength(0)
+    expect(dto.role).toBe(role)
+  })
+
+  it.each([['WORKER'], [null], ['ROOT']])('role: recusa %p', async (role) => {
+    const { errors } = await valid(UpdateUserDto, { role })
+    expect(errors.map((e) => e.property)).toEqual(['role'])
+  })
+
   it('name: null explícito é rejeitado (coluna não-anulável, viraria 500 no Prisma)', async () => {
     const { errors } = await valid(UpdateUserDto, { name: null })
     expect(errors.length).toBeGreaterThan(0)
@@ -85,6 +98,16 @@ describe('UpdateUserDto', () => {
 // create, não no patch.
 describe('CreateUserDto', () => {
   const base = { name: 'Ana', email: 'ana@empresa.com.br', password: 'Senha@2026', role: 'WORKER' }
+
+  it.each(['WORKER', 'SUPERVISOR', 'ADMIN'])('aceita o nível %s', async (role) => {
+    const { errors } = await valid(CreateUserDto, { ...base, role })
+    expect(errors).toHaveLength(0)
+  })
+
+  it('recusa nível fora dos três', async () => {
+    const { errors } = await valid(CreateUserDto, { ...base, role: 'ROOT' })
+    expect(errors.map((e) => e.property)).toEqual(['role'])
+  })
 
   it('aceita os dados de saúde declaratórios do cadastro', async () => {
     const { dto, errors } = await valid(CreateUserDto, {
