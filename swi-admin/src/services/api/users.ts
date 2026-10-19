@@ -442,7 +442,17 @@ export type PendingUser = {
   allergies: string | null
   avatar: string
 }
-const toPending = (u: UserSummaryDto & Partial<PendingUser>): PendingUser => ({
+// Payload do GET /users/pending: identidade e o perfil que o funcionário
+// preencheu no cadastro. O GET /users genérico não traz CPF, telefone, cidade
+// nem alergias, e a fila mostrava "não informado" para quem preencheu.
+// Campos de perfil opcionais: cadastro sem perfil segue válido.
+type PendingUserDto = {
+  id: string
+  name: string
+  email: string
+  createdAt: string
+} & Partial<Omit<PendingUser, 'id' | 'name' | 'email' | 'requestedAt'>>
+const toPending = (u: PendingUserDto): PendingUser => ({
   id: u.id,
   name: u.name,
   email: u.email,
@@ -475,7 +485,7 @@ const postAction = async (
 export const approvalsApi = {
   listPendingWorkers: async (): Promise<ServiceResponse<PendingUser[]>> => {
     try {
-      const users = await apiFetch<UserSummaryDto[]>('/users?role=WORKER&approvalStatus=PENDING')
+      const users = await apiFetch<PendingUserDto[]>('/users/pending')
       return { data: users.map(toPending), error: null }
     } catch (e) {
       return { data: null, error: { message: errorMessage(e, 'Falha ao carregar') } }
