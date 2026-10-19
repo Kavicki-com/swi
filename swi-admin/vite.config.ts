@@ -72,5 +72,13 @@ export default defineConfig({
   },
   define: {
     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+    // O Animated do react-native-web lê `global.cancelAnimationFrame` e
+    // `global.performance`, e `global` é do Node e do React Native, não do
+    // navegador. Sem isto, parar qualquer animação do design system (o
+    // esqueleto da lista de administradores, por exemplo) lança
+    // ReferenceError e derruba a tela. No build o esbuild troca o
+    // identificador; no dev o cliente do Vite o define em runtime, o que
+    // cobre também as dependências pré-empacotadas.
+    global: 'globalThis',
   },
 })
