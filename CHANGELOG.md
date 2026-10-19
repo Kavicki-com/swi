@@ -2,6 +2,16 @@
 
 Registro das entregas do SWI. O versionamento segue a versão do produto (app mobile), que é a referência da entrega ao cliente.
 
+## 1.1.2
+
+Correção no painel. O app e o backend não mudam, e o APK da 1.1.0 continua valendo.
+
+### Painel (`swi-admin`)
+
+- A tela de Administradores abria preta. Parar a animação do esqueleto de carregamento lia `global`, que existe no app e no servidor, mas não no navegador. O build passou a definir `global`, o que vale para qualquer animação do design system.
+- Depois de uma atualização do painel, quem ainda tinha a página antiga aberta recebia 404 ao abrir uma tela nova e também via a tela preta. O painel agora recarrega sozinho, uma vez, quando um arquivo de tela não é encontrado.
+- Teste de navegador para a tela de Administradores, que não tinha cobertura.
+
 ## 1.1.1
 
 Correção no painel. O app e o backend não mudam, e o APK da 1.1.0 continua valendo.
