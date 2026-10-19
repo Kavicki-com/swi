@@ -12,6 +12,12 @@
 // sessionStorage, que sobrevive ao reload e morre com a aba. Sem storage
 // utilizável (modo privado que o bloqueia), não recarrega: deixar o erro seguir
 // é melhor do que arriscar o laço.
+//
+// O erro original segue sempre, sem `preventDefault`: cancelado, o `import()`
+// resolve `undefined` e o `.then` que remapeia o export nomeado (App.tsx)
+// quebraria com uma mensagem que não diz qual arquivo faltou. O reload já foi
+// pedido antes de o erro se propagar, e, quando o reload não resolve, a
+// mensagem que fica no console é a que aponta o chunk.
 
 export const STALE_CHUNK_RELOAD_KEY = 'swi.admin.reloadPorChunk'
 export const STALE_CHUNK_RELOAD_WINDOW_MS = 30_000
@@ -25,7 +31,7 @@ export function installStaleChunkReload(
   win: StaleChunkWindow = window,
   now: () => number = Date.now,
 ) {
-  win.addEventListener('vite:preloadError', (event) => {
+  win.addEventListener('vite:preloadError', () => {
     const agora = now()
     try {
       // Sem marca nunca entra no `<`; marca ilegível vira NaN e também não entra.
@@ -35,7 +41,6 @@ export function installStaleChunkReload(
     } catch {
       return
     }
-    event.preventDefault()
     win.location.reload()
   })
 }
