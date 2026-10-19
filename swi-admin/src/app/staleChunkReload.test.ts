@@ -25,8 +25,8 @@ function janelaFalsa(storage: Partial<Pick<Storage, 'getItem' | 'setItem'>> = {}
     },
     location: { reload },
   } as unknown as StaleChunkWindow
-  // O evento real do Vite é cancelável: `preventDefault` é o que impede o
-  // helper de relançar o erro.
+  // O evento real do Vite é cancelável. O helper nunca o cancela: é assim que
+  // o erro original, com o nome do chunk, continua chegando ao console.
   const falhar = () => {
     const evento = new Event('vite:preloadError', { cancelable: true })
     alvo.dispatchEvent(evento)
@@ -36,13 +36,13 @@ function janelaFalsa(storage: Partial<Pick<Storage, 'getItem' | 'setItem'>> = {}
 }
 
 describe('installStaleChunkReload', () => {
-  it('na primeira falha recarrega, cancela o erro e marca o momento', () => {
+  it('na primeira falha recarrega, marca o momento e deixa o erro original seguir', () => {
     const { win, reload, falhar, dados } = janelaFalsa()
     installStaleChunkReload(win, () => 1_000)
 
     const evento = falhar()
 
-    expect(evento.defaultPrevented).toBe(true)
+    expect(evento.defaultPrevented).toBe(false)
     expect(reload).toHaveBeenCalledTimes(1)
     expect(dados.get(STALE_CHUNK_RELOAD_KEY)).toBe('1000')
   })
@@ -71,9 +71,8 @@ describe('installStaleChunkReload', () => {
     installStaleChunkReload(win, relogio)
 
     falhar()
-    const segundo = falhar()
+    falhar()
 
-    expect(segundo.defaultPrevented).toBe(true)
     expect(reload).toHaveBeenCalledTimes(2)
   })
 
