@@ -4,8 +4,8 @@ import { entrarNoPainel } from './session'
 // A tela de Administradores é a única que carrega com o esqueleto animado do
 // design system. Parar essa animação passa pelo Animated do react-native-web,
 // que chama `global.cancelAnimationFrame`, e `global` não existe no navegador.
-// Em 2026-10-19 a tela abriu preta em produção por isso, e nenhum teste cobria
-// a rota: os testes de componente rodam no jsdom, onde o Vitest define
+// A tela já abriu preta em produção por isso, sem nenhum teste cobrindo a
+// rota: os testes de componente rodam no jsdom, onde o Vitest define
 // `global`, então o erro só aparece no artefato que o cliente abre. Este spec
 // roda contra o BUILD servido pelo preview, que é onde ele se reproduz.
 
