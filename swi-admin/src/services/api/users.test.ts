@@ -213,7 +213,7 @@ describe('employeesApi.get (real)', () => {
 })
 
 describe('approvalsApi.listPendingWorkers (real)', () => {
-  it('GET /users?role=WORKER&approvalStatus=PENDING e mapeia createdAt→requestedAt', async () => {
+  it('GET /users/pending e mapeia createdAt→requestedAt', async () => {
     const f = okJson([
       summary({ approvalStatus: 'PENDING', createdAt: '2026-07-10T00:00:00.000Z' }),
     ])
@@ -227,7 +227,9 @@ describe('approvalsApi.listPendingWorkers (real)', () => {
       requestedAt: '2026-07-10T00:00:00.000Z',
     })
     const [url] = f.mock.calls[0] as [string]
-    expect(url).toContain('/users?role=WORKER&approvalStatus=PENDING')
+    // A rota dedicada da fila, que traz o perfil do cadastro. A listagem
+    // genérica não traz CPF nem contato.
+    expect(url).toMatch(/\/users\/pending$/)
   })
 
   // O app manda o perfil junto do cadastro, e a fila precisa repassar pra tela,
