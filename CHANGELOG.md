@@ -2,6 +2,14 @@
 
 Registro das entregas do SWI. O versionamento segue a versão do produto (app mobile), que é a referência da entrega ao cliente.
 
+## 1.1.1
+
+Correção no painel. O app e o backend não mudam, e o APK da 1.1.0 continua valendo.
+
+### Painel (`swi-admin`)
+
+- A fila de cadastros pendentes mostra o CPF, o telefone, a cidade e as alergias que o funcionário informou no cadastro. Antes ela lia a listagem genérica de usuários, que não traz esses campos, e exibia "não informado".
+
 ## 1.1.0
 
 Fecha os dois itens do Anexo I que a 1.0.2 entregava com limitação: anexos multimídia nos relatórios e níveis de permissão.
