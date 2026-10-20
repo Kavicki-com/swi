@@ -102,6 +102,20 @@ export type WorkerTelemetry = {
    * backend anterior responde sem o campo, e aí a tela não marca nada.
    */
   baseline?: BaselineSource | null
+  /**
+   * Repouso e máxima que a fórmula usou, da última avaliação. Opcional porque
+   * um backend anterior responde sem o campo; nulo quando não há referência.
+   */
+  heartRateReference?: HeartRateReference | null
+}
+
+export type HeartRateReference = {
+  restingBpm: number
+  restingSource: BaselineSource
+  provisionalFrom: 'OPEN_DAY' | 'SESSION' | 'DEFAULT' | null
+  measuredDays: number
+  maxBpm: number | null
+  computedAt: string
 }
 
 export type BaselineSource = 'MEASURED' | 'PROVISIONAL'

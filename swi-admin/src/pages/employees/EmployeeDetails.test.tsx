@@ -11,7 +11,7 @@ import { employeesApi } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
 import { telemetryApi } from '@/services/api/telemetry'
 import { telemetryDevicesApi } from '@/services/api/telemetryDevices'
-import { metric, neverReported, reporting } from '@/test-utils/telemetryFixtures'
+import { FIXTURE_AT, metric, neverReported, reporting } from '@/test-utils/telemetryFixtures'
 
 vi.mock('@/services/api/users', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/api/users')>()
@@ -72,6 +72,14 @@ const PAIRED = {
   },
   error: null,
 }
+
+// Vitais e medições do relógio decidem com as mesmas opções: as duas faixas
+// dizem a mesma frase de estado.
+const expectReadingState = (phrase: string) =>
+  waitFor(() => {
+    expect(screen.getByTestId('vitals-card')).toHaveTextContent(phrase)
+    expect(screen.getByTestId('measurements-empty')).toHaveTextContent(phrase)
+  })
 
 const EMPLOYEE = {
   id: 'w1',
@@ -154,7 +162,7 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     currentMock.mockResolvedValue({ data: neverReported(), error: null })
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
-    expect(await screen.findByText('Sem leitura do aparelho')).toBeInTheDocument()
+    await expectReadingState('Sem leitura do aparelho')
     expect(screen.queryByText('0 minutos')).not.toBeInTheDocument()
   })
 
@@ -166,7 +174,7 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     currentMock.mockResolvedValue({ data: reporting(), error: null })
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
-    expect(await screen.findByText('Verificando o relógio…')).toBeInTheDocument()
+    await expectReadingState('Verificando o relógio…')
     await waitFor(() => expect(currentMock).toHaveBeenCalled())
     expect(screen.queryByText('Monitorando agora')).toBeNull()
   })
@@ -178,7 +186,7 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
     await screen.findByTestId('device-section-error')
-    expect(await screen.findByText('Leitura indisponível no momento')).toBeInTheDocument()
+    await expectReadingState('Leitura indisponível no momento')
     expect(screen.queryByText('Monitorando agora')).toBeNull()
   })
 
@@ -187,7 +195,7 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     currentMock.mockResolvedValue({ data: null, error: { message: 'offline' } })
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
-    expect(await screen.findByText('Leitura indisponível no momento')).toBeInTheDocument()
+    await expectReadingState('Leitura indisponível no momento')
   })
 
   // Até o socket do painel existir, a página relê sozinha para o operador não
@@ -213,8 +221,31 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     currentMock.mockResolvedValue({ data: neverReported(), error: null })
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
-    expect(await screen.findByText('Sem relógio pareado')).toBeInTheDocument()
+    await expectReadingState('Sem relógio pareado')
     expect(screen.queryByText('Sem leitura do aparelho')).not.toBeInTheDocument()
+  })
+
+  it('mostra as medições do relógio lidas da mesma telemetria dos vitais', async () => {
+    getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
+    currentMock.mockResolvedValue({
+      data: {
+        ...reporting({ oxygenSaturation: metric(97) }),
+        heartRateReference: {
+          restingBpm: 62,
+          restingSource: 'MEASURED',
+          provisionalFrom: null,
+          measuredDays: 9,
+          maxBpm: 187,
+          computedAt: FIXTURE_AT,
+        },
+      },
+      error: null,
+    })
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+
+    expect(await screen.findByTestId('measurement-oxygen')).toHaveTextContent('97%')
+    expect(screen.getByTestId('measurement-resting')).toHaveTextContent('62 bpm')
+    expect(screen.getByTestId('measurement-resting-caption')).toHaveTextContent('Medido em 9 dias')
   })
 
   it('o bloco Aparelho recebe a leitura da página e mostra a bateria do relógio', async () => {

@@ -46,9 +46,12 @@ describe('AdminDetails: vitais', () => {
     })
     await renderPage(<AdminDetails />, { route: '/admins/admin-7', path: '/admins/:id' })
 
-    // Os vitais e o gráfico de gasto calórico dizem os dois que não há aparelho.
-    expect(await screen.findAllByText('Sem relógio pareado')).toHaveLength(2)
+    // Os vitais, as medições do relógio e o gráfico de gasto calórico dizem
+    // os três que não há aparelho.
+    expect(await screen.findByTestId('vitals-card')).toHaveTextContent('Sem relógio pareado')
+    expect(screen.getByTestId('measurements-empty')).toHaveTextContent('Sem relógio pareado')
     expect(screen.getByTestId('calories-empty')).toHaveTextContent('Sem relógio pareado')
+    expect(screen.queryByTestId('measurement-oxygen')).not.toBeInTheDocument()
     expect(screen.getByText('Sem estimativa')).toBeInTheDocument()
     expect(screen.queryByTestId('vitals-source-badge')).not.toBeInTheDocument()
   })

@@ -12,7 +12,8 @@ import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { DeviceSection, type DeviceState } from '@/pages/employees/DeviceSection'
 import { fullMapPath } from '@/pages/maps/mapFocus'
-import { vitalsViewFrom } from '@/services/vitals/vitalsView'
+import { vitalsViewFrom, type ReadingOptions } from '@/services/vitals/vitalsView'
+import { measurementsViewFrom } from '@/services/vitals/measurementsView'
 import { useLivePositions } from '@/hooks/useLivePositions'
 import { useNow } from '@/hooks/useNow'
 import { POSITION_CLOCK_MS, stalePositionNote } from '@/services/positions/positionAge'
@@ -85,17 +86,23 @@ export function EmployeeDetails() {
     )
   }
 
+  // Vitais e medições decidem com as mesmas opções, e as legendas de horário
+  // seguem o relógio da página.
+  const readingOptions: ReadingOptions = {
+    failed: failed || deviceState === 'failed',
+    noDevice: deviceState === 'unpaired',
+    deviceUnknown: deviceState !== 'paired',
+    now,
+  }
+
   return (
     <WorkerDetailsLayout
       worker={{
         ...employee,
         // O gráfico de gasto calórico lê a série deste funcionário.
         seriesWorkerId: employee.id,
-        vitals: vitalsViewFrom(telemetry, {
-          failed: failed || deviceState === 'failed',
-          noDevice: deviceState === 'unpaired',
-          deviceUnknown: deviceState !== 'paired',
-        }),
+        vitals: vitalsViewFrom(telemetry, readingOptions),
+        measurements: measurementsViewFrom(telemetry, readingOptions),
       }}
       position={position ? { lat: position.lat, lng: position.lng } : null}
       positionNote={position ? stalePositionNote(position.recordedAt, now) : null}

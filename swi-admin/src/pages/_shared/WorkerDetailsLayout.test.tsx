@@ -48,6 +48,7 @@ const withGap = () =>
     { bucket: 'hour', period: 'day' },
   )
 import { vitalsViewFrom, type WorkerVitalsView } from '@/services/vitals/vitalsView'
+import { measurementsViewFrom } from '@/services/vitals/measurementsView'
 import { WorkerDetailsLayout, type WorkerDetailsData } from './WorkerDetailsLayout'
 
 const BASE: WorkerDetailsData = {
@@ -58,6 +59,7 @@ const BASE: WorkerDetailsData = {
   specialization: 'Setor Leste',
   avatarUri: '',
   vitals: vitalsViewFrom(null),
+  measurements: measurementsViewFrom(null),
 }
 
 const READING: WorkerVitalsView = {
@@ -107,13 +109,31 @@ describe('WorkerDetailsLayout', () => {
 
   it('sem leitura, declara a ausência em vez de mostrar 0', async () => {
     await renderLayout({})
-    expect(screen.getByText('Sem leitura do aparelho')).toBeInTheDocument()
+    expect(screen.getByTestId('vitals-card')).toHaveTextContent('Sem leitura do aparelho')
+    expect(screen.getByTestId('measurements-empty')).toHaveTextContent('Sem leitura do aparelho')
     expect(screen.getByText('Sem estimativa')).toBeInTheDocument()
     expect(screen.queryByText(/^0\s*$/)).not.toBeInTheDocument()
     expect(screen.queryByText('0 minutos')).not.toBeInTheDocument()
     expect(screen.queryByText('0,0%')).not.toBeInTheDocument()
     // Nenhum juízo de saúde sem condição do backend que o sustente.
     expect(screen.queryByText('Condições excelentes')).not.toBeInTheDocument()
+  })
+
+  // A faixa ocupa a largura toda, como o gráfico: filha direta da página,
+  // depois do corpo de três colunas e antes do gasto calórico, nunca dentro
+  // de uma das colunas.
+  it('mostra a seção de medições entre as colunas e o gráfico', async () => {
+    await renderLayout({})
+    const page = screen.getByTestId('worker-details')
+    const blocks = Array.from(page.children)
+    // Índice do bloco da página (filho direto) que contém o elemento.
+    const blockOf = (el: HTMLElement) => blocks.findIndex((block) => block.contains(el))
+    const body = blockOf(screen.getByText('Alergias'))
+    const measurements = blockOf(screen.getByTestId('measurements-section'))
+    const calories = blockOf(screen.getByText('Gasto calórico'))
+    expect(body).toBeGreaterThanOrEqual(0)
+    expect(measurements).toBe(body + 1)
+    expect(calories).toBe(measurements + 1)
   })
 
   it('leitura de demonstração leva o selo de demonstração', async () => {

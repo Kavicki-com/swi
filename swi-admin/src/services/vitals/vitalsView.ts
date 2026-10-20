@@ -47,6 +47,15 @@ export const NO_VALUE = '--'
 /** Frase de quem não tem relógio pareado, a mesma em todas as telas. */
 export const NO_DEVICE_LABEL = 'Sem relógio pareado'
 
+/** Ainda sem saber se há relógio pareado. */
+export const CHECKING_DEVICE_LABEL = 'Verificando o relógio…'
+
+/** A consulta falhou: não dá para afirmar que falta leitura. */
+export const READING_UNAVAILABLE_LABEL = 'Leitura indisponível no momento'
+
+/** Nenhuma leitura do aparelho, ou quem nunca reportou. */
+export const NO_READING_LABEL = 'Sem leitura do aparelho'
+
 const oneDecimal = (n: number) => Math.round(Math.min(100, Math.max(0, n)) * 10) / 10
 
 const NO_ESTIMATE = { minutes: null, label: 'Sem estimativa' }
@@ -60,9 +69,24 @@ const EMPTY: Omit<WorkerVitalsView, 'status'> = {
   sourceBadge: null,
 }
 
+/**
+ * Como decidir o que a leitura mostra, as mesmas opções para vitais e medições
+ * do relógio: assim uma faixa nunca mostra a leitura guardada que a outra esconde.
+ */
+export type ReadingOptions = {
+  /** Sem relógio pareado: a leitura guardada não vale. */
+  noDevice?: boolean
+  /** Ainda sem saber se há relógio: a leitura guardada espera. */
+  deviceUnknown?: boolean
+  /** A consulta falhou. */
+  failed?: boolean
+  /** Relógio da tela, para "Última leitura às 14:32" envelhecer com a página. */
+  now?: number
+}
+
 export function vitalsViewFrom(
   telemetry: WorkerTelemetry | null,
-  options: { noDevice?: boolean; deviceUnknown?: boolean; failed?: boolean; now?: number } = {},
+  options: ReadingOptions = {},
 ): WorkerVitalsView {
   // Sem aparelho pareado, a leitura guardada não vale: desparear não apaga o
   // último snapshot no backend, e mostrá-lo seria apresentar dado velho como atual.
@@ -72,14 +96,14 @@ export function vitalsViewFrom(
   if (options.deviceUnknown) {
     return {
       ...EMPTY,
-      status: options.failed ? 'Leitura indisponível no momento' : 'Verificando o relógio…',
+      status: options.failed ? READING_UNAVAILABLE_LABEL : CHECKING_DEVICE_LABEL,
     }
   }
 
   if (telemetry === null || telemetry.origin === null) {
     return {
       ...EMPTY,
-      status: options.failed ? 'Leitura indisponível no momento' : 'Sem leitura do aparelho',
+      status: options.failed ? READING_UNAVAILABLE_LABEL : NO_READING_LABEL,
     }
   }
 
