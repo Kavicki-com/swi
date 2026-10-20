@@ -47,6 +47,11 @@ const snapshotRow = (over: Record<string, unknown> = {}) => ({
   bodyTemperatureC: null,
   bodyTemperatureSource: null,
   bodyTemperatureAt: null,
+  // Linha anterior à pulseira, como a do relógio: lastEventTime é obrigatório
+  // no banco, tipo e chegada do lote são nulos.
+  deviceKind: null,
+  lastEventTime: secondsAgo(5),
+  lastReceivedAt: null,
   ...over,
 })
 
@@ -299,6 +304,66 @@ describe('TelemetryQueryService.currentForWorker', () => {
       bodyTemperatureSource: true,
       bodyTemperatureAt: true,
     })
+  })
+
+  it('pulseira: sync sai do snapshot, e a avaliação esparsa é datada pela última leitura', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(
+      snapshotRow({
+        deviceKind: 'ANDROID_PHONE',
+        lastEventTime: secondsAgo(3_120),
+        lastReceivedAt: secondsAgo(30),
+        heartRateAt: secondsAgo(3_120),
+      }),
+    )
+    prisma.telemetryAssessment.findMany.mockResolvedValue([
+      {
+        computedAt: secondsAgo(1),
+        windowEnd: secondsAgo(3_120),
+        effortPercent: 55,
+        wearPercent: 40,
+        fatigueEtaMin: null,
+        formulaVersion: 'swi-fatigue-sparse-1',
+        baselineSource: 'MEASURED',
+      },
+    ])
+
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(result.sync).toEqual({
+      measuredUntil: secondsAgo(3_120).toISOString(),
+      syncedAt: secondsAgo(30).toISOString(),
+    })
+    expect(result.metrics.wear.measuredAt).toBe(secondsAgo(3_120).toISOString())
+    expect(prisma.telemetrySnapshot.findUnique.mock.calls[0][0].select).toMatchObject({
+      deviceKind: true,
+      lastEventTime: true,
+      lastReceivedAt: true,
+    })
+    expect(prisma.telemetryAssessment.findMany.mock.calls[0][0].select).toMatchObject({ windowEnd: true })
+  })
+
+  it('avaliação do relógio continua datada pelo cálculo, mesmo com windowEnd na linha', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
+    prisma.telemetryAssessment.findMany.mockResolvedValue([
+      {
+        computedAt: secondsAgo(10),
+        windowEnd: secondsAgo(15),
+        effortPercent: 55,
+        wearPercent: 40,
+        fatigueEtaMin: null,
+        formulaVersion: 'swi-fatigue-experimental',
+        baselineSource: 'MEASURED',
+      },
+    ])
+
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(result.metrics.wear.measuredAt).toBe(secondsAgo(10).toISOString())
+    expect(result.sync).toBeNull()
   })
 
   it('usa a avaliação mais recente do dia monitorado', async () => {
@@ -996,6 +1061,25 @@ describe('TelemetryQueryService.adminWorkers', () => {
     const sql: string = prisma.$queryRaw.mock.calls[0][0].sql
     expect(sql).toContain('"TelemetryAssessment"')
     expect(sql).not.toContain('"inputs"')
+  })
+
+  it('a lista data a avaliação esparsa pela última leitura, como a leitura individual', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana')])
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow({ workerId: 'worker-1' })])
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        workerId: 'worker-1', origin: 'REAL', computedAt: secondsAgo(1), windowEnd: secondsAgo(3_120),
+        effortPercent: 55, wearPercent: 40, fatigueEtaMin: null, formulaVersion: 'swi-fatigue-sparse-1',
+        baselineSource: 'MEASURED',
+      },
+    ])
+
+    const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
+
+    expect(workers[0].telemetry.metrics.wear.measuredAt).toBe(secondsAgo(3_120).toISOString())
+    expect(prisma.$queryRaw.mock.calls[0][0].sql).toContain('"windowEnd"')
   })
 
   it('a janela das taxas é uma consulta limitada por funcionário que reporta', async () => {

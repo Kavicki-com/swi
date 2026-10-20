@@ -13,6 +13,7 @@ import {
   type BloodPressure,
   type BloodPressureRecency,
   type ConditionKind,
+  type DeviceKind,
   type MeasurementSource,
   type MetricKind,
   type MetricState,
@@ -83,11 +84,22 @@ export interface ProjectionSnapshot {
   bodyTemperatureC: number | null
   bodyTemperatureSource: MeasurementSource | null
   bodyTemperatureAt: string | null
+  /** Tipo do aparelho que promoveu o atual. Nulo nos snapshots anteriores à coluna. */
+  deviceKind?: DeviceKind | null
+  /** Instante do evento que promoveu o atual: o "dados até" da pulseira. */
+  lastEventTime?: string
+  /** Quando o lote que promoveu o atual chegou: o "sincronizado às" da pulseira. */
+  lastReceivedAt?: string | null
 }
 
 /** Avaliação já calculada. Quem a escreve é o serviço de avaliação; aqui só se lê. */
 export interface ProjectionAssessment {
   computedAt: string
+  /**
+   * Instante que o número descreve. Na fórmula do relógio é o próprio
+   * computedAt; na esparsa, a última leitura do dia.
+   */
+  measuredAt?: string
   effortPercent: number | null
   wearPercent: number | null
   /** Minutos até o desgaste cruzar o limiar do alerta. Nulo: não se aproxima. */
@@ -264,6 +276,13 @@ export interface WorkerTelemetry {
    * individual não achou referência.
    */
   heartRateReference?: HeartRateReference | null
+  /**
+   * Só da pulseira, que chega em lote horas depois de medir: até quando ela
+   * mediu e quando o backend recebeu o lote, ambos ISO-8601. Nulo para o
+   * relógio, que fala ao vivo e tem a qualidade de cada métrica como resposta.
+   * App e painel antigos ignoram o campo.
+   */
+  sync: { measuredUntil: string; syncedAt: string } | null
 }
 
 /**
@@ -541,7 +560,7 @@ function assessmentStates(
   assessment: ProjectionAssessment | null,
   now: Date,
 ): { effort: MetricState<number>; wear: MetricState<number>; fatigueEtaMin: MetricState<number> } {
-  const at = assessment?.computedAt ?? null
+  const at = assessment?.measuredAt ?? assessment?.computedAt ?? null
   return {
     effort: metricState('effort', sampleOf(assessment?.effortPercent ?? null, at, 'DERIVED'), now),
     wear: metricState('wear', sampleOf(assessment?.wearPercent ?? null, at, 'DERIVED'), now),
@@ -570,6 +589,12 @@ function activeConditions(
       observedValue: c.observedValue,
       thresholdValue: c.thresholdValue,
     }))
+}
+
+/** Só a pulseira tem sincronização: o relógio fala ao vivo e a qualidade já conta tudo. */
+function syncOf(snapshot: ProjectionSnapshot | null): WorkerTelemetry['sync'] {
+  if (snapshot?.deviceKind !== 'ANDROID_PHONE' || !snapshot.lastEventTime || !snapshot.lastReceivedAt) return null
+  return { measuredUntil: snapshot.lastEventTime, syncedAt: snapshot.lastReceivedAt }
 }
 
 // ---------------------------------------------------------------------------
@@ -640,6 +665,7 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     movementWindow: movement.coverage,
     observedAt: now.toISOString(),
     conditions: activeConditions(snapshot?.origin ?? null, input.conditions),
+    sync: syncOf(snapshot),
   }
 }
 

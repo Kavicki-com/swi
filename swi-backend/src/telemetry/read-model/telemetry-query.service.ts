@@ -11,10 +11,12 @@ import { heartRateReferenceOf } from './heart-rate-reference'
 import { assembleSeries, seriesBuckets, type SeriesPeriod, type WorkerSeries } from './telemetry-series'
 import type {
   ConditionKind,
+  DeviceKind,
   MeasurementSource,
   Sample,
   TelemetryOrigin,
 } from '../domain/telemetry.types'
+import { isSparseFormula } from '../assessment/sparse-profile'
 import {
   ENERGY_RATE_WINDOW_MS,
   projectAdminSummary,
@@ -66,11 +68,19 @@ const SNAPSHOT_FIELDS = {
   bodyTemperatureC: true,
   bodyTemperatureSource: true,
   bodyTemperatureAt: true,
+  // Os três dizem se o atual é de pulseira, até quando ela mediu e quando
+  // sincronizou.
+  deviceKind: true,
+  lastEventTime: true,
+  lastReceivedAt: true,
 } as const
 
 const ASSESSMENT_FIELDS = {
   workerId: true,
   computedAt: true,
+  // A avaliação esparsa descreve o dia até a última leitura, e é por ela que
+  // envelhece; a do relógio envelhece pelo próprio cálculo.
+  windowEnd: true,
   effortPercent: true,
   wearPercent: true,
   fatigueEtaMin: true,
@@ -172,10 +182,14 @@ interface SnapshotRow {
   bodyTemperatureC: number | null
   bodyTemperatureSource: MeasurementSource | null
   bodyTemperatureAt: Date | null
+  deviceKind: DeviceKind | null
+  lastEventTime: Date
+  lastReceivedAt: Date | null
 }
 
 interface AssessmentRow {
   computedAt: Date
+  windowEnd: Date
   effortPercent: number | null
   wearPercent: number | null
   fatigueEtaMin: number | null
@@ -253,12 +267,16 @@ function toProjectionSnapshot(row: SnapshotRow): ProjectionSnapshot {
     bodyTemperatureC: row.bodyTemperatureC,
     bodyTemperatureSource: row.bodyTemperatureSource,
     bodyTemperatureAt: iso(row.bodyTemperatureAt),
+    deviceKind: row.deviceKind,
+    lastEventTime: row.lastEventTime.toISOString(),
+    lastReceivedAt: iso(row.lastReceivedAt),
   }
 }
 
 function toProjectionAssessment(row: AssessmentRow): ProjectionAssessment {
   return {
     computedAt: row.computedAt.toISOString(),
+    ...(isSparseFormula(row.formulaVersion) ? { measuredAt: row.windowEnd.toISOString() } : {}),
     effortPercent: row.effortPercent,
     wearPercent: row.wearPercent,
     fatigueEtaMin: row.fatigueEtaMin,
@@ -754,7 +772,7 @@ export class TelemetryQueryService {
   ): Promise<(AssessmentRow & { workerId: string; origin: TelemetryOrigin })[]> {
     const query = Prisma.sql`
       SELECT DISTINCT ON ("workerId", "origin")
-        "workerId", "origin", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion", "baselineSource"
+        "workerId", "origin", "computedAt", "windowEnd", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion", "baselineSource"
       FROM "TelemetryAssessment"
       WHERE "workerId" IN (${Prisma.join(workerIds)})
       ORDER BY "workerId", "origin", "computedAt" DESC
@@ -783,7 +801,7 @@ export class TelemetryQueryService {
   ): Promise<(AssessmentRow & { workerId: string })[]> {
     const query = Prisma.sql`
       SELECT DISTINCT ON ("workerId")
-        "workerId", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion", "baselineSource"
+        "workerId", "computedAt", "windowEnd", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion", "baselineSource"
       FROM "TelemetryAssessment"
       WHERE "workerId" IN (${Prisma.join(workerIds)})
         AND "origin" = CAST(${'REAL'} AS "TelemetryOrigin")

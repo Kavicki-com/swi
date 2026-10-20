@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { INestApplication } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
+import { requireJwtSecret } from '../src/auth/jwt-secret'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { TelemetryConditionService } from '../src/telemetry/alerts/condition.service'
 import { SparseAssessmentService } from '../src/telemetry/assessment/sparse-assessment.service'
@@ -272,6 +274,29 @@ describe('Telemetry Health Connect e2e', () => {
       expect(
         await prisma.telemetryCondition.count({ where: { workerId: workerC, kind: 'BLOOD_PRESSURE_REVIEW' } }),
       ).toBe(1)
+    })
+
+    // A rota do próprio funcionário passa pela mesma projeção da do painel; o
+    // escopo de empresa do painel é assunto dos unitários da consulta.
+    it('a leitura atual diz até quando a pulseira mediu e quando sincronizou', async () => {
+      const token = new JwtService({ secret: requireJwtSecret() }).sign({ sub: workerC, role: 'WORKER' })
+
+      const { body } = await request(app.getHttpServer())
+        .get('/telemetry/v1/me/current')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+
+      expect(body.sync.measuredUntil).toBe(measuredUntil)
+      expect(Math.abs(Date.parse(body.sync.syncedAt) - Date.now())).toBeLessThan(60_000)
+      expect(body.metrics.heartRate).toMatchObject({ value: 190, quality: 'UNAVAILABLE', measuredAt: measuredUntil })
+      // Datada pela última leitura do dia avaliado, nunca pela hora do recálculo.
+      const latest = await prisma.telemetryAssessment.findFirstOrThrow({
+        where: { workerId: workerC },
+        orderBy: { computedAt: 'desc' },
+      })
+      expect(body.metrics.wear.measuredAt).toBe(latest.windowEnd.toISOString())
+      expect(body.metrics.wear.measuredAt).not.toBe(latest.computedAt.toISOString())
+      expect(body.metrics.fatigueEtaMin.value).toBeNull()
     })
 
     it('bateria vinda do Health Connect é recusada como medição inválida', async () => {
