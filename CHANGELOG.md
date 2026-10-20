@@ -4,12 +4,13 @@ Registro das entregas do SWI. O versionamento segue a versão do produto (app mo
 
 ## 1.2.0
 
-Cadastro pelo painel com credenciais por e-mail, e esforço e desgaste desde o primeiro uso do relógio. O APK da 1.1.0 continua valendo.
+Cadastro pelo painel com credenciais por e-mail, esforço e desgaste desde o primeiro uso do relógio, e chat por empresa. O APK da 1.1.0 continua valendo.
 
 ### Backend (`swi-backend`)
 
 - Cadastro feito pelo painel (funcionário, supervisor ou administrador) envia à pessoa um e-mail de cadastro concluído com as credenciais de acesso: o login, que é o e-mail, e a senha definida pelo admin. A conta continua nascendo ativa, sem etapa de ativação. Se o e-mail não puder ser enviado, o cadastro é concluído mesmo assim e a resposta da API informa isso ao painel.
 - Esforço, desgaste e previsão de fadiga existem desde o primeiro uso do relógio. Enquanto não há dia fechado com batimento, a avaliação usa um repouso provisório (o menor batimento plausível já visto, com teto de 70 bpm) e registra isso na própria linha e na leitura do painel (`baseline: PROVISIONAL`). Uma rodada a cada 30 minutos resume como provisório cada dia ainda não fechado e fecha o dia que acabou de fechar; o Resumo provisório de um dia que já terminou conta como repouso medido, então o repouso medido chega na manhã seguinte ao primeiro dia de uso, e o selo de estimativa aparece só nesse primeiro dia. Migration aditiva com duas colunas.
+- O chat passa a ser por empresa, no app e no painel: o diretório de contatos só lista pessoas da mesma empresa, e a conversa só existe entre pessoas da mesma empresa. Quem não tem empresa só fala com quem também não tem. Conversas antigas com gente de outra empresa somem da lista e não aceitam mensagem nova, sem apagar nada do banco; as notificações seguem a conversa.
 
 ### Painel (`swi-admin`)
 

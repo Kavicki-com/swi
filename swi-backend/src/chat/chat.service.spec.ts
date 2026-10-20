@@ -13,7 +13,9 @@ const notifications = () => ({ createFor: jest.fn(), enqueueForMany: jest.fn() }
 const prisma = () => ({
   conversation: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
   message: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-  user: { findMany: jest.fn(), findUnique: jest.fn() },
+  // Por padrão A e B existem e são da mesma empresa (sem empresa, os dois):
+  // é o que o recorte por empresa consulta antes de cada operação.
+  user: { findMany: jest.fn().mockResolvedValue([userRow(A), userRow(B)]), findUnique: jest.fn() },
   idempotencyKey: { findUnique: jest.fn().mockResolvedValue(null) },
   $executeRaw: jest.fn().mockResolvedValue(1),
   $transaction: jest.fn(),
@@ -41,16 +43,17 @@ const msgRow = (over: any = {}) => ({
 })
 
 describe('ChatService', () => {
-  // O diretório não é escopado por empresa nem filtra papel: o worker conversa
-  // com qualquer pessoa no app. Sobram dois recortes: conta aprovada (PENDING e
-  // REJECTED nem logam) e eu fora da minha própria lista.
-  it('listDirectory traz qualquer conta aprovada exceto eu, presignando avatar', async () => {
+  // O diretório é recortado por empresa e não filtra papel. Sobram três
+  // recortes: minha empresa, conta aprovada (PENDING e REJECTED nem logam) e eu
+  // fora da minha própria lista.
+  it('listDirectory traz as contas aprovadas da minha empresa exceto eu, presignando avatar', async () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
-    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
+    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, 'empresa-1')
     const where = db.user.findMany.mock.calls[0][0].where
     expect(where).toEqual({
       approvalStatus: 'APPROVED',
       id: { not: A },
+      companyId: 'empresa-1',
     })
     expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
     // birthDate, bloodType, allergies e gender vão junto: sem esses campos o
@@ -67,13 +70,13 @@ describe('ChatService', () => {
     })
   })
 
-  // Antes o `where` levava companyId, então o worker de uma empresa não
-  // enxergava ninguém de outra — nem pra iniciar conversa.
-  it('listDirectory não recorta por empresa nem por papel', async () => {
+  // Sem empresa é um balde próprio: companyId nulo no where casa só com nulo,
+  // então quem não tem empresa só vê quem também não tem.
+  it('listDirectory de quem não tem empresa pede companyId nulo e não recorta por papel', async () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
-    await new ChatService(db, media(), realtime(), notifications()).listDirectory(A)
+    await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, null)
     const where = db.user.findMany.mock.calls[0][0].where
-    expect(where).not.toHaveProperty('companyId')
+    expect(where.companyId).toBeNull()
     expect(where).not.toHaveProperty('role')
   })
 
@@ -85,6 +88,34 @@ describe('ChatService', () => {
     expect(out[0].participantAvatars).toEqual(['signed:chat/avatars/aaaa.png', 'signed:chat/avatars/bbbb.png'])
     expect(out[0].unreadBy).toEqual({ aaaa: 2 })
     expect(out[0].lastMessageAt).toBe('2026-06-23T13:00:00.000Z')
+  })
+
+  it('listConversations esconde a conversa com quem hoje é de outra empresa e com quem não existe mais', async () => {
+    const db = prisma()
+    const C = 'cccc', D = 'dddd'
+    db.conversation.findMany.mockResolvedValue([
+      convRow(),
+      convRow({ id: [A, C].sort().join('#'), participants: [A, C] }),
+      convRow({ id: [A, D].sort().join('#'), participants: [A, D] }),
+    ])
+    // A e B sem empresa (o mesmo balde), C de uma empresa, D não existe.
+    db.user.findMany.mockResolvedValue([
+      userRow(A, { companyId: null }),
+      userRow(B, { companyId: null }),
+      userRow(C, { companyId: 'empresa-2' }),
+    ])
+    const out = await new ChatService(db, media(), realtime(), notifications()).listConversations(A)
+    expect(out.map((c) => c.id)).toEqual([CONV])
+    // Uma consulta só, com todo mundo das conversas.
+    expect(db.user.findMany).toHaveBeenCalledTimes(1)
+    expect(db.user.findMany.mock.calls[0][0].where.id.in).toEqual(expect.arrayContaining([A, B, C, D]))
+  })
+
+  it('listMessages de conversa com quem hoje é de outra empresa → 404, sem ler mensagem', async () => {
+    const db = prisma(); db.conversation.findUnique.mockResolvedValue(convRow())
+    db.user.findMany.mockResolvedValue([userRow(A, { companyId: 'empresa-1' }), userRow(B, { companyId: 'empresa-2' })])
+    await expect(new ChatService(db, media(), realtime(), notifications()).listMessages(A, CONV)).rejects.toThrow(NotFoundException)
+    expect(db.message.findMany).not.toHaveBeenCalled()
   })
 
   it('listMessages de não-membro → 404', async () => {
@@ -153,6 +184,27 @@ describe('ChatService', () => {
     db.user.findMany.mockResolvedValue([userRow(A)]) // só 1 dos 2 ids existe
     await expect(new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'x' })).rejects.toThrow(NotFoundException)
     expect(db.conversation.create).not.toHaveBeenCalled()
+  })
+
+  it('sendMessage para quem é de outra empresa → 404 antes de tocar na conversa', async () => {
+    const db = prisma()
+    db.user.findMany.mockResolvedValue([userRow(A, { companyId: 'empresa-1' }), userRow(B, { companyId: 'empresa-2' })])
+    const rt = realtime()
+    await expect(new ChatService(db, media(), rt, notifications()).sendMessage(A, CONV, { body: 'x' })).rejects.toThrow(NotFoundException)
+    expect(db.conversation.findUnique).not.toHaveBeenCalled()
+    expect(db.conversation.create).not.toHaveBeenCalled()
+    expect(db.message.create).not.toHaveBeenCalled()
+    expect(db.$executeRaw).not.toHaveBeenCalled()
+    expect(rt.emitToUsers).not.toHaveBeenCalled()
+  })
+
+  it('sendMessage entre duas pessoas sem empresa segue normal: o balde é o mesmo', async () => {
+    const db = prisma()
+    db.conversation.findUnique.mockResolvedValue(convRow({ unreadByJson: {} }))
+    db.user.findMany.mockResolvedValue([userRow(A, { companyId: null }), userRow(B, { companyId: null })])
+    db.message.create.mockResolvedValue(msgRow({ senderId: A, body: 'oi' }))
+    const out = await new ChatService(db, media(), realtime(), notifications()).sendMessage(A, CONV, { body: 'oi' })
+    expect(out.body).toBe('oi')
   })
 
   it('markRead zera meu unread via UPDATE atômico (membership ok)', async () => {
