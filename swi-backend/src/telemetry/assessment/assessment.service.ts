@@ -2,10 +2,9 @@ import { Injectable, Logger } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { EXPERIMENTAL_ALERT_PROFILE } from '../alerts/alert-profile'
-import { monitoredDayOf } from '../domain/metric-state'
-import { ageInYearsAt, maxHeartRateForAge, restingBaseline } from './assessment-baseline'
+import { baselineFor, restingMinimaOf } from './assessment-baseline'
 import { EXPERIMENTAL_PROFILE, type AssessmentProfile } from './assessment-profile'
-import { assessWindow, type Baseline, type FormulaState } from './fatigue-formula'
+import { assessWindow, type FormulaState } from './fatigue-formula'
 
 // Serviço de avaliação: decide QUAIS LINHAS entram na conta e grava o
 // resultado; a conta é da fórmula, que é pura. A cadeia é por sessão de
@@ -15,16 +14,6 @@ import { assessWindow, type Baseline, type FormulaState } from './fatigue-formul
 
 /** Corte entre avaliações da mesma sessão. É a decisão da ADR-0006. */
 export const ASSESSMENT_THROTTLE_MS = 15_000
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-/**
- * Quantos Resumos provisórios podem existir ao mesmo tempo: o dia de hoje e os
- * dois anteriores, que terminaram mas ainda não fecharam. É a folga que a
- * consulta da linha de base dá além dos dias medidos; os dois anteriores já
- * contam como medidos, e o corte nos 14 dias é feito depois.
- */
-const OPEN_DAY_ROWS = 3
 
 export type AssessOutcome =
   | { outcome: 'assessed'; assessmentId: string }
@@ -159,8 +148,7 @@ export class TelemetryAssessmentService {
     const skippedMs =
       reason === null && previous !== null ? Math.max(0, windowStart.getTime() - previous.windowEnd.getTime()) : 0
 
-    const sinceDay = new Date(monitoredDayOf(now).getTime() - this.profile.restingDays * DAY_MS)
-    const [samples, profile, summaries] = await Promise.all([
+    const [samples, profile, { endedDayMinima, openDayMinima }] = await Promise.all([
       tx.telemetrySample.findMany({
         // Fronteira de baixo fechada na primeira da cadeia, aberta na
         // continuação. Na primeira, windowStart cai no startedAt, que é o
@@ -172,26 +160,9 @@ export class TelemetryAssessmentService {
         orderBy: { eventTime: 'asc' },
       }),
       tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
-      tx.telemetryDailySummary.findMany({
-        // Os Resumos provisórios vêm junto, mais recentes primeiro. O de um dia
-        // que já terminou conta como medido; só o do dia em andamento fica de
-        // fora da mediana, e o teto deixa folga para ele sem cortar os 14 dias.
-        where: { workerId: session.workerId, origin: session.origin, day: { gte: sinceDay }, heartRateMin: { not: null } },
-        select: { day: true, heartRateMin: true, provisional: true },
-        orderBy: { day: 'desc' },
-        take: this.profile.restingDays + OPEN_DAY_ROWS,
-      }),
+      restingMinimaOf(tx, session.workerId, session.origin, now, this.profile.restingDays),
     ])
 
-    const todayMs = monitoredDayOf(now).getTime()
-    const minimaOf = (rows: typeof summaries) => rows.flatMap((s) => (s.heartRateMin === null ? [] : [s.heartRateMin]))
-    // Um dia terminou quando é anterior ao dia monitorado de agora: o Resumo
-    // dele, definitivo ou provisório, é medido. O do dia em andamento não é.
-    const endedDayMinima = minimaOf(summaries.filter((s) => !s.provisional || s.day.getTime() < todayMs)).slice(
-      0,
-      this.profile.restingDays,
-    )
-    const openDayMinima = minimaOf(summaries.filter((s) => s.provisional && s.day.getTime() >= todayMs))
     // Só quem ainda não tem dia terminado paga a agregação: esta é a rota mais
     // quente do backend, e para quem já tem repouso medido ela não muda nada.
     const sessionMinBpm =
@@ -203,15 +174,11 @@ export class TelemetryAssessmentService {
               _min: { heartRateBpm: true },
             })
           )._min.heartRateBpm
-    const resting = restingBaseline({ endedDayMinima, openDayMinima, sessionMinBpm })
-    const birthDate = profile?.birthDate ?? null
-    const ageYears = birthDate === null ? null : ageInYearsAt(birthDate, now)
-    const maxBpm = ageYears === null ? null : maxHeartRateForAge(ageYears)
-
-    const baseline: Baseline =
-      maxBpm === null
-        ? { kind: 'unavailable', reason: 'no_birth_date' }
-        : { kind: 'available', restingBpm: resting.restingBpm, maxBpm }
+    const { baseline, resting, ageYears, maxBpm } = baselineFor(
+      { endedDayMinima, openDayMinima, sessionMinBpm },
+      profile?.birthDate ?? null,
+      now,
+    )
 
     const result = assessWindow({
       profile: this.profile,
