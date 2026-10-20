@@ -164,8 +164,42 @@ describe('TelemetryLifecycleService.summarizeClosedDays: o que ela carrega e gra
     expect(prisma.telemetryDailySummary.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { workerId_day_origin: { workerId: 'worker-1', day: DAY, origin: 'REAL' } },
-        create: expect.objectContaining({ heartRateMin: 60, heartRateMax: 80, sampleCount: 2 }),
-        update: expect.objectContaining({ heartRateMin: 60, heartRateMax: 80, sampleCount: 2 }),
+        create: expect.objectContaining({ heartRateMin: 60, heartRateMax: 80, sampleCount: 2, provisional: false }),
+        update: expect.objectContaining({ heartRateMin: 60, heartRateMax: 80, sampleCount: 2, provisional: false }),
+      }),
+    )
+  })
+
+  it('o Resumo provisório não impede o dia de ser resumido de novo quando fecha', async () => {
+    // A exclusão da varredura fechada só conta Resumo definitivo: o provisório
+    // foi feito com o dia ainda aberto e precisa ser sobrescrito.
+    const prisma = prismaDouble()
+
+    await service(prisma).summarizeClosedDays(NOW)
+
+    const { sql } = prisma.$queryRaw.mock.calls[0][0]
+    expect(sql).toMatch(/NOT EXISTS[\s\S]*"provisional" = false/)
+  })
+
+  it('a rodada dos dias abertos parte do corte, sem exclusão, e grava como provisório', async () => {
+    // Dia aberto é refeito toda rodada, porque a Leitura dele ainda cresce; a
+    // marca de provisório é o que depois deixa o fechamento sobrescrever.
+    const prisma = prismaDouble()
+    prisma.$queryRaw.mockResolvedValue([candidate({ day: new Date('2026-09-03T00:00:00.000Z') })])
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow('12:00:00', { heartRateBpm: 60 })])
+
+    const result = await service(prisma).summarizeOpenDays(NOW)
+
+    const query = prisma.$queryRaw.mock.calls[0][0]
+    expect(query.sql).toMatch(/>= /)
+    expect(query.sql).not.toMatch(/NOT EXISTS/)
+    expect(query.values).toContainEqual(closedDayCutoff(NOW))
+    expect(query.values).toContainEqual(MAX_TRIPLES_PER_RUN)
+    expect(result).toEqual({ summarized: 1, failed: 0 })
+    expect(prisma.telemetryDailySummary.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ provisional: true }),
+        update: expect.objectContaining({ provisional: true }),
       }),
     )
   })
@@ -307,6 +341,9 @@ describe('TelemetryLifecycleService.purgeRetainedData: só apaga o que já foi r
       expect.objectContaining({
         where: {
           summarizerVersion: SUMMARIZER_VERSION,
+          // Resumo provisório não libera a retenção: ele ainda vai ser refeito
+          // quando o dia fechar, e precisa da Leitura bruta para isso.
+          provisional: false,
           // 30 dias antes de `2026-09-04T12:00Z` é `2026-08-05T12:00Z`, cujo dia
           // monitorado é `2026-08-05`: só dias estritamente anteriores a ele
           // estão inteiros fora da janela.

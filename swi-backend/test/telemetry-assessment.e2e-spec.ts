@@ -179,16 +179,19 @@ describe('Telemetry assessment e2e', () => {
     expect(await prisma.telemetryAssessment.count({ where: { sessionId: session } })).toBe(0)
   })
 
-  it('sem dia fechado com batimento, a avaliação existe e diz que está indisponível', async () => {
+  it('sem dia fechado com batimento, a avaliação sai com repouso provisório e o painel marca a estimativa', async () => {
     const session = randomUUID()
     await post(headersB, liveBatch(session)).expect(200)
 
     const rows = await prisma.telemetryAssessment.findMany({ where: { sessionId: session } })
     expect(rows).toHaveLength(1)
-    expect(rows[0].effortPercent).toBeNull()
-    expect((rows[0].inputs as { unavailableReason: string }).unavailableReason).toBe('no_resting_baseline')
+    expect(rows[0].effortPercent).not.toBeNull()
+    expect(rows[0].wearPercent).not.toBeNull()
+    expect(rows[0].baselineSource).toBe('PROVISIONAL')
+    expect((rows[0].inputs as { baseline: { source: string } }).baseline.source).toBe('provisional')
 
     const current = await query.currentForWorker(workerB)
-    expect(current.metrics.effort.quality).toBe('UNAVAILABLE')
+    expect(current.metrics.effort.quality).toBe('CURRENT')
+    expect(current.baseline).toBe('PROVISIONAL')
   })
 })

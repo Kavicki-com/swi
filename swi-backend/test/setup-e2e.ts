@@ -45,6 +45,11 @@ process.env.JWT_SECRET = `e2e-descartavel-${randomBytes(24).toString('hex')}`
 // ressuscitar a varredura por baixo da suíte.
 process.env.TELEMETRY_CONDITION_SWEEP_CRON = '0 0 0 1 1 *'
 
+// O resumo parcial roda a cada 30 minutos e cruzaria a hora cheia no meio de
+// uma rodada, gravando Resumos provisórios sobre os fixtures de qualquer
+// suíte. O spec do ciclo de vida chama o serviço direto, com instante fixo.
+process.env.TELEMETRY_SUMMARY_REFRESH_CRON = '0 0 0 1 1 *'
+
 // Mesma classe de problema, mais fria: o alerta de clima dispara nos minutos
 // cheios e nas meias horas, então uma rodada que cruze uma dessas marcas pega
 // o tique, consulta o provedor de clima e tenta notificar. Não é a cada 30 s

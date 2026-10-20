@@ -92,6 +92,7 @@ export interface ProjectionAssessment {
   /** Minutos até o desgaste cruzar o limiar do alerta. Nulo: não se aproxima. */
   fatigueEtaMin: number | null
   formulaVersion: string
+  baselineSource: BaselineSource | null
 }
 
 /**
@@ -238,7 +239,15 @@ export interface WorkerTelemetry {
    * aberta não há alerta a mostrar, e a tela não deduz um dos números.
    */
   conditions: ActiveCondition[]
+  /**
+   * De onde veio o repouso que deu esforço e desgaste: medido na mediana dos
+   * dias fechados, ou provisório enquanto não há dia fechado. É o que o painel
+   * usa para marcar a estimativa. Nulo sem avaliação ou com ela indisponível.
+   */
+  baseline: BaselineSource | null
 }
+
+export type BaselineSource = 'MEASURED' | 'PROVISIONAL'
 
 /**
  * Cobertura vazia é fabricada a cada chamada, nunca uma constante devolvida por
@@ -599,6 +608,7 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     metrics,
     bloodPressureRecency: bloodPressureRecency(fromSnapshot.pressureSample?.measuredAt ?? null, now),
     formulaVersion: assessment?.formulaVersion ?? null,
+    baseline: assessment?.baselineSource ?? null,
     energyWindow: energy.coverage,
     movementWindow: movement.coverage,
     observedAt: now.toISOString(),

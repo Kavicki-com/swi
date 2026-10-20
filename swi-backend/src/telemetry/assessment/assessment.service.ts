@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { EXPERIMENTAL_ALERT_PROFILE } from '../alerts/alert-profile'
 import { monitoredDayOf } from '../domain/metric-state'
-import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from './assessment-baseline'
+import { ageInYearsAt, maxHeartRateForAge, restingBaseline } from './assessment-baseline'
 import { EXPERIMENTAL_PROFILE, type AssessmentProfile } from './assessment-profile'
 import { assessWindow, type Baseline, type FormulaState } from './fatigue-formula'
 
@@ -17,6 +17,13 @@ import { assessWindow, type Baseline, type FormulaState } from './fatigue-formul
 export const ASSESSMENT_THROTTLE_MS = 15_000
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Quantos Resumos provisórios podem existir ao mesmo tempo: o dia de hoje e os
+ * dois anteriores, que ainda não fecharam. É a folga que a consulta da linha
+ * de base dá além dos dias medidos.
+ */
+const OPEN_DAY_ROWS = 3
 
 export type AssessOutcome =
   | { outcome: 'assessed'; assessmentId: string }
@@ -165,25 +172,39 @@ export class TelemetryAssessmentService {
       }),
       tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
       tx.telemetryDailySummary.findMany({
+        // Os Resumos provisórios (dias ainda abertos) vêm junto, mais recentes
+        // primeiro: contam só quando não há dia fechado, e o teto deixa folga
+        // para eles sem cortar os 14 dias medidos.
         where: { workerId: session.workerId, origin: session.origin, day: { gte: sinceDay }, heartRateMin: { not: null } },
-        select: { heartRateMin: true },
+        select: { heartRateMin: true, provisional: true },
         orderBy: { day: 'desc' },
-        take: this.profile.restingDays,
+        take: this.profile.restingDays + OPEN_DAY_ROWS,
       }),
     ])
 
-    const minima = summaries.flatMap((s) => (s.heartRateMin === null ? [] : [s.heartRateMin]))
-    const restingBpm = restingFromDailyMinima(minima)
+    const minimaOf = (rows: typeof summaries) => rows.flatMap((s) => (s.heartRateMin === null ? [] : [s.heartRateMin]))
+    const closedMinima = minimaOf(summaries.filter((s) => !s.provisional)).slice(0, this.profile.restingDays)
+    const openMinima = minimaOf(summaries.filter((s) => s.provisional))
+    // Só quem ainda não tem dia fechado paga a agregação: esta é a rota mais
+    // quente do backend, e para quem já tem repouso medido ela não muda nada.
+    const sessionMinBpm =
+      closedMinima.length > 0
+        ? null
+        : (
+            await tx.telemetrySample.aggregate({
+              where: { sessionId, heartRateBpm: { not: null } },
+              _min: { heartRateBpm: true },
+            })
+          )._min.heartRateBpm
+    const resting = restingBaseline({ closedMinima, openMinima, sessionMinBpm })
     const birthDate = profile?.birthDate ?? null
     const ageYears = birthDate === null ? null : ageInYearsAt(birthDate, now)
     const maxBpm = ageYears === null ? null : maxHeartRateForAge(ageYears)
 
     const baseline: Baseline =
-      restingBpm === null
-        ? { kind: 'unavailable', reason: 'no_resting_baseline' }
-        : maxBpm === null
-          ? { kind: 'unavailable', reason: 'no_birth_date' }
-          : { kind: 'available', restingBpm, maxBpm }
+      maxBpm === null
+        ? { kind: 'unavailable', reason: 'no_birth_date' }
+        : { kind: 'available', restingBpm: resting.restingBpm, maxBpm }
 
     const result = assessWindow({
       profile: this.profile,
@@ -204,7 +225,14 @@ export class TelemetryAssessmentService {
         previousState,
         nextState: result.nextState,
       },
-      baseline: { restingBpm, days: minima.length, ageYears, maxBpm },
+      baseline: {
+        restingBpm: resting.restingBpm,
+        source: resting.source,
+        ...(resting.source === 'provisional' ? { provisionalFrom: resting.from } : {}),
+        days: resting.days,
+        ageYears,
+        maxBpm,
+      },
       wearAlertPercent: EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent,
       window: {
         skippedMs,
@@ -228,6 +256,10 @@ export class TelemetryAssessmentService {
         wearPercent: result.wearPercent,
         fatigueEtaMin: result.fatigueEtaMin,
         formulaVersion: this.profile.version,
+        // Coluna própria, e não só o JSON: o painel lê a origem do repouso em
+        // toda atualização, e abrir inputs para isso seria carregar o estado da
+        // cadeia inteira por funcionário.
+        baselineSource: baseline.kind === 'available' ? (resting.source === 'measured' ? 'MEASURED' : 'PROVISIONAL') : null,
         inputs: inputs as unknown as Prisma.InputJsonValue,
       },
       select: { id: true },

@@ -1,7 +1,9 @@
 import { Logger } from '@nestjs/common'
 import {
   DEFAULT_LIFECYCLE_CRON,
+  DEFAULT_SUMMARY_REFRESH_CRON,
   lifecycleCron,
+  summaryRefreshCron,
   TelemetryLifecycleJob,
 } from './telemetry-lifecycle.job'
 import type { TelemetryLifecycleService } from './telemetry-lifecycle.service'
@@ -40,6 +42,54 @@ describe('lifecycleCron: a expressão vem do ambiente', () => {
     // Sem isto, uma variável declarada e apagada no ambiente derrubaria o
     // agendamento na subida, em vez de voltar ao padrão.
     expect(lifecycleCron({ TELEMETRY_LIFECYCLE_CRON: '' })).toBe(DEFAULT_LIFECYCLE_CRON)
+  })
+})
+
+describe('summaryRefreshCron: a expressão vem do ambiente', () => {
+  it('usa a expressão da variável quando ela existe', () => {
+    expect(summaryRefreshCron({ TELEMETRY_SUMMARY_REFRESH_CRON: '0 */10 * * * *' })).toBe('0 */10 * * * *')
+  })
+
+  it('sem variável, ou com ela vazia, roda a cada 30 minutos', () => {
+    expect(summaryRefreshCron({})).toBe(DEFAULT_SUMMARY_REFRESH_CRON)
+    expect(summaryRefreshCron({ TELEMETRY_SUMMARY_REFRESH_CRON: '' })).toBe(DEFAULT_SUMMARY_REFRESH_CRON)
+  })
+})
+
+describe('TelemetryLifecycleJob.refresh: resume fechados e abertos, e nunca apaga', () => {
+  it('fecha os dias fechados, refaz os abertos como provisórios e deixa a retenção para a noite', async () => {
+    const debug = jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined)
+    const closed = jest.fn().mockResolvedValue({ summarized: 1, failed: 0 })
+    const open = jest.fn().mockResolvedValue({ summarized: 2, failed: 0 })
+    const purge = jest.fn().mockResolvedValue(EMPTY_PURGE)
+    const job = new TelemetryLifecycleJob({
+      summarizeClosedDays: closed,
+      summarizeOpenDays: open,
+      purgeRetainedData: purge,
+    } as unknown as TelemetryLifecycleService)
+
+    await job.refresh()
+    debug.mockRestore()
+
+    expect(closed).toHaveBeenCalledTimes(1)
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(closed.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0])
+    expect(purge).not.toHaveBeenCalled()
+    // O mesmo instante para as duas etapas, como na rodada noturna.
+    expect(closed.mock.calls[0][0]).toEqual(open.mock.calls[0][0])
+  })
+
+  it('falha vira aviso, nunca rejeição solta', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const job = new TelemetryLifecycleJob({
+      summarizeClosedDays: jest.fn().mockRejectedValue(new Error('banco fora')),
+      summarizeOpenDays: jest.fn(),
+      purgeRetainedData: jest.fn(),
+    } as unknown as TelemetryLifecycleService)
+
+    await expect(job.refresh()).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('banco fora'))
+    warn.mockRestore()
   })
 })
 
