@@ -7,8 +7,10 @@ import { PrismaService } from '../src/prisma/prisma.service'
 
 describe('Chat e2e', () => {
   let app: INestApplication, prisma: PrismaService, base: string
-  const eA = 'chat-a@ex.com', eB = 'chat-b@ex.com'
-  let idA = '', idB = '', convId = ''
+  const eA = 'chat-a@ex.com', eB = 'chat-b@ex.com', eC = 'chat-c@ex.com'
+  // CNPJ exclusivo desta suíte: o cleanup apaga a empresa por CNPJ.
+  const CNPJ_C = '99000000001301'
+  let idA = '', idB = '', idC = '', convId = ''
   const key = (a: string, b: string) => [a, b].sort().join('#')
   const cpath = (id: string) => `/chat/conversations/${encodeURIComponent(id)}` // ids têm '#'
   const login = async (email: string) => {
@@ -18,7 +20,7 @@ describe('Chat e2e', () => {
   // Cleanup robusto (sobrevive a re-runs): resolve users por email, apaga suas
   // mensagens + conversas (participants) e só então os users (FK Message.senderId).
   const cleanup = async () => {
-    const users = await prisma.user.findMany({ where: { email: { in: [eA, eB] } } })
+    const users = await prisma.user.findMany({ where: { email: { in: [eA, eB, eC] } } })
     const ids = users.map((u) => u.id)
     if (ids.length) {
       await prisma.notification.deleteMany({ where: { workerId: { in: ids } } }) // chat→notif cria linhas p/ o destinatário
@@ -28,7 +30,8 @@ describe('Chat e2e', () => {
       await prisma.message.deleteMany({ where: { senderId: { in: ids } } })
       if (convIds.length) await prisma.conversation.deleteMany({ where: { id: { in: convIds } } })
     }
-    await prisma.user.deleteMany({ where: { email: { in: [eA, eB] } } })
+    await prisma.user.deleteMany({ where: { email: { in: [eA, eB, eC] } } })
+    await prisma.company.deleteMany({ where: { cnpj: CNPJ_C } })
   }
 
   beforeAll(async () => {
@@ -40,9 +43,14 @@ describe('Chat e2e', () => {
     prisma = app.get(PrismaService)
     await cleanup()
     const bcrypt = await import('bcrypt')
-    const mk = async (email: string, name: string) =>
-      (await prisma.user.create({ data: { email, name, passwordHash: await bcrypt.hash('test1234', 10), role: 'WORKER', emailVerified: true, approvalStatus: 'APPROVED' } })).id
+    const mk = async (email: string, name: string, companyId: string | null = null) =>
+      (await prisma.user.create({ data: { email, name, companyId, passwordHash: await bcrypt.hash('test1234', 10), role: 'WORKER', emailVerified: true, approvalStatus: 'APPROVED' } })).id
+    // A e B sem empresa, o mesmo balde; C é de uma empresa.
     idA = await mk(eA, 'Chat A'); idB = await mk(eB, 'Chat B')
+    const company = await prisma.company.create({
+      data: { name: 'Chat C Ltda', cnpj: CNPJ_C, cep: '01000-000', street: 'Rua C', number: '1', neighborhood: 'Centro', uf: 'SP' },
+    })
+    idC = await mk(eC, 'Chat C', company.id)
     convId = key(idA, idB)
   })
   afterAll(async () => { await cleanup(); await app.close() })
@@ -133,5 +141,33 @@ describe('Chat e2e', () => {
     expect(msg.body).toBe('push!')
     expect(msg.conversationId).toBe(convId)
     sock.close()
+  })
+
+  it('diretório fica dentro da empresa, e quem não tem empresa só vê quem também não tem', async () => {
+    const tA = await login(eA), tC = await login(eC)
+    const { body: dirA } = await request(app.getHttpServer()).get('/chat/directory').set({ Authorization: `Bearer ${tA}` }).expect(200)
+    expect(dirA.map((c: any) => c.workerId)).toContain(idB)
+    expect(dirA.map((c: any) => c.workerId)).not.toContain(idC)
+    const { body: dirC } = await request(app.getHttpServer()).get('/chat/directory').set({ Authorization: `Bearer ${tC}` }).expect(200)
+    expect(dirC.map((c: any) => c.workerId)).not.toContain(idA)
+    expect(dirC.map((c: any) => c.workerId)).not.toContain(idB)
+  })
+
+  it('mensagem para outra empresa responde 404 sem criar conversa; conversa antiga entre empresas some da lista e não abre', async () => {
+    const tA = await login(eA)
+    const cross = key(idA, idC)
+    await request(app.getHttpServer()).post(`${cpath(cross)}/messages`).set({ Authorization: `Bearer ${tA}` }).send({ body: 'oi C' }).expect(404)
+    expect(await prisma.conversation.findUnique({ where: { id: cross } })).toBeNull()
+
+    // Conversa de quando A e C ainda podiam conversar: fica no banco, mas não
+    // aparece nem aceita leitura.
+    await prisma.conversation.create({
+      data: { id: cross, participants: [idA, idC], participantNames: ['Chat A', 'Chat C'], participantSubtitles: ['', ''], participantAvatarKeys: ['', ''], unreadByJson: {} },
+    })
+    const { body: convs } = await request(app.getHttpServer()).get('/chat/conversations').set({ Authorization: `Bearer ${tA}` }).expect(200)
+    expect(convs.map((c: any) => c.id)).not.toContain(cross)
+    await request(app.getHttpServer()).get(`${cpath(cross)}/messages`).set({ Authorization: `Bearer ${tA}` }).expect(404)
+    await request(app.getHttpServer()).post(`${cpath(cross)}/read`).set({ Authorization: `Bearer ${tA}` }).expect(404)
+    expect(await prisma.conversation.findUnique({ where: { id: cross } })).not.toBeNull()
   })
 })

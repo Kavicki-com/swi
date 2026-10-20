@@ -32,7 +32,7 @@ describe('ChatController', () => {
     await c.listMessages('u1', 'conv-1')
 
     expect(s.listConversations).toHaveBeenCalledWith('u1')
-    expect(s.listDirectory).toHaveBeenCalledWith('u1')
+    expect(s.listDirectory).toHaveBeenCalledWith('u1', 'empresa-1')
     expect(s.listMessages).toHaveBeenCalledWith('u1', 'conv-1')
   })
 

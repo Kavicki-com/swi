@@ -27,18 +27,18 @@ export class ChatService {
     private readonly mail?: MailService,
   ) {}
 
-  async listDirectory(userId: string) {
+  async listDirectory(userId: string, companyId: string | null) {
     const users = await this.prisma.user.findMany({
-      // Diretório ABERTO por decisão de produto: o worker conversa com quem
-      // quiser no app, sejam colegas, painel ou gente de outra empresa.
+      // Diretório recortado por empresa: cada um só vê, e só inicia conversa
+      // com, quem é da mesma empresa. Quem não tem empresa só vê quem também
+      // não tem: no Prisma, companyId nulo casa só com nulo, o mesmo balde que
+      // o cadastro de usuários usa.
       //
-      // Aqui não entra recorte por empresa nem por papel. O recorte por papel
-      // excluiria em silêncio qualquer papel novo.
-      //
-      // Sobrou o que ainda faz sentido: conta aprovada — PENDING e REJECTED
+      // Não há recorte por papel, que excluiria em silêncio qualquer papel
+      // novo. Sobra o que ainda faz sentido: conta aprovada (PENDING e REJECTED
       // sequer conseguem entrar, então oferecê-los como contato só renderia
-      // mensagem sem leitor — e eu fora da minha própria lista.
-      where: { approvalStatus: 'APPROVED', id: { not: userId } },
+      // mensagem sem leitor) e eu fora da minha própria lista.
+      where: { approvalStatus: 'APPROVED', id: { not: userId }, companyId },
       include: { profile: true },
       orderBy: { name: 'asc' },
       take: LIST_CAP,
@@ -52,7 +52,11 @@ export class ChatService {
       orderBy: { lastMessageAt: { sort: 'desc', nulls: 'last' } },
       take: LIST_CAP,
     })
-    return Promise.all(rows.map((c) => this.toConvDto(c)))
+    // Só aparece a conversa com quem é da minha empresa hoje. A conversa com
+    // quem era de outra empresa, ou com quem trocou de empresa depois, some da
+    // lista e fica intacta no banco.
+    const visible = await this.sameCompanyOnly(rows)
+    return Promise.all(visible.map((c) => this.toConvDto(c)))
   }
 
   async listMessages(userId: string, convId: string) {
@@ -76,6 +80,11 @@ export class ChatService {
     }
     const recipientId = participants.find((p) => p !== userId)
     if (!recipientId) throw new NotFoundException('Conversa não encontrada') // self-conv a#a: sem destinatário
+
+    // Conversa só entre gente da mesma empresa, nova ou existente: a antiga
+    // com quem hoje é de outra empresa deixa de aceitar mensagem, e o 404 é o
+    // mesmo do id malformado, para não contar quem existe.
+    await this.assertSameCompany(participants)
 
     let conv = await this.prisma.conversation.findUnique({ where: { id: convId } })
     if (!conv) {
@@ -273,7 +282,39 @@ export class ChatService {
   private async assertMember(userId: string, convId: string): Promise<Conversation> {
     const conv = await this.prisma.conversation.findUnique({ where: { id: convId } })
     if (!conv || !conv.participants.includes(userId)) throw new NotFoundException('Conversa não encontrada')
+    // Mesma regra da listagem: a conversa com quem hoje é de outra empresa
+    // não existe para quem pergunta, e o 404 não conta que ela existe.
+    await this.assertSameCompany(conv.participants)
     return conv
+  }
+
+  /** Empresa de cada usuário pedido; quem não existe fica fora do mapa. */
+  private async companiesOf(ids: readonly string[]): Promise<Map<string, string | null>> {
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: [...new Set(ids)] } },
+      select: { id: true, companyId: true },
+    })
+    return new Map(users.map((u) => [u.id, u.companyId]))
+  }
+
+  /** Todos existem e são da mesma empresa; sem empresa casa só com sem empresa. */
+  private static sameCompany(ids: readonly string[], companies: Map<string, string | null>): boolean {
+    const [first, ...rest] = ids
+    if (first === undefined || !companies.has(first)) return false
+    return rest.every((id) => companies.has(id) && companies.get(id) === companies.get(first))
+  }
+
+  /** 404 se algum participante não existe ou se eles não são da mesma empresa. */
+  private async assertSameCompany(participants: readonly string[]) {
+    const companies = await this.companiesOf(participants)
+    if (!ChatService.sameCompany(participants, companies)) throw new NotFoundException('Conversa não encontrada')
+  }
+
+  /** As conversas cujos participantes são, hoje, todos da mesma empresa. */
+  private async sameCompanyOnly(rows: Conversation[]): Promise<Conversation[]> {
+    if (rows.length === 0) return rows
+    const companies = await this.companiesOf(rows.flatMap((c) => c.participants))
+    return rows.filter((c) => ChatService.sameCompany(c.participants, companies))
   }
 
   private async createConversation(convId: string, parts: string[]): Promise<Conversation> {
