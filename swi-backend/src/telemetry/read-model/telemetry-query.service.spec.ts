@@ -323,6 +323,81 @@ describe('TelemetryQueryService.currentForWorker', () => {
     expect(result.metrics.wear.value).toBe(40)
   })
 
+  it('repouso e máxima saem das entradas da avaliação mais recente', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
+    prisma.telemetryAssessment.findMany.mockResolvedValue([
+      {
+        computedAt: secondsAgo(10), effortPercent: 55, wearPercent: 40, fatigueEtaMin: null,
+        formulaVersion: 'swi-fatigue-experimental-1', baselineSource: 'PROVISIONAL',
+        inputs: { baseline: { restingBpm: 66, source: 'provisional', provisionalFrom: 'session', days: 0, ageYears: 30, maxBpm: 187 } },
+      },
+    ])
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(prisma.telemetryAssessment.findMany.mock.calls[0][0].select.inputs).toBe(true)
+    expect(result.heartRateReference).toEqual({
+      restingBpm: 66, restingSource: 'PROVISIONAL', provisionalFrom: 'SESSION', measuredDays: 0, maxBpm: 187,
+      computedAt: secondsAgo(10).toISOString(),
+    })
+  })
+
+  it('sem data de nascimento o repouso vem mesmo com a origem da coluna nula', async () => {
+    // Sem máxima a fórmula fica indisponível e a avaliação grava a coluna nula,
+    // mas o repouso foi calculado e está nas entradas. O perfil lê o repouso
+    // daqui, e não de `baseline`, que continua dizendo só o que a fórmula usou.
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
+    prisma.telemetryAssessment.findMany.mockResolvedValue([
+      {
+        computedAt: secondsAgo(10), effortPercent: null, wearPercent: null, fatigueEtaMin: null,
+        formulaVersion: 'swi-fatigue-experimental-1', baselineSource: null,
+        inputs: { baseline: { restingBpm: 61, source: 'measured', days: 4, ageYears: null, maxBpm: null } },
+      },
+    ])
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(result.baseline).toBeNull()
+    expect(result.heartRateReference?.restingSource).toBe('MEASURED')
+    expect(result.heartRateReference?.restingBpm).toBe(61)
+    expect(result.heartRateReference?.measuredDays).toBe(4)
+    expect(result.heartRateReference?.maxBpm).toBeNull()
+  })
+
+  it('entradas em formato inesperado não derrubam a leitura: referência nula, esforço e desgaste intactos', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
+    prisma.telemetryAssessment.findMany.mockResolvedValue([
+      {
+        computedAt: secondsAgo(10), effortPercent: 55, wearPercent: 40, fatigueEtaMin: null,
+        formulaVersion: 'swi-fatigue-experimental-1', baselineSource: 'MEASURED',
+        inputs: { baseline: 'x' },
+      },
+    ])
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(result.heartRateReference).toBeNull()
+    expect(result.baseline).toBe('MEASURED')
+    expect(result.metrics.effort.value).toBe(55)
+    expect(result.metrics.wear.value).toBe(40)
+  })
+
+  it('sem avaliação a leitura individual diz que não há referência', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(result.heartRateReference).toBeNull()
+  })
+
+  it('quem nunca reportou também responde referência nula', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(null)
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(result.heartRateReference).toBeNull()
+  })
+
   it('avaliação de segundos atrás não some na virada do dia monitorado', async () => {
     // 03:00:30Z é 00:00:30 em Brasília. Uma avaliação de 40 segundos atrás foi
     // calculada às 23:59:50, ou seja, no dia monitorado que acabou de terminar.
@@ -897,6 +972,30 @@ describe('TelemetryQueryService.adminWorkers', () => {
     const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
 
     expect(workers.map((w) => w.worker.name)).toEqual(['Bruno', 'Ana'])
+  })
+
+  it('a lista não lê as entradas da avaliação: a referência cardíaca fica ausente', async () => {
+    // O JSON de entradas carrega o estado da cadeia da fórmula, e a lista
+    // atualiza a cada aviso do socket para a empresa inteira. A referência é
+    // da leitura individual; aqui o campo não vem, em vez de vir nulo.
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana')])
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([snapshotRow({ workerId: 'worker-1' })])
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        workerId: 'worker-1', origin: 'REAL', computedAt: secondsAgo(10), effortPercent: 55, wearPercent: 40,
+        fatigueEtaMin: null, formulaVersion: 'swi-fatigue-experimental-1', baselineSource: 'MEASURED',
+      },
+    ])
+
+    const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
+
+    expect(workers[0].telemetry.metrics.effort.value).toBe(55)
+    expect('heartRateReference' in workers[0].telemetry).toBe(false)
+    const sql: string = prisma.$queryRaw.mock.calls[0][0].sql
+    expect(sql).toContain('"TelemetryAssessment"')
+    expect(sql).not.toContain('"inputs"')
   })
 
   it('a janela das taxas é uma consulta limitada por funcionário que reporta', async () => {

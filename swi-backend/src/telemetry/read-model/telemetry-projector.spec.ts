@@ -488,6 +488,16 @@ describe('projectWorker: esforço e desgaste vêm da avaliação, com versão', 
     expect(project({ assessment: null }).baseline).toBeNull()
   })
 
+  it('a referência cardíaca atravessa da avaliação; ausente quando a leitura não a consultou', () => {
+    const reference = { restingBpm: 58, restingSource: 'MEASURED' as const, provisionalFrom: null, measuredDays: 9, maxBpm: 180, computedAt: secondsAgo(10) }
+    expect(project({ assessment: assessment({ heartRateReference: reference }) }).heartRateReference).toEqual(reference)
+    expect(project({ assessment: assessment({ heartRateReference: null }) }).heartRateReference).toBeNull()
+    // Listas não leem as entradas: o campo não vem, em vez de vir nulo e
+    // afirmar que a pessoa não tem referência.
+    expect('heartRateReference' in project({ assessment: assessment() })).toBe(false)
+    expect('heartRateReference' in project({ snapshot: null })).toBe(false)
+  })
+
   it('minutos até a fadiga vêm da avaliação, derivados, em minutos', () => {
     expect(project({ assessment: assessment({ fatigueEtaMin: 37 }) }).metrics.fatigueEtaMin).toEqual({
       value: 37,

@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { monitoredDayRange } from '../domain/metric-state'
 import { closedDayCutoff, SUMMARIZER_SAMPLE_FIELDS } from '../lifecycle/telemetry-lifecycle.service'
 import { healthStatusOf, type HealthStatus } from './health-status'
+import { heartRateReferenceOf } from './heart-rate-reference'
 import { assembleSeries, seriesBuckets, type SeriesPeriod, type WorkerSeries } from './telemetry-series'
 import type {
   ConditionKind,
@@ -29,6 +30,7 @@ import {
   type ProjectionCondition,
   type ProjectionSample,
   type ProjectionSnapshot,
+  type CurrentWorkerTelemetry,
   type WorkerTelemetry,
 } from './telemetry-projector'
 import { can } from '../../auth/permissions'
@@ -75,6 +77,13 @@ const ASSESSMENT_FIELDS = {
   formulaVersion: true,
   baselineSource: true,
 } as const
+
+// A leitura individual também abre as entradas, de onde saem o repouso e a
+// máxima calculados na avaliação. É uma linha só, então carregar o JSON aqui é
+// barato. As listas usam SQL cru sem `inputs` de propósito: o JSON carrega o
+// estado da cadeia da fórmula, e multiplicá-lo pela empresa inteira a cada
+// atualização do painel seria pagar caro por um dado que a lista não mostra.
+const CURRENT_ASSESSMENT_FIELDS = { ...ASSESSMENT_FIELDS, inputs: true } as const
 
 const SAMPLE_FIELDS = {
   eventTime: true,
@@ -172,6 +181,8 @@ interface AssessmentRow {
   fatigueEtaMin: number | null
   formulaVersion: string
   baselineSource: string | null
+  /** Só na leitura individual; as listas não selecionam a coluna. */
+  inputs?: Prisma.JsonValue
 }
 
 const CONDITION_FIELDS = {
@@ -255,7 +266,20 @@ function toProjectionAssessment(row: AssessmentRow): ProjectionAssessment {
     // A coluna é texto livre no banco; só os dois valores conhecidos passam,
     // para a projeção nunca repassar lixo ao painel.
     baselineSource: row.baselineSource === 'MEASURED' || row.baselineSource === 'PROVISIONAL' ? row.baselineSource : null,
+    // Sem a coluna na linha, o campo nem nasce: a projeção o deixa ausente.
+    ...(row.inputs !== undefined
+      ? { heartRateReference: heartRateReferenceOf(row.inputs, row.computedAt.toISOString()) }
+      : {}),
   }
+}
+
+/**
+ * A leitura individual sempre responde a referência cardíaca, nula quando não
+ * há. Ausente só nas listas, que não a consultam: é essa diferença que deixa o
+ * painel separar "sem referência" de "não perguntado".
+ */
+function withHeartRateReference(telemetry: WorkerTelemetry): CurrentWorkerTelemetry {
+  return { ...telemetry, heartRateReference: telemetry.heartRateReference ?? null }
 }
 
 function toProjectionSample(row: SampleRow): ProjectionSample {
@@ -306,23 +330,25 @@ export class TelemetryQueryService {
    * erro: quem ainda não reportou não é quem não existe, e a tela precisa poder
    * dizer "sem dados" em vez de falhar.
    */
-  async currentForWorker(workerId: string, now = new Date()): Promise<WorkerTelemetry> {
+  async currentForWorker(workerId: string, now = new Date()): Promise<CurrentWorkerTelemetry> {
     const snapshot = await this.prisma.telemetrySnapshot.findUnique({
       where: { workerId },
       select: SNAPSHOT_FIELDS,
     })
 
     if (snapshot === null) {
-      return projectWorker(
-        {
-          workerId,
-          snapshot: null,
-          windowSamples: [],
-          dayTotals: { steps: null, activeEnergy: null, distance: null },
-          assessment: null,
-          conditions: [],
-        },
-        now,
+      return withHeartRateReference(
+        projectWorker(
+          {
+            workerId,
+            snapshot: null,
+            windowSamples: [],
+            dayTotals: { steps: null, activeEnergy: null, distance: null },
+            assessment: null,
+            conditions: [],
+          },
+          now,
+        ),
       )
     }
 
@@ -373,7 +399,7 @@ export class TelemetryQueryService {
       // se ela ainda descreve o agora é o domínio, na projeção.
       this.prisma.telemetryAssessment.findMany({
         where: scope,
-        select: ASSESSMENT_FIELDS,
+        select: CURRENT_ASSESSMENT_FIELDS,
         orderBy: { computedAt: 'desc' },
         take: 1,
       }),
@@ -386,25 +412,27 @@ export class TelemetryQueryService {
       }),
     ])
 
-    return projectWorker(
-      {
-        workerId,
-        snapshot: toProjectionSnapshot(snapshot),
-        windowSamples: windowSamples.map(toProjectionSample),
-        dayTotals: {
-          steps: toStepsSample(steps),
-          activeEnergy: toEnergyTotal(energy),
-          distance: toDistanceSample(distance),
+    return withHeartRateReference(
+      projectWorker(
+        {
+          workerId,
+          snapshot: toProjectionSnapshot(snapshot),
+          windowSamples: windowSamples.map(toProjectionSample),
+          dayTotals: {
+            steps: toStepsSample(steps),
+            activeEnergy: toEnergyTotal(energy),
+            distance: toDistanceSample(distance),
+          },
+          assessment: assessments.length === 0 ? null : toProjectionAssessment(assessments[0]),
+          conditions: conditions.map(toProjectionCondition),
         },
-        assessment: assessments.length === 0 ? null : toProjectionAssessment(assessments[0]),
-        conditions: conditions.map(toProjectionCondition),
-      },
-      now,
+        now,
+      ),
     )
   }
 
   /** Mesma leitura, com o escopo de empresa do administrador aplicado antes. */
-  async currentForAdmin(admin: JwtUser, workerId: string, now = new Date()): Promise<WorkerTelemetry> {
+  async currentForAdmin(admin: JwtUser, workerId: string, now = new Date()): Promise<CurrentWorkerTelemetry> {
     await this.requireSameCompany(admin, workerId)
     return this.currentForWorker(workerId, now)
   }

@@ -19,6 +19,7 @@ import {
   type Sample,
   type TelemetryOrigin,
 } from '../domain/telemetry.types'
+import type { BaselineSource, HeartRateReference } from './heart-rate-reference'
 
 // Projeção do read model do piloto: o único lugar que transforma amostra bruta
 // em número exibido. Puro de propósito, com "now" por parâmetro, como o resto
@@ -93,6 +94,12 @@ export interface ProjectionAssessment {
   fatigueEtaMin: number | null
   formulaVersion: string
   baselineSource: BaselineSource | null
+  /**
+   * Repouso e máxima calculados na avaliação; a fórmula só usa o repouso
+   * quando há máxima. Só a leitura individual consulta as entradas da
+   * avaliação; nas listas o campo fica ausente.
+   */
+  heartRateReference?: HeartRateReference | null
 }
 
 /**
@@ -245,9 +252,26 @@ export interface WorkerTelemetry {
    * usa para marcar a estimativa. Nulo sem avaliação ou com ela indisponível.
    */
   baseline: BaselineSource | null
+  /**
+   * Repouso calculado na última avaliação, em bpm, de onde veio, e a máxima
+   * pela idade. A fórmula só usa o repouso quando há máxima.
+   *
+   * `restingSource` não depende de `baseline`: sem data de nascimento a
+   * avaliação grava `baseline` nulo, porque a fórmula ficou indisponível, mas
+   * o repouso existe e vem aqui. O perfil lê repouso e origem deste campo.
+   *
+   * Ausente nas listas, que não leem as entradas; nulo quando a leitura
+   * individual não achou referência.
+   */
+  heartRateReference?: HeartRateReference | null
 }
 
-export type BaselineSource = 'MEASURED' | 'PROVISIONAL'
+/**
+ * A leitura individual: a mesma de `WorkerTelemetry`, com a referência
+ * cardíaca sempre presente, objeto ou nulo. O tipo é o que garante que só a
+ * lista pode omiti-la.
+ */
+export type CurrentWorkerTelemetry = WorkerTelemetry & { heartRateReference: HeartRateReference | null }
 
 /**
  * Cobertura vazia é fabricada a cada chamada, nunca uma constante devolvida por
@@ -609,6 +633,9 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     bloodPressureRecency: bloodPressureRecency(fromSnapshot.pressureSample?.measuredAt ?? null, now),
     formulaVersion: assessment?.formulaVersion ?? null,
     baseline: assessment?.baselineSource ?? null,
+    // Ausente continua ausente: nulo diria "procurei e não há", e as listas
+    // nem procuraram.
+    ...(assessment?.heartRateReference !== undefined ? { heartRateReference: assessment.heartRateReference } : {}),
     energyWindow: energy.coverage,
     movementWindow: movement.coverage,
     observedAt: now.toISOString(),
