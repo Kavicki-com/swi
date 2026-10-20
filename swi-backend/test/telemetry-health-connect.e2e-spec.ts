@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { TelemetryConditionService } from '../src/telemetry/alerts/condition.service'
 import { SparseAssessmentService } from '../src/telemetry/assessment/sparse-assessment.service'
 import { encodeCredential, hashCredential } from '../src/telemetry/devices/device-auth.service'
 import { monitoredDayOf, monitoredDayWindow } from '../src/telemetry/domain/metric-state'
@@ -22,6 +23,8 @@ describe('Telemetry Health Connect e2e', () => {
     a: `telemetry-hc-a-${randomUUID()}@ex.com`,
     b: `telemetry-hc-b-${randomUUID()}@ex.com`,
     c: `telemetry-hc-c-${randomUUID()}@ex.com`,
+    d: `telemetry-hc-d-${randomUUID()}@ex.com`,
+    e: `telemetry-hc-e-${randomUUID()}@ex.com`,
   }
   let workerA = ''
   let workerB = ''
@@ -72,6 +75,21 @@ describe('Telemetry Health Connect e2e', () => {
     }
   }
 
+  const worker = async (email: string) =>
+    (
+      await prisma.user.create({
+        data: {
+          email,
+          name: email,
+          passwordHash: 'nao-usado-neste-spec',
+          role: 'WORKER',
+          emailVerified: true,
+          approvalStatus: 'APPROVED',
+          profile: { create: { birthDate: new Date('1991-05-10T00:00:00.000Z') } },
+        },
+      })
+    ).id
+
   beforeAll(async () => {
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = mod.createNestApplication()
@@ -79,20 +97,6 @@ describe('Telemetry Health Connect e2e', () => {
     prisma = app.get(PrismaService)
     sparse = app.get(SparseAssessmentService)
 
-    const worker = async (email: string) =>
-      (
-        await prisma.user.create({
-          data: {
-            email,
-            name: email,
-            passwordHash: 'nao-usado-neste-spec',
-            role: 'WORKER',
-            emailVerified: true,
-            approvalStatus: 'APPROVED',
-            profile: { create: { birthDate: new Date('1991-05-10T00:00:00.000Z') } },
-          },
-        })
-      ).id
     const android = async (workerId: string) =>
       (
         await prisma.telemetryDevice.create({
@@ -279,6 +283,37 @@ describe('Telemetry Health Connect e2e', () => {
       expect(body.conflicts).toEqual([
         { eventId: battery.eventId, reason: 'invalid_measurement', detail: expect.any(String) },
       ])
+    })
+  })
+
+  describe('varredura de silêncio', () => {
+    // Snapshot montado direto no banco: o que importa aqui é só o tipo do
+    // aparelho, com o mesmo silêncio dos dois lados.
+    const silentFor = async (email: string, kind: 'ANDROID_PHONE' | 'IPHONE') => {
+      const workerId = await worker(email)
+      const device = await prisma.telemetryDevice.create({
+        data: { workerId, kind, credentialHash: hashCredential(randomUUID()) },
+      })
+      const lastEventTime = new Date(Date.now() - 3 * 60 * 60_000)
+      const session = await prisma.telemetrySession.create({
+        data: { id: randomUUID(), deviceId: device.id, workerId, origin: 'REAL', startedAt: lastEventTime },
+      })
+      await prisma.telemetrySnapshot.create({
+        data: { workerId, sessionId: session.id, origin: 'REAL', lastEventTime, deviceKind: kind },
+      })
+      return workerId
+    }
+    const signalLost = (workerId: string) =>
+      prisma.telemetryCondition.count({ where: { workerId, kind: 'DEVICE_SIGNAL_LOST' } })
+
+    it('não abre perda de sinal para a pulseira; o iPhone no mesmo silêncio abre', async () => {
+      const band = await silentFor(emails.d, 'ANDROID_PHONE')
+      const iphone = await silentFor(emails.e, 'IPHONE')
+
+      await app.get(TelemetryConditionService).sweepSilentSessions(new Date())
+
+      expect(await signalLost(band)).toBe(0)
+      expect(await signalLost(iphone)).toBe(1)
     })
   })
 })

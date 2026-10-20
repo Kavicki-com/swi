@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { parseTelemetryRetention } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
+import { SPARSE_FORMULA_VERSION } from '../assessment/sparse-profile'
 import {
   BRT_OFFSET_MS,
   EVENT_AGE,
@@ -360,7 +361,16 @@ export class TelemetryLifecycleService {
         select: SAMPLE_FIELDS,
       }),
       this.prisma.telemetryAssessment.findMany({
-        where: { workerId, origin, computedAt: { gte: start, lt: end } },
+        // A avaliação esparsa recalcula o dia inteiro a cada sincronização e é
+        // carimbada na hora do recálculo: contada aqui, cairia no dia errado e
+        // se repetiria a cada lote. Limitação aceita na v1: o Resumo de quem
+        // usa pulseira sai sem esforço e desgaste.
+        where: {
+          workerId,
+          origin,
+          computedAt: { gte: start, lt: end },
+          formulaVersion: { not: SPARSE_FORMULA_VERSION },
+        },
         select: ASSESSMENT_FIELDS,
       }),
     ])

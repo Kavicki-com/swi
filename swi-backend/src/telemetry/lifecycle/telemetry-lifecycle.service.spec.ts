@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common'
 import { RETENTION_DEFAULT_BATCH } from '../../config/runtime-env'
 import type { PrismaService } from '../../prisma/prisma.service'
+import { SPARSE_FORMULA_VERSION } from '../assessment/sparse-profile'
 import {
   closedDayCutoff,
   MAX_TRIPLES_PER_RUN,
@@ -266,6 +267,29 @@ describe('TelemetryLifecycleService.summarizeClosedDays: o que ela carrega e gra
           sessionCount: 1,
           summarizerVersion: SUMMARIZER_VERSION,
         }),
+      }),
+    )
+  })
+
+  it('avaliação esparsa da pulseira fica fora do Resumo', async () => {
+    // Ela recalcula o dia inteiro a cada sincronização e é carimbada na hora do
+    // recálculo: contada aqui, cairia no dia errado e se repetiria a cada lote.
+    const prisma = prismaDouble()
+    prisma.$queryRaw.mockResolvedValue([candidate()])
+
+    await service(prisma).summarizeClosedDays(NOW)
+
+    expect(prisma.telemetryAssessment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workerId: 'worker-1',
+          origin: 'REAL',
+          computedAt: {
+            gte: new Date('2026-09-01T03:00:00.000Z'),
+            lt: new Date('2026-09-02T03:00:00.000Z'),
+          },
+          formulaVersion: { not: SPARSE_FORMULA_VERSION },
+        },
       }),
     )
   })

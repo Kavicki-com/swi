@@ -499,6 +499,12 @@ export class TelemetryConditionService {
       where: {
         origin: 'REAL',
         sessionId: { not: null },
+        // Pulseira não fala ao vivo: horas sem lote é o normal dela, e perda de
+        // sinal ali seria alarme falso permanente. O painel mostra "sem
+        // sincronização há X" pelo carimbo do atual, sem condição. OR com nulo
+        // porque `not` em SQL também descarta a linha sem tipo, que é todo
+        // snapshot anterior a esta coluna.
+        OR: [{ deviceKind: null }, { deviceKind: { not: 'ANDROID_PHONE' } }],
         // O piso (MONITORED_SILENCE_FLOOR_MS) corta quem sumiu do piloto; ele
         // não é teto de turno, e o motivo está na declaração da constante.
         lastEventTime: {
