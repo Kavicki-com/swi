@@ -16,7 +16,7 @@ import { TelemetryIngestionService } from './telemetry-ingestion.service'
 // que o backend aceita como verdade. Persistência real é assunto do e2e; aqui a
 // pergunta é de autoridade, de ordem e do que volta no ACK.
 
-const DEVICE: DeviceIdentity = { deviceId: 'device-1', workerId: 'worker-1' }
+const DEVICE: DeviceIdentity = { deviceId: 'device-1', workerId: 'worker-1', kind: 'IPHONE' }
 const SESSION = randomUUID()
 
 const stored = (over: Partial<SaveEventResult> = {}): SaveEventResult => ({

@@ -26,10 +26,12 @@ describe('Telemetry enrollment e2e', () => {
     admin: `telemetry-enroll-admin-${randomUUID()}@ex.com`,
     a: `telemetry-enroll-a-${randomUUID()}@ex.com`,
     b: `telemetry-enroll-b-${randomUUID()}@ex.com`,
+    c: `telemetry-enroll-c-${randomUUID()}@ex.com`,
   }
   let adminId = ''
   let workerA = ''
   let workerB = ''
+  let workerC = ''
 
   // Assina com o mesmo segredo que a estratégia JWT confere; o papel vem do
   // banco a cada requisição, então o token só identifica a pessoa.
@@ -37,11 +39,12 @@ describe('Telemetry enrollment e2e', () => {
     Authorization: `Bearer ${new JwtService({ secret: requireJwtSecret() }).sign({ sub, role })}`,
   })
 
-  const convidar = async (workerId: string) => {
+  // Com `kind` nulo, o convite é o do painel novo, que não sabe o celular.
+  const convidar = async (workerId: string, kind: string | null = 'IPHONE') => {
     const { body } = await request(app.getHttpServer())
       .post('/telemetry/v1/devices/enrollments')
       .set(bearer(adminId, 'ADMIN'))
-      .send({ workerId, kind: 'IPHONE' })
+      .send(kind === null ? { workerId } : { workerId, kind })
       .expect(201)
     return body as { enrollmentId: string; code: string }
   }
@@ -90,6 +93,7 @@ describe('Telemetry enrollment e2e', () => {
     adminId = await user(emails.admin, 'ADMIN')
     workerA = await user(emails.a, 'WORKER')
     workerB = await user(emails.b, 'WORKER')
+    workerC = await user(emails.c, 'WORKER')
   })
 
   afterAll(async () => {
@@ -167,5 +171,49 @@ describe('Telemetry enrollment e2e', () => {
     expect(body.workerId).toBe(workerB)
     const usado = await concluir(workerB, { enrollmentId, code }).expect(400)
     expect(usado.body).toMatchObject({ code: 'ENROLLMENT_USED' })
+  })
+
+  // Health Connect: o painel convida sem tipo e o app declara o celular. Os
+  // casos rodam em ordem sobre o mesmo funcionário de propósito: o último prova
+  // que trocar de iPhone para Android não deixa as duas credenciais vivas.
+  describe('convite sem tipo, celular declarado pelo app', () => {
+    it('sem tipo no convite nem no app, recusa com ENROLLMENT_KIND_REQUIRED e o código segue valendo', async () => {
+      const { enrollmentId, code } = await convidar(workerC, null)
+      const semTipo = await prisma.telemetryEnrollment.findUniqueOrThrow({ where: { id: enrollmentId } })
+      expect(semTipo.kind).toBeNull()
+
+      const recusa = await concluir(workerC, { code }).expect(400)
+      expect(recusa.body).toMatchObject({ code: 'ENROLLMENT_KIND_REQUIRED' })
+      const aberto = await prisma.telemetryEnrollment.findUniqueOrThrow({ where: { id: enrollmentId } })
+      expect(aberto.consumedAt).toBeNull()
+
+      const { body } = await concluir(workerC, { code, kind: 'IPHONE', model: 'iPhone 15' }).expect(200)
+      const device = await prisma.telemetryDevice.findUniqueOrThrow({ where: { id: body.deviceId } })
+      expect(device).toMatchObject({ workerId: workerC, kind: 'IPHONE', revokedAt: null })
+    })
+
+    it('o tipo que não é celular é recusado pela validação, antes do serviço', async () => {
+      const { code } = await convidar(workerC, null)
+      await concluir(workerC, { code, kind: 'APPLE_WATCH' }).expect(400)
+    })
+
+    it('Android conclui convite sem tipo e revoga o iPhone ativo do funcionário', async () => {
+      const iphone = await prisma.telemetryDevice.findFirstOrThrow({
+        where: { workerId: workerC, kind: 'IPHONE', revokedAt: null },
+      })
+      const { code } = await convidar(workerC, null)
+
+      const { body } = await concluir(workerC, {
+        code,
+        kind: 'ANDROID_PHONE',
+        model: 'Health Connect · Zepp',
+      }).expect(200)
+
+      const android = await prisma.telemetryDevice.findUniqueOrThrow({ where: { id: body.deviceId } })
+      expect(android).toMatchObject({ workerId: workerC, kind: 'ANDROID_PHONE', revokedAt: null })
+      const antigo = await prisma.telemetryDevice.findUniqueOrThrow({ where: { id: iphone.id } })
+      expect(antigo.revokedAt).not.toBeNull()
+      expect(await prisma.telemetryDevice.count({ where: { workerId: workerC, revokedAt: null } })).toBe(1)
+    })
   })
 })

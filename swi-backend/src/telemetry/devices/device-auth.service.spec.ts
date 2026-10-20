@@ -174,7 +174,7 @@ describe('DeviceAuthService.completeEnrollment', () => {
     expect(data.consumedAt).toBeInstanceOf(Date)
   })
 
-  it('revoga o aparelho anterior do mesmo tipo ao concluir um novo pareamento', async () => {
+  it('revoga qualquer celular anterior ao concluir um novo pareamento', async () => {
     const prisma = prismaDouble()
     prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment())
     withTransaction(prisma)
@@ -184,10 +184,15 @@ describe('DeviceAuthService.completeEnrollment', () => {
       code: CODE,
     })
 
-    // Trocar de iPhone não pode deixar a credencial antiga viva: o funcionário
-    // tem um aparelho ativo por tipo, e o painel não mostra dois "ativos".
+    // Trocar de celular não pode deixar a credencial antiga viva, nem de iPhone
+    // para Android: o funcionário tem um celular ativo, e o painel não mostra
+    // dois "ativos".
     const { where, data } = prisma.telemetryDevice.updateMany.mock.calls[0][0]
-    expect(where).toEqual({ workerId: 'worker-1', kind: 'IPHONE', revokedAt: null })
+    expect(where).toEqual({
+      workerId: 'worker-1',
+      kind: { in: ['IPHONE', 'ANDROID_PHONE'] },
+      revokedAt: null,
+    })
     expect(data.revokedAt).toBeInstanceOf(Date)
     // A revogação vem antes da criação, senão o aparelho novo se auto-revoga.
     expect(prisma.telemetryDevice.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
@@ -526,6 +531,7 @@ describe('DeviceAuthService.authenticate', () => {
   const device = (over: Record<string, unknown> = {}) => ({
     id: 'device-1',
     workerId: 'worker-1',
+    kind: 'IPHONE',
     credentialHash: hashCredential(secret),
     revokedAt: null,
     worker: { active: true },
@@ -538,7 +544,19 @@ describe('DeviceAuthService.authenticate', () => {
 
     const identity = await service(prisma).authenticate(`Device device-1.${secret}`)
 
-    expect(identity).toEqual({ deviceId: 'device-1', workerId: 'worker-1' })
+    expect(identity).toEqual({ deviceId: 'device-1', workerId: 'worker-1', kind: 'IPHONE' })
+  })
+
+  // A ingestão decide pelo tipo se o evento promove o atual só ao vivo ou em
+  // qualquer idade, então o tipo sai daqui, do aparelho, e não do corpo.
+  it('devolve o tipo do aparelho junto da identidade', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryDevice.findUnique.mockResolvedValue(device({ kind: 'ANDROID_PHONE' }))
+
+    const identity = await service(prisma).authenticate(`Device device-1.${secret}`)
+
+    expect(identity.kind).toBe('ANDROID_PHONE')
+    expect(prisma.telemetryDevice.findUnique.mock.calls[0][0].select.kind).toBe(true)
   })
 
   it('marca o último contato do dispositivo', async () => {
@@ -688,6 +706,86 @@ describe('DeviceAuthService.revoke', () => {
       service(prisma).revoke({ ...ADMIN, companyId: null }, 'device-1'),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(prisma.telemetryDevice.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+// O painel não sabe qual celular o funcionário tem, então convida sem tipo, e
+// quem declara é o app ao concluir. O que estes casos protegem: convite antigo
+// com tipo continua mandando, e sem tipo nenhum o convite não é gasto à toa.
+describe('DeviceAuthService, tipo declarado pelo app', () => {
+  const withTransaction = (prisma: any) => {
+    prisma.$transaction.mockImplementation((fn: any) => fn(prisma))
+    prisma.telemetryDevice.create.mockImplementation(({ data }: any) => ({
+      id: 'device-1',
+      ...data,
+    }))
+  }
+
+  it('convite sem tipo é gravado com tipo nulo', async () => {
+    const prisma = prismaDouble()
+    prisma.user.findUnique.mockResolvedValue(worker())
+    prisma.telemetryEnrollment.create.mockImplementation(({ data }: any) => ({ id: 'e1', ...data }))
+
+    await service(prisma).createEnrollment(ADMIN, { workerId: 'worker-1' })
+
+    expect(prisma.telemetryEnrollment.create.mock.calls[0][0].data.kind).toBeNull()
+  })
+
+  it('convite sem tipo e app Android cria o aparelho ANDROID_PHONE', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment({ kind: null }))
+    withTransaction(prisma)
+
+    await service(prisma).completeEnrollment('worker-1', {
+      enrollmentId: 'enrollment-1',
+      code: CODE,
+      kind: 'ANDROID_PHONE',
+    })
+
+    expect(prisma.telemetryDevice.create.mock.calls[0][0].data.kind).toBe('ANDROID_PHONE')
+  })
+
+  it('convite com tipo manda sobre o que o app disser', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment({ kind: 'IPHONE' }))
+    withTransaction(prisma)
+
+    await service(prisma).completeEnrollment('worker-1', {
+      enrollmentId: 'enrollment-1',
+      code: CODE,
+      kind: 'ANDROID_PHONE',
+    })
+
+    expect(prisma.telemetryDevice.create.mock.calls[0][0].data.kind).toBe('IPHONE')
+  })
+
+  it('sem tipo no convite nem no app, recusa com ENROLLMENT_KIND_REQUIRED e não gasta o convite', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment({ kind: null }))
+    withTransaction(prisma)
+
+    const erro = await service(prisma)
+      .completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: CODE })
+      .catch((e: BadRequestException) => e)
+
+    expect(erro).toBeInstanceOf(BadRequestException)
+    expect((erro as BadRequestException).getResponse()).toMatchObject({ code: 'ENROLLMENT_KIND_REQUIRED' })
+    expect(prisma.telemetryEnrollment.update).not.toHaveBeenCalled()
+    expect(prisma.telemetryDevice.create).not.toHaveBeenCalled()
+  })
+
+  it('o medidor de pressão revoga só o medidor anterior, não o celular', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment({ kind: 'EXTERNAL_CUFF' }))
+    withTransaction(prisma)
+
+    await service(prisma).completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: CODE })
+
+    expect(prisma.telemetryDevice.updateMany.mock.calls[0][0].where).toEqual({
+      workerId: 'worker-1',
+      kind: 'EXTERNAL_CUFF',
+      revokedAt: null,
+    })
   })
 })
 

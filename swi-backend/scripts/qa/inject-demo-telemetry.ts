@@ -136,7 +136,7 @@ async function main(): Promise<void> {
       console.log(`base de repouso: ${rows.length} dias sob origem DEMO, mínimo ${rows[0].heartRateMin} bpm`)
     }
 
-    const identity = { deviceId: device.id, workerId: worker.id }
+    const identity = { deviceId: device.id, workerId: worker.id, kind: device.kind }
     const scenario = SCENARIOS[args.scenario]
     const sessionId = randomUUID()
     console.log(

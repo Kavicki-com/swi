@@ -6,7 +6,7 @@ import type { DeviceIdentity } from './device-auth.service'
 // O par do CurrentUser para as rotas de aparelho. O que se prova aqui é de onde
 // sai a identidade de quem mede: da request que o guard preencheu.
 
-const DEVICE: DeviceIdentity = { deviceId: 'device-1', workerId: 'worker-1' }
+const DEVICE: DeviceIdentity = { deviceId: 'device-1', workerId: 'worker-1', kind: 'IPHONE' }
 
 const context = (device?: DeviceIdentity): ExecutionContext => {
   const request = { headers: {}, device } as DeviceRequest
