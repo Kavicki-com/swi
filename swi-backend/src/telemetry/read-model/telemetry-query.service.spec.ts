@@ -381,8 +381,9 @@ describe('TelemetryQueryService.currentForWorker', () => {
 
     const result = await service(prisma).currentForWorker('worker-1', NOW)
 
+    // Pelo instante medido: a pulseira recalcula dias velhos depois dos novos.
     const call = prisma.telemetryAssessment.findMany.mock.calls[0][0]
-    expect(call.orderBy).toEqual({ computedAt: 'desc' })
+    expect(call.orderBy).toEqual([{ windowEnd: 'desc' }, { computedAt: 'desc' }])
     expect(call.take).toBe(1)
     expect(result.metrics.effort.value).toBe(55)
     expect(result.metrics.wear.value).toBe(40)
@@ -610,7 +611,7 @@ describe('TelemetryQueryService.adminSummary', () => {
 
     const query = prisma.$queryRaw.mock.calls[0][0]
     expect(query.sql).toMatch(/DISTINCT ON \("workerId"\)/)
-    expect(query.sql).toMatch(/ORDER BY "workerId", "computedAt" DESC/)
+    expect(query.sql).toMatch(/ORDER BY "workerId", "windowEnd" DESC, "computedAt" DESC/)
     expect(query.values).toEqual(expect.arrayContaining(['worker-1', 'worker-2']))
     expect(summary.wearRate.value).toBe(35)
     expect(summary.wearRate.coverage).toEqual({ evaluated: 1, total: 2 })
@@ -1080,6 +1081,10 @@ describe('TelemetryQueryService.adminWorkers', () => {
 
     expect(workers[0].telemetry.metrics.wear.measuredAt).toBe(secondsAgo(3_120).toISOString())
     expect(prisma.$queryRaw.mock.calls[0][0].sql).toContain('"windowEnd"')
+    // A escolhida é a do instante medido mais recente, não a calculada por último.
+    expect(prisma.$queryRaw.mock.calls[0][0].sql).toMatch(
+      /ORDER BY "workerId", "origin", "windowEnd" DESC, "computedAt" DESC/,
+    )
   })
 
   it('a janela das taxas é uma consulta limitada por funcionário que reporta', async () => {

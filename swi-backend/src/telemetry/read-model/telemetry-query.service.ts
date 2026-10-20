@@ -413,12 +413,14 @@ export class TelemetryQueryService {
       // Sem recorte por dia monitorado: a avaliação já tem prazo de atualidade
       // próprio, e cortar também pelo calendário fazia esforço e desgaste
       // sumirem nos primeiros minutos depois da meia-noite de Brasília, todo
-      // dia. A mais recente pelo índice (workerId, computedAt) basta; quem diz
-      // se ela ainda descreve o agora é o domínio, na projeção.
+      // dia. A do instante medido mais recente, pelo índice (workerId,
+      // windowEnd), basta: a pulseira recalcula um dia velho depois do de hoje,
+      // e a calculada por último seria a de ontem. Quem diz se ela ainda
+      // descreve o agora é o domínio, na projeção.
       this.prisma.telemetryAssessment.findMany({
         where: scope,
         select: CURRENT_ASSESSMENT_FIELDS,
-        orderBy: { computedAt: 'desc' },
+        orderBy: [{ windowEnd: 'desc' }, { computedAt: 'desc' }],
         take: 1,
       }),
       // Só as abertas e só da origem do snapshot. Poucas linhas por definição:
@@ -775,7 +777,7 @@ export class TelemetryQueryService {
         "workerId", "origin", "computedAt", "windowEnd", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion", "baselineSource"
       FROM "TelemetryAssessment"
       WHERE "workerId" IN (${Prisma.join(workerIds)})
-      ORDER BY "workerId", "origin", "computedAt" DESC
+      ORDER BY "workerId", "origin", "windowEnd" DESC, "computedAt" DESC
     `
     return this.prisma.$queryRaw(query)
   }
@@ -792,9 +794,11 @@ export class TelemetryQueryService {
    *
    * Sem recorte por dia monitorado: esforço e desgaste já têm prazo de
    * atualidade próprio, e cortar também pelo calendário zerava a cobertura do
-   * painel nos primeiros minutos depois da meia-noite de Brasília. A última
-   * linha de cada funcionário sai pelo índice (workerId, computedAt), então a
-   * busca continua barata sem o limite inferior.
+   * painel nos primeiros minutos depois da meia-noite de Brasília. A linha de
+   * cada funcionário é a do instante medido mais recente, não a calculada por
+   * último (a pulseira recalcula dias velhos depois dos novos), e sai pelo
+   * índice (workerId, windowEnd), então a busca continua barata sem o limite
+   * inferior.
    */
   private latestAssessmentPerWorker(
     workerIds: string[],
@@ -805,7 +809,7 @@ export class TelemetryQueryService {
       FROM "TelemetryAssessment"
       WHERE "workerId" IN (${Prisma.join(workerIds)})
         AND "origin" = CAST(${'REAL'} AS "TelemetryOrigin")
-      ORDER BY "workerId", "computedAt" DESC
+      ORDER BY "workerId", "windowEnd" DESC, "computedAt" DESC
     `
     return this.prisma.$queryRaw(query)
   }

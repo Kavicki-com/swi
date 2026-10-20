@@ -265,9 +265,10 @@ export class TelemetryIngestionService {
       }
     }
 
-    // Um recálculo por dia tocado, do mais antigo para o mais novo: a leitura
-    // atual pega a avaliação mais recente por computedAt, e ela tem de ser a de
-    // hoje. Falha aqui não derruba o ACK, pelo mesmo motivo das de cima.
+    // Um recálculo por dia tocado, do mais antigo para o mais novo. A leitura
+    // atual escolhe pelo instante medido (windowEnd), então a ordem aqui não
+    // decide qual dia aparece; ela só mantém o histórico de cálculo na ordem
+    // dos dias. Falha aqui não derruba o ACK, pelo mesmo motivo das de cima.
     for (const [origin, days] of sparseDays) {
       for (const dayMs of [...days].sort((a, b) => a - b)) {
         try {

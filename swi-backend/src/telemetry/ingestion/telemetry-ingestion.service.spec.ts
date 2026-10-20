@@ -745,9 +745,9 @@ describe('pulseira pelo Health Connect', () => {
     expect(now).toBeInstanceOf(Date)
   })
 
-  // A leitura atual pega a avaliação mais recente por computedAt, e ela tem
-  // de ser a do dia mais novo. Logo depois da virada, a meia-noite usada é a
-  // de ontem: 00:10 de hoje ainda estaria no futuro.
+  // Cada dia tocado é avaliado uma vez, na ordem dos dias; qual aparece no
+  // atual é decidido na leitura, pelo instante medido. Logo depois da virada,
+  // a meia-noite usada é a de ontem: 00:10 de hoje ainda estaria no futuro.
   it('lote que cruza a meia-noite avalia cada dia uma vez, do mais antigo para o mais novo', async () => {
     const { service, sparse } = build()
     const todayStart = monitoredDayRange(new Date()).start.getTime()

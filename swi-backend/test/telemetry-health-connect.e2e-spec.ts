@@ -5,12 +5,18 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { requireJwtSecret } from '../src/auth/jwt-secret'
+import type { JwtUser } from '../src/auth/current-user.decorator'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { TelemetryConditionService } from '../src/telemetry/alerts/condition.service'
 import { SparseAssessmentService } from '../src/telemetry/assessment/sparse-assessment.service'
 import { encodeCredential, hashCredential } from '../src/telemetry/devices/device-auth.service'
 import { monitoredDayOf, monitoredDayWindow } from '../src/telemetry/domain/metric-state'
 import { SUMMARIZER_VERSION } from '../src/telemetry/lifecycle/telemetry-summarizer'
+import { TelemetryQueryService } from '../src/telemetry/read-model/telemetry-query.service'
+
+// CNPJ exclusivo deste spec, só para a lista do painel. Reusar o do seed
+// apagaria a empresa demo e desvincularia os usuários dela.
+const CNPJ = '99000000000310'
 
 // E2E da pulseira lida pelo Health Connect. O que se promete aqui só existe com
 // Postgres: o dia inteiro do funcionário, de qualquer sessão, relido a cada
@@ -27,6 +33,8 @@ describe('Telemetry Health Connect e2e', () => {
     c: `telemetry-hc-c-${randomUUID()}@ex.com`,
     d: `telemetry-hc-d-${randomUUID()}@ex.com`,
     e: `telemetry-hc-e-${randomUUID()}@ex.com`,
+    f: `telemetry-hc-f-${randomUUID()}@ex.com`,
+    admin: `telemetry-hc-admin-${randomUUID()}@ex.com`,
   }
   let workerA = ''
   let workerB = ''
@@ -143,6 +151,7 @@ describe('Telemetry Health Connect e2e', () => {
     // Notificação também não tem cascade, e a revisão de pressão gera uma.
     await prisma.notification.deleteMany({ where: { workerId: { in: workers.map((w) => w.id) } } })
     await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
+    await prisma.company.deleteMany({ where: { cnpj: CNPJ } })
     await app.close()
   })
 
@@ -366,6 +375,72 @@ describe('Telemetry Health Connect e2e', () => {
       expect(body.conflicts).toEqual([
         { eventId: battery.eventId, reason: 'invalid_measurement', detail: expect.any(String) },
       ])
+    })
+  })
+
+  // A pulseira sincroniza dias velhos a qualquer hora: o recálculo de ontem
+  // pode sair depois do de hoje. O atual é a avaliação do instante medido mais
+  // recente, não a calculada por último.
+  describe('leitura atual pela avaliação mais recente no tempo', () => {
+    it('avaliação de ontem calculada depois da de hoje não aparece no atual, nem na lista do painel', async () => {
+      await prisma.company.deleteMany({ where: { cnpj: CNPJ } })
+      const endereco = { cep: '01000-000', street: 'Rua A', number: '1', neighborhood: 'Centro', uf: 'SP' }
+      const companyId = (await prisma.company.create({ data: { name: 'HC Co', cnpj: CNPJ, ...endereco } })).id
+      const workerF = await worker(emails.f)
+      await prisma.user.update({ where: { id: workerF }, data: { companyId } })
+      const admin: JwtUser = {
+        userId: (
+          await prisma.user.create({
+            data: {
+              email: emails.admin,
+              name: emails.admin,
+              passwordHash: 'nao-usado-neste-spec',
+              role: 'ADMIN',
+              emailVerified: true,
+              approvalStatus: 'APPROVED',
+              companyId,
+            },
+          })
+        ).id,
+        role: 'ADMIN',
+        companyId,
+      }
+      const secret = randomUUID().replace(/-/g, '')
+      const device = await prisma.telemetryDevice.create({
+        data: { workerId: workerF, kind: 'ANDROID_PHONE', credentialHash: hashCredential(secret) },
+      })
+      let sequence = 0
+      const post = (eventTimes: Date[]) =>
+        request(app.getHttpServer())
+          .post('/telemetry/v1/batches')
+          .set({ Authorization: `Device ${encodeCredential(device.id, secret)}` })
+          .send({
+            events: eventTimes.map((at) => ({
+              eventId: randomUUID(),
+              monitoringSessionId: randomUUID(),
+              sequence: ++sequence,
+              eventTime: at.toISOString(),
+              origin: 'REAL',
+              measurements: { heartRate: { value: 140, unit: 'bpm', source: 'HEALTH_CONNECT' } },
+            })),
+          })
+          .expect(200)
+
+      // Hoje primeiro, ontem depois: a de ontem fica com o computedAt maior.
+      const today = new Date(Date.now() - 60_000)
+      await post([new Date(today.getTime() - 30_000), today])
+      await post([t(0), t(30)])
+      const latestComputed = await prisma.telemetryAssessment.findFirstOrThrow({
+        where: { workerId: workerF },
+        orderBy: { computedAt: 'desc' },
+      })
+      expect(latestComputed.windowEnd.toISOString()).toBe(t(30).toISOString())
+
+      const own = await app.get(TelemetryQueryService).currentForWorker(workerF)
+      expect(own.metrics.wear.measuredAt).toBe(today.toISOString())
+      const { workers } = await app.get(TelemetryQueryService).adminWorkers(admin)
+      const listed = workers.find((w) => w.worker.id === workerF)
+      expect(listed?.telemetry.metrics.wear.measuredAt).toBe(today.toISOString())
     })
   })
 

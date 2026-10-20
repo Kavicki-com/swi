@@ -860,6 +860,9 @@ model TelemetryAssessment {
   createdAt DateTime @default(now())
 
   @@index([workerId, computedAt])
+  /// A leitura atual escolhe pelo instante medido: a pulseira recalcula dias
+  /// velhos depois dos novos.
+  @@index([workerId, windowEnd])
   @@index([sessionId, computedAt])
 }
 
