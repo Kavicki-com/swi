@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
@@ -7,8 +7,10 @@ import {
   Avatar,
   Button,
   Combobox,
+  COMPACT_SCALE,
   DonutChart,
   ExamInfoCard,
+  gridColumnsToCover,
   Icon,
   JourneyTheme,
   LineCaloriesChart,
@@ -161,6 +163,9 @@ export default function MyStats() {
     .map((a) => a.trim())
     .filter(Boolean);
   const theme = useTheme();
+  // A grade de pontos do chart compact precisa encostar nas bordas em qualquer
+  // largura de tela, como no desenho de 360; as colunas vêm da janela.
+  const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const heartCondition = toHeartCondition(status);
   // Donut-center icons usam gradient linear inline — também precisam namespace.
@@ -194,9 +199,9 @@ export default function MyStats() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-    {/* BG: gradient (my-stats-bg.png) + dot-grid (BackgroundDotsGrid layer
-        in JourneyTheme, showDotGrid default true). Same pattern as dashboard
-        so the dot-grid is consistent across both screens. */}
+    {/* BG: só o gradient. A grade de pontos desta tela é a do próprio
+        StatusChart compact (nó 342:9420), que transborda o chart; a grade
+        do JourneyTheme fica desligada pra não sobrepor duas. */}
     <JourneyTheme gradient={require('../../assets/login-bg.png')} showDotGrid={false} />
     <ScrollView
       style={{ flex: 1, backgroundColor: 'transparent' }}
@@ -228,6 +233,7 @@ export default function MyStats() {
           // Ellipse 5 e poço seguem visíveis — sao eles que dao profundidade
           // ao botao. (A v0.1.126 escondia sete camadas por leitura errada
           size="compact"
+          gridColumns={gridColumnsToCover(windowWidth, COMPACT_SCALE)}
           showActionButton={false}
           // O badge volta a ser posicionado pelo DS: fazer isso à mão exigia
           // converter HEART_STATUS_OFFSET pra percentuais do canvas, e no
