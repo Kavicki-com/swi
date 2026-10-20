@@ -286,6 +286,30 @@ describe('Telemetry Health Connect e2e', () => {
       expect(snapshot.lastEventTime.toISOString()).toBe(measuredUntil)
     })
 
+    // Cada evento da pulseira traz uma medição só, com horários espalhados: a
+    // oxigenação de antes do último batimento ainda é a oxigenação mais nova.
+    it('cada medição entra pelo próprio horário: oxigenação mais velha que o batimento do lote também vale', async () => {
+      const session = randomUUID()
+      const newest = ago(2 * HOUR - 10 * 60_000)
+      const oxygenAt = ago(3 * HOUR)
+      const events = [
+        event(newest, beat(150), session),
+        event(oxygenAt, { oxygenSaturation: { value: 96, unit: '%', source: 'HEALTH_CONNECT' } }, session),
+      ]
+
+      const { body } = await post({ events })
+
+      expect(body.acceptedEventIds).toHaveLength(2)
+      const snapshot = await prisma.telemetrySnapshot.findUniqueOrThrow({ where: { workerId: workerC } })
+      expect(snapshot.heartRateBpm).toBe(150)
+      expect(snapshot.heartRateAt?.toISOString()).toBe(newest)
+      expect(snapshot.oxygenSaturationPct).toBe(96)
+      expect(snapshot.oxygenSaturationAt?.toISOString()).toBe(oxygenAt)
+      // Último evento e sessão só andam para a frente.
+      expect(snapshot.lastEventTime.toISOString()).toBe(newest)
+      measuredUntil = newest
+    })
+
     it('pressão alta de horas atrás abre a revisão de pressão', async () => {
       const pressure = event(ago(5 * HOUR), {
         bloodPressure: { value: { systolic: 165, diastolic: 100 }, unit: 'mmHg', source: 'HEALTH_CONNECT' },
@@ -311,7 +335,7 @@ describe('Telemetry Health Connect e2e', () => {
 
       expect(body.sync.measuredUntil).toBe(measuredUntil)
       expect(Math.abs(Date.parse(body.sync.syncedAt) - Date.now())).toBeLessThan(60_000)
-      expect(body.metrics.heartRate).toMatchObject({ value: 190, quality: 'UNAVAILABLE', measuredAt: measuredUntil })
+      expect(body.metrics.heartRate).toMatchObject({ value: 150, quality: 'UNAVAILABLE', measuredAt: measuredUntil })
       // Datada pela última leitura do dia avaliado, nunca pela hora do recálculo.
       const latest = await prisma.telemetryAssessment.findFirstOrThrow({
         where: { workerId: workerC },

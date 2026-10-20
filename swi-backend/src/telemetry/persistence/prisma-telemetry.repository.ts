@@ -238,6 +238,69 @@ async function promote(
   return true
 }
 
+/** Cada métrica do snapshot com o horário que decide se ela é a mais nova. */
+const METRIC_STAMPS = [
+  { at: 'heartRateAt', fields: ['heartRateBpm'] },
+  { at: 'batteryAt', fields: ['batteryPercent'] },
+  { at: 'bloodPressureAt', fields: ['systolicMmHg', 'diastolicMmHg', 'bloodPressureSource'] },
+  { at: 'oxygenSaturationAt', fields: ['oxygenSaturationPct'] },
+  { at: 'bodyTemperatureAt', fields: ['bodyTemperatureC', 'bodyTemperatureSource'] },
+] as const satisfies readonly { at: keyof SnapshotPatch; fields: readonly (keyof SnapshotPatch)[] }[]
+
+/**
+ * Promoção da pulseira. Cada evento dela traz uma medição só, com horários
+ * espalhados pelo lote, e comparar o snapshot inteiro descartaria a
+ * oxigenação das 13:00 que chega depois do batimento das 14:10, para sempre.
+ *
+ * Então cada métrica decide sozinha, contra o próprio horário gravado, como na
+ * medição avulsa; sessão, último evento e horário dele só andam para a frente.
+ * Tipo do aparelho e carimbo de recebimento vão sempre. Origem diferente
+ * descarta tudo, pelo mesmo motivo de `promote`.
+ *
+ * As comparações vão no WHERE da própria escrita, como em `promoteSpotReading`.
+ */
+async function promoteByMetric(
+  tx: Prisma.TransactionClient,
+  workerId: string,
+  patch: SnapshotPatch,
+): Promise<boolean> {
+  const current = await tx.telemetrySnapshot.findUnique({ where: { workerId }, select: { origin: true } })
+  if (current === null || current.origin !== patch.origin) {
+    await tx.telemetrySnapshot.upsert({
+      where: { workerId },
+      create: { workerId, ...patch },
+      update: { ...CLEARED_METRICS, ...patch },
+    })
+    return true
+  }
+
+  const { origin } = patch
+  const eventTime = patch.lastEventTime
+  await tx.telemetrySnapshot.update({
+    where: { workerId },
+    data: { deviceKind: patch.deviceKind, lastReceivedAt: patch.lastReceivedAt },
+  })
+  // Snapshot sem sessão foi aberto por medição avulsa: o primeiro evento da
+  // pulseira assume a linha, como o primeiro do relógio.
+  const head = await tx.telemetrySnapshot.updateMany({
+    where: { workerId, origin, OR: [{ sessionId: null }, { lastEventTime: { lte: eventTime } }] },
+    data: { sessionId: patch.sessionId, lastEventId: patch.lastEventId, lastEventTime: eventTime },
+  })
+  let promoted = head.count > 0
+
+  for (const { at, fields } of METRIC_STAMPS) {
+    if (patch[at] === undefined) continue
+    const data: Prisma.TelemetrySnapshotUncheckedUpdateManyInput = { [at]: eventTime }
+    for (const field of fields) Object.assign(data, { [field]: patch[field] })
+    const { count } = await tx.telemetrySnapshot.updateMany({
+      where: { workerId, origin, OR: [{ [at]: null }, { [at]: { lt: eventTime } }] },
+      data,
+    })
+    if (count > 0) promoted = true
+  }
+  return promoted
+}
+
 /**
  * Promoção da medição avulsa: pressão e temperatura lidas do app Saúde, que
  * chegam pelo iPhone com o horário em que foram medidas.
@@ -369,12 +432,11 @@ export class PrismaTelemetryRepository implements TelemetryRepository {
     // atual: um evento de duas horas atrás não é "o que está acontecendo agora".
     const live = !isBacklog(event.eventTime, now)
     // A pulseira só manda em lote: o mais recente dela é o atual, em qualquer
-    // idade até o histórico. O relógio continua só ao vivo. A comparação por
-    // lastEventTime dentro de promote já impede o evento mais velho do lote de
-    // passar por cima do mais novo.
+    // idade até o histórico, decidido métrica por métrica em promoteByMetric.
+    // O relógio continua só ao vivo, com o snapshot inteiro comparado em promote.
     const deviceKind = options?.deviceKind ?? null
-    const promotable =
-      snapshotPolicyFor(deviceKind) === 'LATEST' ? classifyEventAge(event.eventTime, now) !== 'HISTORICAL' : live
+    const latestWins = snapshotPolicyFor(deviceKind) === 'LATEST'
+    const promotable = latestWins ? classifyEventAge(event.eventTime, now) !== 'HISTORICAL' : live
     // Medição avulsa do app Saúde tem promoção própria, em qualquer idade, e
     // nunca passa pela do relógio, nem quando acabou de ser medida.
     const spot = isSpotReadingEvent(event.measurements)
@@ -413,7 +475,8 @@ export class PrismaTelemetryRepository implements TelemetryRepository {
             eventTime,
           )
         } else if (promotable) {
-          snapshotPromoted = await promote(
+          const promoteSnapshot = latestWins ? promoteByMetric : promote
+          snapshotPromoted = await promoteSnapshot(
             tx,
             session.workerId,
             buildSnapshotPatch(event, measured, eventTime, deviceKind),
