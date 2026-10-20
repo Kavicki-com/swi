@@ -1,7 +1,7 @@
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { Dimensions } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { SwiThemeProvider } from '@kavicki/swi-design-system';
+import { gridColumnsToCover, SwiThemeProvider } from '@kavicki/swi-design-system';
 import Dashboard from '../../../app/(app)/dashboard';
 import { reporting } from '../../../services/telemetry/myTelemetryFixtures';
 import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
@@ -155,6 +155,14 @@ describe('dashboard: geometria do hero', () => {
 
     // (640 - 47 - 34 - 370) * HERO_RATIO fica abaixo do piso, então vale o piso.
     esperarHero(tree, HERO_MIN_WIDTH);
+  });
+
+  it('a grade de pontos do chart recebe colunas para encostar nas bordas da janela', async () => {
+    const tree = await montar(411, 899);
+
+    const grafico = tree.root.findAll((n) => n.props?.accessibilityLabel === 'Status de saúde')[0];
+    expect(grafico.props.gridColumns).toBe(gridColumnsToCover(411, 1));
+    expect(grafico.props.gridColumns).toBeGreaterThan(27);
   });
 
   it('com altura de sobra, o bloco de baixo medido não mexe no hero', async () => {

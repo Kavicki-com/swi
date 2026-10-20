@@ -8,8 +8,8 @@ import {
   Avatar,
   Button,
   HeartStatus,
+  gridColumnsToCover,
   Icon,
-  JourneyTheme,
   ProgressBar,
   StatusChart as DSStatusChart,
   Text,
@@ -257,8 +257,9 @@ export default function Dashboard() {
 
       {/* Background gradient PNG renderizado via expo-image (decoder ARGB_8888 no
           Android — RN Image decodifica em RGB_565 e perde a alpha sutil dos blobs
-          de glow, virando preto chapado). JourneyTheme sem `gradient` prop pra
-          manter só o dot-grid layer. */}
+          de glow, virando preto chapado). A grade de pontos é a do próprio
+          StatusChart, tintada pelo estado e larga o bastante pra encostar nas
+          bordas da janela; uma segunda grade de página ficaria desalinhada. */}
       <View
         pointerEvents="none"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
@@ -269,7 +270,6 @@ export default function Dashboard() {
           style={{ flex: 1 }}
         />
       </View>
-      <JourneyTheme />
 
       {/* Caminho 4122 agora é renderizado DENTRO do StatusChart DS (v0.1.86+)
           via prop extrapolate={true}. O outer layer aqui foi removido — o DS
@@ -330,6 +330,7 @@ export default function Dashboard() {
           renderHeartStatus={false}
           extrapolate
           discDiameter={550}
+          gridColumns={gridColumnsToCover(windowWidth, heroScale)}
           onPressHeartRate={handlePressHeartRate}
           onPressSettings={handlePressSettings}
           accessibilityLabel="Status de saúde"
