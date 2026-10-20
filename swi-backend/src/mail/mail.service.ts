@@ -46,6 +46,28 @@ export class MailService {
     })
   }
 
+  // Cadastro feito pelo painel: a conta já nasce ativa, então no lugar de
+  // código ou link de ativação a pessoa recebe as credenciais prontas. É o
+  // único momento em que a senha existe em texto; depois do hash ninguém a
+  // recupera, nem para reenviar. "Login" vai escrito como o e-mail de
+  // propósito: o painel também pede um nome de usuário, e ele não serve para
+  // entrar.
+  async sendPanelCredentials(to: string, info: PanelCredentialsInfo): Promise<void> {
+    const acesso = info.panelUrl
+      ? `Entre no painel SWI em ${info.panelUrl} com o login e a senha acima.`
+      : 'Entre no aplicativo SWI com o login e a senha acima.'
+    await this.transporter.sendMail({
+      from: this.from, to, subject: 'SWI: seu cadastro foi concluído',
+      text:
+        `Olá, ${info.name}.\n\n` +
+        `Seu cadastro no SWI foi concluído e já está ativo. Estas são as suas credenciais de acesso:\n\n` +
+        `Login (e-mail): ${info.email}\n` +
+        `Senha: ${info.password}\n\n` +
+        `${acesso}\n\n` +
+        `Recomendamos trocar a senha após o primeiro acesso, nas configurações.\n`,
+    })
+  }
+
   // Denúncia de mensagem do chat. Sem persistência no banco, este e-mail é o
   // único registro da denúncia, por isso carrega tudo que um moderador precisa
   // sem ir ao banco.
@@ -64,6 +86,16 @@ export class MailService {
         `Id da mensagem: ${report.messageId}\n`,
     })
   }
+}
+
+export interface PanelCredentialsInfo {
+  name: string
+  /** O login da pessoa. Vai explícito no e-mail como "Login (e-mail)". */
+  email: string
+  /** Senha em texto, definida pelo admin no painel. Só existe aqui, antes do hash. */
+  password: string
+  /** URL do painel para quem entra por ele (administrador e supervisor); ausente para o funcionário, que entra pelo app. */
+  panelUrl?: string
 }
 
 export interface MessageReportInfo {

@@ -11,6 +11,29 @@ describe('MailService', () => {
     expect(sendMail.mock.calls[0][0].text).toContain('123456')
   })
 
+  // Cadastro pelo painel: a conta nasce ativa e a pessoa recebe as credenciais
+  // prontas. O login vai escrito como o e-mail, porque o painel também pede um
+  // nome de usuário e ele não serve para entrar.
+  it('envia as credenciais do cadastro pelo painel com login (e-mail), senha e a porta de entrada', async () => {
+    const sendMail = jest.fn().mockResolvedValue({})
+    const svc = new MailService({ sendMail } as any)
+
+    await svc.sendPanelCredentials('ana@ex.com', { name: 'Ana', email: 'ana@ex.com', password: 'Senha@2026' })
+    const funcionaria = sendMail.mock.calls[0][0]
+    expect(funcionaria).toEqual(expect.objectContaining({ to: 'ana@ex.com', subject: 'SWI: seu cadastro foi concluído' }))
+    expect(funcionaria.text).toContain('Olá, Ana.')
+    expect(funcionaria.text).toContain('Login (e-mail): ana@ex.com')
+    expect(funcionaria.text).toContain('Senha: Senha@2026')
+    expect(funcionaria.text).toContain('aplicativo SWI')
+    expect(funcionaria.text).not.toContain('painel')
+    expect(funcionaria.text).toContain('trocar a senha após o primeiro acesso')
+
+    await svc.sendPanelCredentials('bia@ex.com', { name: 'Bia', email: 'bia@ex.com', password: 'Senha@2026', panelUrl: 'https://painel.teste' })
+    const supervisora = sendMail.mock.calls[1][0]
+    expect(supervisora.text).toContain('painel SWI em https://painel.teste')
+    expect(supervisora.text).not.toContain('aplicativo')
+  })
+
   // Denúncia de mensagem do chat. O e-mail É o registro, já que não há
   // persistência no banco, então precisa ser autossuficiente: quem denunciou,
   // quem escreveu, o texto, onde e quando, sem exigir que o moderador vá caçar
