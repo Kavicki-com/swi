@@ -2,6 +2,14 @@
 
 Registro das entregas do SWI. O versionamento segue a versão do produto (app mobile), que é a referência da entrega ao cliente.
 
+## 1.2.0
+
+Cadastro pelo painel com credenciais por e-mail. O APK da 1.1.0 continua valendo.
+
+### Backend (`swi-backend`)
+
+- Cadastro feito pelo painel (funcionário, supervisor ou administrador) envia à pessoa um e-mail de cadastro concluído com as credenciais de acesso: o login, que é o e-mail, e a senha definida pelo admin. A conta continua nascendo ativa, sem etapa de ativação. Se o e-mail não puder ser enviado, o cadastro é concluído mesmo assim e a resposta da API informa isso ao painel.
+
 ## 1.1.2
 
 Correção no painel. O app e o backend não mudam, e o APK da 1.1.0 continua valendo.

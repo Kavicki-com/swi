@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService } from '../media/media.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
+import { MailService } from '../mail/mail.service'
 import { describeError } from '../common/describe-error'
 import { hash } from '../auth/codes'
 import { Prisma, Role } from '@prisma/client'
@@ -32,6 +33,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly realtime: RealtimeGateway,
+    private readonly mail: MailService,
   ) {}
 
   findByEmail(email: string) { return this.prisma.user.findUnique({ where: { email } }) }
@@ -78,7 +80,10 @@ export class UsersService {
         },
         include: { profile: true },
       })
-      return this.toSummaryDto(user)
+      // O envio nunca lança (ver enviarCredenciais): o cadastro já está
+      // gravado, e o que o painel precisa saber volta na resposta.
+      const credentialsEmailSent = await this.enviarCredenciais(user, dto.password)
+      return { ...(await this.toSummaryDto(user)), credentialsEmailSent }
     } catch (e) {
       // Rede de segurança pra corrida: se dois creates concorrentes passarem o
       // pré-check, o segundo bate num unique (P2002) → traduz pra 409. O alvo
@@ -87,6 +92,27 @@ export class UsersService {
       // errado.
       this.traduzirUnique(e)
       throw e
+    }
+  }
+
+  // Credenciais por e-mail logo depois do cadastro pelo painel: a conta nasce
+  // ativa, sem etapa de ativação, e a pessoa precisa saber com o que entrar.
+  // Melhor esforço, de propósito: com o SMTP fora do ar, desfazer um cadastro
+  // já gravado deixaria o admin sem saber em que pé ficou; o resultado volta
+  // na resposta para o painel avisar. A senha fica fora do log.
+  private async enviarCredenciais(user: UserWithProfile, password: string): Promise<boolean> {
+    try {
+      await this.mail.sendPanelCredentials(user.email, {
+        name: user.name,
+        email: user.email,
+        password,
+        // Quem entra pelo painel recebe a URL dele; o funcionário entra pelo app.
+        ...(isPanelRole(user.role) ? { panelUrl: process.env.ADMIN_APP_URL ?? 'http://localhost:5173' } : {}),
+      })
+      return true
+    } catch (e) {
+      this.logger.warn(`E-mail de credenciais não enviado ao usuário ${user.id}: ${describeError(e)}`)
+      return false
     }
   }
 
