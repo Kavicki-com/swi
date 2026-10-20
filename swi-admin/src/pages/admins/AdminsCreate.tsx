@@ -25,6 +25,7 @@ import { ExamsSection } from '@/pages/user/components/ExamsSection'
 import { useExamAttachments } from './hooks/useExamAttachments'
 import { LevelField } from './components/LevelField'
 import {
+  avisoDeCadastro,
   dadosDeSaude,
   EMAIL_RE,
   formDoUsuario,
@@ -273,7 +274,7 @@ export function AdminsCreate({
         showToast('Erro', apiError.message)
         return
       }
-      showToast('Cadastro concluído', `${nome} foi cadastrado com sucesso`)
+      showToast('Cadastro concluído', avisoDeCadastro(nome, data?.credentialsEmailSent))
       // Só agora existe id pra anexar. Antes disto não havia a quem.
       if (data?.id) await exames.enviarPendentes(data.id)
       voltar()

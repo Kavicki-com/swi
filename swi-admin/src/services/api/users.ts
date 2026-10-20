@@ -216,12 +216,17 @@ export type CreateUserInput = {
   role?: PanelLevel
 }
 
+// Resposta do POST /users: o resumo do usuário mais o resultado do e-mail de
+// credenciais que o backend manda logo depois de gravar. Opcional porque um
+// backend anterior responde sem o campo, e aí o painel não afirma nada.
+export type CreatedUserDto = UserSummaryDto & { credentialsEmailSent?: boolean }
+
 async function createUser(
   role: 'WORKER' | PanelLevel,
   input: CreateUserInput,
-): Promise<ServiceResponse<UserSummaryDto>> {
+): Promise<ServiceResponse<CreatedUserDto>> {
   try {
-    const created = await apiFetch<UserSummaryDto>('/users', {
+    const created = await apiFetch<CreatedUserDto>('/users', {
       method: 'POST',
       body: JSON.stringify({ ...input, role }),
     })
