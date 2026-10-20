@@ -12,6 +12,7 @@ import { levelLabel } from '@/app/levels'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { fullMapPath } from '@/pages/maps/mapFocus'
 import { vitalsViewFrom } from '@/services/vitals/vitalsView'
+import { measurementsViewFrom } from '@/services/vitals/measurementsView'
 import { useLivePositions } from '@/hooks/useLivePositions'
 
 export function AdminDetails({ adminId }: { adminId?: string } = {}) {
@@ -70,6 +71,7 @@ export function AdminDetails({ adminId }: { adminId?: string } = {}) {
         // Administrador não pareia aparelho, então não há biometria nem série
         // de gasto calórico a mostrar.
         vitals: vitalsViewFrom(null, { noDevice: true }),
+        measurements: measurementsViewFrom(null, { noDevice: true }),
       }}
       position={position ? { lat: position.lat, lng: position.lng } : null}
       testID="admin-details"

@@ -5,6 +5,7 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { renderPage } from '@/test-utils/renderPage'
 import { vitalsViewFrom } from '@/services/vitals/vitalsView'
+import { measurementsViewFrom } from '@/services/vitals/measurementsView'
 import { WorkerDetailsLayout, type WorkerDetailsData } from './WorkerDetailsLayout'
 
 const open = vi.hoisted(() => ({ fn: vi.fn(async (_id: string | undefined, _name: string) => {}) }))
@@ -19,6 +20,7 @@ const BASE: WorkerDetailsData = {
   specialization: 'Setor Leste',
   avatarUri: 'https://fotos.test/fulano.png',
   vitals: vitalsViewFrom(null),
+  measurements: measurementsViewFrom(null),
 }
 
 const renderWith = (worker: WorkerDetailsData) =>

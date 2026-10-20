@@ -6,6 +6,7 @@ import { StrictMode, useEffect, useState } from 'react'
 import { act, screen } from '@testing-library/react'
 import { renderPage } from '@/test-utils/renderPage'
 import { vitalsViewFrom } from '@/services/vitals/vitalsView'
+import { measurementsViewFrom } from '@/services/vitals/measurementsView'
 import { WorkerDetailsLayout, type WorkerDetailsData } from './WorkerDetailsLayout'
 
 type FakeMap = { remove: ReturnType<typeof vi.fn>; setCenter: ReturnType<typeof vi.fn> }
@@ -48,6 +49,7 @@ const BASE: WorkerDetailsData = {
   specialization: 'Setor Leste',
   avatarUri: 'https://fotos.test/fulano.png',
   vitals: vitalsViewFrom(null),
+  measurements: measurementsViewFrom(null),
 }
 const AQUI = { lat: -23.55, lng: -46.63 }
 const ALI = { lat: -23.56, lng: -46.64 }

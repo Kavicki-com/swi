@@ -9,17 +9,16 @@ import type * as maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useOpenLiveCamera } from '@/hooks/useOpenLiveCamera'
-import { DataOriginBadge } from '@/components/DataOriginBadge'
 import { formatAge } from '@/lib/formatAge'
 import type { Gender } from '@/services/types/directory'
 import { PERIOD_FROM_OPTION } from '@/services/vitals/caloriesSeries'
 import { useWorkerSeries } from '@/hooks/useWorkerSeries'
-import { NO_DEVICE_LABEL, NO_VALUE, type WorkerVitalsView } from '@/services/vitals/vitalsView'
+import { NO_DEVICE_LABEL, type WorkerVitalsView } from '@/services/vitals/vitalsView'
+import type { WorkerMeasurementsView } from '@/services/vitals/measurementsView'
 import {
   Avatar,
   Button,
   Chip,
-  DonutChart,
   ExamInfoCard,
   Icon,
   Silhouette,
@@ -30,6 +29,10 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import { WorkerCaloriesSection } from './WorkerCaloriesSection'
+import { WorkerEffortDonuts } from './WorkerEffortDonuts'
+import { WorkerFatigueBar } from './WorkerFatigueBar'
+import { WorkerMeasurementsSection } from './WorkerMeasurementsSection'
+import { WorkerVitalsCard } from './WorkerVitalsCard'
 
 export type WorkerExamEntry = {
   id: string
@@ -55,6 +58,8 @@ export type WorkerDetailsData = {
    * Obrigatório de propósito: sem ele a tela voltaria a preencher com zero.
    */
   vitals: WorkerVitalsView
+  /** Medições do relógio já decididas (measurementsViewFrom), obrigatórias como os vitais. */
+  measurements: WorkerMeasurementsView
   allergies?: ReadonlyArray<string>
   examHistory?: ReadonlyArray<WorkerExamEntry>
   /**
@@ -335,15 +340,6 @@ export function WorkerDetailsLayout({
         ? 'admin_filled'
         : 'account_circle'
   const { vitals } = worker
-  // Desgaste e esforço já chegam na escala 0-100, não em fração 0-1. formatPct
-  // só formata: multiplicar por 100 aqui exibiria "8.900,0%". Sem leitura, a
-  // rosca mostra NO_VALUE e fica vazia em vez de afirmar 0%.
-  const formatPct = (n: number | null) =>
-    n === null
-      ? NO_VALUE
-      : `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n)}%`
-  const fatiguePct = formatPct(vitals.wearPct)
-  const effortPct = formatPct(vitals.effortPct)
   const allergies = worker.allergies ?? []
   const exams = worker.examHistory ?? []
   const [caloriesPeriod, setCaloriesPeriod] = useState<keyof typeof PERIOD_FROM_OPTION>('today')
@@ -564,91 +560,9 @@ export function WorkerDetailsLayout({
             gap: theme.gap.sm,
           }}
         >
-          {/* Combined vitals card. Linear gradient
-              from surface.primary (green) to surface.secondary (blue). Web-only
-              <div> wrapper because react-native-web View strips the
-              `background` shorthand needed for linear-gradient. */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: theme.gap.s,
-              background: `linear-gradient(to right, ${theme.surface.primary}, ${theme.surface.secondary})`,
-              borderRadius: theme.border.radius.m,
-              paddingLeft: 40,
-              paddingRight: theme.padding.m,
-              paddingTop: theme.padding.s,
-              paddingBottom: theme.padding.s,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Icon name="heart_filled" size={20} color={theme.content.light} />
-                <Text variant="body.s" color={theme.content.light} style={{ fontWeight: '700' }}>
-                  {`${vitals.heartRate ?? NO_VALUE} `}
-                  <Text variant="body.s" color={theme.content.light}>
-                    bpm
-                  </Text>
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Icon name="vitals_pulse" size={20} color={theme.content.light} />
-                <Text variant="body.s" color={theme.content.light} style={{ fontWeight: '700' }}>
-                  {vitals.pressure ?? NO_VALUE}
-                </Text>
-              </View>
-            </View>
-            {/* Estado da LEITURA, não da saúde: juízo de saúde só com as
-                condições do backend. */}
-            <Title variant="title.xs" color={theme.content.light}>
-              {vitals.status}
-            </Title>
-          </div>
+          <WorkerVitalsCard vitals={vitals} />
 
-          {/* Leitura de demonstração é declarada; leitura real do relógio
-              dispensa selo. */}
-          {vitals.sourceBadge ? (
-            <View style={{ alignItems: 'flex-end' }}>
-              <DataOriginBadge label={vitals.sourceBadge} testID="vitals-source-badge" />
-            </View>
-          ) : null}
-
-          {/* Fatigue total time. Pill-rounded
-              outer container (bg=background) with padding.xs inset and an
-              inset drop shadow framing a 6px gradient bar (error→warning→success).
-              Outer container is a <div> because react-native-web View does
-              not pass through `boxShadow: inset ...`. */}
-          <View style={{ gap: theme.gap.s }}>
-            <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' }}>
-              Tempo até atingir fadiga total:
-            </Text>
-            <div
-              style={{
-                borderRadius: 999,
-                backgroundColor: theme.background,
-                paddingLeft: theme.padding.xs,
-                paddingRight: theme.padding.xs,
-                paddingTop: theme.padding.xs,
-                paddingBottom: theme.padding.xs,
-                boxShadow: 'inset 0 4px 4px 0 rgba(0,0,0,0.16)',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  width: `${Math.min(100, ((vitals.fatigueEta.minutes ?? 0) / 240) * 100)}%`,
-                  height: 6,
-                  borderRadius: 999,
-                  background: `linear-gradient(90deg, ${theme.surface.error} 0%, ${theme.surface.warning} 45.673%, ${theme.surface.success} 100%)`,
-                }}
-              />
-            </div>
-            <Text variant="body.m" color={theme.content.dark}>
-              {vitals.fatigueEta.label}
-            </Text>
-          </View>
+          <WorkerFatigueBar fatigueEta={vitals.fatigueEta} />
 
           {/* Divider separates fatigue from stats. */}
           <View style={{ height: 1, backgroundColor: theme.surface.high, width: '100%' }} />
@@ -698,41 +612,12 @@ export function WorkerDetailsLayout({
             </View>
           </View>
 
-          {/* Donut charts side-by-side: both admin and employee use the flat
-              appearance (no bezel/well, thin arc). Gradients use surface tokens.
-              Each chart sizes intrinsically via size="small"; the row aligns
-              them to the LEFT of the column so they line up with the vitals,
-              fatigue and allergies stack above (column-edge alignment). */}
-          {/* Each donut sits at intrinsic size (size="small" → 156 wide).
-              The row is at the LEFT of the right column, so the first donut
-              card's left edge aligns with "Alergias"/"Tempo até atingir fadiga"
-              above. Title stays CENTERED above its own chart per DS default. */}
-          <View style={{ flexDirection: 'row', gap: theme.gap.m, alignItems: 'flex-start' }}>
-            <DonutChart
-              title="Taxa de fadiga"
-              value={fatiguePct}
-              // O donut mede UMA pessoa, então a legenda fala do estado dela e
-              // não de um KPI de equipe.
-              label="Fadiga atual"
-              progress={vitals.wearPct ?? 0}
-              size="small"
-              appearance="bevel"
-              icon="heartbeat"
-              progressGradient={[theme.surface.success, theme.surface.primary]}
-            />
-            <DonutChart
-              title="Esforço realizado"
-              value={effortPct}
-              label="Esforço feito"
-              progress={vitals.effortPct ?? 0}
-              size="small"
-              appearance="bevel"
-              icon="heartbeat"
-              progressGradient={[theme.surface.info, theme.surface.secondary]}
-            />
-          </View>
+          <WorkerEffortDonuts wearPct={vitals.wearPct} effortPct={vitals.effortPct} />
         </View>
       </View>
+
+      {/* Medições do relógio, na largura toda como o gráfico abaixo. */}
+      <WorkerMeasurementsSection view={worker.measurements} />
 
       {/* BOTTOM: gasto calórico (título + seletor de período + gráfico de
           linha). Extraído para WorkerCaloriesSection. */}
