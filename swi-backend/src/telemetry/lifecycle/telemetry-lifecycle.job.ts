@@ -25,6 +25,21 @@ export function lifecycleCron(env: NodeJS.ProcessEnv): string {
   return env.TELEMETRY_LIFECYCLE_CRON || DEFAULT_LIFECYCLE_CRON
 }
 
+/**
+ * A cada 30 minutos, de dia e de noite: fecha os dias que acabaram de fechar e
+ * refaz o Resumo provisório dos dias abertos. É o que faz o repouso da linha
+ * de base existir desde o primeiro dia de uso e virar medido no mesmo dia em
+ * que o primeiro dia fecha, em vez de esperar a madrugada seguinte. A limpeza
+ * continua só na rodada noturna. Na escala do piloto as duas varreduras são
+ * baratas, e a rodada fechada é idempotente pela exclusão de quem já tem
+ * Resumo.
+ */
+export const DEFAULT_SUMMARY_REFRESH_CRON = '0 */30 * * * *'
+
+export function summaryRefreshCron(env: NodeJS.ProcessEnv): string {
+  return env.TELEMETRY_SUMMARY_REFRESH_CRON || DEFAULT_SUMMARY_REFRESH_CRON
+}
+
 @Injectable()
 export class TelemetryLifecycleJob {
   private readonly logger = new Logger(TelemetryLifecycleJob.name)
@@ -64,6 +79,22 @@ export class TelemetryLifecycleJob {
       // e uma exceção solta viraria rejeição não tratada no processo. O que
       // ficou de fora entra na rodada de amanhã.
       this.logger.warn(`Ciclo de vida falhou: ${describeError(error)}`)
+    }
+  }
+
+  /** Só resume, nunca apaga: a retenção fica com a rodada noturna. */
+  @Cron(summaryRefreshCron(process.env))
+  async refresh(): Promise<void> {
+    try {
+      const now = new Date()
+      const closed = await this.lifecycle.summarizeClosedDays(now)
+      const open = await this.lifecycle.summarizeOpenDays(now)
+      this.logger.debug(
+        `Resumo parcial: ${closed.summarized} dias fechados e ${open.summarized} abertos resumidos, ` +
+          `${closed.failed + open.failed} falharam`,
+      )
+    } catch (error) {
+      this.logger.warn(`Resumo parcial falhou: ${describeError(error)}`)
     }
   }
 }

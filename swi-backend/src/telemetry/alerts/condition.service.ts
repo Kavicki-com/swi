@@ -308,11 +308,14 @@ export class TelemetryConditionService {
       }),
       tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
       tx.telemetryDailySummary.findMany({
+        // Só dias fechados: o limite de batimento baixo parte do repouso medido,
+        // e um Resumo provisório de dia aberto traria o mínimo de poucas horas.
         where: {
           workerId: session.workerId,
           origin: session.origin,
           day: { gte: sinceDay },
           heartRateMin: { not: null },
+          provisional: false,
         },
         select: { heartRateMin: true },
         orderBy: { day: 'desc' },

@@ -154,7 +154,7 @@ Cada evento pode trazer qualquer subconjunto das medições abaixo (`RAW_MEASURE
 
 Nenhum dos dois tem valor padrão. Sem eles o sistema grava a avaliação com percentuais nulos e o motivo, em vez de inventar um número.
 
-Consequência prática: um funcionário recém-pareado só passa a ter esforço e desgaste depois que o primeiro dia de uso fecha. Um dia monitorado (dia civil no horário de Brasília) fecha 48 horas depois da meia-noite que o encerra, e o Resumo do dia é gerado na rodada noturna seguinte (seção 6.3). Na prática, dois a três dias após o primeiro uso.
+Consequência prática: um funcionário recém-pareado já tem esforço e desgaste desde o primeiro uso, com um **repouso provisório** enquanto não existe dia fechado com batimento. O provisório é o menor batimento plausível já visto da pessoa (no Resumo provisório do dia aberto ou na própria sessão), limitado a um teto de 70 bpm e a um chão de 40 bpm, o mesmo do alerta de batimento baixo. Cada avaliação registra de onde veio o repouso (`baselineSource`, MEASURED ou PROVISIONAL), e o painel marca a estimativa. O repouso medido substitui o provisório assim que o primeiro dia de uso fecha: um dia monitorado (dia civil no horário de Brasília) fecha 48 horas depois da meia-noite que o encerra, e a rodada de resumo parcial, a cada 30 minutos, resume o dia aberto como provisório e fecha o dia que acabou de fechar (seção 6.3). Na prática, o repouso medido chega no terceiro dia de uso, sem deixar o painel vazio até lá.
 
 ### 2.3 Dado sintético: a origem `DEMO`
 
@@ -552,7 +552,7 @@ Um administrador ou supervisor sem empresa não lê telemetria de ninguém. Fora
 - **Versões mínimas.** O app do iPhone instala a partir do **iOS 15.1**, mas a telemetria do relógio exige **iOS 17** no iPhone e **watchOS 10** no relógio, porque depende do espelhamento da sessão de treino entre relógio e iPhone. Em iPhone com iOS 15 ou 16 o app funciona, mas sem telemetria do relógio e sem a leitura de pressão e temperatura do app Saúde, cuja autorização é pedida junto com a do relógio.
 - **Apenas Apple Watch.** As medições contínuas aceitam só a origem `APPLE_WATCH`. Outro dispositivo exige um produtor novo que envie o mesmo contrato de evento.
 - **Contrato de variação.** Passos, distância, energia e movimento devem chegar como variação desde o evento anterior. Um produtor que envie o acumulado passa pela validação e infla os totais sem erro visível, porque não há como distinguir pela amostra.
-- **Repouso observado e máxima estimada.** O repouso é o piso observado, não o clínico, e tende a subestimar o esforço; a máxima por idade tem desvio de cerca de 10 bpm. Funcionário novo fica sem esforço e desgaste por dois a três dias.
+- **Repouso observado e máxima estimada.** O repouso é o piso observado, não o clínico, e tende a subestimar o esforço; a máxima por idade tem desvio de cerca de 10 bpm. Funcionário novo usa um repouso provisório (teto de 70 bpm) até o primeiro dia de uso fechar, e nesse período o esforço e o desgaste são estimativa, marcada como tal na avaliação e no painel.
 - **Tempo até a fadiga raramente aparece.** Com o perfil atual, a estimativa só existe com intensidade sustentada acima da máxima prevista pela idade (seção 3.5).
 - **Limite alto de batimento sensível.** 90% da máxima por idade por 60 s tende a disparar em trabalho pesado normal (seção 5.2).
 - **Sessão sem encerramento.** As sessões de monitoramento não são encerradas pelo sistema; a perda de sinal é inferida pelo silêncio do relógio. Um funcionário calado há mais de 7 dias deixa de ser varrido.

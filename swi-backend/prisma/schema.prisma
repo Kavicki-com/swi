@@ -837,6 +837,10 @@ model TelemetryAssessment {
 
   /// Perfil versionado da fórmula. Experimental até a calibração em hardware.
   formulaVersion String
+  /// De onde veio o repouso da linha de base: MEASURED (mediana dos dias
+  /// fechados) ou PROVISIONAL (menor batimento já visto ou o padrão, enquanto
+  /// não há dia fechado). Nulo quando a avaliação saiu indisponível.
+  baselineSource String?
   /// Entradas do cálculo, para reproduzir o número exibido.
   inputs         Json
 
@@ -988,6 +992,10 @@ model TelemetryDailySummary {
   /// Rastro do cálculo, para que um recálculo seja auditável.
   summarizerVersion String
   computedAt        DateTime
+  /// Resumo de dia ainda aberto (ou fechado há menos de 48 h), refeito a cada
+  /// rodada até o dia fechar. Não vale como linha de base medida nem libera a
+  /// retenção; o Resumo definitivo o sobrescreve pela mesma chave.
+  provisional       Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

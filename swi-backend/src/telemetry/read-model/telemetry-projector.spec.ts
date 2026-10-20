@@ -475,7 +475,17 @@ describe('projectWorker: esforço e desgaste vêm da avaliação, com versão', 
     wearPercent: 31,
     fatigueEtaMin: null,
     formulaVersion: 'swi-fatigue-experimental',
+    baselineSource: 'MEASURED',
     ...over,
+  })
+
+  it('a origem do repouso atravessa para a leitura, e some sem avaliação', () => {
+    // É o que o painel usa para marcar "estimativa provisória" enquanto a
+    // pessoa não tem dia fechado; sem avaliação nenhuma não há o que marcar.
+    expect(project({ assessment: assessment({ baselineSource: 'PROVISIONAL' }) }).baseline).toBe('PROVISIONAL')
+    expect(project({ assessment: assessment() }).baseline).toBe('MEASURED')
+    expect(project({ assessment: assessment({ baselineSource: null }) }).baseline).toBeNull()
+    expect(project({ assessment: null }).baseline).toBeNull()
   })
 
   it('minutos até a fadiga vêm da avaliação, derivados, em minutos', () => {
@@ -663,6 +673,7 @@ const worker = (id: string, over: WorkerOverrides = {}) =>
               wearPercent: over.wearPercent,
               fatigueEtaMin: null,
               formulaVersion: 'swi-fatigue-experimental',
+              baselineSource: 'MEASURED',
             },
       activeConditions: (over.conditions ?? []) as ConditionKind[],
     },

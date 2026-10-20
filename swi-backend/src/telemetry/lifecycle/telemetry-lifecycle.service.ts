@@ -117,13 +117,27 @@ export class TelemetryLifecycleService {
    * problemático.
    */
   async summarizeClosedDays(now: Date): Promise<SummarizeRunResult> {
-    const candidates = await this.findCandidates(closedDayCutoff(now))
+    return this.summarizeAll(await this.findCandidates(closedDayCutoff(now)), now, false)
+  }
 
+  /**
+   * Resume como PROVISÓRIOS os dias ainda abertos: de hoje até o corte do dia
+   * fechado. É o que faz o repouso da linha de base existir desde o primeiro
+   * dia de uso, em vez de dois a três dias depois. Diferente da rodada de dias
+   * fechados, aqui não há exclusão: a Leitura de um dia aberto ainda cresce,
+   * então o dia é refeito a cada rodada e a linha provisória é sobrescrita
+   * pela mesma chave até o Resumo definitivo tomar o lugar dela.
+   */
+  async summarizeOpenDays(now: Date): Promise<SummarizeRunResult> {
+    return this.summarizeAll(await this.findOpenCandidates(closedDayCutoff(now)), now, true)
+  }
+
+  private async summarizeAll(candidates: SummaryCandidate[], now: Date, provisional: boolean): Promise<SummarizeRunResult> {
     let summarized = 0
     let failed = 0
     for (const candidate of candidates) {
       try {
-        if (await this.summarizeOne(candidate, now)) summarized++
+        if (await this.summarizeOne(candidate, now, provisional)) summarized++
       } catch (error) {
         failed++
         // Sem valor de saúde na mensagem: log é lugar onde dado sensível vaza
@@ -176,8 +190,33 @@ export class TelemetryLifecycleService {
           AND r."origin" = c."origin"
           AND r."day" = c."day"
           AND r."summarizerVersion" = ${SUMMARIZER_VERSION}
+          AND r."provisional" = false
       )
       ORDER BY c."day" ASC
+      LIMIT ${MAX_TRIPLES_PER_RUN}
+    `)
+  }
+
+  /**
+   * As triplas com leitura ou avaliação a partir do corte, ou seja, em dia
+   * ainda aberto. Sem NOT EXISTS de propósito: o dia aberto é refeito toda
+   * rodada. O teto é o mesmo da rodada fechada, e alcança folgado: são no
+   * máximo três dias por funcionário e origem.
+   */
+  private async findOpenCandidates(cutoff: Date): Promise<SummaryCandidate[]> {
+    return this.prisma.$queryRaw<SummaryCandidate[]>(Prisma.sql`
+      SELECT "workerId", "origin",
+             ("eventTime" + CAST(${DAY_OFFSET_INTERVAL} AS interval))::date AS day
+      FROM "TelemetrySample"
+      WHERE "eventTime" >= ${cutoff}
+      GROUP BY 1, 2, 3
+      UNION
+      SELECT "workerId", "origin",
+             ("computedAt" + CAST(${DAY_OFFSET_INTERVAL} AS interval))::date AS day
+      FROM "TelemetryAssessment"
+      WHERE "computedAt" >= ${cutoff}
+      GROUP BY 1, 2, 3
+      ORDER BY day ASC
       LIMIT ${MAX_TRIPLES_PER_RUN}
     `)
   }
@@ -210,8 +249,11 @@ export class TelemetryLifecycleService {
     // e meio fora, e a Leitura da manhã sumiria antes da Leitura da noite.
     const cutoffDay = monitoredDayOf(new Date(now.getTime() - windowMs))
 
+    // `provisional: false` é parte do gate: um Resumo provisório ainda será
+    // refeito quando o dia fechar, e apagar a Leitura dele antes disso deixaria
+    // o Resumo definitivo sem de onde nascer.
     const summaries = await this.prisma.telemetryDailySummary.findMany({
-      where: { summarizerVersion: SUMMARIZER_VERSION, day: { lt: cutoffDay } },
+      where: { summarizerVersion: SUMMARIZER_VERSION, provisional: false, day: { lt: cutoffDay } },
       select: { workerId: true, day: true, origin: true },
       orderBy: { day: 'asc' },
       take: MAX_TRIPLES_PER_RUN,
@@ -306,7 +348,7 @@ export class TelemetryLifecycleService {
   }
 
   /** Devolve false quando o dia não tinha o que resumir. */
-  private async summarizeOne(candidate: SummaryCandidate, now: Date): Promise<boolean> {
+  private async summarizeOne(candidate: SummaryCandidate, now: Date, provisional: boolean): Promise<boolean> {
     const { workerId, day, origin } = candidate
     // A janela vem do domínio: o job não recalcula fronteira de dia por conta
     // própria, senão o Resumo discordaria do painel sobre a mesma leitura.
@@ -343,10 +385,15 @@ export class TelemetryLifecycleService {
     // da tabela têm os mesmos nomes de propósito, e é o tipo de entrada do
     // Prisma que faz o contrato valer nos dois sentidos, coluna esquecida no
     // resumidor e campo que a tabela não tem.
+    //
+    // A marca de provisório vai ao lado, e não dentro do resumidor: ela não é
+    // conta do dia, é o estado do dia na rodada, e é o upsert que a troca
+    // quando o Resumo definitivo chega.
+    const row = { ...summary, provisional }
     await this.prisma.telemetryDailySummary.upsert({
       where: { workerId_day_origin: { workerId, day, origin } },
-      create: summary,
-      update: summary,
+      create: row,
+      update: row,
     })
     return true
   }

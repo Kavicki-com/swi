@@ -271,6 +271,27 @@ describe('Telemetry lifecycle e2e', () => {
     expect(await prisma.telemetryDailySummary.count({ where: { workerId } })).toBe(0)
   })
 
+  it('dia aberto ganha Resumo provisório, que o fechamento sobrescreve como definitivo pela mesma chave', async () => {
+    await prisma.telemetryDailySummary.deleteMany({ where: { workerId } })
+
+    // Um milissegundo antes de `2026-09-01` fechar o dia ainda está aberto: a
+    // rodada parcial o resume como provisório, para a linha de base existir.
+    const aberto = await lifecycle.summarizeOpenDays(new Date('2026-09-04T02:59:59.999Z'))
+    expect(aberto).toEqual({ summarized: 1, failed: 0 })
+    const provisorio = await prisma.telemetryDailySummary.findMany({ where: { workerId } })
+    expect(provisorio).toHaveLength(1)
+    expect(provisorio[0].provisional).toBe(true)
+
+    // Fechado o dia, a rodada fechada recandidata a tripla apesar da linha
+    // existente e grava por cima: mesma chave, mesma linha, agora definitiva.
+    const fechado = await lifecycle.summarizeClosedDays(now)
+    expect(fechado).toEqual({ summarized: 1, failed: 0 })
+    const definitivo = await prisma.telemetryDailySummary.findMany({ where: { workerId } })
+    expect(definitivo).toHaveLength(1)
+    expect(definitivo[0].id).toBe(provisorio[0].id)
+    expect(definitivo[0].provisional).toBe(false)
+  })
+
   describe('retenção', () => {
     // Um dia bem além da janela de 30 dias e outro dentro dela, os dois já
     // fechados. Só o antigo pode perder a Leitura bruta.

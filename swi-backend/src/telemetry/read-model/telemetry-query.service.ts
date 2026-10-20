@@ -73,6 +73,7 @@ const ASSESSMENT_FIELDS = {
   wearPercent: true,
   fatigueEtaMin: true,
   formulaVersion: true,
+  baselineSource: true,
 } as const
 
 const SAMPLE_FIELDS = {
@@ -170,6 +171,7 @@ interface AssessmentRow {
   wearPercent: number | null
   fatigueEtaMin: number | null
   formulaVersion: string
+  baselineSource: string | null
 }
 
 const CONDITION_FIELDS = {
@@ -250,6 +252,9 @@ function toProjectionAssessment(row: AssessmentRow): ProjectionAssessment {
     wearPercent: row.wearPercent,
     fatigueEtaMin: row.fatigueEtaMin,
     formulaVersion: row.formulaVersion,
+    // A coluna é texto livre no banco; só os dois valores conhecidos passam,
+    // para a projeção nunca repassar lixo ao painel.
+    baselineSource: row.baselineSource === 'MEASURED' || row.baselineSource === 'PROVISIONAL' ? row.baselineSource : null,
   }
 }
 
@@ -721,7 +726,7 @@ export class TelemetryQueryService {
   ): Promise<(AssessmentRow & { workerId: string; origin: TelemetryOrigin })[]> {
     const query = Prisma.sql`
       SELECT DISTINCT ON ("workerId", "origin")
-        "workerId", "origin", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion"
+        "workerId", "origin", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion", "baselineSource"
       FROM "TelemetryAssessment"
       WHERE "workerId" IN (${Prisma.join(workerIds)})
       ORDER BY "workerId", "origin", "computedAt" DESC
@@ -750,7 +755,7 @@ export class TelemetryQueryService {
   ): Promise<(AssessmentRow & { workerId: string })[]> {
     const query = Prisma.sql`
       SELECT DISTINCT ON ("workerId")
-        "workerId", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion"
+        "workerId", "computedAt", "effortPercent", "wearPercent", "fatigueEtaMin", "formulaVersion", "baselineSource"
       FROM "TelemetryAssessment"
       WHERE "workerId" IN (${Prisma.join(workerIds)})
         AND "origin" = CAST(${'REAL'} AS "TelemetryOrigin")
