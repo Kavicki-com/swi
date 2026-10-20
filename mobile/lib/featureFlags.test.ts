@@ -112,6 +112,60 @@ describe('DATA_BACKEND e AUTH_BACKEND no ambiente de teste', () => {
   });
 });
 
+// Os gates são resolvidos na carga do módulo a partir de `Platform.OS` e de
+// `Constants.executionEnvironment`. Cada caso recarrega o módulo isolado com
+// a plataforma e o ambiente simulados.
+function loadGates(
+  os: 'ios' | 'android' | 'web',
+  executionEnvironment: 'standalone' | 'bare' | 'storeClient',
+) {
+  let flags: typeof import('./featureFlags') | undefined;
+  jest.isolateModules(() => {
+    jest.doMock('react-native', () => ({ Platform: { OS: os } }));
+    jest.doMock('expo-constants', () => ({
+      __esModule: true,
+      default: { executionEnvironment },
+    }));
+    flags = require('./featureFlags') as typeof import('./featureFlags');
+  });
+  if (flags === undefined) throw new Error('featureFlags não carregou');
+  return flags;
+}
+
+describe('gate healthConnect', () => {
+  afterEach(() => {
+    jest.dontMock('react-native');
+    jest.dontMock('expo-constants');
+    jest.resetModules();
+  });
+
+  it('existe e fica desligado no iOS, mesmo compilado', () => {
+    const flags = loadGates('ios', 'standalone');
+    expect(flags.FEATURE_GATES).toHaveProperty('healthConnect');
+    expect(flags.isFeatureEnabled('healthConnect')).toBe(false);
+  });
+
+  it('fica desligado no web', () => {
+    const flags = loadGates('web', 'standalone');
+    expect(flags.isFeatureEnabled('healthConnect')).toBe(false);
+  });
+
+  it('fica desligado no Expo Go do Android, que não carrega o módulo nativo', () => {
+    const flags = loadGates('android', 'storeClient');
+    expect(flags.isFeatureEnabled('healthConnect')).toBe(false);
+  });
+
+  it('liga no Android compilado pelo EAS', () => {
+    const flags = loadGates('android', 'standalone');
+    expect(flags.isFeatureEnabled('healthConnect')).toBe(true);
+  });
+
+  it('liga no dev client do Android', () => {
+    const flags = loadGates('android', 'bare');
+    expect(flags.isFeatureEnabled('healthConnect')).toBe(true);
+  });
+});
+
 // O produto web suportado na entrega é o painel administrativo. O Expo web é
 // restrito ao desenvolvimento e não faz parte do aplicativo entregue ao usuário.
 //

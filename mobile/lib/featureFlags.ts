@@ -29,7 +29,8 @@ export type FeatureGate =
   | 'maps'
   | 'notifications'
   | 'smartwatch3d'
-  | 'appleWatchPilot';
+  | 'appleWatchPilot'
+  | 'healthConnect';
 
 export const FEATURE_GATES: Record<FeatureGate, boolean> = {
   watchOnboarding: IS_PROD_BUILD,
@@ -39,6 +40,9 @@ export const FEATURE_GATES: Record<FeatureGate, boolean> = {
   // Piloto Apple Watch: só existe compilado em iOS (EAS/TestFlight). Em Android
   // e Expo Go a tela diagnóstica nem aparece no menu.
   appleWatchPilot: IS_PROD_BUILD && Platform.OS === 'ios',
+  // Pulseiras pelo Health Connect: só Android compilado (EAS ou dev client).
+  // Expo Go não carrega o módulo nativo.
+  healthConnect: IS_PROD_BUILD && Platform.OS === 'android',
 };
 
 export function isFeatureEnabled(gate: FeatureGate): boolean {
