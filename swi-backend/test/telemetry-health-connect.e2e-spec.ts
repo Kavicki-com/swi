@@ -346,6 +346,17 @@ describe('Telemetry Health Connect e2e', () => {
       expect(body.metrics.fatigueEtaMin.value).toBeNull()
     })
 
+    it('batimento do Apple Watch pelo celular Android é recusado como medição inválida', async () => {
+      const watch = event(ago(HOUR), { heartRate: { value: 80, unit: 'bpm', source: 'APPLE_WATCH' } })
+
+      const { body } = await post({ events: [watch] })
+
+      expect(body.acceptedEventIds).toEqual([])
+      expect(body.conflicts).toEqual([
+        { eventId: watch.eventId, reason: 'invalid_measurement', detail: expect.any(String) },
+      ])
+    })
+
     it('bateria vinda do Health Connect é recusada como medição inválida', async () => {
       const battery = event(ago(HOUR), { battery: { value: 80, unit: '%', source: 'HEALTH_CONNECT' } })
 

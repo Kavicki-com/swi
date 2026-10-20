@@ -505,6 +505,28 @@ export function validateRawMeasurement(key: string, raw: unknown): void {
 }
 
 /**
+ * Origens que cada celular não tem como trazer. O iPhone lê o relógio e o app
+ * Saúde, nunca o Health Connect; o Android lê o Health Connect, nunca o relógio
+ * nem o app Saúde. Medição assim é payload trocado ou forjado, e aceitá-la
+ * mudaria a régua de atualidade que o tipo do aparelho escolhe.
+ */
+const FOREIGN_SOURCES: Partial<Record<DeviceKind, readonly MeasurementSource[]>> = {
+  IPHONE: ['HEALTH_CONNECT'],
+  ANDROID_PHONE: ['APPLE_WATCH', 'MANUAL_HEALTHKIT'],
+}
+
+/** Recusa a medição cuja origem o aparelho que a mandou não tem como ter lido. */
+export function assertSourcesFitDevice(kind: DeviceKind, measurements: object): void {
+  const foreign = FOREIGN_SOURCES[kind] ?? []
+  for (const [key, measurement] of Object.entries(measurements)) {
+    const source = (measurement as { source?: unknown }).source
+    if (foreign.includes(source as MeasurementSource)) {
+      throw new InvalidMeasurementError(key, `origem ${String(source)} não vem de ${kind}`)
+    }
+  }
+}
+
+/**
  * Um evento precisa medir alguma coisa. Sem medição ele grava uma linha só de
  * nulos, consome uma sequência da sessão e não conta nada a ninguém.
  */

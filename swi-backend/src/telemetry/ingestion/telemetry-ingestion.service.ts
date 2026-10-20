@@ -8,6 +8,7 @@ import type { DeviceIdentity } from '../devices/device-auth.service'
 import {
   assertEventTimeUsable,
   assertMeasuresSomething,
+  assertSourcesFitDevice,
   classifyEventAge,
   isBacklog,
   isSpotReadingEvent,
@@ -317,6 +318,7 @@ export class TelemetryIngestionService {
     for (const [key, measurement] of Object.entries(measurements)) {
       validateRawMeasurement(key, measurement)
     }
+    assertSourcesFitDevice(device.kind, measurements)
 
     return {
       eventId: raw.eventId,

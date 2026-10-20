@@ -16,8 +16,6 @@ export type EnrollmentRejectionCode =
   | 'ENROLLMENT_USED'
   | 'ENROLLMENT_EXPIRED'
   | 'ENROLLMENT_UNSUPPORTED_DEVICE'
-  /** Convite sem tipo e app que não declarou o próprio: app antigo. */
-  | 'ENROLLMENT_KIND_REQUIRED'
 
 // O corpo mantém a forma padrão do Nest (statusCode, error, message) e soma
 // `code`: superconjunto do que quem lê hoje espera. Com objeto, o Nest devolve

@@ -709,9 +709,9 @@ describe('DeviceAuthService.revoke', () => {
   })
 })
 
-// O painel não sabe qual celular o funcionário tem, então convida sem tipo, e
-// quem declara é o app ao concluir. O que estes casos protegem: convite antigo
-// com tipo continua mandando, e sem tipo nenhum o convite não é gasto à toa.
+// O painel não sabe qual celular o funcionário tem, então quem declara é o app
+// ao concluir. O que estes casos protegem: entre celulares o app manda, o
+// medidor de pressão segue o convite, e o app iOS, que não declara, é iPhone.
 describe('DeviceAuthService, tipo declarado pelo app', () => {
   const withTransaction = (prisma: any) => {
     prisma.$transaction.mockImplementation((fn: any) => fn(prisma))
@@ -745,7 +745,9 @@ describe('DeviceAuthService, tipo declarado pelo app', () => {
     expect(prisma.telemetryDevice.create.mock.calls[0][0].data.kind).toBe('ANDROID_PHONE')
   })
 
-  it('convite com tipo manda sobre o que o app disser', async () => {
+  // O painel de hoje grava IPHONE em todo convite: se o convite mandasse, o
+  // Android entraria como iPhone até o painel mudar.
+  it('entre celulares vale o que o app declara, mesmo com convite de iPhone', async () => {
     const prisma = prismaDouble()
     prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment({ kind: 'IPHONE' }))
     withTransaction(prisma)
@@ -756,22 +758,42 @@ describe('DeviceAuthService, tipo declarado pelo app', () => {
       kind: 'ANDROID_PHONE',
     })
 
-    expect(prisma.telemetryDevice.create.mock.calls[0][0].data.kind).toBe('IPHONE')
+    expect(prisma.telemetryDevice.create.mock.calls[0][0].data.kind).toBe('ANDROID_PHONE')
   })
 
-  it('sem tipo no convite nem no app, recusa com ENROLLMENT_KIND_REQUIRED e não gasta o convite', async () => {
+  it('app que não declara tipo segue o convite de celular', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment({ kind: 'ANDROID_PHONE' }))
+    withTransaction(prisma)
+
+    await service(prisma).completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: CODE })
+
+    expect(prisma.telemetryDevice.create.mock.calls[0][0].data.kind).toBe('ANDROID_PHONE')
+  })
+
+  // O app iOS instalado não manda tipo, e só ele conclui sem dizer o que é.
+  it('sem tipo no convite nem no app, entra como iPhone', async () => {
     const prisma = prismaDouble()
     prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment({ kind: null }))
     withTransaction(prisma)
 
-    const erro = await service(prisma)
-      .completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: CODE })
-      .catch((e: BadRequestException) => e)
+    await service(prisma).completeEnrollment('worker-1', { enrollmentId: 'enrollment-1', code: CODE })
 
-    expect(erro).toBeInstanceOf(BadRequestException)
-    expect((erro as BadRequestException).getResponse()).toMatchObject({ code: 'ENROLLMENT_KIND_REQUIRED' })
-    expect(prisma.telemetryEnrollment.update).not.toHaveBeenCalled()
-    expect(prisma.telemetryDevice.create).not.toHaveBeenCalled()
+    expect(prisma.telemetryDevice.create.mock.calls[0][0].data.kind).toBe('IPHONE')
+  })
+
+  it('convite de medidor de pressão continua medidor, diga o app o que disser', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryEnrollment.findUnique.mockResolvedValue(await enrollment({ kind: 'EXTERNAL_CUFF' }))
+    withTransaction(prisma)
+
+    await service(prisma).completeEnrollment('worker-1', {
+      enrollmentId: 'enrollment-1',
+      code: CODE,
+      kind: 'ANDROID_PHONE',
+    })
+
+    expect(prisma.telemetryDevice.create.mock.calls[0][0].data.kind).toBe('EXTERNAL_CUFF')
   })
 
   it('o medidor de pressão revoga só o medidor anterior, não o celular', async () => {

@@ -177,17 +177,14 @@ describe('Telemetry enrollment e2e', () => {
   // casos rodam em ordem sobre o mesmo funcionário de propósito: o último prova
   // que trocar de iPhone para Android não deixa as duas credenciais vivas.
   describe('convite sem tipo, celular declarado pelo app', () => {
-    it('sem tipo no convite nem no app, recusa com ENROLLMENT_KIND_REQUIRED e o código segue valendo', async () => {
+    // O app iOS instalado não manda tipo: sem tipo dos dois lados, é iPhone.
+    it('sem tipo no convite nem no app, o aparelho entra como iPhone', async () => {
       const { enrollmentId, code } = await convidar(workerC, null)
       const semTipo = await prisma.telemetryEnrollment.findUniqueOrThrow({ where: { id: enrollmentId } })
       expect(semTipo.kind).toBeNull()
 
-      const recusa = await concluir(workerC, { code }).expect(400)
-      expect(recusa.body).toMatchObject({ code: 'ENROLLMENT_KIND_REQUIRED' })
-      const aberto = await prisma.telemetryEnrollment.findUniqueOrThrow({ where: { id: enrollmentId } })
-      expect(aberto.consumedAt).toBeNull()
+      const { body } = await concluir(workerC, { code, model: 'iPhone 15' }).expect(200)
 
-      const { body } = await concluir(workerC, { code, kind: 'IPHONE', model: 'iPhone 15' }).expect(200)
       const device = await prisma.telemetryDevice.findUniqueOrThrow({ where: { id: body.deviceId } })
       expect(device).toMatchObject({ workerId: workerC, kind: 'IPHONE', revokedAt: null })
     })
@@ -214,6 +211,16 @@ describe('Telemetry enrollment e2e', () => {
       const antigo = await prisma.telemetryDevice.findUniqueOrThrow({ where: { id: iphone.id } })
       expect(antigo.revokedAt).not.toBeNull()
       expect(await prisma.telemetryDevice.count({ where: { workerId: workerC, revokedAt: null } })).toBe(1)
+    })
+
+    // O painel de hoje grava IPHONE em todo convite.
+    it('convite do painel com iPhone, concluído pelo app Android, cria ANDROID_PHONE', async () => {
+      const { code } = await convidar(workerC, 'IPHONE')
+
+      const { body } = await concluir(workerC, { code, kind: 'ANDROID_PHONE' }).expect(200)
+
+      const device = await prisma.telemetryDevice.findUniqueOrThrow({ where: { id: body.deviceId } })
+      expect(device.kind).toBe('ANDROID_PHONE')
     })
   })
 })

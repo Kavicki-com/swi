@@ -40,6 +40,17 @@ export type EnrollableKind = (typeof ENROLLABLE_KINDS)[number]
 export const PHONE_KINDS = [TelemetryDeviceKind.IPHONE, TelemetryDeviceKind.ANDROID_PHONE] as const
 export type PhoneKind = (typeof PHONE_KINDS)[number]
 
+/**
+ * Que aparelho o pareamento cria. Entre os celulares vale o que o app declara:
+ * só ele sabe em que celular está, e o painel grava IPHONE em todo convite. O
+ * medidor de pressão segue o convite, que é quem sabe que é um medidor. Sem
+ * tipo dos dois lados é o app iOS instalado, que não declara o próprio.
+ */
+function kindFor(invited: TelemetryDeviceKind | null, declared: PhoneKind | undefined): TelemetryDeviceKind {
+  if (invited === TelemetryDeviceKind.EXTERNAL_CUFF) return invited
+  return declared ?? invited ?? TelemetryDeviceKind.IPHONE
+}
+
 export interface DeviceIdentity {
   deviceId: string
   workerId: string
@@ -58,7 +69,7 @@ export interface CompleteEnrollmentInput {
   enrollmentId?: string
   code: string
   model?: string
-  /** O celular que conclui. Só conta quando o convite não fixou tipo. */
+  /** O celular que conclui. Manda sobre o convite, menos no de medidor de pressão. */
   kind?: PhoneKind
 }
 
@@ -189,14 +200,7 @@ export class DeviceAuthService {
       input.enrollmentId === undefined
         ? await this.enrollmentByCode(workerId, input.code)
         : await this.enrollmentById(workerId, input.enrollmentId, input.code)
-    // O convite manda quando fixou tipo; sem tipo, quem declara é o app. Sem
-    // nenhum dos dois não há como saber que aparelho está entrando, e o convite
-    // continua aberto para a tentativa certa.
-    const kind = enrollment.kind ?? input.kind ?? null
-    if (kind === null) {
-      throw enrollmentRejection('ENROLLMENT_KIND_REQUIRED', 'Informe o tipo do aparelho')
-    }
-    return this.issueDevice(enrollment, kind, input.model)
+    return this.issueDevice(enrollment, kindFor(enrollment.kind, input.kind), input.model)
   }
 
   private async enrollmentById(

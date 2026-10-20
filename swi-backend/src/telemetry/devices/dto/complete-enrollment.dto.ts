@@ -20,7 +20,7 @@ export class CompleteEnrollmentDto {
   // hardware: serve para a pessoa reconhecer qual celular revogar.
   @IsOptional() @IsString() @Length(1, 100) model?: string
 
-  // O celular que conclui. Obrigatório só para convite sem tipo, e quem
-  // confere isso é o serviço, que conhece o convite.
+  // O celular que conclui. Manda sobre o tipo do convite, menos no de medidor
+  // de pressão; ausente, o serviço segue o convite ou assume iPhone.
   @IsOptional() @IsIn(PHONE_KINDS) kind?: PhoneKind
 }

@@ -839,6 +839,32 @@ describe('pulseira pelo Health Connect', () => {
     expect(realtime.emitToUsers).toHaveBeenCalledTimes(1)
   })
 
+  // A origem diz de onde a medição veio, e o tipo do aparelho, quem a mandou:
+  // as duas têm de contar a mesma história.
+  it('batimento do Apple Watch vindo do celular Android é recusado como medição inválida', async () => {
+    const { service, repository } = build()
+    const watch = event({ measurements: { heartRate: { value: 82, unit: 'bpm', source: 'APPLE_WATCH' } } })
+
+    const ack = await service.ingest(ANDROID, { events: [watch] })
+
+    expect(ack.acceptedEventIds).toEqual([])
+    expect(ack.conflicts).toEqual([
+      { eventId: watch.eventId, reason: 'invalid_measurement', detail: expect.any(String) },
+    ])
+    expect(repository.saveEvent).not.toHaveBeenCalled()
+  })
+
+  it('medição do Health Connect vinda do iPhone é recusada como medição inválida', async () => {
+    const { service, repository } = build()
+    const hc = band({ eventTime: ago(HOUR) })
+
+    const ack = await service.ingest(DEVICE, { events: [hc] })
+
+    expect(ack.acceptedEventIds).toEqual([])
+    expect(ack.conflicts).toEqual([{ eventId: hc.eventId, reason: 'invalid_measurement', detail: expect.any(String) }])
+    expect(repository.saveEvent).not.toHaveBeenCalled()
+  })
+
   it('o relógio continua na cadeia ao vivo e grava com o próprio tipo', async () => {
     const { service, repository, assessment, conditions, sparse } = build()
 
