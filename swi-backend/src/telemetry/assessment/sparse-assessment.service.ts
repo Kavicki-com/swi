@@ -10,10 +10,13 @@ import { SPARSE_PROFILE } from './sparse-profile'
 // fora da rota ao vivo e fora da cadeia por sessão: a pulseira abre uma sessão
 // por sincronização, e a conta é do dia do funcionário, não da sessão.
 
-export type SparseOutcome =
-  | { outcome: 'assessed'; assessmentId: string }
-  | { outcome: 'throttled' }
-  | { outcome: 'nothing_new' }
+export type SparseOutcome = { outcome: 'assessed'; assessmentId: string } | { outcome: 'nothing_new' }
+
+/** Quantos batimentos a avaliação gravada leu. Sem o campo, -1: nunca bate e o dia recalcula. */
+const sampleCountOf = (inputs: Prisma.JsonValue): number => {
+  const window = (inputs as { window?: { sampleCount?: unknown } } | null)?.window
+  return typeof window?.sampleCount === 'number' ? window.sampleCount : -1
+}
 
 @Injectable()
 export class SparseAssessmentService {
@@ -36,30 +39,40 @@ export class SparseAssessmentService {
   ): Promise<SparseOutcome> {
     // Lock consultivo por funcionário, origem e dia: dois lotes da mesma
     // sincronização em voo recalculariam o mesmo dia ao mesmo tempo e gravariam
-    // duas linhas, e o corte de um minuto não veria a outra. $executeRaw pelo
+    // duas linhas, e nenhum dos dois veria a do outro. $executeRaw pelo
     // mesmo motivo do lock das condições: pg_advisory_xact_lock devolve void.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`sparse:${workerId}:${origin}:${day.toISOString()}`}))`
 
     const { start, end } = monitoredDayWindow(day)
-    const last = await tx.telemetryAssessment.findFirst({
-      where: { workerId, origin, formulaVersion: this.profile.version, windowStart: start },
-      orderBy: { computedAt: 'desc' },
-      select: { computedAt: true },
-    })
-    if (last !== null && now.getTime() - last.computedAt.getTime() < this.profile.recomputeThrottleMs) {
-      return { outcome: 'throttled' }
-    }
-
-    const [rows, profileRow, minima] = await Promise.all([
+    const [rows, last] = await Promise.all([
       tx.telemetrySample.findMany({
         where: { workerId, origin, eventTime: { gte: start, lt: end }, heartRateBpm: { not: null } },
         select: { eventTime: true, heartRateBpm: true, sessionId: true },
         orderBy: { eventTime: 'asc' },
       }),
+      tx.telemetryAssessment.findFirst({
+        where: { workerId, origin, formulaVersion: this.profile.version, windowStart: start },
+        orderBy: { computedAt: 'desc' },
+        select: { windowEnd: true, inputs: true },
+      }),
+    ])
+    if (rows.length === 0) return { outcome: 'nothing_new' }
+    const lastRow = rows[rows.length - 1]
+    // Pula só o lote que não trouxe batimento novo ao dia. Nada de corte por
+    // tempo: a sincronização vem em vários lotes de segundos de distância, e
+    // um corte deixaria o dia parcial para sempre.
+    if (
+      last !== null &&
+      last.windowEnd.getTime() === lastRow.eventTime.getTime() &&
+      sampleCountOf(last.inputs) === rows.length
+    ) {
+      return { outcome: 'nothing_new' }
+    }
+
+    const [profileRow, minima] = await Promise.all([
       tx.profile.findUnique({ where: { userId: workerId }, select: { birthDate: true } }),
       restingMinimaOf(tx, workerId, origin, now, this.profile.restingDays),
     ])
-    if (rows.length === 0) return { outcome: 'nothing_new' }
 
     // O piso provisório da pulseira é o mínimo do próprio dia: ela abre uma
     // sessão por sincronização, e o mínimo de uma sessão só diria pouco.
@@ -71,7 +84,6 @@ export class SparseAssessmentService {
       now,
     )
     const result = assessSparseDay({ profile: this.profile, baseline, samples: beats })
-    const lastRow = rows[rows.length - 1]
 
     const created = await tx.telemetryAssessment.create({
       data: {

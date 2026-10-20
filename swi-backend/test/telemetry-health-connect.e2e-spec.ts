@@ -14,8 +14,8 @@ import { SUMMARIZER_VERSION } from '../src/telemetry/lifecycle/telemetry-summari
 
 // E2E da pulseira lida pelo Health Connect. O que se promete aqui só existe com
 // Postgres: o dia inteiro do funcionário, de qualquer sessão, relido a cada
-// sincronização, o lock por funcionário e dia, e o corte de um minuto entre
-// recálculos.
+// sincronização, o lock por funcionário e dia, e o recálculo pulado só quando
+// o lote não trouxe batimento novo.
 describe('Telemetry Health Connect e2e', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -184,21 +184,44 @@ describe('Telemetry Health Connect e2e', () => {
       })
     })
 
-    it('segura o segundo recálculo do mesmo dia dentro de um minuto', async () => {
+    // A sincronização chega em vários lotes de segundos de distância: cada lote
+    // com leitura nova recalcula, e só o que não traz nada novo é pulado.
+    it('recalcula a cada leitura nova do dia, por perto que venha, e pula quando nada mudou', async () => {
+      const session = randomUUID()
       await seedSamples(workerB, deviceB, [
-        { session: randomUUID(), at: t(0), bpm: 120 },
-        { session: randomUUID(), at: t(5), bpm: 125 },
+        { session, at: t(0), bpm: 120 },
+        { session, at: t(5), bpm: 125 },
       ])
       const now = new Date()
+      const after = (ms: number) => new Date(now.getTime() + ms)
+      const window = async (assessmentId: string) => {
+        const row = await prisma.telemetryAssessment.findUniqueOrThrow({ where: { id: assessmentId } })
+        return {
+          sampleCount: (row.inputs as { window: { sampleCount: number } }).window.sampleCount,
+          windowEnd: row.windowEnd.toISOString(),
+        }
+      }
 
       expect((await sparse.assessDay(workerB, 'REAL', day, now)).outcome).toBe('assessed')
-      expect((await sparse.assessDay(workerB, 'REAL', day, new Date(now.getTime() + 30_000))).outcome).toBe(
-        'throttled',
-      )
-      expect((await sparse.assessDay(workerB, 'REAL', day, new Date(now.getTime() + 61_000))).outcome).toBe(
-        'assessed',
-      )
-      expect(await prisma.telemetryAssessment.count({ where: { workerId: workerB } })).toBe(2)
+
+      // Segundo lote, 30 s depois, com leitura mais nova.
+      await seedSamples(workerB, deviceB, [{ session, at: t(10), bpm: 130 }])
+      const second = await sparse.assessDay(workerB, 'REAL', day, after(30_000))
+      expect(second.outcome).toBe('assessed')
+      if (second.outcome !== 'assessed') return
+      expect(await window(second.assessmentId)).toEqual({ sampleCount: 3, windowEnd: t(10).toISOString() })
+
+      // Leitura atrasada no meio do dia: a última não muda, a contagem muda.
+      await seedSamples(workerB, deviceB, [{ session, at: t(2), bpm: 122 }])
+      const third = await sparse.assessDay(workerB, 'REAL', day, after(40_000))
+      expect(third.outcome).toBe('assessed')
+      if (third.outcome !== 'assessed') return
+      expect(await window(third.assessmentId)).toEqual({ sampleCount: 4, windowEnd: t(10).toISOString() })
+
+      // Nada novo: pulado, perto ou longe do último recálculo.
+      expect((await sparse.assessDay(workerB, 'REAL', day, after(45_000))).outcome).toBe('nothing_new')
+      expect((await sparse.assessDay(workerB, 'REAL', day, after(10 * 60_000))).outcome).toBe('nothing_new')
+      expect(await prisma.telemetryAssessment.count({ where: { workerId: workerB } })).toBe(3)
     })
   })
 

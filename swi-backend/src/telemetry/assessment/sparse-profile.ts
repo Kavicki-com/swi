@@ -24,8 +24,6 @@ export interface SparseProfile {
    * fora de treino, e com dois minutos ela nunca acumularia desgaste.
    */
   readonly gapMaxMs: number
-  /** Menor distância entre dois recálculos do mesmo dia. A sincronização vem em rajada. */
-  readonly recomputeThrottleMs: number
 }
 
 export const SPARSE_PROFILE: SparseProfile = Object.freeze({
@@ -37,7 +35,6 @@ export const SPARSE_PROFILE: SparseProfile = Object.freeze({
   doseScale: EXPERIMENTAL_PROFILE.doseScale,
   restingDays: EXPERIMENTAL_PROFILE.restingDays,
   gapMaxMs: 10 * 60_000,
-  recomputeThrottleMs: 60_000,
 })
 
 export const isSparseFormula = (version: string): boolean => version === SPARSE_FORMULA_VERSION

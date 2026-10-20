@@ -769,6 +769,21 @@ describe('pulseira pelo Health Connect', () => {
     ])
   })
 
+  // A falha da avaliação depois do ACK deixaria o dia parado: o reenvio volta
+  // como repetido, e é ele que tem de reparar.
+  it('batimento repetido da pulseira também agenda o dia', async () => {
+    const { service, repository, sparse } = build()
+    repository.saveEvent.mockResolvedValue(stored({ outcome: 'DUPLICATE', snapshotPromoted: false }))
+    const eventTime = ago(2 * HOUR)
+    const repetido = band({ eventTime })
+
+    const ack = await service.ingest(ANDROID, { events: [repetido] })
+
+    expect(ack.duplicateEventIds).toEqual([repetido.eventId])
+    expect(sparse.assessDay).toHaveBeenCalledTimes(1)
+    expect(sparse.assessDay.mock.calls[0][2]).toEqual(monitoredDayOf(new Date(eventTime)))
+  })
+
   it('lote só com passos não avalia', async () => {
     const { service, sparse } = build()
 

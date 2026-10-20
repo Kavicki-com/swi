@@ -184,6 +184,21 @@ export class TelemetryIngestionService {
         await this.requireOwnSession(sessions, device, event, startedAt)
 
         const result = await this.repository.saveEvent(event, now, { deviceKind: device.kind })
+        // Pulseira: nada aqui é ao vivo, e a cadeia por sessão e as condições
+        // de batimento, sinal e desgaste não se aplicam. O que vale é o dia de
+        // cada batimento, recalculado inteiro depois do laço. Vale também para
+        // o repetido: se a avaliação falhou depois do ACK, é o reenvio que
+        // repara o dia.
+        const band = snapshotPolicyFor(device.kind) === 'LATEST'
+        if (
+          band &&
+          event.measurements.heartRate !== undefined &&
+          classifyEventAge(event.eventTime, now) !== 'HISTORICAL'
+        ) {
+          const days = sparseDays.get(event.origin) ?? new Set<number>()
+          days.add(monitoredDayOf(new Date(event.eventTime)).getTime())
+          sparseDays.set(event.origin, days)
+        }
         if (result.outcome === 'DUPLICATE') {
           duplicateEventIds.push(event.eventId)
           continue
@@ -199,16 +214,7 @@ export class TelemetryIngestionService {
         // acontecendo e avaliaria esforço onde não há o que avaliar.
         if (isSpotReadingEvent(event.measurements)) {
           spotSessionByOrigin.set(event.origin, event.monitoringSessionId)
-        } else if (snapshotPolicyFor(device.kind) === 'LATEST') {
-          // Pulseira: nada aqui é ao vivo, e a cadeia por sessão e as condições
-          // de batimento, sinal e desgaste não se aplicam. O que vale é o dia de
-          // cada batimento, recalculado inteiro depois do laço.
-          if (event.measurements.heartRate !== undefined && classifyEventAge(event.eventTime, now) !== 'HISTORICAL') {
-            const days = sparseDays.get(event.origin) ?? new Set<number>()
-            days.add(monitoredDayOf(new Date(event.eventTime)).getTime())
-            sparseDays.set(event.origin, days)
-          }
-        } else if (!isBacklog(event.eventTime, now)) {
+        } else if (!band && !isBacklog(event.eventTime, now)) {
           const at = new Date(event.eventTime)
           const known = liveTriggers.get(event.monitoringSessionId)
           if (known === undefined || at > known) liveTriggers.set(event.monitoringSessionId, at)
