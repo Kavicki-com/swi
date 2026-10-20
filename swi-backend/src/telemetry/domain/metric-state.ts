@@ -8,6 +8,7 @@ import type {
   BloodPressure,
   BloodPressureRecency,
   ClientIndicator,
+  DeviceKind,
   EventAge,
   Measurement,
   MeasurementSource,
@@ -118,13 +119,13 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
   heartRate: {
     unit: 'bpm',
     freshness: 'VITAL',
-    sources: ['APPLE_WATCH'],
+    sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
     retainsExpiredValue: true,
   },
   steps: {
     unit: 'steps',
     freshness: 'VITAL',
-    sources: ['APPLE_WATCH'],
+    sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
     indicator: 'Q14',
     retainsExpiredValue: true,
   },
@@ -138,7 +139,7 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
   activeEnergy: {
     unit: 'kcal',
     freshness: 'VITAL',
-    sources: ['APPLE_WATCH'],
+    sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
     retainsExpiredValue: true,
   },
   energyRatePerHour: {
@@ -157,7 +158,7 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
   bloodPressure: {
     unit: 'mmHg',
     freshness: 'BLOOD_PRESSURE',
-    sources: ['EXTERNAL_CUFF', 'MANUAL_HEALTHKIT', 'MANUAL_SWI'],
+    sources: ['EXTERNAL_CUFF', 'MANUAL_HEALTHKIT', 'MANUAL_SWI', 'HEALTH_CONNECT'],
     // Acima de 72 h é "sem medição recente": o valor some, nunca vira 0/0.
     retainsExpiredValue: false,
   },
@@ -167,18 +168,19 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
   distance: {
     unit: 'm',
     freshness: 'VITAL',
-    sources: ['APPLE_WATCH'],
+    sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
     retainsExpiredValue: true,
   },
   /**
-   * O relógio só mede oxigenação em repouso, então ela chega poucas vezes por
-   * turno e segue a régua da pressão: "última medição às", nunca "atual" no
-   * sentido do BPM. Acima de 72 h o valor some, como a pressão.
+   * O relógio só mede oxigenação em repouso, e a pulseira lida pelo Health
+   * Connect também a grava pontual, então ela chega poucas vezes por turno e
+   * segue a régua da pressão: "última medição às", nunca "atual" no sentido do
+   * BPM. Acima de 72 h o valor some, como a pressão.
    */
   oxygenSaturation: {
     unit: '%',
     freshness: 'BLOOD_PRESSURE',
-    sources: ['APPLE_WATCH'],
+    sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
     retainsExpiredValue: false,
   },
   /**
@@ -188,16 +190,17 @@ export const METRICS: Record<MetricKind, MetricSpec> = {
    */
   fatigueEtaMin: { unit: 'min', freshness: 'VITAL', sources: ['DERIVED'], retainsExpiredValue: true },
   /**
-   * Temperatura corporal lida do app Saúde pelo iPhone, gravada lá por um
-   * termômetro ou vestível de terceiro. O relógio do piloto não a mede no
-   * turno, então APPLE_WATCH não entra. Segue a régua da pressão: "última
-   * medição às", e acima de 72 h o valor some. Não abre condição nem alerta:
-   * medida no pulso é temperatura de pele, não temperatura central.
+   * Temperatura corporal lida do app Saúde pelo iPhone ou do Health Connect
+   * no Android, gravada lá por um termômetro ou vestível de terceiro. O relógio
+   * do piloto não a mede no turno, então APPLE_WATCH não entra. Segue a régua
+   * da pressão: "última medição às", e acima de 72 h o valor some. Não abre
+   * condição nem alerta: medida no pulso é temperatura de pele, não
+   * temperatura central.
    */
   bodyTemperature: {
     unit: '°C',
     freshness: 'BLOOD_PRESSURE',
-    sources: ['MANUAL_HEALTHKIT'],
+    sources: ['MANUAL_HEALTHKIT', 'HEALTH_CONNECT'],
     retainsExpiredValue: false,
   },
 }
@@ -554,4 +557,18 @@ export function assertEventTimeUsable(eventTime: string, now: Date | string): vo
   if (measured - toMs(now) > CLOCK_SKEW_MS) {
     throw new InvalidTelemetryEventError('eventTime no futuro')
   }
+}
+
+export type SnapshotPolicy = 'LIVE_ONLY' | 'LATEST'
+
+/**
+ * Quem pode promover o estado atual. O relógio manda ao vivo, e evento com mais
+ * de dois minutos é backlog: promovê-lo apagaria uma leitura mais nova. A
+ * pulseira lida pelo Health Connect só manda em lote, horas depois de medir, e
+ * nunca teria evento ao vivo: o mais recente do lote é o atual dela, e a
+ * qualidade continua sendo decidida pela régua de FRESHNESS, então ele aparece
+ * como última leitura com horário, nunca como "atual".
+ */
+export function snapshotPolicyFor(kind: DeviceKind | null): SnapshotPolicy {
+  return kind === 'ANDROID_PHONE' ? 'LATEST' : 'LIVE_ONLY'
 }

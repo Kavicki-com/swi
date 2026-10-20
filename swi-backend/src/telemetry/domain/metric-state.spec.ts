@@ -16,6 +16,7 @@ import {
   assertEventTimeUsable,
   assertMeasuresSomething,
   rejectWorkerIdAuthority,
+  snapshotPolicyFor,
   validateMeasurement,
   validateRawMeasurement,
 } from './metric-state'
@@ -252,7 +253,11 @@ describe('Q13, Q14 e Q16 com unidades explícitas', () => {
       unit: 'kcal/h',
       sources: ['DERIVED'],
     })
-    expect(METRICS.steps).toMatchObject({ indicator: 'Q14', unit: 'steps', sources: ['APPLE_WATCH'] })
+    expect(METRICS.steps).toMatchObject({
+      indicator: 'Q14',
+      unit: 'steps',
+      sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
+    })
     expect(METRICS.movementPerMinute).toMatchObject({
       indicator: 'Q16',
       unit: 'mpm',
@@ -268,7 +273,7 @@ describe('Q13, Q14 e Q16 com unidades explícitas', () => {
     expect(METRICS.distance).toMatchObject({
       unit: 'm',
       freshness: 'VITAL',
-      sources: ['APPLE_WATCH'],
+      sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
       retainsExpiredValue: true,
     })
     // Medida em repouso e raramente: acima de 72 h é "sem medição recente" e o
@@ -276,20 +281,20 @@ describe('Q13, Q14 e Q16 com unidades explícitas', () => {
     expect(METRICS.oxygenSaturation).toMatchObject({
       unit: '%',
       freshness: 'BLOOD_PRESSURE',
-      sources: ['APPLE_WATCH'],
+      sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
       retainsExpiredValue: false,
     })
     expect(METRICS.fatigueEtaMin).toMatchObject({ unit: 'min', freshness: 'VITAL', sources: ['DERIVED'] })
   })
 
-  // A temperatura chega pelo app Saúde, gravada por termômetro ou vestível de
-  // terceiro, nunca pelo relógio do piloto. É medição pontual como a pressão:
-  // "última medição às", e acima de 72 h some.
-  it('temperatura corporal vem do app Saúde e segue a régua da pressão', () => {
+  // A temperatura chega pelo app Saúde ou pelo Health Connect, gravada por
+  // termômetro ou vestível de terceiro, nunca pelo relógio do piloto. É medição
+  // pontual como a pressão: "última medição às", e acima de 72 h some.
+  it('temperatura corporal vem do app Saúde ou do Health Connect e segue a régua da pressão', () => {
     expect(METRICS.bodyTemperature).toMatchObject({
       unit: '°C',
       freshness: 'BLOOD_PRESSURE',
-      sources: ['MANUAL_HEALTHKIT'],
+      sources: ['MANUAL_HEALTHKIT', 'HEALTH_CONNECT'],
       retainsExpiredValue: false,
     })
   })
@@ -547,5 +552,34 @@ describe('assertMeasuresSomething', () => {
 
   it('recusa evento sem medição alguma', () => {
     expect(() => assertMeasuresSomething({})).toThrow(InvalidTelemetryEventError)
+  })
+})
+
+describe('Health Connect', () => {
+  const hc = (value: unknown, unit: string) => ({ value, unit, source: 'HEALTH_CONNECT' })
+
+  it('aceita as sete medições que a pulseira grava no Health Connect', () => {
+    expect(() => validateRawMeasurement('heartRate', hc(92, 'bpm'))).not.toThrow()
+    expect(() => validateRawMeasurement('stepDelta', hc(140, 'steps'))).not.toThrow()
+    expect(() => validateRawMeasurement('distanceDeltaM', hc(95.5, 'm'))).not.toThrow()
+    expect(() => validateRawMeasurement('activeEnergyKcal', hc(12.4, 'kcal'))).not.toThrow()
+    expect(() => validateRawMeasurement('oxygenSaturation', hc(97, '%'))).not.toThrow()
+    expect(() => validateRawMeasurement('bodyTemperature', hc(36.4, '°C'))).not.toThrow()
+    expect(() =>
+      validateRawMeasurement('bloodPressure', hc({ systolic: 128, diastolic: 82 }, 'mmHg')),
+    ).not.toThrow()
+  })
+
+  it('recusa bateria e contagem de movimento: o Health Connect não tem nenhuma das duas', () => {
+    expect(() => validateRawMeasurement('battery', hc(80, '%'))).toThrow(/origem HEALTH_CONNECT/)
+    expect(() => validateRawMeasurement('motionCount', hc(12, 'count'))).toThrow(/origem HEALTH_CONNECT/)
+  })
+
+  it('celular Android promove o atual em qualquer idade; o resto, só ao vivo', () => {
+    expect(snapshotPolicyFor('ANDROID_PHONE')).toBe('LATEST')
+    expect(snapshotPolicyFor('IPHONE')).toBe('LIVE_ONLY')
+    expect(snapshotPolicyFor('APPLE_WATCH')).toBe('LIVE_ONLY')
+    expect(snapshotPolicyFor('EXTERNAL_CUFF')).toBe('LIVE_ONLY')
+    expect(snapshotPolicyFor(null)).toBe('LIVE_ONLY')
   })
 })
