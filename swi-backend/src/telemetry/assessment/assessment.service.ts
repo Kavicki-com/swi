@@ -20,8 +20,9 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 /**
  * Quantos Resumos provisórios podem existir ao mesmo tempo: o dia de hoje e os
- * dois anteriores, que ainda não fecharam. É a folga que a consulta da linha
- * de base dá além dos dias medidos.
+ * dois anteriores, que terminaram mas ainda não fecharam. É a folga que a
+ * consulta da linha de base dá além dos dias medidos; os dois anteriores já
+ * contam como medidos, e o corte nos 14 dias é feito depois.
  */
 const OPEN_DAY_ROWS = 3
 
@@ -172,23 +173,29 @@ export class TelemetryAssessmentService {
       }),
       tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
       tx.telemetryDailySummary.findMany({
-        // Os Resumos provisórios (dias ainda abertos) vêm junto, mais recentes
-        // primeiro: contam só quando não há dia fechado, e o teto deixa folga
-        // para eles sem cortar os 14 dias medidos.
+        // Os Resumos provisórios vêm junto, mais recentes primeiro. O de um dia
+        // que já terminou conta como medido; só o do dia em andamento fica de
+        // fora da mediana, e o teto deixa folga para ele sem cortar os 14 dias.
         where: { workerId: session.workerId, origin: session.origin, day: { gte: sinceDay }, heartRateMin: { not: null } },
-        select: { heartRateMin: true, provisional: true },
+        select: { day: true, heartRateMin: true, provisional: true },
         orderBy: { day: 'desc' },
         take: this.profile.restingDays + OPEN_DAY_ROWS,
       }),
     ])
 
+    const todayMs = monitoredDayOf(now).getTime()
     const minimaOf = (rows: typeof summaries) => rows.flatMap((s) => (s.heartRateMin === null ? [] : [s.heartRateMin]))
-    const closedMinima = minimaOf(summaries.filter((s) => !s.provisional)).slice(0, this.profile.restingDays)
-    const openMinima = minimaOf(summaries.filter((s) => s.provisional))
-    // Só quem ainda não tem dia fechado paga a agregação: esta é a rota mais
+    // Um dia terminou quando é anterior ao dia monitorado de agora: o Resumo
+    // dele, definitivo ou provisório, é medido. O do dia em andamento não é.
+    const endedDayMinima = minimaOf(summaries.filter((s) => !s.provisional || s.day.getTime() < todayMs)).slice(
+      0,
+      this.profile.restingDays,
+    )
+    const openDayMinima = minimaOf(summaries.filter((s) => s.provisional && s.day.getTime() >= todayMs))
+    // Só quem ainda não tem dia terminado paga a agregação: esta é a rota mais
     // quente do backend, e para quem já tem repouso medido ela não muda nada.
     const sessionMinBpm =
-      closedMinima.length > 0
+      endedDayMinima.length > 0
         ? null
         : (
             await tx.telemetrySample.aggregate({
@@ -196,7 +203,7 @@ export class TelemetryAssessmentService {
               _min: { heartRateBpm: true },
             })
           )._min.heartRateBpm
-    const resting = restingBaseline({ closedMinima, openMinima, sessionMinBpm })
+    const resting = restingBaseline({ endedDayMinima, openDayMinima, sessionMinBpm })
     const birthDate = profile?.birthDate ?? null
     const ageYears = birthDate === null ? null : ageInYearsAt(birthDate, now)
     const maxBpm = ageYears === null ? null : maxHeartRateForAge(ageYears)

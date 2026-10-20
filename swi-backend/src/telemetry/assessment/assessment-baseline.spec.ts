@@ -13,7 +13,7 @@ import {
 // pela mesma pegadinha de fuso que o schema documenta para @db.Date.
 
 describe('restingFromDailyMinima', () => {
-  it('sem dia fechado com batimento, não há repouso observado', () => {
+  it('sem dia terminado com batimento, não há repouso observado', () => {
     expect(restingFromDailyMinima([])).toBeNull()
   })
 
@@ -35,11 +35,11 @@ describe('restingFromDailyMinima', () => {
 })
 
 // Repouso provisório: existe para esforço e desgaste aparecerem desde o
-// primeiro uso. Ele nunca passa por cima de um dia fechado, nunca sobe além do
+// primeiro uso. Ele nunca passa por cima de um dia terminado, nunca sobe além do
 // teto e nunca desce abaixo do chão do alerta de batimento baixo.
 describe('restingBaseline', () => {
-  it('com dia fechado, é a mediana medida, e o que o dia aberto mostrou não entra', () => {
-    expect(restingBaseline({ closedMinima: [70, 20, 62], openMinima: [50], sessionMinBpm: 45 })).toEqual({
+  it('com dia terminado, é a mediana medida, e o que o dia em andamento mostrou não entra', () => {
+    expect(restingBaseline({ endedDayMinima: [70, 20, 62], openDayMinima: [50], sessionMinBpm: 45 })).toEqual({
       restingBpm: 62,
       source: 'measured',
       days: 3,
@@ -47,7 +47,7 @@ describe('restingBaseline', () => {
   })
 
   it('sem nada observado, o provisório é o teto padrão', () => {
-    expect(restingBaseline({ closedMinima: [], openMinima: [], sessionMinBpm: null })).toEqual({
+    expect(restingBaseline({ endedDayMinima: [], openDayMinima: [], sessionMinBpm: null })).toEqual({
       restingBpm: PROVISIONAL_RESTING_DEFAULT_BPM,
       source: 'provisional',
       days: 0,
@@ -55,15 +55,15 @@ describe('restingBaseline', () => {
     })
   })
 
-  it('o menor batimento do dia aberto vale quando fica abaixo do teto', () => {
-    expect(restingBaseline({ closedMinima: [], openMinima: [66, 58], sessionMinBpm: null })).toMatchObject({
+  it('o menor batimento do dia em andamento vale quando fica abaixo do teto', () => {
+    expect(restingBaseline({ endedDayMinima: [], openDayMinima: [66, 58], sessionMinBpm: null })).toMatchObject({
       restingBpm: 58,
       from: 'open_day',
     })
   })
 
   it('o menor batimento da sessão vale quando é o menor de todos', () => {
-    expect(restingBaseline({ closedMinima: [], openMinima: [58], sessionMinBpm: 55 })).toMatchObject({
+    expect(restingBaseline({ endedDayMinima: [], openDayMinima: [58], sessionMinBpm: 55 })).toMatchObject({
       restingBpm: 55,
       from: 'session',
     })
@@ -72,18 +72,18 @@ describe('restingBaseline', () => {
   it('mínimo observado acima do teto não sobe o repouso', () => {
     // Poucos minutos de uso em atividade dizem mais sobre o trabalho do que
     // sobre o repouso, e um repouso de 95 faria o esforço do dia sair baixo.
-    expect(restingBaseline({ closedMinima: [], openMinima: [95], sessionMinBpm: 92 })).toMatchObject({
+    expect(restingBaseline({ endedDayMinima: [], openDayMinima: [95], sessionMinBpm: 92 })).toMatchObject({
       restingBpm: PROVISIONAL_RESTING_DEFAULT_BPM,
       from: 'default',
     })
   })
 
   it('leitura abaixo do chão é espúria e fica fora', () => {
-    expect(restingBaseline({ closedMinima: [], openMinima: [PROVISIONAL_RESTING_FLOOR_BPM - 1], sessionMinBpm: 20 })).toMatchObject({
+    expect(restingBaseline({ endedDayMinima: [], openDayMinima: [PROVISIONAL_RESTING_FLOOR_BPM - 1], sessionMinBpm: 20 })).toMatchObject({
       restingBpm: PROVISIONAL_RESTING_DEFAULT_BPM,
       from: 'default',
     })
-    expect(restingBaseline({ closedMinima: [], openMinima: [], sessionMinBpm: PROVISIONAL_RESTING_FLOOR_BPM })).toMatchObject({
+    expect(restingBaseline({ endedDayMinima: [], openDayMinima: [], sessionMinBpm: PROVISIONAL_RESTING_FLOOR_BPM })).toMatchObject({
       restingBpm: PROVISIONAL_RESTING_FLOOR_BPM,
       from: 'session',
     })
