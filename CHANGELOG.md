@@ -9,7 +9,7 @@ Cadastro pelo painel com credenciais por e-mail, e esforço e desgaste desde o p
 ### Backend (`swi-backend`)
 
 - Cadastro feito pelo painel (funcionário, supervisor ou administrador) envia à pessoa um e-mail de cadastro concluído com as credenciais de acesso: o login, que é o e-mail, e a senha definida pelo admin. A conta continua nascendo ativa, sem etapa de ativação. Se o e-mail não puder ser enviado, o cadastro é concluído mesmo assim e a resposta da API informa isso ao painel.
-- Esforço, desgaste e previsão de fadiga existem desde o primeiro uso do relógio. Enquanto não há dia fechado com batimento, a avaliação usa um repouso provisório (o menor batimento plausível já visto, com teto de 70 bpm) e registra isso na própria linha e na leitura do painel (`baseline: PROVISIONAL`). Uma rodada a cada 30 minutos resume o dia aberto como provisório e fecha o dia que acabou de fechar, então o repouso medido chega no terceiro dia de uso em vez de na madrugada seguinte. Migration aditiva com duas colunas.
+- Esforço, desgaste e previsão de fadiga existem desde o primeiro uso do relógio. Enquanto não há dia fechado com batimento, a avaliação usa um repouso provisório (o menor batimento plausível já visto, com teto de 70 bpm) e registra isso na própria linha e na leitura do painel (`baseline: PROVISIONAL`). Uma rodada a cada 30 minutos resume como provisório cada dia ainda não fechado e fecha o dia que acabou de fechar; o Resumo provisório de um dia que já terminou conta como repouso medido, então o repouso medido chega na manhã seguinte ao primeiro dia de uso, e o selo de estimativa aparece só nesse primeiro dia. Migration aditiva com duas colunas.
 
 ### Painel (`swi-admin`)
 

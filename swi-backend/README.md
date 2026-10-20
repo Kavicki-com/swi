@@ -198,7 +198,7 @@ O bucket precisa aceitar `PUT` e `GET` vindos da origem do painel (política de 
 | `WEATHER_CRON` | | a cada 30 minutos | Coleta de clima. |
 | `TELEMETRY_CONDITION_SWEEP_CRON` | | `*/30 * * * * *` (a cada 30 s) | Varredura de condições de saúde. Expressão de seis campos, com segundos. |
 | `TELEMETRY_LIFECYCLE_CRON` | | `0 30 6 * * *` (06:30 UTC) | Resumo diário da telemetria e limpeza das leituras brutas já resumidas. |
-| `TELEMETRY_SUMMARY_REFRESH_CRON` | | `0 */30 * * * *` (a cada 30 min) | Resumo provisório dos dias abertos e fechamento dos dias que acabaram de fechar, para a linha de base do repouso existir desde o primeiro uso. Não apaga nada. |
+| `TELEMETRY_SUMMARY_REFRESH_CRON` | | `0 */30 * * * *` (a cada 30 min) | Resumo provisório dos dias ainda não fechados e fechamento dos dias que acabaram de fechar, para o repouso existir desde o primeiro uso e ser medido a partir do dia seguinte. Não apaga nada. |
 | `TELEMETRY_RETENTION_DAYS` | | `30` | Dias de retenção das leituras brutas de telemetria. Mínimo 2; abaixo disso o processo não sobe. |
 | `TELEMETRY_RETENTION_BATCH_SIZE` | | `5000` | Linhas apagadas por lote na limpeza. Mínimo 1. |
 | `POSITION_RETENTION_CRON` | | `0 45 6 * * *` (06:45 UTC) | Limpeza da trilha de posições do mapa de calor. |

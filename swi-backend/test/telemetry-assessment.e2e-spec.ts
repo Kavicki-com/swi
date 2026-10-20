@@ -22,11 +22,14 @@ describe('Telemetry assessment e2e', () => {
 
   const emailWithBaseline = `telemetry-assess-a-${randomUUID()}@ex.com`
   const emailWithoutBaseline = `telemetry-assess-b-${randomUUID()}@ex.com`
-  const emails = [emailWithBaseline, emailWithoutBaseline]
+  const emailWithEndedDay = `telemetry-assess-c-${randomUUID()}@ex.com`
+  const emails = [emailWithBaseline, emailWithoutBaseline, emailWithEndedDay]
   let workerA = ''
   let workerB = ''
+  let workerC = ''
   let headersA: Record<string, string> = {}
   let headersB: Record<string, string> = {}
+  let headersC: Record<string, string> = {}
 
   const post = (headers: Record<string, string>, body: object) =>
     request(app.getHttpServer()).post('/telemetry/v1/batches').set(headers).send(body)
@@ -74,8 +77,10 @@ describe('Telemetry assessment e2e', () => {
 
     workerA = await worker(emailWithBaseline, 'Telemetry Assess A', new Date('1991-05-10T00:00:00.000Z'))
     workerB = await worker(emailWithoutBaseline, 'Telemetry Assess B', new Date('1991-05-10T00:00:00.000Z'))
+    workerC = await worker(emailWithEndedDay, 'Telemetry Assess C', new Date('1991-05-10T00:00:00.000Z'))
     headersA = await enroll(workerA)
     headersB = await enroll(workerB)
+    headersC = await enroll(workerC)
 
     // Um dia fechado com batimento para o funcionário A: é o repouso observado.
     const threeDaysAgo = monitoredDayOf(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
@@ -86,6 +91,22 @@ describe('Telemetry assessment e2e', () => {
         origin: 'REAL',
         heartRateMin: 62,
         sampleCount: 10,
+        summarizerVersion: SUMMARIZER_VERSION,
+        computedAt: new Date(),
+      },
+    })
+
+    // Para C, só o Resumo provisório de ontem, como a rodada de 30 minutos o
+    // deixa: dia terminado conta como medido sem esperar as 48 h do fechamento.
+    const yesterday = monitoredDayOf(new Date(Date.now() - 24 * 60 * 60 * 1000))
+    await prisma.telemetryDailySummary.create({
+      data: {
+        workerId: workerC,
+        day: yesterday,
+        origin: 'REAL',
+        heartRateMin: 66,
+        sampleCount: 300,
+        provisional: true,
         summarizerVersion: SUMMARIZER_VERSION,
         computedAt: new Date(),
       },
@@ -179,7 +200,7 @@ describe('Telemetry assessment e2e', () => {
     expect(await prisma.telemetryAssessment.count({ where: { sessionId: session } })).toBe(0)
   })
 
-  it('sem dia fechado com batimento, a avaliação sai com repouso provisório e o painel marca a estimativa', async () => {
+  it('sem dia terminado com batimento, a avaliação sai com repouso provisório e o painel marca a estimativa', async () => {
     const session = randomUUID()
     await post(headersB, liveBatch(session)).expect(200)
 
@@ -193,5 +214,22 @@ describe('Telemetry assessment e2e', () => {
     const current = await query.currentForWorker(workerB)
     expect(current.metrics.effort.quality).toBe('CURRENT')
     expect(current.baseline).toBe('PROVISIONAL')
+  })
+
+  it('Resumo provisório de um dia que já terminou vale como repouso medido, sem esperar o fechamento', async () => {
+    const session = randomUUID()
+    await post(headersC, liveBatch(session)).expect(200)
+
+    const rows = await prisma.telemetryAssessment.findMany({ where: { sessionId: session } })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].baselineSource).toBe('MEASURED')
+    expect((rows[0].inputs as { baseline: { restingBpm: number; days: number } }).baseline).toMatchObject({
+      restingBpm: 66,
+      days: 1,
+    })
+
+    const current = await query.currentForWorker(workerC)
+    expect(current.metrics.effort.quality).toBe('CURRENT')
+    expect(current.baseline).toBe('MEASURED')
   })
 })

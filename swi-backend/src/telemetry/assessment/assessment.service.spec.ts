@@ -11,6 +11,9 @@ import { ASSESSMENT_THROTTLE_MS, TelemetryAssessmentService } from './assessment
 const NOW = new Date('2026-09-04T12:00:00.000Z')
 const secondsAgo = (s: number) => new Date(NOW.getTime() - s * 1000)
 const hoursAgo = (h: number) => secondsAgo(h * 3600)
+// Dia monitorado de NOW (09:00 em Brasília) e os anteriores, como o @db.Date os guarda.
+const TODAY = new Date('2026-09-04T00:00:00.000Z')
+const daysBefore = (n: number) => new Date(TODAY.getTime() - n * 24 * 3600 * 1000)
 
 const SESSION = { id: 'session-1', workerId: 'worker-1', origin: 'REAL', startedAt: secondsAgo(3_600) }
 
@@ -28,11 +31,11 @@ const prismaDouble = () => {
     },
     telemetrySample: {
       findMany: jest.fn().mockResolvedValue([]),
-      // Mínimo da sessão, consultado só quando não há dia fechado.
+      // Mínimo da sessão, consultado só quando não há dia terminado.
       aggregate: jest.fn().mockResolvedValue({ _min: { heartRateBpm: null } }),
     },
     profile: { findUnique: jest.fn().mockResolvedValue({ birthDate: new Date('1991-05-10T00:00:00.000Z') }) },
-    telemetryDailySummary: { findMany: jest.fn().mockResolvedValue([{ heartRateMin: 62, provisional: false }]) },
+    telemetryDailySummary: { findMany: jest.fn().mockResolvedValue([{ day: daysBefore(3), heartRateMin: 62, provisional: false }]) },
   }
   db.$transaction = jest.fn(async (fn: any) => {
     db.open = true
@@ -178,12 +181,12 @@ describe('TelemetryAssessmentService.assessSession', () => {
     expect(prisma.telemetryAssessment.create).not.toHaveBeenCalled()
   })
 
-  it('repouso observado: mediana dos mínimos diários dos últimos 14 dias fechados da mesma origem', async () => {
+  it('repouso observado: mediana dos mínimos diários dos últimos 14 dias terminados da mesma origem', async () => {
     const prisma = prismaDouble()
     prisma.telemetryDailySummary.findMany.mockResolvedValue([
-      { heartRateMin: 70, provisional: false },
-      { heartRateMin: 20, provisional: false },
-      { heartRateMin: 62, provisional: false },
+      { day: daysBefore(3), heartRateMin: 70, provisional: false },
+      { day: daysBefore(4), heartRateMin: 20, provisional: false },
+      { day: daysBefore(5), heartRateMin: 62, provisional: false },
     ])
     prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
 
@@ -199,11 +202,11 @@ describe('TelemetryAssessmentService.assessSession', () => {
     expect(prisma.telemetrySample.aggregate).not.toHaveBeenCalled()
   })
 
-  it('com dia fechado, o Resumo provisório do dia aberto fica fora da mediana', async () => {
+  it('com dia terminado, o Resumo provisório do dia em andamento fica fora da mediana', async () => {
     const prisma = prismaDouble()
     prisma.telemetryDailySummary.findMany.mockResolvedValue([
-      { heartRateMin: 50, provisional: true },
-      { heartRateMin: 62, provisional: false },
+      { day: TODAY, heartRateMin: 50, provisional: true },
+      { day: daysBefore(3), heartRateMin: 62, provisional: false },
     ])
     prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
 
@@ -212,7 +215,26 @@ describe('TelemetryAssessmentService.assessSession', () => {
     expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.baseline).toMatchObject({ restingBpm: 62, days: 1, source: 'measured' })
   })
 
-  it('sem dia fechado com batimento: repouso provisório de 70, marcado na linha, e a avaliação sai com esforço e desgaste', async () => {
+  it('Resumo provisório de um dia que já terminou conta como medido, sem esperar as 48 h do fechamento', async () => {
+    const prisma = prismaDouble()
+    // Hoje em andamento (fora), ontem e anteontem terminados mas ainda não
+    // fechados: a mediana é dos dois terminados, e a linha sai como medida.
+    prisma.telemetryDailySummary.findMany.mockResolvedValue([
+      { day: TODAY, heartRateMin: 50, provisional: true },
+      { day: daysBefore(1), heartRateMin: 64, provisional: true },
+      { day: daysBefore(2), heartRateMin: 60, provisional: true },
+    ])
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.baseline).toMatchObject({ restingBpm: 62, days: 2, source: 'measured' })
+    expect(data.baselineSource).toBe('MEASURED')
+    expect(prisma.telemetrySample.aggregate).not.toHaveBeenCalled()
+  })
+
+  it('sem dia terminado com batimento: repouso provisório de 70, marcado na linha, e a avaliação sai com esforço e desgaste', async () => {
     const prisma = prismaDouble()
     prisma.telemetryDailySummary.findMany.mockResolvedValue([])
     prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
@@ -242,9 +264,9 @@ describe('TelemetryAssessmentService.assessSession', () => {
     expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.baseline).toMatchObject({ restingBpm: 58, provisionalFrom: 'session' })
   })
 
-  it('Resumo provisório do dia aberto entra no repouso provisório', async () => {
+  it('Resumo provisório do dia em andamento entra no repouso provisório', async () => {
     const prisma = prismaDouble()
-    prisma.telemetryDailySummary.findMany.mockResolvedValue([{ heartRateMin: 55, provisional: true }])
+    prisma.telemetryDailySummary.findMany.mockResolvedValue([{ day: TODAY, heartRateMin: 55, provisional: true }])
     prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
 
     await service(prisma).assessSession('session-1', NOW, NOW)

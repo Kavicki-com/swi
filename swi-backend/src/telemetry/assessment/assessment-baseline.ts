@@ -2,11 +2,15 @@ import { monitoredDayOf } from '../domain/metric-state'
 
 // Linha de base da avaliação: repouso e máxima por idade. A máxima vem do
 // perfil, e sem data de nascimento a avaliação sai indisponível (ADR-0009). O
-// repouso medido é a mediana dos dias fechados; enquanto não existe dia
-// fechado, entra um repouso provisório (abaixo), marcado como tal na linha e
-// no painel, para esforço e desgaste existirem desde o primeiro uso.
+// repouso medido é a mediana dos mínimos dos dias terminados: Resumo
+// definitivo do dia fechado ou Resumo provisório de um dia que já passou da
+// meia-noite, que a rodada de 30 minutos refaz enquanto chegar leitura
+// atrasada. Só o dia em andamento não conta como medido, porque o mínimo dele
+// ainda cai conforme o dia passa. Enquanto não existe dia terminado, entra um
+// repouso provisório (abaixo), marcado como tal na linha e no painel, para
+// esforço e desgaste existirem desde o primeiro uso.
 
-/** Mediana dos mínimos diários de BPM dos dias fechados. Nulo sem dia nenhum. */
+/** Mediana dos mínimos diários de BPM dos dias terminados. Nulo sem dia nenhum. */
 export function restingFromDailyMinima(dailyMinima: readonly number[]): number | null {
   if (dailyMinima.length === 0) return null
   const sorted = [...dailyMinima].sort((a, b) => a - b)
@@ -16,7 +20,7 @@ export function restingFromDailyMinima(dailyMinima: readonly number[]): number |
 
 /**
  * Teto do repouso provisório: repouso típico de adulto. Quem já mostrou um
- * piso menor, no dia aberto ou na própria sessão, fica com o piso; quem só
+ * piso menor, no dia em andamento ou na própria sessão, fica com o piso; quem só
  * mostrou batimento acima disso fica com o teto, porque um mínimo alto de
  * poucos minutos de uso diz mais sobre a atividade do que sobre o repouso.
  */
@@ -37,23 +41,23 @@ export type RestingBaseline =
   | { restingBpm: number; source: 'provisional'; days: 0; from: ProvisionalRestingFrom }
 
 /**
- * O repouso da linha de base. Medido quando há dia fechado com batimento;
+ * O repouso da linha de base. Medido quando há dia terminado com batimento;
  * provisório enquanto não há, pelo menor batimento plausível já visto (Resumo
- * provisório do dia aberto ou a própria sessão), limitado ao teto padrão.
+ * provisório do dia em andamento ou a própria sessão), limitado ao teto padrão.
  */
 export function restingBaseline(input: {
-  /** Mínimos diários dos dias já fechados, da mesma origem. */
-  closedMinima: readonly number[]
-  /** Mínimos dos Resumos provisórios, dos dias ainda abertos. */
-  openMinima: readonly number[]
+  /** Mínimos diários dos dias já terminados, da mesma origem, de Resumo definitivo ou provisório. */
+  endedDayMinima: readonly number[]
+  /** Mínimo do Resumo provisório do dia em andamento, se houver. */
+  openDayMinima: readonly number[]
   /** Menor batimento da própria sessão de monitoramento, se houver. */
   sessionMinBpm: number | null
 }): RestingBaseline {
-  const measured = restingFromDailyMinima(input.closedMinima)
-  if (measured !== null) return { restingBpm: measured, source: 'measured', days: input.closedMinima.length }
+  const measured = restingFromDailyMinima(input.endedDayMinima)
+  if (measured !== null) return { restingBpm: measured, source: 'measured', days: input.endedDayMinima.length }
 
   const plausible = (bpm: number | null): bpm is number => bpm !== null && bpm >= PROVISIONAL_RESTING_FLOOR_BPM
-  const openMin = input.openMinima.filter(plausible).reduce<number | null>((m, b) => (m === null || b < m ? b : m), null)
+  const openMin = input.openDayMinima.filter(plausible).reduce<number | null>((m, b) => (m === null || b < m ? b : m), null)
   const sessionMin = plausible(input.sessionMinBpm) ? input.sessionMinBpm : null
 
   let restingBpm = PROVISIONAL_RESTING_DEFAULT_BPM
