@@ -96,7 +96,15 @@ export type WorkerTelemetry = {
   observedAt: string
   /** Condições abertas da mesma origem da leitura, mais antiga primeiro. */
   conditions: ActiveCondition[]
+  /**
+   * De onde veio o repouso que deu esforço e desgaste: medido nos dias
+   * fechados, ou provisório enquanto não há dia fechado. Opcional porque um
+   * backend anterior responde sem o campo, e aí a tela não marca nada.
+   */
+  baseline?: BaselineSource | null
 }
+
+export type BaselineSource = 'MEASURED' | 'PROVISIONAL'
 
 export type Coverage = { evaluated: number; total: number }
 

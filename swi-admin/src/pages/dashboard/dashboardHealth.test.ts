@@ -154,7 +154,39 @@ describe('wearRows', () => {
       pressure: '128/82',
       avatarUri: 'https://img/a.png',
       demo: true,
+      // Demonstração já tem o próprio selo; o de estimativa não se soma a ele.
+      provisional: false,
     })
+  })
+
+  it('marca como estimativa provisória o desgaste calculado antes do primeiro dia fechado', () => {
+    const rows = wearRows(
+      list(
+        adminWorker('p1', 'Pedro', {
+          telemetry: { ...reporting({}, 'REAL', 'p1'), baseline: 'PROVISIONAL' },
+        }),
+        // Sem desgaste na tela não há o que chamar de estimativa.
+        adminWorker('p2', 'Paula', {
+          telemetry: {
+            ...reporting({ wear: noMetric('%') }, 'REAL', 'p2'),
+            baseline: 'PROVISIONAL',
+          },
+        }),
+        adminWorker('m1', 'Marta', {
+          telemetry: { ...reporting({}, 'REAL', 'm1'), baseline: 'MEASURED' },
+        }),
+      ),
+      {},
+    )
+    expect(rows.map((r) => r.provisional)).toEqual([true, false, false])
+  })
+
+  it('backend anterior, sem o campo, não marca estimativa', () => {
+    const rows = wearRows(
+      list(adminWorker('a', 'Ana', { telemetry: reporting({}, 'REAL', 'a') })),
+      {},
+    )
+    expect(rows.map((r) => r.provisional)).toEqual([false])
   })
 
   it('sem leitura de batimento, usa o valor que abriu a condição de batimento', () => {

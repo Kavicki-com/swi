@@ -4,7 +4,7 @@ Registro das entregas do SWI. O versionamento segue a versão do produto (app mo
 
 ## 1.2.0
 
-Cadastro pelo painel com credenciais por e-mail. O APK da 1.1.0 continua valendo.
+Cadastro pelo painel com credenciais por e-mail, e esforço e desgaste desde o primeiro uso do relógio. O APK da 1.1.0 continua valendo.
 
 ### Backend (`swi-backend`)
 
@@ -14,6 +14,7 @@ Cadastro pelo painel com credenciais por e-mail. O APK da 1.1.0 continua valendo
 ### Painel (`swi-admin`)
 
 - Depois de cadastrar, o aviso diz se a pessoa recebeu as credenciais por e-mail. Quando o e-mail não pôde ser enviado, o aviso pede que o admin passe o login e a senha por outro meio.
+- Enquanto o repouso da linha de base é provisório, o desgaste no painel leva o selo "Estimativa provisória": nos cards de desgaste do início e na leitura dos sinais vitais do funcionário. O selo some sozinho quando o repouso medido chega, e a leitura de demonstração continua com o próprio selo.
 
 ## 1.1.2
 

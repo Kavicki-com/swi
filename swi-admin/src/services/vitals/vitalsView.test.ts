@@ -13,6 +13,19 @@ describe('vitalsViewFrom', () => {
     expect(view.sourceBadge).toBeNull()
   })
 
+  it('desgaste com repouso provisório leva o selo de estimativa; demonstração vence; sem desgaste não há selo', () => {
+    expect(vitalsViewFrom({ ...reporting(), baseline: 'PROVISIONAL' }).sourceBadge).toBe(
+      'Estimativa provisória',
+    )
+    expect(vitalsViewFrom({ ...reporting({}, 'DEMO'), baseline: 'PROVISIONAL' }).sourceBadge).toBe(
+      'Dados de demonstração',
+    )
+    expect(
+      vitalsViewFrom({ ...reporting({ wear: none('%') }), baseline: 'PROVISIONAL' }).sourceBadge,
+    ).toBeNull()
+    expect(vitalsViewFrom({ ...reporting(), baseline: 'MEASURED' }).sourceBadge).toBeNull()
+  })
+
   it('leitura desatualizada do mesmo dia mantém o valor e diz o horário', () => {
     const now = new Date('2026-10-01T20:00:00.000Z').getTime()
     const view = vitalsViewFrom(

@@ -15,7 +15,11 @@ import {
 } from '@kavicki/swi-design-system'
 import { useDemoToast } from '@/lib/demoToast'
 import { DataOriginBadge } from '@/components/DataOriginBadge'
-import { DEMO_DATA_LABEL, NO_DEVICE_LABEL } from '@/services/vitals/vitalsView'
+import {
+  DEMO_DATA_LABEL,
+  NO_DEVICE_LABEL,
+  PROVISIONAL_BASELINE_LABEL,
+} from '@/services/vitals/vitalsView'
 import type { WearRow, WearTier } from '../dashboardHealth'
 
 const WEAR_FILTER_TABS = ['Excelentes', 'Desgastados', 'Alertas de Fadiga'] as const
@@ -156,6 +160,13 @@ function WearCard({ row }: { row: WearRow }) {
       {row.demo ? (
         <View style={{ alignItems: 'flex-end' }}>
           <DataOriginBadge label={DEMO_DATA_LABEL} testID={`wear-alert-${row.id}-demo`} />
+        </View>
+      ) : row.provisional ? (
+        <View style={{ alignItems: 'flex-end' }}>
+          <DataOriginBadge
+            label={PROVISIONAL_BASELINE_LABEL}
+            testID={`wear-alert-${row.id}-provisional`}
+          />
         </View>
       ) : null}
     </View>

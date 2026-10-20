@@ -24,6 +24,23 @@ export type WorkerVitalsView = {
 
 export const DEMO_DATA_LABEL = 'Dados de demonstração'
 
+/**
+ * Esforço e desgaste calculados com repouso provisório, antes do primeiro dia
+ * de uso fechar. O número existe e vale, mas ainda vai se ajustar.
+ */
+export const PROVISIONAL_BASELINE_LABEL = 'Estimativa provisória'
+
+/**
+ * Selo da leitura. Demonstração vence: um dado que nem é real não precisa
+ * dizer que é estimativa. O provisório só faz sentido com desgaste na tela.
+ */
+export function sourceBadgeOf(telemetry: WorkerTelemetry): string | null {
+  if (telemetry.origin === 'DEMO') return DEMO_DATA_LABEL
+  if (telemetry.baseline === 'PROVISIONAL' && telemetry.metrics.wear.value !== null)
+    return PROVISIONAL_BASELINE_LABEL
+  return null
+}
+
 /** Marcador de valor ausente na tela. */
 export const NO_VALUE = '--'
 
@@ -102,6 +119,6 @@ export function vitalsViewFrom(
     effortPct: effort.value === null ? null : oneDecimal(effort.value),
     fatigueEta,
     status,
-    sourceBadge: telemetry.origin === 'DEMO' ? DEMO_DATA_LABEL : null,
+    sourceBadge: sourceBadgeOf(telemetry),
   }
 }

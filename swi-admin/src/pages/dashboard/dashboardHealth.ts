@@ -42,6 +42,8 @@ export type WearRow = {
   tier: WearTier | null
   /** Leitura de origem demonstração, rotulada na tela. */
   demo: boolean
+  /** Desgaste calculado com repouso provisório (sem dia fechado ainda), rotulado na tela. */
+  provisional: boolean
   /** Tem aparelho pareado; sem nenhum pareado, a lista mostra o estado vazio. */
   paired: boolean
 }
@@ -147,6 +149,13 @@ export function wearRows(
           : `${bloodPressure.value.systolic}/${bloodPressure.value.diastolic}`,
       tier: tierOf(telemetry),
       demo: telemetry.origin === 'DEMO',
+      // Só com desgaste na tela e aparelho pareado: sem barra não há o que
+      // chamar de estimativa, e demonstração já tem o próprio selo.
+      provisional:
+        paired &&
+        telemetry.origin !== 'DEMO' &&
+        telemetry.baseline === 'PROVISIONAL' &&
+        wear.value !== null,
       paired,
     }
   })
