@@ -10,6 +10,10 @@ Cadastro pelo painel com credenciais por e-mail. O APK da 1.1.0 continua valendo
 
 - Cadastro feito pelo painel (funcionário, supervisor ou administrador) envia à pessoa um e-mail de cadastro concluído com as credenciais de acesso: o login, que é o e-mail, e a senha definida pelo admin. A conta continua nascendo ativa, sem etapa de ativação. Se o e-mail não puder ser enviado, o cadastro é concluído mesmo assim e a resposta da API informa isso ao painel.
 
+### Painel (`swi-admin`)
+
+- Depois de cadastrar, o aviso diz se a pessoa recebeu as credenciais por e-mail. Quando o e-mail não pôde ser enviado, o aviso pede que o admin passe o login e a senha por outro meio.
+
 ## 1.1.2
 
 Correção no painel. O app e o backend não mudam, e o APK da 1.1.0 continua valendo.

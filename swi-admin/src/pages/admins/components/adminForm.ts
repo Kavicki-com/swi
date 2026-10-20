@@ -228,3 +228,14 @@ export function parseBR(value: string): string | undefined {
 // e-mail "de forma" (não RFC): barra o esquecimento óbvio antes de gastar uma
 // ida ao backend só pra receber um 400.
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Aviso depois do cadastro. O backend diz se o e-mail com as credenciais saiu;
+// quando não saiu, é o admin quem precisa passar login e senha, e o aviso diz
+// isso. Sem a informação (backend anterior), fica o aviso de sempre.
+export function avisoDeCadastro(nome: string, emailEnviado: boolean | undefined): string {
+  if (emailEnviado === true) return `${nome} foi cadastrado e recebeu as credenciais por e-mail`
+  if (emailEnviado === false) {
+    return `${nome} foi cadastrado, mas o e-mail com as credenciais não pôde ser enviado. Passe o login e a senha por outro meio.`
+  }
+  return `${nome} foi cadastrado com sucesso`
+}
