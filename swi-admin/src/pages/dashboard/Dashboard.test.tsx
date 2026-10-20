@@ -545,6 +545,29 @@ describe('Dashboard: saúde da frota pela telemetria', () => {
     expect(screen.getByTestId('wear-alert-d1-demo')).toHaveTextContent('Dados de demonstração')
   })
 
+  it('desgaste com repouso provisório leva o selo de estimativa no card', async () => {
+    telemetry.state = {
+      ...telemetry.state,
+      workers: {
+        observedAt: '2026-10-01T15:00:00.000Z',
+        workers: [
+          adminWorker('p1', 'Pedro Novo', {
+            telemetry: {
+              ...reporting({}, 'REAL', 'p1'),
+              baseline: 'PROVISIONAL',
+              conditions: [condition('URGENT')],
+            },
+          }),
+        ],
+      },
+    }
+    await renderReady()
+    expect(screen.getByTestId('wear-alert-p1-provisional')).toHaveTextContent(
+      'Estimativa provisória',
+    )
+    expect(screen.queryByTestId('wear-alert-p1-demo')).toBeNull()
+  })
+
   it('quem não tem leitura atual aparece contado, não escondido', async () => {
     telemetry.state = {
       ...telemetry.state,
