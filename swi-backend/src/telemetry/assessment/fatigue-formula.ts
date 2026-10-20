@@ -56,20 +56,21 @@ export const INITIAL_STATE: FormulaState = Object.freeze({
 
 const MINUTE_MS = 60_000
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+// Exportados para a fórmula esparsa usar a mesma conta, sem cópia.
+export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
 /** Alfa da média móvel para um intervalo real, a partir do alfa por 15 s. */
-function alphaFor(dtMs: number, alphaPer15s: number): number {
+export function alphaFor(dtMs: number, alphaPer15s: number): number {
   if (dtMs <= 0) return alphaPer15s
   return 1 - (1 - alphaPer15s) ** (dtMs / 15_000)
 }
 
-function decayed(dose: number, elapsedMs: number, decayMinutes: number): number {
+export function decayed(dose: number, elapsedMs: number, decayMinutes: number): number {
   if (elapsedMs <= 0) return dose
   return dose * Math.exp(-(elapsedMs / MINUTE_MS) / decayMinutes)
 }
 
-function wearOf(dose: number, doseScale: number): number {
+export function wearOf(dose: number, doseScale: number): number {
   return Math.round(100 * (1 - Math.exp(-dose / doseScale)))
 }
 

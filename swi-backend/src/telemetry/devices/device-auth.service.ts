@@ -26,19 +26,42 @@ export const ENROLLMENT_TTL_MIN = 10
  */
 export const ENROLLABLE_KINDS = [
   TelemetryDeviceKind.IPHONE,
+  TelemetryDeviceKind.ANDROID_PHONE,
   TelemetryDeviceKind.EXTERNAL_CUFF,
 ] as const
 
 export type EnrollableKind = (typeof ENROLLABLE_KINDS)[number]
 
+/**
+ * Celulares que recebem credencial. Um funcionário tem no máximo um ativo, de
+ * qualquer dos dois tipos: quem troca de iPhone para Android não pode ficar
+ * com as duas credenciais vivas, e o atual dele só tem uma origem.
+ */
+export const PHONE_KINDS = [TelemetryDeviceKind.IPHONE, TelemetryDeviceKind.ANDROID_PHONE] as const
+export type PhoneKind = (typeof PHONE_KINDS)[number]
+
+/**
+ * Que aparelho o pareamento cria. Entre os celulares vale o que o app declara:
+ * só ele sabe em que celular está, e o painel grava IPHONE em todo convite. O
+ * medidor de pressão segue o convite, que é quem sabe que é um medidor. Sem
+ * tipo dos dois lados é o app iOS instalado, que não declara o próprio.
+ */
+function kindFor(invited: TelemetryDeviceKind | null, declared: PhoneKind | undefined): TelemetryDeviceKind {
+  if (invited === TelemetryDeviceKind.EXTERNAL_CUFF) return invited
+  return declared ?? invited ?? TelemetryDeviceKind.IPHONE
+}
+
 export interface DeviceIdentity {
   deviceId: string
   workerId: string
+  /** Decide se o evento promove o atual ao vivo ou em qualquer idade. */
+  kind: TelemetryDeviceKind
 }
 
 export interface CreateEnrollmentInput {
   workerId: string
-  kind: EnrollableKind
+  /** Ausente: o painel não sabe o celular, e o app declara ao concluir. */
+  kind?: EnrollableKind
 }
 
 export interface CompleteEnrollmentInput {
@@ -46,6 +69,8 @@ export interface CompleteEnrollmentInput {
   enrollmentId?: string
   code: string
   model?: string
+  /** O celular que conclui. Manda sobre o convite, menos no de medidor de pressão. */
+  kind?: PhoneKind
 }
 
 /**
@@ -138,7 +163,7 @@ export class DeviceAuthService {
 
   async createEnrollment(admin: JwtUser, input: CreateEnrollmentInput) {
     const companyId = companyScopeOf(admin, 'Funcionário não encontrado')
-    if (!ENROLLABLE_KINDS.includes(input.kind)) {
+    if (input.kind !== undefined && !ENROLLABLE_KINDS.includes(input.kind)) {
       throw enrollmentRejection(
         'ENROLLMENT_UNSUPPORTED_DEVICE',
         'Este tipo de aparelho não recebe credencial própria',
@@ -160,7 +185,7 @@ export class DeviceAuthService {
       data: {
         workerId: worker.id,
         createdById: admin.userId,
-        kind: input.kind,
+        kind: input.kind ?? null,
         codeHash: await hash(code),
         expiresAt,
       },
@@ -175,7 +200,7 @@ export class DeviceAuthService {
       input.enrollmentId === undefined
         ? await this.enrollmentByCode(workerId, input.code)
         : await this.enrollmentById(workerId, input.enrollmentId, input.code)
-    return this.issueDevice(enrollment, input.model)
+    return this.issueDevice(enrollment, kindFor(enrollment.kind, input.kind), input.model)
   }
 
   private async enrollmentById(
@@ -241,7 +266,11 @@ export class DeviceAuthService {
   }
 
   /** Consumo do convite e emissão da credencial, iguais nos dois caminhos. */
-  private async issueDevice(enrollment: TelemetryEnrollment, model: string | undefined) {
+  private async issueDevice(
+    enrollment: TelemetryEnrollment,
+    kind: TelemetryDeviceKind,
+    model: string | undefined,
+  ) {
     const secret = randomBytes(32).toString('hex')
     let device
     try {
@@ -252,17 +281,22 @@ export class DeviceAuthService {
           where: { id: enrollment.id, consumedAt: null },
           data: { consumedAt: new Date() },
         })
-        // Trocar de aparelho não pode deixar a credencial antiga viva. Antes de
-        // criar, senão o novo entraria na própria varredura.
+        // Trocar de aparelho não pode deixar a credencial antiga viva, e para
+        // celular isso vale entre os dois tipos. Antes de criar, senão o novo
+        // entraria na própria varredura.
         await tx.telemetryDevice.updateMany({
-          where: { workerId: enrollment.workerId, kind: enrollment.kind, revokedAt: null },
+          where: {
+            workerId: enrollment.workerId,
+            kind: (PHONE_KINDS as readonly TelemetryDeviceKind[]).includes(kind) ? { in: [...PHONE_KINDS] } : kind,
+            revokedAt: null,
+          },
           data: { revokedAt: new Date() },
         })
         return tx.telemetryDevice.create({
           data: {
             // Do enrollment, nunca do corpo da requisição.
             workerId: enrollment.workerId,
-            kind: enrollment.kind,
+            kind,
             model: model ?? null,
             credentialHash: hashCredential(secret),
           },
@@ -296,6 +330,7 @@ export class DeviceAuthService {
       select: {
         id: true,
         workerId: true,
+        kind: true,
         credentialHash: true,
         revokedAt: true,
         worker: { select: { active: true } },
@@ -323,14 +358,14 @@ export class DeviceAuthService {
 
     // O funcionário sai daqui, do vínculo do aparelho, e não do que o cliente
     // afirma ser. É esta linha que sustenta a regra do evento sem workerId.
-    return { deviceId: device.id, workerId: device.workerId }
+    return { deviceId: device.id, workerId: device.workerId, kind: device.kind }
   }
 
   /**
    * A única leitura de aparelho do backend, escopada pela empresa como as
    * escritas: funcionário de fora responde como inexistente, sem consultar
-   * aparelho nenhum. Concluir um pareamento revoga o anterior do mesmo tipo,
-   * então "o ativo" é no máximo um por tipo, e o piloto só emite para iPhone.
+   * aparelho nenhum. Concluir um pareamento de celular revoga qualquer celular
+   * anterior, iPhone ou Android, então há no máximo um celular ativo.
    */
   async deviceStateForAdmin(admin: JwtUser, workerId: string): Promise<WorkerDeviceState> {
     const companyId = companyScopeOf(admin, 'Funcionário não encontrado')

@@ -1,4 +1,5 @@
-import { IsOptional, IsString, Length, Matches } from 'class-validator'
+import { IsIn, IsOptional, IsString, Length, Matches } from 'class-validator'
+import { PHONE_KINDS, type PhoneKind } from '../device-auth.service'
 
 /**
  * Corpo da conclusão do pareamento. Não existe campo de funcionário aqui de
@@ -16,6 +17,10 @@ export class CompleteEnrollmentDto {
   @Matches(/^\d{6}$/, { message: 'Código de pareamento inválido' }) code!: string
 
   // Rótulo do aparelho para o painel. Sem dado de saúde e sem identificador de
-  // hardware: serve para a pessoa reconhecer qual iPhone revogar.
+  // hardware: serve para a pessoa reconhecer qual celular revogar.
   @IsOptional() @IsString() @Length(1, 100) model?: string
+
+  // O celular que conclui. Manda sobre o tipo do convite, menos no de medidor
+  // de pressão; ausente, o serviço segue o convite ou assume iPhone.
+  @IsOptional() @IsIn(PHONE_KINDS) kind?: PhoneKind
 }

@@ -19,7 +19,7 @@ const serviceDouble = (authenticate: DeviceAuthService['authenticate']) =>
 
 describe('DeviceAuthGuard', () => {
   it('anexa a identidade verificada na request e libera a rota', async () => {
-    const identity = { deviceId: 'device-1', workerId: 'worker-1' }
+    const identity = { deviceId: 'device-1', workerId: 'worker-1', kind: 'IPHONE' as const }
     const { ctx, request } = context({ authorization: 'Device device-1.segredo' })
     const guard = new DeviceAuthGuard(serviceDouble(async () => identity))
 

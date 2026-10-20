@@ -28,4 +28,14 @@ describe('CompleteEnrollmentDto', () => {
   it.each([undefined, '12345', '1234567', 'abcdef'])('recusa código malformado: %p', async (code) => {
     expect(await errosEm({ code })).toEqual(['code'])
   })
+
+  // O tipo é do celular que conclui: só iPhone e Android recebem credencial por
+  // aqui, e quem confere se ele é obrigatório é o serviço, que conhece o convite.
+  it.each(['IPHONE', 'ANDROID_PHONE'])('aceita o celular %p como tipo', async (kind) => {
+    expect(await errosEm({ code: '123456', kind })).toEqual([])
+  })
+
+  it.each(['APPLE_WATCH', 'EXTERNAL_CUFF', 'OUTRO'])('recusa %p como tipo', async (kind) => {
+    expect(await errosEm({ code: '123456', kind })).toEqual(['kind'])
+  })
 })

@@ -7,6 +7,7 @@ import { TelemetryConditionSweepJob } from './alerts/condition-sweep.job'
 import { TelemetryConditionService } from './alerts/condition.service'
 import { TelemetryHealthNotifier } from './alerts/health-notifier'
 import { TelemetryAssessmentService } from './assessment/assessment.service'
+import { SparseAssessmentService } from './assessment/sparse-assessment.service'
 import { DeviceAuthGuard } from './devices/device-auth.guard'
 import { DeviceAuthService } from './devices/device-auth.service'
 import { TelemetryDevicesController } from './devices/telemetry-devices.controller'
@@ -50,6 +51,8 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     // condições.
     TelemetryAudienceService,
     TelemetryAssessmentService,
+    // A da pulseira: o dia inteiro a cada sincronização, fora da cadeia ao vivo.
+    SparseAssessmentService,
     TelemetryHealthNotifier,
     // Depois da avaliação, porque é nessa ordem que a ingestão as chama.
     TelemetryConditionService,

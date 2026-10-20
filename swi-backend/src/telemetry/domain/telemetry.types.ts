@@ -20,6 +20,8 @@ export type MeasurementSource =
   | 'EXTERNAL_CUFF'
   | 'MANUAL_HEALTHKIT'
   | 'MANUAL_SWI'
+  /** Lido do Health Connect no Android, gravado lá pelo app de uma pulseira. */
+  | 'HEALTH_CONNECT'
   | 'DERIVED'
 
 /** Estado de leitura de uma métrica. Ausência é null, nunca zero. */
@@ -134,3 +136,6 @@ export const URGENT_CONDITION_KINDS = ['HEART_RATE_HIGH', 'HEART_RATE_LOW'] as c
 
 /** LIVE promove o snapshot; BACKLOG só vai ao histórico; HISTORICAL passou de 48 h. */
 export type EventAge = 'LIVE' | 'BACKLOG' | 'HISTORICAL'
+
+/** Espelha o enum TelemetryDeviceKind do schema. */
+export type DeviceKind = 'APPLE_WATCH' | 'IPHONE' | 'EXTERNAL_CUFF' | 'ANDROID_PHONE'

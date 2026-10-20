@@ -578,6 +578,9 @@ enum TelemetryDeviceKind {
   APPLE_WATCH
   IPHONE
   EXTERNAL_CUFF
+  /// Celular Android que lê a pulseira pelo Health Connect. O dado chega em
+  /// lotes, horas depois de medido, e por isso promove o atual em qualquer idade.
+  ANDROID_PHONE
 }
 
 enum TelemetrySessionStatus {
@@ -591,6 +594,8 @@ enum TelemetryMeasurementSource {
   EXTERNAL_CUFF
   MANUAL_HEALTHKIT
   MANUAL_SWI
+  /// Lido do Health Connect no Android, gravado lá pelo app de uma pulseira.
+  HEALTH_CONNECT
   DERIVED
 }
 
@@ -630,7 +635,9 @@ model TelemetryEnrollment {
   worker      User                @relation("enrolledWorker", fields: [workerId], references: [id], onDelete: Cascade)
   createdById String
   createdBy   User                @relation("enrollmentAuthor", fields: [createdById], references: [id], onDelete: Cascade)
-  kind        TelemetryDeviceKind
+  /// Nulo quando o painel convida sem saber o celular do funcionário: quem
+  /// declara o tipo é o app, ao concluir.
+  kind        TelemetryDeviceKind?
 
   /// Hash lento (bcrypt), como o código de confirmação de e-mail: seis dígitos
   /// têm entropia baixa e o custo do hash é parte da defesa.
@@ -783,6 +790,12 @@ model TelemetrySnapshot {
 
   lastEventId   String?
   lastEventTime DateTime
+  /// Tipo do aparelho que promoveu o atual. É o que diz ao read model que a
+  /// leitura é de pulseira sincronizada, sem join com sessão e aparelho.
+  deviceKind     TelemetryDeviceKind?
+  /// Quando o backend recebeu o lote que promoveu o atual. Para pulseira, é o
+  /// "sincronizado às"; lastEventTime é o "dados até".
+  lastReceivedAt DateTime?
 
   heartRateBpm        Float?
   heartRateAt         DateTime?
@@ -847,6 +860,9 @@ model TelemetryAssessment {
   createdAt DateTime @default(now())
 
   @@index([workerId, computedAt])
+  /// A leitura atual escolhe pelo instante medido: a pulseira recalcula dias
+  /// velhos depois dos novos.
+  @@index([workerId, windowEnd])
   @@index([sessionId, computedAt])
 }
 

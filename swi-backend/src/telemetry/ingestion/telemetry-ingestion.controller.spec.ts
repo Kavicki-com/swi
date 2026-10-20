@@ -5,7 +5,7 @@ import type { TelemetryIngestionService } from './telemetry-ingestion.service'
 // O roteamento é assunto do e2e. O que se prova aqui é que o controlador não
 // inventa identidade: passa adiante o aparelho da credencial e o lote do corpo.
 
-const DEVICE: DeviceIdentity = { deviceId: 'device-1', workerId: 'worker-1' }
+const DEVICE: DeviceIdentity = { deviceId: 'device-1', workerId: 'worker-1', kind: 'IPHONE' }
 
 describe('TelemetryIngestionController', () => {
   it('ingere com o aparelho da credencial e o lote do corpo', async () => {

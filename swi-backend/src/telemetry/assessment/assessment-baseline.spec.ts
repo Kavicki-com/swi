@@ -1,5 +1,6 @@
 import {
   ageInYearsAt,
+  baselineFor,
   maxHeartRateForAge,
   PROVISIONAL_RESTING_DEFAULT_BPM,
   PROVISIONAL_RESTING_FLOOR_BPM,
@@ -102,5 +103,27 @@ describe('ageInYearsAt', () => {
 describe('maxHeartRateForAge', () => {
   it('é 208 menos 0,7 vezes a idade', () => {
     expect(maxHeartRateForAge(35)).toBe(183.5)
+  })
+})
+
+// A linha de base inteira, num lugar só: a avaliação do relógio e a esparsa da
+// pulseira passam por aqui e não podem discordar sobre o repouso de ninguém.
+describe('baselineFor', () => {
+  const now = new Date('2026-10-20T15:00:00.000Z')
+
+  it('sem data de nascimento, indisponível', () => {
+    const r = baselineFor({ endedDayMinima: [60], openDayMinima: [], sessionMinBpm: null }, null, now)
+    expect(r.baseline).toEqual({ kind: 'unavailable', reason: 'no_birth_date' })
+    expect(r.resting.source).toBe('measured')
+  })
+
+  it('com data de nascimento, repouso medido e máxima de Tanaka', () => {
+    const r = baselineFor(
+      { endedDayMinima: [62, 58, 60], openDayMinima: [], sessionMinBpm: null },
+      new Date('1991-05-10T00:00:00.000Z'),
+      now,
+    )
+    expect(r.ageYears).toBe(35)
+    expect(r.baseline).toEqual({ kind: 'available', restingBpm: 60, maxBpm: 208 - 0.7 * 35 })
   })
 })

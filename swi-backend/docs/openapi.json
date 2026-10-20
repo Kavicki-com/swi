@@ -4217,13 +4217,13 @@
             "type": "string",
             "enum": [
               "IPHONE",
+              "ANDROID_PHONE",
               "EXTERNAL_CUFF"
             ]
           }
         },
         "required": [
-          "workerId",
-          "kind"
+          "workerId"
         ]
       },
       "CompleteEnrollmentDto": {
@@ -4240,6 +4240,13 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "IPHONE",
+              "ANDROID_PHONE"
+            ]
           }
         },
         "required": [

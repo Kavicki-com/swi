@@ -1135,3 +1135,54 @@ describe('projectAdminWorkers: lista do painel, uma leitura por funcionário', (
     expect(order).toEqual(['Ana', 'Davi', 'Bruno', 'Álvaro', 'Carla', 'Zuleica'])
   })
 })
+
+// A pulseira chega em lote, horas depois de medir. A leitura diz até quando ela
+// mediu e quando sincronizou, e o número continua envelhecendo pela régua de
+// sempre, contado da medição e não da chegada.
+describe('projectWorker: pulseira sincronizada', () => {
+  const measuredUntil = minutesAgo(52)
+  const syncedAt = secondsAgo(30)
+  const assessment = (over: Partial<ProjectionAssessment> = {}): ProjectionAssessment => ({
+    computedAt: secondsAgo(1),
+    effortPercent: 62,
+    wearPercent: 41,
+    fatigueEtaMin: null,
+    formulaVersion: 'swi-fatigue-sparse-1',
+    baselineSource: 'MEASURED',
+    ...over,
+  })
+
+  it('expõe dados até e sincronizado às quando o atual veio de celular Android', () => {
+    const t = project({
+      snapshot: snapshot({
+        deviceKind: 'ANDROID_PHONE',
+        lastEventTime: measuredUntil,
+        lastReceivedAt: syncedAt,
+        heartRateBpm: 88,
+        heartRateAt: measuredUntil,
+      }),
+    })
+
+    expect(t.sync).toEqual({ measuredUntil, syncedAt })
+    expect(t.metrics.heartRate).toMatchObject({ value: 88, quality: 'UNAVAILABLE', measuredAt: measuredUntil })
+  })
+
+  it('relógio não tem sync, nem snapshot sem tipo, nem quem nunca reportou', () => {
+    expect(project({ snapshot: snapshot({ deviceKind: 'IPHONE', lastEventTime: secondsAgo(5) }) }).sync).toBeNull()
+    expect(project({ snapshot: snapshot() }).sync).toBeNull()
+    expect(project({ snapshot: null }).sync).toBeNull()
+  })
+
+  it('esforço e desgaste da fórmula esparsa envelhecem pela última leitura, não pela hora do recálculo', () => {
+    const t = project({ assessment: assessment({ measuredAt: measuredUntil }) })
+
+    expect(t.metrics.wear).toMatchObject({ value: 41, quality: 'UNAVAILABLE', measuredAt: measuredUntil })
+    expect(t.metrics.effort).toMatchObject({ measuredAt: measuredUntil })
+  })
+
+  it('sem measuredAt, a avaliação continua datada pelo cálculo', () => {
+    const t = project({ assessment: assessment({ formulaVersion: 'swi-fatigue-experimental' }) })
+
+    expect(t.metrics.wear).toMatchObject({ value: 41, measuredAt: secondsAgo(1) })
+  })
+})

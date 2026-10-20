@@ -1,4 +1,6 @@
+import type { Prisma, TelemetryOrigin } from '@prisma/client'
 import { monitoredDayOf } from '../domain/metric-state'
+import type { Baseline } from './fatigue-formula'
 
 // Linha de base da avaliação: repouso e máxima por idade. A máxima vem do
 // perfil, e sem data de nascimento a avaliação sai indisponível (ADR-0009). O
@@ -87,4 +89,70 @@ export function ageInYearsAt(birthDate: Date, at: Date): number {
 /** Tanaka, Monahan e Seals (2001). Estimativa respaldada, não medição. */
 export function maxHeartRateForAge(ageYears: number): number {
   return 208 - 0.7 * ageYears
+}
+
+/**
+ * A linha de base inteira de uma avaliação, a partir do que o banco devolveu:
+ * repouso (medido ou provisório) e máxima por idade. As duas avaliações, a do
+ * relógio e a esparsa da pulseira, passam por aqui, e por isso não podem
+ * discordar sobre o repouso de ninguém. A frente de calibração troca esta
+ * função, não as fórmulas.
+ */
+export function baselineFor(
+  restingInput: Parameters<typeof restingBaseline>[0],
+  birthDate: Date | null,
+  now: Date,
+): { baseline: Baseline; resting: RestingBaseline; ageYears: number | null; maxBpm: number | null } {
+  const resting = restingBaseline(restingInput)
+  const ageYears = birthDate === null ? null : ageInYearsAt(birthDate, now)
+  const maxBpm = ageYears === null ? null : maxHeartRateForAge(ageYears)
+  const baseline: Baseline =
+    maxBpm === null
+      ? { kind: 'unavailable', reason: 'no_birth_date' }
+      : { kind: 'available', restingBpm: resting.restingBpm, maxBpm }
+  return { baseline, resting, ageYears, maxBpm }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Quantos Resumos provisórios podem existir ao mesmo tempo: o dia de hoje e os
+ * dois anteriores, que terminaram mas ainda não fecharam. É a folga que a
+ * consulta da linha de base dá além dos dias medidos; os dois anteriores já
+ * contam como medidos, e o corte nos 14 dias é feito depois.
+ */
+const OPEN_DAY_ROWS = 3
+
+/**
+ * Mínimos diários para o repouso. Mesma consulta e mesmo corte que a avaliação
+ * do relógio sempre fez; mora aqui para a esparsa usar a mesma.
+ */
+export async function restingMinimaOf(
+  tx: Prisma.TransactionClient,
+  workerId: string,
+  origin: TelemetryOrigin,
+  now: Date,
+  restingDays: number,
+): Promise<{ endedDayMinima: number[]; openDayMinima: number[] }> {
+  const sinceDay = new Date(monitoredDayOf(now).getTime() - restingDays * DAY_MS)
+  const summaries = await tx.telemetryDailySummary.findMany({
+    // Os Resumos provisórios vêm junto, mais recentes primeiro. O de um dia
+    // que já terminou conta como medido; só o do dia em andamento fica de
+    // fora da mediana, e o teto deixa folga para ele sem cortar os 14 dias.
+    where: { workerId, origin, day: { gte: sinceDay }, heartRateMin: { not: null } },
+    select: { day: true, heartRateMin: true, provisional: true },
+    orderBy: { day: 'desc' },
+    take: restingDays + OPEN_DAY_ROWS,
+  })
+
+  const todayMs = monitoredDayOf(now).getTime()
+  const minimaOf = (rows: typeof summaries) => rows.flatMap((s) => (s.heartRateMin === null ? [] : [s.heartRateMin]))
+  // Um dia terminou quando é anterior ao dia monitorado de agora: o Resumo
+  // dele, definitivo ou provisório, é medido. O do dia em andamento não é.
+  const endedDayMinima = minimaOf(summaries.filter((s) => !s.provisional || s.day.getTime() < todayMs)).slice(
+    0,
+    restingDays,
+  )
+  const openDayMinima = minimaOf(summaries.filter((s) => s.provisional && s.day.getTime() >= todayMs))
+  return { endedDayMinima, openDayMinima }
 }

@@ -854,11 +854,25 @@ describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', (
     expect(where).toEqual({
       origin: 'REAL',
       sessionId: { not: null },
+      OR: [{ deviceKind: null }, { deviceKind: { not: 'ANDROID_PHONE' } }],
       lastEventTime: { lt: secondsAgo(120), gte: daysAgo(7) },
     })
     // lastEventTime sai da projeção: o silêncio que vale é o relido dentro da
     // transação, e não este, que envelhece durante o laço.
     expect(select).toEqual({ sessionId: true })
+  })
+
+  it('pulseira fica de fora; snapshot sem tipo, anterior à coluna, continua candidato', async () => {
+    // Horas sem lote é o normal da pulseira. O OR com nulo existe porque `not`
+    // em SQL também descarta a linha sem tipo.
+    const prisma = prismaDouble()
+
+    await service(prisma).sweepSilentSessions(NOW)
+
+    expect(prisma.telemetrySnapshot.findMany.mock.calls[0][0].where.OR).toEqual([
+      { deviceKind: null },
+      { deviceKind: { not: 'ANDROID_PHONE' } },
+    ])
   })
 
   it('candidata calada há três dias continua sendo varrida', async () => {
