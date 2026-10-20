@@ -1,5 +1,5 @@
 import { TelemetryDomainError } from '../domain/telemetry.errors'
-import type { TelemetryEvent, TelemetryOrigin } from '../domain/telemetry.types'
+import type { DeviceKind, TelemetryEvent, TelemetryOrigin } from '../domain/telemetry.types'
 
 // Porta de persistência da telemetria. A ingestão fala com esta interface, não
 // com o Prisma: o contrato de idempotência é o que importa para quem chama, e o
@@ -72,6 +72,11 @@ export function sessionBelongsTo(
   return session.deviceId === device.deviceId && session.workerId === device.workerId
 }
 
+export interface SaveEventOptions {
+  /** Quem mandou. Decide se o evento promove o atual só ao vivo ou em qualquer idade. */
+  deviceKind: DeviceKind | null
+}
+
 export interface TelemetryRepository {
   /**
    * Devolve a sessão nomeada pelo aparelho, criando-a se ainda não existir.
@@ -85,12 +90,17 @@ export interface TelemetryRepository {
    * do funcionário. "now" é obrigatório, como em todo o domínio: a fronteira
    * entre ao vivo e backlog não pode depender do relógio da máquina.
    *
+   * A pulseira (celular Android lendo o Health Connect) só manda em lote,
+   * horas depois de medir: o evento mais recente dela promove o atual em
+   * qualquer idade até o histórico, e o snapshot guarda o tipo do aparelho e
+   * quando o lote chegou. Sem `options`, vale a regra do relógio.
+   *
    * Evento só de medição avulsa (pressão e temperatura do app Saúde) segue
    * outra regra: atualiza apenas a própria medição no snapshot, em qualquer
    * idade, quando é mais nova que a gravada, e não mexe em sessão nem em
    * último evento.
    */
-  saveEvent(event: TelemetryEvent, now: Date): Promise<SaveEventResult>
+  saveEvent(event: TelemetryEvent, now: Date, options?: SaveEventOptions): Promise<SaveEventResult>
 }
 
 /**

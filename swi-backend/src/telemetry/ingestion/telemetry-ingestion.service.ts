@@ -3,13 +3,17 @@ import { RealtimeGateway } from '../../realtime/realtime.gateway'
 import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import { TelemetryConditionService } from '../alerts/condition.service'
 import { TelemetryAssessmentService } from '../assessment/assessment.service'
+import { SparseAssessmentService } from '../assessment/sparse-assessment.service'
 import type { DeviceIdentity } from '../devices/device-auth.service'
 import {
   assertEventTimeUsable,
   assertMeasuresSomething,
+  classifyEventAge,
   isBacklog,
   isSpotReadingEvent,
+  monitoredDayOf,
   rejectWorkerIdAuthority,
+  snapshotPolicyFor,
   validateRawMeasurement,
 } from '../domain/metric-state'
 import {
@@ -33,7 +37,9 @@ import { describeError } from '../../common/describe-error'
 // confirmado. A avaliação de esforço e desgaste e a avaliação de condições
 // rodam depois do laço, uma vez por sessão ao vivo cada, com corte de 15 s no
 // serviço de avaliação; a gravação do evento nunca espera por nenhuma das
-// duas, e nenhuma das duas derruba a outra.
+// duas, e nenhuma das duas derruba a outra. A pulseira lida pelo Health
+// Connect não dispara essa cadeia: ela chega em lote, horas depois, e o que se
+// recalcula é o dia inteiro de cada batimento, pela fórmula esparsa.
 
 /** Motivos estáveis de recusa. O cliente decide o que fazer lendo este código. */
 export type TelemetryRejectionReason =
@@ -145,6 +151,7 @@ export class TelemetryIngestionService {
     private readonly assessment: TelemetryAssessmentService,
     private readonly conditions: TelemetryConditionService,
     private readonly audience: TelemetryAudienceService,
+    private readonly sparse: SparseAssessmentService,
   ) {}
 
   async ingest(device: DeviceIdentity, batch: TelemetryBatchDto): Promise<TelemetryBatchAck> {
@@ -164,6 +171,8 @@ export class TelemetryIngestionService {
     // e origem. O iPhone manda cada medição numa sessão própria, e uma
     // avaliação por sessão seria a mesma conta repetida dezenas de vezes.
     const spotSessionByOrigin = new Map<TelemetryOrigin, string>()
+    // Dias monitorados (em ms) que a pulseira tocou neste lote, por origem.
+    const sparseDays = new Map<TelemetryOrigin, Set<number>>()
     let promoted: PromotedEvent | null = null
 
     for (const raw of batch.events) {
@@ -174,7 +183,7 @@ export class TelemetryIngestionService {
         const startedAt = sessionStarts.get(event.monitoringSessionId) ?? new Date(event.eventTime)
         await this.requireOwnSession(sessions, device, event, startedAt)
 
-        const result = await this.repository.saveEvent(event, now)
+        const result = await this.repository.saveEvent(event, now, { deviceKind: device.kind })
         if (result.outcome === 'DUPLICATE') {
           duplicateEventIds.push(event.eventId)
           continue
@@ -190,6 +199,15 @@ export class TelemetryIngestionService {
         // acontecendo e avaliaria esforço onde não há o que avaliar.
         if (isSpotReadingEvent(event.measurements)) {
           spotSessionByOrigin.set(event.origin, event.monitoringSessionId)
+        } else if (snapshotPolicyFor(device.kind) === 'LATEST') {
+          // Pulseira: nada aqui é ao vivo, e a cadeia por sessão e as condições
+          // de batimento, sinal e desgaste não se aplicam. O que vale é o dia de
+          // cada batimento, recalculado inteiro depois do laço.
+          if (event.measurements.heartRate !== undefined && classifyEventAge(event.eventTime, now) !== 'HISTORICAL') {
+            const days = sparseDays.get(event.origin) ?? new Set<number>()
+            days.add(monitoredDayOf(new Date(event.eventTime)).getTime())
+            sparseDays.set(event.origin, days)
+          }
         } else if (!isBacklog(event.eventTime, now)) {
           const at = new Date(event.eventTime)
           const known = liveTriggers.get(event.monitoringSessionId)
@@ -237,6 +255,19 @@ export class TelemetryIngestionService {
         await this.conditions.evaluateSession(sessionId, triggerAt, now)
       } catch (error) {
         this.logger.error(`Falha ao avaliar as condições da sessão ${sessionId}: ${describeError(error)}`)
+      }
+    }
+
+    // Um recálculo por dia tocado, do mais antigo para o mais novo: a leitura
+    // atual pega a avaliação mais recente por computedAt, e ela tem de ser a de
+    // hoje. Falha aqui não derruba o ACK, pelo mesmo motivo das de cima.
+    for (const [origin, days] of sparseDays) {
+      for (const dayMs of [...days].sort((a, b) => a - b)) {
+        try {
+          await this.sparse.assessDay(device.workerId, origin, new Date(dayMs), now)
+        } catch (error) {
+          this.logger.error(`Falha na avaliação esparsa do funcionário ${device.workerId}: ${describeError(error)}`)
+        }
       }
     }
 

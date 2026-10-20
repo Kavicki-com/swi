@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto'
 import type { RealtimeGateway } from '../../realtime/realtime.gateway'
 import type { TelemetryConditionService } from '../alerts/condition.service'
 import type { TelemetryAssessmentService } from '../assessment/assessment.service'
+import type { SparseAssessmentService } from '../assessment/sparse-assessment.service'
 import type { DeviceIdentity } from '../devices/device-auth.service'
+import { monitoredDayOf, monitoredDayRange } from '../domain/metric-state'
 import {
   TelemetryIntegrityConflictError,
   TelemetrySessionNotFoundError,
@@ -52,20 +54,26 @@ const audienceDouble = () => ({
   recipientsFor: jest.fn().mockImplementation(async (workerId: string) => [workerId]),
 })
 
+const sparseDouble = () => ({
+  assessDay: jest.fn().mockResolvedValue({ outcome: 'assessed', assessmentId: 's-1' }),
+})
+
 const build = () => {
   const repository = repositoryDouble()
   const realtime = realtimeDouble()
   const assessment = assessmentDouble()
   const conditions = conditionsDouble()
   const audience = audienceDouble()
+  const sparse = sparseDouble()
   const service = new TelemetryIngestionService(
     repository,
     realtime as unknown as RealtimeGateway,
     assessment as unknown as TelemetryAssessmentService,
     conditions as unknown as TelemetryConditionService,
     audience as unknown as TelemetryAudienceService,
+    sparse as unknown as SparseAssessmentService,
   )
-  return { repository, realtime, assessment, conditions, audience, service }
+  return { repository, realtime, assessment, conditions, audience, sparse, service }
 }
 
 // eventTime recente de propósito: um horário antigo cairia na regra de backlog
@@ -705,5 +713,125 @@ describe('medição avulsa do app Saúde', () => {
     expect(conditions.evaluateSession.mock.calls[0][0]).toBe(SESSION)
     expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
     expect(conditions.evaluateSpotReading.mock.calls[0][0]).toBe(healthSession)
+  })
+})
+
+// A pulseira lida pelo Health Connect chega em lote, horas depois de medir.
+// Nada nela é ao vivo: a cadeia por sessão e as condições de batimento não se
+// aplicam, e o que vale é o dia de cada batimento, recalculado inteiro.
+describe('pulseira pelo Health Connect', () => {
+  // Mesmo aparelho do dublê do repositório, que devolve a sessão como sendo
+  // dele; o que muda é só o tipo.
+  const ANDROID: DeviceIdentity = { ...DEVICE, kind: 'ANDROID_PHONE' }
+  const HOUR = 60 * 60 * 1000
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
+  const beat = (bpm = 92) => ({ heartRate: { value: bpm, unit: 'bpm', source: 'HEALTH_CONNECT' } })
+  const band = (over: Partial<TelemetryEventDto> = {}) => event({ measurements: beat(), ...over })
+
+  it('grava com o tipo do aparelho e avalia o dia do batimento, sem a cadeia ao vivo', async () => {
+    const { service, repository, assessment, conditions, sparse } = build()
+    const eventTime = ago(3 * HOUR)
+
+    await service.ingest(ANDROID, { events: [band({ eventTime })] })
+
+    expect(repository.saveEvent.mock.calls[0][2]).toEqual({ deviceKind: 'ANDROID_PHONE' })
+    expect(assessment.assessSession).not.toHaveBeenCalled()
+    expect(conditions.evaluateSession).not.toHaveBeenCalled()
+    expect(sparse.assessDay).toHaveBeenCalledTimes(1)
+    const [workerId, origin, day, now] = sparse.assessDay.mock.calls[0]
+    expect(workerId).toBe('worker-1')
+    expect(origin).toBe('REAL')
+    expect(day).toEqual(monitoredDayOf(new Date(eventTime)))
+    expect(now).toBeInstanceOf(Date)
+  })
+
+  // A leitura atual pega a avaliação mais recente por computedAt, e ela tem
+  // de ser a do dia mais novo. Logo depois da virada, a meia-noite usada é a
+  // de ontem: 00:10 de hoje ainda estaria no futuro.
+  it('lote que cruza a meia-noite avalia cada dia uma vez, do mais antigo para o mais novo', async () => {
+    const { service, sparse } = build()
+    const todayStart = monitoredDayRange(new Date()).start.getTime()
+    const midnight = Date.now() - todayStart > 15 * 60_000 ? todayStart : todayStart - 24 * HOUR
+    const lateNight = new Date(midnight - 10 * 60_000)
+    const earlyMorning = new Date(midnight + 10 * 60_000)
+
+    await service.ingest(ANDROID, {
+      events: [
+        band({ sequence: 2, eventTime: earlyMorning.toISOString() }),
+        band({ sequence: 1, eventTime: lateNight.toISOString() }),
+        band({ sequence: 3, eventTime: new Date(earlyMorning.getTime() + 60_000).toISOString() }),
+      ],
+    })
+
+    expect(sparse.assessDay.mock.calls.map((call) => call[2])).toEqual([
+      monitoredDayOf(lateNight),
+      monitoredDayOf(earlyMorning),
+    ])
+  })
+
+  it('lote só com passos não avalia', async () => {
+    const { service, sparse } = build()
+
+    await service.ingest(ANDROID, {
+      events: [
+        event({
+          eventTime: ago(HOUR),
+          measurements: { stepDelta: { value: 140, unit: 'steps', source: 'HEALTH_CONNECT' } },
+        }),
+      ],
+    })
+
+    expect(sparse.assessDay).not.toHaveBeenCalled()
+  })
+
+  it('batimento além do backlog entra no histórico sem avaliar', async () => {
+    const { service, sparse } = build()
+    const antigo = band({ eventTime: ago(60 * HOUR) })
+
+    const ack = await service.ingest(ANDROID, { events: [antigo] })
+
+    expect(ack.acceptedEventIds).toEqual([antigo.eventId])
+    expect(sparse.assessDay).not.toHaveBeenCalled()
+  })
+
+  it('pressão da pulseira mantém a revisão de pressão e não avalia o dia', async () => {
+    const { service, conditions, sparse } = build()
+
+    await service.ingest(ANDROID, {
+      events: [
+        event({
+          eventTime: ago(5 * HOUR),
+          measurements: {
+            bloodPressure: { value: { systolic: 165, diastolic: 100 }, unit: 'mmHg', source: 'HEALTH_CONNECT' },
+          },
+        }),
+      ],
+    })
+
+    expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
+    expect(sparse.assessDay).not.toHaveBeenCalled()
+  })
+
+  it('falha na avaliação do dia não derruba o ACK nem o aviso', async () => {
+    const { service, realtime, sparse } = build()
+    sparse.assessDay.mockRejectedValue(new Error('fórmula esparsa estourou'))
+    const aceito = band({ eventTime: ago(2 * HOUR) })
+
+    const ack = await service.ingest(ANDROID, { events: [aceito] })
+
+    expect(ack.acceptedEventIds).toEqual([aceito.eventId])
+    expect(ack.conflicts).toEqual([])
+    expect(realtime.emitToUsers).toHaveBeenCalledTimes(1)
+  })
+
+  it('o relógio continua na cadeia ao vivo e grava com o próprio tipo', async () => {
+    const { service, repository, assessment, conditions, sparse } = build()
+
+    await service.ingest(DEVICE, { events: [event()] })
+
+    expect(repository.saveEvent.mock.calls[0][2]).toEqual({ deviceKind: 'IPHONE' })
+    expect(assessment.assessSession).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
+    expect(sparse.assessDay).not.toHaveBeenCalled()
   })
 })
