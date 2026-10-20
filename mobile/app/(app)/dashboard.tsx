@@ -90,7 +90,9 @@ const CONTAINER_GAP_XL = 24;
 // para tudo, o hero é escalado pela altura disponível para o bloco de baixo
 // (sinais + fadiga + ações), para a fileira de ações do rodapé caber sempre em
 // vez de ser empurrada para fora. Numa tela alta ele fica no tamanho cheio.
-const HERO_RATIO = 360 / 431;
+const HERO_WIDTH = 360;
+const HERO_HEIGHT = 431;
+const HERO_RATIO = HERO_WIDTH / HERO_HEIGHT;
 const HERO_MIN_WIDTH = 220;
 
 export default function Dashboard() {
@@ -117,7 +119,7 @@ export default function Dashboard() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   // Altura real do bloco de baixo (sinais + fadiga + ações), medida no layout.
   const [bottomBlockHeight, setBottomBlockHeight] = useState(0);
   // Largura do hero: cheia (360) por padrão; quando a tela não tem altura para
@@ -133,6 +135,14 @@ export default function Dashboard() {
           ),
         )
       : 360;
+  // Largura real do hero, numérica de propósito. Com largura em porcentagem
+  // mais maxWidth e aspectRatio, o Yoga resolve a altura pela largura cheia da
+  // janela antes de aplicar o maxWidth, e o bloco de baixo é empurrado para
+  // fora da tela. O hero é desenhado uma vez em 360 x 431 e escalado por
+  // inteiro, para o anel, o pino, a câmera e a pasta encolherem juntos
+  // (a mesma técnica do preset compact do StatusChart do DS).
+  const heroWidth = windowWidth > 0 ? Math.min(windowWidth, heroMaxWidth) : heroMaxWidth;
+  const heroScale = heroWidth / HERO_WIDTH;
   // SVGs com <defs> precisam de IDs únicos por instância — caso contrário
   // colidem com cópias renderizadas em outras telas montadas em background.
   const gaugeXml = useUniqueSvg(GAUGE_ICON_SVG);
@@ -278,17 +288,28 @@ export default function Dashboard() {
       >
         {/* Top zone — Caminho 4122 (outer ring) + Knob + silhouette + heart
             status + heart-rate button + avatar + location pin + camera/briefcase.
-            Wrapper aspectRatio 360:431 acomoda o Caminho 4122 que sangra 57px
-            abaixo do knob original. Inner sub-zone preserva 360:374 pra todas
-            as % existentes dos elementos internos ficarem inalteradas.
+            O invólucro ocupa o espaço final (largura e altura numéricas) e a
+            tela de desenho por dentro é sempre 360:431, escalada por inteiro.
+            Os 431 acomodam o Caminho 4122 que sangra 57px abaixo do knob
+            original. Inner sub-zone preserva 360:374 pra todas as % existentes
+            dos elementos internos ficarem inalteradas.
             BG_DECOR continua edge-to-edge como sibling. */}
         <View
+          testID="home-hero"
           style={{
-            width: '100%',
-            maxWidth: heroMaxWidth,
-            aspectRatio: 360 / 431,
+            width: heroWidth,
+            height: heroWidth / HERO_RATIO,
             alignSelf: 'center',
             overflow: 'visible',
+          }}
+        >
+        <View
+          testID="home-hero-canvas"
+          style={{
+            width: HERO_WIDTH,
+            height: HERO_HEIGHT,
+            transform: [{ scale: heroScale }],
+            transformOrigin: 'top left',
           }}
         >
         {/* Inner sub-zone — todas as % existentes dos elementos abaixo
@@ -443,6 +464,7 @@ export default function Dashboard() {
             accessibilityLabel="Trabalho"
             onPress={() => router.push('/(app)/journey')}
           />
+        </View>
         </View>
       </View>
 
