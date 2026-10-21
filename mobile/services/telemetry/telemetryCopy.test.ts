@@ -5,6 +5,7 @@ import {
   HEALTH_CONNECT_PAIRING_COPY,
   healthConnectInstallCopy,
   healthConnectMonitoringCopy,
+  healthConnectOnboardingCopy,
   type HealthConnectMonitoringStatus,
   lastSyncCopy,
   pairingCopy,
@@ -323,6 +324,126 @@ describe('copy do Monitoramento no Android', () => {
     expect(HEALTH_CONNECT_MONITORING_COPY.redetectar).toBe('Redetectar pulseira');
     expect(HEALTH_CONNECT_MONITORING_COPY.falhaRedetectar).toBe(
       'Não foi possível redetectar a pulseira. Tente de novo.',
+    );
+  });
+});
+
+// Fim do primeiro uso no Android: o relogio nao existe ali, e a copy do
+// "sem suporte" diria que o aparelho nao monitora, o que e falso com a
+// pulseira pelo Health Connect.
+describe('copy do fim do primeiro uso no Android', () => {
+  const ESTADOS: HealthConnectMonitoringStatus[] = [
+    'unknown',
+    'unavailable',
+    'update_required',
+    'not_granted',
+    'not_granted_after_request',
+    'granted',
+  ];
+
+  // O que o leitor sabe da pulseira: detectada (o nome do app dela), "nenhuma
+  // pulseira", ou nenhum resultado ainda.
+  const SEM_RESULTADO = { noBand: false, bandLabel: null };
+  const NENHUMA = { noBand: true, bandLabel: null };
+  const DETECTADA = { noBand: false, bandLabel: 'Mi Fitness' };
+  const PULSEIRAS = [SEM_RESULTADO, NENHUMA, DETECTADA, null];
+
+  it('nenhum estado fala do Apple Watch, diz que o aparelho nao monitora ou acusa negacao', () => {
+    for (const pareado of [true, false]) {
+      for (const pulseira of PULSEIRAS) {
+        for (const estado of ESTADOS) {
+          const copy = healthConnectOnboardingCopy(pareado, estado, pulseira);
+          expect(copy.titulo).not.toBe('');
+          expect(copy.corpo).not.toBe('');
+          const frase = `${copy.titulo} ${copy.corpo}`;
+          expect(frase).not.toMatch(/iPhone|Apple Watch/);
+          expect(frase).not.toContain('não faz o monitoramento');
+          expect(frase).not.toMatch(/negou|negad/i);
+        }
+      }
+    }
+  });
+
+  // So a pulseira detectada sustenta a frase de que o SWI le as medicoes.
+  it('pareado, com a leitura permitida e a pulseira detectada, tudo pronto', () => {
+    expect(healthConnectOnboardingCopy(true, 'granted', DETECTADA)).toEqual({
+      titulo: 'Tudo pronto',
+      corpo:
+        'O SWI lê as medições da sua pulseira pelo Health Connect e as envia ao servidor. Você acompanha em Configurações, Monitoramento.',
+    });
+  });
+
+  // O passo do pareamento mostrou "ainda não trouxe resultado": o fim diz o
+  // mesmo, com a mesma frase, e nao afirma leitura nem falta de pulseira.
+  it('leitura permitida sem resultado ainda nao diz que esta tudo pronto', () => {
+    for (const pulseira of [SEM_RESULTADO, null]) {
+      const copy = healthConnectOnboardingCopy(true, 'granted', pulseira);
+      expect(copy).toEqual({
+        titulo: 'Quase lá',
+        corpo:
+          'A leitura do Health Connect ainda não trouxe resultado. O SWI tenta de novo sozinho. Você acompanha em Configurações, Monitoramento.',
+      });
+      expect(copy.corpo.startsWith(HEALTH_CONNECT_PAIRING_COPY.semResultado)).toBe(true);
+      expect(copy.corpo).not.toMatch(/lê as medições/);
+    }
+  });
+
+  // O passo do pareamento acabou de mostrar "Nenhuma pulseira encontrada": o
+  // fim nao pode dizer que o SWI le a pulseira. Mesmo titulo do passo, porque
+  // o estado e o mesmo.
+  it('leitura permitida sem pulseira no Health Connect nao afirma leitura', () => {
+    const copy = healthConnectOnboardingCopy(true, 'granted', NENHUMA);
+    expect(copy).toEqual({
+      titulo: 'Nenhuma pulseira encontrada',
+      corpo:
+        'Abra o app da sua pulseira, sincronize e confira nos ajustes dele se ele grava no Health Connect. O SWI procura de novo sozinho. Você acompanha em Configurações, Monitoramento.',
+    });
+    expect(copy.titulo).toBe(HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseira);
+    expect(copy.corpo).not.toMatch(/lê as medições/);
+  });
+
+  // Quem pulou o pareamento precisa saber que nada sai do aparelho, e onde
+  // parear depois. Nada mais importa: sem pareamento nada e enviado.
+  it('sem pareamento, aponta o caminho para parear depois', () => {
+    for (const pulseira of PULSEIRAS) {
+      for (const estado of ESTADOS) {
+        expect(healthConnectOnboardingCopy(false, estado, pulseira)).toEqual({
+          titulo: 'Celular ainda não pareado',
+          corpo:
+            'Sem o pareamento, as medições da sua pulseira não chegam ao servidor. Peça o código ao administrador e pareie em Configurações, Monitoramento.',
+        });
+      }
+    }
+  });
+
+  it('pareado sem a leitura permitida, aponta Configurações', () => {
+    for (const estado of ['not_granted', 'not_granted_after_request'] as const) {
+      expect(healthConnectOnboardingCopy(true, estado, DETECTADA)).toEqual({
+        titulo: 'Falta liberar a leitura',
+        corpo:
+          'O SWI ainda não consegue ler as medições da sua pulseira pelo Health Connect. Você pode resolver depois em Configurações, Monitoramento.',
+      });
+    }
+  });
+
+  // O conserto e a Play Store, nao a permissao. O titulo e o mesmo do
+  // Monitoramento, para o mesmo estado ter o mesmo nome nas duas telas.
+  it('Health Connect ausente ou desatualizado aponta a Play Store, com o titulo do Monitoramento', () => {
+    expect(healthConnectOnboardingCopy(true, 'unavailable', DETECTADA)).toEqual({
+      titulo: healthConnectMonitoringCopy('unavailable').titulo,
+      corpo:
+        'Instale o Health Connect pela Play Store. Você pode resolver depois em Configurações, Monitoramento.',
+    });
+    expect(healthConnectOnboardingCopy(true, 'update_required', DETECTADA)).toEqual({
+      titulo: healthConnectMonitoringCopy('update_required').titulo,
+      corpo:
+        'Atualize o Health Connect pela Play Store. Você pode resolver depois em Configurações, Monitoramento.',
+    });
+  });
+
+  it('antes da primeira conferência, não afirma nada: usa o "conferindo" do Monitoramento', () => {
+    expect(healthConnectOnboardingCopy(true, 'unknown', DETECTADA)).toEqual(
+      healthConnectMonitoringCopy('unknown'),
     );
   });
 });

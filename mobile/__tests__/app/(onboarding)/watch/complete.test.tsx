@@ -1,13 +1,16 @@
+import { Platform } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Button, SwiThemeProvider } from '@kavicki/swi-design-system';
 import WatchComplete from '../../../../app/(onboarding)/watch/complete';
-import { isFeatureEnabled } from '../../../../lib/featureFlags';
+import { isFeatureEnabled, type FeatureGate } from '../../../../lib/featureFlags';
+import type { HealthConnectState } from '../../../../services/telemetry/healthConnect/healthConnectReader';
 import {
   useWatchDiagnostics,
   type WatchDiagnosticsState,
 } from '../../../../services/telemetry/watchDiagnostics';
 import { markWatchOnboardingComplete } from '../../../../services/telemetry/watchOnboarding';
+import { useTelemetryUploadState } from '../../../../services/telemetry/TelemetryUploadProvider';
 
 // Ultima tela do primeiro uso. Tres estados: leitura real, sessao ativa sem
 // leitura ainda, e nada. Nenhum deles impede entrar no app (ADR-0004).
@@ -28,6 +31,10 @@ jest.mock('../../../../services/telemetry/watchDiagnostics', () => ({
 
 jest.mock('../../../../services/telemetry/watchOnboarding', () => ({
   markWatchOnboardingComplete: jest.fn(async () => undefined),
+}));
+
+jest.mock('../../../../services/telemetry/TelemetryUploadProvider', () => ({
+  useTelemetryUploadState: jest.fn(),
 }));
 
 jest.mock('../../../../components/Smartwatch3D', () => {
@@ -83,8 +90,20 @@ const SEM_NADA: WatchDiagnosticsState = {
 // teste, o que o Jest reporta como log fora de hora.
 const montadas: ReturnType<typeof create>[] = [];
 
+const mockEnvio = useTelemetryUploadState as jest.Mock;
+const envio = (paired: boolean, healthConnect: HealthConnectState | null = null) =>
+  mockEnvio.mockReturnValue({ paired, healthConnect });
+
+const originalOS = Platform.OS;
+const naPlataforma = (os: typeof Platform.OS) =>
+  Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+
+const comGates = (...ligados: FeatureGate[]) =>
+  mockGate.mockImplementation((gate: FeatureGate) => ligados.includes(gate));
+
 afterEach(() => {
   while (montadas.length) montadas.pop()!.unmount();
+  naPlataforma(originalOS);
 });
 
 const render = async (estado: WatchDiagnosticsState) => {
@@ -134,6 +153,7 @@ const finalizar = async (tree: ReturnType<typeof create>) => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockGate.mockReturnValue(true);
+  envio(false);
 });
 
 describe('primeiro uso, tela final', () => {
@@ -221,5 +241,101 @@ describe('primeiro uso, tela final', () => {
     const tree = await render(SEM_NADA);
     await finalizar(tree);
     expect(mockReplace).toHaveBeenCalledWith('/(app)/dashboard');
+  });
+});
+
+// No Android com o Health Connect o controle do relogio responde "sem
+// suporte", e a copy do relogio diria que o aparelho nao monitora. Aqui quem
+// fala e o pareamento e a leitura da pulseira.
+describe('primeiro uso, tela final: Android com o Health Connect', () => {
+  const SEM_SUPORTE: WatchDiagnosticsState = { support: 'unsupported' };
+  const estadoHC = (parcial: Partial<HealthConnectState> = {}): HealthConnectState => ({
+    availability: 'available',
+    permission: 'granted',
+    bandPackage: null,
+    bandLabel: null,
+    noBand: false,
+    lastSyncAt: null,
+    ...parcial,
+  });
+
+  beforeEach(() => {
+    naPlataforma('android');
+    comGates('watchOnboarding', 'healthConnect');
+  });
+
+  it('pareado, com a leitura permitida e a pulseira detectada, diz que esta tudo pronto', async () => {
+    envio(true, estadoHC({ bandPackage: 'com.mi.health', bandLabel: 'Mi Fitness' }));
+    const t = texto(await render(SEM_SUPORTE));
+    expect(t).toContain('Tudo pronto');
+    expect(t).toContain('Health Connect');
+    expect(t).not.toContain('não faz o monitoramento');
+    expect(t).not.toMatch(/iPhone|Apple Watch/);
+  });
+
+  it('sem pareamento, aponta onde parear depois', async () => {
+    envio(false, estadoHC());
+    const t = texto(await render(SEM_SUPORTE));
+    expect(t).toContain('Celular ainda não pareado');
+    expect(t).toContain('Configurações, Monitoramento');
+    expect(t).not.toMatch(/iPhone|Apple Watch/);
+  });
+
+  it('pareado sem a leitura permitida, aponta Configuracoes sem acusar negacao', async () => {
+    envio(true, estadoHC({ permission: 'denied' }));
+    const t = texto(await render(SEM_SUPORTE));
+    expect(t).toContain('Falta liberar a leitura');
+    expect(t.toLowerCase()).not.toMatch(/negou|negad/);
+    expect(t).not.toMatch(/iPhone|Apple Watch/);
+  });
+
+  // O passo do pareamento acabou de dizer "Nenhuma pulseira encontrada": o
+  // fim nao pode afirmar que o SWI le a pulseira.
+  it('leitura permitida sem pulseira no Health Connect nao diz que esta tudo pronto', async () => {
+    envio(true, estadoHC({ noBand: true }));
+    const t = texto(await render(SEM_SUPORTE));
+    expect(t).toContain('Nenhuma pulseira encontrada');
+    expect(t).not.toContain('Tudo pronto');
+    expect(t).not.toContain('lê as medições');
+  });
+
+  // O passo do pareamento mostrou "ainda não trouxe resultado": sem pulseira
+  // detectada, o fim nao afirma leitura.
+  it('leitura permitida sem resultado ainda nao diz que esta tudo pronto', async () => {
+    envio(true, estadoHC());
+    const t = texto(await render(SEM_SUPORTE));
+    expect(t).toContain('ainda não trouxe resultado');
+    expect(t).not.toContain('Tudo pronto');
+    expect(t).not.toContain('lê as medições');
+  });
+
+  it('Health Connect ausente aponta a Play Store, nao a permissao', async () => {
+    envio(true, estadoHC({ availability: 'unavailable', permission: null }));
+    const t = texto(await render(SEM_SUPORTE));
+    expect(t).toContain('Health Connect não instalado');
+    expect(t).toContain('Play Store');
+    expect(t).not.toContain('Falta liberar a leitura');
+  });
+
+  it('Finalizar grava a marcacao e continua entrando no app', async () => {
+    envio(false);
+    const tree = await render(SEM_SUPORTE);
+    await finalizar(tree);
+    expect(mockMarcar).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/dashboard');
+  });
+
+  it('sem o gate do Health Connect, o Android segue como antes', async () => {
+    comGates('watchOnboarding');
+    const t = texto(await render(SEM_SUPORTE));
+    expect(t).toContain('não faz o monitoramento');
+  });
+
+  it('no iOS, mesmo com o gate ligado, a copy do relogio continua', async () => {
+    naPlataforma('ios');
+    envio(true, estadoHC());
+    const t = texto(await render(SEM_NADA));
+    expect(t).toContain('Monitoramento indisponível');
+    expect(t).not.toContain('Tudo pronto');
   });
 });

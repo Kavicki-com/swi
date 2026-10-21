@@ -243,6 +243,71 @@ export function healthConnectMonitoringCopy(status: HealthConnectMonitoringStatu
   }
 }
 
+// Fecho das frases do fim do primeiro uso que não pedem conserto agora.
+const ACOMPANHA = 'Você acompanha em Configurações, Monitoramento.';
+
+/**
+ * Título e corpo do fim do primeiro uso no Android, no lugar da copy do Apple
+ * Watch (`telemetryCopy`): ali o controle do relógio responde "sem suporte", e
+ * dizer que o aparelho não monitora seria falso com a pulseira pelo Health
+ * Connect. Sem pareamento nada sai do aparelho, qualquer que seja a
+ * permissão. Antes da primeira conferência não se afirma nada, e nenhuma
+ * frase acusa a pessoa de ter negado. A pulseira vem do estado do leitor,
+ * como no passo do pareamento: só a detectada (`bandLabel`) sustenta que o
+ * SWI lê as medições; "nenhuma pulseira" (`noBand`) e nenhum resultado ainda
+ * repetem a frase que o passo acabou de mostrar.
+ */
+export function healthConnectOnboardingCopy(
+  paired: boolean,
+  status: HealthConnectMonitoringStatus,
+  pulseira: { readonly noBand: boolean; readonly bandLabel: string | null } | null,
+): TelemetryCopy {
+  if (!paired) {
+    return {
+      titulo: 'Celular ainda não pareado',
+      corpo:
+        'Sem o pareamento, as medições da sua pulseira não chegam ao servidor. Peça o código ao administrador e pareie em Configurações, Monitoramento.',
+    };
+  }
+  if (status === 'unknown') return healthConnectMonitoringCopy('unknown');
+  // O conserto é a Play Store, não a permissão. O título é o do
+  // Monitoramento: o mesmo estado com o mesmo nome nas duas telas.
+  if (status === 'unavailable' || status === 'update_required') {
+    return {
+      titulo: healthConnectMonitoringCopy(status).titulo,
+      corpo: `${
+        status === 'unavailable' ? 'Instale' : 'Atualize'
+      } o Health Connect pela Play Store. Você pode resolver depois em Configurações, Monitoramento.`,
+    };
+  }
+  if (status === 'granted') {
+    if (pulseira?.bandLabel) {
+      return {
+        titulo: 'Tudo pronto',
+        corpo:
+          'O SWI lê as medições da sua pulseira pelo Health Connect e as envia ao servidor. Você acompanha em Configurações, Monitoramento.',
+      };
+    }
+    if (pulseira?.noBand) {
+      return {
+        titulo: HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseira,
+        corpo: `${HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseiraConselho} ${ACOMPANHA}`,
+      };
+    }
+    // O título do mesmo momento no relógio (conectado, sem leitura ainda):
+    // não afirma leitura nem falta de pulseira.
+    return {
+      titulo: 'Quase lá',
+      corpo: `${HEALTH_CONNECT_PAIRING_COPY.semResultado} ${ACOMPANHA}`,
+    };
+  }
+  return {
+    titulo: 'Falta liberar a leitura',
+    corpo:
+      'O SWI ainda não consegue ler as medições da sua pulseira pelo Health Connect. Você pode resolver depois em Configurações, Monitoramento.',
+  };
+}
+
 /**
  * Ações do Monitoramento no Android que o pareamento não tem. Permitir, tentar
  * de novo, abrir os ajustes e o resultado da detecção vêm de
