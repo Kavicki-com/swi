@@ -8,6 +8,7 @@ import { NotificationController } from '../notifications/notification.controller
 import { PositionsController } from '../positions/positions.controller'
 import { RescueController } from '../rescue/rescue.controller'
 import { AlertQueueController } from '../telemetry/alerts/alert-queue.controller'
+import { CalibrationController } from '../telemetry/calibration/calibration.controller'
 import { TelemetryDevicesController } from '../telemetry/devices/telemetry-devices.controller'
 import { TelemetryQueryController } from '../telemetry/read-model/telemetry-query.controller'
 import { UsersController } from '../users/users.controller'
@@ -51,6 +52,13 @@ const TABLE: Row[] = [
   ['alert-queue', AlertQueueController, 'list', PAINEL],
   ['alert-queue', AlertQueueController, 'acknowledge', PAINEL],
   ['alert-queue', AlertQueueController, 'resolve', PAINEL],
+  // Calibração: faixa pelo painel, trava só pelo admin.
+  ['calibration', CalibrationController, 'detail', PAINEL],
+  ['calibration', CalibrationController, 'history', PAINEL],
+  ['calibration', CalibrationController, 'setBand', PAINEL],
+  ['calibration', CalibrationController, 'clearBand', PAINEL],
+  ['calibration', CalibrationController, 'setSafety', ADMIN],
+  ['calibration', CalibrationController, 'clearSafety', ADMIN],
   ['notifications', NotificationController, 'pauseRequest', PAINEL],
   ['positions', PositionsController, 'list', PAINEL],
   ['positions', PositionsController, 'heat', TODOS],

@@ -1,4 +1,4 @@
-import { defaultSafetyLabel, safetyValuesOf, validateSafety } from './safety-limits'
+import { defaultSafetyLabel, defaultSafetyValues, safetyValuesOf, validateSafety } from './safety-limits'
 
 // As travas são o piso de proteção que não aprende, e só o admin as muda. O
 // que estes casos protegem é a leitura desconfiada do JSON gravado e a recusa
@@ -103,5 +103,29 @@ describe('defaultSafetyLabel', () => {
     expect(defaultSafetyLabel('OXYGEN_LOW')).toBe('abaixo de 90%')
     expect(defaultSafetyLabel('BLOOD_PRESSURE_HIGH')).toBe('180/110 ou mais')
     expect(defaultSafetyLabel('WEAR_HIGH')).toBe('90% ou mais')
+  })
+})
+
+describe('defaultSafetyValues', () => {
+  it('batimento pela máxima por idade e pelo repouso, com a histerese do perfil', () => {
+    const baseline = { maxBpm: 190, restingBpm: 70 }
+    expect(defaultSafetyValues('HEART_RATE_HIGH', baseline)).toEqual({ openAt: 171, closeAt: 161 })
+    expect(defaultSafetyValues('HEART_RATE_LOW', baseline)).toEqual({ openAt: 55, closeAt: 65 })
+  })
+
+  it('sem idade nem repouso, os pisos do perfil', () => {
+    const baseline = { maxBpm: null, restingBpm: null }
+    expect(defaultSafetyValues('HEART_RATE_HIGH', baseline)).toEqual({ openAt: 180, closeAt: 170 })
+    expect(defaultSafetyValues('HEART_RATE_LOW', baseline)).toEqual({ openAt: 40, closeAt: 50 })
+  })
+
+  it('oxigenação, desgaste e pressão saem do perfil calibrado e passam na própria validação', () => {
+    const baseline = { maxBpm: null, restingBpm: null }
+    expect(defaultSafetyValues('OXYGEN_LOW', baseline)).toEqual({ openAt: 90, closeAt: expect.any(Number) })
+    expect(defaultSafetyValues('WEAR_HIGH', baseline)).toEqual({ openAt: 90, closeAt: 80 })
+    expect(defaultSafetyValues('BLOOD_PRESSURE_HIGH', baseline)).toMatchObject({ systolicAt: 180, diastolicAt: 110 })
+    for (const rule of ['OXYGEN_LOW', 'WEAR_HIGH', 'BLOOD_PRESSURE_HIGH'] as const) {
+      expect(validateSafety(rule, defaultSafetyValues(rule, baseline))).toBeNull()
+    }
   })
 })

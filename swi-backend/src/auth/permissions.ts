@@ -22,6 +22,10 @@ const EVERYONE = ROLES
 export const PERMISSIONS = {
   /** Telemetria, sessões, estado do aparelho e transmissão ao vivo dos funcionários. */
   'monitoring.read': PANEL,
+  /** Corrigir as faixas de calibração de um funcionário. */
+  'monitoring.bands.manage': PANEL,
+  /** Ajustar as travas de segurança de um funcionário. */
+  'monitoring.safety.manage': ADMIN_ONLY,
   /** Fila de alertas (reconhecer e resolver) e pedido de pausa ao funcionário. */
   'alerts.operate': PANEL,
   'workOrders.operate': PANEL,

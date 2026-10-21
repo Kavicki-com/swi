@@ -7,6 +7,7 @@ const ALL = Object.keys(PERMISSIONS) as Permission[]
 // precisa entrar numa das duas listas, senão o teste de cobertura abaixo falha.
 const SUPERVISOR_PODE: Permission[] = [
   'monitoring.read',
+  'monitoring.bands.manage',
   'alerts.operate',
   'workOrders.operate',
   'chat.use',
@@ -18,7 +19,14 @@ const SUPERVISOR_PODE: Permission[] = [
   'users.read',
   'reports.read',
 ]
-const SO_ADMIN: Permission[] = ['users.manage', 'devices.manage', 'cameras.manage', 'company.manage', 'reports.delete']
+const SO_ADMIN: Permission[] = [
+  'monitoring.safety.manage',
+  'users.manage',
+  'devices.manage',
+  'cameras.manage',
+  'company.manage',
+  'reports.delete',
+]
 
 describe('matriz de permissões', () => {
   it('toda permissão está classificada como do Supervisor ou só do Administrador', () => {

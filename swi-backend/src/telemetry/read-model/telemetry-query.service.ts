@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { monitoredDayRange } from '../domain/metric-state'
 import { closedDayCutoff, SUMMARIZER_SAMPLE_FIELDS } from '../lifecycle/telemetry-lifecycle.service'
 import { healthStatusOf, type HealthStatus } from './health-status'
+import { calibrationViewOf, type CalibrationRows } from './calibration-view'
 import { heartRateReferenceOf } from './heart-rate-reference'
 import { assembleSeries, seriesBuckets, type SeriesPeriod, type WorkerSeries } from './telemetry-series'
 import type {
@@ -291,13 +292,20 @@ function toProjectionAssessment(row: AssessmentRow): ProjectionAssessment {
   }
 }
 
+/** O que a leitura individual lê da calibração; nada, para quem não está na origem real. */
+const NO_CALIBRATION: CalibrationRows = { calibration: null, bands: [] }
+
 /**
- * A leitura individual sempre responde a referência cardíaca, nula quando não
- * há. Ausente só nas listas, que não a consultam: é essa diferença que deixa o
- * painel separar "sem referência" de "não perguntado".
+ * A leitura individual sempre responde a referência cardíaca e a calibração,
+ * nulas quando não há. Ausentes só nas listas, que não as consultam: é essa
+ * diferença que deixa o painel separar "sem referência" de "não perguntado".
  */
-function withHeartRateReference(telemetry: WorkerTelemetry): CurrentWorkerTelemetry {
-  return { ...telemetry, heartRateReference: telemetry.heartRateReference ?? null }
+function asCurrent(telemetry: WorkerTelemetry, calibration: CalibrationRows): CurrentWorkerTelemetry {
+  return {
+    ...telemetry,
+    heartRateReference: telemetry.heartRateReference ?? null,
+    calibration: calibrationViewOf(telemetry.metrics, calibration),
+  }
 }
 
 function toProjectionSample(row: SampleRow): ProjectionSample {
@@ -355,7 +363,7 @@ export class TelemetryQueryService {
     })
 
     if (snapshot === null) {
-      return withHeartRateReference(
+      return asCurrent(
         projectWorker(
           {
             workerId,
@@ -367,6 +375,7 @@ export class TelemetryQueryService {
           },
           now,
         ),
+        NO_CALIBRATION,
       )
     }
 
@@ -380,7 +389,9 @@ export class TelemetryQueryService {
     // isso a série que vem é só a janela das taxas, e os acumulados do dia
     // chegam somados pelo banco: o dia inteiro seriam milhares de linhas por
     // chamada, multiplicadas pelo número de funcionários a cada cinco segundos.
-    const [windowSamples, steps, energy, distance, assessments, conditions] = await Promise.all([
+    // A calibração só existe na origem real: a demonstração nem a consulta.
+    const real = snapshot.origin === 'REAL'
+    const [windowSamples, steps, energy, distance, assessments, conditions, calibration, bands] = await Promise.all([
       this.prisma.telemetrySample.findMany({
         where: { ...scope, eventTime: { gte: new Date(now.getTime() - ENERGY_RATE_WINDOW_MS) } },
         select: SAMPLE_FIELDS,
@@ -430,9 +441,21 @@ export class TelemetryQueryService {
         select: CONDITION_FIELDS,
         orderBy: { firstSeenAt: 'asc' },
       }),
+      real
+        ? this.prisma.workerCalibration.findUnique({
+            where: { workerId },
+            select: { version: true, validDays: true, recalibrating: true },
+          })
+        : null,
+      real
+        ? this.prisma.workerCalibrationBand.findMany({
+            where: { workerId },
+            select: { metric: true, learnedCuts: true, overrideCuts: true },
+          })
+        : [],
     ])
 
-    return withHeartRateReference(
+    return asCurrent(
       projectWorker(
         {
           workerId,
@@ -448,6 +471,7 @@ export class TelemetryQueryService {
         },
         now,
       ),
+      { calibration, bands },
     )
   }
 
