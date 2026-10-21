@@ -376,3 +376,63 @@ describe('DeviceSection: aviso à página', () => {
     expect(onDeviceStateChange).toHaveBeenLastCalledWith('failed')
   })
 })
+
+// Celular Android lê a pulseira pelo Health Connect e manda lotes com atraso:
+// não há bateria nem sinal ao vivo, e o último contato é o último lote.
+const androidSeenAt = (lastSeenAt: string | null) => ({
+  data: {
+    device: { ...DEVICE, kind: 'ANDROID_PHONE', model: 'Galaxy A54', lastSeenAt },
+    pendingEnrollment: null,
+  },
+  error: null,
+})
+
+describe('DeviceSection: aparelho por tipo', () => {
+  it('Android diz o tipo, o modelo e a última sincronização, sem bateria nem tags do relógio', async () => {
+    stateOf.mockResolvedValue(androidSeenAt(todayAt(9, 5)))
+    await mountWith({
+      ...reporting({ battery: metric(12) }),
+      conditions: [
+        condition('DEVICE', { kind: 'DEVICE_BATTERY_LOW', observedValue: 12 }),
+        condition('DEVICE', { kind: 'DEVICE_SIGNAL_LOST' }),
+      ],
+    })
+
+    expect(await screen.findByText('Celular Android com pulseira (Health Connect)')).toBeTruthy()
+    expect(screen.getByText(/Galaxy A54/)).toBeTruthy()
+    expect(screen.getByText('Última sincronização às 09:05')).toBeTruthy()
+    expect(screen.queryByText(/Último contato/)).toBeNull()
+    expect(screen.queryByText(/Bateria do relógio/)).toBeNull()
+    expect(screen.queryByText('Sem sinal do relógio')).toBeNull()
+  })
+
+  it('Android sem lote ainda diz "Sem sincronização ainda"', async () => {
+    stateOf.mockResolvedValue(androidSeenAt(null))
+    await mount()
+    expect(await screen.findByText('Sem sincronização ainda')).toBeTruthy()
+    expect(screen.queryByText('Sem contato ainda')).toBeNull()
+  })
+
+  it('iPhone não ganha linha de tipo', async () => {
+    stateOf.mockResolvedValue(PAIRED)
+    await mount()
+    await screen.findByTestId('device-section-paired')
+    expect(screen.queryByText(/Health Connect/)).toBeNull()
+    expect(screen.queryByText(/Apple Watch/)).toBeNull()
+  })
+
+  it('não pareado e código não falam de iPhone', async () => {
+    stateOf.mockResolvedValue(UNPAIRED)
+    createEnrollment.mockResolvedValue({
+      data: { enrollmentId: 'e1', code: '123456', expiresAt: inMinutes(10) },
+      error: null,
+    })
+    await mount()
+    const unpaired = await screen.findByTestId('device-section-unpaired')
+    expect(unpaired.textContent).not.toMatch(/iPhone/i)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar código de pareamento' }))
+    const code = await screen.findByTestId('device-section-code')
+    expect(code.textContent).not.toMatch(/iPhone/i)
+  })
+})

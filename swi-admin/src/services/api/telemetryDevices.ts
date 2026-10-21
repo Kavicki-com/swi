@@ -1,14 +1,21 @@
-// Pareamento de aparelho do piloto Apple Watch, pelo painel. Três verbos do
-// backend (telemetry/v1/devices): ler o estado do aparelho de um funcionário,
-// gerar o código de pareamento que o administrador lê para ele, e revogar. O
-// funcionário conclui o pareamento no próprio iPhone; o painel nunca vê a
-// credencial, e o código só existe em claro no retorno da criação.
+// Pareamento do celular do funcionário, pelo painel. Três verbos do backend
+// (telemetry/v1/devices): ler o estado do aparelho de um funcionário, gerar o
+// código de pareamento que o administrador lê para ele, e revogar. O painel
+// convida sem saber qual celular a pessoa tem; é o app que declara o tipo ao
+// concluir (iPhone com Apple Watch, ou Android com pulseira via Health
+// Connect). O painel nunca vê a credencial, e o código só existe em claro no
+// retorno da criação.
 import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 
 export type WorkerDevice = {
   id: string
-  kind: string
+  /**
+   * Declarado pelo app ao concluir o pareamento. O relógio nunca aparece aqui:
+   * não tem credencial própria, quem a recebe é o celular. A união aberta
+   * aceita um tipo que o backend venha a criar sem quebrar a leitura do estado.
+   */
+  kind: 'IPHONE' | 'ANDROID_PHONE' | 'EXTERNAL_CUFF' | (string & {})
   model: string | null
   /** ISO-8601: quando o pareamento foi concluído. */
   pairedAt: string
@@ -51,13 +58,13 @@ export const telemetryDevicesApi = {
     }
   },
 
-  // Só iPhone recebe credencial no piloto: o relógio se associa ao iPhone na
-  // sessão espelhada, e o backend recusa qualquer outro tipo.
+  // O convite não tem tipo de aparelho: só o funcionário. O app declara
+  // IPHONE ou ANDROID_PHONE quando conclui o pareamento com o código.
   createEnrollment: async (workerId: string): Promise<ServiceResponse<EnrollmentCode>> => {
     try {
       const data = await apiFetch<EnrollmentCode>('/telemetry/v1/devices/enrollments', {
         method: 'POST',
-        body: JSON.stringify({ workerId, kind: 'IPHONE' }),
+        body: JSON.stringify({ workerId }),
       })
       return { data, error: null }
     } catch (e) {

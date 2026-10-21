@@ -130,4 +130,133 @@ describe('vitalsViewFrom', () => {
   it('origem de demonstração é declarada na tela', () => {
     expect(vitalsViewFrom(reporting({}, 'DEMO')).sourceBadge).toBe('Dados de demonstração')
   })
+
+  // Pulseira lida pelo Health Connect: a leitura chega em lotes e vale para o
+  // instante medido, não para agora. O painel diz até quando há dados e quando
+  // o lote chegou, no relógio de quem está olhando. Os instantes são montados
+  // no fuso local para "mesmo dia" e "outro dia" valerem em qualquer máquina.
+  describe('leitura sincronizada pela pulseira (sync)', () => {
+    const local = (day: number, hour: number, minute: number) =>
+      new Date(2026, 8, day, hour, minute).toISOString()
+    const hhmm = (iso: string) =>
+      new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const now = new Date(2026, 8, 30, 12, 0).getTime()
+    const MEASURED = local(30, 11, 10)
+    const SYNCED = local(30, 12, 2)
+    const YESTERDAY_MEASURED = local(29, 14, 10)
+    const YESTERDAY_SYNCED = local(29, 23, 50)
+    const synced = (measuredUntil = MEASURED, syncedAt = SYNCED) => ({
+      ...reporting(),
+      sync: { measuredUntil, syncedAt },
+    })
+
+    it('no mesmo dia o selo diz até que hora há dados e quando sincronizou', () => {
+      const view = vitalsViewFrom(synced(), { now })
+      expect(view.sourceBadge).toBe(`Dados até ${hhmm(MEASURED)}, sincronizado às ${hhmm(SYNCED)}`)
+      expect(view.sourceBadge).toMatch(/^Dados até \d{2}:\d{2}, sincronizado às \d{2}:\d{2}$/)
+    })
+
+    it('em outro dia cada parte leva a data, para dado velho não parecer de hoje', () => {
+      expect(vitalsViewFrom(synced(YESTERDAY_MEASURED, SYNCED), { now }).sourceBadge).toBe(
+        `Dados até 29/09 às ${hhmm(YESTERDAY_MEASURED)}, sincronizado às ${hhmm(SYNCED)}`,
+      )
+      expect(
+        vitalsViewFrom(synced(YESTERDAY_MEASURED, YESTERDAY_SYNCED), { now }).sourceBadge,
+      ).toBe(
+        `Dados até 29/09 às ${hhmm(YESTERDAY_MEASURED)}, sincronizado em 29/09 às ${hhmm(YESTERDAY_SYNCED)}`,
+      )
+    })
+
+    it('demonstração vence a sincronização, que vence a estimativa provisória', () => {
+      expect(
+        vitalsViewFrom({ ...synced(), origin: 'DEMO', baseline: 'PROVISIONAL' }, { now })
+          .sourceBadge,
+      ).toBe('Dados de demonstração')
+      expect(vitalsViewFrom({ ...synced(), baseline: 'PROVISIONAL' }, { now }).sourceBadge).toBe(
+        `Dados até ${hhmm(MEASURED)}, sincronizado às ${hhmm(SYNCED)}`,
+      )
+    })
+
+    it('as roscas de fadiga e esforço dizem o instante medido de cada métrica', () => {
+      const view = vitalsViewFrom(
+        {
+          ...synced(),
+          metrics: {
+            ...reporting().metrics,
+            wear: metric(38.4, { source: 'DERIVED', measuredAt: MEASURED }),
+            effort: metric(61, { source: 'DERIVED', measuredAt: YESTERDAY_MEASURED }),
+          },
+        },
+        { now },
+      )
+      expect(view.wearLabel).toBe(`Fadiga ${whenLabel(MEASURED, now)}`)
+      expect(view.wearLabel).toMatch(/^Fadiga às \d{2}:\d{2}$/)
+      expect(view.effortLabel).toBe(`Esforço feito ${whenLabel(YESTERDAY_MEASURED, now)}`)
+      expect(view.effortLabel).toMatch(/^Esforço feito em 29\/09 às \d{2}:\d{2}$/)
+    })
+
+    it('métrica sem instante próprio usa o fim dos dados sincronizados', () => {
+      const view = vitalsViewFrom(
+        {
+          ...synced(),
+          metrics: {
+            ...reporting().metrics,
+            wear: metric(38.4, { source: 'DERIVED', measuredAt: null }),
+            effort: metric(61, { source: 'DERIVED', measuredAt: null }),
+          },
+        },
+        { now },
+      )
+      expect(view.wearLabel).toBe(`Fadiga ${whenLabel(MEASURED, now)}`)
+      expect(view.effortLabel).toBe(`Esforço feito ${whenLabel(MEASURED, now)}`)
+    })
+
+    it('com sync mas sem valor a rosca mantém o rótulo padrão, sem instante medido', () => {
+      const view = vitalsViewFrom(
+        {
+          ...synced(),
+          metrics: {
+            ...reporting().metrics,
+            wear: metric(0, { value: null, source: 'DERIVED', measuredAt: MEASURED }),
+            effort: metric(0, { value: null, source: 'DERIVED', measuredAt: MEASURED }),
+          },
+        },
+        { now },
+      )
+      expect(view.wearLabel).toBe('Fadiga atual')
+      expect(view.effortLabel).toBe('Esforço feito')
+    })
+
+    it('data inválida no sync cai na estimativa provisória e nos rótulos padrão', () => {
+      const view = vitalsViewFrom({ ...synced('x'), baseline: 'PROVISIONAL' }, { now })
+      expect(view.sourceBadge).toBe('Estimativa provisória')
+      expect(view.wearLabel).toBe('Fadiga atual')
+      expect(view.effortLabel).toBe('Esforço feito')
+    })
+
+    it('sem sync (ausente ou nulo) as roscas mantêm os rótulos de hoje e não há selo', () => {
+      for (const telemetry of [reporting(), { ...reporting(), sync: null }]) {
+        const view = vitalsViewFrom(telemetry, { now })
+        expect(view.sourceBadge).toBeNull()
+        expect(view.wearLabel).toBe('Fadiga atual')
+        expect(view.effortLabel).toBe('Esforço feito')
+      }
+    })
+
+    it('a visão vazia usa os rótulos padrão mesmo com sync na leitura guardada', () => {
+      for (const view of [
+        vitalsViewFrom(synced(), { now, noDevice: true }),
+        vitalsViewFrom(synced(), { now, deviceUnknown: true }),
+        vitalsViewFrom(
+          { ...neverReported(), sync: { measuredUntil: MEASURED, syncedAt: SYNCED } },
+          { now },
+        ),
+        vitalsViewFrom(null, { now }),
+      ]) {
+        expect(view.sourceBadge).toBeNull()
+        expect(view.wearLabel).toBe('Fadiga atual')
+        expect(view.effortLabel).toBe('Esforço feito')
+      }
+    })
+  })
 })

@@ -26,10 +26,17 @@ export function WorkerMeasurementsSection({
   view,
   wearPct,
   effortPct,
+  wearLabel,
+  effortLabel,
 }: {
   view: WorkerMeasurementsView
   wearPct: number | null
   effortPct: number | null
+  /** Rótulos das roscas, decididos pelo vitalsView: ao vivo "Fadiga atual" e
+      "Esforço feito"; com a pulseira, o instante medido, porque o valor não é
+      de agora. */
+  wearLabel: string
+  effortLabel: string
 }) {
   const theme = useTheme()
   return (
@@ -73,7 +80,7 @@ export function WorkerMeasurementsSection({
             value={formatPct(wearPct)}
             // A rosca mede UMA pessoa, então a legenda fala do estado dela e
             // não de um KPI de equipe.
-            label="Fadiga atual"
+            label={wearLabel}
             progress={wearPct ?? 0}
             size="small"
             appearance="bevel"
@@ -84,7 +91,7 @@ export function WorkerMeasurementsSection({
           <DonutChart
             title="Esforço realizado"
             value={formatPct(effortPct)}
-            label="Esforço feito"
+            label={effortLabel}
             progress={effortPct ?? 0}
             size="small"
             appearance="bevel"

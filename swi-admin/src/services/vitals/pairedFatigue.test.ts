@@ -48,4 +48,20 @@ describe('pairedFatigue', () => {
       'Dados de demonstração',
     )
   })
+
+  // Pulseira lida pelo Android chega em lote: o selo diz até quando há dado e
+  // quando sincronizou. A regex não fixa hora nem data, então vale em qualquer fuso.
+  it('leitura sincronizada pela pulseira leva o selo do atraso', () => {
+    const now = Date.now()
+    const t = {
+      ...reporting(),
+      sync: {
+        measuredUntil: new Date(now - 50 * 60_000).toISOString(),
+        syncedAt: new Date(now - 2 * 60_000).toISOString(),
+      },
+    }
+    expect(pairedFatigue({ device: 'paired', telemetry: t, failed: false }).sourceBadge).toMatch(
+      /^Dados até .+, sincronizado .+$/,
+    )
+  })
 })

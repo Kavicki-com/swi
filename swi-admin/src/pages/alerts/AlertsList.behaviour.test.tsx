@@ -536,4 +536,18 @@ describe('AlertsList: seleção de pino', () => {
     expect(await screen.findByTestId('alerts-demo-badge')).toBeTruthy()
     expect(screen.getByTestId('alerts-selected-demo')).toBeTruthy()
   })
+
+  // Pulseira lida pelo Android chega em lote: o cartão nunca pode parecer ao vivo.
+  it('leitura sincronizada pela pulseira leva o selo do atraso', async () => {
+    const sync = { measuredUntil: '2026-10-01T14:10:00.000Z', syncedAt: '2026-10-01T15:00:00.000Z' }
+    h.workers = {
+      observedAt: '2026-10-01T15:00:00.000Z',
+      workers: [
+        adminWorker('w1', 'Ana Lima', { telemetry: { ...reporting({}, 'REAL', 'w1'), sync } }),
+      ],
+    }
+    await renderAlerts('/alerts/w1')
+    const badge = await screen.findByTestId('alerts-selected-demo')
+    expect(badge.getAttribute('aria-label')).toMatch(/^Dados até .+, sincronizado .+$/)
+  })
 })

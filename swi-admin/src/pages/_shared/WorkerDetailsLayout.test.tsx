@@ -70,6 +70,8 @@ const READING: WorkerVitalsView = {
   fatigueEta: { minutes: 95, label: '95 minutos' },
   status: 'Monitorando agora',
   sourceBadge: null,
+  wearLabel: 'Fadiga atual',
+  effortLabel: 'Esforço feito',
 }
 
 // Medições da mesma leitura: na página, as duas visões saem do mesmo current.
