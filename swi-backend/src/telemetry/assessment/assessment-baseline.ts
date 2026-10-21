@@ -1,4 +1,5 @@
 import type { Prisma, TelemetryOrigin } from '@prisma/client'
+import { FULL_DAYS, PERSONAL_FROM_DAY } from '../calibration/calibration-bands'
 import { monitoredDayOf } from '../domain/metric-state'
 import type { Baseline } from './fatigue-formula'
 
@@ -111,6 +112,92 @@ export function baselineFor(
       ? { kind: 'unavailable', reason: 'no_birth_date' }
       : { kind: 'available', restingBpm: resting.restingBpm, maxBpm }
   return { baseline, resting, ageYears, maxBpm }
+}
+
+/**
+ * Menor distância aceita entre repouso e topo da régua. Um pico habitual mal
+ * medido, quase colado no repouso, faria qualquer batimento virar esforço
+ * máximo; abaixo disso a régua volta para a máxima por idade.
+ */
+export const MIN_RESERVE_BPM = 20
+
+/** De onde veio o topo da régua: idade, mistura de idade com pico, ou só o pico pessoal. */
+export type PeakSource = 'AGE' | 'BLEND' | 'PERSONAL'
+
+/** O que a avaliação lê da `WorkerCalibration`. */
+export interface CalibrationRuler {
+  restingBpm: number | null
+  peakBpm: number | null
+  validDays: number
+}
+
+/**
+ * A linha de base com a calibração individual (revisão 2.0): repouso dos dias
+ * válidos e topo da régua no pico habitual, já misturado com a idade pelo
+ * recálculo. Sem calibração (DEMO ou funcionário sem dado), a de sempre.
+ */
+export function calibratedBaselineFor(
+  calibration: CalibrationRuler | null,
+  restingInput: Parameters<typeof restingBaseline>[0],
+  birthDate: Date | null,
+  now: Date,
+): ReturnType<typeof baselineFor> & { peakSource: PeakSource } {
+  const legacy = baselineFor(restingInput, birthDate, now)
+  if (calibration === null) return { ...legacy, peakSource: 'AGE' }
+
+  const resting: RestingBaseline =
+    calibration.restingBpm === null
+      ? legacy.resting
+      : { restingBpm: calibration.restingBpm, source: 'measured', days: calibration.validDays }
+
+  let maxBpm = calibration.peakBpm ?? legacy.maxBpm
+  // Sem idade, o pico guardado é só pessoal; com idade, a parte pessoal só
+  // entra no 3º dia válido, e antes disso o guardado ainda é a partida.
+  let peakSource: PeakSource =
+    calibration.peakBpm === null
+      ? 'AGE'
+      : calibration.validDays >= FULL_DAYS || legacy.maxBpm === null
+        ? 'PERSONAL'
+        : calibration.validDays >= PERSONAL_FROM_DAY
+          ? 'BLEND'
+          : 'AGE'
+  if (maxBpm !== null && maxBpm - resting.restingBpm < MIN_RESERVE_BPM) {
+    maxBpm = legacy.maxBpm
+    peakSource = 'AGE'
+  }
+  const baseline: Baseline =
+    maxBpm === null
+      ? { kind: 'unavailable', reason: 'no_birth_date' }
+      : { kind: 'available', restingBpm: resting.restingBpm, maxBpm }
+  return { baseline, resting, ageYears: legacy.ageYears, maxBpm, peakSource }
+}
+
+/**
+ * A calibração que as duas avaliações leem. Só a origem REAL tem calibração:
+ * DEMO passa nulo e segue a régua de sempre.
+ */
+export async function calibrationRulerOf(
+  tx: Prisma.TransactionClient,
+  workerId: string,
+  origin: TelemetryOrigin,
+): Promise<(CalibrationRuler & { version: string }) | null> {
+  if (origin !== 'REAL') return null
+  return tx.workerCalibration.findUnique({
+    where: { workerId },
+    select: { version: true, restingBpm: true, peakBpm: true, validDays: true },
+  })
+}
+
+/** O que a linha grava sobre a calibração usada. */
+export function calibrationInputsOf(
+  calibration: { version: string; validDays: number } | null,
+  peakSource: PeakSource,
+): { calibrationVersion: string | null; phaseDay: number | null; peakSource: PeakSource } {
+  return {
+    calibrationVersion: calibration?.version ?? null,
+    phaseDay: calibration?.validDays ?? null,
+    peakSource,
+  }
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000

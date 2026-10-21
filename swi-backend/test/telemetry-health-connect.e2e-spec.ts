@@ -9,9 +9,11 @@ import type { JwtUser } from '../src/auth/current-user.decorator'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { TelemetryConditionService } from '../src/telemetry/alerts/condition.service'
 import { SparseAssessmentService } from '../src/telemetry/assessment/sparse-assessment.service'
+import { CALIBRATION_VERSION } from '../src/telemetry/calibration/calibration-bands'
 import { encodeCredential, hashCredential } from '../src/telemetry/devices/device-auth.service'
 import { monitoredDayOf, monitoredDayWindow } from '../src/telemetry/domain/metric-state'
 import { SUMMARIZER_VERSION } from '../src/telemetry/lifecycle/telemetry-summarizer'
+import { heartRateReferenceOf } from '../src/telemetry/read-model/heart-rate-reference'
 import { TelemetryQueryService } from '../src/telemetry/read-model/telemetry-query.service'
 
 // CNPJ exclusivo deste spec, só para a lista do painel. Reusar o do seed
@@ -34,6 +36,8 @@ describe('Telemetry Health Connect e2e', () => {
     d: `telemetry-hc-d-${randomUUID()}@ex.com`,
     e: `telemetry-hc-e-${randomUUID()}@ex.com`,
     f: `telemetry-hc-f-${randomUUID()}@ex.com`,
+    g: `telemetry-hc-g-${randomUUID()}@ex.com`,
+    h: `telemetry-hc-h-${randomUUID()}@ex.com`,
     admin: `telemetry-hc-admin-${randomUUID()}@ex.com`,
   }
   let workerA = ''
@@ -100,19 +104,19 @@ describe('Telemetry Health Connect e2e', () => {
       })
     ).id
 
+  const android = async (workerId: string) =>
+    (
+      await prisma.telemetryDevice.create({
+        data: { workerId, kind: 'ANDROID_PHONE', credentialHash: hashCredential(randomUUID()) },
+      })
+    ).id
+
   beforeAll(async () => {
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = mod.createNestApplication()
     await app.init()
     prisma = app.get(PrismaService)
     sparse = app.get(SparseAssessmentService)
-
-    const android = async (workerId: string) =>
-      (
-        await prisma.telemetryDevice.create({
-          data: { workerId, kind: 'ANDROID_PHONE', credentialHash: hashCredential(randomUUID()) },
-        })
-      ).id
 
     workerA = await worker(emails.a)
     workerB = await worker(emails.b)
@@ -179,7 +183,7 @@ describe('Telemetry Health Connect e2e', () => {
         where: { workerId: workerA },
         orderBy: { computedAt: 'desc' },
       })
-      expect(row.formulaVersion).toBe('swi-fatigue-sparse-1')
+      expect(row.formulaVersion).toBe('swi-fatigue-sparse-2')
       expect(row.windowStart.toISOString()).toBe(start.toISOString())
       expect(row.windowEnd.toISOString()).toBe(t(60).toISOString())
       expect(row.fatigueEtaMin).toBeNull()
@@ -232,6 +236,72 @@ describe('Telemetry Health Connect e2e', () => {
       expect((await sparse.assessDay(workerB, 'REAL', day, after(10 * 60_000))).outcome).toBe('nothing_new')
       expect(await prisma.telemetryAssessment.count({ where: { workerId: workerB } })).toBe(3)
     })
+
+    it('sem dia terminado, o repouso provisório grava de onde veio e a leitura do perfil reconhece a linha', async () => {
+      const workerG = await worker(emails.g)
+      const deviceG = await android(workerG)
+      await seedSamples(workerG, deviceG, [
+        { session: randomUUID(), at: t(0), bpm: 64 },
+        { session: randomUUID(), at: t(5), bpm: 90 },
+      ])
+
+      const out = await sparse.assessDay(workerG, 'REAL', day, new Date())
+
+      expect(out.outcome).toBe('assessed')
+      const row = await prisma.telemetryAssessment.findFirstOrThrow({ where: { workerId: workerG } })
+      expect(row.baselineSource).toBe('PROVISIONAL')
+      expect((row.inputs as { baseline: Record<string, unknown> }).baseline).toMatchObject({
+        restingBpm: 64,
+        source: 'provisional',
+        provisionalFrom: 'session',
+        calibrationVersion: null,
+        peakSource: 'AGE',
+      })
+      // A linha gravada passa pela mesma leitura do perfil. Sem a origem do
+      // provisório, a referência saía nula.
+      expect(heartRateReferenceOf(row.inputs, row.computedAt.toISOString())).toMatchObject({
+        restingBpm: 64,
+        restingSource: 'PROVISIONAL',
+        provisionalFrom: 'SESSION',
+      })
+    })
+
+    it('com calibração, a régua da pulseira é o repouso e o pico da pessoa', async () => {
+      const workerH = await worker(emails.h)
+      const deviceH = await android(workerH)
+      await prisma.workerCalibration.create({
+        data: {
+          workerId: workerH,
+          version: CALIBRATION_VERSION,
+          deviceFamily: 'BAND',
+          phaseStartedAt: monitoredDayOf(new Date(Date.now() - 20 * DAY_MS)),
+          validDays: 12,
+          restingBpm: 55,
+          peakBpm: 165,
+          peakPersonalBpm: 160,
+          computedAt: new Date(),
+        },
+      })
+      await seedSamples(workerH, deviceH, [
+        { session: randomUUID(), at: t(0), bpm: 140 },
+        { session: randomUUID(), at: t(5), bpm: 145 },
+      ])
+
+      expect((await sparse.assessDay(workerH, 'REAL', day, new Date())).outcome).toBe('assessed')
+
+      const row = await prisma.telemetryAssessment.findFirstOrThrow({ where: { workerId: workerH } })
+      expect(row.formulaVersion).toBe('swi-fatigue-sparse-2')
+      expect(row.baselineSource).toBe('MEASURED')
+      expect((row.inputs as { baseline: Record<string, unknown> }).baseline).toMatchObject({
+        restingBpm: 55,
+        source: 'measured',
+        days: 12,
+        maxBpm: 165,
+        calibrationVersion: CALIBRATION_VERSION,
+        phaseDay: 12,
+        peakSource: 'BLEND',
+      })
+    })
   })
 
   // Pela rota, com a credencial do celular Android: a ordem dos casos importa,
@@ -273,7 +343,7 @@ describe('Telemetry Health Connect e2e', () => {
       expect(Math.abs((snapshot.lastReceivedAt?.getTime() ?? 0) - Date.now())).toBeLessThan(60_000)
       expect(
         await prisma.telemetryAssessment.count({
-          where: { workerId: workerC, formulaVersion: 'swi-fatigue-sparse-1' },
+          where: { workerId: workerC, formulaVersion: 'swi-fatigue-sparse-2' },
         }),
       ).toBeGreaterThanOrEqual(1)
       // 190 bpm ao vivo abriria condição; da pulseira, horas depois, não.

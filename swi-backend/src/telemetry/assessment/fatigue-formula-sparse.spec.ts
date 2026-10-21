@@ -1,6 +1,6 @@
 import { percentile } from '../calibration/percentile'
 import { assessSparseDay, dayStatsOf } from './fatigue-formula-sparse'
-import { SPARSE_FORMULA_VERSION, SPARSE_PROFILE } from './sparse-profile'
+import { isSparseFormula, SPARSE_FORMULA_VERSION, SPARSE_PROFILE } from './sparse-profile'
 import type { Baseline } from './fatigue-formula'
 
 const MIN = 60_000
@@ -11,8 +11,15 @@ const at = (minutes: number, bpm: number) => ({ atMs: T0 + minutes * MIN, bpm })
 
 describe('assessSparseDay', () => {
   it('fixa a versão literal: mudar coeficiente sem mudar versão é proibido', () => {
-    expect(SPARSE_FORMULA_VERSION).toBe('swi-fatigue-sparse-1')
+    expect(SPARSE_FORMULA_VERSION).toBe('swi-fatigue-sparse-2')
     expect(SPARSE_PROFILE.gapMaxMs).toBe(10 * MIN)
+  })
+
+  it('reconhece a esparsa de qualquer versão pelo prefixo, e só ela', () => {
+    expect(isSparseFormula('swi-fatigue-sparse-1')).toBe(true)
+    expect(isSparseFormula(SPARSE_FORMULA_VERSION)).toBe(true)
+    expect(isSparseFormula('swi-fatigue-calibrated-1')).toBe(false)
+    expect(isSparseFormula('swi-fatigue-experimental-1')).toBe(false)
   })
 
   it('sem leitura no dia, indisponível por falta de batimento', () => {

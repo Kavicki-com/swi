@@ -9,7 +9,10 @@ import { FRESHNESS } from '../domain/metric-state'
 // proibido, porque a cadeia por sessão compara versão para saber se o estado
 // anterior ainda vale.
 
-export const FORMULA_VERSION = 'swi-fatigue-experimental-1'
+// calibrated-1: os coeficientes são os mesmos da experimental-1; muda a régua,
+// que passa a ser o repouso e o pico habitual da calibração individual, e a
+// previsão, que mira o corte de fadiga do desgaste da própria pessoa.
+export const FORMULA_VERSION = 'swi-fatigue-calibrated-1'
 
 export interface AssessmentProfile {
   readonly version: string

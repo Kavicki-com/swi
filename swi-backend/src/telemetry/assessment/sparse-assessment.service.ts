@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import type { Prisma, TelemetryOrigin } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { monitoredDayWindow } from '../domain/metric-state'
-import { baselineFor, restingMinimaOf } from './assessment-baseline'
+import { calibratedBaselineFor, calibrationInputsOf, calibrationRulerOf, restingMinimaOf } from './assessment-baseline'
 import { assessSparseDay } from './fatigue-formula-sparse'
 import { SPARSE_PROFILE } from './sparse-profile'
 
@@ -69,16 +69,18 @@ export class SparseAssessmentService {
       return { outcome: 'nothing_new' }
     }
 
-    const [profileRow, minima] = await Promise.all([
+    const [profileRow, minima, calibration] = await Promise.all([
       tx.profile.findUnique({ where: { userId: workerId }, select: { birthDate: true } }),
       restingMinimaOf(tx, workerId, origin, now, this.profile.restingDays),
+      calibrationRulerOf(tx, workerId, origin),
     ])
 
     // O piso provisório da pulseira é o mínimo do próprio dia: ela abre uma
     // sessão por sincronização, e o mínimo de uma sessão só diria pouco.
     const beats = rows.map((r) => ({ atMs: r.eventTime.getTime(), bpm: r.heartRateBpm as number }))
     const dayMin = beats.reduce((min, b) => Math.min(min, b.bpm), Number.POSITIVE_INFINITY)
-    const { baseline, resting, ageYears, maxBpm } = baselineFor(
+    const { baseline, resting, ageYears, maxBpm, peakSource } = calibratedBaselineFor(
+      calibration,
       { ...minima, sessionMinBpm: dayMin },
       profileRow?.birthDate ?? null,
       now,
@@ -102,7 +104,17 @@ export class SparseAssessmentService {
         inputs: {
           profile: this.profile,
           chain: { reason: 'sparse_day' },
-          baseline: { restingBpm: resting.restingBpm, source: resting.source, days: resting.days, ageYears, maxBpm },
+          // Mesmo formato do relógio, com a origem do provisório: sem ela, a
+          // referência do batimento no perfil não reconhecia a linha.
+          baseline: {
+            restingBpm: resting.restingBpm,
+            source: resting.source,
+            ...(resting.source === 'provisional' ? { provisionalFrom: resting.from } : {}),
+            days: resting.days,
+            ageYears,
+            maxBpm,
+            ...calibrationInputsOf(calibration, peakSource),
+          },
           window: {
             day: day.toISOString(),
             sampleCount: rows.length,

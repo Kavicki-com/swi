@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
-import type { Prisma } from '@prisma/client'
+import type { Prisma, TelemetryOrigin } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { EXPERIMENTAL_ALERT_PROFILE } from '../alerts/alert-profile'
-import { baselineFor, restingMinimaOf } from './assessment-baseline'
+import { cutsOf, wearFatigueCutOf } from '../calibration/calibration-bands'
+import { calibratedBaselineFor, calibrationInputsOf, calibrationRulerOf, restingMinimaOf } from './assessment-baseline'
 import { EXPERIMENTAL_PROFILE, type AssessmentProfile } from './assessment-profile'
 import { assessWindow, type FormulaState } from './fatigue-formula'
 
@@ -43,6 +44,26 @@ function stateFrom(inputs: Prisma.JsonValue): FormulaState | null {
     lastHeartRate: heartRateFrom(state.lastHeartRate),
     lastSampleAtMs: typeof state.lastSampleAtMs === 'number' ? state.lastSampleAtMs : null,
   }
+}
+
+/**
+ * O alvo da previsão de fadiga. REAL mira o corte de fadiga do desgaste da
+ * própria pessoa (o do gestor, se houver; sem faixa ou com JSON torto, a
+ * partida); DEMO segue o 80 do perfil de alertas.
+ */
+async function wearAlertPercentOf(
+  tx: Prisma.TransactionClient,
+  workerId: string,
+  origin: TelemetryOrigin,
+): Promise<number> {
+  if (origin !== 'REAL') return EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent
+  const row = await tx.workerCalibrationBand.findUnique({
+    where: { workerId_metric: { workerId, metric: 'WEAR' } },
+    select: { learnedCuts: true, overrideCuts: true },
+  })
+  if (row === null) return wearFatigueCutOf(null)
+  const learned = cutsOf('WEAR', row.learnedCuts)
+  return wearFatigueCutOf(learned === null ? null : { learned, override: cutsOf('WEAR', row.overrideCuts) })
 }
 
 @Injectable()
@@ -148,7 +169,7 @@ export class TelemetryAssessmentService {
     const skippedMs =
       reason === null && previous !== null ? Math.max(0, windowStart.getTime() - previous.windowEnd.getTime()) : 0
 
-    const [samples, profile, { endedDayMinima, openDayMinima }] = await Promise.all([
+    const [samples, profile, { endedDayMinima, openDayMinima }, calibration, wearAlertPercent] = await Promise.all([
       tx.telemetrySample.findMany({
         // Fronteira de baixo fechada na primeira da cadeia, aberta na
         // continuação. Na primeira, windowStart cai no startedAt, que é o
@@ -161,6 +182,8 @@ export class TelemetryAssessmentService {
       }),
       tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
       restingMinimaOf(tx, session.workerId, session.origin, now, this.profile.restingDays),
+      calibrationRulerOf(tx, session.workerId, session.origin),
+      wearAlertPercentOf(tx, session.workerId, session.origin),
     ])
 
     // Só quem ainda não tem dia terminado paga a agregação: esta é a rota mais
@@ -174,7 +197,8 @@ export class TelemetryAssessmentService {
               _min: { heartRateBpm: true },
             })
           )._min.heartRateBpm
-    const { baseline, resting, ageYears, maxBpm } = baselineFor(
+    const { baseline, resting, ageYears, maxBpm, peakSource } = calibratedBaselineFor(
+      calibration,
       { endedDayMinima, openDayMinima, sessionMinBpm },
       profile?.birthDate ?? null,
       now,
@@ -186,9 +210,7 @@ export class TelemetryAssessmentService {
       baseline,
       samples: samples.map((s) => ({ atMs: s.eventTime.getTime(), heartRateBpm: s.heartRateBpm, motionCount: s.motionCount })),
       window: { startMs: windowStart.getTime(), endMs: windowEnd.getTime() },
-      // O 80 tem um dono só, o perfil de alertas: é a condição de desgaste
-      // alto que dá sentido aos minutos até a fadiga.
-      wearAlertPercent: EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent,
+      wearAlertPercent,
     })
 
     const inputs = {
@@ -206,8 +228,9 @@ export class TelemetryAssessmentService {
         days: resting.days,
         ageYears,
         maxBpm,
+        ...calibrationInputsOf(calibration, peakSource),
       },
-      wearAlertPercent: EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent,
+      wearAlertPercent,
       window: {
         skippedMs,
         sampleCount: samples.length,

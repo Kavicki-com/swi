@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import type {
+  PeakSource,
   ProvisionalRestingFrom as WrittenProvisionalFrom,
   RestingSource as WrittenRestingSource,
 } from '../assessment/assessment-baseline'
@@ -33,8 +34,13 @@ export interface HeartRateReference {
   provisionalFrom: RestingProvisionalOrigin | null
   /** Dias terminados que entraram na mediana; zero no provisório. */
   measuredDays: number
-  /** Máxima estimada pela idade, uma casa. Nula sem data de nascimento. */
+  /**
+   * Topo da régua usado na avaliação, uma casa: a máxima pela idade ou, com
+   * calibração, o pico habitual. Nulo quando não há nenhum dos dois.
+   */
   maxBpm: number | null
+  /** De onde veio o topo da régua. Ausente em linha de antes da calibração. */
+  peakSource?: PeakSource
   /** Instante da avaliação de onde a referência saiu. */
   computedAt: string
 }
@@ -49,6 +55,12 @@ const PROVISIONAL_ORIGINS = {
   default: 'DEFAULT',
 } as const satisfies Record<WrittenProvisionalFrom, RestingProvisionalOrigin>
 const PROVISIONAL_FROM = new Map<unknown, RestingProvisionalOrigin>(Object.entries(PROVISIONAL_ORIGINS))
+
+// Mesmo amarramento das origens do provisório: uma origem do pico nova do lado
+// que grava deixa de compilar aqui.
+const PEAK_SOURCE_KEYS = { AGE: true, BLEND: true, PERSONAL: true } as const satisfies Record<PeakSource, true>
+const PEAK_SOURCES = new Set<unknown>(Object.keys(PEAK_SOURCE_KEYS))
+const isPeakSource = (v: unknown): v is PeakSource => PEAK_SOURCES.has(v)
 
 const MEASURED: WrittenRestingSource = 'measured'
 const PROVISIONAL: WrittenRestingSource = 'provisional'
@@ -96,6 +108,9 @@ export function heartRateReferenceOf(
     provisionalFrom,
     measuredDays,
     maxBpm: isNumber(baseline.maxBpm) ? round1(baseline.maxBpm) : null,
+    // Origem do pico torta não derruba a referência: repouso e topo continuam
+    // certos, só falta dizer de onde veio o topo.
+    ...(isPeakSource(baseline.peakSource) ? { peakSource: baseline.peakSource } : {}),
     computedAt,
   }
 }

@@ -244,10 +244,13 @@ export function effectiveCuts(learned: Cuts, override: Cuts | null): Cuts {
   return override ?? learned
 }
 
-/** Corte de fadiga do desgaste que a previsão de fadiga mira. */
+/**
+ * Corte de fadiga do desgaste que a previsão de fadiga mira. Fora de (0, 100]
+ * volta para a partida: a previsão faz log(1 - alvo/100) e daria NaN.
+ */
 export function wearFatigueCutOf(band: { learned: Cuts; override: Cuts | null } | null): number {
   const fatigue = band === null ? null : effectiveCuts(band.learned, band.override).fatigue
-  return fatigue ?? WEAR_FATIGUE_START
+  return fatigue !== null && fatigue !== undefined && fatigue > 0 && fatigue <= 100 ? fatigue : WEAR_FATIGUE_START
 }
 
 /** Parser defensivo do JSON de cortes gravado no banco. Chave ausente reprova. */

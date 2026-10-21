@@ -176,6 +176,13 @@ describe('corte efetivo', () => {
     expect(wearFatigueCutOf({ learned: { excellence: 30, fatigue: 72 }, override: { excellence: 30, fatigue: 85 } })).toBe(85)
     expect(wearFatigueCutOf({ learned: { excellence: null, fatigue: null }, override: null })).toBe(80)
   })
+
+  it('corte fora de 0 a 100 não vira alvo da previsão: volta para a partida', () => {
+    // A previsão faz log(1 - alvo/100); acima de 100 ela daria NaN.
+    expect(wearFatigueCutOf({ learned: { excellence: 30, fatigue: 72 }, override: { excellence: 30, fatigue: 120 } })).toBe(80)
+    expect(wearFatigueCutOf({ learned: { excellence: 30, fatigue: 0 }, override: null })).toBe(80)
+    expect(wearFatigueCutOf({ learned: { excellence: 30, fatigue: 100 }, override: null })).toBe(100)
+  })
 })
 
 describe('cutsOf', () => {

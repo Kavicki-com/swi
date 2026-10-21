@@ -6,6 +6,7 @@ import { AppModule } from '../src/app.module'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { FORMULA_VERSION } from '../src/telemetry/assessment/assessment-profile'
 import { ASSESSMENT_THROTTLE_MS, TelemetryAssessmentService } from '../src/telemetry/assessment/assessment.service'
+import { CALIBRATION_VERSION } from '../src/telemetry/calibration/calibration-bands'
 import { encodeCredential, hashCredential } from '../src/telemetry/devices/device-auth.service'
 import { monitoredDayOf } from '../src/telemetry/domain/metric-state'
 import { SUMMARIZER_VERSION } from '../src/telemetry/lifecycle/telemetry-summarizer'
@@ -23,13 +24,16 @@ describe('Telemetry assessment e2e', () => {
   const emailWithBaseline = `telemetry-assess-a-${randomUUID()}@ex.com`
   const emailWithoutBaseline = `telemetry-assess-b-${randomUUID()}@ex.com`
   const emailWithEndedDay = `telemetry-assess-c-${randomUUID()}@ex.com`
-  const emails = [emailWithBaseline, emailWithoutBaseline, emailWithEndedDay]
+  const emailCalibrated = `telemetry-assess-d-${randomUUID()}@ex.com`
+  const emails = [emailWithBaseline, emailWithoutBaseline, emailWithEndedDay, emailCalibrated]
   let workerA = ''
   let workerB = ''
   let workerC = ''
+  let workerD = ''
   let headersA: Record<string, string> = {}
   let headersB: Record<string, string> = {}
   let headersC: Record<string, string> = {}
+  let headersD: Record<string, string> = {}
 
   const post = (headers: Record<string, string>, body: object) =>
     request(app.getHttpServer()).post('/telemetry/v1/batches').set(headers).send(body)
@@ -81,6 +85,33 @@ describe('Telemetry assessment e2e', () => {
     headersA = await enroll(workerA)
     headersB = await enroll(workerB)
     headersC = await enroll(workerC)
+    // D sem data de nascimento: com calibração do 7º dia em diante, a régua
+    // existe mesmo assim, pelo pico pessoal.
+    workerD = await worker(emailCalibrated, 'Telemetry Assess D', null)
+    headersD = await enroll(workerD)
+    await prisma.workerCalibration.create({
+      data: {
+        workerId: workerD,
+        version: CALIBRATION_VERSION,
+        deviceFamily: 'WATCH',
+        phaseStartedAt: monitoredDayOf(new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)),
+        validDays: 12,
+        restingBpm: 58,
+        peakBpm: 160,
+        peakPersonalBpm: 160,
+        computedAt: new Date(),
+      },
+    })
+    await prisma.workerCalibrationBand.create({
+      data: {
+        workerId: workerD,
+        metric: 'WEAR',
+        validDays: 12,
+        startCuts: { excellence: null, fatigue: 80 },
+        learnedCuts: { excellence: 30, fatigue: 72 },
+        computedAt: new Date(),
+      },
+    })
 
     // Um dia fechado com batimento para o funcionário A: é o repouso observado.
     const threeDaysAgo = monitoredDayOf(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
@@ -231,5 +262,29 @@ describe('Telemetry assessment e2e', () => {
     const current = await query.currentForWorker(workerC)
     expect(current.metrics.effort.quality).toBe('CURRENT')
     expect(current.baseline).toBe('MEASURED')
+  })
+
+  it('com calibração, a régua é o repouso e o pico da pessoa, e a previsão mira a fadiga dela', async () => {
+    const session = randomUUID()
+    await post(headersD, liveBatch(session)).expect(200)
+
+    const rows = await prisma.telemetryAssessment.findMany({ where: { sessionId: session } })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].formulaVersion).toBe('swi-fatigue-calibrated-1')
+    expect(rows[0].baselineSource).toBe('MEASURED')
+    expect(rows[0].effortPercent).not.toBeNull()
+    const inputs = rows[0].inputs as { baseline: Record<string, unknown>; wearAlertPercent: number }
+    expect(inputs.baseline).toMatchObject({
+      restingBpm: 58,
+      maxBpm: 160,
+      ageYears: null,
+      calibrationVersion: CALIBRATION_VERSION,
+      phaseDay: 12,
+      peakSource: 'PERSONAL',
+    })
+    expect(inputs.wearAlertPercent).toBe(72)
+
+    const current = await query.currentForWorker(workerD)
+    expect(current.heartRateReference).toMatchObject({ restingBpm: 58, maxBpm: 160, peakSource: 'PERSONAL' })
   })
 })
