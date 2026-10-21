@@ -1,10 +1,9 @@
 // src/pages/dashboard/components/ActivitiesSection.tsx
 // Bloco de atividades em andamento: abas de status, CTA de ver todos e um
-// cartão por atividade (ícone, progresso colorido por risco, participantes
-// e atalho para o mapa). Extraído de Dashboard.tsx.
+// cartão por atividade (ícone, progresso colorido por risco e participantes).
+// Extraído de Dashboard.tsx.
 import { useMemo, useState } from 'react'
-import { Pressable, View } from 'react-native'
-import { useNavigate } from 'react-router-dom'
+import { View } from 'react-native'
 import {
   AvatarGroup,
   Button,
@@ -48,7 +47,6 @@ function progressColorForRisk(
 
 function ActivityCard({ activity }: { activity: DashboardActivity }) {
   const theme = useTheme()
-  const navigate = useNavigate()
   return (
     <View
       testID={`activity-${activity.id}`}
@@ -99,14 +97,6 @@ function ActivityCard({ activity }: { activity: DashboardActivity }) {
         size="m"
         bordered
       />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Abrir localização da atividade ${activity.title}`}
-        onPress={() => navigate('/maps/general')}
-        testID={`activity-${activity.id}-location`}
-      >
-        <Icon name="location_on_filled" size={24} color={theme.content.dark} />
-      </Pressable>
     </View>
   )
 }

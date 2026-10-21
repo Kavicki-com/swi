@@ -270,6 +270,10 @@ describe('Dashboard', () => {
     // The two em-curso activities render
     expect(screen.getByTestId('activity-a1')).toBeInTheDocument()
     expect(screen.getByTestId('activity-a2')).toBeInTheDocument()
+    // O cartão da atividade não tem pino: só levava ao mapa geral.
+    expect(
+      within(screen.getByTestId('activity-a1')).queryByLabelText(/Abrir localização/),
+    ).not.toBeInTheDocument()
     // The a-fazer + concluida ones are filtered out
     expect(screen.queryByTestId('activity-a3')).not.toBeInTheDocument()
     expect(screen.queryByTestId('activity-a4')).not.toBeInTheDocument()

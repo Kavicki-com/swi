@@ -175,8 +175,9 @@ export function TasksList() {
               avatars={row.responsibleAvatars.map((uri) => ({ uri: uri || undefined }))}
               totalAvatarsCount={row.responsibleCount}
               onPress={() => navigate(`/tasks/${row.id}`)}
-              onLocationPress={() => navigate('/maps/general')}
-              locationAccessibilityLabel={`Abrir localização da tarefa ${row.title}`}
+              // A tarefa não tem posição própria: o pino só levava ao mapa
+              // geral, então o card sai sem ele.
+              locationIcon={null}
               fullWidth
             />
           ))}
