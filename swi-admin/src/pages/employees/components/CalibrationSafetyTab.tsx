@@ -112,8 +112,12 @@ function SafetyRow({
   return (
     <View
       testID={`safety-row-${rule}`}
+      // Mesmo motivo da aba Faixas: o Input do DS some num cartão
+      // surface.standard; sobre o background ele aparece como campo.
       style={{
-        backgroundColor: theme.surface.standard,
+        backgroundColor: theme.background,
+        borderWidth: theme.border.size.s,
+        borderColor: theme.surface.standard,
         borderRadius: theme.border.radius.m,
         padding: theme.padding.m,
         gap: theme.gap.s,

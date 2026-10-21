@@ -124,8 +124,13 @@ function BandRow({
   return (
     <View
       testID={`band-row-${metric}`}
+      // O Input do DS pinta o campo em surface.standard: num cartão da mesma
+      // cor ele some. Como nos formulários do painel, o campo fica sobre o
+      // background, e a borda delimita o cartão.
       style={{
-        backgroundColor: theme.surface.standard,
+        backgroundColor: theme.background,
+        borderWidth: theme.border.size.s,
+        borderColor: theme.surface.standard,
         borderRadius: theme.border.radius.m,
         padding: theme.padding.m,
         gap: theme.gap.s,
