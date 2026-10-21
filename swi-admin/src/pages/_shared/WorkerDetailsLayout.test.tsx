@@ -3,9 +3,9 @@
 // Onde o dado falta, ela declara a ausência em vez de preencher com um default.
 // vitest globals (describe/it/expect) via globals: true.
 import { vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { renderPage } from '@/test-utils/renderPage'
-import { emptyPoint, series } from '@/test-utils/telemetryFixtures'
+import { emptyPoint, reporting, series } from '@/test-utils/telemetryFixtures'
 
 const seriesMock = vi.fn()
 
@@ -72,6 +72,9 @@ const READING: WorkerVitalsView = {
   sourceBadge: null,
 }
 
+// Medições da mesma leitura: na página, as duas visões saem do mesmo current.
+const WITH_MEASUREMENTS = measurementsViewFrom(reporting())
+
 const renderLayout = async (
   worker: Partial<WorkerDetailsData>,
   position: { lat: number; lng: number } | null = { lat: -23.55, lng: -46.63 },
@@ -93,10 +96,20 @@ describe('WorkerDetailsLayout', () => {
   // Desgaste e esforço vêm em 0-100 do backend. Multiplicar por 100 de novo na
   // formatação exibiria "8.900,0%".
   it('formata fadiga/esforço na escala 0-100, sem multiplicar de novo', async () => {
-    await renderLayout({ vitals: READING })
+    await renderLayout({ vitals: READING, measurements: WITH_MEASUREMENTS })
     expect(screen.getByText('89,0%')).toBeInTheDocument()
     expect(screen.getByText('92,0%')).toBeInTheDocument()
     expect(screen.queryByText('8.900,0%')).not.toBeInTheDocument()
+  })
+
+  // As roscas de fadiga e esforço saíram da coluna da direita: ficam lado a
+  // lado com as medições, na faixa de largura toda.
+  it('fadiga e esforço ficam na faixa de medições, não na coluna da direita', async () => {
+    await renderLayout({ vitals: READING, measurements: WITH_MEASUREMENTS })
+    const section = within(screen.getByTestId('measurements-section'))
+    expect(section.getByText('Taxa de fadiga')).toBeInTheDocument()
+    expect(section.getByText('Esforço realizado')).toBeInTheDocument()
+    expect(screen.getAllByText('Taxa de fadiga')).toHaveLength(1)
   })
 
   it('mostra a leitura do aparelho: batimento, pressão, estado e tempo até a fadiga', async () => {
