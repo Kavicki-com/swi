@@ -24,7 +24,11 @@ const prismaDouble = () =>
   ({
     $queryRaw: jest.fn().mockResolvedValue([]),
     telemetrySample: { findMany: jest.fn().mockResolvedValue([]) },
-    telemetryAssessment: { findMany: jest.fn().mockResolvedValue([]) },
+    telemetryAssessment: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+    telemetryDevice: { findMany: jest.fn().mockResolvedValue([]) },
     telemetryDailySummary: { upsert: jest.fn().mockResolvedValue({}) },
   }) as any
 
@@ -40,6 +44,7 @@ const candidate = (over: Record<string, unknown> = {}) => ({
 const sampleRow = (clock: string, over: Record<string, unknown> = {}) => ({
   eventTime: new Date(`2026-09-01T${clock}.000Z`),
   sessionId: 'session-1',
+  deviceId: 'device-1',
   heartRateBpm: null,
   stepDelta: null,
   distanceDeltaM: null,
@@ -228,6 +233,11 @@ describe('TelemetryLifecycleService.summarizeClosedDays: o que ela carrega e gra
           systolicMmHg: true,
           diastolicMmHg: true,
           bloodPressureSource: true,
+          // Só do Resumo, para a calibração: a série não carrega estes.
+          oxygenSaturationPct: true,
+          bodyTemperatureC: true,
+          motionCount: true,
+          deviceId: true,
         },
       }),
     )
@@ -288,10 +298,42 @@ describe('TelemetryLifecycleService.summarizeClosedDays: o que ela carrega e gra
             gte: new Date('2026-09-01T03:00:00.000Z'),
             lt: new Date('2026-09-02T03:00:00.000Z'),
           },
-          formulaVersion: { not: SPARSE_FORMULA_VERSION },
+          // Toda versão da esparsa, e não só a atual: a próxima também refaz o dia.
+          NOT: { formulaVersion: { startsWith: 'swi-fatigue-sparse-' } },
         },
       }),
     )
+    expect(SPARSE_FORMULA_VERSION.startsWith('swi-fatigue-sparse-')).toBe(true)
+  })
+
+  it('pulseira: lê as estatísticas da última esparsa do dia e a família pelo aparelho', async () => {
+    const prisma = prismaDouble()
+    prisma.$queryRaw.mockResolvedValue([candidate()])
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow('12:00:00', { heartRateBpm: 70 })])
+    prisma.telemetryDevice.findMany.mockResolvedValue([{ id: 'device-1', kind: 'ANDROID_PHONE' }])
+    prisma.telemetryAssessment.findFirst.mockResolvedValue({
+      inputs: { dayStats: { wearMax: 40, effortP25: 10, effortP90: 60 } },
+    })
+
+    await service(prisma).summarizeClosedDays(NOW)
+
+    // O dia da esparsa é o começo da janela, não o carimbo do recálculo.
+    expect(prisma.telemetryAssessment.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          formulaVersion: { startsWith: 'swi-fatigue-sparse-' },
+          windowStart: new Date('2026-09-01T03:00:00.000Z'),
+        }),
+        orderBy: { windowEnd: 'desc' },
+      }),
+    )
+    expect(prisma.telemetryDevice.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['device-1'] } } }),
+    )
+    const row = prisma.telemetryDailySummary.upsert.mock.calls[0][0].create
+    expect(row).toMatchObject({ wearMax: 40, effortP25: 10, effortP90: 60, deviceFamily: 'BAND' })
+    // O id do aparelho só serve para achar a família: não é coluna do Resumo.
+    expect(row).not.toHaveProperty('deviceId')
   })
 
   it('origem de demonstração gera Resumo próprio, sem se misturar com o real', async () => {

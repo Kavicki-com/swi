@@ -1,3 +1,5 @@
+import { percentile } from '../calibration/percentile'
+import type { SparseDayStats } from '../assessment/fatigue-formula-sparse'
 import {
   SUMMARIZER_VERSION,
   summarizeDay,
@@ -63,7 +65,8 @@ const summarize = (
   samples: SummarizerSample[],
   assessments: SummarizerAssessment[] = [],
   origin: 'REAL' | 'DEMO' = 'REAL',
-) => summarizeDay({ workerId: 'worker-1', day: DAY, origin, samples, assessments }, COMPUTED_AT)
+  sparseDayStats: SparseDayStats | null = null,
+) => summarizeDay({ workerId: 'worker-1', day: DAY, origin, samples, assessments, sparseDayStats }, COMPUTED_AT)
 
 describe('summarizeDay: estatísticas de BPM', () => {
   it('resume mínimo, máximo, média e quantidade das leituras do dia', () => {
@@ -415,6 +418,124 @@ describe('summarizeDay: quando existe linha', () => {
   })
 })
 
+describe('summarizeDay: estatísticas da calibração (v3)', () => {
+  it('percentis do batimento pelo mesmo nearest-rank do recálculo', () => {
+    const bpms = Array.from({ length: 41 }, (_, i) => 60 + i)
+    const summary = summarize(heartRates('12:00:00', bpms))
+
+    expect(summary?.heartRateP25).toBe(percentile(bpms, 25))
+    expect(summary?.heartRateP90).toBe(percentile(bpms, 90))
+  })
+
+  it('oxigenação: p10, p50 e quantas leituras; sem leitura, tudo nulo', () => {
+    const summary = summarize([
+      sample({ eventTime: at('12:00:00'), oxygenSaturationPct: 97 }),
+      sample({ eventTime: at('13:00:00'), oxygenSaturationPct: 95 }),
+      sample({ eventTime: at('14:00:00'), oxygenSaturationPct: 98 }),
+    ])
+
+    expect(summary?.oxygenSaturationP10).toBe(95)
+    expect(summary?.oxygenSaturationP50).toBe(97)
+    expect(summary?.oxygenSaturationCount).toBe(3)
+
+    const none = summarize(heartRates('12:00:00', [70]))
+    expect(none?.oxygenSaturationP10).toBeNull()
+    expect(none?.oxygenSaturationP50).toBeNull()
+    expect(none?.oxygenSaturationCount).toBeNull()
+  })
+
+  it('temperatura de pulso: os quatro percentis e a contagem; sem leitura, nulos', () => {
+    const temps = [33.1, 33.4, 33.8, 34.0, 34.2, 34.5, 34.9, 35.0, 35.2, 35.6]
+    const summary = summarize(
+      temps.map((bodyTemperatureC, i) =>
+        sample({ eventTime: new Date(at('12:00:00').getTime() + i * 600_000), bodyTemperatureC }),
+      ),
+    )
+
+    expect(summary?.bodyTemperatureP10).toBe(percentile(temps, 10))
+    expect(summary?.bodyTemperatureP25).toBe(percentile(temps, 25))
+    expect(summary?.bodyTemperatureP75).toBe(percentile(temps, 75))
+    expect(summary?.bodyTemperatureP90).toBe(percentile(temps, 90))
+    expect(summary?.bodyTemperatureCount).toBe(10)
+
+    const none = summarize(heartRates('12:00:00', [70]))
+    expect(none?.bodyTemperatureP10).toBeNull()
+    expect(none?.bodyTemperatureP90).toBeNull()
+    expect(none?.bodyTemperatureCount).toBeNull()
+  })
+
+  it('pressão: média de sistólica e diastólica, sem mudar a última aferição', () => {
+    const summary = summarize([
+      sample({ eventTime: at('12:00:00'), systolicMmHg: 120, diastolicMmHg: 80 }),
+      sample({ eventTime: at('15:00:00'), systolicMmHg: 130, diastolicMmHg: 90 }),
+    ])
+
+    expect(summary?.systolicAvg).toBe(125)
+    expect(summary?.diastolicAvg).toBe(85)
+    expect(summary?.lastSystolicMmHg).toBe(130)
+    expect(summary?.lastDiastolicMmHg).toBe(90)
+    expect(summarize(heartRates('12:00:00', [70]))?.systolicAvg).toBeNull()
+  })
+
+  it('movimento: mediana entre os minutos com leitura da soma do minuto', () => {
+    const summary = summarize([
+      sample({ eventTime: at('12:00:05'), motionCount: 10 }),
+      sample({ eventTime: at('12:00:40'), motionCount: 20 }),
+      sample({ eventTime: at('12:01:10'), motionCount: 5 }),
+    ])
+
+    // Minutos com 30 e 5: mediana 17,5.
+    expect(summary?.movementPerMinuteMedian).toBe(17.5)
+    expect(summarize(heartRates('12:00:00', [70]))?.movementPerMinuteMedian).toBeNull()
+  })
+
+  it('esforço do relógio: p25 e p90 das avaliações do dia', () => {
+    const summary = summarize([], efforts('12:00:00', [10, 20, 30, 40]))
+
+    expect(summary?.effortP25).toBe(10)
+    expect(summary?.effortP90).toBe(40)
+  })
+
+  it('pulseira: desgaste máximo e percentis do esforço vêm das estatísticas da esparsa', () => {
+    const summary = summarize(heartRates('12:00:00', [70]), [], 'REAL', {
+      wearMax: 55,
+      effortP25: 12,
+      effortP90: 70,
+    })
+
+    expect(summary?.wearMax).toBe(55)
+    expect(summary?.effortP25).toBe(12)
+    expect(summary?.effortP90).toBe(70)
+  })
+
+  it('com as duas fontes, o maior desgaste vence e o esforço vem do relógio', () => {
+    const summary = summarize(
+      heartRates('12:00:00', [70]),
+      [assessment('12:00:00', { effortPercent: 30, wearPercent: 40 })],
+      'REAL',
+      { wearMax: 55, effortP25: 12, effortP90: 70 },
+    )
+
+    expect(summary?.wearMax).toBe(55)
+    expect(summary?.effortP25).toBe(30)
+    expect(summary?.effortP90).toBe(30)
+  })
+
+  it('família do dia: a que mais leu batimento', () => {
+    const summary = summarize([
+      ...heartRates('12:00:00', [70, 72, 74]).map((s) => ({ ...s, deviceFamily: 'BAND' as const })),
+      sample({ eventTime: at('13:00:00'), heartRateBpm: 80, deviceFamily: 'WATCH' }),
+      // Leitura sem batimento não vota.
+      sample({ eventTime: at('13:01:00'), stepDelta: 10, deviceFamily: 'WATCH' }),
+      sample({ eventTime: at('13:02:00'), stepDelta: 10, deviceFamily: 'WATCH' }),
+      sample({ eventTime: at('13:03:00'), stepDelta: 10, deviceFamily: 'WATCH' }),
+    ])
+
+    expect(summary?.deviceFamily).toBe('BAND')
+    expect(summarize([sample({ eventTime: at('12:00:00'), stepDelta: 5 })])?.deviceFamily).toBeNull()
+  })
+})
+
 describe('summarizeDay: chave e rastro', () => {
   it('carrega funcionário, dia e origem, que são a chave da linha', () => {
     const summary = summarize(heartRates('12:00:00', [70]), [], 'DEMO')
@@ -435,7 +556,7 @@ describe('summarizeDay: chave e rastro', () => {
     // A varredura recandidata dia cujo Resumo veio de outra versão, então este
     // literal é o gatilho de recálculo de todo o histórico. Ele não pode mudar
     // junto com um refactor qualquer.
-    expect(SUMMARIZER_VERSION).toBe('swi-daily-summary-2')
+    expect(SUMMARIZER_VERSION).toBe('swi-daily-summary-3')
   })
 
   it('um dia com centenas de milhares de leituras não estoura a pilha', () => {

@@ -1,4 +1,5 @@
-import { assessSparseDay } from './fatigue-formula-sparse'
+import { percentile } from '../calibration/percentile'
+import { assessSparseDay, dayStatsOf } from './fatigue-formula-sparse'
 import { SPARSE_FORMULA_VERSION, SPARSE_PROFILE } from './sparse-profile'
 import type { Baseline } from './fatigue-formula'
 
@@ -74,5 +75,69 @@ describe('assessSparseDay', () => {
   it('o resultado vale na última leitura', () => {
     const r = assessSparseDay({ profile: SPARSE_PROFILE, baseline, samples: [at(0, 100), at(7, 110)] })
     expect(r.measuredUntilMs).toBe(T0 + 7 * MIN)
+  })
+})
+
+describe('assessSparseDay: estatísticas do dia e série', () => {
+  // Sobe a 170 por 1 h e volta ao repouso por 3 h: o desgaste do fim é menor
+  // que o pico, e é o pico que o Resumo precisa guardar.
+  const day = [
+    ...Array.from({ length: 13 }, (_, i) => at(i * 5, 170)),
+    ...Array.from({ length: 36 }, (_, i) => at(65 + i * 5, 60)),
+  ]
+
+  it('um ponto por batimento, em ordem, e o último é o resultado final', () => {
+    const r = assessSparseDay({ profile: SPARSE_PROFILE, baseline, samples: day })
+    expect(r.points).toHaveLength(day.length)
+    expect(r.points.map((p) => p.atMs)).toEqual(day.map((s) => s.atMs))
+    const last = r.points[r.points.length - 1]
+    expect(last.effortPercent).toBe(r.effortPercent)
+    expect(last.wearPercent).toBe(r.wearPercent)
+  })
+
+  it('o desgaste máximo do dia é o pico da série, não o do fim', () => {
+    const r = assessSparseDay({ profile: SPARSE_PROFILE, baseline, samples: day })
+    const peak = Math.max(...r.points.map((p) => p.wearPercent))
+    expect(r.dayStats.wearMax).toBe(peak)
+    expect(r.dayStats.wearMax!).toBeGreaterThan(r.wearPercent!)
+  })
+
+  it('p25 e p90 do esforço saem dos esforços de cada batimento', () => {
+    const r = assessSparseDay({ profile: SPARSE_PROFILE, baseline, samples: day })
+    const efforts = r.points.map((p) => p.effortPercent)
+    expect(r.dayStats.effortP25).toBe(percentile(efforts, 25))
+    expect(r.dayStats.effortP90).toBe(percentile(efforts, 90))
+  })
+
+  it('sem batimento ou sem linha de base, estatísticas nulas e série vazia', () => {
+    const none = { wearMax: null, effortP25: null, effortP90: null }
+    const empty = assessSparseDay({ profile: SPARSE_PROFILE, baseline, samples: [] })
+    expect(empty.dayStats).toEqual(none)
+    expect(empty.points).toEqual([])
+    const noBaseline = assessSparseDay({
+      profile: SPARSE_PROFILE,
+      baseline: { kind: 'unavailable', reason: 'no_birth_date' },
+      samples: [at(0, 120)],
+    })
+    expect(noBaseline.dayStats).toEqual(none)
+    expect(noBaseline.points).toEqual([])
+  })
+})
+
+describe('dayStatsOf', () => {
+  it('lê as estatísticas gravadas em inputs.dayStats', () => {
+    expect(dayStatsOf({ dayStats: { wearMax: 40, effortP25: 12, effortP90: null } })).toEqual({
+      wearMax: 40,
+      effortP25: 12,
+      effortP90: null,
+    })
+  })
+
+  it('nulo sem inputs, sem dayStats ou com campo torto', () => {
+    expect(dayStatsOf(null)).toBeNull()
+    expect(dayStatsOf({ window: {} })).toBeNull()
+    expect(dayStatsOf({ dayStats: { wearMax: '40', effortP25: 12, effortP90: 70 } })).toBeNull()
+    expect(dayStatsOf({ dayStats: { wearMax: 40 } })).toBeNull()
+    expect(dayStatsOf([1, 2])).toBeNull()
   })
 })

@@ -109,6 +109,9 @@ export class SparseAssessmentService {
             heartRateSamples: rows.length,
             gapsOverMax: result.gapsOverMax,
           },
+          // O Resumo diário lê daqui o pico de desgaste e os percentis do
+          // esforço do dia. A série inteira (`result.points`) não é gravada.
+          dayStats: result.dayStats,
           unavailableReason: result.unavailableReason,
         } as unknown as Prisma.InputJsonValue,
       },
