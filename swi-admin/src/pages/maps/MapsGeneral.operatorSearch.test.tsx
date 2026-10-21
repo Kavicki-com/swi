@@ -6,8 +6,25 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { MapsGeneral } from './MapsGeneral'
 import { clearSession, renderPage } from '@/test-utils/renderPage'
 
-const live = vi.hoisted(() => ({ value: null as Array<Record<string, unknown>> | null }))
-vi.mock('@/hooks/useLivePositions', () => ({ useLivePositions: () => live.value }))
+// Posições ao vivo de mentira: `emit` avisa quem lê que a lista mudou, como o
+// socket faria a cada snapshot.
+const live = vi.hoisted(() => {
+  const listeners = new Set<() => void>()
+  return {
+    value: null as Array<Record<string, unknown>> | null,
+    subscribe: (cb: () => void) => {
+      listeners.add(cb)
+      return () => {
+        listeners.delete(cb)
+      }
+    },
+    emit: () => listeners.forEach((cb) => cb()),
+  }
+})
+vi.mock('@/hooks/useLivePositions', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return { useLivePositions: () => useSyncExternalStore(live.subscribe, () => live.value) }
+})
 vi.mock('@/hooks/useAdminTelemetry', () => ({
   useAdminTelemetry: () => ({
     workers: null,
@@ -168,9 +185,77 @@ describe('MapsGeneral: buscar operador', () => {
     search('gab')
     fireEvent.click(await screen.findByRole('button', { name: 'Gabriela Lima' }))
     await waitFor(() => expect(onMap()).toHaveLength(1))
-    expect(maplibre.flyTo).toHaveBeenCalled()
+    await waitFor(() =>
+      expect(maplibre.flyTo).toHaveBeenCalledWith(
+        expect.objectContaining({ center: [-46.65, -23.57], zoom: 16 }),
+      ),
+    )
     // Escolhido: a lista fecha.
     expect(screen.queryByRole('button', { name: 'Gabriel Fernandes' })).toBeNull()
+    await close(unmount)
+  })
+
+  it('escolher um nome contido em outro seleciona só a pessoa escolhida', async () => {
+    live.value = [
+      worker('w1', 'João Pereira', -46.61, -23.51),
+      worker('w2', 'João Pereira Filho', -46.62, -23.52),
+      worker('w3', 'Ana Souza', -46.63, -23.53),
+    ]
+    const { unmount } = await openMap()
+    search('joão pereira')
+    await waitFor(() => expect(onMap()).toHaveLength(2))
+    fireEvent.click(await screen.findByRole('button', { name: 'João Pereira' }))
+    await waitFor(() => expect(onMap()).toHaveLength(1))
+    await waitFor(() =>
+      expect(maplibre.flyTo).toHaveBeenCalledWith(
+        expect.objectContaining({ center: [-46.61, -23.51], zoom: 16 }),
+      ),
+    )
+    // Escolhido: a lista fecha, mesmo com o nome do outro casando com o texto.
+    expect(screen.queryByRole('button', { name: 'João Pereira Filho' })).toBeNull()
+    await close(unmount)
+  })
+
+  it('com o escolhido fora do ao vivo, não cai no outro nome que casa com o texto', async () => {
+    const joao = worker('w1', 'João Pereira', -46.61, -23.51)
+    const others = [
+      worker('w2', 'João Pereira Filho', -46.62, -23.52),
+      worker('w3', 'Ana Souza', -46.63, -23.53),
+    ]
+    live.value = [joao, ...others]
+    const { unmount } = await openMap()
+    search('joão pereira')
+    fireEvent.click(await screen.findByRole('button', { name: 'João Pereira' }))
+    await waitFor(() => expect(onMap()).toHaveLength(1))
+    maplibre.flyTo.mockClear()
+    await act(async () => {
+      live.value = others
+      live.emit()
+    })
+    await waitFor(() => expect(onMap()).toHaveLength(0))
+    expect(maplibre.flyTo).not.toHaveBeenCalled()
+    // Voltou a mandar posição: o pino dele reaparece.
+    await act(async () => {
+      live.value = [joao, ...others]
+      live.emit()
+    })
+    await waitFor(() => expect(onMap()).toHaveLength(1))
+    await close(unmount)
+  })
+
+  it('digitar depois de escolher desfaz a escolha', async () => {
+    live.value = [
+      worker('w1', 'João Pereira', -46.61, -23.51),
+      worker('w2', 'João Pereira Filho', -46.62, -23.52),
+      worker('w3', 'Ana Souza', -46.63, -23.53),
+    ]
+    const { unmount } = await openMap()
+    search('joão pereira')
+    fireEvent.click(await screen.findByRole('button', { name: 'João Pereira' }))
+    await waitFor(() => expect(onMap()).toHaveLength(1))
+    search('joão')
+    await waitFor(() => expect(onMap()).toHaveLength(2))
+    expect(await screen.findByRole('button', { name: 'João Pereira Filho' })).toBeTruthy()
     await close(unmount)
   })
 
