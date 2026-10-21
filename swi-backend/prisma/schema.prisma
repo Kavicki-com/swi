@@ -77,6 +77,10 @@ model User {
   telemetryAssessments TelemetryAssessment[]
   telemetryConditions  TelemetryCondition[]
   telemetrySummaries   TelemetryDailySummary[]
+  calibration          WorkerCalibration?        @relation("workerCalibration")
+  calibrationBands     WorkerCalibrationBand[]   @relation("workerCalibrationBands")
+  safetyLimits         WorkerSafetyLimit[]       @relation("workerSafetyLimits")
+  calibrationChanges   WorkerCalibrationChange[] @relation("workerCalibrationChanges")
   operationalAlerts    OperationalAlert[]    @relation("alertedWorker")
   triagedAlerts        OperationalAlert[]    @relation("triagedAlerts")
   positionSamples      WorkerPositionSample[]
@@ -589,6 +593,38 @@ enum CalibrationDeviceFamily {
   BAND
 }
 
+/// Medição com faixa própria na calibração individual.
+enum CalibrationMetric {
+  HEART_RATE
+  OXYGEN_SATURATION
+  BODY_TEMPERATURE
+  SYSTOLIC
+  DIASTOLIC
+  EFFORT
+  WEAR
+  STEPS
+  DISTANCE
+  ACTIVE_ENERGY
+  MOVEMENT
+}
+
+/// Trava de segurança que o admin pode mudar por funcionário.
+enum SafetyRule {
+  HEART_RATE_HIGH
+  HEART_RATE_LOW
+  OXYGEN_LOW
+  BLOOD_PRESSURE_HIGH
+  WEAR_HIGH
+}
+
+enum CalibrationChangeAction {
+  BAND_OVERRIDE
+  BAND_REVERT
+  SAFETY_SET
+  SAFETY_REVERT
+  RECALIBRATE_DEVICE
+}
+
 enum TelemetrySessionStatus {
   ACTIVE
   INTERRUPTED
@@ -1047,4 +1083,75 @@ model TelemetryDailySummary {
 
   @@unique([workerId, day, origin])
   @@index([day])
+}
+
+/// Calibração individual de um funcionário (só origem REAL). Refeita pelo job
+/// diário; a fase recomeça quando muda a família do aparelho.
+model WorkerCalibration {
+  workerId        String                  @id
+  worker          User                    @relation("workerCalibration", fields: [workerId], references: [id], onDelete: Cascade)
+  version         String
+  deviceFamily    CalibrationDeviceFamily
+  phaseStartedAt  DateTime                @db.Date
+  recalibrating   Boolean                 @default(false)
+  /// Dias válidos de batimento na fase.
+  validDays       Int
+  restingBpm      Float?
+  /// Topo da régua do esforço já misturado com a máxima por idade.
+  peakBpm         Float?
+  peakPersonalBpm Float?
+  /// Partida do pico na fase: máxima por idade, ou o pico de antes da troca.
+  peakStartBpm    Float?
+  computedAt      DateTime
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+}
+
+/// Faixa de uma medição. Os cortes são JSON com tipo por medição no código
+/// (`calibration-bands.ts`): um lado, dois lados (temperatura) ou atividade.
+model WorkerCalibrationBand {
+  workerId     String
+  worker       User              @relation("workerCalibrationBands", fields: [workerId], references: [id], onDelete: Cascade)
+  metric       CalibrationMetric
+  validDays    Int
+  startCuts    Json
+  learnedCuts  Json
+  /// Correção do gestor. Nula: vale o aprendido.
+  overrideCuts Json?
+  overrideById String?
+  overrideAt   DateTime?
+  computedAt   DateTime
+  updatedAt    DateTime          @updatedAt
+
+  @@id([workerId, metric])
+}
+
+/// Trava mudada pelo admin. Sem linha, vale o padrão do perfil de alerta.
+model WorkerSafetyLimit {
+  workerId    String
+  worker      User       @relation("workerSafetyLimits", fields: [workerId], references: [id], onDelete: Cascade)
+  rule        SafetyRule
+  /// Valores por regra (`safety-limits.ts`): abre e fecha; pressão tem dois de cada.
+  values      Json
+  updatedById String
+  updatedAt   DateTime   @updatedAt
+
+  @@id([workerId, rule])
+}
+
+/// Histórico de correções, travas e recalibrações.
+model WorkerCalibrationChange {
+  id       String                  @id @default(uuid())
+  workerId String
+  worker   User                    @relation("workerCalibrationChanges", fields: [workerId], references: [id], onDelete: Cascade)
+  action   CalibrationChangeAction
+  metric   CalibrationMetric?
+  rule     SafetyRule?
+  from     Json?
+  to       Json?
+  /// Nulo na recalibração automática por troca de aparelho.
+  actorId  String?
+  at       DateTime                @default(now())
+
+  @@index([workerId, at])
 }
