@@ -41,17 +41,17 @@ function entryOf(view: WorkerMeasurementsView, key: MeasurementKey) {
 const NOTHING = { value: null, caption: null }
 
 describe('measurementsViewFrom', () => {
-  it('sem relógio pareado mostra só a frase, mesmo com leitura guardada', () => {
+  it('sem aparelho pareado mostra só a frase, mesmo com leitura guardada', () => {
     expect(measurementsViewFrom(reporting(), { noDevice: true })).toEqual({
       kind: 'empty',
       message: NO_DEVICE_LABEL,
     })
   })
 
-  it('sem saber ainda se há relógio, espera; se a consulta falhou, diz que está indisponível', () => {
+  it('sem saber ainda se há aparelho, espera; se a consulta falhou, diz que está indisponível', () => {
     expect(measurementsViewFrom(reporting(), { deviceUnknown: true })).toEqual({
       kind: 'empty',
-      message: 'Verificando o relógio…',
+      message: 'Verificando o aparelho…',
     })
     expect(measurementsViewFrom(reporting(), { deviceUnknown: true, failed: true })).toEqual({
       kind: 'empty',
@@ -59,10 +59,10 @@ describe('measurementsViewFrom', () => {
     })
   })
 
-  it('sem saber se há relógio, espera mesmo sem leitura alguma', () => {
+  it('sem saber se há aparelho, espera mesmo sem leitura alguma', () => {
     expect(measurementsViewFrom(null, { deviceUnknown: true })).toEqual({
       kind: 'empty',
-      message: 'Verificando o relógio…',
+      message: 'Verificando o aparelho…',
     })
   })
 

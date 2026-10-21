@@ -59,7 +59,7 @@ function passesFilter(status: DashboardMapMarker['status'], filter: string): boo
   if (filter === 'good') return status === 'good'
   if (filter === 'alert') return status === 'alert'
   // Sem leitura do aparelho não é urgência médica: o pino neutro só aparece em
-  // "Todos", senão quem nunca pareou um relógio cairia no filtro de urgência.
+  // "Todos", senão quem nunca pareou um aparelho cairia no filtro de urgência.
   if (filter === 'low') return status === 'low'
   return true
 }
@@ -187,7 +187,7 @@ export function AlertsList() {
   // Batimento como número para o cartão do DS; null mostra a ausência.
   const selectedHeartRate =
     selectedVitals?.heartRate == null ? null : Number(selectedVitals.heartRate)
-  // Sem relógio pareado, a frase toma a coluna de saúde do cartão (no lugar
+  // Sem aparelho pareado, a frase toma a coluna de saúde do cartão (no lugar
   // do "-- Bpm"), e a linha de estado abaixo não a repete.
   const selectedNoDevice = selectedEntry?.device.state === 'NONE'
   // A borda acompanha o estado real; sem condição, o cartão fica com a borda padrão.

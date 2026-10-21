@@ -18,7 +18,7 @@ describe('adminMenuVitalsFrom', () => {
       sector: 'Operações',
       heartRate: '--',
       showPulse: false,
-      status: 'Sem relógio pareado',
+      status: 'Sem aparelho pareado',
       mpm: '--',
       mpmPercent: 0,
       fatigue: 'Sem estimativa',

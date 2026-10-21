@@ -60,7 +60,7 @@ describe('vitalsViewFrom', () => {
 
   it('sem leitura alguma (falha ou admin) usa a frase pedida', () => {
     expect(vitalsViewFrom(null).status).toBe('Sem leitura do aparelho')
-    expect(vitalsViewFrom(null, { noDevice: true }).status).toBe('Sem relógio pareado')
+    expect(vitalsViewFrom(null, { noDevice: true }).status).toBe('Sem aparelho pareado')
     // Falha de rede não é ausência de aparelho: a frase não pode culpar o relógio.
     expect(vitalsViewFrom(null, { failed: true }).status).toBe('Leitura indisponível no momento')
   })
@@ -76,19 +76,19 @@ describe('vitalsViewFrom', () => {
     expect(view.wearPct).toBeNull()
     expect(view.effortPct).toBeNull()
     expect(view.fatigueEta).toEqual({ minutes: null, label: 'Sem estimativa' })
-    expect(view.status).toBe('Sem relógio pareado')
+    expect(view.status).toBe('Sem aparelho pareado')
   })
 
-  // Enquanto não se sabe se há relógio, a leitura guardada pode ser de quem já
+  // Enquanto não se sabe se há aparelho, a leitura guardada pode ser de quem já
   // despareou: não aparece como atual.
-  it('sem saber se há relógio, esconde a leitura e diz que está verificando', () => {
+  it('sem saber se há aparelho, esconde a leitura e diz que está verificando', () => {
     const view = vitalsViewFrom(reporting(), { deviceUnknown: true })
     expect(view.heartRate).toBeNull()
     expect(view.pressure).toBeNull()
-    expect(view.status).toBe('Verificando o relógio…')
+    expect(view.status).toBe('Verificando o aparelho…')
   })
 
-  it('sem conseguir saber se há relógio, esconde a leitura e diz que está indisponível', () => {
+  it('sem conseguir saber se há aparelho, esconde a leitura e diz que está indisponível', () => {
     const view = vitalsViewFrom(reporting(), { deviceUnknown: true, failed: true })
     expect(view.heartRate).toBeNull()
     expect(view.status).toBe('Leitura indisponível no momento')

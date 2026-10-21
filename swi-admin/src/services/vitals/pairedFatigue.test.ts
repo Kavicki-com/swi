@@ -13,7 +13,7 @@ describe('pairedFatigue', () => {
   // Vale para admin e para funcionário sem aparelho: não há de onde vir o dado.
   it('sem aparelho diz isso', () => {
     expect(pairedFatigue({ device: 'none', telemetry: null, failed: false }).label).toBe(
-      'Sem relógio pareado',
+      'Sem aparelho pareado',
     )
   })
 

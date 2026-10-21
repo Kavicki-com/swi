@@ -57,14 +57,14 @@ export type WorkerDetailsData = {
    * Obrigatório de propósito: sem ele a tela voltaria a preencher com zero.
    */
   vitals: WorkerVitalsView
-  /** Medições do relógio já decididas (measurementsViewFrom), obrigatórias como os vitais. */
+  /** Medições do aparelho já decididas (measurementsViewFrom), obrigatórias como os vitais. */
   measurements: WorkerMeasurementsView
   allergies?: ReadonlyArray<string>
   examHistory?: ReadonlyArray<WorkerExamEntry>
   /**
    * Funcionário cuja série de gasto calórico o gráfico lê, e cuja transmissão
    * o botão de câmera do minimapa procura. Ausente para quem não pareia
-   * aparelho nem transmite (administrador): o gráfico diz "Sem relógio pareado".
+   * aparelho nem transmite (administrador): o gráfico diz "Sem aparelho pareado".
    */
   seriesWorkerId?: string
 }
@@ -614,7 +614,7 @@ export function WorkerDetailsLayout({
         </View>
       </View>
 
-      {/* Medições do relógio, na largura toda como o gráfico abaixo: as
+      {/* Medições do aparelho, na largura toda como o gráfico abaixo: as
           roscas de fadiga e esforço lado a lado com as demais medições. */}
       <WorkerMeasurementsSection
         view={worker.measurements}

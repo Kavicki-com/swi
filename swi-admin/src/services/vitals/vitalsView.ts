@@ -111,11 +111,11 @@ export function sourceBadgeOf(telemetry: WorkerTelemetry, now: number = Date.now
 /** Marcador de valor ausente na tela. */
 export const NO_VALUE = '--'
 
-/** Frase de quem não tem relógio pareado, a mesma em todas as telas. */
-export const NO_DEVICE_LABEL = 'Sem relógio pareado'
+/** Frase de quem não tem aparelho pareado, a mesma em todas as telas. */
+export const NO_DEVICE_LABEL = 'Sem aparelho pareado'
 
-/** Ainda sem saber se há relógio pareado. */
-export const CHECKING_DEVICE_LABEL = 'Verificando o relógio…'
+/** Ainda sem saber se há aparelho pareado. */
+export const CHECKING_DEVICE_LABEL = 'Verificando o aparelho…'
 
 /** A consulta falhou: não dá para afirmar que falta leitura. */
 export const READING_UNAVAILABLE_LABEL = 'Leitura indisponível no momento'
@@ -162,12 +162,12 @@ const measuredLabel = (
 
 /**
  * Como decidir o que a leitura mostra, as mesmas opções para vitais e medições
- * do relógio: assim uma faixa nunca mostra a leitura guardada que a outra esconde.
+ * do aparelho: assim uma faixa nunca mostra a leitura guardada que a outra esconde.
  */
 export type ReadingOptions = {
-  /** Sem relógio pareado: a leitura guardada não vale. */
+  /** Sem aparelho pareado: a leitura guardada não vale. */
   noDevice?: boolean
-  /** Ainda sem saber se há relógio: a leitura guardada espera. */
+  /** Ainda sem saber se há aparelho: a leitura guardada espera. */
   deviceUnknown?: boolean
   /** A consulta falhou. */
   failed?: boolean
@@ -182,7 +182,7 @@ export function vitalsViewFrom(
   // Sem aparelho pareado, a leitura guardada não vale: desparear não apaga o
   // último snapshot no backend, e mostrá-lo seria apresentar dado velho como atual.
   if (options.noDevice) return { ...EMPTY, status: NO_DEVICE_LABEL }
-  // Sem saber ainda se há relógio, a leitura guardada pode ser de quem já
+  // Sem saber ainda se há aparelho, a leitura guardada pode ser de quem já
   // despareou: ela espera a resposta, ou some se a resposta não vier.
   if (options.deviceUnknown) {
     return {
