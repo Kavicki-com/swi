@@ -73,7 +73,7 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 
 | Pacote | Versão | Licença | Observação |
 | --- | --- | --- | --- |
-| `@kavicki/swi-design-system` | 0.1.143 | Proprietária (Kavicki) | Biblioteca própria da Kavicki |
+| `@kavicki/swi-design-system` | 0.1.144 | Proprietária (Kavicki) | Biblioteca própria da Kavicki |
 | `maplibre-gl` | 6.11.2 | BSD-3-Clause |  |
 | `react` | 18.3.1 | MIT |  |
 | `react-dom` | 18.3.1 | MIT |  |
