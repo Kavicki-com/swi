@@ -4,6 +4,7 @@ import {
   type HealthReadingsSource,
 } from '../../modules/swi-watch-control';
 import type { OutboxEvent, TelemetryOutbox } from './telemetryOutbox';
+import { withTimeout } from './withTimeout';
 
 // Pressão arterial e temperatura corporal lidas do app Saúde. O relógio não
 // mede nenhuma das duas: quem as grava é um aparelho com app próprio ou o
@@ -92,23 +93,6 @@ export interface HealthReadingsReaderDeps {
   now?: () => number;
   /** Prazo da consulta; o padrão é HEALTH_READ_TIMEOUT_MS. */
   timeoutMs?: number;
-}
-
-/** A promessa, ou uma rejeição se ela não resolver no prazo. */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`sem resposta em ${ms} ms`)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }
 
 export interface HealthReadingsReader {
