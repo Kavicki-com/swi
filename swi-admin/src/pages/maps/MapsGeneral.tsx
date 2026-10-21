@@ -43,6 +43,8 @@ export function MapsGeneral() {
     setShowCameras,
     cameraSearch,
     setCameraSearch,
+    operatorSearch,
+    setOperatorSearch,
     isLocating,
     handleLocate,
     backBtnPanResponder,
@@ -180,6 +182,8 @@ export function MapsGeneral() {
           variant="operators"
           expanded={showOperators}
           onExpandedChange={setShowOperators}
+          searchValue={operatorSearch}
+          onSearchChange={setOperatorSearch}
         />
         <MapControl
           variant="heatmap"

@@ -21,7 +21,7 @@ import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { reportsApi } from '@/services/api/reports'
 import { camerasApi, type Camera } from '@/services/api/cameras'
-import { filterCameras } from '@/pages/cameras/cameraSearch'
+import { filterByName, filterCameras } from '@/pages/cameras/cameraSearch'
 import { buildPin, buildCameraPin, type PinHandle } from '../pinBuilders'
 import { useStalePinTitles } from './useStalePinTitles'
 
@@ -117,10 +117,18 @@ export function useMapsGeneral() {
   // desenha o ponto azul. Deslocar os pinos em volta do usuário desenharia o
   // GPS de cada funcionário num lugar onde ele não está.
   const operatorMarkers = useMemo<DashboardMapMarker[]>(() => mapMarkers ?? [], [mapMarkers])
+  // "Buscar operador" do controle: deixa no mapa só quem casa com o nome.
+  const [operatorSearch, setOperatorSearch] = useState('')
+  const visibleOperators = useMemo(
+    () => filterByName(operatorMarkers, operatorSearch),
+    [operatorMarkers, operatorSearch],
+  )
+  const visibleOperatorsRef = useRef(visibleOperators)
+  visibleOperatorsRef.current = visibleOperators
   // Hora da posição velha ao passar o mouse no pino; a cor não muda. O pino
   // nasce com o texto do momento, e quando um texto muda só o título do
   // elemento é trocado, sem refazer os pinos.
-  const pinTitles = useStalePinTitles(operatorMarkers)
+  const pinTitles = useStalePinTitles(visibleOperators)
   const pinTitlesRef = useRef(pinTitles)
   pinTitlesRef.current = pinTitles
   const operatorPinsRef = useRef<PinHandle[]>([])
@@ -270,11 +278,22 @@ export function useMapsGeneral() {
     map.flyTo({ center: [target.lng, target.lat], zoom: 16, duration: 1500 })
   }, [mapReady, focusId, operatorMarkers])
 
+  // Busca que sobra com um operador só voa até ele, uma vez por resultado: a
+  // posição sai do ref para a câmera não ser puxada a cada posição ao vivo.
+  const searchMatchId =
+    operatorSearch.trim() && visibleOperators.length === 1 ? visibleOperators[0]!.id : null
   useEffect(() => {
     const map = mapRef.current
-    if (!lib || !map || !mapReady || !showOperators || operatorMarkers.length === 0) return
+    if (!map || !mapReady || !searchMatchId) return
+    const target = visibleOperatorsRef.current.find((m) => m.id === searchMatchId)
+    if (target) map.flyTo({ center: [target.lng, target.lat], zoom: 16, duration: 1500 })
+  }, [mapReady, searchMatchId])
 
-    const handles = operatorMarkers.map((m, i) =>
+  useEffect(() => {
+    const map = mapRef.current
+    if (!lib || !map || !mapReady || !showOperators || visibleOperators.length === 0) return
+
+    const handles = visibleOperators.map((m, i) =>
       buildPin(m, map, lib, () => navigate(`/employees/${m.id}`), pinTitlesRef.current[i], {
         focused: m.id === focusId,
       }),
@@ -295,7 +314,7 @@ export function useMapsGeneral() {
         })
       })
     }
-  }, [mapReady, operatorMarkers, showOperators, lib, navigate, focusId])
+  }, [mapReady, visibleOperators, showOperators, lib, navigate, focusId])
 
   useEffect(() => {
     operatorPinsRef.current.forEach((h, i) => {
@@ -511,6 +530,8 @@ export function useMapsGeneral() {
     setShowCameras,
     cameraSearch,
     setCameraSearch,
+    operatorSearch,
+    setOperatorSearch,
     isLocating,
     handleLocate,
     backBtnPanResponder,
