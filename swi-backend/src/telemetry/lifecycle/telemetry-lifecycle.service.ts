@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { parseTelemetryRetention } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
-import { SPARSE_FORMULA_VERSION } from '../assessment/sparse-profile'
+import { dayStatsOf } from '../assessment/fatigue-formula-sparse'
+import { familyOfDeviceKind } from '../calibration/device-family'
 import {
   BRT_OFFSET_MS,
   EVENT_AGE,
@@ -98,6 +99,24 @@ const SAMPLE_FIELDS = {
  * de colunas poderia esquecer uma que o Resumo lê.
  */
 export const SUMMARIZER_SAMPLE_FIELDS = SAMPLE_FIELDS
+
+/**
+ * O que só o Resumo do dia lê, para a calibração: oxigenação, temperatura,
+ * movimento e o aparelho de cada leitura. Fica fora do contrato compartilhado
+ * porque a série não usa nada disso e carregaria colunas à toa. Os campos são
+ * opcionais no resumidor, então aqui o compilador não cobre a omissão: quem
+ * acrescentar estatística nova confere esta lista.
+ */
+const LIFECYCLE_SAMPLE_FIELDS = {
+  ...SAMPLE_FIELDS,
+  oxygenSaturationPct: true,
+  bodyTemperatureC: true,
+  motionCount: true,
+  deviceId: true,
+} as const
+
+/** Toda versão da fórmula esparsa, a atual e as que vierem. */
+const SPARSE_FORMULA_PREFIX = 'swi-fatigue-sparse-'
 
 const ASSESSMENT_FIELDS = {
   computedAt: true,
@@ -355,27 +374,52 @@ export class TelemetryLifecycleService {
     // própria, senão o Resumo discordaria do painel sobre a mesma leitura.
     const { start, end } = monitoredDayWindow(day)
 
-    const [samples, assessments] = await Promise.all([
+    const [rows, assessments, sparse] = await Promise.all([
       this.prisma.telemetrySample.findMany({
         where: { workerId, origin, eventTime: { gte: start, lt: end } },
-        select: SAMPLE_FIELDS,
+        select: LIFECYCLE_SAMPLE_FIELDS,
       }),
       this.prisma.telemetryAssessment.findMany({
         // A avaliação esparsa recalcula o dia inteiro a cada sincronização e é
         // carimbada na hora do recálculo: contada aqui, cairia no dia errado e
-        // se repetiria a cada lote. Limitação aceita na v1: o Resumo de quem
-        // usa pulseira sai sem esforço e desgaste.
+        // se repetiria a cada lote. O que o Resumo precisa dela vem pronto em
+        // `inputs.dayStats`, lido abaixo. Prefixo, e não a versão atual, para
+        // a próxima versão da esparsa também ficar de fora.
         where: {
           workerId,
           origin,
           computedAt: { gte: start, lt: end },
-          formulaVersion: { not: SPARSE_FORMULA_VERSION },
+          NOT: { formulaVersion: { startsWith: SPARSE_FORMULA_PREFIX } },
         },
         select: ASSESSMENT_FIELDS,
       }),
+      // A esparsa mais recente do dia já viu o dia inteiro até ali: é dela o
+      // pico de desgaste e os percentis do esforço da pulseira. O dia dela é o
+      // começo da janela, não o carimbo do recálculo.
+      this.prisma.telemetryAssessment.findFirst({
+        where: { workerId, origin, formulaVersion: { startsWith: SPARSE_FORMULA_PREFIX }, windowStart: start },
+        orderBy: { windowEnd: 'desc' },
+        select: { inputs: true },
+      }),
     ])
 
-    const summary = summarizeDay({ workerId, day, origin, samples, assessments }, now)
+    // A família de cada leitura sai do aparelho que a mandou: o Resumo é por
+    // funcionário e origem, e um dia pode misturar relógio e pulseira.
+    const deviceIds = [...new Set(rows.map((r) => r.deviceId))]
+    const devices =
+      deviceIds.length === 0
+        ? []
+        : await this.prisma.telemetryDevice.findMany({
+            where: { id: { in: deviceIds } },
+            select: { id: true, kind: true },
+          })
+    const familyById = new Map(devices.map((d) => [d.id, familyOfDeviceKind(d.kind)]))
+    const samples = rows.map(({ deviceId, ...s }) => ({ ...s, deviceFamily: familyById.get(deviceId) ?? null }))
+
+    const summary = summarizeDay(
+      { workerId, day, origin, samples, assessments, sparseDayStats: dayStatsOf(sparse?.inputs ?? null) },
+      now,
+    )
     if (summary === null) {
       // Não é caso normal, é invariante quebrado: a varredura achou a tripla
       // porque havia linha abaixo do corte, e a janela do mesmo dia não trouxe

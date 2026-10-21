@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { SPARSE_FORMULA_VERSION } from '../src/telemetry/assessment/sparse-profile'
+import { monitoredDayWindow } from '../src/telemetry/domain/metric-state'
 import { TelemetryLifecycleService } from '../src/telemetry/lifecycle/telemetry-lifecycle.service'
 import { SUMMARIZER_VERSION } from '../src/telemetry/lifecycle/telemetry-summarizer'
 
@@ -213,9 +215,10 @@ describe('Telemetry lifecycle e2e', () => {
     // Subir a conta precisa alcançar o histórico. Sem a versão no filtro da
     // varredura, o dia já resumido nunca voltaria, e o painel mostraria linhas
     // vizinhas produzidas por regras diferentes.
+    // A v2 é a que está gravada em produção quando a v3 sobe: sem percentis.
     await prisma.telemetryDailySummary.update({
       where: { workerId_day_origin: { workerId, day, origin: 'REAL' } },
-      data: { summarizerVersion: 'swi-daily-summary-0', heartRateMax: 999, sampleCount: 0 },
+      data: { summarizerVersion: 'swi-daily-summary-2', heartRateMax: 999, sampleCount: 0, heartRateP25: null },
     })
 
     const result = await lifecycle.summarizeClosedDays(now)
@@ -226,6 +229,9 @@ describe('Telemetry lifecycle e2e', () => {
     expect(linhas[0].summarizerVersion).toBe(SUMMARIZER_VERSION)
     expect(linhas[0].heartRateMax).toBe(90)
     expect(linhas[0].sampleCount).toBe(5)
+    // O dia refeito ganha o que a calibração lê: é assim que os 30 dias de
+    // bruto guardado viram dias válidos no deploy, sem script de backfill.
+    expect(linhas[0].heartRateP25).toBe(60)
   })
 
   it('o dia guardado é data pura, sem hora nem fuso', async () => {
@@ -236,15 +242,17 @@ describe('Telemetry lifecycle e2e', () => {
     expect(summary.day.toISOString()).toBe('2026-09-01T00:00:00.000Z')
   })
 
-  it('movimento por minuto não é do Resumo, e a coluna não existe para inventá-lo', async () => {
-    // MPM é derivada de janela e vive na projeção do painel, não no Resumo do
-    // dia. A ausência aqui é de propósito: o Resumo guarda o que foi medido, e
-    // uma coluna a mais convidaria alguém a recalcular a derivada de outro
-    // jeito, com outro resultado.
+  it('o movimento por minuto ao vivo não é do Resumo; só a mediana do dia, para a calibração', async () => {
+    // MPM é derivada de janela e vive na projeção do painel. O Resumo guarda
+    // outra coisa, com outro nome: a mediana entre os minutos com leitura da
+    // soma de movimento do minuto, que é o "habitual" que a calibração compara.
+    // Sem coluna `movementPerMinute`, ninguém confunde as duas.
     const summary = await storedSummary()
 
     expect(summary).not.toHaveProperty('movementPerMinute')
     expect(summary).not.toHaveProperty('movementPerMinuteAvg')
+    // Esta série não tem contagem de movimento: mediana desconhecida, não zero.
+    expect(summary.movementPerMinuteMedian).toBeNull()
   })
 
   it('rodar de novo não duplica a linha nem muda os valores', async () => {
@@ -388,6 +396,165 @@ describe('Telemetry lifecycle e2e', () => {
       expect(
         await prisma.telemetrySample.count({ where: { workerId, eventTime: antigoAt('12:01:00') } }),
       ).toBe(1)
+    })
+  })
+
+  describe('Resumo v3 para a calibração', () => {
+    // Funcionários próprios: os casos acima contam as linhas do funcionário
+    // principal, e um dia a mais ali mudaria todas as contas.
+    const watchEmail = `telemetry-lifecycle-watch-${randomUUID()}@ex.com`
+    const bandEmail = `telemetry-lifecycle-band-${randomUUID()}@ex.com`
+
+    interface Seeded {
+      workerId: string
+      deviceId: string
+      sessionId: string
+    }
+    let watch: Seeded
+    let band: Seeded
+
+    const seedWorker = async (mail: string, kind: 'APPLE_WATCH' | 'ANDROID_PHONE'): Promise<Seeded> => {
+      const user = await prisma.user.create({
+        data: {
+          email: mail,
+          name: 'Telemetry Lifecycle Calibração',
+          passwordHash: 'nao-usado-neste-spec',
+          role: 'WORKER',
+          emailVerified: true,
+          approvalStatus: 'APPROVED',
+        },
+      })
+      const device = await prisma.telemetryDevice.create({
+        data: { workerId: user.id, kind, credentialHash: 'hash-de-credencial-de-teste' },
+      })
+      const session = await prisma.telemetrySession.create({
+        data: {
+          id: `lifecycle-cal-${randomUUID()}`,
+          deviceId: device.id,
+          workerId: user.id,
+          origin: 'REAL',
+          startedAt: at('12:00:00'),
+        },
+      })
+      return { workerId: user.id, deviceId: device.id, sessionId: session.id }
+    }
+
+    let calSequence = 0
+    const calRow = (
+      who: Seeded,
+      eventTime: Date,
+      measures: {
+        heartRateBpm?: number
+        motionCount?: number
+        oxygenSaturationPct?: number
+        bodyTemperatureC?: number
+        systolicMmHg?: number
+        diastolicMmHg?: number
+      },
+    ) => ({
+      eventId: randomUUID(),
+      sessionId: who.sessionId,
+      deviceId: who.deviceId,
+      workerId: who.workerId,
+      origin: 'REAL' as const,
+      sequence: ++calSequence,
+      eventTime,
+      receivedAt: eventTime,
+      ...measures,
+      payload: {},
+      payloadHash: `hash-${randomUUID()}`,
+    })
+
+    beforeAll(async () => {
+      watch = await seedWorker(watchEmail, 'APPLE_WATCH')
+      band = await seedWorker(bandEmail, 'ANDROID_PHONE')
+
+      await prisma.telemetrySample.createMany({
+        data: [
+          calRow(watch, at('12:00:00'), { heartRateBpm: 60, motionCount: 10 }),
+          calRow(watch, at('12:00:30'), { heartRateBpm: 70, motionCount: 20 }),
+          calRow(watch, at('12:01:10'), { heartRateBpm: 80, motionCount: 5, oxygenSaturationPct: 97 }),
+          calRow(watch, at('12:30:00'), { oxygenSaturationPct: 95, bodyTemperatureC: 34 }),
+          calRow(watch, at('13:00:00'), {
+            oxygenSaturationPct: 98,
+            bodyTemperatureC: 34.5,
+            systolicMmHg: 120,
+            diastolicMmHg: 80,
+          }),
+          calRow(watch, at('14:00:00'), { bodyTemperatureC: 35, systolicMmHg: 130, diastolicMmHg: 90 }),
+          calRow(band, at('12:00:00'), { heartRateBpm: 70 }),
+          calRow(band, at('12:05:00'), { heartRateBpm: 75 }),
+        ],
+      })
+
+      // A esparsa refaz o dia a cada sincronização e é carimbada na hora do
+      // recálculo, aqui dois dias depois. O Resumo acha a do dia pelo começo da
+      // janela e lê a mais recente; a anterior, de pico menor, não pode vencer.
+      const { start } = monitoredDayWindow(day)
+      const sparse = (windowEnd: Date, computedAt: Date, wearMax: number) => ({
+        workerId: band.workerId,
+        sessionId: band.sessionId,
+        origin: 'REAL' as const,
+        computedAt,
+        windowStart: start,
+        windowEnd,
+        effortPercent: 20,
+        wearPercent: 30,
+        formulaVersion: SPARSE_FORMULA_VERSION,
+        inputs: { dayStats: { wearMax, effortP25: 10, effortP90: 60 } },
+      })
+      await prisma.telemetryAssessment.createMany({
+        data: [
+          sparse(at('12:00:00'), new Date('2026-09-03T09:00:00.000Z'), 25),
+          sparse(at('12:05:00'), new Date('2026-09-03T10:00:00.000Z'), 40),
+        ],
+      })
+    })
+
+    afterAll(async () => {
+      await prisma.user.deleteMany({ where: { email: { in: [watchEmail, bandEmail] } } })
+    })
+
+    const summaryOf = (who: Seeded) =>
+      prisma.telemetryDailySummary.findUniqueOrThrow({
+        where: { workerId_day_origin: { workerId: who.workerId, day, origin: 'REAL' } },
+      })
+
+    it('dia de relógio: percentis, oxigenação, temperatura, pressão média, movimento e família', async () => {
+      const result = await lifecycle.summarizeClosedDays(now)
+      expect(result.failed).toBe(0)
+
+      const summary = await summaryOf(watch)
+
+      expect(summary.summarizerVersion).toBe('swi-daily-summary-3')
+      expect(summary.heartRateP25).toBe(60)
+      expect(summary.heartRateP90).toBe(80)
+      expect(summary.oxygenSaturationP10).toBe(95)
+      expect(summary.oxygenSaturationP50).toBe(97)
+      expect(summary.oxygenSaturationCount).toBe(3)
+      expect(summary.bodyTemperatureP10).toBe(34)
+      expect(summary.bodyTemperatureP25).toBe(34)
+      expect(summary.bodyTemperatureP75).toBe(35)
+      expect(summary.bodyTemperatureP90).toBe(35)
+      expect(summary.bodyTemperatureCount).toBe(3)
+      expect(summary.systolicAvg).toBe(125)
+      expect(summary.diastolicAvg).toBe(85)
+      // Minutos 12:00 (10 + 20) e 12:01 (5): mediana 17,5.
+      expect(summary.movementPerMinuteMedian).toBe(17.5)
+      expect(summary.deviceFamily).toBe('WATCH')
+    })
+
+    it('dia de pulseira: pico de desgaste e esforço da última avaliação esparsa do dia', async () => {
+      const summary = await summaryOf(band)
+
+      expect(summary.deviceFamily).toBe('BAND')
+      expect(summary.wearMax).toBe(40)
+      expect(summary.effortP25).toBe(10)
+      expect(summary.effortP90).toBe(60)
+      // A esparsa segue fora das contagens por avaliação: carimbada no dia do
+      // recálculo, ela cairia no dia errado e se repetiria a cada lote.
+      expect(summary.effortCount).toBeNull()
+      expect(summary.wearCount).toBeNull()
     })
   })
 

@@ -1,3 +1,7 @@
+import type { CalibrationDeviceFamily } from '@prisma/client'
+import type { SparseDayStats } from '../assessment/fatigue-formula-sparse'
+import { dominantFamily } from '../calibration/device-family'
+import { median, percentile } from '../calibration/percentile'
 import { FRESHNESS } from '../domain/metric-state'
 import type { MeasurementSource, TelemetryOrigin } from '../domain/telemetry.types'
 
@@ -15,7 +19,8 @@ import type { MeasurementSource, TelemetryOrigin } from '../domain/telemetry.typ
  * possa ser reconhecido como produto de outra regra, em vez de ser comparado
  * com um novo como se fossem a mesma coisa.
  */
-export const SUMMARIZER_VERSION = 'swi-daily-summary-2'
+// v3: percentis, oxigenação, temperatura, média de pressão, movimento e família do aparelho, para a calibração.
+export const SUMMARIZER_VERSION = 'swi-daily-summary-3'
 
 /**
  * Intervalo máximo entre duas leituras que ainda conta como tempo coberto.
@@ -39,6 +44,12 @@ export interface SummarizerSample {
   systolicMmHg: number | null
   diastolicMmHg: number | null
   bloodPressureSource: MeasurementSource | null
+  // Opcionais porque a série também monta amostras e não precisa deles.
+  oxygenSaturationPct?: number | null
+  bodyTemperatureC?: number | null
+  motionCount?: number | null
+  /** Preenchida pelo ciclo de vida a partir do aparelho da amostra. */
+  deviceFamily?: CalibrationDeviceFamily | null
 }
 
 /** Uma avaliação de esforço e desgaste do dia. */
@@ -51,6 +62,9 @@ export interface SummarizerAssessment {
 /**
  * A partir de quanto uma avaliação conta como esforço ou desgaste alto. O
  * limite é inclusivo: 80 exato já é alto.
+ *
+ * É estatística de tempo acima de 80%, não limite de alerta: o alerta de
+ * desgaste segue o próprio perfil e não lê esta constante.
  */
 const HIGH_PERCENT = 80
 
@@ -61,6 +75,12 @@ export interface DailySummaryInput {
   origin: TelemetryOrigin
   samples: readonly SummarizerSample[]
   assessments: readonly SummarizerAssessment[]
+  /**
+   * Da última avaliação esparsa do dia (pulseira). A esparsa não grava uma
+   * avaliação por batimento, então o pico de desgaste e os percentis do
+   * esforço chegam prontos daqui.
+   */
+  sparseDayStats?: SparseDayStats | null
 }
 
 /**
@@ -78,6 +98,8 @@ export interface DailySummary {
   heartRateAvg: number | null
   heartRateCount: number | null
   heartRateCoveredMs: number | null
+  heartRateP25: number | null
+  heartRateP90: number | null
 
   stepsTotal: number | null
   stepsCount: number | null
@@ -88,10 +110,24 @@ export interface DailySummary {
   activeEnergyKcalTotal: number | null
   activeEnergyCount: number | null
 
+  oxygenSaturationP10: number | null
+  oxygenSaturationP50: number | null
+  oxygenSaturationCount: number | null
+
+  bodyTemperatureP10: number | null
+  bodyTemperatureP25: number | null
+  bodyTemperatureP75: number | null
+  bodyTemperatureP90: number | null
+  bodyTemperatureCount: number | null
+
+  movementPerMinuteMedian: number | null
+
   effortMax: number | null
   effortAvg: number | null
   effortCount: number | null
   effortAbove80Ms: number | null
+  effortP25: number | null
+  effortP90: number | null
   wearMax: number | null
   wearAvg: number | null
   wearCount: number | null
@@ -102,6 +138,8 @@ export interface DailySummary {
   lastDiastolicMmHg: number | null
   lastBloodPressureSource: MeasurementSource | null
   lastBloodPressureAt: Date | null
+  systolicAvg: number | null
+  diastolicAvg: number | null
 
   batteryMin: number | null
 
@@ -110,6 +148,7 @@ export interface DailySummary {
   firstSampleAt: Date | null
   lastSampleAt: Date | null
   coveredMs: number | null
+  deviceFamily: CalibrationDeviceFamily | null
 
   summarizerVersion: string
   computedAt: Date
@@ -208,6 +247,31 @@ function extremes(values: readonly number[]): { min: number; max: number } | nul
 }
 
 /**
+ * Soma de movimento por minuto de relógio, só nos minutos com leitura de
+ * movimento; a mediana entre eles é o ritmo do dia, sem os minutos parados
+ * sem relógio puxarem para zero.
+ */
+function movementMedianOf(samples: readonly SummarizerSample[]): number | null {
+  const perMinute = new Map<number, number>()
+  for (const s of samples) {
+    if (s.motionCount === null || s.motionCount === undefined) continue
+    const minute = Math.floor(s.eventTime.getTime() / 60_000)
+    perMinute.set(minute, (perMinute.get(minute) ?? 0) + s.motionCount)
+  }
+  return median([...perMinute.values()])
+}
+
+const averageOf = (values: readonly number[]): number | null =>
+  values.length === 0 ? null : values.reduce((a, b) => a + b, 0) / values.length
+
+/** O maior entre dois máximos que podem faltar; nulo só quando faltam os dois. */
+function maxOfNullable(a: number | null, b: number | null): number | null {
+  if (a === null) return b
+  if (b === null) return a
+  return Math.max(a, b)
+}
+
+/**
  * Resume um dia fechado. Devolve null quando não houve nada a resumir: um dia
  * sem leitura e sem avaliação não é um dia de zeros, é um dia sem dado, e
  * gravar a linha inventaria um monitoramento que não aconteceu.
@@ -233,6 +297,9 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
   const distance = samples.flatMap((s) => (s.distanceDeltaM === null ? [] : [s.distanceDeltaM]))
   const energy = samples.flatMap((s) => (s.activeEnergyKcal === null ? [] : [s.activeEnergyKcal]))
   const battery = samples.flatMap((s) => (s.batteryPercent === null ? [] : [s.batteryPercent]))
+  // Campos opcionais da amostra: ausente e nulo são o mesmo "não mediu".
+  const oxygen = samples.flatMap((s) => (s.oxygenSaturationPct == null ? [] : [s.oxygenSaturationPct]))
+  const temperature = samples.flatMap((s) => (s.bodyTemperatureC == null ? [] : [s.bodyTemperatureC]))
 
   // Pressão é o par, não dois números soltos: meia medição não é aferição.
   const pressures = samples.filter(
@@ -244,6 +311,9 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
   const wear = assessments.flatMap((a) => (a.wearPercent === null ? [] : [a.wearPercent]))
   const effortStats = statsOf(effort)
   const wearStats = statsOf(wear)
+  // O relógio tem uma avaliação a cada poucos segundos e manda nos percentis
+  // do esforço; a pulseira só entra quando o relógio não avaliou o dia.
+  const sparse = input.sparseDayStats ?? null
 
   const bpmRange = extremes(bpm)
   const batteryRange = extremes(battery)
@@ -259,6 +329,8 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
     heartRateAvg: bpm.length === 0 ? null : bpm.reduce((a, b) => a + b, 0) / bpm.length,
     heartRateCount: bpm.length === 0 ? null : bpm.length,
     heartRateCoveredMs: beats.length === 0 ? null : coveredMsOfOrdered(beats),
+    heartRateP25: percentile(bpm, 25),
+    heartRateP90: percentile(bpm, 90),
 
     stepsTotal: steps.length === 0 ? null : steps.reduce((a, b) => a + b, 0),
     stepsCount: steps.length === 0 ? null : steps.length,
@@ -268,6 +340,18 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
 
     activeEnergyKcalTotal: energy.length === 0 ? null : energy.reduce((a, b) => a + b, 0),
     activeEnergyCount: energy.length === 0 ? null : energy.length,
+
+    oxygenSaturationP10: percentile(oxygen, 10),
+    oxygenSaturationP50: percentile(oxygen, 50),
+    oxygenSaturationCount: oxygen.length === 0 ? null : oxygen.length,
+
+    bodyTemperatureP10: percentile(temperature, 10),
+    bodyTemperatureP25: percentile(temperature, 25),
+    bodyTemperatureP75: percentile(temperature, 75),
+    bodyTemperatureP90: percentile(temperature, 90),
+    bodyTemperatureCount: temperature.length === 0 ? null : temperature.length,
+
+    movementPerMinuteMedian: movementMedianOf(samples),
 
     effortMax: effortStats?.max ?? null,
     effortAvg: effortStats?.avg ?? null,
@@ -280,7 +364,9 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
               a.effortPercent === null ? [] : [{ at: a.computedAt.getTime(), value: a.effortPercent }],
             ),
           ),
-    wearMax: wearStats?.max ?? null,
+    effortP25: percentile(effort, 25) ?? sparse?.effortP25 ?? null,
+    effortP90: percentile(effort, 90) ?? sparse?.effortP90 ?? null,
+    wearMax: maxOfNullable(wearStats?.max ?? null, sparse?.wearMax ?? null),
     wearAvg: wearStats?.avg ?? null,
     wearCount: wearStats?.count ?? null,
     wearAbove80Ms:
@@ -297,6 +383,9 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
     lastDiastolicMmHg: lastPressure?.diastolicMmHg ?? null,
     lastBloodPressureSource: lastPressure?.bloodPressureSource ?? null,
     lastBloodPressureAt: lastPressure?.eventTime ?? null,
+    // Média pelos pares, como a contagem: meia medição não entra.
+    systolicAvg: averageOf(pressures.map((s) => s.systolicMmHg as number)),
+    diastolicAvg: averageOf(pressures.map((s) => s.diastolicMmHg as number)),
 
     batteryMin: batteryRange === null ? null : batteryRange.min,
 
@@ -306,6 +395,9 @@ export function summarizeDay(input: DailySummaryInput, computedAt: Date): DailyS
     firstSampleAt: timeRange === null ? null : new Date(timeRange.min),
     lastSampleAt: timeRange === null ? null : new Date(timeRange.max),
     coveredMs: times.length === 0 ? null : coveredMsOfOrdered(times),
+    deviceFamily: dominantFamily(
+      samples.flatMap((s) => (s.heartRateBpm === null ? [] : [s.deviceFamily ?? null])),
+    ),
 
     summarizerVersion: SUMMARIZER_VERSION,
     computedAt,
