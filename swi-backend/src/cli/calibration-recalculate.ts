@@ -7,15 +7,18 @@
 // esperar a madrugada. Sem portão de produção de propósito: é em produção que
 // ele precisa rodar.
 //
-//   npm run calibration:recalculate
+// Vive em src/cli, e não em scripts/, para o nest build emitir o JavaScript:
+// em produção não há ts-node nem src/, só o dist.
+//
+//   npm run calibration:recalculate   (node dist/cli/calibration-recalculate.js)
 
 // O mesmo primeiro passo do main.ts: sem isto o AppModule sobe sem o .env.
 import 'dotenv/config'
 
 async function main(): Promise<void> {
   const { NestFactory } = await import('@nestjs/core')
-  const { AppModule } = await import('../../src/app.module')
-  const { CalibrationService } = await import('../../src/telemetry/calibration/calibration.service')
+  const { AppModule } = await import('../app.module')
+  const { CalibrationService } = await import('../telemetry/calibration/calibration.service')
 
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] })
   try {

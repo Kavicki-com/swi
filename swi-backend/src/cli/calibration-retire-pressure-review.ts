@@ -4,14 +4,17 @@
 // usá-lo na mesma transação; este script roda logo depois dela. Idempotente:
 // rodar de novo não acha nada para fechar.
 //
-//   npm run calibration:retire-pressure-review
+// Vive em src/cli, e não em scripts/, para o nest build emitir o JavaScript:
+// em produção não há ts-node nem src/, só o dist.
+//
+//   npm run calibration:retire-pressure-review   (node dist/cli/calibration-retire-pressure-review.js)
 
 // O mesmo primeiro passo do main.ts: sem isto o PrismaClient sobe sem o .env.
 import 'dotenv/config'
 
 async function main(): Promise<void> {
   const { PrismaClient } = await import('@prisma/client')
-  const { retireBloodPressureReview } = await import('../../src/telemetry/calibration/retire-blood-pressure-review')
+  const { retireBloodPressureReview } = await import('../telemetry/calibration/retire-blood-pressure-review')
 
   const prisma = new PrismaClient()
   try {
