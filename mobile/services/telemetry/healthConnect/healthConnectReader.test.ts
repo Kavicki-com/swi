@@ -585,6 +585,147 @@ describe('disponibilidade e permissão', () => {
     m.reader.openSettings();
     expect(m.source.openSettings).toHaveBeenCalledTimes(1);
   });
+
+  // A tela de pareamento precisa saber o que oferecer ANTES de pedir a
+  // permissão (antes da primeira rodada a disponibilidade é nula), e o que
+  // mudou nos ajustes do Health Connect quando a pessoa volta de lá.
+  it('checkAccess com Health Connect disponível relê a permissão, sem rodada', async () => {
+    const m = montar();
+
+    expect(await m.reader.checkAccess()).toBe('available');
+
+    expect(await m.reader.state()).toMatchObject({
+      availability: 'available',
+      permission: 'granted',
+    });
+    expect(m.source.grantedPermissions).toHaveBeenCalledTimes(1);
+    expect(m.log).toEqual([]);
+    expect(m.storage.writes).toBe(0);
+  });
+
+  // O Health Connect sumiu (desinstalado) com uma permissão antiga na
+  // memória: como na rodada, sem Health Connect não há permissão a mostrar.
+  it.each(['unavailable', 'update_required'] as const)(
+    'checkAccess com Health Connect %s zera a permissão antiga e não a consulta',
+    async (status) => {
+      const m = montar();
+      await m.reader.run();
+      expect((await m.reader.state()).permission).toBe('granted');
+      m.source.grantedPermissions.mockClear();
+      m.source.availability.mockResolvedValueOnce(status);
+
+      expect(await m.reader.checkAccess()).toBe(status);
+
+      expect(await m.reader.state()).toMatchObject({ availability: status, permission: null });
+      expect(m.source.grantedPermissions).not.toHaveBeenCalled();
+    },
+  );
+
+  // O caso da revisão: a drenagem já rodou (intervalo contando), o pedido foi
+  // negado, a pessoa concedeu nos ajustes e voltou. Sem reler a permissão, a
+  // tela ficaria "sem permissão" e a rodada esperaria os 15 min.
+  it('concedida nos ajustes: checkAccess vê granted e libera a próxima rodada', async () => {
+    const m = montar();
+    m.source.grantedPermissions.mockResolvedValueOnce([]);
+    await m.reader.run();
+    m.source.requestPermissions.mockResolvedValueOnce([]);
+    expect(await m.reader.requestPermissions()).toBe('denied');
+
+    await m.reader.checkAccess();
+
+    expect((await m.reader.state()).permission).toBe('granted');
+    m.source.readRecords.mockClear();
+    await m.reader.run();
+    expect(m.source.readRecords).toHaveBeenCalled();
+  });
+
+  it('revogada nos ajustes: checkAccess vê denied e não libera rodada', async () => {
+    const m = montar();
+    await m.reader.run();
+    m.source.grantedPermissions.mockResolvedValueOnce(['Steps']);
+
+    await m.reader.checkAccess();
+
+    expect((await m.reader.state()).permission).toBe('denied');
+    m.source.availability.mockClear();
+    expect(await m.reader.run()).toBe(0);
+    expect(m.source.availability).not.toHaveBeenCalled();
+  });
+
+  // Já concedida e conferida de novo (cada volta ao primeiro plano): não é
+  // motivo para pular o intervalo outra vez.
+  it('checkAccess sem mudança na permissão concedida não libera rodada', async () => {
+    const m = montar();
+    await m.reader.run();
+
+    await m.reader.checkAccess();
+
+    m.source.availability.mockClear();
+    expect(await m.reader.run()).toBe(0);
+    expect(m.source.availability).not.toHaveBeenCalled();
+  });
+
+  it('a rodada em curso não desfaz a permissão que checkAccess acabou de ler', async () => {
+    const m = montar();
+    let responder: (granted: string[]) => void = () => undefined;
+    m.source.grantedPermissions.mockImplementationOnce(
+      () => new Promise<string[]>((resolve) => (responder = resolve)),
+    );
+
+    const rodada = m.reader.run();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await m.reader.checkAccess();
+    // A consulta da rodada, feita antes de a pessoa conceder, volta sem batimento.
+    responder(['Steps']);
+    await rodada;
+
+    expect((await m.reader.state()).permission).toBe('granted');
+  });
+
+  // A conferência perguntou antes de a pessoa responder ao pedido: a resposta
+  // do pedido, mais nova, fica.
+  it('um pedido que termina durante o checkAccess não é desfeito por ele', async () => {
+    const m = montar();
+    let responder: (granted: string[]) => void = () => undefined;
+    m.source.grantedPermissions.mockImplementationOnce(
+      () => new Promise<string[]>((resolve) => (responder = resolve)),
+    );
+
+    const conferencia = m.reader.checkAccess();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await m.reader.requestPermissions()).toBe('granted');
+    responder(['Steps']);
+    await conferencia;
+
+    expect((await m.reader.state()).permission).toBe('granted');
+  });
+
+  it('checkAccess nunca rejeita: disponibilidade que lança vira unavailable', async () => {
+    const m = montar();
+    m.source.availability.mockRejectedValueOnce(new Error('ponte nativa caiu'));
+    expect(await m.reader.checkAccess()).toBe('unavailable');
+    expect(await m.reader.state()).toMatchObject({ availability: 'unavailable', permission: null });
+  });
+
+  // Sem resposta sobre as permissões não se afirma nada novo: fica a última
+  // que se sabia, e a próxima rodada pergunta de novo.
+  it('checkAccess nunca rejeita: consulta de permissões que lança mantém a anterior', async () => {
+    const m = montar();
+    m.source.grantedPermissions.mockResolvedValueOnce([]);
+    await m.reader.run();
+    m.source.grantedPermissions.mockRejectedValueOnce(new Error('ponte nativa caiu'));
+
+    expect(await m.reader.checkAccess()).toBe('available');
+
+    expect((await m.reader.state()).permission).toBe('denied');
+  });
+
+  it('checkAccess não consome o intervalo da próxima rodada', async () => {
+    const m = montar();
+    await m.reader.checkAccess();
+    await m.reader.run();
+    expect(m.source.readRecords).toHaveBeenCalled();
+  });
 });
 
 describe('run: ritmo, falhas e concorrência', () => {

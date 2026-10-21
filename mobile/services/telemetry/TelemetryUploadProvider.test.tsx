@@ -74,6 +74,7 @@ function leitorFalso() {
     }),
     redetect: jest.fn(async () => undefined),
     requestPermissions: jest.fn(async () => 'granted' as const),
+    checkAccess: jest.fn(async () => 'available' as const),
     openSettings: jest.fn(),
   };
   return { reader: reader as jest.Mocked<HealthConnectReader>, ordem };
@@ -182,6 +183,9 @@ describe('TelemetryUploadProvider', () => {
     expect(visto.healthConnect).toBeNull();
     expect(() => visto.refreshPairing()).not.toThrow();
     await expect(visto.syncNow()).resolves.toBeUndefined();
+    await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
+    await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
+    expect(() => visto.openHealthConnectSettings()).not.toThrow();
   });
 });
 
@@ -206,6 +210,18 @@ describe('TelemetryUploadProvider, iPhone', () => {
       await visto.syncNow();
     });
     expect(drainNow).not.toHaveBeenCalled();
+    expect(mockSharedReader).not.toHaveBeenCalled();
+  });
+
+  it('pedir a permissão e conferir o Health Connect não fazem nada fora do Android', async () => {
+    naPlataforma('ios');
+    comGates('appleWatchPilot');
+    await montar();
+    await act(async () => {
+      await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
+      await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
+    });
+    visto.openHealthConnectSettings();
     expect(mockSharedReader).not.toHaveBeenCalled();
   });
 
@@ -391,6 +407,89 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
       await visto.syncNow();
     });
     expect(leitor.reader.run).toHaveBeenCalledTimes(2);
+  });
+
+  // A tela de pareamento pede a permissão pelo contexto, sem importar o
+  // leitor: o provider repassa ao leitor único e relê o estado, para a tela
+  // ver a resposta nova na hora.
+  it('requestHealthConnectPermission pede ao leitor, relê o estado e devolve a resposta', async () => {
+    await montar();
+    leitor.ordem.length = 0;
+    leitor.reader.requestPermissions.mockImplementationOnce(async () => {
+      leitor.ordem.push('pedido');
+      return 'denied';
+    });
+    leitor.reader.state.mockImplementationOnce(async () => {
+      leitor.ordem.push('estado');
+      return { ...estadoHC('2026-10-20T12:00:00.000Z'), permission: 'denied' };
+    });
+    let resposta: string | undefined;
+    await act(async () => {
+      resposta = await visto.requestHealthConnectPermission();
+    });
+    expect(resposta).toBe('denied');
+    expect(leitor.ordem).toEqual(['pedido', 'estado']);
+    expect(visto.healthConnect?.permission).toBe('denied');
+  });
+
+  // O leitor rejeita o pedido quando o Health Connect não está pronto (foi
+  // desinstalado, pede atualização). A tela recebe 'unavailable', nunca erro,
+  // e a disponibilidade é conferida de novo para ela oferecer a Play Store.
+  it('requestHealthConnectPermission que rejeita vira unavailable e confere o acesso', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await montar();
+    leitor.reader.requestPermissions.mockRejectedValueOnce(new Error('Health Connect ausente'));
+    leitor.reader.checkAccess.mockResolvedValueOnce('unavailable');
+    leitor.reader.state.mockResolvedValueOnce({
+      ...estadoHC(null),
+      availability: 'unavailable',
+      permission: null,
+    });
+    let resposta: string | undefined;
+    await act(async () => {
+      resposta = await visto.requestHealthConnectPermission();
+    });
+    expect(resposta).toBe('unavailable');
+    expect(leitor.reader.checkAccess).toHaveBeenCalledTimes(1);
+    expect(visto.healthConnect?.availability).toBe('unavailable');
+    warn.mockRestore();
+  });
+
+  // A volta dos ajustes ou da Play Store: o leitor confere disponibilidade e
+  // permissão, e a tela vê as duas no estado relido.
+  it('checkHealthConnect confere o acesso no leitor, relê o estado e devolve', async () => {
+    await montar();
+    leitor.reader.checkAccess.mockResolvedValueOnce('update_required');
+    leitor.reader.state.mockResolvedValueOnce({
+      ...estadoHC(null),
+      availability: 'update_required',
+      permission: null,
+    });
+    let resposta: string | undefined;
+    await act(async () => {
+      resposta = await visto.checkHealthConnect();
+    });
+    expect(resposta).toBe('update_required');
+    expect(visto.healthConnect?.availability).toBe('update_required');
+  });
+
+  it('openHealthConnectSettings abre os ajustes pelo leitor', async () => {
+    await montar();
+    visto.openHealthConnectSettings();
+    expect(leitor.reader.openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  // Sem sessão o estado fica zerado (logout): nada a pedir nem a conferir.
+  it('sem sessão, pedir a permissão e conferir não chamam o leitor', async () => {
+    comUsuario(null);
+    await montar();
+    await act(async () => {
+      await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
+      await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
+    });
+    expect(leitor.reader.requestPermissions).not.toHaveBeenCalled();
+    expect(leitor.reader.checkAccess).not.toHaveBeenCalled();
+    expect(visto.healthConnect).toBeNull();
   });
 
   // O envio roda a cada 15 s e cada desfecho relê o estado: sem mudança, as

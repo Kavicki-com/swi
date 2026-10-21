@@ -1,4 +1,8 @@
 import {
+  bandDetectedCopy,
+  HEALTH_CONNECT_PAIRING_COPY,
+  healthConnectInstallCopy,
+  pairingCopy,
   pairingFailureCopy,
   watchProtocolCopy,
   telemetryCopy,
@@ -118,6 +122,37 @@ describe('pairingFailureCopy', () => {
     expect(pairingFailureCopy('rate_limited')).toMatch(/aguarde/i);
   });
 
+  // A credencial do Android mora no SecureStore, não no chaveiro do iPhone.
+  it('keychain fala do aparelho certo: iPhone por padrão, celular no Android', () => {
+    expect(pairingFailureCopy('keychain')).toBe(
+      'Não foi possível guardar o pareamento neste iPhone. Tente de novo.',
+    );
+    expect(pairingFailureCopy('keychain', 'IPHONE')).toBe(pairingFailureCopy('keychain'));
+    expect(pairingFailureCopy('keychain', 'ANDROID_PHONE')).toBe(
+      'Não foi possível guardar o pareamento neste celular. Tente de novo.',
+    );
+  });
+
+  it('no Android nenhum motivo cita iPhone, e as recusas do backend não mudam', () => {
+    for (const m of [
+      'unsupported',
+      'unauthorized',
+      'invalid_code',
+      'expired',
+      'already_used',
+      'unsupported_device',
+      'keychain',
+      'network',
+      'rate_limited',
+      'unexpected',
+    ] as const) {
+      expect(pairingFailureCopy(m, 'ANDROID_PHONE')).not.toMatch(/iPhone/);
+      if (m !== 'keychain') {
+        expect(pairingFailureCopy(m, 'ANDROID_PHONE')).toBe(pairingFailureCopy(m));
+      }
+    }
+  });
+
   it('todo motivo tem frase', () => {
     const motivos = [
       'unsupported',
@@ -132,5 +167,79 @@ describe('pairingFailureCopy', () => {
       'unexpected',
     ] as const;
     for (const m of motivos) expect(pairingFailureCopy(m).length).toBeGreaterThan(10);
+  });
+});
+
+describe('pairingCopy', () => {
+  // O iPhone fica exatamente como sempre foi.
+  it('no iPhone, por padrão, a copy de sempre', () => {
+    expect(pairingCopy()).toEqual({
+      titulo: 'Parear este iPhone',
+      instrucao:
+        'Peça ao administrador o código de pareamento de seis dígitos, gerado no painel, e digite abaixo. O código vale por dez minutos.',
+      pareadoTitulo: 'Aparelho pareado',
+      pareadoCorpo: 'As leituras do seu Apple Watch passam a ser enviadas ao servidor.',
+    });
+    expect(pairingCopy('IPHONE')).toEqual(pairingCopy());
+  });
+
+  it('no Android fala do celular e da pulseira, sem citar iPhone nem Apple Watch', () => {
+    const android = pairingCopy('ANDROID_PHONE');
+    expect(android.titulo).toBe('Parear este celular');
+    expect(android.instrucao).toBe(pairingCopy().instrucao);
+    expect(android.pareadoTitulo).toBe('Aparelho pareado');
+    expect(android.pareadoCorpo).toBe(
+      'As leituras da sua pulseira passam a ser enviadas ao servidor.',
+    );
+    expect(Object.values(android).join(' ')).not.toMatch(/iPhone|Apple Watch/);
+  });
+});
+
+describe('copy do Health Connect no pareamento', () => {
+  it('explica o que o SWI lê e por que pede a permissão', () => {
+    expect(HEALTH_CONNECT_PAIRING_COPY.explicacao).toBe(
+      'O SWI lê as medições da sua pulseira pelo Health Connect, o app de saúde do Android. Para isso, ele pede permissão de leitura.',
+    );
+    expect(HEALTH_CONNECT_PAIRING_COPY.permitir).toBe('Permitir leitura');
+  });
+
+  it('ausente manda instalar, desatualizado manda atualizar, os dois pela Play Store', () => {
+    expect(healthConnectInstallCopy('unavailable')).toEqual({
+      corpo:
+        'O Health Connect não está instalado neste celular. Instale pela Play Store e volte para o SWI.',
+      botao: 'Instalar o Health Connect',
+    });
+    expect(healthConnectInstallCopy('update_required')).toEqual({
+      corpo:
+        'O Health Connect deste celular precisa de atualização. Atualize pela Play Store e volte para o SWI.',
+      botao: 'Atualizar o Health Connect',
+    });
+  });
+
+  // Sem travar: a pessoa sempre pode seguir e permitir depois.
+  it('sem permissão diz o que fazer e que dá para seguir', () => {
+    expect(HEALTH_CONNECT_PAIRING_COPY.semPermissao).toMatch(/ajustes do Health Connect/);
+    expect(HEALTH_CONNECT_PAIRING_COPY.semPermissao).toMatch(/continuar/i);
+    expect(HEALTH_CONNECT_PAIRING_COPY.tentarDeNovo).toBe('Tentar de novo');
+    expect(HEALTH_CONNECT_PAIRING_COPY.abrirAjustes).toBe('Abrir os ajustes do Health Connect');
+  });
+
+  it('o resultado da primeira sincronização', () => {
+    expect(HEALTH_CONNECT_PAIRING_COPY.sincronizando).toBe(
+      'Procurando a pulseira no Health Connect…',
+    );
+    expect(bandDetectedCopy('Zepp')).toBe('Pulseira detectada: Zepp');
+    expect(HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseira).toBe('Nenhuma pulseira encontrada');
+    expect(HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseiraConselho).toMatch(/app da sua pulseira/);
+    expect(HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseiraConselho).toMatch(/Health Connect/);
+  });
+
+  // A rodada falhou em silêncio, ou caiu numa em voo: não há pulseira nem
+  // "nenhuma pulseira" a afirmar. A frase não pode dizer que não há pulseira.
+  it('sem resultado da primeira sincronização, uma frase neutra', () => {
+    expect(HEALTH_CONNECT_PAIRING_COPY.semResultado).toBe(
+      'A leitura do Health Connect ainda não trouxe resultado. O SWI tenta de novo sozinho.',
+    );
+    expect(HEALTH_CONNECT_PAIRING_COPY.semResultado).not.toMatch(/nenhuma/i);
   });
 });

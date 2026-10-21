@@ -89,6 +89,9 @@ const envio = (paired: boolean) =>
     refreshPairing: jest.fn(),
     healthConnect: null,
     syncNow: jest.fn(),
+    requestHealthConnectPermission: jest.fn(),
+    checkHealthConnect: jest.fn(),
+    openHealthConnectSettings: jest.fn(),
   });
 
 beforeEach(() => {

@@ -253,6 +253,17 @@ export interface HealthConnectReader {
    * Sem prazo: quem responde é a pessoa, no tempo dela.
    */
   requestPermissions(): Promise<HealthConnectPermission>;
+  /**
+   * Confere o acesso sem fazer rodada: se há Health Connect no aparelho e,
+   * havendo, se a leitura de batimento está concedida. Guarda as duas
+   * respostas na memória (`state()`) e devolve a disponibilidade. É o que a
+   * tela de pareamento usa antes de pedir a permissão (até a primeira rodada
+   * as duas são nulas) e na volta dos ajustes do Health Connect ou da Play
+   * Store, onde a pessoa pode ter concedido ou revogado. Concedida agora e
+   * não antes, a próxima rodada não espera o intervalo, como depois de um
+   * pedido. Não lê registros nem grava o arquivo. Nunca rejeita.
+   */
+  checkAccess(): Promise<HealthConnectAvailability>;
   openSettings(): void;
 }
 
@@ -514,6 +525,37 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       // Negado não libera: a próxima rodada não leria nada de qualquer jeito.
       if (result === 'granted') intervalFree = true;
       return result;
+    },
+
+    async checkAccess() {
+      // Como na rodada: só escreve a permissão se nenhum pedido terminou no
+      // meio desta conferência, e sobe a versão ao escrever, para uma rodada
+      // em curso (com uma consulta de antes da volta dos ajustes) não
+      // desfazer a resposta mais nova.
+      const version = permissionVersion;
+      const setPermission = (value: HealthConnectPermission | null) => {
+        if (permissionVersion !== version) return;
+        // Concedida agora e não antes (voltou dos ajustes): o momento de ler,
+        // sem esperar os 15 min. Já concedida e só conferida de novo, a cada
+        // volta ao primeiro plano, não pula o intervalo outra vez.
+        if (value === 'granted' && permission !== 'granted') intervalFree = true;
+        permission = value;
+        permissionVersion += 1;
+      };
+      // A porta promete nunca rejeitar; o `catch` é para a tela nunca receber
+      // erro mesmo se ela mudar, e sem resposta não há Health Connect a usar.
+      availability = await source.availability().catch(() => 'unavailable' as const);
+      if (availability !== 'available') {
+        setPermission(null);
+        return availability;
+      }
+      try {
+        setPermission(permissionOf(await source.grantedPermissions()));
+      } catch {
+        // Sem resposta sobre as permissões não se afirma nada novo: fica a
+        // última que se sabia, e a próxima rodada pergunta de novo.
+      }
+      return availability;
     },
 
     openSettings() {

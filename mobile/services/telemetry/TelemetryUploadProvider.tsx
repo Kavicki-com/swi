@@ -15,9 +15,11 @@ import { useAuth } from '../auth/AuthProvider';
 import { androidDeviceControl } from './android/androidDeviceControl';
 import { syncHealthConnectTaskRegistration } from './healthConnect/healthConnectBackgroundTask';
 import type {
+  HealthConnectPermission,
   HealthConnectReader,
   HealthConnectState,
 } from './healthConnect/healthConnectReader';
+import type { HealthConnectAvailability } from './healthConnect/healthConnectSource';
 import { sharedHealthConnectReader, sharedTelemetryOutbox } from './telemetryRuntime';
 import {
   useTelemetryUpload,
@@ -42,6 +44,10 @@ import {
 // pareamento e o estado do Health Connect. A tarefa em si é definida no
 // carregamento do bundle (index.js); aqui só se decide se ela fica no
 // agendador do sistema.
+//
+// A tela de pareamento do Android pede a permissão de leitura, confere o
+// acesso e abre os ajustes do Health Connect por este contexto, para
+// nunca importar o leitor nem a porta: o leitor é um só por runtime.
 
 export interface TelemetryUploadContextValue extends TelemetryUploadState {
   /** A tela de pareamento chama ao concluir: o envio relê a credencial. */
@@ -55,6 +61,24 @@ export interface TelemetryUploadContextValue extends TelemetryUploadState {
    * terminar, devolve a mesma sincronização em vez de começar outra.
    */
   syncNow: () => Promise<void>;
+  /**
+   * Abre o pedido de permissão de leitura do Health Connect (tela de
+   * pareamento) e relê o estado. Nunca rejeita: o leitor rejeita quando o
+   * Health Connect não está pronto, e isso volta como `'unavailable'`, com o
+   * acesso já conferido de novo. `'unavailable'` também fora do Android com
+   * o gate e sem sessão, sem chamar nada.
+   */
+  requestHealthConnectPermission: () => Promise<HealthConnectPermission | 'unavailable'>;
+  /**
+   * Confere o acesso ao Health Connect (se há o app e se a leitura está
+   * concedida; antes da primeira rodada as duas são nulas no estado) e relê
+   * o estado. É a volta dos ajustes ou da Play Store na tela de pareamento.
+   * Devolve a disponibilidade. Nunca rejeita; `'unavailable'` fora do
+   * Android com o gate e sem sessão.
+   */
+  checkHealthConnect: () => Promise<HealthConnectAvailability>;
+  /** Abre os ajustes do Health Connect; sem efeito fora do Android com o gate. */
+  openHealthConnectSettings: () => void;
 }
 
 const FORA_DO_PROVIDER: TelemetryUploadContextValue = {
@@ -63,6 +87,9 @@ const FORA_DO_PROVIDER: TelemetryUploadContextValue = {
   refreshPairing: () => undefined,
   healthConnect: null,
   syncNow: async () => undefined,
+  requestHealthConnectPermission: async () => 'unavailable',
+  checkHealthConnect: async () => 'unavailable',
+  openHealthConnectSettings: () => undefined,
 };
 
 const TelemetryUploadContext = createContext<TelemetryUploadContextValue>(FORA_DO_PROVIDER);
@@ -210,9 +237,71 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
     return run;
   }, [reader, enabled, paired, drainNow, refreshHealthConnect]);
 
+  // A releitura depois de pedir ou conferir: ilegível só avisa, a tela segue
+  // com o estado que já tinha.
+  const rereadHealthConnect = useCallback(
+    (from: HealthConnectReader) =>
+      refreshHealthConnect(from).catch((error: unknown) =>
+        warn('estado do Health Connect ilegível', error),
+      ),
+    [refreshHealthConnect],
+  );
+
+  // A tela de pareamento fala com o leitor único por aqui, em vez de
+  // importar o leitor ou a porta. Sem sessão não há pedido: o estado está
+  // zerado e a releitura nem gravaria.
+  const requestHealthConnectPermission = useCallback(async (): Promise<
+    HealthConnectPermission | 'unavailable'
+  > => {
+    if (reader === null || !enabled) return 'unavailable';
+    let answer: HealthConnectPermission | 'unavailable';
+    try {
+      answer = await reader.requestPermissions();
+    } catch (error) {
+      // O leitor rejeita com o Health Connect ausente ou pedindo
+      // atualização. Conferir o acesso põe a disponibilidade certa no
+      // estado, e a tela troca o pedido pelo caminho da Play Store.
+      warn('pedido de permissão do Health Connect falhou', error);
+      await reader.checkAccess();
+      answer = 'unavailable';
+    }
+    await rereadHealthConnect(reader);
+    return answer;
+  }, [reader, enabled, rereadHealthConnect]);
+
+  const checkHealthConnect = useCallback(async (): Promise<HealthConnectAvailability> => {
+    if (reader === null || !enabled) return 'unavailable';
+    const availability = await reader.checkAccess();
+    await rereadHealthConnect(reader);
+    return availability;
+  }, [reader, enabled, rereadHealthConnect]);
+
+  // Abrir os ajustes não lê dado de ninguém: basta haver leitor.
+  const openHealthConnectSettings = useCallback(() => {
+    reader?.openSettings();
+  }, [reader]);
+
   const value = useMemo(
-    () => ({ paired, lastOutcome, refreshPairing, healthConnect, syncNow }),
-    [paired, lastOutcome, refreshPairing, healthConnect, syncNow],
+    () => ({
+      paired,
+      lastOutcome,
+      refreshPairing,
+      healthConnect,
+      syncNow,
+      requestHealthConnectPermission,
+      checkHealthConnect,
+      openHealthConnectSettings,
+    }),
+    [
+      paired,
+      lastOutcome,
+      refreshPairing,
+      healthConnect,
+      syncNow,
+      requestHealthConnectPermission,
+      checkHealthConnect,
+      openHealthConnectSettings,
+    ],
   );
   return <TelemetryUploadContext.Provider value={value}>{children}</TelemetryUploadContext.Provider>;
 }

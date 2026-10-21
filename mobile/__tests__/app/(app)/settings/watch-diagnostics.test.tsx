@@ -120,6 +120,9 @@ beforeEach(() => {
     refreshPairing: jest.fn(),
     healthConnect: null,
     syncNow: jest.fn(),
+    requestHealthConnectPermission: jest.fn(),
+    checkHealthConnect: jest.fn(),
+    openHealthConnectSettings: jest.fn(),
   });
 });
 
@@ -205,6 +208,9 @@ describe('Configurações, Monitoramento', () => {
       refreshPairing: jest.fn(),
       healthConnect: null,
       syncNow: jest.fn(),
+      requestHealthConnectPermission: jest.fn(),
+      checkHealthConnect: jest.fn(),
+      openHealthConnectSettings: jest.fn(),
     });
     expect(textoDe(await render(ATIVO()))).toContain('Enviando ao servidor');
   });
@@ -241,6 +247,9 @@ describe('Configurações, Monitoramento', () => {
       refreshPairing: jest.fn(),
       healthConnect: null,
       syncNow: jest.fn(),
+      requestHealthConnectPermission: jest.fn(),
+      checkHealthConnect: jest.fn(),
+      openHealthConnectSettings: jest.fn(),
     });
     expect(botaoParear(await render(ATIVO()))).toBeUndefined();
   });
