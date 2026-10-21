@@ -2,7 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
-import { normalizeEvacuationArea, type AreaVertex } from './evacuation-area'
+import { normalizeEvacuationArea, normalizeMusterPoint, type AreaVertex } from './evacuation-area'
 import type { Evacuation } from '@prisma/client'
 import { PANEL_ROLES } from '../auth/permissions'
 
@@ -30,6 +30,9 @@ export interface EvacuationProgress {
   // Polígono da área demarcada ao iniciar (anel fechado [lng, lat]), ou null
   // quando a evacuação foi disparada sem recorte visual.
   area: AreaVertex[] | null
+  // Ponto de encontro [lng, lat] marcado ao iniciar: destino da rota de cada
+  // funcionário. Null só em evacuações anteriores a 2026-10.
+  musterPoint: AreaVertex | null
 }
 
 @Injectable()
@@ -40,7 +43,15 @@ export class EvacuationEventsService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async start(adminId: string, companyId: string | null, area?: unknown): Promise<EvacuationProgress> {
+  async start(
+    adminId: string,
+    companyId: string | null,
+    area?: unknown,
+    musterPoint?: unknown,
+  ): Promise<EvacuationProgress> {
+    // O ponto de encontro primeiro, porque é o que faltar impede a evacuação
+    // de servir para algo: sem destino não há rota para mandar ninguém.
+    const muster = normalizeMusterPoint(musterPoint)
     // Valida e fecha o anel antes de tocar o banco: área inválida vira 400 sem
     // criar nada.
     const normalizedArea = normalizeEvacuationArea(area)
@@ -56,6 +67,7 @@ export class EvacuationEventsService {
         startedById: adminId,
         // Sem área, deixa a coluna em NULL (default); com área, grava o anel.
         ...(normalizedArea ? { area: normalizedArea } : {}),
+        musterPoint: muster,
       },
     })
     const workers = await this.orgWorkers(companyId)
@@ -189,6 +201,7 @@ export class EvacuationEventsService {
         ackAt: ackByWorker.get(w.id)?.toISOString() ?? null,
       })),
       area: (evac.area as AreaVertex[] | null) ?? null,
+      musterPoint: (evac.musterPoint as AreaVertex | null) ?? null,
     }
   }
 }

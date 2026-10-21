@@ -2035,7 +2035,17 @@
     "/evacuation/route": {
       "get": {
         "operationId": "EvacuationController_getRoute",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Posição atual \"lng,lat\" (GPS do app)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -4429,6 +4439,9 @@
             "items": {
               "type": "object"
             }
+          },
+          "musterPoint": {
+            "type": "object"
           }
         }
       },

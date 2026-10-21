@@ -81,17 +81,21 @@ describe('Evacuations e2e', () => {
       [-46.65, -23.56],
     ]
     const closedArea = [...drawnArea, drawnArea[0]]
+    // E com o ponto de encontro do segundo passo: é o destino da rota de cada
+    // funcionário, e sem ele o disparo é 400.
+    const musterPoint: [number, number] = [-46.62, -23.544]
     const { body: started } = await request(app.getHttpServer())
       .post('/evacuations')
       .set(admin)
-      .send({ area: drawnArea })
+      .send({ area: drawnArea, musterPoint })
       .expect(201)
     expect(started).toMatchObject({ status: 'ACTIVE', total: 2, acked: 0 })
     expect(started.area).toEqual(closedArea)
+    expect(started.musterPoint).toEqual(musterPoint)
     expect(started.workers.map((w: { id: string }) => w.id).sort()).toEqual([ids.w1, ids.w2].sort())
 
     // Segunda ativa na mesma org → 409.
-    await request(app.getHttpServer()).post('/evacuations').set(admin).expect(409)
+    await request(app.getHttpServer()).post('/evacuations').set(admin).send({ musterPoint }).expect(409)
 
     // Notificação REAL persistida pros 2 workers (fila roda inline em test).
     const notifs = await prisma.notification.findMany({ where: { domain: 'evacuation', targetId: started.id } })
@@ -106,6 +110,7 @@ describe('Evacuations e2e', () => {
     const { body: active } = await request(app.getHttpServer()).get('/evacuations/active').set(admin).expect(200)
     expect(active).toMatchObject({ id: started.id, total: 2, acked: 1 })
     expect(active.area).toEqual(closedArea)
+    expect(active.musterPoint).toEqual(musterPoint)
     const w1Entry = active.workers.find((w: { id: string }) => w.id === ids.w1)
     expect(w1Entry.acked).toBe(true)
     expect(typeof w1Entry.ackAt).toBe('string')
@@ -131,8 +136,21 @@ describe('Evacuations e2e', () => {
     await request(app.getHttpServer())
       .post('/evacuations')
       .set(admin)
-      .send({ area: [[-46.6, -23.5], [-46.5, -23.4]] })
+      .send({ area: [[-46.6, -23.5], [-46.5, -23.4]], musterPoint: [-46.62, -23.544] })
       .expect(400)
+    const { body: after } = await request(app.getHttpServer()).get('/evacuations/active').set(admin).expect(200)
+    expect(after?.id ?? null).toBeNull()
+  })
+
+  it('sem ponto de encontro → 400 e não cria evacuação', async () => {
+    const admin = await login(emails.admin)
+    const drawnArea: [number, number][] = [
+      [-46.64, -23.53],
+      [-46.6, -23.52],
+      [-46.58, -23.55],
+    ]
+    await request(app.getHttpServer()).post('/evacuations').set(admin).send({ area: drawnArea }).expect(400)
+    await request(app.getHttpServer()).post('/evacuations').set(admin).send({}).expect(400)
     const { body: after } = await request(app.getHttpServer()).get('/evacuations/active').set(admin).expect(200)
     expect(after?.id ?? null).toBeNull()
   })

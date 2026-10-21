@@ -173,6 +173,37 @@ describe('PositionSimulatorService', () => {
       svc.onModuleDestroy()
     })
 
+    it('vai ao ponto de encontro MARCADO na evacuação, não ao ponto padrão', async () => {
+      // Dentro da área dos loops (o worker alcança em poucos ticks), mas a
+      // centenas de metros do ponto de reserva, que é o que o teste separa.
+      const marked: [number, number] = [-46.6255, -23.5475]
+      const { pos, ev, svc } = await setup(
+        [{ id: 'w1', companyId: 'org1' }],
+        [{ id: 'ev1', companyId: 'org1', musterPoint: marked }],
+      )
+      for (let i = 0; i < 400 && ev.ack.mock.calls.length === 0; i++) await svc.tick()
+      expect(ev.ack).toHaveBeenCalledWith('w1', 'ev1')
+      // Chegou no ponto do gestor (lat=Y, lng=X), e não no MUSTER_POINT fixo.
+      const last = pos.heartbeat.mock.calls.at(-1)!
+      expect(last[1]).toBeCloseTo(marked[1], 10)
+      expect(last[2]).toBeCloseTo(marked[0], 10)
+      expect(distanceMeters([last[2], last[1]], MUSTER_POINT)).toBeGreaterThan(100)
+      svc.onModuleDestroy()
+    })
+
+    it('evacuação antiga SEM ponto cai no ponto padrão do simulador', async () => {
+      const { pos, ev, svc } = await setup(
+        [{ id: 'w1', companyId: 'org1' }],
+        [{ id: 'ev1', companyId: 'org1', musterPoint: null }],
+      )
+      for (let i = 0; i < 400 && ev.ack.mock.calls.length === 0; i++) await svc.tick()
+      expect(ev.ack).toHaveBeenCalledWith('w1', 'ev1')
+      const last = pos.heartbeat.mock.calls.at(-1)!
+      expect(last[1]).toBeCloseTo(MUSTER_POINT[1], 10)
+      expect(last[2]).toBeCloseTo(MUSTER_POINT[0], 10)
+      svc.onModuleDestroy()
+    })
+
     it("org SEM evacuação segue no loop normal e nunca ack'a", async () => {
       const { ev, svc } = await setup(
         [{ id: 'w1', companyId: 'org1' }, { id: 'w2', companyId: 'org2' }],

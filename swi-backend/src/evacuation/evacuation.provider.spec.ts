@@ -24,13 +24,16 @@ describe('coerceDirections', () => {
 })
 
 describe('RouteProvider.fetch (seleção de URL + fetch mockado)', () => {
+  // A rota pedida vem sempre de quem chama (posição da pessoa → ponto de
+  // encontro): o provider não tem mais rota padrão.
+  const route = { origin: [-46.632, -23.552] as [number, number], destination: [-46.62, -23.544] as [number, number] }
   const origToken = process.env.MAPBOX_TOKEN
   afterEach(() => { jest.restoreAllMocks(); if (origToken === undefined) delete process.env.MAPBOX_TOKEN; else process.env.MAPBOX_TOKEN = origToken })
 
   it('sem MAPBOX_TOKEN → OSRM keyless + coerce', async () => {
     delete process.env.MAPBOX_TOKEN
     const spy = jest.spyOn(httpGet, 'httpGetJson').mockResolvedValue({ ok: true, json: async () => geojson([[-46.632, -23.552], [-46.62, -23.544]]) } as any)
-    const out = await new RouteProvider().fetch()
+    const out = await new RouteProvider().fetch(route)
     expect(out.waypoints.length).toBe(2)
     const url = spy.mock.calls[0][0]
     expect(url).toContain('router.project-osrm.org')
@@ -40,13 +43,13 @@ describe('RouteProvider.fetch (seleção de URL + fetch mockado)', () => {
   it('com MAPBOX_TOKEN → URL Mapbox walking com token', async () => {
     process.env.MAPBOX_TOKEN = 'pk.test'
     const spy = jest.spyOn(httpGet, 'httpGetJson').mockResolvedValue({ ok: true, json: async () => geojson([[-46.632, -23.552], [-46.62, -23.544]]) } as any)
-    await new RouteProvider().fetch()
+    await new RouteProvider().fetch(route)
     const url = spy.mock.calls[0][0]
     expect(url).toContain('api.mapbox.com/directions/v5/mapbox/walking')
     expect(url).toContain('access_token=pk.test')
   })
   it('HTTP !ok → lança (caller faz fallback)', async () => {
     jest.spyOn(httpGet, 'httpGetJson').mockResolvedValue({ ok: false, status: 503 } as any)
-    await expect(new RouteProvider().fetch()).rejects.toThrow()
+    await expect(new RouteProvider().fetch(route)).rejects.toThrow()
   })
 })
