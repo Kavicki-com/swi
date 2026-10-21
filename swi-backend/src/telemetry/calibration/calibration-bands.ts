@@ -2,23 +2,26 @@ import type { CalibrationDeviceFamily, CalibrationMetric } from '@prisma/client'
 import { median, percentile } from './percentile'
 
 // Modelo das faixas da calibração individual (revisão 2.0 das regras,
-// aprovada pelo cliente em 20/10/2026). Puro: o job lê os Resumos, chama
-// daqui e grava. Mudar número aqui sem mudar CALIBRATION_VERSION é proibido.
+// aprovada pelo cliente em 20/10/2026, com a partida mínima de 21/10/2026).
+// Puro: o job lê os Resumos, chama daqui e grava. Mudar número aqui sem mudar
+// CALIBRATION_VERSION é proibido.
 
-export const CALIBRATION_VERSION = 'swi-calibration-1'
+export const CALIBRATION_VERSION = 'swi-calibration-2'
 /** Dias válidos para a faixa ser só da pessoa. */
 export const FULL_DAYS = 30
 /** A parte pessoal entra na mistura a partir deste dia válido. */
 export const PERSONAL_FROM_DAY = 3
-/** Corte sem partida v1.0 aparece a partir deste dia válido. */
-export const NO_START_FROM_DAY = 7
+/** Corte sem partida (só atividade) aparece a partir deste dia válido. */
+export const NO_START_FROM_DAY = 3
+/** Máxima de quem não tem data de nascimento: 208 - 0,7 x 40 anos. */
+export const FALLBACK_MAX_BPM = 180
 /** Depois dos 30 dias, quanto um corte anda por recálculo diário (cerca de 3% por semana). */
 export const SLOW_STEP_FRACTION = 0.005
 export const VALID_DAY_HEART_RATE_MS = 2 * 60 * 60 * 1000
 export const MIN_SPOT_READINGS = 3
 /** O pico habitual: o máximo que a pessoa atinge em 19 de cada 20 dias. */
 export const PEAK_PERCENTILE = 95
-/** Partida do corte de fadiga do desgaste e previsão sem banda: o 80% da v1.0. */
+/** Partida do corte de fadiga do desgaste e previsão sem banda: 80%. */
 export const WEAR_FATIGUE_START = 80
 
 export const CALIBRATION_METRICS = [
@@ -174,17 +177,28 @@ export function personalCuts(metric: CalibrationMetric, days: readonly Calibrati
 
 export const nullCuts = (metric: CalibrationMetric): Cuts => Object.fromEntries(CUT_KEYS[metric].map((k) => [k, null]))
 
-/** Partida da regra v1.0: só o corte de fadiga de batimento, pressão e desgaste. */
-export function startCutsV1(metric: CalibrationMetric, maxBpmByAge: number | null): Cuts {
+/**
+ * Partida mínima (revisão 2.0, aprovada em 21/10/2026): referência geral de
+ * adulto para todas as medições de estado, para a pessoa ter faixa desde a
+ * primeira leitura. Atividade não tem habitual geral e fica sem partida.
+ */
+export function startCuts(metric: CalibrationMetric, maxBpmByAge: number | null): Cuts {
+  const maxBpm = maxBpmByAge ?? FALLBACK_MAX_BPM
   switch (metric) {
     case 'HEART_RATE':
-      return { excellence: null, fatigue: maxBpmByAge === null ? null : 0.9 * maxBpmByAge }
+      return { excellence: 0.6 * maxBpm, fatigue: 0.9 * maxBpm }
+    case 'OXYGEN_SATURATION':
+      return { excellence: 95, fatigue: 92 }
+    case 'BODY_TEMPERATURE':
+      return { p10: 35.5, p25: 36.1, p75: 37.2, p90: 37.8 }
     case 'SYSTOLIC':
-      return { excellence: null, fatigue: 140 }
+      return { excellence: 120, fatigue: 140 }
     case 'DIASTOLIC':
-      return { excellence: null, fatigue: 90 }
+      return { excellence: 80, fatigue: 90 }
+    case 'EFFORT':
+      return { excellence: 40, fatigue: 80 }
     case 'WEAR':
-      return { excellence: null, fatigue: WEAR_FATIGUE_START }
+      return { excellence: 40, fatigue: WEAR_FATIGUE_START }
     default:
       return nullCuts(metric)
   }
@@ -199,7 +213,7 @@ export function slowStep(previous: number | null, target: number): number {
 /**
  * Um corte no recálculo de hoje.
  * `validDays`: dias válidos da medição na fase. `personal`: valor da janela.
- * `start`: partida da fase (v1.0 ou faixa anterior à troca de aparelho), nula
+ * `start`: partida da fase (mínima ou faixa anterior à troca de aparelho), nula
  * quando não há. `previous`: o aprendido de ontem, nulo na primeira vez.
  */
 export function nextCut(validDays: number, personal: number | null, start: number | null, previous: number | null): number | null {

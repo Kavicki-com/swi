@@ -110,7 +110,7 @@ const prismaDouble = () => {
     telemetryAssessment: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     profile: { findUnique: jest.fn().mockResolvedValue({ birthDate: new Date('1991-05-10T00:00:00.000Z') }) },
     telemetryDailySummary: { findMany: jest.fn().mockResolvedValue([{ heartRateMin: 62 }]) },
-    // Calibração da origem REAL: sem linha nenhuma, vale a partida v1.0 e as
+    // Calibração da origem REAL: sem linha nenhuma, vale a partida mínima e as
     // travas padrão do perfil calibrado.
     workerCalibration: { findUnique: jest.fn().mockResolvedValue(null) },
     workerCalibrationBand: { findMany: jest.fn().mockResolvedValue([]) },

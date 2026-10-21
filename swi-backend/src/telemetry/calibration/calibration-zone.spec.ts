@@ -32,7 +32,7 @@ describe('zoneOf', () => {
       expect(zoneOf('WEAR', 80, { excellence: 30, fatigue: 80 })).toBe('FATIGUE')
     })
 
-    it('só com fadiga (partida v1.0), tudo abaixo dela é normal', () => {
+    it('só com fadiga (excelência anulada pela ordem), tudo abaixo dela é normal', () => {
       expect(zoneOf('HEART_RATE', 55, { excellence: null, fatigue: 140 })).toBe('NORMAL')
       expect(zoneOf('HEART_RATE', 140, { excellence: null, fatigue: 140 })).toBe('FATIGUE')
     })

@@ -8,7 +8,7 @@ import {
   nextCuts,
   nullCuts,
   personalCuts,
-  startCutsV1,
+  startCuts,
   type CalibrationDay,
   type Cuts,
 } from './calibration-bands'
@@ -96,36 +96,36 @@ function phaseOf(
   days: readonly CalibrationDay[],
   maxBpmByAge: number | null,
 ): Phase {
-  const v1 = (metric: CalibrationMetric) => startCutsV1(metric, maxBpmByAge)
+  const minimum = (metric: CalibrationMetric) => startCuts(metric, maxBpmByAge)
   const fresh = { learnedOf: () => null, previousPeakBpm: null }
 
   if (previous === null) {
     // `family` veio de um dia com família, então o trecho existe.
     const startedAt = stretchStart(days, family) ?? days[0].day
-    return { ...fresh, startedAt, recalibrating: false, deviceChanged: false, startOf: v1, peakStartBpm: maxBpmByAge }
+    return { ...fresh, startedAt, recalibrating: false, deviceChanged: false, startOf: minimum, peakStartBpm: maxBpmByAge }
   }
 
   if (previous.deviceFamily !== family) {
     // Troca de aparelho: tudo o que a pessoa já tinha aprendido vira a partida
-    // da fase nova, inclusive os cortes que não tinham partida na v1.0.
+    // da fase nova, inclusive os cortes sem partida (atividade).
     const startedAt = stretchStart(days, family) ?? days[0].day
     return {
       ...fresh,
       startedAt,
       recalibrating: true,
       deviceChanged: true,
-      startOf: (metric) => previous.bands[metric]?.learned ?? v1(metric),
+      startOf: (metric) => previous.bands[metric]?.learned ?? minimum(metric),
       peakStartBpm: previous.peakBpm ?? maxBpmByAge,
     }
   }
 
-  // Mesma fase. Na da v1.0 a partida segue a regra com a idade de hoje (a data
+  // Mesma fase. Na inicial a partida segue a regra com a idade de hoje (a data
   // de nascimento pode ter chegado depois); na de recalibração, a guardada.
   return {
     startedAt: previous.phaseStartedAt,
     recalibrating: previous.recalibrating,
     deviceChanged: false,
-    startOf: previous.recalibrating ? (metric) => previous.bands[metric]?.start ?? v1(metric) : v1,
+    startOf: previous.recalibrating ? (metric) => previous.bands[metric]?.start ?? minimum(metric) : minimum,
     peakStartBpm: previous.recalibrating ? (previous.peakStartBpm ?? maxBpmByAge) : maxBpmByAge,
     learnedOf: (metric) => previous.bands[metric]?.learned ?? null,
     previousPeakBpm: previous.peakBpm,
