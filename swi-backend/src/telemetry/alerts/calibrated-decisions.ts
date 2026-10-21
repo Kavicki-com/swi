@@ -11,11 +11,13 @@ import {
   decideOxygenLow,
   decidePressureCrisis,
   decideWearSafety,
+  episodesOf,
   heartRateLimits,
   heartRatePoints,
   type BloodPressureReading,
   type Decision,
   type EngineSample,
+  type Episode,
   type Point,
   type SafetySource,
   type Threshold,
@@ -76,6 +78,83 @@ export function calibratedOxygenDecisions(
       ? null
       : decideOxygenAttention(latest, previous, cut, active.has('OXYGEN_FATIGUE'), PROFILE.oxygenAttention.minApartMs),
   ])
+}
+
+/** O dia da pulseira que a avaliação esparsa acabou de recalcular. */
+export interface BandBatch {
+  /** Batimentos do dia, em qualquer ordem. */
+  beats: readonly Point[]
+  /** Desgaste logo depois de cada batimento, como a fórmula esparsa calculou. */
+  wear: readonly Point[]
+  /** Fim da avaliação esparsa anterior do mesmo dia; zero sem ela. Até aqui já foi avaliado. */
+  sinceMs: number
+}
+
+/** Episódio de uma condição da pulseira, com a régua que o decidiu. */
+export interface BandEpisode extends Episode {
+  kind: TelemetryConditionKind
+  threshold: Threshold
+}
+
+/**
+ * Condições da pulseira (origem REAL), episódio por episódio do lote. As
+ * travas são as mesmas do relógio, decididas numa leitura: a pulseira grava a
+ * cada poucos minutos, e a persistência de 60 s do relógio não se prova com
+ * ela. A Atenção pede 10 min seguidos na faixa, sem vão maior que 10 min.
+ */
+export function calibratedBandEpisodes(
+  batch: BandBatch,
+  thresholds: CalibrationThresholds,
+  baseline: { maxBpm: number | null; fallbackRestingBpm: number | null },
+  active: Active,
+): BandEpisode[] {
+  const limits = heartRateLimits(PROFILE, {
+    maxBpm: baseline.maxBpm,
+    restingBpm: thresholds.restingBpm ?? baseline.fallbackRestingBpm,
+  })
+  const { holdMs, maxGapMs } = PROFILE.sparseAttention
+  const episodes = (
+    kind: TelemetryConditionKind,
+    points: readonly Point[],
+    threshold: Threshold,
+    opens: (v: number) => boolean,
+    recovers: (v: number) => boolean,
+    hold: number,
+  ): BandEpisode[] =>
+    episodesOf(points, opens, recovers, hold, maxGapMs, active.has(kind), batch.sinceMs).map((e) => ({
+      kind,
+      threshold,
+      ...e,
+    }))
+
+  // As travas de batimento como no relógio: idade e repouso por padrão; com
+  // valor do admin, abrem e recuperam pelos números dele.
+  const lock = (custom: SafetyBand | undefined, byAge: Threshold): Threshold =>
+    custom === undefined ? { value: byAge.value, rule: 'SAFETY_DEFAULT' } : { value: custom.openAt, rule: 'SAFETY_CUSTOM' }
+  const highCustom = thresholds.safety.HEART_RATE_HIGH
+  const high = lock(highCustom, limits.high)
+  const highRecover = highCustom?.closeAt ?? high.value - PROFILE.heartRateHigh.hysteresisBpm
+  const lowCustom = thresholds.safety.HEART_RATE_LOW
+  const low = lock(lowCustom, limits.low)
+  const lowRecover = lowCustom?.closeAt ?? low.value + PROFILE.heartRateLow.hysteresisBpm
+  const wearCustom = thresholds.safety.WEAR_HIGH
+  const wearLock = wearCustom ?? { openAt: PROFILE.wearHigh.openAtPercent, closeAt: PROFILE.wearHigh.recoverBelowPercent }
+  const wearHigh: Threshold = { value: wearLock.openAt, rule: sourceOf(wearCustom) }
+
+  // Atenção só com corte de fadiga efetivo, e pela mesma régua do relógio: na
+  // faixa a partir do corte, fora dela abaixo dele.
+  const attention = (kind: TelemetryConditionKind, points: readonly Point[], cut: number | null | undefined) =>
+    cut === null || cut === undefined
+      ? []
+      : episodes(kind, points, { value: cut, rule: 'BAND' }, (v) => v >= cut, (v) => v < cut, holdMs)
+
+  return [
+    ...episodes('HEART_RATE_HIGH', batch.beats, high, (v) => v >= high.value, (v) => v < highRecover, 0),
+    ...episodes('HEART_RATE_LOW', batch.beats, low, (v) => v <= low.value, (v) => v > lowRecover, 0),
+    ...attention('HEART_RATE_FATIGUE', batch.beats, thresholds.cuts.HEART_RATE.fatigue),
+    ...episodes('WEAR_HIGH', batch.wear, wearHigh, (v) => v >= wearLock.openAt, (v) => v < wearLock.closeAt, 0),
+    ...attention('WEAR_FATIGUE', batch.wear, thresholds.cuts.WEAR.fatigue),
+  ]
 }
 
 export interface WatchReadings {

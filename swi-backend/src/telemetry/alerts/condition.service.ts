@@ -8,7 +8,13 @@ import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../ass
 import { CLOCK_SKEW_MS, EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
 import { loadThresholds } from '../calibration/calibration-thresholds'
 import { CALIBRATED_ALERT_PROFILE, EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
-import { calibratedOxygenDecisions, calibratedPressureDecisions, calibratedWatchDecisions } from './calibrated-decisions'
+import {
+  calibratedBandEpisodes,
+  calibratedOxygenDecisions,
+  calibratedPressureDecisions,
+  calibratedWatchDecisions,
+  type BandBatch,
+} from './calibrated-decisions'
 import {
   decideBattery,
   decideBloodPressure,
@@ -129,6 +135,15 @@ export interface EvaluateOutcome {
   alerts: number
 }
 
+/** Um dia da pulseira, como a avaliação esparsa acabou de recalcular. */
+export interface BandDayInput {
+  workerId: string
+  origin: TelemetryOrigin
+  /** Sessão da última leitura do dia: é nela que a condição nova fica. */
+  sessionId: string
+  batch: BandBatch
+}
+
 /** Nome do evento de socket que anuncia condição aberta ou recuperada. */
 export const CONDITION_CHANGED_EVENT = 'telemetry.condition.changed'
 
@@ -211,6 +226,149 @@ export class TelemetryConditionService {
     return outcome
   }
 
+  /**
+   * Avalia o dia da pulseira depois da avaliação esparsa. A pulseira chega em
+   * lote, horas depois de medir, então nada aqui é "agora": o dia é percorrido
+   * em ordem, episódio por episódio, e cada um é gravado com os instantes
+   * medidos.
+   *
+   * - Abriu e fechou dentro do lote: condição que já nasce recuperada, sem
+   *   alerta na fila e sem aviso. Ninguém pode agir sobre algo que já passou.
+   * - Abriu e segue ativa na última leitura: abre como no relógio, com alerta e
+   *   aviso depois do commit.
+   * - Já estava aberta e fechou: recupera no instante medido.
+   *
+   * Só a origem REAL, pelo perfil calibrado. A DEMO não passa por aqui.
+   */
+  async evaluateBandDay(input: BandDayInput, now: Date): Promise<EvaluateOutcome> {
+    if (input.origin !== 'REAL') return { opened: [], recovered: [], alerts: 0 }
+    const changes: ConditionChange[] = []
+    const outcome = await this.prisma.$transaction((tx) => this.evaluateBandLocked(tx, input, now, changes))
+    await this.announce(changes)
+    await this.notifyHealth(changes)
+    return outcome
+  }
+
+  private async evaluateBandLocked(
+    tx: Prisma.TransactionClient,
+    input: BandDayInput,
+    now: Date,
+    changes: ConditionChange[],
+  ): Promise<EvaluateOutcome> {
+    const outcome: EvaluateOutcome = { opened: [], recovered: [], alerts: 0 }
+    const session = { id: input.sessionId, workerId: input.workerId, origin: input.origin }
+    // O mesmo lock do relógio e da varredura: as três portas mexem no mesmo
+    // conjunto de condições do funcionário e da origem.
+    await this.lockWorkerOrigin(tx, session)
+
+    const [active, { maxBpm, restingBpm }] = await Promise.all([
+      tx.telemetryCondition.findMany({
+        where: { workerId: session.workerId, origin: session.origin, status: 'ACTIVE' },
+        select: { id: true, kind: true },
+      }),
+      this.heartRateBaselineOf(tx, session, now),
+    ])
+    const thresholds = await loadThresholds(tx, session.workerId, maxBpm)
+    const activeByKind = new Map(active.map((c) => [c.kind, c]))
+    const episodes = calibratedBandEpisodes(
+      input.batch,
+      thresholds,
+      { maxBpm, fallbackRestingBpm: restingBpm },
+      new Set(activeByKind.keys()),
+    )
+
+    for (const episode of episodes) {
+      const { kind, threshold, observedValue } = episode
+      if (episode.openedAtMs === null) {
+        const row = activeByKind.get(kind)
+        if (row === undefined || episode.recoveredAtMs === null) continue
+        const recoveredAt = new Date(episode.recoveredAtMs)
+        await tx.telemetryCondition.update({
+          where: { id: row.id },
+          data: { status: 'RECOVERED', recoveredAt, recoveryReason: 'NORMALIZED', lastSeenAt: recoveredAt },
+        })
+        outcome.recovered.push(kind)
+        changes.push(changeOf(session.workerId, row.id, kind, 'RECOVERED', now))
+        continue
+      }
+
+      const firstSeenAt = new Date(episode.openedAtMs)
+      if (episode.recoveredAtMs !== null) {
+        // Pelo cliente, e não pelo INSERT cru: o índice único é parcial em
+        // ACTIVE, então uma condição recuperada não conflita com nada.
+        const recoveredAt = new Date(episode.recoveredAtMs)
+        await tx.telemetryCondition.create({
+          data: {
+            workerId: session.workerId,
+            sessionId: session.id,
+            origin: session.origin,
+            kind,
+            status: 'RECOVERED',
+            firstSeenAt,
+            lastSeenAt: recoveredAt,
+            recoveredAt,
+            recoveryReason: 'NORMALIZED',
+            thresholdProfile: CALIBRATED_ALERT_PROFILE.version,
+            thresholdRule: threshold.rule,
+            thresholdValue: threshold.value,
+            observedValue,
+            calibrationDay: thresholds.calibrationDay,
+          },
+        })
+        continue
+      }
+
+      const createdId = await this.insertCondition(tx, session, now, {
+        kind,
+        profileVersion: CALIBRATED_ALERT_PROFILE.version,
+        rule: threshold.rule,
+        value: threshold.value,
+        observedValue,
+        calibrationDay: thresholds.calibrationDay,
+        firstSeenAt,
+      })
+      if (createdId === null) continue
+      outcome.opened.push(kind)
+      changes.push(changeOf(session.workerId, createdId, kind, 'OPENED', now))
+      if (await this.openAlert(tx, createdId, session.workerId, session.origin, kind)) outcome.alerts += 1
+    }
+    return outcome
+  }
+
+  /**
+   * A máxima por idade e o repouso observado nos dias fechados, que são a
+   * régua das travas de batimento quando a calibração ainda não tem o dela.
+   */
+  private async heartRateBaselineOf(
+    tx: Prisma.TransactionClient,
+    session: { workerId: string; origin: TelemetryOrigin },
+    now: Date,
+  ): Promise<{ maxBpm: number | null; restingBpm: number | null }> {
+    const sinceDay = new Date(monitoredDayOf(now).getTime() - this.profile.restingDays * DAY_MS)
+    const [profile, summaries] = await Promise.all([
+      tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
+      tx.telemetryDailySummary.findMany({
+        // Só dias fechados: o limite de batimento baixo parte do repouso medido,
+        // e um Resumo provisório de dia aberto traria o mínimo de poucas horas.
+        where: {
+          workerId: session.workerId,
+          origin: session.origin,
+          day: { gte: sinceDay },
+          heartRateMin: { not: null },
+          provisional: false,
+        },
+        select: { heartRateMin: true },
+        orderBy: { day: 'desc' },
+        take: this.profile.restingDays,
+      }),
+    ])
+    const birthDate = profile?.birthDate ?? null
+    return {
+      maxBpm: birthDate === null ? null : maxHeartRateForAge(ageInYearsAt(birthDate, now)),
+      restingBpm: restingFromDailyMinima(summaries.flatMap((s) => (s.heartRateMin === null ? [] : [s.heartRateMin]))),
+    }
+  }
+
   private async evaluateLocked(
     tx: Prisma.TransactionClient,
     sessionId: string,
@@ -272,7 +430,6 @@ export class TelemetryConditionService {
     // 10 min da Atenção. A trava recorta sozinha o último minuto dela.
     const attentionFrom = new Date(triggerAt.getTime() - CALIBRATED_ALERT_PROFILE.attention.windowMs)
     const windowStart = real ? attentionFrom : new Date(triggerAt.getTime() - this.profile.persistence.windowMs)
-    const sinceDay = new Date(monitoredDayOf(now).getTime() - this.profile.restingDays * DAY_MS)
     // Cada métrica tem a sua própria noção de "vale agora", e uma janela só não
     // serve às três. BPM precisa de evidência CONTÍNUA dentro da janela de
     // persistência; bateria e pressão precisam do ÚLTIMO valor conhecido dentro
@@ -300,7 +457,7 @@ export class TelemetryConditionService {
     // chegada dela disparou, e a revisão não abriria.
     const pressureUntil = spotReading ? new Date(triggerAt.getTime() + CLOCK_SKEW_MS) : triggerAt
     const oxygenFrom = new Date(triggerAt.getTime() - OXYGEN_LOOKBACK_MS)
-    const [rows, batteryRow, pressureRow, wearRow, profile, summaries, wearRows, oxygenRows] = await Promise.all([
+    const [rows, batteryRow, pressureRow, wearRow, { maxBpm, restingBpm }, wearRows, oxygenRows] = await Promise.all([
       // Fronteira de baixo fechada, como a do motor: aberta, a amostra que cai
       // exatamente no início da janela ficaria de fora e o trecho medido seria
       // menor que o que o perfil declara. Só BPM: as colunas de bateria e de
@@ -350,21 +507,7 @@ export class TelemetryConditionService {
         select: { wearPercent: true },
         orderBy: { windowEnd: 'desc' },
       }),
-      tx.profile.findUnique({ where: { userId: session.workerId }, select: { birthDate: true } }),
-      tx.telemetryDailySummary.findMany({
-        // Só dias fechados: o limite de batimento baixo parte do repouso medido,
-        // e um Resumo provisório de dia aberto traria o mínimo de poucas horas.
-        where: {
-          workerId: session.workerId,
-          origin: session.origin,
-          day: { gte: sinceDay },
-          heartRateMin: { not: null },
-          provisional: false,
-        },
-        select: { heartRateMin: true },
-        orderBy: { day: 'desc' },
-        take: this.profile.restingDays,
-      }),
+      this.heartRateBaselineOf(tx, session, now),
       // A Atenção de desgaste olha as avaliações da sessão dos últimos 10 min,
       // pelo fim da janela de cada uma, como a última avaliação acima. Só REAL.
       real
@@ -391,11 +534,6 @@ export class TelemetryConditionService {
         : Promise.resolve([]),
     ])
 
-    const restingBpm = restingFromDailyMinima(
-      summaries.flatMap((s) => (s.heartRateMin === null ? [] : [s.heartRateMin])),
-    )
-    const birthDate = profile?.birthDate ?? null
-    const maxBpm = birthDate === null ? null : maxHeartRateForAge(ageInYearsAt(birthDate, now))
     const thresholds = real ? await loadThresholds(tx, session.workerId, maxBpm) : null
 
     // batteryPercent fica nulo aqui de propósito: o motor recebe a bateria como
@@ -854,6 +992,8 @@ export class TelemetryConditionService {
       value: number | null
       observedValue: number | null
       calibrationDay: number | null
+      /** Instante medido em que abriu, quando não é agora: o da pulseira. */
+      firstSeenAt?: Date
     },
   ): Promise<string | null> {
     const inserted = await tx.$queryRaw<Array<{ id: string }>>`
@@ -867,7 +1007,7 @@ export class TelemetryConditionService {
         CAST(${session.origin} AS "TelemetryOrigin"),
         CAST(${opening.kind} AS "TelemetryConditionKind"),
         CAST(${'ACTIVE'} AS "TelemetryConditionStatus"),
-        ${now},
+        ${opening.firstSeenAt ?? now},
         ${now},
         ${opening.profileVersion},
         ${opening.rule},

@@ -38,6 +38,7 @@ describe('Telemetry Health Connect e2e', () => {
     f: `telemetry-hc-f-${randomUUID()}@ex.com`,
     g: `telemetry-hc-g-${randomUUID()}@ex.com`,
     h: `telemetry-hc-h-${randomUUID()}@ex.com`,
+    i: `telemetry-hc-i-${randomUUID()}@ex.com`,
     admin: `telemetry-hc-admin-${randomUUID()}@ex.com`,
   }
   let workerA = ''
@@ -324,7 +325,7 @@ describe('Telemetry Health Connect e2e', () => {
 
     let measuredUntil = ''
 
-    it('promove o batimento mais recente do lote, avalia o dia e não abre condição de batimento', async () => {
+    it('promove o batimento mais recente do lote, avalia o dia e abre a trava no instante medido', async () => {
       const session = randomUUID()
       measuredUntil = ago(2 * HOUR)
       const events = [
@@ -346,12 +347,17 @@ describe('Telemetry Health Connect e2e', () => {
           where: { workerId: workerC, formulaVersion: 'swi-fatigue-sparse-2' },
         }),
       ).toBeGreaterThanOrEqual(1)
-      // 190 bpm ao vivo abriria condição; da pulseira, horas depois, não.
-      expect(
-        await prisma.telemetryCondition.count({
-          where: { workerId: workerC, kind: { in: ['HEART_RATE_HIGH', 'HEART_RATE_LOW'] } },
-        }),
-      ).toBe(0)
+      // A pulseira passa pelo motor depois da avaliação do dia: a trava abre na
+      // primeira leitura acima dela, datada de quando foi medida, e segue ativa
+      // na última leitura do lote, então vira item de fila.
+      const trava = await prisma.telemetryCondition.findFirstOrThrow({
+        where: { workerId: workerC, kind: 'HEART_RATE_HIGH', status: 'ACTIVE' },
+      })
+      expect(trava).toMatchObject({ thresholdRule: 'SAFETY_DEFAULT', thresholdValue: 165, observedValue: 190 })
+      expect(trava.firstSeenAt.toISOString()).toBe(events[0].eventTime)
+      expect(await prisma.operationalAlert.findUnique({ where: { conditionId: trava.id } })).toMatchObject({
+        status: 'OPEN',
+      })
     })
 
     it('lote com leitura mais velha que o atual é aceito e não mexe no atual', async () => {
@@ -445,6 +451,66 @@ describe('Telemetry Health Connect e2e', () => {
       expect(body.conflicts).toEqual([
         { eventId: battery.eventId, reason: 'invalid_measurement', detail: expect.any(String) },
       ])
+    })
+  })
+
+  // As condições da pulseira percorrem o dia em ordem depois da avaliação
+  // esparsa. Tudo no dia de ontem, com horário fixo: um "agora menos tanto"
+  // perto da meia-noite partiria o lote em dois dias, e o episódio junto.
+  describe('condições da pulseira por lote', () => {
+    it('episódio dentro do lote vira histórico sem alerta; o ativo no fim abre alerta; o lote seguinte fecha', async () => {
+      const workerI = await worker(emails.i)
+      const secret = randomUUID().replace(/-/g, '')
+      const device = await prisma.telemetryDevice.create({
+        data: { workerId: workerI, kind: 'ANDROID_PHONE', credentialHash: hashCredential(secret) },
+      })
+      let sequence = 0
+      const post = (beats: Array<[number, number]>) =>
+        request(app.getHttpServer())
+          .post('/telemetry/v1/batches')
+          .set({ Authorization: `Device ${encodeCredential(device.id, secret)}` })
+          .send({
+            events: beats.map(([minutes, bpm]) => ({
+              eventId: randomUUID(),
+              monitoringSessionId: randomUUID(),
+              sequence: ++sequence,
+              eventTime: t(minutes).toISOString(),
+              origin: 'REAL',
+              measurements: { heartRate: { value: bpm, unit: 'bpm', source: 'HEALTH_CONNECT' } },
+            })),
+          })
+          .expect(200)
+      const conditions = () =>
+        prisma.telemetryCondition.findMany({ where: { workerId: workerI, kind: 'HEART_RATE_HIGH' }, orderBy: { firstSeenAt: 'asc' } })
+      const alerts = () => prisma.operationalAlert.count({ where: { workerId: workerI } })
+
+      // Nascido em 1991: a trava de batimento alto é 165, e recupera abaixo de 155.
+      await post([
+        [0, 70],
+        [10, 200],
+        [15, 150],
+        [20, 70],
+      ])
+      const [historico] = await conditions()
+      expect(historico).toMatchObject({ status: 'RECOVERED', recoveryReason: 'NORMALIZED', observedValue: 200 })
+      expect(historico.firstSeenAt.toISOString()).toBe(t(10).toISOString())
+      expect(historico.recoveredAt?.toISOString()).toBe(t(15).toISOString())
+      expect(await alerts()).toBe(0)
+
+      await post([[60, 200]])
+      const ativa = (await conditions()).find((c) => c.status === 'ACTIVE')
+      expect(ativa?.firstSeenAt.toISOString()).toBe(t(60).toISOString())
+      expect(await alerts()).toBe(1)
+
+      // O lote seguinte não reabre o que o anterior já gravou: a leitura de 60
+      // minutos já foi avaliada, e só a de 90 é nova.
+      await post([[90, 150]])
+      const depois = await conditions()
+      expect(depois).toHaveLength(2)
+      expect(depois[1]).toMatchObject({ id: ativa?.id, status: 'RECOVERED', recoveryReason: 'NORMALIZED' })
+      expect(depois[1].recoveredAt?.toISOString()).toBe(t(90).toISOString())
+      // Recuperar não fecha alerta: isso é da triagem humana.
+      expect(await alerts()).toBe(1)
     })
   })
 

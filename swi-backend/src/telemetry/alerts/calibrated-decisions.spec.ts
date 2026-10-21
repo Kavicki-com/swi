@@ -2,9 +2,12 @@ import type { TelemetryConditionKind } from '@prisma/client'
 
 import { thresholdsOf, type ThresholdRows } from '../calibration/calibration-thresholds'
 import {
+  calibratedBandEpisodes,
   calibratedOxygenDecisions,
   calibratedPressureDecisions,
   calibratedWatchDecisions,
+  type BandBatch,
+  type BandEpisode,
   type WatchReadings,
 } from './calibrated-decisions'
 import type { EngineSample, Point } from './condition-engine'
@@ -224,5 +227,128 @@ describe('calibratedOxygenDecisions', () => {
 
   it('sem leitura não decide nada', () => {
     expect(calibratedOxygenDecisions([], withCut(), new Set(['OXYGEN_LOW', 'OXYGEN_FATIGUE']))).toEqual([])
+  })
+})
+
+describe('calibratedBandEpisodes', () => {
+  // A pulseira chega em lote: o dia é percorrido em ordem, com as travas numa
+  // leitura e a Atenção pelos 10 min seguidos, sem vão maior que 10 min.
+  const at = (minutes: number) => NOW + minutes * MIN
+  const pts = (...pairs: Array<[number, number]>): Point[] => pairs.map(([m, value]) => ({ atMs: at(m), value }))
+  const batch = (over: Partial<BandBatch> = {}): BandBatch => ({ beats: [], wear: [], sinceMs: 0, ...over })
+  const baseline = { maxBpm: 190, fallbackRestingBpm: 60 }
+  const heartRateCut = thresholds({
+    bands: [{ metric: 'HEART_RATE', learnedCuts: { excellence: 95, fatigue: 130 }, overrideCuts: null }],
+  })
+  const of = (episodes: BandEpisode[], kind: string) => episodes.filter((e) => e.kind === kind)
+
+  it('uma leitura acima da trava abre no instante medido, e a leitura de volta fecha dentro do lote', () => {
+    // Máxima 190: a trava é 171, e recupera abaixo de 161.
+    const episodes = calibratedBandEpisodes(batch({ beats: pts([0, 175], [5, 150]) }), thresholds(), baseline, none)
+
+    expect(of(episodes, 'HEART_RATE_HIGH')).toEqual([
+      {
+        kind: 'HEART_RATE_HIGH',
+        openedAtMs: at(0),
+        recoveredAtMs: at(5),
+        observedValue: 175,
+        threshold: { value: 171, rule: 'SAFETY_DEFAULT' },
+      },
+    ])
+  })
+
+  it('10 min seguidos na faixa de fadiga abrem a Atenção, que segue ativa; 9 min não', () => {
+    const dez = calibratedBandEpisodes(batch({ beats: pts([0, 140], [5, 140], [10, 140]) }), heartRateCut, baseline, none)
+    expect(of(dez, 'HEART_RATE_FATIGUE')).toEqual([
+      {
+        kind: 'HEART_RATE_FATIGUE',
+        openedAtMs: at(10),
+        recoveredAtMs: null,
+        observedValue: 140,
+        threshold: { value: 130, rule: 'BAND' },
+      },
+    ])
+
+    const nove = calibratedBandEpisodes(batch({ beats: pts([0, 140], [4.5, 140], [9, 140]) }), heartRateCut, baseline, none)
+    expect(of(nove, 'HEART_RATE_FATIGUE')).toEqual([])
+  })
+
+  it('vão maior que 10 min entre leituras recomeça a contagem', () => {
+    const beats = pts([0, 140], [11, 140], [21, 140])
+
+    const episodes = calibratedBandEpisodes(batch({ beats }), heartRateCut, baseline, none)
+
+    expect(of(episodes, 'HEART_RATE_FATIGUE').map((e) => e.openedAtMs)).toEqual([at(21)])
+  })
+
+  it('o que o lote anterior já avaliou não reabre', () => {
+    const beats = pts([0, 175], [5, 150])
+
+    expect(calibratedBandEpisodes(batch({ beats, sinceMs: at(5) }), thresholds(), baseline, none)).toEqual([])
+  })
+
+  it('condição já aberta fecha no instante medido da leitura de volta', () => {
+    const active = new Set<TelemetryConditionKind>(['HEART_RATE_HIGH'])
+
+    const episodes = calibratedBandEpisodes(batch({ beats: pts([10, 150]) }), thresholds(), baseline, active)
+
+    expect(of(episodes, 'HEART_RATE_HIGH')).toEqual([
+      expect.objectContaining({ openedAtMs: null, recoveredAtMs: at(10), observedValue: 150 }),
+    ])
+  })
+
+  it('a trava do admin vale no lugar da padrão, com a recuperação dele', () => {
+    const t = thresholds({ safety: [{ rule: 'HEART_RATE_HIGH', values: { openAt: 150, closeAt: 140 } }] })
+    const beats = pts([0, 155], [5, 145], [10, 139])
+
+    expect(of(calibratedBandEpisodes(batch({ beats }), t, baseline, none), 'HEART_RATE_HIGH')).toEqual([
+      {
+        kind: 'HEART_RATE_HIGH',
+        openedAtMs: at(0),
+        recoveredAtMs: at(10),
+        observedValue: 155,
+        threshold: { value: 150, rule: 'SAFETY_CUSTOM' },
+      },
+    ])
+  })
+
+  it('batimento baixo segue o repouso: a partir de 45 abre, acima de 55 fecha', () => {
+    const beats = pts([0, 44], [5, 50], [10, 56])
+
+    expect(of(calibratedBandEpisodes(batch({ beats }), thresholds(), baseline, none), 'HEART_RATE_LOW')).toEqual([
+      {
+        kind: 'HEART_RATE_LOW',
+        openedAtMs: at(0),
+        recoveredAtMs: at(10),
+        observedValue: 44,
+        threshold: { value: 45, rule: 'SAFETY_DEFAULT' },
+      },
+    ])
+  })
+
+  it('o repouso calibrado vale no lugar do observado', () => {
+    // Repouso calibrado 70: a trava de baixo vai para 55.
+    const t = thresholds({ calibration: { validDays: 9, restingBpm: 70 } })
+
+    const episodes = calibratedBandEpisodes(batch({ beats: pts([0, 54]) }), t, baseline, none)
+
+    expect(of(episodes, 'HEART_RATE_LOW').map((e) => e.threshold)).toEqual([{ value: 55, rule: 'SAFETY_DEFAULT' }])
+  })
+
+  it('desgaste: uma leitura na trava abre o urgente; 10 min na faixa abrem a Atenção', () => {
+    const wear = pts([0, 92], [5, 92], [10, 92])
+
+    const episodes = calibratedBandEpisodes(batch({ wear }), thresholds(), baseline, none)
+
+    expect(episodes.map((e) => [e.kind, e.openedAtMs, e.recoveredAtMs, e.threshold])).toEqual([
+      ['WEAR_HIGH', at(0), null, { value: 90, rule: 'SAFETY_DEFAULT' }],
+      ['WEAR_FATIGUE', at(10), null, { value: 80, rule: 'BAND' }],
+    ])
+  })
+
+  it('sem leitura não há episódio', () => {
+    const active = new Set<TelemetryConditionKind>(['HEART_RATE_HIGH'])
+
+    expect(calibratedBandEpisodes(batch(), heartRateCut, baseline, active)).toEqual([])
   })
 })

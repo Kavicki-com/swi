@@ -3,7 +3,7 @@ import { RealtimeGateway } from '../../realtime/realtime.gateway'
 import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import { TelemetryConditionService } from '../alerts/condition.service'
 import { TelemetryAssessmentService } from '../assessment/assessment.service'
-import { SparseAssessmentService } from '../assessment/sparse-assessment.service'
+import { SparseAssessmentService, type SparseOutcome } from '../assessment/sparse-assessment.service'
 import type { DeviceIdentity } from '../devices/device-auth.service'
 import {
   assertEventTimeUsable,
@@ -185,11 +185,11 @@ export class TelemetryIngestionService {
         await this.requireOwnSession(sessions, device, event, startedAt)
 
         const result = await this.repository.saveEvent(event, now, { deviceKind: device.kind })
-        // Pulseira: nada aqui é ao vivo, e a cadeia por sessão e as condições
-        // de batimento, sinal e desgaste não se aplicam. O que vale é o dia de
-        // cada batimento, recalculado inteiro depois do laço. Vale também para
-        // o repetido: se a avaliação falhou depois do ACK, é o reenvio que
-        // repara o dia.
+        // Pulseira: nada aqui é ao vivo, e a cadeia por sessão e a perda de
+        // sinal não se aplicam. O que vale é o dia de cada batimento,
+        // recalculado inteiro depois do laço, com as condições dele percorridas
+        // em seguida. Vale também para o repetido: se a avaliação falhou
+        // depois do ACK, é o reenvio que repara o dia.
         const band = snapshotPolicyFor(device.kind) === 'LATEST'
         if (
           band &&
@@ -275,12 +275,30 @@ export class TelemetryIngestionService {
     // atual escolhe pelo instante medido (windowEnd), então a ordem aqui não
     // decide qual dia aparece; ela só mantém o histórico de cálculo na ordem
     // dos dias. Falha aqui não derruba o ACK, pelo mesmo motivo das de cima.
+    //
+    // As condições do dia vêm depois, porque percorrem o desgaste que a
+    // avaliação acabou de calcular, e só quando ela recalculou: dia sem
+    // batimento novo não tem episódio novo. Transação e try/catch próprios,
+    // pelo mesmo motivo da avaliação e das condições do relógio: alerta é
+    // segurança, e uma falha de um lado não pode calar o outro.
     for (const [origin, days] of sparseDays) {
       for (const dayMs of [...days].sort((a, b) => a - b)) {
+        let assessed: SparseOutcome = { outcome: 'nothing_new' }
         try {
-          await this.sparse.assessDay(device.workerId, origin, new Date(dayMs), now)
+          assessed = await this.sparse.assessDay(device.workerId, origin, new Date(dayMs), now)
         } catch (error) {
           this.logger.error(`Falha na avaliação esparsa do funcionário ${device.workerId}: ${describeError(error)}`)
+        }
+        if (assessed.outcome !== 'assessed') continue
+        try {
+          await this.conditions.evaluateBandDay(
+            { workerId: device.workerId, origin, sessionId: assessed.sessionId, batch: assessed.batch },
+            now,
+          )
+        } catch (error) {
+          this.logger.error(
+            `Falha ao avaliar as condições da pulseira do funcionário ${device.workerId}: ${describeError(error)}`,
+          )
         }
       }
     }
