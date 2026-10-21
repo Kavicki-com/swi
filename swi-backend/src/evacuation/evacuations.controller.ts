@@ -20,7 +20,7 @@ export class EvacuationsController {
 
   @Can('evacuation.operate') @Post()
   start(@CurrentUser() user: JwtUser, @Body() dto: StartEvacuationDto) {
-    return this.events.start(user.userId, user.companyId, dto.area)
+    return this.events.start(user.userId, user.companyId, dto.area, dto.musterPoint)
   }
 
   // WORKER também lê: o app mobile precisa da ativa da PRÓPRIA org pra saber

@@ -9,4 +9,12 @@ export class StartEvacuationDto {
   @IsOptional()
   @IsArray()
   area?: AreaVertex[]
+
+  // Ponto de encontro [lng, lat], obrigatório: destino da rota de cada
+  // funcionário. Opcional AQUI só para a whitelist deixar passar; quem exige e
+  // responde a mensagem própria é o service (normalizeMusterPoint), como na
+  // área.
+  @IsOptional()
+  @IsArray()
+  musterPoint?: AreaVertex
 }

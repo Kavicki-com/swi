@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common'
-import { normalizeEvacuationArea } from './evacuation-area'
+import { normalizeEvacuationArea, normalizeMusterPoint } from './evacuation-area'
 
 // Polígono da área desenhado ao iniciar: vértices [lng, lat] (convenção
 // maplibre/GeoJSON). O servidor valida e fecha o anel antes de persistir.
@@ -62,5 +62,26 @@ describe('normalizeEvacuationArea', () => {
     expect(() => normalizeEvacuationArea([[Number.NaN, -23.5], [-46.5, -23.4], [-46.4, -23.3]])).toThrow(
       BadRequestException,
     )
+  })
+})
+
+// Ponto de encontro marcado no mesmo fluxo da área: um par [lng, lat], e
+// obrigatório, porque é o destino da rota de cada funcionário.
+describe('normalizeMusterPoint', () => {
+  it('aceita [lng, lat] dentro do globo', () => {
+    expect(normalizeMusterPoint([-46.62, -23.544])).toEqual([-46.62, -23.544])
+  })
+
+  it('sem ponto (undefined/null) → 400', () => {
+    expect(() => normalizeMusterPoint(undefined)).toThrow(BadRequestException)
+    expect(() => normalizeMusterPoint(null)).toThrow(BadRequestException)
+  })
+
+  it('ponto inválido → 400', () => {
+    expect(() => normalizeMusterPoint([200, 0])).toThrow(BadRequestException)
+    expect(() => normalizeMusterPoint([-46.62, -95])).toThrow(BadRequestException)
+    expect(() => normalizeMusterPoint(['a', 1])).toThrow(BadRequestException)
+    expect(() => normalizeMusterPoint([1])).toThrow(BadRequestException)
+    expect(() => normalizeMusterPoint({ lng: -46.62, lat: -23.544 })).toThrow(BadRequestException)
   })
 })

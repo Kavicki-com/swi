@@ -52,3 +52,20 @@ export function normalizeEvacuationArea(area: unknown): AreaVertex[] | null {
   }
   return [...open, open[0]]
 }
+
+/**
+ * Valida e normaliza o ponto de encontro marcado no disparo da evacuação,
+ * [lng, lat]. Obrigatório: é o destino da rota de cada funcionário, e sem ele
+ * não há para onde mandar ninguém. Ausente ou inválido vira 400.
+ */
+export function normalizeMusterPoint(point: unknown): AreaVertex {
+  if (point === null || point === undefined) {
+    throw new BadRequestException('Marque o ponto de encontro da evacuação')
+  }
+  if (!isValidVertex(point)) {
+    throw new BadRequestException(
+      'O ponto de encontro precisa ser um par [lng, lat] dentro dos limites do globo',
+    )
+  }
+  return [point[0], point[1]]
+}

@@ -279,6 +279,9 @@ model Evacuation {
   // Polígono da área demarcada ao iniciar: anel fechado [[lng,lat],...]. Null =
   // disparada sem recorte visual (a notificação segue valendo pra org inteira).
   area        Json?
+  // Ponto de encontro [lng, lat] marcado ao iniciar: destino da rota de cada
+  // funcionário. Obrigatório desde 2026-10; null só em evacuações anteriores.
+  musterPoint Json?
   createdAt   DateTime         @default(now())
   endedAt     DateTime?
   acks        EvacuationAck[]
