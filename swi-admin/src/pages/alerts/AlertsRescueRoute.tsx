@@ -19,7 +19,7 @@ import { useRescueRoute } from '@/hooks/useRescueRoute'
 import { useLivePositions } from '@/hooks/useLivePositions'
 import { rescuesApi } from '@/services/api/rescues'
 import { errorMessage } from './hooks/useRescues'
-import { lngLatAlongLineString, totalLineLength } from '@/lib/lineString'
+import { lngLatAlongLineString } from '@/lib/lineString'
 import { formatDuration, formatDistance } from '@/lib/formatRoute'
 import { useDemoToast } from '@/lib/demoToast'
 import {
@@ -132,7 +132,9 @@ export function AlertsRescueRoute() {
   // Mapbox Directions API: rescuer -> injured. Replaces the previous
   // hardcoded 3-point LineString with a real road-following polyline +
   // real ETA/distance values. Loading + error states are handled below.
-  const { route, loading, error } = useRescueRoute(ends?.rescuer ?? null, ends?.injured ?? null)
+  // `error` não entra: a tela decide pelo que tem em mãos (rota ou não) e, sem
+  // rota, `loading` separa "ainda buscando" de "não deu".
+  const { route, loading } = useRescueRoute(ends?.rescuer ?? null, ends?.injured ?? null)
   const { show: showToast } = useDemoToast()
 
   // "Continuar" grava o resgate: o backend pausa a jornada do socorrista e o
@@ -155,22 +157,12 @@ export function AlertsRescueRoute() {
     }
   }
 
-  // Surface the error to the user once per occurrence (no re-toast on
-  // re-renders). The fallback geometry + euclidean-distance labels
-  // already keep the UI usable; this is just disclosure.
-  useEffect(() => {
-    if (error) {
-      showToast('Rota indisponível', 'Exibindo linha direta entre os dois pontos.')
-    }
-  }, [error, showToast])
-
-  // GeoJSON coords driving both the line layer and the label positions.
-  // Falls back to a straight 2-point LineString while route is loading
-  // or failed — keeps the UI usable, swaps in the real polyline once
-  // the API resolves.
+  // Coordenadas do traçado. Só existem quando o roteador devolveu um caminho
+  // real: a reta entre as duas pontas que ficava aqui antes atravessava pátio
+  // ferroviário, viaduto e prédio, e ninguém percorre aquilo. Sem rota, o mapa
+  // mostra os dois pinos e a tela diz por quê, como já faz quando falta posição.
   const coords = useMemo<Array<LngLat>>(() => {
-    if (!ends) return []
-    if (!route) return [ends.rescuer, ends.injured]
+    if (!ends || !route) return []
     return route.geometry.coordinates.map((c) => [c[0]!, c[1]!] as LngLat)
   }, [route, ends])
 
@@ -179,31 +171,17 @@ export function AlertsRescueRoute() {
   // UI always communicates that there ARE labels there. Once resolved,
   // values come straight from duration (seconds) + distance (metres).
   // Error case (route===null after loading=false) is handled in C2.
+  // Os rótulos acompanham o traçado, então só existem com rota real. Sem ela
+  // não há tempo nem distância honestos para mostrar: a distância em linha
+  // reta mentia justamente onde o caminho é mais tortuoso.
   const labels = useMemo(() => {
-    if (loading || !ends) {
-      return [
-        { t: 0.25, text: '…' },
-        { t: 0.55, text: '…' },
-        { t: 0.78, text: '…' },
-      ]
-    }
-    if (route) {
-      return [
-        { t: 0.25, text: formatDuration(route.duration * 0.4) },
-        { t: 0.55, text: formatDistance(route.distance) },
-        { t: 0.78, text: formatDuration(route.duration) },
-      ]
-    }
-    // Error fallback: no ETA available, but estimate distance from the
-    // straight-line geometry. 1° lat ≈ 111 km globally; lng° varies with
-    // latitude but at -23.5° the error is < 10%, fine for the demo label.
-    const distMeters = totalLineLength([ends.rescuer, ends.injured]) * 111000
+    if (!route) return []
     return [
-      { t: 0.25, text: '—' },
-      { t: 0.55, text: formatDistance(distMeters) },
-      { t: 0.78, text: '—' },
+      { t: 0.25, text: formatDuration(route.duration * 0.4) },
+      { t: 0.55, text: formatDistance(route.distance) },
+      { t: 0.78, text: formatDuration(route.duration) },
     ]
-  }, [route, loading, ends])
+  }, [route])
 
   // Init the map once — frame both pins inside view via fitBounds.
   useEffect(() => {
@@ -387,6 +365,35 @@ export function AlertsRescueRoute() {
         >
           <Text variant="body.m" color={theme.content.dark}>
             Posição ao vivo indisponível para o par selecionado.
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Estado do roteador, fixo na tela. Era um toast que sumia em segundos,
+          e o operador ficava olhando uma reta achando que era caminho. */}
+      {ends && !route ? (
+        <View
+          testID={loading ? 'alerts-rescue-route-calculando' : 'alerts-rescue-route-indisponivel'}
+          style={{
+            position: 'absolute',
+            bottom: theme.padding.m,
+            left: theme.padding.m,
+            right: theme.padding.m,
+            zIndex: 3,
+            gap: theme.gap.xs,
+            paddingHorizontal: theme.padding.m,
+            paddingVertical: theme.padding.s,
+            borderRadius: theme.border.radius.m,
+            backgroundColor: theme.surface.standard,
+          }}
+        >
+          <Text variant="body.m" color={theme.content.dark} style={{ fontWeight: '700' as const }}>
+            {loading ? 'Calculando a rota…' : 'Rota indisponível'}
+          </Text>
+          <Text variant="body.s" color={theme.content.medium}>
+            {loading
+              ? 'Buscando o caminho pelas ruas entre o socorrista e o ferido.'
+              : 'Não foi possível calcular o caminho. Siga pelo mapa até o pino do ferido.'}
           </Text>
         </View>
       ) : null}
