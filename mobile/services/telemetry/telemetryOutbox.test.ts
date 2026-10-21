@@ -1,6 +1,7 @@
 import {
   createTelemetryOutbox,
   type OutboxEvent,
+  type OutboxMeasurements,
   type OutboxStorage,
 } from './telemetryOutbox';
 
@@ -563,6 +564,73 @@ describe('medições lidas do app Saúde', () => {
       heartRate: { value: 72, unit: 'bpm', source: 'MANUAL_HEALTHKIT' as 'APPLE_WATCH' },
     });
     expect(await gravados(batimentoDeOutraOrigem)).toEqual([]);
+  });
+});
+
+describe('medições lidas do Health Connect', () => {
+  // O Android lê o Health Connect e manda cada medição com a origem
+  // HEALTH_CONNECT, que o backend aceita em sete delas (metric-state.ts).
+  // Bateria e contagem de movimento continuam só do relógio: o Health Connect
+  // não tem nenhuma das duas, e o backend recusa a origem nelas.
+  const com = (measurements: OutboxMeasurements): OutboxEvent => ({
+    ...evento('e1'),
+    measurements,
+  });
+
+  async function gravados(event: OutboxEvent) {
+    const outbox = createTelemetryOutbox(memoryStorage().storage);
+    await outbox.append(event);
+    return outbox.pending();
+  }
+
+  it.each<[string, OutboxMeasurements]>([
+    ['heartRate', { heartRate: { value: 72, unit: 'bpm', source: 'HEALTH_CONNECT' } }],
+    ['stepDelta', { stepDelta: { value: 40, unit: 'steps', source: 'HEALTH_CONNECT' } }],
+    ['activeEnergyKcal', { activeEnergyKcal: { value: 2.4, unit: 'kcal', source: 'HEALTH_CONNECT' } }],
+    ['distanceDeltaM', { distanceDeltaM: { value: 31.5, unit: 'm', source: 'HEALTH_CONNECT' } }],
+    ['oxygenSaturation', { oxygenSaturation: { value: 97, unit: '%', source: 'HEALTH_CONNECT' } }],
+    [
+      'bloodPressure',
+      {
+        bloodPressure: {
+          value: { systolic: 124, diastolic: 80 },
+          unit: 'mmHg',
+          source: 'HEALTH_CONNECT',
+        },
+      },
+    ],
+    ['bodyTemperature', { bodyTemperature: { value: 36.6, unit: '°C', source: 'HEALTH_CONNECT' } }],
+  ])('aceita %s com origem HEALTH_CONNECT', async (_nome, measurements) => {
+    const event = com(measurements);
+    expect(await gravados(event)).toEqual([event]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  // Fora do it.each de propósito: dentro da chamada, o erro de tipo sai na
+  // chamada inteira, e não na linha da origem que o @ts-expect-error marca.
+  const bateria: OutboxMeasurements = {
+    battery: {
+      value: 76,
+      unit: '%',
+      // @ts-expect-error o tipo também recusa: bateria só vem do relógio.
+      source: 'HEALTH_CONNECT',
+    },
+  };
+  const movimento: OutboxMeasurements = {
+    motionCount: {
+      value: 3,
+      unit: 'count',
+      // @ts-expect-error o tipo também recusa: movimento só vem do relógio.
+      source: 'HEALTH_CONNECT',
+    },
+  };
+
+  it.each<[string, OutboxMeasurements]>([
+    ['battery', bateria],
+    ['motionCount', movimento],
+  ])('recusa %s com origem HEALTH_CONNECT, que só o relógio mede', async (_nome, measurements) => {
+    expect(await gravados(com(measurements))).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 

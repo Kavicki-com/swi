@@ -11,8 +11,16 @@ import { File, Paths } from 'expo-file-system';
 // mesmo estado fariam a segunda escrita apagar a primeira.
 
 /**
+ * Origem de quem lê o vestível: o relógio, no iPhone, ou o Health Connect, no
+ * Android. Vale para as medições que os dois trazem; bateria e contagem de
+ * movimento só o relógio mede, e ficam com APPLE_WATCH.
+ */
+export type WearableSource = 'APPLE_WATCH' | 'HEALTH_CONNECT';
+
+/**
  * Uma medição do evento. A origem padrão é APPLE_WATCH, que é quem produz as
- * sete medições do monitoramento; pressão e temperatura declaram as delas.
+ * sete medições do monitoramento; as medições que o Health Connect também
+ * traz, e pressão e temperatura, declaram a origem própria.
  */
 export interface OutboxMeasurement<
   U extends string,
@@ -47,17 +55,24 @@ export interface OutboxBloodPressure {
  * `bloodPressure` e `bodyTemperature` não vêm do relógio: são a última medição
  * registrada no app Saúde, e saem num evento só delas, com o horário em que
  * foram medidas (healthReadings.ts).
+ *
+ * No Android, o Health Connect traz sete delas com a origem HEALTH_CONNECT,
+ * inclusive pressão e temperatura; bateria e contagem de movimento, não.
  */
 export interface OutboxMeasurements {
-  heartRate?: OutboxMeasurement<'bpm'>;
-  stepDelta?: OutboxMeasurement<'steps'>;
-  activeEnergyKcal?: OutboxMeasurement<'kcal'>;
+  heartRate?: OutboxMeasurement<'bpm', WearableSource>;
+  stepDelta?: OutboxMeasurement<'steps', WearableSource>;
+  activeEnergyKcal?: OutboxMeasurement<'kcal', WearableSource>;
   motionCount?: OutboxMeasurement<'count'>;
   battery?: OutboxMeasurement<'%'>;
-  distanceDeltaM?: OutboxMeasurement<'m'>;
-  oxygenSaturation?: OutboxMeasurement<'%'>;
-  bloodPressure?: OutboxMeasurement<'mmHg', 'EXTERNAL_CUFF' | 'MANUAL_HEALTHKIT', OutboxBloodPressure>;
-  bodyTemperature?: OutboxMeasurement<'°C', 'MANUAL_HEALTHKIT'>;
+  distanceDeltaM?: OutboxMeasurement<'m', WearableSource>;
+  oxygenSaturation?: OutboxMeasurement<'%', WearableSource>;
+  bloodPressure?: OutboxMeasurement<
+    'mmHg',
+    'EXTERNAL_CUFF' | 'MANUAL_HEALTHKIT' | 'HEALTH_CONNECT',
+    OutboxBloodPressure
+  >;
+  bodyTemperature?: OutboxMeasurement<'°C', 'MANUAL_HEALTHKIT' | 'HEALTH_CONNECT'>;
 }
 
 /** Exatamente a forma que POST /telemetry/v1/batches aceita (telemetry-batch.dto.ts). */
@@ -82,6 +97,7 @@ interface MeasurementRule {
 }
 
 const FROM_WATCH = ['APPLE_WATCH'] as const;
+const FROM_WATCH_OR_HEALTH_CONNECT = ['APPLE_WATCH', 'HEALTH_CONNECT'] as const;
 
 /**
  * Unidade, origem e restrição de cada medição, do domínio do backend
@@ -89,15 +105,19 @@ const FROM_WATCH = ['APPLE_WATCH'] as const;
  * medição nova no contrato não compila até alguém dizer como é validada.
  */
 const MEASUREMENT_RULES: Record<keyof OutboxMeasurements, MeasurementRule> = {
-  heartRate: { unit: 'bpm', sources: FROM_WATCH },
-  stepDelta: { unit: 'steps', sources: FROM_WATCH, integer: true, min: 0 },
-  activeEnergyKcal: { unit: 'kcal', sources: FROM_WATCH, min: 0 },
+  heartRate: { unit: 'bpm', sources: FROM_WATCH_OR_HEALTH_CONNECT },
+  stepDelta: { unit: 'steps', sources: FROM_WATCH_OR_HEALTH_CONNECT, integer: true, min: 0 },
+  activeEnergyKcal: { unit: 'kcal', sources: FROM_WATCH_OR_HEALTH_CONNECT, min: 0 },
   motionCount: { unit: 'count', sources: FROM_WATCH, min: 0 },
   battery: { unit: '%', sources: FROM_WATCH, min: 0, max: 100 },
-  distanceDeltaM: { unit: 'm', sources: FROM_WATCH, min: 0 },
-  oxygenSaturation: { unit: '%', sources: FROM_WATCH, min: 0, max: 100 },
-  bloodPressure: { unit: 'mmHg', sources: ['EXTERNAL_CUFF', 'MANUAL_HEALTHKIT'], pair: true },
-  bodyTemperature: { unit: '°C', sources: ['MANUAL_HEALTHKIT'] },
+  distanceDeltaM: { unit: 'm', sources: FROM_WATCH_OR_HEALTH_CONNECT, min: 0 },
+  oxygenSaturation: { unit: '%', sources: FROM_WATCH_OR_HEALTH_CONNECT, min: 0, max: 100 },
+  bloodPressure: {
+    unit: 'mmHg',
+    sources: ['EXTERNAL_CUFF', 'MANUAL_HEALTHKIT', 'HEALTH_CONNECT'],
+    pair: true,
+  },
+  bodyTemperature: { unit: '°C', sources: ['MANUAL_HEALTHKIT', 'HEALTH_CONNECT'] },
 };
 
 /** O que há de errado com um número de medição, ou null. */
