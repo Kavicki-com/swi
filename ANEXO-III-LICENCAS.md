@@ -135,6 +135,8 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 | `cep-promise` | 4.4.1 | MIT |  |
 | `expo` | 54.0.37 | MIT |  |
 | `expo-asset` | 12.0.13 | MIT |  |
+| `expo-background-task` | 1.0.10 | MIT |  |
+| `expo-build-properties` | 1.0.10 | MIT |  |
 | `expo-constants` | 18.0.14 | MIT |  |
 | `expo-dev-client` | 6.0.21 | MIT |  |
 | `expo-document-picker` | 14.0.8 | MIT |  |
@@ -156,6 +158,7 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 | `react-dom` | 19.1.0 | MIT |  |
 | `react-native` | 0.81.5 | MIT |  |
 | `react-native-gesture-handler` | 2.28.0 | MIT |  |
+| `react-native-health-connect` | 4.1.3 | MIT |  |
 | `react-native-keyboard-controller` | 1.18.5 | MIT |  |
 | `react-native-reanimated` | 4.1.7 | MIT |  |
 | `react-native-safe-area-context` | 5.6.2 | MIT |  |

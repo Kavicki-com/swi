@@ -37,10 +37,10 @@ import {
 //   de bateria, modo soneca e o próprio fabricante podem espaçar bem mais.
 //   No Android o `expo-background-task` 1.0.10 reagenda a execução seguinte
 //   sozinho, qualquer que seja o resultado devolvido aqui;
-// - a validação real, com o app fechado, é da Fase 4 (emulador). Os testes
-//   daqui cobrem a lógica da rodada e do registro, não o agendador.
+// - a validação real, com o app fechado, é no emulador. Os testes daqui
+//   cobrem a lógica da rodada e do registro, não o agendador.
 //
-// Dois riscos achados na revisão, a confirmar na Fase 4:
+// Dois riscos achados na revisão, a confirmar no emulador:
 //
 // - PRAZOS NÃO VALEM AQUI. Com o app em segundo plano, ou subido sem tela
 //   pelo WorkManager, os timers do JavaScript não disparam no RN 0.81: o
@@ -52,7 +52,7 @@ import {
 //   matar o worker (uns 10 min), só então reagendado, e a sincronização de
 //   segundo plano para até o próximo início a frio. Nenhum dado se perde:
 //   a fila é durável e o token só avança depois de enfileirar;
-// - A BIBLIOTECA REINICIA O AGENDAMENTO. No expo-background-task 1.0.10 com
+// - A BIBLIOTECA REINICIA O AGENDAMENTO. No `expo-background-task` 1.0.10 com
 //   o expo-task-manager, todo início a frio do processo (inclusive o que o
 //   próprio WorkManager provoca para rodar a tarefa) passa por
 //   `restoreTasks`, que chama `scheduleWorker(cancelExisting = true)` com
