@@ -62,6 +62,28 @@ describe('Notifications e2e', () => {
     await request(app.getHttpServer()).post('/notifications/read-all').set({ Authorization: `Bearer ${tB}` }).expect(204)
   })
 
+  it('limpar no painel esconde só no painel do dono; o app continua vendo', async () => {
+    const http = () => request(app.getHttpServer())
+    const tA = await login(eA), tB = await login(eB)
+    const velha = await prisma.notification.create({ data: { workerId: idB, title: 'Velha', domain: 'faq', read: false } })
+    const deA = await prisma.notification.create({ data: { workerId: idA, title: 'De A', domain: 'faq', read: false } })
+
+    await http().post('/notifications/clear-panel').set({ Authorization: `Bearer ${tB}` }).expect(204)
+
+    const { body: painel } = await http().get('/notifications?surface=panel').set({ Authorization: `Bearer ${tB}` }).expect(200)
+    expect(painel.find((x: any) => x.id === velha.id)).toBeUndefined()
+    const { body: app_ } = await http().get('/notifications').set({ Authorization: `Bearer ${tB}` }).expect(200)
+    expect(app_.find((x: any) => x.id === velha.id)).toMatchObject({ read: false })
+    const { body: painelA } = await http().get('/notifications?surface=panel').set({ Authorization: `Bearer ${tA}` }).expect(200)
+    expect(painelA.find((x: any) => x.id === deA.id)).toBeTruthy()
+
+    const nova = await prisma.notification.create({ data: { workerId: idB, title: 'Nova', domain: 'faq', read: false } })
+    const { body: painel2 } = await http().get('/notifications?surface=panel').set({ Authorization: `Bearer ${tB}` }).expect(200)
+    expect(painel2.map((x: any) => x.id)).toContain(nova.id)
+
+    await http().get('/notifications?surface=outra').set({ Authorization: `Bearer ${tB}` }).expect(400)
+  })
+
   it('cross-domain: B recebe notification (chat) quando A manda mensagem', async () => {
     const tA = await login(eA)
     const convId = key(idA, idB)

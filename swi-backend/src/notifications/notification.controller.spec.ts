@@ -12,6 +12,7 @@ const service = () =>
     requestPause: jest.fn().mockResolvedValue(undefined),
     markAllRead: jest.fn().mockResolvedValue(undefined),
     markRead: jest.fn().mockResolvedValue(undefined),
+    clearPanel: jest.fn().mockResolvedValue(undefined),
   }) as unknown as jest.Mocked<NotificationService>
 
 const admin = { userId: 'admin-1', companyId: 'empresa-1', role: 'ADMIN' } as unknown as JwtUser
@@ -19,8 +20,19 @@ const admin = { userId: 'admin-1', companyId: 'empresa-1', role: 'ADMIN' } as un
 describe('NotificationController', () => {
   it('lista as notificações do usuário do token', async () => {
     const s = service()
-    await new NotificationController(s).list('u1')
-    expect(s.list).toHaveBeenCalledWith('u1')
+    await new NotificationController(s).list('u1', {})
+    expect(s.list).toHaveBeenCalledWith('u1', undefined)
+  })
+
+  it('o painel pede a lista com surface=panel e limpa só a do usuário do token', async () => {
+    const s = service()
+    const c = new NotificationController(s)
+
+    await c.list('u1', { surface: 'panel' })
+    await c.clearPanel('u1')
+
+    expect(s.list).toHaveBeenCalledWith('u1', 'panel')
+    expect(s.clearPanel).toHaveBeenCalledWith('u1')
   })
 
   it('pausa: alvo vem do corpo, empresa vem do token', async () => {

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { QueueService } from '../queue/queue.service'
 import type { Notification, NotificationDomain } from '@prisma/client'
+import type { NotificationSurface } from './dto'
 
 export interface NotificationPayload {
   title: string
@@ -50,8 +51,9 @@ export class NotificationService implements OnModuleInit {
     })
   }
 
-  async list(workerId: string) {
-    const rows = await this.prisma.notification.findMany({ where: { workerId }, orderBy: { createdAt: 'desc' }, take: LIST_CAP })
+  async list(workerId: string, surface?: NotificationSurface) {
+    const where = surface === 'panel' ? { workerId, panelHiddenAt: null } : { workerId }
+    const rows = await this.prisma.notification.findMany({ where, orderBy: { createdAt: 'desc' }, take: LIST_CAP })
     return rows.map((n) => this.toDto(n))
   }
 
@@ -63,6 +65,12 @@ export class NotificationService implements OnModuleInit {
 
   async markAllRead(workerId: string): Promise<void> {
     await this.prisma.notification.updateMany({ where: { workerId, read: false }, data: { read: true } })
+  }
+
+  // "Limpar todas" do painel: esconde só no painel, sem apagar nem mexer no
+  // lido, porque o app do celular continua mostrando as mesmas notificações.
+  async clearPanel(workerId: string): Promise<void> {
+    await this.prisma.notification.updateMany({ where: { workerId, panelHiddenAt: null }, data: { panelHiddenAt: new Date() } })
   }
 
   // Superfície injetável cross-domain: cria + empurra ao vivo pro destinatário.

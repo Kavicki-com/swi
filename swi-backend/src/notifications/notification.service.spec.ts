@@ -61,6 +61,18 @@ describe('NotificationService', () => {
     expect(out[0]).toEqual({ id: 'n1', title: 'T', body: 'B', domain: 'chat', targetId: null, read: false, createdAt: '2026-06-23T15:00:00.000Z' })
   })
 
+  it('list do painel (surface=panel) esconde as limpas no painel', async () => {
+    const db = prisma(); db.notification.findMany.mockResolvedValue([])
+    await new NotificationService(db, realtime(), queue()).list(W, 'panel')
+    expect(db.notification.findMany).toHaveBeenCalledWith({ where: { workerId: W, panelHiddenAt: null }, orderBy: { createdAt: 'desc' }, take: 200 })
+  })
+
+  it('clearPanel marca panelHiddenAt só nas do worker ainda visíveis no painel, sem mexer em read', async () => {
+    const db = prisma(); db.notification.updateMany.mockResolvedValue({ count: 2 })
+    await new NotificationService(db, realtime(), queue()).clearPanel(W)
+    expect(db.notification.updateMany).toHaveBeenCalledWith({ where: { workerId: W, panelHiddenAt: null }, data: { panelHiddenAt: expect.any(Date) } })
+  })
+
   it('list mapeia body null → ""', async () => {
     const db = prisma(); db.notification.findMany.mockResolvedValue([row({ body: null })])
     expect((await new NotificationService(db, realtime(), queue()).list(W))[0].body).toBe('')

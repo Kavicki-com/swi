@@ -962,7 +962,19 @@
     "/notifications": {
       "get": {
         "operationId": "NotificationController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "surface",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "panel"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -1010,6 +1022,25 @@
     "/notifications/read-all": {
       "post": {
         "operationId": "NotificationController_markAllRead",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "notifications"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/notifications/clear-panel": {
+      "post": {
+        "operationId": "NotificationController_clearPanel",
         "parameters": [],
         "responses": {
           "204": {

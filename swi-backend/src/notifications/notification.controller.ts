@@ -1,7 +1,7 @@
-import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { NotificationService } from './notification.service'
-import { PauseRequestDto } from './dto'
+import { NotificationListQueryDto, PauseRequestDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Can } from '../auth/roles.decorator'
@@ -15,7 +15,9 @@ export class NotificationController {
   constructor(private readonly notifications: NotificationService) {}
 
   @Get()
-  list(@CurrentUserId() userId: string) { return this.notifications.list(userId) }
+  list(@CurrentUserId() userId: string, @Query() query: NotificationListQueryDto) {
+    return this.notifications.list(userId, query.surface)
+  }
 
   // "Solicitar Pausa" real: ADMIN pede, o worker recebe a notificação.
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('alerts.operate') @Post('pause-request') @HttpCode(204)
@@ -26,6 +28,10 @@ export class NotificationController {
   @Post('read-all')
   @HttpCode(204)
   markAllRead(@CurrentUserId() userId: string) { return this.notifications.markAllRead(userId) }
+
+  @Post('clear-panel')
+  @HttpCode(204)
+  clearPanel(@CurrentUserId() userId: string) { return this.notifications.clearPanel(userId) }
 
   @Post(':id/read')
   @HttpCode(204)
