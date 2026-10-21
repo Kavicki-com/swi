@@ -237,6 +237,21 @@ describe('SyncBanner: o botão', () => {
     expect(textos(tree)).not.toContain('Sincronizar agora');
   });
 
+  // Sem a leitura de batimento a rodada forçada não lê nada: o botão piscaria
+  // sem subir medição. O Monitoramento já exige o mesmo.
+  it.each<[string, HealthConnectState]>([
+    ['leitura não concedida', { ...LENDO, permission: 'denied' }],
+    ['permissão ainda não conferida', { ...LENDO, availability: null, permission: null }],
+    ['Health Connect ausente', { ...LENDO, availability: 'unavailable', permission: null }],
+  ])('pareado com %s a faixa mostra só o texto', async (_caso, estado) => {
+    mockHealthConnect = estado;
+    const tree = await montar();
+
+    expect(faixa(tree)).toBeDefined();
+    expect(botao(tree)).toBeUndefined();
+    expect(textos(tree)).not.toContain('Sincronizar agora');
+  });
+
   it('com Health Connect e pareado oferece "Sincronizar agora"', async () => {
     mockHealthConnect = LENDO;
     const tree = await montar();

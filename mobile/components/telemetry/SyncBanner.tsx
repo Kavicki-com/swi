@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Button, Surface, Text, useTheme } from '@kavicki/swi-design-system';
+import { healthConnectStatusOf } from '../../services/telemetry/healthConnect/useHealthConnectPermissionRequest';
 import type { WorkerTelemetry } from '../../services/telemetry/myTelemetry';
 import { SYNC_BANNER_COPY as COPY } from '../../services/telemetry/telemetryCopy';
 import { useTelemetryUploadState } from '../../services/telemetry/TelemetryUploadProvider';
@@ -16,9 +17,10 @@ import { useMyTelemetry, useRefreshMyTelemetry } from '../../services/vitals/MyT
 // - Sem `sync` na leitura (iPhone, cujo relógio envia ao vivo, ou sem
 //   leitura) não há faixa, e nada mais roda: nem o relógio de 5 s.
 // - O botão "Sincronizar agora" só existe quando ESTE celular lê o Health
-//   Connect e está pareado. Dado que outro aparelho do mesmo funcionário
-//   sincronizou mostra só o texto; com o pareamento caído o `syncNow` é
-//   inerte, e o botão piscaria sem subir nada.
+//   Connect, com a leitura concedida, e está pareado. Dado que outro
+//   aparelho do mesmo funcionário sincronizou mostra só o texto; com o
+//   pareamento caído ou sem a leitura o `syncNow` não sobe nada, e o botão
+//   piscaria à toa.
 // - O progresso é o `syncing` do contexto do envio, um estado só: com Minhas
 //   estatísticas empilhada sobre o Dashboard as duas faixas mostram o mesmo,
 //   e uma sincronização começada noutro lugar também aparece aqui.
@@ -49,6 +51,9 @@ function SyncBannerBody({ telemetry }: { telemetry: WorkerTelemetry }) {
   const text = syncBannerOf(telemetry, now);
   if (text === null) return null;
 
+  // A mesma regra do Monitoramento: pareado e com a leitura concedida.
+  const podeSincronizar = paired && healthConnectStatusOf(healthConnect, null) === 'granted';
+
   const sincronizar = () => {
     if (syncing || pedida.current !== null) return;
     const run = syncNow();
@@ -78,7 +83,7 @@ function SyncBannerBody({ telemetry }: { telemetry: WorkerTelemetry }) {
       <Text variant="body.s" color={theme.content.dark}>
         {text}
       </Text>
-      {healthConnect !== null && paired ? (
+      {podeSincronizar ? (
         <Button
           variant="outline"
           size="small"
