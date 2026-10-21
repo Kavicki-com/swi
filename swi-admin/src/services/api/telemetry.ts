@@ -129,8 +129,8 @@ export type WorkerTelemetry = {
   /**
    * Calibração individual: fase, dia e, por medição, a faixa em vigor com a
    * zona em que o valor atual cai. Só a leitura individual a carrega; ausente
-   * nas listas e num backend anterior, nula na demonstração e para quem ainda
-   * não tem linha de calibração.
+   * nas listas. Sem linha gravada (e na demonstração) vem a partida padrão;
+   * um backend anterior manda nula nesses casos.
    */
   calibration?: WorkerCalibration | null
 }
@@ -167,8 +167,8 @@ export type CalibrationMetricView = {
   /** Nula sem valor atual, sem faixa, ou no total do dia (passos, distância, calorias). */
   zone: CalibrationZone | null
   cuts: Cuts
-  /** Aprendido pelo recálculo ou corrigido pelo gestor. */
-  source: 'LEARNED' | 'OVERRIDE'
+  /** Partida padrão (ainda sem faixa aprendida), aprendido pelo recálculo ou corrigido pelo gestor. */
+  source: 'START' | 'LEARNED' | 'OVERRIDE'
 }
 
 export type WorkerCalibration = {
