@@ -69,6 +69,11 @@ describe('perfil de alertas calibrado', () => {
     expect(Object.isFrozen(CALIBRATED_ALERT_PROFILE.wearAttention)).toBe(true)
   })
 
+  it('a Atenção de oxigenação pede duas leituras com 10 min ou mais entre elas', () => {
+    expect(CALIBRATED_ALERT_PROFILE.oxygenAttention).toEqual({ minApartMs: 600_000 })
+    expect(Object.isFrozen(CALIBRATED_ALERT_PROFILE.oxygenAttention)).toBe(true)
+  })
+
   it('as travas novas são as do desenho', () => {
     expect(CALIBRATED_ALERT_PROFILE.oxygenLow).toEqual({ openBelowPercent: 90, recoverAbovePercent: 92 })
     expect(CALIBRATED_ALERT_PROFILE.bloodPressureHigh).toEqual({

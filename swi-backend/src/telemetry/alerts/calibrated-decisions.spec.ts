@@ -1,7 +1,12 @@
 import type { TelemetryConditionKind } from '@prisma/client'
 
 import { thresholdsOf, type ThresholdRows } from '../calibration/calibration-thresholds'
-import { calibratedPressureDecisions, calibratedWatchDecisions, type WatchReadings } from './calibrated-decisions'
+import {
+  calibratedOxygenDecisions,
+  calibratedPressureDecisions,
+  calibratedWatchDecisions,
+  type WatchReadings,
+} from './calibrated-decisions'
 import type { EngineSample, Point } from './condition-engine'
 
 // As duas camadas da origem REAL juntas: Atenção pela faixa da pessoa e travas
@@ -164,5 +169,60 @@ describe('calibratedPressureDecisions', () => {
 
   it('sem medição não decide nada', () => {
     expect(calibratedPressureDecisions(null, thresholds(), none)).toEqual([])
+  })
+})
+
+describe('calibratedOxygenDecisions', () => {
+  // Corte de fadiga aprendido em 94%: só existe do 7º dia válido em diante,
+  // porque a oxigenação não tem partida na v1.0.
+  const withCut = (over: Partial<ThresholdRows> = {}) =>
+    thresholds({
+      bands: [{ metric: 'OXYGEN_SATURATION', learnedCuts: { excellence: 97, fatigue: 94 }, overrideCuts: null }],
+      ...over,
+    })
+  const reading = (minutesAgo: number, value: number): Point => ({ atMs: NOW - minutesAgo * MIN, value })
+
+  it('89% abre a trava padrão; 93% a fecha', () => {
+    expect(calibratedOxygenDecisions([reading(0, 89)], thresholds(), none)).toEqual([
+      { kind: 'OXYGEN_LOW', action: 'OPEN', observedValue: 89, threshold: { value: 90, rule: 'SAFETY_DEFAULT' } },
+    ])
+    expect(kinds(calibratedOxygenDecisions([reading(0, 93)], thresholds(), new Set(['OXYGEN_LOW'])))).toEqual([
+      'OXYGEN_LOW:RECOVER',
+    ])
+  })
+
+  it('91% com a trava aberta não fecha: a recuperação é acima de 92%', () => {
+    expect(calibratedOxygenDecisions([reading(0, 91)], thresholds(), new Set(['OXYGEN_LOW']))).toEqual([])
+  })
+
+  it('duas leituras na faixa com 12 min entre elas abrem a Atenção; com 5 min, não', () => {
+    expect(calibratedOxygenDecisions([reading(0, 93), reading(12, 92)], withCut(), none)).toEqual([
+      { kind: 'OXYGEN_FATIGUE', action: 'OPEN', observedValue: 93, threshold: { value: 94, rule: 'BAND' } },
+    ])
+    expect(calibratedOxygenDecisions([reading(0, 93), reading(5, 92)], withCut(), none)).toEqual([])
+  })
+
+  it('a Atenção aberta fecha com a última leitura fora da faixa', () => {
+    expect(
+      kinds(calibratedOxygenDecisions([reading(0, 96), reading(12, 93)], withCut(), new Set(['OXYGEN_FATIGUE']))),
+    ).toEqual(['OXYGEN_FATIGUE:RECOVER'])
+  })
+
+  it('sem corte de fadiga aprendido só a trava decide', () => {
+    expect(kinds(calibratedOxygenDecisions([reading(0, 89), reading(12, 89)], thresholds(), none))).toEqual([
+      'OXYGEN_LOW:OPEN',
+    ])
+  })
+
+  it('a trava do admin vale no lugar da padrão', () => {
+    const t = thresholds({ safety: [{ rule: 'OXYGEN_LOW', values: { openAt: 93, closeAt: 95 } }] })
+
+    expect(calibratedOxygenDecisions([reading(0, 92)], t, none)).toEqual([
+      { kind: 'OXYGEN_LOW', action: 'OPEN', observedValue: 92, threshold: { value: 93, rule: 'SAFETY_CUSTOM' } },
+    ])
+  })
+
+  it('sem leitura não decide nada', () => {
+    expect(calibratedOxygenDecisions([], withCut(), new Set(['OXYGEN_LOW', 'OXYGEN_FATIGUE']))).toEqual([])
   })
 })

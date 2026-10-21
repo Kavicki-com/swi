@@ -8,7 +8,7 @@ import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../ass
 import { CLOCK_SKEW_MS, EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
 import { loadThresholds } from '../calibration/calibration-thresholds'
 import { CALIBRATED_ALERT_PROFILE, EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
-import { calibratedPressureDecisions, calibratedWatchDecisions } from './calibrated-decisions'
+import { calibratedOxygenDecisions, calibratedPressureDecisions, calibratedWatchDecisions } from './calibrated-decisions'
 import {
   decideBattery,
   decideBloodPressure,
@@ -84,13 +84,22 @@ const ALERTING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryCon
 
 /**
  * O que a medição avulsa decide, e por isso o único carimbo que ela renova:
- * as condições de pressão, de qualquer perfil.
+ * as condições de pressão, de qualquer perfil, e as de oxigenação.
  */
 const SPOT_READING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
   'BLOOD_PRESSURE_REVIEW',
   'BLOOD_PRESSURE_FATIGUE',
   'BLOOD_PRESSURE_HIGH',
+  'OXYGEN_FATIGUE',
+  'OXYGEN_LOW',
 ])
+
+/**
+ * Até onde a oxigenação é lida para decidir. Ela é pontual e chega poucas
+ * vezes por turno, então a régua é de horas, como a da pressão, mas menor:
+ * leitura de ontem não descreve a oxigenação de hoje.
+ */
+const OXYGEN_LOOKBACK_MS = 12 * 60 * 60 * 1000
 
 /**
  * Condições contínuas que o SILÊNCIO derruba. Batimento e bateria descrevem um
@@ -182,11 +191,14 @@ export class TelemetryConditionService {
    * do prazo dela", só que feita na hora em que a medição chega, para a
    * revisão não depender de haver relógio falando.
    *
-   * Esta porta decide a pressão e MAIS NADA: a revisão na DEMO, a Atenção e a
-   * trava na REAL. O relógio não falou,
-   * então nada do que ele mede é reavaliado: perda de sinal ativa continua
-   * ativa, e batimento, bateria e desgaste ficam como o último evento dele
-   * deixou. Reavaliar a bateria aqui reabriria "bateria baixa" a partir de uma
+   * É também a porta da oxigenação que não chega ao vivo: a da pulseira, que
+   * vem em lote, e a do relógio que chega como backlog.
+   *
+   * Esta porta decide a pressão e a oxigenação e MAIS NADA: a revisão de
+   * pressão na DEMO; a Atenção e a trava de cada uma na REAL. O relógio não
+   * falou, então nada do resto que ele mede é reavaliado: perda de sinal
+   * ativa continua ativa, e batimento, bateria e desgaste ficam como o último
+   * evento dele deixou. Reavaliar a bateria aqui reabriria "bateria baixa" a partir de uma
    * leitura velha de um relógio que já descarregou, a cada medição que chegasse.
    */
   async evaluateSpotReading(sessionId: string, now: Date): Promise<EvaluateOutcome> {
@@ -287,7 +299,8 @@ export class TelemetryConditionService {
     // chegar carimbada alguns segundos à frente ficaria fora da conta que a
     // chegada dela disparou, e a revisão não abriria.
     const pressureUntil = spotReading ? new Date(triggerAt.getTime() + CLOCK_SKEW_MS) : triggerAt
-    const [rows, batteryRow, pressureRow, wearRow, profile, summaries, wearRows] = await Promise.all([
+    const oxygenFrom = new Date(triggerAt.getTime() - OXYGEN_LOOKBACK_MS)
+    const [rows, batteryRow, pressureRow, wearRow, profile, summaries, wearRows, oxygenRows] = await Promise.all([
       // Fronteira de baixo fechada, como a do motor: aberta, a amostra que cai
       // exatamente no início da janela ficaria de fora e o trecho medido seria
       // menor que o que o perfil declara. Só BPM: as colunas de bateria e de
@@ -360,6 +373,22 @@ export class TelemetryConditionService {
             select: { windowEnd: true, wearPercent: true },
           })
         : Promise.resolve([]),
+      // Oxigenação é pontual como a pressão: por funcionário e origem, com o
+      // mesmo teto da folga de relógio adiantado. As duas últimas bastam: a
+      // trava olha a última, a Atenção as duas. Só REAL.
+      real
+        ? tx.telemetrySample.findMany({
+            where: {
+              workerId: session.workerId,
+              origin: session.origin,
+              oxygenSaturationPct: { not: null },
+              eventTime: { gte: oxygenFrom, lte: pressureUntil },
+            },
+            select: { eventTime: true, oxygenSaturationPct: true },
+            orderBy: { eventTime: 'desc' },
+            take: 2,
+          })
+        : Promise.resolve([]),
     ])
 
     const restingBpm = restingFromDailyMinima(
@@ -385,27 +414,35 @@ export class TelemetryConditionService {
         ? null
         : { systolic: pressureRow.systolicMmHg, diastolic: pressureRow.diastolicMmHg }
 
+    const oxygen = oxygenRows.flatMap((r) =>
+      r.oxygenSaturationPct === null ? [] : [{ atMs: r.eventTime.getTime(), value: r.oxygenSaturationPct }],
+    )
+
     const nowMs = triggerAt.getTime()
-    // A medição avulsa decide só a pressão. As leituras do relógio lidas acima
-    // ficam sem uso nesse caso, de propósito: o que elas dizem já foi decidido
-    // no último evento dele, e decidi-las de novo sem dado novo é o que
-    // reabriria bateria baixa de um relógio que parou de falar.
+    // A medição avulsa decide só a pressão e a oxigenação. As outras leituras
+    // do relógio lidas acima ficam sem uso nesse caso, de propósito: o que
+    // elas dizem já foi decidido no último evento dele, e decidi-las de novo
+    // sem dado novo é o que reabriria bateria baixa de um relógio que parou de
+    // falar. No evento do relógio, pressão e oxigenação entram junto.
     let decisions: Decision[]
     if (thresholds !== null) {
       const activeKinds = new Set(activeByKind.keys())
-      const pressureDecisions = calibratedPressureDecisions(pressure, thresholds, activeKinds)
+      const spotDecisions = [
+        ...calibratedPressureDecisions(pressure, thresholds, activeKinds),
+        ...calibratedOxygenDecisions(oxygen, thresholds, activeKinds),
+      ]
       const wear = wearRows.flatMap((r) =>
         r.wearPercent === null ? [] : [{ atMs: r.windowEnd.getTime(), value: r.wearPercent }],
       )
       decisions = spotReading
-        ? pressureDecisions
+        ? spotDecisions
         : [
             ...calibratedWatchDecisions(
               { samples, wear, latestWear, battery: latestBattery, maxBpm, fallbackRestingBpm: restingBpm, nowMs },
               thresholds,
               activeKinds,
             ),
-            ...pressureDecisions,
+            ...spotDecisions,
           ]
     } else {
       const limits = heartRateLimits(this.profile, { maxBpm, restingBpm })

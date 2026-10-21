@@ -714,6 +714,30 @@ describe('medição avulsa do app Saúde', () => {
     expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
     expect(conditions.evaluateSpotReading.mock.calls[0][0]).toBe(healthSession)
   })
+
+  // Oxigenação é pontual, mas quem a manda é o relógio, dentro do evento
+  // regular dele: ao vivo, ela é decidida pela avaliação da sessão, que já a
+  // lê. Só a que não chega ao vivo precisa da porta avulsa para ser decidida.
+  const oxygen = { oxygenSaturation: { value: 89, unit: '%', source: 'APPLE_WATCH' } }
+
+  it('oxigenação ao vivo do relógio é decidida pela avaliação da sessão, sem a porta avulsa', async () => {
+    const { service, conditions } = build()
+
+    await service.ingest(DEVICE, { events: [event({ measurements: oxygen })] })
+
+    expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateSpotReading).not.toHaveBeenCalled()
+  })
+
+  it('oxigenação que chega como backlog é decidida pela porta avulsa', async () => {
+    const { service, conditions } = build()
+
+    await service.ingest(DEVICE, { events: [event({ eventTime: fiveHoursAgo(), measurements: oxygen })] })
+
+    expect(conditions.evaluateSession).not.toHaveBeenCalled()
+    expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateSpotReading.mock.calls[0][0]).toBe(SESSION)
+  })
 })
 
 // A pulseira lida pelo Health Connect chega em lote, horas depois de medir.
@@ -825,6 +849,22 @@ describe('pulseira pelo Health Connect', () => {
 
     expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
     expect(sparse.assessDay).not.toHaveBeenCalled()
+  })
+
+  it('oxigenação da pulseira é decidida pela porta avulsa', async () => {
+    const { service, conditions } = build()
+
+    await service.ingest(ANDROID, {
+      events: [
+        event({
+          eventTime: ago(HOUR),
+          measurements: { oxygenSaturation: { value: 89, unit: '%', source: 'HEALTH_CONNECT' } },
+        }),
+      ],
+    })
+
+    expect(conditions.evaluateSession).not.toHaveBeenCalled()
+    expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
   })
 
   it('falha na avaliação do dia não derruba o ACK nem o aviso', async () => {

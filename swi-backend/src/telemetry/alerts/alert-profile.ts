@@ -128,6 +128,11 @@ export interface CalibratedAlertProfile extends AlertProfile {
    * máximo entre duas leituras, o mesmo gapMaxMs da fórmula esparsa.
    */
   readonly sparseAttention: { readonly holdMs: number; readonly maxGapMs: number }
+  /**
+   * Oxigenação é pontual e espaçada: a persistência da Atenção é de duas
+   * leituras seguidas na faixa, com este tempo ou mais entre elas.
+   */
+  readonly oxygenAttention: { readonly minApartMs: number }
   readonly oxygenLow: { readonly openBelowPercent: number; readonly recoverAbovePercent: number }
   readonly bloodPressureHigh: {
     readonly systolicAt: number
@@ -145,6 +150,7 @@ export const CALIBRATED_ALERT_PROFILE: CalibratedAlertProfile = Object.freeze({
   attention: Object.freeze({ windowMs: 600_000, minSpanMs: 585_000, maxGapMs: 15_000 }),
   wearAttention: Object.freeze({ windowMs: 600_000, minSpanMs: 540_000, maxGapMs: 60_000 }),
   sparseAttention: Object.freeze({ holdMs: 600_000, maxGapMs: 600_000 }),
+  oxygenAttention: Object.freeze({ minApartMs: 600_000 }),
   oxygenLow: Object.freeze({ openBelowPercent: 90, recoverAbovePercent: 92 }),
   bloodPressureHigh: Object.freeze({ systolicAt: 180, diastolicAt: 110, systolicRecoverBelow: 160, diastolicRecoverBelow: 100 }),
 })

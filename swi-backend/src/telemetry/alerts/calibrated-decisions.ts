@@ -7,6 +7,8 @@ import {
   decideBandPressure,
   decideBattery,
   decideHeartRate,
+  decideOxygenAttention,
+  decideOxygenLow,
   decidePressureCrisis,
   decideWearSafety,
   heartRateLimits,
@@ -46,6 +48,33 @@ export function calibratedPressureDecisions(
   return present([
     decideBandPressure(pressure, cuts, active.has('BLOOD_PRESSURE_FATIGUE')),
     decidePressureCrisis(pressure, custom ?? PROFILE.bloodPressureHigh, active.has('BLOOD_PRESSURE_HIGH'), sourceOf(custom)),
+  ])
+}
+
+/**
+ * Trava e Atenção de oxigenação. `readings` são as últimas leituras, a mais
+ * nova primeiro: a trava olha só a última, a Atenção as duas. A oxigenação não
+ * tem partida na v1.0, então a Atenção só existe com corte de fadiga efetivo
+ * (aprendido do 7º dia válido em diante, ou corrigido pelo gestor).
+ */
+export function calibratedOxygenDecisions(
+  readings: readonly Point[],
+  thresholds: CalibrationThresholds,
+  active: Active,
+): Decision[] {
+  const [latest = null, previous = null] = readings
+  const custom = thresholds.safety.OXYGEN_LOW
+  const cut = thresholds.cuts.OXYGEN_SATURATION.fatigue ?? null
+  return present([
+    decideOxygenLow(
+      latest?.value ?? null,
+      custom ?? { openAt: PROFILE.oxygenLow.openBelowPercent, closeAt: PROFILE.oxygenLow.recoverAbovePercent },
+      active.has('OXYGEN_LOW'),
+      sourceOf(custom),
+    ),
+    cut === null
+      ? null
+      : decideOxygenAttention(latest, previous, cut, active.has('OXYGEN_FATIGUE'), PROFILE.oxygenAttention.minApartMs),
   ])
 }
 

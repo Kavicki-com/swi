@@ -56,6 +56,8 @@ describe('Telemetry conditions e2e', () => {
     calibrado: `telemetry-cond-e-${randomUUID()}@ex.com`,
     trava: `telemetry-cond-f-${randomUUID()}@ex.com`,
     desgaste: `telemetry-cond-g-${randomUUID()}@ex.com`,
+    oxigenio: `telemetry-cond-h-${randomUUID()}@ex.com`,
+    oxigenioSemFaixa: `telemetry-cond-i-${randomUUID()}@ex.com`,
     admin: `telemetry-cond-admin-${randomUUID()}@ex.com`,
     outroAdmin: `telemetry-cond-outro-admin-${randomUUID()}@ex.com`,
   }
@@ -66,6 +68,8 @@ describe('Telemetry conditions e2e', () => {
   let workerCalibrado = ''
   let workerTrava = ''
   let workerDesgaste = ''
+  let workerOxigenio = ''
+  let workerOxigenioSemFaixa = ''
   let admin: JwtUser = { userId: '', role: 'ADMIN', companyId: null }
   let headersA: Record<string, string> = {}
   let headersB: Record<string, string> = {}
@@ -74,6 +78,8 @@ describe('Telemetry conditions e2e', () => {
   let headersCalibrado: Record<string, string> = {}
   let headersTrava: Record<string, string> = {}
   let headersDesgaste: Record<string, string> = {}
+  let headersOxigenio: Record<string, string> = {}
+  let headersOxigenioSemFaixa: Record<string, string> = {}
 
   /**
    * 185 bpm serve aos dois limites de propósito. Para quem nasceu em 1991 a
@@ -189,6 +195,8 @@ describe('Telemetry conditions e2e', () => {
     workerCalibrado = await worker(emails.calibrado, 'Cond E', nascimento)
     workerTrava = await worker(emails.trava, 'Cond F', nascimento)
     workerDesgaste = await worker(emails.desgaste, 'Cond G', nascimento)
+    workerOxigenio = await worker(emails.oxigenio, 'Cond H', nascimento)
+    workerOxigenioSemFaixa = await worker(emails.oxigenioSemFaixa, 'Cond I', nascimento)
 
     // O administrador entra pelo serviço, e não por login: adminSummary só olha
     // o companyId do token, e o que este spec exercita é o contador do painel,
@@ -219,6 +227,8 @@ describe('Telemetry conditions e2e', () => {
     headersCalibrado = await enroll(workerCalibrado)
     headersTrava = await enroll(workerTrava)
     headersDesgaste = await enroll(workerDesgaste)
+    headersOxigenio = await enroll(workerOxigenio)
+    headersOxigenioSemFaixa = await enroll(workerOxigenioSemFaixa)
 
     // E está no 10º dia da calibração, com a faixa de fadiga de batimento
     // aprendida em 130 bpm: abaixo da trava pela idade (165), para a Atenção
@@ -243,6 +253,33 @@ describe('Telemetry conditions e2e', () => {
         validDays: 9,
         startCuts: { excellence: null, fatigue: 165 },
         learnedCuts: { excellence: 95, fatigue: 130 },
+        computedAt: new Date(),
+      },
+    })
+
+    // H também está no 10º dia, com a faixa de fadiga de oxigenação aprendida
+    // em 94%. A oxigenação não tem partida na v1.0: sem esta faixa (como I),
+    // só a trava decide.
+    await prisma.workerCalibration.create({
+      data: {
+        workerId: workerOxigenio,
+        version: CALIBRATION_VERSION,
+        deviceFamily: 'WATCH',
+        phaseStartedAt: monitoredDayOf(new Date(Date.now() - 12 * 24 * 60 * 60 * 1000)),
+        validDays: 9,
+        restingBpm: 60,
+        peakBpm: 170,
+        peakPersonalBpm: 170,
+        computedAt: new Date(),
+      },
+    })
+    await prisma.workerCalibrationBand.create({
+      data: {
+        workerId: workerOxigenio,
+        metric: 'OXYGEN_SATURATION',
+        validDays: 9,
+        startCuts: { excellence: null, fatigue: null },
+        learnedCuts: { excellence: 97, fatigue: 94 },
         computedAt: new Date(),
       },
     })
@@ -744,7 +781,17 @@ describe('Telemetry conditions e2e', () => {
     const { body } = await lista(bearer(admin.userId, 'ADMIN')).expect(200)
     const ids = body.workers.map((w: { worker: { id: string } }) => w.worker.id)
     expect(new Set(ids)).toEqual(
-      new Set([workerA, workerB, workerSemNascimento, workerDemo, workerCalibrado, workerTrava, workerDesgaste]),
+      new Set([
+        workerA,
+        workerB,
+        workerSemNascimento,
+        workerDemo,
+        workerCalibrado,
+        workerTrava,
+        workerDesgaste,
+        workerOxigenio,
+        workerOxigenioSemFaixa,
+      ]),
     )
     for (const entry of body.workers) {
       expect(entry.device.state).toBe('PAIRED')
@@ -1016,5 +1063,89 @@ describe('Telemetry conditions e2e', () => {
     expect(
       await prisma.telemetryCondition.count({ where: { workerId: workerDemo, kind: { in: ['BLOOD_PRESSURE_FATIGUE', 'BLOOD_PRESSURE_HIGH'] } } }),
     ).toBe(0)
+  }, 30_000)
+
+  // Oxigenação é pontual: quem a manda é o relógio, poucas vezes por turno. A
+  // ao vivo é decidida pela avaliação da sessão; a que chega como backlog, pela
+  // porta da medição avulsa. As duas leem as duas últimas leituras do
+  // funcionário nas últimas 12 h, em qualquer sessão.
+  const oxigenacao = (pct: number, minutosAtras = 0, origin = 'REAL') =>
+    event({
+      origin,
+      eventTime: new Date(Date.now() - minutosAtras * 60_000).toISOString(),
+      measurements: { oxygenSaturation: { value: pct, unit: '%', source: 'APPLE_WATCH' } },
+    })
+  const OXIGENACAO = ['OXYGEN_FATIGUE', 'OXYGEN_LOW'] as const
+  const ativasDe = async (workerId: string) =>
+    (await ativas(workerId)).filter((c) => (OXIGENACAO as readonly string[]).includes(c.kind))
+
+  it('20. oxigenação: duas leituras na faixa com 12 min entre elas abrem a Atenção, com 5 min não; 89% abre a trava urgente e 93% a fecha', async () => {
+    // As duas chegam como backlog, com 5 min entre elas: a porta avulsa decide e não abre.
+    await post(headersOxigenio, { events: [oxigenacao(93, 17), oxigenacao(93, 12)] }).expect(200)
+    expect(await ativasDe(workerOxigenio)).toEqual([])
+
+    // A ao vivo fica 12 min depois da anterior: duas seguidas na faixa de fadiga (abaixo de 94).
+    await post(headersOxigenio, { events: [oxigenacao(93)] }).expect(200)
+    const atencao = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerOxigenio, kind: 'OXYGEN_FATIGUE', status: 'ACTIVE' },
+    })
+    expect(atencao).toMatchObject({
+      origin: 'REAL',
+      thresholdProfile: CALIBRATED_ALERT_PROFILE_VERSION,
+      thresholdRule: 'BAND',
+      thresholdValue: 94,
+      observedValue: 93,
+      calibrationDay: 10,
+    })
+    expect(await prisma.operationalAlert.findUnique({ where: { conditionId: atencao.id } })).toMatchObject({
+      status: 'OPEN',
+    })
+
+    const urgentesAntes = (await query.adminSummary(admin)).urgentAlerts.workers
+    await post(headersOxigenio, { events: [oxigenacao(89)] }).expect(200)
+    const trava = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerOxigenio, kind: 'OXYGEN_LOW', status: 'ACTIVE' },
+    })
+    expect(trava).toMatchObject({ thresholdRule: 'SAFETY_DEFAULT', thresholdValue: 90, observedValue: 89 })
+    expect((await query.currentForWorker(workerOxigenio)).conditions.find((c) => c.kind === 'OXYGEN_LOW')?.category).toBe(
+      'URGENT',
+    )
+    expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(urgentesAntes + 1)
+
+    // 93% passa da recuperação da trava (acima de 92%), mas segue na faixa de fadiga.
+    await post(headersOxigenio, { events: [oxigenacao(93)] }).expect(200)
+    expect(await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: trava.id } })).toMatchObject({
+      status: 'RECOVERED',
+      recoveryReason: 'NORMALIZED',
+    })
+    expect((await ativasDe(workerOxigenio)).map((c) => c.kind)).toEqual(['OXYGEN_FATIGUE'])
+  }, 30_000)
+
+  it('21. sem faixa de oxigenação aprendida só a trava decide; a demonstração não decide oxigenação', async () => {
+    // Medida há 30 min e lida só agora: a porta avulsa abre a trava na chegada,
+    // sem esperar o relógio falar. A leitura nova acima de 92% a fecha.
+    await post(headersOxigenioSemFaixa, { events: [oxigenacao(88, 30)] }).expect(200)
+    const trava = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerOxigenioSemFaixa, kind: 'OXYGEN_LOW', status: 'ACTIVE' },
+    })
+    expect(trava).toMatchObject({ thresholdRule: 'SAFETY_DEFAULT', thresholdValue: 90, observedValue: 88 })
+    await post(headersOxigenioSemFaixa, { events: [oxigenacao(95, 20)] }).expect(200)
+    expect((await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: trava.id } })).status).toBe('RECOVERED')
+
+    // 91% duas vezes com 12 min entre elas: acima da trava, e sem corte de fadiga não há Atenção.
+    await post(headersOxigenioSemFaixa, { events: [oxigenacao(91, 12)] }).expect(200)
+    await post(headersOxigenioSemFaixa, { events: [oxigenacao(91)] }).expect(200)
+    expect(await ativasDe(workerOxigenioSemFaixa)).toEqual([])
+
+    // Um backlog mais velho abaixo da trava não abre: a última leitura continua
+    // sendo a de 91% de agora, e é ela que a trava olha.
+    await post(headersOxigenioSemFaixa, { events: [oxigenacao(88, 25)] }).expect(200)
+    expect(await ativasDe(workerOxigenioSemFaixa)).toEqual([])
+
+    await post(headersOxigenioSemFaixa, { events: [oxigenacao(88)] }).expect(200)
+    expect((await ativasDe(workerOxigenioSemFaixa)).map((c) => c.kind)).toEqual(['OXYGEN_LOW'])
+
+    await post(headersDemo, { events: [oxigenacao(85, 0, 'DEMO')] }).expect(200)
+    expect(await prisma.telemetryCondition.count({ where: { workerId: workerDemo, kind: { in: [...OXIGENACAO] } } })).toBe(0)
   }, 30_000)
 })

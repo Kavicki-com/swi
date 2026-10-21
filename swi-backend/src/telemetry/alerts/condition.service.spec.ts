@@ -23,11 +23,31 @@ const hoursAgo = (h: number) => minutesAgo(h * 60)
 const daysAgo = (d: number) => hoursAgo(d * 24)
 const SESSION = { id: 'session-1', workerId: 'worker-1', origin: 'REAL' }
 
+// A oxigenação também é lida por findMany de amostras: a linha de batimento
+// traz a coluna nula, como o banco traria, e a busca de oxigenação a ignora.
 const sampleRow = (secAgo: number, heartRateBpm: number | null, over: Record<string, unknown> = {}) => ({
   eventTime: secondsAgo(secAgo),
   heartRateBpm,
+  oxygenSaturationPct: null,
   ...over,
 })
+
+/**
+ * As duas últimas leituras de oxigenação, mais nova primeiro. O dublê separa a
+ * busca dela da série de batimento pela coluna que o `where` filtra.
+ */
+const withOxygen = (prisma: any, readings: Array<{ minAgo: number; pct: number }>) => {
+  const series = prisma.telemetrySample.findMany
+  prisma.telemetrySample.findMany = jest
+    .fn()
+    .mockImplementation(async (args: any) =>
+      args.where.oxygenSaturationPct === undefined
+        ? series(args)
+        : readings.map((r) => ({ eventTime: minutesAgo(r.minAgo), oxygenSaturationPct: r.pct })),
+    )
+}
+const oxygenCall = (prisma: any) =>
+  prisma.telemetrySample.findMany.mock.calls.map((c: any) => c[0]).find((arg: any) => arg.where.oxygenSaturationPct)
 
 /** 13 amostras a cada 5 s cobrindo os últimos 60 s: densidade que o motor aceita. */
 const highSeries = (bpm = 185) => Array.from({ length: 13 }, (_, i) => sampleRow(60 - i * 5, bpm))
@@ -813,6 +833,59 @@ describe('TelemetryConditionService.evaluateSession: origem REAL calibrada', () 
     expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
     expect(prisma.workerSafetyLimit.findMany).not.toHaveBeenCalled()
     expect(prisma.telemetryAssessment.findMany).not.toHaveBeenCalled()
+    expect(oxygenCall(prisma)).toBeUndefined()
+  })
+
+  // Oxigenação é pontual, como a pressão: as duas últimas leituras do
+  // funcionário e da origem nas últimas 12 h, em qualquer sessão.
+  it('lê as duas últimas leituras de oxigenação do funcionário nas últimas 12 h', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(oxygenCall(prisma)).toEqual({
+      where: {
+        workerId: 'worker-1',
+        origin: 'REAL',
+        oxygenSaturationPct: { not: null },
+        eventTime: { gte: hoursAgo(12), lte: NOW },
+      },
+      select: { eventTime: true, oxygenSaturationPct: true },
+      orderBy: { eventTime: 'desc' },
+      take: 2,
+    })
+  })
+
+  it('oxigenação em 89% no evento do relógio abre a trava, urgente', async () => {
+    const prisma = prismaDouble()
+    withOxygen(prisma, [{ minAgo: 0, pct: 89 }])
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: ['OXYGEN_LOW'], recovered: [], alerts: 1 })
+    expect(insertValues(prisma.$queryRaw)).toEqual(
+      expect.arrayContaining(['OXYGEN_LOW', CALIBRATED_ALERT_PROFILE_VERSION, 'SAFETY_DEFAULT', 90, 89]),
+    )
+  })
+
+  it('a Atenção de oxigenação só abre com corte de fadiga aprendido', async () => {
+    const semFaixa = prismaDouble()
+    withOxygen(semFaixa, [
+      { minAgo: 0, pct: 93 },
+      { minAgo: 12, pct: 93 },
+    ])
+    expect((await service(semFaixa).evaluateSession('session-1', NOW, NOW)).opened).toEqual([])
+
+    const comFaixa = prismaDouble()
+    comFaixa.workerCalibration.findUnique.mockResolvedValue({ validDays: 9, restingBpm: 58 })
+    comFaixa.workerCalibrationBand.findMany.mockResolvedValue([
+      { metric: 'OXYGEN_SATURATION', learnedCuts: { excellence: 97, fatigue: 94 }, overrideCuts: null },
+    ])
+    withOxygen(comFaixa, [
+      { minAgo: 0, pct: 93 },
+      { minAgo: 12, pct: 93 },
+    ])
+    expect((await service(comFaixa).evaluateSession('session-1', NOW, NOW)).opened).toEqual(['OXYGEN_FATIGUE'])
   })
 })
 
@@ -896,6 +969,48 @@ describe('TelemetryConditionService.evaluateSpotReading', () => {
       where: { id: 'c-bp' },
       data: { lastSeenAt: NOW },
     })
+  })
+
+  it('decide a oxigenação na REAL e renova o carimbo dela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      activeRow('c-ox', 'OXYGEN_LOW', minutesAgo(5)),
+      activeRow('c-hr', 'HEART_RATE_FATIGUE', minutesAgo(5)),
+    ])
+    withOxygen(prisma, [{ minAgo: 30, pct: 88 }])
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
+    expect(prisma.telemetryCondition.update.mock.calls.map((c: any) => c[0].where.id)).toEqual(['c-ox'])
+  })
+
+  it('oxigenação de volta acima de 92% fecha a trava', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-ox', 'OXYGEN_LOW')])
+    withOxygen(prisma, [{ minAgo: 0, pct: 93 }])
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.recovered).toEqual(['OXYGEN_LOW'])
+  })
+
+  it('a demonstração não decide oxigenação', async () => {
+    const prisma = demoDouble()
+    withOxygen(prisma, [{ minAgo: 0, pct: 85 }])
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.opened).toEqual([])
+    expect(oxygenCall(prisma)).toBeUndefined()
+  })
+
+  it('lê a oxigenação até a folga de relógio adiantado', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(oxygenCall(prisma).where.eventTime).toEqual({ gte: hoursAgo(12), lte: new Date(NOW.getTime() + 2 * 60 * 1000) })
   })
 
   // A ingestão aceita horário até dois minutos à frente do servidor. Uma

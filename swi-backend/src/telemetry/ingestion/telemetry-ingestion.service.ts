@@ -219,6 +219,12 @@ export class TelemetryIngestionService {
           const at = new Date(event.eventTime)
           const known = liveTriggers.get(event.monitoringSessionId)
           if (known === undefined || at > known) liveTriggers.set(event.monitoringSessionId, at)
+        } else if (event.measurements.oxygenSaturation !== undefined) {
+          // Oxigenação ao vivo do relógio é decidida pela avaliação da sessão,
+          // que a lê. A da pulseira e a que chega como backlog não têm essa
+          // avaliação, e passam pela porta da medição avulsa. O evento continua
+          // sendo do relógio: só a avaliação da oxigenação muda de porta.
+          spotSessionByOrigin.set(event.origin, event.monitoringSessionId)
         }
 
         const candidate: PromotedEvent = {
