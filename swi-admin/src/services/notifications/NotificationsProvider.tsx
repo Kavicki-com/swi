@@ -46,6 +46,7 @@ export type NotificationsView = {
   refresh: () => void
   markRead: (id: string) => void
   markAllRead: () => void
+  clearAll: () => void
 }
 
 const EMPTY = initialNotifications()
@@ -66,5 +67,6 @@ export function useNotifications(): NotificationsView | null {
     refresh: store.refresh,
     markRead: store.markRead,
     markAllRead: store.markAllRead,
+    clearAll: store.clearAll,
   }
 }

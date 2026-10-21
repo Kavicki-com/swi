@@ -6,7 +6,9 @@ import type { ServiceResponse } from '@/services/types'
 import {
   initialNotifications,
   withArrival,
+  withClearSettled,
   withFailure,
+  withLocalClear,
   withLocalRead,
   withReadSettled,
   withResponse,
@@ -18,6 +20,7 @@ export interface NotificationsStoreDeps {
     list(): Promise<ServiceResponse<NotificationDto[]>>
     markRead(id: string): Promise<ServiceResponse<null>>
     markAllRead(): Promise<ServiceResponse<null>>
+    clearPanel(): Promise<ServiceResponse<null>>
   }
   subscribe(cb: (n: NotificationDto) => void): () => void
 }
@@ -31,6 +34,8 @@ export interface NotificationsStore {
   refresh(): void
   markRead(id: string): void
   markAllRead(): void
+  /** Esconde do sino tudo o que está na tela; o app do celular segue vendo. */
+  clearAll(): void
 }
 
 // Promessa que rejeita vira falha comum: sem isto a leitura ficaria "em voo"
@@ -131,6 +136,20 @@ export function createNotificationsStore(deps: NotificationsStoreDeps): Notifica
         .markAllRead()
         .catch(() => failed<null>())
         .then(settle(ids, generation))
+    },
+    clearAll() {
+      const ids = state.items.map((n) => n.id)
+      if (ids.length === 0) return
+      set(withLocalClear(state, ids))
+      const gen = generation
+      void deps.api
+        .clearPanel()
+        .catch(() => failed<null>())
+        .then((res) => {
+          if (gen !== generation) return
+          set(withClearSettled(state, ids, !res.error, requests))
+          if (res.error) read()
+        })
     },
   }
 }

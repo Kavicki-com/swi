@@ -94,26 +94,39 @@ export function NotificationBell() {
       }
     >
       <View style={{ width: PANEL_WIDTH, gap: theme.gap.s }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: theme.gap.s,
-            paddingHorizontal: theme.padding.s,
-          }}
-        >
+        {/* As duas ações não cabem ao lado do título em 360px: ficam numa linha
+            própria, logo abaixo, alinhadas à direita como antes. */}
+        <View style={{ gap: theme.gap.xs, paddingHorizontal: theme.padding.s }}>
           <Title variant="title.xs" color={theme.content.dark}>
             Notificações
           </Title>
-          {unread > 0 ? (
-            <Button
-              variant="ghost"
-              size="small"
-              label="Marcar todas como lidas"
-              accessibilityLabel="Marcar todas as notificações como lidas"
-              onPress={view.markAllRead}
-            />
+          {state.items.length > 0 ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: theme.gap.xs,
+              }}
+            >
+              {unread > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="small"
+                  label="Marcar todas como lidas"
+                  accessibilityLabel="Marcar todas as notificações como lidas"
+                  onPress={view.markAllRead}
+                />
+              ) : null}
+              {/* Some só do painel: o app do celular continua mostrando. */}
+              <Button
+                variant="ghost"
+                size="small"
+                label="Limpar todas"
+                accessibilityLabel="Limpar todas as notificações do painel"
+                onPress={view.clearAll}
+              />
+            </View>
           ) : null}
         </View>
         {state.status === 'failed' ? (
