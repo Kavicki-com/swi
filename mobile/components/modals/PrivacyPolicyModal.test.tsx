@@ -41,6 +41,13 @@ describe('PrivacyPolicyModal: texto da política', () => {
   });
 
   it('mostra a versão e a data da política', async () => {
-    expect(textoLido(await render())).toContain('Versão 1.0, 15 de outubro de 2026');
+    expect(textoLido(await render())).toContain('Versão 1.1, 21 de outubro de 2026');
+  });
+
+
+  it('vale para o relógio do iPhone e para a pulseira do Android', async () => {
+    const texto = textoLido(await render());
+    expect(texto).toContain('uma pulseira, no Android');
+    expect(texto).toContain('Health Connect');
   });
 });

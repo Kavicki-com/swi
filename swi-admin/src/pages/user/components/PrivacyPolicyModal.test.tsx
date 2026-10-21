@@ -16,6 +16,13 @@ describe('PrivacyPolicyModal: texto da política', () => {
 
   it('mostra a versão e a data da política', async () => {
     const { container } = await renderPage(<PrivacyPolicyModal onClose={vi.fn()} />)
-    expect(container.textContent).toContain('Versão 1.0, 15 de outubro de 2026')
+    expect(container.textContent).toContain('Versão 1.1, 21 de outubro de 2026')
+  })
+
+
+  it('vale para o relógio do iPhone e para a pulseira do Android', async () => {
+    const { container } = await renderPage(<PrivacyPolicyModal onClose={vi.fn()} />)
+    expect(container.textContent).toContain('uma pulseira, no Android')
+    expect(container.textContent).toContain('Health Connect')
   })
 })
