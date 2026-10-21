@@ -262,4 +262,74 @@ describe('measurementsViewFrom', () => {
     expect(entryOf(view, 'distance').value).toBe('0,0 km')
     expect(entryOf(view, 'movement').value).toBe('0/min')
   })
+
+  // Calibração individual: cada medição leva a zona de agora e a faixa da
+  // pessoa. Os totais do dia (passos, distância) só levam a faixa; o
+  // movimento é ritmo de agora e leva a zona.
+  describe('calibração individual', () => {
+    const calibrated: WorkerTelemetry = {
+      ...reporting(),
+      calibration: {
+        version: 'cal-v1',
+        phase: 'CALIBRATED',
+        recalibrating: false,
+        day: null,
+        metrics: {
+          OXYGEN_SATURATION: {
+            zone: 'EXCELLENCE',
+            cuts: { excellence: 97, fatigue: 94 },
+            source: 'LEARNED',
+          },
+          BODY_TEMPERATURE: {
+            zone: 'NORMAL',
+            cuts: { p10: 33.1, p25: 33.5, p75: 34.5, p90: 34.9 },
+            source: 'LEARNED',
+          },
+          STEPS: { zone: 'BELOW', cuts: { below: 8000, above: 11000 }, source: 'LEARNED' },
+          DISTANCE: { zone: null, cuts: { below: 5200, above: 7800 }, source: 'LEARNED' },
+          MOVEMENT: { zone: 'ABOVE', cuts: { below: 30, above: 52 }, source: 'LEARNED' },
+        },
+      },
+    }
+    const lineOf = (key: MeasurementKey) => {
+      const view = measurementsViewFrom(calibrated, { now })
+      if (view.kind !== 'entries') throw new Error('esperava medições')
+      const found = view.entries.find((e) => e.key === key)
+      return { zone: found?.zone, limits: found?.limits }
+    }
+
+    it('oxigenação, temperatura e movimento levam zona e faixa', () => {
+      expect(lineOf('oxygen')).toEqual({
+        zone: { label: 'Excelência', status: 'accept' },
+        limits: 'excelência a partir de 97%, fadiga abaixo de 94%',
+      })
+      expect(lineOf('temperature')).toEqual({
+        zone: { label: 'Normal', status: 'info' },
+        limits: 'habitual de 33,5 a 34,5 °C',
+      })
+      expect(lineOf('movement')).toEqual({
+        zone: { label: 'Acima do habitual', status: 'info' },
+        limits: 'habitual: 30 a 52/min',
+      })
+    })
+
+    it('passos e distância só levam a faixa habitual', () => {
+      expect(lineOf('steps')).toEqual({ zone: null, limits: 'habitual: 8 a 11 mil passos' })
+      expect(lineOf('distance')).toEqual({ zone: null, limits: 'habitual: 5,2 a 7,8 km' })
+    })
+
+    it('repouso e máxima não têm faixa', () => {
+      expect(lineOf('resting')).toEqual({ zone: null, limits: null })
+      expect(lineOf('max')).toEqual({ zone: null, limits: null })
+    })
+
+    it('sem calibração, nenhuma medição leva zona nem faixa', () => {
+      const view = measurementsViewFrom(reporting(), { now })
+      if (view.kind !== 'entries') throw new Error('esperava medições')
+      for (const e of view.entries) {
+        expect(e.zone).toBeNull()
+        expect(e.limits).toBeNull()
+      }
+    })
+  })
 })

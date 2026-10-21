@@ -107,11 +107,31 @@ describe('createUrgentAlertsStore', () => {
     expect(t.onFresh.mock.calls[0]![0].map((a: { id: string }) => a.id)).toEqual(['b'])
   })
 
-  it('condição que não é de batimento, ou que se recuperou, não relê', async () => {
+  it('as travas novas também são urgentes: oxigenação, pressão e desgaste extremo releem', async () => {
+    for (const kind of ['OXYGEN_LOW', 'BLOOD_PRESSURE_HIGH', 'WEAR_HIGH'] as const) {
+      const t = setup()
+      t.store.start()
+      await t.answer(0, [])
+      t.condition(condition(kind))
+      await vi.advanceTimersByTimeAsync(URGENT_REFETCH_DEBOUNCE_MS)
+      expect(t.api.alerts).toHaveBeenCalledTimes(2)
+    }
+  })
+
+  it('condição que não é urgente, ou que se recuperou, não relê', async () => {
     const t = setup()
     t.store.start()
     await t.answer(0, [])
-    t.condition(condition('WEAR_HIGH'))
+    for (const kind of [
+      'HEART_RATE_FATIGUE',
+      'OXYGEN_FATIGUE',
+      'WEAR_FATIGUE',
+      'BLOOD_PRESSURE_FATIGUE',
+      'BLOOD_PRESSURE_REVIEW',
+      'DEVICE_BATTERY_LOW',
+    ] as const) {
+      t.condition(condition(kind))
+    }
     t.condition(condition('DEVICE_SIGNAL_LOST'))
     t.condition(condition('HEART_RATE_HIGH', 'RECOVERED'))
     await vi.advanceTimersByTimeAsync(URGENT_REFETCH_DEBOUNCE_MS)

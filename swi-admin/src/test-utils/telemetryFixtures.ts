@@ -87,7 +87,8 @@ export const reporting = (
 
 const KIND_BY_CATEGORY: Record<ConditionCategory, ActiveCondition['kind']> = {
   URGENT: 'HEART_RATE_HIGH',
-  HEALTH: 'WEAR_HIGH',
+  // Desgaste alto virou trava urgente; a Atenção de desgaste é a faixa de fadiga.
+  HEALTH: 'WEAR_FATIGUE',
   DEVICE: 'DEVICE_BATTERY_LOW',
 }
 

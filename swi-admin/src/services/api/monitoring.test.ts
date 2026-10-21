@@ -24,7 +24,7 @@ import {
 } from './monitoring'
 import { adminsApi, employeesApi, type Employee } from './users'
 import { reportsApi } from './reports'
-import { telemetryApi } from './telemetry'
+import { telemetryApi, type ConditionKind } from './telemetry'
 import { countCameras } from './cameras'
 import {
   adminSummary,
@@ -68,22 +68,105 @@ describe('alertDetailFrom', () => {
     expect(d.notes?.[0]).toBe(`Urgente, aberto às ${clock(alertItem('a1').condition.openedAt)}`)
   })
 
-  it('desgaste alto é atenção, não urgência', () => {
+  it('desgaste extremo é a trava: urgência, com o valor e o limite', () => {
     const d = alertDetailFrom(
       alertItem('a2', {
         condition: {
           kind: 'WEAR_HIGH',
-          category: 'HEALTH',
-          observedValue: 82.4,
-          thresholdValue: 80,
+          category: 'URGENT',
+          observedValue: 92.4,
+          thresholdValue: 90,
           openedAt: OLD,
           recoveredAt: null,
         },
       }),
     )
-    expect(d.title).toBe('Desgaste alto')
-    expect(d.description).toBe('Desgaste estimado em 82%, limite de 80%')
-    expect(d.tone).toBe('warning')
+    expect(d.title).toBe('Desgaste extremo')
+    expect(d.description).toBe('Desgaste estimado em 92%, limite de 90%')
+    expect(d.tone).toBe('error')
+  })
+
+  // Calibração individual: faixa de fadiga (Atenção) e as travas novas.
+  const kindDetail = (
+    kind: ConditionKind,
+    category: 'URGENT' | 'HEALTH',
+    observedValue: number | null,
+    thresholdValue: number | null,
+  ) =>
+    alertDetailFrom(
+      alertItem('k', {
+        condition: {
+          kind,
+          category,
+          observedValue,
+          thresholdValue,
+          openedAt: OLD,
+          recoveredAt: null,
+        },
+      }),
+    )
+
+  it.each([
+    [
+      'HEART_RATE_FATIGUE',
+      150.6,
+      146,
+      'Batimento na faixa de fadiga',
+      '151 bpm há 10 min, faixa de fadiga a partir de 146 bpm',
+    ],
+    [
+      'OXYGEN_FATIGUE',
+      93.2,
+      94,
+      'Oxigenação na faixa de fadiga',
+      '93%, faixa de fadiga abaixo de 94%',
+    ],
+    [
+      'WEAR_FATIGUE',
+      84.4,
+      80,
+      'Desgaste na faixa de fadiga',
+      'Desgaste em 84% há 10 min, faixa a partir de 80%',
+    ],
+    [
+      'BLOOD_PRESSURE_FATIGUE',
+      151,
+      146,
+      'Pressão na faixa de fadiga',
+      'Sistólica 151, faixa a partir de 146',
+    ],
+  ] as const)(
+    '%s é atenção, com o valor e a faixa da pessoa',
+    (kind, obs, thr, title, description) => {
+      const d = kindDetail(kind, 'HEALTH', obs, thr)
+      expect(d.title).toBe(title)
+      expect(d.description).toBe(description)
+      expect(d.tone).toBe('warning')
+    },
+  )
+
+  it.each([
+    ['OXYGEN_LOW', 87.6, 90, 'Oxigenação baixa', '88%, abaixo da trava de 90%'],
+    ['BLOOD_PRESSURE_HIGH', 184, 180, 'Pressão em crise', 'Sistólica 184, trava em 180'],
+  ] as const)(
+    '%s é trava: urgência com o valor e a trava',
+    (kind, obs, thr, title, description) => {
+      const d = kindDetail(kind, 'URGENT', obs, thr)
+      expect(d.title).toBe(title)
+      expect(d.description).toBe(description)
+      expect(d.tone).toBe('error')
+    },
+  )
+
+  it.each([
+    ['HEART_RATE_FATIGUE', 'Batimento na faixa de fadiga da pessoa'],
+    ['OXYGEN_FATIGUE', 'Oxigenação na faixa de fadiga da pessoa'],
+    ['WEAR_FATIGUE', 'Desgaste na faixa de fadiga da pessoa'],
+    ['BLOOD_PRESSURE_FATIGUE', 'Pressão na faixa de fadiga da pessoa'],
+    ['OXYGEN_LOW', 'Oxigenação abaixo da trava configurada'],
+    ['BLOOD_PRESSURE_HIGH', 'Pressão acima da trava configurada'],
+  ] as const)('%s sem valor gravado não inventa número', (kind, description) => {
+    expect(kindDetail(kind, 'HEALTH', null, null).description).toBe(description)
   })
 
   it('sem valor gravado a frase não inventa número', () => {

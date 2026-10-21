@@ -51,6 +51,11 @@ const EmployeesList = lazy(() =>
 const EmployeeDetails = lazy(() =>
   import('@/pages/employees/EmployeeDetails').then((m) => ({ default: m.EmployeeDetails })),
 )
+const WorkerCalibrationPage = lazy(() =>
+  import('@/pages/employees/WorkerCalibrationPage').then((m) => ({
+    default: m.WorkerCalibrationPage,
+  })),
+)
 const ChatInbox = lazy(() =>
   import('@/pages/chat/ChatInbox').then((m) => ({ default: m.ChatInbox })),
 )
@@ -191,6 +196,9 @@ export function App() {
                       />
                     </Route>
                     <Route path="/employees/:id" element={<EmployeeDetails />} />
+                    {/* Faixas e travas: fora do AdminOnly porque o supervisor
+                        corrige faixas; as travas só o admin edita, na página. */}
+                    <Route path="/employees/:id/faixas" element={<WorkerCalibrationPage />} />
                     {/* /monitoring/* is a nested layout: MonitoringLayout owns
                     KPIs/title/tabs/search/userlist; child views render the
                     unique row that goes between KPIs and title. */}

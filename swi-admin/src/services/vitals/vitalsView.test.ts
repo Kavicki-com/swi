@@ -1,4 +1,5 @@
 // describe/it/expect vêm dos globals do Vitest; importar de 'vitest' duplica a instância.
+import type { WorkerCalibration, WorkerTelemetry } from '@/services/api/telemetry'
 import { metric, neverReported, noMetric as none, reporting } from '@/test-utils/telemetryFixtures'
 import { vitalsViewFrom } from './vitalsView'
 import { whenLabel } from '@/lib/whenLabel'
@@ -256,6 +257,91 @@ describe('vitalsViewFrom', () => {
         expect(view.sourceBadge).toBeNull()
         expect(view.wearLabel).toBe('Fadiga atual')
         expect(view.effortLabel).toBe('Esforço feito')
+      }
+    })
+  })
+
+  // Calibração individual: enquanto calibra, o selo diz o dia da fase no lugar
+  // da estimativa provisória; a demonstração continua vencendo sozinha.
+  describe('calibração individual', () => {
+    const calibrating = (over: Partial<WorkerCalibration> = {}): WorkerTelemetry => ({
+      ...reporting(),
+      baseline: 'PROVISIONAL',
+      calibration: {
+        version: 'cal-v1',
+        phase: 'CALIBRATING',
+        recalibrating: false,
+        day: 12,
+        metrics: {
+          HEART_RATE: { zone: 'NORMAL', cuts: { excellence: 68, fatigue: 128 }, source: 'LEARNED' },
+          SYSTOLIC: { zone: 'NORMAL', cuts: { excellence: 118, fatigue: 135 }, source: 'LEARNED' },
+          DIASTOLIC: { zone: 'FATIGUE', cuts: { excellence: 76, fatigue: 88 }, source: 'LEARNED' },
+          WEAR: { zone: 'EXCELLENCE', cuts: { excellence: 25, fatigue: 70 }, source: 'LEARNED' },
+          EFFORT: { zone: null, cuts: { excellence: 25, fatigue: 70 }, source: 'OVERRIDE' },
+          ACTIVE_ENERGY: { zone: 'ABOVE', cuts: { below: 350, above: 520 }, source: 'LEARNED' },
+        },
+        ...over,
+      },
+    })
+
+    it('calibrando: o selo diz o dia, no lugar do provisório', () => {
+      expect(vitalsViewFrom(calibrating()).sourceBadge).toBe('Calibrando, dia 12 de 30')
+    })
+
+    it('recalibrando por troca de aparelho', () => {
+      expect(vitalsViewFrom(calibrating({ recalibrating: true, day: 2 })).sourceBadge).toBe(
+        'Recalibrando: novo aparelho, dia 2 de 30',
+      )
+    })
+
+    it('calibrado não leva selo; sem calibração fica o provisório de hoje', () => {
+      expect(vitalsViewFrom(calibrating({ phase: 'CALIBRATED', day: null })).sourceBadge).toBeNull()
+      expect(
+        vitalsViewFrom({ ...reporting(), baseline: 'PROVISIONAL', calibration: null }).sourceBadge,
+      ).toBe('Estimativa provisória')
+    })
+
+    it('demonstração vence sozinha, sem segundo selo', () => {
+      const view = vitalsViewFrom({ ...calibrating(), origin: 'DEMO' })
+      expect(view.sourceBadge).toBe('Dados de demonstração')
+    })
+
+    it('zona e faixa de batimento, pressão, desgaste, esforço e calorias', () => {
+      const { calibration } = vitalsViewFrom(calibrating())
+      expect(calibration.heartRate).toEqual({
+        zone: { label: 'Normal', status: 'info' },
+        limits: 'excelência até 68, fadiga a partir de 128',
+      })
+      expect(calibration.pressure).toEqual({
+        zone: { label: 'Fadiga', status: 'canceled' },
+        limits: 'excelência até 118/76, fadiga a partir de 135/88',
+      })
+      expect(calibration.wear).toEqual({
+        zone: { label: 'Excelência', status: 'accept' },
+        limits: 'excelência até 25%, fadiga a partir de 70%',
+      })
+      expect(calibration.effort).toEqual({
+        zone: null,
+        limits: 'excelência até 25%, fadiga a partir de 70%',
+      })
+      // Total do dia: só a faixa habitual, mesmo que chegue uma zona.
+      expect(calibration.activeEnergy).toEqual({ zone: null, limits: 'habitual: 350 a 520 kcal' })
+    })
+
+    it('sem calibração, sem leitura ou sem relógio: tudo vazio', () => {
+      const empty = { zone: null, limits: null }
+      for (const view of [
+        vitalsViewFrom(reporting()),
+        vitalsViewFrom(null),
+        vitalsViewFrom(calibrating(), { noDevice: true }),
+      ]) {
+        expect(view.calibration).toEqual({
+          heartRate: empty,
+          pressure: empty,
+          wear: empty,
+          effort: empty,
+          activeEnergy: empty,
+        })
       }
     })
   })

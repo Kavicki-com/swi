@@ -5,6 +5,33 @@
 // condições do backend, que esta leitura ainda não traz.
 import type { WorkerTelemetry } from '@/services/api/telemetry'
 import { whenLabel } from '@/lib/whenLabel'
+import {
+  calibrationBadgeOf,
+  calibrationLineOf,
+  EMPTY_LINE,
+  pressureLineOf,
+  type CalibrationLine,
+} from './calibrationView'
+
+/**
+ * Zona e faixa da calibração individual nos cards de vitais, nas roscas de
+ * desgaste e esforço e no gasto calórico (só a faixa: o dia ainda corre).
+ */
+export type VitalsCalibration = {
+  heartRate: CalibrationLine
+  pressure: CalibrationLine
+  wear: CalibrationLine
+  effort: CalibrationLine
+  activeEnergy: CalibrationLine
+}
+
+export const NO_VITALS_CALIBRATION: VitalsCalibration = {
+  heartRate: EMPTY_LINE,
+  pressure: EMPTY_LINE,
+  wear: EMPTY_LINE,
+  effort: EMPTY_LINE,
+  activeEnergy: EMPTY_LINE,
+}
 
 export type WorkerVitalsView = {
   /** Batimento já formatado, ou null sem leitura. */
@@ -24,6 +51,8 @@ export type WorkerVitalsView = {
   wearLabel: string
   /** Rótulo da rosca de esforço: "Esforço feito", ou com o instante medido. */
   effortLabel: string
+  /** Zona de agora e faixa da pessoa, quando a leitura traz calibração. */
+  calibration: VitalsCalibration
 }
 
 export const DEMO_DATA_LABEL = 'Dados de demonstração'
@@ -63,14 +92,17 @@ export const PROVISIONAL_BASELINE_LABEL = 'Estimativa provisória'
 /**
  * Selo da leitura. Demonstração vence: um dado que nem é real não precisa
  * dizer até quando foi medido nem que é estimativa. Depois vem o atraso da
- * pulseira, porque um dado velho apresentado como atual engana mais do que um
- * repouso ainda provisório. O provisório só faz sentido com desgaste na tela.
+ * pulseira, porque um dado velho apresentado como atual engana mais do que
+ * uma faixa ainda em aprendizado. Com calibração, o selo é o da fase ("dia N
+ * de 30", ou nenhum depois de calibrado), que substitui o provisório; sem
+ * calibração ainda, fica o provisório, que só faz sentido com desgaste na tela.
  * `now` é o relógio da tela, para o selo envelhecer junto com a página.
  */
 export function sourceBadgeOf(telemetry: WorkerTelemetry, now: number = Date.now()): string | null {
   if (telemetry.origin === 'DEMO') return DEMO_DATA_LABEL
   const sync = syncBadgeOf(telemetry, now)
   if (sync !== null) return sync
+  if (telemetry.calibration) return calibrationBadgeOf(telemetry.calibration)
   if (telemetry.baseline === 'PROVISIONAL' && telemetry.metrics.wear.value !== null)
     return PROVISIONAL_BASELINE_LABEL
   return null
@@ -104,6 +136,7 @@ const EMPTY: Omit<WorkerVitalsView, 'status'> = {
   sourceBadge: null,
   wearLabel: WEAR_LABEL,
   effortLabel: EFFORT_LABEL,
+  calibration: NO_VITALS_CALIBRATION,
 }
 
 /**
@@ -205,5 +238,19 @@ export function vitalsViewFrom(
     sourceBadge: sourceBadgeOf(telemetry, now),
     wearLabel: measuredLabel('Fadiga', WEAR_LABEL, wear, telemetry, now),
     effortLabel: measuredLabel('Esforço feito', EFFORT_LABEL, effort, telemetry, now),
+    calibration: vitalsCalibrationOf(telemetry),
+  }
+}
+
+/** A demonstração não aprende faixa: chega sem calibração e fica vazia. */
+function vitalsCalibrationOf(telemetry: WorkerTelemetry): VitalsCalibration {
+  const cal = telemetry.calibration
+  if (!cal) return NO_VITALS_CALIBRATION
+  return {
+    heartRate: calibrationLineOf(cal, 'HEART_RATE'),
+    pressure: pressureLineOf(cal),
+    wear: calibrationLineOf(cal, 'WEAR'),
+    effort: calibrationLineOf(cal, 'EFFORT'),
+    activeEnergy: calibrationLineOf(cal, 'ACTIVE_ENERGY', { withZone: false }),
   }
 }

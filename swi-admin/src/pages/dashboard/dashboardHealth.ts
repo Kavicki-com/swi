@@ -8,6 +8,7 @@
 import type {
   AdminTelemetrySummary,
   AdminWorkersTelemetry,
+  ConditionKind,
   WorkerTelemetry,
 } from '@/services/api/telemetry'
 import { healthStatusFrom } from '@/services/vitals/healthStatus'
@@ -54,7 +55,16 @@ const LOW_WEAR = 'Desgaste baixo'
 
 const ratio = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0)
 
-const hasWearAlert = (t: WorkerTelemetry) => t.conditions.some((c) => c.kind === 'WEAR_HIGH')
+// Desgaste extremo (a trava) ou desgaste na faixa de fadiga da pessoa.
+const WEAR_KINDS: ReadonlySet<ConditionKind> = new Set<ConditionKind>(['WEAR_HIGH', 'WEAR_FATIGUE'])
+const hasWearAlert = (t: WorkerTelemetry) => t.conditions.some((c) => WEAR_KINDS.has(c.kind))
+
+// Condições cujo valor observado é batimento, em bpm: as travas e a faixa de fadiga.
+const HEART_RATE_KINDS: ReadonlySet<ConditionKind> = new Set<ConditionKind>([
+  'HEART_RATE_HIGH',
+  'HEART_RATE_LOW',
+  'HEART_RATE_FATIGUE',
+])
 
 export function healthDonuts(
   summary: AdminTelemetrySummary,
@@ -115,10 +125,7 @@ function tierOf(t: WorkerTelemetry): WearTier | null {
 // uma medição real e diz mais que a ausência.
 function bpmOf(t: WorkerTelemetry): number | null {
   if (t.metrics.heartRate.value !== null) return Math.round(t.metrics.heartRate.value)
-  const opened = t.conditions.find(
-    (c) =>
-      (c.kind === 'HEART_RATE_HIGH' || c.kind === 'HEART_RATE_LOW') && c.observedValue !== null,
-  )
+  const opened = t.conditions.find((c) => HEART_RATE_KINDS.has(c.kind) && c.observedValue !== null)
   return opened?.observedValue != null ? Math.round(opened.observedValue) : null
 }
 

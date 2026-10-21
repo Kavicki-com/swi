@@ -1,7 +1,8 @@
 // src/pages/employees/EmployeeDetails.tsx
 // Employee details. Three-column worker layout shared with
 // AdminDetails via `WorkerDetailsLayout`. This page owns employee data
-// fetching and supplies the top-right "Solicitar Pausa" CTA (contained
+// fetching and supplies the top-right actions: "Faixas e travas" (outline,
+// abre /employees/:id/faixas) and the "Solicitar Pausa" CTA (contained
 // button in surface.accent, the employee-specific variant of the slot).
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
@@ -118,14 +119,26 @@ export function EmployeeDetails() {
         />
       }
       topRightAction={
-        <Button
-          label={pausing ? 'Solicitando…' : 'Solicitar Pausa'}
-          variant="contained"
-          backgroundColor={theme.surface.accent}
-          accessibilityLabel="Solicitar pausa para o funcionário"
-          disabled={pausing}
-          onPress={() => requestPause(employee)}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
+          {/* Faixas aprendidas, travas e histórico da calibração individual.
+              Sem calibração (DEMO ou ainda sem dias) não há o que abrir. */}
+          {telemetry?.calibration ? (
+            <Button
+              label="Faixas e travas"
+              variant="outline"
+              accessibilityLabel="Faixas e travas"
+              onPress={() => navigate(`/employees/${employee.id}/faixas`)}
+            />
+          ) : null}
+          <Button
+            label={pausing ? 'Solicitando…' : 'Solicitar Pausa'}
+            variant="contained"
+            backgroundColor={theme.surface.accent}
+            accessibilityLabel="Solicitar pausa para o funcionário"
+            disabled={pausing}
+            onPress={() => requestPause(employee)}
+          />
+        </View>
       }
     />
   )

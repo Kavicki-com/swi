@@ -120,6 +120,44 @@ describe('EmployeeDetails', () => {
     expect(nav.spy).toHaveBeenCalledWith('/maps/general?focus=w1')
   })
 
+  it('Faixas e travas abre a página de calibração do funcionário', async () => {
+    getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
+    currentMock.mockResolvedValue({
+      data: {
+        ...reporting(),
+        calibration: {
+          version: 'cal-v1',
+          phase: 'CALIBRATING',
+          recalibrating: false,
+          day: 12,
+          metrics: {},
+        },
+      },
+      error: null,
+    })
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Faixas e travas' }))
+
+    expect(nav.spy).toHaveBeenCalledWith('/employees/w1/faixas')
+  })
+
+  // O backend manda `calibration` nulo para DEMO e para quem ainda não tem
+  // calibração: não há faixa nem trava da pessoa para abrir.
+  it.each([
+    ['DEMO', { ...reporting({}, 'DEMO'), calibration: null }],
+    ['sem calibração', { ...reporting(), calibration: null }],
+    ['nunca reportou', neverReported()],
+  ])('Faixas e travas some para %s', async (_, data) => {
+    getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
+    currentMock.mockResolvedValue({ data, error: null })
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+
+    await screen.findByRole('button', { name: 'Solicitar pausa para o funcionário' })
+    await waitFor(() => expect(currentMock).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Faixas e travas' })).toBeNull()
+  })
+
   // O "Solicitar Pausa" dispara o POST real, que é a notificação de journey pro
   // worker, com o id da rota.
   it('Solicitar Pausa → notificationsApi.requestPause com o id do funcionário', async () => {
