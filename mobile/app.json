@@ -40,7 +40,16 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_OXYGEN_SATURATION",
+        "android.permission.health.READ_BLOOD_PRESSURE",
+        "android.permission.health.READ_BODY_TEMPERATURE",
+        "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND",
+        "android.permission.health.READ_HEALTH_DATA_HISTORY"
       ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
@@ -81,7 +90,13 @@
           "cameraPermission": "Permite tirar fotos para anexar a tarefas e relatórios e, quando você liga a câmera na tela inicial, transmitir a imagem ao vivo para os administradores da sua empresa.",
           "microphonePermission": "O SWI não usa o microfone. A transmissão ao vivo da câmera é só de imagem."
         }
-      ]
+      ],
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        { "android": { "minSdkVersion": 26 } }
+      ],
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true

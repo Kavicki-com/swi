@@ -37,6 +37,17 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../../../services/vitals/MyTelemetryProvider', () => ({
   useMyTelemetry: () => mockTelemetria,
+  useRefreshMyTelemetry: () => () => undefined,
+}));
+// O envio real puxa a tarefa de segundo plano (módulo nativo). Aqui é o
+// iPhone, sem Health Connect: a faixa de sincronização não entra.
+jest.mock('../../../services/telemetry/TelemetryUploadProvider', () => ({
+  useTelemetryUploadState: () => ({
+    healthConnect: null,
+    paired: false,
+    syncing: false,
+    syncNow: async () => undefined,
+  }),
 }));
 jest.mock('../../../services/profile/ProfileProvider', () => ({
   useProfile: () => ({ profile: { fullName: 'Trabalhador Teste', avatarUrl: '' } }),

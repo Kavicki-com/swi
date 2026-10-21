@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import { AppState } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
 import {
@@ -37,6 +45,15 @@ const IDLE: MyTelemetryState = { telemetry: null, failed: false, loading: true }
 
 const MyTelemetryContext = createContext<MyTelemetryState | null>(null);
 
+// A releitura na hora mora num contexto à parte, e não dentro do estado: o
+// estado é comparado por inteiro em muitos lugares, e a função é a mesma do
+// começo ao fim. Fora do provider ela não faz nada e não lança, ao contrário
+// de `useMyTelemetry`: ler o estado sem provider seria mostrar uma leitura
+// que ninguém pediu, e o erro aponta a montagem errada; pedir uma releitura
+// que não acontece só deixa a tela como estava, e quem chama (a faixa, no fim
+// de uma sincronização que já subiu) não tem o que fazer com um erro.
+const RefreshMyTelemetryContext = createContext<() => void>(() => undefined);
+
 const withoutValue = <T,>(state: MetricState<T>): MetricState<T> => ({
   ...state,
   value: null,
@@ -71,6 +88,11 @@ export function MyTelemetryProvider({ children }: PropsWithChildren) {
   const { user } = useAuth();
   const signedIn = user !== null;
   const [state, setState] = useState<MyTelemetryState>(IDLE);
+  // O pedido do efeito ativo, para a releitura na hora usar o mesmo caminho
+  // (senhas de ordem, prazo da leitura) em vez de um pedido paralelo. Nulo
+  // sem sessão: aí não há o que reler.
+  const loadNow = useRef<(() => void) | null>(null);
+  const refresh = useCallback(() => loadNow.current?.(), []);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -149,9 +171,11 @@ export function MyTelemetryProvider({ children }: PropsWithChildren) {
       }
     });
     if (AppState.currentState !== 'background') start();
+    loadNow.current = load;
 
     return () => {
       cancelled = true;
+      loadNow.current = null;
       stop();
       if (holdTimer !== null) clearTimeout(holdTimer);
       sub.remove();
@@ -159,7 +183,20 @@ export function MyTelemetryProvider({ children }: PropsWithChildren) {
     };
   }, [signedIn]);
 
-  return <MyTelemetryContext.Provider value={state}>{children}</MyTelemetryContext.Provider>;
+  return (
+    <MyTelemetryContext.Provider value={state}>
+      <RefreshMyTelemetryContext.Provider value={refresh}>{children}</RefreshMyTelemetryContext.Provider>
+    </MyTelemetryContext.Provider>
+  );
+}
+
+/**
+ * Relê me/current na hora, sem esperar o intervalo. É o fim do "Sincronizar
+ * agora" da faixa da pulseira: o envio acabou de subir, e o "sincronizado há"
+ * que o backend devolve só muda numa leitura nova. O intervalo segue o dele.
+ */
+export function useRefreshMyTelemetry(): () => void {
+  return useContext(RefreshMyTelemetryContext);
 }
 
 export function useMyTelemetry(): MyTelemetryState {

@@ -2,13 +2,24 @@ import { act, create } from 'react-test-renderer';
 import { createElement, useState, type ReactElement } from 'react';
 import type { SwiWatchControlStatus, WatchControl } from '../../modules/swi-watch-control';
 import { createTelemetryOutbox, type OutboxStorage } from './telemetryOutbox';
-import type { TelemetryUploader, UploadOutcome } from './telemetryUploader';
+import { sharedTelemetryOutbox } from './telemetryRuntime';
 import {
   MAX_DRAIN_ROUNDS,
+  type TelemetryUploader,
+  type UploadOutcome,
+} from './telemetryUploader';
+import {
   useTelemetryUpload,
   type TelemetryUploadDeps,
   type TelemetryUploadState,
 } from './useTelemetryUpload';
+
+// A fila de arquivo é única por runtime (telemetryRuntime.ts). Aqui ela vira
+// um dublê: os testes que não injetam fila dizem qual a fila compartilhada.
+jest.mock('./telemetryRuntime', () => ({ sharedTelemetryOutbox: jest.fn() }));
+const mockSharedOutbox = sharedTelemetryOutbox as jest.MockedFunction<
+  typeof sharedTelemetryOutbox
+>;
 
 // O hook é a fiação: enquanto a tela de monitoramento está montada, cada
 // amostra que entra na fila dispara um envio, e o que ficou de uma execução
@@ -86,13 +97,24 @@ const amostra = (measuredAt: string): SwiWatchControlStatus => ({
 // Macrotarefa: gravador, fila e laço de envio resolvem antes dela.
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+// O estado vai para `states` sem o `drainNow`, para as comparações seguirem
+// exatas; o gatilho de cada render fica em `drains`.
 function probe(control: WatchControl, deps?: TelemetryUploadDeps) {
   const states: TelemetryUploadState[] = [];
+  const drains: (() => Promise<void>)[] = [];
   function Probe() {
-    states.push(useTelemetryUpload(control, deps));
+    const { drainNow, ...state } = useTelemetryUpload(control, deps);
+    states.push(state);
+    drains.push(drainNow);
     return null;
   }
-  return { Probe, states, last: () => states[states.length - 1] };
+  return {
+    Probe,
+    states,
+    drains,
+    last: () => states[states.length - 1],
+    drainNow: () => drains[drains.length - 1]!(),
+  };
 }
 
 async function mount(Probe: () => ReactElement | null) {
@@ -364,3 +386,128 @@ describe('medições do app Saúde', () => {
     warn.mockRestore();
   });
 });
+
+describe('fila compartilhada', () => {
+  // Uma fila nova a cada vez que o efeito liga seria uma segunda fila sobre o
+  // mesmo arquivo, e as duas apagariam eventos uma da outra.
+  it('sem fila injetada, o gravador escreve na fila única do runtime', async () => {
+    const outbox = createTelemetryOutbox(memoryStorage());
+    mockSharedOutbox.mockReturnValue(outbox);
+    const c = fakeControl();
+    const u = fakeUploader();
+    const p = probe(c.control, { uploader: u.uploader });
+
+    montadas.push(await mount(p.Probe));
+    await act(async () => {
+      c.emit(amostra('2026-09-07T12:00:05.000Z'));
+      await flush();
+    });
+
+    expect(mockSharedOutbox).toHaveBeenCalled();
+    expect(await outbox.pending()).toHaveLength(1);
+  });
+});
+
+describe('drainNow', () => {
+  function adiado(mock: jest.Mock<Promise<UploadOutcome>, []>) {
+    let soltar!: (outcome: UploadOutcome) => void;
+    mock.mockImplementationOnce(
+      () =>
+        new Promise<UploadOutcome>((resolve) => {
+          soltar = resolve;
+        }),
+    );
+    return (outcome: UploadOutcome) => soltar(outcome);
+  }
+
+  it('pareado, drena na hora e resolve só quando a drenagem termina', async () => {
+    const s = await setup();
+    montadas.push(await mount(s.Probe));
+    expect(s.uploadPending).toHaveBeenCalledTimes(1);
+    const soltar = adiado(s.uploadPending);
+
+    let terminou = false;
+    let pedido!: Promise<void>;
+    await act(async () => {
+      pedido = s.drainNow().then(() => {
+        terminou = true;
+      });
+      await flush();
+    });
+    expect(s.uploadPending).toHaveBeenCalledTimes(2);
+    expect(terminou).toBe(false);
+
+    await act(async () => {
+      soltar(sent(1, 0));
+      await pedido;
+    });
+    expect(terminou).toBe(true);
+    expect(s.last().lastOutcome).toEqual(sent(1, 0));
+  });
+
+  // O que motivou o pedido (um evento que acabou de entrar) pode ter chegado
+  // depois de a drenagem em curso contar a fila: só a rodada a mais o leva.
+  it('no meio de uma drenagem, espera também a rodada a mais', async () => {
+    const s = await setup();
+    const soltarPrimeira = adiado(s.uploadPending);
+    const soltarRodadaAMais = adiado(s.uploadPending);
+    montadas.push(await mount(s.Probe));
+    expect(s.uploadPending).toHaveBeenCalledTimes(1);
+
+    let terminou = false;
+    let pedido!: Promise<void>;
+    await act(async () => {
+      pedido = s.drainNow().then(() => {
+        terminou = true;
+      });
+      await flush();
+    });
+    expect(terminou).toBe(false);
+
+    // A primeira terminou e a rodada a mais começou: o pedido segue esperando.
+    await act(async () => {
+      soltarPrimeira(sent(1, 0));
+      await flush();
+    });
+    expect(s.uploadPending).toHaveBeenCalledTimes(2);
+    expect(terminou).toBe(false);
+
+    await act(async () => {
+      soltarRodadaAMais(sent(1, 0));
+      await pedido;
+    });
+    expect(terminou).toBe(true);
+  });
+
+  it('sem credencial resolve sem drenar nem enviar', async () => {
+    const s = await setup();
+    s.hasDeviceCredential.mockReturnValue(false);
+    montadas.push(await mount(s.Probe));
+
+    await act(async () => {
+      await s.drainNow();
+    });
+
+    expect(s.uploadPending).not.toHaveBeenCalled();
+  });
+
+  it('é a mesma função em todo render', async () => {
+    const s = await setup();
+    let rerender!: () => void;
+    function Wrapper() {
+      const [, setN] = useState(0);
+      rerender = () => setN((n) => n + 1);
+      return createElement(s.Probe);
+    }
+    montadas.push(await mount(Wrapper));
+    await act(async () => {
+      rerender();
+    });
+    expect(s.drains.length).toBeGreaterThanOrEqual(2);
+    expect(typeof s.drains[0]).toBe('function');
+    expect(new Set(s.drains).size).toBe(1);
+  });
+});
+
+// O controle real do Android (Health Connect) está em
+// useTelemetryUpload.gating.test.ts, com e sem credencial lado a lado.

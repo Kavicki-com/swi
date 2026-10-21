@@ -36,15 +36,24 @@ export interface EnrollmentFailure {
 
 export type EnrollmentResult = { paired: true } | EnrollmentFailure;
 
+/**
+ * Tipo de celular que o aparelho declara ao parear. No backend, o declarado
+ * vale mais que o do convite (exceto em convite de manguito externo); sem
+ * ele, o backend segue o convite ou assume IPHONE.
+ */
+export type PhoneKind = 'IPHONE' | 'ANDROID_PHONE';
+
 export interface EnrollmentDeps {
   control?: WatchControl;
   readToken?: () => Promise<string | null>;
   apiUrl?: () => string;
   /**
-   * Rótulo do aparelho para o painel (o administrador reconhece qual iPhone
+   * Rótulo do aparelho para o painel (o administrador reconhece qual celular
    * revogar). Sem `expo-device` no projeto, o padrão é não informar.
    */
   deviceModel?: () => string | null;
+  /** Padrão IPHONE: o app iOS sempre declara o próprio tipo. */
+  deviceKind?: PhoneKind;
 }
 
 // O backend responde 400 para as quatro recusas e as distingue por `code`,
@@ -131,6 +140,7 @@ export async function completeEnrollment(
     readToken = readSessionToken,
     apiUrl = getApiUrl,
     deviceModel = () => null,
+    deviceKind = 'IPHONE',
   } = deps;
 
   if (!control.supported) return { paired: false, reason: 'unsupported' };
@@ -145,7 +155,7 @@ export async function completeEnrollment(
   if (!token) return { paired: false, reason: 'unauthorized' };
 
   const model = deviceModel();
-  const payload: { code: string; model?: string } = { code };
+  const payload: { code: string; kind: PhoneKind; model?: string } = { code, kind: deviceKind };
   if (model) payload.model = model.slice(0, MODEL_MAX_LENGTH);
 
   const storedBefore = credentialStored(control);

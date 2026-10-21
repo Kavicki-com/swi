@@ -21,6 +21,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
+import { SyncBanner } from '../../components/telemetry/SyncBanner';
 import { useWatchDiagnostics } from '../../services/telemetry/watchDiagnostics';
 import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { useMySeries } from '../../services/vitals/useMySeries';
@@ -389,6 +390,10 @@ export default function MyStats() {
           <Text variant="caption.s" color={theme.content.dark}>
             {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
           </Text>
+          {/* Pulseira pelo Health Connect: de quando são os números acima e,
+              se este celular lê, o "Sincronizar agora". Mesma faixa do
+              dashboard; sem sync não há nada. */}
+          <SyncBanner />
         </View>
 
         <View

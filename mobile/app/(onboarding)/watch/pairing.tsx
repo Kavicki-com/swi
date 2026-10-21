@@ -1,28 +1,36 @@
 import { useState } from 'react';
-import { Image, View } from 'react-native';
+import { Image, Platform, View } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, Text, Title, TopBar, useTheme } from '@kavicki/swi-design-system';
+import { HealthConnectPairingStep } from '../../../components/pairing/HealthConnectPairingStep';
 import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
-import { completeEnrollment } from '../../../services/telemetry/deviceEnrollment';
-import { pairingFailureCopy } from '../../../services/telemetry/telemetryCopy';
+import { androidDeviceControl } from '../../../services/telemetry/android/androidDeviceControl';
+import { completeEnrollment, type PhoneKind } from '../../../services/telemetry/deviceEnrollment';
+import { pairingCopy, pairingFailureCopy } from '../../../services/telemetry/telemetryCopy';
 import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUploadProvider';
 
-// Pareamento do iPhone com o servidor. O administrador gera o código no painel
-// e o dita; aqui o funcionário digita os seis dígitos. Uma tela, dois
+// Pareamento do celular com o servidor. O administrador gera o código no
+// painel e o dita; aqui o funcionário digita os seis dígitos. Uma tela, dois
 // caminhos: a etapa do primeiro uso, que pode ser pulada ("Parear depois" não
 // é negação, o monitoramento local segue), e a entrada por Configurações,
 // Monitoramento, para quem pulou, trocou de aparelho ou foi revogado.
 //
-// A credencial nasce e fica no Swift: esta tela só sabe se pareou.
+// Dois aparelhos, a mesma tela. No iPhone (piloto do Apple Watch) a
+// credencial nasce e fica no Swift. No Android (pulseira pelo Health
+// Connect) ela fica no SecureStore, pelo controle do Android
+// (androidDeviceControl.ts), e depois de parear vem o passo do Health
+// Connect: a permissão de leitura e a primeira sincronização. Nos dois, esta
+// tela só sabe se pareou; no Android, ela ainda avisa o leitor do Health
+// Connect do pareamento novo, antes de o envio reler a credencial.
 
 const CODE_LENGTH = 6;
 const FIM_DO_PRIMEIRO_USO = '/(onboarding)/watch/complete';
 
 export default function WatchPairing() {
-  if (!isFeatureEnabled('appleWatchPilot')) {
+  if (!isFeatureEnabled('appleWatchPilot') && !isFeatureEnabled('healthConnect')) {
     return <ProdOnlyPlaceholder />;
   }
   return <WatchPairingScreen />;
@@ -35,11 +43,17 @@ function WatchPairingScreen() {
   const { origem } = useLocalSearchParams<{ origem?: string }>();
   const deConfiguracoes = origem === 'configuracoes';
   const envio = useTelemetryUploadState();
+  // A plataforma conferida junto do gate, como no provider: é ela que decide
+  // o caminho, e o gate do Health Connect só existe no Android compilado.
+  const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
+  const aparelho: PhoneKind = naPulseira ? 'ANDROID_PHONE' : 'IPHONE';
+  const copy = pairingCopy(aparelho);
 
   const [codigo, setCodigo] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [recusa, setRecusa] = useState<string | null>(null);
-  // O pareamento concluído nesta tela vale antes de o envio reler o chaveiro.
+  // O pareamento concluído nesta tela vale antes de o envio reler a
+  // credencial (o chaveiro no iPhone, o SecureStore no Android).
   const [concluido, setConcluido] = useState(false);
   const pareado = concluido || envio.paired;
 
@@ -51,7 +65,29 @@ function WatchPairingScreen() {
   const parear = async () => {
     setEnviando(true);
     setRecusa(null);
-    const resultado = await completeEnrollment(codigo);
+    // No iPhone, os padrões do serviço (o controle do relógio); no Android, o
+    // controle do SecureStore e o tipo de aparelho que o backend registra.
+    const resultado = naPulseira
+      ? await completeEnrollment(codigo, {
+          control: androidDeviceControl,
+          deviceKind: 'ANDROID_PHONE',
+        })
+      : await completeEnrollment(codigo);
+    if (resultado.paired && naPulseira) {
+      // Cada pareamento cria outro aparelho no servidor, que recusa as
+      // sessões do anterior: o leitor do Health Connect troca o sal antes de
+      // o envio reler a credencial e de a primeira sincronização sair. A
+      // falha só avisa: o pareamento já deu certo e continua valendo.
+      try {
+        await envio.resetHealthConnectForNewPairing();
+      } catch (error) {
+        console.warn(
+          `[WatchPairing] reset do Health Connect no pareamento novo falhou: ${String(
+            (error as { message?: unknown })?.message ?? error,
+          )}`,
+        );
+      }
+    }
     setEnviando(false);
     if (resultado.paired) {
       setConcluido(true);
@@ -59,7 +95,7 @@ function WatchPairingScreen() {
       envio.refreshPairing();
       return;
     }
-    setRecusa(pairingFailureCopy(resultado.reason));
+    setRecusa(pairingFailureCopy(resultado.reason, aparelho));
   };
 
   const seguir = () => {
@@ -91,23 +127,25 @@ function WatchPairingScreen() {
         {deConfiguracoes && <TopBar title="Parear aparelho" onBack={() => router.back()} />}
 
         {pareado ? (
-          <View style={{ gap: theme.gap.s }}>
-            <Title variant="title.s" color={theme.content.dark}>
-              Aparelho pareado
-            </Title>
-            <Text variant="body.m" color={theme.content.dark}>
-              As leituras do seu Apple Watch passam a ser enviadas ao servidor.
-            </Text>
-          </View>
+          <>
+            <View style={{ gap: theme.gap.s }}>
+              <Title variant="title.s" color={theme.content.dark}>
+                {copy.pareadoTitulo}
+              </Title>
+              <Text variant="body.m" color={theme.content.dark}>
+                {copy.pareadoCorpo}
+              </Text>
+            </View>
+            {naPulseira && <HealthConnectPairingStep />}
+          </>
         ) : (
           <>
             <View style={{ gap: theme.gap.s }}>
               <Title variant="title.s" color={theme.content.dark}>
-                Parear este iPhone
+                {copy.titulo}
               </Title>
               <Text variant="body.m" color={theme.content.dark}>
-                Peça ao administrador o código de pareamento de seis dígitos, gerado no painel, e
-                digite abaixo. O código vale por dez minutos.
+                {copy.instrucao}
               </Text>
             </View>
 

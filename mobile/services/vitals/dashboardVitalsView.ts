@@ -46,7 +46,7 @@ const dayMonth = (iso: string) => {
 };
 
 /** A medição é do mesmo dia (no relógio do aparelho) que o instante da leitura. */
-export const isSameDay = (measuredAt: string, observedAt: string) =>
+export const isSameDay = (measuredAt: string, observedAt: string | number) =>
   new Date(measuredAt).toDateString() === new Date(observedAt).toDateString();
 
 /**
@@ -59,6 +59,59 @@ export const whenLabel = (measuredAt: string, observedAt: string) =>
   isSameDay(measuredAt, observedAt)
     ? `às ${clock(measuredAt)}`
     : `em ${dayMonth(measuredAt)} às ${clock(measuredAt)}`;
+
+const MIN_MS = 60 * 1000;
+const HOUR_MS = 60 * MIN_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+// Cortes: menos de 1 min (ou relógio do aparelho atrás do servidor) é "agora
+// há pouco"; até 59 min, minutos inteiros; até 23 h, horas inteiras. De 24 h
+// em diante "há 30 h" obrigaria a fazer conta: vai a data e a hora.
+// Exportada para a última sincronização em Configurações, Monitoramento
+// (lastSyncCopy, telemetryCopy.ts): as duas telas dizem o tempo do mesmo
+// jeito, e os cortes moram só aqui.
+export function syncedAgo(syncedAt: string, observedAt: string | number): string {
+  const elapsed = new Date(observedAt).getTime() - Date.parse(syncedAt);
+  if (elapsed < MIN_MS) return 'agora há pouco';
+  if (elapsed < HOUR_MS) return `há ${Math.floor(elapsed / MIN_MS)} min`;
+  if (elapsed < DAY_MS) return `há ${Math.floor(elapsed / HOUR_MS)} h`;
+  return `em ${dayMonth(syncedAt)} às ${clock(syncedAt)}`;
+}
+
+/**
+ * Faixa da pulseira lida pelo Health Connect: o celular Android só envia o que
+ * a pulseira já sincronizou com ele, e quem olha precisa saber que o dado é de
+ * antes. null sem sincronização (iPhone, cujo relógio envia ao vivo).
+ * `observedAt` é o relógio do aparelho (useNow), para o "há N min" andar com a
+ * tela aberta.
+ */
+export function syncBannerOf(
+  telemetry: WorkerTelemetry | null,
+  observedAt: string | number,
+): string | null {
+  const sync = telemetry?.sync;
+  if (!sync) return null;
+  // "Dados até às 14:10" não cabe na frase: o horário vai sem o "às" do whenLabel.
+  const until = isSameDay(sync.measuredUntil, observedAt)
+    ? clock(sync.measuredUntil)
+    : `${dayMonth(sync.measuredUntil)} às ${clock(sync.measuredUntil)}`;
+  return `Dados até ${until} · sincronizado ${syncedAgo(sync.syncedAt, observedAt)}`;
+}
+
+/**
+ * Sufixo de quando vale uma avaliação da pulseira (" às 14:10"). Com o
+ * Health Connect o esforço e o desgaste saem da fórmula esparsa e valem para o
+ * instante medido, não para agora; no iPhone o valor é de agora e o sufixo é
+ * vazio. Avaliação sem horário próprio vale até onde há dado.
+ */
+export function measuredSuffix(
+  telemetry: Pick<WorkerTelemetry, 'sync' | 'observedAt'>,
+  measuredAt: string | null,
+): string {
+  const { sync } = telemetry;
+  if (!sync) return '';
+  return ` ${whenLabel(measuredAt ?? sync.measuredUntil, telemetry.observedAt)}`;
+}
 
 /**
  * O valor de uma métrica contínua enquanto ele vale como leitura. O backend
@@ -138,9 +191,13 @@ export function dashboardVitalsView(
   // a tela não recalcula frescor com o próprio relógio.
   // Com falha ou ainda carregando, o que chega aqui é só a condição aberta
   // que sobrou da última leitura: a frase fala da leitura que falta.
+  // Com a pulseira (sync presente) nunca vai "agora": o backend dá CURRENT a
+  // uma medição de até 45 s mesmo vinda pelo Health Connect, que só chega em
+  // lote, e o "agora" prometeria um monitoramento contínuo que não existe. A
+  // frase é a da última leitura, com o horário em que foi medida.
   const status = options.failed
     ? UNAVAILABLE_STATUS
-    : heartRate.value !== null && heartRate.quality === 'CURRENT'
+    : heartRate.value !== null && heartRate.quality === 'CURRENT' && !telemetry.sync
       ? 'Monitorando agora'
       : heartRate.value !== null && heartRate.measuredAt
         ? `Última leitura ${whenLabel(heartRate.measuredAt, observedAt)}`
@@ -151,12 +208,14 @@ export function dashboardVitalsView(
   // Com o alerta aberto o limiar já ficou para trás: o tempo até ele seria um
   // zero que não diz isso. Avaliação presente sem estimativa quer dizer que o
   // ritmo recente não leva ao limiar dentro do horizonte da fórmula.
+  // Com a pulseira cada frase diz de quando é a avaliação que a sustenta.
+  const wearAt = measuredSuffix(telemetry, telemetry.metrics.wear.measuredAt);
   const fatigueText = telemetry.conditions.some((c) => c.kind === WEAR_ALERT_KIND)
-    ? FATIGUE_ALERT_REACHED
+    ? `${FATIGUE_ALERT_REACHED}${wearAt}`
     : fatigueEta !== null
-      ? `${FATIGUE_PREFIX} ${formatEta(fatigueEta)}`
+      ? `${FATIGUE_PREFIX} ${formatEta(fatigueEta)}${measuredSuffix(telemetry, telemetry.metrics.fatigueEtaMin.measuredAt)}`
       : wear !== null
-        ? 'Sem previsão de fadiga no ritmo atual'
+        ? `Sem previsão de fadiga no ritmo atual${wearAt}`
         : EMPTY.fatigueText;
 
   return {

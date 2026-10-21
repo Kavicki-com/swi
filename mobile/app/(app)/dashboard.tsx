@@ -22,6 +22,7 @@ import { AlertActiveView } from '../../components/dashboard/AlertActiveView';
 import { BadgedButton } from '../../components/dashboard/BadgedButton';
 import { StatCol } from '../../components/dashboard/StatCol';
 import { StatDivider } from '../../components/dashboard/StatDivider';
+import { SyncBanner } from '../../components/telemetry/SyncBanner';
 import {
   FIRE_ICON_SVG,
   GAUGE_ICON_SVG,
@@ -560,6 +561,10 @@ export default function Dashboard() {
           <Text variant="caption.s" color={theme.content.dark}>
             {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
           </Text>
+          {/* Pulseira pelo Health Connect: de quando são os números acima e,
+              se este celular lê, o "Sincronizar agora". Sem sync não há nada.
+              Mora no bloco medido: a altura dela entra na conta do hero. */}
+          <SyncBanner />
         </View>
 
         {/* 5. Bottom actions row: reports + notif (with badge "4") + chat + help.

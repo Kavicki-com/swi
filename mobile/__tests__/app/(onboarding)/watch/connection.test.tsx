@@ -1,13 +1,16 @@
+import { Platform } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Redirect } from 'expo-router';
 import { Button, SwiThemeProvider } from '@kavicki/swi-design-system';
 import WatchConnection from '../../../../app/(onboarding)/watch/connection';
-import { isFeatureEnabled } from '../../../../lib/featureFlags';
+import { isFeatureEnabled, type FeatureGate } from '../../../../lib/featureFlags';
 import {
   activateMonitoring,
   useWatchDiagnostics,
   type WatchDiagnosticsState,
 } from '../../../../services/telemetry/watchDiagnostics';
+import { useTelemetryUploadState } from '../../../../services/telemetry/TelemetryUploadProvider';
 
 // Primeira tela do primeiro uso: explica o que vai ser lido e oferece as duas
 // acoes do ADR-0003 juntas, autorizar e ativar, num botao so.
@@ -15,6 +18,7 @@ import {
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
+  Redirect: jest.fn(() => null),
   useRouter: () => ({ push: mockPush, replace: mockReplace, back: jest.fn() }),
 }));
 
@@ -27,6 +31,20 @@ jest.mock('../../../../services/telemetry/watchDiagnostics', () => ({
   useWatchDiagnostics: jest.fn(),
   activateMonitoring: jest.fn(),
 }));
+
+jest.mock('../../../../services/telemetry/TelemetryUploadProvider', () => ({
+  useTelemetryUploadState: jest.fn(),
+}));
+
+const mockEnvio = useTelemetryUploadState as jest.Mock;
+const envio = (paired: boolean) => mockEnvio.mockReturnValue({ paired });
+
+const originalOS = Platform.OS;
+const naPlataforma = (os: typeof Platform.OS) =>
+  Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+
+const comGates = (...ligados: FeatureGate[]) =>
+  mockGate.mockImplementation((gate: FeatureGate) => ligados.includes(gate));
 
 const mockGate = isFeatureEnabled as jest.Mock;
 const mockEstado = useWatchDiagnostics as jest.MockedFunction<typeof useWatchDiagnostics>;
@@ -53,6 +71,7 @@ const montadas: ReturnType<typeof create>[] = [];
 
 afterEach(() => {
   while (montadas.length) montadas.pop()!.unmount();
+  naPlataforma(originalOS);
 });
 
 const render = async (estado: WatchDiagnosticsState) => {
@@ -107,7 +126,13 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGate.mockReturnValue(true);
   mockAtivar.mockResolvedValue(true);
+  envio(false);
 });
+
+const redirecionamentos = (tree: ReturnType<typeof create>) =>
+  tree.root
+    .findAllByType(Redirect as React.ComponentType<{ href: string }>)
+    .map((r) => r.props.href);
 
 describe('primeiro uso, tela de conexao', () => {
   it('atras do portao do primeiro uso, como o resto do fluxo', async () => {
@@ -171,5 +196,46 @@ describe('primeiro uso, tela de conexao', () => {
     await tocar(tree, 'Continuar');
     expect(mockAtivar).not.toHaveBeenCalled();
     expect(mockReplace).toHaveBeenCalledWith('/(onboarding)/watch/complete');
+  });
+});
+
+// No Android com o Health Connect o monitoramento vem da pulseira, nao do
+// relogio: o controle do relogio responde "sem suporte" ali, e o primeiro uso
+// dizia que o aparelho nao monitora. A entrada agora leva ao pareamento, que
+// tem o passo do Health Connect e a saida "Parear depois".
+describe('primeiro uso, tela de conexao: Android com o Health Connect', () => {
+  beforeEach(() => {
+    naPlataforma('android');
+    comGates('watchOnboarding', 'healthConnect');
+  });
+
+  it('sem pareamento, vai ao pareamento em vez de dizer que o aparelho nao monitora', async () => {
+    const tree = await render(SEM_SUPORTE);
+    expect(redirecionamentos(tree)).toEqual(['/(onboarding)/watch/pairing']);
+    expect(texto(tree)).not.toContain('não faz o monitoramento');
+    expect(texto(tree)).not.toMatch(/iPhone|Apple Watch/);
+    expect(mockAtivar).not.toHaveBeenCalled();
+  });
+
+  it('ja pareado, vai direto ao fim do primeiro uso', async () => {
+    envio(true);
+    const tree = await render(SEM_SUPORTE);
+    expect(redirecionamentos(tree)).toEqual(['/(onboarding)/watch/complete']);
+  });
+
+  it('sem o gate do Health Connect, o Android segue como antes', async () => {
+    comGates('watchOnboarding');
+    const tree = await render(SEM_SUPORTE);
+    expect(redirecionamentos(tree)).toEqual([]);
+    expect(texto(tree)).toContain('não faz o monitoramento');
+  });
+
+  // O gate so existe no Android compilado, mas e a plataforma que decide: um
+  // iPhone nunca troca o relogio pela pulseira.
+  it('no iOS, mesmo com o gate ligado, a tela do relogio continua', async () => {
+    naPlataforma('ios');
+    const tree = await render(PRONTO);
+    expect(redirecionamentos(tree)).toEqual([]);
+    expect(texto(tree)).toContain('Apple Watch');
   });
 });

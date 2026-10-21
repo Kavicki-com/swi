@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { watchControl, type WatchControl } from '../../modules/swi-watch-control';
 import { createHealthReadingsReader, type HealthReadingsReader } from './healthReadings';
@@ -7,13 +7,12 @@ import {
   createTelemetryInboxDrain,
   type TelemetryInboxDrain,
 } from './telemetryInboxDrain';
-import {
-  createFileOutboxStorage,
-  createTelemetryOutbox,
-  type TelemetryOutbox,
-} from './telemetryOutbox';
+import type { TelemetryOutbox } from './telemetryOutbox';
+import { sharedTelemetryOutbox } from './telemetryRuntime';
 import {
   createTelemetryUploader,
+  MAX_DRAIN_ROUNDS,
+  shouldDrainAgain,
   type TelemetryUploader,
   type UploadOutcome,
 } from './telemetryUploader';
@@ -24,6 +23,18 @@ import {
 // anterior: a fila é arquivo, e sobrevive ao app. Quem o monta é a raiz do
 // app (TelemetryUploadProvider), para o envio não depender de tela aberta.
 //
+// No Android o mesmo laço serve ao Health Connect: o controle do aparelho é o
+// `androidDeviceControl` (sem relógio, então o gravador e o dreno do arquivo
+// durável não trazem nada), e quem põe evento na fila é o leitor injetado no
+// passo do `healthReader`.
+//
+// A fila padrão é a ÚNICA do runtime (telemetryRuntime.ts), e não uma nova a
+// cada vez que o efeito liga, nas duas plataformas. Duas filas sobre o mesmo
+// arquivo apagariam eventos uma da outra, porque cada uma só serializa as
+// próprias operações; no iPhone isso já podia acontecer num religar com uma
+// operação da fila anterior ainda em voo, e no Android a tarefa de segundo
+// plano soma mais um escritor no mesmo runtime.
+//
 // Só faz alguma coisa com módulo nativo E credencial do aparelho. Sem os dois
 // não há como autenticar o envio, e tocar a rede seria um 401 por amostra.
 //
@@ -31,15 +42,9 @@ import {
 // iPhone segue crescendo enquanto o relógio manda remessas. O módulo nativo
 // não expõe limpeza desse arquivo; o teto dele é assunto do lado nativo.
 
-/**
- * Teto de rodadas por drenagem. Cada rodada manda até MAX_BATCH_EVENTS, e um
- * `sent` com `remaining` maior que zero pede outra. O teto faz o laço ser
- * finito por construção mesmo com amostra entrando a cada rodada; o que
- * sobrar sai na próxima amostra ou na próxima montagem. Vinte rodadas são
- * 4.000 eventos, mais de 16 horas de amostras a cada 15 s: só um backlog
- * patológico chega aqui.
- */
-export const MAX_DRAIN_ROUNDS = 20;
+// O teto de rodadas e o critério de parar (MAX_DRAIN_ROUNDS, shouldDrainAgain)
+// moram no uploader, porque a tarefa de segundo plano do Health Connect drena
+// a mesma fila pela mesma regra.
 
 /**
  * De quanto em quanto tempo o arquivo durável é drenado enquanto a tela está
@@ -81,16 +86,22 @@ export interface TelemetryUploadState {
   lastOutcome: UploadOutcome | null;
 }
 
-// Uma confirmação que não citou evento nenhum deixou a fila como estava;
-// repetir seria martelar o backend com o mesmo lote.
-const madeProgress = (outcome: UploadOutcome) =>
-  outcome.outcome === 'sent' && outcome.accepted + outcome.duplicates + outcome.conflicts > 0;
+export interface TelemetryUploadHandle extends TelemetryUploadState {
+  /**
+   * Drena agora, sem esperar o intervalo: dreno do arquivo, leitor, envio. Se
+   * já há uma drenagem em curso, espera ela terminar, inclusive a rodada a
+   * mais que este pedido provoca. Sem efeito (e resolve na hora) quando não
+   * está pareado ou está desligado. Nunca rejeita. A mesma função em todo
+   * render, para poder entrar em dependência de efeito.
+   */
+  drainNow: () => Promise<void>;
+}
 
 export function useTelemetryUpload(
   control: WatchControl = watchControl,
   deps: TelemetryUploadDeps = {},
   options: TelemetryUploadOptions = {},
-): TelemetryUploadState {
+): TelemetryUploadHandle {
   const enabled = options.enabled ?? true;
   const recheckKey = options.recheckKey ?? 0;
   // Lido uma vez ao montar e depois só quando ligar ou a chave mudar, nunca a
@@ -108,6 +119,8 @@ export function useTelemetryUpload(
   // As dependências injetadas valem para a montagem; trocá-las depois não
   // recria a fiação.
   const depsRef = useRef(deps);
+  // A drenagem do efeito ativo; nula enquanto não há envio ligado.
+  const drainRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     const paired =
@@ -116,7 +129,7 @@ export function useTelemetryUpload(
     mounted.current = true;
     setState((prev) => (prev.paired === paired ? prev : { paired, lastOutcome: null }));
     if (!paired) return undefined;
-    const outbox = depsRef.current.outbox ?? createTelemetryOutbox(createFileOutboxStorage());
+    const outbox = depsRef.current.outbox ?? sharedTelemetryOutbox();
     const uploader = depsRef.current.uploader ?? createTelemetryUploader({ outbox, control });
     const inboxDrain =
       depsRef.current.inboxDrain ?? createTelemetryInboxDrain({ control, outbox });
@@ -131,6 +144,9 @@ export function useTelemetryUpload(
     // Amostra que entrou durante uma drenagem: a fila pode ter sido contada
     // antes dela, e uma rodada a mais garante que nada fica para trás.
     let again = false;
+    // A drenagem em curso, do começo ao fim, inclusive a rodada a mais: quem
+    // pede no meio dela (drainNow) espera esta promessa, e não uma resolvida.
+    let current: Promise<void> = Promise.resolve();
 
     const halt = () => {
       halted = true;
@@ -138,12 +154,17 @@ export function useTelemetryUpload(
       stop = null;
     };
 
-    async function drain(): Promise<void> {
-      if (halted) return;
+    function drain(): Promise<void> {
+      if (halted) return Promise.resolve();
       if (draining) {
         again = true;
-        return;
+        return current;
       }
+      current = drainRounds();
+      return current;
+    }
+
+    async function drainRounds(): Promise<void> {
       draining = true;
       try {
         // Antes de enviar, e não depois: o que o Swift gravou com o app em
@@ -162,14 +183,17 @@ export function useTelemetryUpload(
         }
         if (!alive || halted) return;
 
-        // Pressão e temperatura do app Saúde entram na fila aqui, para subir
-        // nesta mesma rodada. O leitor se limita sozinho a uma consulta por
-        // minuto, e uma falha dele não segura o envio, como a do dreno.
+        // O leitor de saúde põe na fila aqui, para o que ele leu subir nesta
+        // mesma rodada. No iPhone é o do app Saúde (pressão e temperatura),
+        // que se limita sozinho a uma consulta por minuto; no Android é o do
+        // Health Connect (tudo o que a pulseira gravou), que se limita a uma
+        // rodada a cada 15 min. Uma falha dele não segura o envio, como a do
+        // dreno.
         try {
           await healthReader.run();
         } catch (error) {
           console.warn(
-            `[useTelemetryUpload] leitura do app Saúde falhou: ${String(
+            `[useTelemetryUpload] leitura de saúde falhou: ${String(
               (error as { message?: unknown })?.message ?? error,
             )}`,
           );
@@ -184,9 +208,7 @@ export function useTelemetryUpload(
             halt();
             return;
           }
-          if (outcome.outcome !== 'sent' || outcome.remaining === 0 || !madeProgress(outcome)) {
-            break;
-          }
+          if (!shouldDrainAgain(outcome)) break;
         }
       } finally {
         draining = false;
@@ -205,6 +227,7 @@ export function useTelemetryUpload(
       },
     });
     stop = recorder.start();
+    drainRef.current = drain;
     void drain();
 
     // O formato novo não anuncia leitura ao JavaScript, então o gatilho é o
@@ -219,11 +242,26 @@ export function useTelemetryUpload(
 
     return () => {
       alive = false;
+      if (drainRef.current === drain) drainRef.current = null;
       clearInterval(ticker);
       subscription.remove();
       halt();
     };
   }, [control, enabled, recheckKey]);
 
-  return state;
+  const drainNow = useCallback(async () => {
+    try {
+      await drainRef.current?.();
+    } catch (error) {
+      // O laço não costuma rejeitar (cada passo trata a própria falha), mas
+      // quem chama é um botão: uma rejeição aqui não pode virar erro na tela.
+      console.warn(
+        `[useTelemetryUpload] drenagem pedida falhou: ${String(
+          (error as { message?: unknown })?.message ?? error,
+        )}`,
+      );
+    }
+  }, []);
+
+  return useMemo(() => ({ ...state, drainNow }), [state, drainNow]);
 }

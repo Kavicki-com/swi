@@ -1,8 +1,10 @@
+import { Platform } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Redirect } from 'expo-router';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import WatchConnectionStart from '../../../../app/(onboarding)/watch/connection-start';
-import { isFeatureEnabled } from '../../../../lib/featureFlags';
+import { isFeatureEnabled, type FeatureGate } from '../../../../lib/featureFlags';
 import {
   useWatchDiagnostics,
   type WatchDiagnosticsState,
@@ -15,7 +17,10 @@ import { useTelemetryUploadState } from '../../../../services/telemetry/Telemetr
 
 const mockReplace = jest.fn();
 const mockRouter = { replace: mockReplace, push: jest.fn(), back: jest.fn() };
-jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
+jest.mock('expo-router', () => ({
+  Redirect: jest.fn(() => null),
+  useRouter: () => mockRouter,
+}));
 
 jest.mock('../../../../lib/featureFlags', () => ({
   ...jest.requireActual('../../../../lib/featureFlags'),
@@ -83,7 +88,19 @@ const PAREAMENTO = '/(onboarding)/watch/pairing';
 
 const mockEnvio = useTelemetryUploadState as jest.MockedFunction<typeof useTelemetryUploadState>;
 const envio = (paired: boolean) =>
-  mockEnvio.mockReturnValue({ paired, lastOutcome: null, refreshPairing: jest.fn() });
+  mockEnvio.mockReturnValue({
+    paired,
+    lastOutcome: null,
+    refreshPairing: jest.fn(),
+    healthConnect: null,
+    syncNow: jest.fn(),
+    syncing: false,
+    requestHealthConnectPermission: jest.fn(),
+    checkHealthConnect: jest.fn(),
+    openHealthConnectSettings: jest.fn(),
+    redetectBand: jest.fn(),
+    resetHealthConnectForNewPairing: jest.fn(),
+  });
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -92,9 +109,22 @@ beforeEach(() => {
   envio(false);
 });
 
+const originalOS = Platform.OS;
+const naPlataforma = (os: typeof Platform.OS) =>
+  Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+
+const comGates = (...ligados: FeatureGate[]) =>
+  mockGate.mockImplementation((gate: FeatureGate) => ligados.includes(gate));
+
+const redirecionamentos = (tree: ReturnType<typeof create>) =>
+  tree.root
+    .findAllByType(Redirect as React.ComponentType<{ href: string }>)
+    .map((r) => r.props.href);
+
 afterEach(() => {
   jest.useRealTimers();
   jest.restoreAllMocks();
+  naPlataforma(originalOS);
 });
 
 describe('primeiro uso, espera do relogio', () => {
@@ -194,5 +224,44 @@ describe('primeiro uso, espera do relogio', () => {
 
     await avancar(60_000);
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+// A entrada (connection) ja desvia o Android com o Health Connect para o
+// pareamento; esta tela faz o mesmo se for alcancada assim mesmo, em vez de
+// esperar o relogio e cair no fim pelo "sem suporte".
+describe('primeiro uso, espera do relogio: Android com o Health Connect', () => {
+  beforeEach(() => {
+    naPlataforma('android');
+    comGates('watchOnboarding', 'healthConnect');
+  });
+
+  it('sem pareamento, vai ao pareamento sem esperar o relogio', async () => {
+    const tree = await render({ support: 'unsupported' });
+    expect(redirecionamentos(tree)).toEqual([PAREAMENTO]);
+    expect(tree.root.findAll((n) => n.props?.testID === 'smartwatch-3d')).toHaveLength(0);
+    await avancar(30_000);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('ja pareado, vai direto ao fim', async () => {
+    envio(true);
+    const tree = await render({ support: 'unsupported' });
+    expect(redirecionamentos(tree)).toEqual([FIM]);
+  });
+
+  it('sem o gate do Health Connect, o Android segue como antes', async () => {
+    comGates('watchOnboarding');
+    const tree = await render({ support: 'unsupported' });
+    expect(redirecionamentos(tree)).toEqual([]);
+    expect(mockReplace).toHaveBeenCalledWith(FIM);
+  });
+
+  it('no iOS, mesmo com o gate ligado, a espera do relogio continua', async () => {
+    naPlataforma('ios');
+    const tree = await render();
+    expect(redirecionamentos(tree)).toEqual([]);
+    await avancar(30_000);
+    expect(mockReplace).toHaveBeenCalledWith(PAREAMENTO);
   });
 });

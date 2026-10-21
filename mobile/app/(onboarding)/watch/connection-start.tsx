@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { Image, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Image, Platform, View } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SmartbandStatus, Title, useTheme } from '@kavicki/swi-design-system';
 import { Smartwatch3D } from '../../../components/Smartwatch3D';
@@ -23,7 +23,18 @@ export default function WatchConnectionStart() {
   if (!isFeatureEnabled('watchOnboarding')) {
     return <ProdOnlyPlaceholder />;
   }
+  // A entrada (connection.tsx) já leva o Android com o Health Connect ao
+  // pareamento. Se esta tela for alcançada assim mesmo, não espera um relógio
+  // que não existe nem cai no fim pelo "sem suporte".
+  if (Platform.OS === 'android' && isFeatureEnabled('healthConnect')) {
+    return <PulseiraRedirect />;
+  }
   return <WatchConnectionStartScreen />;
+}
+
+function PulseiraRedirect() {
+  const { paired } = useTelemetryUploadState();
+  return <Redirect href={paired ? '/(onboarding)/watch/complete' : '/(onboarding)/watch/pairing'} />;
 }
 
 function WatchConnectionStartScreen() {

@@ -4,6 +4,7 @@ import {
   DEMO_DATA_LABEL,
   isSameDay,
   liveValue,
+  measuredSuffix,
   NO_VALUE,
   whenLabel,
 } from './dashboardVitalsView';
@@ -75,7 +76,11 @@ export function statsDonutsView(telemetry: WorkerTelemetry | null): StatsDonutsV
   return {
     effort: {
       value: effort === null ? NO_VALUE : pct(effort),
-      label: 'Esforço feito',
+      // Com a pulseira o esforço vale para o instante medido: o rótulo diz qual.
+      label:
+        effort !== null && reported
+          ? `Esforço feito${measuredSuffix(reported, reported.metrics.effort.measuredAt)}`
+          : 'Esforço feito',
       progress: effort === null ? 0 : clampPct(effort),
     },
     oxygen: {

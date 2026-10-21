@@ -15,6 +15,8 @@ import {
 import type { MySeriesState } from '../../../services/vitals/useMySeries';
 import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
 import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
+import type { WorkerTelemetry } from '../../../services/telemetry/myTelemetry';
+import type { HealthConnectState } from '../../../services/telemetry/healthConnect/healthConnectReader';
 
 // Meus dados (app/(app)/my-stats.tsx). Tela de leitura clínica: o que ela mostra
 // tem que ser o que foi MEDIDO. Os sinais saem de me/current e o gasto calórico
@@ -53,9 +55,26 @@ jest.mock('../../../services/telemetry/watchDiagnostics', () => ({
 }));
 
 let mockTelemetryState: MyTelemetryState = CARREGANDO;
+const mockRefreshTelemetry = jest.fn();
 jest.mock('../../../services/vitals/MyTelemetryProvider', () => ({
   useMyTelemetry: () => mockTelemetryState,
+  useRefreshMyTelemetry: () => mockRefreshTelemetry,
 }));
+
+// O envio da telemetria (o real puxa a tarefa de segundo plano, módulo
+// nativo). O padrão é o iPhone, sem Health Connect; a faixa de sincronização
+// liga onde o teste pede.
+let mockHealthConnect: HealthConnectState | null = null;
+const mockSyncNow = jest.fn<Promise<void>, []>();
+jest.mock('../../../services/telemetry/TelemetryUploadProvider', () => ({
+  useTelemetryUploadState: () => ({
+    healthConnect: mockHealthConnect,
+    paired: true,
+    syncing: mockSyncing,
+    syncNow: mockSyncNow,
+  }),
+}));
+let mockSyncing = false;
 
 const serie = (s: MySeriesState['series']): MySeriesState => ({
   series: s,
@@ -159,6 +178,134 @@ beforeEach(() => {
   mockSeriesState = serie(series('day', [120, 80, 200]));
   mockProfile.profile = null;
   mockListExams.mockResolvedValue([]);
+  mockHealthConnect = null;
+  mockSyncing = false;
+  mockSyncNow.mockReset();
+  mockSyncNow.mockResolvedValue(undefined);
+});
+
+// Pulseira lida pelo Health Connect: dados até 50 min atrás, enviados há 3 min
+// pelo relógio real (a faixa conta com o relógio do aparelho).
+const pulseira = (): { telemetry: WorkerTelemetry; measuredUntil: string } => {
+  const agora = Date.now();
+  const measuredUntil = new Date(agora - 50 * 60_000).toISOString();
+  return {
+    measuredUntil,
+    telemetry: {
+      ...reporting(),
+      sync: { measuredUntil, syncedAt: new Date(agora - 3 * 60_000).toISOString() },
+    },
+  };
+};
+
+const LENDO_HEALTH_CONNECT: HealthConnectState = {
+  availability: 'available',
+  permission: 'granted',
+  bandPackage: 'com.huami.watch.hmwatchmanager',
+  bandLabel: 'Zepp',
+  noBand: false,
+  lastSyncAt: null,
+};
+
+const clockOf = (iso: string) =>
+  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+const renderTela = () => render();
+
+const faixaDe = (tree: ReturnType<typeof create>) =>
+  tree.root.findAll((n) => n.props?.testID === 'sync-banner')[0];
+
+// O nó pressável do Button do DS com o rótulo visível dado.
+const botaoComRotulo = (tree: ReturnType<typeof create>, label: string) =>
+  tree.root.findAll(
+    (n) => n.props?.accessibilityRole === 'button' && n.props?.accessibilityLabel === label,
+  )[0];
+
+describe('Meus dados: faixa de sincronização da pulseira', () => {
+  // A faixa tem o relógio de 5 s (useNow): árvore que fica montada dispara
+  // render depois de o arquivo terminar. Cada caso desmonta as suas.
+  const montadas: ReturnType<typeof create>[] = [];
+  const render = async () => {
+    const tree = await renderTela();
+    montadas.push(tree);
+    return tree;
+  };
+  // Relógio fixo ao meio-dia local: com o relógio real, entre 00:00 e 00:50
+  // os 50 min de atraso caem no dia anterior e a faixa passa a mostrar a data.
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 9, 1, 12, 0, 0));
+  });
+  afterEach(async () => {
+    await act(async () => {
+      montadas.splice(0).forEach((tree) => tree.unmount());
+    });
+    jest.useRealTimers();
+  });
+
+  it('sem sincronização (iPhone) não há faixa', async () => {
+    const tree = await render();
+    expect(faixaDe(tree)).toBeUndefined();
+    expect(textos(tree)).not.toContain('Sincronizar agora');
+  });
+
+  it('com sincronização a faixa diz até quando há dado e quando o celular enviou', async () => {
+    const { telemetry, measuredUntil } = pulseira();
+    mockTelemetryState = lendo(telemetry);
+    const tree = await render();
+
+    expect(faixaDe(tree)).toBeDefined();
+    expect(textos(tree)).toContain(
+      `Dados até ${clockOf(measuredUntil)} · sincronizado há 3 min`,
+    );
+    expect(textos(tree)).not.toContain('Monitorando agora');
+  });
+
+  it('o botão só existe quando este celular lê o Health Connect', async () => {
+    mockTelemetryState = lendo(pulseira().telemetry);
+    const semLeitor = await render();
+    expect(botaoComRotulo(semLeitor, 'Sincronizar agora')).toBeUndefined();
+
+    mockHealthConnect = LENDO_HEALTH_CONNECT;
+    const comLeitor = await render();
+    expect(botaoComRotulo(comLeitor, 'Sincronizar agora')).toBeDefined();
+  });
+
+  it('o toque sincroniza uma vez e relê a leitura no fim', async () => {
+    mockTelemetryState = lendo(pulseira().telemetry);
+    mockHealthConnect = LENDO_HEALTH_CONNECT;
+    let terminar!: () => void;
+    mockSyncNow.mockReturnValue(
+      new Promise<void>((resolve) => {
+        terminar = resolve;
+      }),
+    );
+    const tree = await render();
+
+    await act(async () => {
+      botaoComRotulo(tree, 'Sincronizar agora').props.onPress();
+    });
+    expect(mockSyncNow).toHaveBeenCalledTimes(1);
+    expect(mockRefreshTelemetry).not.toHaveBeenCalled();
+
+    await act(async () => {
+      terminar();
+    });
+    expect(mockRefreshTelemetry).toHaveBeenCalledTimes(1);
+  });
+
+  // O progresso é o `syncing` do contexto do envio (o fluxo inteiro, com o
+  // estado mudando, está em SyncBanner.test.tsx).
+  it('com a sincronização em curso mostra o progresso, desabilitado', async () => {
+    mockTelemetryState = lendo(pulseira().telemetry);
+    mockHealthConnect = LENDO_HEALTH_CONNECT;
+    mockSyncing = true;
+    const tree = await render();
+
+    expect(botaoComRotulo(tree, 'Sincronizar agora')).toBeUndefined();
+    const emCurso = botaoComRotulo(tree, 'Sincronizando…');
+    expect(emCurso.props.accessibilityState).toEqual({ disabled: true });
+  });
 });
 
 describe('Meus dados: leitura ausente', () => {

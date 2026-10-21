@@ -1,6 +1,7 @@
-import type { EnrollmentFailureReason } from './deviceEnrollment';
+import type { EnrollmentFailureReason, PhoneKind } from './deviceEnrollment';
 import type { WatchProtocol } from '../../modules/swi-watch-control';
 import type { TelemetryAvailability } from './telemetryAvailability';
+import { syncedAgo } from '../vitals/dashboardVitalsView';
 
 // Fonte única da copy de estado do monitoramento. As duas superfícies que a
 // mostram, o primeiro uso e Configurações, precisam dizer a mesma coisa: um
@@ -86,12 +87,265 @@ export function watchProtocolCopy(watchProtocol: WatchProtocol | null): string |
   return 'O app do relógio ainda não atualizou. Abra o SWI no Apple Watch.';
 }
 
+export interface PairingCopy {
+  readonly titulo: string;
+  readonly instrucao: string;
+  readonly pareadoTitulo: string;
+  readonly pareadoCorpo: string;
+}
+
+/**
+ * Copy da tela de pareamento por aparelho. O iPhone pareia para o Apple
+ * Watch; o Android pareia para a pulseira que grava no Health Connect. O
+ * código e o jeito de pedir ao administrador são os mesmos nos dois.
+ */
+export function pairingCopy(kind: PhoneKind = 'IPHONE'): PairingCopy {
+  const instrucao =
+    'Peça ao administrador o código de pareamento de seis dígitos, gerado no painel, e digite abaixo. O código vale por dez minutos.';
+  return kind === 'ANDROID_PHONE'
+    ? {
+        titulo: 'Parear este celular',
+        instrucao,
+        pareadoTitulo: 'Aparelho pareado',
+        pareadoCorpo: 'As leituras da sua pulseira passam a ser enviadas ao servidor.',
+      }
+    : {
+        titulo: 'Parear este iPhone',
+        instrucao,
+        pareadoTitulo: 'Aparelho pareado',
+        pareadoCorpo: 'As leituras do seu Apple Watch passam a ser enviadas ao servidor.',
+      };
+}
+
+/**
+ * Passo do Health Connect, no Android, logo depois de parear. Nenhuma frase
+ * trava a pessoa: sem permissão ela segue e permite depois, e o envio do
+ * resto continua.
+ */
+export const HEALTH_CONNECT_PAIRING_COPY = {
+  explicacao:
+    'O SWI lê as medições da sua pulseira pelo Health Connect, o app de saúde do Android. Para isso, ele pede permissão de leitura.',
+  permitir: 'Permitir leitura',
+  // Vale para o pedido negado e para o que não chegou a abrir: nos dois o
+  // conselho é o mesmo, e a frase não acusa a pessoa de ter negado.
+  semPermissao:
+    'O SWI ainda não tem permissão para ler as medições da pulseira. Toque em Tentar de novo ou abra os ajustes do Health Connect e permita a leitura para o SWI. Você também pode continuar e permitir depois.',
+  tentarDeNovo: 'Tentar de novo',
+  abrirAjustes: 'Abrir os ajustes do Health Connect',
+  sincronizando: 'Procurando a pulseira no Health Connect…',
+  nenhumaPulseira: 'Nenhuma pulseira encontrada',
+  // Sem pulseira, cada rodada do leitor relê as 48 h e detecta de novo
+  // (healthConnectReader.ts): não há o que a pessoa refazer aqui.
+  nenhumaPulseiraConselho:
+    'Abra o app da sua pulseira, sincronize e confira nos ajustes dele se ele grava no Health Connect. O SWI procura de novo sozinho.',
+  // A primeira sincronização terminou sem pulseira e sem "nenhuma pulseira":
+  // a rodada falhou em silêncio ou caiu numa em voo. Não se afirma nada sobre
+  // a pulseira; a próxima rodada do envio tenta de novo.
+  semResultado:
+    'A leitura do Health Connect ainda não trouxe resultado. O SWI tenta de novo sozinho.',
+} as const;
+
+/**
+ * Botão da faixa de sincronização, no Dashboard e em Minhas estatísticas. O
+ * texto da faixa ("Dados até ... · sincronizado ...") sai de `syncBannerOf`
+ * (dashboardVitalsView.ts), junto das outras frases sobre a leitura; aqui
+ * fica só a ação, que existe quando este celular lê o Health Connect.
+ */
+export const SYNC_BANNER_COPY = {
+  sincronizar: 'Sincronizar agora',
+  // No lugar do rótulo enquanto a leitura, o envio e a releitura correm: o
+  // botão desabilitado com o rótulo de sempre pareceria travado.
+  sincronizando: 'Sincronizando…',
+} as const;
+
+/** Health Connect ausente ou desatualizado: o caminho é a Play Store. */
+export function healthConnectInstallCopy(
+  availability: 'unavailable' | 'update_required',
+): { readonly corpo: string; readonly botao: string } {
+  return availability === 'update_required'
+    ? {
+        corpo:
+          'O Health Connect deste celular precisa de atualização. Atualize pela Play Store e volte para o SWI.',
+        botao: 'Atualizar o Health Connect',
+      }
+    : {
+        corpo:
+          'O Health Connect não está instalado neste celular. Instale pela Play Store e volte para o SWI.',
+        botao: 'Instalar o Health Connect',
+      };
+}
+
+/** O nome vem de `bandLabel` do leitor: o do app da pulseira, ou o pacote. */
+export function bandDetectedCopy(bandLabel: string): string {
+  return `Pulseira detectada: ${bandLabel}`;
+}
+
+/**
+ * Em que pé está o Health Connect na tela de Monitoramento, no Android.
+ * `unknown` é antes de a primeira conferência voltar (disponibilidade nula no
+ * estado). `not_granted_after_request` é o pedido feito NESTA tela que não
+ * concedeu: só ele leva ao caminho dos ajustes, como no pareamento, porque a
+ * permissão do estado também vem negada de quem nunca foi perguntado.
+ */
+export type HealthConnectMonitoringStatus =
+  | 'unknown'
+  | 'unavailable'
+  | 'update_required'
+  | 'not_granted'
+  | 'not_granted_after_request'
+  | 'granted';
+
+// Repetida nos estados de permissão: é a explicação do que o SWI faz com o
+// Health Connect, e quem chega por Configurações pode não lembrar do
+// pareamento.
+const LE_PELO_HEALTH_CONNECT =
+  'O SWI lê as medições da sua pulseira pelo Health Connect, o app de saúde do Android';
+
+/**
+ * Título e corpo de estado do Monitoramento no Android, no lugar da copy do
+ * Apple Watch (`telemetryCopy`). Ausente e desatualizado reusam o corpo do
+ * pareamento, porque o caminho é a mesma Play Store. Nenhuma frase acusa a
+ * pessoa de ter negado: o mesmo estado vale para o pedido que nem abriu.
+ */
+export function healthConnectMonitoringCopy(status: HealthConnectMonitoringStatus): TelemetryCopy {
+  switch (status) {
+    case 'unavailable':
+      return {
+        titulo: 'Health Connect não instalado',
+        corpo: healthConnectInstallCopy('unavailable').corpo,
+      };
+    case 'update_required':
+      return {
+        titulo: 'Health Connect desatualizado',
+        corpo: healthConnectInstallCopy('update_required').corpo,
+      };
+    case 'not_granted':
+      return {
+        titulo: 'Leitura não permitida',
+        corpo: `${LE_PELO_HEALTH_CONNECT}, e precisa de permissão para isso. Toque em Permitir leitura.`,
+      };
+    case 'not_granted_after_request':
+      // Sem o "continuar e permitir depois" do pareamento: aqui não há
+      // Continuar, a pessoa só sai pela TopBar.
+      return {
+        titulo: 'Leitura não permitida',
+        corpo:
+          'O SWI ainda não tem permissão para ler as medições da pulseira. Toque em Tentar de novo ou abra os ajustes do Health Connect e permita a leitura para o SWI.',
+      };
+    case 'granted':
+      return { titulo: 'Leitura permitida', corpo: `${LE_PELO_HEALTH_CONNECT}.` };
+    default:
+      return {
+        titulo: 'Conferindo o Health Connect',
+        corpo:
+          'O SWI está conferindo o acesso às medições da sua pulseira no Health Connect, o app de saúde do Android.',
+      };
+  }
+}
+
+// Fecho das frases do fim do primeiro uso que não pedem conserto agora.
+const ACOMPANHA = 'Você acompanha em Configurações, Monitoramento.';
+
+/**
+ * Título e corpo do fim do primeiro uso no Android, no lugar da copy do Apple
+ * Watch (`telemetryCopy`): ali o controle do relógio responde "sem suporte", e
+ * dizer que o aparelho não monitora seria falso com a pulseira pelo Health
+ * Connect. Sem pareamento nada sai do aparelho, qualquer que seja a
+ * permissão. Antes da primeira conferência não se afirma nada, e nenhuma
+ * frase acusa a pessoa de ter negado. A pulseira vem do estado do leitor,
+ * como no passo do pareamento: só a detectada (`bandLabel`) sustenta que o
+ * SWI lê as medições; "nenhuma pulseira" (`noBand`) e nenhum resultado ainda
+ * repetem a frase que o passo acabou de mostrar.
+ */
+export function healthConnectOnboardingCopy(
+  paired: boolean,
+  status: HealthConnectMonitoringStatus,
+  pulseira: { readonly noBand: boolean; readonly bandLabel: string | null } | null,
+): TelemetryCopy {
+  if (!paired) {
+    return {
+      titulo: 'Celular ainda não pareado',
+      corpo:
+        'Sem o pareamento, as medições da sua pulseira não chegam ao servidor. Peça o código ao administrador e pareie em Configurações, Monitoramento.',
+    };
+  }
+  if (status === 'unknown') return healthConnectMonitoringCopy('unknown');
+  // O conserto é a Play Store, não a permissão. O título é o do
+  // Monitoramento: o mesmo estado com o mesmo nome nas duas telas.
+  if (status === 'unavailable' || status === 'update_required') {
+    return {
+      titulo: healthConnectMonitoringCopy(status).titulo,
+      corpo: `${
+        status === 'unavailable' ? 'Instale' : 'Atualize'
+      } o Health Connect pela Play Store. Você pode resolver depois em Configurações, Monitoramento.`,
+    };
+  }
+  if (status === 'granted') {
+    if (pulseira?.bandLabel) {
+      return {
+        titulo: 'Tudo pronto',
+        corpo:
+          'O SWI lê as medições da sua pulseira pelo Health Connect e as envia ao servidor. Você acompanha em Configurações, Monitoramento.',
+      };
+    }
+    if (pulseira?.noBand) {
+      return {
+        titulo: HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseira,
+        corpo: `${HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseiraConselho} ${ACOMPANHA}`,
+      };
+    }
+    // O título do mesmo momento no relógio (conectado, sem leitura ainda):
+    // não afirma leitura nem falta de pulseira.
+    return {
+      titulo: 'Quase lá',
+      corpo: `${HEALTH_CONNECT_PAIRING_COPY.semResultado} ${ACOMPANHA}`,
+    };
+  }
+  return {
+    titulo: 'Falta liberar a leitura',
+    corpo:
+      'O SWI ainda não consegue ler as medições da sua pulseira pelo Health Connect. Você pode resolver depois em Configurações, Monitoramento.',
+  };
+}
+
+/**
+ * Ações do Monitoramento no Android que o pareamento não tem. Permitir, tentar
+ * de novo, abrir os ajustes e o resultado da detecção vêm de
+ * `HEALTH_CONNECT_PAIRING_COPY`, e Sincronizar agora de `SYNC_BANNER_COPY`:
+ * o mesmo botão tem o mesmo nome em toda tela.
+ */
+export const HEALTH_CONNECT_MONITORING_COPY = {
+  // Esquece a pulseira detectada e procura de novo: é o caminho de quem
+  // trocou de pulseira, porque a conhecida fica até a pessoa pedir.
+  redetectar: 'Redetectar pulseira',
+  // O estado não pôde ser gravado: a pulseira antiga continua, e a pessoa
+  // precisa saber que o pedido não valeu.
+  falhaRedetectar: 'Não foi possível redetectar a pulseira. Tente de novo.',
+} as const;
+
+/**
+ * Linha da última sincronização com o Health Connect, a partir do
+ * `lastSyncAt` do leitor (o INÍCIO da última rodada completa). O "há N min"
+ * sai de `syncedAgo`, o mesmo da faixa de sincronização: as duas telas nunca
+ * dizem o tempo de jeitos diferentes. `observedAt` é o relógio do aparelho
+ * (useNow), para a frase andar com a tela aberta.
+ */
+export function lastSyncCopy(lastSyncAt: string | null, observedAt: number): string {
+  if (lastSyncAt === null) return 'Ainda não houve sincronização com o Health Connect.';
+  return `Última sincronização ${syncedAgo(lastSyncAt, observedAt)}`;
+}
+
 /**
  * Frase de cada desfecho do pareamento. As quatro recusas do backend têm
  * conselho próprio; o resto diz o que o funcionário pode fazer, sem culpar o
- * código quando o problema é outro.
+ * código quando o problema é outro. Só a falha de guardar a credencial muda
+ * com o aparelho: no Android ela mora no SecureStore, não no chaveiro do
+ * iPhone.
  */
-export function pairingFailureCopy(reason: EnrollmentFailureReason): string {
+export function pairingFailureCopy(
+  reason: EnrollmentFailureReason,
+  kind: PhoneKind = 'IPHONE',
+): string {
   switch (reason) {
     case 'expired':
       return 'Este código expirou. Peça um novo ao administrador.';
@@ -109,7 +363,9 @@ export function pairingFailureCopy(reason: EnrollmentFailureReason): string {
     case 'unauthorized':
       return 'Sua sessão expirou. Entre de novo no app para parear.';
     case 'keychain':
-      return 'Não foi possível guardar o pareamento neste iPhone. Tente de novo.';
+      return `Não foi possível guardar o pareamento neste ${
+        kind === 'ANDROID_PHONE' ? 'celular' : 'iPhone'
+      }. Tente de novo.`;
     default:
       return 'Não foi possível parear agora. Tente de novo em instantes.';
   }

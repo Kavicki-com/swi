@@ -5,6 +5,10 @@ import {
   type NativeHttpResponse,
   type WatchControl,
 } from '../../modules/swi-watch-control';
+import {
+  createAndroidDeviceControl,
+  type CredentialStore,
+} from './android/androidDeviceControl';
 import { completeEnrollment, type EnrollmentFailure } from './deviceEnrollment';
 
 jest.mock('expo-secure-store', () => {
@@ -87,17 +91,27 @@ beforeEach(async () => {
 });
 
 describe('completeEnrollment, caminho feliz', () => {
-  it('envia só o code no corpo, bearer com o token lido e storeCredential ligado', async () => {
+  it('envia o code e o tipo IPHONE no corpo, bearer com o token lido e storeCredential ligado', async () => {
     const { control, request } = fakeControl();
     await completeEnrollment(CODE, deps(control));
     expect(request).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledWith(
       `${API}/telemetry/v1/devices/enrollments/complete`,
       'POST',
-      JSON.stringify({ code: CODE }),
+      JSON.stringify({ code: CODE, kind: 'IPHONE' }),
       { kind: 'bearer', token: TOKEN },
       true,
     );
+  });
+
+  // O tipo declarado pelo aparelho vale mais que o do convite no backend.
+  it('declara ANDROID_PHONE quando o aparelho é Android', async () => {
+    const { control, request } = fakeControl();
+    await completeEnrollment(CODE, deps(control, { deviceKind: 'ANDROID_PHONE' }));
+    expect(JSON.parse(request.mock.calls[0][2] as string)).toEqual({
+      code: CODE,
+      kind: 'ANDROID_PHONE',
+    });
   });
 
   it('inclui o modelo quando o aparelho o informa', async () => {
@@ -108,6 +122,7 @@ describe('completeEnrollment, caminho feliz', () => {
     );
     expect(JSON.parse(request.mock.calls[0][2] as string)).toEqual({
       code: CODE,
+      kind: 'IPHONE',
       model: 'iPhone 15',
     });
   });
@@ -295,6 +310,47 @@ describe('completeEnrollment, rejeição do nativo', () => {
     await expect(completeEnrollment(CODE, deps(control))).resolves.toEqual({
       paired: false,
       reason: 'unexpected',
+    });
+  });
+});
+
+// O controle do Android rejeita com os mesmos códigos do Swift, então os
+// motivos da tela valem sem mudança.
+describe('completeEnrollment, rejeição do controle do Android', () => {
+  const store = (setItemAsync: CredentialStore['setItemAsync']): CredentialStore => ({
+    getItem: () => null,
+    setItemAsync,
+    deleteItemAsync: async () => undefined,
+  });
+  const pareado = async () => ({
+    status: 201,
+    text: async () => JSON.stringify({ deviceId: 'dev-1', credential: SEGREDO }),
+  });
+  const android = { deviceKind: 'ANDROID_PHONE' } as const;
+
+  it('SecureStore que recusa a gravação vira keychain', async () => {
+    const control = createAndroidDeviceControl({
+      fetch: pareado,
+      store: store(async () => {
+        throw new Error('Keystore indisponível');
+      }),
+    });
+    await expect(completeEnrollment(CODE, deps(control, android))).resolves.toEqual({
+      paired: false,
+      reason: 'keychain',
+    });
+  });
+
+  it('fetch que rejeita vira network', async () => {
+    const control = createAndroidDeviceControl({
+      fetch: async () => {
+        throw new TypeError('Network request failed');
+      },
+      store: store(async () => undefined),
+    });
+    await expect(completeEnrollment(CODE, deps(control, android))).resolves.toEqual({
+      paired: false,
+      reason: 'network',
     });
   });
 });

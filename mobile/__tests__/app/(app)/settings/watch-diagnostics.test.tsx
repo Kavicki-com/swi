@@ -1,7 +1,10 @@
+import { Platform } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Button, SwiThemeProvider, TopBar } from '@kavicki/swi-design-system';
 import WatchDiagnostics from '../../../../app/(app)/settings/watch-diagnostics';
+import { HealthConnectMonitoring } from '../../../../components/telemetry/HealthConnectMonitoring';
+import { isFeatureEnabled } from '../../../../lib/featureFlags';
 import {
   activateMonitoring,
   useWatchDiagnostics,
@@ -28,6 +31,18 @@ jest.mock('../../../../services/telemetry/watchDiagnostics', () => ({
 jest.mock('../../../../services/telemetry/TelemetryUploadProvider', () => ({
   useTelemetryUploadState: jest.fn(),
 }));
+
+// O caminho do Health Connect depende do gate e da plataforma, como no
+// pareamento. Desligado por padrão: os casos do iPhone não dependem dele.
+jest.mock('../../../../lib/featureFlags', () => ({
+  ...jest.requireActual('../../../../lib/featureFlags'),
+  isFeatureEnabled: jest.fn(),
+}));
+const mockGate = isFeatureEnabled as jest.MockedFunction<typeof isFeatureEnabled>;
+
+const originalOS = Platform.OS;
+const naPlataforma = (os: typeof Platform.OS) =>
+  Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
 
 const mockEstado = useWatchDiagnostics as jest.MockedFunction<typeof useWatchDiagnostics>;
 const mockAtivar = activateMonitoring as jest.MockedFunction<typeof activateMonitoring>;
@@ -114,7 +129,24 @@ const ENCERRADO_COM_LEITURA = (): WatchDiagnosticsState => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockAtivar.mockResolvedValue(true);
-  mockEnvio.mockReturnValue({ paired: false, lastOutcome: null, refreshPairing: jest.fn() });
+  mockEnvio.mockReturnValue({
+    paired: false,
+    lastOutcome: null,
+    refreshPairing: jest.fn(),
+    healthConnect: null,
+    syncNow: jest.fn(),
+    syncing: false,
+    requestHealthConnectPermission: jest.fn(),
+    checkHealthConnect: jest.fn(),
+    openHealthConnectSettings: jest.fn(),
+    redetectBand: jest.fn(),
+    resetHealthConnectForNewPairing: jest.fn(),
+  });
+  mockGate.mockReturnValue(false);
+});
+
+afterEach(() => {
+  naPlataforma(originalOS);
 });
 
 describe('Configurações, Monitoramento', () => {
@@ -193,7 +225,19 @@ describe('Configurações, Monitoramento', () => {
   // A linha de envio ao backend. A tela de produto é outra; aqui só a prova
   // de que o caminho existe.
   it('pareado diz que está enviando ao servidor', async () => {
-    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null, refreshPairing: jest.fn() });
+    mockEnvio.mockReturnValue({
+      paired: true,
+      lastOutcome: null,
+      refreshPairing: jest.fn(),
+      healthConnect: null,
+      syncNow: jest.fn(),
+      syncing: false,
+      requestHealthConnectPermission: jest.fn(),
+      checkHealthConnect: jest.fn(),
+      openHealthConnectSettings: jest.fn(),
+      redetectBand: jest.fn(),
+      resetHealthConnectForNewPairing: jest.fn(),
+    });
     expect(textoDe(await render(ATIVO()))).toContain('Enviando ao servidor');
   });
 
@@ -223,11 +267,112 @@ describe('Configurações, Monitoramento', () => {
   });
 
   it('pareado não oferece parear de novo', async () => {
-    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null, refreshPairing: jest.fn() });
+    mockEnvio.mockReturnValue({
+      paired: true,
+      lastOutcome: null,
+      refreshPairing: jest.fn(),
+      healthConnect: null,
+      syncNow: jest.fn(),
+      syncing: false,
+      requestHealthConnectPermission: jest.fn(),
+      checkHealthConnect: jest.fn(),
+      openHealthConnectSettings: jest.fn(),
+      redetectBand: jest.fn(),
+      resetHealthConnectForNewPairing: jest.fn(),
+    });
     expect(botaoParear(await render(ATIVO()))).toBeUndefined();
   });
 
   it('sem suporte não oferece parear', async () => {
     expect(botaoParear(await render(SEM_SUPORTE))).toBeUndefined();
+  });
+});
+
+// No Android com o gate do Health Connect a pulseira grava no Health Connect,
+// e o caminho é outro: nada do Apple Watch (o controle dele diz "sem
+// suporte" no Android, o que seria falso para quem usa pulseira). O bloco
+// tem teste próprio (HealthConnectMonitoring.test.tsx); aqui, a escolha.
+describe('Configurações, Monitoramento: Android', () => {
+  const ESTADO_HC = {
+    availability: 'available' as const,
+    permission: 'granted' as const,
+    bandPackage: 'com.huami.watch.hmwatchmanager',
+    bandLabel: 'Zepp',
+    noBand: false,
+    lastSyncAt: agoraMenos(180),
+  };
+
+  const comEnvioAndroid = (paired: boolean) =>
+    mockEnvio.mockReturnValue({
+      paired,
+      lastOutcome: null,
+      refreshPairing: jest.fn(),
+      healthConnect: ESTADO_HC,
+      syncNow: jest.fn(async () => undefined),
+      syncing: false,
+      requestHealthConnectPermission: jest.fn(async () => 'granted' as const),
+      checkHealthConnect: jest.fn(async () => 'available' as const),
+      openHealthConnectSettings: jest.fn(),
+      redetectBand: jest.fn(async () => true),
+      resetHealthConnectForNewPairing: jest.fn(),
+    });
+
+  beforeEach(() => {
+    naPlataforma('android');
+    mockGate.mockImplementation((gate) => gate === 'healthConnect');
+  });
+
+  it('com o gate, mostra o Health Connect no lugar do Apple Watch', async () => {
+    comEnvioAndroid(true);
+    const tree = await render(SEM_SUPORTE);
+    const t = textoDe(tree);
+    expect(tree.root.findAllByType(HealthConnectMonitoring)).toHaveLength(1);
+    expect(t).toContain('Leitura permitida');
+    expect(t).toContain('Pulseira detectada: Zepp');
+    expect(t).not.toMatch(/iPhone|Apple Watch|bpm|não faz o monitoramento/i);
+    expect(botaoAtivar(tree)).toBeUndefined();
+    // O controle do relógio nem é consultado: o caminho dele não roda.
+    expect(mockEstado).not.toHaveBeenCalled();
+  });
+
+  it('mantém a TopBar e o nome da tela', async () => {
+    comEnvioAndroid(true);
+    const tree = await render(SEM_SUPORTE);
+    const topBar = tree.root.findAllByType(TopBar as React.ComponentType<{ title: string }>)[0];
+    expect(topBar.props.title).toBe('Monitoramento');
+  });
+
+  it('sem pareamento, Parear aparelho leva à tela do código, vinda de Configurações', async () => {
+    comEnvioAndroid(false);
+    const tree = await render(SEM_SUPORTE);
+    const botao = tree.root
+      .findAllByType(Button as React.ComponentType<{ label: string; onPress: () => void }>)
+      .find((b) => b.props.label === 'Parear aparelho');
+    expect(botao).toBeDefined();
+    await act(async () => {
+      botao!.props.onPress();
+    });
+    expect(mockPush).toHaveBeenCalledWith('/(onboarding)/watch/pairing?origem=configuracoes');
+  });
+
+  // Sem o gate (Expo Go, build sem o módulo) não há Health Connect a ler:
+  // fica o caminho de sempre, que diz que o aparelho não faz o monitoramento.
+  it('sem o gate, segue o caminho de sempre', async () => {
+    mockGate.mockReturnValue(false);
+    const tree = await render(SEM_SUPORTE);
+    expect(tree.root.findAllByType(HealthConnectMonitoring)).toHaveLength(0);
+    expect(textoDe(tree)).toContain('iPhone e Apple Watch');
+  });
+});
+
+// No iPhone o gate do Health Connect nunca liga (só Android compilado), mas
+// a plataforma é conferida junto, como no provider e no pareamento.
+describe('Configurações, Monitoramento: iPhone com o gate ligado', () => {
+  it('segue no Apple Watch', async () => {
+    naPlataforma('ios');
+    mockGate.mockReturnValue(true);
+    const tree = await render(SEM_NADA);
+    expect(tree.root.findAllByType(HealthConnectMonitoring)).toHaveLength(0);
+    expect(botaoAtivar(tree)).toBeDefined();
   });
 });

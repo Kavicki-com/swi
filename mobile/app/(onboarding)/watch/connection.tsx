@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Image, ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Image, Platform, ScrollView, View } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system';
 import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
@@ -8,17 +8,33 @@ import { isFeatureEnabled } from '../../../lib/featureFlags';
 import { activateMonitoring, useWatchDiagnostics } from '../../../services/telemetry/watchDiagnostics';
 import { deriveTelemetryAvailability } from '../../../services/telemetry/telemetryAvailability';
 import { telemetryCopy } from '../../../services/telemetry/telemetryCopy';
+import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUploadProvider';
 import { useNow } from '../../../services/telemetry/useNow';
 
 // Primeira tela do primeiro uso (ADR-0003): autorizar e ativar aparecem juntas,
 // mas como ações distintas, e nada acontece antes do funcionário ler o que vai
 // ser lido. Nenhuma folha do sistema abre sozinha.
+//
+// No Android com o Health Connect não há relógio a ativar: o controle dele
+// responde "sem suporte" ali, e esta tela diria que o aparelho não monitora.
+// O monitoramento vem da pulseira, e o caminho dela é o pareamento, que tem o
+// passo do Health Connect e a saída "Parear depois".
 
 export default function WatchConnection() {
   if (!isFeatureEnabled('watchOnboarding')) {
     return <ProdOnlyPlaceholder />;
   }
+  // A plataforma conferida junto do gate, como no pareamento.
+  if (Platform.OS === 'android' && isFeatureEnabled('healthConnect')) {
+    return <PulseiraRedirect />;
+  }
   return <WatchConnectionScreen />;
+}
+
+/** Quem já está pareado não repete a etapa, como no iPhone. */
+function PulseiraRedirect() {
+  const { paired } = useTelemetryUploadState();
+  return <Redirect href={paired ? '/(onboarding)/watch/complete' : '/(onboarding)/watch/pairing'} />;
 }
 
 function WatchConnectionScreen() {

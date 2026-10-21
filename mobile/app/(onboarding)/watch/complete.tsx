@@ -1,4 +1,4 @@
-import { Image, View } from 'react-native';
+import { Image, Platform, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, SmartbandStatus, Text, Title, useTheme } from '@kavicki/swi-design-system';
@@ -7,11 +7,17 @@ import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
 import { useWatchDiagnostics } from '../../../services/telemetry/watchDiagnostics';
 import { deriveTelemetryAvailability } from '../../../services/telemetry/telemetryAvailability';
+import { healthConnectStatusOf } from '../../../services/telemetry/healthConnect/useHealthConnectPermissionRequest';
 import { markWatchOnboardingComplete } from '../../../services/telemetry/watchOnboarding';
-import { telemetryCopy } from '../../../services/telemetry/telemetryCopy';
+import {
+  healthConnectOnboardingCopy,
+  telemetryCopy,
+} from '../../../services/telemetry/telemetryCopy';
+import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUploadProvider';
 import { useNow } from '../../../services/telemetry/useNow';
 
-// Última tela do primeiro uso. Diz o que de fato chegou do relógio, e deixa
+// Última tela do primeiro uso. Diz o que de fato chegou do relógio (no
+// Android, o estado do pareamento e da leitura da pulseira), e deixa
 // entrar no app em qualquer caso: telemetria ausente não barra o funcionário
 // (ADR-0004). Nenhum texto aqui afirma que a permissão foi negada, porque o
 // iOS não conta isso.
@@ -37,7 +43,18 @@ function WatchCompleteScreen() {
   const insets = useSafeAreaInsets();
   const estado = useWatchDiagnostics();
   const disponibilidade = deriveTelemetryAvailability(estado, useNow());
-  const copy = telemetryCopy(disponibilidade, 'primeiro-uso');
+  const { paired, healthConnect } = useTelemetryUploadState();
+  // No Android com o Health Connect o relógio responde "sem suporte", e a
+  // copy dele diria que o aparelho não monitora. Ali quem fala é o pareamento
+  // e a leitura da pulseira; sem leitura do relógio, só o corpo aparece.
+  const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
+  const copy = naPulseira
+    ? healthConnectOnboardingCopy(
+        paired,
+        healthConnectStatusOf(healthConnect, null),
+        healthConnect,
+      )
+    : telemetryCopy(disponibilidade, 'primeiro-uso');
 
   const finalizar = async () => {
     // Gravar é conveniência; falhar só repete uma tela. Entrar no app não pode
