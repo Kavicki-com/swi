@@ -1,6 +1,6 @@
-// Núcleo PURO do simulador dev de posições (sem Date/random — determinístico,
-// testável). Cada worker anda num loop fechado dentro da área do site (mesma
-// vizinhança da SITE_ROUTE de evacuation.types.ts).
+// Núcleo PURO do simulador dev de posições (sem Date/random, determinístico e
+// testável). Cada worker anda num loop fechado dentro da área do site do
+// piloto de São Paulo.
 
 export type LngLat = [number, number]
 
@@ -13,9 +13,9 @@ export interface SimState {
 const M_PER_DEG_LAT = 111_320
 const mPerDegLng = (lat: number): number => M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180)
 
-// Loop base: polígono dentro do site do piloto (entre a origem e o destino
-// da SITE_ROUTE). Cada worker ganha o loop deslocado por um offset derivado
-// do índice — determinístico, espalha os pinos sem random.
+// Loop base: polígono dentro do site do piloto de São Paulo. Cada worker ganha
+// o loop deslocado por um offset derivado do índice, determinístico, que
+// espalha os pinos sem random.
 const BASE_LOOP: LngLat[] = [
   [-46.631, -23.551],
   [-46.6265, -23.5515],
@@ -39,8 +39,9 @@ const segmentMeters = (a: LngLat, b: LngLat): number => {
 
 export const distanceMeters = segmentMeters
 
-// Ponto de encontro da evacuação simulada — centro da área dos loops. Em
-// produção o muster real vem do site (SITE_ROUTE.destination no mobile).
+// Ponto de encontro de RESERVA do simulador, centro da área dos loops. Só vale
+// para evacuações antigas, sem ponto marcado: desde 2026-10 o destino é o
+// `musterPoint` que o gestor marca ao iniciar.
 export const MUSTER_POINT: LngLat = [-46.6275, -23.549]
 
 // Passo em linha reta na direção do alvo, clampando SEM overshoot: chegou,

@@ -14,6 +14,12 @@ import {
 const TICK_MS = 3_000
 const WALK_SPEED_MPS = 1.4
 
+// Evacuação ativa de uma org, com o destino já resolvido pro tick.
+interface ActiveEvacuation {
+  id: string
+  target: LngLat
+}
+
 interface SimWorker {
   id: string
   companyId: string | null
@@ -27,8 +33,9 @@ interface SimWorker {
 // dentro do site e alimenta o MESMO caminho de escrita do heartbeat real:
 // upsert + push WS. Nada na cadeia é fake, só a origem do sinal.
 // Com evacuação ATIVA na org do worker, ele abandona o loop e CONVERGE em linha
-// reta pro muster point. Na chegada confirma presença pelo MESMO service que o
-// app mobile usa, e o admin vê o X/N subir ao vivo.
+// reta pro ponto de encontro que o gestor marcou (MUSTER_POINT só em evacuação
+// antiga, sem ponto). Na chegada confirma presença pelo MESMO service que o app
+// mobile usa, e o admin vê o X/N subir ao vivo.
 @Injectable()
 export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PositionSimulatorService.name)
@@ -78,9 +85,9 @@ export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
     const liveReal = await this.recentRealWorkers()
     for (const w of this.workers) {
       if (liveReal.has(w.id)) continue
-      const evacId = evacByOrg.get(w.companyId)
-      if (evacId) {
-        w.pos = stepToward(w.pos, MUSTER_POINT, TICK_MS / 1000, WALK_SPEED_MPS)
+      const evac = evacByOrg.get(w.companyId)
+      if (evac) {
+        w.pos = stepToward(w.pos, evac.target, TICK_MS / 1000, WALK_SPEED_MPS)
       } else {
         const { state, pos } = advance(w.route, w.state, TICK_MS / 1000, WALK_SPEED_MPS)
         w.state = state
@@ -91,7 +98,7 @@ export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
       } catch {
         // Worker removido/desativado no meio da simulação — não derruba os demais.
       }
-      if (evacId) await this.maybeAck(w, evacId)
+      if (evac) await this.maybeAck(w, evac)
     }
   }
 
@@ -109,29 +116,37 @@ export class PositionSimulatorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // Map org→evacuação ativa. Falha de leitura degrada pra "sem evacuação"
-  // neste tick — o simulador nunca pode morrer por uma query.
-  private async activeEvacuations(): Promise<Map<string | null, string>> {
+  // Map org→evacuação ativa, com o ponto de encontro de destino. Falha de
+  // leitura degrada pra "sem evacuação" neste tick — o simulador nunca pode
+  // morrer por uma query.
+  private async activeEvacuations(): Promise<Map<string | null, ActiveEvacuation>> {
     try {
       const evacs = await this.prisma.evacuation.findMany({
         where: { status: 'ACTIVE' },
-        select: { id: true, companyId: true },
+        select: { id: true, companyId: true, musterPoint: true },
       })
-      return new Map(evacs.map((e: { id: string; companyId: string | null }) => [e.companyId, e.id]))
+      return new Map(
+        evacs.map((e: { id: string; companyId: string | null; musterPoint: unknown }) => [
+          e.companyId,
+          // Sem ponto marcado (evacuação anterior a 2026-10), o simulador cai
+          // no ponto de reserva pra não ficar sem destino.
+          { id: e.id, target: (e.musterPoint as LngLat | null) ?? MUSTER_POINT },
+        ]),
+      )
     } catch {
       return new Map()
     }
   }
 
-  private async maybeAck(w: SimWorker, evacId: string): Promise<void> {
-    const arrived = w.pos[0] === MUSTER_POINT[0] && w.pos[1] === MUSTER_POINT[1]
-    const key = `${evacId}:${w.id}`
+  private async maybeAck(w: SimWorker, evac: ActiveEvacuation): Promise<void> {
+    const arrived = w.pos[0] === evac.target[0] && w.pos[1] === evac.target[1]
+    const key = `${evac.id}:${w.id}`
     if (!arrived || this.acked.has(key)) return
     // Marca ANTES do await: mesmo se o ack falhar (evacuação encerrada no
     // meio), não fica re-tentando/spammando a cada tick.
     this.acked.add(key)
     try {
-      await this.evacuations.ack(w.id, evacId)
+      await this.evacuations.ack(w.id, evac.id)
     } catch {
       // Encerrou/removida no meio — o pino já está no muster, segue o jogo.
     }
