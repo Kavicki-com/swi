@@ -26,6 +26,7 @@ const prismaDouble = () =>
     telemetrySession: { findUnique: jest.fn() },
     telemetryDailySummary: { findMany: jest.fn() },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
+    profile: { findUnique: jest.fn() },
     workerCalibration: { findUnique: jest.fn() },
     workerCalibrationBand: { findMany: jest.fn() },
   }) as any
@@ -75,6 +76,7 @@ const emptyReads = (prisma: any) => {
   prisma.telemetrySnapshot.findMany.mockResolvedValue([])
   prisma.workerCalibration.findUnique.mockResolvedValue(null)
   prisma.workerCalibrationBand.findMany.mockResolvedValue([])
+  prisma.profile.findUnique.mockResolvedValue(null)
 }
 
 describe('TelemetryQueryService.currentForWorker', () => {
@@ -511,6 +513,21 @@ describe('TelemetryQueryService.currentForWorker', () => {
     expect(result.calibration).toMatchObject({ day: 1, metrics: { HEART_RATE: { source: 'START' } } })
     expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
     expect(prisma.workerCalibrationBand.findMany).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['com leitura', () => snapshotRow()],
+    ['sem leitura', () => null],
+  ])('a partida do batimento segue a máxima por idade (%s)', async (_, snapshot) => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshot())
+    // 30 anos em setembro de 2026: máxima 208 - 0,7 x 30 = 187.
+    prisma.profile.findUnique.mockResolvedValue({ birthDate: new Date('1996-01-01T00:00:00.000Z') })
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(prisma.profile.findUnique.mock.calls[0][0].where).toEqual({ userId: 'worker-1' })
+    expect(result.calibration!.metrics.HEART_RATE!.cuts.excellence).toBeCloseTo(112.2)
+    expect(result.calibration!.metrics.HEART_RATE!.cuts.fatigue).toBeCloseTo(168.3)
   })
 
   it('quem nunca reportou responde a partida com zona nula, sem consultar as faixas', async () => {

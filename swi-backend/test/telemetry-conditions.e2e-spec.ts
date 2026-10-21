@@ -258,8 +258,7 @@ describe('Telemetry conditions e2e', () => {
     })
 
     // H também está no 10º dia, com a faixa de fadiga de oxigenação aprendida
-    // em 94%. A oxigenação não tem partida na v1.0: sem esta faixa (como I),
-    // só a trava decide.
+    // em 94%. Sem esta faixa (como I), vale a partida mínima: fadiga abaixo de 92%.
     await prisma.workerCalibration.create({
       data: {
         workerId: workerOxigenio,
@@ -636,7 +635,7 @@ describe('Telemetry conditions e2e', () => {
 
     await post(headersB, { events: [event({ measurements: pressao(150, 95) })] }).expect(200)
 
-    // Sem faixa aprendida, a faixa de fadiga é a partida v1.0: 140 por 90.
+    // Sem faixa aprendida, a faixa de fadiga é a da partida mínima: 140 por 90.
     const aberta = await prisma.telemetryCondition.findFirstOrThrow({
       where: { workerId: workerB, kind: 'BLOOD_PRESSURE_FATIGUE', status: 'ACTIVE' },
     })
@@ -1121,7 +1120,7 @@ describe('Telemetry conditions e2e', () => {
     expect((await ativasDe(workerOxigenio)).map((c) => c.kind)).toEqual(['OXYGEN_FATIGUE'])
   }, 30_000)
 
-  it('21. sem faixa de oxigenação aprendida só a trava decide; a demonstração não decide oxigenação', async () => {
+  it('21. sem faixa de oxigenação gravada a Atenção usa a partida de 92%; a demonstração não decide oxigenação', async () => {
     // Medida há 30 min e lida só agora: a porta avulsa abre a trava na chegada,
     // sem esperar o relógio falar. A leitura nova acima de 92% a fecha.
     await post(headersOxigenioSemFaixa, { events: [oxigenacao(88, 30)] }).expect(200)
@@ -1132,18 +1131,23 @@ describe('Telemetry conditions e2e', () => {
     await post(headersOxigenioSemFaixa, { events: [oxigenacao(95, 20)] }).expect(200)
     expect((await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: trava.id } })).status).toBe('RECOVERED')
 
-    // 91% duas vezes com 12 min entre elas: acima da trava, e sem corte de fadiga não há Atenção.
+    // 91% duas vezes com 12 min entre elas: acima da trava, mas abaixo do
+    // corte de fadiga da partida, no 1º dia da calibração.
     await post(headersOxigenioSemFaixa, { events: [oxigenacao(91, 12)] }).expect(200)
     await post(headersOxigenioSemFaixa, { events: [oxigenacao(91)] }).expect(200)
-    expect(await ativasDe(workerOxigenioSemFaixa)).toEqual([])
+    expect(
+      await prisma.telemetryCondition.findFirstOrThrow({
+        where: { workerId: workerOxigenioSemFaixa, kind: 'OXYGEN_FATIGUE', status: 'ACTIVE' },
+      }),
+    ).toMatchObject({ thresholdRule: 'BAND', thresholdValue: 92, observedValue: 91, calibrationDay: 1 })
 
     // Um backlog mais velho abaixo da trava não abre: a última leitura continua
     // sendo a de 91% de agora, e é ela que a trava olha.
     await post(headersOxigenioSemFaixa, { events: [oxigenacao(88, 25)] }).expect(200)
-    expect(await ativasDe(workerOxigenioSemFaixa)).toEqual([])
+    expect((await ativasDe(workerOxigenioSemFaixa)).map((c) => c.kind)).toEqual(['OXYGEN_FATIGUE'])
 
     await post(headersOxigenioSemFaixa, { events: [oxigenacao(88)] }).expect(200)
-    expect((await ativasDe(workerOxigenioSemFaixa)).map((c) => c.kind)).toEqual(['OXYGEN_LOW'])
+    expect((await ativasDe(workerOxigenioSemFaixa)).map((c) => c.kind).sort()).toEqual(['OXYGEN_FATIGUE', 'OXYGEN_LOW'])
 
     await post(headersDemo, { events: [oxigenacao(85, 0, 'DEMO')] }).expect(200)
     expect(await prisma.telemetryCondition.count({ where: { workerId: workerDemo, kind: { in: [...OXIGENACAO] } } })).toBe(0)

@@ -118,9 +118,9 @@ describe('Telemetry calibration e2e', () => {
 
     const heartRate = await bandOf(realId, 'HEART_RATE')
     expect(heartRate.validDays).toBe(10)
-    expect(heartRate.startCuts).toEqual({ excellence: null, fatigue: 0.9 * 183.5 })
+    expect(heartRate.startCuts).toEqual({ excellence: 0.6 * 183.5, fatigue: 0.9 * 183.5 })
     const learned = heartRate.learnedCuts as { excellence: number; fatigue: number }
-    expect(learned.excellence).toBe(75)
+    expect(learned.excellence).toBeCloseTo((10 / 30) * 75 + (20 / 30) * 0.6 * 183.5)
     expect(learned.fatigue).toBeCloseTo((10 / 30) * 128 + (20 / 30) * 0.9 * 183.5)
     expect(heartRate.overrideCuts).toBeNull()
   })
@@ -216,30 +216,39 @@ describe('Telemetry calibration e2e', () => {
       expect(metrics.STEPS).toMatchObject({ zone: null, source: 'LEARNED' })
     })
 
-    it('na demonstração a calibração é nula, mesmo com dias de demonstração resumidos', async () => {
+    it('na demonstração mostra a partida, mesmo com dias de demonstração resumidos', async () => {
       const now = new Date()
       await snapshotOf(demoId, 'DEMO', now)
 
       const current = await query.currentForWorker(demoId, now)
 
       expect(current.origin).toBe('DEMO')
-      expect(current.calibration).toBeNull()
+      expect(current.calibration).toMatchObject({ version: CALIBRATION_VERSION, phase: 'CALIBRATING', day: 1 })
+      expect(current.calibration!.metrics.OXYGEN_SATURATION).toMatchObject({ source: 'START' })
     })
 
-    it('na origem real sem linha de calibração a calibração é nula', async () => {
+    it('na origem real sem linha de calibração traz a partida no dia 1, pela idade', async () => {
       const now = new Date()
       await snapshotOf(noneId, 'REAL', now)
 
       const current = await query.currentForWorker(noneId, now)
 
       expect(current.origin).toBe('REAL')
-      expect(current.calibration).toBeNull()
+      expect(current.calibration).toMatchObject({ phase: 'CALIBRATING', recalibrating: false, day: 1 })
+      const metrics = current.calibration!.metrics
+      expect(metrics.OXYGEN_SATURATION).toEqual({ zone: null, cuts: { excellence: 95, fatigue: 92 }, source: 'START' })
+      // 150 bpm entre 60% e 90% da máxima por idade (183,5).
+      expect(metrics.HEART_RATE).toMatchObject({ zone: 'NORMAL', source: 'START' })
+      expect(metrics.HEART_RATE!.cuts.fatigue).toBeCloseTo(0.9 * 183.5)
+      // Atividade não tem partida.
+      expect(metrics.STEPS).toBeUndefined()
     })
 
-    it('quem nunca reportou responde calibração nula', async () => {
+    it('quem nunca reportou responde a partida com zona nula', async () => {
       const current = await query.currentForWorker(randomUUID())
       expect(current.origin).toBeNull()
-      expect(current.calibration).toBeNull()
+      expect(current.calibration).toMatchObject({ day: 1 })
+      expect(Object.values(current.calibration!.metrics).every((m) => m.source === 'START' && m.zone === null)).toBe(true)
     })
   })
 })
