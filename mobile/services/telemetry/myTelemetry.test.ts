@@ -1,6 +1,6 @@
 import { apiRequest } from '../api/http';
 import { fetchMyTelemetry, MY_TELEMETRY_PATH } from './myTelemetry';
-import { neverReported, reporting } from './myTelemetryFixtures';
+import { metric, neverReported, reporting } from './myTelemetryFixtures';
 
 jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 
@@ -38,6 +38,45 @@ describe('fetchMyTelemetry', () => {
   ])('resposta fora do contrato (%s) é falha, não leitura', async (_caso, corpo) => {
     requestMock.mockResolvedValue(corpo);
     await expect(fetchMyTelemetry()).rejects.toThrow('fora do contrato');
+  });
+
+  describe('sincronização do Health Connect', () => {
+    const SYNC = {
+      measuredUntil: '2026-10-01T14:10:00.000Z',
+      syncedAt: '2026-10-01T14:56:30.000Z',
+    };
+
+    it('aparelho Android manda até quando há dado e quando sincronizou', async () => {
+      requestMock.mockResolvedValue({ ...reporting(), sync: SYNC });
+      await expect(fetchMyTelemetry()).resolves.toMatchObject({ sync: SYNC });
+    });
+
+    // iPhone não manda o campo, e backend antigo também não: os dois são
+    // leitura sem atraso de sincronização, não falha.
+    it('sem o campo, sync vem null', async () => {
+      const { sync: _ausente, ...semSync } = reporting();
+      requestMock.mockResolvedValue(semSync);
+      await expect(fetchMyTelemetry()).resolves.toMatchObject({ sync: null });
+    });
+
+    it.each([
+      ['texto', 'ontem'],
+      ['sem syncedAt', { measuredUntil: SYNC.measuredUntil }],
+      ['campo numérico', { ...SYNC, measuredUntil: 1700000000000 }],
+      ['data ilegível', { ...SYNC, syncedAt: 'não é data' }],
+    ])('sync fora da forma (%s) vira null sem derrubar a leitura', async (_caso, sync) => {
+      requestMock.mockResolvedValue({ ...reporting(), sync });
+      const telemetry = await fetchMyTelemetry();
+      expect(telemetry.sync).toBeNull();
+      expect(telemetry.metrics.heartRate.value).toBe(112);
+    });
+
+    it('medição vinda da pulseira chega com a origem HEALTH_CONNECT', async () => {
+      const heartRate = metric(84, { source: 'HEALTH_CONNECT' });
+      requestMock.mockResolvedValue({ ...reporting({ heartRate }), sync: SYNC });
+      const telemetry = await fetchMyTelemetry();
+      expect(telemetry.metrics.heartRate.source).toBe('HEALTH_CONNECT');
+    });
   });
 
   it('falha de rede chega a quem chama, nunca vira leitura vazia', async () => {

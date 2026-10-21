@@ -14,6 +14,7 @@ export type MeasurementSource =
   | 'EXTERNAL_CUFF'
   | 'MANUAL_HEALTHKIT'
   | 'MANUAL_SWI'
+  | 'HEALTH_CONNECT'
   | 'DERIVED';
 
 export interface MetricState<T> {
@@ -72,6 +73,18 @@ export interface ActiveCondition {
   thresholdValue: number | null;
 }
 
+/**
+ * Atraso da pulseira lida pelo Health Connect: o celular Android só envia o
+ * que a pulseira já sincronizou com ele, então a leitura vale para um instante
+ * passado. Ambos ISO-8601.
+ */
+export interface TelemetrySync {
+  /** Até quando há medição no servidor. */
+  measuredUntil: string;
+  /** Quando o celular enviou pela última vez. */
+  syncedAt: string;
+}
+
 export interface WorkerTelemetry {
   workerId: string;
   /** Condições abertas da mesma origem da leitura, mais antiga primeiro. */
@@ -82,6 +95,12 @@ export interface WorkerTelemetry {
   metrics: WorkerMetrics;
   bloodPressureRecency: 'CURRENT' | 'HISTORICAL' | 'NONE';
   formulaVersion: string | null;
+  /**
+   * Presente quando a leitura vem de celular Android (pulseira via Health
+   * Connect); null no iPhone, cujo relógio envia ao vivo. Depois do parse é
+   * sempre null ou válido; opcional só para quem monta leitura à mão.
+   */
+  sync?: TelemetrySync | null;
   /** ISO-8601 do instante contra o qual a qualidade foi decidida. */
   observedAt: string;
 }
@@ -112,6 +131,16 @@ function isWorkerTelemetry(data: unknown): data is WorkerTelemetry {
   return isObject(metrics) && READ_METRICS.every((key) => isObject(metrics[key]));
 }
 
+const isIsoDate = (v: unknown): v is string =>
+  typeof v === 'string' && Number.isFinite(Date.parse(v));
+
+// O atraso de sincronização é complemento, não leitura: fora da forma ele vira
+// null e a leitura segue valendo, em vez de derrubar a tela por um rótulo.
+function parseSync(v: unknown): TelemetrySync | null {
+  if (!isObject(v) || !isIsoDate(v.measuredUntil) || !isIsoDate(v.syncedAt)) return null;
+  return { measuredUntil: v.measuredUntil, syncedAt: v.syncedAt };
+}
+
 /**
  * Lança em falha de rede ou de sessão, e também quando a resposta não é uma
  * leitura: o cliente HTTP devolve {} para corpo que não é JSON, e um backend
@@ -121,5 +150,5 @@ function isWorkerTelemetry(data: unknown): data is WorkerTelemetry {
 export async function fetchMyTelemetry(): Promise<WorkerTelemetry> {
   const data: unknown = await apiRequest(MY_TELEMETRY_PATH, { auth: true });
   if (!isWorkerTelemetry(data)) throw new Error('Leitura de telemetria fora do contrato');
-  return data;
+  return { ...data, sync: parseSync(data.sync) };
 }

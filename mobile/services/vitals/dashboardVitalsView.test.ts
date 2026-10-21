@@ -7,7 +7,8 @@ import {
   noMetric,
   reporting,
 } from '../telemetry/myTelemetryFixtures';
-import { dashboardVitalsView, workerStatusOf } from './dashboardVitalsView';
+import type { WorkerTelemetry } from '../telemetry/myTelemetry';
+import { dashboardVitalsView, syncBannerOf, workerStatusOf } from './dashboardVitalsView';
 
 const OLD = '2026-10-01T14:20:00.000Z';
 const clock = (iso: string) =>
@@ -255,5 +256,127 @@ describe('aparelho sem o módulo do relógio', () => {
 
   it('com suporte, nada muda', () => {
     expect(dashboardVitalsView(null, { unsupported: false }).status).toBe('Sem leitura do aparelho');
+  });
+});
+
+// Pulseira lida pelo Health Connect: o celular Android envia atrasado, e a
+// leitura vale para o instante medido, não para agora.
+const NOW = '2026-10-01T15:00:00.000Z';
+const MEASURED_UNTIL = '2026-10-01T14:10:00.000Z';
+const MIN = 60 * 1000;
+const before = (ms: number) => new Date(Date.parse(NOW) - ms).toISOString();
+const synced = (
+  over: Partial<WorkerTelemetry['metrics']> = {},
+  sync: Partial<NonNullable<WorkerTelemetry['sync']>> = {},
+): WorkerTelemetry => ({
+  ...reporting(over),
+  sync: { measuredUntil: MEASURED_UNTIL, syncedAt: before(3 * MIN), ...sync },
+});
+
+describe('syncBannerOf', () => {
+  it('sem sincronização (iPhone, leitura nula ou backend antigo) não há faixa', () => {
+    expect(syncBannerOf(null, NOW)).toBeNull();
+    expect(syncBannerOf(reporting(), NOW)).toBeNull();
+    const { sync: _ausente, ...semCampo } = reporting();
+    expect(syncBannerOf(semCampo, NOW)).toBeNull();
+  });
+
+  it('diz até quando há dado e há quanto tempo o celular sincronizou', () => {
+    expect(syncBannerOf(synced(), NOW)).toBe(
+      `Dados até ${clock(MEASURED_UNTIL)} · sincronizado há 3 min`,
+    );
+  });
+
+  it('dado de outro dia leva a data, como as outras medições da tela', () => {
+    expect(syncBannerOf(synced({}, { measuredUntil: FIXTURE_OTHER_DAY }), NOW)).toBe(
+      `Dados até ${dayMonth(FIXTURE_OTHER_DAY)} às ${clock(FIXTURE_OTHER_DAY)} · sincronizado há 3 min`,
+    );
+  });
+
+  // Menos de 1 min: "agora há pouco" (inclui relógio do aparelho atrás do
+  // servidor). De 1 a 59 min: minutos inteiros. De 1 h a 23 h: horas
+  // inteiras. A partir de 24 h, "há N h" esconderia o dia: vai data e hora.
+  it.each([
+    [0, 'agora há pouco'],
+    [59 * 1000, 'agora há pouco'],
+    [-30 * 1000, 'agora há pouco'],
+    [MIN, 'há 1 min'],
+    [59 * MIN + 59 * 1000, 'há 59 min'],
+    [60 * MIN, 'há 1 h'],
+    [2 * 60 * MIN + 59 * MIN, 'há 2 h'],
+    [24 * 60 * MIN - 1, 'há 23 h'],
+  ])('sincronizado %d ms antes: "sincronizado %s"', (ms, texto) => {
+    expect(syncBannerOf(synced({}, { syncedAt: before(ms) }), NOW)).toBe(
+      `Dados até ${clock(MEASURED_UNTIL)} · sincronizado ${texto}`,
+    );
+  });
+
+  it('24 h ou mais desde a sincronização: data e hora em vez de "há N h"', () => {
+    const syncedAt = before(24 * 60 * MIN);
+    expect(syncBannerOf(synced({}, { syncedAt }), NOW)).toBe(
+      `Dados até ${clock(MEASURED_UNTIL)} · sincronizado em ${dayMonth(syncedAt)} às ${clock(syncedAt)}`,
+    );
+  });
+
+  // A tela passa o relógio do aparelho (useNow), em milissegundos, para o
+  // "há N min" andar enquanto ela fica aberta.
+  it('aceita o instante de referência em milissegundos', () => {
+    expect(syncBannerOf(synced(), Date.parse(NOW))).toBe(
+      `Dados até ${clock(MEASURED_UNTIL)} · sincronizado há 3 min`,
+    );
+  });
+});
+
+describe('desgaste da pulseira vale para o instante medido', () => {
+  const WEAR_AT = '2026-10-01T14:05:00.000Z';
+
+  it('a frase da fadiga leva o horário da avaliação', () => {
+    const view = dashboardVitalsView(
+      synced({ fatigueEtaMin: metric(95, { source: 'DERIVED', measuredAt: WEAR_AT }) }),
+    );
+    expect(view.fatigueText).toBe(`Tempo até o alerta de fadiga: 1h35m às ${clock(WEAR_AT)}`);
+  });
+
+  it('alerta atingido e ritmo sem previsão também dizem de quando são', () => {
+    const wear = metric(38.4, { source: 'DERIVED', measuredAt: WEAR_AT });
+    const alert = { ...synced({ wear }), conditions: [condition('HEALTH')] };
+    expect(dashboardVitalsView(alert).fatigueText).toBe(
+      `Alerta de fadiga atingido às ${clock(WEAR_AT)}`,
+    );
+    const semPrevisao = synced({ wear, fatigueEtaMin: noMetric('min') });
+    expect(dashboardVitalsView(semPrevisao).fatigueText).toBe(
+      `Sem previsão de fadiga no ritmo atual às ${clock(WEAR_AT)}`,
+    );
+  });
+
+  it('avaliação sem horário próprio usa até quando há dado', () => {
+    const view = dashboardVitalsView(
+      synced({ fatigueEtaMin: metric(95, { source: 'DERIVED', measuredAt: null }) }),
+    );
+    expect(view.fatigueText).toBe(
+      `Tempo até o alerta de fadiga: 1h35m às ${clock(MEASURED_UNTIL)}`,
+    );
+  });
+
+  it('avaliação de outro dia leva a data', () => {
+    const view = dashboardVitalsView(
+      synced({ fatigueEtaMin: metric(95, { source: 'DERIVED', measuredAt: FIXTURE_OTHER_DAY }) }),
+    );
+    expect(view.fatigueText).toBe(
+      `Tempo até o alerta de fadiga: 1h35m em ${dayMonth(FIXTURE_OTHER_DAY)} às ${clock(FIXTURE_OTHER_DAY)}`,
+    );
+  });
+
+  it('sem avaliação não há horário a dizer', () => {
+    const view = dashboardVitalsView(
+      synced({ wear: noMetric('%'), fatigueEtaMin: noMetric('min') }),
+    );
+    expect(view.fatigueText).toBe('Tempo até o alerta de fadiga: sem estimativa');
+  });
+
+  it('sem sincronização (iPhone) a frase não muda', () => {
+    expect(dashboardVitalsView(reporting()).fatigueText).toBe(
+      'Tempo até o alerta de fadiga: 1h35m',
+    );
   });
 });

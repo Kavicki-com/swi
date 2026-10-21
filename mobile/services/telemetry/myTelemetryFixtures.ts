@@ -64,6 +64,7 @@ export const neverReported = (): WorkerTelemetry => ({
   },
   bloodPressureRecency: 'NONE',
   formulaVersion: null,
+  sync: null,
   observedAt: '2026-10-01T15:00:00.000Z',
 });
 

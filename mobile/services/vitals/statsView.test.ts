@@ -128,6 +128,51 @@ describe('statsDonutsView', () => {
   });
 });
 
+// Pulseira lida pelo Health Connect: o esforço sai da fórmula esparsa e vale
+// para o instante medido, não para agora.
+describe('esforço da pulseira diz de quando é', () => {
+  const MEASURED_UNTIL = '2026-10-01T14:10:00.000Z';
+  const EFFORT_AT = '2026-10-01T14:05:00.000Z';
+  const sync = { measuredUntil: MEASURED_UNTIL, syncedAt: '2026-10-01T14:57:00.000Z' };
+
+  it('com sincronização o rótulo leva o horário da avaliação', () => {
+    const telemetry = {
+      ...reporting({ effort: metric(61, { source: 'DERIVED', measuredAt: EFFORT_AT }) }),
+      sync,
+    };
+    expect(statsDonutsView(telemetry).effort.label).toBe(`Esforço feito às ${clock(EFFORT_AT)}`);
+  });
+
+  it('avaliação sem horário próprio usa até quando há dado', () => {
+    const telemetry = {
+      ...reporting({ effort: metric(61, { source: 'DERIVED', measuredAt: null }) }),
+      sync,
+    };
+    expect(statsDonutsView(telemetry).effort.label).toBe(
+      `Esforço feito às ${clock(MEASURED_UNTIL)}`,
+    );
+  });
+
+  it('avaliação de outro dia leva a data', () => {
+    const telemetry = {
+      ...reporting({ effort: metric(61, { source: 'DERIVED', measuredAt: FIXTURE_OTHER_DAY }) }),
+      sync,
+    };
+    expect(statsDonutsView(telemetry).effort.label).toBe(
+      `Esforço feito em ${dayMonth(FIXTURE_OTHER_DAY)} às ${clock(FIXTURE_OTHER_DAY)}`,
+    );
+  });
+
+  it('sem esforço a mostrar não há horário', () => {
+    const telemetry = { ...reporting({ effort: noMetric('%') }), sync };
+    expect(statsDonutsView(telemetry).effort.label).toBe('Esforço feito');
+  });
+
+  it('sem sincronização (iPhone) o rótulo não muda', () => {
+    expect(statsDonutsView(reporting()).effort.label).toBe('Esforço feito');
+  });
+});
+
 describe('caloriesChartView', () => {
   it('carregando, falha e ausência dizem o que houve, sem desenhar ponto', () => {
     expect(caloriesChartView(null, { loading: true })).toMatchObject({
