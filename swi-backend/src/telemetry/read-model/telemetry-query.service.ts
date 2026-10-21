@@ -304,7 +304,7 @@ function asCurrent(telemetry: WorkerTelemetry, calibration: CalibrationRows): Cu
   return {
     ...telemetry,
     heartRateReference: telemetry.heartRateReference ?? null,
-    calibration: calibrationViewOf(telemetry.metrics, calibration),
+    calibration: calibrationViewOf(telemetry.metrics, calibration, null),
   }
 }
 

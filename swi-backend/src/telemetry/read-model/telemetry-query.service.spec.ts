@@ -482,7 +482,7 @@ describe('TelemetryQueryService.currentForWorker', () => {
 
     expect(prisma.workerCalibration.findUnique.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
     expect(prisma.workerCalibrationBand.findMany.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
-    expect(result.calibration).toEqual({
+    expect(result.calibration).toMatchObject({
       version: 'swi-calibration-1',
       phase: 'CALIBRATING',
       recalibrating: false,
@@ -490,34 +490,36 @@ describe('TelemetryQueryService.currentForWorker', () => {
       metrics: {
         HEART_RATE: { zone: 'FATIGUE', cuts: { excellence: 70, fatigue: 140 }, source: 'LEARNED' },
         WEAR: { zone: null, cuts: { excellence: 25, fatigue: 70 }, source: 'OVERRIDE' },
+        OXYGEN_SATURATION: { source: 'START' },
       },
     })
   })
 
-  it('sem linha de calibração a leitura real diz que não há calibração', async () => {
+  it('sem linha de calibração a leitura real traz a partida, dia 1', async () => {
     const prisma = prismaDouble()
     emptyReads(prisma)
     prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
     const result = await service(prisma).currentForWorker('worker-1', NOW)
-    expect(result.calibration).toBeNull()
+    expect(result.calibration).toMatchObject({ phase: 'CALIBRATING', day: 1, metrics: { OXYGEN_SATURATION: { source: 'START' } } })
   })
 
-  it('demonstração não tem calibração, e nem a consulta', async () => {
+  it('demonstração mostra a partida sem consultar as faixas', async () => {
     const prisma = prismaDouble()
     emptyReads(prisma)
     prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow({ origin: 'DEMO' }))
     const result = await service(prisma).currentForWorker('worker-1', NOW)
-    expect(result.calibration).toBeNull()
+    expect(result.calibration).toMatchObject({ day: 1, metrics: { HEART_RATE: { source: 'START' } } })
     expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
     expect(prisma.workerCalibrationBand.findMany).not.toHaveBeenCalled()
   })
 
-  it('quem nunca reportou responde calibração nula sem consultar', async () => {
+  it('quem nunca reportou responde a partida com zona nula, sem consultar as faixas', async () => {
     const prisma = prismaDouble()
     emptyReads(prisma)
     prisma.telemetrySnapshot.findUnique.mockResolvedValue(null)
     const result = await service(prisma).currentForWorker('worker-1', NOW)
-    expect(result.calibration).toBeNull()
+    expect(result.calibration).toMatchObject({ day: 1 })
+    expect(Object.values(result.calibration!.metrics).every((m) => m.source === 'START' && m.zone === null)).toBe(true)
     expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
   })
 

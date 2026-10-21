@@ -19,8 +19,8 @@ export type StateZone = 'EXCELLENCE' | 'NORMAL' | 'FATIGUE'
 export type ActivityZone = 'BELOW' | 'USUAL' | 'ABOVE'
 export type CalibrationZone = StateZone | ActivityZone
 
-/** De onde veio o corte em vigor: aprendido pelo recálculo ou corrigido pelo gestor. */
-export type CutsSource = 'LEARNED' | 'OVERRIDE'
+/** De onde veio o corte em vigor: partida mínima, aprendido pelo recálculo ou corrigido pelo gestor. */
+export type CutsSource = 'START' | 'LEARNED' | 'OVERRIDE'
 
 /** Uma medição como a leitura individual a entrega: a zona de agora e a faixa em vigor. */
 export interface CalibrationMetricView {
