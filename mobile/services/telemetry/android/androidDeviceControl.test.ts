@@ -1,4 +1,5 @@
 import { nativeErrorCode, type WatchControl } from '../../../modules/swi-watch-control';
+import { REQUEST_TIMEOUT_MS } from '../../api/http';
 import { completeEnrollment } from '../deviceEnrollment';
 import { createTelemetryOutbox, type OutboxStorage } from '../telemetryOutbox';
 import { createTelemetryUploader } from '../telemetryUploader';
@@ -7,8 +8,8 @@ import {
   createAndroidDeviceControl,
   DEVICE_CREDENTIAL_KEY,
   type CredentialStore,
-  type FetchLike,
 } from './androidDeviceControl';
+import type { HttpTransport } from './xhrTransport';
 
 jest.mock('expo-secure-store', () => {
   const itens = new Map<string, string>();
@@ -78,16 +79,15 @@ function segurar<A extends unknown[]>(
   return () => soltar();
 }
 
-function resposta(status: number, body: string) {
-  return { status, text: async () => body };
-}
-
-function fakeFetch(status = 200, body = '{}') {
-  return jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>(async () => resposta(status, body));
+function fakeTransport(status = 200, body = '{}') {
+  return jest.fn<ReturnType<HttpTransport>, Parameters<HttpTransport>>(async () => ({
+    status,
+    body,
+  }));
 }
 
 const headersDe = (fetch: jest.Mock, chamada = 0) =>
-  (fetch.mock.calls[chamada][1] as { headers: Record<string, string> }).headers;
+  (fetch.mock.calls[chamada][0] as { headers: Record<string, string> }).headers;
 
 // Os dois pedidos que os serviços fazem: concluir o pareamento e enviar lote.
 const parear = (control: WatchControl) =>
@@ -115,8 +115,8 @@ function semSegredo(valor: unknown) {
 
 describe('createAndroidDeviceControl: request com bearer', () => {
   it('manda Bearer e Content-Type e devolve status e corpo em texto', async () => {
-    const fetch = fakeFetch(201, '{"ok":true}');
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore() });
+    const fetch = fakeTransport(201, '{"ok":true}');
+    const control = createAndroidDeviceControl({ transport: fetch, store: fakeStore() });
 
     const res = await control.request(
       URL_PAREAMENTO,
@@ -128,9 +128,11 @@ describe('createAndroidDeviceControl: request com bearer', () => {
 
     expect(res).toEqual({ status: 201, body: '{"ok":true}' });
     expect(fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = fetch.mock.calls[0];
-    expect(url).toBe(URL_PAREAMENTO);
-    expect(init).toMatchObject({ method: 'POST', body: '{"code":"1"}', credentials: 'omit' });
+    expect(fetch.mock.calls[0][0]).toMatchObject({
+      url: URL_PAREAMENTO,
+      method: 'POST',
+      body: '{"code":"1"}',
+    });
     expect(headersDe(fetch)).toEqual({
       Authorization: `Bearer ${TOKEN}`,
       'Content-Type': 'application/json',
@@ -138,18 +140,18 @@ describe('createAndroidDeviceControl: request com bearer', () => {
   });
 
   it('sem corpo, não manda corpo nem Content-Type, como o Swift', async () => {
-    const fetch = fakeFetch(200, 'x');
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore() });
+    const fetch = fakeTransport(200, 'x');
+    const control = createAndroidDeviceControl({ transport: fetch, store: fakeStore() });
 
     await control.request(URL_LOTES, 'GET', null, { kind: 'bearer', token: TOKEN }, false);
 
-    expect(fetch.mock.calls[0][1].body).toBeUndefined();
+    expect(fetch.mock.calls[0][0].body).toBeNull();
     expect(headersDe(fetch)).toEqual({ Authorization: `Bearer ${TOKEN}` });
   });
 
   it('kind desconhecido vai sem Authorization, como o Swift', async () => {
-    const fetch = fakeFetch();
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore(SEGREDO) });
+    const fetch = fakeTransport();
+    const control = createAndroidDeviceControl({ transport: fetch, store: fakeStore(SEGREDO) });
 
     await control.request(URL_LOTES, 'POST', '{}', { kind: 'outro' } as never, false);
 
@@ -159,8 +161,8 @@ describe('createAndroidDeviceControl: request com bearer', () => {
 
 describe('createAndroidDeviceControl: request com device', () => {
   it('sem credencial guardada rejeita com E_NO_CREDENTIAL antes de tocar a rede', async () => {
-    const fetch = fakeFetch();
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore() });
+    const fetch = fakeTransport();
+    const control = createAndroidDeviceControl({ transport: fetch, store: fakeStore() });
 
     const erro = await rejeicao(enviar(control));
 
@@ -170,12 +172,12 @@ describe('createAndroidDeviceControl: request com device', () => {
   });
 
   it('SecureStore que lança na leitura conta como sem credencial, no envio e na pergunta', async () => {
-    const fetch = fakeFetch();
+    const fetch = fakeTransport();
     const store = fakeStore(SEGREDO);
     store.getItem.mockImplementation(() => {
       throw new Error('chave do Keystore inválida');
     });
-    const control = createAndroidDeviceControl({ fetch, store });
+    const control = createAndroidDeviceControl({ transport: fetch, store });
 
     const erro = await rejeicao(enviar(control));
 
@@ -185,8 +187,8 @@ describe('createAndroidDeviceControl: request com device', () => {
   });
 
   it('com credencial monta Authorization: Device <credencial>', async () => {
-    const fetch = fakeFetch(202, '{"accepted":[]}');
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore(SEGREDO) });
+    const fetch = fakeTransport(202, '{"accepted":[]}');
+    const control = createAndroidDeviceControl({ transport: fetch, store: fakeStore(SEGREDO) });
 
     const res = await enviar(control);
 
@@ -199,7 +201,7 @@ describe('createAndroidDeviceControl: request com device', () => {
 describe('createAndroidDeviceControl: request com storeCredential', () => {
   it('2xx com credential grava no SecureStore e devolve o corpo com true no lugar', async () => {
     const store = fakeStore();
-    const control = createAndroidDeviceControl({ fetch: fakeFetch(201, pareado()), store });
+    const control = createAndroidDeviceControl({ transport: fakeTransport(201, pareado()), store });
 
     const res = await parear(control);
 
@@ -218,7 +220,7 @@ describe('createAndroidDeviceControl: request com storeCredential', () => {
     ['JSON nulo', 'null'],
   ])('2xx %s rejeita com E_CREDENTIAL_MISSING e não grava', async (_caso, body) => {
     const store = fakeStore();
-    const control = createAndroidDeviceControl({ fetch: fakeFetch(200, body), store });
+    const control = createAndroidDeviceControl({ transport: fakeTransport(200, body), store });
 
     const erro = await rejeicao(parear(control));
 
@@ -229,7 +231,7 @@ describe('createAndroidDeviceControl: request com storeCredential', () => {
   it('SecureStore que recusa gravar rejeita com E_KEYCHAIN, sem o segredo no erro', async () => {
     const store = fakeStore();
     store.setItemAsync.mockRejectedValue(new Error(`falhou ao gravar ${SEGREDO}`));
-    const control = createAndroidDeviceControl({ fetch: fakeFetch(201, pareado()), store });
+    const control = createAndroidDeviceControl({ transport: fakeTransport(201, pareado()), store });
 
     const erro = await rejeicao(parear(control));
 
@@ -242,7 +244,7 @@ describe('createAndroidDeviceControl: request com storeCredential', () => {
   // mesmo com credential no corpo.
   it.each([199, 300, 400, 500])('status %p sobe intacto e não grava', async (status) => {
     const store = fakeStore();
-    const control = createAndroidDeviceControl({ fetch: fakeFetch(status, pareado()), store });
+    const control = createAndroidDeviceControl({ transport: fakeTransport(status, pareado()), store });
 
     await expect(parear(control)).resolves.toEqual({ status, body: pareado() });
     expect(store.setItemAsync).not.toHaveBeenCalled();
@@ -250,7 +252,7 @@ describe('createAndroidDeviceControl: request com storeCredential', () => {
 
   it('sem storeCredential, um 2xx com credential sobe cru e não grava', async () => {
     const store = fakeStore();
-    const control = createAndroidDeviceControl({ fetch: fakeFetch(200, pareado()), store });
+    const control = createAndroidDeviceControl({ transport: fakeTransport(200, pareado()), store });
 
     const res = await control.request(
       URL_PAREAMENTO,
@@ -266,11 +268,11 @@ describe('createAndroidDeviceControl: request com storeCredential', () => {
 });
 
 describe('createAndroidDeviceControl: falhas de rede e de URL', () => {
-  it('fetch que rejeita vira E_NETWORK', async () => {
-    const fetch = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>(async () => {
-      throw new TypeError('Network request failed');
+  it('transporte que rejeita (rede, prazo, aborto) vira E_NETWORK', async () => {
+    const fetch = jest.fn<ReturnType<HttpTransport>, Parameters<HttpTransport>>(async () => {
+      throw new Error(`Tempo esgotado com ${SEGREDO}`);
     });
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore(SEGREDO) });
+    const control = createAndroidDeviceControl({ transport: fetch, store: fakeStore(SEGREDO) });
 
     const erro = await rejeicao(enviar(control));
 
@@ -278,39 +280,39 @@ describe('createAndroidDeviceControl: falhas de rede e de URL', () => {
     semSegredo(erro);
   });
 
-  it('corpo que não termina de chegar vira E_NETWORK', async () => {
-    const fetch = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>(async () => ({
-      status: 200,
-      text: async () => {
-        throw new Error('conexão caiu no meio');
-      },
-    }));
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore() });
+  // O prazo vai dentro do pedido, para o transporte cumprir do lado nativo:
+  // um setTimeout daqui não dispara com o app sem tela.
+  it('o prazo vai no próprio pedido, com o REQUEST_TIMEOUT_MS de padrão', async () => {
+    const fetch = fakeTransport();
+    await enviar(createAndroidDeviceControl({ transport: fetch, store: fakeStore(SEGREDO) }));
+    await enviar(
+      createAndroidDeviceControl({ transport: fetch, store: fakeStore(SEGREDO), timeoutMs: 5 }),
+    );
 
-    const erro = await rejeicao(parear(control));
-
-    expect(nativeErrorCode(erro)).toBe('E_NETWORK');
+    expect(fetch.mock.calls[0][0].timeoutMs).toBe(REQUEST_TIMEOUT_MS);
+    expect(fetch.mock.calls[1][0].timeoutMs).toBe(5);
   });
 
-  it('servidor que não responde dentro do prazo vira E_NETWORK e aborta', async () => {
-    let sinal: AbortSignal | undefined;
-    const fetch = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>((_url, init) => {
-      sinal = init.signal;
-      return new Promise(() => undefined);
-    });
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore(), timeoutMs: 5 });
+  it('não agenda timer nenhum: a resposta chega sem o relógio andar', async () => {
+    jest.useFakeTimers();
+    try {
+      const control = createAndroidDeviceControl({
+        transport: fakeTransport(202, '{}'),
+        store: fakeStore(SEGREDO),
+      });
 
-    const erro = await rejeicao(parear(control));
-
-    expect(nativeErrorCode(erro)).toBe('E_NETWORK');
-    expect(sinal?.aborted).toBe(true);
+      await expect(enviar(control)).resolves.toEqual({ status: 202, body: '{}' });
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it.each(['localhost:3000', 'ftp://api.exemplo/x', 'https://', 'https:///x', 'não é url', ''])(
     'URL %p rejeita com E_URL sem tocar a rede',
     async (url) => {
-      const fetch = fakeFetch();
-      const control = createAndroidDeviceControl({ fetch, store: fakeStore(SEGREDO) });
+      const fetch = fakeTransport();
+      const control = createAndroidDeviceControl({ transport: fetch, store: fakeStore(SEGREDO) });
 
       const erro = await rejeicao(enviar(control, url));
 
@@ -320,8 +322,8 @@ describe('createAndroidDeviceControl: falhas de rede e de URL', () => {
   );
 
   it('aceita http com porta, como o backend local', async () => {
-    const fetch = fakeFetch();
-    const control = createAndroidDeviceControl({ fetch, store: fakeStore(SEGREDO) });
+    const fetch = fakeTransport();
+    const control = createAndroidDeviceControl({ transport: fetch, store: fakeStore(SEGREDO) });
 
     await enviar(control, 'http://10.0.2.2:3000/x');
 
@@ -333,8 +335,8 @@ describe('createAndroidDeviceControl: limpar a credencial', () => {
   it('responde false na hora, antes do apagar terminar, e o envio não usa a revogada', async () => {
     const store = fakeStore(SEGREDO);
     const soltarApagar = segurar(store.deleteItemAsync, (key) => store.itens.delete(key));
-    const fetch = fakeFetch();
-    const control = createAndroidDeviceControl({ fetch, store });
+    const fetch = fakeTransport();
+    const control = createAndroidDeviceControl({ transport: fetch, store });
 
     expect(control.clearDeviceCredential()).toBeUndefined();
     expect(control.hasDeviceCredential()).toBe(false);
@@ -363,7 +365,7 @@ describe('createAndroidDeviceControl: limpar a credencial', () => {
   ])('apagar que %s não escapa e a resposta segue false', async (_caso, apagar) => {
     const store = fakeStore(SEGREDO);
     store.deleteItemAsync.mockImplementation(apagar);
-    const control = createAndroidDeviceControl({ fetch: fakeFetch(), store });
+    const control = createAndroidDeviceControl({ transport: fakeTransport(), store });
 
     expect(() => control.clearDeviceCredential()).not.toThrow();
     await esperar();
@@ -374,8 +376,8 @@ describe('createAndroidDeviceControl: limpar a credencial', () => {
   it('um pareamento novo depois de limpar grava só depois do apagar e vale de novo', async () => {
     const store = fakeStore(SEGREDO);
     const soltarApagar = segurar(store.deleteItemAsync, (key) => store.itens.delete(key));
-    const fetch = fakeFetch(201, pareado(OUTRO_SEGREDO));
-    const control = createAndroidDeviceControl({ fetch, store });
+    const fetch = fakeTransport(201, pareado(OUTRO_SEGREDO));
+    const control = createAndroidDeviceControl({ transport: fetch, store });
 
     control.clearDeviceCredential();
     const pedido = parear(control);
@@ -389,7 +391,7 @@ describe('createAndroidDeviceControl: limpar a credencial', () => {
     expect(store.itens.get(DEVICE_CREDENTIAL_KEY)).toBe(OUTRO_SEGREDO);
     expect(control.hasDeviceCredential()).toBe(true);
 
-    fetch.mockImplementation(async () => resposta(202, '{}'));
+    fetch.mockImplementation(async () => ({ status: 202, body: '{}' }));
     await enviar(control);
     expect(headersDe(fetch, 1).Authorization).toBe(`Device ${OUTRO_SEGREDO}`);
   });
@@ -398,7 +400,7 @@ describe('createAndroidDeviceControl: limpar a credencial', () => {
     const store = fakeStore();
     const soltarGravar = segurar(store.setItemAsync, (key, value) => store.itens.set(key, value));
     const soltarApagar = segurar(store.deleteItemAsync, (key) => store.itens.delete(key));
-    const control = createAndroidDeviceControl({ fetch: fakeFetch(201, pareado()), store });
+    const control = createAndroidDeviceControl({ transport: fakeTransport(201, pareado()), store });
 
     const pedido = parear(control);
     await esperar();
@@ -421,7 +423,7 @@ describe('createAndroidDeviceControl: limpar a credencial', () => {
 });
 
 describe('createAndroidDeviceControl: o resto do WatchControl é inerte', () => {
-  const control = createAndroidDeviceControl({ fetch: fakeFetch(), store: fakeStore() });
+  const control = createAndroidDeviceControl({ transport: fakeTransport(), store: fakeStore() });
 
   it('supported true, sem inbox, sem status e sem relógio', async () => {
     expect(control.supported).toBe(true);
@@ -442,16 +444,38 @@ describe('createAndroidDeviceControl: o resto do WatchControl é inerte', () => 
 
 describe('androidDeviceControl: a instância do processo', () => {
   const fetchOriginal = global.fetch;
+  const xhrOriginal = global.XMLHttpRequest;
   afterEach(() => {
     global.fetch = fetchOriginal;
+    global.XMLHttpRequest = xhrOriginal;
   });
 
-  it('é uma só, e usa o fetch global e o expo-secure-store', async () => {
+  // O fetch do React Native só entrega a resposta dentro de um setTimeout, e
+  // com o app sem tela (a tarefa de segundo plano) esse timer nunca dispara:
+  // o lote chegava ao backend e a tarefa ficava pendurada. Por isso a
+  // instância vai pelo XMLHttpRequest, e o fetch não pode ser tocado.
+  it('é uma só, e usa o XMLHttpRequest global (nunca o fetch) e o expo-secure-store', async () => {
     const SecureStore = jest.requireMock<{ getItem: jest.Mock; setItemAsync: jest.Mock }>(
       'expo-secure-store',
     );
-    const fetch = fakeFetch(201, pareado());
+    const fetch = jest.fn();
     global.fetch = fetch as unknown as typeof global.fetch;
+    const abertos: string[] = [];
+    global.XMLHttpRequest = jest.fn(() => {
+      const xhr = {
+        status: 0,
+        responseText: '',
+        onload: null as (() => void) | null,
+        open: (_method: string, url: string) => abertos.push(url),
+        setRequestHeader: () => undefined,
+        send: () => {
+          xhr.status = 201;
+          xhr.responseText = pareado();
+          void Promise.resolve().then(() => xhr.onload?.());
+        },
+      };
+      return xhr;
+    }) as unknown as typeof XMLHttpRequest;
     const deNovo = jest.requireActual<typeof import('./androidDeviceControl')>(
       './androidDeviceControl',
     );
@@ -461,7 +485,8 @@ describe('androidDeviceControl: a instância do processo', () => {
 
     await parear(androidDeviceControl);
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(abertos).toEqual([URL_PAREAMENTO]);
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(DEVICE_CREDENTIAL_KEY, SEGREDO);
     expect(androidDeviceControl.hasDeviceCredential()).toBe(true);
     expect(SecureStore.getItem).toHaveBeenCalledWith(DEVICE_CREDENTIAL_KEY);
@@ -482,8 +507,8 @@ describe('createAndroidDeviceControl: pareamento e envio rodam sem mudança', ()
 
   it('completeEnrollment pareia, e o segredo nunca chega a quem chamou', async () => {
     const store = fakeStore();
-    const fetch = fakeFetch(201, pareado());
-    const control = createAndroidDeviceControl({ fetch, store });
+    const fetch = fakeTransport(201, pareado());
+    const control = createAndroidDeviceControl({ transport: fetch, store });
 
     const result = await completeEnrollment('482910', {
       control,
@@ -492,15 +517,15 @@ describe('createAndroidDeviceControl: pareamento e envio rodam sem mudança', ()
     });
 
     expect(result).toEqual({ paired: true });
-    expect(fetch.mock.calls[0][0]).toBe(URL_PAREAMENTO);
+    expect(fetch.mock.calls[0][0].url).toBe(URL_PAREAMENTO);
     expect(store.itens.get(DEVICE_CREDENTIAL_KEY)).toBe(SEGREDO);
     expect(JSON.stringify(result)).not.toContain(SEGREDO);
   });
 
   it('o 401 do envio limpa a credencial e o aparelho fica sem pareamento', async () => {
     const store = fakeStore(SEGREDO);
-    const fetch = fakeFetch(401, '{"statusCode":401}');
-    const control = createAndroidDeviceControl({ fetch, store });
+    const fetch = fakeTransport(401, '{"statusCode":401}');
+    const control = createAndroidDeviceControl({ transport: fetch, store });
     const outbox = createTelemetryOutbox(memoryStorage());
     await outbox.append({
       eventId: '00000000-0000-4000-8000-000000000001',

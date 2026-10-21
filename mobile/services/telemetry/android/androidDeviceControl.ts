@@ -5,11 +5,14 @@ import type {
   NativeRequestErrorCode,
   WatchControl,
 } from '../../../modules/swi-watch-control';
-import { REQUEST_TIMEOUT_MS, withDeadline } from '../../api/http';
+import { REQUEST_TIMEOUT_MS } from '../../api/http';
+import { createXhrTransport, type HttpTransport } from './xhrTransport';
 
 // Controle do aparelho no Android: o mesmo `WatchControl` que o envio de
 // telemetria e o pareamento já consomem no iPhone, feito em JavaScript puro
-// com `fetch` e `expo-secure-store`. Os dois serviços rodam sem mudança.
+// com XMLHttpRequest e `expo-secure-store`. Os dois serviços rodam sem
+// mudança. Não é o `fetch` porque ele não entrega a resposta com o app sem
+// tela, que é onde roda a tarefa de segundo plano (ver xhrTransport.ts).
 //
 // ATENÇÃO: no Android a credencial do aparelho fica visível ao JavaScript.
 // No iPhone ela vive no chaveiro e o JavaScript só sabe que ela existe; aqui
@@ -29,22 +32,11 @@ export interface CredentialStore {
   deleteItemAsync(key: string): Promise<void>;
 }
 
-/** O pedaço do `fetch` que este controle usa. */
-export type FetchLike = (
-  url: string,
-  init: {
-    method: string;
-    headers: Record<string, string>;
-    body: string | undefined;
-    credentials: 'omit';
-    signal: AbortSignal;
-  },
-) => Promise<{ status: number; text(): Promise<string> }>;
-
 export interface AndroidDeviceControlDeps {
-  fetch?: FetchLike;
+  /** O padrão é o XMLHttpRequest global (`createXhrTransport`). */
+  transport?: HttpTransport;
   store?: CredentialStore;
-  /** Prazo da requisição inteira, do envio à leitura do corpo. */
+  /** Prazo da requisição inteira, do envio à leitura do corpo, cumprido pelo transporte. */
   timeoutMs?: number;
 }
 
@@ -60,9 +52,6 @@ function rejection(code: NativeRequestErrorCode, message: string): Error {
 // implementa `protocol` nem `hostname`.
 const HTTP_URL = /^https?:\/\/(?:[^/?#@\s]*@)?[^/?#:@\s]/i;
 
-// O `fetch` global é lido na hora da chamada, e não na criação do controle.
-const globalFetch: FetchLike = (url, init) => fetch(url, init);
-
 /**
  * Fábrica para os testes. Código de produção usa a instância única
  * `androidDeviceControl`, abaixo: o marcador de limpeza e a fila de gravação
@@ -70,7 +59,11 @@ const globalFetch: FetchLike = (url, init) => fetch(url, init);
  * e a tarefa em segundo plano precisam enxergar a mesma credencial.
  */
 export function createAndroidDeviceControl(deps: AndroidDeviceControlDeps = {}): WatchControl {
-  const { fetch: send = globalFetch, store = SecureStore, timeoutMs = REQUEST_TIMEOUT_MS } = deps;
+  const {
+    transport = createXhrTransport(),
+    store = SecureStore,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  } = deps;
 
   // `clearDeviceCredential` é síncrono e o SecureStore apaga de forma
   // assíncrona. O marcador faz a revogação valer na hora: até um pareamento
@@ -162,18 +155,9 @@ export function createAndroidDeviceControl(deps: AndroidDeviceControlDeps = {}):
 
       let response: NativeHttpResponse;
       try {
-        response = await withDeadline(timeoutMs, 'Tempo esgotado', async (signal) => {
-          // Sem cookies, como a sessão do Swift: um Set-Cookie do caminho não
-          // pode ir junto com o Authorization na chamada seguinte.
-          const res = await send(url, {
-            method,
-            headers,
-            body: body ?? undefined,
-            credentials: 'omit',
-            signal,
-          });
-          return { status: res.status, body: await res.text() };
-        });
+        // O prazo vai dentro do pedido, e não num setTimeout daqui: sem tela,
+        // um timer do JavaScript não dispara.
+        response = await transport({ url, method, headers, body, timeoutMs });
       } catch {
         throw rejection('E_NETWORK', 'Falha de rede no envio');
       }

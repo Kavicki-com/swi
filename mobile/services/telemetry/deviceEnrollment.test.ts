@@ -324,13 +324,13 @@ describe('completeEnrollment, rejeição do controle do Android', () => {
   });
   const pareado = async () => ({
     status: 201,
-    text: async () => JSON.stringify({ deviceId: 'dev-1', credential: SEGREDO }),
+    body: JSON.stringify({ deviceId: 'dev-1', credential: SEGREDO }),
   });
   const android = { deviceKind: 'ANDROID_PHONE' } as const;
 
   it('SecureStore que recusa a gravação vira keychain', async () => {
     const control = createAndroidDeviceControl({
-      fetch: pareado,
+      transport: pareado,
       store: store(async () => {
         throw new Error('Keystore indisponível');
       }),
@@ -341,9 +341,9 @@ describe('completeEnrollment, rejeição do controle do Android', () => {
     });
   });
 
-  it('fetch que rejeita vira network', async () => {
+  it('transporte que rejeita vira network', async () => {
     const control = createAndroidDeviceControl({
-      fetch: async () => {
+      transport: async () => {
         throw new TypeError('Network request failed');
       },
       store: store(async () => undefined),

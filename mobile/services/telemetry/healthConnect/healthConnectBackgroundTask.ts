@@ -40,18 +40,19 @@ import {
 // - a validação real, com o app fechado, é no emulador. Os testes daqui
 //   cobrem a lógica da rodada e do registro, não o agendador.
 //
-// Dois riscos achados na revisão, a confirmar no emulador:
+// Dois riscos achados na revisão e confirmados no emulador:
 //
-// - PRAZOS NÃO VALEM AQUI. Com o app em segundo plano, ou subido sem tela
+// - TIMERS NÃO DISPARAM AQUI. Com o app em segundo plano, ou subido sem tela
 //   pelo WorkManager, os timers do JavaScript não disparam no RN 0.81: o
 //   `JavaTimerManager` fica pausado quando não há HeadlessJsTask, e o
-//   expo-task-manager não usa o `HeadlessJsTaskContext`. O OkHttp do RN
-//   também não tem prazo próprio. Então `withTimeout` (porta do Health
-//   Connect) e `withDeadline` (controle do Android) não protegem este
-//   caminho: uma chamada travada deixa a rodada pendurada até o WorkManager
-//   matar o worker (uns 10 min), só então reagendado, e a sincronização de
-//   segundo plano para até o próximo início a frio. Nenhum dado se perde:
-//   a fila é durável e o token só avança depois de enfileirar;
+//   expo-task-manager não usa o `HeadlessJsTaskContext`. Por isso o envio
+//   não usa `fetch` (ele só entrega a resposta dentro de um setTimeout, e a
+//   rodada pendurava logo depois do lote chegar ao backend): o controle do
+//   Android vai pelo XMLHttpRequest, com o prazo cumprido pelo OkHttp
+//   (xhrTransport.ts). O que continua sem proteção é o `withTimeout` da
+//   porta do Health Connect: uma chamada nativa travada deixa a rodada
+//   pendurada até o WorkManager encerrar o worker (uns 10 min). Nenhum dado
+//   se perde: a fila é durável e o token só avança depois de enfileirar;
 // - A BIBLIOTECA REINICIA O AGENDAMENTO. No `expo-background-task` 1.0.10 com
 //   o expo-task-manager, todo início a frio do processo (inclusive o que o
 //   próprio WorkManager provoca para rodar a tarefa) passa por
