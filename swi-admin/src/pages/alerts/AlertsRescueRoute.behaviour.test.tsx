@@ -56,6 +56,12 @@ vi.mock('react-dom/client', () => ({
 // não bater em rede. O número volta para o título "Resgate em tempo real ID N".
 const rescuesApiMock = vi.hoisted(() => ({ dispatch: vi.fn() }))
 vi.mock('@/services/api/rescues', () => ({ rescuesApi: rescuesApiMock }))
+// O renderPage monta só esta rota; o destino do Voltar é conferido no navigate.
+const navigateMock = vi.hoisted(() => vi.fn())
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router-dom')>()),
+  useNavigate: () => navigateMock,
+}))
 
 const mapState = {
   layers: new Set<string>(),
@@ -311,6 +317,28 @@ describe('AlertsRescueRoute: despacho', () => {
     await waitFor(() => expect(mapState.paint['line-color']).toBe('#8B5CF6'))
     expect(screen.getByText('Resgate em tempo real ID 1849')).toBeTruthy()
     expect(h.markers.map((m) => m.anchor)).toEqual(['center', 'bottom'])
+  })
+})
+
+describe('AlertsRescueRoute: Voltar', () => {
+  it('já despachado, Voltar leva à lista de resgates', async () => {
+    await renderRoute('?dispatched=true&n=1849')
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar para os resgates' }))
+    expect(navigateMock).toHaveBeenCalledWith('/alerts/rescues')
+  })
+
+  it('depois de "Continuar", Voltar também leva à lista de resgates', async () => {
+    await renderRoute()
+    fireEvent.click(screen.getByText('Continuar'))
+    await waitFor(() => expect(screen.getByText('Resgate em tempo real ID 1849')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar para os resgates' }))
+    expect(navigateMock).toHaveBeenCalledWith('/alerts/rescues')
+  })
+
+  it('antes do despacho, Voltar retorna à escolha do socorrista', async () => {
+    await renderRoute()
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar para a escolha do socorrista' }))
+    expect(navigateMock).toHaveBeenCalledWith('/alerts/w1/rescue')
   })
 })
 

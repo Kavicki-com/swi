@@ -4,7 +4,7 @@
 // services/api/rescues.test.ts); aqui interessa o comportamento da tela.
 import { vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
 import { ApiError } from '@/services/api/http'
@@ -41,6 +41,11 @@ const ENDED: Rescue = {
   rescuer: { id: 's2', name: 'Davi Socorro' },
 }
 
+function RouteProbe() {
+  const location = useLocation()
+  return <div data-testid="rescue-route">{`${location.pathname}${location.search}`}</div>
+}
+
 async function renderAt(route = '/alerts/rescues') {
   seedSession()
   return settled(
@@ -51,6 +56,7 @@ async function renderAt(route = '/alerts/rescues') {
             <Routes>
               <Route path="/alerts/rescues" element={<RescueHistoryPage />} />
               <Route path="/alerts" element={<div data-testid="alerts-route" />} />
+              <Route path="/alerts/:employeeId/rescue/:rescuerId" element={<RouteProbe />} />
             </Routes>
           </MemoryRouter>
         </AuthProvider>
@@ -123,6 +129,20 @@ describe('RescueHistoryPage', () => {
       expect(
         screen.queryByRole('button', { name: 'Encerrar resgate 1849' }),
       ).not.toBeInTheDocument(),
+    )
+  })
+
+  it('acompanhar rota reabre a rota de socorro já despachada, com o ID no título', async () => {
+    await renderAt()
+    await waitFor(() => expect(screen.getByText('Resgate ID 1849')).toBeInTheDocument())
+    expect(
+      screen.queryByRole('button', { name: 'Acompanhar rota do resgate 1800' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Acompanhar rota do resgate 1849' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('rescue-route')).toHaveTextContent(
+        '/alerts/f1/rescue/s1?dispatched=true&n=1849',
+      ),
     )
   })
 

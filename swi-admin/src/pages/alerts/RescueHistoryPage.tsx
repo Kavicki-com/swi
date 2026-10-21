@@ -1,8 +1,8 @@
 // src/pages/alerts/RescueHistoryPage.tsx
 // /alerts/rescues. Histórico de resgates em andamento e encerrados (MEL-12),
 // alcançada por um botão na tela de Alertas. Cada resgate em andamento pode ter
-// a chegada registrada (retoma a jornada do socorrista no backend) e ser
-// encerrado. Compõe componentes do DS; a lógica de dados fica no useRescues.
+// a rota reaberta, a chegada registrada (retoma a jornada do socorrista no
+// backend) e ser encerrado. Compõe componentes do DS; a lógica de dados fica no useRescues.
 import { useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
@@ -95,6 +95,11 @@ export function RescueHistoryPage() {
             <RescueRow
               key={r.id}
               rescue={r}
+              onTrack={() =>
+                navigate(
+                  `/alerts/${r.injured.id}/rescue/${r.rescuer.id}?dispatched=true&n=${r.number}`,
+                )
+              }
               onArrive={() => void run(arrive(r.id))}
               onEnd={() => void run(end(r.id))}
             />
@@ -107,10 +112,12 @@ export function RescueHistoryPage() {
 
 function RescueRow({
   rescue,
+  onTrack,
   onArrive,
   onEnd,
 }: {
   rescue: Rescue
+  onTrack: () => void
   onArrive: () => void
   onEnd: () => void
 }) {
@@ -155,6 +162,14 @@ function RescueRow({
 
       {rescue.status !== 'ended' ? (
         <View style={{ flexDirection: 'row', gap: theme.gap.s, flexWrap: 'wrap' }}>
+          {/* Reabre a rota de socorro já despachada (mesma URL que o despacho
+              grava), já que fechar o mapa não deixava caminho de volta. */}
+          <Button
+            label="Acompanhar rota"
+            accessibilityLabel={`Acompanhar rota do resgate ${rescue.number}`}
+            backgroundColor={theme.surface.success}
+            onPress={onTrack}
+          />
           {rescue.status === 'dispatched' ? (
             <Button
               label="Registrar chegada"
