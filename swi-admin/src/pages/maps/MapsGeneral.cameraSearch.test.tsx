@@ -46,6 +46,8 @@ vi.mock('@/lib/rainViewer', () => ({ getRainViewerLatestRadar: async () => null 
 const cameras = vi.hoisted(() => [
   { id: 'cam-a', name: 'Portaria', lat: -23.54, lng: -46.63, url: null },
   { id: 'cam-b', name: 'Pátio central', lat: -23.56, lng: -46.62, url: null },
+  // Nome que contém o da primeira: escolher "Portaria" não pode deixar as duas.
+  { id: 'cam-c', name: 'Portaria 2', lat: -23.58, lng: -46.61, url: null },
 ])
 vi.mock('@/services/api/cameras', () => ({
   camerasApi: { list: async () => cameras },
@@ -145,6 +147,21 @@ describe('MapsGeneral: buscar câmera', () => {
         expect.objectContaining({ center: [-46.62, -23.56], zoom: 16 }),
       ),
     )
+    await close(unmount)
+  })
+
+  it('escolher uma câmera com nome contido em outro deixa só ela no mapa', async () => {
+    const { unmount } = await openCameras()
+    search('portaria')
+    await waitFor(() => expect(onMap()).toHaveLength(2))
+    fireEvent.click(await screen.findByRole('button', { name: 'Portaria' }))
+    await waitFor(() => expect(onMap()).toHaveLength(1))
+    await waitFor(() =>
+      expect(maplibre.flyTo).toHaveBeenCalledWith(
+        expect.objectContaining({ center: [-46.63, -23.54], zoom: 16 }),
+      ),
+    )
+    expect(screen.queryByRole('button', { name: 'Portaria 2' })).toBeNull()
     await close(unmount)
   })
 

@@ -119,10 +119,19 @@ export function useMapsGeneral() {
   const operatorMarkers = useMemo<DashboardMapMarker[]>(() => mapMarkers ?? [], [mapMarkers])
   // "Buscar operador" do controle: deixa no mapa só quem casa com o nome.
   const [operatorSearch, setOperatorSearch] = useState('')
-  const visibleOperators = useMemo(
-    () => filterByName(operatorMarkers, operatorSearch),
-    [operatorMarkers, operatorSearch],
-  )
+  // Escolha feita na lista. O nome escrito na busca não basta para identificar
+  // quem foi escolhido: "João Pereira" também casa com "João Pereira Filho".
+  const [pickedOperatorId, setPickedOperatorId] = useState<string | null>(null)
+  // Com uma escolha, só ela fica no mapa; fora do ao vivo não sobra pino, para
+  // o mapa não mostrar outro nome que casa com o texto. Digitar desfaz a escolha.
+  const visibleOperators = useMemo(() => {
+    if (!pickedOperatorId) return filterByName(operatorMarkers, operatorSearch)
+    return operatorMarkers.filter((m) => m.id === pickedOperatorId)
+  }, [operatorMarkers, operatorSearch, pickedOperatorId])
+  const changeOperatorSearch = useCallback((value: string) => {
+    setPickedOperatorId(null)
+    setOperatorSearch(value)
+  }, [])
   const visibleOperatorsRef = useRef(visibleOperators)
   visibleOperatorsRef.current = visibleOperators
   // Hora da posição velha ao passar o mouse no pino; a cor não muda. O pino
@@ -137,10 +146,16 @@ export function useMapsGeneral() {
   const [cameras, setCameras] = useState<ReadonlyArray<Camera>>([])
   // "Buscar câmera" do controle: deixa no mapa só as câmeras que casam com o nome.
   const [cameraSearch, setCameraSearch] = useState('')
-  const visibleCameras = useMemo(
-    () => filterCameras(cameras, cameraSearch),
-    [cameras, cameraSearch],
-  )
+  // Mesma história dos operadores: "Portaria" casa com "Portaria 2".
+  const [pickedCameraId, setPickedCameraId] = useState<string | null>(null)
+  const visibleCameras = useMemo(() => {
+    if (!pickedCameraId) return filterCameras(cameras, cameraSearch)
+    return cameras.filter((c) => c.id === pickedCameraId)
+  }, [cameras, cameraSearch, pickedCameraId])
+  const changeCameraSearch = useCallback((value: string) => {
+    setPickedCameraId(null)
+    setCameraSearch(value)
+  }, [])
   // Lista abaixo da busca: o mesmo filtro que decide os pinos.
   const operatorResults = useMemo(
     () => visibleOperators.map((m) => ({ id: m.id, label: m.name })),
@@ -150,19 +165,23 @@ export function useMapsGeneral() {
     () => visibleCameras.map((c) => ({ id: c.id, label: c.name })),
     [visibleCameras],
   )
-  // Escolher um nome põe o nome inteiro na busca: sobra um pino, e o efeito
-  // de resultado único voa até ele.
+  // Escolher um nome guarda o id e põe o nome inteiro na busca: sobra um pino,
+  // e o efeito de resultado único voa até ele.
   const pickOperator = useCallback(
     (id: string) => {
       const m = operatorMarkers.find((o) => o.id === id)
-      if (m) setOperatorSearch(m.name)
+      if (!m) return
+      setPickedOperatorId(m.id)
+      setOperatorSearch(m.name)
     },
     [operatorMarkers],
   )
   const pickCamera = useCallback(
     (id: string) => {
       const c = cameras.find((o) => o.id === id)
-      if (c) setCameraSearch(c.name)
+      if (!c) return
+      setPickedCameraId(c.id)
+      setCameraSearch(c.name)
     },
     [cameras],
   )
@@ -566,9 +585,9 @@ export function useMapsGeneral() {
     showCameras,
     setShowCameras,
     cameraSearch,
-    setCameraSearch,
+    setCameraSearch: changeCameraSearch,
     operatorSearch,
-    setOperatorSearch,
+    setOperatorSearch: changeOperatorSearch,
     operatorResults,
     cameraResults,
     pickOperator,
