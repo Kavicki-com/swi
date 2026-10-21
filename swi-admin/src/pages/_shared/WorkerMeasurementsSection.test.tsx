@@ -93,11 +93,26 @@ const EMPTY: WorkerMeasurementsView = { kind: 'empty', message: NO_DEVICE_LABEL 
 const replacing = (key: MeasurementEntry['key'], over: Partial<MeasurementEntry>) =>
   ENTRIES.map((e): MeasurementEntry => (e.key === key ? { ...e, ...over } : e))
 
+// Os rótulos das roscas vêm decididos pelo vitalsView: ao vivo são os padrão,
+// com a pulseira trazem o instante medido.
 const renderSection = (
   view: WorkerMeasurementsView = entries(),
   wearPct: number | null = 38.4,
   effortPct: number | null = 61,
-) => renderPage(<WorkerMeasurementsSection view={view} wearPct={wearPct} effortPct={effortPct} />)
+  labels: { wearLabel: string; effortLabel: string } = {
+    wearLabel: 'Fadiga atual',
+    effortLabel: 'Esforço feito',
+  },
+) =>
+  renderPage(
+    <WorkerMeasurementsSection
+      view={view}
+      wearPct={wearPct}
+      effortPct={effortPct}
+      wearLabel={labels.wearLabel}
+      effortLabel={labels.effortLabel}
+    />,
+  )
 
 describe('WorkerMeasurementsSection', () => {
   it('mostra o título da faixa', async () => {
@@ -149,6 +164,23 @@ describe('WorkerMeasurementsSection', () => {
     expect(effort.getByText('Esforço realizado')).toBeInTheDocument()
     expect(effort.getByText('61,0%')).toBeInTheDocument()
     expect(effort.getByText('Esforço feito')).toBeInTheDocument()
+  })
+
+  // Com a pulseira o valor é do instante medido, não de agora: a rosca mostra
+  // o rótulo que o vitalsView decidiu, em vez do texto fixo "atual".
+  it('fadiga e esforço usam os rótulos recebidos, com o instante medido', async () => {
+    await renderSection(entries(), 38.4, 61, {
+      wearLabel: 'Fadiga às 14:10',
+      effortLabel: 'Esforço feito em 30/09 às 14:10',
+    })
+    expect(
+      within(screen.getByTestId('measurement-wear')).getByText('Fadiga às 14:10'),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('measurement-effort')).getByText('Esforço feito em 30/09 às 14:10'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Fadiga atual')).not.toBeInTheDocument()
+    expect(screen.queryByText('Esforço feito')).not.toBeInTheDocument()
   })
 
   it('fadiga e esforço sem valor mostram NO_VALUE em vez de 0%', async () => {

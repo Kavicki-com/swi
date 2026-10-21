@@ -18,11 +18,41 @@ export type WorkerVitalsView = {
   fatigueEta: { minutes: number | null; label: string }
   /** Frase do cartão: em que pé está a leitura. */
   status: string
-  /** Selo de origem quando a leitura não é do relógio real. */
+  /** Selo da leitura: demonstração, atraso da pulseira ou estimativa provisória. */
   sourceBadge: string | null
+  /** Rótulo da rosca de fadiga: "Fadiga atual", ou com o instante medido. */
+  wearLabel: string
+  /** Rótulo da rosca de esforço: "Esforço feito", ou com o instante medido. */
+  effortLabel: string
 }
 
 export const DEMO_DATA_LABEL = 'Dados de demonstração'
+
+/** Rótulos das roscas quando a leitura é ao vivo: o valor é de agora. */
+export const WEAR_LABEL = 'Fadiga atual'
+export const EFFORT_LABEL = 'Esforço feito'
+
+/**
+ * Instante sem o "às" na frente ("Dados até 14:10", "Dados até 30/09 às
+ * 14:10"), a mesma convenção do app no celular. Reaproveita o whenLabel para a
+ * data e o dia seguirem a mesma regra do resto do painel.
+ */
+const untilLabel = (iso: string, now: number): string | null =>
+  whenLabel(iso, now)?.replace(/^(às|em) /, '') ?? null
+
+/**
+ * Selo de atraso da pulseira lida pelo Health Connect. O lote chega depois e
+ * vale até o último instante medido, não até agora: sem dizer isso, um esforço
+ * de duas horas atrás pareceria o de agora. measuredUntil é relógio do celular,
+ * syncedAt é relógio do servidor; o painel mostra os dois no relógio de quem olha.
+ */
+const syncBadgeOf = (telemetry: WorkerTelemetry, now: number): string | null => {
+  if (!telemetry.sync) return null
+  const until = untilLabel(telemetry.sync.measuredUntil, now)
+  const synced = whenLabel(telemetry.sync.syncedAt, now)
+  if (until === null || synced === null) return null
+  return `Dados até ${until}, sincronizado ${synced}`
+}
 
 /**
  * Esforço e desgaste calculados com repouso provisório, antes do primeiro dia
@@ -32,10 +62,15 @@ export const PROVISIONAL_BASELINE_LABEL = 'Estimativa provisória'
 
 /**
  * Selo da leitura. Demonstração vence: um dado que nem é real não precisa
- * dizer que é estimativa. O provisório só faz sentido com desgaste na tela.
+ * dizer até quando foi medido nem que é estimativa. Depois vem o atraso da
+ * pulseira, porque um dado velho apresentado como atual engana mais do que um
+ * repouso ainda provisório. O provisório só faz sentido com desgaste na tela.
+ * `now` é o relógio da tela, para o selo envelhecer junto com a página.
  */
-export function sourceBadgeOf(telemetry: WorkerTelemetry): string | null {
+export function sourceBadgeOf(telemetry: WorkerTelemetry, now: number = Date.now()): string | null {
   if (telemetry.origin === 'DEMO') return DEMO_DATA_LABEL
+  const sync = syncBadgeOf(telemetry, now)
+  if (sync !== null) return sync
   if (telemetry.baseline === 'PROVISIONAL' && telemetry.metrics.wear.value !== null)
     return PROVISIONAL_BASELINE_LABEL
   return null
@@ -67,6 +102,29 @@ const EMPTY: Omit<WorkerVitalsView, 'status'> = {
   effortPct: null,
   fatigueEta: NO_ESTIMATE,
   sourceBadge: null,
+  wearLabel: WEAR_LABEL,
+  effortLabel: EFFORT_LABEL,
+}
+
+/**
+ * Rótulo da rosca com a pulseira: o esforço e o desgaste valem para o fim da
+ * janela avaliada (measuredAt da métrica, ou o fim dos dados sincronizados),
+ * então o rótulo diz esse instante e perde o "atual". Ao vivo, fica o padrão.
+ * Sem valor, também fica o padrão: "--" ao lado de um horário sugeriria uma
+ * medição vazia naquele instante (o app no celular segue a mesma regra). Um
+ * sync com data inválida não ganha selo, então também não muda o rótulo.
+ */
+const measuredLabel = (
+  prefix: string,
+  fallback: string,
+  metric: { value: number | null; measuredAt: string | null },
+  telemetry: WorkerTelemetry,
+  now: number,
+): string => {
+  if (!telemetry.sync || metric.value === null || syncBadgeOf(telemetry, now) === null)
+    return fallback
+  const when = whenLabel(metric.measuredAt ?? telemetry.sync.measuredUntil, now)
+  return when === null ? fallback : `${prefix} ${when}`
 }
 
 /**
@@ -108,6 +166,7 @@ export function vitalsViewFrom(
   }
 
   const { heartRate, bloodPressure, wear, effort, fatigueEtaMin } = telemetry.metrics
+  const now = options.now ?? Date.now()
 
   // A qualidade já chega decidida pelo backend contra o instante da leitura;
   // a tela não recalcula frescor com o próprio relógio.
@@ -120,7 +179,7 @@ export function vitalsViewFrom(
           ? // Com a data ("em dd/mm às HH:mm") fora do dia: o backend guarda o
             // último bpm para sempre, e só a hora faria uma leitura de dias
             // atrás parecer de agora.
-            `Última leitura ${whenLabel(heartRate.measuredAt, options.now ?? Date.now())}`
+            `Última leitura ${whenLabel(heartRate.measuredAt, now)}`
           : 'Sem leitura recente'
 
   // Avaliação presente sem estimativa quer dizer que o ritmo recente não leva
@@ -143,6 +202,8 @@ export function vitalsViewFrom(
     effortPct: effort.value === null ? null : oneDecimal(effort.value),
     fatigueEta,
     status,
-    sourceBadge: sourceBadgeOf(telemetry),
+    sourceBadge: sourceBadgeOf(telemetry, now),
+    wearLabel: measuredLabel('Fadiga', WEAR_LABEL, wear, telemetry, now),
+    effortLabel: measuredLabel('Esforço feito', EFFORT_LABEL, effort, telemetry, now),
   }
 }

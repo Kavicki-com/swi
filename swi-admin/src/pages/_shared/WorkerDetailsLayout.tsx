@@ -620,6 +620,8 @@ export function WorkerDetailsLayout({
         view={worker.measurements}
         wearPct={vitals.wearPct}
         effortPct={vitals.effortPct}
+        wearLabel={vitals.wearLabel}
+        effortLabel={vitals.effortLabel}
       />
 
       {/* BOTTOM: gasto calórico (título + seletor de período + gráfico de

@@ -182,9 +182,10 @@ export function measurementsViewFrom(
       entry('resting', 'Repouso', 'Batimento', 'favorite', restingHeartRate(ref)),
       entry('max', 'Máxima', 'Batimento', 'heartbeat', maxHeartRate(ref)),
     ],
-    // Só a demonstração ganha selo. O sourceBadgeOf também marca o repouso
-    // provisório, mas isso é do esforço e do desgaste; aqui a legenda do
-    // repouso já diz "Estimativa provisória".
+    // Só a demonstração ganha selo. O sourceBadgeOf também marca o atraso da
+    // pulseira e o repouso provisório. O atraso fica de fora de propósito: o
+    // card de sinais vitais logo acima já o mostra. O provisório é do esforço e
+    // do desgaste; aqui a legenda do repouso já diz "Estimativa provisória".
     sourceBadge: telemetry.origin === 'DEMO' ? DEMO_DATA_LABEL : null,
   }
 }
