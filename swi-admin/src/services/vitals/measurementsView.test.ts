@@ -76,18 +76,67 @@ describe('measurementsViewFrom', () => {
     })
   })
 
-  it('com leitura traz sempre as sete medições, na ordem, com rótulo e ícone', () => {
+  it('com leitura traz sempre as sete medições, na ordem, com rótulos e ícone', () => {
     const view = measurementsViewFrom(reporting(), { now })
     if (view.kind !== 'entries') throw new Error('esperava entradas')
-    expect(view.entries.map(({ key, label, icon }) => ({ key, label, icon }))).toEqual([
-      { key: 'oxygen', label: 'Oxigenação', icon: 'water_drop' },
-      { key: 'temperature', label: 'Temperatura', icon: 'device_thermostat' },
-      { key: 'steps', label: 'Passos', icon: 'footprint' },
-      { key: 'distance', label: 'Distância', icon: 'directions_walk' },
-      { key: 'movement', label: 'Movimento', icon: 'health_activity' },
-      { key: 'resting', label: 'Repouso', icon: 'favorite' },
-      { key: 'max', label: 'Máxima', icon: 'heartbeat' },
+    expect(
+      view.entries.map(({ key, label, centerLabel, icon }) => ({ key, label, centerLabel, icon })),
+    ).toEqual([
+      { key: 'oxygen', label: 'Oxigenação', centerLabel: 'Saturação', icon: 'water_drop' },
+      {
+        key: 'temperature',
+        label: 'Temperatura',
+        centerLabel: 'Corporal',
+        icon: 'device_thermostat',
+      },
+      { key: 'steps', label: 'Passos', centerLabel: 'Passos dados', icon: 'footprint' },
+      { key: 'distance', label: 'Distância', centerLabel: 'Percorrida', icon: 'directions_walk' },
+      { key: 'movement', label: 'Movimento', centerLabel: 'Ritmo atual', icon: 'health_activity' },
+      { key: 'resting', label: 'Repouso', centerLabel: 'Batimento', icon: 'favorite' },
+      { key: 'max', label: 'Máxima', centerLabel: 'Batimento', icon: 'heartbeat' },
     ])
+  })
+
+  // Só a oxigenação tem escala própria; para as outras o anel não inventa
+  // meta: cheio quando há leitura, vazio sem ela.
+  it('anel da rosca: oxigenação enche pela própria porcentagem, as demais cheias com leitura', () => {
+    const progressOf = (view: WorkerMeasurementsView) => {
+      if (view.kind !== 'entries') throw new Error('esperava entradas')
+      return Object.fromEntries(view.entries.map((e) => [e.key, e.progress]))
+    }
+    const full = measurementsViewFrom(
+      {
+        ...reporting({
+          oxygenSaturation: metric(96.6),
+          bodyTemperature: metric(36.5),
+          steps: metric(0),
+          distance: metric(3200),
+          movementPerMinute: metric(42),
+        }),
+        heartRateReference: reference(),
+      },
+      { now },
+    )
+    expect(progressOf(full)).toEqual({
+      oxygen: 96.6,
+      temperature: 100,
+      steps: 100,
+      distance: 100,
+      movement: 100,
+      resting: 100,
+      max: 100,
+    })
+    // Sem valor, vazio, inclusive quando a legenda ainda diz algo.
+    const empty = measurementsViewFrom(withReference(reference({ maxBpm: null })), { now })
+    expect(progressOf(empty)).toEqual({
+      oxygen: 0,
+      temperature: 0,
+      steps: 0,
+      distance: 0,
+      movement: 0,
+      resting: 100,
+      max: 0,
+    })
   })
 
   it('leitura de demonstração leva o selo de demonstração', () => {

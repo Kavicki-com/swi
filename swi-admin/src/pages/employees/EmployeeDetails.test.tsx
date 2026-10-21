@@ -245,7 +245,7 @@ describe('EmployeeDetails: vitais do aparelho', () => {
 
     expect(await screen.findByTestId('measurement-oxygen')).toHaveTextContent('97%')
     expect(screen.getByTestId('measurement-resting')).toHaveTextContent('62 bpm')
-    expect(screen.getByTestId('measurement-resting-caption')).toHaveTextContent('Medido em 9 dias')
+    expect(screen.getByTestId('measurement-resting')).toHaveTextContent('Medido em 9 dias')
   })
 
   it('o bloco Aparelho recebe a leitura da página e mostra a bateria do relógio', async () => {

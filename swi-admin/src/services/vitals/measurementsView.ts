@@ -27,12 +27,17 @@ export type MeasurementKey =
 
 export type MeasurementEntry = {
   key: MeasurementKey
+  /** Título acima da rosca. */
   label: string
+  /** Rótulo dentro da rosca, abaixo do valor. */
+  centerLabel: string
   icon: IconName
   /** Valor já formatado com unidade, ou null sem leitura (a tela escreve NO_VALUE). */
   value: string | null
-  /** Linha abaixo do card, ou null. */
+  /** Linha abaixo da rosca, ou null. */
   caption: string | null
+  /** Arco da rosca, de 0 a 100. */
+  progress: number
 }
 
 export type WorkerMeasurementsView =
@@ -45,6 +50,8 @@ export type WorkerMeasurementsView =
     }
 
 const TODAY = 'Hoje'
+
+const FULL_RING = 100
 
 // Milhar em pt-BR, como no resto do painel ("4.230").
 const integer = (n: number) => Math.round(n).toLocaleString('pt-BR')
@@ -124,12 +131,17 @@ export function measurementsViewFrom(
     telemetry.metrics
   const ref = telemetry.heartRateReference ?? null
 
+  // Só a oxigenação tem escala própria (já é porcentagem). As outras não têm
+  // meta que valha para todos, então o anel não inventa uma: cheio quando há
+  // leitura, vazio sem ela.
   const entry = (
     key: MeasurementKey,
     label: string,
+    centerLabel: string,
     icon: IconName,
     reading: Reading,
-  ): MeasurementEntry => ({ key, label, icon, ...reading })
+    progress = reading.value === null ? 0 : FULL_RING,
+  ): MeasurementEntry => ({ key, label, centerLabel, icon, ...reading, progress })
 
   return {
     kind: 'entries',
@@ -137,26 +149,38 @@ export function measurementsViewFrom(
       entry(
         'oxygen',
         'Oxigenação',
+        'Saturação',
         'water_drop',
         spot(oxygenSaturation, (n) => `${integer(n)}%`, now),
+        oxygenSaturation.value === null
+          ? 0
+          : Math.min(FULL_RING, Math.max(0, oxygenSaturation.value)),
       ),
       entry(
         'temperature',
         'Temperatura',
+        'Corporal',
         'device_thermostat',
         spot(bodyTemperature, (n) => `${formatOneDecimal(n)} °C`, now),
       ),
-      entry('steps', 'Passos', 'footprint', daily(steps, integer)),
+      entry('steps', 'Passos', 'Passos dados', 'footprint', daily(steps, integer)),
       // Metros do dia em km com uma casa, também abaixo de 1 km ("0,4 km").
       entry(
         'distance',
         'Distância',
+        'Percorrida',
         'directions_walk',
         daily(distance, (m) => `${formatOneDecimal(m / 1000)} km`),
       ),
-      entry('movement', 'Movimento', 'health_activity', movement(movementPerMinute, now)),
-      entry('resting', 'Repouso', 'favorite', restingHeartRate(ref)),
-      entry('max', 'Máxima', 'heartbeat', maxHeartRate(ref)),
+      entry(
+        'movement',
+        'Movimento',
+        'Ritmo atual',
+        'health_activity',
+        movement(movementPerMinute, now),
+      ),
+      entry('resting', 'Repouso', 'Batimento', 'favorite', restingHeartRate(ref)),
+      entry('max', 'Máxima', 'Batimento', 'heartbeat', maxHeartRate(ref)),
     ],
     // Só a demonstração ganha selo. O sourceBadgeOf também marca o repouso
     // provisório, mas isso é do esforço e do desgaste; aqui a legenda do

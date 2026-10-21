@@ -29,7 +29,6 @@ import {
   type IconName,
 } from '@kavicki/swi-design-system'
 import { WorkerCaloriesSection } from './WorkerCaloriesSection'
-import { WorkerEffortDonuts } from './WorkerEffortDonuts'
 import { WorkerFatigueBar } from './WorkerFatigueBar'
 import { WorkerMeasurementsSection } from './WorkerMeasurementsSection'
 import { WorkerVitalsCard } from './WorkerVitalsCard'
@@ -544,7 +543,8 @@ export function WorkerDetailsLayout({
           />
         </View>
 
-        {/* RIGHT column — vitals card + fatigue + stats + allergies + donuts.
+        {/* RIGHT column: vitals card + fatigue + stats + allergies (the fatigue
+            and effort donuts live in the measurements band below).
             - Tablet: full-width (stacked).
             - Desktop (1024-1499): hard width 459
               so body stats stay inline and "Condições excelentes" never wraps.
@@ -611,13 +611,16 @@ export function WorkerDetailsLayout({
               )}
             </View>
           </View>
-
-          <WorkerEffortDonuts wearPct={vitals.wearPct} effortPct={vitals.effortPct} />
         </View>
       </View>
 
-      {/* Medições do relógio, na largura toda como o gráfico abaixo. */}
-      <WorkerMeasurementsSection view={worker.measurements} />
+      {/* Medições do relógio, na largura toda como o gráfico abaixo: as
+          roscas de fadiga e esforço lado a lado com as demais medições. */}
+      <WorkerMeasurementsSection
+        view={worker.measurements}
+        wearPct={vitals.wearPct}
+        effortPct={vitals.effortPct}
+      />
 
       {/* BOTTOM: gasto calórico (título + seletor de período + gráfico de
           linha). Extraído para WorkerCaloriesSection. */}
