@@ -273,6 +273,28 @@ const synced = (
   sync: { measuredUntil: MEASURED_UNTIL, syncedAt: before(3 * MIN), ...sync },
 });
 
+describe('linha de estado com a pulseira', () => {
+  // A qualidade do batimento é decidida no backend pela idade da medição
+  // (qualityAt, régua VITAL de 45 s), e a pulseira pelo Health Connect entra
+  // na mesma régua (snapshotPolicyFor: LATEST). Medição sincronizada logo
+  // depois de feita chega CURRENT, mas o celular só envia em lote: dizer
+  // "agora" afirmaria um monitoramento contínuo que não há.
+  it('batimento ainda atual não vira "Monitorando agora": vai o horário da medição', () => {
+    const telemetry = synced();
+    expect(telemetry.metrics.heartRate.quality).toBe('CURRENT');
+    const view = dashboardVitalsView(telemetry);
+    expect(view.status).not.toMatch(/agora/);
+    expect(view.status).toBe(
+      `Última leitura às ${clock(telemetry.metrics.heartRate.measuredAt!)}`,
+    );
+    expect(view.heartRate).toBe('112');
+  });
+
+  it('sem a pulseira (iPhone) a frase de sempre', () => {
+    expect(dashboardVitalsView(reporting()).status).toBe('Monitorando agora');
+  });
+});
+
 describe('syncBannerOf', () => {
   it('sem sincronização (iPhone, leitura nula ou backend antigo) não há faixa', () => {
     expect(syncBannerOf(null, NOW)).toBeNull();

@@ -9,6 +9,7 @@ import {
   MY_TELEMETRY_REFRESH_MS,
   MyTelemetryProvider,
   useMyTelemetry,
+  useRefreshMyTelemetry,
   type MyTelemetryState,
 } from './MyTelemetryProvider';
 
@@ -468,6 +469,79 @@ describe('MyTelemetryProvider: primeiro e segundo plano', () => {
     await mudarEstado('active');
 
     expect(last().telemetry?.metrics.heartRate.value).toBe(112);
+  });
+});
+
+describe('useRefreshMyTelemetry', () => {
+  // A faixa de sincronização chama ao fim do "Sincronizar agora": sem isto o
+  // "sincronizado há" seguiria velho por até um intervalo inteiro, logo depois
+  // de a pessoa ver o botão terminar.
+  let refreshes: (() => void)[];
+  function RefreshProbe() {
+    seen.push(useMyTelemetry());
+    refreshes.push(useRefreshMyTelemetry());
+    return null;
+  }
+  const montar = async () => {
+    let tree!: ReturnType<typeof create>;
+    await act(async () => {
+      tree = create(
+        <MyTelemetryProvider>
+          <RefreshProbe />
+        </MyTelemetryProvider>,
+      );
+    });
+    return tree;
+  };
+  const reler = async () => {
+    await act(async () => {
+      refreshes[refreshes.length - 1]!();
+    });
+  };
+
+  beforeEach(() => {
+    refreshes = [];
+  });
+
+  it('relê na hora, sem esperar o intervalo, e entrega a leitura nova', async () => {
+    await montar();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    fetchMock.mockResolvedValue(reporting({ heartRate: metric(120) }));
+    await reler();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(last().telemetry?.metrics.heartRate.value).toBe(120);
+  });
+
+  it('é a mesma função em todo render', async () => {
+    await montar();
+    await avancar(MY_TELEMETRY_REFRESH_MS);
+
+    expect(refreshes.length).toBeGreaterThan(1);
+    expect(new Set(refreshes).size).toBe(1);
+  });
+
+  it('sem sessão não pede nada', async () => {
+    mockUseAuth.mockReturnValue({ user: null });
+    await montar();
+
+    await reler();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fora do provider é inerte', () => {
+    function Solta() {
+      refreshes.push(useRefreshMyTelemetry());
+      return null;
+    }
+    act(() => {
+      create(<Solta />);
+    });
+
+    expect(() => refreshes[0]!()).not.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

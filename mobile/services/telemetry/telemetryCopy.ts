@@ -144,6 +144,19 @@ export const HEALTH_CONNECT_PAIRING_COPY = {
     'A leitura do Health Connect ainda não trouxe resultado. O SWI tenta de novo sozinho.',
 } as const;
 
+/**
+ * Botão da faixa de sincronização, no Dashboard e em Minhas estatísticas. O
+ * texto da faixa ("Dados até ... · sincronizado ...") sai de `syncBannerOf`
+ * (dashboardVitalsView.ts), junto das outras frases sobre a leitura; aqui
+ * fica só a ação, que existe quando este celular lê o Health Connect.
+ */
+export const SYNC_BANNER_COPY = {
+  sincronizar: 'Sincronizar agora',
+  // No lugar do rótulo enquanto a leitura, o envio e a releitura correm: o
+  // botão desabilitado com o rótulo de sempre pareceria travado.
+  sincronizando: 'Sincronizando…',
+} as const;
+
 /** Health Connect ausente ou desatualizado: o caminho é a Play Store. */
 export function healthConnectInstallCopy(
   availability: 'unavailable' | 'update_required',

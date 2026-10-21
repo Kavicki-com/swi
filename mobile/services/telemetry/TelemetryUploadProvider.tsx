@@ -62,6 +62,14 @@ export interface TelemetryUploadContextValue extends TelemetryUploadState {
    */
   syncNow: () => Promise<void>;
   /**
+   * Verdadeiro enquanto a sincronização única de `syncNow` corre; falso ao
+   * terminar, com sucesso ou não. As faixas de sincronização das telas leem o
+   * progresso daqui, e não de uma flag própria: com Minhas estatísticas
+   * empilhada sobre o Dashboard as duas mostram o mesmo estado. O `syncNow`
+   * inerte (sem sessão, sem pareamento) não o liga.
+   */
+  syncing: boolean;
+  /**
    * Abre o pedido de permissão de leitura do Health Connect (tela de
    * pareamento) e relê o estado. Nunca rejeita: o leitor rejeita quando o
    * Health Connect não está pronto, e isso volta como `'unavailable'`, com o
@@ -87,6 +95,7 @@ const FORA_DO_PROVIDER: TelemetryUploadContextValue = {
   refreshPairing: () => undefined,
   healthConnect: null,
   syncNow: async () => undefined,
+  syncing: false,
   requestHealthConnectPermission: async () => 'unavailable',
   checkHealthConnect: async () => 'unavailable',
   openHealthConnectSettings: () => undefined,
@@ -209,10 +218,14 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
     void syncHealthConnectTaskRegistration({ enabled });
   }, [onHealthConnect, restoring, enabled, paired, healthConnect]);
 
-  // A sincronização em curso: um segundo toque recebe a mesma promessa.
-  const syncing = useRef<Promise<void> | null>(null);
+  // A sincronização em curso: um segundo toque recebe a mesma promessa. O
+  // estado `syncing` espelha a ref para as telas; a ref é o que decide, porque
+  // o estado só muda no próximo render e dois toques no mesmo quadro o
+  // veriam ainda falso.
+  const inFlight = useRef<Promise<void> | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const syncNow = useCallback((): Promise<void> => {
-    if (syncing.current !== null) return syncing.current;
+    if (inFlight.current !== null) return inFlight.current;
     // Sem sessão não há de quem ler a saúde. Sem pareamento a leitura
     // forçada avançaria o token do Health Connect e nada subiria: a tela
     // mostraria uma sincronização nova que o painel nunca recebeu.
@@ -231,9 +244,11 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
       // Encadeado, e não dentro do bloco acima: um `finally` encadeado roda
       // sempre depois desta função voltar, então nunca limpa antes de a
       // promessa ser guardada, e a promessa devolvida só resolve já limpa.
-      syncing.current = null;
+      inFlight.current = null;
+      setSyncing(false);
     });
-    syncing.current = run;
+    inFlight.current = run;
+    setSyncing(true);
     return run;
   }, [reader, enabled, paired, drainNow, refreshHealthConnect]);
 
@@ -288,6 +303,7 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
       refreshPairing,
       healthConnect,
       syncNow,
+      syncing,
       requestHealthConnectPermission,
       checkHealthConnect,
       openHealthConnectSettings,
@@ -298,6 +314,7 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
       refreshPairing,
       healthConnect,
       syncNow,
+      syncing,
       requestHealthConnectPermission,
       checkHealthConnect,
       openHealthConnectSettings,

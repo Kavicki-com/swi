@@ -4,6 +4,7 @@ import {
   healthConnectInstallCopy,
   pairingCopy,
   pairingFailureCopy,
+  SYNC_BANNER_COPY,
   watchProtocolCopy,
   telemetryCopy,
   telemetryUploadCopy,
@@ -241,5 +242,14 @@ describe('copy do Health Connect no pareamento', () => {
       'A leitura do Health Connect ainda não trouxe resultado. O SWI tenta de novo sozinho.',
     );
     expect(HEALTH_CONNECT_PAIRING_COPY.semResultado).not.toMatch(/nenhuma/i);
+  });
+});
+
+describe('copy da faixa de sincronização', () => {
+  // O texto da faixa sai de syncBannerOf (dashboardVitalsView.ts); aqui fica
+  // só o botão, que existe quando este celular lê o Health Connect.
+  it('o botão pede a sincronização e diz que ela está em curso', () => {
+    expect(SYNC_BANNER_COPY.sincronizar).toBe('Sincronizar agora');
+    expect(SYNC_BANNER_COPY.sincronizando).toBe('Sincronizando…');
   });
 });

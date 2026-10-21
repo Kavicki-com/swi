@@ -181,6 +181,7 @@ describe('TelemetryUploadProvider', () => {
     });
     expect(visto.paired).toBe(false);
     expect(visto.healthConnect).toBeNull();
+    expect(visto.syncing).toBe(false);
     expect(() => visto.refreshPairing()).not.toThrow();
     await expect(visto.syncNow()).resolves.toBeUndefined();
     await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
@@ -407,6 +408,66 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
       await visto.syncNow();
     });
     expect(leitor.reader.run).toHaveBeenCalledTimes(2);
+  });
+
+  // As faixas de sincronização (Dashboard e Minhas estatísticas, que podem
+  // estar montadas juntas) leem o progresso daqui: um estado só, o da
+  // promessa única, em vez de uma flag por tela.
+  it('syncing fica verdadeiro enquanto a sincronização corre e volta a falso no fim', async () => {
+    await montar();
+    expect(visto.syncing).toBe(false);
+    let soltar!: () => void;
+    leitor.reader.run.mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve) => {
+          soltar = () => resolve(0);
+        }),
+    );
+
+    let emCurso!: Promise<void>;
+    await act(async () => {
+      emCurso = visto.syncNow();
+    });
+    expect(visto.syncing).toBe(true);
+
+    await act(async () => {
+      soltar();
+      await emCurso;
+    });
+    expect(visto.syncing).toBe(false);
+  });
+
+  it('syncing volta a falso também quando a sincronização falha', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await montar();
+    leitor.reader.run.mockRejectedValueOnce(new Error('ponte nativa caiu'));
+    await act(async () => {
+      await visto.syncNow();
+    });
+    expect(visto.syncing).toBe(false);
+    warn.mockRestore();
+  });
+
+  // Sem pareamento o syncNow é inerte: não há progresso a mostrar.
+  it('syncNow inerte não liga syncing', async () => {
+    mockUpload.mockReturnValue(envio({ paired: false }));
+    const vistos: boolean[] = [];
+    function Historico() {
+      vistos.push(useTelemetryUploadState().syncing);
+      return null;
+    }
+    await act(async () => {
+      create(
+        <TelemetryUploadProvider>
+          <Historico />
+          <Leitor />
+        </TelemetryUploadProvider>,
+      );
+    });
+    await act(async () => {
+      await visto.syncNow();
+    });
+    expect(vistos).not.toContain(true);
   });
 
   // A tela de pareamento pede a permissão pelo contexto, sem importar o

@@ -66,6 +66,7 @@ const comEnvio = (parcial: Partial<TelemetryUploadContextValue> = {}) =>
     refreshPairing: mockRefresh,
     healthConnect: null,
     syncNow: mockSyncNow,
+    syncing: false,
     requestHealthConnectPermission: mockPedir,
     checkHealthConnect: mockConferir,
     openHealthConnectSettings: mockAjustes,

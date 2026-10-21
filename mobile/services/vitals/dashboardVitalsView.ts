@@ -188,9 +188,13 @@ export function dashboardVitalsView(
   // a tela não recalcula frescor com o próprio relógio.
   // Com falha ou ainda carregando, o que chega aqui é só a condição aberta
   // que sobrou da última leitura: a frase fala da leitura que falta.
+  // Com a pulseira (sync presente) nunca vai "agora": o backend dá CURRENT a
+  // uma medição de até 45 s mesmo vinda pelo Health Connect, que só chega em
+  // lote, e o "agora" prometeria um monitoramento contínuo que não existe. A
+  // frase é a da última leitura, com o horário em que foi medida.
   const status = options.failed
     ? UNAVAILABLE_STATUS
-    : heartRate.value !== null && heartRate.quality === 'CURRENT'
+    : heartRate.value !== null && heartRate.quality === 'CURRENT' && !telemetry.sync
       ? 'Monitorando agora'
       : heartRate.value !== null && heartRate.measuredAt
         ? `Última leitura ${whenLabel(heartRate.measuredAt, observedAt)}`
