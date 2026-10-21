@@ -583,6 +583,12 @@ enum TelemetryDeviceKind {
   ANDROID_PHONE
 }
 
+/// Família do aparelho que mediu o dia. A calibração recomeça quando ela muda.
+enum CalibrationDeviceFamily {
+  WATCH
+  BAND
+}
+
 enum TelemetrySessionStatus {
   ACTIVE
   INTERRUPTED
@@ -970,6 +976,9 @@ model TelemetryDailySummary {
   heartRateCount Int?
   /// Soma dos intervalos entre leituras consecutivas de BPM, sem as lacunas.
   heartRateCoveredMs Int?
+  /// Percentis do batimento do dia (nearest-rank). Base das faixas de calibração.
+  heartRateP25 Float?
+  heartRateP90 Float?
 
   stepsTotal Int?
   stepsCount Int?
@@ -980,10 +989,26 @@ model TelemetryDailySummary {
   activeEnergyKcalTotal Float?
   activeEnergyCount     Int?
 
+  oxygenSaturationP10   Float?
+  oxygenSaturationP50   Float?
+  oxygenSaturationCount Int?
+
+  /// Temperatura de pulso (pele), não do corpo.
+  bodyTemperatureP10   Float?
+  bodyTemperatureP25   Float?
+  bodyTemperatureP75   Float?
+  bodyTemperatureP90   Float?
+  bodyTemperatureCount Int?
+
+  /// Mediana, entre os minutos com leitura, da soma de movimento do minuto.
+  movementPerMinuteMedian Float?
+
   effortMax       Float?
   effortAvg       Float?
   effortCount     Int?
   effortAbove80Ms Int?
+  effortP25       Float?
+  effortP90       Float?
   wearMax         Float?
   wearAvg         Float?
   wearCount       Int?
@@ -994,6 +1019,8 @@ model TelemetryDailySummary {
   lastDiastolicMmHg       Int?
   lastBloodPressureSource TelemetryMeasurementSource?
   lastBloodPressureAt     DateTime?
+  systolicAvg             Float?
+  diastolicAvg            Float?
 
   batteryMin Float?
 
@@ -1004,6 +1031,8 @@ model TelemetryDailySummary {
   firstSampleAt DateTime?
   lastSampleAt  DateTime?
   coveredMs     Int?
+  /// Família que mais leu batimento no dia. Nula sem batimento.
+  deviceFamily  CalibrationDeviceFamily?
 
   /// Rastro do cálculo, para que um recálculo seja auditável.
   summarizerVersion String
