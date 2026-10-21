@@ -5,6 +5,8 @@ import Dashboard from '../../../app/(app)/dashboard';
 import { condition, reporting } from '../../../services/telemetry/myTelemetryFixtures';
 import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
 import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
+import { Platform } from 'react-native';
+import { isFeatureEnabled } from '../../../lib/featureFlags';
 
 // Companheiro de dashboard.integration.test.tsx, que cobre a leitura da telemetria,
 // badges, navegacao e a tela ?alert=active. Aqui ficam os dois caminhos de
@@ -35,6 +37,18 @@ let mockSuporte: WatchDiagnosticsState = { support: 'ready' } as WatchDiagnostic
 jest.mock('../../../services/telemetry/watchDiagnostics', () => ({
   useWatchDiagnostics: () => mockSuporte,
 }));
+
+// O caminho da pulseira (Android com Health Connect) depende do gate e da
+// plataforma, como no pareamento. Por padrão o gate real; o caso Android liga.
+jest.mock('../../../lib/featureFlags', () => ({
+  ...jest.requireActual('../../../lib/featureFlags'),
+  isFeatureEnabled: jest.fn(),
+}));
+const mockGate = isFeatureEnabled as jest.MockedFunction<typeof isFeatureEnabled>;
+const { isFeatureEnabled: gateReal } = jest.requireActual('../../../lib/featureFlags');
+const originalOS = Platform.OS;
+const naPlataforma = (os: typeof Platform.OS) =>
+  Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -156,6 +170,7 @@ beforeEach(() => {
   mockSuporte = { support: 'ready' } as WatchDiagnosticsState;
   jest.useFakeTimers();
   jest.clearAllMocks();
+  mockGate.mockImplementation(gateReal);
   mockSearchParams = {};
   mockTelemetryState = lendo(reporting());
   mockAlertaVigente = ALERTA;
@@ -163,6 +178,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
+  naPlataforma(originalOS);
 });
 
 // --- Alerta por rota ---------------------------------------------------------
@@ -477,13 +493,13 @@ describe('dashboard: ajuda urgente sem leitura', () => {
 });
 
 describe('dashboard: aparelho sem o módulo do relógio', () => {
-  const SEM_RELOGIO = 'Monitoramento só com iPhone e Apple Watch';
+  const SEM_RELOGIO = 'Este aparelho não faz o monitoramento';
   const frases = (tree: ReactTestRenderer) =>
     tree.root
       .findAll((n) => typeof n.props.children === 'string')
       .map((n) => n.props.children as string);
 
-  it('a linha de estado diz onde o monitoramento funciona, e a tela fica inteira', async () => {
+  it('a linha de estado diz que este aparelho não monitora, e a tela fica inteira', async () => {
     mockSuporte = { support: 'unsupported' };
     mockTelemetryState = { telemetry: null, failed: false, loading: false };
     const tree = await montar();
@@ -491,6 +507,19 @@ describe('dashboard: aparelho sem o módulo do relógio', () => {
     expect(frases(tree)).toContain(SEM_RELOGIO);
     expect(frases(tree)).not.toContain('Sem leitura do aparelho');
     expect(porRotulo(tree, 'Ajuda urgente')).toBeTruthy();
+  });
+
+  it('Android com a pulseira pelo Health Connect não é "sem suporte": sem leitura diz só que não há leitura', async () => {
+    // No Android o módulo do relógio não existe, e por isso responde "sem
+    // suporte"; quem monitora ali é a pulseira.
+    naPlataforma('android');
+    mockGate.mockImplementation((gate) => gate === 'healthConnect');
+    mockSuporte = { support: 'unsupported' };
+    mockTelemetryState = { telemetry: null, failed: false, loading: false };
+    const tree = await montar();
+
+    expect(frases(tree)).toContain('Sem leitura do aparelho');
+    expect(frases(tree)).not.toContain(SEM_RELOGIO);
   });
 
   it('com o módulo presente a frase não aparece', async () => {

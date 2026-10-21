@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, useWindowDimensions, View } from 'react-native';
+import { Platform, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
@@ -23,6 +23,7 @@ import {
 import { NavFABs } from '../../components/NavFABs';
 import { SyncBanner } from '../../components/telemetry/SyncBanner';
 import { useWatchDiagnostics } from '../../services/telemetry/watchDiagnostics';
+import { isFeatureEnabled } from '../../lib/featureFlags';
 import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { useMySeries } from '../../services/vitals/useMySeries';
 import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
@@ -136,9 +137,12 @@ export default function MyStats() {
   // e falha não trocam a tela: as visões devolvem a ausência declarada, e
   // alergias e exames (dado real do cadastro) seguem à vista.
   const { telemetry, failed, loading } = useMyTelemetry();
-  // Sem o módulo do relógio a linha de estado diz onde o monitoramento
-  // funciona, no mesmo Text, para a tela ficar igual à do iPhone.
-  const unsupported = useWatchDiagnostics().support === 'unsupported';
+  // Sem o módulo do relógio a linha de estado diz que este aparelho não
+  // monitora, no mesmo Text, para a tela ficar igual à do iPhone. No Android
+  // o módulo nunca existe: quem monitora ali é a pulseira pelo Health Connect.
+  const relogio = useWatchDiagnostics();
+  const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
+  const unsupported = !naPulseira && relogio.support === 'unsupported';
   const view = dashboardVitalsView(telemetry, { failed, loading, unsupported });
   const donuts = statsDonutsView(telemetry);
   const status = view.workerStatus;

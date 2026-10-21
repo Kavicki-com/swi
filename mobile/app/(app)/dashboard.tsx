@@ -40,6 +40,7 @@ import {
 } from '../../lib/dashboardDecor';
 import { useUniqueId, useUniqueSvg } from '../../lib/uniqueSvg';
 import { useWatchDiagnostics } from '../../services/telemetry/watchDiagnostics';
+import { isFeatureEnabled } from '../../lib/featureFlags';
 import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
 import { useProfile } from '../../services/profile/ProfileProvider';
@@ -101,9 +102,12 @@ export default function Dashboard() {
   // a visão devolve a ausência declarada ("--", "Sem medição") e o dashboard
   // segue inteiro, com a ajuda urgente ao alcance de quem está sem monitoramento.
   const { telemetry, failed, loading } = useMyTelemetry();
-  // Sem o módulo do relógio a linha de estado diz onde o monitoramento
-  // funciona, no mesmo Text, para a tela ficar igual à do iPhone.
-  const unsupported = useWatchDiagnostics().support === 'unsupported';
+  // Sem o módulo do relógio a linha de estado diz que este aparelho não
+  // monitora, no mesmo Text, para a tela ficar igual à do iPhone. No Android
+  // o módulo nunca existe: quem monitora ali é a pulseira pelo Health Connect.
+  const relogio = useWatchDiagnostics();
+  const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
+  const unsupported = !naPulseira && relogio.support === 'unsupported';
   const view = dashboardVitalsView(telemetry, { failed, loading, unsupported });
   const status = view.workerStatus;
   const { profile } = useProfile();
