@@ -535,6 +535,8 @@ model Notification {
   domain    NotificationDomain
   targetId  String?
   read      Boolean            @default(false)
+  // "Limpar todas" do sino do painel: some só no painel, o app continua vendo.
+  panelHiddenAt DateTime?
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
 
