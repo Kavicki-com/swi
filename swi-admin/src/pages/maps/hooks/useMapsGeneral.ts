@@ -5,7 +5,7 @@
 // A ordem de declaração dos efeitos é significativa: o React roda cleanups
 // nessa ordem, e é disso que dependem as guardas `mapRef.current !== map`
 // nos cleanups de heatmap e meteo. Não reordene.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder } from 'react-native'
 import { useNavigate, useLocation } from 'react-router-dom'
 import type * as maplibregl from 'maplibre-gl'
@@ -140,6 +140,31 @@ export function useMapsGeneral() {
   const visibleCameras = useMemo(
     () => filterCameras(cameras, cameraSearch),
     [cameras, cameraSearch],
+  )
+  // Lista abaixo da busca: o mesmo filtro que decide os pinos.
+  const operatorResults = useMemo(
+    () => visibleOperators.map((m) => ({ id: m.id, label: m.name })),
+    [visibleOperators],
+  )
+  const cameraResults = useMemo(
+    () => visibleCameras.map((c) => ({ id: c.id, label: c.name })),
+    [visibleCameras],
+  )
+  // Escolher um nome põe o nome inteiro na busca: sobra um pino, e o efeito
+  // de resultado único voa até ele.
+  const pickOperator = useCallback(
+    (id: string) => {
+      const m = operatorMarkers.find((o) => o.id === id)
+      if (m) setOperatorSearch(m.name)
+    },
+    [operatorMarkers],
+  )
+  const pickCamera = useCallback(
+    (id: string) => {
+      const c = cameras.find((o) => o.id === id)
+      if (c) setCameraSearch(c.name)
+    },
+    [cameras],
   )
   useEffect(() => {
     if (!showCameras) return
@@ -288,6 +313,18 @@ export function useMapsGeneral() {
     const target = visibleOperatorsRef.current.find((m) => m.id === searchMatchId)
     if (target) map.flyTo({ center: [target.lng, target.lat], zoom: 16, duration: 1500 })
   }, [mapReady, searchMatchId])
+
+  // Mesma regra para a câmera: uma só sobrando, a câmera voa até ela.
+  const visibleCamerasRef = useRef(visibleCameras)
+  visibleCamerasRef.current = visibleCameras
+  const cameraMatchId =
+    cameraSearch.trim() && visibleCameras.length === 1 ? visibleCameras[0]!.id : null
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady || !cameraMatchId) return
+    const target = visibleCamerasRef.current.find((c) => c.id === cameraMatchId)
+    if (target) map.flyTo({ center: [target.lng, target.lat], zoom: 16, duration: 1500 })
+  }, [mapReady, cameraMatchId])
 
   useEffect(() => {
     const map = mapRef.current
@@ -532,6 +569,10 @@ export function useMapsGeneral() {
     setCameraSearch,
     operatorSearch,
     setOperatorSearch,
+    operatorResults,
+    cameraResults,
+    pickOperator,
+    pickCamera,
     isLocating,
     handleLocate,
     backBtnPanResponder,
