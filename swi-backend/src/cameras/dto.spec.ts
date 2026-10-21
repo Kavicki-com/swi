@@ -103,6 +103,25 @@ describe('isEmbedUrlAllowed', () => {
     expect(isEmbedUrlAllowed('https://player.exemplo.com.br.evil.com/cam', hosts)).toBe(false)
     expect(isEmbedUrlAllowed('https://exemplo.com.br/cam', hosts)).toBe(false)
   })
+
+  it('"*.dominio" libera o domínio e os subdomínios, sem sufixo enganoso', () => {
+    const wild = new Set(['*.youtube.com'])
+    expect(isEmbedUrlAllowed('https://www.youtube.com/embed/abc', wild)).toBe(true)
+    expect(isEmbedUrlAllowed('https://youtube.com/embed/abc', wild)).toBe(true)
+    expect(isEmbedUrlAllowed('https://m.www.youtube.com/embed/abc', wild)).toBe(true)
+    expect(isEmbedUrlAllowed('https://evilyoutube.com/embed/abc', wild)).toBe(false)
+    expect(isEmbedUrlAllowed('https://www.youtube.com.evil.com/embed/abc', wild)).toBe(false)
+    expect(isEmbedUrlAllowed('http://www.youtube.com/embed/abc', wild)).toBe(false)
+  })
+
+  it('"*" libera qualquer domínio, mas segue exigindo https', () => {
+    const any = new Set(['*'])
+    expect(isEmbedUrlAllowed('https://player.twitch.tv/?channel=x&parent=swi.kavicki.com', any)).toBe(true)
+    expect(isEmbedUrlAllowed('https://cftv.obra.com.br/cam/1', any)).toBe(true)
+    expect(isEmbedUrlAllowed('http://cftv.obra.com.br/cam/1', any)).toBe(false)
+    expect(isEmbedUrlAllowed('javascript:alert(1)', any)).toBe(false)
+    expect(isEmbedUrlAllowed('não é endereço', any)).toBe(false)
+  })
 })
 
 describe('embedUrl no DTO', () => {

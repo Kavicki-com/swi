@@ -36,9 +36,21 @@ export function embedAllowedHosts(env: string | undefined = process.env.CAMERA_E
   )
 }
 
+// Uma entrada da lista casa com o host assim: "*" libera qualquer domínio;
+// "*.dominio.com" libera o domínio e os subdomínios dele, separados por ponto
+// (então "evildominio.com" não passa); qualquer outra entrada casa o host todo.
+function hostMatches(host: string, entry: string): boolean {
+  if (entry === '*') return true
+  if (entry.startsWith('*.')) {
+    const base = entry.slice(2)
+    return host === base || host.endsWith(`.${base}`)
+  }
+  return host === entry
+}
+
 // O player por iframe roda dentro da página do painel, então só entra um
-// endereço https cujo host inteiro esteja na lista liberada. Casa o host todo:
-// um sufixo como "liberado.com.br.evil.com" não passa. Lista vazia recusa tudo.
+// endereço https cujo host case com a lista liberada. Casa o host todo: um
+// sufixo como "liberado.com.br.evil.com" não passa. Lista vazia recusa tudo.
 export function isEmbedUrlAllowed(value: unknown, hosts: Set<string> = embedAllowedHosts()): boolean {
   if (typeof value !== 'string') return false
   if (hosts.size === 0) return false
@@ -49,7 +61,8 @@ export function isEmbedUrlAllowed(value: unknown, hosts: Set<string> = embedAllo
     return false
   }
   if (parsed.protocol !== 'https:') return false
-  return hosts.has(parsed.hostname.toLowerCase())
+  const host = parsed.hostname.toLowerCase()
+  return [...hosts].some((entry) => hostMatches(host, entry))
 }
 
 @ValidatorConstraint({ name: 'isAllowedEmbedUrl', async: false })
