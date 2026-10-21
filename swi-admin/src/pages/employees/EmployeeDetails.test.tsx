@@ -142,20 +142,40 @@ describe('EmployeeDetails', () => {
     expect(nav.spy).toHaveBeenCalledWith('/employees/w1/faixas')
   })
 
-  // O backend manda `calibration` nulo para DEMO e para quem ainda não tem
-  // calibração: não há faixa nem trava da pessoa para abrir.
+  // Toda pessoa tem faixa desde o pareamento (a partida padrão), então o botão
+  // fica sempre. Um backend anterior ainda manda `calibration` nulo para DEMO e
+  // para quem não tem linha gravada: a página de faixas mostra a partida.
   it.each([
     ['DEMO', { ...reporting({}, 'DEMO'), calibration: null }],
     ['sem calibração', { ...reporting(), calibration: null }],
     ['nunca reportou', neverReported()],
-  ])('Faixas e travas some para %s', async (_, data) => {
+    [
+      'calibração de partida',
+      {
+        ...reporting(),
+        calibration: {
+          version: 'swi-calibration-2',
+          phase: 'CALIBRATING' as const,
+          recalibrating: false,
+          day: 1,
+          metrics: {
+            OXYGEN_SATURATION: {
+              zone: 'NORMAL' as const,
+              cuts: { excellence: 95, fatigue: 92 },
+              source: 'START' as const,
+            },
+          },
+        },
+      },
+    ],
+  ])('Faixas e travas aparece para %s', async (_, data) => {
     getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
     currentMock.mockResolvedValue({ data, error: null })
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
-    await screen.findByRole('button', { name: 'Solicitar pausa para o funcionário' })
-    await waitFor(() => expect(currentMock).toHaveBeenCalled())
-    expect(screen.queryByRole('button', { name: 'Faixas e travas' })).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'Faixas e travas' }))
+
+    expect(nav.spy).toHaveBeenCalledWith('/employees/w1/faixas')
   })
 
   // O "Solicitar Pausa" dispara o POST real, que é a notificação de journey pro

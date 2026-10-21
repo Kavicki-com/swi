@@ -120,16 +120,14 @@ export function EmployeeDetails() {
       }
       topRightAction={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          {/* Faixas aprendidas, travas e histórico da calibração individual.
-              Sem calibração (DEMO ou ainda sem dias) não há o que abrir. */}
-          {telemetry?.calibration ? (
-            <Button
-              label="Faixas e travas"
-              variant="outline"
-              accessibilityLabel="Faixas e travas"
-              onPress={() => navigate(`/employees/${employee.id}/faixas`)}
-            />
-          ) : null}
+          {/* Faixas, travas e histórico da calibração individual. Sempre
+              presente: sem faixa gravada, a página mostra a partida padrão. */}
+          <Button
+            label="Faixas e travas"
+            variant="outline"
+            accessibilityLabel="Faixas e travas"
+            onPress={() => navigate(`/employees/${employee.id}/faixas`)}
+          />
           <Button
             label={pausing ? 'Solicitando…' : 'Solicitar Pausa'}
             variant="contained"
