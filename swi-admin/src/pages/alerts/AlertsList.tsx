@@ -46,6 +46,8 @@ import { useEvacuation } from '@/hooks/useEvacuation'
 import { useWeatherAlert } from '@/hooks/useWeatherAlert'
 import { countWorkersInArea, type AreaVertex } from '@/lib/evacuationArea'
 import { drawAreaLayer, AREA_VERTEX_COLOR } from '@/pages/maps/evacuationAreaLayer'
+import { buildMusterPin } from '@/pages/maps/musterPointPin'
+import { EvacuationDrawToolbar } from './components/EvacuationDrawToolbar'
 
 const FILTER_CHIPS = [
   { value: 'all', label: 'Todos' },
@@ -113,12 +115,16 @@ export function AlertsList() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [mapMode, setMapMode] = useState<'pins' | 'heat' | 'meteo'>('pins')
-  // Fluxo de demarcação da área (MEL-13): "Iniciar evacuação" entra em modo de
-  // desenho; cada clique no mapa põe um vértice; confirmar dispara com a área.
-  const [drawing, setDrawing] = useState(false)
+  // Fluxo de demarcação em dois passos: "Iniciar evacuação" abre o passo da
+  // área (MEL-13, um vértice por clique) e, com a área fechada, o passo do
+  // ponto de encontro (um clique, obrigatório). Confirmar dispara com os dois.
+  const [drawStep, setDrawStep] = useState<'area' | 'muster' | null>(null)
   const [draftVertices, setDraftVertices] = useState<AreaVertex[]>([])
+  const [draftMuster, setDraftMuster] = useState<AreaVertex | null>(null)
   // Polígono salvo da evacuação ativa (anel fechado [lng, lat]), ou null.
   const savedArea = evacuation?.area ?? null
+  // Ponto de encontro salvo; evacuações anteriores ao ponto obrigatório não têm.
+  const savedMuster = evacuation?.musterPoint ?? null
   // Quantos funcionários estão dentro da área salva, sobre as posições ao vivo.
   const workersInArea = useMemo(() => countWorkersInArea(markers, savedArea), [markers, savedArea])
   // Contorno vermelho do tema; magenta dos vértices como no print (sem token).
@@ -128,22 +134,29 @@ export function AlertsList() {
   )
   const beginDraw = () => {
     setDraftVertices([])
-    setDrawing(true)
+    setDraftMuster(null)
+    setDrawStep('area')
   }
   const cancelDraw = () => {
-    setDrawing(false)
+    setDrawStep(null)
     setDraftVertices([])
+    setDraftMuster(null)
   }
   const confirmDraw = () => {
     const area = draftVertices
-    setDrawing(false)
+    const muster = draftMuster
+    // O botão já fica desabilitado sem o ponto; a guarda é a rede de segurança
+    // do contrato (o backend recusa 400 sem ele).
+    if (!muster) return
+    setDrawStep(null)
     setDraftVertices([])
-    void startEvacuation(area)
+    setDraftMuster(null)
+    void startEvacuation(area, muster)
   }
   // O handler de clique do mapa é instalado uma vez; estes refs deixam ele ver
-  // o estado atual de desenho sem reinstalar e recriar o mapa.
-  const drawingRef = useRef(drawing)
-  drawingRef.current = drawing
+  // o passo de desenho atual sem reinstalar e recriar o mapa.
+  const drawStepRef = useRef(drawStep)
+  drawStepRef.current = drawStep
   const appendVertexRef = useRef<(v: AreaVertex) => void>(() => {})
   appendVertexRef.current = (v: AreaVertex) => setDraftVertices((cur) => [...cur, v])
 
@@ -231,12 +244,18 @@ export function AlertsList() {
       }
       setMapReady(true)
     })
-    // Em modo de desenho, o clique no mapa põe um vértice da área; fora dele,
-    // o clique no mapa vazio fecha o card (o pino é um elemento DOM por cima do
-    // canvas, então o clique nele não chega aqui; só o clique fora dele).
+    // No passo da área, o clique no mapa põe um vértice; no passo do ponto,
+    // troca o ponto de encontro; fora do desenho, o clique no mapa vazio fecha
+    // o card (o pino é um elemento DOM por cima do canvas, então o clique nele
+    // não chega aqui; só o clique fora dele).
     map.on('click', (e: maplibregl.MapMouseEvent) => {
-      if (drawingRef.current) {
+      const step = drawStepRef.current
+      if (step === 'area') {
         appendVertexRef.current([e.lngLat.lng, e.lngLat.lat])
+        return
+      }
+      if (step === 'muster') {
+        setDraftMuster([e.lngLat.lng, e.lngLat.lat])
         return
       }
       navigateRef.current('/alerts')
@@ -370,28 +389,42 @@ export function AlertsList() {
     }
   }, [mapReady, mapMode])
 
-  // Traçado em edição: redesenha a cada vértice adicionado ou arrastado. Os
-  // vértices são arrastáveis; soltar um atualiza o anel.
+  // Traçado em edição: redesenha a cada vértice adicionado ou arrastado. No
+  // passo da área os vértices são arrastáveis (soltar um atualiza o anel); no
+  // passo do ponto a área do rascunho fica só leitura, como referência.
   useEffect(() => {
     const map = mapRef.current
-    if (!lib || !map || !mapReady || !drawing) return
+    if (!lib || !map || !mapReady || !drawStep) return
     const dispose = drawAreaLayer(map, lib, draftVertices, {
       colors: areaColors,
-      draggable: true,
+      draggable: drawStep === 'area',
       onVertexDrag: (index, vertex) =>
         setDraftVertices((cur) => cur.map((p, k) => (k === index ? vertex : p))),
     })
     return dispose
-  }, [lib, mapReady, drawing, draftVertices, areaColors])
+  }, [lib, mapReady, drawStep, draftVertices, areaColors])
 
   // Área salva da evacuação ativa: polígono vermelho com vértices magenta, só
-  // leitura. Enquanto o admin redesenha (drawing), o traçado acima tem a vez.
+  // leitura. Enquanto o admin redesenha, o traçado acima tem a vez.
   useEffect(() => {
     const map = mapRef.current
-    if (!lib || !map || !mapReady || drawing || !savedArea) return
+    if (!lib || !map || !mapReady || drawStep || !savedArea) return
     const dispose = drawAreaLayer(map, lib, savedArea, { colors: areaColors })
     return dispose
-  }, [lib, mapReady, drawing, savedArea, areaColors])
+  }, [lib, mapReady, drawStep, savedArea, areaColors])
+
+  // Pino do ponto de encontro: o do rascunho enquanto o gestor marca, o salvo
+  // da evacuação ativa quando o desenho está fechado. As deps são as
+  // coordenadas, não o par: cada ACK do socket devolve um dto novo, e depender
+  // da identidade do array remontaria o pino a cada confirmação.
+  const musterPin = drawStep === 'muster' ? draftMuster : drawStep ? null : savedMuster
+  const musterLng = musterPin?.[0] ?? null
+  const musterLat = musterPin?.[1] ?? null
+  useEffect(() => {
+    const map = mapRef.current
+    if (!lib || !map || !mapReady || musterLng == null || musterLat == null) return
+    return buildMusterPin([musterLng, musterLat], map, lib)
+  }, [lib, mapReady, musterLng, musterLat])
 
   // Selected marker → screen position tracker. Runs whenever the selected
   // marker changes and re-runs on every map move/zoom so the overlay card
@@ -453,34 +486,17 @@ export function AlertsList() {
         <View style={{ gap: theme.gap.s, alignItems: 'flex-end' }}>
           {/* Evacuação real: sem ativa → desenhar a área e disparar; ativa →
             progresso X/N ao vivo (WS evacuation-ack) + encerramento. */}
-          {drawing ? (
-            <View
-              testID="evacuation-draw-toolbar"
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: theme.gap.s,
-                flexWrap: 'wrap',
-              }}
-            >
-              <Text variant="body.s" color={theme.content.medium}>
-                Toque no mapa para marcar a área ({draftVertices.length}{' '}
-                {draftVertices.length === 1 ? 'ponto' : 'pontos'})
-              </Text>
-              <Button
-                label="Desfazer"
-                variant="outline"
-                onPress={() => setDraftVertices((cur) => cur.slice(0, -1))}
-                disabled={draftVertices.length === 0}
-              />
-              <Button label="Cancelar" variant="outline" onPress={cancelDraw} />
-              <Button
-                label="Confirmar e iniciar"
-                backgroundColor={theme.surface.error}
-                disabled={draftVertices.length < 3}
-                onPress={confirmDraw}
-              />
-            </View>
+          {drawStep ? (
+            <EvacuationDrawToolbar
+              step={drawStep}
+              vertexCount={draftVertices.length}
+              hasMuster={draftMuster !== null}
+              onUndo={() => setDraftVertices((cur) => cur.slice(0, -1))}
+              onCancel={cancelDraw}
+              onNext={() => setDrawStep('muster')}
+              onBack={() => setDrawStep('area')}
+              onConfirm={confirmDraw}
+            />
           ) : evacuation ? (
             <View
               testID="evacuation-banner"

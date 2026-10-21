@@ -11,8 +11,9 @@ export interface UseEvacuationResult {
   // null = sem evacuação ativa (ou ainda carregando o snapshot inicial).
   evacuation: EvacuationProgressDto | null
   error: string | null
-  // `area` é o polígono desenhado no mapa; sem ele, dispara sem recorte visual.
-  start: (area?: AreaVertex[]) => Promise<void>
+  // `area` é o polígono desenhado no mapa e `musterPoint` o ponto de encontro
+  // marcado no passo seguinte; os dois são obrigatórios pro backend.
+  start: (area: AreaVertex[], musterPoint: AreaVertex) => Promise<void>
   end: () => Promise<void>
 }
 
@@ -76,9 +77,9 @@ export function useEvacuation(): UseEvacuationResult {
     }
   }, [])
 
-  const start = useCallback(async (area?: AreaVertex[]) => {
+  const start = useCallback(async (area: AreaVertex[], musterPoint: AreaVertex) => {
     setError(null)
-    const res = await evacuationsApi.start(area)
+    const res = await evacuationsApi.start(area, musterPoint)
     if (res.data) {
       revision.current += 1
       setEvacuation(res.data)

@@ -23,6 +23,9 @@ export type EvacuationProgressDto = {
   // Polígono da área demarcada ao iniciar (anel fechado [lng, lat]), ou null
   // quando a evacuação foi disparada sem recorte visual.
   area: AreaVertex[] | null
+  // Ponto de encontro marcado ao iniciar ([lng, lat]), destino da rota de
+  // evacuação. Null nas evacuações anteriores ao ponto obrigatório.
+  musterPoint: AreaVertex | null
 }
 
 const asError = (err: unknown) => ({
@@ -41,13 +44,18 @@ export const evacuationsApi = {
     }
   },
 
-  // `area` é o polígono [[lng,lat],...] desenhado no mapa ao iniciar. Sem área,
-  // dispara sem corpo (demarcação visual é opcional).
-  start: async (area?: AreaVertex[]): Promise<ServiceResponse<EvacuationProgressDto>> => {
+  // `area` é o polígono [[lng,lat],...] desenhado no mapa ao iniciar e
+  // `musterPoint` o ponto de encontro marcado no passo seguinte. Os dois são
+  // obrigatórios: o backend recusa (400) o disparo sem o ponto, porque é dele
+  // que sai a rota de evacuação.
+  start: async (
+    area: AreaVertex[],
+    musterPoint: AreaVertex,
+  ): Promise<ServiceResponse<EvacuationProgressDto>> => {
     try {
       const dto = await apiFetch<EvacuationProgressDto>('/evacuations', {
         method: 'POST',
-        ...(area ? { body: JSON.stringify({ area }) } : {}),
+        body: JSON.stringify({ area, musterPoint }),
       })
       return { data: dto, error: null }
     } catch (err) {
