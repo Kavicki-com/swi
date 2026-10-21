@@ -153,4 +153,31 @@ describe('MapsGeneral: buscar operador', () => {
     await waitFor(() => expect(onMap()).toHaveLength(3))
     await close(unmount)
   })
+
+  it('mostra a lista dos operadores que casam com o texto', async () => {
+    const { unmount } = await openMap()
+    search('gab')
+    expect(await screen.findByRole('button', { name: 'Gabriel Fernandes' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Gabriela Lima' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ana Souza' })).toBeNull()
+    await close(unmount)
+  })
+
+  it('escolher um nome da lista deixa só ele no mapa e voa até ele', async () => {
+    const { unmount } = await openMap()
+    search('gab')
+    fireEvent.click(await screen.findByRole('button', { name: 'Gabriela Lima' }))
+    await waitFor(() => expect(onMap()).toHaveLength(1))
+    expect(maplibre.flyTo).toHaveBeenCalled()
+    // Escolhido: a lista fecha.
+    expect(screen.queryByRole('button', { name: 'Gabriel Fernandes' })).toBeNull()
+    await close(unmount)
+  })
+
+  it('sem resultado mostra "Nenhum resultado"', async () => {
+    const { unmount } = await openMap()
+    search('zzz')
+    expect(await screen.findByText('Nenhum resultado')).toBeTruthy()
+    await close(unmount)
+  })
 })

@@ -45,6 +45,10 @@ export function MapsGeneral() {
     setCameraSearch,
     operatorSearch,
     setOperatorSearch,
+    operatorResults,
+    cameraResults,
+    pickOperator,
+    pickCamera,
     isLocating,
     handleLocate,
     backBtnPanResponder,
@@ -184,6 +188,8 @@ export function MapsGeneral() {
           onExpandedChange={setShowOperators}
           searchValue={operatorSearch}
           onSearchChange={setOperatorSearch}
+          results={operatorResults}
+          onResultPress={pickOperator}
         />
         <MapControl
           variant="heatmap"
@@ -207,6 +213,8 @@ export function MapsGeneral() {
           onExpandedChange={setShowCameras}
           searchValue={cameraSearch}
           onSearchChange={setCameraSearch}
+          results={cameraResults}
+          onResultPress={pickCamera}
         />
       </View>
 
