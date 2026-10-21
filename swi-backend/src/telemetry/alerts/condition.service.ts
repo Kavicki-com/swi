@@ -6,7 +6,9 @@ import { TelemetryAudienceService } from '../realtime/telemetry-audience.service
 import { TelemetryHealthNotifier } from './health-notifier'
 import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../assessment/assessment-baseline'
 import { CLOCK_SKEW_MS, EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
-import { EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
+import { loadThresholds } from '../calibration/calibration-thresholds'
+import { CALIBRATED_ALERT_PROFILE, EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
+import { calibratedPressureDecisions, calibratedWatchDecisions } from './calibrated-decisions'
 import {
   decideBattery,
   decideBloodPressure,
@@ -64,13 +66,30 @@ export const MONITORED_SILENCE_FLOOR_MS = 7 * 24 * 60 * 60 * 1000
 /**
  * Tipos que viram item de fila. Bateria e sinal são estado, não item. Desgaste
  * alto vira item porque é o alerta que a narrativa do piloto promete: alguém
- * tem de decidir se o funcionário para.
+ * tem de decidir se o funcionário para. As duas camadas da calibração também:
+ * a Atenção pede que alguém olhe, a trava pede que alguém aja.
  */
 const ALERTING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
   'HEART_RATE_HIGH',
   'HEART_RATE_LOW',
   'BLOOD_PRESSURE_REVIEW',
   'WEAR_HIGH',
+  'HEART_RATE_FATIGUE',
+  'OXYGEN_FATIGUE',
+  'WEAR_FATIGUE',
+  'BLOOD_PRESSURE_FATIGUE',
+  'OXYGEN_LOW',
+  'BLOOD_PRESSURE_HIGH',
+])
+
+/**
+ * O que a medição avulsa decide, e por isso o único carimbo que ela renova:
+ * as condições de pressão, de qualquer perfil.
+ */
+const SPOT_READING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
+  'BLOOD_PRESSURE_REVIEW',
+  'BLOOD_PRESSURE_FATIGUE',
+  'BLOOD_PRESSURE_HIGH',
 ])
 
 /**
@@ -79,6 +98,8 @@ const ALERTING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryCon
  * sustentava a condição deixou de existir, e mantê-la aberta seria afirmar um
  * agora que ninguém mediu. Desgaste entra pelo mesmo motivo: ele vem da
  * avaliação, e a avaliação só nasce de evento ao vivo.
+ *
+ * A Atenção de batimento e a de desgaste entram pelo mesmo motivo.
  *
  * Pressão fica de fora de propósito: é medida à mão, vale por 72 h pelo prazo
  * do domínio, e silêncio do relógio não diz nada sobre a pressão de ninguém.
@@ -89,6 +110,8 @@ const SILENCE_RECOVERS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryC
   'HEART_RATE_LOW',
   'DEVICE_BATTERY_LOW',
   'WEAR_HIGH',
+  'HEART_RATE_FATIGUE',
+  'WEAR_FATIGUE',
 ])
 
 export interface EvaluateOutcome {
@@ -159,7 +182,8 @@ export class TelemetryConditionService {
    * do prazo dela", só que feita na hora em que a medição chega, para a
    * revisão não depender de haver relógio falando.
    *
-   * Esta porta decide a revisão de pressão e MAIS NADA. O relógio não falou,
+   * Esta porta decide a pressão e MAIS NADA: a revisão na DEMO, a Atenção e a
+   * trava na REAL. O relógio não falou,
    * então nada do que ele mede é reavaliado: perda de sinal ativa continua
    * ativa, e batimento, bateria e desgaste ficam como o último evento dele
    * deixou. Reavaliar a bateria aqui reabriria "bateria baixa" a partir de uma
@@ -228,7 +252,14 @@ export class TelemetryConditionService {
     })
     const activeByKind = new Map(active.map((c) => [c.kind, c]))
 
-    const windowStart = new Date(triggerAt.getTime() - this.profile.persistence.windowMs)
+    // A origem REAL segue o perfil calibrado, pela faixa da pessoa e pelas
+    // travas; a DEMO segue o v2, intocado, que é o que o roteiro de aceite mostra.
+    const real = session.origin === 'REAL'
+    const alertProfile = profileFor(session.origin)
+    // A janela de batimento cobre a maior persistência do perfil: na REAL, os
+    // 10 min da Atenção. A trava recorta sozinha o último minuto dela.
+    const attentionFrom = new Date(triggerAt.getTime() - CALIBRATED_ALERT_PROFILE.attention.windowMs)
+    const windowStart = real ? attentionFrom : new Date(triggerAt.getTime() - this.profile.persistence.windowMs)
     const sinceDay = new Date(monitoredDayOf(now).getTime() - this.profile.restingDays * DAY_MS)
     // Cada métrica tem a sua própria noção de "vale agora", e uma janela só não
     // serve às três. BPM precisa de evidência CONTÍNUA dentro da janela de
@@ -256,7 +287,7 @@ export class TelemetryConditionService {
     // chegar carimbada alguns segundos à frente ficaria fora da conta que a
     // chegada dela disparou, e a revisão não abriria.
     const pressureUntil = spotReading ? new Date(triggerAt.getTime() + CLOCK_SKEW_MS) : triggerAt
-    const [rows, batteryRow, pressureRow, wearRow, profile, summaries] = await Promise.all([
+    const [rows, batteryRow, pressureRow, wearRow, profile, summaries, wearRows] = await Promise.all([
       // Fronteira de baixo fechada, como a do motor: aberta, a amostra que cai
       // exatamente no início da janela ficaria de fora e o trecho medido seria
       // menor que o que o perfil declara. Só BPM: as colunas de bateria e de
@@ -321,6 +352,14 @@ export class TelemetryConditionService {
         orderBy: { day: 'desc' },
         take: this.profile.restingDays,
       }),
+      // A Atenção de desgaste olha as avaliações da sessão dos últimos 10 min,
+      // pelo fim da janela de cada uma, como a última avaliação acima. Só REAL.
+      real
+        ? tx.telemetryAssessment.findMany({
+            where: { sessionId, wearPercent: { not: null }, windowEnd: { gte: attentionFrom, lte: triggerAt } },
+            select: { windowEnd: true, wearPercent: true },
+          })
+        : Promise.resolve([]),
     ])
 
     const restingBpm = restingFromDailyMinima(
@@ -328,7 +367,7 @@ export class TelemetryConditionService {
     )
     const birthDate = profile?.birthDate ?? null
     const maxBpm = birthDate === null ? null : maxHeartRateForAge(ageInYearsAt(birthDate, now))
-    const limits = heartRateLimits(this.profile, { maxBpm, restingBpm })
+    const thresholds = real ? await loadThresholds(tx, session.workerId, maxBpm) : null
 
     // batteryPercent fica nulo aqui de propósito: o motor recebe a bateria como
     // escalar, pela leitura própria, e nenhuma decisão de BPM olha esta coluna.
@@ -347,22 +386,42 @@ export class TelemetryConditionService {
         : { systolic: pressureRow.systolicMmHg, diastolic: pressureRow.diastolicMmHg }
 
     const nowMs = triggerAt.getTime()
-    const pressureDecision = decideBloodPressure(pressure, activeByKind.has('BLOOD_PRESSURE_REVIEW'), this.profile)
     // A medição avulsa decide só a pressão. As leituras do relógio lidas acima
     // ficam sem uso nesse caso, de propósito: o que elas dizem já foi decidido
     // no último evento dele, e decidi-las de novo sem dado novo é o que
     // reabriria bateria baixa de um relógio que parou de falar.
-    const decisions: Decision[] = (
-      spotReading
-        ? [pressureDecision]
+    let decisions: Decision[]
+    if (thresholds !== null) {
+      const activeKinds = new Set(activeByKind.keys())
+      const pressureDecisions = calibratedPressureDecisions(pressure, thresholds, activeKinds)
+      const wear = wearRows.flatMap((r) =>
+        r.wearPercent === null ? [] : [{ atMs: r.windowEnd.getTime(), value: r.wearPercent }],
+      )
+      decisions = spotReading
+        ? pressureDecisions
         : [
-            decideHeartRate('HEART_RATE_HIGH', samples, limits.high, activeByKind.has('HEART_RATE_HIGH'), this.profile, nowMs),
-            decideHeartRate('HEART_RATE_LOW', samples, limits.low, activeByKind.has('HEART_RATE_LOW'), this.profile, nowMs),
-            decideBattery(latestBattery, activeByKind.has('DEVICE_BATTERY_LOW'), this.profile),
-            pressureDecision,
-            decideWear(latestWear, activeByKind.has('WEAR_HIGH'), this.profile),
+            ...calibratedWatchDecisions(
+              { samples, wear, latestWear, battery: latestBattery, maxBpm, fallbackRestingBpm: restingBpm, nowMs },
+              thresholds,
+              activeKinds,
+            ),
+            ...pressureDecisions,
           ]
-    ).flatMap((d) => (d === null ? [] : [d]))
+    } else {
+      const limits = heartRateLimits(this.profile, { maxBpm, restingBpm })
+      const pressureDecision = decideBloodPressure(pressure, activeByKind.has('BLOOD_PRESSURE_REVIEW'), this.profile)
+      decisions = (
+        spotReading
+          ? [pressureDecision]
+          : [
+              decideHeartRate('HEART_RATE_HIGH', samples, limits.high, activeByKind.has('HEART_RATE_HIGH'), this.profile, nowMs),
+              decideHeartRate('HEART_RATE_LOW', samples, limits.low, activeByKind.has('HEART_RATE_LOW'), this.profile, nowMs),
+              decideBattery(latestBattery, activeByKind.has('DEVICE_BATTERY_LOW'), this.profile),
+              pressureDecision,
+              decideWear(latestWear, activeByKind.has('WEAR_HIGH'), this.profile),
+            ]
+      ).flatMap((d) => (d === null ? [] : [d]))
+    }
 
     // Evento ao vivo é sinal de volta: perda de sinal ativa recupera aqui, e
     // não na varredura, que só enxerga o silêncio. Medição avulsa do app Saúde
@@ -421,7 +480,7 @@ export class TelemetryConditionService {
       if (recoveredIds.has(row.id)) continue
       // A medição avulsa só cobriu a pressão: o carimbo das condições do
       // relógio não pode andar por causa de uma avaliação que não as olhou.
-      if (spotReading && row.kind !== 'BLOOD_PRESSURE_REVIEW') continue
+      if (spotReading && !SPOT_READING_KINDS.has(row.kind)) continue
       if (row.lastSeenAt > refreshBefore) continue
       await tx.telemetryCondition.update({ where: { id: row.id }, data: { lastSeenAt: now } })
     }
@@ -432,9 +491,12 @@ export class TelemetryConditionService {
       // ser crua está em insertCondition, junto do SQL.
       const createdId = await this.insertCondition(tx, session, now, {
         kind: decision.kind,
+        profileVersion: alertProfile.version,
         rule: decision.threshold?.rule ?? null,
         value: decision.threshold?.value ?? null,
         observedValue: decision.observedValue,
+        // O dia da calibração vai para a condição como selo, até o 30º.
+        calibrationDay: thresholds?.calibrationDay ?? null,
       })
       if (createdId === null) continue
 
@@ -637,12 +699,16 @@ export class TelemetryConditionService {
     // ALERTING_KINDS, e openAlert nem chega a ser chamado aqui.
     const created = await this.insertCondition(tx, session, now, {
       kind: 'DEVICE_SIGNAL_LOST',
+      // O prazo de silêncio é o mesmo nos dois perfis; a versão gravada é a da
+      // origem, para a linha dizer com que perfil a pessoa estava sendo vista.
+      profileVersion: profileFor(session.origin).version,
       // Regra nula porque não se personaliza silêncio: o limite é o prazo do
       // perfil, igual para todo mundo. O valor observado é o silêncio medido em
       // milissegundos, que é o que a auditoria quer saber depois.
       rule: null,
       value: this.profile.signalLost.silenceMs,
       observedValue: observedSilenceMs,
+      calibrationDay: null,
     })
     if (created !== null) {
       result.signalLost += 1
@@ -746,15 +812,17 @@ export class TelemetryConditionService {
     now: Date,
     opening: {
       kind: TelemetryConditionKind
+      profileVersion: string
       rule: string | null
       value: number | null
       observedValue: number | null
+      calibrationDay: number | null
     },
   ): Promise<string | null> {
     const inserted = await tx.$queryRaw<Array<{ id: string }>>`
       INSERT INTO "TelemetryCondition" (
         "id", "workerId", "sessionId", "origin", "kind", "status", "firstSeenAt", "lastSeenAt",
-        "thresholdProfile", "thresholdRule", "thresholdValue", "observedValue", "updatedAt"
+        "thresholdProfile", "thresholdRule", "thresholdValue", "observedValue", "calibrationDay", "updatedAt"
       ) VALUES (
         gen_random_uuid()::text,
         ${session.workerId},
@@ -764,10 +832,11 @@ export class TelemetryConditionService {
         CAST(${'ACTIVE'} AS "TelemetryConditionStatus"),
         ${now},
         ${now},
-        ${this.profile.version},
+        ${opening.profileVersion},
         ${opening.rule},
         ${opening.value},
         ${opening.observedValue},
+        ${opening.calibrationDay},
         ${now}
       )
       ON CONFLICT ("workerId", "kind", "origin") WHERE "status" = 'ACTIVE' DO NOTHING
@@ -811,6 +880,11 @@ export class TelemetryConditionService {
     await tx.operationalAlert.create({ data: { conditionId, workerId, origin, status: 'OPEN' } })
     return true
   }
+}
+
+/** REAL pelo perfil calibrado; DEMO pelo v2, que o roteiro de aceite mostra. */
+function profileFor(origin: TelemetryOrigin): AlertProfile {
+  return origin === 'REAL' ? CALIBRATED_ALERT_PROFILE : EXPERIMENTAL_ALERT_PROFILE
 }
 
 function changeOf(

@@ -389,7 +389,7 @@ describe('Telemetry Health Connect e2e', () => {
       measuredUntil = newest
     })
 
-    it('pressão alta de horas atrás abre a revisão de pressão', async () => {
+    it('pressão alta de horas atrás abre a Atenção de pressão, pela faixa de partida', async () => {
       const pressure = event(ago(5 * HOUR), {
         bloodPressure: { value: { systolic: 165, diastolic: 100 }, unit: 'mmHg', source: 'HEALTH_CONNECT' },
       })
@@ -398,7 +398,7 @@ describe('Telemetry Health Connect e2e', () => {
 
       expect(body.acceptedEventIds).toEqual([pressure.eventId])
       expect(
-        await prisma.telemetryCondition.count({ where: { workerId: workerC, kind: 'BLOOD_PRESSURE_REVIEW' } }),
+        await prisma.telemetryCondition.count({ where: { workerId: workerC, kind: 'BLOOD_PRESSURE_FATIGUE' } }),
       ).toBe(1)
     })
 

@@ -43,10 +43,10 @@ const prismaDouble = () =>
 const service = (prisma: any) => new AlertQueueService(prisma as PrismaService)
 
 describe('alertCategory', () => {
-  it('batimento fora da faixa é urgência, saúde sem urgência é HEALTH, aparelho é DEVICE', () => {
+  it('batimento fora da faixa e desgaste na trava são urgência, saúde sem urgência é HEALTH, aparelho é DEVICE', () => {
     expect(alertCategory('HEART_RATE_HIGH')).toBe('URGENT')
     expect(alertCategory('HEART_RATE_LOW')).toBe('URGENT')
-    expect(alertCategory('WEAR_HIGH')).toBe('HEALTH')
+    expect(alertCategory('WEAR_HIGH')).toBe('URGENT')
     expect(alertCategory('BLOOD_PRESSURE_REVIEW')).toBe('HEALTH')
     expect(alertCategory('DEVICE_BATTERY_LOW')).toBe('DEVICE')
     expect(alertCategory('DEVICE_SIGNAL_LOST')).toBe('DEVICE')

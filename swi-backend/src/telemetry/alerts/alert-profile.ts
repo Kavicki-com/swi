@@ -117,6 +117,13 @@ export interface CalibratedAlertProfile extends AlertProfile {
   /** Persistência da camada de Atenção no relógio: 10 min seguidos na faixa de fadiga. */
   readonly attention: { readonly windowMs: number; readonly minSpanMs: number; readonly maxGapMs: number }
   /**
+   * A mesma Atenção para o desgaste no relógio. A janela é a mesma; o vão não:
+   * avaliação nasce no máximo a cada 15 s (o corte da avaliação) e só quando
+   * chega lote, então os vãos entre duas ficam um pouco acima de 15 s, e o
+   * teto do batimento nunca deixaria o desgaste abrir.
+   */
+  readonly wearAttention: { readonly windowMs: number; readonly minSpanMs: number; readonly maxGapMs: number }
+  /**
    * Pulseira: leituras espaçadas de minutos. Tempo seguido na faixa e vão
    * máximo entre duas leituras, o mesmo gapMaxMs da fórmula esparsa.
    */
@@ -136,6 +143,7 @@ export const CALIBRATED_ALERT_PROFILE: CalibratedAlertProfile = Object.freeze({
   wearHigh: Object.freeze({ openAtPercent: 90, recoverBelowPercent: 80 }),
   // A mesma máquina da persistência de batimento, com janela de 10 min.
   attention: Object.freeze({ windowMs: 600_000, minSpanMs: 585_000, maxGapMs: 15_000 }),
+  wearAttention: Object.freeze({ windowMs: 600_000, minSpanMs: 540_000, maxGapMs: 60_000 }),
   sparseAttention: Object.freeze({ holdMs: 600_000, maxGapMs: 600_000 }),
   oxygenLow: Object.freeze({ openBelowPercent: 90, recoverAbovePercent: 92 }),
   bloodPressureHigh: Object.freeze({ systolicAt: 180, diastolicAt: 110, systolicRecoverBelow: 160, diastolicRecoverBelow: 100 }),

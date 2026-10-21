@@ -9,6 +9,7 @@ import {
   decideOxygenLow,
   decidePressureCrisis,
   decideWear,
+  decideWearSafety,
   episodesOf,
   heartRateLimits,
   type EngineSample,
@@ -194,6 +195,14 @@ describe('decideHeartRate: histerese e recuperação', () => {
     expect(decideHeartRate('HEART_RATE_LOW', series(60, 52), LOW, true, PROFILE, NOW)).toBeNull()
     expect(decideHeartRate('HEART_RATE_LOW', series(60, 60), LOW, true, PROFILE, NOW)?.action).toBe('RECOVER')
   })
+
+  it('trava do admin: recupera pela recuperação gravada, não pela banda do perfil', () => {
+    const CUSTOM = { value: 150, rule: 'SAFETY_CUSTOM' as const }
+
+    // Banda do perfil daria 140; a trava gravada recupera abaixo de 145.
+    expect(decideHeartRate('HEART_RATE_HIGH', series(60, 144), CUSTOM, true, PROFILE, NOW, 145)?.action).toBe('RECOVER')
+    expect(decideHeartRate('HEART_RATE_HIGH', series(60, 146), CUSTOM, true, PROFILE, NOW, 145)).toBeNull()
+  })
 })
 
 describe('decideBattery: uma leitura basta, banda de dez pontos', () => {
@@ -249,6 +258,29 @@ describe('decideWear: uma leitura da avaliação basta, banda de dez pontos', ()
   it('sem avaliação com desgaste não decide nada', () => {
     expect(decideWear(null, false, PROFILE)).toBeNull()
     expect(decideWear(null, true, PROFILE)).toBeNull()
+  })
+})
+
+describe('decideWearSafety: trava de desgaste do perfil calibrado', () => {
+  const defaults = { openAt: 90, closeAt: 80 }
+
+  it('abre em 90% com o rastro da trava; 89% não abre', () => {
+    expect(decideWearSafety(90, defaults, false, 'SAFETY_DEFAULT')).toEqual({
+      kind: 'WEAR_HIGH',
+      action: 'OPEN',
+      observedValue: 90,
+      threshold: { value: 90, rule: 'SAFETY_DEFAULT' },
+    })
+    expect(decideWearSafety(89, defaults, false, 'SAFETY_DEFAULT')).toBeNull()
+  })
+
+  it('ativa, 80% mantém e 79% recupera', () => {
+    expect(decideWearSafety(80, defaults, true, 'SAFETY_DEFAULT')).toBeNull()
+    expect(decideWearSafety(79, defaults, true, 'SAFETY_CUSTOM')?.action).toBe('RECOVER')
+  })
+
+  it('sem avaliação com desgaste não decide nada', () => {
+    expect(decideWearSafety(null, defaults, true, 'SAFETY_DEFAULT')).toBeNull()
   })
 })
 

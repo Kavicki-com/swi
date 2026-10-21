@@ -64,6 +64,11 @@ describe('perfil de alertas calibrado', () => {
     expect(CALIBRATED_ALERT_PROFILE.sparseAttention).toEqual({ holdMs: 600_000, maxGapMs: 600_000 })
   })
 
+  it('o desgaste no relógio tem a mesma janela, com vão de até 1 min entre avaliações', () => {
+    expect(CALIBRATED_ALERT_PROFILE.wearAttention).toEqual({ windowMs: 600_000, minSpanMs: 540_000, maxGapMs: 60_000 })
+    expect(Object.isFrozen(CALIBRATED_ALERT_PROFILE.wearAttention)).toBe(true)
+  })
+
   it('as travas novas são as do desenho', () => {
     expect(CALIBRATED_ALERT_PROFILE.oxygenLow).toEqual({ openBelowPercent: 90, recoverAbovePercent: 92 })
     expect(CALIBRATED_ALERT_PROFILE.bloodPressureHigh).toEqual({

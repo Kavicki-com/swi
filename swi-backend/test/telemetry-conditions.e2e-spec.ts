@@ -7,7 +7,13 @@ import { AppModule } from '../src/app.module'
 import { requireJwtSecret } from '../src/auth/jwt-secret'
 import type { JwtUser } from '../src/auth/current-user.decorator'
 import { PrismaService } from '../src/prisma/prisma.service'
-import { ALERT_PROFILE_VERSION, EXPERIMENTAL_ALERT_PROFILE } from '../src/telemetry/alerts/alert-profile'
+import {
+  ALERT_PROFILE_VERSION,
+  CALIBRATED_ALERT_PROFILE,
+  CALIBRATED_ALERT_PROFILE_VERSION,
+  EXPERIMENTAL_ALERT_PROFILE,
+} from '../src/telemetry/alerts/alert-profile'
+import { CALIBRATION_VERSION } from '../src/telemetry/calibration/calibration-bands'
 import { TelemetryConditionService } from '../src/telemetry/alerts/condition.service'
 import { encodeCredential, hashCredential } from '../src/telemetry/devices/device-auth.service'
 import { monitoredDayOf } from '../src/telemetry/domain/metric-state'
@@ -47,6 +53,9 @@ describe('Telemetry conditions e2e', () => {
     b: `telemetry-cond-b-${randomUUID()}@ex.com`,
     semNascimento: `telemetry-cond-c-${randomUUID()}@ex.com`,
     demo: `telemetry-cond-d-${randomUUID()}@ex.com`,
+    calibrado: `telemetry-cond-e-${randomUUID()}@ex.com`,
+    trava: `telemetry-cond-f-${randomUUID()}@ex.com`,
+    desgaste: `telemetry-cond-g-${randomUUID()}@ex.com`,
     admin: `telemetry-cond-admin-${randomUUID()}@ex.com`,
     outroAdmin: `telemetry-cond-outro-admin-${randomUUID()}@ex.com`,
   }
@@ -54,11 +63,17 @@ describe('Telemetry conditions e2e', () => {
   let workerB = ''
   let workerSemNascimento = ''
   let workerDemo = ''
+  let workerCalibrado = ''
+  let workerTrava = ''
+  let workerDesgaste = ''
   let admin: JwtUser = { userId: '', role: 'ADMIN', companyId: null }
   let headersA: Record<string, string> = {}
   let headersB: Record<string, string> = {}
   let headersSemNascimento: Record<string, string> = {}
   let headersDemo: Record<string, string> = {}
+  let headersCalibrado: Record<string, string> = {}
+  let headersTrava: Record<string, string> = {}
+  let headersDesgaste: Record<string, string> = {}
 
   /**
    * 185 bpm serve aos dois limites de propósito. Para quem nasceu em 1991 a
@@ -69,7 +84,7 @@ describe('Telemetry conditions e2e', () => {
    */
   const SUSTAINED_BPM = 185
   const LIMITE_PERSONALIZADO = 165
-  const LIMITE_PISO = EXPERIMENTAL_ALERT_PROFILE.heartRateHigh.floorBpm
+  const LIMITE_PISO = CALIBRATED_ALERT_PROFILE.heartRateHigh.floorBpm
 
   const post = (headers: Record<string, string>, body: object) =>
     request(app.getHttpServer()).post('/telemetry/v1/batches').set(headers).send(body)
@@ -103,6 +118,17 @@ describe('Telemetry conditions e2e', () => {
         monitoringSessionId: session,
         eventTime: new Date(fimMs - (12 - i) * 5_000).toISOString(),
         ...over,
+      }),
+    ),
+  })
+
+  /** Eventos a cada 5 s cobrindo os últimos `minutos`, todos com o mesmo batimento. */
+  const minutesBatch = (session: string, minutos: number, bpm: number) => ({
+    events: Array.from({ length: minutos * 12 + 1 }, (_, i) =>
+      event({
+        monitoringSessionId: session,
+        eventTime: new Date(Date.now() - (minutos * 12 - i) * 5_000).toISOString(),
+        measurements: { heartRate: { value: bpm, unit: 'bpm', source: 'APPLE_WATCH' } },
       }),
     ),
   })
@@ -160,6 +186,9 @@ describe('Telemetry conditions e2e', () => {
     workerB = await worker(emails.b, 'Cond B', nascimento)
     workerSemNascimento = await worker(emails.semNascimento, 'Cond C', null)
     workerDemo = await worker(emails.demo, 'Cond D', null)
+    workerCalibrado = await worker(emails.calibrado, 'Cond E', nascimento)
+    workerTrava = await worker(emails.trava, 'Cond F', nascimento)
+    workerDesgaste = await worker(emails.desgaste, 'Cond G', nascimento)
 
     // O administrador entra pelo serviço, e não por login: adminSummary só olha
     // o companyId do token, e o que este spec exercita é o contador do painel,
@@ -187,6 +216,36 @@ describe('Telemetry conditions e2e', () => {
     headersB = await enroll(workerB)
     headersSemNascimento = await enroll(workerSemNascimento)
     headersDemo = await enroll(workerDemo)
+    headersCalibrado = await enroll(workerCalibrado)
+    headersTrava = await enroll(workerTrava)
+    headersDesgaste = await enroll(workerDesgaste)
+
+    // E está no 10º dia da calibração, com a faixa de fadiga de batimento
+    // aprendida em 130 bpm: abaixo da trava pela idade (165), para a Atenção
+    // abrir sem a trava junto.
+    await prisma.workerCalibration.create({
+      data: {
+        workerId: workerCalibrado,
+        version: CALIBRATION_VERSION,
+        deviceFamily: 'WATCH',
+        phaseStartedAt: monitoredDayOf(new Date(Date.now() - 12 * 24 * 60 * 60 * 1000)),
+        validDays: 9,
+        restingBpm: 60,
+        peakBpm: 170,
+        peakPersonalBpm: 170,
+        computedAt: new Date(),
+      },
+    })
+    await prisma.workerCalibrationBand.create({
+      data: {
+        workerId: workerCalibrado,
+        metric: 'HEART_RATE',
+        validDays: 9,
+        startCuts: { excellence: null, fatigue: 165 },
+        learnedCuts: { excellence: 95, fatigue: 130 },
+        computedAt: new Date(),
+      },
+    })
 
     // Um dia fechado com batimento mínimo para A e B: é o repouso observado.
     // Ele não muda o limite ALTO, que sai da idade, mas sem ele o limite baixo
@@ -228,8 +287,12 @@ describe('Telemetry conditions e2e', () => {
     expect(condicao.origin).toBe('REAL')
     // A versão do perfil é o que permite auditar depois com que régua a
     // condição foi aberta. Sem ela, mudar limite apaga a história.
-    expect(condicao.thresholdProfile).toBe(ALERT_PROFILE_VERSION)
-    expect(condicao.thresholdRule).toBe('PERSONALIZED')
+    expect(condicao.thresholdProfile).toBe(CALIBRATED_ALERT_PROFILE_VERSION)
+    // A origem REAL segue o perfil calibrado: o batimento alto é trava, e sem
+    // valor do admin vale a padrão, pela máxima por idade.
+    expect(condicao.thresholdRule).toBe('SAFETY_DEFAULT')
+    // Sem calibração gravada, a pessoa está no primeiro dia, e o selo vai junto.
+    expect(condicao.calibrationDay).toBe(1)
     expect(condicao.thresholdValue).toBe(LIMITE_PERSONALIZADO)
     expect(condicao.observedValue).toBe(SUSTAINED_BPM)
 
@@ -329,7 +392,7 @@ describe('Telemetry conditions e2e', () => {
     expect(await prisma.telemetryCondition.count({ where: { workerId: workerSemNascimento } })).toBe(0)
   }, 30_000)
 
-  it('5. sem data de nascimento abre pelo piso, e a linha registra a regra de piso', async () => {
+  it('5. sem data de nascimento abre pelo piso de 180, gravado como trava padrão', async () => {
     await post(headersSemNascimento, sustainedBatch(randomUUID())).expect(200)
 
     const rows = await ativas(workerSemNascimento)
@@ -339,7 +402,7 @@ describe('Telemetry conditions e2e', () => {
     // não tem dado. A regra vai para a linha porque é ela que explica, na
     // auditoria, por que 185 bpm abriu para um com limite 165 e para outro com
     // limite 180.
-    expect(rows[0].thresholdRule).toBe('FLOOR')
+    expect(rows[0].thresholdRule).toBe('SAFETY_DEFAULT')
     expect(rows[0].thresholdValue).toBe(LIMITE_PISO)
   }, 30_000)
 
@@ -527,33 +590,35 @@ describe('Telemetry conditions e2e', () => {
    * e não pela janela de 60 s da sessão. Por isso a medição que abre vai numa
    * sessão e a que recupera vai em OUTRA.
    */
-  it('10. pressão fora da faixa abre revisão com alerta não urgente, e recupera por medição em outra sessão', async () => {
+  it('10. pressão na faixa de fadiga abre a Atenção com alerta não urgente, e recupera por medição em outra sessão', async () => {
     const urgentesAntes = (await query.adminSummary(admin)).urgentAlerts.workers
     const alertasAntes = await prisma.operationalAlert.count({ where: { workerId: workerB } })
     const pressao = (systolic: number, diastolic: number) => ({
       bloodPressure: { value: { systolic, diastolic }, unit: 'mmHg', source: 'EXTERNAL_CUFF' },
     })
 
-    await post(headersB, { events: [event({ measurements: pressao(150, 80) })] }).expect(200)
+    await post(headersB, { events: [event({ measurements: pressao(150, 95) })] }).expect(200)
 
+    // Sem faixa aprendida, a faixa de fadiga é a partida v1.0: 140 por 90.
     const aberta = await prisma.telemetryCondition.findFirstOrThrow({
-      where: { workerId: workerB, kind: 'BLOOD_PRESSURE_REVIEW', status: 'ACTIVE' },
+      where: { workerId: workerB, kind: 'BLOOD_PRESSURE_FATIGUE', status: 'ACTIVE' },
     })
     expect(aberta).toMatchObject({
       origin: 'REAL',
-      thresholdProfile: EXPERIMENTAL_ALERT_PROFILE.version,
-      thresholdRule: 'FLOOR',
-      thresholdValue: EXPERIMENTAL_ALERT_PROFILE.bloodPressureReview.systolicAt,
+      thresholdProfile: CALIBRATED_ALERT_PROFILE_VERSION,
+      thresholdRule: 'BAND',
+      thresholdValue: 140,
       observedValue: 150,
+      calibrationDay: 1,
     })
-    // Revisão vira item de fila, porque exige gente. Mas não é urgente: o
-    // contador do painel só olha batimento.
+    // Atenção vira item de fila, porque pede que alguém olhe. Mas não é
+    // urgente: urgente é só trava.
     const alerta = await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })
     expect(alerta).toMatchObject({ workerId: workerB, origin: 'REAL', status: 'OPEN' })
     expect(await prisma.operationalAlert.count({ where: { workerId: workerB } })).toBe(alertasAntes + 1)
     expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(urgentesAntes)
 
-    // Medição nova, abaixo de 130 por 85, em sessão de monitoramento NOVA.
+    // Medição nova, fora da faixa de fadiga nas duas, em sessão de monitoramento NOVA.
     await post(headersB, { events: [event({ measurements: pressao(125, 80) })] }).expect(200)
 
     const recuperada = await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: aberta.id } })
@@ -599,9 +664,11 @@ describe('Telemetry conditions e2e', () => {
     expect(recuperada.conditions.some((c) => c.kind === 'DEVICE_BATTERY_LOW')).toBe(false)
   })
 
-  it('12. desgaste em 80% abre condição com alerta não urgente, e recupera em sessão nova com desgaste baixo', async () => {
-    const urgentesAntes = (await query.adminSummary(admin)).urgentAlerts.workers
-    const alertasAntes = await prisma.operationalAlert.count({ where: { workerId: workerA } })
+  it('12. demonstração segue o perfil v2: desgaste em 80% abre WEAR_HIGH, e recupera em sessão nova', async () => {
+    // O funcionário A, na origem DEMO: o desgaste precisa da máxima por idade, e
+    // o funcionário de demonstração deste spec não tem data de nascimento.
+    const alertasAntes = await prisma.operationalAlert.count({ where: { workerId: workerA, origin: 'DEMO' } })
+    const demo = { origin: 'DEMO' }
 
     // Chegar a 80% de desgaste pela porta da frente leva mais de duas horas de
     // intensidade máxima. O caso planta a dose na cadeia da sessão, que é o
@@ -613,8 +680,8 @@ describe('Telemetry conditions e2e', () => {
     const sessao = randomUUID()
     await post(headersA, {
       events: [
-        event({ monitoringSessionId: sessao, eventTime: new Date(Date.now() - 10_000).toISOString() }),
-        event({ monitoringSessionId: sessao, eventTime: new Date(Date.now() - 5_000).toISOString() }),
+        event({ ...demo, monitoringSessionId: sessao, eventTime: new Date(Date.now() - 10_000).toISOString() }),
+        event({ ...demo, monitoringSessionId: sessao, eventTime: new Date(Date.now() - 5_000).toISOString() }),
       ],
     }).expect(200)
     const primeira = await prisma.telemetryAssessment.findFirstOrThrow({
@@ -629,7 +696,7 @@ describe('Telemetry conditions e2e', () => {
       data: { inputs, computedAt: new Date(Date.now() - 20_000) },
     })
 
-    await post(headersA, { events: [event({ monitoringSessionId: sessao })] }).expect(200)
+    await post(headersA, { events: [event({ ...demo, monitoringSessionId: sessao })] }).expect(200)
 
     const avaliada = await prisma.telemetryAssessment.findFirstOrThrow({
       where: { sessionId: sessao },
@@ -638,28 +705,27 @@ describe('Telemetry conditions e2e', () => {
     expect(avaliada.wearPercent).toBeGreaterThanOrEqual(80)
 
     const aberta = await prisma.telemetryCondition.findFirstOrThrow({
-      where: { workerId: workerA, kind: 'WEAR_HIGH', status: 'ACTIVE' },
+      where: { workerId: workerA, origin: 'DEMO', kind: 'WEAR_HIGH', status: 'ACTIVE' },
     })
+    // A demonstração não tem calibração: régua de piso do v2, sem dia.
     expect(aberta).toMatchObject({
-      origin: 'REAL',
+      origin: 'DEMO',
       thresholdProfile: EXPERIMENTAL_ALERT_PROFILE.version,
       thresholdRule: 'FLOOR',
       thresholdValue: EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent,
       observedValue: avaliada.wearPercent,
+      calibrationDay: null,
     })
-    // Vira item de fila, porque é o alerta que o piloto promete. Mas não é
-    // urgente: o contador do painel só olha batimento.
     const alerta = await prisma.operationalAlert.findUnique({ where: { conditionId: aberta.id } })
-    expect(alerta).toMatchObject({ workerId: workerA, origin: 'REAL', status: 'OPEN' })
-    expect(await prisma.operationalAlert.count({ where: { workerId: workerA } })).toBe(alertasAntes + 1)
-    expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(urgentesAntes)
+    expect(alerta).toMatchObject({ workerId: workerA, origin: 'DEMO', status: 'OPEN' })
+    expect(await prisma.operationalAlert.count({ where: { workerId: workerA, origin: 'DEMO' } })).toBe(alertasAntes + 1)
 
     // Sessão nova começa a cadeia do zero: um lote denso a 70 bpm produz uma
     // avaliação com desgaste próximo de zero, abaixo da banda de recuperação.
     const nova = randomUUID()
     await post(
       headersA,
-      sustainedBatch(nova, { measurements: { heartRate: { value: 70, unit: 'bpm', source: 'APPLE_WATCH' } } }),
+      sustainedBatch(nova, { ...demo, measurements: { heartRate: { value: 70, unit: 'bpm', source: 'APPLE_WATCH' } } }),
     ).expect(200)
 
     const recuperada = await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: aberta.id } })
@@ -677,7 +743,9 @@ describe('Telemetry conditions e2e', () => {
 
     const { body } = await lista(bearer(admin.userId, 'ADMIN')).expect(200)
     const ids = body.workers.map((w: { worker: { id: string } }) => w.worker.id)
-    expect(new Set(ids)).toEqual(new Set([workerA, workerB, workerSemNascimento, workerDemo]))
+    expect(new Set(ids)).toEqual(
+      new Set([workerA, workerB, workerSemNascimento, workerDemo, workerCalibrado, workerTrava, workerDesgaste]),
+    )
     for (const entry of body.workers) {
       expect(entry.device.state).toBe('PAIRED')
       expect(Array.isArray(entry.telemetry.conditions)).toBe(true)
@@ -717,7 +785,7 @@ describe('Telemetry conditions e2e', () => {
     expect(alheia.body.workers).toEqual([])
   })
 
-  it('14. pressão do app Saúde medida há horas abre a revisão ao chegar, sem devolver o sinal do relógio', async () => {
+  it('14. pressão do app Saúde medida há horas abre a Atenção ao chegar, sem devolver o sinal do relógio', async () => {
     // O caso 9 deixou neste funcionário uma revisão de pressão inserida à mão,
     // sem valor observado. Com ela ativa o motor não abriria outra.
     await prisma.telemetryCondition.deleteMany({
@@ -754,11 +822,11 @@ describe('Telemetry conditions e2e', () => {
       ],
     }).expect(200)
 
-    const revisao = await prisma.telemetryCondition.findFirstOrThrow({
-      where: { workerId: workerSemNascimento, kind: 'BLOOD_PRESSURE_REVIEW', status: 'ACTIVE' },
+    const atencao = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerSemNascimento, kind: 'BLOOD_PRESSURE_FATIGUE', status: 'ACTIVE' },
     })
-    expect(revisao.observedValue).toBe(150)
-    expect(await prisma.operationalAlert.findUnique({ where: { conditionId: revisao.id } })).toMatchObject({
+    expect(atencao.observedValue).toBe(150)
+    expect(await prisma.operationalAlert.findUnique({ where: { conditionId: atencao.id } })).toMatchObject({
       status: 'OPEN',
     })
 
@@ -771,7 +839,7 @@ describe('Telemetry conditions e2e', () => {
     // A varredura recuperou a bateria baixa por silêncio, e a chegada da
     // pressão não a reabre a partir da leitura velha do relógio.
     expect((await ativas(workerSemNascimento)).map((c) => c.kind).sort()).toEqual([
-      'BLOOD_PRESSURE_REVIEW',
+      'BLOOD_PRESSURE_FATIGUE',
       'DEVICE_SIGNAL_LOST',
     ])
 
@@ -783,5 +851,170 @@ describe('Telemetry conditions e2e', () => {
       measuredAt: medidaEm,
       source: 'MANUAL_HEALTHKIT',
     })
+  }, 30_000)
+
+  // Calibração individual (perfil swi-alert-calibrated-3): a origem REAL abre a
+  // Atenção pela faixa de fadiga da pessoa e o urgente pelas travas. Os casos
+  // abaixo provam a fiação com o banco de verdade: faixa gravada, trava do
+  // admin, avaliações de desgaste e o dia da calibração na condição.
+
+  it('15. calibrado: 10 min acima da faixa de fadiga abrem a Atenção com o dia; 9 min não; uma leitura de volta fecha', async () => {
+    const sessao = randomUUID()
+    await post(headersCalibrado, minutesBatch(sessao, 9, 140)).expect(200)
+    expect(await ativas(workerCalibrado)).toHaveLength(0)
+
+    await post(headersCalibrado, minutesBatch(sessao, 10, 140)).expect(200)
+    const abertas = await ativas(workerCalibrado)
+    expect(abertas).toHaveLength(1)
+    expect(abertas[0]).toMatchObject({
+      kind: 'HEART_RATE_FATIGUE',
+      origin: 'REAL',
+      thresholdProfile: CALIBRATED_ALERT_PROFILE_VERSION,
+      thresholdRule: 'BAND',
+      thresholdValue: 130,
+      observedValue: 140,
+      calibrationDay: 10,
+    })
+    // Atenção vira item de fila, como saúde sem urgência.
+    expect(await prisma.operationalAlert.findUnique({ where: { conditionId: abertas[0].id } })).toMatchObject({
+      status: 'OPEN',
+    })
+    const leitura = await query.currentForWorker(workerCalibrado)
+    expect(leitura.conditions).toEqual([expect.objectContaining({ kind: 'HEART_RATE_FATIGUE', category: 'HEALTH' })])
+
+    await post(headersCalibrado, {
+      events: [
+        event({
+          monitoringSessionId: sessao,
+          measurements: { heartRate: { value: 110, unit: 'bpm', source: 'APPLE_WATCH' } },
+        }),
+      ],
+    }).expect(200)
+    expect(await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: abertas[0].id } })).toMatchObject({
+      status: 'RECOVERED',
+      recoveryReason: 'NORMALIZED',
+    })
+  }, 60_000)
+
+  it('16. trava de batimento alto gravada pelo admin abre pelo valor dele', async () => {
+    await prisma.workerSafetyLimit.create({
+      data: { workerId: workerTrava, rule: 'HEART_RATE_HIGH', values: { openAt: 150, closeAt: 140 }, updatedById: admin.userId },
+    })
+
+    // 155 bpm fica abaixo da trava padrão pela idade (165): só a do admin abre.
+    await post(
+      headersTrava,
+      sustainedBatch(randomUUID(), { measurements: { heartRate: { value: 155, unit: 'bpm', source: 'APPLE_WATCH' } } }),
+    ).expect(200)
+
+    const abertas = await ativas(workerTrava)
+    expect(abertas).toHaveLength(1)
+    expect(abertas[0]).toMatchObject({
+      kind: 'HEART_RATE_HIGH',
+      thresholdRule: 'SAFETY_CUSTOM',
+      thresholdValue: 150,
+      observedValue: 155,
+    })
+  }, 30_000)
+
+  it('17. desgaste em 85% por 10 min abre só a Atenção; em 90% abre a trava, urgente', async () => {
+    // Chegar a 85% de desgaste pela porta da frente leva horas. O caso grava as
+    // avaliações da sessão direto no banco, a cada 20 s como a ingestão grava
+    // (corte de 15 s, uma por lote), e chama o motor: é a leitura da série de
+    // avaliações que se prova, não a fórmula.
+    const sessao = randomUUID()
+    await post(headersDesgaste, {
+      events: [
+        event({ monitoringSessionId: sessao, measurements: { heartRate: { value: 80, unit: 'bpm', source: 'APPLE_WATCH' } } }),
+      ],
+    }).expect(200)
+    const agora = Date.now() + 1_000
+    const avaliacao = (msAntes: number, wearPercent: number) => ({
+      workerId: workerDesgaste,
+      sessionId: sessao,
+      origin: 'REAL' as const,
+      computedAt: new Date(agora - msAntes),
+      windowStart: new Date(agora - msAntes - 20_000),
+      windowEnd: new Date(agora - msAntes),
+      wearPercent,
+      formulaVersion: 'e2e-condicoes',
+      inputs: {},
+    })
+    await prisma.telemetryAssessment.createMany({
+      data: Array.from({ length: 31 }, (_, i) => avaliacao((30 - i) * 20_000, 85)),
+    })
+
+    await conditions.evaluateSession(sessao, new Date(agora), new Date())
+
+    const abertas = await ativas(workerDesgaste)
+    expect(abertas.map((c) => c.kind)).toEqual(['WEAR_FATIGUE'])
+    // Sem faixa aprendida, o corte de fadiga do desgaste é a partida: 80.
+    expect(abertas[0]).toMatchObject({ thresholdRule: 'BAND', thresholdValue: 80, observedValue: 85 })
+
+    const urgentesAntes = (await query.adminSummary(admin)).urgentAlerts.workers
+    await prisma.telemetryAssessment.create({ data: avaliacao(-5_000, 92) })
+    await conditions.evaluateSession(sessao, new Date(agora + 5_000), new Date())
+
+    const trava = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerDesgaste, kind: 'WEAR_HIGH', status: 'ACTIVE' },
+    })
+    expect(trava).toMatchObject({ thresholdRule: 'SAFETY_DEFAULT', thresholdValue: 90, observedValue: 92 })
+    // O desgaste na trava passou a ser urgente.
+    const leitura = await query.currentForWorker(workerDesgaste)
+    expect(leitura.conditions.find((c) => c.kind === 'WEAR_HIGH')?.category).toBe('URGENT')
+    expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(urgentesAntes + 1)
+    // A Atenção segue aberta: 92% continua na faixa de fadiga.
+    expect((await ativas(workerDesgaste)).map((c) => c.kind).sort()).toEqual(['WEAR_FATIGUE', 'WEAR_HIGH'])
+  }, 30_000)
+
+  it('18. pressão em 185 por 112 abre a Atenção e a trava urgente, e nunca a revisão', async () => {
+    const urgentesAntes = (await query.adminSummary(admin)).urgentAlerts.workers
+
+    await post(headersCalibrado, {
+      events: [
+        event({
+          measurements: {
+            bloodPressure: { value: { systolic: 185, diastolic: 112 }, unit: 'mmHg', source: 'EXTERNAL_CUFF' },
+          },
+        }),
+      ],
+    }).expect(200)
+
+    const abertas = await ativas(workerCalibrado)
+    expect(abertas.map((c) => c.kind).sort()).toEqual(['BLOOD_PRESSURE_FATIGUE', 'BLOOD_PRESSURE_HIGH'])
+    expect(abertas.find((c) => c.kind === 'BLOOD_PRESSURE_HIGH')).toMatchObject({
+      thresholdRule: 'SAFETY_DEFAULT',
+      thresholdValue: 180,
+      observedValue: 185,
+      calibrationDay: 10,
+    })
+    expect((await query.adminSummary(admin)).urgentAlerts.workers).toBe(urgentesAntes + 1)
+  }, 30_000)
+
+  it('19. demonstração continua abrindo a revisão de pressão do perfil v2', async () => {
+    await post(headersDemo, {
+      events: [
+        event({
+          origin: 'DEMO',
+          measurements: {
+            bloodPressure: { value: { systolic: 150, diastolic: 80 }, unit: 'mmHg', source: 'EXTERNAL_CUFF' },
+          },
+        }),
+      ],
+    }).expect(200)
+
+    const revisao = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerDemo, kind: 'BLOOD_PRESSURE_REVIEW', status: 'ACTIVE' },
+    })
+    expect(revisao).toMatchObject({
+      origin: 'DEMO',
+      thresholdProfile: ALERT_PROFILE_VERSION,
+      thresholdRule: 'FLOOR',
+      thresholdValue: EXPERIMENTAL_ALERT_PROFILE.bloodPressureReview.systolicAt,
+      calibrationDay: null,
+    })
+    expect(
+      await prisma.telemetryCondition.count({ where: { workerId: workerDemo, kind: { in: ['BLOOD_PRESSURE_FATIGUE', 'BLOOD_PRESSURE_HIGH'] } } }),
+    ).toBe(0)
   }, 30_000)
 })

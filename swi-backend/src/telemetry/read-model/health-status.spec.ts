@@ -66,11 +66,11 @@ describe('healthStatusOf', () => {
   })
 
   it('condição de saúde aberta é alerta', () => {
-    expect(healthStatusOf(telemetry(snapshot(), [condition('WEAR_HIGH')]))).toBe('alert')
+    expect(healthStatusOf(telemetry(snapshot(), [condition('WEAR_FATIGUE')]))).toBe('alert')
   })
 
   it('urgência vence saúde', () => {
-    const lido = telemetry(snapshot(), [condition('WEAR_HIGH'), condition('HEART_RATE_HIGH')])
+    const lido = telemetry(snapshot(), [condition('WEAR_FATIGUE'), condition('HEART_RATE_HIGH')])
     expect(healthStatusOf(lido)).toBe('low')
   })
 

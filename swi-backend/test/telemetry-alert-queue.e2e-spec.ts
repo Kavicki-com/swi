@@ -94,7 +94,7 @@ describe('Telemetry alert queue e2e', () => {
     await prisma.profile.create({ data: { userId: workerId, fullName: 'Funcionaria Fila', sector: 'Leste' } })
 
     realAlert = await alertFor('HEART_RATE_HIGH', 'REAL', 10)
-    healthAlert = await alertFor('WEAR_HIGH', 'REAL', 5)
+    healthAlert = await alertFor('WEAR_FATIGUE', 'REAL', 5)
     demoAlert = await alertFor('HEART_RATE_HIGH', 'DEMO', 1)
 
     adminA = await login(emails.adminA)

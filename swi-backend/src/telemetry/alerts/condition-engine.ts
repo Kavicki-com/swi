@@ -95,7 +95,7 @@ export interface Persistence {
   readonly maxGapMs: number
 }
 
-const heartRatePoints = (samples: readonly EngineSample[]): Point[] =>
+export const heartRatePoints = (samples: readonly EngineSample[]): Point[] =>
   samples.flatMap((s) => (s.heartRateBpm === null ? [] : [{ atMs: s.atMs, value: s.heartRateBpm }]))
 
 /**
@@ -140,6 +140,8 @@ export function decideHeartRate(
   active: boolean,
   profile: AlertProfile,
   nowMs: number,
+  /** Recuperação da trava do admin. Sem ela, a banda do perfil a partir do limite. */
+  recoverAt?: number,
 ): Decision | null {
   const high = kind === 'HEART_RATE_HIGH'
   const band = high ? profile.heartRateHigh.hysteresisBpm : profile.heartRateLow.hysteresisBpm
@@ -155,8 +157,8 @@ export function decideHeartRate(
 
   // Recupera pela banda, não pelo mesmo limite: quem oscila em torno dele
   // abriria e fecharia a cada leitura.
-  const recoverAt = high ? threshold.value - band : threshold.value + band
-  const values = sustained(points, nowMs, profile.persistence, (bpm) => (high ? bpm < recoverAt : bpm > recoverAt))
+  const recoverLine = recoverAt ?? (high ? threshold.value - band : threshold.value + band)
+  const values = sustained(points, nowMs, profile.persistence, (bpm) => (high ? bpm < recoverLine : bpm > recoverLine))
   if (values === null) return null
   return { kind, action: 'RECOVER', observedValue: high ? Math.max(...values) : Math.min(...values), threshold }
 }
@@ -195,6 +197,28 @@ export function decideWear(wearPercent: number | null, active: boolean, profile:
     return { kind: 'WEAR_HIGH', action: 'OPEN', observedValue: wearPercent, threshold }
   }
   if (active && wearPercent < profile.wearHigh.recoverBelowPercent) {
+    return { kind: 'WEAR_HIGH', action: 'RECOVER', observedValue: wearPercent, threshold }
+  }
+  return null
+}
+
+/**
+ * Trava de desgaste do perfil calibrado: a mesma leitura única de `decideWear`,
+ * com a abertura e a recuperação da trava (padrão 90 e 80, ou as do admin) e o
+ * rastro de trava no lugar do piso.
+ */
+export function decideWearSafety(
+  wearPercent: number | null,
+  values: SafetyBand,
+  active: boolean,
+  rule: SafetySource,
+): Decision | null {
+  if (wearPercent === null) return null
+  const threshold: Threshold = { value: values.openAt, rule }
+  if (!active && wearPercent >= values.openAt) {
+    return { kind: 'WEAR_HIGH', action: 'OPEN', observedValue: wearPercent, threshold }
+  }
+  if (active && wearPercent < values.closeAt) {
     return { kind: 'WEAR_HIGH', action: 'RECOVER', observedValue: wearPercent, threshold }
   }
   return null
