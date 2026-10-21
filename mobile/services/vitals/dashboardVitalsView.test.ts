@@ -233,12 +233,12 @@ describe('dashboardVitalsView', () => {
 });
 
 describe('aparelho sem o módulo do relógio', () => {
-  // Android e iPhone sem o módulo compilado nunca vão ler: a linha de estado
-  // diz onde o monitoramento funciona, em vez de "sem leitura", que soa como
-  // falha. Mesma linha de Text, nenhum pixel muda de lugar.
-  const SEM_RELOGIO = 'Monitoramento só com iPhone e Apple Watch';
+  // Build sem o módulo do relógio e sem o Health Connect nunca vai ler: a
+  // linha de estado diz que este aparelho não monitora, em vez de "sem
+  // leitura", que soa como falha. Mesma linha de Text, nenhum pixel muda de lugar.
+  const SEM_RELOGIO = 'Este aparelho não faz o monitoramento';
 
-  it('sem leitura, a linha de estado diz onde o monitoramento funciona', () => {
+  it('sem leitura, a linha de estado diz que este aparelho não monitora', () => {
     expect(dashboardVitalsView(null, { unsupported: true }).status).toBe(SEM_RELOGIO);
     expect(dashboardVitalsView(neverReported(), { unsupported: true }).status).toBe(SEM_RELOGIO);
   });

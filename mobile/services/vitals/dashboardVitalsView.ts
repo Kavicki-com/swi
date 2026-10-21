@@ -132,7 +132,7 @@ const UNAVAILABLE_STATUS = 'Leitura indisponível no momento';
 const LOADING_STATUS = 'Carregando leitura';
 // Não usa "indisponível": no glossário a palavra nomeia o estado de quem tem
 // suporte e não recebeu leitura, que pede outro conselho.
-const UNSUPPORTED_STATUS = 'Monitoramento só com iPhone e Apple Watch';
+const UNSUPPORTED_STATUS = 'Este aparelho não faz o monitoramento';
 
 const EMPTY: Omit<DashboardVitalsView, 'status'> = {
   heartRate: null,
@@ -163,8 +163,8 @@ export function dashboardVitalsView(
   options: { failed?: boolean; loading?: boolean; unsupported?: boolean } = {},
 ): DashboardVitalsView {
   if (telemetry === null || telemetry.origin === null) {
-    // Aparelho sem o módulo do relógio (Android, iPhone sem a build do piloto)
-    // nunca vai ler: a frase diz onde o monitoramento funciona e vale acima de
+    // Build sem o módulo do relógio e sem o Health Connect (iPhone sem a build
+    // do piloto, Expo Go) nunca vai ler: a frase diz isso e vale acima de
     // carregando e de falha, porque esses dois prometem uma leitura que não
     // vem. Leitura que já existe no servidor (outro aparelho do mesmo
     // funcionário, demonstração) continua aparecendo pelo caminho de baixo.
