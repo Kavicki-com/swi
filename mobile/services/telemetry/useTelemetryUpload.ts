@@ -11,6 +11,8 @@ import type { TelemetryOutbox } from './telemetryOutbox';
 import { sharedTelemetryOutbox } from './telemetryRuntime';
 import {
   createTelemetryUploader,
+  MAX_DRAIN_ROUNDS,
+  shouldDrainAgain,
   type TelemetryUploader,
   type UploadOutcome,
 } from './telemetryUploader';
@@ -40,15 +42,9 @@ import {
 // iPhone segue crescendo enquanto o relógio manda remessas. O módulo nativo
 // não expõe limpeza desse arquivo; o teto dele é assunto do lado nativo.
 
-/**
- * Teto de rodadas por drenagem. Cada rodada manda até MAX_BATCH_EVENTS, e um
- * `sent` com `remaining` maior que zero pede outra. O teto faz o laço ser
- * finito por construção mesmo com amostra entrando a cada rodada; o que
- * sobrar sai na próxima amostra ou na próxima montagem. Vinte rodadas são
- * 4.000 eventos, mais de 16 horas de amostras a cada 15 s: só um backlog
- * patológico chega aqui.
- */
-export const MAX_DRAIN_ROUNDS = 20;
+// O teto de rodadas e o critério de parar (MAX_DRAIN_ROUNDS, shouldDrainAgain)
+// moram no uploader, porque a tarefa de segundo plano do Health Connect drena
+// a mesma fila pela mesma regra.
 
 /**
  * De quanto em quanto tempo o arquivo durável é drenado enquanto a tela está
@@ -100,11 +96,6 @@ export interface TelemetryUploadHandle extends TelemetryUploadState {
    */
   drainNow: () => Promise<void>;
 }
-
-// Uma confirmação que não citou evento nenhum deixou a fila como estava;
-// repetir seria martelar o backend com o mesmo lote.
-const madeProgress = (outcome: UploadOutcome) =>
-  outcome.outcome === 'sent' && outcome.accepted + outcome.duplicates + outcome.conflicts > 0;
 
 export function useTelemetryUpload(
   control: WatchControl = watchControl,
@@ -217,9 +208,7 @@ export function useTelemetryUpload(
             halt();
             return;
           }
-          if (outcome.outcome !== 'sent' || outcome.remaining === 0 || !madeProgress(outcome)) {
-            break;
-          }
+          if (!shouldDrainAgain(outcome)) break;
         }
       } finally {
         draining = false;

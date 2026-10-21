@@ -5,7 +5,12 @@ import {
   type OutboxStorage,
   type TelemetryOutbox,
 } from './telemetryOutbox';
-import { createTelemetryUploader, MAX_BATCH_EVENTS, type UploadOutcome } from './telemetryUploader';
+import {
+  createTelemetryUploader,
+  MAX_BATCH_EVENTS,
+  shouldDrainAgain,
+  type UploadOutcome,
+} from './telemetryUploader';
 
 const API = 'https://api.exemplo';
 const URL_LOTES = `${API}/telemetry/v1/batches`;
@@ -367,5 +372,38 @@ describe('telemetryUploader, reentrância', () => {
     await expect(up.uploadPending()).resolves.toEqual(sent(1, 0));
     expect(request).toHaveBeenCalledTimes(2);
     await expect(labels(outbox)).resolves.toEqual([]);
+  });
+});
+
+// O critério de seguir drenando, o mesmo para o envio em primeiro plano
+// (useTelemetryUpload) e para a tarefa de segundo plano do Health Connect.
+describe('shouldDrainAgain', () => {
+  const enviado = (accepted: number, remaining: number, duplicates = 0, conflicts = 0) =>
+    ({ outcome: 'sent', accepted, duplicates, conflicts, remaining }) as const;
+
+  it('segue enquanto sobra fila e a confirmação citou algum evento', () => {
+    expect(shouldDrainAgain(enviado(200, 5))).toBe(true);
+    expect(shouldDrainAgain(enviado(0, 5, 1))).toBe(true);
+    expect(shouldDrainAgain(enviado(0, 5, 0, 1))).toBe(true);
+  });
+
+  it('para com a fila zerada', () => {
+    expect(shouldDrainAgain(enviado(200, 0))).toBe(false);
+  });
+
+  // A confirmação não citou nada: a fila ficou como estava, e repetir seria
+  // mandar o mesmo lote de novo.
+  it('para sem progresso, mesmo com fila sobrando', () => {
+    expect(shouldDrainAgain(enviado(0, 5))).toBe(false);
+  });
+
+  it('para em todo desfecho que não é envio', () => {
+    const outros: UploadOutcome[] = [
+      { outcome: 'idle' },
+      { outcome: 'deferred' },
+      { outcome: 'rejected', status: 400 },
+      { outcome: 'unpaired' },
+    ];
+    for (const desfecho of outros) expect(shouldDrainAgain(desfecho)).toBe(false);
   });
 });

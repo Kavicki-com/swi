@@ -3,9 +3,12 @@ import { createElement, useState, type ReactElement } from 'react';
 import type { SwiWatchControlStatus, WatchControl } from '../../modules/swi-watch-control';
 import { createTelemetryOutbox, type OutboxStorage } from './telemetryOutbox';
 import { sharedTelemetryOutbox } from './telemetryRuntime';
-import type { TelemetryUploader, UploadOutcome } from './telemetryUploader';
 import {
   MAX_DRAIN_ROUNDS,
+  type TelemetryUploader,
+  type UploadOutcome,
+} from './telemetryUploader';
+import {
   useTelemetryUpload,
   type TelemetryUploadDeps,
   type TelemetryUploadState,

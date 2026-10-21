@@ -39,6 +39,36 @@ export type UploadOutcome =
   /** 401, E_NO_CREDENTIAL ou E_UNSUPPORTED: não há como autenticar o aparelho. */
   | { outcome: 'unpaired' };
 
+/**
+ * Teto de rodadas por drenagem. Cada rodada manda até MAX_BATCH_EVENTS, e um
+ * `sent` com `remaining` maior que zero pede outra. O teto faz o laço ser
+ * finito por construção mesmo com amostra entrando a cada rodada; o que
+ * sobrar sai na próxima drenagem. Vinte rodadas são 4.000 eventos, mais de 16
+ * horas de amostras a cada 15 s: só um backlog patológico chega aqui.
+ *
+ * Mora aqui, junto do critério abaixo, porque dois laços drenam a mesma fila:
+ * o envio em primeiro plano (useTelemetryUpload) e a tarefa de segundo plano
+ * do Health Connect (healthConnectBackgroundTask.ts). Os dois param pela
+ * mesma regra.
+ */
+export const MAX_DRAIN_ROUNDS = 20;
+
+// Uma confirmação que não citou evento nenhum deixou a fila como estava;
+// repetir seria martelar o backend com o mesmo lote.
+const madeProgress = (outcome: UploadOutcome) =>
+  outcome.outcome === 'sent' && outcome.accepted + outcome.duplicates + outcome.conflicts > 0;
+
+/**
+ * Se a drenagem pede mais uma rodada: só um envio que deixou fila E citou
+ * algum evento. Fila vazia, adiamento, recusa, falta de credencial ou uma
+ * confirmação que não tirou nada da fila encerram o laço. O `unpaired` também
+ * encerra; o que fazer depois dele (parar o envio, voltar a não pareado) é de
+ * quem chama.
+ */
+export function shouldDrainAgain(outcome: UploadOutcome): boolean {
+  return outcome.outcome === 'sent' && outcome.remaining > 0 && madeProgress(outcome);
+}
+
 export interface TelemetryUploaderDeps {
   outbox: TelemetryOutbox;
   control?: WatchControl;

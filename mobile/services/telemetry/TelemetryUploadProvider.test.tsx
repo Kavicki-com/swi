@@ -3,6 +3,7 @@ import { act, create } from 'react-test-renderer';
 import { isFeatureEnabled, type FeatureGate } from '../../lib/featureFlags';
 import { useAuth } from '../auth/AuthProvider';
 import { androidDeviceControl } from './android/androidDeviceControl';
+import { syncHealthConnectTaskRegistration } from './healthConnect/healthConnectBackgroundTask';
 import type {
   HealthConnectReader,
   HealthConnectState,
@@ -27,6 +28,12 @@ jest.mock('./telemetryRuntime', () => ({
   sharedTelemetryOutbox: jest.fn(),
   sharedHealthConnectReader: jest.fn(),
 }));
+jest.mock('./healthConnect/healthConnectBackgroundTask', () => ({
+  syncHealthConnectTaskRegistration: jest.fn(async () => undefined),
+}));
+const mockSyncTask = syncHealthConnectTaskRegistration as jest.MockedFunction<
+  typeof syncHealthConnectTaskRegistration
+>;
 
 const mockAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockGate = isFeatureEnabled as jest.MockedFunction<typeof isFeatureEnabled>;
@@ -89,8 +96,8 @@ const originalOS = Platform.OS;
 const naPlataforma = (os: typeof Platform.OS) =>
   Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
 
-const comUsuario = (user: unknown) =>
-  mockAuth.mockReturnValue({ user } as unknown as ReturnType<typeof useAuth>);
+const comUsuario = (user: unknown, restoring = false) =>
+  mockAuth.mockReturnValue({ user, restoring } as unknown as ReturnType<typeof useAuth>);
 
 let visto: TelemetryUploadContextValue;
 function Leitor() {
@@ -200,6 +207,29 @@ describe('TelemetryUploadProvider, iPhone', () => {
     });
     expect(drainNow).not.toHaveBeenCalled();
     expect(mockSharedReader).not.toHaveBeenCalled();
+  });
+
+  // A tarefa de segundo plano é do Health Connect: no iPhone nem o registro
+  // é consultado, com sessão, pareamento ou logout.
+  it('nunca mexe no registro da tarefa de segundo plano', async () => {
+    naPlataforma('ios');
+    comGates('appleWatchPilot', 'healthConnect');
+    mockUpload.mockReturnValue(envio({ paired: true }));
+    await montar();
+    comUsuario(null);
+    await act(async () => {
+      visto.refreshPairing();
+    });
+    expect(mockSyncTask).not.toHaveBeenCalled();
+  });
+});
+
+describe('TelemetryUploadProvider, Android sem o gate', () => {
+  it('nunca mexe no registro da tarefa de segundo plano', async () => {
+    naPlataforma('android');
+    comGates();
+    await montar();
+    expect(mockSyncTask).not.toHaveBeenCalled();
   });
 });
 
@@ -426,5 +456,84 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
       soltarVelha(estadoHC('2026-10-20T12:00:00.000Z'));
     });
     expect(visto.healthConnect?.lastSyncAt).toBe('2026-10-20T12:15:00.000Z');
+  });
+});
+
+// O registro da tarefa de segundo plano acompanha a sessão, o pareamento e o
+// estado do Health Connect (a tela pode ter concedido a permissão de ler em
+// segundo plano). Quem decide registrar ou não é a própria função; o provider
+// só a chama quando um dos insumos muda.
+describe('TelemetryUploadProvider, registro da tarefa de segundo plano', () => {
+  beforeEach(() => {
+    naPlataforma('android');
+    comGates('healthConnect');
+    mockUpload.mockReturnValue(envio({ paired: true }));
+  });
+
+  const ultimaSync = () => mockSyncTask.mock.calls[mockSyncTask.mock.calls.length - 1]![0];
+
+  it('com sessão aberta, sincroniza o registro com a sessão ligada', async () => {
+    await montar();
+    expect(mockSyncTask).toHaveBeenCalled();
+    expect(ultimaSync()).toEqual({ enabled: true });
+  });
+
+  it('o logout sincroniza com a sessão desligada', async () => {
+    await montar();
+    comUsuario(null);
+    await act(async () => {
+      visto.refreshPairing();
+    });
+    expect(ultimaSync()).toEqual({ enabled: false });
+  });
+
+  // Enquanto a sessão é restaurada não se sabe se há alguém logado: um
+  // desregistro aqui tiraria a tarefa do agendador a cada abertura do app.
+  it('não sincroniza enquanto a sessão é restaurada, e sincroniza ao terminar', async () => {
+    comUsuario(null, true);
+    await montar();
+    expect(mockSyncTask).not.toHaveBeenCalled();
+    comUsuario({ id: 'w1' });
+    await act(async () => {
+      visto.refreshPairing();
+    });
+    expect(ultimaSync()).toEqual({ enabled: true });
+  });
+
+  it('sincroniza de novo quando o pareamento muda', async () => {
+    await montar();
+    const antes = mockSyncTask.mock.calls.length;
+    mockUpload.mockReturnValue(envio({ paired: false }));
+    await act(async () => {
+      visto.refreshPairing();
+    });
+    expect(mockSyncTask.mock.calls.length).toBe(antes + 1);
+  });
+
+  it('sincroniza de novo quando o estado do Health Connect muda', async () => {
+    await montar();
+    const antes = mockSyncTask.mock.calls.length;
+    leitor.reader.state.mockResolvedValueOnce({
+      ...estadoHC('2026-10-20T12:00:00.000Z'),
+      permission: 'denied',
+    });
+    mockUpload.mockReturnValue(envio({ paired: true, lastOutcome: { outcome: 'idle' } }));
+    await act(async () => {
+      visto.refreshPairing();
+    });
+    expect(mockSyncTask.mock.calls.length).toBe(antes + 1);
+  });
+
+  // O envio roda a cada 15 s: um desfecho novo com o mesmo estado não pode
+  // virar uma consulta nativa de permissões a cada rodada.
+  it('não repete quando nada mudou', async () => {
+    await montar();
+    const antes = mockSyncTask.mock.calls.length;
+    mockUpload.mockReturnValue(envio({ paired: true, lastOutcome: { outcome: 'idle' } }));
+    await act(async () => {
+      visto.refreshPairing();
+    });
+    expect(leitor.reader.state.mock.calls.length).toBeGreaterThan(1);
+    expect(mockSyncTask.mock.calls.length).toBe(antes);
   });
 });

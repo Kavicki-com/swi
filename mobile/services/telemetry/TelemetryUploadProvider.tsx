@@ -13,6 +13,7 @@ import { isFeatureEnabled } from '../../lib/featureFlags';
 import type { WatchControl } from '../../modules/swi-watch-control';
 import { useAuth } from '../auth/AuthProvider';
 import { androidDeviceControl } from './android/androidDeviceControl';
+import { syncHealthConnectTaskRegistration } from './healthConnect/healthConnectBackgroundTask';
 import type {
   HealthConnectReader,
   HealthConnectState,
@@ -35,6 +36,12 @@ import {
 // o leitor do Health Connect no passo do `healthReader`, os dois sobre a fila
 // única do runtime (telemetryRuntime.ts). No iPhone segue como sempre: o
 // controle padrão do relógio e o leitor do app Saúde que o hook cria.
+//
+// Também no Android, o provider mantém o registro da tarefa de segundo plano
+// do Health Connect (healthConnectBackgroundTask.ts) em dia com a sessão, o
+// pareamento e o estado do Health Connect. A tarefa em si é definida no
+// carregamento do bundle (index.js); aqui só se decide se ela fica no
+// agendador do sistema.
 
 export interface TelemetryUploadContextValue extends TelemetryUploadState {
   /** A tela de pareamento chama ao concluir: o envio relê a credencial. */
@@ -94,7 +101,7 @@ const warn = (what: string, error: unknown) =>
   );
 
 export function TelemetryUploadProvider({ children }: PropsWithChildren) {
-  const { user } = useAuth();
+  const { user, restoring } = useAuth();
   const [recheckKey, setRecheckKey] = useState(0);
   const [healthConnect, setHealthConnect] = useState<HealthConnectState | null>(null);
   // O gate já embute a plataforma, e a conferência repetida aqui é o que
@@ -154,6 +161,26 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
       warn('estado do Health Connect ilegível', error),
     );
   }, [reader, enabled, lastOutcome, refreshHealthConnect]);
+
+  // O registro da tarefa de segundo plano, conferido de novo quando um dos
+  // insumos muda: a sessão (logout tira a tarefa do agendador), o pareamento
+  // (um 401 derruba o `paired`) e o estado do Health Connect. O estado é o
+  // gatilho da permissão de segundo plano, que a tela pode ter acabado de
+  // conceder; ele só troca de objeto quando algum campo muda (ver
+  // `sameHealthConnect`), então um desfecho de envio igual, a cada 15 s, não
+  // vira uma consulta nativa de permissões. O `lastSyncAt` muda a cada rodada
+  // completa do leitor, o que reconfere também uma permissão concedida nos
+  // ajustes do sistema, no máximo uns 15 min depois.
+  // Enquanto a sessão é restaurada não há decisão a tomar: o `user` ainda é
+  // nulo, e desregistrar ali tiraria a tarefa do agendador a cada abertura
+  // do app. `syncHealthConnectTaskRegistration` nunca rejeita.
+  // Abrir o app sem servidor e sem cópia de sessão recente termina a
+  // restauração com `user` nulo e desregistra; o registro volta quando a
+  // sessão se confirmar (aceito pela especificação).
+  useEffect(() => {
+    if (!onHealthConnect || restoring) return;
+    void syncHealthConnectTaskRegistration({ enabled });
+  }, [onHealthConnect, restoring, enabled, paired, healthConnect]);
 
   // A sincronização em curso: um segundo toque recebe a mesma promessa.
   const syncing = useRef<Promise<void> | null>(null);
