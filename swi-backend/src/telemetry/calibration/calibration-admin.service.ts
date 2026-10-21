@@ -267,7 +267,7 @@ export class CalibrationAdminService {
       const custom = row === undefined ? null : safetyValuesOf(rule, row.values)
       return {
         rule,
-        defaultLabel: defaultSafetyLabel(rule),
+        defaultLabel: defaultSafetyLabel(rule, { maxBpm: maxBpmByAge }),
         defaultValues,
         effective: custom ?? defaultValues,
         custom: custom !== null,

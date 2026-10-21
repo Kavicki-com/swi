@@ -100,12 +100,19 @@ const percent = (fraction: number) => Math.round(fraction * 100)
  * O padrão em texto, para o painel mostrar o que vale sem linha do admin. Em
  * texto e não em número porque as travas de batimento dependem da idade e do
  * repouso de cada pessoa. Sai dos números do perfil, para nunca divergir dele.
+ * O batimento alto leva a máxima pela idade da pessoa: com ela, o valor em
+ * bpm; sem data de nascimento, o piso, que é o que o motor usa.
  */
-export function defaultSafetyLabel(rule: SafetyRule): string {
+export function defaultSafetyLabel(rule: SafetyRule, { maxBpm }: { maxBpm: number | null }): string {
   const p = CALIBRATED_ALERT_PROFILE
+  const seconds = p.persistence.windowMs / 1000
   switch (rule) {
-    case 'HEART_RATE_HIGH':
-      return `${percent(p.heartRateHigh.maxFraction)}% da máxima pela idade por ${p.persistence.windowMs / 1000} s (${p.heartRateHigh.floorBpm} bpm sem data de nascimento)`
+    case 'HEART_RATE_HIGH': {
+      const openAt = heartRateLimits(p, { maxBpm, restingBpm: null }).high.value
+      return maxBpm === null
+        ? `${openAt} bpm por ${seconds} s (sem data de nascimento)`
+        : `${percent(p.heartRateHigh.maxFraction)}% da máxima pela idade (${openAt} bpm) por ${seconds} s`
+    }
     case 'HEART_RATE_LOW':
       return `${p.heartRateLow.belowRestingBpm} bpm abaixo do repouso, nunca abaixo de ${p.heartRateLow.floorBpm} bpm`
     case 'OXYGEN_LOW':

@@ -98,11 +98,15 @@ describe('validateSafety', () => {
 
 describe('defaultSafetyLabel', () => {
   it('descreve o padrão do perfil calibrado em texto, regra a regra', () => {
-    expect(defaultSafetyLabel('HEART_RATE_HIGH')).toBe('90% da máxima pela idade por 60 s (180 bpm sem data de nascimento)')
-    expect(defaultSafetyLabel('HEART_RATE_LOW')).toBe('15 bpm abaixo do repouso, nunca abaixo de 40 bpm')
-    expect(defaultSafetyLabel('OXYGEN_LOW')).toBe('abaixo de 90%')
-    expect(defaultSafetyLabel('BLOOD_PRESSURE_HIGH')).toBe('180/110 ou mais')
-    expect(defaultSafetyLabel('WEAR_HIGH')).toBe('90% ou mais')
+    expect(defaultSafetyLabel('HEART_RATE_HIGH', { maxBpm: 190 })).toBe('90% da máxima pela idade (171 bpm) por 60 s')
+    expect(defaultSafetyLabel('HEART_RATE_LOW', { maxBpm: 190 })).toBe('15 bpm abaixo do repouso, nunca abaixo de 40 bpm')
+    expect(defaultSafetyLabel('OXYGEN_LOW', { maxBpm: 190 })).toBe('abaixo de 90%')
+    expect(defaultSafetyLabel('BLOOD_PRESSURE_HIGH', { maxBpm: 190 })).toBe('180/110 ou mais')
+    expect(defaultSafetyLabel('WEAR_HIGH', { maxBpm: 190 })).toBe('90% ou mais')
+  })
+
+  it('batimento alto sem data de nascimento: o piso do perfil, sem falar em idade', () => {
+    expect(defaultSafetyLabel('HEART_RATE_HIGH', { maxBpm: null })).toBe('180 bpm por 60 s (sem data de nascimento)')
   })
 })
 
