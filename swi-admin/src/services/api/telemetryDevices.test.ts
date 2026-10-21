@@ -47,7 +47,7 @@ describe('telemetryDevicesApi.stateOf', () => {
 })
 
 describe('telemetryDevicesApi.createEnrollment', () => {
-  it('POST /telemetry/v1/devices/enrollments com o funcionário e o tipo iPhone', async () => {
+  it('POST /telemetry/v1/devices/enrollments só com o funcionário: o tipo do celular é o app quem declara', async () => {
     const f = ok({ enrollmentId: 'e1', code: '123456', expiresAt: '2026-09-14T12:10:00.000Z' }, 201)
     vi.stubGlobal('fetch', f)
 
@@ -58,7 +58,7 @@ describe('telemetryDevicesApi.createEnrollment', () => {
     const [url, init] = f.mock.calls[0] as [string, RequestInit]
     expect(url).toContain('/telemetry/v1/devices/enrollments')
     expect(init.method).toBe('POST')
-    expect(JSON.parse(String(init.body))).toEqual({ workerId: 'w1', kind: 'IPHONE' })
+    expect(JSON.parse(String(init.body))).toEqual({ workerId: 'w1' })
   })
 
   it('teto de taxa (429) vira envelope de erro, não exceção', async () => {

@@ -12,6 +12,8 @@ export type MetricQuality = 'CURRENT' | 'STALE' | 'UNAVAILABLE'
 
 export type MeasurementSource =
   | 'APPLE_WATCH'
+  /** Pulseira lida pelo app Android via Health Connect. */
+  | 'HEALTH_CONNECT'
   | 'EXTERNAL_CUFF'
   | 'MANUAL_HEALTHKIT'
   | 'MANUAL_SWI'
@@ -107,6 +109,21 @@ export type WorkerTelemetry = {
    * um backend anterior responde sem o campo; nulo quando não há referência.
    */
   heartRateReference?: HeartRateReference | null
+  /**
+   * Só para celular Android: até quando o Health Connect tinha leituras
+   * (measuredUntil) e quando o backend recebeu esse lote (syncedAt). Nulo para
+   * iPhone e relógio, que mandam ao vivo, e para o Android antes do primeiro
+   * lote. Opcional porque um backend anterior responde sem o campo.
+   */
+  sync?: TelemetrySync | null
+}
+
+/** Os dois instantes estão em relógios diferentes: o do celular e o do servidor. */
+export type TelemetrySync = {
+  /** ISO-8601 do último evento lido do Health Connect, pelo relógio do celular. */
+  measuredUntil: string
+  /** ISO-8601 de quando o backend recebeu esse lote, pelo relógio do servidor. */
+  syncedAt: string
 }
 
 export type HeartRateReference = {
