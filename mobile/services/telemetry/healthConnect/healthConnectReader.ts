@@ -1,6 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import { uuid } from 'expo-modules-core';
-import type { OutboxStorage, TelemetryOutbox } from '../telemetryOutbox';
+import type { OutboxEvent, OutboxStorage, TelemetryOutbox } from '../telemetryOutbox';
 import {
   HEALTH_CONNECT_RECORD_TYPES,
   HEALTH_CONNECT_WINDOW_MS,
@@ -35,14 +35,15 @@ import {
 // responde repetição. Por isso o estado só avança DEPOIS de a fila gravar, e
 // uma falha no meio deixa a próxima rodada refazer o mesmo trecho.
 //
-// INSTÂNCIA ÚNICA: a serialização daqui (rodadas, `redetect`, leitura e
-// escrita do estado) vale só dentro de UMA instância do leitor, e a da fila só
-// dentro de uma instância da fila. Leitor e fila precisam ser únicos por
-// runtime JS: o primeiro plano e a tarefa de segundo plano compartilham as
-// mesmas instâncias. Duas filas sobre o mesmo arquivo apagariam eventos uma da
-// outra (cada uma lê, muda e escreve o arquivo inteiro) enquanto o leitor já
-// teria avançado o token, e aqueles eventos não voltariam mais. Quem garante a
-// instância única é a fiação (M5, M6), não este arquivo.
+// INSTÂNCIA ÚNICA: a serialização daqui (rodadas, `redetect`, reset do
+// pareamento, leitura e escrita do estado) vale só dentro de UMA instância do
+// leitor, e a da fila só dentro de uma instância da fila. Leitor e fila
+// precisam ser únicos por runtime JS: o primeiro plano e a tarefa de segundo
+// plano compartilham as mesmas instâncias. Duas filas sobre o mesmo arquivo
+// apagariam eventos uma da outra (cada uma lê, muda e escreve o arquivo
+// inteiro) enquanto o leitor já teria avançado o token, e aqueles eventos não
+// voltariam mais. Quem garante a instância única é a fiação (M5, M6), não
+// este arquivo.
 
 /**
  * Intervalo mínimo entre duas rodadas, contado do INÍCIO da última tentativa
@@ -134,9 +135,10 @@ export interface HealthConnectState {
 /** O estado gravado em arquivo. Disponibilidade e permissão ficam em memória. */
 interface PersistedState {
   /**
-   * Uuid v4 gerado uma vez por instalação; entra na sessão de todo evento
-   * (healthConnectMapping.ts). Perdê-lo muda a sessão dos eventos relidos, e
-   * o backend os recusaria como conflito de id em vez de repetição.
+   * Uuid v4 gerado uma vez por instalação e trocado a cada pareamento novo
+   * (`resetForNewPairing`); entra na sessão de todo evento
+   * (healthConnectMapping.ts). Perdê-lo fora disso muda a sessão dos eventos
+   * relidos, e o backend os recusaria como conflito de id em vez de repetição.
    */
   sessionSalt: string;
   changesToken: string | null;
@@ -248,6 +250,18 @@ export interface HealthConnectReader {
    */
   redetect(): Promise<void>;
   /**
+   * Pareamento novo neste celular. O backend cria outro aparelho a cada
+   * pareamento e recusa evento de sessão do aparelho anterior; com o sal
+   * antigo, tudo o que fosse lido até a meia-noite UTC se perderia. Grava o
+   * estado inicial com sal novo (sem token, sem primeira leitura, sem
+   * pulseira) e tira da fila os eventos do Health Connect ainda não enviados,
+   * que estão na sessão antiga: a próxima rodada, sem esperar o intervalo,
+   * relê as 48 h e os recria na sessão nova. Espera a rodada em curso
+   * terminar, como `redetect`. Rejeita se o estado ou a fila não puderem ser
+   * gravados.
+   */
+  resetForNewPairing(): Promise<void>;
+  /**
    * Abre o pedido de permissão do sistema e devolve se a leitura de batimento
    * ficou concedida. Concedida, a próxima rodada não espera o intervalo.
    * Sem prazo: quem responde é a pessoa, no tempo dela.
@@ -266,6 +280,13 @@ export interface HealthConnectReader {
   checkAccess(): Promise<HealthConnectAvailability>;
   openSettings(): void;
 }
+
+/**
+ * Evento lido do Health Connect: alguma medição com essa origem (a origem
+ * mora em cada medição, não no evento). Os do relógio nunca a têm.
+ */
+const fromHealthConnect = (event: OutboxEvent) =>
+  Object.values(event.measurements).some((measurement) => measurement?.source === 'HEALTH_CONNECT');
 
 const permissionOf = (granted: readonly string[]): HealthConnectPermission =>
   granted.includes('HeartRate') ? 'granted' : 'denied';
@@ -333,7 +354,8 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       return next;
     });
 
-  // Rodadas e `redetect` em fila única: um só mexe no estado de cada vez.
+  // Rodadas, `redetect` e `resetForNewPairing` em fila única: um só mexe no
+  // estado de cada vez.
   let exclusiveChain: Promise<unknown> = Promise.resolve();
   function exclusive<T>(operation: () => Promise<T>): Promise<T> {
     const run = exclusiveChain.then(operation, operation);
@@ -343,8 +365,9 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
 
   let inFlight: Promise<number> | null = null;
   let lastAttemptAt: number | null = null;
-  // Libera a próxima rodada do intervalo: depois de `redetect` e de uma
-  // permissão concedida, esperar 15 min deixaria a tela sem resposta.
+  // Libera a próxima rodada do intervalo: depois de `redetect`, de um
+  // pareamento novo e de uma permissão concedida, esperar 15 min deixaria a
+  // tela sem resposta.
   let intervalFree = false;
 
   /** Mapeia e enfileira; devolve quantos entraram. Lança se a fila falhar. */
@@ -516,6 +539,19 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
     async redetect() {
       intervalFree = true;
       await exclusive(() => updateState({ bandPackage: null, noBand: false }));
+    },
+
+    async resetForNewPairing() {
+      intervalFree = true;
+      await exclusive(async () => {
+        // O estado antes da fila. Se a fila falhar depois, o sal já é o novo
+        // e só os pendentes antigos se perdem (sobem e voltam recusados). Na
+        // ordem inversa, um estado que não grava deixaria a fila já limpa e o
+        // sal antigo: perderia os pendentes e o resto do dia.
+        await serialized(() => storage.write(JSON.stringify(initialState(uuidV4()))));
+        const stale = (await outbox.pending()).filter(fromHealthConnect);
+        await outbox.remove(stale.map((event) => event.eventId));
+      });
     },
 
     async requestPermissions() {

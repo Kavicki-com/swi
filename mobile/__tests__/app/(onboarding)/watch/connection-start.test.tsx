@@ -94,6 +94,7 @@ const envio = (paired: boolean) =>
     checkHealthConnect: jest.fn(),
     openHealthConnectSettings: jest.fn(),
     redetectBand: jest.fn(),
+    resetHealthConnectForNewPairing: jest.fn(),
   });
 
 beforeEach(() => {

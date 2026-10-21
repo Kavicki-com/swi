@@ -73,6 +73,7 @@ function leitorFalso() {
       return estadoHC('2026-10-20T12:00:00.000Z');
     }),
     redetect: jest.fn(async () => undefined),
+    resetForNewPairing: jest.fn(async () => undefined),
     requestPermissions: jest.fn(async () => 'granted' as const),
     checkAccess: jest.fn(async () => 'available' as const),
     openSettings: jest.fn(),
@@ -188,6 +189,7 @@ describe('TelemetryUploadProvider', () => {
     await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
     expect(() => visto.openHealthConnectSettings()).not.toThrow();
     await expect(visto.redetectBand()).resolves.toBe(false);
+    await expect(visto.resetHealthConnectForNewPairing()).resolves.toBe(false);
   });
 });
 
@@ -223,6 +225,7 @@ describe('TelemetryUploadProvider, iPhone', () => {
       await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
       await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
       await expect(visto.redetectBand()).resolves.toBe(false);
+      await expect(visto.resetHealthConnectForNewPairing()).resolves.toBe(false);
     });
     visto.openHealthConnectSettings();
     expect(mockSharedReader).not.toHaveBeenCalled();
@@ -605,6 +608,43 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
     warn.mockRestore();
   });
 
+  // Parear de novo cria outro aparelho no backend: o leitor troca o sal e
+  // limpa o que era do anterior, e o estado relido já chega sem pulseira.
+  it('resetHealthConnectForNewPairing pede ao leitor, relê o estado e devolve true', async () => {
+    await montar();
+    leitor.ordem.length = 0;
+    leitor.reader.resetForNewPairing.mockImplementationOnce(async () => {
+      leitor.ordem.push('reset do pareamento');
+    });
+    leitor.reader.state.mockImplementationOnce(async () => {
+      leitor.ordem.push('estado');
+      return { ...estadoHC(null), bandPackage: null, bandLabel: null };
+    });
+    let resposta: boolean | undefined;
+    await act(async () => {
+      resposta = await visto.resetHealthConnectForNewPairing();
+    });
+    expect(resposta).toBe(true);
+    expect(leitor.ordem).toEqual(['reset do pareamento', 'estado']);
+    expect(visto.healthConnect).toMatchObject({ bandLabel: null, lastSyncAt: null });
+  });
+
+  // O pareamento já deu certo: a falha do reset só avisa, nunca rejeita.
+  it('resetHealthConnectForNewPairing que rejeita vira false, com aviso, e não relê o estado', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await montar();
+    const leiturasAntes = leitor.reader.state.mock.calls.length;
+    leitor.reader.resetForNewPairing.mockRejectedValueOnce(new Error('disco cheio'));
+    let resposta: boolean | undefined;
+    await act(async () => {
+      resposta = await visto.resetHealthConnectForNewPairing();
+    });
+    expect(resposta).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('disco cheio'));
+    expect(leitor.reader.state.mock.calls.length).toBe(leiturasAntes);
+    warn.mockRestore();
+  });
+
   it('openHealthConnectSettings abre os ajustes pelo leitor', async () => {
     await montar();
     visto.openHealthConnectSettings();
@@ -619,10 +659,12 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
       await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
       await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
       await expect(visto.redetectBand()).resolves.toBe(false);
+      await expect(visto.resetHealthConnectForNewPairing()).resolves.toBe(false);
     });
     expect(leitor.reader.requestPermissions).not.toHaveBeenCalled();
     expect(leitor.reader.checkAccess).not.toHaveBeenCalled();
     expect(leitor.reader.redetect).not.toHaveBeenCalled();
+    expect(leitor.reader.resetForNewPairing).not.toHaveBeenCalled();
     expect(visto.healthConnect).toBeNull();
   });
 

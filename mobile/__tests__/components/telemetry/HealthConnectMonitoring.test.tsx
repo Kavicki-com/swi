@@ -54,6 +54,7 @@ const comEnvio = (parcial: Partial<TelemetryUploadContextValue> = {}) =>
     checkHealthConnect: mockConferir,
     openHealthConnectSettings: mockAjustes,
     redetectBand: mockRedetectar,
+    resetHealthConnectForNewPairing: jest.fn(),
     ...parcial,
   });
 

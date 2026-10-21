@@ -289,12 +289,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * como a ponte formatou a data.
  *
  * A identidade vale enquanto o sal e a credencial do aparelho forem os mesmos.
- * Depois de reinstalar ou parear de novo, a releitura das 48 h produz o mesmo
- * `eventId` sob outra sessão e outro aparelho, e o backend responde conflito
- * de id, que o envio descarta: nenhuma duplicação, só recusas no registro. O
- * mesmo vale para um registro reescrito no lugar, com o mesmo `metadata.id` e
- * instante: o valor revisado nunca chega ao backend. Consequências aceitas do
- * desenho.
+ * O sal muda ao reinstalar (o estado do leitor some) e a cada pareamento novo:
+ * o backend cria outro aparelho por pareamento e recusa evento de sessão do
+ * anterior, e o leitor troca o sal, tira da fila os eventos do Health Connect
+ * ainda não enviados e relê as 48 h (`resetForNewPairing`). Nessa releitura,
+ * o que já tinha subido produz o mesmo `eventId` sob outra sessão e outro
+ * aparelho, e o backend responde conflito de id, que o envio descarta: nenhuma
+ * duplicação, só recusas no registro; o que não tinha subido entra na sessão
+ * nova. O mesmo conflito vale para um registro reescrito no lugar, com o mesmo
+ * `metadata.id` e instante: o valor revisado nunca chega ao backend.
+ * Consequências aceitas do desenho.
  */
 export function mapHealthConnectRecords(
   records: readonly HealthConnectRecord[],

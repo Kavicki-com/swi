@@ -830,6 +830,129 @@ describe('redetect', () => {
   });
 });
 
+// Parear de novo no mesmo celular cria outro aparelho no backend, e as sessões
+// do sal antigo ficam do aparelho anterior: o backend as recusa. Sem trocar o
+// sal, tudo o que fosse lido até a meia-noite UTC se perderia em silêncio.
+describe('resetForNewPairing', () => {
+  const sessaoDe = (sal: string) => uuidV5(`${sal}:2026-10-20`, HEALTH_CONNECT_EVENT_NAMESPACE);
+
+  // Um evento do relógio, que o reset não pode tocar.
+  const doRelogio = {
+    eventId: uuidV5('relogio:1', HEALTH_CONNECT_EVENT_NAMESPACE),
+    monitoringSessionId: uuidV5('relogio:sessao', HEALTH_CONNECT_EVENT_NAMESPACE),
+    sequence: 0,
+    eventTime: em(-30),
+    origin: 'REAL' as const,
+    measurements: { heartRate: { value: 72, unit: 'bpm' as const, source: 'APPLE_WATCH' as const } },
+  };
+
+  it('troca o sal, zera token, primeira leitura e pulseira, e a próxima rodada relê as 48 h sem esperar o intervalo', async () => {
+    const m = montar({ HeartRate: [batimento('h1', -600)] });
+    await m.reader.run();
+    const [antes] = await m.outbox.pending();
+    expect(antes.monitoringSessionId).toBe(sessaoDe(SAL));
+    m.log.length = 0;
+    m.uuidV4.mockReturnValueOnce(OUTRO_SAL);
+
+    await m.reader.resetForNewPairing();
+
+    expect(lerEstado(m.storage)).toEqual({
+      sessionSalt: OUTRO_SAL,
+      changesToken: null,
+      tokenTypes: [],
+      firstSyncDone: false,
+      bandPackage: null,
+      noBand: false,
+      lastSyncAt: null,
+    });
+    expect(await m.reader.state()).toMatchObject({ bandPackage: null, lastSyncAt: null });
+
+    // Sem force e sem avançar o relógio: o intervalo não segura esta rodada.
+    expect(await m.reader.run()).toBe(1);
+    expect(m.source.getChanges).not.toHaveBeenCalled();
+    expect(m.log[0]).toBe('token');
+    expect(m.log.slice(1)).toEqual(HEALTH_CONNECT_RECORD_TYPES.map((type) => `read:${type}`));
+    const depois = await m.outbox.pending();
+    expect(depois).toHaveLength(1);
+    // O mesmo evento, agora na sessão do sal novo.
+    expect(depois[0].eventId).toBe(antes.eventId);
+    expect(depois[0].monitoringSessionId).toBe(sessaoDe(OUTRO_SAL));
+    expect(lerEstado(m.storage)).toMatchObject({
+      sessionSalt: OUTRO_SAL,
+      firstSyncDone: true,
+      bandPackage: PULSEIRA,
+    });
+  });
+
+  it('tira da fila só os eventos do Health Connect ainda pendentes, e mantém os de outra origem', async () => {
+    const m = montar({ HeartRate: [batimento('h1', -600)], Steps: [passos('s1', -200, 50)] });
+    await m.reader.run();
+    await m.outbox.append(doRelogio);
+    expect(await m.outbox.pending()).toHaveLength(3);
+
+    await m.reader.resetForNewPairing();
+
+    expect(await m.outbox.pending()).toEqual([doRelogio]);
+  });
+
+  it('com uma rodada em curso, espera ela terminar: não roda no meio dela', async () => {
+    const m = montar({ HeartRate: [batimento('h1', -600)] });
+    let soltar: () => void = () => undefined;
+    const real = m.source.readRecords.getMockImplementation()!;
+    m.source.readRecords.mockImplementationOnce(async (type, since) => {
+      await new Promise<void>((resolve) => (soltar = resolve));
+      return real(type, since);
+    });
+    m.uuidV4.mockReturnValueOnce(SAL).mockReturnValueOnce(OUTRO_SAL);
+
+    const rodada = m.reader.run();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    let terminou = false;
+    const reset = m.reader.resetForNewPairing().then(() => {
+      terminou = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(terminou).toBe(false);
+
+    soltar();
+    await rodada;
+    await reset;
+
+    // A rodada gravou o dela antes, e o reset por cima: o estado é o inicial
+    // com o sal novo, e o que ela enfileirou na sessão antiga saiu da fila.
+    expect(lerEstado(m.storage)).toMatchObject({
+      sessionSalt: OUTRO_SAL,
+      firstSyncDone: false,
+      changesToken: null,
+      bandPackage: null,
+    });
+    expect(await m.outbox.pending()).toHaveLength(0);
+  });
+
+  it('rejeita quando o estado não pode ser gravado, e a fila fica como estava', async () => {
+    const m = montar({ HeartRate: [batimento('h1', -600)] });
+    await m.reader.run();
+    m.storage.write = async () => {
+      throw new Error('somente leitura');
+    };
+
+    await expect(m.reader.resetForNewPairing()).rejects.toThrow('somente leitura');
+
+    expect(await m.outbox.pending()).toHaveLength(1);
+  });
+
+  it('rejeita quando a fila não pode ser gravada, já com o sal novo no estado', async () => {
+    const m = montar({ HeartRate: [batimento('h1', -600)] });
+    await m.reader.run();
+    jest.spyOn(m.outbox, 'remove').mockRejectedValueOnce(new Error('disco cheio'));
+    m.uuidV4.mockReturnValueOnce(OUTRO_SAL);
+
+    await expect(m.reader.resetForNewPairing()).rejects.toThrow('disco cheio');
+
+    expect(lerEstado(m.storage)).toMatchObject({ sessionSalt: OUTRO_SAL, firstSyncDone: false });
+  });
+});
+
 describe('state', () => {
   it('antes da primeira rodada: tudo nulo, sem gravar nada', async () => {
     const m = montar();

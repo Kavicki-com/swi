@@ -56,6 +56,7 @@ const mockConferir = jest.fn(
   async (): Promise<'available' | 'unavailable' | 'update_required'> => 'available',
 );
 const mockAjustes = jest.fn();
+const mockResetHC = jest.fn(async (): Promise<boolean> => true);
 
 // O contexto do envio como a tela o lê. Trocar o valor e renderizar de novo
 // imita o provider relendo o estado.
@@ -71,6 +72,7 @@ const comEnvio = (parcial: Partial<TelemetryUploadContextValue> = {}) =>
     checkHealthConnect: mockConferir,
     openHealthConnectSettings: mockAjustes,
     redetectBand: jest.fn(async () => true),
+    resetHealthConnectForNewPairing: mockResetHC,
     ...parcial,
   });
 
@@ -170,6 +172,7 @@ beforeEach(() => {
   mockSyncNow.mockReset().mockResolvedValue(undefined);
   mockPedir.mockReset().mockResolvedValue('granted');
   mockConferir.mockReset().mockResolvedValue('available');
+  mockResetHC.mockReset().mockResolvedValue(true);
   comEnvio();
   mockConcluir.mockResolvedValue({ paired: true });
 });
@@ -347,6 +350,14 @@ describe('pareamento: iPhone', () => {
     expect(mockConferir).not.toHaveBeenCalled();
     expect(texto(tree)).not.toContain('Health Connect');
   });
+
+  it('pareado, não mexe no leitor do Health Connect', async () => {
+    const tree = await render();
+    await digitar(tree, '482910');
+    await tocar(tree, 'Parear');
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+    expect(mockResetHC).not.toHaveBeenCalled();
+  });
 });
 
 const estadoHC = (parcial: Partial<HealthConnectState> = {}): HealthConnectState => ({
@@ -397,6 +408,56 @@ describe('pareamento: Android', () => {
       deviceKind: 'ANDROID_PHONE',
     });
     expect(mockRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  // Cada pareamento cria outro aparelho no backend, que recusa as sessões do
+  // anterior: o leitor troca o sal antes de o envio reler a credencial e de
+  // a primeira sincronização sair.
+  it('pareamento novo: avisa o leitor do Health Connect antes de reler a credencial', async () => {
+    const ordem: string[] = [];
+    let soltar: () => void = () => undefined;
+    mockResetHC.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          soltar = () => {
+            ordem.push('reset');
+            resolve(true);
+          };
+        }),
+    );
+    mockRefresh.mockImplementation(() => {
+      ordem.push('refresh');
+    });
+    const tree = await parearNoAndroid();
+
+    expect(mockResetHC).toHaveBeenCalledTimes(1);
+    // Enquanto o reset não termina, nada do pareamento concluído começa.
+    expect(mockRefresh).not.toHaveBeenCalled();
+    expect(mockConferir).not.toHaveBeenCalled();
+    expect(texto(tree)).not.toContain('Aparelho pareado');
+
+    await act(async () => {
+      soltar();
+    });
+
+    expect(ordem).toEqual(['reset', 'refresh']);
+    expect(texto(tree)).toContain('Aparelho pareado');
+  });
+
+  it('falha do reset avisa e não impede a tela de mostrar pareado', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockResetHC.mockRejectedValue(new Error('disco cheio'));
+    const tree = await parearNoAndroid();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('disco cheio'));
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+    expect(texto(tree)).toContain('Aparelho pareado');
+  });
+
+  it('pareamento recusado não mexe no leitor do Health Connect', async () => {
+    mockConcluir.mockResolvedValue({ paired: false, reason: 'invalid_code' });
+    await parearNoAndroid();
+    expect(mockResetHC).not.toHaveBeenCalled();
   });
 
   it('fala do celular e da pulseira, sem citar iPhone nem Apple Watch', async () => {

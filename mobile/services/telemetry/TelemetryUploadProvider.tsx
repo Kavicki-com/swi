@@ -46,9 +46,10 @@ import {
 // agendador do sistema.
 //
 // A tela de pareamento do Android pede a permissão de leitura, confere o
-// acesso e abre os ajustes do Health Connect por este contexto, e o
-// Monitoramento em Configurações também redetecta a pulseira por ele, para
-// nunca importar o leitor nem a porta: o leitor é um só por runtime.
+// acesso, abre os ajustes do Health Connect e avisa o pareamento novo por
+// este contexto, e o Monitoramento em Configurações também redetecta a
+// pulseira por ele, para nunca importar o leitor nem a porta: o leitor é um
+// só por runtime.
 
 export interface TelemetryUploadContextValue extends TelemetryUploadState {
   /** A tela de pareamento chama ao concluir: o envio relê a credencial. */
@@ -98,6 +99,17 @@ export interface TelemetryUploadContextValue extends TelemetryUploadState {
    * sem chamar nada.
    */
   redetectBand: () => Promise<boolean>;
+  /**
+   * A tela de pareamento do Android chama quando um pareamento novo deu
+   * certo, antes de `refreshPairing`: o backend criou outro aparelho, e o
+   * leitor troca o sal da sessão, esquece token e pulseira e tira da fila os
+   * eventos do Health Connect ainda não enviados, que eram do aparelho
+   * anterior (ver `resetForNewPairing`). Relê o estado em seguida. Devolve se
+   * deu certo. Nunca rejeita: a falha volta como `false`, com aviso, e o
+   * pareamento segue valendo. `false` também fora do Android com o gate e
+   * sem sessão, sem chamar nada.
+   */
+  resetHealthConnectForNewPairing: () => Promise<boolean>;
 }
 
 const FORA_DO_PROVIDER: TelemetryUploadContextValue = {
@@ -111,6 +123,7 @@ const FORA_DO_PROVIDER: TelemetryUploadContextValue = {
   checkHealthConnect: async () => 'unavailable',
   openHealthConnectSettings: () => undefined,
   redetectBand: async () => false,
+  resetHealthConnectForNewPairing: async () => false,
 };
 
 const TelemetryUploadContext = createContext<TelemetryUploadContextValue>(FORA_DO_PROVIDER);
@@ -332,6 +345,20 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
     return true;
   }, [reader, enabled, rereadHealthConnect]);
 
+  // Como `redetectBand`: sem sessão não há de quem esquecer nada, e a falha
+  // só avisa. O pareamento que acabou de dar certo não depende disto.
+  const resetHealthConnectForNewPairing = useCallback(async (): Promise<boolean> => {
+    if (reader === null || !enabled) return false;
+    try {
+      await reader.resetForNewPairing();
+    } catch (error) {
+      warn('reset do Health Connect no pareamento novo falhou', error);
+      return false;
+    }
+    await rereadHealthConnect(reader);
+    return true;
+  }, [reader, enabled, rereadHealthConnect]);
+
   const value = useMemo(
     () => ({
       paired,
@@ -344,6 +371,7 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
       checkHealthConnect,
       openHealthConnectSettings,
       redetectBand,
+      resetHealthConnectForNewPairing,
     }),
     [
       paired,
@@ -356,6 +384,7 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
       checkHealthConnect,
       openHealthConnectSettings,
       redetectBand,
+      resetHealthConnectForNewPairing,
     ],
   );
   return <TelemetryUploadContext.Provider value={value}>{children}</TelemetryUploadContext.Provider>;

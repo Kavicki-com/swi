@@ -23,7 +23,8 @@ import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUp
 // Connect) ela fica no SecureStore, pelo controle do Android
 // (androidDeviceControl.ts), e depois de parear vem o passo do Health
 // Connect: a permissão de leitura e a primeira sincronização. Nos dois, esta
-// tela só sabe se pareou.
+// tela só sabe se pareou; no Android, ela ainda avisa o leitor do Health
+// Connect do pareamento novo, antes de o envio reler a credencial.
 
 const CODE_LENGTH = 6;
 const FIM_DO_PRIMEIRO_USO = '/(onboarding)/watch/complete';
@@ -72,6 +73,21 @@ function WatchPairingScreen() {
           deviceKind: 'ANDROID_PHONE',
         })
       : await completeEnrollment(codigo);
+    if (resultado.paired && naPulseira) {
+      // Cada pareamento cria outro aparelho no servidor, que recusa as
+      // sessões do anterior: o leitor do Health Connect troca o sal antes de
+      // o envio reler a credencial e de a primeira sincronização sair. A
+      // falha só avisa: o pareamento já deu certo e continua valendo.
+      try {
+        await envio.resetHealthConnectForNewPairing();
+      } catch (error) {
+        console.warn(
+          `[WatchPairing] reset do Health Connect no pareamento novo falhou: ${String(
+            (error as { message?: unknown })?.message ?? error,
+          )}`,
+        );
+      }
+    }
     setEnviando(false);
     if (resultado.paired) {
       setConcluido(true);

@@ -140,6 +140,7 @@ beforeEach(() => {
     checkHealthConnect: jest.fn(),
     openHealthConnectSettings: jest.fn(),
     redetectBand: jest.fn(),
+    resetHealthConnectForNewPairing: jest.fn(),
   });
   mockGate.mockReturnValue(false);
 });
@@ -235,6 +236,7 @@ describe('Configurações, Monitoramento', () => {
       checkHealthConnect: jest.fn(),
       openHealthConnectSettings: jest.fn(),
       redetectBand: jest.fn(),
+      resetHealthConnectForNewPairing: jest.fn(),
     });
     expect(textoDe(await render(ATIVO()))).toContain('Enviando ao servidor');
   });
@@ -276,6 +278,7 @@ describe('Configurações, Monitoramento', () => {
       checkHealthConnect: jest.fn(),
       openHealthConnectSettings: jest.fn(),
       redetectBand: jest.fn(),
+      resetHealthConnectForNewPairing: jest.fn(),
     });
     expect(botaoParear(await render(ATIVO()))).toBeUndefined();
   });
@@ -311,6 +314,7 @@ describe('Configurações, Monitoramento: Android', () => {
       checkHealthConnect: jest.fn(async () => 'available' as const),
       openHealthConnectSettings: jest.fn(),
       redetectBand: jest.fn(async () => true),
+      resetHealthConnectForNewPairing: jest.fn(),
     });
 
   beforeEach(() => {
