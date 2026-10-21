@@ -9,7 +9,7 @@
 //   - Dispatched: violet route, small violet "moving" rescuer marker, no modal.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { createRoot, type Root } from 'react-dom/client'
 import type * as maplibregl from 'maplibre-gl'
 import { useMapLibre } from '@/lib/useMapLibre'
@@ -95,6 +95,12 @@ export function AlertsRescueRoute() {
   const rescueNumber = searchParams.get('n')
   const headerTitle =
     dispatched && rescueNumber ? `Resgate em tempo real ID ${rescueNumber}` : 'Rota de socorro'
+  // Voltar: despachado, o resgate já existe e é acompanhado pela lista de
+  // Resgates; antes disso, só desfaz a escolha do socorrista.
+  const navigate = useNavigate()
+  const back = dispatched
+    ? { to: '/alerts/rescues', label: 'Voltar para os resgates' }
+    : { to: `/alerts/${employeeId ?? ''}/rescue`, label: 'Voltar para a escolha do socorrista' }
 
   // Pontas REAIS do socorro: as posições ao vivo do ferido (:employeeId) e do
   // socorrista escolhido (:rescuerId), nunca coordenadas fixas. É o que mantém
@@ -359,6 +365,17 @@ export function AlertsRescueRoute() {
         <Title variant="title.xs" color={theme.content.dark}>
           {headerTitle}
         </Title>
+      </View>
+
+      <View
+        style={{ position: 'absolute', top: theme.padding.m, right: theme.padding.m, zIndex: 3 }}
+      >
+        <Button
+          label="Voltar"
+          accessibilityLabel={back.label}
+          backgroundColor={theme.surface.secondary}
+          onPress={() => navigate(back.to)}
+        />
       </View>
 
       {/* Sem posição conhecida das duas pontas não existe rota: dizer isso é
