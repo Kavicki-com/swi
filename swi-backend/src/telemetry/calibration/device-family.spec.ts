@@ -1,10 +1,10 @@
 import { dominantFamily, familyOfDeviceKind } from './device-family'
 
 describe('família do aparelho', () => {
-  it('relógio e pulseira; o resto não calibra', () => {
+  it('relógio (o iPhone repassa o Apple Watch) e pulseira; o manguito não calibra', () => {
     expect(familyOfDeviceKind('APPLE_WATCH')).toBe('WATCH')
     expect(familyOfDeviceKind('ANDROID_PHONE')).toBe('BAND')
-    expect(familyOfDeviceKind('IPHONE')).toBeNull()
+    expect(familyOfDeviceKind('IPHONE')).toBe('WATCH')
     expect(familyOfDeviceKind('EXTERNAL_CUFF')).toBeNull()
   })
   it('a do dia é a que mais leu batimento; empate fica com o relógio', () => {

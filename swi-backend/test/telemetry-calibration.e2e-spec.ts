@@ -51,7 +51,7 @@ describe('Telemetry calibration e2e', () => {
     movementPerMinuteMedian: 40,
     deviceFamily: over.deviceFamily ?? 'WATCH',
     sampleCount: 100,
-    summarizerVersion: 'swi-daily-summary-3',
+    summarizerVersion: 'swi-daily-summary-4',
     computedAt: noonOf(iso),
     provisional: over.provisional ?? false,
   })

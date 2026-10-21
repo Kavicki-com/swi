@@ -2,10 +2,12 @@ import type { CalibrationDeviceFamily, TelemetryDeviceKind } from '@prisma/clien
 
 // A calibração separa relógio e pulseira porque os dois medem de jeitos
 // diferentes (a pulseira mede a noite, e o repouso dela sai mais baixo).
-// iPhone e manguito não leem batimento contínuo e não definem a família.
+// O aparelho cadastrado é o celular que repassa o vestível: o iPhone repassa
+// o Apple Watch, e o Android, a pulseira pelo Health Connect. Manguito não lê
+// batimento contínuo e não define a família.
 
 export function familyOfDeviceKind(kind: TelemetryDeviceKind): CalibrationDeviceFamily | null {
-  if (kind === 'APPLE_WATCH') return 'WATCH'
+  if (kind === 'APPLE_WATCH' || kind === 'IPHONE') return 'WATCH'
   if (kind === 'ANDROID_PHONE') return 'BAND'
   return null
 }

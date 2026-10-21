@@ -556,7 +556,7 @@ describe('summarizeDay: chave e rastro', () => {
     // A varredura recandidata dia cujo Resumo veio de outra versão, então este
     // literal é o gatilho de recálculo de todo o histórico. Ele não pode mudar
     // junto com um refactor qualquer.
-    expect(SUMMARIZER_VERSION).toBe('swi-daily-summary-3')
+    expect(SUMMARIZER_VERSION).toBe('swi-daily-summary-4')
   })
 
   it('um dia com centenas de milhares de leituras não estoura a pilha', () => {
