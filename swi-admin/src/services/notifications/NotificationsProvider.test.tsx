@@ -7,11 +7,17 @@ const h = vi.hoisted(() => ({
   list: vi.fn(),
   markRead: vi.fn(),
   markAllRead: vi.fn(),
+  clearPanel: vi.fn(),
   unsubscribe: vi.fn(),
   push: null as ((n: unknown) => void) | null,
 }))
 vi.mock('@/services/api/notifications', () => ({
-  notificationsApi: { list: h.list, markRead: h.markRead, markAllRead: h.markAllRead },
+  notificationsApi: {
+    list: h.list,
+    markRead: h.markRead,
+    markAllRead: h.markAllRead,
+    clearPanel: h.clearPanel,
+  },
 }))
 vi.mock('./notificationsSocket', () => ({
   subscribeNotifications: (cb: (n: unknown) => void) => {
@@ -49,6 +55,7 @@ beforeEach(() => {
   h.list.mockReset().mockResolvedValue({ data: [n('a'), n('b')], error: null })
   h.markRead.mockReset().mockResolvedValue({ data: null, error: null })
   h.markAllRead.mockReset().mockResolvedValue({ data: null, error: null })
+  h.clearPanel.mockReset().mockResolvedValue({ data: null, error: null })
   h.unsubscribe.mockReset()
   h.push = null
 })

@@ -25,6 +25,11 @@ export type NotificationsState = {
    * "não lida", então a marca vale até chegar resposta de leitura mais nova.
    */
   pendingRead: ReadonlyMap<string, number | null>
+  /**
+   * Limpas aqui ("limpar todas"), com a mesma regra de `pendingRead`: ficam
+   * fora de qualquer resposta até chegar leitura pedida depois da confirmação.
+   */
+  pendingClear: ReadonlyMap<string, number | null>
   /** Número de cada chegada pelo socket, por id. */
   arrivals: ReadonlyMap<string, number>
   arrivalCount: number
@@ -44,6 +49,7 @@ export function initialNotifications(): NotificationsState {
     status: 'loading',
     items: [],
     pendingRead: new Map(),
+    pendingClear: new Map(),
     arrivals: new Map(),
     arrivalCount: 0,
     lastApplied: 0,
@@ -60,12 +66,32 @@ const newestFirst = (a: NotificationDto, b: NotificationDto) =>
 const withPendingReads = (items: NotificationDto[], pending: ReadonlyMap<string, number | null>) =>
   items.map((n) => (pending.has(n.id) && !n.read ? { ...n, read: true } : n))
 
+// Marca confirmada sai quando a resposta vem de leitura pedida depois da
+// confirmação: essa já viu a gravação.
+const prunedFor = (pending: ReadonlyMap<string, number | null>, request: number) =>
+  new Map([...pending].filter(([, settledAt]) => settledAt === null || request <= settledAt))
+
+// Confirmada, a marca guarda a última leitura já pedida; recusada, sai.
+const settled = (
+  pending: ReadonlyMap<string, number | null>,
+  ids: string[],
+  ok: boolean,
+  lastRequest: number,
+) => {
+  const next = new Map(pending)
+  for (const id of ids) {
+    if (ok) next.set(id, lastRequest)
+    else next.delete(id)
+  }
+  return next
+}
+
 export function withResponse(
   state: NotificationsState,
   response: NotificationsResponse,
 ): NotificationsState {
   if (response.request < state.lastApplied) return state
-  const fresh = response.items.filter(belongsInBell)
+  const fresh = response.items.filter((n) => belongsInBell(n) && !state.pendingClear.has(n.id))
   const inResponse = new Set(fresh.map((n) => n.id))
   const later = state.items.filter(
     (n) => !inResponse.has(n.id) && (state.arrivals.get(n.id) ?? 0) > response.askedArrival,
@@ -76,26 +102,24 @@ export function withResponse(
   const items = withPendingReads([...later, ...fresh], state.pendingRead)
     .sort(newestFirst)
     .slice(0, NOTIFICATIONS_CAP)
-  // Marca confirmada sai quando a resposta vem de leitura pedida depois da
-  // confirmação: essa já viu a gravação.
-  const pendingRead = new Map(
-    [...state.pendingRead].filter(
-      ([, settledAt]) => settledAt === null || response.request <= settledAt,
-    ),
-  )
   return {
     ...state,
     status: 'ready',
     items,
     arrivals,
-    pendingRead,
+    pendingRead: prunedFor(state.pendingRead, response.request),
+    pendingClear: prunedFor(state.pendingClear, response.request),
     lastApplied: response.request,
   }
 }
 
 export function withArrival(state: NotificationsState, dto: NotificationDto): NotificationsState {
   const arrivalCount = state.arrivalCount + 1
-  if (!belongsInBell(dto) || state.items.some((n) => n.id === dto.id)) {
+  if (
+    !belongsInBell(dto) ||
+    state.pendingClear.has(dto.id) ||
+    state.items.some((n) => n.id === dto.id)
+  ) {
     return { ...state, arrivalCount }
   }
   const arrivals = new Map(state.arrivals).set(dto.id, arrivalCount)
@@ -128,16 +152,38 @@ export function withReadSettled(
   ok: boolean,
   lastRequest: number,
 ): NotificationsState {
-  const settled = new Set(ids)
-  const pendingRead = new Map(state.pendingRead)
-  for (const id of ids) {
-    if (ok) pendingRead.set(id, lastRequest)
-    else pendingRead.delete(id)
-  }
+  const back = new Set(ids)
+  const pendingRead = settled(state.pendingRead, ids, ok, lastRequest)
   const items = ok
     ? state.items
-    : state.items.map((n) => (settled.has(n.id) ? { ...n, read: false } : n))
+    : state.items.map((n) => (back.has(n.id) ? { ...n, read: false } : n))
   return { ...state, pendingRead, items }
+}
+
+/** "Limpar todas": somem da tela na hora, antes de o servidor responder. */
+export function withLocalClear(state: NotificationsState, ids: string[]): NotificationsState {
+  const cleared = new Set(ids)
+  const pendingClear = new Map(state.pendingClear)
+  for (const id of ids) pendingClear.set(id, null)
+  return {
+    ...state,
+    pendingClear,
+    items: state.items.filter((n) => !cleared.has(n.id)),
+    arrivals: new Map([...state.arrivals].filter(([id]) => !cleared.has(id))),
+  }
+}
+
+/**
+ * Resposta do servidor ao limpar, com a regra de `withReadSettled`. Recusada,
+ * a marca sai e quem chamou relê para as notificações voltarem.
+ */
+export function withClearSettled(
+  state: NotificationsState,
+  ids: string[],
+  ok: boolean,
+  lastRequest: number,
+): NotificationsState {
+  return { ...state, pendingClear: settled(state.pendingClear, ids, ok, lastRequest) }
 }
 
 export function unreadCount(state: NotificationsState): number {

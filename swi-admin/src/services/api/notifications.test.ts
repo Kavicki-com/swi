@@ -22,7 +22,7 @@ const health: NotificationDto = {
 }
 
 describe('notificationsApi.list', () => {
-  it('GET /notifications devolve a lista do próprio admin, mais nova primeiro', async () => {
+  it('GET /notifications?surface=panel devolve a lista do admin sem as limpas no painel', async () => {
     const f = vi.fn().mockResolvedValue(ok([health]))
     vi.stubGlobal('fetch', f)
 
@@ -31,7 +31,7 @@ describe('notificationsApi.list', () => {
     expect(error).toBeNull()
     expect(data).toEqual([health])
     const [url, init] = f.mock.calls[0] as [string, RequestInit]
-    expect(url).toMatch(/\/notifications$/)
+    expect(url).toMatch(/\/notifications\?surface=panel$/)
     expect(init.method ?? 'GET').toBe('GET')
   })
 
@@ -63,6 +63,18 @@ describe('notificationsApi.markRead e markAllRead', () => {
     expect(error).toBeNull()
     const [url, init] = f.mock.calls[0] as [string, RequestInit]
     expect(url).toMatch(/\/notifications\/n%201\/read$/)
+    expect(init.method).toBe('POST')
+  })
+
+  it('POST /notifications/clear-panel esconde todas só no painel', async () => {
+    const f = vi.fn().mockResolvedValue(ok({}, 204))
+    vi.stubGlobal('fetch', f)
+
+    const { error } = await notificationsApi.clearPanel()
+
+    expect(error).toBeNull()
+    const [url, init] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toMatch(/\/notifications\/clear-panel$/)
     expect(init.method).toBe('POST')
   })
 

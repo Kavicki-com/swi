@@ -3,7 +3,9 @@ import {
   initialNotifications,
   unreadCount,
   withArrival,
+  withClearSettled,
   withFailure,
+  withLocalClear,
   withLocalRead,
   withReadSettled,
   withResponse,
@@ -164,5 +166,52 @@ describe('marcar como lida', () => {
     s = withReadSettled(withLocalRead(s, ['a']), ['a'], false, 1)
     expect(s.pendingRead.size).toBe(0)
     expect(s.items[0]!.read).toBe(false)
+  })
+})
+
+describe('limpar no painel', () => {
+  it('some na hora com tudo o que está na tela, e a conta vai a zero', () => {
+    let s = withResponse(initialNotifications(), {
+      request: 1,
+      askedArrival: 0,
+      items: [n('a'), n('b')],
+    })
+    s = withLocalClear(s, ['a', 'b'])
+    expect(ids(s)).toEqual([])
+    expect(unreadCount(s)).toBe(0)
+  })
+
+  // A leitura saiu antes de o servidor esconder e chegou depois: ainda traz as
+  // limpas, que seguem fora até chegar leitura pedida depois da confirmação.
+  it('leitura que saiu antes da confirmação não traz as limpas de volta', () => {
+    let s = withResponse(initialNotifications(), { request: 1, askedArrival: 0, items: [n('a')] })
+    s = withClearSettled(withLocalClear(s, ['a']), ['a'], true, 2)
+    s = withResponse(s, { request: 2, askedArrival: 0, items: [n('a'), n('b')] })
+    expect(ids(s)).toEqual(['b'])
+    expect(s.pendingClear.size).toBe(1)
+    s = withResponse(s, { request: 3, askedArrival: 0, items: [n('b')] })
+    expect(s.pendingClear.size).toBe(0)
+  })
+
+  it('o que chega pelo socket depois de limpar aparece', () => {
+    let s = withResponse(initialNotifications(), { request: 1, askedArrival: 0, items: [n('a')] })
+    s = withLocalClear(s, ['a'])
+    s = withArrival(s, n('b'))
+    expect(ids(s)).toEqual(['b'])
+  })
+
+  it('a mesma limpa repetida pelo socket não volta', () => {
+    let s = withResponse(initialNotifications(), { request: 1, askedArrival: 0, items: [n('a')] })
+    s = withLocalClear(s, ['a'])
+    s = withArrival(s, n('a'))
+    expect(ids(s)).toEqual([])
+  })
+
+  it('recusada pelo servidor, a marca sai para a releitura trazer de volta', () => {
+    let s = withResponse(initialNotifications(), { request: 1, askedArrival: 0, items: [n('a')] })
+    s = withClearSettled(withLocalClear(s, ['a']), ['a'], false, 1)
+    expect(s.pendingClear.size).toBe(0)
+    s = withResponse(s, { request: 2, askedArrival: 0, items: [n('a')] })
+    expect(ids(s)).toEqual(['a'])
   })
 })

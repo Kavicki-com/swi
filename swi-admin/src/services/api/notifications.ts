@@ -2,9 +2,10 @@
 // /notifications/pause-request: o backend valida org + role e enfileira a
 // notificação de journey pro worker (aparece no app dele).
 //
-// O sino lê as notificações do próprio admin: GET /notifications (até 200, mais
-// nova primeiro) e as duas marcações de lida. O mesmo formato chega pelo socket
-// no evento `notification`.
+// O sino lê as notificações do próprio admin: GET /notifications?surface=panel
+// (até 200, mais nova primeiro, sem as que o admin limpou no painel), as duas
+// marcações de lida e o "limpar todas", que esconde só aqui: o app do celular
+// continua vendo. O mesmo formato chega pelo socket no evento `notification`.
 import type { ServiceResponse } from '@/services/types'
 import { apiFetch } from './http'
 
@@ -40,7 +41,7 @@ async function call<T>(work: () => Promise<T>, fallback: string): Promise<Servic
 export const notificationsApi = {
   list: (): Promise<ServiceResponse<NotificationDto[]>> =>
     call(async () => {
-      const rows = await apiFetch<unknown>('/notifications')
+      const rows = await apiFetch<unknown>('/notifications?surface=panel')
       // Corpo que não é lista (o apiFetch devolve {} quando o corpo não é JSON)
       // não pode virar "nenhuma notificação".
       if (!Array.isArray(rows)) throw new Error('Resposta inesperada das notificações')
@@ -58,6 +59,12 @@ export const notificationsApi = {
       await apiFetch<unknown>('/notifications/read-all', { method: 'POST' })
       return null
     }, 'Falha ao marcar as notificações como lidas'),
+
+  clearPanel: (): Promise<ServiceResponse<null>> =>
+    call(async () => {
+      await apiFetch<unknown>('/notifications/clear-panel', { method: 'POST' })
+      return null
+    }, 'Falha ao limpar as notificações'),
 
   requestPause: async (workerId: string): Promise<ServiceResponse<{ requested: true }>> => {
     try {

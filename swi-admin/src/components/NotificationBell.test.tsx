@@ -48,6 +48,7 @@ function viewWith(over: Partial<NotificationsView> & { items?: NotificationDto[]
     refresh: vi.fn(),
     markRead: vi.fn(),
     markAllRead: vi.fn(),
+    clearAll: vi.fn(),
     ...over,
   }
   h.view = view
@@ -153,6 +154,21 @@ describe('NotificationBell', () => {
     await renderPage(<NotificationBell />)
     fireEvent.click(bell())
     expect(screen.queryByText('Marcar todas como lidas')).toBeNull()
+  })
+
+  it('limpar todas aparece com notificações na lista, mesmo já lidas', async () => {
+    const view = viewWith({ items: [n('a', { read: true })] })
+    await renderPage(<NotificationBell />)
+    fireEvent.click(bell())
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar todas as notificações do painel' }))
+    expect(view.clearAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('lista vazia não oferece limpar', async () => {
+    viewWith({ items: [] })
+    await renderPage(<NotificationBell />)
+    fireEvent.click(bell())
+    expect(screen.queryByText('Limpar todas')).toBeNull()
   })
 
   it('lista vazia diz que não há notificação', async () => {

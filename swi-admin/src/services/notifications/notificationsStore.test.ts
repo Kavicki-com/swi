@@ -40,6 +40,7 @@ function setup() {
     }),
     markRead: vi.fn(async (_id: string) => done),
     markAllRead: vi.fn(async () => done),
+    clearPanel: vi.fn(async (): Promise<ServiceResponse<null>> => done),
   }
   const store = createNotificationsStore({
     api,
@@ -189,6 +190,54 @@ describe('createNotificationsStore', () => {
     await t.flush()
     t.store.markAllRead()
     expect(t.api.markAllRead).not.toHaveBeenCalled()
+  })
+
+  it('limpar esconde o que está na tela e chama o servidor uma vez', async () => {
+    const t = setup()
+    t.store.start()
+    t.lists[0]!.resolve(okList([n('a'), n('b', { read: true })]))
+    await t.flush()
+    t.store.clearAll()
+    expect(t.store.getState().items).toEqual([])
+    expect(t.api.clearPanel).toHaveBeenCalledTimes(1)
+    await t.flush()
+    expect(t.store.getState().items).toEqual([])
+  })
+
+  it('lista vazia, limpar não chama o servidor', async () => {
+    const t = setup()
+    t.store.start()
+    t.lists[0]!.resolve(okList([]))
+    await t.flush()
+    t.store.clearAll()
+    expect(t.api.clearPanel).not.toHaveBeenCalled()
+  })
+
+  it('releitura em voo durante o limpar não traz as limpas de volta', async () => {
+    const t = setup()
+    t.store.start()
+    t.lists[0]!.resolve(okList([n('a')]))
+    await t.flush()
+    t.store.refresh()
+    t.store.clearAll()
+    await t.flush()
+    t.lists[1]!.resolve(okList([n('a')]))
+    await t.flush()
+    expect(t.store.getState().items).toEqual([])
+  })
+
+  it('limpar recusado relê e as notificações voltam', async () => {
+    const t = setup()
+    t.api.clearPanel.mockResolvedValueOnce(failed<null>())
+    t.store.start()
+    t.lists[0]!.resolve(okList([n('a')]))
+    await t.flush()
+    t.store.clearAll()
+    await t.flush()
+    expect(t.api.list).toHaveBeenCalledTimes(2)
+    t.lists[1]!.resolve(okList([n('a')]))
+    await t.flush()
+    expect(t.store.getState().items.map((i) => i.id)).toEqual(['a'])
   })
 
   it('desligado, solta o socket e ignora resposta atrasada', async () => {
