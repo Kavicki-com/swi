@@ -101,7 +101,6 @@ async function renderAt(route = '/tasks') {
               <Route path="/tasks" element={<TasksList />} />
               <Route path="/tasks/new" element={<div data-testid="task-form-route" />} />
               <Route path="/tasks/:id" element={<TaskDetailsProbe />} />
-              <Route path="/maps/general" element={<div data-testid="maps-route" />} />
               <Route path="/" element={<div data-testid="dashboard-route" />} />
             </Routes>
           </MemoryRouter>
@@ -152,14 +151,14 @@ describe('TasksList', () => {
     expect(listMock).toHaveBeenCalledWith('in_progress')
   })
 
-  // DS 0.1.118: locationAccessibilityLabel — o pino saía com 'Open location'
-  // fixo em inglês; a lista passa o label pt-BR por tarefa.
-  it('o pino de localização tem label pt-BR com o título da tarefa', async () => {
+  // A tarefa não tem posição própria: o pino só levava ao mapa geral, então
+  // o card sai sem ele.
+  it('o card da tarefa não tem pino de localização', async () => {
     await renderAt()
     await waitFor(() => {
       expect(screen.getByText('Inspeção')).toBeInTheDocument()
     })
-    expect(screen.getByLabelText('Abrir localização da tarefa Inspeção')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Abrir localização/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Open location')).not.toBeInTheDocument()
   })
 
@@ -289,23 +288,6 @@ describe('TasksList', () => {
     await waitFor(() => {
       expect(screen.getByTestId('task-form-route')).toBeInTheDocument()
     })
-  })
-
-  it('o pino navega pro mapa e NÃO dispara a navegação da linha', async () => {
-    await renderAt()
-    await waitFor(() => expect(screen.getByText('Reparo')).toBeInTheDocument())
-
-    // Pressables aninhados: o pino vive dentro do card clicável. Só o interno
-    // pode vencer — se o clique vazar pro card, a rota final vira /tasks/wo_1.
-    const pins = screen.getAllByRole('button', { name: /Abrir localização da tarefa/ })
-    const firstPin = pins.at(0)
-    expect(firstPin).toBeDefined()
-    fireEvent.click(firstPin as HTMLElement)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('maps-route')).toBeInTheDocument()
-    })
-    expect(screen.queryByTestId('task-details-route')).not.toBeInTheDocument()
   })
 
   it('o cluster de avatares mostra +N quando há mais responsáveis que avatares exibidos', async () => {
