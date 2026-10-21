@@ -6,7 +6,13 @@
 import { screen, within } from '@testing-library/react'
 import { renderPage } from '@/test-utils/renderPage'
 import type { MeasurementEntry, WorkerMeasurementsView } from '@/services/vitals/measurementsView'
-import { DEMO_DATA_LABEL, NO_DEVICE_LABEL, NO_VALUE } from '@/services/vitals/vitalsView'
+import {
+  DEMO_DATA_LABEL,
+  NO_DEVICE_LABEL,
+  NO_VALUE,
+  NO_VITALS_CALIBRATION,
+  type VitalsCalibration,
+} from '@/services/vitals/vitalsView'
 import { WorkerMeasurementsSection } from './WorkerMeasurementsSection'
 
 // Leitura completa: toda medição com valor e legenda, na ordem do measurementsView.
@@ -21,6 +27,8 @@ const ENTRIES: FullEntry[] = [
     value: '97%',
     caption: 'Última medição às 14:59',
     progress: 97,
+    zone: null,
+    limits: null,
   },
   {
     key: 'temperature',
@@ -30,6 +38,8 @@ const ENTRIES: FullEntry[] = [
     value: '36,5 °C',
     caption: 'Última medição às 14:59',
     progress: 100,
+    zone: null,
+    limits: null,
   },
   {
     key: 'steps',
@@ -39,6 +49,8 @@ const ENTRIES: FullEntry[] = [
     value: '4.230',
     caption: 'Hoje',
     progress: 100,
+    zone: null,
+    limits: null,
   },
   {
     key: 'distance',
@@ -48,6 +60,8 @@ const ENTRIES: FullEntry[] = [
     value: '3,1 km',
     caption: 'Hoje',
     progress: 100,
+    zone: null,
+    limits: null,
   },
   {
     key: 'movement',
@@ -57,6 +71,8 @@ const ENTRIES: FullEntry[] = [
     value: '42/min',
     caption: 'Última amostra às 14:59',
     progress: 100,
+    zone: null,
+    limits: null,
   },
   {
     key: 'resting',
@@ -66,6 +82,8 @@ const ENTRIES: FullEntry[] = [
     value: '62 bpm',
     caption: 'Medido em 9 dias',
     progress: 100,
+    zone: null,
+    limits: null,
   },
   {
     key: 'max',
@@ -75,6 +93,8 @@ const ENTRIES: FullEntry[] = [
     value: '181 bpm',
     caption: 'Estimada pela idade',
     progress: 100,
+    zone: null,
+    limits: null,
   },
 ]
 
@@ -103,6 +123,7 @@ const renderSection = (
     wearLabel: 'Fadiga atual',
     effortLabel: 'Esforço feito',
   },
+  calibration: VitalsCalibration = NO_VITALS_CALIBRATION,
 ) =>
   renderPage(
     <WorkerMeasurementsSection
@@ -111,6 +132,7 @@ const renderSection = (
       effortPct={effortPct}
       wearLabel={labels.wearLabel}
       effortLabel={labels.effortLabel}
+      calibration={calibration}
     />,
   )
 
@@ -228,5 +250,53 @@ describe('WorkerMeasurementsSection', () => {
     unmount()
     await renderSection(EMPTY, null, null)
     expect(screen.queryByTestId('measurements-source-badge')).not.toBeInTheDocument()
+  })
+
+  // Calibração individual: abaixo da legenda, o selo da zona (StatusTag do DS)
+  // e a faixa da pessoa. Totais do dia chegam só com a faixa.
+  describe('calibração individual', () => {
+    it('medição com zona e faixa mostra as duas dentro da rosca', async () => {
+      await renderSection(
+        entries(
+          replacing('movement', {
+            zone: { label: 'Acima do habitual', status: 'info' },
+            limits: 'habitual: 30 a 52/min',
+          }),
+        ),
+      )
+      const movement = within(screen.getByTestId('measurement-movement'))
+      expect(movement.getByTestId('movement-zone')).toHaveTextContent('Acima do habitual')
+      expect(movement.getByTestId('movement-limits')).toHaveTextContent('habitual: 30 a 52/min')
+    })
+
+    it('total do dia mostra só a faixa', async () => {
+      await renderSection(entries(replacing('steps', { limits: 'habitual: 8 a 11 mil passos' })))
+      expect(screen.queryByTestId('steps-zone')).not.toBeInTheDocument()
+      expect(screen.getByTestId('steps-limits')).toHaveTextContent('habitual: 8 a 11 mil passos')
+    })
+
+    it('desgaste e esforço levam a zona e a faixa recebidas', async () => {
+      await renderSection(entries(), 38.4, 61, undefined, {
+        ...NO_VITALS_CALIBRATION,
+        wear: {
+          zone: { label: 'Excelência', status: 'accept' },
+          limits: 'excelência até 25%, fadiga a partir de 70%',
+        },
+        effort: { zone: { label: 'Fadiga', status: 'canceled' }, limits: null },
+      })
+      const wear = within(screen.getByTestId('measurement-wear'))
+      expect(wear.getByTestId('wear-zone')).toHaveTextContent('Excelência')
+      expect(wear.getByTestId('wear-limits')).toHaveTextContent(
+        'excelência até 25%, fadiga a partir de 70%',
+      )
+      const effort = within(screen.getByTestId('measurement-effort'))
+      expect(effort.getByTestId('effort-zone')).toHaveTextContent('Fadiga')
+      expect(screen.queryByTestId('effort-limits')).not.toBeInTheDocument()
+    })
+
+    it('sem calibração não desenha zona nem faixa', async () => {
+      await renderSection()
+      expect(screen.queryByTestId(/-(zone|limits)$/)).not.toBeInTheDocument()
+    })
   })
 })

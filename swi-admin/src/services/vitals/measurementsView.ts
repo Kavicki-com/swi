@@ -15,6 +15,12 @@ import {
   READING_UNAVAILABLE_LABEL,
   type ReadingOptions,
 } from './vitalsView'
+import {
+  calibrationLineOf,
+  EMPTY_LINE,
+  type CalibrationLine,
+  type ZoneTag,
+} from './calibrationView'
 
 export type MeasurementKey =
   | 'oxygen'
@@ -38,6 +44,10 @@ export type MeasurementEntry = {
   caption: string | null
   /** Arco da rosca, de 0 a 100. */
   progress: number
+  /** Zona de agora na faixa da pessoa, ou null (sem calibração, total do dia). */
+  zone: ZoneTag | null
+  /** Faixa da pessoa em frase, ou null sem calibração. */
+  limits: string | null
 }
 
 export type WorkerMeasurementsView =
@@ -130,6 +140,7 @@ export function measurementsViewFrom(
   const { oxygenSaturation, bodyTemperature, steps, distance, movementPerMinute } =
     telemetry.metrics
   const ref = telemetry.heartRateReference ?? null
+  const cal = telemetry.calibration
 
   // Só a oxigenação tem escala própria (já é porcentagem). As outras não têm
   // meta que valha para todos, então o anel não inventa uma: cheio quando há
@@ -140,8 +151,9 @@ export function measurementsViewFrom(
     centerLabel: string,
     icon: IconName,
     reading: Reading,
+    line: CalibrationLine,
     progress = reading.value === null ? 0 : FULL_RING,
-  ): MeasurementEntry => ({ key, label, centerLabel, icon, ...reading, progress })
+  ): MeasurementEntry => ({ key, label, centerLabel, icon, ...reading, progress, ...line })
 
   return {
     kind: 'entries',
@@ -152,6 +164,7 @@ export function measurementsViewFrom(
         'Saturação',
         'water_drop',
         spot(oxygenSaturation, (n) => `${integer(n)}%`, now),
+        calibrationLineOf(cal, 'OXYGEN_SATURATION'),
         oxygenSaturation.value === null
           ? 0
           : Math.min(FULL_RING, Math.max(0, oxygenSaturation.value)),
@@ -162,8 +175,17 @@ export function measurementsViewFrom(
         'Corporal',
         'device_thermostat',
         spot(bodyTemperature, (n) => `${formatOneDecimal(n)} °C`, now),
+        calibrationLineOf(cal, 'BODY_TEMPERATURE'),
       ),
-      entry('steps', 'Passos', 'Passos dados', 'footprint', daily(steps, integer)),
+      // Totais do dia: o dia ainda corre, então só a faixa habitual, sem zona.
+      entry(
+        'steps',
+        'Passos',
+        'Passos dados',
+        'footprint',
+        daily(steps, integer),
+        calibrationLineOf(cal, 'STEPS', { withZone: false }),
+      ),
       // Metros do dia em km com uma casa, também abaixo de 1 km ("0,4 km").
       entry(
         'distance',
@@ -171,6 +193,7 @@ export function measurementsViewFrom(
         'Percorrida',
         'directions_walk',
         daily(distance, (m) => `${formatOneDecimal(m / 1000)} km`),
+        calibrationLineOf(cal, 'DISTANCE', { withZone: false }),
       ),
       entry(
         'movement',
@@ -178,9 +201,11 @@ export function measurementsViewFrom(
         'Ritmo atual',
         'health_activity',
         movement(movementPerMinute, now),
+        // Ritmo de agora: leva a zona ao vivo.
+        calibrationLineOf(cal, 'MOVEMENT'),
       ),
-      entry('resting', 'Repouso', 'Batimento', 'favorite', restingHeartRate(ref)),
-      entry('max', 'Máxima', 'Batimento', 'heartbeat', maxHeartRate(ref)),
+      entry('resting', 'Repouso', 'Batimento', 'favorite', restingHeartRate(ref), EMPTY_LINE),
+      entry('max', 'Máxima', 'Batimento', 'heartbeat', maxHeartRate(ref), EMPTY_LINE),
     ],
     // Só a demonstração ganha selo. O sourceBadgeOf também marca o atraso da
     // pulseira e o repouso provisório. O atraso fica de fora de propósito: o

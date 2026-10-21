@@ -6,6 +6,13 @@ import { View } from 'react-native'
 import { Text, useTheme } from '@kavicki/swi-design-system'
 import type { WorkerVitalsView } from '@/services/vitals/vitalsView'
 
+/**
+ * Minutos que enchem a barra: o mesmo da fórmula (fatigueEtaHorizonMinutes do
+ * perfil de avaliação no backend, um turno de oito horas). Acima dele o
+ * backend nem devolve estimativa, então a barra cheia é o maior valor possível.
+ */
+export const FATIGUE_BAR_HORIZON_MIN = 480
+
 export function WorkerFatigueBar({ fatigueEta }: { fatigueEta: WorkerVitalsView['fatigueEta'] }) {
   const theme = useTheme()
   return (
@@ -31,8 +38,9 @@ export function WorkerFatigueBar({ fatigueEta }: { fatigueEta: WorkerVitalsView[
         }}
       >
         <div
+          data-testid="fatigue-bar-fill"
           style={{
-            width: `${Math.min(100, ((fatigueEta.minutes ?? 0) / 240) * 100)}%`,
+            width: `${Math.min(100, ((fatigueEta.minutes ?? 0) / FATIGUE_BAR_HORIZON_MIN) * 100)}%`,
             height: 6,
             borderRadius: 999,
             background: `linear-gradient(90deg, ${theme.surface.error} 0%, ${theme.surface.warning} 45.673%, ${theme.surface.success} 100%)`,

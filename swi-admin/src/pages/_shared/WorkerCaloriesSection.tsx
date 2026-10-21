@@ -9,6 +9,7 @@
 import { View } from 'react-native'
 import { Combobox, LineCaloriesChart, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { PERIOD_FROM_OPTION, type CaloriesPoint } from '@/services/vitals/caloriesSeries'
+import { WorkerCalibrationLine } from './WorkerCalibrationLine'
 
 type Period = keyof typeof PERIOD_FROM_OPTION
 
@@ -17,11 +18,14 @@ export function WorkerCaloriesSection({
   period,
   onPeriodChange,
   emptyMessage,
+  usualRange = null,
 }: {
   points: CaloriesPoint[]
   period: Period
   onPeriodChange: (period: Period) => void
   emptyMessage: string | null
+  /** Faixa habitual do dia pela calibração individual, sem zona: o dia ainda corre. */
+  usualRange?: string | null
 }) {
   const theme = useTheme()
   return (
@@ -56,6 +60,11 @@ export function WorkerCaloriesSection({
           />
         </View>
       </View>
+      <WorkerCalibrationLine
+        line={{ zone: null, limits: usualRange }}
+        testIDPrefix="activeEnergy"
+        align="flex-start"
+      />
       {emptyMessage === null ? (
         <View testID="calories-chart">
           <LineCaloriesChart points={points} unit="kcal" fullWidth connectAcrossGaps />

@@ -21,6 +21,40 @@ describe('telemetryApi.workerCurrent', () => {
     expect(error).toBeNull()
   })
 
+  it('a calibração e a origem do pico chegam como o backend mandou', async () => {
+    const reading = {
+      workerId: 'w1',
+      heartRateReference: {
+        restingBpm: 62,
+        restingSource: 'MEASURED',
+        provisionalFrom: null,
+        measuredDays: 9,
+        maxBpm: 171,
+        peakSource: 'BLEND',
+        computedAt: '2026-10-21T12:00:00.000Z',
+      },
+      calibration: {
+        version: 'swi-calibration-1',
+        phase: 'CALIBRATING',
+        recalibrating: false,
+        day: 9,
+        metrics: {
+          HEART_RATE: {
+            zone: 'FATIGUE',
+            cuts: { excellence: 118, fatigue: 146 },
+            source: 'LEARNED',
+          },
+          STEPS: { zone: null, cuts: { below: 4000, above: 12000 }, source: 'OVERRIDE' },
+        },
+      },
+    }
+    fetchMock.mockResolvedValue(reading)
+    const { data } = await telemetryApi.workerCurrent('w1')
+    expect(data?.calibration?.metrics.HEART_RATE?.zone).toBe('FATIGUE')
+    expect(data?.calibration?.metrics.STEPS?.source).toBe('OVERRIDE')
+    expect(data?.heartRateReference?.peakSource).toBe('BLEND')
+  })
+
   it('falha vira erro com mensagem, nunca leitura vazia', async () => {
     fetchMock.mockImplementation(async () => {
       throw new Error('Funcionário não encontrado')

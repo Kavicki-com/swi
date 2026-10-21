@@ -3,7 +3,7 @@
 // nome nem categoria e também para dados de demonstração; a fila traz o nome,
 // a categoria e já filtra a demonstração, então é ela que vale.
 //
-// Relê: ao ligar; quando abre condição de batimento (com a mesma espera do
+// Relê: ao ligar; quando abre condição urgente (com a mesma espera do
 // monitoramento, porque várias chegam juntas); quando alguém triou aqui; e a
 // cada minuto enquanto houver aviso na tela, para sumir quando outro admin
 // reconhecer. Volta da conexão e da aba chegam pelo provider.
@@ -27,7 +27,15 @@ export const URGENT_REFETCH_DEBOUNCE_MS = 1_000
 export const URGENT_RECHECK_MS = 60_000
 /** O servidor devolve no máximo 100 por página. */
 const QUERY: AlertQueueQuery = { status: ['OPEN'], limit: 100 }
-const URGENT_KINDS = new Set<ConditionKind>(['HEART_RATE_HIGH', 'HEART_RATE_LOW'])
+// Espelha URGENT_CONDITION_KINDS do backend: batimento fora da faixa e as
+// travas da calibração individual. As de Atenção (faixa de fadiga) não releem.
+const URGENT_KINDS = new Set<ConditionKind>([
+  'HEART_RATE_HIGH',
+  'HEART_RATE_LOW',
+  'OXYGEN_LOW',
+  'BLOOD_PRESSURE_HIGH',
+  'WEAR_HIGH',
+])
 
 export interface UrgentAlertsStoreDeps {
   api: { alerts(query?: AlertQueueQuery): Promise<ServiceResponse<AlertQueuePage>> }

@@ -58,11 +58,21 @@ export type ConditionKind =
   | 'BLOOD_PRESSURE_REVIEW'
   | 'DEVICE_BATTERY_LOW'
   | 'DEVICE_SIGNAL_LOST'
+  /** Trava do desgaste (desgaste extremo). Urgente desde a calibração individual. */
   | 'WEAR_HIGH'
+  /** Camada de Atenção da calibração individual: valor na faixa de fadiga da pessoa. */
+  | 'HEART_RATE_FATIGUE'
+  | 'OXYGEN_FATIGUE'
+  | 'WEAR_FATIGUE'
+  | 'BLOOD_PRESSURE_FATIGUE'
+  /** Travas da calibração individual: o piso de proteção que não aprende. Urgentes. */
+  | 'OXYGEN_LOW'
+  | 'BLOOD_PRESSURE_HIGH'
 
 /**
- * URGENT é batimento fora da faixa; HEALTH pede atenção sem urgência (desgaste
- * alto, revisar pressão); DEVICE é problema do aparelho, não risco da pessoa.
+ * URGENT é batimento fora da faixa e as travas (oxigenação, pressão, desgaste
+ * extremo); HEALTH pede atenção sem urgência (faixa de fadiga da pessoa,
+ * revisar pressão); DEVICE é problema do aparelho, não risco da pessoa.
  */
 export type ConditionCategory = 'URGENT' | 'HEALTH' | 'DEVICE'
 
@@ -116,6 +126,61 @@ export type WorkerTelemetry = {
    * lote. Opcional porque um backend anterior responde sem o campo.
    */
   sync?: TelemetrySync | null
+  /**
+   * Calibração individual: fase, dia e, por medição, a faixa em vigor com a
+   * zona em que o valor atual cai. Só a leitura individual a carrega; ausente
+   * nas listas e num backend anterior, nula na demonstração e para quem ainda
+   * não tem linha de calibração.
+   */
+  calibration?: WorkerCalibration | null
+}
+
+/** Espelha o enum CalibrationMetric do backend. */
+export type CalibrationMetric =
+  | 'HEART_RATE'
+  | 'OXYGEN_SATURATION'
+  | 'BODY_TEMPERATURE'
+  | 'SYSTOLIC'
+  | 'DIASTOLIC'
+  | 'EFFORT'
+  | 'WEAR'
+  | 'STEPS'
+  | 'DISTANCE'
+  | 'ACTIVE_ENERGY'
+  | 'MOVEMENT'
+
+/**
+ * Cortes de uma faixa, por chave: excellence/fatigue nas medições de estado,
+ * p10/p25/p75/p90 na temperatura, below/above nas de atividade. Corte nulo
+ * desliga só a borda dele.
+ */
+export type Cuts = Readonly<Record<string, number | null>>
+
+/** Zona de uma medição de estado: batimento, oxigenação, temperatura, pressão, esforço, desgaste. */
+export type StateZone = 'EXCELLENCE' | 'NORMAL' | 'FATIGUE'
+/** Zona de uma medição de atividade: passos, distância, calorias, movimento. */
+export type ActivityZone = 'BELOW' | 'USUAL' | 'ABOVE'
+export type CalibrationZone = StateZone | ActivityZone
+
+/** Uma medição como a leitura individual a entrega: a zona de agora e a faixa em vigor. */
+export type CalibrationMetricView = {
+  /** Nula sem valor atual, sem faixa, ou no total do dia (passos, distância, calorias). */
+  zone: CalibrationZone | null
+  cuts: Cuts
+  /** Aprendido pelo recálculo ou corrigido pelo gestor. */
+  source: 'LEARNED' | 'OVERRIDE'
+}
+
+export type WorkerCalibration = {
+  version: string
+  /** CALIBRATED quando a fase fechou os 30 dias válidos. */
+  phase: 'CALIBRATING' | 'CALIBRATED'
+  /** Fase reaberta por troca de aparelho: a faixa de antes é a partida. */
+  recalibrating: boolean
+  /** Dia N de 30 enquanto calibra; nulo depois. */
+  day: number | null
+  /** Só as faixas gravadas e legíveis; a medição sem faixa fica ausente. */
+  metrics: Partial<Record<CalibrationMetric, CalibrationMetricView>>
 }
 
 /** Os dois instantes estão em relógios diferentes: o do celular e o do servidor. */
@@ -131,9 +196,17 @@ export type HeartRateReference = {
   restingSource: BaselineSource
   provisionalFrom: 'OPEN_DAY' | 'SESSION' | 'DEFAULT' | null
   measuredDays: number
+  /** Topo da régua: a máxima pela idade ou, com calibração, o pico habitual. */
   maxBpm: number | null
+  /**
+   * De onde veio o topo da régua: idade, mistura de idade e pessoal, ou só o
+   * pessoal. Ausente em avaliação de antes da calibração e em backend anterior.
+   */
+  peakSource?: PeakSource
   computedAt: string
 }
+
+export type PeakSource = 'AGE' | 'BLEND' | 'PERSONAL'
 
 export type BaselineSource = 'MEASURED' | 'PROVISIONAL'
 

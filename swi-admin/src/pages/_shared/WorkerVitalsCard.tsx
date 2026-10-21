@@ -6,10 +6,20 @@
 import { View } from 'react-native'
 import { Icon, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { DataOriginBadge } from '@/components/DataOriginBadge'
+import type { CalibrationLine } from '@/services/vitals/calibrationView'
 import { NO_VALUE, type WorkerVitalsView } from '@/services/vitals/vitalsView'
+import { WorkerCalibrationLine } from './WorkerCalibrationLine'
+
+const isEmpty = (line: CalibrationLine) => line.zone === null && line.limits === null
 
 export function WorkerVitalsCard({ vitals }: { vitals: WorkerVitalsView }) {
   const theme = useTheme()
+  const { heartRate, pressure } = vitals.calibration
+  // Calibração individual: zona de agora e faixa da pessoa, abaixo do card.
+  const calibrated = [
+    { key: 'heartRate', title: 'Batimento', line: heartRate },
+    { key: 'pressure', title: 'Pressão', line: pressure },
+  ].filter((item) => !isEmpty(item.line))
   return (
     <>
       {/* Combined vitals card. Linear gradient
@@ -55,6 +65,19 @@ export function WorkerVitalsCard({ vitals }: { vitals: WorkerVitalsView }) {
           {vitals.status}
         </Title>
       </div>
+
+      {calibrated.length > 0 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap.m }}>
+          {calibrated.map((item) => (
+            <View key={item.key} style={{ gap: theme.gap.xs }}>
+              <Text variant="body.s" color={theme.content.dark} weight="bold">
+                {item.title}
+              </Text>
+              <WorkerCalibrationLine line={item.line} testIDPrefix={item.key} align="flex-start" />
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {/* Leitura de demonstração é declarada; leitura real do relógio
           dispensa selo. */}

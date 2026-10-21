@@ -47,7 +47,11 @@ const withGap = () =>
     ],
     { bucket: 'hour', period: 'day' },
   )
-import { vitalsViewFrom, type WorkerVitalsView } from '@/services/vitals/vitalsView'
+import {
+  NO_VITALS_CALIBRATION,
+  vitalsViewFrom,
+  type WorkerVitalsView,
+} from '@/services/vitals/vitalsView'
 import { measurementsViewFrom } from '@/services/vitals/measurementsView'
 import { WorkerDetailsLayout, type WorkerDetailsData } from './WorkerDetailsLayout'
 
@@ -72,6 +76,7 @@ const READING: WorkerVitalsView = {
   sourceBadge: null,
   wearLabel: 'Fadiga atual',
   effortLabel: 'Esforço feito',
+  calibration: NO_VITALS_CALIBRATION,
 }
 
 // Medições da mesma leitura: na página, as duas visões saem do mesmo current.

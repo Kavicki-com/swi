@@ -82,6 +82,26 @@ describe('healthDonuts', () => {
     expect(donuts.wear).toEqual({ value: 2, progress: 50, caption: 'Desgaste baixo' })
   })
 
+  it('desgaste extremo (trava) e desgaste na faixa de fadiga contam como alerta de desgaste', () => {
+    const withKind = (id: string, kind: 'WEAR_HIGH' | 'WEAR_FATIGUE' | 'HEART_RATE_FATIGUE') =>
+      adminWorker(id, id, {
+        telemetry: {
+          ...reporting({}, 'REAL', id),
+          conditions: [condition(kind === 'WEAR_HIGH' ? 'URGENT' : 'HEALTH', { kind })],
+        },
+      })
+    const donuts = healthDonuts(
+      adminSummary(),
+      list(
+        withKind('a', 'WEAR_HIGH'),
+        withKind('b', 'WEAR_FATIGUE'),
+        withKind('c', 'HEART_RATE_FATIGUE'),
+      ),
+    )
+    // Só o batimento na faixa de fadiga fica como desgaste baixo.
+    expect(donuts.wear).toEqual({ value: 1, progress: 33, caption: 'Desgaste baixo' })
+  })
+
   it('demonstração não entra no donut de desgaste, como o resumo não a conta', () => {
     const donuts = healthDonuts(
       adminSummary(),
@@ -203,6 +223,25 @@ describe('wearRows', () => {
     )
     expect(row?.bpm).toBe(185)
     expect(row?.pressure).toBeNull()
+  })
+
+  it('batimento na faixa de fadiga também serve de batimento; desgaste na faixa não', () => {
+    const noHeart = (
+      id: string,
+      kind: 'HEART_RATE_FATIGUE' | 'WEAR_FATIGUE',
+      observedValue: number,
+    ) =>
+      adminWorker(id, id, {
+        telemetry: {
+          ...reporting({ heartRate: noMetric('bpm') }, 'REAL', id),
+          conditions: [condition('HEALTH', { kind, observedValue })],
+        },
+      })
+    const rows = wearRows(
+      list(noHeart('a', 'HEART_RATE_FATIGUE', 150.6), noHeart('b', 'WEAR_FATIGUE', 84)),
+      {},
+    )
+    expect(rows.map((r) => r.bpm)).toEqual([151, null])
   })
 
   it('sem batimento algum, o batimento fica nulo e o desgaste ausente fica sem barra', () => {

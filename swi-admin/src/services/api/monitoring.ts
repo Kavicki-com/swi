@@ -83,9 +83,63 @@ function describe(condition: Pick<ActiveCondition, 'kind' | 'observedValue' | 't
             : `Batimento ${side} do limite configurado`,
       }
     }
+    case 'HEART_RATE_FATIGUE':
+      return {
+        title: 'Batimento na faixa de fadiga',
+        icon: 'heart_filled',
+        description:
+          obs !== null && thr !== null
+            ? `${round(obs)} bpm há 10 min, faixa de fadiga a partir de ${round(thr)} bpm`
+            : 'Batimento na faixa de fadiga da pessoa',
+      }
+    case 'OXYGEN_FATIGUE':
+      return {
+        title: 'Oxigenação na faixa de fadiga',
+        icon: 'water_drop',
+        description:
+          obs !== null && thr !== null
+            ? `${round(obs)}%, faixa de fadiga abaixo de ${round(thr)}%`
+            : 'Oxigenação na faixa de fadiga da pessoa',
+      }
+    case 'WEAR_FATIGUE':
+      return {
+        title: 'Desgaste na faixa de fadiga',
+        icon: 'cognition_filled' as IconName,
+        description:
+          obs !== null && thr !== null
+            ? `Desgaste em ${round(obs)}% há 10 min, faixa a partir de ${round(thr)}%`
+            : 'Desgaste na faixa de fadiga da pessoa',
+      }
+    case 'BLOOD_PRESSURE_FATIGUE':
+      return {
+        title: 'Pressão na faixa de fadiga',
+        icon: 'blood_pressure',
+        description:
+          obs !== null && thr !== null
+            ? `Sistólica ${round(obs)}, faixa a partir de ${round(thr)}`
+            : 'Pressão na faixa de fadiga da pessoa',
+      }
+    case 'OXYGEN_LOW':
+      return {
+        title: 'Oxigenação baixa',
+        icon: 'water_drop',
+        description:
+          obs !== null && thr !== null
+            ? `${round(obs)}%, abaixo da trava de ${round(thr)}%`
+            : 'Oxigenação abaixo da trava configurada',
+      }
+    case 'BLOOD_PRESSURE_HIGH':
+      return {
+        title: 'Pressão em crise',
+        icon: 'blood_pressure',
+        description:
+          obs !== null && thr !== null
+            ? `Sistólica ${round(obs)}, trava em ${round(thr)}`
+            : 'Pressão acima da trava configurada',
+      }
     case 'WEAR_HIGH':
       return {
-        title: 'Desgaste alto',
+        title: 'Desgaste extremo',
         icon: 'cognition_filled' as IconName,
         description:
           obs !== null && thr !== null

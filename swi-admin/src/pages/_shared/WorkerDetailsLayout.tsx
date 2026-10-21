@@ -622,6 +622,7 @@ export function WorkerDetailsLayout({
         effortPct={vitals.effortPct}
         wearLabel={vitals.wearLabel}
         effortLabel={vitals.effortLabel}
+        calibration={vitals.calibration}
       />
 
       {/* BOTTOM: gasto calórico (título + seletor de período + gráfico de
@@ -631,6 +632,7 @@ export function WorkerDetailsLayout({
         period={caloriesPeriod}
         onPeriodChange={setCaloriesPeriod}
         emptyMessage={caloriesEmpty}
+        usualRange={vitals.calibration.activeEnergy.limits}
       />
     </View>
   )

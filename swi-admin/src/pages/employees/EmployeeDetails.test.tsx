@@ -120,6 +120,15 @@ describe('EmployeeDetails', () => {
     expect(nav.spy).toHaveBeenCalledWith('/maps/general?focus=w1')
   })
 
+  it('Faixas e travas abre a página de calibração do funcionário', async () => {
+    getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Faixas e travas' }))
+
+    expect(nav.spy).toHaveBeenCalledWith('/employees/w1/faixas')
+  })
+
   // O "Solicitar Pausa" dispara o POST real, que é a notificação de journey pro
   // worker, com o id da rota.
   it('Solicitar Pausa → notificationsApi.requestPause com o id do funcionário', async () => {
