@@ -4,8 +4,8 @@ import type { WatchControl } from '../../modules/swi-watch-control';
 import {
   createAndroidDeviceControl,
   type CredentialStore,
-  type FetchLike,
 } from './android/androidDeviceControl';
+import type { HttpTransport } from './android/xhrTransport';
 import type { TelemetryInboxDrain } from './telemetryInboxDrain';
 import { createTelemetryOutbox, type OutboxEvent, type OutboxStorage } from './telemetryOutbox';
 import {
@@ -198,22 +198,22 @@ describe('useTelemetryUpload, Android com Health Connect', () => {
   // tudo o que recebe.
   function setupAndroid(credencial: string | null) {
     const ordem: string[] = [];
-    const fetch = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>(async (_url, init) => {
+    const fetch = jest.fn<ReturnType<HttpTransport>, Parameters<HttpTransport>>(async (pedido) => {
       ordem.push('envio');
-      const { events } = JSON.parse(init.body ?? '{}') as { events: OutboxEvent[] };
+      const { events } = JSON.parse(pedido.body ?? '{}') as { events: OutboxEvent[] };
       const ack = {
         acceptedEventIds: events.map((event) => event.eventId),
         duplicateEventIds: [],
         conflicts: [],
       };
-      return { status: 200, text: async () => JSON.stringify(ack) };
+      return { status: 200, body: JSON.stringify(ack) };
     });
     const store: CredentialStore = {
       getItem: () => credencial,
       setItemAsync: async () => undefined,
       deleteItemAsync: async () => undefined,
     };
-    const control = createAndroidDeviceControl({ fetch, store });
+    const control = createAndroidDeviceControl({ transport: fetch, store });
     const request = jest.spyOn(control, 'request');
     const outbox = createTelemetryOutbox(memoryStorage());
     const uploader = createTelemetryUploader({ outbox, control, apiUrl: () => API });
@@ -245,9 +245,9 @@ describe('useTelemetryUpload, Android com Health Connect', () => {
     const s = setupAndroid(SEGREDO);
     await mount(s, { enabled: true });
     expect(s.ordem).toEqual(['leitor', 'envio']);
-    const [url, init] = s.fetch.mock.calls[0]!;
-    expect(url).toBe(`${API}/telemetry/v1/batches`);
-    expect(init.headers.Authorization).toBe(`Device ${SEGREDO}`);
+    const [pedido] = s.fetch.mock.calls[0]!;
+    expect(pedido.url).toBe(`${API}/telemetry/v1/batches`);
+    expect(pedido.headers.Authorization).toBe(`Device ${SEGREDO}`);
     expect(s.last().paired).toBe(true);
     expect(s.last().lastOutcome).toEqual({
       outcome: 'sent',
