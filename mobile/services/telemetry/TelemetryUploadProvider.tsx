@@ -46,7 +46,8 @@ import {
 // agendador do sistema.
 //
 // A tela de pareamento do Android pede a permissão de leitura, confere o
-// acesso e abre os ajustes do Health Connect por este contexto, para
+// acesso e abre os ajustes do Health Connect por este contexto, e o
+// Monitoramento em Configurações também redetecta a pulseira por ele, para
 // nunca importar o leitor nem a porta: o leitor é um só por runtime.
 
 export interface TelemetryUploadContextValue extends TelemetryUploadState {
@@ -87,6 +88,16 @@ export interface TelemetryUploadContextValue extends TelemetryUploadState {
   checkHealthConnect: () => Promise<HealthConnectAvailability>;
   /** Abre os ajustes do Health Connect; sem efeito fora do Android com o gate. */
   openHealthConnectSettings: () => void;
+  /**
+   * "Redetectar pulseira" (Configurações, Monitoramento): o leitor esquece a
+   * pulseira detectada e o estado é relido, já sem ela. Devolve se deu certo;
+   * quem chama pede `syncNow` em seguida, para a detecção acontecer na hora em
+   * vez de na próxima rodada. Nunca rejeita: o leitor rejeita quando o estado
+   * não pôde ser gravado, e isso volta como `false`, com aviso, para a tela
+   * dizer que não deu. `false` também fora do Android com o gate e sem sessão,
+   * sem chamar nada.
+   */
+  redetectBand: () => Promise<boolean>;
 }
 
 const FORA_DO_PROVIDER: TelemetryUploadContextValue = {
@@ -99,6 +110,7 @@ const FORA_DO_PROVIDER: TelemetryUploadContextValue = {
   requestHealthConnectPermission: async () => 'unavailable',
   checkHealthConnect: async () => 'unavailable',
   openHealthConnectSettings: () => undefined,
+  redetectBand: async () => false,
 };
 
 const TelemetryUploadContext = createContext<TelemetryUploadContextValue>(FORA_DO_PROVIDER);
@@ -173,6 +185,12 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
   // hora de gravar fecha esse caminho.
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
+  // O pareamento lido do mesmo jeito, no momento da chamada: um `syncNow`
+  // guardado de um render anterior (a tela que redetecta e só sincroniza
+  // depois de um `await`) veria o `paired` da captura, e um 401 no meio do
+  // caminho não o pararia.
+  const pairedRef = useRef(paired);
+  pairedRef.current = paired;
   const refreshHealthConnect = useCallback(async (from: HealthConnectReader) => {
     lastTicket.current += 1;
     const ticket = lastTicket.current;
@@ -228,8 +246,10 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
     if (inFlight.current !== null) return inFlight.current;
     // Sem sessão não há de quem ler a saúde. Sem pareamento a leitura
     // forçada avançaria o token do Health Connect e nada subiria: a tela
-    // mostraria uma sincronização nova que o painel nunca recebeu.
-    if (reader === null || !enabled || !paired) return Promise.resolve();
+    // mostraria uma sincronização nova que o painel nunca recebeu. Os dois
+    // pelas refs, os de agora: quem chama pode ter guardado esta função de
+    // um render em que ainda havia sessão e pareamento.
+    if (reader === null || !enabledRef.current || !pairedRef.current) return Promise.resolve();
     const run = (async () => {
       try {
         // `run` nunca rejeita e `drainNow` também não; o `try` é para um
@@ -250,7 +270,7 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
     inFlight.current = run;
     setSyncing(true);
     return run;
-  }, [reader, enabled, paired, drainNow, refreshHealthConnect]);
+  }, [reader, drainNow, refreshHealthConnect]);
 
   // A releitura depois de pedir ou conferir: ilegível só avisa, a tela segue
   // com o estado que já tinha.
@@ -296,6 +316,22 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
     reader?.openSettings();
   }, [reader]);
 
+  // Sem sessão o estado está zerado, como nos pedidos acima: não há pulseira
+  // de quem esquecer. Não exige pareamento: esquecer a pulseira não envia
+  // nada, e a tela só oferece o botão a quem está pareado. Com falha não há
+  // releitura: nada foi gravado, e o estado que a tela tem continua certo.
+  const redetectBand = useCallback(async (): Promise<boolean> => {
+    if (reader === null || !enabled) return false;
+    try {
+      await reader.redetect();
+    } catch (error) {
+      warn('redetecção da pulseira falhou', error);
+      return false;
+    }
+    await rereadHealthConnect(reader);
+    return true;
+  }, [reader, enabled, rereadHealthConnect]);
+
   const value = useMemo(
     () => ({
       paired,
@@ -307,6 +343,7 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
       requestHealthConnectPermission,
       checkHealthConnect,
       openHealthConnectSettings,
+      redetectBand,
     }),
     [
       paired,
@@ -318,6 +355,7 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
       requestHealthConnectPermission,
       checkHealthConnect,
       openHealthConnectSettings,
+      redetectBand,
     ],
   );
   return <TelemetryUploadContext.Provider value={value}>{children}</TelemetryUploadContext.Provider>;

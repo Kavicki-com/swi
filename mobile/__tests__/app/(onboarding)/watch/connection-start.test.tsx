@@ -93,6 +93,7 @@ const envio = (paired: boolean) =>
     requestHealthConnectPermission: jest.fn(),
     checkHealthConnect: jest.fn(),
     openHealthConnectSettings: jest.fn(),
+    redetectBand: jest.fn(),
   });
 
 beforeEach(() => {

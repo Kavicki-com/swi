@@ -67,7 +67,10 @@ const DAY_MS = 24 * HOUR_MS;
 // Cortes: menos de 1 min (ou relógio do aparelho atrás do servidor) é "agora
 // há pouco"; até 59 min, minutos inteiros; até 23 h, horas inteiras. De 24 h
 // em diante "há 30 h" obrigaria a fazer conta: vai a data e a hora.
-function syncedAgo(syncedAt: string, observedAt: string | number): string {
+// Exportada para a última sincronização em Configurações, Monitoramento
+// (lastSyncCopy, telemetryCopy.ts): as duas telas dizem o tempo do mesmo
+// jeito, e os cortes moram só aqui.
+export function syncedAgo(syncedAt: string, observedAt: string | number): string {
   const elapsed = new Date(observedAt).getTime() - Date.parse(syncedAt);
   if (elapsed < MIN_MS) return 'agora há pouco';
   if (elapsed < HOUR_MS) return `há ${Math.floor(elapsed / MIN_MS)} min`;

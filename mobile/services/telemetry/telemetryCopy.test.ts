@@ -1,7 +1,12 @@
+import { syncedAgo } from '../vitals/dashboardVitalsView';
 import {
   bandDetectedCopy,
+  HEALTH_CONNECT_MONITORING_COPY,
   HEALTH_CONNECT_PAIRING_COPY,
   healthConnectInstallCopy,
+  healthConnectMonitoringCopy,
+  type HealthConnectMonitoringStatus,
+  lastSyncCopy,
   pairingCopy,
   pairingFailureCopy,
   SYNC_BANNER_COPY,
@@ -251,5 +256,93 @@ describe('copy da faixa de sincronização', () => {
   it('o botão pede a sincronização e diz que ela está em curso', () => {
     expect(SYNC_BANNER_COPY.sincronizar).toBe('Sincronizar agora');
     expect(SYNC_BANNER_COPY.sincronizando).toBe('Sincronizando…');
+  });
+});
+
+describe('copy do Monitoramento no Android', () => {
+  const ESTADOS: HealthConnectMonitoringStatus[] = [
+    'unknown',
+    'unavailable',
+    'update_required',
+    'not_granted',
+    'not_granted_after_request',
+    'granted',
+  ];
+
+  it('cada estado tem título e corpo, e nenhum fala do Apple Watch', () => {
+    for (const estado of ESTADOS) {
+      const copy = healthConnectMonitoringCopy(estado);
+      expect(copy.titulo).not.toBe('');
+      expect(copy.corpo).not.toBe('');
+      expect(`${copy.titulo} ${copy.corpo}`).not.toMatch(/iPhone|Apple Watch/);
+    }
+  });
+
+  it('o estado de cada passo, com a frase exata', () => {
+    expect(healthConnectMonitoringCopy('unknown')).toEqual({
+      titulo: 'Conferindo o Health Connect',
+      corpo:
+        'O SWI está conferindo o acesso às medições da sua pulseira no Health Connect, o app de saúde do Android.',
+    });
+    expect(healthConnectMonitoringCopy('not_granted')).toEqual({
+      titulo: 'Leitura não permitida',
+      corpo:
+        'O SWI lê as medições da sua pulseira pelo Health Connect, o app de saúde do Android, e precisa de permissão para isso. Toque em Permitir leitura.',
+    });
+    expect(healthConnectMonitoringCopy('granted')).toEqual({
+      titulo: 'Leitura permitida',
+      corpo:
+        'O SWI lê as medições da sua pulseira pelo Health Connect, o app de saúde do Android.',
+    });
+  });
+
+  // Mesmo título do pedido que não abriu: o estado é o mesmo, só o conselho
+  // muda. Aqui não há Continuar, então a frase não promete seguir adiante.
+  it('depois de um pedido sem permissão, o conselho é tentar de novo ou os ajustes', () => {
+    const copy = healthConnectMonitoringCopy('not_granted_after_request');
+    expect(copy.titulo).toBe(healthConnectMonitoringCopy('not_granted').titulo);
+    expect(copy.corpo).toBe(
+      'O SWI ainda não tem permissão para ler as medições da pulseira. Toque em Tentar de novo ou abra os ajustes do Health Connect e permita a leitura para o SWI.',
+    );
+    expect(copy.corpo).not.toMatch(/continuar/i);
+  });
+
+  // O corpo é o mesmo do pareamento: a Play Store é o caminho nos dois.
+  it('ausente ou desatualizado usa o corpo da Play Store do pareamento', () => {
+    expect(healthConnectMonitoringCopy('unavailable')).toEqual({
+      titulo: 'Health Connect não instalado',
+      corpo: healthConnectInstallCopy('unavailable').corpo,
+    });
+    expect(healthConnectMonitoringCopy('update_required')).toEqual({
+      titulo: 'Health Connect desatualizado',
+      corpo: healthConnectInstallCopy('update_required').corpo,
+    });
+  });
+
+  it('o botão de redetectar e a falha dele', () => {
+    expect(HEALTH_CONNECT_MONITORING_COPY.redetectar).toBe('Redetectar pulseira');
+    expect(HEALTH_CONNECT_MONITORING_COPY.falhaRedetectar).toBe(
+      'Não foi possível redetectar a pulseira. Tente de novo.',
+    );
+  });
+});
+
+describe('lastSyncCopy', () => {
+  const NOW = Date.parse('2026-10-01T15:00:00.000Z');
+  const antes = (ms: number) => new Date(NOW - ms).toISOString();
+
+  it('sem sincronização diz que ainda não houve', () => {
+    expect(lastSyncCopy(null, NOW)).toBe('Ainda não houve sincronização com o Health Connect.');
+  });
+
+  // O "há N min" é o mesmo da faixa de sincronização (syncedAgo), para as
+  // duas telas nunca dizerem tempos diferentes da mesma coisa.
+  it('com sincronização diz há quanto tempo, nos cortes da faixa', () => {
+    expect(lastSyncCopy(antes(10 * 1000), NOW)).toBe('Última sincronização agora há pouco');
+    expect(lastSyncCopy(antes(5 * 60 * 1000), NOW)).toBe('Última sincronização há 5 min');
+    expect(lastSyncCopy(antes(3 * 60 * 60 * 1000), NOW)).toBe('Última sincronização há 3 h');
+    const ontem = antes(30 * 60 * 60 * 1000);
+    expect(lastSyncCopy(ontem, NOW)).toBe(`Última sincronização ${syncedAgo(ontem, NOW)}`);
+    expect(lastSyncCopy(ontem, NOW)).toMatch(/^Última sincronização em \d\d\/\d\d às /);
   });
 });

@@ -1,6 +1,7 @@
 import type { EnrollmentFailureReason, PhoneKind } from './deviceEnrollment';
 import type { WatchProtocol } from '../../modules/swi-watch-control';
 import type { TelemetryAvailability } from './telemetryAvailability';
+import { syncedAgo } from '../vitals/dashboardVitalsView';
 
 // Fonte única da copy de estado do monitoramento. As duas superfícies que a
 // mostram, o primeiro uso e Configurações, precisam dizer a mesma coisa: um
@@ -177,6 +178,96 @@ export function healthConnectInstallCopy(
 /** O nome vem de `bandLabel` do leitor: o do app da pulseira, ou o pacote. */
 export function bandDetectedCopy(bandLabel: string): string {
   return `Pulseira detectada: ${bandLabel}`;
+}
+
+/**
+ * Em que pé está o Health Connect na tela de Monitoramento, no Android.
+ * `unknown` é antes de a primeira conferência voltar (disponibilidade nula no
+ * estado). `not_granted_after_request` é o pedido feito NESTA tela que não
+ * concedeu: só ele leva ao caminho dos ajustes, como no pareamento, porque a
+ * permissão do estado também vem negada de quem nunca foi perguntado.
+ */
+export type HealthConnectMonitoringStatus =
+  | 'unknown'
+  | 'unavailable'
+  | 'update_required'
+  | 'not_granted'
+  | 'not_granted_after_request'
+  | 'granted';
+
+// Repetida nos estados de permissão: é a explicação do que o SWI faz com o
+// Health Connect, e quem chega por Configurações pode não lembrar do
+// pareamento.
+const LE_PELO_HEALTH_CONNECT =
+  'O SWI lê as medições da sua pulseira pelo Health Connect, o app de saúde do Android';
+
+/**
+ * Título e corpo de estado do Monitoramento no Android, no lugar da copy do
+ * Apple Watch (`telemetryCopy`). Ausente e desatualizado reusam o corpo do
+ * pareamento, porque o caminho é a mesma Play Store. Nenhuma frase acusa a
+ * pessoa de ter negado: o mesmo estado vale para o pedido que nem abriu.
+ */
+export function healthConnectMonitoringCopy(status: HealthConnectMonitoringStatus): TelemetryCopy {
+  switch (status) {
+    case 'unavailable':
+      return {
+        titulo: 'Health Connect não instalado',
+        corpo: healthConnectInstallCopy('unavailable').corpo,
+      };
+    case 'update_required':
+      return {
+        titulo: 'Health Connect desatualizado',
+        corpo: healthConnectInstallCopy('update_required').corpo,
+      };
+    case 'not_granted':
+      return {
+        titulo: 'Leitura não permitida',
+        corpo: `${LE_PELO_HEALTH_CONNECT}, e precisa de permissão para isso. Toque em Permitir leitura.`,
+      };
+    case 'not_granted_after_request':
+      // Sem o "continuar e permitir depois" do pareamento: aqui não há
+      // Continuar, a pessoa só sai pela TopBar.
+      return {
+        titulo: 'Leitura não permitida',
+        corpo:
+          'O SWI ainda não tem permissão para ler as medições da pulseira. Toque em Tentar de novo ou abra os ajustes do Health Connect e permita a leitura para o SWI.',
+      };
+    case 'granted':
+      return { titulo: 'Leitura permitida', corpo: `${LE_PELO_HEALTH_CONNECT}.` };
+    default:
+      return {
+        titulo: 'Conferindo o Health Connect',
+        corpo:
+          'O SWI está conferindo o acesso às medições da sua pulseira no Health Connect, o app de saúde do Android.',
+      };
+  }
+}
+
+/**
+ * Ações do Monitoramento no Android que o pareamento não tem. Permitir, tentar
+ * de novo, abrir os ajustes e o resultado da detecção vêm de
+ * `HEALTH_CONNECT_PAIRING_COPY`, e Sincronizar agora de `SYNC_BANNER_COPY`:
+ * o mesmo botão tem o mesmo nome em toda tela.
+ */
+export const HEALTH_CONNECT_MONITORING_COPY = {
+  // Esquece a pulseira detectada e procura de novo: é o caminho de quem
+  // trocou de pulseira, porque a conhecida fica até a pessoa pedir.
+  redetectar: 'Redetectar pulseira',
+  // O estado não pôde ser gravado: a pulseira antiga continua, e a pessoa
+  // precisa saber que o pedido não valeu.
+  falhaRedetectar: 'Não foi possível redetectar a pulseira. Tente de novo.',
+} as const;
+
+/**
+ * Linha da última sincronização com o Health Connect, a partir do
+ * `lastSyncAt` do leitor (o INÍCIO da última rodada completa). O "há N min"
+ * sai de `syncedAgo`, o mesmo da faixa de sincronização: as duas telas nunca
+ * dizem o tempo de jeitos diferentes. `observedAt` é o relógio do aparelho
+ * (useNow), para a frase andar com a tela aberta.
+ */
+export function lastSyncCopy(lastSyncAt: string | null, observedAt: number): string {
+  if (lastSyncAt === null) return 'Ainda não houve sincronização com o Health Connect.';
+  return `Última sincronização ${syncedAgo(lastSyncAt, observedAt)}`;
 }
 
 /**

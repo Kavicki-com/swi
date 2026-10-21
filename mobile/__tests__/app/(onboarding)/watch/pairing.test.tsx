@@ -70,6 +70,7 @@ const comEnvio = (parcial: Partial<TelemetryUploadContextValue> = {}) =>
     requestHealthConnectPermission: mockPedir,
     checkHealthConnect: mockConferir,
     openHealthConnectSettings: mockAjustes,
+    redetectBand: jest.fn(async () => true),
     ...parcial,
   });
 

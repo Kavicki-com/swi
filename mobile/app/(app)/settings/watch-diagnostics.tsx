@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { Image as RNImage, ScrollView, View } from 'react-native';
+import { useState, type PropsWithChildren } from 'react';
+import { Image as RNImage, Platform, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text, Title, TopBar, useTheme } from '@kavicki/swi-design-system';
+import { HealthConnectMonitoring } from '../../../components/telemetry/HealthConnectMonitoring';
+import { isFeatureEnabled } from '../../../lib/featureFlags';
 import {
   activateMonitoring,
   useWatchDiagnostics,
@@ -20,6 +22,14 @@ import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUp
 // cadastro, ou negou na folha do sistema, volta por aqui. Mesmo vocabulário da
 // tela final do primeiro uso (CONTEXT.md), e mesma regra: nenhuma frase afirma
 // que a permissão foi negada, porque o iOS não conta isso (ADR-0004).
+//
+// Dois aparelhos, a mesma tela. No iPhone, o Apple Watch: a copy do relógio,
+// o BPM e Ativar monitoramento. No Android com o gate do Health Connect, a
+// pulseira que grava no Health Connect (HealthConnectMonitoring.tsx): lá o
+// controle do relógio diria "sem suporte", o que é falso para quem usa
+// pulseira, então o caminho do relógio nem roda.
+
+const PAREAMENTO = '/(onboarding)/watch/pairing?origem=configuracoes';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -29,10 +39,61 @@ function formatHoraLocal(iso: string): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-
 export default function WatchDiagnostics() {
+  // A plataforma conferida junto do gate, como no provider e no pareamento:
+  // é ela que decide o caminho, e o gate do Health Connect só existe no
+  // Android compilado.
+  const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
+  return naPulseira ? <MonitoramentoDaPulseira /> : <MonitoramentoDoRelogio />;
+}
+
+// O fundo, a rolagem e a TopBar, iguais nos dois caminhos.
+function Moldura({ children }: PropsWithChildren) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <View
+        pointerEvents="none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      >
+        <RNImage
+          source={require('../../../assets/login-bg.png')}
+          resizeMode="cover"
+          accessible={false}
+          style={{ width: '100%', height: '100%' }}
+        />
+      </View>
+
+      <ScrollView
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+        contentContainerStyle={{
+          paddingTop: insets.top + theme.padding.xxl,
+          paddingBottom: insets.bottom + theme.padding.xxl,
+          paddingHorizontal: theme.padding.m,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <TopBar title="Monitoramento" onBack={() => router.back()} />
+
+        <View style={{ gap: theme.gap.l, marginTop: theme.padding.xxl }}>{children}</View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function MonitoramentoDaPulseira() {
+  const router = useRouter();
+  return (
+    <Moldura>
+      <HealthConnectMonitoring onPair={() => router.push(PAREAMENTO)} />
+    </Moldura>
+  );
+}
+
+function MonitoramentoDoRelogio() {
+  const theme = useTheme();
   const router = useRouter();
   const estado = useWatchDiagnostics();
   // O envio ao backend mora na raiz do app; esta tela só mostra o estado dele
@@ -60,101 +121,75 @@ export default function WatchDiagnostics() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View
-        pointerEvents="none"
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      >
-        <RNImage
-          source={require('../../../assets/login-bg.png')}
-          resizeMode="cover"
-          accessible={false}
-          style={{ width: '100%', height: '100%' }}
-        />
+    <Moldura>
+      <View style={{ gap: theme.gap.s }}>
+        <Title variant="title.xs" color={theme.content.dark}>
+          {copy.titulo}
+        </Title>
+        <Text variant="body.s" color={theme.content.dark}>
+          {copy.corpo}
+        </Text>
       </View>
 
-      <ScrollView
-        style={{ flex: 1, backgroundColor: 'transparent' }}
-        contentContainerStyle={{
-          paddingTop: insets.top + theme.padding.xxl,
-          paddingBottom: insets.bottom + theme.padding.xxl,
-          paddingHorizontal: theme.padding.m,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        <TopBar title="Monitoramento" onBack={() => router.back()} />
-
-        <View style={{ gap: theme.gap.l, marginTop: theme.padding.xxl }}>
-          <View style={{ gap: theme.gap.s }}>
-            <Title variant="title.xs" color={theme.content.dark}>
-              {copy.titulo}
-            </Title>
-            <Text variant="body.s" color={theme.content.dark}>
-              {copy.corpo}
-            </Text>
-          </View>
-
-          {estado.support === 'ready' && (
-            <View style={{ gap: theme.gap.s }}>
-              <Text variant="caption.s" color={theme.content.dark}>
-                {disponibilidade.kind === 'current' ? 'BPM atual' : 'Última leitura'}
+      {estado.support === 'ready' && (
+        <View style={{ gap: theme.gap.s }}>
+          <Text variant="caption.s" color={theme.content.dark}>
+            {disponibilidade.kind === 'current' ? 'BPM atual' : 'Última leitura'}
+          </Text>
+          {leitura ? (
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: theme.gap.s }}>
+              <Title variant="title.l" color={theme.content.dark}>
+                {String(Math.round(leitura.bpm))}
+              </Title>
+              <Text variant="body.m" color={theme.content.dark}>
+                bpm
               </Text>
-              {leitura ? (
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: theme.gap.s }}>
-                  <Title variant="title.l" color={theme.content.dark}>
-                    {String(Math.round(leitura.bpm))}
-                  </Title>
-                  <Text variant="body.m" color={theme.content.dark}>
-                    bpm
-                  </Text>
-                  <Text variant="caption.s" color={theme.content.dark}>
-                    {`medido às ${formatHoraLocal(leitura.measuredAt)}`}
-                  </Text>
-                </View>
-              ) : (
-                // Ausência nunca vira zero.
-                <Text variant="body.m" color={theme.content.dark}>
-                  Sem leitura ainda
-                </Text>
-              )}
+              <Text variant="caption.s" color={theme.content.dark}>
+                {`medido às ${formatHoraLocal(leitura.measuredAt)}`}
+              </Text>
             </View>
-          )}
-
-          {/* Sem suporte não há o que enviar nem o que parear. */}
-          {estado.support === 'ready' && (
-            <Text variant="body.s" color={theme.content.dark}>
-              {telemetryUploadCopy(envio.paired)}
+          ) : (
+            // Ausência nunca vira zero.
+            <Text variant="body.m" color={theme.content.dark}>
+              Sem leitura ainda
             </Text>
-          )}
-
-          {estado.support === 'ready' && !envio.paired && (
-            <Button
-              variant="outline"
-              label="Parear aparelho"
-              fullWidth
-              onPress={() => router.push('/(onboarding)/watch/pairing?origem=configuracoes')}
-            />
-          )}
-
-          {avisoDoRelogio !== null && (
-            <Text variant="body.s" color={theme.content.dark}>
-              {avisoDoRelogio}
-            </Text>
-          )}
-
-          {podeAtivar && (
-            <Button
-              variant="contained"
-              label="Ativar monitoramento"
-              fullWidth
-              disabled={ativando}
-              onPress={() => {
-                void ativar();
-              }}
-            />
           )}
         </View>
-      </ScrollView>
-    </View>
+      )}
+
+      {/* Sem suporte não há o que enviar nem o que parear. */}
+      {estado.support === 'ready' && (
+        <Text variant="body.s" color={theme.content.dark}>
+          {telemetryUploadCopy(envio.paired)}
+        </Text>
+      )}
+
+      {estado.support === 'ready' && !envio.paired && (
+        <Button
+          variant="outline"
+          label="Parear aparelho"
+          fullWidth
+          onPress={() => router.push(PAREAMENTO)}
+        />
+      )}
+
+      {avisoDoRelogio !== null && (
+        <Text variant="body.s" color={theme.content.dark}>
+          {avisoDoRelogio}
+        </Text>
+      )}
+
+      {podeAtivar && (
+        <Button
+          variant="contained"
+          label="Ativar monitoramento"
+          fullWidth
+          disabled={ativando}
+          onPress={() => {
+            void ativar();
+          }}
+        />
+      )}
+    </Moldura>
   );
 }

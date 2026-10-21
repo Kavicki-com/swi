@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Linking, View } from 'react-native';
+import { View } from 'react-native';
 import { Button, StatusTag, Text, useTheme } from '@kavicki/swi-design-system';
-import type { HealthConnectPermission } from '../../services/telemetry/healthConnect/healthConnectReader';
+import { openHealthConnectInPlayStore } from '../../services/telemetry/healthConnect/playStore';
+import {
+  healthConnectStatusOf,
+  useHealthConnectPermissionRequest,
+} from '../../services/telemetry/healthConnect/useHealthConnectPermissionRequest';
+import { useHealthConnectRecheck } from '../../services/telemetry/healthConnect/useHealthConnectRecheck';
 import {
   bandDetectedCopy,
   HEALTH_CONNECT_PAIRING_COPY as COPY,
@@ -22,25 +27,12 @@ import { useTelemetryUploadState } from '../../services/telemetry/TelemetryUploa
 // - concedida: a primeira sincronização, e o que ela achou.
 //
 // A volta da Play Store ou dos ajustes é a volta do app ao primeiro plano, e
-// é nela que o acesso (disponibilidade E permissão) é conferido de novo.
-// Mais simples que um botão de "já instalei" ou "já permiti": não pede nada
-// da pessoa, e o mesmo ouvinte cobre quem mudou por outro caminho.
+// é nela que o acesso (disponibilidade E permissão) é conferido de novo
+// (useHealthConnectRecheck.ts, o mesmo do Monitoramento em Configurações).
+// O link da Play Store também é o mesmo das duas telas (playStore.ts).
 //
 // Tudo passa pelo contexto do envio, que fala com o leitor ÚNICO do runtime:
 // esta tela nunca importa o leitor nem a porta.
-
-const HEALTH_CONNECT_PACKAGE = 'com.google.android.apps.healthdata';
-const PLAY_STORE_APP = `market://details?id=${HEALTH_CONNECT_PACKAGE}`;
-const PLAY_STORE_WEB = `https://play.google.com/store/apps/details?id=${HEALTH_CONNECT_PACKAGE}`;
-
-// O link do market só abre com o app da Play Store no aparelho; sem ele, a
-// mesma página no navegador. Sem nenhum dos dois não há o que fazer, e a
-// pessoa segue pelo Continuar.
-const abrirPlayStore = () => {
-  Linking.openURL(PLAY_STORE_APP)
-    .catch(() => Linking.openURL(PLAY_STORE_WEB))
-    .catch(() => undefined);
-};
 
 export function HealthConnectPairingStep() {
   const theme = useTheme();
@@ -53,25 +45,27 @@ export function HealthConnectPairingStep() {
     openHealthConnectSettings,
   } = useTelemetryUploadState();
 
-  const [pedindo, setPedindo] = useState(false);
-  // A resposta do pedido feito AQUI. A permissão do estado também pode vir
-  // negada de uma rodada, de quem nunca foi perguntado: só a resposta de um
-  // pedido desta tela abre o caminho dos ajustes.
-  const [resposta, setResposta] = useState<HealthConnectPermission | 'unavailable' | null>(null);
+  const disponibilidade = healthConnect?.availability ?? null;
+  // A resposta do pedido feito AQUI, enquanto vale para o Health Connect de
+  // agora (useHealthConnectPermissionRequest.ts, o mesmo do Monitoramento).
+  // A permissão do estado também pode vir negada de uma rodada, de quem nunca
+  // foi perguntado: só a resposta de um pedido desta tela abre o caminho dos
+  // ajustes.
+  const pedido = useHealthConnectPermissionRequest(
+    disponibilidade,
+    requestHealthConnectPermission,
+  );
+  const status = healthConnectStatusOf(healthConnect, pedido.answer);
+  const pedir = () => {
+    void pedido.request();
+  };
   const [sincronizado, setSincronizado] = useState(false);
   const sincronizou = useRef(false);
 
   // Antes da primeira rodada disponibilidade e permissão do estado são nulas:
   // confere o acesso ao entrar, e de novo a cada volta ao primeiro plano (a
   // Play Store, os ajustes, onde a pessoa pode ter concedido ou revogado).
-  // Nunca rejeita.
-  useEffect(() => {
-    void checkHealthConnect();
-    const sub = AppState.addEventListener('change', (estado) => {
-      if (estado === 'active') void checkHealthConnect();
-    });
-    return () => sub.remove();
-  }, [checkHealthConnect]);
+  useHealthConnectRecheck(checkHealthConnect);
 
   const concedida = healthConnect?.permission === 'granted';
 
@@ -89,35 +83,25 @@ export function HealthConnectPairingStep() {
     void syncNow().then(() => setSincronizado(true));
   }, [concedida, paired, syncNow]);
 
-  const pedir = async () => {
-    setPedindo(true);
-    setResposta(await requestHealthConnectPermission());
-    setPedindo(false);
-  };
-
-  const disponibilidade = healthConnect?.availability ?? null;
-
-  // A resposta de um pedido vale para o Health Connect daquele momento. Se a
-  // disponibilidade muda (a pessoa instalou ou atualizou pela Play Store
-  // depois de um pedido que falhou), ela deixa de valer: a permissão do
-  // estado vem negada por nunca ter sido perguntada, e a tela volta a
-  // oferecer o pedido em vez do caminho dos ajustes.
-  useEffect(() => {
-    setResposta(null);
-  }, [disponibilidade]);
-
   let acao: React.ReactNode = null;
-  if (disponibilidade === 'unavailable' || disponibilidade === 'update_required') {
-    const loja = healthConnectInstallCopy(disponibilidade);
+  if (status === 'unavailable' || status === 'update_required') {
+    const loja = healthConnectInstallCopy(status);
     acao = (
       <>
         <Text variant="body.m" color={theme.content.dark}>
           {loja.corpo}
         </Text>
-        <Button variant="outline" label={loja.botao} fullWidth onPress={abrirPlayStore} />
+        <Button
+          variant="outline"
+          label={loja.botao}
+          fullWidth
+          onPress={() => {
+            void openHealthConnectInPlayStore();
+          }}
+        />
       </>
     );
-  } else if (disponibilidade === 'available' && concedida) {
+  } else if (status === 'granted') {
     acao = !sincronizado ? (
       <StatusTag status="info" fullWidth numberOfLines={2} label={COPY.sincronizando} />
     ) : healthConnect?.bandLabel ? (
@@ -141,13 +125,10 @@ export function HealthConnectPairingStep() {
         {COPY.semResultado}
       </Text>
     );
-  } else if (
-    disponibilidade === 'available' &&
-    // Pedido que rejeitou com o Health Connect ainda disponível (a
+  } else if (status === 'not_granted_after_request') {
+    // Também o pedido que rejeitou com o Health Connect ainda disponível (a
     // conferência do provider não o achou ausente): o conselho é o mesmo de
     // sem permissão, e não um "Permitir leitura" mudo de novo.
-    (resposta === 'denied' || resposta === 'unavailable')
-  ) {
     acao = (
       <>
         <Text variant="body.m" color={theme.content.dark}>
@@ -157,10 +138,8 @@ export function HealthConnectPairingStep() {
           variant="outline"
           label={COPY.tentarDeNovo}
           fullWidth
-          disabled={pedindo}
-          onPress={() => {
-            void pedir();
-          }}
+          disabled={pedido.requesting}
+          onPress={pedir}
         />
         <Button
           variant="ghost"
@@ -170,16 +149,14 @@ export function HealthConnectPairingStep() {
         />
       </>
     );
-  } else if (disponibilidade === 'available') {
+  } else if (status === 'not_granted') {
     acao = (
       <Button
         variant="outline"
         label={COPY.permitir}
         fullWidth
-        disabled={pedindo}
-        onPress={() => {
-          void pedir();
-        }}
+        disabled={pedido.requesting}
+        onPress={pedir}
       />
     );
   }

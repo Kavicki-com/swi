@@ -187,6 +187,7 @@ describe('TelemetryUploadProvider', () => {
     await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
     await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
     expect(() => visto.openHealthConnectSettings()).not.toThrow();
+    await expect(visto.redetectBand()).resolves.toBe(false);
   });
 });
 
@@ -221,6 +222,7 @@ describe('TelemetryUploadProvider, iPhone', () => {
     await act(async () => {
       await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
       await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
+      await expect(visto.redetectBand()).resolves.toBe(false);
     });
     visto.openHealthConnectSettings();
     expect(mockSharedReader).not.toHaveBeenCalled();
@@ -373,6 +375,35 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
     await montar();
     await act(async () => {
       await visto.syncNow();
+    });
+    expect(leitor.reader.run).not.toHaveBeenCalled();
+    expect(drainNow).not.toHaveBeenCalled();
+  });
+
+  // Um chamador que guardou o `syncNow` de um render anterior (a tela que
+  // redetecta e só sincroniza depois do `await`) não pode contornar a guarda:
+  // o pareamento e a sessão valem os de agora, não os da hora da captura.
+  it('syncNow capturado antes de o pareamento cair não lê nem drena', async () => {
+    await montar();
+    const capturado = visto.syncNow;
+    await novoDesfecho({ paired: false });
+    expect(visto.paired).toBe(false);
+    await act(async () => {
+      await capturado();
+    });
+    expect(leitor.reader.run).not.toHaveBeenCalled();
+    expect(drainNow).not.toHaveBeenCalled();
+  });
+
+  it('syncNow capturado antes do logout não lê nem drena', async () => {
+    await montar();
+    const capturado = visto.syncNow;
+    comUsuario(null);
+    await act(async () => {
+      visto.refreshPairing();
+    });
+    await act(async () => {
+      await capturado();
     });
     expect(leitor.reader.run).not.toHaveBeenCalled();
     expect(drainNow).not.toHaveBeenCalled();
@@ -534,6 +565,46 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
     expect(visto.healthConnect?.availability).toBe('update_required');
   });
 
+  // "Redetectar pulseira" no Monitoramento: o leitor esquece a pulseira, o
+  // estado relido já chega sem ela, e a tela sabe que deu certo para pedir a
+  // sincronização que detecta de novo.
+  it('redetectBand pede ao leitor, relê o estado e devolve true', async () => {
+    await montar();
+    leitor.ordem.length = 0;
+    leitor.reader.redetect.mockImplementationOnce(async () => {
+      leitor.ordem.push('redetecção');
+    });
+    leitor.reader.state.mockImplementationOnce(async () => {
+      leitor.ordem.push('estado');
+      return { ...estadoHC('2026-10-20T12:00:00.000Z'), bandPackage: null, bandLabel: null };
+    });
+    let resposta: boolean | undefined;
+    await act(async () => {
+      resposta = await visto.redetectBand();
+    });
+    expect(resposta).toBe(true);
+    expect(leitor.ordem).toEqual(['redetecção', 'estado']);
+    expect(visto.healthConnect?.bandLabel).toBeNull();
+  });
+
+  // O leitor rejeita quando o estado não pôde ser gravado: a pulseira antiga
+  // continua, e a tela mostra que não deu. Rejeição nunca chega ao botão.
+  it('redetectBand que rejeita vira false, com aviso, e não relê o estado', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await montar();
+    const leiturasAntes = leitor.reader.state.mock.calls.length;
+    leitor.reader.redetect.mockRejectedValueOnce(new Error('disco cheio'));
+    let resposta: boolean | undefined;
+    await act(async () => {
+      resposta = await visto.redetectBand();
+    });
+    expect(resposta).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('disco cheio'));
+    expect(leitor.reader.state.mock.calls.length).toBe(leiturasAntes);
+    expect(visto.healthConnect?.bandLabel).toBe('Zepp');
+    warn.mockRestore();
+  });
+
   it('openHealthConnectSettings abre os ajustes pelo leitor', async () => {
     await montar();
     visto.openHealthConnectSettings();
@@ -547,9 +618,11 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
     await act(async () => {
       await expect(visto.requestHealthConnectPermission()).resolves.toBe('unavailable');
       await expect(visto.checkHealthConnect()).resolves.toBe('unavailable');
+      await expect(visto.redetectBand()).resolves.toBe(false);
     });
     expect(leitor.reader.requestPermissions).not.toHaveBeenCalled();
     expect(leitor.reader.checkAccess).not.toHaveBeenCalled();
+    expect(leitor.reader.redetect).not.toHaveBeenCalled();
     expect(visto.healthConnect).toBeNull();
   });
 
