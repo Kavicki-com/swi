@@ -64,8 +64,8 @@ const chain = (windows: number, bpm: number, motion: number | null = null) => {
 }
 
 describe('assessWindow: perfil', () => {
-  it('a versão do perfil é a experimental, fixada por literal para mudar ser decisão', () => {
-    expect(FORMULA_VERSION).toBe('swi-fatigue-experimental-1')
+  it('a versão do perfil é a calibrada, fixada por literal para mudar ser decisão', () => {
+    expect(FORMULA_VERSION).toBe('swi-fatigue-calibrated-1')
     expect(EXPERIMENTAL_PROFILE.version).toBe(FORMULA_VERSION)
   })
 

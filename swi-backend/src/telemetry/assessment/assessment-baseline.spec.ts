@@ -1,7 +1,9 @@
 import {
   ageInYearsAt,
   baselineFor,
+  calibratedBaselineFor,
   maxHeartRateForAge,
+  MIN_RESERVE_BPM,
   PROVISIONAL_RESTING_DEFAULT_BPM,
   PROVISIONAL_RESTING_FLOOR_BPM,
   restingBaseline,
@@ -125,5 +127,83 @@ describe('baselineFor', () => {
     )
     expect(r.ageYears).toBe(35)
     expect(r.baseline).toEqual({ kind: 'available', restingBpm: 60, maxBpm: 208 - 0.7 * 35 })
+  })
+})
+
+// A régua da calibração individual (revisão 2.0): repouso dos dias válidos e
+// topo no pico habitual. Sem calibração, exatamente a de sempre.
+describe('calibratedBaselineFor', () => {
+  const now = new Date('2026-10-20T15:00:00.000Z')
+  const birthDate = new Date('1991-05-10T00:00:00.000Z')
+  const byAge = 208 - 0.7 * 35
+  const restingInput = { endedDayMinima: [62, 58, 60], openDayMinima: [], sessionMinBpm: null }
+  const noDays = { endedDayMinima: [], openDayMinima: [], sessionMinBpm: 64 }
+
+  it('sem calibração, igual a baselineFor e o pico pela idade', () => {
+    const r = calibratedBaselineFor(null, restingInput, birthDate, now)
+    expect(r).toEqual({ ...baselineFor(restingInput, birthDate, now), peakSource: 'AGE' })
+  })
+
+  it('com calibração em mistura, repouso e pico da calibração', () => {
+    const r = calibratedBaselineFor({ restingBpm: 58, peakBpm: 150, validDays: 12 }, noDays, birthDate, now)
+    expect(r.baseline).toEqual({ kind: 'available', restingBpm: 58, maxBpm: 150 })
+    expect(r.resting).toEqual({ restingBpm: 58, source: 'measured', days: 12 })
+    expect(r.maxBpm).toBe(150)
+    expect(r.ageYears).toBe(35)
+    expect(r.peakSource).toBe('BLEND')
+  })
+
+  it('com 30 dias válidos, o pico é só pessoal', () => {
+    const r = calibratedBaselineFor({ restingBpm: 58, peakBpm: 150, validDays: 30 }, noDays, birthDate, now)
+    expect(r.peakSource).toBe('PERSONAL')
+  })
+
+  it('antes do 3º dia válido, o pico guardado ainda é a partida pela idade', () => {
+    const r = calibratedBaselineFor({ restingBpm: 58, peakBpm: byAge, validDays: 2 }, noDays, birthDate, now)
+    expect(r.peakSource).toBe('AGE')
+    expect(r.maxBpm).toBe(byAge)
+  })
+
+  it('sem data de nascimento e sem pico, indisponível', () => {
+    const r = calibratedBaselineFor({ restingBpm: 58, peakBpm: null, validDays: 4 }, noDays, null, now)
+    expect(r.baseline).toEqual({ kind: 'unavailable', reason: 'no_birth_date' })
+    expect(r.peakSource).toBe('AGE')
+  })
+
+  it('sem data de nascimento, com pico do 7º dia em diante, disponível e pessoal', () => {
+    const r = calibratedBaselineFor({ restingBpm: 58, peakBpm: 150, validDays: 7 }, noDays, null, now)
+    expect(r.baseline).toEqual({ kind: 'available', restingBpm: 58, maxBpm: 150 })
+    expect(r.ageYears).toBeNull()
+    expect(r.peakSource).toBe('PERSONAL')
+  })
+
+  it('calibração sem repouso usa o repouso do caminho de hoje', () => {
+    const r = calibratedBaselineFor({ restingBpm: null, peakBpm: 150, validDays: 12 }, noDays, birthDate, now)
+    expect(r.resting).toEqual({ restingBpm: 64, source: 'provisional', days: 0, from: 'session' })
+    expect(r.baseline).toEqual({ kind: 'available', restingBpm: 64, maxBpm: 150 })
+  })
+
+  it('reserva menor que o mínimo cai na máxima pela idade', () => {
+    const r = calibratedBaselineFor(
+      { restingBpm: 80, peakBpm: 80 + MIN_RESERVE_BPM - 1, validDays: 30 },
+      noDays,
+      birthDate,
+      now,
+    )
+    expect(r.baseline).toEqual({ kind: 'available', restingBpm: 80, maxBpm: byAge })
+    expect(r.peakSource).toBe('AGE')
+  })
+
+  it('reserva menor que o mínimo e sem idade, indisponível', () => {
+    const r = calibratedBaselineFor({ restingBpm: 80, peakBpm: 95, validDays: 30 }, noDays, null, now)
+    expect(r.baseline).toEqual({ kind: 'unavailable', reason: 'no_birth_date' })
+    expect(r.maxBpm).toBeNull()
+    expect(r.peakSource).toBe('AGE')
+  })
+
+  it('reserva exatamente no mínimo ainda vale o pico', () => {
+    const r = calibratedBaselineFor({ restingBpm: 80, peakBpm: 80 + MIN_RESERVE_BPM, validDays: 30 }, noDays, birthDate, now)
+    expect(r.maxBpm).toBe(100)
+    expect(r.peakSource).toBe('PERSONAL')
   })
 })

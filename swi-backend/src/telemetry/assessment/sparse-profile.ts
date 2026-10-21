@@ -8,7 +8,12 @@ import { EXPERIMENTAL_PROFILE } from './assessment-profile'
 //
 // Mesma regra do perfil do relógio: mudar número sem mudar versão é proibido.
 
-export const SPARSE_FORMULA_VERSION = 'swi-fatigue-sparse-1'
+// sparse-2: mesmos coeficientes da sparse-1; a régua passa a ser a da
+// calibração individual, e o repouso provisório grava de onde veio.
+export const SPARSE_FORMULA_VERSION = 'swi-fatigue-sparse-2'
+
+/** Prefixo comum a todas as versões da esparsa, para as linhas antigas seguirem reconhecidas. */
+export const SPARSE_FORMULA_PREFIX = 'swi-fatigue-sparse-'
 
 export interface SparseProfile {
   readonly version: string
@@ -37,4 +42,4 @@ export const SPARSE_PROFILE: SparseProfile = Object.freeze({
   gapMaxMs: 10 * 60_000,
 })
 
-export const isSparseFormula = (version: string): boolean => version === SPARSE_FORMULA_VERSION
+export const isSparseFormula = (version: string): boolean => version.startsWith(SPARSE_FORMULA_PREFIX)

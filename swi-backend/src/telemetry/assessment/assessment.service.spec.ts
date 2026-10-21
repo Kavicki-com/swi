@@ -36,6 +36,9 @@ const prismaDouble = () => {
     },
     profile: { findUnique: jest.fn().mockResolvedValue({ birthDate: new Date('1991-05-10T00:00:00.000Z') }) },
     telemetryDailySummary: { findMany: jest.fn().mockResolvedValue([{ day: daysBefore(3), heartRateMin: 62, provisional: false }]) },
+    // Sem calibração por padrão: o caminho de sempre.
+    workerCalibration: { findUnique: jest.fn().mockResolvedValue(null) },
+    workerCalibrationBand: { findUnique: jest.fn().mockResolvedValue(null) },
   }
   db.$transaction = jest.fn(async (fn: any) => {
     db.open = true
@@ -592,5 +595,105 @@ describe('TelemetryAssessmentService.assessSession, estado anterior ilegível', 
     await service(prisma).assessSession('session-1', NOW, NOW)
 
     expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.chain.previousState.lastHeartRate).toBeNull()
+  })
+})
+
+// A régua e a previsão pela calibração individual (revisão 2.0). Só a origem
+// REAL tem calibração; DEMO segue a régua e o alvo de sempre.
+describe('TelemetryAssessmentService.assessSession, calibração individual', () => {
+  const CALIBRATION = { version: 'swi-calibration-1', restingBpm: 58, peakBpm: 150, validDays: 12 }
+  const wearBand = (learnedFatigue: number | null, overrideFatigue?: number) => ({
+    learnedCuts: { excellence: 30, fatigue: learnedFatigue },
+    overrideCuts: overrideFatigue === undefined ? null : { excellence: 30, fatigue: overrideFatigue },
+  })
+
+  it('com calibração, repouso e topo da régua vêm dela, e a linha registra versão, dia da fase e origem do pico', async () => {
+    const prisma = prismaDouble()
+    prisma.workerCalibration.findUnique.mockResolvedValue(CALIBRATION)
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.workerCalibration.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workerId: 'worker-1' } }),
+    )
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.baseline).toMatchObject({
+      restingBpm: 58,
+      source: 'measured',
+      days: 12,
+      maxBpm: 150,
+      calibrationVersion: 'swi-calibration-1',
+      phaseDay: 12,
+      peakSource: 'BLEND',
+    })
+    expect(data.baselineSource).toBe('MEASURED')
+    expect(data.formulaVersion).toBe('swi-fatigue-calibrated-1')
+  })
+
+  it('sem calibração, a régua de sempre, com a falta registrada na linha', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.baseline).toMatchObject({
+      restingBpm: 62,
+      maxBpm: 183.5,
+      calibrationVersion: null,
+      phaseDay: null,
+      peakSource: 'AGE',
+    })
+    expect(data.inputs.wearAlertPercent).toBe(80)
+  })
+
+  it('a previsão mira o corte de fadiga aprendido do desgaste da pessoa', async () => {
+    const prisma = prismaDouble()
+    prisma.workerCalibrationBand.findUnique.mockResolvedValue(wearBand(72))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.workerCalibrationBand.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workerId_metric: { workerId: 'worker-1', metric: 'WEAR' } } }),
+    )
+    expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.wearAlertPercent).toBe(72)
+  })
+
+  it('a correção do gestor vence o aprendido na previsão', async () => {
+    const prisma = prismaDouble()
+    prisma.workerCalibrationBand.findUnique.mockResolvedValue(wearBand(72, 65))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.wearAlertPercent).toBe(65)
+  })
+
+  it('faixa de desgaste com JSON torto não derruba a avaliação: alvo de partida', async () => {
+    const prisma = prismaDouble()
+    prisma.workerCalibrationBand.findUnique.mockResolvedValue({ learnedCuts: { fatigue: 'x' }, overrideCuts: null })
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.create.mock.calls[0][0].data.inputs.wearAlertPercent).toBe(80)
+  })
+
+  it('DEMO não lê calibração nem faixa: régua e alvo de sempre', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySession.findUnique.mockResolvedValue({ ...SESSION, origin: 'DEMO' })
+    prisma.workerCalibration.findUnique.mockResolvedValue(CALIBRATION)
+    prisma.workerCalibrationBand.findUnique.mockResolvedValue(wearBand(72))
+    prisma.telemetrySample.findMany.mockResolvedValue([sampleRow(0)])
+
+    await service(prisma).assessSession('session-1', NOW, NOW)
+
+    expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
+    expect(prisma.workerCalibrationBand.findUnique).not.toHaveBeenCalled()
+    const { data } = prisma.telemetryAssessment.create.mock.calls[0][0]
+    expect(data.inputs.baseline).toMatchObject({ restingBpm: 62, calibrationVersion: null, peakSource: 'AGE' })
+    expect(data.inputs.wearAlertPercent).toBe(EXPERIMENTAL_ALERT_PROFILE.wearHigh.openAtPercent)
   })
 })

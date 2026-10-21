@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { parseTelemetryRetention } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
 import { dayStatsOf } from '../assessment/fatigue-formula-sparse'
+import { SPARSE_FORMULA_PREFIX } from '../assessment/sparse-profile'
 import { familyOfDeviceKind } from '../calibration/device-family'
 import {
   BRT_OFFSET_MS,
@@ -114,9 +115,6 @@ const LIFECYCLE_SAMPLE_FIELDS = {
   motionCount: true,
   deviceId: true,
 } as const
-
-/** Toda versão da fórmula esparsa, a atual e as que vierem. */
-const SPARSE_FORMULA_PREFIX = 'swi-fatigue-sparse-'
 
 const ASSESSMENT_FIELDS = {
   computedAt: true,
