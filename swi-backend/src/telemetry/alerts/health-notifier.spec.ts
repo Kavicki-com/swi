@@ -75,6 +75,67 @@ describe('healthNotificationsFor', () => {
   })
 
   // Quem resolve bateria fraca é quem está com o relógio.
+  it('batimento na faixa de fadiga vai aos dois, com o corte da própria pessoa', () => {
+    const out = healthNotificationsFor({ kind: 'HEART_RATE_FATIGUE', observedValue: 151.2, thresholdValue: 148 }, 'Ana Souza')
+    expect(out.worker).toEqual({
+      domain: 'health',
+      title: 'Batimento na faixa de fadiga',
+      body: 'Seu batimento está em 151 bpm, na sua faixa de fadiga (a partir de 148 bpm). Considere uma pausa.',
+    })
+    expect(out.admins).toEqual({
+      domain: 'health',
+      title: 'Batimento na faixa de fadiga: Ana Souza',
+      body: '151 bpm, na faixa de fadiga desta pessoa (a partir de 148 bpm).',
+    })
+  })
+
+  it('oxigenação na faixa de fadiga e oxigenação baixa vão aos dois', () => {
+    const fatigue = healthNotificationsFor({ kind: 'OXYGEN_FATIGUE', observedValue: 93, thresholdValue: 94 }, 'Ana Souza')
+    expect(fatigue.worker?.title).toBe('Oxigenação na faixa de fadiga')
+    expect(fatigue.admins).toEqual({
+      domain: 'health',
+      title: 'Oxigenação na faixa de fadiga: Ana Souza',
+      body: '93%, na faixa de fadiga desta pessoa (abaixo de 94%).',
+    })
+    const low = healthNotificationsFor({ kind: 'OXYGEN_LOW', observedValue: 88, thresholdValue: 90 }, 'Ana Souza')
+    expect(low.worker).toEqual({ domain: 'health', title: 'Oxigenação baixa', body: 'Sua oxigenação chegou a 88%, abaixo do limite de 90%.' })
+    expect(low.admins).toEqual({ domain: 'health', title: 'Oxigenação baixa: Ana Souza', body: '88%, abaixo do limite de 90%.' })
+  })
+
+  it('desgaste na faixa de fadiga vai aos dois, sem valor inventado quando não há leitura', () => {
+    const out = healthNotificationsFor({ kind: 'WEAR_FATIGUE', observedValue: 72.4, thresholdValue: 70 }, 'Ana Souza')
+    expect(out.worker).toEqual({
+      domain: 'health',
+      title: 'Desgaste na faixa de fadiga',
+      body: 'Desgaste estimado em 72%. Considere uma pausa.',
+    })
+    expect(out.admins?.title).toBe('Desgaste na faixa de fadiga: Ana Souza')
+    const empty = healthNotificationsFor({ kind: 'WEAR_FATIGUE', observedValue: null, thresholdValue: null }, 'Ana Souza')
+    expect(empty.worker?.body).toBe('Considere uma pausa.')
+    expect(empty.admins?.body).toBe('O desgaste estimado entrou na faixa de fadiga desta pessoa.')
+  })
+
+  it('pressão na faixa de fadiga e pressão muito alta vão aos dois e não repetem o valor', () => {
+    const fatigue = healthNotificationsFor({ kind: 'BLOOD_PRESSURE_FATIGUE', observedValue: 150, thresholdValue: 140 }, 'Ana Souza')
+    expect(fatigue.worker).toEqual({
+      domain: 'health',
+      title: 'Pressão na faixa de fadiga',
+      body: 'A última medição de pressão ficou na sua faixa de fadiga.',
+    })
+    expect(fatigue.admins?.body).not.toContain('150')
+    const high = healthNotificationsFor({ kind: 'BLOOD_PRESSURE_HIGH', observedValue: 185, thresholdValue: 180 }, 'Ana Souza')
+    expect(high.worker).toEqual({
+      domain: 'health',
+      title: 'Pressão muito alta',
+      body: 'A última medição de pressão passou do limite de segurança.',
+    })
+    expect(high.admins).toEqual({
+      domain: 'health',
+      title: 'Pressão muito alta: Ana Souza',
+      body: 'A última medição de pressão passou do limite de segurança.',
+    })
+  })
+
   it('bateria fraca vai só ao funcionário', () => {
     const out = healthNotificationsFor({ kind: 'DEVICE_BATTERY_LOW', observedValue: 12, thresholdValue: 15 }, 'Ana Souza')
     expect(out.worker).toEqual({ domain: 'health', title: 'Bateria do relógio baixa', body: 'Bateria em 12%. Carregue o relógio para seguir monitorado.' })

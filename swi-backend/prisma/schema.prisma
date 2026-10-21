@@ -648,6 +648,14 @@ enum TelemetryConditionKind {
   DEVICE_BATTERY_LOW
   DEVICE_SIGNAL_LOST
   WEAR_HIGH
+  /// Camada de Atenção da calibração individual: faixa de fadiga da pessoa.
+  HEART_RATE_FATIGUE
+  OXYGEN_FATIGUE
+  WEAR_FATIGUE
+  BLOOD_PRESSURE_FATIGUE
+  /// Travas da calibração individual (urgentes).
+  OXYGEN_LOW
+  BLOOD_PRESSURE_HIGH
 }
 
 enum TelemetryConditionStatus {
@@ -659,6 +667,9 @@ enum TelemetryConditionRecoveryReason {
   NORMALIZED
   SIGNAL_LOST
   SIGNAL_RESTORED
+  /// A regra que abriu a condição foi aposentada (revisão de pressão trocada
+  /// pela calibração individual).
+  PROFILE_RETIRED
 }
 
 enum OperationalAlertStatus {
@@ -947,6 +958,9 @@ model TelemetryCondition {
   /// banda: gravá-la como NORMALIZED faria a auditoria confundir batimento que
   /// normalizou com relógio que reconectou, justo na condição que mais oscila.
   recoveryReason   TelemetryConditionRecoveryReason?
+  /// Dia da calibração individual quando a condição abriu (1 a 30). Nulo
+  /// depois do 30º dia válido e na DEMO: é o que leva o selo ao alerta.
+  calibrationDay   Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

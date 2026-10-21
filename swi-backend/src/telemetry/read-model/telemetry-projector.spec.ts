@@ -1055,10 +1055,14 @@ describe('projectWorker: condições ativas acompanham a leitura', () => {
     const urgent = (Object.keys(CONDITION_CATEGORY) as ConditionKind[]).filter(
       (kind) => CONDITION_CATEGORY[kind] === 'URGENT',
     )
-    expect(urgent.sort()).toEqual(['HEART_RATE_HIGH', 'HEART_RATE_LOW'])
+    expect(urgent.sort()).toEqual(['BLOOD_PRESSURE_HIGH', 'HEART_RATE_HIGH', 'HEART_RATE_LOW', 'OXYGEN_LOW'])
     expect(CONDITION_CATEGORY.DEVICE_SIGNAL_LOST).toBe('DEVICE')
     expect(CONDITION_CATEGORY.BLOOD_PRESSURE_REVIEW).toBe('HEALTH')
     expect(CONDITION_CATEGORY.WEAR_HIGH).toBe('HEALTH')
+    // A camada de Atenção da calibração nunca é urgência: urgente é só trava.
+    for (const kind of ['HEART_RATE_FATIGUE', 'OXYGEN_FATIGUE', 'WEAR_FATIGUE', 'BLOOD_PRESSURE_FATIGUE'] as const) {
+      expect(CONDITION_CATEGORY[kind]).toBe('HEALTH')
+    }
   })
 })
 

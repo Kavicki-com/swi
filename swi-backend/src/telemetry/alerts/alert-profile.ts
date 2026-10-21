@@ -103,3 +103,40 @@ export const EXPERIMENTAL_ALERT_PROFILE: AlertProfile = Object.freeze({
   signalLost: Object.freeze({ silenceMs: FRESHNESS.VITAL.staleMs, shiftCeilingMs: 8 * 60 * 60 * 1000 }),
   restingDays: 14,
 })
+
+// calibrated-3 (calibração individual, revisão 2.0, só a origem REAL; a DEMO
+// segue o v2 acima): duas camadas. Atenção pela faixa de fadiga de cada
+// pessoa, que aprende; travas fixas, que não aprendem e são o piso de
+// proteção. O desgaste vira trava em 90 (era 80, que agora é a partida da
+// faixa), e entram as travas de oxigenação e de pressão. A revisão de pressão
+// para de abrir.
+
+export const CALIBRATED_ALERT_PROFILE_VERSION = 'swi-alert-calibrated-3'
+
+export interface CalibratedAlertProfile extends AlertProfile {
+  /** Persistência da camada de Atenção no relógio: 10 min seguidos na faixa de fadiga. */
+  readonly attention: { readonly windowMs: number; readonly minSpanMs: number; readonly maxGapMs: number }
+  /**
+   * Pulseira: leituras espaçadas de minutos. Tempo seguido na faixa e vão
+   * máximo entre duas leituras, o mesmo gapMaxMs da fórmula esparsa.
+   */
+  readonly sparseAttention: { readonly holdMs: number; readonly maxGapMs: number }
+  readonly oxygenLow: { readonly openBelowPercent: number; readonly recoverAbovePercent: number }
+  readonly bloodPressureHigh: {
+    readonly systolicAt: number
+    readonly diastolicAt: number
+    readonly systolicRecoverBelow: number
+    readonly diastolicRecoverBelow: number
+  }
+}
+
+export const CALIBRATED_ALERT_PROFILE: CalibratedAlertProfile = Object.freeze({
+  ...EXPERIMENTAL_ALERT_PROFILE,
+  version: CALIBRATED_ALERT_PROFILE_VERSION,
+  wearHigh: Object.freeze({ openAtPercent: 90, recoverBelowPercent: 80 }),
+  // A mesma máquina da persistência de batimento, com janela de 10 min.
+  attention: Object.freeze({ windowMs: 600_000, minSpanMs: 585_000, maxGapMs: 15_000 }),
+  sparseAttention: Object.freeze({ holdMs: 600_000, maxGapMs: 600_000 }),
+  oxygenLow: Object.freeze({ openBelowPercent: 90, recoverAbovePercent: 92 }),
+  bloodPressureHigh: Object.freeze({ systolicAt: 180, diastolicAt: 110, systolicRecoverBelow: 160, diastolicRecoverBelow: 100 }),
+})

@@ -51,6 +51,14 @@ describe('alertCategory', () => {
     expect(alertCategory('DEVICE_BATTERY_LOW')).toBe('DEVICE')
     expect(alertCategory('DEVICE_SIGNAL_LOST')).toBe('DEVICE')
   })
+
+  it('calibração individual: travas novas são urgência, a camada de Atenção é HEALTH', () => {
+    expect(alertCategory('OXYGEN_LOW')).toBe('URGENT')
+    expect(alertCategory('BLOOD_PRESSURE_HIGH')).toBe('URGENT')
+    for (const kind of ['HEART_RATE_FATIGUE', 'OXYGEN_FATIGUE', 'WEAR_FATIGUE', 'BLOOD_PRESSURE_FATIGUE'] as const) {
+      expect(alertCategory(kind)).toBe('HEALTH')
+    }
+  })
 })
 
 describe('AlertQueueService.list', () => {
