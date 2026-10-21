@@ -1055,10 +1055,13 @@ describe('projectWorker: condições ativas acompanham a leitura', () => {
     const urgent = (Object.keys(CONDITION_CATEGORY) as ConditionKind[]).filter(
       (kind) => CONDITION_CATEGORY[kind] === 'URGENT',
     )
-    expect(urgent.sort()).toEqual(['HEART_RATE_HIGH', 'HEART_RATE_LOW'])
+    expect(urgent.sort()).toEqual(['BLOOD_PRESSURE_HIGH', 'HEART_RATE_HIGH', 'HEART_RATE_LOW', 'OXYGEN_LOW', 'WEAR_HIGH'])
     expect(CONDITION_CATEGORY.DEVICE_SIGNAL_LOST).toBe('DEVICE')
     expect(CONDITION_CATEGORY.BLOOD_PRESSURE_REVIEW).toBe('HEALTH')
-    expect(CONDITION_CATEGORY.WEAR_HIGH).toBe('HEALTH')
+    // A camada de Atenção da calibração nunca é urgência: urgente é só trava.
+    for (const kind of ['HEART_RATE_FATIGUE', 'OXYGEN_FATIGUE', 'WEAR_FATIGUE', 'BLOOD_PRESSURE_FATIGUE'] as const) {
+      expect(CONDITION_CATEGORY[kind]).toBe('HEALTH')
+    }
   })
 })
 
@@ -1070,7 +1073,7 @@ describe('projectAdminWorkers: lista do painel, uma leitura por funcionário', (
     observedValue: 182,
     thresholdValue: 167,
   }
-  const wear: ProjectionCondition = { ...urgent, kind: 'WEAR_HIGH', observedValue: 84, thresholdValue: 80 }
+  const wear: ProjectionCondition = { ...urgent, kind: 'WEAR_FATIGUE', observedValue: 84, thresholdValue: 80 }
   const battery: ProjectionCondition = { ...urgent, kind: 'DEVICE_BATTERY_LOW', observedValue: 9, thresholdValue: 15 }
 
   const entry = (

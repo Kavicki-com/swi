@@ -18,6 +18,7 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "qa:demo-telemetry": "ts-node scripts/qa/inject-demo-telemetry.ts",
     "calibration:recalculate": "ts-node scripts/calibration/recalculate-all.ts",
+    "calibration:retire-pressure-review": "ts-node scripts/calibration/retire-blood-pressure-review.ts",
     "docs:openapi": "nest build && node dist/docs/generate-openapi.js",
     "lint": "eslint src test prisma scripts --max-warnings=0",
     "typecheck": "tsc --noEmit -p tsconfig.json",

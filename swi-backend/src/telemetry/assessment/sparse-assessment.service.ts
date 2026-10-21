@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import type { Prisma, TelemetryOrigin } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
+import type { BandBatch } from '../alerts/calibrated-decisions'
 import { monitoredDayWindow } from '../domain/metric-state'
 import { calibratedBaselineFor, calibrationInputsOf, calibrationRulerOf, restingMinimaOf } from './assessment-baseline'
 import { assessSparseDay } from './fatigue-formula-sparse'
@@ -10,7 +11,14 @@ import { SPARSE_PROFILE } from './sparse-profile'
 // fora da rota ao vivo e fora da cadeia por sessão: a pulseira abre uma sessão
 // por sincronização, e a conta é do dia do funcionário, não da sessão.
 
-export type SparseOutcome = { outcome: 'assessed'; assessmentId: string } | { outcome: 'nothing_new' }
+/**
+ * `sessionId` e `batch` são o que as condições da pulseira percorrem depois:
+ * a sessão da última leitura do dia, os batimentos, o desgaste logo depois de
+ * cada um e até onde a avaliação anterior do dia já tinha chegado.
+ */
+export type SparseOutcome =
+  | { outcome: 'assessed'; assessmentId: string; sessionId: string; batch: BandBatch }
+  | { outcome: 'nothing_new' }
 
 /** Quantos batimentos a avaliação gravada leu. Sem o campo, -1: nunca bate e o dia recalcula. */
 const sampleCountOf = (inputs: Prisma.JsonValue): number => {
@@ -131,6 +139,17 @@ export class SparseAssessmentService {
     })
     // Sem esforço nem desgaste na mensagem, como na avaliação do relógio.
     this.logger.debug(`Avaliação esparsa ${created.id}: funcionário ${workerId}, dia ${day.toISOString().slice(0, 10)}`)
-    return { outcome: 'assessed', assessmentId: created.id }
+    return {
+      outcome: 'assessed',
+      assessmentId: created.id,
+      sessionId: lastRow.sessionId,
+      batch: {
+        beats: beats.map((b) => ({ atMs: b.atMs, value: b.bpm })),
+        wear: result.points.map((p) => ({ atMs: p.atMs, value: p.wearPercent })),
+        // O que a avaliação anterior do dia leu já foi avaliado pelas
+        // condições no lote dela.
+        sinceMs: last?.windowEnd.getTime() ?? 0,
+      },
+    }
   }
 }

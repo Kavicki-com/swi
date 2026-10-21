@@ -118,6 +118,14 @@ export type ConditionKind =
   | 'DEVICE_SIGNAL_LOST'
   /** Desgaste da avaliação em 80% ou mais. Vira item de fila, não urgência. */
   | 'WEAR_HIGH'
+  /** Camada de Atenção da calibração individual: faixa de fadiga da pessoa. */
+  | 'HEART_RATE_FATIGUE'
+  | 'OXYGEN_FATIGUE'
+  | 'WEAR_FATIGUE'
+  | 'BLOOD_PRESSURE_FATIGUE'
+  /** Travas da calibração individual. */
+  | 'OXYGEN_LOW'
+  | 'BLOOD_PRESSURE_HIGH'
 
 /**
  * O que conta como urgente, e por exclusão o que não conta.
@@ -127,12 +135,22 @@ export type ConditionKind =
  * não por esquecimento: BLOOD_PRESSURE_REVIEW pede revisão humana e nunca vira
  * urgência automática; DEVICE_BATTERY_LOW e DEVICE_SIGNAL_LOST são alertas de
  * aparelho, e tratá-los como alerta de saúde faria um relógio descarregado
- * contar como funcionário em risco; WEAR_HIGH é estimativa experimental de uma
- * fórmula ainda sem calibração em hardware, e a fórmula não pode tirar ninguém
- * de "dentro dos limites" antes de provar que acerta. Quem for apresentá-los declara os próprios
+ * contar como funcionário em risco. Quem for apresentá-los declara os próprios
  * conjuntos: uma lista exportada sem consumidor envelheceria sem ninguém notar.
+ *
+ * Com a calibração individual (revisão 2.0) entram as travas novas, oxigenação
+ * abaixo de 90% e pressão em 180/110: são o piso de proteção que não aprende.
+ * O desgaste alto também entra, porque deixou de ser estimativa sem régua: a
+ * trava dele subiu para 90% e a faixa de cada pessoa cuida do caminho até lá.
+ * As condições de Atenção (faixa de fadiga da pessoa) ficam de fora.
  */
-export const URGENT_CONDITION_KINDS = ['HEART_RATE_HIGH', 'HEART_RATE_LOW'] as const
+export const URGENT_CONDITION_KINDS = [
+  'HEART_RATE_HIGH',
+  'HEART_RATE_LOW',
+  'OXYGEN_LOW',
+  'BLOOD_PRESSURE_HIGH',
+  'WEAR_HIGH',
+] as const
 
 /** LIVE promove o snapshot; BACKLOG só vai ao histórico; HISTORICAL passou de 48 h. */
 export type EventAge = 'LIVE' | 'BACKLOG' | 'HISTORICAL'

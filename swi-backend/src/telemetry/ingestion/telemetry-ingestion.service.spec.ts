@@ -47,6 +47,7 @@ const assessmentDouble = () => ({
 const conditionsDouble = () => ({
   evaluateSession: jest.fn().mockResolvedValue({ opened: [], recovered: [], alerts: 0 }),
   evaluateSpotReading: jest.fn().mockResolvedValue({ opened: [], recovered: [], alerts: 0 }),
+  evaluateBandDay: jest.fn().mockResolvedValue({ opened: [], recovered: [], alerts: 0 }),
 })
 
 /** Por padrão só o próprio funcionário, como quem não tem empresa. */
@@ -54,8 +55,13 @@ const audienceDouble = () => ({
   recipientsFor: jest.fn().mockImplementation(async (workerId: string) => [workerId]),
 })
 
+/** O dia que a avaliação esparsa devolve para as condições da pulseira. */
+const BAND_BATCH = { beats: [{ atMs: 1, value: 92 }], wear: [{ atMs: 1, value: 3 }], sinceMs: 0 }
+
 const sparseDouble = () => ({
-  assessDay: jest.fn().mockResolvedValue({ outcome: 'assessed', assessmentId: 's-1' }),
+  assessDay: jest
+    .fn()
+    .mockResolvedValue({ outcome: 'assessed', assessmentId: 's-1', sessionId: 'band-session', batch: BAND_BATCH }),
 })
 
 const build = () => {
@@ -714,6 +720,30 @@ describe('medição avulsa do app Saúde', () => {
     expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
     expect(conditions.evaluateSpotReading.mock.calls[0][0]).toBe(healthSession)
   })
+
+  // Oxigenação é pontual, mas quem a manda é o relógio, dentro do evento
+  // regular dele: ao vivo, ela é decidida pela avaliação da sessão, que já a
+  // lê. Só a que não chega ao vivo precisa da porta avulsa para ser decidida.
+  const oxygen = { oxygenSaturation: { value: 89, unit: '%', source: 'APPLE_WATCH' } }
+
+  it('oxigenação ao vivo do relógio é decidida pela avaliação da sessão, sem a porta avulsa', async () => {
+    const { service, conditions } = build()
+
+    await service.ingest(DEVICE, { events: [event({ measurements: oxygen })] })
+
+    expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateSpotReading).not.toHaveBeenCalled()
+  })
+
+  it('oxigenação que chega como backlog é decidida pela porta avulsa', async () => {
+    const { service, conditions } = build()
+
+    await service.ingest(DEVICE, { events: [event({ eventTime: fiveHoursAgo(), measurements: oxygen })] })
+
+    expect(conditions.evaluateSession).not.toHaveBeenCalled()
+    expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateSpotReading.mock.calls[0][0]).toBe(SESSION)
+  })
 })
 
 // A pulseira lida pelo Health Connect chega em lote, horas depois de medir.
@@ -827,9 +857,63 @@ describe('pulseira pelo Health Connect', () => {
     expect(sparse.assessDay).not.toHaveBeenCalled()
   })
 
+  it('oxigenação da pulseira é decidida pela porta avulsa', async () => {
+    const { service, conditions } = build()
+
+    await service.ingest(ANDROID, {
+      events: [
+        event({
+          eventTime: ago(HOUR),
+          measurements: { oxygenSaturation: { value: 89, unit: '%', source: 'HEALTH_CONNECT' } },
+        }),
+      ],
+    })
+
+    expect(conditions.evaluateSession).not.toHaveBeenCalled()
+    expect(conditions.evaluateSpotReading).toHaveBeenCalledTimes(1)
+  })
+
   it('falha na avaliação do dia não derruba o ACK nem o aviso', async () => {
     const { service, realtime, sparse } = build()
     sparse.assessDay.mockRejectedValue(new Error('fórmula esparsa estourou'))
+    const aceito = band({ eventTime: ago(2 * HOUR) })
+
+    const ack = await service.ingest(ANDROID, { events: [aceito] })
+
+    expect(ack.acceptedEventIds).toEqual([aceito.eventId])
+    expect(ack.conflicts).toEqual([])
+    expect(realtime.emitToUsers).toHaveBeenCalledTimes(1)
+  })
+
+  // As condições da pulseira percorrem o dia que a avaliação esparsa acabou
+  // de recalcular, com o desgaste dela: por isso vêm depois, e só quando ela
+  // de fato recalculou.
+  it('o dia avaliado passa pelas condições da pulseira, depois da avaliação', async () => {
+    const { service, conditions, sparse } = build()
+
+    await service.ingest(ANDROID, { events: [band({ eventTime: ago(2 * HOUR) })] })
+
+    expect(conditions.evaluateBandDay).toHaveBeenCalledTimes(1)
+    const [input, now] = conditions.evaluateBandDay.mock.calls[0]
+    expect(input).toEqual({ workerId: 'worker-1', origin: 'REAL', sessionId: 'band-session', batch: BAND_BATCH })
+    expect(now).toBeInstanceOf(Date)
+    expect(conditions.evaluateBandDay.mock.invocationCallOrder[0]).toBeGreaterThan(
+      sparse.assessDay.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('dia sem batimento novo não reavalia as condições', async () => {
+    const { service, conditions, sparse } = build()
+    sparse.assessDay.mockResolvedValue({ outcome: 'nothing_new' })
+
+    await service.ingest(ANDROID, { events: [band({ eventTime: ago(2 * HOUR) })] })
+
+    expect(conditions.evaluateBandDay).not.toHaveBeenCalled()
+  })
+
+  it('falha nas condições da pulseira não derruba o ACK nem o aviso', async () => {
+    const { service, realtime, conditions } = build()
+    conditions.evaluateBandDay.mockRejectedValue(new Error('motor estourou'))
     const aceito = band({ eventTime: ago(2 * HOUR) })
 
     const ack = await service.ingest(ANDROID, { events: [aceito] })

@@ -1133,7 +1133,7 @@ describe('TelemetryQueryService.healthStatusOfWorkers', () => {
     ])
     prisma.telemetryCondition.findMany.mockResolvedValue([
       conditionRow('worker-2'),
-      conditionRow('worker-3', { kind: 'WEAR_HIGH' }),
+      conditionRow('worker-3', { kind: 'WEAR_FATIGUE' }),
     ])
 
     const result = await service(prisma).healthStatusOfWorkers(

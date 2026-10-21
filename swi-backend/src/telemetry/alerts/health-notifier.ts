@@ -24,8 +24,8 @@ const health = (title: string, body: string): NotificationPayload => ({ domain: 
 const round = (value: number | null) => (value === null ? null : Math.round(value))
 
 /**
- * Quem recebe cada condição e com que texto. Batimento, desgaste e pressão vão
- * ao funcionário e à administração. Bateria fraca vai só ao funcionário, que é
+ * Quem recebe cada condição e com que texto. Batimento, oxigenação, desgaste e
+ * pressão vão ao funcionário e à administração, nas travas e na faixa de fadiga. Bateria fraca vai só ao funcionário, que é
  * quem está com o relógio. Perda de sinal vai só à administração: sem sinal, o
  * aparelho do funcionário provavelmente nem recebe, e quem precisa saber que
  * alguém saiu do monitoramento é quem acompanha a equipe.
@@ -64,6 +64,77 @@ export function healthNotificationsFor(condition: OpenedConditionFacts, workerNa
         admins: health(`Desgaste alto: ${workerName}`, estimate ?? 'O desgaste estimado passou do limite.'),
       }
     }
+    case 'HEART_RATE_FATIGUE': {
+      const cut = threshold === null ? '' : ` (a partir de ${threshold} bpm)`
+      return {
+        worker: health(
+          'Batimento na faixa de fadiga',
+          observed === null
+            ? 'Seu batimento entrou na sua faixa de fadiga. Considere uma pausa.'
+            : `Seu batimento está em ${observed} bpm, na sua faixa de fadiga${cut}. Considere uma pausa.`,
+        ),
+        admins: health(
+          `Batimento na faixa de fadiga: ${workerName}`,
+          observed === null
+            ? 'O batimento entrou na faixa de fadiga desta pessoa.'
+            : `${observed} bpm, na faixa de fadiga desta pessoa${cut}.`,
+        ),
+      }
+    }
+    case 'OXYGEN_FATIGUE': {
+      const cut = threshold === null ? '' : ` (abaixo de ${threshold}%)`
+      return {
+        worker: health(
+          'Oxigenação na faixa de fadiga',
+          observed === null
+            ? 'Sua oxigenação entrou na sua faixa de fadiga.'
+            : `Sua oxigenação está em ${observed}%, na sua faixa de fadiga${cut}.`,
+        ),
+        admins: health(
+          `Oxigenação na faixa de fadiga: ${workerName}`,
+          observed === null
+            ? 'A oxigenação entrou na faixa de fadiga desta pessoa.'
+            : `${observed}%, na faixa de fadiga desta pessoa${cut}.`,
+        ),
+      }
+    }
+    case 'OXYGEN_LOW': {
+      const reading =
+        observed === null ? null : threshold === null ? `${observed}%` : `${observed}%, abaixo do limite de ${threshold}%`
+      return {
+        worker: health(
+          'Oxigenação baixa',
+          reading === null ? 'Sua oxigenação ficou abaixo do limite.' : `Sua oxigenação chegou a ${reading}.`,
+        ),
+        admins: health(`Oxigenação baixa: ${workerName}`, reading === null ? 'A oxigenação ficou abaixo do limite.' : `${reading}.`),
+      }
+    }
+    case 'WEAR_FATIGUE': {
+      const estimate = observed === null ? null : `Desgaste estimado em ${observed}%.`
+      return {
+        worker: health(
+          'Desgaste na faixa de fadiga',
+          estimate === null ? 'Considere uma pausa.' : `${estimate} Considere uma pausa.`,
+        ),
+        admins: health(
+          `Desgaste na faixa de fadiga: ${workerName}`,
+          estimate ?? 'O desgaste estimado entrou na faixa de fadiga desta pessoa.',
+        ),
+      }
+    }
+    case 'BLOOD_PRESSURE_FATIGUE':
+      return {
+        worker: health('Pressão na faixa de fadiga', 'A última medição de pressão ficou na sua faixa de fadiga.'),
+        admins: health(
+          `Pressão na faixa de fadiga: ${workerName}`,
+          'A última medição de pressão ficou na faixa de fadiga desta pessoa.',
+        ),
+      }
+    case 'BLOOD_PRESSURE_HIGH':
+      return {
+        worker: health('Pressão muito alta', 'A última medição de pressão passou do limite de segurança.'),
+        admins: health(`Pressão muito alta: ${workerName}`, 'A última medição de pressão passou do limite de segurança.'),
+      }
     case 'BLOOD_PRESSURE_REVIEW':
       return {
         worker: health('Pressão para revisar', 'A última medição de pressão pede revisão.'),

@@ -3,7 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service'
 import type { RealtimeGateway } from '../../realtime/realtime.gateway'
 import type { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import type { TelemetryHealthNotifier } from './health-notifier'
-import { ALERT_PROFILE_VERSION } from './alert-profile'
+import { ALERT_PROFILE_VERSION, CALIBRATED_ALERT_PROFILE_VERSION } from './alert-profile'
 import {
   MAX_SILENT_SESSIONS_PER_RUN,
   MONITORED_SILENCE_FLOOR_MS,
@@ -23,11 +23,31 @@ const hoursAgo = (h: number) => minutesAgo(h * 60)
 const daysAgo = (d: number) => hoursAgo(d * 24)
 const SESSION = { id: 'session-1', workerId: 'worker-1', origin: 'REAL' }
 
+// A oxigenação também é lida por findMany de amostras: a linha de batimento
+// traz a coluna nula, como o banco traria, e a busca de oxigenação a ignora.
 const sampleRow = (secAgo: number, heartRateBpm: number | null, over: Record<string, unknown> = {}) => ({
   eventTime: secondsAgo(secAgo),
   heartRateBpm,
+  oxygenSaturationPct: null,
   ...over,
 })
+
+/**
+ * As duas últimas leituras de oxigenação, mais nova primeiro. O dublê separa a
+ * busca dela da série de batimento pela coluna que o `where` filtra.
+ */
+const withOxygen = (prisma: any, readings: Array<{ minAgo: number; pct: number }>) => {
+  const series = prisma.telemetrySample.findMany
+  prisma.telemetrySample.findMany = jest
+    .fn()
+    .mockImplementation(async (args: any) =>
+      args.where.oxygenSaturationPct === undefined
+        ? series(args)
+        : readings.map((r) => ({ eventTime: minutesAgo(r.minAgo), oxygenSaturationPct: r.pct })),
+    )
+}
+const oxygenCall = (prisma: any) =>
+  prisma.telemetrySample.findMany.mock.calls.map((c: any) => c[0]).find((arg: any) => arg.where.oxygenSaturationPct)
 
 /** 13 amostras a cada 5 s cobrindo os últimos 60 s: densidade que o motor aceita. */
 const highSeries = (bpm = 185) => Array.from({ length: 13 }, (_, i) => sampleRow(60 - i * 5, bpm))
@@ -78,6 +98,8 @@ const prismaDouble = () => {
     telemetryCondition: {
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockImplementation(async ({ data }: any) => data),
+      // Só a pulseira cria condição pelo cliente: a que já nasce recuperada.
+      create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'condition-history', ...data })),
     },
     operationalAlert: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -85,9 +107,14 @@ const prismaDouble = () => {
     },
     telemetrySample: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
     telemetrySnapshot: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
-    telemetryAssessment: { findFirst: jest.fn().mockResolvedValue(null) },
+    telemetryAssessment: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     profile: { findUnique: jest.fn().mockResolvedValue({ birthDate: new Date('1991-05-10T00:00:00.000Z') }) },
     telemetryDailySummary: { findMany: jest.fn().mockResolvedValue([{ heartRateMin: 62 }]) },
+    // Calibração da origem REAL: sem linha nenhuma, vale a partida v1.0 e as
+    // travas padrão do perfil calibrado.
+    workerCalibration: { findUnique: jest.fn().mockResolvedValue(null) },
+    workerCalibrationBand: { findMany: jest.fn().mockResolvedValue([]) },
+    workerSafetyLimit: { findMany: jest.fn().mockResolvedValue([]) },
   }
   db.$transaction = jest.fn(async (fn: any) => {
     db.open = true
@@ -110,6 +137,13 @@ const prismaDouble = () => {
   db.$queryRaw = jest.fn().mockImplementation(async (_strings: TemplateStringsArray, ...values: unknown[]) => {
     return values.some((v) => db.conflicting.has(v)) ? [] : [{ id: 'condition-new' }]
   })
+  return db
+}
+
+/** Sessão de demonstração: a origem que segue o perfil v2, intocado pela calibração. */
+const demoDouble = () => {
+  const db = prismaDouble()
+  db.telemetrySession.findUnique.mockResolvedValue({ ...SESSION, origin: 'DEMO' })
   return db
 }
 
@@ -182,14 +216,23 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
     await expect(service(prisma).evaluateSession('nada', NOW, NOW)).rejects.toThrow(/não existe/)
   })
 
-  it('a janela de 60 s serve só ao BPM: ela não carrega mais bateria nem pressão', async () => {
+  it('a janela de amostras serve só ao BPM, com a persistência mais longa do perfil da origem', async () => {
     const prisma = prismaDouble()
 
     await service(prisma).evaluateSession('session-1', secondsAgo(5), NOW)
 
     const { where, select } = prisma.telemetrySample.findMany.mock.calls[0][0]
-    expect(where).toEqual({ sessionId: 'session-1', eventTime: { gte: secondsAgo(65), lte: secondsAgo(5) } })
+    // Na REAL a janela é a da Atenção, 10 min; a trava recorta o último minuto.
+    expect(where).toEqual({ sessionId: 'session-1', eventTime: { gte: secondsAgo(605), lte: secondsAgo(5) } })
     expect(select).toEqual({ eventTime: true, heartRateBpm: true })
+
+    // Na DEMO segue a de 60 s do perfil v2.
+    const demo = demoDouble()
+    await service(demo).evaluateSession('session-1', secondsAgo(5), NOW)
+    expect(demo.telemetrySample.findMany.mock.calls[0][0].where).toEqual({
+      sessionId: 'session-1',
+      eventTime: { gte: secondsAgo(65), lte: secondsAgo(5) },
+    })
   })
 
   it('bateria é lida pelo prazo da bateria, 30 min, e não pela janela do BPM', async () => {
@@ -256,7 +299,7 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
 })
 
 describe('TelemetryConditionService.evaluateSession: abrir', () => {
-  it('BPM alto sustentado grava condição com perfil, regra, limite e valor, e abre alerta', async () => {
+  it('BPM alto sustentado na origem REAL grava a trava padrão do perfil calibrado, o dia da calibração e abre alerta', async () => {
     const prisma = prismaDouble()
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
 
@@ -272,10 +315,11 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
       'ACTIVE',
       NOW,
       NOW,
-      ALERT_PROFILE_VERSION,
-      'PERSONALIZED',
+      CALIBRATED_ALERT_PROFILE_VERSION,
+      'SAFETY_DEFAULT',
       expect.any(Number),
       185,
+      1,
       NOW,
     ])
     // Quem nasceu em `1991-05-10` tem 35 anos completos no dia monitorado de
@@ -293,7 +337,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
   })
 
   it('sem data de nascimento, BPM alto abre pelo piso e a linha diz FLOOR', async () => {
-    const prisma = prismaDouble()
+    const prisma = demoDouble()
     prisma.profile.findUnique.mockResolvedValue({ birthDate: null })
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries(182))
 
@@ -348,11 +392,11 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
 
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
 
-    expect(outcome.opened).toEqual(['BLOOD_PRESSURE_REVIEW'])
+    expect(outcome.opened).toEqual(['BLOOD_PRESSURE_FATIGUE'])
   })
 
   it('pressão fora da faixa abre condição e alerta, com a régua que cruzou', async () => {
-    const prisma = prismaDouble()
+    const prisma = demoDouble()
     prisma.telemetrySample.findFirst = latestReadings({ pressure: { systolicMmHg: 150, diastolicMmHg: 80 } })
 
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
@@ -372,11 +416,11 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
 
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
 
-    expect(outcome.opened).toEqual(['BLOOD_PRESSURE_REVIEW'])
+    expect(outcome.opened).toEqual(['BLOOD_PRESSURE_FATIGUE'])
   })
 
   it('desgaste em 80% ou mais abre condição E alerta: é o alerta que a narrativa do piloto promete', async () => {
-    const prisma = prismaDouble()
+    const prisma = demoDouble()
     prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 82 })
 
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
@@ -456,7 +500,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
     // conflito é a transação inteira: o Prisma não envolve consulta individual
     // em savepoint. As colunas são afirmadas uma a uma porque é aqui que a
     // linha nasce, e uma coluna esquecida no SQL só apareceria em produção.
-    const prisma = prismaDouble()
+    const prisma = demoDouble()
     prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
 
     await service(prisma).evaluateSession('session-1', NOW, NOW)
@@ -479,6 +523,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
       'thresholdRule',
       'thresholdValue',
       'observedValue',
+      'calibrationDay',
       'updatedAt',
     ])
     // id e updatedAt não têm padrão no banco: os do schema são do cliente
@@ -489,7 +534,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
     expect(insertValues(prisma.$queryRaw)).toEqual([
       'worker-1',
       'session-1',
-      'REAL',
+      'DEMO',
       'HEART_RATE_HIGH',
       'ACTIVE',
       NOW,
@@ -498,6 +543,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
       'PERSONALIZED',
       165,
       185,
+      null,
       NOW,
     ])
   })
@@ -528,9 +574,9 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
 
     const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
 
-    expect(outcome).toEqual({ opened: ['BLOOD_PRESSURE_REVIEW'], recovered: ['DEVICE_SIGNAL_LOST'], alerts: 1 })
+    expect(outcome).toEqual({ opened: ['BLOOD_PRESSURE_FATIGUE'], recovered: ['DEVICE_SIGNAL_LOST'], alerts: 1 })
     expect(insertCalls(prisma.$queryRaw)).toHaveLength(2)
-    expect(insertValues(prisma.$queryRaw, 1)).toContain('BLOOD_PRESSURE_REVIEW')
+    expect(insertValues(prisma.$queryRaw, 1)).toContain('BLOOD_PRESSURE_FATIGUE')
     expect(prisma.telemetryCondition.update.mock.calls[0][0].data).toMatchObject({ status: 'RECOVERED' })
   })
 
@@ -619,7 +665,7 @@ describe('TelemetryConditionService.evaluateSession: lastSeenAt', () => {
 
 describe('TelemetryConditionService.evaluateSession: recuperar', () => {
   it('desgaste ativo recupera abaixo de 70, e não entre 70 e 80', async () => {
-    const prisma = prismaDouble()
+    const prisma = demoDouble()
     prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-wear', 'WEAR_HIGH')])
     prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 75 })
 
@@ -669,6 +715,182 @@ describe('TelemetryConditionService.evaluateSession: recuperar', () => {
   })
 })
 
+// A origem REAL pelo perfil calibrado: a faixa da pessoa abre a Atenção, as
+// travas (padrão ou do admin) abrem o urgente, e a condição leva o dia da
+// calibração. As decisões estão provadas no motor; aqui, o que é lido e gravado.
+describe('TelemetryConditionService.evaluateSession: origem REAL calibrada', () => {
+  /** Amostras a cada 5 s cobrindo os últimos `minutes` minutos. */
+  const beats = (minutes: number, bpm: number) =>
+    Array.from({ length: minutes * 12 + 1 }, (_, i) => sampleRow(minutes * 60 - i * 5, bpm))
+  /** Avaliações a cada 20 s cobrindo os últimos 10 min. */
+  const wearRows = (percent: number) =>
+    Array.from({ length: 31 }, (_, i) => ({ windowEnd: secondsAgo(600 - i * 20), wearPercent: percent }))
+  const calibrated = (prisma: any, validDays: number) => {
+    prisma.workerCalibration.findUnique.mockResolvedValue({ validDays, restingBpm: 58 })
+    prisma.workerCalibrationBand.findMany.mockResolvedValue([
+      { metric: 'HEART_RATE', learnedCuts: { excellence: 95, fatigue: 130 }, overrideCuts: null },
+    ])
+  }
+
+  it('lê a calibração, as faixas e as travas do próprio funcionário', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(prisma.workerCalibration.findUnique.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
+    expect(prisma.workerCalibrationBand.findMany.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
+    expect(prisma.workerSafetyLimit.findMany.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
+  })
+
+  it('10 min acima do corte de fadiga abrem a Atenção, com a régua da faixa e o dia da calibração', async () => {
+    const prisma = prismaDouble()
+    calibrated(prisma, 9)
+    prisma.telemetrySample.findMany.mockResolvedValue(beats(10, 140))
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: ['HEART_RATE_FATIGUE'], recovered: [], alerts: 1 })
+    expect(insertValues(prisma.$queryRaw).slice(7, 12)).toEqual([CALIBRATED_ALERT_PROFILE_VERSION, 'BAND', 130, 140, 10])
+  })
+
+  it('calibração fechada (30 dias válidos) grava a condição sem o dia', async () => {
+    const prisma = prismaDouble()
+    calibrated(prisma, 30)
+    prisma.telemetrySample.findMany.mockResolvedValue(beats(10, 140))
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(insertValues(prisma.$queryRaw)[11]).toBeNull()
+  })
+
+  it('a trava de batimento alto do admin abre pelo valor dele', async () => {
+    const prisma = prismaDouble()
+    prisma.workerSafetyLimit.findMany.mockResolvedValue([{ rule: 'HEART_RATE_HIGH', values: { openAt: 150, closeAt: 140 } }])
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries(155))
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toEqual(['HEART_RATE_HIGH'])
+    expect(insertValues(prisma.$queryRaw).slice(8, 11)).toEqual(['SAFETY_CUSTOM', 150, 155])
+  })
+
+  it('o desgaste da Atenção vem das avaliações da sessão dos últimos 10 min', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findMany.mockResolvedValue(wearRows(85))
+    prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 85 })
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(prisma.telemetryAssessment.findMany.mock.calls[0][0]).toEqual({
+      where: { sessionId: 'session-1', wearPercent: { not: null }, windowEnd: { gte: minutesAgo(10), lte: NOW } },
+      select: { windowEnd: true, wearPercent: true },
+    })
+    // 85% fica abaixo da trava de 90: só a Atenção, pelo corte de partida 80.
+    expect(outcome.opened).toEqual(['WEAR_FATIGUE'])
+    expect(insertValues(prisma.$queryRaw).slice(8, 11)).toEqual(['BAND', 80, 85])
+  })
+
+  it('desgaste em 90% abre a trava padrão', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryAssessment.findFirst.mockResolvedValue({ wearPercent: 92 })
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toEqual(['WEAR_HIGH'])
+    expect(insertValues(prisma.$queryRaw).slice(8, 11)).toEqual(['SAFETY_DEFAULT', 90, 92])
+  })
+
+  it('pressão em 185 por 112 abre a Atenção e a trava, e nunca a revisão', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findFirst = latestReadings({ pressure: { systolicMmHg: 185, diastolicMmHg: 112 } })
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: ['BLOOD_PRESSURE_FATIGUE', 'BLOOD_PRESSURE_HIGH'], recovered: [], alerts: 2 })
+  })
+
+  it('a medição avulsa decide só a pressão, pelo perfil calibrado, e renova o carimbo das condições de pressão', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      activeRow('c-bp', 'BLOOD_PRESSURE_HIGH', minutesAgo(5)),
+      activeRow('c-hr', 'HEART_RATE_FATIGUE', minutesAgo(5)),
+    ])
+    prisma.telemetrySample.findMany.mockResolvedValue(beats(10, 175))
+    prisma.telemetrySample.findFirst = latestReadings({ pressure: { systolicMmHg: 170, diastolicMmHg: 80 } })
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    // 170 por 80 está na faixa de fadiga (a partir de 140) e acima da
+    // recuperação da trava (160): a trava segue aberta e a Atenção abre. O
+    // batimento do relógio não é decidido, e o carimbo dele não anda.
+    expect(outcome).toEqual({ opened: ['BLOOD_PRESSURE_FATIGUE'], recovered: [], alerts: 1 })
+    expect(prisma.telemetryCondition.update.mock.calls.map((c: any) => c[0].where.id)).toEqual(['c-bp'])
+  })
+
+  it('a demonstração não lê calibração nem a série de desgaste', async () => {
+    const prisma = demoDouble()
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
+    expect(prisma.workerSafetyLimit.findMany).not.toHaveBeenCalled()
+    expect(prisma.telemetryAssessment.findMany).not.toHaveBeenCalled()
+    expect(oxygenCall(prisma)).toBeUndefined()
+  })
+
+  // Oxigenação é pontual, como a pressão: as duas últimas leituras do
+  // funcionário e da origem nas últimas 12 h, em qualquer sessão.
+  it('lê as duas últimas leituras de oxigenação do funcionário nas últimas 12 h', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(oxygenCall(prisma)).toEqual({
+      where: {
+        workerId: 'worker-1',
+        origin: 'REAL',
+        oxygenSaturationPct: { not: null },
+        eventTime: { gte: hoursAgo(12), lte: NOW },
+      },
+      select: { eventTime: true, oxygenSaturationPct: true },
+      orderBy: { eventTime: 'desc' },
+      take: 2,
+    })
+  })
+
+  it('oxigenação em 89% no evento do relógio abre a trava, urgente', async () => {
+    const prisma = prismaDouble()
+    withOxygen(prisma, [{ minAgo: 0, pct: 89 }])
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: ['OXYGEN_LOW'], recovered: [], alerts: 1 })
+    expect(insertValues(prisma.$queryRaw)).toEqual(
+      expect.arrayContaining(['OXYGEN_LOW', CALIBRATED_ALERT_PROFILE_VERSION, 'SAFETY_DEFAULT', 90, 89]),
+    )
+  })
+
+  it('a Atenção de oxigenação só abre com corte de fadiga aprendido', async () => {
+    const semFaixa = prismaDouble()
+    withOxygen(semFaixa, [
+      { minAgo: 0, pct: 93 },
+      { minAgo: 12, pct: 93 },
+    ])
+    expect((await service(semFaixa).evaluateSession('session-1', NOW, NOW)).opened).toEqual([])
+
+    const comFaixa = prismaDouble()
+    comFaixa.workerCalibration.findUnique.mockResolvedValue({ validDays: 9, restingBpm: 58 })
+    comFaixa.workerCalibrationBand.findMany.mockResolvedValue([
+      { metric: 'OXYGEN_SATURATION', learnedCuts: { excellence: 97, fatigue: 94 }, overrideCuts: null },
+    ])
+    withOxygen(comFaixa, [
+      { minAgo: 0, pct: 93 },
+      { minAgo: 12, pct: 93 },
+    ])
+    expect((await service(comFaixa).evaluateSession('session-1', NOW, NOW)).opened).toEqual(['OXYGEN_FATIGUE'])
+  })
+})
+
 // A porta da medição avulsa: pressão lida do app Saúde, que chega pelo iPhone
 // sem o relógio ter falado. Ela decide a revisão de pressão e mais nada: tudo
 // o que o relógio mede fica como o último evento dele deixou.
@@ -677,7 +899,7 @@ describe('TelemetryConditionService.evaluateSpotReading', () => {
   const NORMAL = { systolicMmHg: 120, diastolicMmHg: 78 }
 
   it('pressão fora da faixa abre a revisão, com alerta', async () => {
-    const prisma = prismaDouble()
+    const prisma = demoDouble()
     prisma.telemetrySample.findFirst = latestReadings({ pressure: HIGH })
 
     const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
@@ -687,7 +909,7 @@ describe('TelemetryConditionService.evaluateSpotReading', () => {
   })
 
   it('medição nova dentro da banda recupera a revisão aberta', async () => {
-    const prisma = prismaDouble()
+    const prisma = demoDouble()
     prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-bp', 'BLOOD_PRESSURE_REVIEW')])
     prisma.telemetrySample.findFirst = latestReadings({ pressure: NORMAL })
 
@@ -749,6 +971,48 @@ describe('TelemetryConditionService.evaluateSpotReading', () => {
       where: { id: 'c-bp' },
       data: { lastSeenAt: NOW },
     })
+  })
+
+  it('decide a oxigenação na REAL e renova o carimbo dela', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      activeRow('c-ox', 'OXYGEN_LOW', minutesAgo(5)),
+      activeRow('c-hr', 'HEART_RATE_FATIGUE', minutesAgo(5)),
+    ])
+    withOxygen(prisma, [{ minAgo: 30, pct: 88 }])
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
+    expect(prisma.telemetryCondition.update.mock.calls.map((c: any) => c[0].where.id)).toEqual(['c-ox'])
+  })
+
+  it('oxigenação de volta acima de 92% fecha a trava', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-ox', 'OXYGEN_LOW')])
+    withOxygen(prisma, [{ minAgo: 0, pct: 93 }])
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.recovered).toEqual(['OXYGEN_LOW'])
+  })
+
+  it('a demonstração não decide oxigenação', async () => {
+    const prisma = demoDouble()
+    withOxygen(prisma, [{ minAgo: 0, pct: 85 }])
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.opened).toEqual([])
+    expect(oxygenCall(prisma)).toBeUndefined()
+  })
+
+  it('lê a oxigenação até a folga de relógio adiantado', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(oxygenCall(prisma).where.eventTime).toEqual({ gte: hoursAgo(12), lte: new Date(NOW.getTime() + 2 * 60 * 1000) })
   })
 
   // A ingestão aceita horário até dois minutos à frente do servidor. Uma
@@ -990,10 +1254,11 @@ describe('TelemetryConditionService.sweepSilentSessions: abrir e recuperar', () 
       'ACTIVE',
       NOW,
       NOW,
-      ALERT_PROFILE_VERSION,
+      CALIBRATED_ALERT_PROFILE_VERSION,
       null,
       120_000,
       300_000,
+      null,
       NOW,
     ])
     expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
@@ -1134,6 +1399,120 @@ describe('TelemetryConditionService.sweepSilentSessions: repetição e falha', (
     expect(prisma.$transaction).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
+  })
+})
+
+// A pulseira chega em lote, horas depois de medir: o dia é percorrido em ordem
+// depois da avaliação esparsa. Só o que segue ativo na última leitura do lote
+// vira item de fila e aviso; o episódio inteiro dentro do lote é histórico.
+describe('TelemetryConditionService.evaluateBandDay', () => {
+  const band = (beats: Array<[number, number]>, over: Record<string, unknown> = {}) => ({
+    workerId: 'worker-1',
+    origin: 'REAL' as const,
+    sessionId: 'session-band',
+    batch: {
+      beats: beats.map(([minAgo, value]) => ({ atMs: minutesAgo(minAgo).getTime(), value })),
+      wear: [],
+      sinceMs: 0,
+    },
+    ...over,
+  })
+
+  it('trava o par funcionário e origem antes de ler as condições', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateBandDay(band([[30, 80]]), NOW)
+
+    expect(prisma.$executeRaw.mock.calls[0].slice(1)).toEqual(['worker-1:REAL'])
+    expect(firstCall(prisma.$executeRaw)).toBeLessThan(firstCall(prisma.telemetryCondition.findMany))
+  })
+
+  it('episódio que abriu e fechou no lote vira histórico já recuperado, sem alerta nem aviso', async () => {
+    const prisma = prismaDouble()
+    const realtime = realtimeDouble()
+    const notifier = notifierDouble()
+
+    // Nascido em 1991, 35 anos: a trava de batimento alto é 165, e recupera abaixo de 155.
+    const outcome = await service(prisma, realtime, audienceDouble(), notifier).evaluateBandDay(
+      band([
+        [60, 200],
+        [55, 150],
+      ]),
+      NOW,
+    )
+
+    expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
+    expect(prisma.telemetryCondition.create).toHaveBeenCalledTimes(1)
+    expect(prisma.telemetryCondition.create.mock.calls[0][0].data).toEqual({
+      workerId: 'worker-1',
+      sessionId: 'session-band',
+      origin: 'REAL',
+      kind: 'HEART_RATE_HIGH',
+      status: 'RECOVERED',
+      firstSeenAt: minutesAgo(60),
+      lastSeenAt: minutesAgo(55),
+      recoveredAt: minutesAgo(55),
+      recoveryReason: 'NORMALIZED',
+      thresholdProfile: CALIBRATED_ALERT_PROFILE_VERSION,
+      thresholdRule: 'SAFETY_DEFAULT',
+      thresholdValue: 165,
+      observedValue: 200,
+      calibrationDay: 1,
+    })
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+    expect(realtime.emitToUsers).not.toHaveBeenCalled()
+    expect(notifier.notifyOpened).not.toHaveBeenCalled()
+  })
+
+  it('o que segue ativo no fim do lote abre no instante medido, com alerta e aviso depois do commit', async () => {
+    const prisma = prismaDouble()
+    const realtime = realtimeDouble()
+    const notifier = notifierDouble()
+
+    const outcome = await service(prisma, realtime, audienceDouble(), notifier).evaluateBandDay(band([[30, 200]]), NOW)
+
+    expect(outcome).toEqual({ opened: ['HEART_RATE_HIGH'], recovered: [], alerts: 1 })
+    // firstSeenAt é o instante medido; lastSeenAt é a avaliação, agora.
+    expect(insertValues(prisma.$queryRaw).slice(5, 7)).toEqual([minutesAgo(30), NOW])
+    expect(insertValues(prisma.$queryRaw)).toEqual(
+      expect.arrayContaining(['HEART_RATE_HIGH', CALIBRATED_ALERT_PROFILE_VERSION, 'SAFETY_DEFAULT', 165, 200]),
+    )
+    expect(prisma.operationalAlert.create).toHaveBeenCalledTimes(1)
+    const change = { workerId: 'worker-1', conditionId: 'condition-new', kind: 'HEART_RATE_HIGH', change: 'OPENED', at: NOW.toISOString() }
+    expect(realtime.emitToUsers).toHaveBeenCalledWith(['worker-1'], 'telemetry.condition.changed', change)
+    expect(notifier.notifyOpened).toHaveBeenCalledWith([change])
+  })
+
+  it('condição já aberta fecha no instante medido da leitura de volta', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-hr', 'HEART_RATE_HIGH')])
+
+    const outcome = await service(prisma).evaluateBandDay(band([[10, 150]]), NOW)
+
+    expect(outcome).toEqual({ opened: [], recovered: ['HEART_RATE_HIGH'], alerts: 0 })
+    expect(prisma.telemetryCondition.update).toHaveBeenCalledWith({
+      where: { id: 'c-hr' },
+      data: { status: 'RECOVERED', recoveredAt: minutesAgo(10), recoveryReason: 'NORMALIZED', lastSeenAt: minutesAgo(10) },
+    })
+  })
+
+  it('usa a faixa e as travas do próprio funcionário', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateBandDay(band([[30, 80]]), NOW)
+
+    expect(prisma.workerCalibrationBand.findMany.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
+    expect(prisma.workerSafetyLimit.findMany.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
+  })
+
+  it('a demonstração não é avaliada', async () => {
+    const prisma = prismaDouble()
+
+    const outcome = await service(prisma).evaluateBandDay(band([[30, 200]], { origin: 'DEMO' }), NOW)
+
+    expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 })
 

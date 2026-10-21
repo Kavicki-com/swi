@@ -203,8 +203,8 @@ export interface WorkerMetrics {
  * Como a leitura agrupa uma condição para quem a apresenta.
  *
  * URGENT é exatamente o conjunto de urgência do domínio. HEALTH é saúde que
- * pede atenção sem urgência: a pressão pede revisão humana e o desgaste é
- * estimativa experimental, então nenhum dos dois pode virar urgência. DEVICE é
+ * pede atenção sem urgência: a revisão de pressão pede olhar humano, e as
+ * condições de Atenção da calibração avisam antes da trava. DEVICE é
  * aparelho, e misturá-lo com saúde faria um relógio descarregado contar como
  * funcionário em risco.
  */
@@ -222,7 +222,13 @@ export const CONDITION_CATEGORY: Readonly<Record<ConditionKind, ConditionCategor
   HEART_RATE_HIGH: isUrgent('HEART_RATE_HIGH') ? 'URGENT' : 'HEALTH',
   HEART_RATE_LOW: isUrgent('HEART_RATE_LOW') ? 'URGENT' : 'HEALTH',
   BLOOD_PRESSURE_REVIEW: 'HEALTH',
-  WEAR_HIGH: 'HEALTH',
+  WEAR_HIGH: isUrgent('WEAR_HIGH') ? 'URGENT' : 'HEALTH',
+  HEART_RATE_FATIGUE: 'HEALTH',
+  OXYGEN_FATIGUE: 'HEALTH',
+  WEAR_FATIGUE: 'HEALTH',
+  BLOOD_PRESSURE_FATIGUE: 'HEALTH',
+  OXYGEN_LOW: isUrgent('OXYGEN_LOW') ? 'URGENT' : 'HEALTH',
+  BLOOD_PRESSURE_HIGH: isUrgent('BLOOD_PRESSURE_HIGH') ? 'URGENT' : 'HEALTH',
   DEVICE_BATTERY_LOW: 'DEVICE',
   DEVICE_SIGNAL_LOST: 'DEVICE',
 }
