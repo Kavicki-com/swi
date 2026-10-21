@@ -17,8 +17,16 @@ const dto = (over: Partial<EvacuationProgressDto> = {}): EvacuationProgressDto =
     { id: 'w2', name: 'Worker Dois', acked: false, ackAt: null },
   ],
   area: null,
+  musterPoint: null,
   ...over,
 })
+
+const AREA: [number, number][] = [
+  [-46.64, -23.53],
+  [-46.6, -23.52],
+  [-46.58, -23.55],
+]
+const MUSTER: [number, number] = [-46.62, -23.544]
 
 const activeMock = vi.fn()
 const startMock = vi.fn()
@@ -93,31 +101,27 @@ describe('useEvacuation', () => {
     await waitFor(() => expect(subscribeMock).toHaveBeenCalled())
 
     await act(async () => {
-      await result.current.start()
+      await result.current.start(AREA, MUSTER)
     })
     expect(result.current.evacuation?.id).toBe('ev1')
     expect(result.current.error).toBeNull()
 
     startMock.mockResolvedValue({ data: null, error: { message: 'Já existe uma evacuação ativa' } })
     await act(async () => {
-      await result.current.start()
+      await result.current.start(AREA, MUSTER)
     })
     expect(result.current.error).toBe('Já existe uma evacuação ativa')
   })
 
-  it('start(area) repassa o polígono desenhado pra API', async () => {
-    startMock.mockResolvedValue({ data: dto(), error: null })
+  it('start(area, ponto) repassa o polígono e o ponto de encontro pra API', async () => {
+    startMock.mockResolvedValue({ data: dto({ musterPoint: MUSTER }), error: null })
     const { result } = renderHook(() => useEvacuation())
     await waitFor(() => expect(subscribeMock).toHaveBeenCalled())
-    const area: [number, number][] = [
-      [-46.64, -23.53],
-      [-46.6, -23.52],
-      [-46.58, -23.55],
-    ]
     await act(async () => {
-      await result.current.start(area)
+      await result.current.start(AREA, MUSTER)
     })
-    expect(startMock).toHaveBeenCalledWith(area)
+    expect(startMock).toHaveBeenCalledWith(AREA, MUSTER)
+    expect(result.current.evacuation?.musterPoint).toEqual(MUSTER)
   })
 
   it('end() chama a API com o id da ativa e zera o estado', async () => {
@@ -217,7 +221,7 @@ describe('useEvacuation: releitura atrasada', () => {
     act(() => simulateReconnect())
     startMock.mockResolvedValueOnce({ data: dto(), error: null })
     await act(async () => {
-      await result.current.start()
+      await result.current.start(AREA, MUSTER)
     })
 
     await act(async () => late.resolve({ data: null, error: null }))

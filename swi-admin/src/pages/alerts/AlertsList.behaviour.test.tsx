@@ -20,9 +20,10 @@ const h = vi.hoisted(() => ({
     total: number
     workers: Array<{ id: string; acked: boolean }>
     area?: [number, number][] | null
+    musterPoint?: [number, number] | null
   },
   evacError: null as string | null,
-  start: vi.fn(async (_area?: [number, number][]) => {}),
+  start: vi.fn(async (_area: [number, number][], _musterPoint: [number, number]) => {}),
   end: vi.fn(async () => {}),
   navigations: [] as string[],
   // Cada pino criado: guarda o status pedido e o onClick, para provar a cor do
@@ -242,8 +243,16 @@ const clickMapAt = (lng: number, lat: number) =>
     }),
   )
 
+// Os três cliques que marcam a área do rascunho.
+const DRAFT_AREA: [number, number][] = [
+  [-46.64, -23.53],
+  [-46.6, -23.52],
+  [-46.58, -23.55],
+]
+const drawDraftArea = () => DRAFT_AREA.forEach(([lng, lat]) => clickMapAt(lng, lat))
+
 describe('AlertsList: evacuação real', () => {
-  it('"Iniciar evacuação" abre o modo de desenho; confirmar dispara com a área', async () => {
+  it('marca a área, depois o ponto de encontro, e só então inicia', async () => {
     await renderAlerts()
     await waitFor(() => expect(h.pins).toHaveLength(2))
 
@@ -256,20 +265,102 @@ describe('AlertsList: evacuação real', () => {
 
     // Três cliques no mapa marcam a área.
     await act(async () => {
-      clickMapAt(-46.64, -23.53)
-      clickMapAt(-46.6, -23.52)
-      clickMapAt(-46.58, -23.55)
+      drawDraftArea()
     })
 
+    await act(async () => {
+      fireEvent.click(screen.getByText('Próximo: ponto de encontro'))
+    })
+    expect(screen.getByText('Toque no mapa para marcar o ponto de encontro')).toBeTruthy()
+
+    // Sem ponto marcado, confirmar não inicia.
+    await act(async () => {
+      fireEvent.click(screen.getByText('Confirmar e iniciar'))
+    })
+    expect(h.start).not.toHaveBeenCalled()
+
+    await act(async () => {
+      clickMapAt(-46.55, -23.5)
+    })
     await act(async () => {
       fireEvent.click(screen.getByText('Confirmar e iniciar'))
     })
     expect(h.start).toHaveBeenCalledTimes(1)
-    expect(h.start.mock.calls[0]![0]).toEqual([
-      [-46.64, -23.53],
-      [-46.6, -23.52],
-      [-46.58, -23.55],
-    ])
+    expect(h.start).toHaveBeenCalledWith(DRAFT_AREA, [-46.55, -23.5])
+  })
+
+  it('"Voltar" no passo do ponto volta pra área sem perder os vértices', async () => {
+    await renderAlerts()
+    await waitFor(() => expect(h.pins).toHaveLength(2))
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Iniciar evacuação'))
+    })
+    await act(async () => {
+      drawDraftArea()
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Próximo: ponto de encontro'))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Voltar'))
+    })
+
+    // Volta ao passo da área com os três vértices de pé (o texto os conta).
+    expect(screen.getByText(/Toque no mapa para marcar a área \(3 pontos\)/)).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByText('Próximo: ponto de encontro'))
+    })
+    await act(async () => {
+      clickMapAt(-46.55, -23.5)
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Confirmar e iniciar'))
+    })
+    expect(h.start).toHaveBeenCalledWith(DRAFT_AREA, [-46.55, -23.5])
+  })
+
+  it('no passo do ponto, um novo clique troca o ponto de encontro', async () => {
+    await renderAlerts()
+    await waitFor(() => expect(h.pins).toHaveLength(2))
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Iniciar evacuação'))
+    })
+    await act(async () => {
+      drawDraftArea()
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Próximo: ponto de encontro'))
+    })
+    await act(async () => {
+      clickMapAt(-46.55, -23.5)
+    })
+    await act(async () => {
+      clickMapAt(-46.5, -23.49)
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Confirmar e iniciar'))
+    })
+    expect(h.start).toHaveBeenCalledWith(DRAFT_AREA, [-46.5, -23.49])
+  })
+
+  it('evacuação ativa com ponto de encontro põe um pino a mais no mapa', async () => {
+    h.evacuation = {
+      acked: 0,
+      total: 2,
+      workers: [
+        { id: 'w1', acked: false },
+        { id: 'w2', acked: false },
+      ],
+      area: DRAFT_AREA,
+      musterPoint: [-46.55, -23.5],
+    }
+    await renderAlerts()
+
+    // Dois pinos de trabalhador mais o do ponto de encontro.
+    await waitFor(() => expect(h.pins).toHaveLength(3))
+    expect(h.pins.map((p) => p.name)).toContain('Ponto de encontro')
   })
 
   it('cancelar o desenho não dispara e volta ao botão de iniciar', async () => {

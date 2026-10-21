@@ -14,8 +14,16 @@ const dto = (over: Partial<EvacuationProgressDto> = {}): EvacuationProgressDto =
     { id: 'w2', name: 'Worker Dois', acked: false, ackAt: null },
   ],
   area: null,
+  musterPoint: null,
   ...over,
 })
+
+const AREA: [number, number][] = [
+  [-46.64, -23.53],
+  [-46.6, -23.52],
+  [-46.58, -23.55],
+]
+const MUSTER: [number, number] = [-46.62, -23.544]
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -67,33 +75,28 @@ describe('evacuationsApi.start', () => {
   it('POST /evacuations devolve o dto inicial', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okJson(dto({ acked: 0 })))
     vi.stubGlobal('fetch', fetchMock)
-    const res = await evacuationsApi.start()
+    const res = await evacuationsApi.start(AREA, MUSTER)
     const [url, init] = fetchMock.mock.calls[0]!
     expect(String(url)).toContain('/evacuations')
     expect(init.method).toBe('POST')
     expect(res.data?.acked).toBe(0)
   })
 
-  it('com área desenhada envia o polígono no corpo', async () => {
+  // A área e o ponto de encontro são obrigatórios desde o PR do ponto: o
+  // backend recusa (400) o disparo sem o ponto.
+  it('envia a área e o ponto de encontro no corpo', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okJson(dto({ acked: 0 })))
     vi.stubGlobal('fetch', fetchMock)
-    const area: [number, number][] = [
-      [-46.64, -23.53],
-      [-46.6, -23.52],
-      [-46.58, -23.55],
-    ]
-    await evacuationsApi.start(area)
+    await evacuationsApi.start(AREA, MUSTER)
     const [, init] = fetchMock.mock.calls[0]!
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body as string)).toEqual({ area })
+    expect(JSON.parse(init.body as string)).toEqual({ area: AREA, musterPoint: MUSTER })
   })
 
-  it('sem área não envia corpo', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okJson(dto({ acked: 0 })))
-    vi.stubGlobal('fetch', fetchMock)
-    await evacuationsApi.start()
-    const [, init] = fetchMock.mock.calls[0]!
-    expect(init.body).toBeUndefined()
+  it('devolve o ponto de encontro do dto', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okJson(dto({ musterPoint: MUSTER }))))
+    const res = await evacuationsApi.start(AREA, MUSTER)
+    expect(res.data?.musterPoint).toEqual(MUSTER)
   })
 
   it('409 (já existe ativa) vira erro de negócio no envelope', async () => {
@@ -105,7 +108,7 @@ describe('evacuationsApi.start', () => {
         json: async () => ({ message: 'Já existe uma evacuação ativa' }),
       }),
     )
-    const res = await evacuationsApi.start()
+    const res = await evacuationsApi.start(AREA, MUSTER)
     expect(res.data).toBeNull()
     expect(res.error?.message).toBe('Já existe uma evacuação ativa')
   })
