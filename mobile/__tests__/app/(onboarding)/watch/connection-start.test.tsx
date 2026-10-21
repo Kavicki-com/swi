@@ -83,7 +83,13 @@ const PAREAMENTO = '/(onboarding)/watch/pairing';
 
 const mockEnvio = useTelemetryUploadState as jest.MockedFunction<typeof useTelemetryUploadState>;
 const envio = (paired: boolean) =>
-  mockEnvio.mockReturnValue({ paired, lastOutcome: null, refreshPairing: jest.fn() });
+  mockEnvio.mockReturnValue({
+    paired,
+    lastOutcome: null,
+    refreshPairing: jest.fn(),
+    healthConnect: null,
+    syncNow: jest.fn(),
+  });
 
 beforeEach(() => {
   jest.useFakeTimers();

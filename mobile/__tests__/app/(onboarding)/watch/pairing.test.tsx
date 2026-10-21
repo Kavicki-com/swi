@@ -119,7 +119,13 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
   mockGate.mockReturnValue(true);
-  mockEnvio.mockReturnValue({ paired: false, lastOutcome: null, refreshPairing: mockRefresh });
+  mockEnvio.mockReturnValue({
+    paired: false,
+    lastOutcome: null,
+    refreshPairing: mockRefresh,
+    healthConnect: null,
+    syncNow: jest.fn(),
+  });
   mockConcluir.mockResolvedValue({ paired: true });
 });
 
@@ -224,7 +230,13 @@ describe('pareamento: concluído', () => {
   });
 
   it('quem já chega pareado vê o estado pareado, sem campo', async () => {
-    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null, refreshPairing: mockRefresh });
+    mockEnvio.mockReturnValue({
+      paired: true,
+      lastOutcome: null,
+      refreshPairing: mockRefresh,
+      healthConnect: null,
+      syncNow: jest.fn(),
+    });
     const tree = await render();
     expect(texto(tree)).toContain('Aparelho pareado');
     expect(tree.root.findAllByType(Input)).toHaveLength(0);

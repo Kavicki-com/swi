@@ -114,7 +114,13 @@ const ENCERRADO_COM_LEITURA = (): WatchDiagnosticsState => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockAtivar.mockResolvedValue(true);
-  mockEnvio.mockReturnValue({ paired: false, lastOutcome: null, refreshPairing: jest.fn() });
+  mockEnvio.mockReturnValue({
+    paired: false,
+    lastOutcome: null,
+    refreshPairing: jest.fn(),
+    healthConnect: null,
+    syncNow: jest.fn(),
+  });
 });
 
 describe('Configurações, Monitoramento', () => {
@@ -193,7 +199,13 @@ describe('Configurações, Monitoramento', () => {
   // A linha de envio ao backend. A tela de produto é outra; aqui só a prova
   // de que o caminho existe.
   it('pareado diz que está enviando ao servidor', async () => {
-    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null, refreshPairing: jest.fn() });
+    mockEnvio.mockReturnValue({
+      paired: true,
+      lastOutcome: null,
+      refreshPairing: jest.fn(),
+      healthConnect: null,
+      syncNow: jest.fn(),
+    });
     expect(textoDe(await render(ATIVO()))).toContain('Enviando ao servidor');
   });
 
@@ -223,7 +235,13 @@ describe('Configurações, Monitoramento', () => {
   });
 
   it('pareado não oferece parear de novo', async () => {
-    mockEnvio.mockReturnValue({ paired: true, lastOutcome: null, refreshPairing: jest.fn() });
+    mockEnvio.mockReturnValue({
+      paired: true,
+      lastOutcome: null,
+      refreshPairing: jest.fn(),
+      healthConnect: null,
+      syncNow: jest.fn(),
+    });
     expect(botaoParear(await render(ATIVO()))).toBeUndefined();
   });
 
