@@ -1,4 +1,6 @@
-// Bloco "Aparelho" do detalhe do funcionário: pareamento do iPhone do piloto.
+// Bloco "Aparelho" do detalhe do funcionário: pareamento do celular do
+// funcionário (iPhone com Apple Watch, ou Android com pulseira via Health
+// Connect).
 // Composição de primitivos do DS (StatusTag, Title, TimeStamp, Text, Button);
 // nenhum primitivo é reimplementado aqui. O bloco é dono do próprio ciclo:
 // carrega o estado, gera o código, conta a validade, revoga com confirmação.
@@ -10,6 +12,9 @@
 //
 // Pareado, o bloco também mostra o estado do relógio que chega na telemetria
 // da página: bateria e as condições de aparelho (bateria baixa, sem sinal).
+// Isso vale só para o iPhone com Apple Watch. O Android lê a pulseira pelo
+// Health Connect e manda lotes com atraso: sem bateria nem sinal ao vivo, e o
+// último contato é a última sincronização (o último lote recebido).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { Button, StatusTag, Text, TimeStamp, Title, useTheme } from '@kavicki/swi-design-system'
@@ -50,13 +55,15 @@ function batteryLine(battery: MetricState<number>): string {
   return `Bateria do relógio: ${when ? `${pct} ${when}` : pct}`
 }
 
+const isAndroidPhone = (device: WorkerDevice): boolean => device.kind === 'ANDROID_PHONE'
+
 export function DeviceSection({
   workerId,
   telemetry,
   onDeviceStateChange,
 }: {
   workerId: string
-  /** A leitura que a página já faz; dela saem a bateria e as condições do relógio. */
+  /** A leitura que a página já faz; dela saem a bateria e as condições do relógio (só iPhone). */
   telemetry?: WorkerTelemetry | null
   /**
    * Avisa a página se há aparelho pareado, ou se não deu para saber, para os
@@ -274,7 +281,9 @@ export function DeviceSection({
   }
 
   const { device, confirming } = phase
-  const deviceConditions = telemetry?.conditions ?? []
+  const android = isAndroidPhone(device)
+  // Bateria e sinal são do Apple Watch; no Android não chegam ao vivo.
+  const deviceConditions = android ? [] : (telemetry?.conditions ?? [])
   const batteryLow = deviceConditions.some((c) => c.kind === 'DEVICE_BATTERY_LOW')
   const signalLost = deviceConditions.some((c) => c.kind === 'DEVICE_SIGNAL_LOST')
   // Contato de outro dia leva a data, para não parecer de hoje.
@@ -285,13 +294,24 @@ export function DeviceSection({
       <StatusTag status="accept" label="Pareado" />
       {batteryLow ? <StatusTag status="pending" label="Bateria do relógio baixa" /> : null}
       {signalLost ? <StatusTag status="pending" label="Sem sinal do relógio" /> : null}
+      {android ? (
+        <Text variant="body.s" color={theme.content.dark}>
+          Celular Android com pulseira (Health Connect)
+        </Text>
+      ) : null}
       <Text variant="body.s" color={theme.content.dark}>
         {`Desde ${dayAndClock(device.pairedAt)}${device.model ? `, ${device.model}` : ''}`}
       </Text>
       <Text variant="body.s" color={theme.content.medium}>
-        {lastSeen ? `Último contato ${lastSeen}` : 'Sem contato ainda'}
+        {android
+          ? lastSeen
+            ? `Última sincronização ${lastSeen}`
+            : 'Sem sincronização ainda'
+          : lastSeen
+            ? `Último contato ${lastSeen}`
+            : 'Sem contato ainda'}
       </Text>
-      {telemetry ? (
+      {telemetry && !android ? (
         <Text variant="body.s" color={theme.content.medium}>
           {batteryLine(telemetry.metrics.battery)}
         </Text>
