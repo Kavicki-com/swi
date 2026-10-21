@@ -45,7 +45,7 @@ afterEach(() => {
 describe('UserDetailsMenu', () => {
   it('sem aparelho diz isso e não afirma nenhum vital', async () => {
     await renderPage(<UserDetailsMenu open onClose={() => {}} />)
-    expect(await screen.findByText('Sem relógio pareado')).toBeInTheDocument()
+    expect(await screen.findByText('Sem aparelho pareado')).toBeInTheDocument()
     expect(await screen.findByText('Coordenadora')).toBeInTheDocument()
     expect(screen.queryByText('78%')).not.toBeInTheDocument()
     expect(screen.queryByText('23 mpm')).not.toBeInTheDocument()

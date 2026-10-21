@@ -1,4 +1,4 @@
-// O que a faixa "Medições do relógio" do detalhe mostra, decidido a partir da
+// O que a faixa "Medições do aparelho" do detalhe mostra, decidido a partir da
 // leitura do backend. Função pura, no molde do vitalsView: ausência continua
 // ausência (null), para a tela escrever NO_VALUE em vez de inventar um zero, e
 // zero medido continua zero.
@@ -120,8 +120,8 @@ export function measurementsViewFrom(
   telemetry: WorkerTelemetry | null,
   options: ReadingOptions = {},
 ): WorkerMeasurementsView {
-  // As mesmas frases e a mesma ordem de decisão do vitalsViewFrom: sem relógio
-  // pareado a leitura guardada não vale, e sem saber se há relógio ela espera.
+  // As mesmas frases e a mesma ordem de decisão do vitalsViewFrom: sem aparelho
+  // pareado a leitura guardada não vale, e sem saber se há aparelho ela espera.
   if (options.noDevice) return { kind: 'empty', message: NO_DEVICE_LABEL }
   if (options.deviceUnknown) {
     return {

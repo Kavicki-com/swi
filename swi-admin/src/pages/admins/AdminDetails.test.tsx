@@ -29,7 +29,7 @@ describe('AdminDetails', () => {
 // Administrador não pareia aparelho: o cartão diz isso em vez de exibir uma
 // biometria que ninguém mediu.
 describe('AdminDetails: vitais', () => {
-  it('mostra "Sem relógio pareado" e nenhum número de vital', async () => {
+  it('mostra "Sem aparelho pareado" e nenhum número de vital', async () => {
     vi.spyOn(adminsApi, 'get').mockResolvedValue({
       data: {
         id: 'admin-7',
@@ -48,9 +48,9 @@ describe('AdminDetails: vitais', () => {
 
     // Os vitais, as medições do relógio e o gráfico de gasto calórico dizem
     // os três que não há aparelho.
-    expect(await screen.findByTestId('vitals-card')).toHaveTextContent('Sem relógio pareado')
-    expect(screen.getByTestId('measurements-empty')).toHaveTextContent('Sem relógio pareado')
-    expect(screen.getByTestId('calories-empty')).toHaveTextContent('Sem relógio pareado')
+    expect(await screen.findByTestId('vitals-card')).toHaveTextContent('Sem aparelho pareado')
+    expect(screen.getByTestId('measurements-empty')).toHaveTextContent('Sem aparelho pareado')
+    expect(screen.getByTestId('calories-empty')).toHaveTextContent('Sem aparelho pareado')
     expect(screen.queryByTestId('measurement-oxygen')).not.toBeInTheDocument()
     expect(screen.getByText('Sem estimativa')).toBeInTheDocument()
     expect(screen.queryByTestId('vitals-source-badge')).not.toBeInTheDocument()

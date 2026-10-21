@@ -1,4 +1,4 @@
-// A faixa "Medições do relógio" só desenha o que a view decidiu: a frase de
+// A faixa "Medições do aparelho" só desenha o que a view decidiu: a frase de
 // ausência quando não há leitura, e uma rosca por medição quando há, depois
 // das roscas de fadiga e esforço. Valor ausente vira NO_VALUE, nunca um zero
 // inventado.
@@ -139,7 +139,7 @@ const renderSection = (
 describe('WorkerMeasurementsSection', () => {
   it('mostra o título da faixa', async () => {
     await renderSection()
-    expect(screen.getByRole('heading', { name: 'Medições do relógio' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Medições do aparelho' })).toBeInTheDocument()
   })
 
   it('sem leitura mostra a frase de ausência e nenhuma rosca', async () => {

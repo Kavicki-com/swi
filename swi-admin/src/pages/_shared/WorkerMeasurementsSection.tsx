@@ -1,5 +1,5 @@
 // src/pages/_shared/WorkerMeasurementsSection.tsx
-// Faixa "Medições do relógio" do detalhe de funcionário/admin: as roscas de
+// Faixa "Medições do aparelho" do detalhe de funcionário/admin: as roscas de
 // taxa de fadiga e esforço realizado e, lado a lado com elas, as medições que
 // o cabeçalho de sinais vitais não mostra (oxigenação, temperatura, passos,
 // distância, movimento e as referências de batimento). Composição DS, um
@@ -82,10 +82,10 @@ export function WorkerMeasurementsSection({
         }}
       >
         <Title variant="title.s" color={theme.content.dark}>
-          Medições do relógio
+          Medições do aparelho
         </Title>
         {/* Leitura de demonstração é declarada, como no card de vitais;
-            leitura real do relógio dispensa selo. */}
+            leitura real do aparelho dispensa selo. */}
         {view.kind === 'entries' && view.sourceBadge ? (
           <DataOriginBadge label={view.sourceBadge} testID="measurements-source-badge" />
         ) : null}

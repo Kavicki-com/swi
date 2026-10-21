@@ -613,8 +613,8 @@ describe('Dashboard: saúde da frota pela telemetria', () => {
 
   // Despareado com condição ainda aberta na telemetria velha: enquanto houver
   // alguém pareado na frota, o cartão dele aparece na aba, e a coluna de saúde
-  // diz "Sem relógio pareado" no lugar do bpm.
-  it('sem relógio pareado, o cartão mostra a frase no lugar do batimento', async () => {
+  // diz "Sem aparelho pareado" no lugar do bpm.
+  it('sem aparelho pareado, o cartão mostra a frase no lugar do batimento', async () => {
     telemetry.state = {
       ...telemetry.state,
       workers: {
@@ -635,7 +635,7 @@ describe('Dashboard: saúde da frota pela telemetria', () => {
     }
     await renderReady()
     const card = screen.getByTestId('wear-alert-n1')
-    expect(card).toHaveTextContent('Sem relógio pareado')
+    expect(card).toHaveTextContent('Sem aparelho pareado')
     expect(card).not.toHaveTextContent('Bpm')
   })
 })

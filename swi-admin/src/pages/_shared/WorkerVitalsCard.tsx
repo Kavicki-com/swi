@@ -79,7 +79,7 @@ export function WorkerVitalsCard({ vitals }: { vitals: WorkerVitalsView }) {
         </View>
       ) : null}
 
-      {/* Leitura de demonstração é declarada; leitura real do relógio
+      {/* Leitura de demonstração é declarada; leitura real do aparelho
           dispensa selo. */}
       {vitals.sourceBadge ? (
         <View style={{ alignItems: 'flex-end' }}>

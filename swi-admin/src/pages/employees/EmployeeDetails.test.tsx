@@ -195,7 +195,7 @@ describe('EmployeeDetails', () => {
 
 describe('EmployeeDetails: vitais do aparelho', () => {
   // Os vitais abaixo são de quem tem aparelho pareado; sem ele a tela diz
-  // "Sem relógio pareado" (caso no fim deste bloco).
+  // "Sem aparelho pareado" (caso no fim deste bloco).
   beforeEach(() => {
     stateOfMock.mockResolvedValue(PAIRED)
   })
@@ -225,19 +225,19 @@ describe('EmployeeDetails: vitais do aparelho', () => {
   })
 
   // Desparear não apaga a leitura guardada no backend: enquanto o bloco Aparelho
-  // não diz se há relógio, os vitais não podem apresentá-la como atual.
-  it('enquanto não se sabe se há relógio, a leitura guardada não aparece', async () => {
+  // não diz se há aparelho, os vitais não podem apresentá-la como atual.
+  it('enquanto não se sabe se há aparelho, a leitura guardada não aparece', async () => {
     stateOfMock.mockReturnValueOnce(new Promise(() => {}) as never)
     getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
     currentMock.mockResolvedValue({ data: reporting(), error: null })
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
-    await expectReadingState('Verificando o relógio…')
+    await expectReadingState('Verificando o aparelho…')
     await waitFor(() => expect(currentMock).toHaveBeenCalled())
     expect(screen.queryByText('Monitorando agora')).toBeNull()
   })
 
-  it('sem conseguir saber se há relógio, a leitura guardada não aparece', async () => {
+  it('sem conseguir saber se há aparelho, a leitura guardada não aparece', async () => {
     stateOfMock.mockResolvedValueOnce({ data: null, error: { message: 'offline' } } as never)
     getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
     currentMock.mockResolvedValue({ data: reporting(), error: null })
@@ -273,13 +273,13 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     await waitFor(() => expect(currentMock.mock.calls.length).toBe(before + 1))
   })
 
-  it('sem aparelho pareado, os vitais dizem "Sem relógio pareado" em vez de "sem leitura"', async () => {
+  it('sem aparelho pareado, os vitais dizem "Sem aparelho pareado" em vez de "sem leitura"', async () => {
     stateOfMock.mockResolvedValue(UNPAIRED)
     getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
     currentMock.mockResolvedValue({ data: neverReported(), error: null })
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
-    await expectReadingState('Sem relógio pareado')
+    await expectReadingState('Sem aparelho pareado')
     expect(screen.queryByText('Sem leitura do aparelho')).not.toBeInTheDocument()
   })
 
