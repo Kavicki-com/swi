@@ -187,6 +187,7 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 | `eslint-config-expo` | 10.0.0 | MIT |  |
 | `jest` | 29.7.0 | MIT |  |
 | `jest-expo` | 54.0.18 | MIT |  |
+| `patch-package` | 8.0.0 | MIT |  |
 | `react-test-renderer` | 19.1.0 | MIT |  |
 | `typescript` | 5.9.3 | Apache-2.0 |  |
 

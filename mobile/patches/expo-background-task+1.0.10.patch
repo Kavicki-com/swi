@@ -1,0 +1,68 @@
+diff --git a/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskScheduler.kt b/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskScheduler.kt
+index f94e78a..7df7bb1 100644
+--- a/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskScheduler.kt
++++ b/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskScheduler.kt
+@@ -79,6 +79,20 @@ object BackgroundTaskScheduler {
+       return false
+     }
+ 
++    val existingWorkInfo = getWorkerInfo(context)
++
++    // During startup/headless restore, task consumers register again while the
++    // unique worker is already scheduled or executing. Replacing it here resets
++    // the pending run or cancels the active run, which can create a
++    // cancel/reschedule loop.
++    if (
++      cancelExisting &&
++      (existingWorkInfo?.state == WorkInfo.State.ENQUEUED || existingWorkInfo?.state == WorkInfo.State.RUNNING)
++    ) {
++      Log.d(TAG, "Worker is already scheduled, skipping cancel-and-replace scheduling.")
++      return true
++    }
++
+     // Stop the current worker (if any)
+     if (cancelExisting) {
+       stopWorker(context)
+@@ -248,7 +262,7 @@ object BackgroundTaskScheduler {
+ 
+     return try {
+       val workInfos = workManager.getWorkInfosForUniqueWork(WORKER_IDENTIFIER).await()
+-      return workInfos.firstOrNull()
++      return selectCurrentWorkInfo(workInfos)
+     } catch (e: Exception) {
+       Log.d(TAG, "Calling getWorkInfosForUniqueWork failed with error " + e.message)
+       null
+@@ -277,3 +291,11 @@ object BackgroundTaskScheduler {
+     }
+   }
+ }
++
++/**
++ * Chaining runs with `ExistingWorkPolicy.APPEND` keeps finished runs in the unique work,
++ * and WorkManager returns them in no fixed order, so the live run must be picked explicitly.
++ */
++internal fun selectCurrentWorkInfo(workInfos: List<WorkInfo>): WorkInfo? =
++  workInfos.firstOrNull { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
++    ?: workInfos.firstOrNull()
+diff --git a/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskWork.kt b/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskWork.kt
+index 1d5c5e7..33fea94 100644
+--- a/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskWork.kt
++++ b/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskWork.kt
+@@ -5,6 +5,7 @@ import android.util.Log
+ import androidx.work.CoroutineWorker
+ import androidx.work.Data
+ import androidx.work.WorkerParameters
++import kotlinx.coroutines.CancellationException
+ 
+ class BackgroundTaskWork(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+   companion object {
+@@ -24,6 +25,9 @@ class BackgroundTaskWork(context: Context, params: WorkerParameters) : Coroutine
+       // Run tasks async using the task service. This call will return when the task has finished
+       // ie. When JS task executor has notified the task manager that it is done.
+       BackgroundTaskScheduler.runTasks(applicationContext, appScopeKey)
++    } catch (e: CancellationException) {
++      Log.i(TAG, "doWork: Worker was cancelled")
++      throw e
+     } catch (e: Exception) {
+       // Wrap exception in Data:
+       val outputData = Data.Builder()

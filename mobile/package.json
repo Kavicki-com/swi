@@ -19,7 +19,8 @@
     "test:e2e": "playwright test",
     "test:e2e:managed": "node ../scripts/e2e/run-test-stack.mjs --target mobile",
     "build:all": "expo export --platform all",
-    "verify": "npm run lint && npm run typecheck && npm test -- --runInBand && npm run build:all"
+    "verify": "npm run lint && npm run typecheck && npm test -- --runInBand && npm run build:all",
+    "postinstall": "patch-package"
   },
   "jest": {
     "preset": "jest-expo",
@@ -118,6 +119,7 @@
     "eslint-config-expo": "~10.0.0",
     "jest": "^29.7.0",
     "jest-expo": "^54.0.18",
+    "patch-package": "8.0.0",
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
   },
@@ -133,6 +135,13 @@
       "reactNativeDirectoryCheck": {
         "exclude": [
           "react-native-webrtc"
+        ]
+      }
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-background-task"
         ]
       }
     }
