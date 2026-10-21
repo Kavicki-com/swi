@@ -134,7 +134,7 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 | `@react-three/fiber` | 9.6.1 | MIT |  |
 | `cep-promise` | 4.4.1 | MIT |  |
 | `expo` | 54.0.37 | MIT |  |
-| `expo-asset` | 12.0.13 | MIT |  |
+| `expo-asset` | 12.0.14 | MIT |  |
 | `expo-background-task` | 1.0.10 | MIT |  |
 | `expo-build-properties` | 1.0.10 | MIT |  |
 | `expo-constants` | 18.0.14 | MIT |  |
