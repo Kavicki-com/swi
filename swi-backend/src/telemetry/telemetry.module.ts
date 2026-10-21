@@ -9,6 +9,8 @@ import { TelemetryHealthNotifier } from './alerts/health-notifier'
 import { TelemetryAssessmentService } from './assessment/assessment.service'
 import { SparseAssessmentService } from './assessment/sparse-assessment.service'
 import { CalibrationJob } from './calibration/calibration.job'
+import { CalibrationAdminService } from './calibration/calibration-admin.service'
+import { CalibrationController } from './calibration/calibration.controller'
 import { CalibrationService } from './calibration/calibration.service'
 import { DeviceAuthGuard } from './devices/device-auth.guard'
 import { DeviceAuthService } from './devices/device-auth.service'
@@ -40,6 +42,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     TelemetryIngestionController,
     TelemetryQueryController,
     AlertQueueController,
+    CalibrationController,
   ],
   providers: [
     DeviceAuthService,
@@ -66,6 +69,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     TelemetryLifecycleJob,
     // Calibração individual: recálculo diário logo depois do ciclo de vida.
     CalibrationService,
+    CalibrationAdminService,
     CalibrationJob,
   ],
   exports: [

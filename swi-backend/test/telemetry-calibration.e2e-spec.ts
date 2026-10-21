@@ -3,6 +3,7 @@ import type { CalibrationDeviceFamily, TelemetryOrigin } from '@prisma/client'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { CALIBRATION_VERSION } from '../src/telemetry/calibration/calibration-bands'
 import { CalibrationService } from '../src/telemetry/calibration/calibration.service'
+import { TelemetryQueryService } from '../src/telemetry/read-model/telemetry-query.service'
 
 // E2E porque o recálculo é leitura de Resumos e gravação em quatro tabelas
 // numa transação: o que importa provar é a migration, os upserts por chave
@@ -14,9 +15,12 @@ describe('Telemetry calibration e2e', () => {
   const tag = randomUUID()
   const realEmail = `calibration-real-${tag}@ex.com`
   const demoEmail = `calibration-demo-${tag}@ex.com`
-  const emails = [realEmail, demoEmail]
+  const noneEmail = `calibration-none-${tag}@ex.com`
+  const emails = [realEmail, demoEmail, noneEmail]
   let realId = ''
   let demoId = ''
+  /** Origem real, mas sem nenhum dia terminado: nunca ganha linha de calibração. */
+  let noneId = ''
 
   const HOUR = 60 * 60 * 1000
   /** Dia como o banco guarda: data pura em meia-noite UTC. */
@@ -72,6 +76,7 @@ describe('Telemetry calibration e2e', () => {
       })
     realId = (await worker(realEmail)).id
     demoId = (await worker(demoEmail)).id
+    noneId = (await worker(noneEmail)).id
 
     // Dez dias terminados de relógio, 11 a 20 de outubro, e o dia 21 ainda em
     // andamento (provisório e com um p90 absurdo, que não pode contar).
@@ -170,5 +175,71 @@ describe('Telemetry calibration e2e', () => {
     expect(run.recalculated).toBeGreaterThanOrEqual(1)
     expect(await prisma.workerCalibration.findUnique({ where: { workerId: demoId } })).toBeNull()
     expect(await prisma.workerCalibrationBand.count({ where: { workerId: demoId } })).toBe(0)
+  })
+
+  // A leitura individual lê o que o recálculo gravou acima: a fase de pulseira
+  // com dois dias válidos, a correção do gestor no batimento e o aprendido no
+  // resto. Depois dos casos anteriores de propósito, para não mexer no que
+  // eles esperam do banco.
+  describe('leitura individual (current)', () => {
+    let query: TelemetryQueryService
+
+    const snapshotOf = (workerId: string, origin: TelemetryOrigin, now: Date) =>
+      prisma.telemetrySnapshot.create({
+        data: { workerId, origin, lastEventTime: now, heartRateBpm: 150, heartRateAt: now },
+      })
+
+    beforeAll(() => {
+      query = new TelemetryQueryService(prisma)
+    })
+
+    it('na origem real traz a fase, o dia e cada faixa com a zona do valor atual', async () => {
+      const now = new Date()
+      await snapshotOf(realId, 'REAL', now)
+
+      const current = await query.currentForWorker(realId, now)
+
+      expect(current.calibration).toMatchObject({
+        version: CALIBRATION_VERSION,
+        phase: 'CALIBRATING',
+        recalibrating: true,
+        day: 3,
+      })
+      const metrics = current.calibration!.metrics
+      expect(Object.keys(metrics)).toHaveLength(11)
+      // 150 bpm contra a correção do gestor (fadiga a partir de 140).
+      expect(metrics.HEART_RATE).toEqual({ zone: 'FATIGUE', cuts: { excellence: 70, fatigue: 140 }, source: 'OVERRIDE' })
+      // Sem avaliação não há desgaste atual: faixa aprendida, zona nula.
+      expect(metrics.WEAR).toMatchObject({ zone: null, source: 'LEARNED' })
+      expect(metrics.WEAR!.cuts.fatigue).not.toBeNull()
+      // Total do dia nunca ganha zona; a faixa habitual vem mesmo assim.
+      expect(metrics.STEPS).toMatchObject({ zone: null, source: 'LEARNED' })
+    })
+
+    it('na demonstração a calibração é nula, mesmo com dias de demonstração resumidos', async () => {
+      const now = new Date()
+      await snapshotOf(demoId, 'DEMO', now)
+
+      const current = await query.currentForWorker(demoId, now)
+
+      expect(current.origin).toBe('DEMO')
+      expect(current.calibration).toBeNull()
+    })
+
+    it('na origem real sem linha de calibração a calibração é nula', async () => {
+      const now = new Date()
+      await snapshotOf(noneId, 'REAL', now)
+
+      const current = await query.currentForWorker(noneId, now)
+
+      expect(current.origin).toBe('REAL')
+      expect(current.calibration).toBeNull()
+    })
+
+    it('quem nunca reportou responde calibração nula', async () => {
+      const current = await query.currentForWorker(randomUUID())
+      expect(current.origin).toBeNull()
+      expect(current.calibration).toBeNull()
+    })
   })
 })

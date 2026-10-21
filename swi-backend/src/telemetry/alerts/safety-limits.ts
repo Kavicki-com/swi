@@ -1,5 +1,6 @@
 import type { SafetyRule } from '@prisma/client'
 import { CALIBRATED_ALERT_PROFILE } from './alert-profile'
+import { heartRateLimits } from './condition-engine'
 
 // Travas por funcionário (perfil swi-alert-calibrated-3): o piso de proteção
 // que não aprende. Sem linha em WorkerSafetyLimit vale o padrão do perfil; com
@@ -113,5 +114,34 @@ export function defaultSafetyLabel(rule: SafetyRule): string {
       return `${p.bloodPressureHigh.systolicAt}/${p.bloodPressureHigh.diastolicAt} ou mais`
     case 'WEAR_HIGH':
       return `${p.wearHigh.openAtPercent}% ou mais`
+  }
+}
+
+/**
+ * O padrão em números, para a pessoa: o mesmo que o motor de condições usa sem
+ * linha do admin (ver calibrated-decisions). As de batimento saem da máxima
+ * pela idade e do repouso; sem eles, do piso do perfil.
+ */
+export function defaultSafetyValues<R extends SafetyRule>(
+  rule: R,
+  baseline: { maxBpm: number | null; restingBpm: number | null },
+): SafetyValuesFor<R> {
+  const p = CALIBRATED_ALERT_PROFILE
+  const out = (values: SafetyValues) => values as SafetyValuesFor<R>
+  switch (rule) {
+    case 'HEART_RATE_HIGH': {
+      const openAt = heartRateLimits(p, baseline).high.value
+      return out({ openAt, closeAt: openAt - p.heartRateHigh.hysteresisBpm })
+    }
+    case 'HEART_RATE_LOW': {
+      const openAt = heartRateLimits(p, baseline).low.value
+      return out({ openAt, closeAt: openAt + p.heartRateLow.hysteresisBpm })
+    }
+    case 'OXYGEN_LOW':
+      return out({ openAt: p.oxygenLow.openBelowPercent, closeAt: p.oxygenLow.recoverAbovePercent })
+    case 'WEAR_HIGH':
+      return out({ openAt: p.wearHigh.openAtPercent, closeAt: p.wearHigh.recoverBelowPercent })
+    default:
+      return out({ ...p.bloodPressureHigh })
   }
 }

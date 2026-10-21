@@ -2940,6 +2940,285 @@
         ]
       }
     },
+    "/telemetry/v1/workers/{id}/calibration": {
+      "get": {
+        "operationId": "CalibrationController_detail",
+        "summary": "",
+        "description": "Fase, régua, faixas por medição e travas de um funcionário.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/calibration"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/telemetry/v1/workers/{id}/calibration/history": {
+      "get": {
+        "operationId": "CalibrationController_history",
+        "summary": "",
+        "description": "Histórico de mudanças, 50 por página, do mais novo ao mais antigo.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Id do último item da página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/calibration"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/telemetry/v1/workers/{id}/calibration/bands/{metric}": {
+      "put": {
+        "operationId": "CalibrationController_setBand",
+        "summary": "",
+        "description": "Corrige a faixa de uma medição; o recálculo diário não mexe na correção.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metric",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BandOverrideDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/calibration"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "CalibrationController_clearBand",
+        "summary": "",
+        "description": "Remove a correção: a faixa volta ao aprendido.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metric",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/calibration"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/telemetry/v1/workers/{id}/calibration/safety/{rule}": {
+      "put": {
+        "operationId": "CalibrationController_setSafety",
+        "summary": "",
+        "description": "Grava a trava personalizada da regra.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SafetyLimitDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/calibration"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "CalibrationController_clearSafety",
+        "summary": "",
+        "description": "Remove a trava personalizada: vale o padrão do perfil.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/calibration"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/companies": {
       "get": {
         "operationId": "CompaniesController_list",
@@ -4354,6 +4633,30 @@
             "maxLength": 500
           }
         }
+      },
+      "BandOverrideDto": {
+        "type": "object",
+        "properties": {
+          "cuts": {
+            "type": "object",
+            "description": "Cortes da medição, número ou nulo por chave (ex.: excellence e fatigue)."
+          }
+        },
+        "required": [
+          "cuts"
+        ]
+      },
+      "SafetyLimitDto": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "type": "object",
+            "description": "Valores da trava (openAt e closeAt; na pressão, os quatro limites)."
+          }
+        },
+        "required": [
+          "values"
+        ]
       },
       "CreateCameraDto": {
         "type": "object",

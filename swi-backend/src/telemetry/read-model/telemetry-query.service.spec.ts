@@ -26,6 +26,8 @@ const prismaDouble = () =>
     telemetrySession: { findUnique: jest.fn() },
     telemetryDailySummary: { findMany: jest.fn() },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
+    workerCalibration: { findUnique: jest.fn() },
+    workerCalibrationBand: { findMany: jest.fn() },
   }) as any
 
 const service = (prisma: any) => new TelemetryQueryService(prisma as PrismaService)
@@ -71,6 +73,8 @@ const emptyReads = (prisma: any) => {
   prisma.telemetryCondition.findMany.mockResolvedValue([])
   prisma.telemetryDevice.findMany.mockResolvedValue([])
   prisma.telemetrySnapshot.findMany.mockResolvedValue([])
+  prisma.workerCalibration.findUnique.mockResolvedValue(null)
+  prisma.workerCalibrationBand.findMany.mockResolvedValue([])
 }
 
 describe('TelemetryQueryService.currentForWorker', () => {
@@ -462,6 +466,59 @@ describe('TelemetryQueryService.currentForWorker', () => {
     prisma.telemetrySnapshot.findUnique.mockResolvedValue(null)
     const result = await service(prisma).currentForWorker('worker-1', NOW)
     expect(result.heartRateReference).toBeNull()
+  })
+
+  it('a leitura real traz a calibração com a zona do valor atual de cada faixa', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow({ heartRateBpm: 150 }))
+    prisma.workerCalibration.findUnique.mockResolvedValue({ version: 'swi-calibration-1', validDays: 10, recalibrating: false })
+    prisma.workerCalibrationBand.findMany.mockResolvedValue([
+      { metric: 'HEART_RATE', learnedCuts: { excellence: 70, fatigue: 140 }, overrideCuts: null },
+      { metric: 'WEAR', learnedCuts: { excellence: 30, fatigue: 72 }, overrideCuts: { excellence: 25, fatigue: 70 } },
+    ])
+
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(prisma.workerCalibration.findUnique.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
+    expect(prisma.workerCalibrationBand.findMany.mock.calls[0][0].where).toEqual({ workerId: 'worker-1' })
+    expect(result.calibration).toEqual({
+      version: 'swi-calibration-1',
+      phase: 'CALIBRATING',
+      recalibrating: false,
+      day: 11,
+      metrics: {
+        HEART_RATE: { zone: 'FATIGUE', cuts: { excellence: 70, fatigue: 140 }, source: 'LEARNED' },
+        WEAR: { zone: null, cuts: { excellence: 25, fatigue: 70 }, source: 'OVERRIDE' },
+      },
+    })
+  })
+
+  it('sem linha de calibração a leitura real diz que não há calibração', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow())
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(result.calibration).toBeNull()
+  })
+
+  it('demonstração não tem calibração, e nem a consulta', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(snapshotRow({ origin: 'DEMO' }))
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(result.calibration).toBeNull()
+    expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
+    expect(prisma.workerCalibrationBand.findMany).not.toHaveBeenCalled()
+  })
+
+  it('quem nunca reportou responde calibração nula sem consultar', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(null)
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+    expect(result.calibration).toBeNull()
+    expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
   })
 
   it('avaliação de segundos atrás não some na virada do dia monitorado', async () => {
@@ -1059,6 +1116,9 @@ describe('TelemetryQueryService.adminWorkers', () => {
 
     expect(workers[0].telemetry.metrics.effort.value).toBe(55)
     expect('heartRateReference' in workers[0].telemetry).toBe(false)
+    // A calibração é da leitura individual: a lista não a consulta.
+    expect('calibration' in workers[0].telemetry).toBe(false)
+    expect(prisma.workerCalibration.findUnique).not.toHaveBeenCalled()
     const sql: string = prisma.$queryRaw.mock.calls[0][0].sql
     expect(sql).toContain('"TelemetryAssessment"')
     expect(sql).not.toContain('"inputs"')

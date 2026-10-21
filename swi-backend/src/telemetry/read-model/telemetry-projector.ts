@@ -20,6 +20,7 @@ import {
   type Sample,
   type TelemetryOrigin,
 } from '../domain/telemetry.types'
+import type { WorkerCalibrationView } from '../calibration/calibration-zone'
 import type { BaselineSource, HeartRateReference } from './heart-rate-reference'
 
 // Projeção do read model do piloto: o único lugar que transforma amostra bruta
@@ -283,6 +284,13 @@ export interface WorkerTelemetry {
    */
   heartRateReference?: HeartRateReference | null
   /**
+   * A calibração individual da pessoa: fase, dia e, por medição, a faixa em
+   * vigor com a zona em que o valor atual cai. Só a leitura individual a
+   * carrega, como a referência cardíaca; ausente nas listas, nula na
+   * demonstração e para quem ainda não tem linha de calibração.
+   */
+  calibration?: WorkerCalibrationView | null
+  /**
    * Só da pulseira, que chega em lote horas depois de medir: até quando ela
    * mediu e quando o backend recebeu o lote, ambos ISO-8601. Nulo para o
    * relógio, que fala ao vivo e tem a qualidade de cada métrica como resposta.
@@ -293,10 +301,13 @@ export interface WorkerTelemetry {
 
 /**
  * A leitura individual: a mesma de `WorkerTelemetry`, com a referência
- * cardíaca sempre presente, objeto ou nulo. O tipo é o que garante que só a
- * lista pode omiti-la.
+ * cardíaca e a calibração sempre presentes, objeto ou nulo. O tipo é o que
+ * garante que só a lista pode omiti-las.
  */
-export type CurrentWorkerTelemetry = WorkerTelemetry & { heartRateReference: HeartRateReference | null }
+export type CurrentWorkerTelemetry = WorkerTelemetry & {
+  heartRateReference: HeartRateReference | null
+  calibration: WorkerCalibrationView | null
+}
 
 /**
  * Cobertura vazia é fabricada a cada chamada, nunca uma constante devolvida por
