@@ -142,17 +142,20 @@ export function limitsLabelOf(metric: CalibrationMetric, cuts: Cuts): string | n
 }
 
 /**
- * Pressão num card só: os cortes de fadiga das duas ("fadiga a partir de
- * 135/88"). Faltando um lado, fica só o outro, com o nome para não parecer
- * a pressão inteira.
+ * Pressão num card só, no molde do batimento ("excelência até 118/76, fadiga
+ * a partir de 135/88"). Cada corte decide sozinho: faltando um lado, fica só
+ * o outro, com o nome para não parecer a pressão inteira.
  */
 export function pressureLimitsLabel(systolic: Cuts | null, diastolic: Cuts | null): string | null {
-  const sys = systolic === null ? null : cut(systolic, 'fatigue')
-  const dia = diastolic === null ? null : cut(diastolic, 'fatigue')
-  if (sys !== null && dia !== null) return `fadiga a partir de ${integer(sys)}/${integer(dia)}`
-  if (sys !== null) return `fadiga a partir de sistólica ${integer(sys)}`
-  if (dia !== null) return `fadiga a partir de diastólica ${integer(dia)}`
-  return null
+  const pair = (key: string, prefix: string): string | null => {
+    const sys = systolic === null ? null : cut(systolic, key)
+    const dia = diastolic === null ? null : cut(diastolic, key)
+    if (sys !== null && dia !== null) return `${prefix} ${integer(sys)}/${integer(dia)}`
+    if (sys !== null) return `${prefix} sistólica ${integer(sys)}`
+    if (dia !== null) return `${prefix} diastólica ${integer(dia)}`
+    return null
+  }
+  return join([pair('excellence', 'excelência até'), pair('fatigue', 'fadiga a partir de')])
 }
 
 const STATE_RANK: Record<StateZone, number> = { EXCELLENCE: 0, NORMAL: 1, FATIGUE: 2 }

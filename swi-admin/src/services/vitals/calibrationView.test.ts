@@ -132,24 +132,30 @@ describe('limitsLabelOf', () => {
 })
 
 describe('pressureLimitsLabel', () => {
-  it('sistólica e diastólica juntas, pelos cortes de fadiga', () => {
+  it('sistólica e diastólica juntas, excelência e fadiga como no batimento', () => {
     expect(
       pressureLimitsLabel({ excellence: 118, fatigue: 135 }, { excellence: 76, fatigue: 88 }),
-    ).toBe('fadiga a partir de 135/88')
+    ).toBe('excelência até 118/76, fadiga a partir de 135/88')
   })
 
   it('um lado faltando: só o que existe, com o nome', () => {
     expect(pressureLimitsLabel({ excellence: 118, fatigue: 135 }, null)).toBe(
-      'fadiga a partir de sistólica 135',
+      'excelência até sistólica 118, fadiga a partir de sistólica 135',
     )
     expect(pressureLimitsLabel({ fatigue: null }, { fatigue: 88 })).toBe(
       'fadiga a partir de diastólica 88',
     )
   })
 
-  it('nenhum corte de fadiga: sem frase', () => {
+  it('cada corte decide sozinho: só excelência ainda vira frase', () => {
+    expect(pressureLimitsLabel({ excellence: 118, fatigue: null }, { fatigue: null })).toBe(
+      'excelência até sistólica 118',
+    )
+  })
+
+  it('nenhum corte: sem frase', () => {
     expect(pressureLimitsLabel(null, null)).toBeNull()
-    expect(pressureLimitsLabel({ excellence: 118, fatigue: null }, { fatigue: null })).toBeNull()
+    expect(pressureLimitsLabel({ fatigue: null }, { excellence: null })).toBeNull()
   })
 })
 
@@ -195,7 +201,7 @@ describe('calibrationLineOf e pressureLineOf', () => {
   it('pressão usa a pior das duas zonas e a frase conjunta', () => {
     expect(pressureLineOf(cal)).toEqual({
       zone: { label: 'Fadiga', status: 'canceled' },
-      limits: 'fadiga a partir de 135/88',
+      limits: 'excelência até 118/76, fadiga a partir de 135/88',
     })
     expect(pressureLineOf(null)).toEqual({ zone: null, limits: null })
   })

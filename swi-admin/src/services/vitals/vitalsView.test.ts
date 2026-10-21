@@ -314,7 +314,7 @@ describe('vitalsViewFrom', () => {
       })
       expect(calibration.pressure).toEqual({
         zone: { label: 'Fadiga', status: 'canceled' },
-        limits: 'fadiga a partir de 135/88',
+        limits: 'excelência até 118/76, fadiga a partir de 135/88',
       })
       expect(calibration.wear).toEqual({
         zone: { label: 'Excelência', status: 'accept' },

@@ -120,13 +120,16 @@ export function EmployeeDetails() {
       }
       topRightAction={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          {/* Faixas aprendidas, travas e histórico da calibração individual. */}
-          <Button
-            label="Faixas e travas"
-            variant="outline"
-            accessibilityLabel="Faixas e travas"
-            onPress={() => navigate(`/employees/${employee.id}/faixas`)}
-          />
+          {/* Faixas aprendidas, travas e histórico da calibração individual.
+              Sem calibração (DEMO ou ainda sem dias) não há o que abrir. */}
+          {telemetry?.calibration ? (
+            <Button
+              label="Faixas e travas"
+              variant="outline"
+              accessibilityLabel="Faixas e travas"
+              onPress={() => navigate(`/employees/${employee.id}/faixas`)}
+            />
+          ) : null}
           <Button
             label={pausing ? 'Solicitando…' : 'Solicitar Pausa'}
             variant="contained"
