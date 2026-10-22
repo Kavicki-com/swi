@@ -10,6 +10,7 @@ import { Button, StatusTag, Text, Title, useTheme } from '@kavicki/swi-design-sy
 import type { StatusTagStatus } from '@kavicki/swi-design-system'
 import { useRescues, errorMessage } from './hooks/useRescues'
 import type { Rescue, RescueStatus } from '@/services/api/rescues'
+import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 
 const STATUS_TAG: Record<RescueStatus, { status: StatusTagStatus; label: string }> = {
   dispatched: { status: 'pending', label: 'Despachado' },
@@ -34,6 +35,8 @@ export function RescueHistoryPage() {
   const navigate = useNavigate()
   const { rescues, loading, error, retry, arrive, end } = useRescues()
   const [actionError, setActionError] = useState<string | null>(null)
+  // Resgate à espera da confirmação de encerramento.
+  const [ending, setEnding] = useState<Rescue | null>(null)
 
   const run = async (fn: Promise<void>) => {
     setActionError(null)
@@ -101,11 +104,25 @@ export function RescueHistoryPage() {
                 )
               }
               onArrive={() => void run(arrive(r.id))}
-              onEnd={() => void run(end(r.id))}
+              onEnd={() => setEnding(r)}
             />
           ))}
         </View>
       )}
+      {ending ? (
+        <ConfirmDialog
+          title="Encerrar resgate?"
+          message={`O resgate ${ending.number} passa a constar como encerrado.`}
+          confirmLabel="Encerrar"
+          confirmDanger
+          onConfirm={() => {
+            const target = ending
+            setEnding(null)
+            void run(end(target.id))
+          }}
+          onCancel={() => setEnding(null)}
+        />
+      ) : null}
     </View>
   )
 }
