@@ -9,6 +9,8 @@ import { closedDayCutoff, SUMMARIZER_SAMPLE_FIELDS } from '../lifecycle/telemetr
 import { healthStatusOf, type HealthStatus } from './health-status'
 import { calibrationViewOf, type CalibrationRows } from './calibration-view'
 import { heartRateReferenceOf } from './heart-rate-reference'
+import { PHONE_KINDS } from '../devices/device-auth.service'
+import { ABSENCE_DEVICE_SELECT, absenceFactsOf, type AbsenceFacts } from './metric-absence'
 import { assembleSeries, seriesBuckets, type SeriesPeriod, type WorkerSeries } from './telemetry-series'
 import type {
   ConditionKind,
@@ -372,7 +374,8 @@ export class TelemetryQueryService {
     })
 
     if (snapshot === null) {
-      const maxBpmByAge = await this.maxBpmByAge(workerId, now)
+      // Celular pareado e caminho ativo antes da primeira amostra é "aguardando".
+      const [maxBpmByAge, absence] = await Promise.all([this.maxBpmByAge(workerId, now), this.absenceFacts(workerId)])
       return asCurrent(
         projectWorker(
           {
@@ -382,6 +385,7 @@ export class TelemetryQueryService {
             dayTotals: { steps: null, activeEnergy: null, distance: null },
             assessment: null,
             conditions: [],
+            absence,
           },
           now,
         ),
@@ -402,7 +406,7 @@ export class TelemetryQueryService {
     // chamada, multiplicadas pelo número de funcionários a cada cinco segundos.
     // Faixas gravadas só existem na origem real; a demonstração mostra a partida.
     const real = snapshot.origin === 'REAL'
-    const [windowSamples, steps, energy, distance, assessments, conditions, calibration, bands, maxBpmByAge] = await Promise.all([
+    const [windowSamples, steps, energy, distance, assessments, conditions, calibration, bands, maxBpmByAge, absence] = await Promise.all([
       this.prisma.telemetrySample.findMany({
         where: { ...scope, eventTime: { gte: new Date(now.getTime() - ENERGY_RATE_WINDOW_MS) } },
         select: SAMPLE_FIELDS,
@@ -465,6 +469,7 @@ export class TelemetryQueryService {
           })
         : [],
       this.maxBpmByAge(workerId, now),
+      this.absenceFacts(workerId),
     ])
 
     return asCurrent(
@@ -480,12 +485,27 @@ export class TelemetryQueryService {
           },
           assessment: assessments.length === 0 ? null : toProjectionAssessment(assessments[0]),
           conditions: conditions.map(toProjectionCondition),
+          absence,
         },
         now,
       ),
       { calibration, bands },
       maxBpmByAge,
     )
+  }
+
+  /**
+   * Os fatos da ausência por métrica, do celular ativo. Só o celular, nunca o
+   * aparelho mais novo de qualquer tipo: o medidor de pressão pareado depois
+   * não pode esconder o Android, e há no máximo um celular ativo.
+   */
+  private async absenceFacts(workerId: string): Promise<AbsenceFacts | null> {
+    const phone = await this.prisma.telemetryDevice.findFirst({
+      where: { workerId, revokedAt: null, kind: { in: [...PHONE_KINDS] } },
+      orderBy: { createdAt: 'desc' },
+      select: ABSENCE_DEVICE_SELECT,
+    })
+    return absenceFactsOf(phone)
   }
 
   /** Máxima por idade da partida do batimento; nula sem data de nascimento (a partida usa 180). */
@@ -667,9 +687,12 @@ export class TelemetryQueryService {
     // lê na origem do próprio snapshot, e a escolha da linha certa é feita em
     // memória, sobre poucas linhas por pessoa.
     const [devices, snapshots, steps, energy, distance, assessments, conditions] = await Promise.all([
+      // As colunas da ausência vêm na mesma leitura: o celular de cada um sai
+      // daqui em memória, sem uma consulta por pessoa.
       this.prisma.telemetryDevice.findMany({
         where: { revokedAt: null, ...ids },
-        select: { workerId: true, lastSeenAt: true },
+        select: { workerId: true, lastSeenAt: true, createdAt: true, ...ABSENCE_DEVICE_SELECT },
+        orderBy: { createdAt: 'desc' },
       }),
       this.prisma.telemetrySnapshot.findMany({ where: ids, select: SNAPSHOT_FIELDS }),
       this.prisma.telemetrySample.groupBy({
@@ -727,9 +750,13 @@ export class TelemetryQueryService {
     const inputs: AdminWorkerInput[] = people.map((person) => {
       const snapshot = snapshotBy.get(person.id)
       const own = (c: { workerId: string }) => c.workerId === person.id
+      const ownDevices = devices.filter(own)
+      // Do mais novo para trás, como na leitura individual.
+      const phone = ownDevices.find((d) => (PHONE_KINDS as readonly string[]).includes(d.kind)) ?? null
+      const absence = absenceFactsOf(phone)
       const base = {
         worker: { id: person.id, name: person.name, sector: person.profile?.sector ?? null },
-        devices: devices.filter(own).map((d) => ({ lastSeenAt: iso(d.lastSeenAt) })),
+        devices: ownDevices.map((d) => ({ lastSeenAt: iso(d.lastSeenAt) })),
       }
       if (snapshot === undefined) {
         return {
@@ -741,6 +768,7 @@ export class TelemetryQueryService {
             dayTotals: { steps: null, activeEnergy: null, distance: null },
             assessment: null,
             conditions: [],
+            absence,
           },
         }
       }
@@ -761,6 +789,7 @@ export class TelemetryQueryService {
           },
           assessment: assessment === undefined ? null : toProjectionAssessment(assessment),
           conditions: conditions.filter(own).map(toProjectionCondition),
+          absence,
         },
       }
     })
@@ -800,6 +829,8 @@ export class TelemetryQueryService {
             dayTotals: { steps: null, activeEnergy: null, distance: null },
             assessment: null,
             conditions: conditions.filter((c) => c.workerId === workerId).map(toProjectionCondition),
+            // O estado de saúde não lê ausência: sem consulta ao celular.
+            absence: null,
           },
           now,
         )
