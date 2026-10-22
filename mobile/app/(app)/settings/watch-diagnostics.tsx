@@ -1,10 +1,11 @@
-import { useState, type PropsWithChildren } from 'react';
+import { useRef, useState, type PropsWithChildren, type RefObject } from 'react';
 import { Image as RNImage, Platform, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text, Title, TopBar, useTheme } from '@kavicki/swi-design-system';
 import { BluetoothHeartRateMonitoring } from '../../../components/telemetry/BluetoothHeartRateMonitoring';
 import { HealthConnectMonitoring } from '../../../components/telemetry/HealthConnectMonitoring';
+import { SettingsReadiness } from '../../../components/telemetry/ReadinessList';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
 import {
   activateMonitoring,
@@ -54,7 +55,15 @@ export default function WatchDiagnostics() {
 }
 
 // O fundo, a rolagem e a TopBar, iguais nos dois caminhos.
-function Moldura({ children }: PropsWithChildren) {
+function Moldura({
+  children,
+  scrollRef,
+  onContentLayout,
+}: PropsWithChildren<{
+  scrollRef?: RefObject<ScrollView | null>;
+  /** Onde o bloco abaixo da TopBar começa, dentro da rolagem. */
+  onContentLayout?: (y: number) => void;
+}>) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -73,6 +82,7 @@ function Moldura({ children }: PropsWithChildren) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1, backgroundColor: 'transparent' }}
         contentContainerStyle={{
           paddingTop: insets.top + theme.padding.xxl,
@@ -83,7 +93,12 @@ function Moldura({ children }: PropsWithChildren) {
       >
         <TopBar title="Monitoramento" onBack={() => router.back()} />
 
-        <View style={{ gap: theme.gap.l, marginTop: theme.padding.xxl }}>{children}</View>
+        <View
+          onLayout={(e) => onContentLayout?.(e.nativeEvent.layout.y)}
+          style={{ gap: theme.gap.l, marginTop: theme.padding.xxl }}
+        >
+          {children}
+        </View>
       </ScrollView>
     </View>
   );
@@ -91,10 +106,32 @@ function Moldura({ children }: PropsWithChildren) {
 
 function MonitoramentoDaPulseira() {
   const router = useRouter();
+  // A lista completa abre a tela. "Escolher a pulseira" não navega: a escolha
+  // está nesta mesma tela, mais abaixo, e a rolagem leva até ela.
+  const rolagem = useRef<ScrollView | null>(null);
+  const inicioDoBloco = useRef(0);
+  const secaoBluetooth = useRef(0);
+  const irParaPulseira = () =>
+    rolagem.current?.scrollTo({ y: inicioDoBloco.current + secaoBluetooth.current, animated: true });
   return (
-    <Moldura>
+    <Moldura
+      scrollRef={rolagem}
+      onContentLayout={(y) => {
+        inicioDoBloco.current = y;
+      }}
+    >
+      <SettingsReadiness onChooseBand={irParaPulseira} />
       <HealthConnectMonitoring onPair={() => router.push(PAREAMENTO)} />
-      {isFeatureEnabled('bluetoothHeartRate') && <BluetoothHeartRateMonitoring />}
+      {isFeatureEnabled('bluetoothHeartRate') && (
+        <View
+          testID="secao-bluetooth"
+          onLayout={(e) => {
+            secaoBluetooth.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <BluetoothHeartRateMonitoring />
+        </View>
+      )}
       <Button
         variant="outline"
         label="Guia da pulseira"
