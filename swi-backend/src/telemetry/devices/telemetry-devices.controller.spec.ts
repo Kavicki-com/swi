@@ -1,5 +1,6 @@
 import type { JwtUser } from '../../auth/current-user.decorator'
 import type { DeviceAuthService } from './device-auth.service'
+import { TelemetryDeviceReadinessController } from './telemetry-device-readiness.controller'
 import { TelemetryDevicesController } from './telemetry-devices.controller'
 
 // O que estes casos protegem não é o roteamento (isso é E2E), e sim de onde vem
@@ -96,5 +97,17 @@ describe('TelemetryDevicesController', () => {
     // de código de seis dígitos, então tem teto próprio e bem menor.
     expect(limit('createEnrollment')).toBe(5)
     expect(limit('complete')).toBe(5)
+  })
+})
+
+describe('TelemetryDeviceReadinessController', () => {
+  it('grava o relato no aparelho da credencial, não em um que o corpo apontasse', async () => {
+    const devices = { reportReadiness: jest.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<DeviceAuthService>
+    const device = { deviceId: 'device-1', workerId: 'worker-1', kind: 'ANDROID_PHONE' as const }
+    const relato = { healthConnect: {}, bluetooth: {} }
+
+    await new TelemetryDeviceReadinessController(devices).report(device, relato)
+
+    expect(devices.reportReadiness).toHaveBeenCalledWith(device, relato)
   })
 })

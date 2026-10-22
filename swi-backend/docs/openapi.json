@@ -2504,6 +2504,37 @@
         ]
       }
     },
+    "/telemetry/v1/devices/me/readiness": {
+      "put": {
+        "operationId": "TelemetryDeviceReadinessController_report",
+        "summary": "",
+        "description": "O relato de prontidão do celular Android. PUT e 204: cada relato substitui\no anterior inteiro, então repetir o mesmo relato deixa o mesmo estado.",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadinessReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "telemetry/devices"
+        ],
+        "security": [
+          {
+            "device": []
+          }
+        ]
+      }
+    },
     "/telemetry/v1/batches": {
       "post": {
         "operationId": "TelemetryIngestionController_ingest",
@@ -4574,6 +4605,117 @@
         },
         "required": [
           "code"
+        ]
+      },
+      "HealthConnectFailureDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "PERMISSION_DENIED",
+              "UNAVAILABLE",
+              "UPDATE_REQUIRED",
+              "OTHER"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "description": "Quando a sincronização falhou, no relógio do celular."
+          }
+        },
+        "required": [
+          "reason",
+          "at"
+        ]
+      },
+      "HealthConnectReadinessDto": {
+        "type": "object",
+        "properties": {
+          "availability": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "AVAILABLE",
+              "UNAVAILABLE",
+              "UPDATE_REQUIRED"
+            ]
+          },
+          "readGranted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Permissão de ler batimento, concedida ou não."
+          },
+          "backgroundGranted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Permissão de ler em segundo plano, concedida ou não."
+          },
+          "manufacturerPackage": {
+            "type": "string",
+            "nullable": true,
+            "description": "Pacote do app do fabricante que gravou no Health Connect. Só o detectado:\na resposta do funcionário à pergunta sobre o app fica no aparelho. Aqui\nnulo não é \"não sei\", é \"nenhum detectado\", e o passo opcional fica pendente.",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "lastSyncAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "Início da última sincronização com sucesso."
+          },
+          "lastFailure": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HealthConnectFailureDto"
+              }
+            ]
+          }
+        }
+      },
+      "BluetoothReadinessDto": {
+        "type": "object",
+        "properties": {
+          "listenerState": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "CONNECTED",
+              "SEARCHING",
+              "BLUETOOTH_OFF",
+              "ENDED"
+            ]
+          },
+          "bandChosen": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Há pulseira escolhida para a escuta por Bluetooth."
+          },
+          "listenerStateSince": {
+            "type": "string",
+            "nullable": true,
+            "description": "Desde quando a escuta está no estado informado, para \"desconectada desde\"."
+          },
+          "lastReadingAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "Hora da última leitura de batimento recebida da pulseira."
+          }
+        }
+      },
+      "ReadinessReportDto": {
+        "type": "object",
+        "properties": {
+          "healthConnect": {
+            "$ref": "#/components/schemas/HealthConnectReadinessDto"
+          },
+          "bluetooth": {
+            "$ref": "#/components/schemas/BluetoothReadinessDto"
+          }
+        },
+        "required": [
+          "healthConnect",
+          "bluetooth"
         ]
       },
       "TelemetryEventDto": {
