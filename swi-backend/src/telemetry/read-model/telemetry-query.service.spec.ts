@@ -22,7 +22,7 @@ const prismaDouble = () =>
     $queryRaw: jest.fn(),
     telemetryAssessment: { findMany: jest.fn() },
     telemetryCondition: { findMany: jest.fn() },
-    telemetryDevice: { findMany: jest.fn() },
+    telemetryDevice: { findMany: jest.fn(), findFirst: jest.fn() },
     telemetrySession: { findUnique: jest.fn() },
     telemetryDailySummary: { findMany: jest.fn() },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
@@ -65,6 +65,25 @@ const NO_TOTALS = {
   _min: { eventTime: null },
 }
 
+/** Celular sem nenhuma métrica recebida ainda. */
+const semChegada = {
+  readinessReportedAt: null,
+  heartRateFirstReceivedAt: null,
+  stepsFirstReceivedAt: null,
+  activeEnergyFirstReceivedAt: null,
+  oxygenSaturationFirstReceivedAt: null,
+  bloodPressureFirstReceivedAt: null,
+}
+
+/** Celular Android com o Health Connect de caminho ativo pelo relato. */
+const androidComCaminho = {
+  ...semChegada,
+  kind: 'ANDROID_PHONE',
+  readinessReportedAt: secondsAgo(60),
+  healthConnectReadGranted: true,
+  healthConnectLastSyncAt: secondsAgo(60),
+}
+
 const emptyReads = (prisma: any) => {
   prisma.telemetrySample.findMany.mockResolvedValue([])
   prisma.telemetrySample.groupBy.mockResolvedValue([])
@@ -73,6 +92,7 @@ const emptyReads = (prisma: any) => {
   prisma.telemetryAssessment.findMany.mockResolvedValue([])
   prisma.telemetryCondition.findMany.mockResolvedValue([])
   prisma.telemetryDevice.findMany.mockResolvedValue([])
+  prisma.telemetryDevice.findFirst.mockResolvedValue(null)
   prisma.telemetrySnapshot.findMany.mockResolvedValue([])
   prisma.workerCalibration.findUnique.mockResolvedValue(null)
   prisma.workerCalibrationBand.findMany.mockResolvedValue([])
@@ -106,6 +126,24 @@ describe('TelemetryQueryService.currentForWorker', () => {
     expect(result.metrics.heartRate.value).toBeNull()
     expect(prisma.telemetrySample.findMany).not.toHaveBeenCalled()
     expect(prisma.telemetrySample.aggregate).not.toHaveBeenCalled()
+  })
+
+  it('celular Android com caminho e sem nenhuma amostra ainda: aguardando, e só o celular é consultado', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.telemetrySnapshot.findUnique.mockResolvedValue(null)
+    prisma.telemetryDevice.findFirst.mockResolvedValue(androidComCaminho)
+
+    const result = await service(prisma).currentForWorker('worker-1', NOW)
+
+    expect(result.metrics.heartRate.ausencia).toBe('AWAITING')
+    expect(result.metrics.battery).not.toHaveProperty('ausencia')
+    expect(prisma.telemetryDevice.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workerId: 'worker-1', revokedAt: null, kind: { in: ['IPHONE', 'ANDROID_PHONE'] } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    )
   })
 
   it('traz as condições ativas da origem do snapshot, da mais antiga para a mais recente', async () => {
@@ -1070,6 +1108,25 @@ describe('TelemetryQueryService.adminWorkers', () => {
       expect.objectContaining({ where: { revokedAt: null, workerId: { in: ['worker-1'] } } }),
     )
     expect(workers[0].device).toEqual({ state: 'PAIRED', lastSeenAt: secondsAgo(30).toISOString() })
+  })
+
+  // A ausência é do celular: o medidor de pressão pareado depois dele é o
+  // aparelho mais novo, mas não tem caminho nem relato.
+  it('a ausência lê o celular ativo, nunca o medidor mais novo', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana')])
+    prisma.telemetryDevice.findMany.mockResolvedValue([
+      { workerId: 'worker-1', lastSeenAt: null, createdAt: secondsAgo(10), kind: 'EXTERNAL_CUFF', ...semChegada },
+      { workerId: 'worker-1', lastSeenAt: null, createdAt: secondsAgo(3600), ...androidComCaminho },
+    ])
+
+    const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
+
+    expect(workers[0].telemetry.metrics.bloodPressure.ausencia).toBe('AWAITING')
+    expect(prisma.telemetryDevice.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
+    )
   })
 
   it('cada funcionário lê na origem do próprio snapshot, sem misturar linhas de outro', async () => {

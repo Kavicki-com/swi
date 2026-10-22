@@ -22,6 +22,7 @@ import {
 } from '../domain/telemetry.types'
 import type { WorkerCalibrationView } from '../calibration/calibration-zone'
 import type { BaselineSource, HeartRateReference } from './heart-rate-reference'
+import { withAbsence, type AbsenceFacts, type WithAbsence } from './metric-absence'
 
 // Projeção do read model do piloto: o único lugar que transforma amostra bruta
 // em número exibido. Puro de propósito, com "now" por parâmetro, como o resto
@@ -160,6 +161,8 @@ export interface WorkerProjectionInput {
   assessment: ProjectionAssessment | null
   /** Condições abertas do funcionário, em qualquer ordem. */
   conditions: readonly ProjectionCondition[]
+  /** Os fatos do celular ativo que decidem a ausência por métrica; nulo sem celular. */
+  absence: AbsenceFacts | null
 }
 
 // ---------------------------------------------------------------------------
@@ -186,20 +189,25 @@ export interface EnergyRateState extends MetricState<number> {
   calculating: boolean
 }
 
+/**
+ * Batimento, passos, energia (acumulado e taxa), oxigenação e pressão dizem a
+ * ausência: `ausencia` nula quando há valor, e "aguardando" ou "não envia"
+ * quando não há, pela regra de metric-absence.
+ */
 export interface WorkerMetrics {
-  heartRate: MetricState<number>
-  steps: MetricState<number>
+  heartRate: WithAbsence<MetricState<number>>
+  steps: WithAbsence<MetricState<number>>
   movementPerMinute: MetricState<number>
-  activeEnergy: MetricState<number>
-  energyRatePerHour: EnergyRateState
+  activeEnergy: WithAbsence<MetricState<number>>
+  energyRatePerHour: WithAbsence<EnergyRateState>
   battery: MetricState<number>
-  bloodPressure: MetricState<BloodPressure>
+  bloodPressure: WithAbsence<MetricState<BloodPressure>>
   effort: MetricState<number>
   wear: MetricState<number>
   /** Acumulado do dia monitorado, em metros. A tela converte para km. */
   distance: MetricState<number>
   /** Medição pontual, com a régua da pressão: "última medição às", nunca "atual". */
-  oxygenSaturation: MetricState<number>
+  oxygenSaturation: WithAbsence<MetricState<number>>
   /** Graus Celsius vindos do app Saúde, com a régua da pressão. Sem alerta. */
   bodyTemperature: MetricState<number>
   /** Minutos até o alerta de desgaste, mantida a intensidade recente. */
@@ -687,19 +695,21 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
 
   const fromSnapshot = snapshotStates(snapshot, now)
   const derived = assessmentStates(assessment, now)
+  const facts = input.absence
 
   const metrics: WorkerMetrics = {
-    heartRate: fromSnapshot.heartRate,
-    steps: metricState('steps', dayTotals.steps, now),
+    heartRate: withAbsence(fromSnapshot.heartRate, facts, 'heartRate', now),
+    steps: withAbsence(metricState('steps', dayTotals.steps, now), facts, 'steps', now),
     movementPerMinute: rateState('movementPerMinute', movement, now),
-    activeEnergy: metricState('activeEnergy', rounded(dayTotals.activeEnergy), now),
-    energyRatePerHour: energyRateState(energy, now),
+    activeEnergy: withAbsence(metricState('activeEnergy', rounded(dayTotals.activeEnergy), now), facts, 'activeEnergy', now),
+    // A taxa sai das mesmas amostras de energia do acumulado: a mesma chegada decide.
+    energyRatePerHour: withAbsence(energyRateState(energy, now), facts, 'activeEnergy', now),
     battery: fromSnapshot.battery,
-    bloodPressure: fromSnapshot.bloodPressure,
+    bloodPressure: withAbsence(fromSnapshot.bloodPressure, facts, 'bloodPressure', now),
     effort: derived.effort,
     wear: derived.wear,
     distance: metricState('distance', rounded(dayTotals.distance), now),
-    oxygenSaturation: fromSnapshot.oxygenSaturation,
+    oxygenSaturation: withAbsence(fromSnapshot.oxygenSaturation, facts, 'oxygenSaturation', now),
     bodyTemperature: fromSnapshot.bodyTemperature,
     fatigueEtaMin: derived.fatigueEtaMin,
   }

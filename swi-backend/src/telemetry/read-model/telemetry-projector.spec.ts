@@ -18,6 +18,7 @@ import {
   type ProjectionSnapshot,
   type WorkerTelemetry,
 } from './telemetry-projector'
+import type { AbsenceFacts } from './metric-absence'
 
 // A projeção é o único lugar que transforma amostra bruta em número exibido, e
 // é por isso que ela é pura: "now" entra por parâmetro, nada aqui lê relógio,
@@ -99,6 +100,7 @@ const project = (
     dayTotals?: DayTotals
     assessment?: ProjectionAssessment | null
     conditions?: readonly ProjectionCondition[]
+    absence?: AbsenceFacts | null
   } = {},
 ): WorkerTelemetry =>
   projectWorker(
@@ -109,6 +111,7 @@ const project = (
       dayTotals: over.dayTotals ?? totals(),
       assessment: over.assessment ?? null,
       conditions: over.conditions ?? [],
+      absence: over.absence ?? null,
     },
     NOW,
   )
@@ -153,6 +156,36 @@ describe('projectWorker: ausência é estado de leitura, nunca zero', () => {
     expect(projected.metrics.heartRate.quality).toBe('CURRENT')
     expect(projected.metrics.battery.value).toBeNull()
     expect(projected.metrics.battery.quality).toBe('UNAVAILABLE')
+  })
+
+  // A regra da ausência mora em metric-absence; aqui, só onde a projeção a põe.
+  it('batimento, passos, energia, oxigenação e pressão sem valor dizem a ausência; as outras não a carregam', () => {
+    const naoEnvia: AbsenceFacts = {
+      deviceKind: 'ANDROID_PHONE',
+      activePaths: ['HEALTH_CONNECT'],
+      firstReceivedAt: {
+        heartRate: at(25 * 60 * 60_000),
+        steps: null,
+        activeEnergy: null,
+        oxygenSaturation: null,
+        bloodPressure: null,
+      },
+    }
+    const projected = project({ absence: naoEnvia })
+
+    const ausencias = Object.fromEntries(
+      Object.entries(projected.metrics)
+        .filter(([, state]) => 'ausencia' in state)
+        .map(([kind, state]) => [kind, (state as { ausencia: unknown }).ausencia]),
+    )
+    expect(ausencias).toEqual({
+      heartRate: null,
+      steps: 'NOT_SENT',
+      activeEnergy: 'NOT_SENT',
+      energyRatePerHour: 'NOT_SENT',
+      oxygenSaturation: 'NOT_SENT',
+      bloodPressure: 'NOT_SENT',
+    })
   })
 })
 
@@ -417,6 +450,7 @@ describe('projectWorker: oxigenação segue a régua da pressão', () => {
       measuredAt: hoursAgo(23),
       source: 'APPLE_WATCH',
       unit: '%',
+      ausencia: null,
     })
   })
 
@@ -1092,6 +1126,7 @@ describe('projectAdminWorkers: lista do painel, uma leitura por funcionário', (
       dayTotals: totals(),
       assessment: null,
       conditions: over.conditions ?? [],
+      absence: null,
     },
   })
 
