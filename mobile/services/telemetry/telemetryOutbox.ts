@@ -58,9 +58,10 @@ export interface OutboxBloodPressure {
  *
  * No Android, o Health Connect traz sete delas com a origem HEALTH_CONNECT,
  * inclusive pressão e temperatura; bateria e contagem de movimento, não.
+ * A pulseira lida direto pelo Bluetooth manda só batimento, com BLUETOOTH_HR.
  */
 export interface OutboxMeasurements {
-  heartRate?: OutboxMeasurement<'bpm', WearableSource>;
+  heartRate?: OutboxMeasurement<'bpm', WearableSource | 'BLUETOOTH_HR'>;
   stepDelta?: OutboxMeasurement<'steps', WearableSource>;
   activeEnergyKcal?: OutboxMeasurement<'kcal', WearableSource>;
   motionCount?: OutboxMeasurement<'count'>;
@@ -105,7 +106,7 @@ const FROM_WATCH_OR_HEALTH_CONNECT = ['APPLE_WATCH', 'HEALTH_CONNECT'] as const;
  * medição nova no contrato não compila até alguém dizer como é validada.
  */
 const MEASUREMENT_RULES: Record<keyof OutboxMeasurements, MeasurementRule> = {
-  heartRate: { unit: 'bpm', sources: FROM_WATCH_OR_HEALTH_CONNECT },
+  heartRate: { unit: 'bpm', sources: [...FROM_WATCH_OR_HEALTH_CONNECT, 'BLUETOOTH_HR'] },
   stepDelta: { unit: 'steps', sources: FROM_WATCH_OR_HEALTH_CONNECT, integer: true, min: 0 },
   activeEnergyKcal: { unit: 'kcal', sources: FROM_WATCH_OR_HEALTH_CONNECT, min: 0 },
   motionCount: { unit: 'count', sources: FROM_WATCH, min: 0 },
