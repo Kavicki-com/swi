@@ -34,6 +34,12 @@ jest.mock('../../../../services/telemetry/TelemetryUploadProvider', () => ({
 
 // O caminho do Health Connect depende do gate e da plataforma, como no
 // pareamento. Desligado por padrão: os casos do iPhone não dependem dele.
+// A seção da pulseira no Bluetooth tem teste próprio
+// (BluetoothHeartRateMonitoring.test.tsx); aqui, só se ela aparece.
+const mockSecaoBluetooth = jest.fn((_props: object) => null);
+jest.mock('../../../../components/telemetry/BluetoothHeartRateMonitoring', () => ({
+  BluetoothHeartRateMonitoring: (props: object) => mockSecaoBluetooth(props),
+}));
 jest.mock('../../../../lib/featureFlags', () => ({
   ...jest.requireActual('../../../../lib/featureFlags'),
   isFeatureEnabled: jest.fn(),
@@ -353,6 +359,21 @@ describe('Configurações, Monitoramento: Android', () => {
       botao!.props.onPress();
     });
     expect(mockPush).toHaveBeenCalledWith('/(onboarding)/watch/pairing?origem=configuracoes');
+  });
+
+  it('com o gate do Bluetooth, a seção da pulseira vem abaixo do Health Connect', async () => {
+    mockGate.mockImplementation((gate) => gate === 'healthConnect' || gate === 'bluetoothHeartRate');
+    mockSecaoBluetooth.mockClear();
+    comEnvioAndroid(true);
+    await render(SEM_SUPORTE);
+    expect(mockSecaoBluetooth).toHaveBeenCalled();
+  });
+
+  it('sem o gate do Bluetooth, a seção da pulseira não aparece', async () => {
+    mockSecaoBluetooth.mockClear();
+    comEnvioAndroid(true);
+    await render(SEM_SUPORTE);
+    expect(mockSecaoBluetooth).not.toHaveBeenCalled();
   });
 
   // Sem o gate (Expo Go, build sem o módulo) não há Health Connect a ler:

@@ -3,6 +3,7 @@ import { Image as RNImage, Platform, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text, Title, TopBar, useTheme } from '@kavicki/swi-design-system';
+import { BluetoothHeartRateMonitoring } from '../../../components/telemetry/BluetoothHeartRateMonitoring';
 import { HealthConnectMonitoring } from '../../../components/telemetry/HealthConnectMonitoring';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
 import {
@@ -27,7 +28,9 @@ import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUp
 // o BPM e Ativar monitoramento. No Android com o gate do Health Connect, a
 // pulseira que grava no Health Connect (HealthConnectMonitoring.tsx): lá o
 // controle do relógio diria "sem suporte", o que é falso para quem usa
-// pulseira, então o caminho do relógio nem roda.
+// pulseira, então o caminho do relógio nem roda. Com o gate do Bluetooth,
+// abaixo dele vem a pulseira que transmite o batimento ao vivo
+// (BluetoothHeartRateMonitoring.tsx).
 
 const PAREAMENTO = '/(onboarding)/watch/pairing?origem=configuracoes';
 
@@ -88,6 +91,7 @@ function MonitoramentoDaPulseira() {
   return (
     <Moldura>
       <HealthConnectMonitoring onPair={() => router.push(PAREAMENTO)} />
+      {isFeatureEnabled('bluetoothHeartRate') && <BluetoothHeartRateMonitoring />}
     </Moldura>
   );
 }
