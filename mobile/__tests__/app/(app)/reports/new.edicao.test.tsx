@@ -93,11 +93,37 @@ const campo = (tree: ReactTestRenderer, label: string) =>
   )[0];
 const porRotulo = (tree: ReactTestRenderer, rotulo: string) =>
   tree.root.findAll((n) => n.props?.accessibilityLabel === rotulo);
-const salvar = async (tree: ReactTestRenderer) => {
+// Em edição o botão é "Salvar alterações"; ao criar, "Salvar relatório".
+const salvar = async (tree: ReactTestRenderer, rotulo = 'Salvar alterações') => {
   await act(async () => {
-    await porRotulo(tree, 'Salvar relatório')[0].props.onPress();
+    await porRotulo(tree, rotulo)[0].props.onPress();
   });
 };
+const textos = (tree: ReactTestRenderer) =>
+  tree.root
+    .findAll((n) => typeof n.props?.children === 'string')
+    .map((n) => n.props.children as string);
+
+describe('Revisar relatório: textos da edição', () => {
+  it('o título da tela é Revisar relatório e o botão é Salvar alterações', async () => {
+    const tree = await montar();
+
+    expect(textos(tree)).toContain('Revisar relatório');
+    expect(textos(tree)).not.toContain('Novo relatório');
+    expect(porRotulo(tree, 'Salvar alterações').length).toBeGreaterThan(0);
+    expect(porRotulo(tree, 'Salvar relatório')).toHaveLength(0);
+  });
+
+  it('ao criar, seguem Novo relatório e Salvar relatório', async () => {
+    mockParams = {};
+    const tree = await montar();
+
+    expect(textos(tree)).toContain('Novo relatório');
+    expect(textos(tree)).not.toContain('Revisar relatório');
+    expect(porRotulo(tree, 'Salvar relatório').length).toBeGreaterThan(0);
+    expect(porRotulo(tree, 'Salvar alterações')).toHaveLength(0);
+  });
+});
 
 describe('Revisar relatório: formulário preenchido', () => {
   it('carrega o relatório do id e preenche título, resumo e detalhes', async () => {
@@ -212,7 +238,7 @@ describe('Novo relatório sem id continua criando', () => {
         campo(tree, label).props.onChangeText('x');
       });
     }
-    await salvar(tree);
+    await salvar(tree, 'Salvar relatório');
 
     expect(criar).toHaveBeenCalled();
     expect(editar).not.toHaveBeenCalled();

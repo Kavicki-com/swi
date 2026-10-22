@@ -7,7 +7,8 @@ import type { Colleague } from '../../../../services/positions/types';
 
 // "Ver câmera" na ficha do colega não fazia nada. O funcionário não assiste a
 // transmissão de ninguém (só o painel assiste); o botão abre o mapa geral com
-// a camada de câmeras ligada, centrado no colega quando a posição dele chegou.
+// as camadas de câmeras e de pessoas ligadas (o pino do colega aparece),
+// centrado no colega quando a posição dele chegou.
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
@@ -80,7 +81,7 @@ afterEach(async () => {
 });
 
 describe('Ficha do colega: Ver câmera', () => {
-  it('abre o mapa geral com as câmeras ligadas, centrado no colega', async () => {
+  it('abre o mapa geral com câmeras e pessoas ligadas, centrado no colega', async () => {
     mockListColleagues.mockResolvedValue([colega('w9', -10, -40), colega('w1', -23.5, -46.6)]);
     const tree = await abrir();
 
@@ -88,7 +89,7 @@ describe('Ficha do colega: Ver câmera', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/(app)/map',
-      params: { cameras: '1', lat: '-23.5', lng: '-46.6' },
+      params: { cameras: '1', operators: '1', lat: '-23.5', lng: '-46.6' },
     });
   });
 
@@ -98,7 +99,7 @@ describe('Ficha do colega: Ver câmera', () => {
 
     act(() => verCamera(tree).props.onPress());
 
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/(app)/map', params: { cameras: '1' } });
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/(app)/map', params: { cameras: '1', operators: '1' } });
   });
 
   it('com a leitura dos colegas falhando, também abre sem centro', async () => {
@@ -107,6 +108,6 @@ describe('Ficha do colega: Ver câmera', () => {
 
     act(() => verCamera(tree).props.onPress());
 
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/(app)/map', params: { cameras: '1' } });
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/(app)/map', params: { cameras: '1', operators: '1' } });
   });
 });

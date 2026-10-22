@@ -279,6 +279,8 @@ export default function NewReport() {
   };
 
 
+  const saveLabel = editId ? 'Salvar alterações' : 'Salvar relatório';
+
   if (load !== 'ready') {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -333,7 +335,7 @@ export default function NewReport() {
 
         {/* Form title — Montserrat Bold 20 content.primary */}
         <Title variant="title.s" color={theme.content.primary}>
-          Novo relatório
+          {editId ? 'Revisar relatório' : 'Novo relatório'}
         </Title>
 
         {/* Inputs */}
@@ -472,9 +474,9 @@ export default function NewReport() {
           variant="contained"
           backgroundColor={theme.surface.primary}
           labelColor={theme.content.light}
-          label="Salvar relatório"
+          label={saveLabel}
           elevation="lg"
-          accessibilityLabel="Salvar relatório"
+          accessibilityLabel={saveLabel}
           disabled={saving}
           onPress={save}
         />

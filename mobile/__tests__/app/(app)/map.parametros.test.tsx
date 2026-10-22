@@ -3,8 +3,9 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import MapaGeral from '../../../app/(app)/map';
 
 // O mapa geral aberto pelo "Ver câmera" da ficha do colega: `cameras=1` liga a
-// camada de câmeras ao abrir, e `lat`/`lng` centram no colega no lugar da
-// posição do aparelho. Sem parâmetro o mapa abre como sempre.
+// camada de câmeras ao abrir, `operators=1` a de pessoas (o pino do colega), e
+// `lat`/`lng` centram no colega no lugar da posição do aparelho. Sem parâmetro
+// o mapa abre como sempre.
 
 const MINA: [number, number] = [-43.9, -19.9];
 
@@ -29,7 +30,18 @@ jest.mock('@/lib/featureFlags', () => ({
 jest.mock('@/services/positions/getPositionsBackend', () => ({
   getPositionsBackend: () => ({
     heartbeat: jest.fn(),
-    listColleagues: async () => [],
+    listColleagues: async () => [
+      {
+        id: 'w1',
+        name: 'Ana Souza',
+        lat: -23.5,
+        lng: -46.6,
+        sector: null,
+        avatar: '',
+        recordedAt: '2026-10-03T12:00:00.000Z',
+        status: 'good',
+      },
+    ],
     heat: async () => ({ cellSizeM: 50, from: '', to: '', cells: [] }),
   }),
 }));
@@ -86,6 +98,11 @@ const render = async () => {
 const porTestID = (tree: ReactTestRenderer, id: string) =>
   tree.root.findAll((n) => n.props?.testID === id)[0];
 
+const botaoPessoas = (tree: ReactTestRenderer) =>
+  tree.root.findAll(
+    (n) => n.props?.accessibilityLabel === 'Operadores' && typeof n.props?.onPress === 'function',
+  )[0];
+
 const botaoCameras = (tree: ReactTestRenderer) =>
   tree.root.findAll(
     (n) => n.props?.accessibilityLabel === 'Câmeras' && typeof n.props?.onPress === 'function',
@@ -115,6 +132,22 @@ describe('Mapa geral: aberto pelo Ver câmera', () => {
     expect(mockListCameras).toHaveBeenCalled();
     expect(porTestID(tree, 'marker-camera-a')).toBeDefined();
     expect(botaoCameras(tree).props.active).toBe(true);
+  });
+
+  it('operators=1 abre com a camada de pessoas ligada e o pino do colega no mapa', async () => {
+    mockParams = { cameras: '1', operators: '1', lat: '-23.5', lng: '-46.6' };
+    const tree = await render();
+
+    expect(botaoPessoas(tree).props.active).toBe(true);
+    expect(porTestID(tree, 'marker-worker-w1').props.coordinate).toEqual([-46.6, -23.5]);
+  });
+
+  it('sem operators, a camada de pessoas abre desligada', async () => {
+    mockParams = { cameras: '1' };
+    const tree = await render();
+
+    expect(botaoPessoas(tree).props.active).toBe(false);
+    expect(porTestID(tree, 'marker-worker-w1')).toBeUndefined();
   });
 
   it('a camada ligada pelo parâmetro desliga no toque, como sempre', async () => {

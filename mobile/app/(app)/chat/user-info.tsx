@@ -48,8 +48,9 @@ export default function ChatUserInfo() {
   const colleagues = usePolledRead(contact !== null, readColleagues, COLLEAGUES_REFRESH_MS);
 
   // O funcionário não assiste a transmissão de ninguém: "Ver câmera" abre o
-  // mapa geral com a camada de câmeras ligada, centrado no colega quando a
-  // posição dele chegou (a leitura só lista quem tem posição recente).
+  // mapa geral com as camadas de câmeras e de pessoas ligadas (o pino do
+  // colega aparece), centrado no colega quando a posição dele chegou (a
+  // leitura só lista quem tem posição recente).
   const openCameras = () => {
     const position = colleagues.failed
       ? undefined
@@ -57,8 +58,8 @@ export default function ChatUserInfo() {
     router.push({
       pathname: '/(app)/map',
       params: position
-        ? { cameras: '1', lat: String(position.lat), lng: String(position.lng) }
-        : { cameras: '1' },
+        ? { cameras: '1', operators: '1', lat: String(position.lat), lng: String(position.lng) }
+        : { cameras: '1', operators: '1' },
     });
   };
 

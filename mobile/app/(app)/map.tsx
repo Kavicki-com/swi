@@ -68,9 +68,10 @@ const RADIUS_RINGS = [
 ] as const;
 
 // Parâmetros de quem abre o mapa já apontado (o "Ver câmera" da ficha do
-// colega): `cameras=1` liga a camada de câmeras, `lat`/`lng` centram ali no
-// lugar da posição do aparelho. Coordenada que não é número é ignorada.
-type MapParams = { cameras?: string; lat?: string; lng?: string };
+// colega): `cameras=1` liga a camada de câmeras, `operators=1` a de pessoas,
+// `lat`/`lng` centram ali no lugar da posição do aparelho. Coordenada que não
+// é número é ignorada.
+type MapParams = { cameras?: string; operators?: string; lat?: string; lng?: string };
 
 function focusFrom({ lat, lng }: MapParams): [number, number] | null {
   if (lat === undefined || lng === undefined || lat.trim() === '' || lng.trim() === '') return null;
@@ -99,7 +100,7 @@ function MapViewGeneralScreen() {
   // Cada botão é um simple toggle: tap liga, tap de novo desliga.
   // O botão heatmap controla AMBAS sub-layers (produtividade + zonas-alerta)
   // simultaneamente — não há expand-panel admin-style no mobile.
-  const [showOperators, setShowOperators] = useState(false);
+  const [showOperators, setShowOperators] = useState(params.operators === '1');
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showCameras, setShowCameras] = useState(params.cameras === '1');
 
