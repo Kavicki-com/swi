@@ -192,8 +192,13 @@ export function HealthConnectMonitoring({ onPair }: { onPair: () => void }) {
       {pulseira !== null && <View style={{ gap: theme.gap.s }}>{pulseira}</View>}
 
       {/* O `lastSyncAt` vem do arquivo do leitor: é um fato mesmo com o
-          Health Connect fora agora, e diz de quando é o último dado. */}
-      {healthConnect !== null && (
+          Health Connect fora agora, e diz de quando é o último dado. Só com
+          pareamento: revogado pelo painel, o aparelho some e a fila é
+          descartada, mas o arquivo guarda a hora da última rodada, e "há 10
+          min" ao lado de "Aparelho não pareado" diria que o painel recebeu
+          algo que nunca recebeu. O pareamento novo zera o arquivo
+          (`resetForNewPairing`), e a linha volta do zero. */}
+      {paired && healthConnect !== null && (
         <Text variant="body.s" color={theme.content.dark}>
           {lastSyncCopy(healthConnect.lastSyncAt, now)}
         </Text>
