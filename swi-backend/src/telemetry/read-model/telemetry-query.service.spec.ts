@@ -135,6 +135,7 @@ describe('TelemetryQueryService.currentForWorker', () => {
         kind: 'HEART_RATE_HIGH',
         category: 'URGENT',
         openedAt: secondsAgo(90).toISOString(),
+        measuredAt: secondsAgo(5).toISOString(),
         observedValue: 185,
         thresholdValue: 167,
       },

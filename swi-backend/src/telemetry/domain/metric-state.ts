@@ -221,7 +221,7 @@ export const toMs = (iso: string | Date): number =>
 export const isReadableInstant = (iso: string | Date): boolean => !Number.isNaN(toMs(iso))
 
 /** Idade em ms; horário no futuro conta como zero, nunca como "mais atual". */
-function ageMs(measuredAt: string, now: Date | string): number {
+export function ageMs(measuredAt: string, now: Date | string): number {
   return Math.max(0, toMs(now) - toMs(measuredAt))
 }
 
