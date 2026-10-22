@@ -6,6 +6,7 @@ import type { IconName } from '@kavicki/swi-design-system'
 import type { HeartRateReference, MetricState, WorkerTelemetry } from '@/services/api/telemetry'
 import { pluralize } from '@/lib/pluralize'
 import { whenLabel } from '@/lib/whenLabel'
+import { absenceLabelOf } from './absenceLabel'
 import {
   CHECKING_DEVICE_LABEL,
   DEMO_DATA_LABEL,
@@ -80,6 +81,11 @@ function lastAt(prefix: string, measuredAt: string | null, now: number): string 
 type Reading = Pick<MeasurementEntry, 'value' | 'caption'>
 
 const NOTHING: Reading = { value: null, caption: null }
+
+// Sem valor, a ausência decidida pelo backend ("Aguardando medição", "Esta
+// pulseira não envia oxigenação") vira a legenda; a rosca continua na tela.
+const orAbsence = (reading: Reading, absence: string | null): Reading =>
+  reading.value === null && absence !== null ? { ...reading, caption: absence } : reading
 
 /** Medição pontual (oxigenação, temperatura): valor e quando foi medida. */
 function spot(state: MetricState<number>, format: (n: number) => string, now: number): Reading {
@@ -163,7 +169,10 @@ export function measurementsViewFrom(
         'Oxigenação',
         'Saturação',
         'water_drop',
-        spot(oxygenSaturation, (n) => `${integer(n)}%`, now),
+        orAbsence(
+          spot(oxygenSaturation, (n) => `${integer(n)}%`, now),
+          absenceLabelOf('oxygen', oxygenSaturation),
+        ),
         calibrationLineOf(cal, 'OXYGEN_SATURATION'),
         oxygenSaturation.value === null
           ? 0
@@ -183,7 +192,7 @@ export function measurementsViewFrom(
         'Passos',
         'Passos dados',
         'footprint',
-        daily(steps, integer),
+        orAbsence(daily(steps, integer), absenceLabelOf('steps', steps)),
         calibrationLineOf(cal, 'STEPS', { withZone: false }),
       ),
       // Metros do dia em km com uma casa, também abaixo de 1 km ("0,4 km").

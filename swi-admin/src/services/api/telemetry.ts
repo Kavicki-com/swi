@@ -30,16 +30,30 @@ export type MetricState<T> = {
   unit: string
 }
 
+/**
+ * Por que a métrica está sem valor, decidido pelo backend: o caminho está
+ * ativo e ela ainda não chegou (AWAITING), ou 24 h depois da primeira
+ * sincronização ela nunca chegou (NOT_SENT).
+ */
+export type MetricAbsence = 'AWAITING' | 'NOT_SENT'
+
+/**
+ * Métrica que leva ausência. `ausencia` é nula com valor, sem caminho ativo e
+ * no iPhone; opcional porque um backend anterior responde sem o campo, e aí
+ * vale como nula.
+ */
+export type AbsentMetricState<T> = MetricState<T> & { ausencia?: MetricAbsence | null }
+
 export type BloodPressure = { systolic: number; diastolic: number }
 
 export type WorkerMetrics = {
-  heartRate: MetricState<number>
-  steps: MetricState<number>
+  heartRate: AbsentMetricState<number>
+  steps: AbsentMetricState<number>
   movementPerMinute: MetricState<number>
-  activeEnergy: MetricState<number>
-  energyRatePerHour: MetricState<number> & { calculating: boolean }
+  activeEnergy: AbsentMetricState<number>
+  energyRatePerHour: AbsentMetricState<number> & { calculating: boolean }
   battery: MetricState<number>
-  bloodPressure: MetricState<BloodPressure>
+  bloodPressure: AbsentMetricState<BloodPressure>
   /** 0-100. */
   effort: MetricState<number>
   /** 0-100. */
@@ -47,7 +61,7 @@ export type WorkerMetrics = {
   /** Acumulado do dia, em metros. */
   distance: MetricState<number>
   /** Medição pontual: "última medição às", nunca "atual". */
-  oxygenSaturation: MetricState<number>
+  oxygenSaturation: AbsentMetricState<number>
   /** Medição pontual vinda do app Saúde, em °C. */
   bodyTemperature: MetricState<number>
   /** Minutos até o alerta de desgaste no ritmo recente. */

@@ -3,6 +3,7 @@
 // LineCaloriesChart do DS interrompe a linha ali: zero aqui é medição de zero,
 // nunca ausência.
 import type { SeriesPeriod, WorkerSeries } from '@/services/api/telemetry'
+import { NO_DEVICE_LABEL } from './vitalsView'
 
 export type CaloriesPoint = { time: string; kcal: number | null }
 
@@ -41,4 +42,21 @@ export function caloriesPointsFrom(series: WorkerSeries): CaloriesPoint[] {
     time: label(p.start, series.bucket),
     kcal: p.activeEnergyKcal === null ? null : Math.round(p.activeEnergyKcal),
   }))
+}
+
+/**
+ * Frase do gráfico quando não há curva a desenhar, ou null para desenhá-la.
+ * Período sem nenhum ponto diz a ausência que o backend decidiu para a energia
+ * ("Aguardando leitura", "Esta pulseira não envia energia"); sem ausência, a
+ * frase neutra do período.
+ */
+export function caloriesEmptyOf(
+  series: { points: CaloriesPoint[]; loading: boolean; failed: boolean; noDevice: boolean },
+  energyAbsence: string | null,
+): string | null {
+  if (series.noDevice) return NO_DEVICE_LABEL
+  if (series.loading) return 'Carregando…'
+  if (series.failed) return 'Gasto calórico indisponível no momento'
+  if (series.points.length > 0) return null
+  return energyAbsence ?? 'Nenhuma leitura neste período'
 }

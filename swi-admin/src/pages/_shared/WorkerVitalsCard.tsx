@@ -45,17 +45,33 @@ export function WorkerVitalsCard({ vitals }: { vitals: WorkerVitalsView }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Icon name="heart_filled" size={20} color={theme.content.light} />
-            <Text variant="body.s" color={theme.content.light} style={{ fontWeight: '700' }}>
-              {`${vitals.heartRate ?? NO_VALUE} `}
-              <Text variant="body.s" color={theme.content.light}>
-                bpm
-              </Text>
+            {/* Sem valor, o rótulo de ausência do backend toma o lugar do
+                traço; sem ausência, fica o traço. */}
+            <Text
+              variant="body.s"
+              color={theme.content.light}
+              style={{ fontWeight: '700' }}
+              testID="vitals-heart-rate"
+            >
+              {vitals.absence.heartRate ?? (
+                <>
+                  {`${vitals.heartRate ?? NO_VALUE} `}
+                  <Text variant="body.s" color={theme.content.light}>
+                    bpm
+                  </Text>
+                </>
+              )}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Icon name="vitals_pulse" size={20} color={theme.content.light} />
-            <Text variant="body.s" color={theme.content.light} style={{ fontWeight: '700' }}>
-              {vitals.pressure ?? NO_VALUE}
+            <Text
+              variant="body.s"
+              color={theme.content.light}
+              style={{ fontWeight: '700' }}
+              testID="vitals-pressure"
+            >
+              {vitals.absence.pressure ?? vitals.pressure ?? NO_VALUE}
             </Text>
           </View>
         </View>
