@@ -12,6 +12,7 @@ import {
   Icon,
   ProgressBar,
   StatusChart as DSStatusChart,
+  StatusTag,
   Text,
   Toast,
   useTheme,
@@ -560,6 +561,7 @@ export default function Dashboard() {
           <Text variant="body.m" color={theme.content.dark}>
             {view.fatigueText}
           </Text>
+          {view.calibrationTag ? <StatusTag status="info" label={view.calibrationTag} /> : null}
           {/* Em que pé está a leitura e, quando não vem do relógio real, o
               selo de origem. Linha de Text do DS: o Figma não tem esse slot. */}
           <Text variant="caption.s" color={theme.content.dark}>

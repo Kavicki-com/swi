@@ -16,6 +16,7 @@ import {
   LineCaloriesChart,
   ProgressBar,
   StatusChart,
+  StatusTag,
   Text,
   Title,
   useTheme,
@@ -389,6 +390,9 @@ export default function MyStats() {
           <Text variant="body.m" color={theme.content.dark}>
             {view.fatigueText}
           </Text>
+          {/* Selo da régua do desgaste e do esforço: "Calibrando, dia N de
+              30" ou "Estimativa provisória". Mesmo selo do dashboard. */}
+          {view.calibrationTag ? <StatusTag status="info" label={view.calibrationTag} /> : null}
           {/* Em que pé está a leitura e, quando não vem do relógio real, o
               selo de origem. Mesma linha do dashboard. */}
           <Text variant="caption.s" color={theme.content.dark}>
