@@ -236,6 +236,8 @@ describe('copy do Health Connect no pareamento', () => {
       'Procurando a pulseira no Health Connect…',
     );
     expect(bandDetectedCopy('Zepp')).toBe('Pulseira detectada: Zepp');
+    // Sem nome conhecido, a frase não repete "Pulseira".
+    expect(bandDetectedCopy('Pulseira')).toBe('Pulseira detectada');
     expect(HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseira).toBe('Nenhuma pulseira encontrada');
     expect(HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseiraConselho).toMatch(/app da sua pulseira/);
     expect(HEALTH_CONNECT_PAIRING_COPY.nenhumaPulseiraConselho).toMatch(/Health Connect/);

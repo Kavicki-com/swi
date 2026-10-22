@@ -258,6 +258,12 @@ describe('Monitoramento no Android: pulseira, sincronização e envio', () => {
     expect(botao(tree, 'Parear aparelho')).toBeUndefined();
   });
 
+  it('pulseira sem nome conhecido: a frase não repete "Pulseira"', async () => {
+    comEnvio({ healthConnect: estadoHC({ bandPackage: 'com.exemplo.pulseira', bandLabel: 'Pulseira' }) });
+    const tree = await montar();
+    expect(tags(tree)).toEqual([{ label: 'Pulseira detectada', status: 'accept' }]);
+  });
+
   it('a última sincronização anda com o relógio, com a tela aberta', async () => {
     const tree = await montar();
     expect(texto(tree)).toContain('Última sincronização há 3 min');

@@ -175,9 +175,18 @@ export function healthConnectInstallCopy(
       };
 }
 
-/** O nome vem de `bandLabel` do leitor: o do app da pulseira, ou o pacote. */
+/**
+ * O nome de uma pulseira cujo app não está entre os conhecidos: o pacote
+ * Android cru (com.exemplo.pulseira) não diz nada a quem usa o app.
+ */
+export const UNKNOWN_BAND_LABEL = 'Pulseira';
+
+/**
+ * O nome vem de `bandLabel` do leitor: o do app da pulseira, ou
+ * `UNKNOWN_BAND_LABEL`, que não se repete depois de "Pulseira detectada".
+ */
 export function bandDetectedCopy(bandLabel: string): string {
-  return `Pulseira detectada: ${bandLabel}`;
+  return bandLabel === UNKNOWN_BAND_LABEL ? 'Pulseira detectada' : `Pulseira detectada: ${bandLabel}`;
 }
 
 /**

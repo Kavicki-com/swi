@@ -1,6 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import { uuid } from 'expo-modules-core';
 import type { OutboxEvent, OutboxStorage, TelemetryOutbox } from '../telemetryOutbox';
+import { UNKNOWN_BAND_LABEL } from '../telemetryCopy';
 import {
   HEALTH_CONNECT_RECORD_TYPES,
   HEALTH_CONNECT_WINDOW_MS,
@@ -58,7 +59,7 @@ export const HEALTH_CONNECT_STATE_FILE_NAME = 'healthconnect-state.json';
 /**
  * Nome legível do app de cada pulseira, pelo pacote Android que aparece em
  * `metadata.dataOrigin`. Só pacotes conferidos; um desconhecido aparece em
- * tela pelo próprio pacote (`bandLabelOf`).
+ * tela como "Pulseira" (`bandLabelOf`).
  */
 export const BAND_LABELS: Readonly<Record<string, string>> = {
   // O app das Amazfit.
@@ -71,13 +72,13 @@ export const BAND_LABELS: Readonly<Record<string, string>> = {
   'com.huawei.health': 'Huawei Health',
 };
 
-/** O nome para mostrar: o legível quando conhecido, senão o pacote; nulo sem pacote. */
+/** O nome para mostrar: o legível quando conhecido, senão "Pulseira"; nulo sem pacote. */
 export function bandLabelOf(bandPackage: string | null): string | null {
   if (bandPackage === null) return null;
   // Pela chave própria: `toString` existe em todo objeto e não é pulseira.
   return Object.prototype.hasOwnProperty.call(BAND_LABELS, bandPackage)
     ? BAND_LABELS[bandPackage]
-    : bandPackage;
+    : UNKNOWN_BAND_LABEL;
 }
 
 type Loose = Record<string, unknown>;

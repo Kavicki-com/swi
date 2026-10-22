@@ -615,6 +615,19 @@ describe('pareamento: Android', () => {
     expect(tags(tree)).toEqual([{ label: 'Pulseira detectada: Zepp', status: 'accept' }]);
   });
 
+  it('com a pulseira sem nome conhecido, a frase não repete "Pulseira"', async () => {
+    comEnvio({
+      paired: true,
+      healthConnect: estadoHC({
+        permission: 'granted',
+        bandPackage: 'com.exemplo.pulseira',
+        bandLabel: 'Pulseira',
+      }),
+    });
+    const tree = await render();
+    expect(tags(tree)).toEqual([{ label: 'Pulseira detectada', status: 'accept' }]);
+  });
+
   it('sem pulseira, avisa e diz o que conferir', async () => {
     comEnvio({
       paired: true,
