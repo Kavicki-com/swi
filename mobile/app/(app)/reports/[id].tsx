@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Image as RNImage, ScrollView, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Image as RNImage, ScrollView, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -52,6 +52,10 @@ export default function ReportDetails() {
   const [comment, setComment] = useState('');
   // Comentário que não entrou na fila de envios porque ela está no teto.
   const [queueFull, setQueueFull] = useState(false);
+  // O "Fazer comentário" do topo leva ao campo, que fica no fim da tela: o
+  // foco abre o teclado e o KeyboardAwareScrollView rola até ele.
+  const commentInput = useRef<TextInput>(null);
+  const focusComment = useCallback(() => commentInput.current?.focus(), []);
 
   useEffect(() => {
     let active = true;
@@ -205,7 +209,7 @@ export default function ReportDetails() {
                 labelColor={theme.content.primary}
                 label="Fazer comentário"
                 accessibilityLabel="Fazer comentário"
-                onPress={() => {}}
+                onPress={focusComment}
                 iconLeft={
                   <Icon name="chat_bubble_outline" size={18} color={theme.content.primary} />
                 }
@@ -409,6 +413,7 @@ export default function ReportDetails() {
         ) : null}
 
         <Input
+          ref={commentInput}
           label="Adicionar comentário"
           placeholder="Digite aqui o seu comentário"
           value={comment}
