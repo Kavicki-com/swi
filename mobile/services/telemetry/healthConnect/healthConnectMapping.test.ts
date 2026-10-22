@@ -531,6 +531,41 @@ describe('sessão e sequência', () => {
     ]);
   });
 
+  // Duas leituras de SpO2 no mesmo segundo: só a primeira chega ao painel, por
+  // desenho. A sequência tem uma vaga por tipo e por segundo, então dois
+  // registros do mesmo tipo no
+  // mesmo segundo saem daqui com ids diferentes e a MESMA sequência, e o
+  // backend recusa o segundo como conflito de sequência. Este teste prende o
+  // contrato; mudar a fórmula mudaria a sequência de toda amostra já enviada.
+  it('dois registros do mesmo tipo no mesmo segundo têm ids diferentes e a mesma sequência', () => {
+    const { ctx } = contexto();
+    const { events, discarded } = mapHealthConnectRecords(
+      [oxigenacao('ox-a', 97, -300), oxigenacao('ox-b', 95, -300)],
+      ctx,
+    );
+    expect(events).toHaveLength(2);
+    expect(discarded).toBe(0);
+    expect(events[0].eventId).not.toBe(events[1].eventId);
+    expect(sequencias(events)).toEqual([
+      sequenciaDe(-300, 'OxygenSaturation'),
+      sequenciaDe(-300, 'OxygenSaturation'),
+    ]);
+  });
+
+  // O mesmo registro reescrito no lugar (mesmo `metadata.id`, mesmo instante,
+  // outro valor) reproduz o mesmo evento, com o valor novo: o backend o vê
+  // como conflito de id ("mesmo identificador com conteúdo diferente") e o
+  // valor revisado nunca chega. Consequência aceita do id determinístico, que
+  // é o que torna a releitura das 48 h inofensiva.
+  it('o mesmo registro com outro valor reproduz o mesmo id, sessão e sequência', () => {
+    const { ctx } = contexto();
+    const antes = mapHealthConnectRecords([oxigenacao('ox', 97, -300)], ctx).events[0];
+    const depois = mapHealthConnectRecords([oxigenacao('ox', 95, -300)], ctx).events[0];
+    expect(identidade(depois)).toEqual(identidade(antes));
+    expect(antes.measurements.oxygenSaturation?.value).toBe(97);
+    expect(depois.measurements.oxygenSaturation?.value).toBe(95);
+  });
+
   it('o último segundo do dia ainda cabe: a sequência é inteira e não negativa', () => {
     const { ctx } = contexto();
     const { events } = mapHealthConnectRecords(

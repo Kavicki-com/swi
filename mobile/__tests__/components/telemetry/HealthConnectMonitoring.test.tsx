@@ -283,6 +283,27 @@ describe('Monitoramento no Android: pulseira, sincronização e envio', () => {
     expect(mockParear).toHaveBeenCalledTimes(1);
   });
 
+  // Revogado pelo painel, o aparelho some e a fila é descartada, mas o
+  // arquivo do leitor ainda guarda a hora da última rodada: "Última
+  // sincronização há 10 min" ao lado de "Aparelho não pareado" diria que o
+  // painel recebeu algo que ele nunca recebeu. Sem pareamento a linha some,
+  // inclusive a de "ainda não houve", que sem aparelho não acrescenta nada.
+  it('sem pareamento não mostra a última sincronização, nem que não houve', async () => {
+    comEnvio({ paired: false });
+    const tree = await montar();
+    expect(texto(tree)).not.toContain('Última sincronização');
+    expect(texto(tree)).not.toContain('Ainda não houve sincronização');
+
+    comEnvio({ paired: false, healthConnect: estadoHC({ lastSyncAt: null }) });
+    await renderDeNovo(tree);
+    expect(texto(tree)).not.toContain('Ainda não houve sincronização');
+
+    // Pareou de novo: a linha volta com o que o leitor tiver.
+    comEnvio({ paired: true, healthConnect: estadoHC({ lastSyncAt: null }) });
+    await renderDeNovo(tree);
+    expect(texto(tree)).toContain('Ainda não houve sincronização com o Health Connect.');
+  });
+
   // Sem a leitura permitida a rodada não lê nada: o botão primário só
   // piscaria. A mesma regra do Redetectar.
   it('pareado sem leitura permitida não oferece sincronizar', async () => {
