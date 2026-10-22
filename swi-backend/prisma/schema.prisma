@@ -677,6 +677,9 @@ enum TelemetryConditionRecoveryReason {
   /// A regra que abriu a condição foi aposentada (revisão de pressão trocada
   /// pela calibração individual).
   PROFILE_RETIRED
+  /// Condição de saúde sem medição nova da métrica em 24 h ("Encerrada sem
+  /// leitura nova"). Não diz que a pessoa melhorou, e o alerta continua aberto.
+  NO_NEW_READING
 }
 
 enum OperationalAlertStatus {
@@ -1023,6 +1026,8 @@ model TelemetryCondition {
   /// pessoa que fechou. Motivo próprio porque perda de sinal não tem valor nem
   /// banda: gravá-la como NORMALIZED faria a auditoria confundir batimento que
   /// normalizou com relógio que reconectou, justo na condição que mais oscila.
+  /// NO_NEW_READING: 24 h sem medição nova da métrica, para o que o silêncio
+  /// não cobre (pressão, oxigenação, lote do Health Connect).
   recoveryReason   TelemetryConditionRecoveryReason?
   /// Dia da calibração individual quando a condição abriu (1 a 30). Nulo
   /// depois do 30º dia válido e na DEMO: é o que leva o selo ao alerta.

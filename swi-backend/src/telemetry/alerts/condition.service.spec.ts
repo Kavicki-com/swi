@@ -5,8 +5,11 @@ import type { TelemetryAudienceService } from '../realtime/telemetry-audience.se
 import type { TelemetryHealthNotifier } from './health-notifier'
 import { ALERT_PROFILE_VERSION, CALIBRATED_ALERT_PROFILE_VERSION } from './alert-profile'
 import {
+  MAX_NO_NEW_READING_PER_RUN,
   MAX_SILENT_SESSIONS_PER_RUN,
   MONITORED_SILENCE_FLOOR_MS,
+  NO_NEW_READING_METRIC,
+  NO_NEW_READING_MS,
   TelemetryConditionService,
 } from './condition.service'
 
@@ -89,7 +92,8 @@ const readingsOfAnotherSession = (readings: { battery?: unknown; pressure?: unkn
  * caminho, e os casos precisam separar as duas inserções de uma rodada.
  */
 const isInsert = (call: unknown[]) =>
-  (call[0] as TemplateStringsArray).join('?').includes('INSERT INTO "TelemetryCondition"')
+  Array.isArray(call[0]) &&
+  (call[0] as unknown as TemplateStringsArray).join('?').includes('INSERT INTO "TelemetryCondition"')
 const insertCalls = (fn: jest.Mock) => fn.mock.calls.filter(isInsert)
 const insertSql = (fn: jest.Mock, i = 0) =>
   (insertCalls(fn)[i][0] as TemplateStringsArray).join('?').replace(/\s+/g, ' ').trim()
@@ -103,6 +107,7 @@ const prismaDouble = () => {
     telemetryCondition: {
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockImplementation(async ({ data }: any) => data),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       // Só a pulseira cria condição pelo cliente: a que já nasce recuperada.
       create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'condition-history', ...data })),
     },
@@ -139,7 +144,12 @@ const prismaDouble = () => {
   // escritor já abriu, o ON CONFLICT DO NOTHING devolve zero linhas em vez de
   // levantar.
   db.conflicting = new Set<string>()
-  db.$queryRaw = jest.fn().mockImplementation(async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+  // A busca de candidatas do vencimento também é crua: `staleCandidates` faz o
+  // papel das linhas que o NOT EXISTS devolveria.
+  db.staleCandidates = []
+  db.$queryRaw = jest.fn().mockImplementation(async (strings: any, ...values: unknown[]) => {
+    // A busca do vencimento chega montada, como Prisma.Sql, e não como template.
+    if (!Array.isArray(strings) && strings.sql.includes('NOT EXISTS')) return db.staleCandidates
     return values.some((v) => db.conflicting.has(v)) ? [] : [{ id: 'condition-new' }]
   })
   return db
@@ -501,7 +511,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
       workerId: 'worker-1',
       origin: 'REAL',
       status: { in: ['OPEN', 'ACKNOWLEDGED'] },
-      condition: { kind: 'HEART_RATE_HIGH' },
+      condition: { kind: 'HEART_RATE_HIGH', OR: [{ recoveryReason: null }, { recoveryReason: { not: 'NO_NEW_READING' } }] },
     })
     expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
   })
@@ -1726,5 +1736,207 @@ describe('TelemetryConditionService: aviso de condição em tempo real', () => {
         at: NOW.toISOString(),
       },
     ])
+  })
+})
+
+/** Condição ativa de saúde como a busca crua do vencimento a devolve. */
+const staleRow = (id: string, kind: string, over: Record<string, unknown> = {}) => ({
+  id,
+  workerId: 'worker-1',
+  origin: 'REAL',
+  kind,
+  ...over,
+})
+
+/**
+ * Amostras do banco para a reconferência sob o lock. O dublê filtra como o
+ * banco filtraria (funcionário, origem, fronteira de eventTime e coluna não
+ * nula), para os casos afirmarem a fronteira, e não a forma do `where`.
+ */
+const samplesOf = (prisma: any, rows: Array<{ hoursAgo: number; column: string; workerId?: string }>) => {
+  prisma.telemetrySample.findFirst.mockImplementation(async ({ where }: any) => {
+    const hit = rows.find(
+      (r) =>
+        (r.workerId ?? 'worker-1') === where.workerId &&
+        where.origin === 'REAL' &&
+        where[r.column] !== undefined &&
+        hoursAgo(r.hoursAgo).getTime() > where.eventTime.gt.getTime(),
+    )
+    return hit === undefined ? null : { eventTime: hoursAgo(hit.hoursAgo) }
+  })
+}
+
+const closedByNoNewReading = { status: 'RECOVERED', recoveredAt: NOW, recoveryReason: 'NO_NEW_READING', lastSeenAt: NOW }
+
+describe('TelemetryConditionService.sweepNoNewReading: a métrica de cada condição', () => {
+  it('o prazo é o "recente" da régua da medição: 24 h', () => {
+    expect(NO_NEW_READING_MS).toBe(24 * 60 * 60 * 1000)
+  })
+
+  it('batimento sustenta batimento e desgaste; oxigenação e pressão, as suas; aparelho não vence', () => {
+    // O desgaste deriva do batimento: sem batimento novo em 24 h, a condição de
+    // desgaste vence. Bateria e perda de sinal são estado do aparelho, e o
+    // silêncio e o evento ao vivo já cuidam delas.
+    expect(NO_NEW_READING_METRIC).toEqual({
+      HEART_RATE_HIGH: 'heartRateBpm',
+      HEART_RATE_LOW: 'heartRateBpm',
+      HEART_RATE_FATIGUE: 'heartRateBpm',
+      WEAR_HIGH: 'heartRateBpm',
+      WEAR_FATIGUE: 'heartRateBpm',
+      OXYGEN_FATIGUE: 'oxygenSaturationPct',
+      OXYGEN_LOW: 'oxygenSaturationPct',
+      BLOOD_PRESSURE_REVIEW: 'systolicMmHg',
+      BLOOD_PRESSURE_FATIGUE: 'systolicMmHg',
+      BLOOD_PRESSURE_HIGH: 'systolicMmHg',
+      DEVICE_BATTERY_LOW: null,
+      DEVICE_SIGNAL_LOST: null,
+    })
+  })
+
+  it('a busca de candidatas nunca pede tipo de aparelho', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).sweepNoNewReading(NOW)
+
+    const { sql, values } = prisma.$queryRaw.mock.calls[0][0]
+    expect(sql).toContain('NOT EXISTS')
+    expect(values).not.toContain('DEVICE_BATTERY_LOW')
+    expect(values).not.toContain('DEVICE_SIGNAL_LOST')
+    expect(values).toContain('BLOOD_PRESSURE_HIGH')
+    expect(values).toContainEqual(new Date(NOW.getTime() - NO_NEW_READING_MS))
+  })
+
+  it.each([
+    ['HEART_RATE_HIGH', 'heartRateBpm'],
+    ['WEAR_FATIGUE', 'heartRateBpm'],
+    ['OXYGEN_LOW', 'oxygenSaturationPct'],
+    ['BLOOD_PRESSURE_FATIGUE', 'systolicMmHg'],
+  ])('%s: amostra da própria métrica há 23 h segura a condição aberta', async (kind, column) => {
+    const prisma = prismaDouble()
+    prisma.staleCandidates = [staleRow('c-1', kind)]
+    samplesOf(prisma, [{ hoursAgo: 23, column }])
+
+    const outcome = await service(prisma).sweepNoNewReading(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, recovered: 0 })
+    expect(prisma.telemetryCondition.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('amostra de OUTRA métrica não segura: batimento de agora não renova a pressão', async () => {
+    const prisma = prismaDouble()
+    prisma.staleCandidates = [staleRow('c-pressao', 'BLOOD_PRESSURE_HIGH')]
+    samplesOf(prisma, [{ hoursAgo: 0, column: 'heartRateBpm' }])
+
+    const outcome = await service(prisma).sweepNoNewReading(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, recovered: 1 })
+  })
+})
+
+describe('TelemetryConditionService.sweepNoNewReading: a fronteira das 24 h', () => {
+  it('última medição a exatamente 24 h vence', async () => {
+    const prisma = prismaDouble()
+    prisma.staleCandidates = [staleRow('c-pressao', 'BLOOD_PRESSURE_HIGH')]
+    samplesOf(prisma, [{ hoursAgo: 24, column: 'systolicMmHg' }])
+
+    const outcome = await service(prisma).sweepNoNewReading(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, recovered: 1 })
+    expect(prisma.telemetryCondition.updateMany).toHaveBeenCalledWith({
+      where: { id: 'c-pressao', status: 'ACTIVE' },
+      data: closedByNoNewReading,
+    })
+  })
+
+  it('última medição um milissegundo antes das 24 h não vence', async () => {
+    const prisma = prismaDouble()
+    prisma.staleCandidates = [staleRow('c-pressao', 'BLOOD_PRESSURE_HIGH')]
+    samplesOf(prisma, [{ hoursAgo: 24 - 1 / 3_600_000, column: 'systolicMmHg' }])
+
+    const outcome = await service(prisma).sweepNoNewReading(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, recovered: 0 })
+  })
+})
+
+describe('TelemetryConditionService.sweepNoNewReading: fechar', () => {
+  it('trava funcionário e origem antes de reconferir a amostra e de gravar', async () => {
+    // Mesmo lock do caminho do evento e da varredura de silêncio: é ele que
+    // garante que uma condição fecha por um motivo só, o de quem chegou antes.
+    const prisma = prismaDouble()
+    prisma.staleCandidates = [staleRow('c-1', 'HEART_RATE_HIGH')]
+
+    await service(prisma).sweepNoNewReading(NOW)
+
+    const [sql, ...values] = prisma.$executeRaw.mock.calls[0]
+    expect((sql as TemplateStringsArray).join('?')).toContain('pg_advisory_xact_lock')
+    expect(values).toEqual(['worker-1:REAL'])
+    expect(firstCall(prisma.$executeRaw)).toBeLessThan(firstCall(prisma.telemetrySample.findFirst))
+    expect(firstCall(prisma.$executeRaw)).toBeLessThan(firstCall(prisma.telemetryCondition.updateMany))
+  })
+
+  it('condição já fechada por outro motivo não é regravada nem anunciada', async () => {
+    // A varredura de silêncio chegou antes: o ACTIVE no `where` é o que mantém
+    // o motivo dela, e zero linhas atualizadas não viram evento.
+    const prisma = prismaDouble()
+    prisma.staleCandidates = [staleRow('c-1', 'HEART_RATE_HIGH')]
+    prisma.telemetryCondition.updateMany.mockResolvedValue({ count: 0 })
+    const realtime = realtimeDouble()
+
+    const outcome = await service(prisma, realtime).sweepNoNewReading(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, recovered: 0 })
+    expect(realtime.emitToUsers).not.toHaveBeenCalled()
+  })
+
+  it('anuncia a recuperação depois do commit, e não notifica ninguém nem mexe no alerta', async () => {
+    // "Sua condição foi encerrada" seria lido como melhora; o alerta só fecha
+    // na mão de um humano.
+    const prisma = prismaDouble()
+    prisma.staleCandidates = [staleRow('c-1', 'BLOOD_PRESSURE_HIGH')]
+    const realtime = realtimeDouble()
+    const openAtEmit: boolean[] = []
+    realtime.emitToUsers.mockImplementation(() => openAtEmit.push(prisma.open))
+    const notifier = notifierDouble()
+
+    await service(prisma, realtime, audienceDouble(), notifier).sweepNoNewReading(NOW)
+
+    expect(openAtEmit).toEqual([false])
+    expect(realtime.emitToUsers.mock.calls[0][2]).toEqual({
+      workerId: 'worker-1',
+      conditionId: 'c-1',
+      kind: 'BLOOD_PRESSURE_HIGH',
+      change: 'RECOVERED',
+      at: NOW.toISOString(),
+    })
+    expect(notifier.notifyOpened).not.toHaveBeenCalled()
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+  })
+
+  it('candidata que estoura vira aviso e não impede as outras', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const prisma = prismaDouble()
+    prisma.staleCandidates = [staleRow('c-1', 'HEART_RATE_HIGH'), staleRow('c-2', 'OXYGEN_LOW', { workerId: 'worker-2' })]
+    prisma.telemetryCondition.updateMany.mockRejectedValueOnce(new Error('deadlock')).mockResolvedValue({ count: 1 })
+
+    const outcome = await service(prisma).sweepNoNewReading(NOW)
+
+    expect(outcome).toEqual({ scanned: 2, recovered: 1 })
+    expect(warn.mock.calls[0][0]).toMatch(/c-1/)
+    warn.mockRestore()
+  })
+
+  it('bater o teto da rodada vira aviso; o resto entra na seguinte', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const prisma = prismaDouble()
+    prisma.staleCandidates = Array.from({ length: MAX_NO_NEW_READING_PER_RUN }, (_, i) =>
+      staleRow(`c-${i}`, 'HEART_RATE_HIGH'),
+    )
+
+    await service(prisma).sweepNoNewReading(NOW)
+
+    expect(prisma.$queryRaw.mock.calls[0][0].values).toContain(MAX_NO_NEW_READING_PER_RUN)
+    expect(warn.mock.calls[0][0]).toMatch(/teto/)
+    warn.mockRestore()
   })
 })

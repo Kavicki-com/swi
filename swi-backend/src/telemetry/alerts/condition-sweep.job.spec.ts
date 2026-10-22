@@ -7,8 +7,12 @@ import { conditionSweepCron, DEFAULT_SWEEP_CRON, TelemetryConditionSweepJob } fr
 // com instante fixo. O que estes casos protegem é justamente isso: a expressão
 // vem do ambiente, o handler delega passando o instante, e falha nenhuma escapa.
 
-const jobWith = (sweep: jest.Mock) =>
-  new TelemetryConditionSweepJob({ sweepSilentSessions: sweep } as unknown as TelemetryConditionService)
+const semVencimento = () => jest.fn().mockResolvedValue({ scanned: 0, recovered: 0 })
+const jobWith = (sweep: jest.Mock, noNewReading: jest.Mock = semVencimento()) =>
+  new TelemetryConditionSweepJob({
+    sweepSilentSessions: sweep,
+    sweepNoNewReading: noNewReading,
+  } as unknown as TelemetryConditionService)
 
 const nada = () => jest.fn().mockResolvedValue({ scanned: 0, signalLost: 0, recovered: 0 })
 
@@ -127,6 +131,48 @@ describe('TelemetryConditionSweepJob.run: uma rodada por vez', () => {
     await job.run()
 
     expect(sweep).toHaveBeenCalledTimes(2)
+    warn.mockRestore()
+  })
+})
+
+describe('TelemetryConditionSweepJob.run: vencimento na mesma rodada', () => {
+  it('varre o vencimento depois do silêncio, com o mesmo instante', async () => {
+    // Um instante por rodada: com dois relógios, o silêncio e o vencimento
+    // poderiam discordar sobre a mesma condição.
+    const sweep = nada()
+    const noNewReading = semVencimento()
+
+    await jobWith(sweep, noNewReading).run()
+
+    expect(noNewReading).toHaveBeenCalledTimes(1)
+    expect(noNewReading.mock.calls[0][0]).toBe(sweep.mock.calls[0][0])
+    expect(sweep.mock.invocationCallOrder[0]).toBeLessThan(noNewReading.mock.invocationCallOrder[0])
+  })
+
+  it('registra a rodada que encerrou condição por vencimento', async () => {
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+
+    await jobWith(nada(), jest.fn().mockResolvedValue({ scanned: 5, recovered: 2 })).run()
+
+    const linha = log.mock.calls[0][0] as string
+    expect(linha).toMatch(/vencimento/)
+    expect(linha).toMatch(/5 condi/)
+    expect(linha).toMatch(/2 encerrada/)
+    log.mockRestore()
+  })
+
+  it('falha no silêncio não impede o vencimento, e vice-versa', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const noNewReading = semVencimento()
+
+    await jobWith(jest.fn().mockRejectedValue(new Error('banco fora do ar')), noNewReading).run()
+    expect(noNewReading).toHaveBeenCalledTimes(1)
+
+    const sweep = nada()
+    await expect(
+      jobWith(sweep, jest.fn().mockRejectedValue(new Error('banco fora do ar'))).run(),
+    ).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(2)
     warn.mockRestore()
   })
 })
