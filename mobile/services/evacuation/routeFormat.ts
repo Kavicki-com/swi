@@ -12,12 +12,35 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(Math.max(v, lo), hi);
 }
 
-// Índices a 35% / 70% do array (onde as 2 time chips ancoram).
+// Ponto a `fraction` do COMPRIMENTO do traçado (0 = início, 1 = fim). Mede em
+// graus com a longitude encolhida por cos(latitude), o bastante na escala de
+// uma rota a pé; só a proporção importa, não a unidade.
+function pointAlong(waypoints: Pt[], fraction: number): Pt {
+  const k = Math.cos((waypoints[0][1] * Math.PI) / 180);
+  const seg = (p: Pt, q: Pt) => Math.hypot((q[0] - p[0]) * k, q[1] - p[1]);
+  let total = 0;
+  for (let i = 1; i < waypoints.length; i++) total += seg(waypoints[i - 1], waypoints[i]);
+  let left = total * fraction;
+  for (let i = 1; i < waypoints.length; i++) {
+    const p = waypoints[i - 1];
+    const q = waypoints[i];
+    const len = seg(p, q);
+    if (len > 0 && left <= len) {
+      const t = left / len;
+      return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+    }
+    left -= len;
+  }
+  return waypoints[waypoints.length - 1];
+}
+
+// Onde as 2 time chips ancoram: a 35% e 70% do COMPRIMENTO do traçado, a
+// mesma fração do tempo que o rótulo mostra. Pelo índice do array a chip caía
+// em cima do pino de início numa reta de 2 pontos (rota aproximada), e os
+// pontos do roteador não vêm igualmente espaçados.
 export function chipAnchors(waypoints: Pt[]): { a: Pt; b: Pt } | null {
   if (waypoints.length === 0) return null;
-  const i1 = clamp(Math.floor(waypoints.length * 0.35), 0, waypoints.length - 1);
-  const i2 = clamp(Math.floor(waypoints.length * 0.7), 0, waypoints.length - 1);
-  return { a: waypoints[i1], b: waypoints[i2] };
+  return { a: pointAlong(waypoints, 0.35), b: pointAlong(waypoints, 0.7) };
 }
 
 // Rótulo de tempo das chips ancoradas ao longo da rota. O número sai da

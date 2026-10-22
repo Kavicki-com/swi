@@ -4,6 +4,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import EvacuationOngoing from '../../../app/(app)/evacuation-ongoing';
 import type { RouteSnapshot } from '../../../services/evacuation/types';
 import type { RouteErrorKind } from '../../../services/evacuation/EvacuationProvider';
+import { chipAnchors } from '../../../services/evacuation/routeFormat';
 
 // Tela de evacuação EM ANDAMENTO (navegando). Difere da idle em três coisas que
 // este teste trava: a linha é roxa em vez de ciano, não há pino de origem (quem
@@ -254,16 +255,15 @@ describe('Evacuação em andamento: pinos e chips', () => {
     expect(porTestID(tree, 'marker-evacuation-origin')).toBeUndefined();
   });
 
-  it('ancora as chips a 35% e 70% e deriva os rótulos da duração real', async () => {
+  it('ancora as chips a 35% e 70% do comprimento e deriva os rótulos da duração real', async () => {
     pronta({ durationSec: 1200 });
     const tree = await render();
 
-    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-1').props.coordinate).toEqual(
-      WAYPOINTS[3],
-    );
-    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-2').props.coordinate).toEqual(
-      WAYPOINTS[7],
-    );
+    // A conta da âncora (distância ao longo do traçado) tem suíte própria em
+    // routeFormat.test.ts; aqui, que a tela manda ao mapa o que ela calcula.
+    const ancoras = chipAnchors(WAYPOINTS)!;
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-1').props.coordinate).toEqual(ancoras.a);
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-2').props.coordinate).toEqual(ancoras.b);
 
     const t = textos(tree);
     expect(t).toContain('7 minutos');

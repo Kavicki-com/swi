@@ -235,12 +235,22 @@ describe('Tela de evacuação: rota', () => {
 });
 
 describe('Tela de evacuação: chips de tempo ancoradas na rota', () => {
-  it('ancora as duas chips a 35% e 70% dos waypoints', async () => {
+  // A rota de teste é uma reta de passos iguais, então 35% e 70% do
+  // comprimento caem em 35% e 70% do caminho entre a primeira e a última.
+  it('ancora as duas chips a 35% e 70% do comprimento da rota', async () => {
     pronta();
     const tree = await render();
+    const noCaminho = (f: number) => [
+      ORIGEM[0] + (ENCONTRO[0] - ORIGEM[0]) * f,
+      ORIGEM[1] + (ENCONTRO[1] - ORIGEM[1]) * f,
+    ];
 
-    expect(porTestID(tree, 'marker-evacuation-chip-1').props.coordinate).toEqual(WAYPOINTS[3]);
-    expect(porTestID(tree, 'marker-evacuation-chip-2').props.coordinate).toEqual(WAYPOINTS[7]);
+    const c1 = porTestID(tree, 'marker-evacuation-chip-1').props.coordinate;
+    const c2 = porTestID(tree, 'marker-evacuation-chip-2').props.coordinate;
+    expect(c1[0]).toBeCloseTo(noCaminho(0.35)[0], 9);
+    expect(c1[1]).toBeCloseTo(noCaminho(0.35)[1], 9);
+    expect(c2[0]).toBeCloseTo(noCaminho(0.7)[0], 9);
+    expect(c2[1]).toBeCloseTo(noCaminho(0.7)[1], 9);
   });
 
   // Os rótulos eram "6 minutos"/"17 minutos" cravados do mockup; agora saem da

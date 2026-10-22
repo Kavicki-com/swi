@@ -31,9 +31,35 @@ describe('routeFormat: chipEtaLabel', () => {
 type Pt = [number, number];
 const line: Pt[] = [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]];
 
+// As chips ancoram pela DISTÂNCIA ao longo do traçado, não pelo índice do
+// array: o rótulo é o tempo acumulado até aquela fração, e numa reta de 2
+// pontos (rota aproximada) o índice punha a chip em cima do pino de início.
 describe('routeFormat: chipAnchors', () => {
-  it('ancora em ~35% e ~70% do array', () => {
-    expect(chipAnchors(line)).toEqual({ a: [1, 0], b: [3, 0] }); // floor(5*0.35)=1, floor(5*0.7)=3
+  it('ancora a 35% e 70% do comprimento do traçado', () => {
+    const { a, b } = chipAnchors(line)!; // 4 unidades de comprimento
+    expect(a[0]).toBeCloseTo(1.4, 9);
+    expect(a[1]).toBeCloseTo(0, 9);
+    expect(b[0]).toBeCloseTo(2.8, 9);
+  });
+  it('numa reta de 2 pontos as chips ficam no meio do caminho, não nas pontas', () => {
+    const { a, b } = chipAnchors([[0, 0], [10, 0]])!;
+    expect(a[0]).toBeCloseTo(3.5, 9);
+    expect(b[0]).toBeCloseTo(7, 9);
+  });
+  it('trechos curtos e longos pesam pelo tamanho, não pela contagem de pontos', () => {
+    // 3 pontos colados no começo e um trecho longo: pelo índice a chip de 35%
+    // cairia no 1º ponto; pela distância cai dentro do trecho longo.
+    const { a } = chipAnchors([[0, 0], [0.1, 0], [0.2, 0], [10, 0]])!;
+    expect(a[0]).toBeCloseTo(3.5, 9);
+  });
+  it('mede longitude encolhida pela latitude', () => {
+    // A 60° de latitude 1 grau de longitude vale metade de 1 de latitude: um L
+    // com 2 graus pro leste e 1 pro norte tem os dois braços do mesmo tamanho,
+    // então 35% ainda cai no braço leste e 70% no braço norte.
+    const { a, b } = chipAnchors([[0, 60], [2, 60], [2, 61]])!;
+    expect(a[1]).toBeCloseTo(60, 9);
+    expect(b[0]).toBeCloseTo(2, 9);
+    expect(b[1]).toBeGreaterThan(60);
   });
   it('null pra array vazio', () => {
     expect(chipAnchors([])).toBeNull();
