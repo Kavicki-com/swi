@@ -8,7 +8,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
-import { Button, Combobox, SearchInput, Text, useTheme } from '@kavicki/swi-design-system'
+import {
+  Button,
+  Combobox,
+  SearchInput,
+  SkeletonList,
+  Text,
+  useTheme,
+} from '@kavicki/swi-design-system'
 import { reportsApi, type Report } from '@/services/api/reports'
 import { ReportCardV2 } from '@/components/ReportCardV2'
 
@@ -60,6 +67,12 @@ export function ReportsList() {
   const theme = useTheme()
   const navigate = useNavigate()
   const [reports, setReports] = useState<ReadonlyArray<Report>>([])
+  // Carga inicial: 'loading' até a primeira resposta, a mensagem do servidor
+  // na falha. Sem isso a falha e a espera pareciam uma empresa sem relatório.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | { error: string }>('loading')
+  // Incrementado pelo "Tentar novamente": só um gatilho pro efeito refazer a
+  // busca.
+  const [reloadKey, setReloadKey] = useState(0)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState(ALL)
   const [sector, setSector] = useState(ALL)
@@ -76,15 +89,21 @@ export function ReportsList() {
 
   useEffect(() => {
     let cancelled = false
-    reportsApi.list().then(({ data, count }) => {
-      if (cancelled || !data) return
+    setLoadState('loading')
+    reportsApi.list().then(({ data, count, error }) => {
+      if (cancelled) return
+      if (!data) {
+        setLoadState({ error: error?.message ?? 'Falha ao carregar' })
+        return
+      }
       setReports(data)
       setTotal(count ?? data.length)
+      setLoadState('ready')
     })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   const loadMore = async () => {
     if (loadingMore) return
@@ -199,68 +218,98 @@ export function ReportsList() {
         </View>
       </View>
 
-      {/* Card grid with auto-fill cells. The 220 px minimum keeps the
-          4-column density the design calls for at the admin viewport, and
-          theme.gap.l between cells provides the breathing space the client
-          asked for. */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-          gap: theme.gap.l,
-          width: '100%',
-        }}
-      >
-        {filtered.slice(0, visible).map((r) => (
-          <ReportCardV2
-            key={r.id}
-            status={r.status}
-            statusLabel={r.statusLabel}
-            title={r.title}
-            summary={r.summary}
-            creationDate={r.creationDate}
-            authorName={r.authorName}
-            authorAvatarUri={r.authorAvatarUri}
-            sector={r.sector}
-            responsibleAvatars={r.responsibleAvatars}
-            responsibleTotalCount={r.responsibleTotalCount}
-            onPress={() => navigate(`/reports/${r.id}`)}
+      {loadState === 'loading' ? (
+        <View testID="reports-loading">
+          <SkeletonList rows={4} lines={3} avatarSize={null} accessibilityLabel="Carregando" />
+        </View>
+      ) : loadState !== 'ready' ? (
+        <View style={{ alignItems: 'flex-start', gap: theme.gap.s }}>
+          <Text testID="reports-error" variant="body.m" color={theme.content.error}>
+            {loadState.error}
+          </Text>
+          <Button
+            label="Tentar novamente"
+            variant="outline"
+            onPress={() => setReloadKey((k) => k + 1)}
           />
-        ))}
-      </div>
-
-      {/* Rodapé honesto: quantos estão à vista, quantos existem, e como ver o
-          resto. Nada de esconder registro em silêncio. */}
-      <View
-        testID="reports-footer"
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: theme.gap.m,
-        }}
-      >
-        <Text variant="body.s" color={theme.content.medium}>
-          {`Mostrando ${Math.min(visible, filtered.length)} de ${filtered.length}`}
-          {filtered.length < total ? ` (${total} no total)` : ''}
+        </View>
+      ) : reports.length === 0 ? (
+        <Text testID="reports-empty" variant="body.m" color={theme.content.medium}>
+          Nenhum relatório ainda
         </Text>
-        {visible < filtered.length ? (
-          <Button
-            label="Ver mais"
-            variant="outline"
-            accessibilityLabel="Ver mais relatórios"
-            onPress={() => setVisible((v) => v + PAGE_SIZE)}
-          />
-        ) : reports.length < total ? (
-          <Button
-            label={loadingMore ? 'Carregando…' : 'Carregar mais do servidor'}
-            variant="outline"
-            disabled={loadingMore}
-            accessibilityLabel="Carregar mais relatórios do servidor"
-            onPress={() => void loadMore()}
-          />
-        ) : null}
-      </View>
+      ) : (
+        <>
+          {/* Card grid with auto-fill cells. The 220 px minimum keeps the
+              4-column density the design calls for at the admin viewport, and
+              theme.gap.l between cells provides the breathing space the client
+              asked for. Busca sem resultado diz isso no lugar da grade; o
+              rodapé fica, porque pode haver relatório ainda no servidor. */}
+          {filtered.length === 0 ? (
+            <Text testID="reports-no-match" variant="body.m" color={theme.content.medium}>
+              Nenhum resultado
+            </Text>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gap: theme.gap.l,
+                width: '100%',
+              }}
+            >
+              {filtered.slice(0, visible).map((r) => (
+                <ReportCardV2
+                  key={r.id}
+                  status={r.status}
+                  statusLabel={r.statusLabel}
+                  title={r.title}
+                  summary={r.summary}
+                  creationDate={r.creationDate}
+                  authorName={r.authorName}
+                  authorAvatarUri={r.authorAvatarUri}
+                  sector={r.sector}
+                  responsibleAvatars={r.responsibleAvatars}
+                  responsibleTotalCount={r.responsibleTotalCount}
+                  onPress={() => navigate(`/reports/${r.id}`)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Rodapé honesto: quantos estão à vista, quantos existem, e como ver o
+              resto. Nada de esconder registro em silêncio. */}
+          <View
+            testID="reports-footer"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: theme.gap.m,
+            }}
+          >
+            <Text variant="body.s" color={theme.content.medium}>
+              {`Mostrando ${Math.min(visible, filtered.length)} de ${filtered.length}`}
+              {filtered.length < total ? ` (${total} no total)` : ''}
+            </Text>
+            {visible < filtered.length ? (
+              <Button
+                label="Ver mais"
+                variant="outline"
+                accessibilityLabel="Ver mais relatórios"
+                onPress={() => setVisible((v) => v + PAGE_SIZE)}
+              />
+            ) : reports.length < total ? (
+              <Button
+                label={loadingMore ? 'Carregando…' : 'Carregar mais do servidor'}
+                variant="outline"
+                disabled={loadingMore}
+                accessibilityLabel="Carregar mais relatórios do servidor"
+                onPress={() => void loadMore()}
+              />
+            ) : null}
+          </View>
+        </>
+      )}
     </View>
   )
 }
