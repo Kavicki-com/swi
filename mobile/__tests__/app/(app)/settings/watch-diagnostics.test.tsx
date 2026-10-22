@@ -36,6 +36,11 @@ jest.mock('../../../../services/telemetry/TelemetryUploadProvider', () => ({
 // pareamento. Desligado por padrão: os casos do iPhone não dependem dele.
 // A seção da pulseira no Bluetooth tem teste próprio
 // (BluetoothHeartRateMonitoring.test.tsx); aqui, só se ela aparece.
+// A lista de prontidão também tem suíte própria
+// (watch-diagnostics.readiness.test.tsx).
+jest.mock('../../../../components/telemetry/ReadinessList', () => ({
+  SettingsReadiness: () => null,
+}));
 const mockSecaoBluetooth = jest.fn((_props: object) => null);
 jest.mock('../../../../components/telemetry/BluetoothHeartRateMonitoring', () => ({
   BluetoothHeartRateMonitoring: (props: object) => mockSecaoBluetooth(props),

@@ -26,6 +26,7 @@ export const condition = (
   kind,
   category,
   openedAt: FIXTURE_AT,
+  measuredAt: FIXTURE_AT,
   observedValue: null,
   thresholdValue: null,
 });

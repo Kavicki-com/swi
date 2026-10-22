@@ -37,6 +37,15 @@ jest.mock('../../../../services/auth/AuthProvider', () => ({
   useAuth: () => ({ user: mockUsuario }),
 }));
 
+// Nada detectado: aqui a escolha é só pela pergunta. A detecção tem o teste
+// dela (band-guide-detection.test.tsx).
+jest.mock('../../../../services/telemetry/TelemetryUploadProvider', () => ({
+  useTelemetryUploadState: () => ({ healthConnect: null }),
+}));
+jest.mock('../../../../services/telemetry/bluetooth/bluetoothBandChoice', () => ({
+  useBandChoice: () => null,
+}));
+
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
   insets: { top: 47, left: 0, right: 0, bottom: 34 },

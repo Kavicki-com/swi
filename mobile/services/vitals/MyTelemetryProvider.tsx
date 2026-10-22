@@ -61,9 +61,10 @@ const withoutValue = <T,>(state: MetricState<T>): MetricState<T> => ({
 });
 
 // O que sobra de uma leitura que venceu. Os valores medidos somem, porque
-// ninguém consegue mais confirmá-los. Urgência e alerta de saúde ficam:
-// esconder uma condição aberta porque a rede caiu seria pior que mostrá-la
-// atrasada. Condição só de aparelho não segura nada.
+// ninguém consegue mais confirmá-los. Urgência e alerta de saúde ficam na
+// leitura, porque a rede cair não as encerra (a frase da fadiga ainda cita o
+// alerta de desgaste); sem batimento válido elas não pintam o avatar.
+// Condição só de aparelho não segura nada.
 function afterHold(telemetry: WorkerTelemetry): WorkerTelemetry | null {
   const conditions = telemetry.conditions.filter((c) => c.category !== 'DEVICE');
   if (conditions.length === 0) return null;

@@ -23,6 +23,7 @@ import { AlertActiveView } from '../../components/dashboard/AlertActiveView';
 import { BadgedButton } from '../../components/dashboard/BadgedButton';
 import { StatCol } from '../../components/dashboard/StatCol';
 import { StatDivider } from '../../components/dashboard/StatDivider';
+import { DashboardReadiness } from '../../components/telemetry/ReadinessList';
 import { SyncBanner } from '../../components/telemetry/SyncBanner';
 import {
   FIRE_ICON_SVG,
@@ -224,6 +225,11 @@ export default function Dashboard() {
   }
 
   const heartCondition = toHeartCondition(status);
+  const statusLine = (
+    <Text variant="caption.s" color={theme.content.dark}>
+      {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
+    </Text>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -563,10 +569,14 @@ export default function Dashboard() {
           </Text>
           {view.calibrationTag ? <StatusTag status="info" label={view.calibrationTag} /> : null}
           {/* Em que pé está a leitura e, quando não vem do relógio real, o
-              selo de origem. Linha de Text do DS: o Figma não tem esse slot. */}
-          <Text variant="caption.s" color={theme.content.dark}>
-            {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
-          </Text>
+              selo de origem. Linha de Text do DS: o Figma não tem esse slot.
+              Com a pulseira, enquanto falta passo, a lista de prontidão fica
+              no lugar dela e diz o que falta e como resolver. */}
+          {naPulseira ? (
+            <DashboardReadiness>{statusLine}</DashboardReadiness>
+          ) : (
+            statusLine
+          )}
           {/* Pulseira pelo Health Connect: de quando são os números acima e,
               se este celular lê, o "Sincronizar agora". Sem sync não há nada.
               Mora no bloco medido: a altura dela entra na conta do hero. */}

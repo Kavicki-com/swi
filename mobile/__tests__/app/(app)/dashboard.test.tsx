@@ -92,6 +92,11 @@ jest.mock('../../../services/weather/WeatherProvider', () => ({
   useWeather: () => ({ snapshot: null, activeAlert: mockAlertaVigente }),
 }));
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
+// A lista de prontidão do Android tem suíte própria
+// (dashboard.readiness.test.tsx); aqui ela deixa passar a linha de estado.
+jest.mock('../../../components/telemetry/ReadinessList', () => ({
+  DashboardReadiness: ({ children }: { children: unknown }) => children,
+}));
 
 jest.mock('../../../components/modals/WeatherAlertModal', () => {
   const React = require('react');
