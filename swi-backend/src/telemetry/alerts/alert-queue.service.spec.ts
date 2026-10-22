@@ -27,6 +27,7 @@ const row = (over: Record<string, unknown> = {}) => ({
     thresholdValue: 165,
     firstSeenAt: OPENED,
     recoveredAt: null,
+    recoveryReason: null,
   },
   ...over,
 })
@@ -92,8 +93,22 @@ describe('AlertQueueService.list', () => {
         thresholdValue: 165,
         openedAt: OPENED.toISOString(),
         recoveredAt: null,
+        recoveryReason: null,
       },
     })
+  })
+
+  it('condição encerrada por vencimento diz o motivo, e o alerta segue na fila', async () => {
+    // Sem o motivo o painel leria recoveredAt como "o valor voltou ao normal".
+    const prisma = prismaDouble()
+    prisma.operationalAlert.findMany.mockResolvedValue([
+      row({ condition: { ...row().condition, recoveredAt: NOW, recoveryReason: 'NO_NEW_READING' } }),
+    ])
+
+    const page = await service(prisma).list(ADMIN, {})
+
+    expect(page.items[0].status).toBe('OPEN')
+    expect(page.items[0].condition).toMatchObject({ recoveredAt: NOW.toISOString(), recoveryReason: 'NO_NEW_READING' })
   })
 
   it('filtra pelos estados pedidos', async () => {

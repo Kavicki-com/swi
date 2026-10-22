@@ -42,8 +42,8 @@ export function AlertsRescueRouteSelection() {
     }
   }, [])
 
-  // Estado de saúde de cada pessoa pelas condições abertas no backend, a
-  // mesma régua do resto do painel. Quem não está na lista fica 'unknown'.
+  // Estado de saúde de cada pessoa pela tabela do batimento válido, a mesma
+  // régua do resto do painel. Quem não está na lista fica 'unknown'.
   const { workers } = useAdminTelemetry()
   const healthById = useMemo(
     () =>

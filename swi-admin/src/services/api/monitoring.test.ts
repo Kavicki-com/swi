@@ -247,7 +247,7 @@ describe('buildUserAlerts', () => {
     }),
   ]
 
-  it('a aba vem das condições abertas; aparelho não piora ninguém; sem leitura atual não é excelente', () => {
+  it('a aba vem das condições vigentes; aparelho não piora ninguém; sem batimento válido não é excelente', () => {
     const rows = buildUserAlerts(employees, workers, [])
     const tierOf = (id: string) => rows.find((r) => r.id === id)?.tier
     expect(tierOf('w-urg')).toBe('alerta-fadiga')
@@ -268,6 +268,68 @@ describe('buildUserAlerts', () => {
     expect(row?.tier).toBe('alerta-fadiga')
     // Primeiro o alerta da fila, depois a linha da condição do aparelho.
     expect(row?.alerts.map((a) => a.id)).toEqual(['a1', 'w-ok:DEVICE_BATTERY_LOW'])
+  })
+
+  // Condição aberta sem batimento válido não pinta: sem alerta na fila, a
+  // pessoa não é avaliada.
+  it('condição aberta sem batimento válido não leva ninguém à aba', () => {
+    const stale = metric(90, { quality: 'STALE' })
+    const urgent = adminWorker('w-stale', 'Leitura Velha', {
+      telemetry: {
+        ...reporting({ heartRate: stale }, 'REAL', 'w-stale'),
+        conditions: [condition('URGENT')],
+      },
+    })
+    const row = buildUserAlerts(employees, [urgent], []).find((r) => r.id === 'w-stale')
+    expect(row?.tier).toBe('sem-leitura')
+  })
+
+  // Alerta pendente é trabalho do gestor, não afirmação sobre o estado.
+  it('neutro com alerta pendente mantém a aba do alerta', () => {
+    const pending = (id: string, category: 'URGENT' | 'HEALTH', status: 'OPEN' | 'ACKNOWLEDGED') =>
+      alertItem(id, {
+        status,
+        worker: { id: 'w-stale', name: 'Leitura Velha', sector: null },
+        condition: { ...alertItem('x').condition, kind: 'HEART_RATE_FATIGUE', category },
+      })
+    const tierWith = (queue: ReturnType<typeof alertItem>[]) =>
+      buildUserAlerts(employees, workers, queue).find((r) => r.id === 'w-stale')?.tier
+    expect(tierWith([pending('a1', 'URGENT', 'ACKNOWLEDGED')])).toBe('alerta-fadiga')
+    expect(tierWith([pending('a1', 'HEALTH', 'OPEN')])).toBe('desgastado')
+    expect(tierWith([pending('a1', 'HEALTH', 'OPEN'), pending('a2', 'URGENT', 'OPEN')])).toBe(
+      'alerta-fadiga',
+    )
+  })
+
+  it('pressão medida há mais de 6 h não pinta a aba; a da fila ainda segura', () => {
+    const at = (iso: string) =>
+      adminWorker('w-ok', 'Bem Um', {
+        telemetry: {
+          ...reporting({}, 'REAL', 'w-ok'),
+          conditions: [condition('URGENT', { kind: 'BLOOD_PRESSURE_HIGH', measuredAt: iso })],
+        },
+      })
+    const tierOf = (entry: ReturnType<typeof adminWorker>, queue: ReturnType<typeof alertItem>[]) =>
+      buildUserAlerts(employees, [entry], queue).find((r) => r.id === 'w-ok')?.tier
+    const alert = alertItem('a1', { worker: { id: 'w-ok', name: 'Bem Um', sector: null } })
+    expect(tierOf(at('2026-10-01T09:00:00.000Z'), [])).toBe('alerta-fadiga')
+    expect(tierOf(at('2026-10-01T08:59:59.999Z'), [])).toBe('excelente')
+    expect(tierOf(at('2026-10-01T08:59:59.999Z'), [alert])).toBe('alerta-fadiga')
+  })
+
+  it('batimento do Health Connect de até 60 min conta como avaliado', () => {
+    const hc = (measuredAt: string) =>
+      adminWorker('w-ok', 'Bem Um', {
+        telemetry: reporting(
+          { heartRate: metric(80, { quality: 'STALE', source: 'HEALTH_CONNECT', measuredAt }) },
+          'REAL',
+          'w-ok',
+        ),
+      })
+    const tierOf = (entry: ReturnType<typeof adminWorker>) =>
+      buildUserAlerts(employees, [entry], []).find((r) => r.id === 'w-ok')?.tier
+    expect(tierOf(hc('2026-10-01T14:00:00.000Z'))).toBe('excelente')
+    expect(tierOf(hc('2026-10-01T13:59:59.999Z'))).toBe('sem-leitura')
   })
 
   it('alerta resolvido não segura ninguém na aba', () => {
