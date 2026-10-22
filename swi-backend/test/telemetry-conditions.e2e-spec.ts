@@ -872,6 +872,8 @@ describe('Telemetry conditions e2e', () => {
       where: { workerId: workerSemNascimento, kind: 'BLOOD_PRESSURE_FATIGUE', status: 'ACTIVE' },
     })
     expect(atencao.observedValue).toBe(150)
+    // A condição abre na hora da medição, não na da chegada.
+    expect(atencao.firstSeenAt.toISOString()).toBe(medidaEm)
     expect(await prisma.operationalAlert.findUnique({ where: { conditionId: atencao.id } })).toMatchObject({
       status: 'OPEN',
     })

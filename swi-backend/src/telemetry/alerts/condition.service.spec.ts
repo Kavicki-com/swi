@@ -55,13 +55,18 @@ const highSeries = (bpm = 185) => Array.from({ length: 13 }, (_, i) => sampleRow
 /** Condição ativa vista agora há pouco: o carimbo não precisa de renovação. */
 const activeRow = (id: string, kind: string, lastSeenAt: Date = secondsAgo(10)) => ({ id, kind, lastSeenAt })
 
+// A pressão do banco sempre vem com a hora medida; o dublê põe NOW quando o
+// teste não diz outra.
+const withEventTime = (pressure: unknown) =>
+  pressure === undefined || pressure === null ? null : { eventTime: NOW, ...pressure }
+
 /**
  * Bateria e pressão são lidas por chamadas próprias, cada uma com o prazo da
  * sua métrica. O dublê separa as duas pela coluna que cada `where` filtra.
  */
 const latestReadings = (readings: { battery?: unknown; pressure?: unknown }) =>
   jest.fn().mockImplementation(async ({ where }: any) =>
-    where.batteryPercent === undefined ? (readings.pressure ?? null) : (readings.battery ?? null),
+    where.batteryPercent === undefined ? withEventTime(readings.pressure) : (readings.battery ?? null),
   )
 
 /**
@@ -71,7 +76,7 @@ const latestReadings = (readings: { battery?: unknown; pressure?: unknown }) =>
  */
 const readingsOfAnotherSession = (readings: { battery?: unknown; pressure?: unknown }) =>
   jest.fn().mockImplementation(async ({ where }: any) => {
-    const row = (where.batteryPercent === undefined ? readings.pressure : readings.battery) ?? null
+    const row = where.batteryPercent === undefined ? withEventTime(readings.pressure) : (readings.battery ?? null)
     const visivel =
       where.sessionId === undefined && where.workerId === SESSION.workerId && where.origin === SESSION.origin
     return visivel ? row : null
@@ -265,9 +270,36 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
         diastolicMmHg: { not: null },
         eventTime: { gte: hoursAgo(72), lte: NOW },
       },
-      select: { systolicMmHg: true, diastolicMmHg: true },
+      select: { systolicMmHg: true, diastolicMmHg: true, eventTime: true },
       orderBy: { eventTime: 'desc' },
     })
+  })
+
+  // A pulseira entrega a pressão horas depois de medir. Abrir com a hora da
+  // chegada diria ao painel que a pessoa estava com 150 agora, quando a
+  // medição é de manhã.
+  it('pressão abre com a hora em que foi medida, não com a da chegada', async () => {
+    const prisma = prismaDouble()
+    const medidaEm = hoursAgo(3)
+    prisma.telemetrySample.findFirst = latestReadings({
+      pressure: { systolicMmHg: 150, diastolicMmHg: 80, eventTime: medidaEm },
+    })
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toEqual(['BLOOD_PRESSURE_FATIGUE'])
+    expect(insertValues(prisma.$queryRaw).slice(5, 7)).toEqual([medidaEm, NOW])
+  })
+
+  it('pressão carimbada no futuro, pela folga do relógio adiantado, abre com agora', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findFirst = latestReadings({
+      pressure: { systolicMmHg: 150, diastolicMmHg: 80, eventTime: new Date(NOW.getTime() + 30_000) },
+    })
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(insertValues(prisma.$queryRaw)[5]).toEqual(NOW)
   })
 
   it('lê condições ativas do funcionário NA MESMA ORIGEM: demonstração não cega o real', async () => {
