@@ -632,6 +632,28 @@ describe('medições lidas do Health Connect', () => {
     expect(await gravados(com(measurements))).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
   });
+
+  // A pulseira lida pelo Bluetooth no Android só manda batimento, com a
+  // origem BLUETOOTH_HR, que o backend aceita só em heartRate (metric-state.ts).
+  it('aceita heartRate com origem BLUETOOTH_HR', async () => {
+    const event = com({ heartRate: { value: 88, unit: 'bpm', source: 'BLUETOOTH_HR' } });
+    expect(await gravados(event)).toEqual([event]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  const passosPeloBluetooth: OutboxMeasurements = {
+    stepDelta: {
+      value: 10,
+      unit: 'steps',
+      // @ts-expect-error o tipo também recusa: o Bluetooth só traz batimento.
+      source: 'BLUETOOTH_HR',
+    },
+  };
+
+  it('recusa BLUETOOTH_HR fora do batimento', async () => {
+    expect(await gravados(com(passosPeloBluetooth))).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('appendMany', () => {

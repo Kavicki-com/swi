@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.kavicki.swi'
+version = '0.1.0'
+
+dependencies {
+  // HeadlessJsTaskService, para acordar a drenagem em JavaScript sem tela.
+  implementation 'com.facebook.react:react-android'
+}
+
+android {
+  namespace "com.kavicki.swi.bleheartrate"
+  // Sem versionCode e versionName o plugin do React Native falha na
+  // configuração de outro projeto, com uma mensagem que não aponta para cá.
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}

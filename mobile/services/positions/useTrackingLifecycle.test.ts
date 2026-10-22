@@ -16,6 +16,7 @@ function fakeTracking(): jest.Mocked<PositionTracking> {
     resume: jest.fn(async (_userId: string): Promise<StartResult> => 'tracking'),
     stop: jest.fn(async () => undefined),
     halt: jest.fn(async () => undefined),
+    windowOpenFor: jest.fn(async (_userId: string) => true),
     drain: jest.fn(async (_userId: string) => undefined),
     isActive: jest.fn(() => false),
     subscribe: jest.fn((_listener: () => void) => () => undefined),

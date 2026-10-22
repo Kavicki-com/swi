@@ -28,17 +28,19 @@ function JourneyTrackingRoot({ userId }: { userId: string }) {
   return null;
 }
 
-// Batimento ao vivo pela pulseira no Bluetooth: a escuta segue a jornada como
-// o GPS, com a pulseira escolhida em Configurações e o aparelho pareado.
+// Batimento ao vivo pela pulseira no Bluetooth: a escuta segue a jornada e a
+// janela do GPS, com a pulseira escolhida em Configurações e o aparelho
+// pareado. Montada depois do GPS: lê a janela que ele abre no mesmo render.
 // Null-render, só com o gate (Android compilado).
 function BluetoothHeartRateRoot({ userId }: { userId: string }) {
-  const { state, loadStatus } = useJourney();
+  const { state, loadStatus, source } = useJourney();
   const { paired } = useTelemetryUploadState();
   const choice = useBandChoice();
   useBluetoothHeartRate({
     userId,
     journeyState: state,
     journeyKnown: loadStatus === 'ready' || loadStatus === 'empty',
+    journeySource: source === 'cache' ? 'cache' : 'server',
     paired,
     deviceId: choice === undefined ? undefined : (choice?.deviceId ?? null),
   });

@@ -61,8 +61,9 @@ const PULSEIRA = 'A0:9E:1A:00:00:01';
 interface Props extends Partial<BluetoothHeartRateInput> {
   ble: BleHeartRate;
   enabled?: boolean;
+  windowOpenFor?: (userId: string) => Promise<boolean>;
 }
-function Harness({ ble, enabled = true, ...input }: Props) {
+function Harness({ ble, enabled = true, windowOpenFor = async () => true, ...input }: Props) {
   useBluetoothHeartRate(
     {
       userId: 'u1',
@@ -74,6 +75,7 @@ function Harness({ ble, enabled = true, ...input }: Props) {
     },
     ble,
     enabled,
+    windowOpenFor,
   );
   return null;
 }
@@ -95,6 +97,51 @@ describe('useBluetoothHeartRate', () => {
       expect(ble.start).toHaveBeenCalledWith(PULSEIRA);
       expect(ble.stop).not.toHaveBeenCalled();
     }
+  });
+
+  it('pergunta pela janela do rastreio da pessoa antes de ligar', async () => {
+    const ble = fakeBle();
+    const windowOpenFor = jest.fn(async (_userId: string) => true);
+    await montar({ ble, windowOpenFor });
+    expect(windowOpenFor).toHaveBeenCalledWith('u1');
+    expect(ble.start).toHaveBeenCalledWith(PULSEIRA);
+  });
+
+  it('sem a janela aberta (cópia sem janela, 12 h vencidas) não liga e desliga', async () => {
+    // A drenagem para o serviço sem a janela: ligar aqui viraria liga e
+    // desliga a cada volta ao app.
+    const ble = fakeBle();
+    await montar({ ble, windowOpenFor: async () => false });
+    expect(ble.start).not.toHaveBeenCalled();
+    expect(ble.stop).toHaveBeenCalled();
+
+    await appState('active');
+    expect(ble.start).not.toHaveBeenCalled();
+  });
+
+  it('jornada da cópia sem janela que depois chega do servidor liga', async () => {
+    // O GPS abre a janela ao ler o servidor; a escuta pergunta de novo.
+    const ble = fakeBle();
+    let open = false;
+    const windowOpenFor = async () => open;
+    const r = await montar({ ble, windowOpenFor, journeySource: 'cache' });
+    expect(ble.start).not.toHaveBeenCalled();
+    open = true;
+    await act(async () => r.update(harness({ ble, windowOpenFor, journeySource: 'server' })));
+    expect(ble.start).toHaveBeenCalledWith(PULSEIRA);
+  });
+
+  it('jornada que encerra antes da resposta da janela não liga', async () => {
+    const ble = fakeBle();
+    let answer!: (open: boolean) => void;
+    const windowOpenFor = () =>
+      new Promise<boolean>((resolve) => {
+        answer = resolve;
+      });
+    const r = await montar({ ble, windowOpenFor });
+    await act(async () => r.update(harness({ ble, windowOpenFor, journeyState: 'idle' })));
+    await act(async () => answer(true));
+    expect(ble.start).not.toHaveBeenCalled();
   });
 
   it('jornada ociosa desliga', async () => {
