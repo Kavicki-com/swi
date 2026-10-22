@@ -118,6 +118,8 @@ interface SnapshotPatch {
   lastLiveEventTime?: Date
   heartRateBpm?: number
   heartRateAt?: Date
+  /** Vai sempre junto do batimento, nulo inclusive: fonte velha com valor novo mentiria. */
+  heartRateSource?: MeasurementSource | null
   batteryPercent?: number
   batteryAt?: Date
   systolicMmHg?: number
@@ -147,6 +149,7 @@ function buildSnapshotPatch(
   }
   if (measured.heartRateBpm !== null) {
     patch.heartRateBpm = measured.heartRateBpm
+    patch.heartRateSource = measured.heartRateSource
     patch.heartRateAt = eventTime
   }
   if (measured.batteryPercent !== null) {
@@ -175,6 +178,7 @@ function buildSnapshotPatch(
 const CLEARED_METRICS: Prisma.TelemetrySnapshotUncheckedUpdateInput = {
   lastLiveEventTime: null,
   heartRateBpm: null,
+  heartRateSource: null,
   heartRateAt: null,
   stepsTotal: null,
   stepsAt: null,
@@ -245,7 +249,7 @@ async function promote(
 
 /** Cada métrica do snapshot com o horário que decide se ela é a mais nova. */
 const METRIC_STAMPS = [
-  { at: 'heartRateAt', fields: ['heartRateBpm'] },
+  { at: 'heartRateAt', fields: ['heartRateBpm', 'heartRateSource'] },
   { at: 'batteryAt', fields: ['batteryPercent'] },
   { at: 'bloodPressureAt', fields: ['systolicMmHg', 'diastolicMmHg', 'bloodPressureSource'] },
   { at: 'oxygenSaturationAt', fields: ['oxygenSaturationPct'] },

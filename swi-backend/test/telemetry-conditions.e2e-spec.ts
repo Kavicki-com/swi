@@ -344,11 +344,14 @@ describe('Telemetry conditions e2e', () => {
     // A leitura do funcionário traz a condição aberta, já classificada, com o
     // valor e o limite que a abriram: é daí que app e painel tiram o estado.
     const leitura = await query.currentForWorker(workerA)
+    const snapshot = await prisma.telemetrySnapshot.findUniqueOrThrow({ where: { workerId: workerA } })
     expect(leitura.conditions).toEqual([
       {
         kind: 'HEART_RATE_HIGH',
         category: 'URGENT',
         openedAt: condicao.firstSeenAt.toISOString(),
+        // O batimento promovido no atual é o que sustenta a condição agora.
+        measuredAt: snapshot.heartRateAt?.toISOString(),
         observedValue: SUSTAINED_BPM,
         thresholdValue: LIMITE_PERSONALIZADO,
       },
