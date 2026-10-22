@@ -71,13 +71,13 @@ O teste de navegador do app web roda localmente com `npm run test:e2e:managed` (
 
 O projeto também tem perfis do EAS (ver abaixo), mas os builds de release podem ser gerados localmente, sem conta Expo.
 
-As variáveis `EXPO_PUBLIC_*` são gravadas no bundle **no momento do build**. As de release são as do perfil `qa` do `eas.json`, mais a origem do armazenamento de mídia:
+As variáveis `EXPO_PUBLIC_*` são gravadas no bundle **no momento do build**. As de release são as do perfil `qa` do `eas.json`:
 
 ```bash
 export EXPO_PUBLIC_API_URL=https://api.kavicki.com
 export EXPO_PUBLIC_AUTH_BACKEND=api
 export EXPO_PUBLIC_DATA_BACKEND=api
-export EXPO_PUBLIC_MEDIA_ORIGINS=https://<origem-do-armazenamento>
+export EXPO_PUBLIC_MEDIA_ORIGINS=https://c5cacf2d100d6bf7d0bd43eebc686567.r2.cloudflarestorage.com
 ```
 
 `EXPO_PUBLIC_ALLOW_DEMO_MOCKS` fica de fora: é sem ela que o build de release recusa dados simulados. Variáveis definidas no ambiente vencem as do `.env`.
@@ -168,7 +168,7 @@ O `eas.json` define os perfis usados com o serviço de build do Expo. Todos roda
 | `qa-testflight` | envio ao TestFlight | `https://api.kavicki.com` |
 | `production` | lojas | `https://api.kavicki.com` |
 
-Os perfis apontados para a API declaram `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_AUTH_BACKEND=api` e `EXPO_PUBLIC_DATA_BACKEND=api`. Para usar o EAS com outra conta Expo, troque `expo.owner` e `expo.extra.eas.projectId` em `app.json` (o comando `eas init` faz isso) e o `ascAppId` de `submit` no `eas.json` pelo app da conta Apple que vai publicar. Exemplo: `eas build --profile qa --platform android`.
+Os perfis apontados para a API declaram `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_AUTH_BACKEND=api`, `EXPO_PUBLIC_DATA_BACKEND=api` e `EXPO_PUBLIC_MEDIA_ORIGINS` (a origem do armazenamento de mídia de produção, o Cloudflare R2). Para usar o EAS com outra conta Expo, troque `expo.owner` e `expo.extra.eas.projectId` em `app.json` (o comando `eas init` faz isso) e o `ascAppId` de `submit` no `eas.json` pelo app da conta Apple que vai publicar. Exemplo: `eas build --profile qa --platform android`.
 
 ## Variáveis de ambiente
 
