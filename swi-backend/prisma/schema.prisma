@@ -643,6 +643,8 @@ enum TelemetryMeasurementSource {
   MANUAL_SWI
   /// Lido do Health Connect no Android, gravado lá pelo app de uma pulseira.
   HEALTH_CONNECT
+  /// Batimento lido direto da pulseira pelo Bluetooth do celular Android, ao vivo.
+  BLUETOOTH_HR
   DERIVED
 }
 
@@ -796,6 +798,10 @@ model TelemetrySample {
   taskId    String?
 
   heartRateBpm        Float?
+  /// De onde veio o batimento. Decide o caminho dele: o do Bluetooth é ao vivo,
+  /// o do Health Connect é da avaliação do dia. Nulo nas amostras anteriores à
+  /// coluna, e nulo conta como "não veio do Bluetooth".
+  heartRateSource     TelemetryMeasurementSource?
   /// CONTRATO DE DELTA. stepDelta, distanceDeltaM, activeEnergyKcal e
   /// motionCount são variação desde a amostra anterior da mesma sessão, nunca
   /// o acumulado do dia nem o acumulado do HealthKit. O read model os SOMA, na janela móvel e no total do dia.
@@ -854,6 +860,10 @@ model TelemetrySnapshot {
   /// Quando o backend recebeu o lote que promoveu o atual. Para pulseira, é o
   /// "sincronizado às"; lastEventTime é o "dados até".
   lastReceivedAt DateTime?
+  /// Horário do último evento AO VIVO promovido. É por ele que a varredura de
+  /// silêncio mede: o lote da pulseira anda lastEventTime sem ser sinal ao vivo.
+  /// Nulo para quem nunca falou ao vivo (celular Android sem Bluetooth).
+  lastLiveEventTime DateTime?
 
   heartRateBpm        Float?
   heartRateAt         DateTime?
@@ -882,6 +892,7 @@ model TelemetrySnapshot {
   updatedAt DateTime @updatedAt
 
   @@index([origin, lastEventTime])
+  @@index([origin, lastLiveEventTime])
   @@index([sessionId])
 }
 
