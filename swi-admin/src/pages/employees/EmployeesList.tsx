@@ -13,6 +13,7 @@ import {
   Icon,
   Pagination,
   SearchInput,
+  SkeletonList,
   Tabs,
   Text,
   Title,
@@ -339,6 +340,9 @@ export function EmployeesList({
   const { user } = useAuth()
   const myId = user?.id ?? ''
   const [employees, setEmployees] = useState<Employee[]>([])
+  // Carga da lista "cadastrados": sem isto a falha aparecia como "Nenhum
+  // funcionário cadastrado". Mesmo comportamento da lista de administradores.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | { error: string }>('loading')
   const [pendentes, setPendentes] = useState<PendingUser[]>([])
   // true enquanto o fetch da aba Pendentes está em voo. Começa true quando a
   // aba inicial já é 'pendentes' pra não piscar o empty state antes do fetch.
@@ -365,8 +369,19 @@ export function EmployeesList({
 
   useEffect(() => {
     let cancelled = false
-    employeesApi.list().then(({ data }) => {
-      if (!cancelled && data) setEmployees(data.filter((e) => !removidosRef.current.has(e.id)))
+    // Recarregar com a lista já na tela não a esconde; só a nova tentativa
+    // depois de uma falha volta a mostrar o carregando.
+    setLoadState((s) => (typeof s === 'object' ? 'loading' : s))
+    employeesApi.list().then(({ data, error }) => {
+      if (cancelled) return
+      if (!data) {
+        // Falha num recarregamento mantém a lista que já está visível.
+        const message = error?.message ?? 'Falha ao carregar'
+        setLoadState((s) => (s === 'ready' ? s : { error: message }))
+        return
+      }
+      setEmployees(data.filter((e) => !removidosRef.current.has(e.id)))
+      setLoadState('ready')
     })
     return () => {
       cancelled = true
@@ -575,6 +590,21 @@ export function EmployeesList({
               Nenhum cadastro pendente
             </Text>
           )}
+        </View>
+      ) : loadState === 'loading' ? (
+        <View testID="employees-loading">
+          <SkeletonList rows={6} lines={3} avatarSize={64} accessibilityLabel="Carregando" />
+        </View>
+      ) : loadState !== 'ready' ? (
+        <View style={{ gap: theme.gap.s, alignItems: 'flex-start' }}>
+          <Text testID="employees-error" variant="body.m" color={theme.content.error}>
+            {loadState.error}
+          </Text>
+          <Button
+            label="Tentar novamente"
+            variant="outline"
+            onPress={() => setReloadKey((k) => k + 1)}
+          />
         </View>
       ) : (
         <>
