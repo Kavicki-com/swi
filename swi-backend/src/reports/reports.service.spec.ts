@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { NotFoundException, UnprocessableEntityException } from '@nestjs/common'
+import { ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common'
 import { ReportsService } from './reports.service'
 import { requestHash } from '../idempotency/idempotency-key'
 
@@ -40,6 +40,7 @@ const prisma = () => {
 // requisitante, e o acesso entre empresas devolve null ou NotFound.
 const row = (over = {}) => ({
   id: 'r1',
+  authorId: 'u-ana',
   title: 'T',
   summary: null,
   status: 'pending',
@@ -220,6 +221,18 @@ describe('ReportsService', () => {
     expect(out!.activities).toEqual([{ title: 'Só texto' }])
   })
 
+  // O painel mostra Excluir a quem o servidor deixa excluir: o autor ou um
+  // ADMIN. Sem o id do autor na resposta, o supervisor autor não teria como
+  // saber que o relatório é dele (o nome é um snapshot e pode repetir).
+  it('lista e detalhe trazem o id do usuário autor', async () => {
+    const db = prisma()
+    db.report.findMany.mockResolvedValue([row()])
+    db.report.findUnique.mockResolvedValue(row({ comments: [] }))
+    const service = new ReportsService(db, media(), notifications())
+    expect((await service.list('org1')).items[0].authorId).toBe('u-ana')
+    expect((await service.get('r1', 'org1'))!.authorId).toBe('u-ana')
+  })
+
   it('get inexistente → null', async () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue(null)
@@ -293,7 +306,7 @@ describe('ReportsService', () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue({ id: 'r1', author: { companyId: 'org1' } })
     db.report.update.mockResolvedValue(row({ title: 'Novo', status: 'accept', statusLabel: 'Aceito' }))
-    const out = await new ReportsService(db, media(), notifications()).update('r1', 'u1', {
+    const out = await new ReportsService(db, media(), notifications()).update('r1', 'u1', 'ADMIN', {
       title: 'Novo',
       status: 'accept',
       statusLabel: 'Aceito',
@@ -310,7 +323,7 @@ describe('ReportsService', () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue({ id: 'r1', author: { companyId: 'org2' } })
     await expect(
-      new ReportsService(db, media(), notifications()).update('r1', 'u1', { title: 'x' } as any, 'org1'),
+      new ReportsService(db, media(), notifications()).update('r1', 'u1', 'ADMIN', { title: 'x' } as any, 'org1'),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(db.report.update).not.toHaveBeenCalled()
   })
@@ -319,7 +332,7 @@ describe('ReportsService', () => {
     const db = prisma()
     db.report.findUnique.mockResolvedValue(null)
     await expect(
-      new ReportsService(db, media(), notifications()).update('nope', 'u1', { title: 'x' } as any, 'org1'),
+      new ReportsService(db, media(), notifications()).update('nope', 'u1', 'ADMIN', { title: 'x' } as any, 'org1'),
     ).rejects.toBeInstanceOf(NotFoundException)
   })
 
@@ -648,6 +661,7 @@ describe('ReportsService.listAssignees', () => {
       await new ReportsService(db, m, notifications()).update(
         'r1',
         'u1',
+        'ADMIN',
         { imageKeys: ['reports/a.jpg'], imageKeysBase: ['reports/a.jpg', 'reports/b.jpg'] },
         'org1',
       )
@@ -666,6 +680,7 @@ describe('ReportsService.listAssignees', () => {
       await new ReportsService(db, m, notifications()).update(
         'r1',
         'u1',
+        'ADMIN',
         { imageKeys: ['reports/novo.jpg'], imageKeysBase: ['reports/a.jpg'] },
         'org1',
       )
@@ -681,7 +696,7 @@ describe('ReportsService.listAssignees', () => {
         row({ imageKeys: ['reports/a.jpg', 'reports/b.jpg'], author: { companyId: 'org1' } }),
       )
       db.report.update.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
-      await new ReportsService(db, m, notifications()).update('r1', 'u1', { imageKeys: ['reports/a.jpg'] }, 'org1')
+      await new ReportsService(db, m, notifications()).update('r1', 'u1', 'ADMIN', { imageKeys: ['reports/a.jpg'] }, 'org1')
       // contrato antigo preservado: o array substitui...
       expect(db.report.update.mock.calls[0][0].data.imageKeys).toEqual(['reports/a.jpg'])
       // ...mas o objeto continua no bucket
@@ -693,7 +708,7 @@ describe('ReportsService.listAssignees', () => {
       const m = media()
       db.report.findUnique.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
       db.report.update.mockResolvedValue(row())
-      await new ReportsService(db, m, notifications()).update('r1', 'u1', { title: 'Novo' }, 'org1')
+      await new ReportsService(db, m, notifications()).update('r1', 'u1', 'ADMIN', { title: 'Novo' }, 'org1')
       expect(m.deleteObjects).not.toHaveBeenCalled()
     })
 
@@ -701,15 +716,67 @@ describe('ReportsService.listAssignees', () => {
       const db = prisma()
       db.report.findUnique.mockResolvedValue(row({ imageKeys: ['reports/a.jpg'] }))
       db.report.update.mockResolvedValue(row())
-      await new ReportsService(db, media(), notifications()).update('r1', 'u1', { title: 'Novo' }, 'org1')
+      await new ReportsService(db, media(), notifications()).update('r1', 'u1', 'ADMIN', { title: 'Novo' }, 'org1')
       expect(db.$transaction).toHaveBeenCalledTimes(1)
     })
   })
 
+  // Quem edita: o autor, e do painel o ADMIN e o SUPERVISOR da mesma empresa.
+  // Antes bastava ser da empresa, e qualquer funcionário reescrevia o
+  // relatório de outro, que é o registro de segurança do trabalho.
+  describe('update: quem edita', () => {
+    const alvo = (over = {}) => row({ authorId: 'autor-1', ...over })
+
+    it('o autor edita o próprio relatório, mesmo sendo funcionário', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      db.report.update.mockResolvedValue(alvo({ title: 'Novo' }))
+      const out = await new ReportsService(db, media(), notifications()).update('r1', 'autor-1', 'WORKER', { title: 'Novo' }, 'org1')
+      expect(out.title).toBe('Novo')
+      expect(db.report.findUnique.mock.calls[0][0].select).toMatchObject({ authorId: true })
+    })
+
+    it.each(['ADMIN', 'SUPERVISOR'])('%s da mesma empresa edita relatório de outra pessoa', async (role) => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo())
+      db.report.update.mockResolvedValue(alvo({ status: 'accept' }))
+      await new ReportsService(db, media(), notifications()).update('r1', 'painel-1', role, { status: 'accept' }, 'org1')
+      expect(db.report.update).toHaveBeenCalledTimes(1)
+    })
+
+    it('funcionário que não é o autor recebe 403 e nada muda', async () => {
+      const db = prisma()
+      const m = media()
+      db.report.findUnique.mockResolvedValue(alvo({ imageKeys: ['reports/a.jpg'] }))
+      await expect(
+        new ReportsService(db, m, notifications()).update(
+          'r1',
+          'outro-1',
+          'WORKER',
+          { title: 'x', imageKeys: [], imageKeysBase: ['reports/a.jpg'] },
+          'org1',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException)
+      expect(db.report.update).not.toHaveBeenCalled()
+      expect(m.deleteObjects).not.toHaveBeenCalled()
+    })
+
+    // Fora da empresa segue 404, antes da régua do autor: o 403 confirmaria
+    // que o id existe.
+    it('supervisor de outra empresa recebe 404, nunca 403', async () => {
+      const db = prisma()
+      db.report.findUnique.mockResolvedValue(alvo({ author: { companyId: 'org2' } }))
+      await expect(
+        new ReportsService(db, media(), notifications()).update('r1', 'painel-1', 'SUPERVISOR', { title: 'x' }, 'org1'),
+      ).rejects.toBeInstanceOf(NotFoundException)
+      expect(db.report.update).not.toHaveBeenCalled()
+    })
+  })
+
   // Exclusão de relatório: item do contrato que não existia nem no painel nem
-  // na API. Diferente do update, que é só org-scoped, apagar é destrutivo e
-  // irreversível (os comentários vão junto por cascade no schema), então a
-  // régua é mais apertada: autor ou ADMIN.
+  // na API. Diferente da edição, que o SUPERVISOR também faz, apagar é
+  // destrutivo e irreversível (os comentários vão junto por cascade no schema),
+  // então a régua é mais apertada: autor ou ADMIN.
   describe('remove', () => {
     const alvo = (over = {}) => row({ authorId: 'u1', imageKeys: ['reports/x.jpg'], ...over })
 

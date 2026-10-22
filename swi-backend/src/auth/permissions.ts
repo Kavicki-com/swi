@@ -47,9 +47,12 @@ export const PERMISSIONS = {
   'devices.manage': ADMIN_ONLY,
   /** Configurações da empresa; hoje, o local da obra que alimenta o clima. */
   'company.manage': ADMIN_ONLY,
-  // As duas de relatório são impostas no módulo de relatórios: a leitura não
-  // exige papel e a exclusão de relatório alheio exige ADMIN no serviço.
+  // As de relatório são impostas no módulo de relatórios: a leitura não exige
+  // papel, e editar ou excluir relatório alheio exige o papel no serviço. O
+  // autor sempre edita e exclui o próprio.
   'reports.read': PANEL,
+  /** Editar relatório de outra pessoa da mesma empresa. */
+  'reports.edit': PANEL,
   'reports.delete': ADMIN_ONLY,
 } as const satisfies Record<string, readonly Role[]>
 

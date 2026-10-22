@@ -22,6 +22,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   observedValue: 185,
   thresholdValue: 167,
   worker: { name: 'Ana Souza' },
+  session: null as { device: { kind: string } } | null,
   ...over,
 })
 
@@ -142,12 +143,36 @@ describe('healthNotificationsFor', () => {
     expect(out.admins).toBeNull()
   })
 
+  // O aparelho diz a palavra: no Android quem mede é a pulseira, no iPhone é o
+  // relógio. Sem aparelho conhecido o texto fica no relógio, como sempre foi.
+  it('bateria fraca da pulseira fala da pulseira, com e sem número', () => {
+    const out = healthNotificationsFor({ kind: 'DEVICE_BATTERY_LOW', observedValue: 12, thresholdValue: 15 }, 'Ana Souza', 'BAND')
+    expect(out.worker).toEqual({ domain: 'health', title: 'Bateria da pulseira baixa', body: 'Bateria em 12%. Carregue a pulseira para seguir monitorado.' })
+    expect(out.admins).toBeNull()
+    const semNumero = healthNotificationsFor({ kind: 'DEVICE_BATTERY_LOW', observedValue: null, thresholdValue: 15 }, 'Ana Souza', 'BAND')
+    expect(semNumero.worker?.body).toBe('Carregue a pulseira para seguir monitorado.')
+  })
+
+  it('bateria fraca do relógio, e sem aparelho conhecido, fala do relógio', () => {
+    for (const wearable of ['WATCH', null] as const) {
+      const out = healthNotificationsFor({ kind: 'DEVICE_BATTERY_LOW', observedValue: null, thresholdValue: 15 }, 'Ana Souza', wearable)
+      expect(out.worker).toEqual({ domain: 'health', title: 'Bateria do relógio baixa', body: 'Carregue o relógio para seguir monitorado.' })
+    }
+  })
+
   // Sem sinal o aparelho do funcionário provavelmente nem recebe; quem precisa
   // saber que alguém saiu do monitoramento é a administração.
   it('perda de sinal vai só aos administradores', () => {
     const out = healthNotificationsFor({ kind: 'DEVICE_SIGNAL_LOST', observedValue: 600000, thresholdValue: 600000 }, 'Ana Souza')
     expect(out.worker).toBeNull()
     expect(out.admins).toEqual({ domain: 'health', title: 'Sem sinal do relógio: Ana Souza', body: 'O monitoramento parou de receber dados.' })
+  })
+
+  it('perda de sinal da pulseira fala da pulseira', () => {
+    const out = healthNotificationsFor({ kind: 'DEVICE_SIGNAL_LOST', observedValue: 600000, thresholdValue: 600000 }, 'Ana Souza', 'BAND')
+    expect(out.worker).toBeNull()
+    expect(out.admins).toEqual({ domain: 'health', title: 'Sem sinal da pulseira: Ana Souza', body: 'O monitoramento parou de receber dados.' })
+    expect(healthNotificationsFor({ kind: 'DEVICE_SIGNAL_LOST', observedValue: 1, thresholdValue: 1 }, 'Ana', 'WATCH').admins?.title).toBe('Sem sinal do relógio: Ana')
   })
 
   // Um padrão do que já passou: o gestor decide, e o funcionário não é avisado.
@@ -219,6 +244,33 @@ describe('TelemetryHealthNotifier', () => {
       notifier(prisma, notifications, audienceDouble(['worker-1'])).notifyOpened([change(), change({ conditionId: 'cond-2', workerId: 'worker-2', kind: 'DEVICE_BATTERY_LOW' })]),
     ).resolves.toBeUndefined()
     expect(notifications.enqueueForMany).toHaveBeenCalledWith(['worker-2'], expect.objectContaining({ title: 'Bateria do relógio baixa' }))
+  })
+
+  // O aparelho é o da sessão que abriu a condição: o celular cadastrado
+  // repassa o vestível, e o Android repassa a pulseira.
+  it('condição aberta na sessão do Android avisa com a palavra pulseira', async () => {
+    const notifications = notificationsDouble()
+    const prisma = prismaDouble([
+      row({ kind: 'DEVICE_BATTERY_LOW', observedValue: 10, session: { device: { kind: 'ANDROID_PHONE' } } }),
+      row({ id: 'cond-2', kind: 'DEVICE_SIGNAL_LOST', observedValue: 600000, session: { device: { kind: 'ANDROID_PHONE' } } }),
+    ])
+    await notifier(prisma, notifications).notifyOpened([change(), change({ conditionId: 'cond-2' })])
+    expect(prisma.telemetryCondition.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ select: expect.objectContaining({ session: { select: { device: { select: { kind: true } } } } }) }),
+    )
+    expect(notifications.enqueueForMany).toHaveBeenCalledWith(['worker-1'], expect.objectContaining({ title: 'Bateria da pulseira baixa', targetId: 'cond-1' }))
+    expect(notifications.enqueueForMany).toHaveBeenCalledWith(['admin-1', 'admin-2'], expect.objectContaining({ title: 'Sem sinal da pulseira: Ana Souza', targetId: 'cond-2' }))
+  })
+
+  it('condição aberta na sessão do iPhone, ou sem sessão, avisa com a palavra relógio', async () => {
+    const notifications = notificationsDouble()
+    const prisma = prismaDouble([
+      row({ kind: 'DEVICE_BATTERY_LOW', observedValue: 10, session: { device: { kind: 'IPHONE' } } }),
+      row({ id: 'cond-2', kind: 'DEVICE_SIGNAL_LOST', observedValue: 600000, session: null }),
+    ])
+    await notifier(prisma, notifications).notifyOpened([change(), change({ conditionId: 'cond-2' })])
+    expect(notifications.enqueueForMany).toHaveBeenCalledWith(['worker-1'], expect.objectContaining({ title: 'Bateria do relógio baixa' }))
+    expect(notifications.enqueueForMany).toHaveBeenCalledWith(['admin-1', 'admin-2'], expect.objectContaining({ title: 'Sem sinal do relógio: Ana Souza' }))
   })
 
   it('falha ao ler as condições nunca levanta', async () => {

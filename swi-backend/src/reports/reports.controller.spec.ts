@@ -63,7 +63,8 @@ describe('ReportsController', () => {
     await c.addComment('r1', 'u1', { body: 'oi' })
 
     expect(s.create).toHaveBeenCalledWith('u1', { title: 'T' }, undefined)
-    expect(s.update).toHaveBeenCalledWith('r1', 'u1', { title: 'T2' }, 'empresa-1')
+    // O papel vai junto: é com ele que o serviço deixa o painel editar relatório alheio.
+    expect(s.update).toHaveBeenCalledWith('r1', 'u1', 'WORKER', { title: 'T2' }, 'empresa-1')
     expect(s.addComment).toHaveBeenCalledWith('r1', 'u1', { body: 'oi' }, undefined)
   })
 

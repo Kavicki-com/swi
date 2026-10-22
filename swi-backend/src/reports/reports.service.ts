@@ -8,6 +8,7 @@ import type { CreateCommentDto, CreateReportDto, UpdateReportDto } from './dto'
 import { formatBrtDate } from '../common/brazil-time'
 import { isStaffJobTitle } from '../common/staff'
 import { attachmentKindOf, contentTypeOfKey } from '../media/allowed-content-types'
+import { can } from '../auth/permissions'
 
 const LIST_CAP = 200
 
@@ -192,15 +193,22 @@ export class ReportsService {
    * nada é apagado do bucket, porque destruir evidência de campo é pior que
    * vazar storage. Diff e write na MESMA transação, senão um write concorrente
    * entre a leitura e o update deixaria o banco citando objeto apagado.
+   *
+   * Quem edita: o AUTOR, ou quem tem `reports.edit` (ADMIN e SUPERVISOR) na
+   * mesma empresa. Funcionário que não é o autor leva 403, e fora da empresa
+   * segue 404 antes disso, para não confirmar que o id existe.
    */
-  async update(id: string, _userId: string, dto: UpdateReportDto, companyId: string | null) {
+  async update(id: string, userId: string, role: string, dto: UpdateReportDto, companyId: string | null) {
     try {
       const { r, removidos } = await this.prisma.$transaction(async (tx) => {
         const existing = await tx.report.findUnique({
           where: { id },
-          select: { id: true, imageKeys: true, author: { select: { companyId: true } } },
+          select: { id: true, authorId: true, imageKeys: true, author: { select: { companyId: true } } },
         })
         if (!existing || existing.author.companyId !== companyId) throw new NotFoundException('Relatório não encontrado')
+        if (existing.authorId !== userId && !can(role, 'reports.edit')) {
+          throw new ForbiddenException('Apenas o autor, um supervisor ou um administrador pode editar o relatório')
+        }
 
         let imageKeys = dto.imageKeys
         let removidos: string[] = []
@@ -314,6 +322,9 @@ export class ReportsService {
     const attachments = await this.attachmentsFor(r.imageKeys)
     return {
       id: r.id,
+      // Id do usuário autor, o mesmo que a exclusão confere: é por ele que o
+      // painel sabe se quem lê é o autor, já que o nome é snapshot e repete.
+      authorId: r.authorId,
       title: r.title,
       summary: r.summary ?? '',
       status: r.status,
