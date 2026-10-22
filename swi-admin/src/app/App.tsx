@@ -24,6 +24,7 @@ import { GlobalNotices } from '@/components/GlobalNotices'
 import { NotificationsProvider } from '@/services/notifications/NotificationsProvider'
 import { UrgentAlertsProvider } from '@/services/alerts/UrgentAlertsProvider'
 import { Placeholder } from './Placeholder'
+import { NotFound } from './NotFound'
 import { ADMIN_ROUTES, PUBLIC_PATHS } from './routes'
 import { Login } from '@/pages/auth/Login'
 import { SignUp } from '@/pages/auth/SignUp'
@@ -240,6 +241,10 @@ export function App() {
                     <Route path="/cameras" element={<CamerasPage />} />
                     <Route path="/user/settings" element={<UserSettings />} />
                     <Route path="/user/profile" element={<UserProfile />} />
+                    {/* Endereço que não casa com nada: 404 dentro do layout, em
+                        vez da tela em branco. Deslogado, o RequireAuth acima já
+                        manda para o login. */}
+                    <Route path="*" element={<NotFound />} />
                     {ADMIN_ROUTES.filter(
                       (r) =>
                         !PUBLIC_PATHS.has(r.path) &&
