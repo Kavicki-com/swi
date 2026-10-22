@@ -86,10 +86,10 @@ describe('ReportsList: carga e busca', () => {
     expect(screen.getByText('Queda de energia')).toBeTruthy()
   })
 
-  it('resposta vazia não quebra a tela e o rodapé diz zero', async () => {
+  it('resposta vazia não quebra a tela e diz que não há relatório', async () => {
     h.list.mockResolvedValue({ data: [], count: 0 })
     await renderList()
-    expect(await screen.findByText('Mostrando 0 de 0')).toBeTruthy()
+    expect(await screen.findByText('Nenhum relatório ainda')).toBeTruthy()
   })
 })
 

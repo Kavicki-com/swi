@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useDemoToast } from '@/lib/demoToast'
 import { profileApi, type ProfileCatalog, type ProfilePatch } from '@/services/api/profile'
+import { adminsApi } from '@/services/admins'
 import { authApi } from '@/services/api/auth'
 import { uploadImage } from '@/services/api/upload'
 import { examsApi, type Exam } from '@/services/api/exams'
@@ -26,11 +27,6 @@ export const GENDER_OPTIONS = [
   { label: 'Outro', value: 'other' },
 ]
 
-const GERENTE_OPTIONS = [
-  { label: 'João Soares Ribeiro', value: 'joao' },
-  { label: 'Mathias Campos', value: 'mathias' },
-]
-
 type Option = { label: string; value: string }
 
 // Profissão, Setor e Função vêm do catálogo REAL da organização (GET
@@ -41,12 +37,6 @@ type Option = { label: string; value: string }
 // verbatim.
 const toOptions = (values: ReadonlyArray<string>): Option[] =>
   values.map((v) => ({ label: v, value: v }))
-
-// Gerente segue lista fixa (pessoas, fonte diferente, fora do catálogo).
-const valueOf = (options: Option[], label: string | null): string =>
-  label ? (options.find((o) => o.label === label)?.value ?? label) : ''
-const labelOf = (options: Option[], value: string): string =>
-  options.find((o) => o.value === value)?.label ?? value
 
 // O Combobox do DS resolve o texto do trigger por `options.find(o => o.value
 // === value)` (Combobox.tsx:73), um value fora da lista renderiza o
@@ -125,7 +115,15 @@ export function useUserSettings() {
     () => withCurrent(toOptions(catalog?.duties ?? []), funcao),
     [catalog, funcao],
   )
-  const gerenteOptions = useMemo(() => withCurrent(GERENTE_OPTIONS, gerente), [gerente])
+  // Gerente: a equipe do painel da empresa (administradores e supervisores
+  // ativos), pela mesma lista de usuários da tela de administradores. O backend
+  // guarda o NOME, então value === label como nos campos de catálogo. Quem está
+  // logado não é gerente de si mesmo.
+  const [managers, setManagers] = useState<string[]>([])
+  const gerenteOptions = useMemo(
+    () => withCurrent(toOptions(managers), gerente),
+    [managers, gerente],
+  )
 
   // Fonte única dos exames: tabela Exam, a mesma que o app e o detalhe do
   // funcionário leem. Profile.examKeys continua existindo no backend mas não
@@ -156,6 +154,18 @@ export function useUserSettings() {
     }
   }, [])
 
+  const myId = user?.id
+  useEffect(() => {
+    let cancelled = false
+    adminsApi.list().then(({ data }) => {
+      if (cancelled || !data) return
+      setManagers(data.filter((a) => a.active && a.id !== myId).map((a) => a.name))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [myId])
+
   // Prefill real: GET /profile/me (404 = perfil ainda não preenchido → form
   // vazio, sem erro). Labels do backend viram values dos comboboxes.
   useEffect(() => {
@@ -174,7 +184,7 @@ export function useUserSettings() {
       setProfissao(data.jobTitle ?? '')
       setSetor(data.sector ?? '')
       setFuncao(data.duty ?? '')
-      setGerente(valueOf(GERENTE_OPTIONS, data.managerName))
+      setGerente(data.managerName ?? '')
       setBloodType(data.bloodType ?? '')
       // gender é um CÓDIGO ('male'/'female'), não um rótulo: o resto do painel
       // (detalhe do funcionário, painel do chat) compara com esses valores.
@@ -225,7 +235,7 @@ export function useUserSettings() {
       ...(profissao ? { jobTitle: profissao } : {}),
       ...(setor ? { sector: setor } : {}),
       ...(funcao ? { duty: funcao } : {}),
-      ...(gerente ? { managerName: labelOf(GERENTE_OPTIONS, gerente) } : {}),
+      ...(gerente ? { managerName: gerente } : {}),
       // Grava o CÓDIGO, não o rótulo, ver readGender.
       ...(gender ? { gender } : {}),
       ...(bloodType ? { bloodType } : {}),

@@ -33,6 +33,7 @@ import {
   type ReportComment,
 } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
+import { useAuth } from '@/hooks/useAuth'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 
 // reportsApi.get resolve o detalhe (Report) somado à lista de comentários — o
@@ -290,12 +291,50 @@ function ActivityRow({
   )
 }
 
+// "Voltar" do cabeçalho, também presente quando o relatório não carrega.
+function BackToReports({ onPress }: { onPress: () => void }) {
+  const theme = useTheme()
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Voltar para a lista de relatórios"
+      onPress={onPress}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: theme.padding.sm,
+        paddingVertical: theme.padding.sm,
+        borderRadius: theme.border.radius.m,
+      }}
+    >
+      <Icon name="keyboard_arrow_left" size={24} color={theme.content.primaryLight} />
+      <Text
+        variant="body.m"
+        color={theme.content.primaryLight}
+        style={{ fontFamily: theme.fontFamily.title, fontWeight: '700' }}
+      >
+        Voltar
+      </Text>
+    </Pressable>
+  )
+}
+
 export function ReportDetails() {
   const theme = useTheme()
   const navigate = useNavigate()
   const { show: showToast } = useDemoToast()
   const { id } = useParams<{ id: string }>()
+  // Excluir segue reports.delete da matriz do backend, só do administrador: o
+  // supervisor receberia 403, então não vê o botão.
+  const canDelete = (useAuth().user?.level ?? 'ADMIN') === 'ADMIN'
   const [report, setReport] = useState<ReportWithComments | null>(null)
+  // Falha do GET (404 de id inexistente ou rede): a mensagem do servidor. Sem
+  // ela a tela ficava em "Carregando…" para sempre.
+  const [loadError, setLoadError] = useState<string | null>(null)
+  // Incrementado pelo "Tentar novamente": só um gatilho pro efeito refazer a
+  // busca (o id não mudou, então ele sozinho não re-dispara).
+  const [reloadKey, setReloadKey] = useState(0)
   const [search, setSearch] = useState('')
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -316,13 +355,16 @@ export function ReportDetails() {
   useEffect(() => {
     if (!id) return
     let cancelled = false
-    reportsApi.get(id).then(({ data }) => {
-      if (!cancelled) setReport(data)
+    setLoadError(null)
+    reportsApi.get(id).then(({ data, error }) => {
+      if (cancelled) return
+      setReport(data)
+      if (!data) setLoadError(error?.message ?? 'Falha ao carregar')
     })
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, reloadKey])
 
   // Envia o comentário: bloqueia vazio/whitespace e envio duplo (submitting).
   // Sucesso apenda o ReportComment retornado e limpa o campo; erro toasta e
@@ -360,6 +402,26 @@ export function ReportDetails() {
     navigate('/reports')
   }
 
+  // Mesmo formato do detalhe da tarefa: a mensagem do servidor (o 404 diz
+  // "Relatório não encontrado") e uma nova tentativa, com o Voltar no lugar.
+  if (!report && loadError) {
+    return (
+      <View style={{ gap: theme.gap.l, alignItems: 'flex-start' }}>
+        <BackToReports onPress={() => navigate('/reports')} />
+        <View style={{ alignItems: 'flex-start', gap: theme.gap.s }}>
+          <Text testID="report-details-error" variant="body.m" color={theme.content.error}>
+            {loadError}
+          </Text>
+          <Button
+            label="Tentar novamente"
+            variant="outline"
+            onPress={() => setReloadKey((k) => k + 1)}
+          />
+        </View>
+      </View>
+    )
+  }
+
   if (!report) {
     return (
       <View testID="report-details-loading" style={{ padding: 24 }}>
@@ -374,28 +436,7 @@ export function ReportDetails() {
     <View testID="report-details" style={{ gap: theme.gap.l }}>
       {/* Section 1 — Header bar. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Voltar para a lista de relatórios"
-          onPress={() => navigate('/reports')}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: theme.padding.sm,
-            paddingVertical: theme.padding.sm,
-            borderRadius: theme.border.radius.m,
-          }}
-        >
-          <Icon name="keyboard_arrow_left" size={24} color={theme.content.primaryLight} />
-          <Text
-            variant="body.m"
-            color={theme.content.primaryLight}
-            style={{ fontFamily: theme.fontFamily.title, fontWeight: '700' }}
-          >
-            Voltar
-          </Text>
-        </Pressable>
+        <BackToReports onPress={() => navigate('/reports')} />
 
         <View style={{ flex: 1 }}>
           <SearchInput
@@ -422,15 +463,17 @@ export function ReportDetails() {
         />
         {/* Por último e sem preenchimento: é a ação mais rara das três e a única
             irreversível, então não disputa peso visual com as outras duas. */}
-        <Button
-          label="Excluir"
-          variant="outline"
-          borderColor={theme.surface.error}
-          labelColor={theme.content.error}
-          iconLeft={<Icon name="delete_icon" size={20} color={theme.content.error} />}
-          accessibilityLabel="Excluir relatório"
-          onPress={() => setConfirmingDelete(true)}
-        />
+        {canDelete ? (
+          <Button
+            label="Excluir"
+            variant="outline"
+            borderColor={theme.surface.error}
+            labelColor={theme.content.error}
+            iconLeft={<Icon name="delete_icon" size={20} color={theme.content.error} />}
+            accessibilityLabel="Excluir relatório"
+            onPress={() => setConfirmingDelete(true)}
+          />
+        ) : null}
       </View>
 
       {/* Section 2 — Main report card (full-width). */}

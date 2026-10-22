@@ -48,6 +48,10 @@ import { countWorkersInArea, type AreaVertex } from '@/lib/evacuationArea'
 import { drawAreaLayer, AREA_VERTEX_COLOR } from '@/pages/maps/evacuationAreaLayer'
 import { buildMusterPin } from '@/pages/maps/musterPointPin'
 import { EvacuationDrawToolbar } from './components/EvacuationDrawToolbar'
+import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
+
+// Sem posição nenhuma o mapa nasce no mesmo ponto padrão do mapa geral.
+const DEFAULT_CENTER: [number, number] = [-46.63, -23.55]
 
 const FILTER_CHIPS = [
   { value: 'all', label: 'Todos' },
@@ -112,6 +116,8 @@ export function AlertsList() {
     () => new Set((evacuation?.workers ?? []).filter((w) => w.acked).map((w) => w.id)),
     [evacuation],
   )
+  // Encerrar a evacuação pede confirmação: o fim vale para a obra inteira.
+  const [confirmingEnd, setConfirmingEnd] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [mapMode, setMapMode] = useState<'pins' | 'heat' | 'meteo'>('pins')
@@ -211,23 +217,27 @@ export function AlertsList() {
         ? theme.content.warning
         : undefined
 
-  // Init the map once we have lib + container + at least one marker (so
-  // we know where to center). Tear down on unmount.
-  // O mapa nasce UMA vez, no primeiro snapshot com workers. Depender de
-  // `markers` direto destruiria/recriaria o mapa a cada heartbeat WS (3s).
-  const markersLoaded = markers.length > 0
+  // O mapa nasce UMA vez, no primeiro snapshot (mesmo vazio: sem posição ele
+  // centra no ponto padrão e a evacuação continua podendo ser desenhada).
+  // Depender de `markers` direto destruiria/recriaria o mapa a cada heartbeat
+  // WS (3s). Tear down on unmount.
+  const markersLoaded = liveMarkers !== null
+  const noPositions = liveMarkers !== null && liveMarkers.length === 0
   const initialMarkersRef = useRef<DashboardMapMarker[] | null>(null)
-  if (initialMarkersRef.current === null && markers.length > 0) {
-    initialMarkersRef.current = markers
+  if (initialMarkersRef.current === null && liveMarkers !== null) {
+    initialMarkersRef.current = liveMarkers
   }
 
   useEffect(() => {
     if (!lib || !containerRef.current || !markersLoaded) return
     const initial = initialMarkersRef.current ?? []
-    const center: [number, number] = [
-      initial.reduce((s, m) => s + m.lng, 0) / initial.length,
-      initial.reduce((s, m) => s + m.lat, 0) / initial.length,
-    ]
+    const center: [number, number] =
+      initial.length > 0
+        ? [
+            initial.reduce((s, m) => s + m.lng, 0) / initial.length,
+            initial.reduce((s, m) => s + m.lat, 0) / initial.length,
+          ]
+        : DEFAULT_CENTER
     const map = new lib.Map({
       container: containerRef.current,
       style: SATELLITE_STYLE,
@@ -531,7 +541,7 @@ export function AlertsList() {
               <Button
                 label="Encerrar evacuação"
                 backgroundColor={theme.surface.error}
-                onPress={() => void endEvacuation()}
+                onPress={() => setConfirmingEnd(true)}
               />
             </View>
           ) : (
@@ -571,6 +581,35 @@ export function AlertsList() {
 
         {/* Mandatory ESRI attribution (bottom-right, non-interactive). */}
         <MapAttribution />
+
+        {/* Sem posição de ninguém: o mapa fica (a evacuação se desenha nele) e
+            o aviso diz por que não há pino. Só informa: o clique atravessa. */}
+        {noPositions ? (
+          <View
+            style={{
+              pointerEvents: 'none',
+              position: 'absolute',
+              top: theme.padding.m,
+              left: 0,
+              right: 0,
+              alignItems: 'center',
+              zIndex: 2,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: theme.surface.medium,
+                borderRadius: theme.border.radius.m,
+                paddingHorizontal: theme.padding.s,
+                paddingVertical: theme.padding.xs,
+              }}
+            >
+              <Text testID="alerts-no-positions" variant="body.s" color={theme.content.medium}>
+                Sem posição ao vivo
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* Floating mode toggles (top-left over map). */}
         <View
@@ -716,6 +755,19 @@ export function AlertsList() {
           </View>
         ) : null}
       </View>
+      {confirmingEnd ? (
+        <ConfirmDialog
+          title="Encerrar evacuação?"
+          message="A evacuação termina para todos os funcionários da obra."
+          confirmLabel="Encerrar"
+          confirmDanger
+          onConfirm={() => {
+            setConfirmingEnd(false)
+            void endEvacuation()
+          }}
+          onCancel={() => setConfirmingEnd(false)}
+        />
+      ) : null}
     </View>
   )
 }

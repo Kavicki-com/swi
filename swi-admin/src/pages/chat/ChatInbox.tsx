@@ -11,6 +11,7 @@
 //                    ContactInfoPanel (avatar + mini-map + fatigue + stats)
 //                    when selected.
 // Estado, efeitos e handlers moram em hooks/useChatInbox; esta página é layout.
+import { useMemo, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -19,12 +20,12 @@ import {
   Icon,
   Input,
   Logo,
+  SearchInput,
   Text,
   useTheme,
 } from '@kavicki/swi-design-system'
 import { useAuth } from '@/hooks/useAuth'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
-import { useDemoToast } from '@/lib/demoToast'
 import { useMyVitals } from '@/hooks/useMyVitals'
 import { NotificationBell } from '@/components/NotificationBell'
 import { fullMapPath } from '@/pages/maps/mapFocus'
@@ -41,7 +42,6 @@ export function ChatInbox() {
   const navigate = useNavigate()
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
-  const { show: showToast } = useDemoToast()
   const {
     search,
     setSearch,
@@ -69,6 +69,25 @@ export function ChatInbox() {
     handleSaveEdit,
     chatBoxRef,
   } = useChatInbox()
+
+  // Busca dentro da conversa aberta, pelo texto da mensagem. A busca de
+  // contatos continua no campo da coluna da esquerda.
+  const [messageSearchOpen, setMessageSearchOpen] = useState(false)
+  const [messageQuery, setMessageQuery] = useState('')
+  const messageNeedle = messageSearchOpen ? messageQuery.trim().toLocaleLowerCase('pt-BR') : ''
+  const visibleMessages = useMemo(
+    () =>
+      messageNeedle
+        ? messages.filter(
+            (m) => !m.deleted && m.text.toLocaleLowerCase('pt-BR').includes(messageNeedle),
+          )
+        : messages,
+    [messages, messageNeedle],
+  )
+  const toggleMessageSearch = () => {
+    setMessageSearchOpen((open) => !open)
+    setMessageQuery('')
+  }
 
   return (
     <View
@@ -167,13 +186,36 @@ export function ChatInbox() {
             gap: theme.gap.sm,
           }}
         >
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+          {/* "Pesquisar" abre o campo de busca da conversa aberta; tocar de
+              novo fecha e devolve a conversa inteira. Sem conversa aberta não
+              há o que pesquisar. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              gap: theme.gap.s,
+            }}
+          >
+            {messageSearchOpen ? (
+              <View style={{ flex: 1 }}>
+                <SearchInput
+                  testID="chat-message-search"
+                  value={messageQuery}
+                  onChangeText={setMessageQuery}
+                  placeholder="Pesquisar"
+                  onClear={() => setMessageQuery('')}
+                  autoFocus
+                />
+              </View>
+            ) : null}
             <Button
               label="Pesquisar"
               variant="contained"
               iconLeft={<Icon name="search" size={24} color={theme.content.light} />}
               accessibilityLabel="Pesquisar mensagens"
-              onPress={() => showToast('Use o campo de pesquisa de contatos à esquerda')}
+              disabled={!selectedContact}
+              onPress={toggleMessageSearch}
             />
           </View>
 
@@ -198,7 +240,8 @@ export function ChatInbox() {
             <MessageThread
               boxRef={chatBoxRef}
               contact={selectedContact}
-              messages={messages}
+              messages={visibleMessages}
+              emptyText={messageNeedle ? 'Nenhum resultado' : null}
               loadError={loadStatus === 'error'}
               onEdit={startEdit}
               onReport={setReportingMessage}

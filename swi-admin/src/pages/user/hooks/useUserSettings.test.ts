@@ -34,6 +34,9 @@ vi.mock('@/services/api/upload', () => ({ uploadImage: h.uploadImage }))
 vi.mock('@/services/api/exams', () => ({
   examsApi: { list: h.examsList, create: h.examsCreate },
 }))
+vi.mock('@/services/admins', () => ({
+  adminsApi: { list: async () => ({ data: [], error: null }) },
+}))
 
 const profile = (over: Record<string, unknown> = {}) => ({
   fullName: 'Ana Lima',
@@ -105,7 +108,7 @@ describe('useUserSettings: prefill', () => {
     expect(result.current.cpf).toBe('529.982.247-25')
     expect(result.current.phone).toBe('(11) 99999-8888')
     expect(result.current.gender).toBe('female')
-    expect(result.current.gerente).toBe('mathias')
+    expect(result.current.gerente).toBe('Mathias Campos')
   })
 
   it('data de nascimento inválida vinda do backend não quebra o prefill', async () => {
@@ -194,10 +197,10 @@ describe('useUserSettings: salvar cadastro', () => {
     expect(h.toast).toHaveBeenCalledWith('Alterações salvas', 'Cadastro atualizado com sucesso')
   })
 
-  it('gerente vai como rótulo e gênero vai como código', async () => {
+  it('gerente vai como nome e gênero vai como código', async () => {
     const { result } = await setup()
     await act(async () => {
-      result.current.setGerente('mathias')
+      result.current.setGerente('Mathias Campos')
       result.current.setGender('male')
       result.current.setUf(' SP ')
       result.current.setDob('04/05/1990')

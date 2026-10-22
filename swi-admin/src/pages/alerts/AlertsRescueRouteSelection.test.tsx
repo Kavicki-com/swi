@@ -11,7 +11,7 @@ import { adminWorker, condition } from '@/test-utils/telemetryFixtures'
 import type { AdminWorkerEntry } from '@/services/api/telemetry'
 
 const h = vi.hoisted(() => ({
-  positions: [] as Array<Record<string, unknown>>,
+  positions: [] as Array<Record<string, unknown>> | null,
   directory: [] as Array<Record<string, unknown>>,
   navigations: [] as string[],
   workers: [] as AdminWorkerEntry[],
@@ -106,6 +106,32 @@ describe('AlertsRescueRouteSelection', () => {
     await renderSelection()
 
     await waitFor(() => expect(screen.queryByLabelText(/^Selecionar /)).toBeNull())
+  })
+
+  it('sem candidato, a lista diz que não há ninguém em vez de ficar em branco', async () => {
+    h.positions = [pos('w1', 'Ferido', 'low', -46.63, -23.55)]
+    await renderSelection()
+
+    expect((await screen.findByTestId('rescue-candidates-empty')).textContent).toBe(
+      'Nenhum funcionário encontrado.',
+    )
+  })
+
+  it('busca sem resultado também diz que não há ninguém', async () => {
+    await renderSelection()
+    await screen.findByLabelText('Selecionar Ana Lima')
+
+    fireEvent.change(screen.getByPlaceholderText('Pesquisar'), { target: { value: 'guindaste' } })
+
+    expect(screen.getByTestId('rescue-candidates-empty')).toBeTruthy()
+  })
+
+  it('enquanto as posições não chegam, mostra o carregando e não o vazio', async () => {
+    h.positions = null
+    await renderSelection()
+
+    expect(screen.getByTestId('rescue-candidates-loading')).toBeTruthy()
+    expect(screen.queryByTestId('rescue-candidates-empty')).toBeNull()
   })
 
   it('a busca reduz a lista pelo nome, sem diferenciar maiúsculas', async () => {

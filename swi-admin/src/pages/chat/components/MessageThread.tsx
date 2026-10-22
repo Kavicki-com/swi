@@ -12,6 +12,7 @@ export function MessageThread({
   contact,
   messages,
   loadError,
+  emptyText,
   onEdit,
   onReport,
 }: {
@@ -22,6 +23,8 @@ export function MessageThread({
   contact: ChatContact | null
   messages: readonly ChatMessage[]
   loadError: boolean
+  /** Conversa aberta sem nenhuma mensagem a mostrar (ex.: busca sem resultado). */
+  emptyText?: string | null
   onEdit: (message: ChatMessage) => void
   onReport: (message: ChatMessage) => void
 }) {
@@ -63,7 +66,11 @@ export function MessageThread({
         alignItems: 'center',
       }}
     >
-      {contact ? (
+      {contact && emptyText && messages.length === 0 ? (
+        <Text variant="body.s" color={theme.content.medium}>
+          {emptyText}
+        </Text>
+      ) : contact ? (
         <>
           {messages.slice(0, 2).map((m) => (
             <ChatBubble

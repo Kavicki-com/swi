@@ -124,12 +124,27 @@ describe('RescueHistoryPage', () => {
     await renderAt()
     await waitFor(() => expect(screen.getByText('Resgate ID 1849')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Encerrar resgate 1849' }))
+    // Encerrar pede confirmação antes de chamar o servidor.
+    expect(api.end).not.toHaveBeenCalled()
+    expect(screen.getByText('Encerrar resgate?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar' }))
     await waitFor(() => expect(api.end).toHaveBeenCalledWith('r1'))
     await waitFor(() =>
       expect(
         screen.queryByRole('button', { name: 'Encerrar resgate 1849' }),
       ).not.toBeInTheDocument(),
     )
+  })
+
+  it('cancelar a confirmação não encerra o resgate', async () => {
+    await renderAt()
+    await waitFor(() => expect(screen.getByText('Resgate ID 1849')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar resgate 1849' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(api.end).not.toHaveBeenCalled()
+    expect(screen.queryByText('Encerrar resgate?')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Encerrar resgate 1849' })).toBeInTheDocument()
   })
 
   it('acompanhar rota reabre a rota de socorro já despachada, com o ID no título', async () => {

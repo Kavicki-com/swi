@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Icon, SearchInput, Tabs, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import type { Camera, CameraInput } from '@/services/api/cameras'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
+import { useAuth } from '@/hooks/useAuth'
 import { useCameras, errorMessage } from './hooks/useCameras'
 import { CameraList } from './components/CameraList'
 import { filterCameras } from './cameraSearch'
@@ -40,6 +41,9 @@ export function CamerasPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const { cameras, loading, error, retry, create, update, remove } = useCameras()
+  // Cadastrar, editar e excluir câmera é só do administrador (cameras.manage na
+  // matriz do backend). O supervisor vê e abre as câmeras, sem esses controles.
+  const canManage = (useAuth().user?.level ?? 'ADMIN') === 'ADMIN'
   const [search, setSearch] = useState('')
   const [mode, setModeState] = useState<Mode>({ kind: 'view' })
   const [removing, setRemoving] = useState<Camera | null>(null)
@@ -125,12 +129,14 @@ export function CamerasPage() {
               onClear={() => setSearch('')}
             />
           </View>
-          <Button
-            label="Nova câmera"
-            variant="contained"
-            onPress={() => setMode({ kind: 'create' })}
-            iconLeft={<Icon name="add_circle" size={18} color={theme.content.light} />}
-          />
+          {canManage ? (
+            <Button
+              label="Nova câmera"
+              variant="contained"
+              onPress={() => setMode({ kind: 'create' })}
+              iconLeft={<Icon name="add_circle" size={18} color={theme.content.light} />}
+            />
+          ) : null}
         </View>
       ) : null}
 
@@ -171,8 +177,9 @@ export function CamerasPage() {
               </View>
             ) : cameras.length === 0 ? (
               <Text testID="cameras-empty" variant="body.m" color={theme.content.medium}>
-                Nenhuma câmera cadastrada. Use &quot;Nova câmera&quot; para marcar a primeira no
-                mapa.
+                {canManage
+                  ? 'Nenhuma câmera cadastrada. Use "Nova câmera" para marcar a primeira no mapa.'
+                  : 'Nenhuma câmera cadastrada.'}
               </Text>
             ) : filtered.length === 0 ? (
               <Text testID="cameras-no-match" variant="body.m" color={theme.content.medium}>
@@ -186,8 +193,8 @@ export function CamerasPage() {
                   setMode({ kind: 'view' })
                   select(c.id)
                 }}
-                onEdit={(c) => setMode({ kind: 'edit', camera: c })}
-                onRemove={setRemoving}
+                onEdit={canManage ? (c) => setMode({ kind: 'edit', camera: c }) : undefined}
+                onRemove={canManage ? setRemoving : undefined}
               />
             )}
           </View>
