@@ -4,6 +4,7 @@ import { Throttle } from '@nestjs/throttler'
 import { MediaService } from './media.service'
 import { PresignDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { can } from '../auth/permissions'
 
 @ApiTags('media')
 @ApiBearerAuth()
@@ -19,11 +20,12 @@ export class MediaController {
   @Post('presign')
   presign(@Body() dto: PresignDto, @Req() req: { user?: { role?: string } }) {
     const prefix = dto.prefix ?? 'reports'
-    // 'order' é anexo de work-order — escrita ADMIN-only (@Roles na classe do
-    // work-orders.controller). WORKER não tem caminho legítimo nesse namespace;
-    // sem esta checagem, qualquer autenticado geraria URL real de upload nele.
-    if (prefix === 'order' && req.user?.role !== 'ADMIN') {
-      throw new ForbiddenException('prefixo restrito a administradores')
+    // 'order' é anexo de ordem de serviço: escreve nele quem opera ordens
+    // (workOrders.operate, a mesma permissão do work-orders.controller). WORKER
+    // não tem caminho legítimo nesse namespace; sem esta checagem, qualquer
+    // autenticado geraria URL real de upload nele.
+    if (prefix === 'order' && !can(req.user?.role, 'workOrders.operate')) {
+      throw new ForbiddenException('prefixo restrito a quem opera ordens de serviço')
     }
     return this.media.presignPut(dto.contentType, dto.contentLength, prefix)
   }

@@ -57,8 +57,9 @@ export class PresignDto {
   // Prefixo do objeto no bucket; restrito aos domínios que sobem mídia.
   // Default 'reports' (aceita vídeo, áudio e pdf além de imagem). 'task' são
   // fotos de tarefa, 'chat' são imagens de mensagem, e 'order' são anexos do
-  // WorkOrder, que o admin sobe.
+  // WorkOrder, que o painel sobe.
   // 'exams' e 'avatars' são exames clínicos e foto de perfil, upload do próprio
-  // usuário e liberado a qualquer autenticado. Só 'order' é exclusivo do ADMIN.
+  // usuário e liberado a qualquer autenticado. Só 'order' é restrito: exige
+  // workOrders.operate (ADMIN e SUPERVISOR).
   @IsOptional() @IsString() @IsIn(['reports', 'task', 'chat', 'order', 'exams', 'avatars']) prefix?: string
 }

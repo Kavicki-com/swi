@@ -5,10 +5,11 @@ import { MediaController } from './media.controller'
 
 // Hardening (follow-up da fatia admin-tarefas): o presign tinha só JwtAuthGuard,
 // então QUALQUER autenticado (inclusive WORKER) obtinha URL real de upload com
-// prefix 'order' — não é escalonamento (anexar exige POST/PATCH /work-orders,
-// ADMIN-only), mas permite poluir o bucket. Regra: 'order' é namespace de
-// escrita ADMIN-only; os demais prefixos seguem valendo pra qualquer autenticado
-// (o mobile WORKER usa reports/task/chat legitimamente).
+// prefix 'order'. Não é escalonamento (anexar exige POST/PATCH /work-orders),
+// mas permite poluir o bucket. Regra: 'order' é namespace de quem opera ordens
+// de serviço (workOrders.operate na matriz, hoje ADMIN e SUPERVISOR); os demais
+// prefixos seguem valendo pra qualquer autenticado (o mobile WORKER usa
+// reports/task/chat legitimamente).
 
 // presignPut (nao Post): o R2 nao implementa presigned POST — ver
 // media.service.ts. O contrato devolve { url, key }, sem `fields`.
@@ -17,7 +18,7 @@ const media = () =>
 
 const reqWithRole = (role?: string) => ({ user: role ? { role } : undefined }) as any
 
-describe('MediaController.presign — prefixo order é ADMIN-only', () => {
+describe('MediaController.presign: prefixo order segue workOrders.operate', () => {
   it('WORKER pedindo prefix order → 403 e nenhum presign emitido', () => {
     const svc = media()
     const ctrl = new MediaController(svc)
@@ -27,11 +28,20 @@ describe('MediaController.presign — prefixo order é ADMIN-only', () => {
     expect(svc.presignPut).not.toHaveBeenCalled()
   })
 
-  it('ADMIN pedindo prefix order → presign normal', async () => {
+  it.each(['ADMIN', 'SUPERVISOR'])('%s pedindo prefix order → presign normal', async (role) => {
     const svc = media()
     const ctrl = new MediaController(svc)
-    await ctrl.presign({ contentType: 'image/jpeg', contentLength: 100, prefix: 'order' }, reqWithRole('ADMIN'))
+    await ctrl.presign({ contentType: 'image/jpeg', contentLength: 100, prefix: 'order' }, reqWithRole(role))
     expect(svc.presignPut).toHaveBeenCalledWith('image/jpeg', 100, 'order')
+  })
+
+  it('sem papel no token pedindo prefix order → 403', () => {
+    const svc = media()
+    const ctrl = new MediaController(svc)
+    expect(() =>
+      ctrl.presign({ contentType: 'image/jpeg', contentLength: 100, prefix: 'order' } as any, reqWithRole()),
+    ).toThrow(ForbiddenException)
+    expect(svc.presignPut).not.toHaveBeenCalled()
   })
 
   it.each(['reports', 'task', 'chat', 'exams', 'avatars'])('WORKER pedindo prefix %s segue liberado', async (prefix) => {

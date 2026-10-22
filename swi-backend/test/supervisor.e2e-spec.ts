@@ -30,6 +30,9 @@ describe('Supervisor e2e', () => {
 
   // Perfil antes do usuário: o cadastro pelo POST /users cria Profile (FK).
   const cleanup = async () => {
+    // A ordem anexada pelo supervisor notifica o funcionário responsável.
+    await prisma.notification.deleteMany({ where: { worker: { email: { in: Object.values(emails) } } } })
+    await prisma.workOrder.deleteMany({ where: { author: { email: { in: Object.values(emails) } } } })
     await prisma.profile.deleteMany({ where: { user: { email: { in: Object.values(emails) } } } })
     await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
     await prisma.company.deleteMany({ where: { cnpj: CNPJ } })
@@ -95,6 +98,25 @@ describe('Supervisor e2e', () => {
 
     await request(server).patch(`/users/${ids.worker}`).set(a).send({ role: 'ADMIN' }).expect(400)
     await request(server).patch(`/users/${ids.admin}`).set(a).send({ role: 'SUPERVISOR' }).expect(400)
+  })
+
+  it('o supervisor anexa imagem em ordem de serviço; o funcionário segue barrado', async () => {
+    // Operar ordens de serviço inclui anexar: o presign do prefixo order segue
+    // a permissão workOrders.operate da matriz, não um papel fixo.
+    const server = app.getHttpServer()
+    const s = await login(emails.supervisor)
+    const { body: presign } = await request(server).post('/media/presign').set(s)
+      .send({ contentType: 'image/jpeg', contentLength: 1024, prefix: 'order' }).expect(201)
+    expect(presign.key).toMatch(/^order\/[0-9a-f-]{36}\.jpg$/)
+    expect(typeof presign.url).toBe('string')
+
+    const { body: ordem } = await request(server).post('/work-orders').set(s)
+      .send({ title: 'Ordem do supervisor', responsibleIds: [ids.worker], imageKeys: [presign.key] }).expect(201)
+    expect(ordem.imageKeys).toEqual([presign.key])
+
+    const w = await login(emails.worker)
+    await request(server).post('/media/presign').set(w)
+      .send({ contentType: 'image/jpeg', contentLength: 1024, prefix: 'order' }).expect(403)
   })
 
   it('o funcionário continua fora do painel', async () => {

@@ -17,7 +17,7 @@ const errosEm = async <T extends object>(Dto: ClassConstructor<T>, body: object,
 }
 
 // O anexo de uma ordem de serviço tem DUAS origens, e só uma delas passa pelo
-// presign do painel: o admin anexa sob `order/` (prefixo ADMIN-only no
+// presign do painel: o painel anexa sob `order/` (prefixo de workOrders.operate no
 // MediaController), e o funcionário fotografa a tarefa pela jornada sob `task/`
 // (JourneyPhotoDto), que o addTaskPhoto empurra pro MESMO array do pai
 // (WorkOrder.imageKeys). O detalhe devolve as duas cruas, o form de edição as
