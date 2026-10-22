@@ -211,6 +211,12 @@ describe('MonitoringLayout: abas e lista', () => {
     expect(nomesVisiveis()).toHaveLength(POPULACAO.length)
   })
 
+  it('chegando pelo "Ver Todos" do dashboard (?ver=todos), abre já sem filtro de status', async () => {
+    await renderAt('/monitoring/alerts?ver=todos')
+
+    expect(nomesVisiveis()).toHaveLength(POPULACAO.length)
+  })
+
   it('alerta ainda não triado segura a pessoa na aba de alerta mesmo sem condição aberta', async () => {
     queueMock.mockResolvedValue({
       data: [...FILA, alertaDe('al-9', 'u-exc-1', 'Excelente Um')],

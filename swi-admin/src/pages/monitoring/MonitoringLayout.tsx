@@ -216,8 +216,11 @@ export function MonitoringLayout() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   // "Ver Todos" derruba o filtro de tier sem sair da rota, mesmo padrão das
   // atividades do dashboard. Volta a false a cada troca de aba, senão a aba
-  // seguinte abriria já sem filtro.
-  const [showAllTiers, setShowAllTiers] = useState(false)
+  // seguinte abriria já sem filtro. O "Ver Todos" do dashboard chega aqui com
+  // ?ver=todos e abre a tela já nesse estado.
+  const [showAllTiers, setShowAllTiers] = useState(
+    () => new URLSearchParams(location.search).get('ver') === 'todos',
+  )
 
   // Cadastro da org: muda pouco, então é lido uma vez por montagem.
   useEffect(() => {
@@ -305,9 +308,16 @@ export function MonitoringLayout() {
   // cada releitura, e o card aberto não pode fechar sozinho por isso.
   const firstFatigueId = users.find((u) => tierOf(u) === 'alerta-fadiga')?.id ?? null
   useEffect(() => {
-    setShowAllTiers(false)
     setExpandedId(tab === 'alertas' ? firstFatigueId : null)
   }, [tab, firstFatigueId])
+  // O filtro volta só quando a aba muda de fato: a lista chegando do servidor
+  // não pode desfazer o "Ver Todos" com que a tela abriu.
+  const previousTab = useRef(tab)
+  useEffect(() => {
+    if (previousTab.current === tab) return
+    previousTab.current = tab
+    setShowAllTiers(false)
+  }, [tab])
 
   // A tela só muda com a resposta do servidor: reconhecer ou resolver troca o
   // alerta pelo estado que o backend devolveu, com quem triou e quando.

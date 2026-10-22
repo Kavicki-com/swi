@@ -4,6 +4,7 @@
 // telemetria (dashboardHealth). Extraído de Dashboard.tsx.
 import { useMemo, useState } from 'react'
 import { View } from 'react-native'
+import { useNavigate } from 'react-router-dom'
 import {
   Button,
   EmployeeOverviewCard,
@@ -13,7 +14,6 @@ import {
   Title,
   useTheme,
 } from '@kavicki/swi-design-system'
-import { useDemoToast } from '@/lib/demoToast'
 import { DataOriginBadge } from '@/components/DataOriginBadge'
 import {
   DEMO_DATA_LABEL,
@@ -50,7 +50,7 @@ export function WearAlertsSection({
   status: WearReadingStatus
 }) {
   const theme = useTheme()
-  const { show: showToast } = useDemoToast()
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<WearFilterTab>('Alertas de Fadiga')
 
@@ -102,7 +102,9 @@ export function WearAlertsSection({
           label="Ver Todos"
           variant="contained"
           size="small"
-          onPress={() => showToast('Lista completa de funcionários em desgaste')}
+          // A lista completa é o monitoramento, aberto sem filtro de status: o
+          // mesmo "Ver Todos" que a tela de lá oferece.
+          onPress={() => navigate('/monitoring/alerts?ver=todos')}
           testID="wear-alerts-see-all"
         />
       </View>
