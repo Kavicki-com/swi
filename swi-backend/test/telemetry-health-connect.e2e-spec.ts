@@ -581,8 +581,9 @@ describe('Telemetry Health Connect e2e', () => {
   })
 
   describe('varredura de silêncio', () => {
-    // Snapshot montado direto no banco: o que importa aqui é só o tipo do
-    // aparelho, com o mesmo silêncio dos dois lados.
+    // Snapshot montado direto no banco, como cada caminho o deixa: o iPhone do
+    // relógio fala ao vivo e anda o último evento ao vivo, o lote da pulseira
+    // pelo Health Connect não. O silêncio é o mesmo dos dois lados.
     const silentFor = async (email: string, kind: 'ANDROID_PHONE' | 'IPHONE') => {
       const workerId = await worker(email)
       const device = await prisma.telemetryDevice.create({
@@ -593,7 +594,14 @@ describe('Telemetry Health Connect e2e', () => {
         data: { id: randomUUID(), deviceId: device.id, workerId, origin: 'REAL', startedAt: lastEventTime },
       })
       await prisma.telemetrySnapshot.create({
-        data: { workerId, sessionId: session.id, origin: 'REAL', lastEventTime, deviceKind: kind },
+        data: {
+          workerId,
+          sessionId: session.id,
+          origin: 'REAL',
+          lastEventTime,
+          lastLiveEventTime: kind === 'IPHONE' ? lastEventTime : null,
+          deviceKind: kind,
+        },
       })
       return workerId
     }

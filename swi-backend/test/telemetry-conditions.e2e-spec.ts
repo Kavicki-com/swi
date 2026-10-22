@@ -449,7 +449,10 @@ describe('Telemetry conditions e2e', () => {
     // avisar a operação.
     await prisma.telemetrySnapshot.update({
       where: { workerId: workerA },
-      data: { lastEventTime: new Date(Date.now() - 5 * 60 * 1000) },
+      data: {
+        lastEventTime: new Date(Date.now() - 5 * 60 * 1000),
+        lastLiveEventTime: new Date(Date.now() - 5 * 60 * 1000),
+      },
     })
 
     const resultado = await conditions.sweepSilentSessions(new Date())
@@ -847,7 +850,10 @@ describe('Telemetry conditions e2e', () => {
     // Relógio calado: mesma simulação de silêncio do caso 6.
     await prisma.telemetrySnapshot.update({
       where: { workerId: workerSemNascimento },
-      data: { lastEventTime: new Date(Date.now() - 5 * 60 * 1000) },
+      data: {
+        lastEventTime: new Date(Date.now() - 5 * 60 * 1000),
+        lastLiveEventTime: new Date(Date.now() - 5 * 60 * 1000),
+      },
     })
     await conditions.sweepSilentSessions(new Date())
     const perdaDeSinal = await prisma.telemetryCondition.findFirstOrThrow({
