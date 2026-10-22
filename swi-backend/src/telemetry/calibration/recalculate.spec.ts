@@ -1,5 +1,5 @@
 import type { CalibrationDeviceFamily } from '@prisma/client'
-import { startCutsV1, type CalibrationDay } from './calibration-bands'
+import { startCuts, type CalibrationDay } from './calibration-bands'
 import { day } from './fixtures/days'
 import { recalculate, type StoredCalibration } from './recalculate'
 
@@ -41,7 +41,7 @@ describe('recalculate', () => {
     expect(out.validDays).toBe(0)
   })
 
-  it('primeira calibração: fase no começo do trecho mais recente da família, partida v1.0', () => {
+  it('primeira calibração: fase no começo do trecho mais recente da família, partida mínima', () => {
     const days = [...series(5, {}, 'WATCH', 30), ...series(5, {}, 'BAND', 25)]
     const out = recalculate({ previous: null, days, maxBpmByAge: MAX_35_YEARS })!
     expect(out.phaseStartedAt).toEqual(at(26))
@@ -49,8 +49,8 @@ describe('recalculate', () => {
     expect(out.deviceChanged).toBe(false)
     expect(out.validDays).toBe(5)
     expect(out.peakStartBpm).toBe(MAX_35_YEARS)
-    expect(out.bands.HEART_RATE.start).toEqual(startCutsV1('HEART_RATE', MAX_35_YEARS))
-    expect(out.bands.WEAR.start).toEqual({ excellence: null, fatigue: 80 })
+    expect(out.bands.HEART_RATE.start).toEqual(startCuts('HEART_RATE', MAX_35_YEARS))
+    expect(out.bands.WEAR.start).toEqual({ excellence: 40, fatigue: 80 })
   })
 
   it('dia sem família não interrompe o trecho e conta para a pressão', () => {
@@ -77,7 +77,9 @@ describe('recalculate', () => {
     const out = recalculate({ previous: null, days, maxBpmByAge: MAX_35_YEARS })!
     expect(out.validDays).toBe(10)
     expect(out.bands.OXYGEN_SATURATION.validDays).toBe(3)
-    expect(out.bands.OXYGEN_SATURATION.learned).toEqual({ excellence: null, fatigue: null })
+    // 3º dia válido da oxigenação: 3/30 do pessoal (97 e 95) com 27/30 da partida (95 e 92).
+    expect(out.bands.OXYGEN_SATURATION.learned.excellence).toBeCloseTo(95.2)
+    expect(out.bands.OXYGEN_SATURATION.learned.fatigue).toBeCloseTo(92.3)
   })
 
   it('é o exemplo aprovado pelo cliente: 35 anos e pessoal 128 dão 153, 140 e 128', () => {
@@ -89,13 +91,13 @@ describe('recalculate', () => {
     expect(fatigueAt(30)).toBe(128)
   })
 
-  it('sem data de nascimento, fadiga do batimento e pico só a partir do 7º dia válido', () => {
-    const six = recalculate({ previous: null, days: series(6, { heartRateP90: 128 }), maxBpmByAge: null })!
-    expect(six.bands.HEART_RATE.learned.fatigue).toBeNull()
-    expect(six.peakBpm).toBeNull()
-    const seven = recalculate({ previous: null, days: series(7, { heartRateP90: 128 }), maxBpmByAge: null })!
-    expect(seven.bands.HEART_RATE.learned.fatigue).toBe(128)
-    expect(seven.peakBpm).toBe(150)
+  it('sem data de nascimento, o batimento parte da máxima de 180 e o pico só vem do 3º dia válido', () => {
+    const two = recalculate({ previous: null, days: series(2, { heartRateP90: 128 }), maxBpmByAge: null })!
+    expect(two.bands.HEART_RATE.learned.fatigue).toBe(162)
+    expect(two.peakBpm).toBeNull()
+    const three = recalculate({ previous: null, days: series(3, { heartRateP90: 128 }), maxBpmByAge: null })!
+    expect(three.bands.HEART_RATE.learned.fatigue).toBeCloseTo(0.1 * 128 + 0.9 * 162)
+    expect(three.peakBpm).toBe(150)
   })
 
   it('repouso pela mediana dos mínimos e pico pelo p95 dos máximos da janela', () => {
@@ -147,8 +149,8 @@ describe('recalculate', () => {
     expect(out.bands.HEART_RATE.start).toEqual({ excellence: 70, fatigue: 130 })
     expect(out.bands.HEART_RATE.learned.fatigue).toBeCloseTo((10 / 30) * 140 + (20 / 30) * 130)
     expect(out.peakStartBpm).toBe(172)
-    // Medição sem linha guardada parte da v1.0.
-    expect(out.bands.WEAR.start).toEqual({ excellence: null, fatigue: 80 })
+    // Medição sem linha guardada parte da partida mínima.
+    expect(out.bands.WEAR.start).toEqual({ excellence: 40, fatigue: 80 })
   })
 
   it('mesma família fora da recalibração: partida pela idade de hoje', () => {
@@ -157,7 +159,7 @@ describe('recalculate', () => {
       bands: { HEART_RATE: { validDays: 2, start: { excellence: null, fatigue: null }, learned: { excellence: null, fatigue: null } } },
     })
     const out = recalculate({ previous, days: series(3), maxBpmByAge: MAX_35_YEARS })!
-    expect(out.bands.HEART_RATE.start).toEqual(startCutsV1('HEART_RATE', MAX_35_YEARS))
+    expect(out.bands.HEART_RATE.start).toEqual(startCuts('HEART_RATE', MAX_35_YEARS))
     expect(out.peakStartBpm).toBe(MAX_35_YEARS)
   })
 
@@ -181,8 +183,8 @@ describe('recalculate', () => {
     expect(out.bands.OXYGEN_SATURATION.start).toEqual({ excellence: 97, fatigue: 94 })
     expect(out.bands.HEART_RATE.learned.fatigue).toBeCloseTo(0.1 * 140 + 0.9 * 128)
     expect(out.bands.HEART_RATE.learned.excellence).toBeCloseTo(0.1 * 75 + 0.9 * 74)
-    // Medição sem faixa antes da troca parte da v1.0.
-    expect(out.bands.WEAR.start).toEqual({ excellence: null, fatigue: 80 })
+    // Medição sem faixa antes da troca parte da partida mínima.
+    expect(out.bands.WEAR.start).toEqual({ excellence: 40, fatigue: 80 })
   })
 
   it('troca de família sem pico anterior parte da máxima por idade', () => {

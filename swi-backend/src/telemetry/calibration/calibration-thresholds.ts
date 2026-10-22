@@ -1,7 +1,7 @@
 import type { CalibrationMetric, Prisma, SafetyRule } from '@prisma/client'
 
 import { safetyValuesOf, type SafetyValuesFor } from '../alerts/safety-limits'
-import { CALIBRATION_METRICS, FULL_DAYS, cutsOf, effectiveCuts, startCutsV1, type Cuts } from './calibration-bands'
+import { CALIBRATION_METRICS, FULL_DAYS, cutsOf, effectiveCuts, startCuts, type Cuts } from './calibration-bands'
 
 // O que o motor de condições lê da calibração de um funcionário: os cortes
 // efetivos de cada medição, as travas do admin, o repouso calibrado e o dia da
@@ -13,7 +13,7 @@ export type SafetyLimits = { readonly [R in SafetyRule]?: SafetyValuesFor<R> }
 export interface CalibrationThresholds {
   /** Dia da calibração (1 a 30) enquanto ela não fecha; nulo depois do dia 30. */
   calibrationDay: number | null
-  /** Corte efetivo por medição: o do gestor, o aprendido ou a partida v1.0. */
+  /** Corte efetivo por medição: o do gestor, o aprendido ou a partida mínima. */
   cuts: Readonly<Record<CalibrationMetric, Cuts>>
   /** Só as travas que o admin gravou; sem linha vale o padrão do perfil. */
   safety: SafetyLimits
@@ -38,7 +38,7 @@ export interface ThresholdRows {
 }
 
 /**
- * Sem faixa gravada (ou com o aprendido ilegível) vale a partida v1.0, que é o
+ * Sem faixa gravada (ou com o aprendido ilegível) vale a partida mínima, que é o
  * que a calibração usaria no primeiro dia. A correção do gestor só vale se for
  * legível; ilegível, cai no aprendido.
  */
@@ -48,7 +48,7 @@ export function thresholdsOf(rows: ThresholdRows): CalibrationThresholds {
     CALIBRATION_METRICS.map((metric) => {
       const band = byMetric.get(metric)
       const learned = band === undefined ? null : cutsOf(metric, band.learnedCuts)
-      if (band === undefined || learned === null) return [metric, startCutsV1(metric, rows.maxBpmByAge)]
+      if (band === undefined || learned === null) return [metric, startCuts(metric, rows.maxBpmByAge)]
       return [metric, effectiveCuts(learned, cutsOf(metric, band.overrideCuts))]
     }),
   ) as Record<CalibrationMetric, Cuts>

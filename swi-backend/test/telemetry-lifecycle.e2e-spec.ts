@@ -526,7 +526,7 @@ describe('Telemetry lifecycle e2e', () => {
 
       const summary = await summaryOf(watch)
 
-      expect(summary.summarizerVersion).toBe('swi-daily-summary-3')
+      expect(summary.summarizerVersion).toBe('swi-daily-summary-4')
       expect(summary.heartRateP25).toBe(60)
       expect(summary.heartRateP90).toBe(80)
       expect(summary.oxygenSaturationP10).toBe(95)

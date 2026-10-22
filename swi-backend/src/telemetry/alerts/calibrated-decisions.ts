@@ -55,9 +55,8 @@ export function calibratedPressureDecisions(
 
 /**
  * Trava e Atenção de oxigenação. `readings` são as últimas leituras, a mais
- * nova primeiro: a trava olha só a última, a Atenção as duas. A oxigenação não
- * tem partida na v1.0, então a Atenção só existe com corte de fadiga efetivo
- * (aprendido do 7º dia válido em diante, ou corrigido pelo gestor).
+ * nova primeiro: a trava olha só a última, a Atenção as duas. Sem faixa
+ * gravada, a Atenção usa o corte de fadiga da partida mínima (abaixo de 92%).
  */
 export function calibratedOxygenDecisions(
   readings: readonly Point[],

@@ -93,10 +93,13 @@ describe('calibratedWatchDecisions: batimento', () => {
     })
   })
 
-  it('sem corte de fadiga (sem nascimento e sem faixa), não há Atenção de batimento', () => {
+  it('sem nascimento e sem faixa, a Atenção de batimento parte da máxima de 180', () => {
     const t = thresholds({ maxBpmByAge: null })
 
-    expect(kinds(calibratedWatchDecisions(readings({ samples: beats(10, 175), maxBpm: null }), t, none))).toEqual([])
+    // 90% de 180 = 162.
+    expect(calibratedWatchDecisions(readings({ samples: beats(10, 175), maxBpm: null }), t, none)).toEqual([
+      { kind: 'HEART_RATE_FATIGUE', action: 'OPEN', observedValue: 175, threshold: { value: 162, rule: 'BAND' } },
+    ])
   })
 })
 
@@ -176,8 +179,7 @@ describe('calibratedPressureDecisions', () => {
 })
 
 describe('calibratedOxygenDecisions', () => {
-  // Corte de fadiga aprendido em 94%: só existe do 7º dia válido em diante,
-  // porque a oxigenação não tem partida na v1.0.
+  // Corte de fadiga aprendido em 94%, diferente do 92% da partida mínima.
   const withCut = (over: Partial<ThresholdRows> = {}) =>
     thresholds({
       bands: [{ metric: 'OXYGEN_SATURATION', learnedCuts: { excellence: 97, fatigue: 94 }, overrideCuts: null }],
@@ -211,9 +213,9 @@ describe('calibratedOxygenDecisions', () => {
     ).toEqual(['OXYGEN_FATIGUE:RECOVER'])
   })
 
-  it('sem corte de fadiga aprendido só a trava decide', () => {
-    expect(kinds(calibratedOxygenDecisions([reading(0, 89), reading(12, 89)], thresholds(), none))).toEqual([
-      'OXYGEN_LOW:OPEN',
+  it('sem faixa gravada, 91% por 10 min abrem a Atenção pela partida de 92%', () => {
+    expect(calibratedOxygenDecisions([reading(0, 91), reading(10, 91)], thresholds(), none)).toEqual([
+      { kind: 'OXYGEN_FATIGUE', action: 'OPEN', observedValue: 91, threshold: { value: 92, rule: 'BAND' } },
     ])
   })
 

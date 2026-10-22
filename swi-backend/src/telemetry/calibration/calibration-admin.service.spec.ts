@@ -55,7 +55,7 @@ describe('CalibrationAdminService: escopo', () => {
 })
 
 describe('CalibrationAdminService.detail', () => {
-  it('sem calibração: primeiro dia, as 11 medições na partida v1.0 e as 5 travas no padrão', async () => {
+  it('sem calibração: primeiro dia, as 11 medições na partida mínima e as 5 travas no padrão', async () => {
     const prisma = prismaDouble()
     prisma.profile.findUnique.mockResolvedValue({ birthDate: new Date('1986-10-21T00:00:00.000Z') })
     const d = await service(prisma).detail(ADMIN, 'w1', NOW)
@@ -113,7 +113,7 @@ describe('CalibrationAdminService: faixas', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 
-  it('sem linha ainda: cria da partida v1.0 com a correção e grava o histórico sem valor anterior', async () => {
+  it('sem linha ainda: cria da partida mínima com a correção e grava o histórico sem valor anterior', async () => {
     const prisma = prismaDouble()
     await service(prisma).setBand(ADMIN, 'w1', 'SYSTOLIC', { excellence: 110, fatigue: 135, extra: 1 }, NOW)
     expect(prisma.workerCalibrationBand.create).toHaveBeenCalledWith({
@@ -121,8 +121,8 @@ describe('CalibrationAdminService: faixas', () => {
         workerId: 'w1',
         metric: 'SYSTOLIC',
         validDays: 0,
-        startCuts: { excellence: null, fatigue: 140 },
-        learnedCuts: { excellence: null, fatigue: 140 },
+        startCuts: { excellence: 120, fatigue: 140 },
+        learnedCuts: { excellence: 120, fatigue: 140 },
         computedAt: NOW,
         overrideCuts: { excellence: 110, fatigue: 135 },
         overrideById: 'admin-1',

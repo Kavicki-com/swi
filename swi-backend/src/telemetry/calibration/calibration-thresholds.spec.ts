@@ -1,6 +1,6 @@
 import { calibrationDayOf, thresholdsOf, type ThresholdRows } from './calibration-thresholds'
 
-// O motor lê daqui a régua de cada pessoa. O que se protege: a partida v1.0
+// O motor lê daqui a régua de cada pessoa. O que se protege: a partida mínima
 // quando não há faixa, a correção do gestor por cima do aprendido, a trava só
 // quando legível e o dia da calibração que vira selo na condição.
 
@@ -30,22 +30,23 @@ describe('calibrationDayOf', () => {
 })
 
 describe('thresholdsOf', () => {
-  it('sem faixa nenhuma vale a partida v1.0, com a máxima por idade no batimento', () => {
-    const t = thresholdsOf(rows())
+  it('sem faixa nenhuma vale a partida mínima, com a máxima por idade no batimento', () => {
+    const t = thresholdsOf(rows({ maxBpmByAge: 190 }))
 
-    expect(t.cuts.HEART_RATE).toEqual({ excellence: null, fatigue: 162 })
-    expect(t.cuts.SYSTOLIC).toEqual({ excellence: null, fatigue: 140 })
-    expect(t.cuts.DIASTOLIC).toEqual({ excellence: null, fatigue: 90 })
-    expect(t.cuts.WEAR).toEqual({ excellence: null, fatigue: 80 })
-    // Oxigenação não tem partida: Atenção dela só depois do 7º dia válido.
-    expect(t.cuts.OXYGEN_SATURATION).toEqual({ excellence: null, fatigue: null })
+    expect(t.cuts.HEART_RATE).toEqual({ excellence: 114, fatigue: 171 })
+    expect(t.cuts.SYSTOLIC).toEqual({ excellence: 120, fatigue: 140 })
+    expect(t.cuts.DIASTOLIC).toEqual({ excellence: 80, fatigue: 90 })
+    expect(t.cuts.WEAR).toEqual({ excellence: 40, fatigue: 80 })
+    expect(t.cuts.OXYGEN_SATURATION).toEqual({ excellence: 95, fatigue: 92 })
+    // Atividade não tem partida: habitual dela só do 3º dia válido em diante.
+    expect(t.cuts.STEPS).toEqual({ below: null, above: null })
     expect(t.calibrationDay).toBe(1)
     expect(t.restingBpm).toBeNull()
     expect(t.safety).toEqual({})
   })
 
-  it('sem data de nascimento, o batimento fica sem corte de partida', () => {
-    expect(thresholdsOf(rows({ maxBpmByAge: null })).cuts.HEART_RATE.fatigue).toBeNull()
+  it('sem data de nascimento, o batimento parte da máxima de 180', () => {
+    expect(thresholdsOf(rows({ maxBpmByAge: null })).cuts.HEART_RATE).toEqual({ excellence: 108, fatigue: 162 })
   })
 
   it('a faixa aprendida vale; a correção do gestor vale por cima dela', () => {
@@ -76,7 +77,7 @@ describe('thresholdsOf', () => {
       }),
     )
 
-    expect(t.cuts.SYSTOLIC).toEqual({ excellence: null, fatigue: 140 })
+    expect(t.cuts.SYSTOLIC).toEqual({ excellence: 120, fatigue: 140 })
     expect(t.cuts.DIASTOLIC).toEqual({ excellence: 70, fatigue: 88 })
   })
 

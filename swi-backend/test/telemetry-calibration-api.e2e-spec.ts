@@ -104,13 +104,13 @@ describe('Calibração: rotas do painel e2e', () => {
       .send({ cuts: { excellence: 70, fatigue: 150 } }).expect(200)
     expect(metricOf(corrigido, 'HEART_RATE')).toMatchObject({ source: 'OVERRIDE', effective: { excellence: 70, fatigue: 150 } })
 
-    // Medição sem linha ainda: nasce da partida v1.0 com a correção.
+    // Medição sem linha ainda: nasce da partida mínima com a correção.
     const { body: sistolica } = await request(server).put(`${base()}/bands/SYSTOLIC`).set(s)
       .send({ cuts: { excellence: 110, fatigue: 135 } }).expect(200)
     expect(metricOf(sistolica, 'SYSTOLIC')).toMatchObject({
       source: 'OVERRIDE',
       validDays: 0,
-      learned: { excellence: null, fatigue: 140 },
+      learned: { excellence: 120, fatigue: 140 },
       effective: { excellence: 110, fatigue: 135 },
     })
 

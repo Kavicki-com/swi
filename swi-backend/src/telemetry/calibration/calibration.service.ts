@@ -9,7 +9,7 @@ import { recalculate, type StoredBand, type StoredCalibration } from './recalcul
 
 // Recálculo diário da calibração individual. Toda regra mora em
 // `recalculate` (puro); aqui só se lê, chama e grava. Só origem REAL: DEMO
-// segue a v1.0 inteira e nunca ganha calibração.
+// fica na partida mínima e nunca ganha calibração gravada.
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

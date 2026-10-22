@@ -17,6 +17,7 @@ import type {
   Sample,
   TelemetryOrigin,
 } from '../domain/telemetry.types'
+import { ageInYearsAt, maxHeartRateForAge } from '../assessment/assessment-baseline'
 import { isSparseFormula } from '../assessment/sparse-profile'
 import {
   ENERGY_RATE_WINDOW_MS,
@@ -292,19 +293,24 @@ function toProjectionAssessment(row: AssessmentRow): ProjectionAssessment {
   }
 }
 
-/** O que a leitura individual lê da calibração; nada, para quem não está na origem real. */
+/** Sem faixa gravada: quem não está na origem real, ou ainda não reportou. A leitura mostra a partida. */
 const NO_CALIBRATION: CalibrationRows = { calibration: null, bands: [] }
 
 /**
- * A leitura individual sempre responde a referência cardíaca e a calibração,
- * nulas quando não há. Ausentes só nas listas, que não as consultam: é essa
- * diferença que deixa o painel separar "sem referência" de "não perguntado".
+ * A leitura individual sempre responde a referência cardíaca e a calibração.
+ * A referência é nula quando não há; a calibração, sem faixa gravada, é a da
+ * partida. Ausentes só nas listas, que não as consultam: é essa diferença que
+ * deixa o painel separar "sem referência" de "não perguntado".
  */
-function asCurrent(telemetry: WorkerTelemetry, calibration: CalibrationRows): CurrentWorkerTelemetry {
+function asCurrent(
+  telemetry: WorkerTelemetry,
+  calibration: CalibrationRows,
+  maxBpmByAge: number | null,
+): CurrentWorkerTelemetry {
   return {
     ...telemetry,
     heartRateReference: telemetry.heartRateReference ?? null,
-    calibration: calibrationViewOf(telemetry.metrics, calibration),
+    calibration: calibrationViewOf(telemetry.metrics, calibration, maxBpmByAge),
   }
 }
 
@@ -363,6 +369,7 @@ export class TelemetryQueryService {
     })
 
     if (snapshot === null) {
+      const maxBpmByAge = await this.maxBpmByAge(workerId, now)
       return asCurrent(
         projectWorker(
           {
@@ -376,6 +383,7 @@ export class TelemetryQueryService {
           now,
         ),
         NO_CALIBRATION,
+        maxBpmByAge,
       )
     }
 
@@ -389,9 +397,9 @@ export class TelemetryQueryService {
     // isso a série que vem é só a janela das taxas, e os acumulados do dia
     // chegam somados pelo banco: o dia inteiro seriam milhares de linhas por
     // chamada, multiplicadas pelo número de funcionários a cada cinco segundos.
-    // A calibração só existe na origem real: a demonstração nem a consulta.
+    // Faixas gravadas só existem na origem real; a demonstração mostra a partida.
     const real = snapshot.origin === 'REAL'
-    const [windowSamples, steps, energy, distance, assessments, conditions, calibration, bands] = await Promise.all([
+    const [windowSamples, steps, energy, distance, assessments, conditions, calibration, bands, maxBpmByAge] = await Promise.all([
       this.prisma.telemetrySample.findMany({
         where: { ...scope, eventTime: { gte: new Date(now.getTime() - ENERGY_RATE_WINDOW_MS) } },
         select: SAMPLE_FIELDS,
@@ -453,6 +461,7 @@ export class TelemetryQueryService {
             select: { metric: true, learnedCuts: true, overrideCuts: true },
           })
         : [],
+      this.maxBpmByAge(workerId, now),
     ])
 
     return asCurrent(
@@ -472,7 +481,15 @@ export class TelemetryQueryService {
         now,
       ),
       { calibration, bands },
+      maxBpmByAge,
     )
+  }
+
+  /** Máxima por idade da partida do batimento; nula sem data de nascimento (a partida usa 180). */
+  private async maxBpmByAge(workerId: string, now: Date): Promise<number | null> {
+    const profile = await this.prisma.profile.findUnique({ where: { userId: workerId }, select: { birthDate: true } })
+    const birthDate = profile?.birthDate ?? null
+    return birthDate === null ? null : maxHeartRateForAge(ageInYearsAt(birthDate, now))
   }
 
   /** Mesma leitura, com o escopo de empresa do administrador aplicado antes. */

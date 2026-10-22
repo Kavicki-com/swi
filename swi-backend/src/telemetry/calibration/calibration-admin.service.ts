@@ -10,7 +10,7 @@ import {
   validateSafety,
   type SafetyValues,
 } from '../alerts/safety-limits'
-import { CALIBRATION_METRICS, cutsOf, effectiveCuts, startCutsV1, type Cuts } from './calibration-bands'
+import { CALIBRATION_METRICS, cutsOf, effectiveCuts, startCuts, type Cuts } from './calibration-bands'
 import { validateCuts } from './calibration-override'
 import { calibrationDayOf } from './calibration-thresholds'
 
@@ -38,7 +38,7 @@ export interface CalibrationMetricDetail {
   learned: Cuts
   override: Cuts | null
   effective: Cuts
-  /** De onde vem o efetivo: correção do gestor, aprendido, ou partida v1.0 sem recálculo ainda. */
+  /** De onde vem o efetivo: correção do gestor, aprendido, ou partida mínima sem recálculo ainda. */
   source: 'OVERRIDE' | 'LEARNED' | 'START'
 }
 
@@ -142,8 +142,8 @@ export class CalibrationAdminService {
       const existing = await tx.workerCalibrationBand.findUnique({ where })
       const override = { overrideCuts: cuts as Prisma.InputJsonObject, overrideById: caller.userId, overrideAt: now }
       if (existing === null) {
-        // Antes do primeiro recálculo: a linha nasce da partida v1.0, com a correção.
-        const start = startCutsV1(metric, await this.maxBpmByAge(tx, workerId, now)) as Prisma.InputJsonObject
+        // Antes do primeiro recálculo: a linha nasce da partida mínima, com a correção.
+        const start = startCuts(metric, await this.maxBpmByAge(tx, workerId, now)) as Prisma.InputJsonObject
         await tx.workerCalibrationBand.create({
           data: { workerId, metric, validDays: 0, startCuts: start, learnedCuts: start, computedAt: now, ...override },
         })
@@ -243,11 +243,11 @@ export class CalibrationAdminService {
     const restingBpm = calibration?.restingBpm ?? null
 
     const metrics = CALIBRATION_METRICS.map((metric): CalibrationMetricDetail => {
-      const v1 = startCutsV1(metric, maxBpmByAge)
+      const minimum = startCuts(metric, maxBpmByAge)
       const row = bands.find((b) => b.metric === metric)
       // Linha torta vale como ausente, como no recálculo e no motor.
-      const start = row === undefined ? v1 : (cutsOf(metric, row.startCuts) ?? v1)
-      const learned = row === undefined ? v1 : (cutsOf(metric, row.learnedCuts) ?? v1)
+      const start = row === undefined ? minimum : (cutsOf(metric, row.startCuts) ?? minimum)
+      const learned = row === undefined ? minimum : (cutsOf(metric, row.learnedCuts) ?? minimum)
       const override = row === undefined || row.overrideCuts === null ? null : cutsOf(metric, row.overrideCuts)
       const source = override !== null ? 'OVERRIDE' : row === undefined ? 'START' : 'LEARNED'
       return {

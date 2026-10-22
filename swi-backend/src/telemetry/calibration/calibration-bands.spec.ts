@@ -7,7 +7,7 @@ import {
   nextCuts,
   personalCuts,
   slowStep,
-  startCutsV1,
+  startCuts,
   wearFatigueCutOf,
 } from './calibration-bands'
 import { day } from './fixtures/days'
@@ -85,15 +85,25 @@ describe('valor pessoal', () => {
   })
 })
 
-describe('partida v1.0', () => {
-  it('só batimento, pressão e desgaste têm partida, e só no corte de fadiga', () => {
-    expect(startCutsV1('HEART_RATE', 183.5).fatigue).toBeCloseTo(165.15)
-    expect(startCutsV1('HEART_RATE', null)).toEqual({ excellence: null, fatigue: null })
-    expect(startCutsV1('SYSTOLIC', null)).toEqual({ excellence: null, fatigue: 140 })
-    expect(startCutsV1('DIASTOLIC', null)).toEqual({ excellence: null, fatigue: 90 })
-    expect(startCutsV1('WEAR', null)).toEqual({ excellence: null, fatigue: 80 })
-    expect(startCutsV1('OXYGEN_SATURATION', null)).toEqual({ excellence: null, fatigue: null })
-    for (const k of CUT_KEYS.STEPS) expect(startCutsV1('STEPS', null)[k]).toBeNull()
+describe('partida mínima', () => {
+  it('batimento: excelência até 60% e fadiga a partir de 90% da máxima', () => {
+    expect(startCuts('HEART_RATE', 183.5).excellence).toBeCloseTo(110.1)
+    expect(startCuts('HEART_RATE', 183.5).fatigue).toBeCloseTo(165.15)
+  })
+  it('batimento sem data de nascimento usa a máxima de 180', () => {
+    expect(startCuts('HEART_RATE', null)).toEqual({ excellence: 108, fatigue: 162 })
+  })
+  it('medições de estado com valores de referência', () => {
+    expect(startCuts('OXYGEN_SATURATION', null)).toEqual({ excellence: 95, fatigue: 92 })
+    expect(startCuts('BODY_TEMPERATURE', null)).toEqual({ p10: 35.5, p25: 36.1, p75: 37.2, p90: 37.8 })
+    expect(startCuts('SYSTOLIC', null)).toEqual({ excellence: 120, fatigue: 140 })
+    expect(startCuts('DIASTOLIC', null)).toEqual({ excellence: 80, fatigue: 90 })
+    expect(startCuts('EFFORT', null)).toEqual({ excellence: 40, fatigue: 80 })
+    expect(startCuts('WEAR', null)).toEqual({ excellence: 40, fatigue: 80 })
+  })
+  it('atividade não tem partida', () => {
+    for (const m of ['STEPS', 'DISTANCE', 'ACTIVE_ENERGY', 'MOVEMENT'] as const)
+      for (const k of CUT_KEYS[m]) expect(startCuts(m, null)[k]).toBeNull()
   })
 })
 
@@ -112,9 +122,9 @@ describe('mistura', () => {
     expect(Math.round(nextCut(20, 128, 165, null)!)).toBe(140)
     expect(nextCut(30, 128, 165, null)).toBe(128)
   })
-  it('sem partida: nada até o 6º dia, só o pessoal do 7º ao 29º', () => {
-    expect(nextCut(6, 97, null, null)).toBeNull()
-    expect(nextCut(7, 97, null, null)).toBe(97)
+  it('sem partida: nada até o 2º dia, só o pessoal do 3º ao 29º', () => {
+    expect(nextCut(2, 97, null, null)).toBeNull()
+    expect(nextCut(3, 97, null, null)).toBe(97)
   })
   it('depois do dia 30, passo de no máximo 0,5% na direção do alvo', () => {
     expect(slowStep(100, 90)).toBeCloseTo(99.5)

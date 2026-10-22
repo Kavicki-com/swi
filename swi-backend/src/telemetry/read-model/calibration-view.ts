@@ -1,5 +1,12 @@
 import type { CalibrationMetric } from '@prisma/client'
-import { FULL_DAYS, cutsOf, effectiveCuts } from '../calibration/calibration-bands'
+import {
+  CALIBRATION_METRICS,
+  CALIBRATION_VERSION,
+  FULL_DAYS,
+  cutsOf,
+  effectiveCuts,
+  startCuts,
+} from '../calibration/calibration-bands'
 import { calibrationDayOf } from '../calibration/calibration-thresholds'
 import { zoneOf, type CalibrationMetricView, type WorkerCalibrationView } from '../calibration/calibration-zone'
 import type { WorkerMetrics } from './telemetry-projector'
@@ -36,32 +43,37 @@ const VALUE_OF: Readonly<Record<CalibrationMetric, (m: WorkerMetrics) => number 
 }
 
 /**
- * Nulo sem linha de calibração, que é o caso de quem nunca teve dia válido e
- * de quem só tem demonstração. Faixa com aprendido ilegível fica ausente;
- * correção ilegível cai no aprendido, como no motor de condições.
+ * Sempre há calibração: sem linha gravada (quem ainda não teve dia válido, ou
+ * só tem demonstração) ela é virtual, na partida mínima e no dia 1. Faixa
+ * ausente ou com aprendido ilegível vale a partida, sem a correção; correção
+ * ilegível cai no aprendido, como no motor de condições.
  */
-export function calibrationViewOf(metrics: WorkerMetrics, rows: CalibrationRows): WorkerCalibrationView | null {
-  if (rows.calibration === null) return null
-  const { version, validDays, recalibrating } = rows.calibration
-
+export function calibrationViewOf(
+  metrics: WorkerMetrics,
+  rows: CalibrationRows,
+  maxBpmByAge: number | null,
+): WorkerCalibrationView {
   const views: Partial<Record<CalibrationMetric, CalibrationMetricView>> = {}
-  for (const band of rows.bands) {
-    const learned = cutsOf(band.metric, band.learnedCuts)
-    if (learned === null) continue
-    const override = cutsOf(band.metric, band.overrideCuts)
-    const cuts = effectiveCuts(learned, override)
-    views[band.metric] = {
-      zone: zoneOf(band.metric, VALUE_OF[band.metric](metrics), cuts),
+  for (const metric of CALIBRATION_METRICS) {
+    const band = rows.bands.find((b) => b.metric === metric)
+    const learned = band === undefined ? null : cutsOf(metric, band.learnedCuts)
+    const override = band === undefined || learned === null ? null : cutsOf(metric, band.overrideCuts)
+    const cuts = effectiveCuts(learned ?? startCuts(metric, maxBpmByAge), override)
+    // Faixa sem nenhum corte (atividade antes do 3º dia) não vira linha.
+    if (Object.values(cuts).every((v) => v === null)) continue
+    views[metric] = {
+      zone: zoneOf(metric, VALUE_OF[metric](metrics), cuts),
       cuts,
-      source: override === null ? 'LEARNED' : 'OVERRIDE',
+      source: override !== null ? 'OVERRIDE' : learned !== null ? 'LEARNED' : 'START',
     }
   }
 
+  const calibration = rows.calibration
   return {
-    version,
-    phase: validDays >= FULL_DAYS ? 'CALIBRATED' : 'CALIBRATING',
-    recalibrating,
-    day: calibrationDayOf(rows.calibration),
+    version: calibration?.version ?? CALIBRATION_VERSION,
+    phase: calibration !== null && calibration.validDays >= FULL_DAYS ? 'CALIBRATED' : 'CALIBRATING',
+    recalibrating: calibration?.recalibrating ?? false,
+    day: calibrationDayOf(calibration),
     metrics: views,
   }
 }

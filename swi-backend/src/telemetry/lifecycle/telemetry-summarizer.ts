@@ -20,7 +20,8 @@ import type { MeasurementSource, TelemetryOrigin } from '../domain/telemetry.typ
  * com um novo como se fossem a mesma coisa.
  */
 // v3: percentis, oxigenação, temperatura, média de pressão, movimento e família do aparelho, para a calibração.
-export const SUMMARIZER_VERSION = 'swi-daily-summary-3'
+// v4: família do aparelho também para iPhone.
+export const SUMMARIZER_VERSION = 'swi-daily-summary-4'
 
 /**
  * Intervalo máximo entre duas leituras que ainda conta como tempo coberto.
