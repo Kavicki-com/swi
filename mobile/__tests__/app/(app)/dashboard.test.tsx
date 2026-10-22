@@ -9,14 +9,9 @@ import { Platform } from 'react-native';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
 
 // Companheiro de dashboard.integration.test.tsx, que cobre a leitura da telemetria,
-// badges, navegacao e a tela ?alert=active. Aqui ficam os dois caminhos de
-// alerta que sobraram, e eles nao sao o mesmo caminho:
-//
-// - POR ROTA (?alert=modal): deep link externo, por exemplo uma notificacao
-//   push. Pinta o fundo de vermelho e revela o modal 800ms depois do mount,
-//   com dissolve. Os CTAs trocam de rota (replace), sem empilhar historico.
-// - POR ESTADO ("Ajuda urgente"): o usuario pediu ajuda daqui. Abre overlay
-//   sem mexer na rota, justamente para o dashboard atras NAO virar vermelho.
+// badges e navegacao. Aqui fica o alerta pedido pelo botao "Ajuda urgente":
+// abre overlay sem mexer na rota, e o dashboard atras NAO vira vermelho. Os
+// links antigos por rota (?alert=modal, ?alert=active) nao mudam mais nada.
 //
 // Os dois modais sao dublados: a tela em teste e o dashboard, e o que importa
 // e quem os abre, quem os fecha e por qual caminho.
@@ -186,92 +181,16 @@ afterEach(() => {
   naPlataforma(originalOS);
 });
 
-// --- Alerta por rota ---------------------------------------------------------
+// --- Links antigos de alerta -------------------------------------------------
 
-describe('dashboard: alerta que chega pela rota (?alert=modal)', () => {
-  it('segura o modal por 800ms antes de revelar, como o Figma pede', async () => {
-    mockSearchParams = { alert: 'modal' };
-    const tree = await montar();
-
-    // O overlay existe desde o inicio, invisivel e sem receber toque: e ele que
-    // faz o dissolve. Revelar no mount seria um pulo na tela.
-    const overlay = () =>
-      tree.root.findAll((n) => n.props?.style?.zIndex === 10 && n.props?.pointerEvents)[0];
-    expect(overlay().props.style.opacity).toBe(0);
-    expect(overlay().props.pointerEvents).toBe('none');
-
-    await act(async () => {
-      jest.advanceTimersByTime(799);
-    });
-    expect(overlay().props.style.opacity).toBe(0);
-
-    await act(async () => {
-      jest.advanceTimersByTime(1);
-    });
-    expect(overlay().props.style.opacity).toBe(1);
-    expect(overlay().props.pointerEvents).toBe('auto');
-  });
-
-  it('pinta o fundo com a rampa de alerta, diferente da rampa normal', async () => {
+// `?alert=modal` e `?alert=active` eram duplicatas por rota dos dois modais,
+// sem nenhuma entrada no app. Sairam: o parametro nao muda mais nada, e os
+// modais so abrem pelo botao de ajuda urgente (abaixo) e pelas notificacoes.
+describe('dashboard: links antigos ?alert= nao mudam a tela', () => {
+  it.each(['modal', 'active'])('?alert=%s abre o dashboard normal, sem janela', async (alert) => {
     const normal = primeiraParadaDoFundo(await montar());
 
-    mockSearchParams = { alert: 'modal' };
-    const emAlerta = primeiraParadaDoFundo(await montar());
-
-    expect(emAlerta).not.toBe(normal);
-  });
-
-  it('sair do parametro antes dos 800ms cancela a revelacao', async () => {
-    mockSearchParams = { alert: 'modal' };
-    let tree!: ReactTestRenderer;
-    await act(async () => {
-      tree = create(arvore());
-    });
-
-    mockSearchParams = {};
-    await act(async () => {
-      tree.update(arvore());
-    });
-    await act(async () => {
-      jest.advanceTimersByTime(800);
-    });
-
-    // Sem o clearTimeout, o timer sobreviveria a saida e abriria um modal
-    // sobre um dashboard que ja nao esta em alerta.
-    expect(porTestID(tree, 'modal-clima')).toBeUndefined();
-  });
-
-  it('fechar devolve o dashboard limpo, sem empilhar rota', async () => {
-    mockSearchParams = { alert: 'modal' };
-    const tree = await montar();
-
-    await act(async () => {
-      porTestID(tree, 'modal-clima').props.onClose();
-    });
-
-    expect(mockReplace).toHaveBeenCalledWith('/(app)/dashboard');
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('o CTA leva ao procedimento de evacuacao, tambem sem empilhar', async () => {
-    mockSearchParams = { alert: 'modal' };
-    const tree = await montar();
-
-    await act(async () => {
-      porTestID(tree, 'modal-clima').props.onPrimaryAction();
-    });
-
-    expect(mockReplace).toHaveBeenCalledWith('/(app)/dashboard?alert=active');
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  // O link pode chegar velho: a notificacao foi tocada depois que o alerta
-  // acabou. Sem alerta vigente nao ha janela nem fundo vermelho.
-  it('sem alerta vigente, o link nao mostra a janela nem pinta o fundo', async () => {
-    const normal = primeiraParadaDoFundo(await montar());
-
-    mockAlertaVigente = null;
-    mockSearchParams = { alert: 'modal' };
+    mockSearchParams = { alert };
     const tree = await montar();
     await act(async () => {
       jest.advanceTimersByTime(800);
@@ -279,27 +198,7 @@ describe('dashboard: alerta que chega pela rota (?alert=modal)', () => {
 
     expect(porTestID(tree, 'modal-clima')).toBeUndefined();
     expect(primeiraParadaDoFundo(tree)).toBe(normal);
-  });
-
-  it('alerta que expira com a janela aberta leva a janela e o vermelho embora', async () => {
-    const normal = primeiraParadaDoFundo(await montar());
-    mockSearchParams = { alert: 'modal' };
-    let tree!: ReactTestRenderer;
-    await act(async () => {
-      tree = create(arvore());
-    });
-    await act(async () => {
-      jest.advanceTimersByTime(800);
-    });
-    expect(porTestID(tree, 'modal-clima')).toBeDefined();
-
-    mockAlertaVigente = null;
-    await act(async () => {
-      tree.update(arvore());
-    });
-
-    expect(porTestID(tree, 'modal-clima')).toBeUndefined();
-    expect(primeiraParadaDoFundo(tree)).toBe(normal);
+    expect(porRotulo(tree, 'Ajuda urgente')).toBeDefined();
   });
 });
 
@@ -317,7 +216,7 @@ describe('dashboard: alerta pedido pelo botao de ajuda urgente', () => {
     await pedirAjuda(tree);
 
     expect(porTestID(tree, 'modal-clima')).toBeDefined();
-    // A diferenca para o caminho por rota: aqui o fundo NAO fica vermelho.
+    // O fundo NAO fica vermelho: o alerta e uma janela por cima da tela.
     expect(primeiraParadaDoFundo(tree)).toBe(antes);
     expect(mockReplace).not.toHaveBeenCalled();
   });

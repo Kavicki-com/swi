@@ -254,10 +254,8 @@ function NotificationsScreen() {
               onClose={() => setWeatherAlertVisible(false)}
               onPrimaryAction={() => {
                 // Fecha o weather modal e abre o active alert modal in-place
-                // (mesmo backdrop vermelho). NÃO navega pro dashboard — esse
-                // era o "trocando de tela" que o user reportou. A rota
-                // canônica `?alert=active` segue válida pra outros entry
-                // points (ex.: deep link), só não passamos por ela aqui.
+                // (mesmo backdrop vermelho). NÃO navega pro dashboard: esse
+                // era o "trocando de tela" que o user reportou.
                 setWeatherAlertVisible(false);
                 setActiveAlertVisible(true);
               }}

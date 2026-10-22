@@ -225,15 +225,14 @@ describe('Detalhe da tarefa: conteúdo', () => {
     );
   });
 
-  it('sem nomes de responsável cai no nome padrão em vez de "undefined"', async () => {
+  // Os demais casos (0, 1, 2 e sem nome) estão em task-detail.interessados.test.tsx.
+  it('sem nomes de responsável não inventa nome nem desenha "undefined"', async () => {
     mockJourney.getTask.mockResolvedValue(
       tarefa({ responsibleNames: [], responsibleAvatars: [], responsibleCount: 1 }),
     );
     const tree = await render();
 
-    expect(textos(tree)).toContain(
-      'Joacir Alves e mais 0 pessoas estão acompanhando essa tarefa',
-    );
+    expect(textos(tree).some((t) => t.includes('acompanhando'))).toBe(false);
   });
 
   // O snapshot local é carregado uma vez; quem manda depois é o provider, pra

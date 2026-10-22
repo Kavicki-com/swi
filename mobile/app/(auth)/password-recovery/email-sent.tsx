@@ -4,8 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SuccessBadge, Text, Title, useTheme } from '@kavicki/swi-design-system';
 
-// Distinct from the signup variant (211:12920): copy is "Acesse o link de
-// recuperação" + "Enviamos um email para … confirmar a sua conta." (the
+// Distinct from the signup variant (211:12920): title "Confira seu email" and
+// the body sends the user to the emailed CODE (the reset is code-based).
 // Auto-advance to new-password simulates the user clicking the recovery link
 // in the email. 4s mirrors the signup variant (consistent UX between flows).
 const ADVANCE_MS = 4000;
@@ -58,7 +58,7 @@ export default function PasswordRecoveryEmailSent() {
             iconName="mail"
             accessibilityLabel="Email de recuperação de senha enviado"
           />
-          <Title variant="title.xs">Acesse o link de recuperação</Title>
+          <Title variant="title.xs">Confira seu email</Title>
           <Text variant="body.s" style={{ textAlign: 'center', color: theme.content.dark }}>
             Enviamos um email para{' '}
             <Text
@@ -70,7 +70,7 @@ export default function PasswordRecoveryEmailSent() {
             >
               {displayEmail}
             </Text>{' '}
-            acesse sua caixa de entrada e clique no link para confirmar a sua conta.
+            acesse sua caixa de entrada e use o código para criar uma nova senha.
           </Text>
         </View>
       </View>

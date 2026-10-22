@@ -127,16 +127,16 @@ describe('batteryLowOf', () => {
   });
 });
 
-describe('batteryLowCopy: igual à notificação do servidor', () => {
+describe('batteryLowCopy: no relógio, igual à notificação do servidor', () => {
   it('com número', () => {
-    expect(batteryLowCopy(12)).toEqual({
+    expect(batteryLowCopy(12, 'relogio')).toEqual({
       title: 'Bateria do relógio baixa',
       message: 'Bateria em 12%. Carregue o relógio para seguir monitorado.',
     });
   });
 
   it('sem número', () => {
-    expect(batteryLowCopy(null)).toEqual({
+    expect(batteryLowCopy(null, 'relogio')).toEqual({
       title: 'Bateria do relógio baixa',
       message: 'Carregue o relógio para seguir monitorado.',
     });

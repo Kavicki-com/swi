@@ -19,11 +19,11 @@ import { HomeFAB } from '../../../components/HomeFAB';
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'Como faço para criar uma conta?',
-    a: 'Na tela de login, toque em "Criar conta" e preencha seus dados pessoais. Após confirmar seu e-mail, complete os dados complementares e pareie sua smartband para concluir o cadastro.',
+    a: 'Na tela de login, toque em "Primeiro acesso" e preencha seus dados pessoais. Após confirmar seu e-mail, complete os dados complementares e pareie sua smartband para concluir o cadastro.',
   },
   {
     q: 'Esqueci minha senha, o que fazer?',
-    a: 'Na tela de login, toque em "Esqueci minha senha", informe seu e-mail cadastrado e siga o link enviado para definir uma nova senha.',
+    a: 'Na tela de login, toque em "Recuperar senha", informe seu e-mail cadastrado e use o código enviado para definir uma nova senha.',
   },
   {
     q: 'Posso usar o aplicativo offline?',
@@ -31,7 +31,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'Como atualizar meu perfil?',
-    a: 'Acesse Configurações > Dados pessoais para editar seu nome, telefone e demais informações. Algumas alterações exigem reconfirmação por e-mail.',
+    a: 'Acesse Configurações > Editar perfil para editar seu nome, telefone e demais informações.',
   },
   {
     q: 'O aplicativo é gratuito?',
@@ -43,11 +43,11 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'O que fazer se o aplicativo travar?',
-    a: 'Force o fechamento, abra novamente e verifique sua conexão. Se o problema persistir, envie um relato pela tela "Fale conosco" em Configurações.',
+    a: 'Force o fechamento, abra novamente e verifique sua conexão. Se o problema persistir, envie um relato pela tela "Suporte" em Configurações.',
   },
   {
     q: 'Como ativar notificações?',
-    a: 'Acesse Configurações > Preferências e mantenha as notificações habilitadas. Confirme também a permissão de notificações nas configurações do sistema do seu celular.',
+    a: 'Acesse Configurações > Permissões e mantenha as notificações habilitadas. Confirme também a permissão de notificações nas configurações do sistema do seu celular.',
   },
   {
     q: 'Posso sincronizar meus dados entre dispositivos?',
@@ -55,7 +55,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'Como envio feedback ou reporto um problema?',
-    a: 'Em Configurações > Fale conosco, escolha o tipo de mensagem (sugestão, dúvida, problema técnico) e descreva o ocorrido. Nosso time responde por e-mail.',
+    a: 'Em Configurações > Suporte, escolha o tipo de mensagem (sugestão, dúvida, problema técnico) e descreva o ocorrido. Nosso time responde por e-mail.',
   },
   {
     q: 'O aplicativo suporta múltiplos idiomas?',

@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgXml } from 'react-native-svg';
 import {
@@ -19,7 +19,6 @@ import {
 } from '@kavicki/swi-design-system';
 import { ActiveAlertModal } from '../../components/modals/ActiveAlertModal';
 import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
-import { AlertActiveView } from '../../components/dashboard/AlertActiveView';
 import { BadgedButton } from '../../components/dashboard/BadgedButton';
 import { StatCol } from '../../components/dashboard/StatCol';
 import { StatDivider } from '../../components/dashboard/StatDivider';
@@ -34,9 +33,7 @@ import {
 import { SILHOUETTE_BODY_SVG } from '../../lib/dashboardKnobSvgs';
 import {
   BG_DECOR_GRAD_BOTTOM,
-  BG_DECOR_GRAD_BOTTOM_ALERT,
   BG_DECOR_GRAD_TOP,
-  BG_DECOR_GRAD_TOP_ALERT,
   BG_DECOR_H,
   BG_DECOR_PATH,
   BG_DECOR_W,
@@ -181,35 +178,12 @@ export default function Dashboard() {
     [router],
   );
 
-  // Dashboard tem 3 estados:
-  // - sem param: normal (silhouette verde + stats).
-  //   em RED (`surface.danger` tint), e modal "Local em Alerta!" aparece
-  //   com timeline cyan + botão "Traçar rota" verde.
-  const { alert } = useLocalSearchParams<{ alert?: string }>();
-  // A janela "Local em Alerta!" só existe com alerta vigente. O link pode
-  // chegar velho (notificação tocada depois que o alerta acabou): aí não há
-  // janela nem fundo vermelho, o dashboard abre normal.
+  // A janela "Local em Alerta!" só existe com alerta vigente.
   const { activeAlert } = useWeather();
   const hasAlert = activeAlert !== null;
-  const isAlertModal = alert === 'modal' && hasAlert;
-  // Modal opens 800ms após mount, com dissolve fade-in 240ms ease-in-out
-  // Animate Dissolve, Easing Ease in and out, Duration 240ms).
-  const [modalVisible, setModalVisible] = useState(false);
-  useEffect(() => {
-    if (!isAlertModal) {
-      setModalVisible(false);
-      return;
-    }
-    const t = setTimeout(() => setModalVisible(true), 800);
-    return () => clearTimeout(t);
-  }, [isAlertModal]);
 
-  // State-driven alert modals — usados quando o botão "Ajuda urgente" do
-  // dashboard é tapped. Trocamos `router.replace('?alert=modal')` (que muda
-  // rota e re-renderiza o dashboard inteiro em vermelho) por estados locais
-  // que abrem o modal como overlay sem mudar de tela. O fluxo route-based
-  // (`?alert=modal` / `?alert=active`) segue intacto pra deep links externos
-  // (push notifications, etc.).
+  // Os modais de alerta abrem pelo botão "Ajuda urgente", como overlay por
+  // cima do dashboard, sem mudar de rota.
   const [weatherModalOpen, setWeatherModalOpen] = useState(false);
   const [activeModalOpen, setActiveModalOpen] = useState(false);
   // Alerta que acaba com a janela aberta leva a janela junto, e ela não
@@ -224,10 +198,6 @@ export default function Dashboard() {
     if (hasAlert) setWeatherModalOpen(true);
     else setActiveModalOpen(true);
   };
-
-  if (alert === 'active') {
-    return <AlertActiveView />;
-  }
 
   const heartCondition = toHeartCondition(status);
   const statusLine = (
@@ -264,8 +234,8 @@ export default function Dashboard() {
               y2={BG_DECOR_H}
               gradientUnits="userSpaceOnUse"
             >
-              <Stop offset="0" stopColor={isAlertModal ? BG_DECOR_GRAD_TOP_ALERT : BG_DECOR_GRAD_TOP} />
-              <Stop offset="1" stopColor={isAlertModal ? BG_DECOR_GRAD_BOTTOM_ALERT : BG_DECOR_GRAD_BOTTOM} />
+              <Stop offset="0" stopColor={BG_DECOR_GRAD_TOP} />
+              <Stop offset="1" stopColor={BG_DECOR_GRAD_BOTTOM} />
             </LinearGradient>
           </Defs>
           <Path d={BG_DECOR_PATH} fill={`url(#${bgDecorGradId})`} opacity={0.46} />
@@ -678,32 +648,6 @@ export default function Dashboard() {
             variant={camera.notice === 'no-permission' ? 'warning' : 'error'}
             title={liveNoticeTitle(camera.notice)}
             onClose={camera.dismissNotice}
-          />
-        </View>
-      ) : null}
-
-      {isAlertModal ? (
-        <View
-          pointerEvents={modalVisible ? 'auto' : 'none'}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: theme.padding.m,
-            backgroundColor: 'rgba(0,0,0,0.4)',
-            opacity: modalVisible ? 1 : 0,
-            // @ts-expect-error: transition is web-only style (RN-web).
-            transition: 'opacity 240ms ease-in-out',
-            zIndex: 10,
-          }}
-        >
-          <WeatherAlertModal
-            onClose={() => router.replace('/(app)/dashboard')}
-            onPrimaryAction={() => router.replace('/(app)/dashboard?alert=active')}
           />
         </View>
       ) : null}

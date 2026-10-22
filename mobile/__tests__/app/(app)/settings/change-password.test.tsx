@@ -56,7 +56,9 @@ describe('alterar senha — submissão real', () => {
     });
   };
 
+  // A volta vem depois do aviso de sucesso (change-password.sucesso.test.tsx).
   it('envia senha atual e nova pro backend e volta no sucesso', async () => {
+    jest.useFakeTimers();
     mockChangePassword.mockResolvedValue(undefined);
     const tree = await render();
     await preenche(tree);
@@ -69,7 +71,9 @@ describe('alterar senha — submissão real', () => {
       currentPassword: 'velha123',
       newPassword: 'Nova@1234',
     });
+    await act(async () => { jest.runOnlyPendingTimers(); });
     expect(mockBack).toHaveBeenCalled();
+    jest.useRealTimers();
   });
 
   it('mostra o erro do backend e não sai da tela quando a troca falha', async () => {

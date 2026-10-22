@@ -19,17 +19,17 @@ import { HomeFAB } from '../../../components/HomeFAB';
 // Localização e Arquivos espelham a permissão REAL do SO: ligar pede a
 // permissão; desligar abre os Ajustes (revogar programaticamente não
 // existe em iOS/Android), e o estado é relido quando o app volta ao
-// foreground. Notificações e Ligações seguem visuais: notificação exige
-// expo-notifications (fora do build atual) e ligação não tem API JS.
+// foreground. Notificações e Ligações não têm permissão que o app consiga
+// pedir ou ler (notificação exige expo-notifications, fora do build atual, e
+// ligação não tem API JS): os dois toggles abrem os Ajustes, em qualquer
+// direção, e o valor não muda sozinho.
 export default function SettingsPreferences() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const [notifications, setNotifications] = useState(true);
   const [location, setLocation] = useState(false);
   const [filesAccess, setFilesAccess] = useState(false);
-  const [phoneCalls, setPhoneCalls] = useState(true);
 
   const lerPermissoes = useCallback(async () => {
     const [loc, media] = await Promise.all([
@@ -55,6 +55,8 @@ export default function SettingsPreferences() {
     const r = await Location.requestForegroundPermissionsAsync();
     setLocation(r.granted);
   };
+
+  const abrirAjustes = () => { void Linking.openSettings(); };
 
   const aoAlternarArquivos = async (ligar: boolean) => {
     if (!ligar) { void Linking.openSettings(); return; }
@@ -99,10 +101,10 @@ export default function SettingsPreferences() {
 
           {(
             [
-              { key: 'notifications', value: notifications, set: setNotifications, label: 'Notificações' },
+              { key: 'notifications', value: true, set: abrirAjustes, label: 'Notificações' },
               { key: 'location', value: location, set: aoAlternarLocalizacao, label: 'Localização' },
               { key: 'filesAccess', value: filesAccess, set: aoAlternarArquivos, label: 'Acessar pastas e arquivos' },
-              { key: 'phoneCalls', value: phoneCalls, set: setPhoneCalls, label: 'Ligações telefônicas' },
+              { key: 'phoneCalls', value: true, set: abrirAjustes, label: 'Ligações telefônicas' },
             ] as const
           ).map(({ key, value, set, label }) => (
             <View
