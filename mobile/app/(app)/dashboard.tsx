@@ -23,6 +23,7 @@ import { AlertActiveView } from '../../components/dashboard/AlertActiveView';
 import { BadgedButton } from '../../components/dashboard/BadgedButton';
 import { StatCol } from '../../components/dashboard/StatCol';
 import { StatDivider } from '../../components/dashboard/StatDivider';
+import { FailureNotices } from '../../components/telemetry/FailureNotices';
 import { DashboardReadiness } from '../../components/telemetry/ReadinessList';
 import { SyncBanner } from '../../components/telemetry/SyncBanner';
 import {
@@ -45,6 +46,7 @@ import { useWatchDiagnostics } from '../../services/telemetry/watchDiagnostics';
 import { isFeatureEnabled } from '../../lib/featureFlags';
 import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
+import { useAbsenceContext } from '../../services/vitals/useAbsenceContext';
 import { useProfile } from '../../services/profile/ProfileProvider';
 import { useNotifications } from '../../services/notifications/NotificationProvider';
 import { useReports } from '../../services/reports/ReportsProvider';
@@ -101,7 +103,7 @@ const HERO_MIN_WIDTH = 220;
 
 export default function Dashboard() {
   // Leitura de me/current. Carregando, sem leitura e falha não trocam a tela:
-  // a visão devolve a ausência declarada ("--", "Sem medição") e o dashboard
+  // a visão devolve a ausência declarada ("--" e o porquê) e o dashboard
   // segue inteiro, com a ajuda urgente ao alcance de quem está sem monitoramento.
   const { telemetry, failed, loading } = useMyTelemetry();
   // Sem o módulo do relógio a linha de estado diz que este aparelho não
@@ -110,7 +112,10 @@ export default function Dashboard() {
   const relogio = useWatchDiagnostics();
   const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
   const unsupported = !naPulseira && relogio.support === 'unsupported';
-  const view = dashboardVitalsView(telemetry, { failed, loading, unsupported });
+  // Por que cada métrica sem valor está sem valor: Aguardando e Não envia do
+  // backend, Falhou do estado local no Android, e no iPhone a sessão espelhada.
+  const absence = useAbsenceContext(relogio);
+  const view = dashboardVitalsView(telemetry, { failed, loading, unsupported, absence });
   const status = view.workerStatus;
   const { profile } = useProfile();
   // literal "4". O contador não vinha de lugar nenhum, então prometia conteúdo
@@ -510,7 +515,7 @@ export default function Dashboard() {
               />
             }
             value={view.heartRate ?? NO_VALUE}
-            label="BPM"
+            label={view.heartRateLabel}
             // a 140 BPM, então 3 dígitos são esperados, não exceção. 70 é a
             // mesma largura da coluna de Kcal, que já segura "184" — e segue o
             // quando o texto quebrava (65→80 e 55→70).
@@ -568,6 +573,9 @@ export default function Dashboard() {
             {view.fatigueText}
           </Text>
           {view.calibrationTag ? <StatusTag status="info" label={view.calibrationTag} /> : null}
+          {/* Android: o caminho que falhou, com o motivo e o botão que tenta
+              de novo. A coluna da métrica já diz a frase. */}
+          <FailureNotices absent={view.absent} context={absence} />
           {/* Em que pé está a leitura e, quando não vem do relógio real, o
               selo de origem. Linha de Text do DS: o Figma não tem esse slot.
               Com a pulseira, enquanto falta passo, a lista de prontidão fica

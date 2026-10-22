@@ -31,7 +31,7 @@ describe('statsDonutsView', () => {
       const view = statsDonutsView(telemetry);
       expect(view.effort).toEqual({ value: '--', label: 'Esforço feito', progress: 0 });
       expect(view.oxygen).toEqual({ value: '--', label: 'Oxigenação', progress: 0 });
-      expect(view.steps).toEqual({ value: '--', label: 'Sem medição', progress: 0 });
+      expect(view.steps).toEqual({ value: '--', label: 'passos', progress: 0 });
       expect(view.energy).toEqual({ value: '--', label: 'por hora', progress: 0 });
       expect(view.oxygenNote).toBeNull();
       expect(view.battery).toBe('Bateria do aparelho: sem leitura');
@@ -102,7 +102,7 @@ describe('statsDonutsView', () => {
         distance: expired(3104, FIXTURE_OTHER_DAY),
       }),
     );
-    expect(outroDia.steps).toEqual({ value: '--', label: 'Sem medição', progress: 0 });
+    expect(outroDia.steps).toEqual({ value: '--', label: 'passos', progress: 0 });
   });
 
   it('medição de outro dia leva a data, na oxigenação e na bateria', () => {
@@ -185,14 +185,14 @@ describe('caloriesChartView', () => {
     });
     expect(caloriesChartView(emptySeries('week', 7))).toMatchObject({
       points: [],
-      emptyText: 'Sem medição no período',
+      emptyText: 'Nenhuma medição no período',
     });
   });
 
   it('série com origem mas sem nenhuma medição no período também não desenha', () => {
     expect(caloriesChartView(series('day', [null, null, null]))).toMatchObject({
       points: [],
-      emptyText: 'Sem medição no período',
+      emptyText: 'Nenhuma medição no período',
     });
   });
 

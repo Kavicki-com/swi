@@ -1,18 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform } from 'react-native';
 import { isFeatureEnabled } from '../../lib/featureFlags';
-import {
-  bleHeartRate,
-  type BleHeartRate,
-  type ConnectedInterval,
-} from '../../modules/swi-ble-heart-rate/src';
+import { bleHeartRate, type BleHeartRate } from '../../modules/swi-ble-heart-rate/src';
 import type { WatchControl } from '../../modules/swi-watch-control';
 import { androidDeviceControl } from './android/androidDeviceControl';
+import { useBleListener } from './bluetooth/useBleListener';
 import {
-  listenerSinceOf,
   readinessReportOf,
   sendReadinessReport,
-  type ListenerSnapshot,
   type ReadinessReport,
 } from './readinessReport';
 import { useTelemetryUploadState } from './TelemetryUploadProvider';
@@ -37,40 +32,6 @@ export interface ReadinessReportDeps {
   apiUrl?: () => string;
 }
 
-// Os trechos conectados de até 48 h, a mesma janela do leitor do Health
-// Connect. O trecho aberto sempre vem, seja de quando for.
-const INTERVALS_WINDOW_MS = 48 * 60 * 60 * 1000;
-
-function intervalsOf(ble: BleHeartRate): ConnectedInterval[] {
-  try {
-    return ble.connectedIntervals(Date.now() - INTERVALS_WINDOW_MS);
-  } catch {
-    return [];
-  }
-}
-
-function snapshotOf(ble: BleHeartRate): ListenerSnapshot {
-  const { state } = ble.status();
-  return { state, since: listenerSinceOf(state, intervalsOf(ble)) };
-}
-
-/** O estado da escuta, lido ao montar e seguido pelos eventos da ponte. */
-function useListener(ble: BleHeartRate, enabled: boolean): ListenerSnapshot | null {
-  // Lido já no primeiro render, para o primeiro relato não sair sem ele.
-  const [snapshot, setSnapshot] = useState<ListenerSnapshot | null>(() =>
-    enabled ? snapshotOf(ble) : null,
-  );
-  useEffect(() => {
-    if (!enabled) {
-      setSnapshot(null);
-      return undefined;
-    }
-    setSnapshot(snapshotOf(ble));
-    return ble.onStateChanged((event) => setSnapshot({ state: event.state, since: event.changedAt }));
-  }, [ble, enabled]);
-  return snapshot;
-}
-
 const withLastReading = (report: ReadinessReport, ble: BleHeartRate): ReadinessReport => {
   if (report.bluetooth.listenerState === null) return report;
   const { lastReadingAt } = ble.status();
@@ -92,7 +53,7 @@ export function useReadinessReport({
   const listens = active && isFeatureEnabled('bluetoothHeartRate') && ble.supported;
   const { paired, healthConnect, refreshPairing } = useTelemetryUploadState();
   const facts = useReadinessFacts();
-  const listener = useListener(ble, listens);
+  const listener = useBleListener(ble, listens);
   // Antes de o leitor e a escolha da pulseira serem lidos, o relato só
   // diria "não sei" e apagaria no painel o último que dizia algo.
   const known = healthConnect !== null && facts.bandChosen !== null;

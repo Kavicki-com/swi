@@ -25,7 +25,7 @@ import type { HealthConnectState } from '../../../services/telemetry/healthConne
 
 // Meus dados (app/(app)/my-stats.tsx). Tela de leitura clínica: o que ela mostra
 // tem que ser o que foi MEDIDO. Os sinais saem de me/current e o gasto calórico
-// de me/series; sem leitura a tela declara a ausência ("--", "Sem medição") e
+// de me/series; sem leitura a tela declara a ausência ("--" e o porquê) e
 // segue inteira, porque alergias e exames não dependem do relógio. Outras três
 // invariantes de dado real estão travadas aqui:
 //   - alergias saem do cadastro real, não da lista fixa "Buscopan, Dipirona,
@@ -347,7 +347,7 @@ describe('Meus dados: leitura ausente', () => {
 
     expect(t).toContain(frase);
     expect(t).toContain('--');
-    expect(t).toContain('Sem medição');
+    expect(t).not.toContain('Sem medição');
     expect(t).toContain('Tempo até o alerta de fadiga: sem estimativa');
     expect(t).toContain('Bateria do aparelho: sem leitura');
     expect(t).toContain('Alergias');
@@ -358,9 +358,14 @@ describe('Meus dados: leitura ausente', () => {
     mockTelemetryState = lendo(neverReported());
     const tree = await render();
 
-    for (const rotulo of ['Esforço feito', 'Oxigenação', 'Sem medição', 'por hora']) {
-      expect(anel(tree, rotulo)).toMatchObject({ value: '--', progress: 0 });
-    }
+    // iPhone sem a sessão espelhada: os três anéis medidos dizem
+    // "Indisponível" (ADR-0004); o esforço é derivado e não tem ausência.
+    expect(anel(tree, 'Esforço feito')).toMatchObject({ value: '--', progress: 0 });
+    const indisponiveis = tree.root.findAll(
+      (n) => n.props?.label === 'Indisponível' && typeof n.props?.progress === 'number',
+    );
+    expect(indisponiveis.length).toBeGreaterThanOrEqual(3);
+    for (const n of indisponiveis) expect(n.props).toMatchObject({ value: '--', progress: 0 });
     expect(barraDeFadiga(tree).value).toBe(0);
   });
 
@@ -580,7 +585,7 @@ describe('Meus dados: gasto calórico', () => {
   it.each([
     ['carregando', { series: null, failed: false, loading: true }, 'Carregando série'],
     ['falha', { series: null, failed: true, loading: false }, 'Série indisponível no momento'],
-    ['sem medição', serie(emptySeries('day', 3)), 'Sem medição no período'],
+    ['sem medição', serie(emptySeries('day', 3)), 'Nenhuma medição no período'],
   ])('%s: uma frase no lugar do gráfico, nunca um ponto inventado', async (_caso, estado, frase) => {
     mockSeriesState = estado;
     const tree = await render();

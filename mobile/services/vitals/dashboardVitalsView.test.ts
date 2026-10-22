@@ -40,7 +40,10 @@ describe('dashboardVitalsView', () => {
     const view = dashboardVitalsView(neverReported());
     expect(view.heartRate).toBeNull();
     expect(view.pressure).toBeNull();
-    expect(view.pressureLabel).toBe('Sem medição');
+    // Sem contexto de ausência (Android sem o gate) o rótulo é o de sempre.
+    expect(view.heartRateLabel).toBe('BPM');
+    expect(view.pressureLabel).toBe('mmHg');
+    expect(view.energyLabel).toBe('Kcal/hora');
     expect(view.energyRate).toBeNull();
     expect(view.fatigueProgress).toBeNull();
     expect(view.fatigueText).toBe('Tempo até o alerta de fadiga: sem estimativa');

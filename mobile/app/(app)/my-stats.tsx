@@ -22,6 +22,7 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../components/NavFABs';
+import { FailureNotices } from '../../components/telemetry/FailureNotices';
 import { SyncBanner } from '../../components/telemetry/SyncBanner';
 import { useWatchDiagnostics } from '../../services/telemetry/watchDiagnostics';
 import { isFeatureEnabled } from '../../lib/featureFlags';
@@ -29,6 +30,7 @@ import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 import { useMySeries } from '../../services/vitals/useMySeries';
 import { dashboardVitalsView, NO_VALUE } from '../../services/vitals/dashboardVitalsView';
 import { caloriesChartView, statsDonutsView } from '../../services/vitals/statsView';
+import { useAbsenceContext } from '../../services/vitals/useAbsenceContext';
 import type { SeriesPeriod } from '../../services/telemetry/mySeries';
 import type { WorkerStatus } from '../../services/vitals/types';
 import { listExams, type Exam } from '../../services/api/exams';
@@ -144,8 +146,10 @@ export default function MyStats() {
   const relogio = useWatchDiagnostics();
   const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
   const unsupported = !naPulseira && relogio.support === 'unsupported';
-  const view = dashboardVitalsView(telemetry, { failed, loading, unsupported });
-  const donuts = statsDonutsView(telemetry);
+  // Por que cada métrica sem valor está sem valor, a mesma regra do dashboard.
+  const absence = useAbsenceContext(relogio);
+  const view = dashboardVitalsView(telemetry, { failed, loading, unsupported, absence });
+  const donuts = statsDonutsView(telemetry, absence);
   const status = view.workerStatus;
   const [period, setPeriod] = useState<SeriesPeriod>('day');
   const seriesState = useMySeries(period);
@@ -301,7 +305,7 @@ export default function MyStats() {
               color={theme.content.dark}
               style={{ textAlign: 'center' }}
             >
-              BPM
+              {view.heartRateLabel}
             </Text>
           </View>
 
@@ -393,6 +397,10 @@ export default function MyStats() {
           {/* Selo da régua do desgaste e do esforço: "Calibrando, dia N de
               30" ou "Estimativa provisória". Mesmo selo do dashboard. */}
           {view.calibrationTag ? <StatusTag status="info" label={view.calibrationTag} /> : null}
+          {/* Android: o caminho que falhou, com o motivo e o botão. Conta as
+              colunas e os anéis: um aviso por caminho, mesmo com várias
+              métricas caídas por ele. */}
+          <FailureNotices absent={[...view.absent, ...donuts.absent]} context={absence} />
           {/* Em que pé está a leitura e, quando não vem do relógio real, o
               selo de origem. Mesma linha do dashboard. */}
           <Text variant="caption.s" color={theme.content.dark}>

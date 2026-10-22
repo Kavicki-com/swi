@@ -1,6 +1,13 @@
 import type { ActiveCondition, MetricState, WorkerTelemetry } from '../telemetry/myTelemetry';
 import { formatEta } from './formatEta';
+import {
+  absenceLabelOf,
+  failureLabelOf,
+  type AbsenceContext,
+  type AbsenceMetric,
+} from './metricAbsence';
 import type { WorkerStatus } from './types';
+import { clock, dayMonth, isSameDay, whenLabel } from './whenLabel';
 
 // O que o bloco de vitais do dashboard mostra, decidido a partir da leitura do
 // backend. Função pura: a tela só desenha o que sai daqui. Ausência continua
@@ -11,9 +18,14 @@ import type { WorkerStatus } from './types';
 export interface DashboardVitalsView {
   /** Batimento já formatado, ou null sem leitura. */
   heartRate: string | null;
+  /** "BPM", ou a ausência dele (Aguardando, Não envia, Falhou, Indisponível). */
+  heartRateLabel: string;
   /** "sistólica/diastólica", ou null sem medição. */
   pressure: string | null;
-  /** Rótulo sob a pressão: medição pontual leva o horário, nunca um juízo. */
+  /**
+   * Rótulo sob a pressão: medição pontual leva o horário, nunca um juízo;
+   * sem medição, a ausência dela.
+   */
   pressureLabel: string;
   /** Gasto por hora já arredondado, ou null. */
   energyRate: string | null;
@@ -30,6 +42,8 @@ export interface DashboardVitalsView {
   calibrationTag: string | null;
   /** Cor da silhueta: neutra sem batimento válido; com ele, as condições vigentes decidem. */
   workerStatus: WorkerStatus;
+  /** As métricas desta visão sem valor na tela, para o aviso de falha. */
+  absent: AbsenceMetric[];
 }
 
 export const DEMO_DATA_LABEL = 'Dados de demonstração';
@@ -37,30 +51,7 @@ export const DEMO_DATA_LABEL = 'Dados de demonstração';
 /** Marcador de valor ausente na tela. */
 export const NO_VALUE = '--';
 
-const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-const pad2 = (n: number) => String(n).padStart(2, '0');
-
-const dayMonth = (iso: string) => {
-  const d = new Date(iso);
-  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
-};
-
-/** A medição é do mesmo dia (no relógio do aparelho) que o instante da leitura. */
-export const isSameDay = (measuredAt: string, observedAt: string | number) =>
-  new Date(measuredAt).toDateString() === new Date(observedAt).toDateString();
-
-/**
- * De quando é uma medição, para completar frases: "às 14:59" se é de hoje,
- * "em 29/09 às 14:59" se é de outro dia. Pressão e oxigenação valem por dias
- * no backend, e o último batimento fica guardado sem prazo: só o horário
- * faria uma medição de anteontem parecer de hoje.
- */
-export const whenLabel = (measuredAt: string, observedAt: string) =>
-  isSameDay(measuredAt, observedAt)
-    ? `às ${clock(measuredAt)}`
-    : `em ${dayMonth(measuredAt)} às ${clock(measuredAt)}`;
+export { isSameDay, whenLabel };
 
 const MIN_MS = 60 * 1000;
 const HOUR_MS = 60 * MIN_MS;
@@ -136,18 +127,72 @@ const LOADING_STATUS = 'Carregando leitura';
 // suporte e não recebeu leitura, que pede outro conselho.
 const UNSUPPORTED_STATUS = 'Este aparelho não faz o monitoramento';
 
+// Os rótulos de sempre, para quando não há o que afirmar sobre a ausência
+// (Android sem caminho ativo: quem explica é a lista de prontidão).
+const HEART_RATE_LABEL = 'BPM';
+const PRESSURE_LABEL = 'mmHg';
+const ENERGY_LABEL = 'Kcal/hora';
+
 const EMPTY: Omit<DashboardVitalsView, 'status'> = {
   heartRate: null,
+  heartRateLabel: HEART_RATE_LABEL,
   pressure: null,
-  pressureLabel: 'Sem medição',
+  pressureLabel: PRESSURE_LABEL,
   energyRate: null,
-  energyLabel: 'Kcal/hora',
+  energyLabel: ENERGY_LABEL,
   fatigueProgress: null,
   fatigueText: `${FATIGUE_PREFIX} sem estimativa`,
   sourceBadge: null,
   calibrationTag: null,
   workerStatus: 'unknown',
+  absent: ['heartRate', 'bloodPressure', 'energy'],
 };
+
+/**
+ * O contexto que vale para esta leitura. No iPhone, sem leitura ainda
+ * (carregando, falha de rede) não há o que afirmar: "Indisponível" diria que
+ * o relógio não mandou nada, e ninguém conferiu. No Android a falha é local e
+ * vale mesmo sem leitura.
+ */
+export const absenceContextFor = (
+  telemetry: WorkerTelemetry | null,
+  ctx: AbsenceContext | null | undefined,
+): AbsenceContext | null => (ctx == null || (ctx.platform === 'ios' && telemetry === null) ? null : ctx);
+
+/** Rótulos das três colunas sem valor, e quais estão sem valor. */
+function absenceLabels(
+  telemetry: WorkerTelemetry | null,
+  values: { heartRate: number | null; pressure: unknown; energyRate: number | null },
+  absence: AbsenceContext | null | undefined,
+): Pick<DashboardVitalsView, 'heartRateLabel' | 'pressureLabel' | 'energyLabel' | 'absent'> {
+  const ctx = absenceContextFor(telemetry, absence);
+  const m = telemetry?.metrics;
+  const energyRate = m?.energyRatePerHour;
+  const absent: AbsenceMetric[] = [];
+  if (values.heartRate === null) absent.push('heartRate');
+  if (values.pressure === null) absent.push('bloodPressure');
+  if (values.energyRate === null) absent.push('energy');
+  return {
+    heartRateLabel:
+      values.heartRate === null
+        ? (absenceLabelOf('heartRate', m?.heartRate.ausencia, ctx) ?? HEART_RATE_LABEL)
+        : HEART_RATE_LABEL,
+    // A pressão com valor e horário leva o horário; quem chama troca este.
+    pressureLabel:
+      values.pressure === null
+        ? (absenceLabelOf('bloodPressure', m?.bloodPressure.ausencia, ctx) ?? PRESSURE_LABEL)
+        : PRESSURE_LABEL,
+    // Calculando é um aguardando mais preciso (há energia, falta janela):
+    // fica entre a falha, que o sobrepõe, e a ausência do backend.
+    energyLabel:
+      values.energyRate !== null
+        ? ENERGY_LABEL
+        : energyRate?.calculating
+          ? (failureLabelOf('energy', ctx) ?? 'Calculando')
+          : (absenceLabelOf('energy', energyRate?.ausencia, ctx) ?? ENERGY_LABEL),
+    absent,
+  };
+}
 
 // Textos e regra do selo iguais aos do painel (calibrationView.ts e
 // sourceBadgeOf em swi-admin). A diferença é só de lugar: o atraso da pulseira
@@ -242,7 +287,13 @@ export function workerStatusOf(telemetry: WorkerTelemetry | null): WorkerStatus 
 
 export function dashboardVitalsView(
   telemetry: WorkerTelemetry | null,
-  options: { failed?: boolean; loading?: boolean; unsupported?: boolean } = {},
+  options: {
+    failed?: boolean;
+    loading?: boolean;
+    unsupported?: boolean;
+    /** De onde sai o rótulo de cada métrica sem valor (useAbsenceContext). */
+    absence?: AbsenceContext | null;
+  } = {},
 ): DashboardVitalsView {
   if (telemetry === null || telemetry.origin === null) {
     // Build sem o módulo do relógio e sem o Health Connect (iPhone sem a build
@@ -259,7 +310,14 @@ export function dashboardVitalsView(
         : options.loading && telemetry === null
           ? LOADING_STATUS
           : 'Sem leitura do aparelho';
-    return { ...EMPTY, status };
+    // Quem nunca reportou já tem a ausência de cada métrica: é o primeiro
+    // minuto depois de parear, quando ela mais importa.
+    const labels = absenceLabels(
+      telemetry,
+      { heartRate: null, pressure: null, energyRate: null },
+      options.absence,
+    );
+    return { ...EMPTY, ...labels, status };
   }
 
   const { heartRate, bloodPressure, energyRatePerHour } = telemetry.metrics;
@@ -300,8 +358,15 @@ export function dashboardVitalsView(
         ? `Sem previsão de fadiga no ritmo atual${wearAt}`
         : EMPTY.fatigueText;
 
+  const labels = absenceLabels(
+    telemetry,
+    { heartRate: heartRateValue, pressure: bloodPressure.value, energyRate },
+    options.absence,
+  );
+
   return {
     heartRate: heartRateValue === null ? null : String(Math.round(heartRateValue)),
+    heartRateLabel: labels.heartRateLabel,
     pressure:
       bloodPressure.value === null
         ? null
@@ -311,12 +376,10 @@ export function dashboardVitalsView(
         ? isSameDay(bloodPressure.measuredAt, observedAt)
           ? `Às ${clock(bloodPressure.measuredAt)}`
           : `Em ${dayMonth(bloodPressure.measuredAt)}`
-        : EMPTY.pressureLabel,
+        : labels.pressureLabel,
     energyRate: energyRate === null ? null : String(Math.round(energyRate)),
-    energyLabel:
-      energyRatePerHour.value === null && energyRatePerHour.calculating
-        ? 'Calculando'
-        : EMPTY.energyLabel,
+    energyLabel: labels.energyLabel,
+    absent: labels.absent,
     fatigueProgress:
       wear === null ? null : Math.round(Math.min(100, Math.max(0, wear))),
     fatigueText,

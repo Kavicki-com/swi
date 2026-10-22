@@ -18,6 +18,14 @@ export type MeasurementSource =
   | 'BLUETOOTH_HR'
   | 'DERIVED';
 
+/**
+ * Por que uma métrica sem valor está sem valor, decidido no backend:
+ * AWAITING enquanto é normal não ter chegado, NOT_SENT quando a pulseira
+ * comprovadamente não a entrega (Android, 24 h depois da primeira chegada de
+ * outra métrica). Nula no iPhone, sem caminho ativo e com valor.
+ */
+export type MetricAbsence = 'AWAITING' | 'NOT_SENT';
+
 export interface MetricState<T> {
   /**
    * Batimento, esforço, desgaste e as outras métricas contínuas guardam o
@@ -30,6 +38,11 @@ export interface MetricState<T> {
   measuredAt: string | null;
   source: MeasurementSource | null;
   unit: string;
+  /**
+   * Só batimento, passos, energia, oxigenação e pressão. Depois do parse é
+   * sempre null ou válida; opcional só para quem monta leitura à mão.
+   */
+  ausencia?: MetricAbsence | null;
 }
 
 export interface BloodPressure {
@@ -263,6 +276,33 @@ function parseCalibration(v: unknown): WorkerCalibration | null {
   return { phase: v.phase, recalibrating: v.recalibrating, day: v.day, metrics };
 }
 
+// A ausência também é complemento: fora da forma vira null, que a tela lê
+// como "o backend não disse" (o mesmo de um backend antigo, sem o campo).
+// Com valor ela é sempre null: valor medido não está ausente.
+const ABSENCE_METRICS = [
+  'heartRate',
+  'steps',
+  'activeEnergy',
+  'energyRatePerHour',
+  'oxygenSaturation',
+  'bloodPressure',
+] as const satisfies readonly (keyof WorkerMetrics)[];
+
+const parseAbsence = (state: MetricState<unknown>): MetricAbsence | null =>
+  state.value === null && (state.ausencia === 'AWAITING' || state.ausencia === 'NOT_SENT')
+    ? state.ausencia
+    : null;
+
+function parseAbsences(metrics: WorkerMetrics): WorkerMetrics {
+  const out: Record<string, unknown> = { ...metrics };
+  for (const key of ABSENCE_METRICS) {
+    const state = metrics[key];
+    // activeEnergy não é lida pelas telas e pode faltar num backend antigo.
+    if (isObject(state)) out[key] = { ...state, ausencia: parseAbsence(state) };
+  }
+  return out as unknown as WorkerMetrics;
+}
+
 /**
  * Lança em falha de rede ou de sessão, e também quando a resposta não é uma
  * leitura: o cliente HTTP devolve {} para corpo que não é JSON, e um backend
@@ -274,6 +314,7 @@ export async function fetchMyTelemetry(): Promise<WorkerTelemetry> {
   if (!isWorkerTelemetry(data)) throw new Error('Leitura de telemetria fora do contrato');
   return {
     ...data,
+    metrics: parseAbsences(data.metrics),
     conditions: data.conditions.map(parseCondition),
     sync: parseSync(data.sync),
     baseline: parseBaseline(data.baseline),
