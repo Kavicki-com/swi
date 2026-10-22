@@ -13,6 +13,24 @@ import type { ActiveEvacuationView } from '../../services/evacuation/types';
 // tela da rota, que é a parte útil numa emergência. E o ack precisa ser
 // disparado uma única vez por toque, com o erro visível quando não passa.
 
+// useFocusEffect roda na montagem, como o foco real da rota, e guarda o
+// callback pra o teste simular a pessoa voltando pra tela.
+const mockFocusCallbacks = new Set<() => void>();
+const mockRefocus = () => mockFocusCallbacks.forEach((cb) => cb());
+jest.mock('expo-router', () => ({
+  useFocusEffect: (cb: () => void | (() => void)) => {
+    const { useEffect } = require('react');
+    useEffect(() => {
+      mockFocusCallbacks.add(cb);
+      const cleanup = cb();
+      return () => {
+        mockFocusCallbacks.delete(cb);
+        if (typeof cleanup === 'function') cleanup();
+      };
+    }, [cb]);
+  },
+}));
+
 const mockGetActive = jest.fn();
 const mockAck = jest.fn();
 jest.mock('../../services/evacuation/getEvacuationBackend', () => ({
@@ -88,6 +106,34 @@ describe('EvacuationAckBar: quando não deve aparecer', () => {
   it('consulta o backend uma única vez por montagem', async () => {
     await render();
     expect(mockGetActive).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('EvacuationAckBar: volta pra tela', () => {
+  beforeEach(() => mockFocusCallbacks.clear());
+
+  // Visto no emulador: com a evacuação encerrada, voltar pra tela ainda
+  // mostrava "Confirmar chegada", porque a consulta era só na montagem.
+  it('ao voltar o foco consulta de novo e some quando a evacuação acabou', async () => {
+    mockGetActive.mockResolvedValueOnce(ativa());
+    const tree = await render();
+    expect(barra(tree)).toBeDefined();
+
+    mockGetActive.mockResolvedValueOnce(null);
+    await act(async () => { mockRefocus(); });
+
+    expect(mockGetActive).toHaveBeenCalledTimes(2);
+    expect(barra(tree)).toBeUndefined();
+  });
+
+  it('falha de rede na volta mantém a barra que já estava', async () => {
+    mockGetActive.mockResolvedValueOnce(ativa());
+    const tree = await render();
+
+    mockGetActive.mockRejectedValueOnce(new Error('network'));
+    await act(async () => { mockRefocus(); });
+
+    expect(barra(tree)).toBeDefined();
   });
 });
 

@@ -1,4 +1,5 @@
-import { chipAnchors, chipEtaLabel, navArrow, lineFeature, bearingDeg, straightLine } from './routeFormat';
+import { chipAnchors, chipEtaLabel, navArrow, navArrowAt, lineFeature, bearingDeg, routeNotice } from './routeFormat';
+import type { RouteSnapshot } from './types';
 
 // O traço (U+2014) é o que a função devolve quando não há tempo pra mostrar.
 // Montado por código porque o caractere não entra no fonte (regra de escrita do
@@ -30,9 +31,35 @@ describe('routeFormat: chipEtaLabel', () => {
 type Pt = [number, number];
 const line: Pt[] = [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]];
 
+// As chips ancoram pela DISTÂNCIA ao longo do traçado, não pelo índice do
+// array: o rótulo é o tempo acumulado até aquela fração, e numa reta de 2
+// pontos (rota aproximada) o índice punha a chip em cima do pino de início.
 describe('routeFormat: chipAnchors', () => {
-  it('ancora em ~35% e ~70% do array', () => {
-    expect(chipAnchors(line)).toEqual({ a: [1, 0], b: [3, 0] }); // floor(5*0.35)=1, floor(5*0.7)=3
+  it('ancora a 35% e 70% do comprimento do traçado', () => {
+    const { a, b } = chipAnchors(line)!; // 4 unidades de comprimento
+    expect(a[0]).toBeCloseTo(1.4, 9);
+    expect(a[1]).toBeCloseTo(0, 9);
+    expect(b[0]).toBeCloseTo(2.8, 9);
+  });
+  it('numa reta de 2 pontos as chips ficam no meio do caminho, não nas pontas', () => {
+    const { a, b } = chipAnchors([[0, 0], [10, 0]])!;
+    expect(a[0]).toBeCloseTo(3.5, 9);
+    expect(b[0]).toBeCloseTo(7, 9);
+  });
+  it('trechos curtos e longos pesam pelo tamanho, não pela contagem de pontos', () => {
+    // 3 pontos colados no começo e um trecho longo: pelo índice a chip de 35%
+    // cairia no 1º ponto; pela distância cai dentro do trecho longo.
+    const { a } = chipAnchors([[0, 0], [0.1, 0], [0.2, 0], [10, 0]])!;
+    expect(a[0]).toBeCloseTo(3.5, 9);
+  });
+  it('mede longitude encolhida pela latitude', () => {
+    // A 60° de latitude 1 grau de longitude vale metade de 1 de latitude: um L
+    // com 2 graus pro leste e 1 pro norte tem os dois braços do mesmo tamanho,
+    // então 35% ainda cai no braço leste e 70% no braço norte.
+    const { a, b } = chipAnchors([[0, 60], [2, 60], [2, 61]])!;
+    expect(a[1]).toBeCloseTo(60, 9);
+    expect(b[0]).toBeCloseTo(2, 9);
+    expect(b[1]).toBeGreaterThan(60);
   });
   it('null pra array vazio', () => {
     expect(chipAnchors([])).toBeNull();
@@ -72,12 +99,61 @@ describe('routeFormat: bearingDeg', () => {
   });
 });
 
-describe('routeFormat: straightLine (fallback)', () => {
-  it('gera n pontos reto origem→destino', () => {
-    const pts = straightLine([0, 0], [4, 0], 5);
-    expect(pts).toEqual([[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]);
+describe('routeFormat: navArrowAt', () => {
+  // Rota em L: leste ate [2, 0], depois norte ate [2, 2].
+  const L: [number, number][] = [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]];
+
+  it('poe a seta onde a pessoa esta, nao num ponto da rota', () => {
+    expect(navArrowAt([0.9, 0.1], L)?.at).toEqual([0.9, 0.1]);
   });
-  it('n=1 não vira NaN (guard 0/0)', () => {
-    expect(straightLine([2, 3], [9, 9], 1)).toEqual([[2, 3]]);
+
+  it('aponta para o vertice seguinte ao mais proximo', () => {
+    // Mais perto de [1, 0]: o proximo e [2, 0], a leste.
+    expect(navArrowAt([1.1, 0], L)?.rotation).toBeCloseTo(90, 5);
+    // Mais perto de [2, 1]: o proximo e [2, 2], ao norte.
+    expect(navArrowAt([2, 1.1], L)?.rotation).toBeCloseTo(0, 5);
+  });
+
+  it('no ultimo vertice aponta para ele mesmo e cai no rumo do ultimo trecho', () => {
+    expect(navArrowAt([2, 2], L)?.rotation).toBeCloseTo(0, 5);
+  });
+
+  it('rota com menos de dois pontos nao tem seta', () => {
+    expect(navArrowAt([0, 0], [[0, 0]])).toBeNull();
+  });
+});
+
+describe('routeFormat: routeNotice', () => {
+  const rota = (approximate: boolean): RouteSnapshot => ({
+    waypoints: [[0, 0], [1, 1]],
+    durationSec: 60,
+    distanceM: 100,
+    fetchedAt: '2026-10-21T00:00:00.000Z',
+    origin: [0, 0],
+    destination: [1, 1],
+    approximate,
+  });
+
+  it('rota normal nao tem aviso', () => {
+    expect(routeNotice(rota(false), null)).toBeNull();
+  });
+
+  it('rota aproximada avisa para seguir o gestor', () => {
+    expect(routeNotice(rota(true), null)).toEqual({
+      variant: 'warning',
+      text: 'Rota aproximada: siga as orientações do gestor.',
+    });
+  });
+
+  it.each([
+    ['no-evacuation', 'Nenhuma evacuação em andamento com ponto de encontro.'],
+    ['no-position', 'Ative a localização para traçar a rota.'],
+    ['failed', 'Não foi possível traçar a rota. Siga as orientações do gestor.'],
+  ] as const)('erro %s tem frase propria', (kind, text) => {
+    expect(routeNotice(null, kind)).toEqual({ variant: 'error', text });
+  });
+
+  it('carregando (sem rota e sem erro) nao tem aviso', () => {
+    expect(routeNotice(null, null)).toBeNull();
   });
 });

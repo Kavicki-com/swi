@@ -106,3 +106,35 @@ export function circleFeature(
     geometry: { type: 'LineString', coordinates },
   };
 }
+
+/**
+ * Menor distancia, em metros, de `point` ate a linha `line`. Projecao
+ * equirretangular em torno do ponto: na escala de uma rota a pe o erro fica em
+ * centimetros. Linha vazia e infinito (nao ha tracado de que se afastar).
+ *
+ * POR QUE NAO E DISTANCIA ATE O VERTICE MAIS PROXIMO: entre dois waypoints
+ * longos a pessoa pode estar em cima da linha e longe das duas pontas. Medir
+ * so os vertices mandaria recalcular a rota de quem esta no caminho certo.
+ */
+export function distanceToPolylineM(point: Pt, line: readonly Pt[]): number {
+  if (line.length === 0) return Infinity;
+  const k = Math.cos(toRad(point[1])); // longitude encolhe com a latitude
+  const xy = ([lng, lat]: Pt): [number, number] => [
+    toRad(lng - point[0]) * k * EARTH_RADIUS_M,
+    toRad(lat - point[1]) * EARTH_RADIUS_M,
+  ];
+  let best = Infinity;
+  for (let i = 0; i < line.length; i++) {
+    const [ax, ay] = xy(line[i]);
+    // Ultimo vertice: o segmento degenera num ponto (len2 = 0, t = 0).
+    const [bx, by] = xy(line[Math.min(i + 1, line.length - 1)]);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    // t = projecao do ponto (origem do plano local) no segmento, presa em [0,1]
+    // pra nunca sair das pontas.
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+  return best;
+}

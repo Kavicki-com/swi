@@ -4,6 +4,7 @@ import {
   boundsCenter,
   circleFeature,
   destinationPoint,
+  distanceToPolylineM,
 } from './mapGeometry';
 
 type Pt = [number, number];
@@ -148,5 +149,39 @@ describe('BRAZIL_BOUNDS', () => {
     expect(dentro([-34.86, -7.12])).toBe(true); // Joao Pessoa
     expect(dentro([-67.81, -9.97])).toBe(true); // Rio Branco
     expect(dentro([-58.38, -34.6])).toBe(false); // Buenos Aires
+  });
+});
+
+// Distancia ate o tracado: e o numero que decide se a rota de evacuacao e
+// refeita (o app recalcula ao passar de 50 m da linha). Erro aqui significa
+// recalculo que nao vem ou chamada a cada respirada.
+describe('distanceToPolylineM', () => {
+  const line: Pt[] = [
+    [-46.63, -23.55],
+    [-46.62, -23.55],
+  ];
+
+  it('em cima da linha e ~0', () => {
+    expect(distanceToPolylineM([-46.625, -23.55], line)).toBeLessThan(1);
+  });
+
+  it('a ~100 m ao norte da linha', () => {
+    // 0,0009 grau de latitude = ~100 m
+    expect(distanceToPolylineM([-46.625, -23.5491], line)).toBeGreaterThan(90);
+    expect(distanceToPolylineM([-46.625, -23.5491], line)).toBeLessThan(110);
+  });
+
+  it('depois do fim conta ate a ponta', () => {
+    expect(distanceToPolylineM([-46.61, -23.55], line)).toBeGreaterThan(900);
+  });
+
+  it('linha vazia e infinito', () => {
+    expect(distanceToPolylineM([-46.6, -23.5], [])).toBe(Infinity);
+  });
+
+  it('bate com a haversine ate o vertice mais proximo numa linha de um ponto', () => {
+    const um: Pt[] = [[-46.63, -23.55]];
+    const ponto: Pt = [-46.62, -23.54];
+    expect(distanceToPolylineM(ponto, um)).toBeCloseTo(metrosEntre(ponto, um[0]), 0);
   });
 });
