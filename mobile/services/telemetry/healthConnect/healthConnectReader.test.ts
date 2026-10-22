@@ -467,6 +467,77 @@ describe('rodadas seguintes', () => {
   });
 });
 
+// O batimento que a pulseira mandou ao vivo pelo Bluetooth não sai de novo
+// pelo Health Connect: o leitor pergunta à ponte os trechos conectados da
+// janela e o mapeamento descarta o batimento deles.
+describe('batimento já enviado pelo Bluetooth', () => {
+  const ms = (segundos: number) => AGORA + segundos * 1000;
+
+  it('na leitura das 48 h, pede os trechos desde o início da janela e tira o batimento deles', async () => {
+    const bluetoothIntervals = jest.fn((_sinceMs: number) => [{ start: ms(-400), end: null }]);
+    const { reader, outbox } = montar(
+      {
+        HeartRate: [batimento('h1', -600), batimento('h2', -300), batimento('h3', -100)],
+        Steps: [passos('s1', -200, 50)],
+      },
+      { bluetoothIntervals },
+    );
+
+    expect(await reader.run()).toBe(2);
+
+    expect(bluetoothIntervals).toHaveBeenCalledWith(AGORA - HEALTH_CONNECT_WINDOW_MS);
+    const pending = await outbox.pending();
+    expect(pending.map((e) => e.eventTime)).toEqual([em(-600), em(-200)]);
+    expect(pending[1].measurements.stepDelta?.value).toBe(50);
+  });
+
+  it('a pulseira segue detectada pelo batimento do Health Connect, mesmo todo descartado', async () => {
+    const { reader, storage } = montar(
+      { HeartRate: [batimento('h1', -300)] },
+      { bluetoothIntervals: () => [{ start: ms(-1000), end: null }] },
+    );
+
+    expect(await reader.run()).toBe(0);
+
+    expect(lerEstado(storage)).toMatchObject({ bandPackage: PULSEIRA, noBand: false });
+  });
+
+  it('nas mudanças também', async () => {
+    let trechos = [] as { start: number; end: number | null }[];
+    const m = montar({ HeartRate: [batimento('h1', -600)] }, { bluetoothIntervals: () => trechos });
+    await m.reader.run();
+    m.avancar(QUINZE_MIN);
+    trechos = [{ start: ms(QUINZE_MIN / 1000 - 120), end: ms(QUINZE_MIN / 1000 - 30) }];
+    m.source.getChanges.mockResolvedValueOnce(
+      pagina({
+        records: [
+          batimento('h2', QUINZE_MIN / 1000 - 60),
+          batimento('h3', QUINZE_MIN / 1000 - 10),
+        ],
+      }),
+    );
+
+    expect(await m.reader.run()).toBe(1);
+    expect((await m.outbox.pending()).map((e) => e.eventTime)).toEqual([
+      em(-600),
+      em(QUINZE_MIN / 1000 - 10),
+    ]);
+  });
+
+  it('a ponte que lança não derruba a rodada: o batimento entra como sempre', async () => {
+    const { reader } = montar(
+      { HeartRate: [batimento('h1', -300)] },
+      {
+        bluetoothIntervals: () => {
+          throw new Error('módulo fora');
+        },
+      },
+    );
+
+    expect(await reader.run()).toBe(1);
+  });
+});
+
 describe('sem pulseira', () => {
   it('sem batimento nas 48 h: sem pacote, noBand, e passos de fora', async () => {
     const { reader, outbox, storage } = montar({ Steps: [passos('s1', -200, 50)] });

@@ -1,4 +1,5 @@
 import type { HealthConnectRecordResult } from 'react-native-health-connect';
+import type { ConnectedInterval } from '../../../modules/swi-ble-heart-rate/src/SwiBleHeartRate.types';
 import { outboxEventProblem, type OutboxEvent, type OutboxMeasurements } from '../telemetryOutbox';
 
 // Registros do Health Connect virando eventos da fila de telemetria. Função
@@ -99,6 +100,12 @@ export interface HealthConnectMappingContext {
   bandPackage: string | null;
   /** uuid v5 de `name` em `namespace`; em produção, `uuid.v5` do expo-modules-core. */
   uuidV5: (name: string, namespace: string) => string;
+  /**
+   * Trechos em que a pulseira esteve conectada pelo Bluetooth (`end` null =
+   * segue conectada, vale até `nowMs`). O batimento desses trechos já subiu
+   * ao vivo por lá; o do Health Connect sai, e as outras medições ficam.
+   */
+  bluetoothIntervals?: readonly ConnectedInterval[];
 }
 
 export interface HealthConnectMappingResult {
@@ -321,6 +328,10 @@ export function mapHealthConnectRecords(
   const typeIndex = (c: Candidate) => HEALTH_CONNECT_RECORD_TYPES.indexOf(c.recordType);
   candidates.sort((a, b) => a.atMs - b.atMs || typeIndex(a) - typeIndex(b));
 
+  const intervals = ctx.bluetoothIntervals ?? [];
+  const viaBluetooth = (atMs: number) =>
+    intervals.some(({ start, end }) => atMs >= start && atMs <= (end ?? ctx.nowMs));
+
   let lastHeartRateMs: number | null = null;
   // O mesmo registro pode chegar duas vezes numa leitura (duas páginas que se
   // sobrepõem, uma mudança repetida). O backend o reconheceria pelo id, mas
@@ -328,6 +339,11 @@ export function mapHealthConnectRecords(
   const seen = new Set<string>();
   for (const candidate of candidates) {
     const isHeartRate = candidate.measurements.heartRate !== undefined;
+    // Antes da cadência: a amostra que sai não conta como aceita.
+    if (isHeartRate && viaBluetooth(candidate.atMs)) {
+      discarded += 1;
+      continue;
+    }
     if (
       isHeartRate &&
       lastHeartRateMs !== null &&
