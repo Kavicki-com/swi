@@ -60,9 +60,11 @@ export class ReportsController {
     return this.reports.create(userId, dto, parseIdempotencyKey(rawKey))
   }
 
+  // Edição. Como na exclusão, a régua de quem pode vive no serviço (autor,
+  // ADMIN ou SUPERVISOR), e o papel do token viaja junto.
   @Patch(':id')
   update(@Param('id') id: string, @CurrentUser() user: JwtUser, @Body() dto: UpdateReportDto) {
-    return this.reports.update(id, user.userId, dto, user.companyId)
+    return this.reports.update(id, user.userId, user.role, dto, user.companyId)
   }
 
   // Exclusão (204). A régua de quem pode vive no serviço (autor ou ADMIN), e

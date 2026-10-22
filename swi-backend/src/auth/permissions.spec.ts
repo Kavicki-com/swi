@@ -19,6 +19,7 @@ const SUPERVISOR_PODE: Permission[] = [
   'positions.read',
   'users.read',
   'reports.read',
+  'reports.edit',
 ]
 const SO_ADMIN: Permission[] = [
   'monitoring.safety.manage',
