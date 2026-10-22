@@ -17,6 +17,7 @@ export const noMetric = <T,>(unit: string): MetricState<T> => ({
   measuredAt: null,
   source: null,
   unit,
+  ausencia: null,
 });
 
 export const condition = (
@@ -37,6 +38,7 @@ export const metric = <T,>(value: T, over: Partial<MetricState<T>> = {}): Metric
   measuredAt: FIXTURE_AT,
   source: 'APPLE_WATCH',
   unit: '',
+  ausencia: null,
   ...over,
 });
 

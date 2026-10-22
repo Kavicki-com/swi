@@ -359,18 +359,21 @@ const condicaoDoGrafico = (tree: ReactTestRenderer) =>
 describe('dashboard: leitura da telemetria', () => {
   // Carregando, sem leitura e falha NÃO trocam a tela: o dashboard inteiro
   // continua lá, com a ausência declarada, e a ajuda urgente ao alcance.
+  // iPhone sem a sessão espelhada: com a leitura em mãos a coluna diz
+  // "Indisponível" (ADR-0004); sem ela (carregando, falha) ninguém conferiu,
+  // e a coluna fica com o rótulo de sempre.
   it.each([
-    ['carregando', CARREGANDO, 'Carregando leitura'],
-    ['quem nunca reportou', lendo(neverReported()), 'Sem leitura do aparelho'],
-    ['falha na leitura', FALHOU, 'Leitura indisponível no momento'],
-  ])('%s: a tela fica inteira, com a ausência declarada', async (_caso, estado, frase) => {
+    ['carregando', CARREGANDO, 'Carregando leitura', 'BPM'],
+    ['quem nunca reportou', lendo(neverReported()), 'Sem leitura do aparelho', 'Indisponível'],
+    ['falha na leitura', FALHOU, 'Leitura indisponível no momento', 'BPM'],
+  ])('%s: a tela fica inteira, com a ausência declarada', async (_caso, estado, frase, rotulo) => {
     mockTelemetryState = estado;
     const tree = await render();
     const texto = textoDa(tree);
     expect(texto).toContain(frase);
-    expect(texto).toContain('BPM');
+    expect(texto).toContain(rotulo);
     expect(texto).toContain('--');
-    expect(texto).toContain('Sem medição');
+    expect(texto).not.toContain('Sem medição');
     expect(texto).toContain('Tempo até o alerta de fadiga: sem estimativa');
     expect(porRotulo(tree, 'Ajuda urgente')).toBeDefined();
     expect(porRotulo(tree, 'Chat')).toBeDefined();

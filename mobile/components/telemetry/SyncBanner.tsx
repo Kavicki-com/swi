@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { Button, Surface, Text, useTheme } from '@kavicki/swi-design-system';
 import { healthConnectStatusOf } from '../../services/telemetry/healthConnect/useHealthConnectPermissionRequest';
 import type { WorkerTelemetry } from '../../services/telemetry/myTelemetry';
@@ -6,7 +5,8 @@ import { SYNC_BANNER_COPY as COPY } from '../../services/telemetry/telemetryCopy
 import { useTelemetryUploadState } from '../../services/telemetry/TelemetryUploadProvider';
 import { useNow } from '../../services/telemetry/useNow';
 import { syncBannerOf } from '../../services/vitals/dashboardVitalsView';
-import { useMyTelemetry, useRefreshMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
+import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
+import { useSyncAndRefresh } from '../../services/vitals/useSyncAndRefresh';
 
 // Faixa da pulseira lida pelo Health Connect, no Dashboard e em Minhas
 // estatísticas, logo abaixo da linha de estado dos vitais: o celular Android
@@ -21,12 +21,8 @@ import { useMyTelemetry, useRefreshMyTelemetry } from '../../services/vitals/MyT
 //   aparelho do mesmo funcionário sincronizou mostra só o texto; com o
 //   pareamento caído ou sem a leitura o `syncNow` não sobe nada, e o botão
 //   piscaria à toa.
-// - O progresso é o `syncing` do contexto do envio, um estado só: com Minhas
-//   estatísticas empilhada sobre o Dashboard as duas faixas mostram o mesmo,
-//   e uma sincronização começada noutro lugar também aparece aqui.
-// - No fim me/current é relido na hora, porque o "sincronizado há" vem do
-//   backend e só muda numa leitura nova. Relê só a faixa que pediu, e uma vez
-//   por sincronização (ver `pedida`).
+// - Sincronizar, o progresso e a releitura de me/current no fim são os de
+//   useSyncAndRefresh, os mesmos do aviso de sincronização falhada.
 
 export function SyncBanner() {
   const { telemetry } = useMyTelemetry();
@@ -39,36 +35,14 @@ function SyncBannerBody({ telemetry }: { telemetry: WorkerTelemetry }) {
   // O relógio do aparelho, para o "há N min" andar com a tela aberta. Fica
   // aqui, e não na tela, para o tique de 5 s renderizar só a faixa.
   const now = useNow();
-  const { healthConnect, paired, syncing, syncNow } = useTelemetryUploadState();
-  const refresh = useRefreshMyTelemetry();
-  // A sincronização que ESTA faixa pediu e ainda não terminou. É ela que
-  // segura o toque duplo no mesmo quadro: os dois toques veem o mesmo
-  // `syncing` falso, porque o estado só muda no render seguinte. Não é flag
-  // de montagem: nada aqui escreve estado, então StrictMode e Fast Refresh
-  // não deixam a faixa presa em "Sincronizando…".
-  const pedida = useRef<Promise<void> | null>(null);
+  const { healthConnect } = useTelemetryUploadState();
+  const { paired, syncing, sincronizar } = useSyncAndRefresh();
 
   const text = syncBannerOf(telemetry, now);
   if (text === null) return null;
 
   // A mesma regra do Monitoramento: pareado e com a leitura concedida.
   const podeSincronizar = paired && healthConnectStatusOf(healthConnect, null) === 'granted';
-
-  const sincronizar = () => {
-    if (syncing || pedida.current !== null) return;
-    const run = syncNow();
-    pedida.current = run;
-    // `syncNow` nunca rejeita; o segundo braço só impede uma rejeição solta
-    // se isso mudar um dia.
-    run
-      .then(
-        () => refresh(),
-        () => undefined,
-      )
-      .finally(() => {
-        pedida.current = null;
-      });
-  };
 
   return (
     <Surface

@@ -1,13 +1,19 @@
 import type { MetricState, WorkerTelemetry } from '../telemetry/myTelemetry';
 import type { SeriesPoint, WorkerSeries } from '../telemetry/mySeries';
 import {
+  absenceContextFor,
   DEMO_DATA_LABEL,
-  isSameDay,
   liveValue,
   measuredSuffix,
   NO_VALUE,
-  whenLabel,
 } from './dashboardVitalsView';
+import {
+  absenceLabelOf,
+  failureLabelOf,
+  type AbsenceContext,
+  type AbsenceMetric,
+} from './metricAbsence';
+import { isSameDay, whenLabel } from './whenLabel';
 
 // O que a tela de Estatísticas mostra além do bloco de vitais do dashboard:
 // os quatro anéis, a bateria do aparelho e o gráfico de gasto calórico.
@@ -29,6 +35,8 @@ export interface StatsDonutsView {
   /** Oxigenação é medição pontual: a nota diz de quando é, ou null sem medição. */
   oxygenNote: string | null;
   battery: string;
+  /** As métricas dos anéis sem valor na tela, para o aviso de falha. */
+  absent: AbsenceMetric[];
 }
 
 const clampPct = (n: number) => Math.min(100, Math.max(0, n));
@@ -51,9 +59,15 @@ const todayValue = (state: Reading<number>, observedAt: string): number | null =
     ? state.value
     : null;
 
-export function statsDonutsView(telemetry: WorkerTelemetry | null): StatsDonutsView {
+export function statsDonutsView(
+  telemetry: WorkerTelemetry | null,
+  absence?: AbsenceContext | null,
+): StatsDonutsView {
   const reported = telemetry !== null && telemetry.origin !== null ? telemetry : null;
   const m = reported?.metrics;
+  // A ausência vale também para quem nunca reportou: é o primeiro minuto.
+  const ctx = absenceContextFor(telemetry, absence);
+  const declared = telemetry?.metrics;
   const observedAt = reported?.observedAt ?? '';
 
   const effort = liveValue(m?.effort ?? ABSENT);
@@ -85,7 +99,11 @@ export function statsDonutsView(telemetry: WorkerTelemetry | null): StatsDonutsV
     },
     oxygen: {
       value: oxygen.value === null ? NO_VALUE : pct(oxygen.value),
-      label: 'Oxigenação',
+      label:
+        oxygen.value === null
+          ? (absenceLabelOf('oxygenSaturation', declared?.oxygenSaturation.ausencia, ctx) ??
+            'Oxigenação')
+          : 'Oxigenação',
       progress: oxygen.value === null ? 0 : clampPct(oxygen.value),
     },
     steps: {
@@ -95,12 +113,18 @@ export function statsDonutsView(telemetry: WorkerTelemetry | null): StatsDonutsV
           ? `${(distance / 1000).toFixed(2).replace('.', ',')}km`
           : steps !== null
             ? 'passos'
-            : 'Sem medição',
+            : (absenceLabelOf('steps', declared?.steps.ausencia, ctx) ?? 'passos'),
       progress: presence(steps),
     },
     energy: {
       value: energy === null ? NO_VALUE : `${Math.round(energy)} kcal`,
-      label: energyState.value === null && energyState.calculating ? 'Calculando' : 'por hora',
+      // Calculando fica entre a falha, que o sobrepõe, e a ausência do backend.
+      label:
+        energy !== null
+          ? 'por hora'
+          : energyState.calculating
+            ? (failureLabelOf('energy', ctx) ?? 'Calculando')
+            : (absenceLabelOf('energy', declared?.energyRatePerHour.ausencia, ctx) ?? 'por hora'),
       progress: presence(energy),
     },
     oxygenNote:
@@ -108,6 +132,11 @@ export function statsDonutsView(telemetry: WorkerTelemetry | null): StatsDonutsV
         ? `Oxigenação: última medição ${whenLabel(oxygen.measuredAt, observedAt)}`
         : null,
     battery: `Bateria do aparelho: ${batteryText}`,
+    absent: [
+      ...(oxygen.value === null ? (['oxygenSaturation'] as const) : []),
+      ...(steps === null ? (['steps'] as const) : []),
+      ...(energy === null ? (['energy'] as const) : []),
+    ],
   };
 }
 
@@ -238,14 +267,14 @@ export function caloriesChartView(
         ? 'Série indisponível no momento'
         : options.loading
           ? 'Carregando série'
-          : 'Sem medição no período',
+          : 'Nenhuma medição no período',
     );
   }
 
   const points = series.bucket === 'hour' ? hourlyRatePoints(series) : dailyTotalPoints(series);
 
   if (series.origin === null || points.every((p) => p.kcal === null)) {
-    return empty('Sem medição no período');
+    return empty('Nenhuma medição no período');
   }
   return { points, unit, emptyText: null, sourceBadge };
 }

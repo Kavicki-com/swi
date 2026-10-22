@@ -37,7 +37,7 @@ export const READINESS_ROUTES = {
 
 // Sem o gate do Bluetooth não há escolha a ler: um armazenamento que nunca
 // tem pulseira, para o hook não abrir o arquivo à toa.
-const SEM_BLUETOOTH: BandChoiceStore = {
+export const SEM_BLUETOOTH: BandChoiceStore = {
   current: () => null,
   load: async () => null,
   choose: async () => undefined,

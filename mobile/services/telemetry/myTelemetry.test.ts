@@ -1,6 +1,6 @@
 import { apiRequest } from '../api/http';
 import { fetchMyTelemetry, MY_TELEMETRY_PATH } from './myTelemetry';
-import { metric, neverReported, reporting } from './myTelemetryFixtures';
+import { metric, neverReported, noMetric, reporting } from './myTelemetryFixtures';
 
 jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
 
@@ -168,6 +168,71 @@ describe('fetchMyTelemetry', () => {
         expect(telemetry.metrics.heartRate.value).toBe(112);
       },
     );
+  });
+
+  // Por que falta uma métrica, decidido no backend: AWAITING enquanto é
+  // normal não ter chegado, NOT_SENT quando a pulseira não a entrega.
+  describe('ausência por métrica', () => {
+    const vazia = (ausencia: unknown) => ({ ...noMetric<number>('%'), ausencia });
+
+    it('lê a ausência das métricas sem valor', async () => {
+      const leitura = neverReported();
+      requestMock.mockResolvedValue({
+        ...leitura,
+        metrics: {
+          ...leitura.metrics,
+          heartRate: vazia('AWAITING'),
+          bloodPressure: vazia('NOT_SENT'),
+          steps: vazia('AWAITING'),
+          energyRatePerHour: { ...vazia('NOT_SENT'), calculating: false },
+          oxygenSaturation: vazia('NOT_SENT'),
+        },
+      });
+      const { metrics } = await fetchMyTelemetry();
+      expect(metrics.heartRate.ausencia).toBe('AWAITING');
+      expect(metrics.bloodPressure.ausencia).toBe('NOT_SENT');
+      expect(metrics.steps.ausencia).toBe('AWAITING');
+      expect(metrics.energyRatePerHour.ausencia).toBe('NOT_SENT');
+      expect(metrics.oxygenSaturation.ausencia).toBe('NOT_SENT');
+    });
+
+    // Backend antigo não manda o campo, e o iPhone recebe nulo: os dois são
+    // "o backend não disse", não falha.
+    it('sem o campo, a ausência vem nula', async () => {
+      requestMock.mockResolvedValue(neverReported());
+      const { metrics } = await fetchMyTelemetry();
+      expect(metrics.heartRate.ausencia).toBeNull();
+      expect(metrics.bloodPressure.ausencia).toBeNull();
+    });
+
+    it.each([
+      ['texto desconhecido', 'MISSING'],
+      ['minúsculo', 'awaiting'],
+      ['número', 1],
+      ['objeto', { kind: 'AWAITING' }],
+    ])('campo torto (%s) vira nulo sem derrubar a leitura', async (_caso, ausencia) => {
+      const leitura = reporting();
+      requestMock.mockResolvedValue({
+        ...leitura,
+        metrics: { ...leitura.metrics, bloodPressure: vazia(ausencia) },
+      });
+      const telemetry = await fetchMyTelemetry();
+      expect(telemetry.metrics.bloodPressure.ausencia).toBeNull();
+      expect(telemetry.metrics.heartRate.value).toBe(112);
+    });
+
+    // Valor manda: uma ausência junto de um valor é contradição, e o valor é
+    // o que foi medido.
+    it('métrica com valor nunca carrega ausência', async () => {
+      const leitura = reporting();
+      requestMock.mockResolvedValue({
+        ...leitura,
+        metrics: { ...leitura.metrics, heartRate: { ...metric(84), ausencia: 'AWAITING' } },
+      });
+      const { metrics } = await fetchMyTelemetry();
+      expect(metrics.heartRate.value).toBe(84);
+      expect(metrics.heartRate.ausencia).toBeNull();
+    });
   });
 
   it('falha de rede chega a quem chama, nunca vira leitura vazia', async () => {
