@@ -133,6 +133,11 @@ export type ConditionKind =
    * Nasce recuperada, então nunca está entre as ativas da leitura.
    */
   | 'REPEATED_EPISODES'
+  /**
+   * Pedido de ajuda pelo botão "Ajuda urgente" do app. Não é medição: nasce
+   * recuperada para levar o alerta urgente à fila, e nunca está entre as ativas.
+   */
+  | 'HELP_REQUESTED'
 
 /**
  * Espelha o enum TelemetryConditionRecoveryReason do schema: por que uma
@@ -164,6 +169,9 @@ export type ConditionRecoveryReason =
  * O desgaste alto também entra, porque deixou de ser estimativa sem régua: a
  * trava dele subiu para 90% e a faixa de cada pessoa cuida do caminho até lá.
  * As condições de Atenção (faixa de fadiga da pessoa) ficam de fora.
+ *
+ * O pedido de ajuda do app também é urgente, por definição: é uma pessoa
+ * pedindo socorro. Ele nasce recuperado, então nunca conta entre as ativas.
  */
 export const URGENT_CONDITION_KINDS = [
   'HEART_RATE_HIGH',
@@ -171,6 +179,7 @@ export const URGENT_CONDITION_KINDS = [
   'OXYGEN_LOW',
   'BLOOD_PRESSURE_HIGH',
   'WEAR_HIGH',
+  'HELP_REQUESTED',
 ] as const
 
 /** LIVE promove o snapshot; BACKLOG só vai ao histórico; HISTORICAL passou de 48 h. */

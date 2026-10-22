@@ -173,6 +173,7 @@ export const NO_NEW_READING_METRIC: Readonly<Record<TelemetryConditionKind, NoNe
   DEVICE_SIGNAL_LOST: null,
   // Nasce recuperada: não há o que vencer.
   REPEATED_EPISODES: null,
+  HELP_REQUESTED: null,
 }
 
 /**

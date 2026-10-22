@@ -42,18 +42,26 @@ const journey = () =>
 
 const notifications = () => ({ enqueueForMany: jest.fn().mockResolvedValue(undefined) }) as any
 
-const make = (db = prisma(), j = journey(), n = notifications()) => ({
-  svc: new RescueService(db, j, n),
+/** Por padrão o ferido não tem pedido de ajuda aberto. */
+const helpRequests = (openHelpId: string | null = null) =>
+  ({
+    attendByRescue: jest.fn().mockResolvedValue(openHelpId),
+    closeByRescue: jest.fn().mockResolvedValue(undefined),
+  }) as any
+
+const make = (db = prisma(), j = journey(), n = notifications(), h = helpRequests()) => ({
+  svc: new RescueService(db, j, n, h),
   db,
   j,
   n,
+  h,
 })
 
 describe('RescueService', () => {
   describe('dispatch', () => {
     it('grava o resgate na empresa, pausa a jornada do socorrista e o notifica', async () => {
       const { svc, db, j, n } = make()
-      const out = await svc.dispatch('empresa-1', 'ferido-1', 'socorrista-1')
+      const out = await svc.dispatch('empresa-1', 'ferido-1', 'socorrista-1', 'admin-1')
 
       // Confirma que os dois são WORKER da empresa antes de gravar.
       expect(db.user.findMany.mock.calls[0][0].where).toEqual({
@@ -65,6 +73,7 @@ describe('RescueService', () => {
         companyId: 'empresa-1',
         injuredId: 'ferido-1',
         rescuerId: 'socorrista-1',
+        helpAlertId: null,
       })
       expect(j.pauseJourney).toHaveBeenCalledWith('socorrista-1')
       expect(n.enqueueForMany.mock.calls[0][0]).toEqual(['socorrista-1'])
@@ -84,19 +93,19 @@ describe('RescueService', () => {
 
     it('sem empresa no token não despacha: 403', async () => {
       const { svc } = make()
-      await expect(svc.dispatch(null, 'ferido-1', 'socorrista-1')).rejects.toBeInstanceOf(ForbiddenException)
+      await expect(svc.dispatch(null, 'ferido-1', 'socorrista-1', 'admin-1')).rejects.toBeInstanceOf(ForbiddenException)
     })
 
     it('ninguém socorre a si mesmo: 400', async () => {
       const { svc, db } = make()
-      await expect(svc.dispatch('empresa-1', 'ferido-1', 'ferido-1')).rejects.toBeInstanceOf(BadRequestException)
+      await expect(svc.dispatch('empresa-1', 'ferido-1', 'ferido-1', 'admin-1')).rejects.toBeInstanceOf(BadRequestException)
       expect(db.rescue.create).not.toHaveBeenCalled()
     })
 
     it('ferido ou socorrista fora da empresa, inexistente ou não-WORKER: 404', async () => {
       const db = prisma({ user: { findMany: jest.fn().mockResolvedValue([{ id: 'ferido-1', name: 'Ana Ferida' }]) } })
       const { svc } = make(db)
-      await expect(svc.dispatch('empresa-1', 'ferido-1', 'socorrista-x')).rejects.toBeInstanceOf(NotFoundException)
+      await expect(svc.dispatch('empresa-1', 'ferido-1', 'socorrista-x', 'admin-1')).rejects.toBeInstanceOf(NotFoundException)
       expect(db.rescue.create).not.toHaveBeenCalled()
     })
   })
@@ -176,7 +185,7 @@ describe('RescueService', () => {
         },
       })
       const { svc, j } = make(db)
-      const out = await svc.end('empresa-1', 'rescue-1')
+      const out = await svc.end('empresa-1', 'rescue-1', 'admin-1')
       expect(db.rescue.update.mock.calls[0][0].data.status).toBe('ended')
       expect(db.rescue.update.mock.calls[0][0].data.endedAt).toBeInstanceOf(Date)
       expect(j.resumeJourney).toHaveBeenCalledWith('socorrista-1')
@@ -192,14 +201,14 @@ describe('RescueService', () => {
         },
       })
       const { svc, j } = make(db)
-      await svc.end('empresa-1', 'rescue-1')
+      await svc.end('empresa-1', 'rescue-1', 'admin-1')
       expect(j.resumeJourney).not.toHaveBeenCalled()
     })
 
     it('resgate de outra empresa ou inexistente: 404', async () => {
       const db = prisma({ rescue: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() } })
       const { svc } = make(db)
-      await expect(svc.end('empresa-1', 'rescue-x')).rejects.toBeInstanceOf(NotFoundException)
+      await expect(svc.end('empresa-1', 'rescue-x', 'admin-1')).rejects.toBeInstanceOf(NotFoundException)
     })
 
     it('resgate já encerrado: 409', async () => {
@@ -210,12 +219,55 @@ describe('RescueService', () => {
         },
       })
       const { svc } = make(db)
-      await expect(svc.end('empresa-1', 'rescue-1')).rejects.toBeInstanceOf(ConflictException)
+      await expect(svc.end('empresa-1', 'rescue-1', 'admin-1')).rejects.toBeInstanceOf(ConflictException)
     })
 
     it('sem empresa: 403', async () => {
       const { svc } = make()
-      await expect(svc.end(null, 'rescue-1')).rejects.toBeInstanceOf(ForbiddenException)
+      await expect(svc.end(null, 'rescue-1', 'admin-1')).rejects.toBeInstanceOf(ForbiddenException)
+    })
+  })
+  describe('pedido de ajuda do ferido', () => {
+    it('despachar marca atendido o pedido aberto, por quem despachou, e o resgate guarda o vínculo', async () => {
+      const h = helpRequests('help-1')
+      const { svc, db } = make(prisma(), journey(), notifications(), h)
+      await svc.dispatch('empresa-1', 'ferido-1', 'socorrista-1', 'admin-1')
+      expect(h.attendByRescue).toHaveBeenCalledWith('ferido-1', 'admin-1')
+      expect(db.rescue.create.mock.calls[0][0].data.helpAlertId).toBe('help-1')
+    })
+
+    it('despacho recusado não mexe no pedido', async () => {
+      const h = helpRequests('help-1')
+      const db = prisma({ user: { findMany: jest.fn().mockResolvedValue([]) } })
+      const { svc } = make(db, journey(), notifications(), h)
+      await expect(svc.dispatch('empresa-1', 'ferido-1', 'socorrista-1', 'admin-1')).rejects.toBeInstanceOf(NotFoundException)
+      expect(h.attendByRescue).not.toHaveBeenCalled()
+    })
+
+    it('encerrar fecha o pedido vinculado, por quem encerrou', async () => {
+      const h = helpRequests()
+      const db = prisma({
+        rescue: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'rescue-1', status: 'arrived', rescuerId: 'socorrista-1', helpAlertId: 'help-1' }),
+          update: jest.fn().mockResolvedValue({ ...row, status: 'ended' }),
+        },
+      })
+      const { svc } = make(db, journey(), notifications(), h)
+      await svc.end('empresa-1', 'rescue-1', 'sup-1')
+      expect(h.closeByRescue).toHaveBeenCalledWith('help-1', 'sup-1')
+    })
+
+    it('resgate sem pedido vinculado encerra sem tocar em pedido nenhum', async () => {
+      const h = helpRequests()
+      const db = prisma({
+        rescue: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'rescue-1', status: 'arrived', rescuerId: 'socorrista-1', helpAlertId: null }),
+          update: jest.fn().mockResolvedValue({ ...row, status: 'ended' }),
+        },
+      })
+      const { svc } = make(db, journey(), notifications(), h)
+      await svc.end('empresa-1', 'rescue-1', 'admin-1')
+      expect(h.closeByRescue).not.toHaveBeenCalled()
     })
   })
 })

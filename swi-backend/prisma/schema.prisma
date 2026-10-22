@@ -253,6 +253,10 @@ model Rescue {
   rescuerId String
   rescuer   User         @relation("rescueRescuer", fields: [rescuerId], references: [id])
   status    RescueStatus @default(dispatched)
+  /// Pedido de ajuda do ferido que este resgate atende: o despacho o marca
+  /// atendido e o encerramento o fecha. Nulo quando não havia pedido aberto.
+  helpAlertId String?
+  helpAlert   OperationalAlert? @relation(fields: [helpAlertId], references: [id], onDelete: SetNull)
   startedAt DateTime     @default(now())
   arrivedAt DateTime?
   endedAt   DateTime?
@@ -260,6 +264,7 @@ model Rescue {
   updatedAt DateTime     @updatedAt
 
   @@index([companyId, status])
+  @@index([helpAlertId])
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +676,10 @@ enum TelemetryConditionKind {
   /// Três ou mais episódios atrasados do mesmo tipo no mesmo dia monitorado.
   /// Nasce recuperada e gera alerta; o tipo repetido fica em episodeKind.
   REPEATED_EPISODES
+  /// Pedido de ajuda do funcionário pelo botão "Ajuda urgente" do app. Não é
+  /// medição: nasce recuperada só para levar o alerta urgente à fila, e o
+  /// alerta é que diz se o pedido está aberto, atendido ou fechado.
+  HELP_REQUESTED
 }
 
 enum TelemetryConditionStatus {
@@ -1094,6 +1103,9 @@ model OperationalAlert {
   acknowledgedAt DateTime?
   resolvedAt     DateTime?
   resolutionNote String?
+
+  /// Resgates despachados para atender este alerta (só pedido de ajuda).
+  rescues Rescue[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

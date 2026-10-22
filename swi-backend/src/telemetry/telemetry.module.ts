@@ -17,6 +17,8 @@ import { CalibrationAdminService } from './calibration/calibration-admin.service
 import { CalibrationController } from './calibration/calibration.controller'
 import { CalibrationService } from './calibration/calibration.service'
 import { DeviceAuthGuard } from './devices/device-auth.guard'
+import { HelpRequestController } from './help/help-request.controller'
+import { HelpRequestService } from './help/help-request.service'
 import { DeviceAuthService } from './devices/device-auth.service'
 import { TelemetryDeviceReadinessController } from './devices/telemetry-device-readiness.controller'
 import { TelemetryDevicesController } from './devices/telemetry-devices.controller'
@@ -51,6 +53,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     ConditionHistoryController,
     CalibrationController,
     MonitoringPauseController,
+    HelpRequestController,
   ],
   providers: [
     DeviceAuthService,
@@ -81,6 +84,8 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     CalibrationService,
     CalibrationAdminService,
     CalibrationJob,
+    // Pedido de ajuda do app: fila de alertas e resgates.
+    HelpRequestService,
   ],
   exports: [
     DeviceAuthService,
@@ -89,6 +94,8 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     TELEMETRY_REPOSITORY,
     // O mapa de colegas (PositionsModule) lê daqui o estado de saúde.
     TelemetryQueryService,
+    // O resgate marca o pedido de ajuda atendido e fechado.
+    HelpRequestService,
   ],
 })
 export class TelemetryModule {}

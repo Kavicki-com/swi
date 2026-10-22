@@ -245,6 +245,7 @@ export const CONDITION_CATEGORY: Readonly<Record<ConditionKind, ConditionCategor
   OXYGEN_LOW: isUrgent('OXYGEN_LOW') ? 'URGENT' : 'HEALTH',
   BLOOD_PRESSURE_HIGH: isUrgent('BLOOD_PRESSURE_HIGH') ? 'URGENT' : 'HEALTH',
   REPEATED_EPISODES: 'HEALTH',
+  HELP_REQUESTED: isUrgent('HELP_REQUESTED') ? 'URGENT' : 'HEALTH',
   DEVICE_BATTERY_LOW: 'DEVICE',
   DEVICE_SIGNAL_LOST: 'DEVICE',
 }
@@ -268,6 +269,8 @@ export const CONDITION_METRIC: Readonly<Record<ConditionKind, keyof WorkerMetric
   DEVICE_SIGNAL_LOST: null,
   // Um padrão de episódios já encerrados, e não uma medição: nasce recuperada.
   REPEATED_EPISODES: null,
+  // Pedido de uma pessoa, e não medição: nasce recuperada.
+  HELP_REQUESTED: null,
 }
 
 /** Condição aberta como a leitura a entrega. */
@@ -748,11 +751,27 @@ export interface AdminWorkerDevice {
   lastSeenAt: string | null
 }
 
+/**
+ * Pedido de ajuda aberto ou atendido de um funcionário, pelo botão "Ajuda
+ * urgente" do app. O id é o do alerta da fila, que o painel reconhece e resolve.
+ */
+export interface AdminHelpRequest {
+  id: string
+  /** OPEN: ninguém tratou ainda. ATTENDED: reconhecido no painel ou com socorrista despachado. */
+  status: 'OPEN' | 'ATTENDED'
+  /** ISO-8601 de quando o funcionário pediu. */
+  createdAt: string
+  /** Resgate ainda não encerrado despachado para o pedido; nulo sem despacho. */
+  rescueId: string | null
+}
+
 export interface AdminWorkerEntry {
   worker: { id: string; name: string; sector: string | null }
   device: AdminWorkerDevice
   /** A mesma leitura de workers/:id/current, condições incluídas. */
   telemetry: WorkerTelemetry
+  /** Pedido de ajuda ainda não fechado; nulo sem pedido. */
+  helpRequest: AdminHelpRequest | null
 }
 
 export interface AdminWorkersTelemetry {
@@ -766,6 +785,8 @@ export interface AdminWorkerInput {
   /** Aparelhos não revogados do funcionário; vazio quando não há nenhum. */
   devices: readonly { lastSeenAt: string | null }[]
   projection: WorkerProjectionInput
+  /** Pedido de ajuda ainda não fechado; ausente ou nulo sem pedido. */
+  helpRequest?: AdminHelpRequest | null
 }
 
 /**
@@ -773,7 +794,9 @@ export interface AdminWorkerInput {
  * de aparelho não sobe ninguém na lista, pelo mesmo motivo que não conta como
  * risco no resumo: relógio descarregado não é funcionário em risco.
  */
-function attentionRank(telemetry: WorkerTelemetry): number {
+function attentionRank(telemetry: WorkerTelemetry, helpRequest: AdminHelpRequest | null): number {
+  // Quem pediu ajuda vem antes de tudo: é uma pessoa pedindo, não uma leitura.
+  if (helpRequest !== null) return -1
   const categories = new Set(telemetry.conditions.map((c) => c.category))
   if (categories.has('URGENT')) return 0
   if (categories.has('HEALTH')) return 1
@@ -807,10 +830,11 @@ export function projectAdminWorkers(
       lastSeenAt: latestContact(input.devices),
     },
     telemetry: projectWorker(input.projection, now),
+    helpRequest: input.helpRequest ?? null,
   }))
   workers.sort(
     (a, b) =>
-      attentionRank(a.telemetry) - attentionRank(b.telemetry) ||
+      attentionRank(a.telemetry, a.helpRequest) - attentionRank(b.telemetry, b.helpRequest) ||
       byName.compare(a.worker.name, b.worker.name),
   )
   return { observedAt: now.toISOString(), workers }

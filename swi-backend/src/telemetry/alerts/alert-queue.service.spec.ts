@@ -42,7 +42,9 @@ const prismaDouble = () =>
     },
   }) as any
 
-const service = (prisma: any) => new AlertQueueService(prisma as PrismaService)
+const helpDouble = () => ({ announceChanged: jest.fn() })
+const service = (prisma: any, help: ReturnType<typeof helpDouble> = helpDouble()) =>
+  new AlertQueueService(prisma as PrismaService, help as any)
 
 describe('alertCategory', () => {
   it('batimento fora da faixa e desgaste na trava são urgência, saúde sem urgência é HEALTH, aparelho é DEVICE', () => {
@@ -202,6 +204,41 @@ describe('AlertQueueService com TELEMETRY_ALERTS_INCLUDE_DEMO', () => {
     const item = await service(prisma).acknowledge(ADMIN, 'demo-1', NOW)
     expect(prisma.operationalAlert.findFirst.mock.calls[0][0].where.origin).toEqual({ in: ['REAL', 'DEMO'] })
     expect(item).toMatchObject({ origin: 'DEMO', status: 'ACKNOWLEDGED' })
+  })
+})
+
+describe('AlertQueueService: pedido de ajuda tratado na fila', () => {
+  const help = (over: Record<string, unknown> = {}) =>
+    row({ workerId: 'worker-1', condition: { ...row().condition, kind: 'HELP_REQUESTED', observedValue: null, thresholdValue: null }, ...over })
+
+  it('pedido de ajuda é urgente', () => {
+    expect(alertCategory('HELP_REQUESTED')).toBe('URGENT')
+  })
+
+  it('reconhecer avisa o pedido como atendido; resolver, como fechado', async () => {
+    const prisma = prismaDouble()
+    const h = helpDouble()
+    prisma.operationalAlert.findFirst
+      .mockResolvedValueOnce(help())
+      .mockResolvedValueOnce(help({ status: 'ACKNOWLEDGED', acknowledgedAt: NOW }))
+    await service(prisma, h).acknowledge(ADMIN, 'alert-1', NOW)
+    expect(h.announceChanged).toHaveBeenCalledWith('worker-1', 'alert-1', 'ATTENDED', NOW)
+
+    prisma.operationalAlert.findFirst
+      .mockResolvedValueOnce(help({ status: 'ACKNOWLEDGED' }))
+      .mockResolvedValueOnce(help({ status: 'RESOLVED', resolvedAt: NOW }))
+    await service(prisma, h).resolve(ADMIN, 'alert-1', undefined, NOW)
+    expect(h.announceChanged).toHaveBeenLastCalledWith('worker-1', 'alert-1', 'CLOSED', NOW)
+  })
+
+  it('alerta que não é pedido de ajuda não avisa nada', async () => {
+    const prisma = prismaDouble()
+    const h = helpDouble()
+    prisma.operationalAlert.findFirst
+      .mockResolvedValueOnce(row())
+      .mockResolvedValueOnce(row({ status: 'ACKNOWLEDGED', acknowledgedAt: NOW }))
+    await service(prisma, h).acknowledge(ADMIN, 'alert-1', NOW)
+    expect(h.announceChanged).not.toHaveBeenCalled()
   })
 })
 

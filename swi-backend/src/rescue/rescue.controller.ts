@@ -29,11 +29,11 @@ export class RescueController {
 
   @UseGuards(RolesGuard) @Can('rescue.operate') @Post('rescues/:id/end') @HttpCode(200)
   end(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.rescues.end(user.companyId, id)
+    return this.rescues.end(user.companyId, id, user.userId)
   }
 
   @UseGuards(RolesGuard) @Can('rescue.operate') @Post(':injuredId/rescue')
   dispatch(@Param('injuredId') injuredId: string, @CurrentUser() user: JwtUser, @Body() dto: CreateRescueDto) {
-    return this.rescues.dispatch(user.companyId, injuredId, dto.rescuerId)
+    return this.rescues.dispatch(user.companyId, injuredId, dto.rescuerId, user.userId)
   }
 }

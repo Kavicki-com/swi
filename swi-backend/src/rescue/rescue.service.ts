@@ -9,6 +9,7 @@ import type { RescueStatus } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { JourneyService } from '../journey/journey.service'
 import { NotificationService } from '../notifications/notification.service'
+import { HelpRequestService } from '../telemetry/help/help-request.service'
 
 type Person = { id: string; name: string }
 
@@ -45,11 +46,19 @@ export class RescueService {
     private readonly prisma: PrismaService,
     private readonly journey: JourneyService,
     private readonly notifications: NotificationService,
+    private readonly helpRequests: HelpRequestService,
   ) {}
 
   // Despacha um socorrista para um ferido: grava o resgate, pausa a jornada do
-  // socorrista e o notifica. Os dois precisam ser WORKER da mesma empresa.
-  async dispatch(companyId: string | null, injuredId: string, rescuerId: string): Promise<RescueDto> {
+  // socorrista e o notifica. Os dois precisam ser WORKER da mesma empresa. Se o
+  // ferido tem pedido de ajuda aberto, o pedido passa a atendido e o resgate
+  // guarda o vínculo, que é o que o encerramento usa para fechá-lo.
+  async dispatch(
+    companyId: string | null,
+    injuredId: string,
+    rescuerId: string,
+    dispatcherId: string,
+  ): Promise<RescueDto> {
     const company = this.requireCompany(companyId)
     if (injuredId === rescuerId) throw new BadRequestException('O socorrista não pode ser o próprio ferido')
 
@@ -59,8 +68,9 @@ export class RescueService {
     })
     if (found.length < 2) throw new NotFoundException('Ferido ou socorrista não encontrado na empresa')
 
+    const helpAlertId = await this.helpRequests.attendByRescue(injuredId, dispatcherId)
     const rescue = await this.prisma.rescue.create({
-      data: { companyId: company, injuredId, rescuerId },
+      data: { companyId: company, injuredId, rescuerId, helpAlertId },
       include: withPeople,
     })
 
@@ -106,12 +116,13 @@ export class RescueService {
   }
 
   // Encerra o atendimento. Se encerrou direto de dispatched (sem passar por
-  // chegada), a jornada ainda está pausada e volta aqui.
-  async end(companyId: string | null, id: string): Promise<RescueDto> {
+  // chegada), a jornada ainda está pausada e volta aqui. O pedido de ajuda que
+  // o resgate atendia fecha junto.
+  async end(companyId: string | null, id: string, closerId: string): Promise<RescueDto> {
     const company = this.requireCompany(companyId)
     const current = await this.prisma.rescue.findFirst({
       where: { id, companyId: company },
-      select: { id: true, status: true, rescuerId: true },
+      select: { id: true, status: true, rescuerId: true, helpAlertId: true },
     })
     if (!current) throw new NotFoundException('Resgate não encontrado')
     if (current.status === 'ended') throw new ConflictException('Resgate já encerrado')
@@ -122,6 +133,7 @@ export class RescueService {
       include: withPeople,
     })
     if (current.status === 'dispatched') await this.journey.resumeJourney(current.rescuerId)
+    if (current.helpAlertId !== null) await this.helpRequests.closeByRescue(current.helpAlertId, closerId)
     return this.toDto(updated)
   }
 

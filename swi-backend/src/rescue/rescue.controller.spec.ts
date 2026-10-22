@@ -19,7 +19,7 @@ describe('RescueController', () => {
   it('despachar passa a empresa do token, o ferido do caminho e o socorrista do corpo', async () => {
     const s = service()
     await new RescueController(s).dispatch('ferido-1', admin, { rescuerId: 'socorrista-1' })
-    expect(s.dispatch).toHaveBeenCalledWith('empresa-1', 'ferido-1', 'socorrista-1')
+    expect(s.dispatch).toHaveBeenCalledWith('empresa-1', 'ferido-1', 'socorrista-1', 'admin-1')
   })
 
   it('listar o histórico é da empresa do token', async () => {
@@ -34,6 +34,6 @@ describe('RescueController', () => {
     await c.arrive('rescue-1', admin)
     await c.end('rescue-1', admin)
     expect(s.arrive).toHaveBeenCalledWith('empresa-1', 'rescue-1')
-    expect(s.end).toHaveBeenCalledWith('empresa-1', 'rescue-1')
+    expect(s.end).toHaveBeenCalledWith('empresa-1', 'rescue-1', 'admin-1')
   })
 })

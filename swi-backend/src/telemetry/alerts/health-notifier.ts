@@ -44,6 +44,7 @@ const KIND_IN_SENTENCE: Readonly<Record<TelemetryConditionKind, string>> = {
   DEVICE_BATTERY_LOW: 'bateria baixa',
   DEVICE_SIGNAL_LOST: 'sem sinal',
   REPEATED_EPISODES: 'episódios repetidos',
+  HELP_REQUESTED: 'pedido de ajuda',
 }
 
 /**
@@ -53,7 +54,8 @@ const KIND_IN_SENTENCE: Readonly<Record<TelemetryConditionKind, string>> = {
  * aparelho do funcionário provavelmente nem recebe, e quem precisa saber que
  * alguém saiu do monitoramento é quem acompanha a equipe. Episódios repetidos
  * também vão só à administração: são um padrão do que já passou, e é o gestor
- * quem decide o que fazer com ele.
+ * quem decide o que fazer com ele. Pedido de ajuda vai só à administração:
+ * quem pediu já sabe, e é a equipe do painel quem atende.
  *
  * O texto carrega só o que a condição gravou, nunca um valor de outra fonte;
  * a pressão não repete o valor porque a condição guarda um número só de um par.
@@ -179,6 +181,14 @@ export function healthNotificationsFor(condition: OpenedConditionFacts, workerNa
       return {
         worker: null,
         admins: health(`Sem sinal do relógio: ${workerName}`, 'O monitoramento parou de receber dados.'),
+      }
+    case 'HELP_REQUESTED':
+      return {
+        worker: null,
+        admins: health(
+          `Pedido de ajuda: ${workerName}`,
+          'Pediu ajuda pelo botão de ajuda urgente do app. Veja onde está no mapa de Alertas.',
+        ),
       }
     case 'REPEATED_EPISODES': {
       const repeated = condition.episodeKind == null ? null : KIND_IN_SENTENCE[condition.episodeKind]
