@@ -102,6 +102,26 @@ describe('CalibrationAdminService.detail', () => {
     expect(d.safety.find((s) => s.rule === 'WEAR_HIGH')).toMatchObject({ custom: false, updatedAt: null })
     expect(d.safety.find((s) => s.rule === 'HEART_RATE_LOW')!.defaultValues).toEqual({ openAt: 45, closeAt: 55 })
   })
+
+  // O recálculo grava linha para toda medição, mesmo sem dia válido, e antes
+  // do PERSONAL_FROM_DAY o aprendido é a própria partida. Chamar isso de
+  // "Aprendida" no painel diria que o sistema já conhece a pessoa.
+  it('linha gravada antes do 3º dia válido segue na partida', async () => {
+    const prisma = prismaDouble()
+    const start = { excellence: 95, fatigue: 92 }
+    prisma.workerCalibrationBand.findMany.mockResolvedValue([
+      { metric: 'HEART_RATE', validDays: 0, startCuts: { excellence: 108, fatigue: 162 }, learnedCuts: { excellence: 108, fatigue: 162 }, overrideCuts: null },
+      { metric: 'OXYGEN_SATURATION', validDays: 2, startCuts: start, learnedCuts: start, overrideCuts: null },
+      { metric: 'EFFORT', validDays: 3, startCuts: { excellence: 40, fatigue: 80 }, learnedCuts: { excellence: 38, fatigue: 79 }, overrideCuts: null },
+      { metric: 'WEAR', validDays: 0, startCuts: { excellence: 40, fatigue: 80 }, learnedCuts: { excellence: 40, fatigue: 80 }, overrideCuts: { excellence: 30, fatigue: 70 } },
+    ])
+    const d = await service(prisma).detail(ADMIN, 'w1', NOW)
+    const by = (m: string) => d.metrics.find((x) => x.metric === m)!
+    expect(by('HEART_RATE')).toMatchObject({ source: 'START', validDays: 0 })
+    expect(by('OXYGEN_SATURATION')).toMatchObject({ source: 'START', validDays: 2 })
+    expect(by('EFFORT')).toMatchObject({ source: 'LEARNED', validDays: 3 })
+    expect(by('WEAR')).toMatchObject({ source: 'OVERRIDE' })
+  })
 })
 
 describe('CalibrationAdminService: faixas', () => {
