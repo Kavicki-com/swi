@@ -185,12 +185,13 @@ export class TelemetryIngestionService {
         await this.requireOwnSession(sessions, device, event, startedAt)
 
         const result = await this.repository.saveEvent(event, now, { deviceKind: device.kind })
-        // Pulseira: nada aqui é ao vivo, e a cadeia por sessão e a perda de
-        // sinal não se aplicam. O que vale é o dia de cada batimento,
-        // recalculado inteiro depois do laço, com as condições dele percorridas
-        // em seguida. Vale também para o repetido: se a avaliação falhou
-        // depois do ACK, é o reenvio que repara o dia.
-        const band = snapshotPolicyFor(device.kind) === 'LATEST'
+        // Pulseira pelo Health Connect: nada aqui é ao vivo, e a cadeia por
+        // sessão e a perda de sinal não se aplicam. O que vale é o dia de cada
+        // batimento, recalculado inteiro depois do laço, com as condições dele
+        // percorridas em seguida. Vale também para o repetido: se a avaliação
+        // falhou depois do ACK, é o reenvio que repara o dia. O batimento da
+        // pulseira pelo Bluetooth fala ao vivo e segue o caminho do relógio.
+        const band = snapshotPolicyFor(device.kind, event.measurements) === 'LATEST'
         if (
           band &&
           event.measurements.heartRate !== undefined &&
