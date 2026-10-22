@@ -10,7 +10,7 @@ import {
   validateSafety,
   type SafetyValues,
 } from '../alerts/safety-limits'
-import { CALIBRATION_METRICS, cutsOf, effectiveCuts, startCuts, type Cuts } from './calibration-bands'
+import { CALIBRATION_METRICS, PERSONAL_FROM_DAY, cutsOf, effectiveCuts, startCuts, type Cuts } from './calibration-bands'
 import { validateCuts } from './calibration-override'
 import { calibrationDayOf } from './calibration-thresholds'
 
@@ -249,7 +249,10 @@ export class CalibrationAdminService {
       const start = row === undefined ? minimum : (cutsOf(metric, row.startCuts) ?? minimum)
       const learned = row === undefined ? minimum : (cutsOf(metric, row.learnedCuts) ?? minimum)
       const override = row === undefined || row.overrideCuts === null ? null : cutsOf(metric, row.overrideCuts)
-      const source = override !== null ? 'OVERRIDE' : row === undefined ? 'START' : 'LEARNED'
+      // O recálculo grava linha para toda medição, mas antes do
+      // PERSONAL_FROM_DAY o aprendido é a própria partida (`nextCut`).
+      const learnedYet = row !== undefined && row.validDays >= PERSONAL_FROM_DAY
+      const source = override !== null ? 'OVERRIDE' : learnedYet ? 'LEARNED' : 'START'
       return {
         metric,
         validDays: row?.validDays ?? 0,
