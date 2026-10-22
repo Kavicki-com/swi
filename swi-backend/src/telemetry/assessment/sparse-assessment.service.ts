@@ -53,8 +53,18 @@ export class SparseAssessmentService {
 
     const { start, end } = monitoredDayWindow(day)
     const [rows, last] = await Promise.all([
+      // O batimento da pulseira pelo Bluetooth fica de fora: ele tem a cadeia
+      // ao vivo dele, e somado ao dia contaria o mesmo esforço duas vezes. OR
+      // com nulo porque `not` em SQL também descarta a linha sem origem, que é
+      // toda amostra anterior à coluna.
       tx.telemetrySample.findMany({
-        where: { workerId, origin, eventTime: { gte: start, lt: end }, heartRateBpm: { not: null } },
+        where: {
+          workerId,
+          origin,
+          eventTime: { gte: start, lt: end },
+          heartRateBpm: { not: null },
+          OR: [{ heartRateSource: null }, { heartRateSource: { not: 'BLUETOOTH_HR' } }],
+        },
         select: { eventTime: true, heartRateBpm: true, sessionId: true },
         orderBy: { eventTime: 'asc' },
       }),
