@@ -831,8 +831,19 @@ describe('DeviceAuthService.deviceStateForAdmin', () => {
 
     const state = await service(prisma).deviceStateForAdmin(ADMIN, 'worker-1')
 
+    // iPhone: a lista de prontidão do Android não se aplica.
     expect(state).toEqual({
-      device: { id: 'device-1', kind: 'IPHONE', model: 'iPhone 15', pairedAt: PAIRED_AT, lastSeenAt: SEEN_AT },
+      device: {
+        id: 'device-1',
+        kind: 'IPHONE',
+        model: 'iPhone 15',
+        pairedAt: PAIRED_AT,
+        lastSeenAt: SEEN_AT,
+        relato: null,
+        relatadoEm: null,
+        caminhosAtivos: null,
+        pendencias: null,
+      },
       pendingEnrollment: null,
     })
     // Só o ativo interessa: um revogado não é aparelho pareado.
@@ -887,6 +898,70 @@ describe('DeviceAuthService.deviceStateForAdmin', () => {
       service(prisma).deviceStateForAdmin({ ...ADMIN, companyId: null }, 'worker-1'),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('Android sem relato e sem perfil: passos do celular não informados e data de nascimento pendente', async () => {
+    const prisma = prismaDouble()
+    prisma.user.findUnique.mockResolvedValue(worker({ profile: null }))
+    prisma.telemetryDevice.findFirst.mockResolvedValue({
+      id: 'device-1',
+      kind: 'ANDROID_PHONE',
+      model: null,
+      createdAt: PAIRED_AT,
+      lastSeenAt: null,
+      readinessReportedAt: null,
+    })
+
+    const { device } = await service(prisma).deviceStateForAdmin(ADMIN, 'worker-1')
+
+    expect(device).toMatchObject({ relato: null, relatadoEm: null, caminhosAtivos: [] })
+    expect(device?.pendencias?.map((step) => [step.id, step.pendente])).toEqual([
+      ['PAIR', false],
+      ['HEALTH_CONNECT_INSTALL', null],
+      ['HEALTH_CONNECT_READ', null],
+      ['HEALTH_CONNECT_BACKGROUND', null],
+      ['MANUFACTURER_APP', null],
+      ['BLUETOOTH_BAND', null],
+      ['BIRTH_DATE', true],
+    ])
+  })
+})
+
+describe('DeviceAuthService.reportReadiness', () => {
+  const ANDROID = { deviceId: 'device-1', workerId: 'worker-1', kind: 'ANDROID_PHONE' as const }
+  const relato = {
+    healthConnect: { availability: 'AVAILABLE' as const, readGranted: true },
+    bluetooth: { bandChosen: false },
+  }
+
+  it('grava o relato no aparelho da credencial, com o instante em que chegou, zerando o que não veio', async () => {
+    const prisma = prismaDouble()
+    const antes = Date.now()
+
+    await service(prisma).reportReadiness(ANDROID, relato)
+
+    const { where, data } = prisma.telemetryDevice.update.mock.calls[0][0]
+    expect(where).toEqual({ id: 'device-1' })
+    expect(data).toMatchObject({
+      healthConnectAvailability: 'AVAILABLE',
+      healthConnectReadGranted: true,
+      healthConnectBackgroundGranted: null,
+      healthConnectFailureReason: null,
+      bluetoothBandChosen: false,
+      bluetoothListenerState: null,
+    })
+    expect(data.readinessReportedAt.getTime()).toBeGreaterThanOrEqual(antes)
+  })
+
+  it('recusa aparelho que não é celular Android sem gravar nada', async () => {
+    for (const kind of ['IPHONE', 'EXTERNAL_CUFF'] as const) {
+      const prisma = prismaDouble()
+
+      await expect(service(prisma).reportReadiness({ ...ANDROID, kind }, relato)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      )
+      expect(prisma.telemetryDevice.update).not.toHaveBeenCalled()
+    }
   })
 })
 

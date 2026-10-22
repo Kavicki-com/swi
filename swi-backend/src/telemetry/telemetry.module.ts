@@ -14,6 +14,7 @@ import { CalibrationController } from './calibration/calibration.controller'
 import { CalibrationService } from './calibration/calibration.service'
 import { DeviceAuthGuard } from './devices/device-auth.guard'
 import { DeviceAuthService } from './devices/device-auth.service'
+import { TelemetryDeviceReadinessController } from './devices/telemetry-device-readiness.controller'
 import { TelemetryDevicesController } from './devices/telemetry-devices.controller'
 import { TelemetryIngestionController } from './ingestion/telemetry-ingestion.controller'
 import { TelemetryIngestionService } from './ingestion/telemetry-ingestion.service'
@@ -39,6 +40,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
   imports: [RealtimeModule, NotificationModule],
   controllers: [
     TelemetryDevicesController,
+    TelemetryDeviceReadinessController,
     TelemetryIngestionController,
     TelemetryQueryController,
     AlertQueueController,

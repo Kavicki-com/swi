@@ -74,6 +74,12 @@ export interface ProjectionSnapshot {
   sessionId: string | null
   heartRateBpm: number | null
   heartRateAt: string | null
+  /**
+   * De onde veio o batimento promovido: decide se ele é válido para o estado
+   * do funcionário. Nulo nos snapshots anteriores à coluna, e nulo vale como
+   * ao vivo, que é a leitura mais estrita.
+   */
+  heartRateSource?: MeasurementSource | null
   batteryPercent: number | null
   batteryAt: string | null
   systolicMmHg: number | null
@@ -234,12 +240,37 @@ export const CONDITION_CATEGORY: Readonly<Record<ConditionKind, ConditionCategor
   DEVICE_SIGNAL_LOST: 'DEVICE',
 }
 
+/**
+ * A métrica cuja medição sustenta cada condição. Exaustiva por construção,
+ * como a categoria. Perda de sinal não tem medição: ela é a ausência dela.
+ */
+export const CONDITION_METRIC: Readonly<Record<ConditionKind, keyof WorkerMetrics | null>> = {
+  HEART_RATE_HIGH: 'heartRate',
+  HEART_RATE_LOW: 'heartRate',
+  HEART_RATE_FATIGUE: 'heartRate',
+  WEAR_HIGH: 'wear',
+  WEAR_FATIGUE: 'wear',
+  OXYGEN_LOW: 'oxygenSaturation',
+  OXYGEN_FATIGUE: 'oxygenSaturation',
+  BLOOD_PRESSURE_HIGH: 'bloodPressure',
+  BLOOD_PRESSURE_REVIEW: 'bloodPressure',
+  BLOOD_PRESSURE_FATIGUE: 'bloodPressure',
+  DEVICE_BATTERY_LOW: 'battery',
+  DEVICE_SIGNAL_LOST: null,
+}
+
 /** Condição aberta como a leitura a entrega. */
 export interface ActiveCondition {
   kind: ConditionKind
   category: ConditionCategory
   /** ISO-8601 de quando a condição abriu. */
   openedAt: string
+  /**
+   * ISO-8601 da medição mais recente da métrica que sustenta a condição. É
+   * dele que app e painel contam se a condição ainda pinta o estado
+   * (ADR-0011), sem consultar amostras. Nulo sem medição legível dessa métrica.
+   */
+  measuredAt: string | null
   /** O valor que abriu a condição, na unidade dela. Nulo sem limite numérico. */
   observedValue: number | null
   /** O limite em vigor quando abriu. Nulo sem limite numérico. */
@@ -543,7 +574,7 @@ function snapshotStates(snapshot: ProjectionSnapshot | null, now: Date): Snapsho
   return {
     heartRate: metricState(
       'heartRate',
-      sampleOf(snapshot.heartRateBpm, snapshot.heartRateAt, 'APPLE_WATCH'),
+      sampleOf(snapshot.heartRateBpm, snapshot.heartRateAt, snapshot.heartRateSource ?? 'APPLE_WATCH'),
       now,
     ),
     battery: metricState(
@@ -593,8 +624,13 @@ function assessmentStates(
 function activeConditions(
   origin: TelemetryOrigin | null,
   conditions: readonly ProjectionCondition[],
+  metrics: WorkerMetrics,
 ): ActiveCondition[] {
   if (origin === null) return []
+  const measuredAtOf = (kind: ConditionKind): string | null => {
+    const metric = CONDITION_METRIC[kind]
+    return metric === null ? null : metrics[metric].measuredAt
+  }
   return conditions
     .filter((c) => c.origin === origin)
     .slice()
@@ -603,6 +639,7 @@ function activeConditions(
       kind: c.kind,
       category: CONDITION_CATEGORY[c.kind],
       openedAt: c.firstSeenAt,
+      measuredAt: measuredAtOf(c.kind),
       observedValue: c.observedValue,
       thresholdValue: c.thresholdValue,
     }))
@@ -681,7 +718,7 @@ export function projectWorker(input: WorkerProjectionInput, now: Date): WorkerTe
     energyWindow: energy.coverage,
     movementWindow: movement.coverage,
     observedAt: now.toISOString(),
-    conditions: activeConditions(snapshot?.origin ?? null, input.conditions),
+    conditions: activeConditions(snapshot?.origin ?? null, input.conditions, metrics),
     sync: syncOf(snapshot),
   }
 }

@@ -3,12 +3,16 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import Dashboard from '../../../app/(app)/dashboard';
 import {
+  calibrado,
+  calibrando,
   condition,
   metric,
   neverReported,
   reporting,
 } from '../../../services/telemetry/myTelemetryFixtures';
 import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
+import * as http from '../../../services/api/http';
+import { fetchMyTelemetry } from '../../../services/telemetry/myTelemetry';
 import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
 import type { WorkerTelemetry } from '../../../services/telemetry/myTelemetry';
 import type { HealthConnectState } from '../../../services/telemetry/healthConnect/healthConnectReader';
@@ -31,6 +35,11 @@ const lendo = (telemetry: MyTelemetryState['telemetry']): MyTelemetryState => ({
 });
 const REPORTANDO = () =>
   lendo(reporting({ bloodPressure: metric({ systolic: 120, diastolic: 80 }) }));
+/** A leitura como o backend a mandaria, interpretada pelo leitor do app. */
+const lerDoBackend = async (corpo: unknown): Promise<WorkerTelemetry> => {
+  jest.spyOn(http, 'apiRequest').mockResolvedValueOnce(corpo);
+  return fetchMyTelemetry();
+};
 const CARREGANDO: MyTelemetryState = { telemetry: null, failed: false, loading: true };
 const FALHOU: MyTelemetryState = { telemetry: null, failed: true, loading: false };
 
@@ -431,6 +440,72 @@ describe('dashboard: leitura da telemetria', () => {
 
     mockTelemetryState = REPORTANDO();
     expect(textoDa(await render())).not.toContain('Dados de demonstração');
+  });
+});
+
+// --- Selo provisório do desgaste ---------------------------------------------
+
+describe('dashboard: selo da calibração no desgaste', () => {
+  it('com a calibração em curso, diz em que dia dos 30 a pessoa está', async () => {
+    mockTelemetryState = lendo({ ...reporting(), calibration: calibrando(5) });
+    expect(textoDa(await render())).toContain('Calibrando, dia 5 de 30');
+  });
+
+  it('com a calibração reaberta pela troca de aparelho, diz que recalibra', async () => {
+    mockTelemetryState = lendo({ ...reporting(), calibration: calibrando(3, true) });
+    expect(textoDa(await render())).toContain('Recalibrando: novo aparelho, dia 3 de 30');
+  });
+
+  // Dado de demonstração nem é medido: não tem régua aprendendo.
+  it('na demonstração, só o selo de demonstração', async () => {
+    mockTelemetryState = lendo({
+      ...reporting({}, 'DEMO'),
+      baseline: 'PROVISIONAL',
+      calibration: calibrando(1),
+    });
+    const texto = textoDa(await render());
+    expect(texto).toContain('Dados de demonstração');
+    expect(texto).not.toContain('Calibrando');
+    expect(texto).not.toContain('Estimativa provisória');
+  });
+
+  it('com a calibração completa, nenhum selo', async () => {
+    mockTelemetryState = lendo({ ...reporting(), baseline: 'MEASURED', calibration: calibrado() });
+    const texto = textoDa(await render());
+    expect(texto).not.toContain('Calibrando');
+    expect(texto).not.toContain('Estimativa provisória');
+  });
+
+  // Backend sem calibração na resposta (ou com ela torta, que vira ausente):
+  // vale a origem do repouso, como no painel.
+  it('sem calibração e com o repouso provisório, diz que é estimativa provisória', async () => {
+    mockTelemetryState = lendo({ ...reporting(), baseline: 'PROVISIONAL', calibration: null });
+    expect(textoDa(await render())).toContain('Estimativa provisória');
+  });
+
+  // A resposta crua passa pelo leitor de verdade: só o HTTP é dublado.
+  it('calibração torta vira ausente: vale o repouso provisório e a leitura continua', async () => {
+    mockTelemetryState = lendo(
+      await lerDoBackend({
+        ...reporting(),
+        baseline: 'PROVISIONAL',
+        calibration: { phase: 'CALIBRATING', recalibrating: false, day: '4', metrics: {} },
+      }),
+    );
+    const texto = textoDa(await render());
+    expect(texto).toContain('Estimativa provisória');
+    expect(texto).not.toContain('Calibrando');
+    expect(texto).toContain('112');
+  });
+
+  it('calibração e repouso tortos: nenhum selo, e a leitura continua', async () => {
+    mockTelemetryState = lendo(
+      await lerDoBackend({ ...reporting(), baseline: 'QUASE', calibration: 'dia 4' }),
+    );
+    const texto = textoDa(await render());
+    expect(texto).not.toContain('Calibrando');
+    expect(texto).not.toContain('Estimativa provisória');
+    expect(texto).toContain('112');
   });
 });
 

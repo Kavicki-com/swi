@@ -59,6 +59,7 @@ const SNAPSHOT_FIELDS = {
   sessionId: true,
   heartRateBpm: true,
   heartRateAt: true,
+  heartRateSource: true,
   batteryPercent: true,
   batteryAt: true,
   systolicMmHg: true,
@@ -173,6 +174,7 @@ interface SnapshotRow {
   sessionId: string | null
   heartRateBpm: number | null
   heartRateAt: Date | null
+  heartRateSource?: MeasurementSource | null
   batteryPercent: number | null
   batteryAt: Date | null
   systolicMmHg: number | null
@@ -258,6 +260,7 @@ function toProjectionSnapshot(row: SnapshotRow): ProjectionSnapshot {
     sessionId: row.sessionId,
     heartRateBpm: row.heartRateBpm,
     heartRateAt: iso(row.heartRateAt),
+    heartRateSource: row.heartRateSource ?? null,
     batteryPercent: row.batteryPercent,
     batteryAt: iso(row.batteryAt),
     systolicMmHg: row.systolicMmHg,
