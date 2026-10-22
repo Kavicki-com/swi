@@ -527,4 +527,99 @@ describe('Telemetry repository e2e', () => {
       }),
     ).rejects.toMatchObject({ code: 'P2002' })
   })
+
+  describe('origem do batimento e último evento ao vivo', () => {
+    const android = { deviceKind: 'ANDROID_PHONE' as const }
+    const bluetooth = (value: number) => ({ heartRate: { value, unit: 'bpm', source: 'BLUETOOTH_HR' as const } })
+    const healthConnect = (value: number) => ({
+      heartRate: { value, unit: 'bpm', source: 'HEALTH_CONNECT' as const },
+    })
+
+    it('grava a origem em toda amostra com batimento, e nula na amostra sem ele', async () => {
+      const relogio = event()
+      const pulseira = event({ measurements: bluetooth(101) })
+      const bateria = event({ measurements: { battery: { value: 70, unit: '%', source: 'APPLE_WATCH' } } })
+      await repo.saveEvent(relogio, now)
+      await repo.saveEvent(pulseira, now, android)
+      await repo.saveEvent(bateria, now)
+
+      const rows = await prisma.telemetrySample.findMany({
+        where: { workerId },
+        select: { eventId: true, heartRateSource: true },
+      })
+      const sourceOf = (id: string) => rows.find((r) => r.eventId === id)?.heartRateSource
+      expect(sourceOf(relogio.eventId)).toBe('APPLE_WATCH')
+      expect(sourceOf(pulseira.eventId)).toBe('BLUETOOTH_HR')
+      expect(sourceOf(bateria.eventId)).toBeNull()
+    })
+
+    it('o relógio ao vivo anda o último evento ao vivo; o atrasado não', async () => {
+      await repo.saveEvent(event(), now)
+      await repo.saveEvent(event({ eventTime: backlogAt.toISOString() }), now)
+
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.lastLiveEventTime).toEqual(liveAt)
+    })
+
+    it('batimento do Bluetooth no Android promove ao vivo e anda o último evento ao vivo', async () => {
+      const e = event({ measurements: bluetooth(118) })
+
+      const result = await repo.saveEvent(e, now, android)
+
+      expect(result.snapshotPromoted).toBe(true)
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot).toMatchObject({ heartRateBpm: 118, lastEventId: e.eventId, deviceKind: 'ANDROID_PHONE' })
+      expect(snapshot?.lastLiveEventTime).toEqual(liveAt)
+    })
+
+    it('batimento do Bluetooth atrasado vai só ao histórico, como o do relógio', async () => {
+      const result = await repo.saveEvent(event({ eventTime: backlogAt.toISOString(), measurements: bluetooth(90) }), now, android)
+
+      expect(result.snapshotPromoted).toBe(false)
+      expect(await prisma.telemetrySnapshot.findUnique({ where: { workerId } })).toBeNull()
+    })
+
+    it('o lote do Health Connect promove o atual sem andar o último evento ao vivo', async () => {
+      await repo.saveEvent(event({ measurements: bluetooth(118) }), now, android)
+      const lote = event({ eventTime: new Date(now.getTime() - 5_000).toISOString(), measurements: healthConnect(77) })
+
+      const result = await repo.saveEvent(lote, now, android)
+
+      expect(result.snapshotPromoted).toBe(true)
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.lastEventId).toBe(lote.eventId)
+      expect(snapshot?.lastLiveEventTime).toEqual(liveAt)
+    })
+
+    it('celular Android só com Health Connect nunca ganha último evento ao vivo', async () => {
+      await repo.saveEvent(event({ measurements: healthConnect(77) }), now, android)
+
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.heartRateBpm).toBe(77)
+      expect(snapshot?.lastLiveEventTime).toBeNull()
+    })
+
+    it('medição avulsa não anda o último evento ao vivo', async () => {
+      await repo.saveEvent(
+        event({
+          monitoringSessionId: healthSessionId,
+          measurements: { bloodPressure: { value: { systolic: 120, diastolic: 80 }, unit: 'mmHg', source: 'MANUAL_HEALTHKIT' } },
+        }),
+        now,
+      )
+
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.systolicMmHg).toBe(120)
+      expect(snapshot?.lastLiveEventTime).toBeNull()
+    })
+
+    it('troca de origem apaga o último evento ao vivo da origem anterior', async () => {
+      await repo.saveEvent(event(), now)
+      await repo.saveEvent(event({ monitoringSessionId: demoSessionId, origin: 'DEMO', measurements: healthConnect(70) }), now, android)
+
+      const snapshot = await prisma.telemetrySnapshot.findUnique({ where: { workerId } })
+      expect(snapshot?.origin).toBe('DEMO')
+      expect(snapshot?.lastLiveEventTime).toBeNull()
+    })
+  })
 })

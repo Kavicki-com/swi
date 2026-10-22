@@ -1078,24 +1078,24 @@ const candidateRow = (sessionId: string | null) => ({ sessionId })
  */
 const silentFor = (prisma: any, secAgo: number, sessionId = 'session-1') => {
   prisma.telemetrySnapshot.findMany.mockResolvedValue([candidateRow(sessionId)])
-  prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastEventTime: secondsAgo(secAgo) })
+  prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastLiveEventTime: secondsAgo(secAgo) })
 }
 
 /**
  * Candidatas como o BANCO as devolveria: o dublê aplica a fronteira de
- * `lastEventTime` que o serviço pediu, em vez de devolver a lista inteira.
+ * `lastLiveEventTime` que o serviço pediu, em vez de devolver a lista inteira.
  * É o que permite afirmar comportamento, e não só a forma do `where`.
  */
-const snapshotOf = (prisma: any, rows: Array<{ sessionId: string; lastEventTime: Date }>) => {
+const snapshotOf = (prisma: any, rows: Array<{ sessionId: string; lastLiveEventTime: Date }>) => {
   prisma.telemetrySnapshot.findMany.mockImplementation(async ({ where }: any) =>
     rows
-      .filter((r) => r.lastEventTime < where.lastEventTime.lt)
-      .filter((r) => where.lastEventTime.gte === undefined || r.lastEventTime >= where.lastEventTime.gte)
+      .filter((r) => r.lastLiveEventTime < where.lastLiveEventTime.lt)
+      .filter((r) => where.lastLiveEventTime.gte === undefined || r.lastLiveEventTime >= where.lastLiveEventTime.gte)
       .map((r) => candidateRow(r.sessionId)),
   )
   prisma.telemetrySnapshot.findFirst.mockImplementation(async ({ where }: any) => {
     const row = rows.find((r) => r.sessionId === where.sessionId)
-    return row === undefined ? null : { lastEventTime: row.lastEventTime }
+    return row === undefined ? null : { lastLiveEventTime: row.lastLiveEventTime }
   })
 }
 
@@ -1150,25 +1150,36 @@ describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', (
     expect(where).toEqual({
       origin: 'REAL',
       sessionId: { not: null },
-      OR: [{ deviceKind: null }, { deviceKind: { not: 'ANDROID_PHONE' } }],
-      lastEventTime: { lt: secondsAgo(120), gte: daysAgo(7) },
+      lastLiveEventTime: { lt: secondsAgo(120), gte: daysAgo(7) },
     })
-    // lastEventTime sai da projeção: o silêncio que vale é o relido dentro da
+    // lastLiveEventTime sai da projeção: o silêncio que vale é o relido dentro da
     // transação, e não este, que envelhece durante o laço.
     expect(select).toEqual({ sessionId: true })
   })
 
-  it('pulseira fica de fora; snapshot sem tipo, anterior à coluna, continua candidato', async () => {
-    // Horas sem lote é o normal da pulseira. O OR com nulo existe porque `not`
-    // em SQL também descarta a linha sem tipo.
+  it('mede pelo último evento ao vivo, sem olhar o tipo do aparelho', async () => {
+    // Horas sem lote é o normal da pulseira pelo Health Connect, e o lote dela
+    // nunca anda o carimbo ao vivo: quem só tem lote fica com ele nulo, e nulo
+    // não passa em fronteira nenhuma. A pulseira pelo Bluetooth fala ao vivo e
+    // entra na conta como o relógio.
     const prisma = prismaDouble()
 
     await service(prisma).sweepSilentSessions(NOW)
 
-    expect(prisma.telemetrySnapshot.findMany.mock.calls[0][0].where.OR).toEqual([
-      { deviceKind: null },
-      { deviceKind: { not: 'ANDROID_PHONE' } },
-    ])
+    const { where } = prisma.telemetrySnapshot.findMany.mock.calls[0][0]
+    expect(where).not.toHaveProperty('OR')
+    expect(where).not.toHaveProperty('deviceKind')
+    expect(where).not.toHaveProperty('lastEventTime')
+  })
+
+  it('snapshot que nunca falou ao vivo não tem silêncio a medir', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([candidateRow('session-1')])
+    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastLiveEventTime: null })
+
+    const outcome = await service(prisma).sweepSilentSessions(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, signalLost: 0, recovered: 0 })
   })
 
   it('candidata calada há três dias continua sendo varrida', async () => {
@@ -1176,7 +1187,7 @@ describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', (
     // queda longa: fim de semana emendado em feriado cabe folgado dentro dele,
     // e é exatamente esse caso que a ausência de teto superior protegia.
     const prisma = prismaDouble()
-    snapshotOf(prisma, [{ sessionId: 'session-1', lastEventTime: daysAgo(3) }])
+    snapshotOf(prisma, [{ sessionId: 'session-1', lastLiveEventTime: daysAgo(3) }])
 
     const outcome = await service(prisma).sweepSilentSessions(NOW)
 
@@ -1189,7 +1200,7 @@ describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', (
     // do teto a cada 30 s. Com desligados o bastante, os vivos param de ser
     // varridos: o histórico vira negação de serviço lenta.
     const prisma = prismaDouble()
-    snapshotOf(prisma, [{ sessionId: 'session-1', lastEventTime: daysAgo(8) }])
+    snapshotOf(prisma, [{ sessionId: 'session-1', lastLiveEventTime: daysAgo(8) }])
 
     const outcome = await service(prisma).sweepSilentSessions(NOW)
 
@@ -1209,7 +1220,7 @@ describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', (
     await service(prisma).sweepSilentSessions(NOW)
 
     const { orderBy, take } = prisma.telemetrySnapshot.findMany.mock.calls[0][0]
-    expect(orderBy).toEqual({ lastEventTime: 'asc' })
+    expect(orderBy).toEqual({ lastLiveEventTime: 'asc' })
     expect(take).toBe(MAX_SILENT_SESSIONS_PER_RUN)
   })
 
@@ -1219,7 +1230,7 @@ describe('TelemetryConditionService.sweepSilentSessions: quem entra na conta', (
     prisma.telemetrySnapshot.findMany.mockResolvedValue(
       Array.from({ length: MAX_SILENT_SESSIONS_PER_RUN }, (_, i) => candidateRow(`session-${i}`)),
     )
-    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastEventTime: secondsAgo(300) })
+    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastLiveEventTime: secondsAgo(300) })
 
     await service(prisma).sweepSilentSessions(NOW)
 
@@ -1371,7 +1382,7 @@ describe('TelemetryConditionService.sweepSilentSessions: abrir e recuperar', () 
     // sessão, e a coluna de auditoria passa a mentir para menos.
     const prisma = prismaDouble()
     prisma.telemetrySnapshot.findMany.mockResolvedValue([candidateRow('session-1')])
-    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastEventTime: secondsAgo(600) })
+    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastLiveEventTime: secondsAgo(600) })
 
     await service(prisma).sweepSilentSessions(NOW)
 
@@ -1384,7 +1395,7 @@ describe('TelemetryConditionService.sweepSilentSessions: abrir e recuperar', () 
     // busca e o lock, quem manda é ele, e a varredura não tem o que dizer.
     const prisma = prismaDouble()
     prisma.telemetrySnapshot.findMany.mockResolvedValue([candidateRow('session-1')])
-    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastEventTime: secondsAgo(3) })
+    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastLiveEventTime: secondsAgo(3) })
     prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-alto', 'HEART_RATE_HIGH')])
 
     const outcome = await service(prisma).sweepSilentSessions(NOW)
@@ -1419,7 +1430,7 @@ describe('TelemetryConditionService.sweepSilentSessions: repetição e falha', (
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const prisma = prismaDouble()
     prisma.telemetrySnapshot.findMany.mockResolvedValue([candidateRow('session-ruim'), candidateRow('session-1')])
-    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastEventTime: secondsAgo(300) })
+    prisma.telemetrySnapshot.findFirst.mockResolvedValue({ lastLiveEventTime: secondsAgo(300) })
     prisma.telemetrySession.findUnique.mockImplementation(async ({ where }: any) => {
       if (where.id === 'session-ruim') throw new Error('deadlock detected')
       return SESSION

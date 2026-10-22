@@ -15,6 +15,7 @@ import {
   qualityAt,
   assertEventTimeUsable,
   assertMeasuresSomething,
+  assertSourcesFitDevice,
   rejectWorkerIdAuthority,
   snapshotPolicyFor,
   validateMeasurement,
@@ -581,5 +582,45 @@ describe('Health Connect', () => {
     expect(snapshotPolicyFor('APPLE_WATCH')).toBe('LIVE_ONLY')
     expect(snapshotPolicyFor('EXTERNAL_CUFF')).toBe('LIVE_ONLY')
     expect(snapshotPolicyFor(null)).toBe('LIVE_ONLY')
+  })
+})
+
+describe('pulseira pelo Bluetooth do celular Android', () => {
+  const bt = (value: unknown, unit: string) => ({ value, unit, source: 'BLUETOOTH_HR' })
+
+  it('aceita a origem só no batimento: o perfil padrão da pulseira não transmite outra medição', () => {
+    expect(() => validateRawMeasurement('heartRate', bt(96, 'bpm'))).not.toThrow()
+    expect(() => validateRawMeasurement('stepDelta', bt(10, 'steps'))).toThrow(/origem BLUETOOTH_HR/)
+    expect(() => validateRawMeasurement('battery', bt(80, '%'))).toThrow(/origem BLUETOOTH_HR/)
+    expect(() => validateRawMeasurement('oxygenSaturation', bt(97, '%'))).toThrow(/origem BLUETOOTH_HR/)
+    expect(METRICS.heartRate.sources).toContain('BLUETOOTH_HR')
+  })
+
+  it('só o celular Android lê a pulseira pelo Bluetooth', () => {
+    const measurements = { heartRate: bt(96, 'bpm') }
+    expect(() => assertSourcesFitDevice('ANDROID_PHONE', measurements)).not.toThrow()
+    expect(() => assertSourcesFitDevice('IPHONE', measurements)).toThrow(/BLUETOOTH_HR/)
+    expect(() => assertSourcesFitDevice('APPLE_WATCH', measurements)).toThrow(/BLUETOOTH_HR/)
+    expect(() => assertSourcesFitDevice('EXTERNAL_CUFF', measurements)).toThrow(/BLUETOOTH_HR/)
+  })
+
+  it('evento com batimento pelo Bluetooth não leva outra medição junto', () => {
+    expect(() =>
+      assertSourcesFitDevice('ANDROID_PHONE', {
+        heartRate: bt(96, 'bpm'),
+        stepDelta: { value: 10, unit: 'steps', source: 'HEALTH_CONNECT' },
+      }),
+    ).toThrow(InvalidMeasurementError)
+  })
+
+  it('a régua do atual sai da origem do batimento: Bluetooth é ao vivo, o resto do Android segue em lote', () => {
+    expect(snapshotPolicyFor('ANDROID_PHONE', { heartRate: bt(96, 'bpm') })).toBe('LIVE_ONLY')
+    expect(
+      snapshotPolicyFor('ANDROID_PHONE', { heartRate: { value: 96, unit: 'bpm', source: 'HEALTH_CONNECT' } }),
+    ).toBe('LATEST')
+    expect(snapshotPolicyFor('ANDROID_PHONE', {})).toBe('LATEST')
+    expect(snapshotPolicyFor('APPLE_WATCH', { heartRate: { value: 96, unit: 'bpm', source: 'APPLE_WATCH' } })).toBe(
+      'LIVE_ONLY',
+    )
   })
 })

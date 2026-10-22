@@ -743,29 +743,30 @@ export class TelemetryConditionService {
     // demonstração num funcionário que tem condição real aberta deixa essa
     // condição aberta até ele voltar a mandar telemetria real, e isso é aceito
     // porque demonstração é rara e deliberada. De brinde, o índice
-    // [origin, lastEventTime] do snapshot passa a ser usável: origem é a coluna
-    // líder dele.
+    // [origin, lastLiveEventTime] do snapshot passa a ser usável: origem é a
+    // coluna líder dele.
     //
     // A mais calada primeiro, para o teto da rodada cortar as menos urgentes.
     const candidates = await this.prisma.telemetrySnapshot.findMany({
       where: {
         origin: 'REAL',
         sessionId: { not: null },
-        // Pulseira não fala ao vivo: horas sem lote é o normal dela, e perda de
-        // sinal ali seria alarme falso permanente. O painel mostra "sem
-        // sincronização há X" pelo carimbo do atual, sem condição. OR com nulo
-        // porque `not` em SQL também descarta a linha sem tipo, que é todo
-        // snapshot anterior a esta coluna.
-        OR: [{ deviceKind: null }, { deviceKind: { not: 'ANDROID_PHONE' } }],
+        // Mede pelo último evento AO VIVO, e não pelo último evento: o lote da
+        // pulseira pelo Health Connect anda o último evento sem ser sinal ao
+        // vivo, e horas sem lote é o normal dela, então perda de sinal ali
+        // seria alarme falso permanente. Quem só manda lote tem a coluna nula
+        // e nunca é candidato; a pulseira pelo Bluetooth fala ao vivo e entra
+        // na conta como o relógio, sem filtro pelo tipo do aparelho.
+        //
         // O piso (MONITORED_SILENCE_FLOOR_MS) corta quem sumiu do piloto; ele
         // não é teto de turno, e o motivo está na declaração da constante.
-        lastEventTime: {
+        lastLiveEventTime: {
           lt: new Date(now.getTime() - silenceMs),
           gte: new Date(now.getTime() - MONITORED_SILENCE_FLOOR_MS),
         },
       },
       select: { sessionId: true },
-      orderBy: { lastEventTime: 'asc' },
+      orderBy: { lastLiveEventTime: 'asc' },
       take: MAX_SILENT_SESSIONS_PER_RUN,
     })
     if (candidates.length === MAX_SILENT_SESSIONS_PER_RUN) {
@@ -837,10 +838,10 @@ export class TelemetryConditionService {
     const { silenceMs, shiftCeilingMs } = this.profile.signalLost
     const snapshot = await tx.telemetrySnapshot.findFirst({
       where: { sessionId, origin: session.origin },
-      select: { lastEventTime: true },
+      select: { lastLiveEventTime: true },
     })
-    if (snapshot === null) return result
-    const observedSilenceMs = now.getTime() - snapshot.lastEventTime.getTime()
+    if (snapshot?.lastLiveEventTime == null) return result
+    const observedSilenceMs = now.getTime() - snapshot.lastLiveEventTime.getTime()
     if (observedSilenceMs <= silenceMs) return result
 
     // Por funcionário e origem, como no caminho do evento: a condição sobrevive

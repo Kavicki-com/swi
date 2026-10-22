@@ -960,3 +960,57 @@ describe('pulseira pelo Health Connect', () => {
     expect(sparse.assessDay).not.toHaveBeenCalled()
   })
 })
+
+describe('pulseira pelo Bluetooth do celular Android', () => {
+  const ANDROID: DeviceIdentity = { ...DEVICE, kind: 'ANDROID_PHONE' }
+  const bluetooth = (over: Partial<TelemetryEventDto> = {}) =>
+    event({ measurements: { heartRate: { value: 128, unit: 'bpm', source: 'BLUETOOTH_HR' } }, ...over })
+
+  it('batimento ao vivo vai à cadeia ao vivo e não à avaliação do dia', async () => {
+    const { service, assessment, conditions, sparse, realtime } = build()
+
+    const ack = await service.ingest(ANDROID, { events: [bluetooth()] })
+
+    expect(ack.conflicts).toEqual([])
+    expect(assessment.assessSession).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateSession).toHaveBeenCalledTimes(1)
+    expect(conditions.evaluateBandDay).not.toHaveBeenCalled()
+    expect(sparse.assessDay).not.toHaveBeenCalled()
+    expect(realtime.emitToUsers).toHaveBeenCalledTimes(1)
+  })
+
+  it('batimento atrasado fica no histórico, sem cadeia ao vivo nem avaliação do dia', async () => {
+    const { service, assessment, sparse } = build()
+
+    await service.ingest(ANDROID, { events: [bluetooth({ eventTime: new Date(Date.now() - 30 * 60_000).toISOString() })] })
+
+    expect(assessment.assessSession).not.toHaveBeenCalled()
+    expect(sparse.assessDay).not.toHaveBeenCalled()
+  })
+
+  it('no mesmo lote, o batimento do Health Connect continua indo à avaliação do dia', async () => {
+    const { service, assessment, sparse } = build()
+    const hc = event({
+      sequence: 2,
+      monitoringSessionId: randomUUID(),
+      eventTime: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
+      measurements: { heartRate: { value: 80, unit: 'bpm', source: 'HEALTH_CONNECT' } },
+    })
+
+    await service.ingest(ANDROID, { events: [bluetooth(), hc] })
+
+    expect(assessment.assessSession).toHaveBeenCalledTimes(1)
+    expect(assessment.assessSession.mock.calls[0][0]).toBe(SESSION)
+    expect(sparse.assessDay).toHaveBeenCalledTimes(1)
+  })
+
+  it('batimento do Bluetooth vindo do iPhone é recusado como medição inválida', async () => {
+    const { service, repository } = build()
+    const bt = bluetooth()
+
+    const ack = await service.ingest(DEVICE, { events: [bt] })
+
+    expect(ack.conflicts).toEqual([{ eventId: bt.eventId, reason: 'invalid_measurement', detail: expect.any(String) }])
+    expect(repository.saveEvent).not.toHaveBeenCalled()
+  })
+})
