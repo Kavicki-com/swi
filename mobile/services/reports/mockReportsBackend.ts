@@ -1,5 +1,12 @@
 import { Asset } from 'expo-asset';
-import type { Report, ReportActivity, ReportsBackend, ReportStatus, ReportComment } from './types';
+import type {
+  Report,
+  ReportActivity,
+  ReportsBackend,
+  ReportStatus,
+  ReportComment,
+  ReportUpdatePayload,
+} from './types';
 import { contentTypeFor } from '../api/uploadMedia';
 import { attachmentsFromUrls } from './attachments';
 
@@ -141,5 +148,22 @@ export const mockReportsBackend: ReportsBackend = {
       authorAvatarUri: '',
       createdAt: '',
     };
+  },
+  // Sem servidor a "key" é a própria uri: os anexos são as keys que ficaram.
+  async update(id: string, payload: ReportUpdatePayload) {
+    await tick();
+    const found = store.find((r) => r.id === id);
+    if (!found) throw Object.assign(new Error('Relatório não encontrado'), { status: 404 });
+    const updated: Report = {
+      ...found,
+      title: payload.title,
+      summary: payload.summary,
+      details: payload.details,
+      responsibles: payload.responsibles,
+      images: payload.imageKeys.filter((uri) => contentTypeFor(uri).startsWith('image/')),
+      attachments: attachmentsFromUrls(payload.imageKeys),
+    };
+    store = store.map((r) => (r.id === id ? updated : r));
+    return { ...updated };
   },
 };

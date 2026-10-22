@@ -33,6 +33,7 @@ jest.mock('../../../../lib/media/localFileSize', () => ({ localFileSize: () => 3
 jest.mock('../../../../lib/media/pickDocument', () => ({ pickReportDocument: jest.fn() }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+  useLocalSearchParams: () => ({}),
   useFocusEffect: jest.fn(),
 }));
 

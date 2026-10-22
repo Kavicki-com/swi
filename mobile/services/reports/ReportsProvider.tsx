@@ -2,7 +2,7 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren,
 } from 'react';
 import { AppState } from 'react-native';
-import type { Report, ReportComment, ReportInput } from './types';
+import type { Report, ReportComment, ReportEditInput, ReportInput } from './types';
 import { getReportsBackend } from './getReportsBackend';
 import { useAuth } from '../auth/AuthProvider';
 import { useProfile } from '../profile/ProfileProvider';
@@ -37,6 +37,14 @@ interface ReportsState {
   /** Põe o comentário na fila de envios. `full`: a fila está no teto e ele não entrou. */
   addComment: (reportId: string, body: string) => Promise<EnqueueResult>;
   commentsFor: (reportId: string) => OwnComments;
+  /**
+   * Edita o relatório direto no servidor ("Revisar relatório"), sem a fila de
+   * envios: os anexos novos sobem antes, os que já estavam seguem pela key.
+   * Falha propaga, e a tela de edição fica aberta com o que a pessoa escreveu.
+   */
+  update: (id: string, input: ReportEditInput) => Promise<Report>;
+  /** Avança a cada edição confirmada: o detalhe aberto relê o relatório. */
+  revision: number;
 }
 
 // dd/mm/aaaa, o formato que o backend devolve em `creationDate`.
@@ -94,6 +102,28 @@ export function ReportsProvider({ children }: PropsWithChildren) {
   }, [backend]);
   const load = useCallback(() => fetchList(false), [fetchList]);
   const loadOne = useCallback((id: string) => backend.get(id), [backend]);
+
+  const [revision, setRevision] = useState(0);
+  const update = useCallback(
+    async (id: string, input: ReportEditInput) => {
+      const imageKeys: string[] = [];
+      for (const attachment of input.attachments) {
+        imageKeys.push(attachment.key ?? (await backend.uploadImage(attachment.uri)));
+      }
+      const updated = await backend.update(id, {
+        title: input.title,
+        summary: input.summary,
+        details: input.details,
+        responsibles: input.responsibles,
+        imageKeys,
+        imageKeysBase: input.baseKeys,
+      });
+      setReports((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      setRevision((n) => n + 1);
+      return updated;
+    },
+    [backend],
+  );
 
   // Lista que falhou (o app abriu sem sinal) relê sozinha quando a conexão
   // volta e quando o app volta ao primeiro plano.
@@ -191,8 +221,10 @@ export function ReportsProvider({ children }: PropsWithChildren) {
   );
 
   const value = useMemo<ReportsState>(
-    () => ({ reports, status, load, loadOne, pendingReports, create, addComment, commentsFor }),
-    [reports, status, load, loadOne, pendingReports, create, addComment, commentsFor],
+    () => ({
+      reports, status, load, loadOne, pendingReports, create, addComment, commentsFor, update, revision,
+    }),
+    [reports, status, load, loadOne, pendingReports, create, addComment, commentsFor, update, revision],
   );
   return <ReportsContext.Provider value={value}>{children}</ReportsContext.Provider>;
 }

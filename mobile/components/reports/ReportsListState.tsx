@@ -1,5 +1,6 @@
 import { ActivityIndicator, View } from 'react-native';
-import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system';
+import type { ReactNode } from 'react';
+import { Button, Icon, Text, Title, useTheme } from '@kavicki/swi-design-system';
 
 // State views for the Relatórios screens: full-screen-ish
 // centered views that COMPOSE DS primitives (Title + Text + Button) + the RN
@@ -25,6 +26,8 @@ interface CenteredStateProps {
   retryAccessibilityLabel?: string;
   /** Loading shows the spinner instead of a title. */
   loading?: boolean;
+  /** Ação da tela abaixo da mensagem (ex.: o "Novo relatório" do vazio). */
+  action?: ReactNode;
 }
 
 function CenteredState({
@@ -33,6 +36,7 @@ function CenteredState({
   onRetry,
   retryAccessibilityLabel,
   loading,
+  action,
 }: CenteredStateProps) {
   const theme = useTheme();
   return (
@@ -71,6 +75,7 @@ function CenteredState({
           onPress={onRetry}
         />
       )}
+      {action}
     </View>
   );
 }
@@ -79,10 +84,13 @@ interface ReportsListStateProps {
   kind: StateKind;
   /** Required for kind==='error'; ignored otherwise. */
   onRetry?: () => void;
+  /** kind==='empty': o "Novo relatório", o mesmo botão do topo da lista. */
+  onCreate?: () => void;
 }
 
 // List screen (app/(app)/reports/index.tsx) loading/empty/error views.
-export function ReportsListState({ kind, onRetry }: ReportsListStateProps) {
+export function ReportsListState({ kind, onRetry, onCreate }: ReportsListStateProps) {
+  const theme = useTheme();
   if (kind === 'loading') {
     return <CenteredState loading message="Carregando relatórios…" />;
   }
@@ -91,6 +99,20 @@ export function ReportsListState({ kind, onRetry }: ReportsListStateProps) {
       <CenteredState
         title="Nenhum relatório ainda"
         message="Crie um novo relatório para começar."
+        action={
+          onCreate ? (
+            <Button
+              variant="contained"
+              backgroundColor={theme.surface.primary}
+              labelColor={theme.content.light}
+              label="Novo relatório"
+              elevation="lg"
+              iconLeft={<Icon name="add_circle" size={20} color={theme.content.light} />}
+              accessibilityLabel="Novo relatório"
+              onPress={onCreate}
+            />
+          ) : null
+        }
       />
     );
   }

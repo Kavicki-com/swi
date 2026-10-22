@@ -12,6 +12,7 @@
 // iOS/Android (via MapView.native.tsx + @maplibre/maplibre-react-native).
 import { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import {
   Icon,
   LocationPin,
@@ -66,6 +67,19 @@ const RADIUS_RINGS = [
   { meters: 10000, label: '10KM', opacity: 0.75 },
 ] as const;
 
+// Parâmetros de quem abre o mapa já apontado (o "Ver câmera" da ficha do
+// colega): `cameras=1` liga a camada de câmeras, `operators=1` a de pessoas,
+// `lat`/`lng` centram ali no lugar da posição do aparelho. Coordenada que não
+// é número é ignorada.
+type MapParams = { cameras?: string; operators?: string; lat?: string; lng?: string };
+
+function focusFrom({ lat, lng }: MapParams): [number, number] | null {
+  if (lat === undefined || lng === undefined || lat.trim() === '' || lng.trim() === '') return null;
+  const la = Number(lat);
+  const ln = Number(lng);
+  return Number.isFinite(la) && Number.isFinite(ln) ? [ln, la] : null;
+}
+
 export default function MapViewGeneral() {
   if (!isFeatureEnabled('maps')) {
     return <ProdOnlyPlaceholder />;
@@ -80,13 +94,15 @@ function MapViewGeneralScreen() {
   const { coords } = useLocation();
   const { profile } = useProfile();
   const status = workerStatusOf(useMyTelemetry().telemetry);
+  const params = useLocalSearchParams<MapParams>();
+  const [focus] = useState(() => focusFrom(params));
 
   // Cada botão é um simple toggle: tap liga, tap de novo desliga.
   // O botão heatmap controla AMBAS sub-layers (produtividade + zonas-alerta)
   // simultaneamente — não há expand-panel admin-style no mobile.
-  const [showOperators, setShowOperators] = useState(false);
+  const [showOperators, setShowOperators] = useState(params.operators === '1');
   const [showHeatmap, setShowHeatmap] = useState(false);
-  const [showCameras, setShowCameras] = useState(false);
+  const [showCameras, setShowCameras] = useState(params.cameras === '1');
 
   // Colegas da mesma empresa, com a última posição recente e só o estado de
   // saúde. Sem posição própria são eles que o mapa enquadra.
@@ -122,7 +138,7 @@ function MapViewGeneralScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView {...viewport} zoom={14}>
+      <MapView {...(focus ? { center: focus } : viewport)} zoom={14}>
         {/* Keys explícitos pra reconciliação estável: showHeatmap toggle
             muda composição do array de children, shifta as posições e sem
             keys o maplibre useFrozenId throws "id cannot be changed".

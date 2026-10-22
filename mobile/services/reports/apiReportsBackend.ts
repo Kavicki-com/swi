@@ -1,4 +1,11 @@
-import type { Report, ReportActivity, ReportComment, ReportPayload, ReportsBackend } from './types';
+import type {
+  Report,
+  ReportActivity,
+  ReportComment,
+  ReportPayload,
+  ReportsBackend,
+  ReportUpdatePayload,
+} from './types';
 import { apiRequest } from '../api/http';
 import { uploadImage } from '../api/uploadMedia';
 import { attachmentsFromUrls } from './attachments';
@@ -99,5 +106,16 @@ export const apiReportsBackend: ReportsBackend = {
       auth: true,
       idempotencyKey,
     });
+  },
+  // PATCH /reports/:id. O backend só confere a empresa: autor ou não, em
+  // qualquer status. A resposta não traz `comments` nem atividades resolvidas;
+  // quem mostra o relatório relê pelo get.
+  async update(id: string, payload: ReportUpdatePayload) {
+    const editado = await apiRequest<WireReport>(`/reports/${id}`, {
+      method: 'PATCH',
+      body: payload,
+      auth: true,
+    });
+    return fromApi(editado);
   },
 };

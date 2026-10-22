@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,16 +9,22 @@ import {
   Pagination,
   ReportCard,
   SearchInput,
+  Text,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../../components/NavFABs';
 import { ReportsListState } from '../../../components/reports/ReportsListState';
 import { useReports } from '../../../services/reports/ReportsProvider';
 import type { Report } from '../../../services/reports/types';
+import { matchesSearch } from '../../../lib/searchText';
 
 // scrollable ReportCard list + Pagination + 2 FABs (chat + home).
-// Backend slice: 10 mock reports via useReports() (Unit A/B), todos navegam
-// pra /reports/[id]. Mesmos dados que antes (seed migrado das telas).
+// Todos os cartões do servidor navegam pra /reports/[id].
+//
+// Busca e paginação acontecem sobre a lista já carregada: o backend não busca
+// por texto e devolve a lista da empresa numa leitura só. A busca é pelo
+// título, como no painel, sem acento e sem maiúsculas.
+const PAGE_SIZE = 10;
 
 // T5.2: ReportRow memoizado pra impedir que os 10 cards re-renderizem quando
 // search/currentPage mudam. onPress(id) é estável via useCallback no parent.
@@ -70,6 +76,39 @@ export default function Reports() {
     (id: string) => router.push({ pathname: '/(app)/reports/[id]', params: { id } }),
     [router],
   );
+  const openNewReport = useCallback(() => router.push('/(app)/reports/new'), [router]);
+
+  // A página nova começa do primeiro cartão, não da rolagem da anterior.
+  const scrollRef = useRef<ScrollView>(null);
+  const changePage = useCallback((n: number) => {
+    setCurrentPage(n);
+    scrollRef.current?.scrollTo?.({ y: 0, animated: false });
+  }, []);
+
+  // Buscar recomeça da primeira página: a página em que a pessoa estava pode
+  // nem existir no resultado.
+  const handleSearch = useCallback((text: string) => {
+    setSearch(text);
+    setCurrentPage(1);
+  }, []);
+
+  // Os que aguardam envio vêm primeiro (são os mais novos) e não abrem
+  // detalhe. Sem a lista do servidor, só eles entram na conta.
+  const rows = useMemo(() => {
+    const all = [
+      ...pendingReports.map((report) => ({ report, opens: false })),
+      ...(status === 'error' ? [] : reports.map((report) => ({ report, opens: true }))),
+    ];
+    return all.filter(({ report }) => matchesSearch(report.title, search));
+  }, [pendingReports, reports, status, search]);
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // A lista pode encolher com a página aberta (um pendente confirmado sai da
+  // fila): a página mostrada nunca passa da última.
+  const page = Math.min(currentPage, pageCount);
+  // Sem a lista do servidor não há paginação na tela: os pendentes vão todos.
+  const visible =
+    status === 'error' ? rows : rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -81,7 +120,7 @@ export default function Reports() {
       {status === 'loading' || status === 'idle' ? (
         <ReportsListState kind="loading" />
       ) : status === 'empty' && pendingReports.length === 0 ? (
-        <ReportsListState kind="empty" />
+        <ReportsListState kind="empty" onCreate={openNewReport} />
       ) : (
         <>
           <View
@@ -93,7 +132,7 @@ export default function Reports() {
           >
             <SearchInput
               value={search}
-              onChangeText={setSearch}
+              onChangeText={handleSearch}
               placeholder="Pesquisar relatório"
             />
 
@@ -105,11 +144,12 @@ export default function Reports() {
               elevation="lg"
               iconLeft={<Icon name="add_circle" size={20} color={theme.content.light} />}
               accessibilityLabel="Novo relatório"
-              onPress={() => router.push('/(app)/reports/new')}
+              onPress={openNewReport}
             />
           </View>
 
           <ScrollView
+            ref={scrollRef}
             style={{ flex: 1, marginTop: theme.gap.m }}
             contentContainerStyle={{
               paddingHorizontal: theme.padding.m,
@@ -118,24 +158,26 @@ export default function Reports() {
             }}
             showsVerticalScrollIndicator={false}
           >
-            {/* Os relatórios na fila de envios vêm primeiro: são os mais novos. */}
-            {pendingReports.map((report) => (
-              <ReportRow key={report.id} report={report} />
+            {visible.map(({ report, opens }) => (
+              <ReportRow
+                key={report.id}
+                report={report}
+                onPress={opens ? handleReportPress : undefined}
+              />
             ))}
             {/* Sem a lista do servidor (o app abriu sem sinal), a falha fica
                 no lugar dela: a busca, o "Novo relatório" e os pendentes
                 continuam usáveis. */}
-            {status === 'error' ? (
-              <ReportsListState kind="error" onRetry={load} />
-            ) : (
-              reports.map((report) => (
-                <ReportRow
-                  key={report.id}
-                  report={report}
-                  onPress={handleReportPress}
-                />
-              ))
-            )}
+            {status === 'error' ? <ReportsListState kind="error" onRetry={load} /> : null}
+            {status !== 'error' && rows.length === 0 && search.trim() ? (
+              <Text
+                variant="body.m"
+                color={theme.content.dark}
+                style={{ textAlign: 'center', paddingTop: theme.padding.l }}
+              >
+                Nenhum relatório encontrado.
+              </Text>
+            ) : null}
           </ScrollView>
 
           <View
@@ -147,8 +189,9 @@ export default function Reports() {
           >
             {status === 'error' ? null : (
               <Pagination
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
+                currentPage={page}
+                pageCount={pageCount}
+                onPageChange={changePage}
               />
             )}
           </View>

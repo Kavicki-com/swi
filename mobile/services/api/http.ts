@@ -19,7 +19,7 @@ export async function readToken(): Promise<string | null> {
 }
 
 export interface ApiRequestOptions {
-  method?: 'GET' | 'POST' | 'PUT';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH';
   body?: unknown;
   auth?: boolean;
   /** Prazo desta chamada. Só suba para operações longas (upload). */

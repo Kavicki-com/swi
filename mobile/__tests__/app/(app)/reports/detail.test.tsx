@@ -569,21 +569,7 @@ describe('Detalhe do relatorio: navegacao', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  // Os dois botoes da linha de acoes existem no Figma e estao ligados a
-  // `onPress={() => {}}`. O teste NOMEIA isso: sao decorativos hoje. Se algum
-  // dia ganharem destino, este teste cai e alguem escreve o de verdade.
-  it('os dois botoes da linha de acoes ainda nao levam a lugar nenhum', async () => {
-    const tree = await montar();
-
-    await tocar(
-      tree.root.findAll(
-        (n) => n.props?.variant === 'outline' && n.props?.label === 'Fazer comentário',
-      )[0],
-    );
-    await tocar(porLabel(tree, 'Revisar relatório'));
-
-    expect(mockBack).not.toHaveBeenCalled();
-    expect(mockRouter.push).not.toHaveBeenCalled();
-    expect(mockAddComment).not.toHaveBeenCalled();
-  });
+  // Os dois botoes da linha de acoes ganharam destino: o atalho de comentar e
+  // o "Revisar relatorio" tem os testes proprios em
+  // detail.atalho-comentario.test.tsx e detail.revisar-e-busca.test.tsx.
 });
