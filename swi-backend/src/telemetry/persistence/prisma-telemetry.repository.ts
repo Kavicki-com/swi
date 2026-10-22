@@ -64,6 +64,7 @@ function hashCanonical(content: CanonicalContent): string {
 
 interface NormalizedMeasurements {
   heartRateBpm: number | null
+  heartRateSource: MeasurementSource | null
   stepDelta: number | null
   activeEnergyKcal: number | null
   motionCount: number | null
@@ -82,6 +83,7 @@ function normalize(event: TelemetryEvent): NormalizedMeasurements {
   const m = event.measurements
   return {
     heartRateBpm: m.heartRate?.value ?? null,
+    heartRateSource: m.heartRate?.source ?? null,
     stepDelta: m.stepDelta?.value ?? null,
     activeEnergyKcal: m.activeEnergyKcal?.value ?? null,
     motionCount: m.motionCount?.value ?? null,
@@ -112,6 +114,8 @@ interface SnapshotPatch {
   /** Sempre no patch: é o que diz ao read model se o atual é de pulseira. */
   deviceKind: DeviceKind | null
   lastReceivedAt: Date
+  /** Só na promoção ao vivo: é por ele que a varredura de silêncio mede. */
+  lastLiveEventTime?: Date
   heartRateBpm?: number
   heartRateAt?: Date
   batteryPercent?: number
@@ -169,6 +173,7 @@ function buildSnapshotPatch(
 
 /** Todas as métricas do snapshot em branco, para quando a origem muda. */
 const CLEARED_METRICS: Prisma.TelemetrySnapshotUncheckedUpdateInput = {
+  lastLiveEventTime: null,
   heartRateBpm: null,
   heartRateAt: null,
   stepsTotal: null,
@@ -431,11 +436,12 @@ export class PrismaTelemetryRepository implements TelemetryRepository {
     // Backlog e histórico do relógio entram na trilha sem tocar no estado
     // atual: um evento de duas horas atrás não é "o que está acontecendo agora".
     const live = !isBacklog(event.eventTime, now)
-    // A pulseira só manda em lote: o mais recente dela é o atual, em qualquer
-    // idade até o histórico, decidido métrica por métrica em promoteByMetric.
-    // O relógio continua só ao vivo, com o snapshot inteiro comparado em promote.
+    // A pulseira lida pelo Health Connect só manda em lote: o mais recente dela
+    // é o atual, em qualquer idade até o histórico, decidido métrica por métrica
+    // em promoteByMetric. O relógio e o batimento da pulseira pelo Bluetooth são
+    // só ao vivo, com o snapshot inteiro comparado em promote.
     const deviceKind = options?.deviceKind ?? null
-    const latestWins = snapshotPolicyFor(deviceKind) === 'LATEST'
+    const latestWins = snapshotPolicyFor(deviceKind, event.measurements) === 'LATEST'
     const promotable = latestWins ? classifyEventAge(event.eventTime, now) !== 'HISTORICAL' : live
     // Medição avulsa do app Saúde tem promoção própria, em qualquer idade, e
     // nunca passa pela do relógio, nem quando acabou de ser medida.
@@ -475,12 +481,12 @@ export class PrismaTelemetryRepository implements TelemetryRepository {
             eventTime,
           )
         } else if (promotable) {
+          const patch = buildSnapshotPatch(event, measured, eventTime, deviceKind)
+          // Só a régua do ao vivo chega aqui sem ser lote, então só ela anda o
+          // carimbo do sinal: relógio e batimento do Bluetooth.
+          if (!latestWins) patch.lastLiveEventTime = eventTime
           const promoteSnapshot = latestWins ? promoteByMetric : promote
-          snapshotPromoted = await promoteSnapshot(
-            tx,
-            session.workerId,
-            buildSnapshotPatch(event, measured, eventTime, deviceKind),
-          )
+          snapshotPromoted = await promoteSnapshot(tx, session.workerId, patch)
         }
 
         return { outcome: 'STORED' as const, sampleId: sample.id, snapshotPromoted }
