@@ -21,6 +21,21 @@ jest.mock('@/services/location/LocationProvider', () => ({
   useLocation: () => ({ coords: mockCoords, permission: mockPermission }),
 }));
 
+// useFocusEffect roda o callback na montagem, como no foco real da rota, e
+// guarda os callbacks pra o teste simular a pessoa voltando pra tela.
+const mockFocusCallbacks = new Set<() => void>();
+const mockRefocus = () => mockFocusCallbacks.forEach((cb) => cb());
+jest.mock('expo-router', () => ({
+  useFocusEffect: (cb: () => void) => {
+    const { useEffect } = require('react');
+    useEffect(() => {
+      mockFocusCallbacks.add(cb);
+      cb();
+      return () => { mockFocusCallbacks.delete(cb); };
+    }, [cb]);
+  },
+}));
+
 const mockGetRoute = jest.fn();
 jest.mock('./getEvacuationBackend', () => ({
   getEvacuationBackend: () => ({
@@ -82,6 +97,7 @@ const erro = (status: number) => Object.assign(new Error(`HTTP ${status}`), { st
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFocusCallbacks.clear();
   jest.useFakeTimers();
   mockCoords = null;
   mockPermission = 'granted';
@@ -122,6 +138,26 @@ describe('useEvacuationRoute: primeira busca', () => {
     await mover(tree, [-46.6251, -23.55]);
 
     expect(mockGetRoute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useEvacuationRoute: volta pra tela', () => {
+  // Visto no emulador: com a evacuacao encerrada, voltar pra tela mostrava a
+  // rota antiga, porque a busca acontecia uma vez por sessao do app. Cada vez
+  // que a tela ganha foco a rota e buscada de novo.
+  it('ao voltar o foco busca de novo, e a evacuacao encerrada vira a frase', async () => {
+    const tree = await montar();
+    await mover(tree, NA_LINHA);
+    expect(mockGetRoute).toHaveBeenCalledTimes(1);
+    expect(visto.route).not.toBeNull();
+
+    mockGetRoute.mockRejectedValueOnce(erro(404));
+    await act(async () => { mockRefocus(); });
+
+    expect(mockGetRoute).toHaveBeenCalledTimes(2);
+    expect(mockGetRoute).toHaveBeenLastCalledWith(NA_LINHA);
+    expect(visto.route).toBeNull();
+    expect(visto.errorKind).toBe('no-evacuation');
   });
 });
 
@@ -185,10 +221,13 @@ describe('useEvacuationRoute: duas telas e respostas atrasadas', () => {
     mockCoords = NA_LINHA;
     await act(async () => { tree.update(arvore()); });
     await act(async () => { jest.advanceTimersByTime(16_000); });
+    // O dublê dá foco às duas de uma vez, então cada uma fez a sua busca
+    // inicial; o que importa aqui é o recálculo.
+    const antes = mockGetRoute.mock.calls.length;
     mockCoords = A_80_M;
     await act(async () => { tree.update(arvore()); });
 
-    expect(mockGetRoute).toHaveBeenCalledTimes(2);
+    expect(mockGetRoute).toHaveBeenCalledTimes(antes + 1);
   });
 
   it('resposta velha que chega depois da nova nao sobrescreve a rota', async () => {

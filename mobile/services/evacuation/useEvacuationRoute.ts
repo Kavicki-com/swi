@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useLocation } from '../location/LocationProvider';
 import { useEvacuation, type RouteErrorKind } from './EvacuationProvider';
 import { distanceToPolylineM } from '../../lib/mapGeometry';
@@ -21,23 +22,30 @@ interface EvacuationRouteView {
 
 /**
  * Rota de evacuação da posição de quem está com o telefone até o ponto de
- * encontro da evacuação ativa. Busca uma vez quando o GPS responde (ou com
- * `null`, se a localização foi negada, pro backend usar a última posição real)
- * e refaz o traçado quando a pessoa se afasta dele.
+ * encontro da evacuação ativa. Busca cada vez que a tela ganha foco, assim que
+ * o GPS responde (ou com `null`, se a localização foi negada, pro backend usar
+ * a última posição real), e refaz o traçado quando a pessoa se afasta dele.
  */
 export function useEvacuationRoute(): EvacuationRouteView {
   const { coords, permission } = useLocation();
-  const { route, loadStatus, errorKind, load, reload, msSinceLastFetch } = useEvacuation();
-  const asked = useRef(false);
+  const { route, loadStatus, errorKind, reload, msSinceLastFetch } = useEvacuation();
 
-  // Primeira busca: espera o GPS responder. Permissão negada não é espera
-  // eterna, é resposta: pede a rota sem posição.
+  // Busca a cada foco, não uma vez por sessão do app: entre uma visita e outra
+  // a evacuação pode ter acabado ou o ponto pode ter mudado, e rota velha na
+  // tela de segurança leva pro lugar errado. Só a tela em foco recebe o evento,
+  // então as duas telas empilhadas não buscam juntas.
+  const [focusKey, setFocusKey] = useState(0);
+  useFocusEffect(useCallback(() => { setFocusKey((k) => k + 1); }, []));
+  const askedFor = useRef(0);
+
+  // Espera o GPS responder. Permissão negada não é espera eterna, é resposta:
+  // pede a rota sem posição.
   useEffect(() => {
-    if (asked.current) return;
+    if (focusKey === 0 || askedFor.current === focusKey) return;
     if (!coords && permission !== 'denied') return;
-    asked.current = true;
-    load(coords ?? null);
-  }, [coords, permission, load]);
+    askedFor.current = focusKey;
+    reload(coords ?? null);
+  }, [focusKey, coords, permission, reload]);
 
   // Recálculo: longe do traçado E com a última busca velha o bastante.
   useEffect(() => {
