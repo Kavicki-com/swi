@@ -1,0 +1,36 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+  <!-- Android 12 em diante: varredura e conexão têm permissões próprias,
+       pedidas em tempo de execução. A varredura declara que não serve para
+       localizar ninguém. -->
+  <uses-permission
+      android:name="android.permission.BLUETOOTH_SCAN"
+      android:usesPermissionFlags="neverForLocation"
+      tools:targetApi="s" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+  <!-- Android 8 a 11: Bluetooth pelas permissões antigas, e a varredura só
+       entrega resultado com a localização precisa concedida. A localização
+       NÃO é declarada aqui: o app já a declara para o GPS, e um
+       maxSdkVersion nesta declaração seria mesclado na do app, tirando o GPS
+       do Android 12 em diante. -->
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
+  <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+  <application>
+    <service
+        android:name="com.kavicki.swi.bleheartrate.BleHeartRateService"
+        android:exported="false"
+        android:foregroundServiceType="connectedDevice" />
+    <service
+        android:name="com.kavicki.swi.bleheartrate.BleDrainTaskService"
+        android:exported="false" />
+  </application>
+</manifest>
