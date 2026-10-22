@@ -130,6 +130,20 @@ export type ConditionKind =
   | 'BLOOD_PRESSURE_HIGH'
 
 /**
+ * Espelha o enum TelemetryConditionRecoveryReason do schema: por que uma
+ * condição fechou. NORMALIZED, o valor voltou; SIGNAL_LOST, a sessão ao vivo
+ * silenciou; SIGNAL_RESTORED, o aparelho voltou a falar e fechou a perda de
+ * sinal; PROFILE_RETIRED, a regra que abriu foi aposentada; NO_NEW_READING, 24 h
+ * sem medição nova da métrica.
+ */
+export type ConditionRecoveryReason =
+  | 'NORMALIZED'
+  | 'SIGNAL_LOST'
+  | 'SIGNAL_RESTORED'
+  | 'PROFILE_RETIRED'
+  | 'NO_NEW_READING'
+
+/**
  * O que conta como urgente, e por exclusão o que não conta.
  *
  * É o mesmo conjunto que "condição cardíaca ativa" em sinais vitais: no piloto,
