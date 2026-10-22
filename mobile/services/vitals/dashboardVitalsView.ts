@@ -26,6 +26,8 @@ export interface DashboardVitalsView {
   status: string;
   /** Selo de origem quando a leitura não é do relógio real. */
   sourceBadge: string | null;
+  /** Selo das roscas de esforço e desgaste enquanto a régua ainda aprende. */
+  calibrationTag: string | null;
   /** Cor da silhueta: só condição aberta no backend tira o estado de bom. */
   workerStatus: WorkerStatus;
 }
@@ -143,8 +145,41 @@ const EMPTY: Omit<DashboardVitalsView, 'status'> = {
   fatigueProgress: null,
   fatigueText: `${FATIGUE_PREFIX} sem estimativa`,
   sourceBadge: null,
+  calibrationTag: null,
   workerStatus: 'unknown',
 };
+
+// Textos e regra do selo iguais aos do painel (calibrationView.ts e
+// sourceBadgeOf em swi-admin). A diferença é só de lugar: o atraso da pulseira
+// já tem a faixa própria aqui, então não disputa o selo com a calibração.
+const calibratingLabel = (day: number) => `Calibrando, dia ${day} de 30`;
+const recalibratingLabel = (day: number) =>
+  `Recalibrando: novo aparelho, dia ${day} de 30`;
+
+/**
+ * Esforço e desgaste calculados com repouso provisório, antes do primeiro dia
+ * de uso fechar. O número existe e vale, mas ainda vai se ajustar.
+ */
+const PROVISIONAL_BASELINE_LABEL = 'Estimativa provisória';
+
+/**
+ * Demonstração não leva selo de régua: nem é medida. Com calibração, o selo é
+ * o da fase ("dia N de 30", nenhum depois de calibrado), que substitui o
+ * provisório; sem ela, fica o provisório, que só faz sentido com desgaste.
+ */
+function calibrationTagOf(telemetry: WorkerTelemetry): string | null {
+  if (telemetry.origin === 'DEMO') return null;
+  const { calibration } = telemetry;
+  if (calibration) {
+    if (calibration.day === null) return null;
+    return calibration.recalibrating
+      ? recalibratingLabel(calibration.day)
+      : calibratingLabel(calibration.day);
+  }
+  if (telemetry.baseline === 'PROVISIONAL' && telemetry.metrics.wear.value !== null)
+    return PROVISIONAL_BASELINE_LABEL;
+  return null;
+}
 
 // Urgência e alerta de saúde valem mesmo com a leitura velha: esconder uma
 // condição aberta seria pior que mostrá-la atrasada. "Bom" exige leitura atual,
@@ -240,6 +275,7 @@ export function dashboardVitalsView(
     fatigueText,
     status,
     sourceBadge: telemetry.origin === 'DEMO' ? DEMO_DATA_LABEL : null,
+    calibrationTag: calibrationTagOf(telemetry),
     workerStatus: workerStatusOf(telemetry),
   };
 }

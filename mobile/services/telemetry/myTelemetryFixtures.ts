@@ -1,5 +1,10 @@
 // Leituras de telemetria para teste, no formato de GET /telemetry/v1/me/current.
-import type { ActiveCondition, MetricState, WorkerTelemetry } from './myTelemetry';
+import type {
+  ActiveCondition,
+  MetricState,
+  WorkerCalibration,
+  WorkerTelemetry,
+} from './myTelemetry';
 
 export const FIXTURE_AT = '2026-10-01T14:59:30.000Z';
 
@@ -65,7 +70,25 @@ export const neverReported = (): WorkerTelemetry => ({
   bloodPressureRecency: 'NONE',
   formulaVersion: null,
   sync: null,
+  baseline: null,
+  calibration: null,
   observedAt: '2026-10-01T15:00:00.000Z',
+});
+
+/** Calibração em curso no dia dado, com a faixa de partida do esforço. */
+export const calibrando = (day: number, recalibrating = false): WorkerCalibration => ({
+  phase: 'CALIBRATING',
+  recalibrating,
+  day,
+  metrics: { EFFORT: { zone: 'NORMAL', cuts: { excellence: 40, fatigue: 80 }, source: 'START' } },
+});
+
+/** Calibração fechada nos 30 dias: o dia some e o selo também. */
+export const calibrado = (): WorkerCalibration => ({
+  phase: 'CALIBRATED',
+  recalibrating: false,
+  day: null,
+  metrics: { EFFORT: { zone: 'NORMAL', cuts: { excellence: 40, fatigue: 80 }, source: 'LEARNED' } },
 });
 
 /** Reportando agora: 112 bpm, 310 kcal/h, desgaste 38,4, esforço 61, 95 min. */

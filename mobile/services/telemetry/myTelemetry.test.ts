@@ -79,6 +79,97 @@ describe('fetchMyTelemetry', () => {
     });
   });
 
+  describe('calibração e origem do repouso', () => {
+    const CALIBRACAO = {
+      version: 'cal-v1',
+      phase: 'CALIBRATING',
+      recalibrating: false,
+      day: 4,
+      metrics: {
+        EFFORT: { zone: 'NORMAL', cuts: { excellence: 40, fatigue: 80 }, source: 'START' },
+        STEPS: { zone: null, cuts: { below: 6000, above: null }, source: 'LEARNED' },
+      },
+    };
+
+    it('lê a fase, o dia, as faixas e a origem do repouso', async () => {
+      requestMock.mockResolvedValue({ ...reporting(), baseline: 'PROVISIONAL', calibration: CALIBRACAO });
+      const telemetry = await fetchMyTelemetry();
+      expect(telemetry.baseline).toBe('PROVISIONAL');
+      expect(telemetry.calibration).toEqual({
+        phase: 'CALIBRATING',
+        recalibrating: false,
+        day: 4,
+        metrics: {
+          EFFORT: { zone: 'NORMAL', cuts: { excellence: 40, fatigue: 80 }, source: 'START' },
+          STEPS: { zone: null, cuts: { below: 6000, above: null }, source: 'LEARNED' },
+        },
+      });
+    });
+
+    it('calibração fechada chega sem dia', async () => {
+      requestMock.mockResolvedValue({
+        ...reporting(),
+        calibration: { ...CALIBRACAO, phase: 'CALIBRATED', day: null },
+      });
+      await expect(fetchMyTelemetry()).resolves.toMatchObject({
+        calibration: { phase: 'CALIBRATED', day: null },
+      });
+    });
+
+    // Backend anterior não manda nenhum dos dois: leitura sem selo, não falha.
+    it('sem os campos, os dois vêm null', async () => {
+      const { baseline: _b, calibration: _c, ...semCampos } = reporting();
+      requestMock.mockResolvedValue(semCampos);
+      await expect(fetchMyTelemetry()).resolves.toMatchObject({ baseline: null, calibration: null });
+    });
+
+    it.each([
+      ['texto', 'calibrando'],
+      ['fase desconhecida', { ...CALIBRACAO, phase: 'ALMOST' }],
+      ['dia zero', { ...CALIBRACAO, day: 0 }],
+      ['dia fracionado', { ...CALIBRACAO, day: 4.5 }],
+      ['dia em texto', { ...CALIBRACAO, day: '4' }],
+      ['dia ausente', { ...CALIBRACAO, day: undefined }],
+      ['recalibrando em texto', { ...CALIBRACAO, recalibrating: 'não' }],
+      ['faixas em lista', { ...CALIBRACAO, metrics: [] }],
+    ])('calibração torta (%s) vira null sem derrubar a leitura', async (_caso, calibration) => {
+      requestMock.mockResolvedValue({ ...reporting(), calibration });
+      const telemetry = await fetchMyTelemetry();
+      expect(telemetry.calibration).toBeNull();
+      expect(telemetry.metrics.heartRate.value).toBe(112);
+    });
+
+    it('faixa torta some sozinha; as outras e a fase ficam', async () => {
+      requestMock.mockResolvedValue({
+        ...reporting(),
+        calibration: {
+          ...CALIBRACAO,
+          metrics: {
+            EFFORT: CALIBRACAO.metrics.EFFORT,
+            WEAR: { zone: 'NORMAL', cuts: 'alto', source: 'START' },
+            HEART_RATE: { zone: 'MUITO', cuts: { fatigue: 150 }, source: 'START' },
+            OXYGEN_SATURATION: { zone: null, cuts: { fatigue: '92' }, source: 'START' },
+            MOVEMENT: { zone: null, cuts: { above: 50 }, source: 'INVENTADO' },
+            INVENTADA: { zone: null, cuts: { above: 1 }, source: 'START' },
+          },
+        },
+      });
+      const telemetry = await fetchMyTelemetry();
+      expect(telemetry.calibration).toMatchObject({ phase: 'CALIBRATING', day: 4 });
+      expect(telemetry.calibration?.metrics).toEqual({ EFFORT: CALIBRACAO.metrics.EFFORT });
+    });
+
+    it.each([['texto qualquer', 'ESTIMATED'], ['número', 1], ['objeto', {}]])(
+      'origem do repouso torta (%s) vira null sem derrubar a leitura',
+      async (_caso, baseline) => {
+        requestMock.mockResolvedValue({ ...reporting(), baseline });
+        const telemetry = await fetchMyTelemetry();
+        expect(telemetry.baseline).toBeNull();
+        expect(telemetry.metrics.heartRate.value).toBe(112);
+      },
+    );
+  });
+
   it('falha de rede chega a quem chama, nunca vira leitura vazia', async () => {
     requestMock.mockRejectedValue(new Error('offline'));
     await expect(fetchMyTelemetry()).rejects.toThrow('offline');
