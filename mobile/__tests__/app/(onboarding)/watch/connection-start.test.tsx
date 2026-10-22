@@ -244,10 +244,10 @@ describe('primeiro uso, espera do relogio: Android com o Health Connect', () => 
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it('ja pareado, vai direto ao fim', async () => {
+  it('ja pareado, pula o pareamento e vai ao Health Connect', async () => {
     envio(true);
     const tree = await render({ support: 'unsupported' });
-    expect(redirecionamentos(tree)).toEqual([FIM]);
+    expect(redirecionamentos(tree)).toEqual(['/(onboarding)/watch/health-connect']);
   });
 
   it('sem o gate do Health Connect, o Android segue como antes', async () => {

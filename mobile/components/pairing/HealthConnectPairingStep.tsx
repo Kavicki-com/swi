@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Button, StatusTag, Text, useTheme } from '@kavicki/swi-design-system';
+import { HEALTH_CONNECT_FIRST_USE_COPY } from '../../services/telemetry/androidFirstUse';
 import { openHealthConnectInPlayStore } from '../../services/telemetry/healthConnect/playStore';
 import {
   healthConnectStatusOf,
@@ -33,8 +34,21 @@ import { useTelemetryUploadState } from '../../services/telemetry/TelemetryUploa
 //
 // Tudo passa pelo contexto do envio, que fala com o leitor ÚNICO do runtime:
 // esta tela nunca importa o leitor nem a porta.
+//
+// No primeiro uso do Android o passo tem tela própria (health-connect.tsx),
+// que também recebe quem tocou "Parear depois": ali a leitura pode ser
+// permitida antes de parear.
 
-export function HealthConnectPairingStep() {
+export interface HealthConnectPairingStepProps {
+  /**
+   * O celular está pareado, segundo a tela. Logo depois de parear o
+   * `paired` do envio ainda está falso enquanto ele relê a credencial; a
+   * tela de pareamento já sabe. Falso só para quem pulou o pareamento.
+   */
+  pareado: boolean;
+}
+
+export function HealthConnectPairingStep({ pareado }: HealthConnectPairingStepProps) {
   const theme = useTheme();
   const {
     paired,
@@ -102,7 +116,13 @@ export function HealthConnectPairingStep() {
       </>
     );
   } else if (status === 'granted') {
-    acao = !sincronizado ? (
+    // Sem pareamento a primeira sincronização não sai (ela espera o
+    // pareamento), e "procurando" ficaria na tela para sempre.
+    acao = !pareado ? (
+      <Text variant="body.m" color={theme.content.dark}>
+        {HEALTH_CONNECT_FIRST_USE_COPY.semPareamento}
+      </Text>
+    ) : !sincronizado ? (
       <StatusTag status="info" fullWidth numberOfLines={2} label={COPY.sincronizando} />
     ) : healthConnect?.bandLabel ? (
       <StatusTag

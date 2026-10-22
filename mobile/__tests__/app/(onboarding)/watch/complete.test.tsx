@@ -317,6 +317,22 @@ describe('primeiro uso, tela final: Android com o Health Connect', () => {
     expect(t).not.toContain('Falta liberar a leitura');
   });
 
+  // ADR-0013: no Android passos e movimento so chegam pelo Health Connect.
+  it('nenhum estado promete movimento ao vivo', async () => {
+    const estados: [boolean, HealthConnectState][] = [
+      [true, estadoHC({ bandPackage: 'com.mi.health', bandLabel: 'Mi Fitness' })],
+      [false, estadoHC()],
+      [true, estadoHC({ permission: 'denied' })],
+      [true, estadoHC({ noBand: true })],
+      [true, estadoHC({ availability: 'unavailable', permission: null })],
+    ];
+    for (const [pareado, estado] of estados) {
+      envio(pareado, estado);
+      const t = texto(await render(SEM_SUPORTE));
+      expect(t).not.toMatch(/ao vivo|tempo real/i);
+    }
+  });
+
   it('Finalizar grava a marcacao e continua entrando no app', async () => {
     envio(false);
     const tree = await render(SEM_SUPORTE);

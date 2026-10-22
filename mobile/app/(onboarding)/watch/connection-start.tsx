@@ -6,6 +6,7 @@ import { SmartbandStatus, Title, useTheme } from '@kavicki/swi-design-system';
 import { Smartwatch3D } from '../../../components/Smartwatch3D';
 import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
+import { androidFirstUseRoute } from '../../../services/telemetry/androidFirstUse';
 import { useWatchDiagnostics } from '../../../services/telemetry/watchDiagnostics';
 import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUploadProvider';
 
@@ -34,7 +35,7 @@ export default function WatchConnectionStart() {
 
 function PulseiraRedirect() {
   const { paired } = useTelemetryUploadState();
-  return <Redirect href={paired ? '/(onboarding)/watch/complete' : '/(onboarding)/watch/pairing'} />;
+  return <Redirect href={androidFirstUseRoute(paired ? 'health-connect' : 'pairing')} />;
 }
 
 function WatchConnectionStartScreen() {

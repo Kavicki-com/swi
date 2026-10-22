@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system';
 import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
+import { androidFirstUseRoute } from '../../../services/telemetry/androidFirstUse';
 import { activateMonitoring, useWatchDiagnostics } from '../../../services/telemetry/watchDiagnostics';
 import { deriveTelemetryAvailability } from '../../../services/telemetry/telemetryAvailability';
 import { telemetryCopy } from '../../../services/telemetry/telemetryCopy';
@@ -17,8 +18,9 @@ import { useNow } from '../../../services/telemetry/useNow';
 //
 // No Android com o Health Connect não há relógio a ativar: o controle dele
 // responde "sem suporte" ali, e esta tela diria que o aparelho não monitora.
-// O monitoramento vem da pulseira, e o caminho dela é o pareamento, que tem o
-// passo do Health Connect e a saída "Parear depois".
+// O monitoramento vem da pulseira, e o primeiro uso dela tem as etapas da
+// ADR-0013 (androidFirstUse.ts): pareamento, Health Connect e a pulseira por
+// Bluetooth, opcional.
 
 export default function WatchConnection() {
   if (!isFeatureEnabled('watchOnboarding')) {
@@ -31,10 +33,10 @@ export default function WatchConnection() {
   return <WatchConnectionScreen />;
 }
 
-/** Quem já está pareado não repete a etapa, como no iPhone. */
+/** Quem já está pareado não repete a etapa e começa pelo Health Connect. */
 function PulseiraRedirect() {
   const { paired } = useTelemetryUploadState();
-  return <Redirect href={paired ? '/(onboarding)/watch/complete' : '/(onboarding)/watch/pairing'} />;
+  return <Redirect href={androidFirstUseRoute(paired ? 'health-connect' : 'pairing')} />;
 }
 
 function WatchConnectionScreen() {
