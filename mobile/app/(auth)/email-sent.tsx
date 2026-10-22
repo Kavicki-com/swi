@@ -111,7 +111,7 @@ export default function EmailSent() {
             >
               {displayEmail}
             </Text>{' '}
-            acesse sua caixa de entrada e clique no link para confirmar a sua conta.
+            acesse sua caixa de entrada e digite abaixo o código para confirmar a sua conta.
           </Text>
 
           {AUTH_BACKEND === 'api' && (

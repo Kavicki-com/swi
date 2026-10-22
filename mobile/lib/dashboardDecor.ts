@@ -10,11 +10,6 @@
 export const BG_DECOR_GRAD_TOP = '#3BC958';
 export const BG_DECOR_GRAD_BOTTOM = '#1E652C';
 
-// Estado de alerta (?alert=modal): gradiente vermelho invertido, indicando
-// emergência. Mantém a mesma opacidade de 46% do estado normal.
-export const BG_DECOR_GRAD_TOP_ALERT = '#E04848';
-export const BG_DECOR_GRAD_BOTTOM_ALERT = '#5E1818';
-
 // O divisor vai do tom escuro nas bordas ao verde de marca no centro.
 // DIVIDER_GRAD_END subiu para #3A3A3A por contraste real contra o fundo
 // #171717; #2A2A2A ainda sumia no Android em vãos estreitos.

@@ -1,5 +1,6 @@
 // Lógica PURA do clima (formatters + seleção de alerta vigente). Sem efeitos;
 // `now` é injetado pra testabilidade. Espelha o estilo de progress.ts.
+import type { WeatherCondition as WeatherIconCondition } from '@kavicki/swi-design-system';
 import type { WeatherSnapshot, WeatherAlert, WeatherAlertSeverity, WeatherCondition } from './types';
 
 export function formatTempC(c: number): string { return `${Math.round(c)}ºC`; }
@@ -15,6 +16,19 @@ const CONDITION_LABEL: Record<WeatherCondition, string> = {
   fog: 'Névoa',
 };
 export function conditionLabel(c: WeatherCondition): string { return CONDITION_LABEL[c]; }
+
+// A imagem de cada condição. O WeatherIcon do DS desenha sol, nuvem, chuva e
+// tempestade; névoa cai em nuvem e neve em chuva, o mesmo agrupamento da tira
+// de previsão do painel.
+const CONDITION_ICON: Record<WeatherCondition, WeatherIconCondition> = {
+  clear: 'sunny',
+  clouds: 'partly-cloudy',
+  fog: 'partly-cloudy',
+  rain: 'rainy',
+  snow: 'rainy',
+  storm: 'storm',
+};
+export function conditionIcon(c: WeatherCondition): WeatherIconCondition { return CONDITION_ICON[c]; }
 
 // O alerta que a tela mostra: entre os ainda vigentes (endsAt >= now), o de
 // perigo passa na frente; empate fica na ordem recebida. Null se não há nenhum.

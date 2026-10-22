@@ -2,7 +2,7 @@ import type { WorkerTelemetry } from '../telemetry/myTelemetry';
 
 // O aviso geral da área logada, por cima de qualquer tela. Um por vez, do mais
 // urgente para o menos: o envio recusado (a pessoa precisa refazer), a falta
-// de conexão (o que está na tela pode estar velho) e a bateria do relógio.
+// de conexão (o que está na tela pode estar velho) e a bateria do aparelho.
 
 export type RootNotice =
   | { kind: 'refused' }
@@ -61,13 +61,29 @@ export function batteryLowOf(telemetry: WorkerTelemetry | null): BatteryLow | nu
   return { key: open.openedAt, percent: value === null ? null : Math.round(value) };
 }
 
-/** O texto da notificação que o servidor manda ao funcionário, igual. */
-export function batteryLowCopy(percent: number | null): { title: string; message: string } {
+/**
+ * O aparelho que mede: a pulseira no Android (Health Connect ou Bluetooth), o
+ * relógio no iPhone.
+ */
+export type WearableKind = 'pulseira' | 'relogio';
+
+const WEARABLE_COPY: Record<WearableKind, { da: string; a: string }> = {
+  pulseira: { da: 'da pulseira', a: 'a pulseira' },
+  relogio: { da: 'do relógio', a: 'o relógio' },
+};
+
+/**
+ * O texto do aviso de bateria baixa. No relógio é igual ao da notificação que o
+ * servidor manda ao funcionário; na pulseira, o mesmo texto com o aparelho certo.
+ */
+export function batteryLowCopy(
+  percent: number | null,
+  wearable: WearableKind,
+): { title: string; message: string } {
+  const { da, a } = WEARABLE_COPY[wearable];
+  const carregue = `Carregue ${a} para seguir monitorado.`;
   return {
-    title: 'Bateria do relógio baixa',
-    message:
-      percent === null
-        ? 'Carregue o relógio para seguir monitorado.'
-        : `Bateria em ${percent}%. Carregue o relógio para seguir monitorado.`,
+    title: `Bateria ${da} baixa`,
+    message: percent === null ? carregue : `Bateria em ${percent}%. ${carregue}`,
   };
 }

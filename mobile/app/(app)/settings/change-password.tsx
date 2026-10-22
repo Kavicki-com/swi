@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image as RNImage, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
@@ -14,6 +14,7 @@ import { PasswordInput } from '../../../components/PasswordInput';
 import { HomeFAB } from '../../../components/HomeFAB';
 import { useAuth } from '../../../services/auth/AuthProvider';
 import { useField } from '../../../lib/forms/useField';
+import { useSubmitOnce } from '../../../lib/forms/useSubmitOnce';
 import {
   validatePasswordField,
   validatePasswordMatch,
@@ -22,14 +23,31 @@ import {
 
 // password inputs + Toast informativo + Salvar + Home FAB. Salvar troca a
 // senha de verdade (POST /auth/password/change via useAuth); a mensagem de
-// erro da API (ex.: senha atual incorreta) aparece num Toast de erro e a
-// tela só fecha no sucesso.
+// erro da API (ex.: senha atual incorreta) aparece num Toast de erro. No
+// sucesso o Toast "Senha alterada." aparece e a tela volta depois dele.
+//
+// O botão trava enquanto a troca está no ar (useSubmitOnce) e segue travado
+// depois do sucesso: um novo toque mandaria a senha antiga, que já não vale.
+
+// Tempo para ler o aviso de sucesso antes de a tela voltar.
+const BACK_AFTER_SUCCESS_MS = 2000;
+
 export default function SettingsChangePassword() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { changePassword } = useAuth();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Sair da tela antes do prazo (voltar na mão) cancela a volta agendada.
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => router.back(), BACK_AFTER_SUCCESS_MS);
+    return () => clearTimeout(t);
+    // `router` de useRouter() é estável; só o sucesso agenda a volta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved]);
 
   const currentPassword = useField({
     validator: (v) => validateRequired(v, 'Senha atual'),
@@ -57,7 +75,7 @@ export default function SettingsChangePassword() {
         currentPassword: currentPassword.value,
         newPassword: newPassword.value,
       });
-      router.back();
+      setSaved(true);
     } catch (e) {
       setSaveError(
         e instanceof Error && e.message
@@ -66,6 +84,8 @@ export default function SettingsChangePassword() {
       );
     }
   };
+
+  const { run: save, busy: saving } = useSubmitOnce(handleSave);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -141,6 +161,7 @@ export default function SettingsChangePassword() {
           />
 
           {saveError ? <Toast variant="error" title={saveError} /> : null}
+          {saved ? <Toast variant="success" title="Senha alterada." /> : null}
         </View>
       </KeyboardAwareScrollView>
 
@@ -162,7 +183,8 @@ export default function SettingsChangePassword() {
             label="Salvar nova senha"
             elevation="lg"
             accessibilityLabel="Salvar nova senha"
-            onPress={handleSave}
+            disabled={saving || saved}
+            onPress={save}
           />
         </View>
       </View>

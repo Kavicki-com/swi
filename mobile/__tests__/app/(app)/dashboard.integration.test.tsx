@@ -21,9 +21,8 @@ import type { HealthConnectState } from '../../../services/telemetry/healthConne
 //
 // Não afirma estrutura de arquivo nem hierarquia de componentes: só o que a
 // tela mostra e para onde ela navega. É isso que precisa sobreviver quando o
-// JSX mudar de arquivo. Cobre as DUAS telas que vivem aqui, a normal e o
-// `?alert=active` (procedimento de evacuação), porque a segunda é tela de
-// segurança e não pode regredir sem ninguém perceber.
+// JSX mudar de arquivo. O procedimento de evacuação é o ActiveAlertModal, com
+// suíte própria.
 
 // A leitura de me/current que a tela recebe. O padrão é o funcionário
 // reportando agora (112 bpm, 310 kcal/h, desgaste 38,4, 95 min até a fadiga),
@@ -639,80 +638,5 @@ describe('dashboard: câmera ao vivo', () => {
       toastCom(tree, FALHA_AO_LIGAR).props.onClose();
     });
     expect(mockDismissLive).toHaveBeenCalledTimes(1);
-  });
-});
-
-// --- Tela de evacuação (?alert=active) ---------------------------------------
-
-describe('dashboard: procedimento de evacuação (?alert=active)', () => {
-  beforeEach(() => {
-    mockSearchParams = { alert: 'active' };
-  });
-
-  it('substitui o dashboard inteiro, mesmo com os vitais prontos', async () => {
-    const texto = textoDa(await render());
-    expect(texto).toContain('Procedimento de evacuação');
-    expect(texto).not.toContain('Kcal/hora');
-  });
-
-  it('mostra os quatro passos do procedimento', async () => {
-    const texto = textoDa(await render());
-    expect(texto).toContain('Desloque-se para o local de resgate');
-    expect(texto).toContain('Mantenha se em um abrigo protegido do vento');
-    expect(texto).toContain('Espere pelo veículo de resgate');
-    expect(texto).toContain('reporte imediatamente à central');
-  });
-
-  it('sem clima carregado, não inventa medição nem texto de alerta', async () => {
-    const texto = textoDa(await render());
-    expect(texto).toContain('--');
-    expect(texto).not.toContain('17ºC');
-    expect(texto).not.toContain('Chuva Intensa');
-    expect(texto).not.toContain('Risco de desabamentos');
-  });
-
-  it('com alerta vigente, mostra a leitura e a descrição que vieram do backend', async () => {
-    mockClima = {
-      snapshot: {
-        current: { tempC: 22.4, condition: 'storm', humidityPct: 88, windKmh: 47.6 },
-        daily: { maxC: 27, minC: 15 },
-        alerts: [],
-        fetchedAt: '2026-06-23T12:00:00.000Z',
-      },
-      activeAlert: {
-        id: 'wx-1',
-        event: 'Tempestade',
-        severity: 'PERIGO',
-        description: 'Raios e rajadas fortes na próxima hora.',
-        startsAt: '2026-06-23T11:00:00.000Z',
-        endsAt: '2026-06-23T18:00:00.000Z',
-      },
-    };
-    const texto = textoDa(await render());
-    expect(texto).toContain('22ºC');
-    expect(texto).toContain('Raios e rajadas fortes na próxima hora.');
-  });
-
-  it('ignora o estado da leitura: a tela de segurança sempre aparece', async () => {
-    mockTelemetryState = FALHOU;
-    const texto = textoDa(await render());
-    expect(texto).toContain('Procedimento de evacuação');
-    expect(texto).not.toContain('Leitura indisponível');
-  });
-
-  it.each([
-    ['Traçar rota de evacuação', '/(app)/evacuation'],
-    ['Reportar acidente', '/(app)/reports/new'],
-  ])('%s leva a %s', async (rotulo, rota) => {
-    const tree = await render();
-    await tocar(tree, rotulo);
-    expect(mockPush).toHaveBeenCalledWith(rota);
-  });
-
-  it('confirmar as instruções volta ao dashboard sem empilhar rota', async () => {
-    const tree = await render();
-    await tocar(tree, 'Confirmar instruções recebidas');
-    expect(mockReplace).toHaveBeenCalledWith('/(app)/dashboard');
-    expect(mockPush).not.toHaveBeenCalled();
   });
 });

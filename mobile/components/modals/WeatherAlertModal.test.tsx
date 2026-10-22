@@ -119,7 +119,7 @@ describe('WeatherAlertModal: o que vem do alerta e da leitura', () => {
 
     const lidos = textos(await render());
 
-    expect(lidos).toEqual(['Local em Alerta!', '--', 'Instruções de segurança']);
+    expect(lidos).toEqual(['Local em Alerta!', '--', 'Instruções de segurança', 'Ver mapa do clima']);
   });
 });
 

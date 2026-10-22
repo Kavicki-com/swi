@@ -41,6 +41,16 @@ import type { EnqueueResult } from '../../../../services/outbox/sendQueue';
 
 type DetailStatus = 'loading' | 'ready' | 'empty' | 'error';
 
+// Legenda dos Interessados. Fala de quem acompanha a tarefa pelo primeiro nome
+// que ela traz e pelo total (a API manda só os nomes dos avatares visíveis).
+// Sem nome não há de quem falar, e a linha some.
+function interestedCaption(firstName: string | undefined, count: number): string | null {
+  if (!firstName || count < 1) return null;
+  if (count === 1) return `${firstName} está acompanhando essa tarefa`;
+  if (count === 2) return `${firstName} e mais 1 pessoa estão acompanhando essa tarefa`;
+  return `${firstName} e mais ${count - 1} pessoas estão acompanhando essa tarefa`;
+}
+
 type Notice = { variant: 'warning' | 'error'; title: string };
 const QUEUE_FULL: Notice = { variant: 'warning', title: QUEUE_FULL_TITLE };
 
@@ -216,12 +226,12 @@ export default function TaskDetails() {
     }
   };
 
-  // ordem (uris). O caption deriva do responsibleCount ("<1º nome> e mais N-1
-  // pessoas estão acompanhando essa tarefa").
+  // ordem (uris). A legenda sai de interestedCaption (abaixo).
   const responsibleAvatars = liveTask.responsibleAvatars.map((uri, i) => ({
     uri,
     alt: liveTask.responsibleNames[i],
   }));
+  const caption = interestedCaption(liveTask.responsibleNames[0], liveTask.responsibleCount);
 
   // Finalizar/Cancelar operam SÓ neste item — o turno segue rodando (o backend
   // não encerra o turno). Concluir marca done; cancelar devolve pra pending.
@@ -435,9 +445,11 @@ export default function TaskDetails() {
             size="m"
             bordered
           />
-          <Text variant="body.m" color={theme.content.dark}>
-            {`${liveTask.responsibleNames[0] ?? 'Joacir Alves'} e mais ${liveTask.responsibleCount - 1} pessoas estão acompanhando essa tarefa`}
-          </Text>
+          {caption ? (
+            <Text variant="body.m" color={theme.content.dark}>
+              {caption}
+            </Text>
+          ) : null}
         </View>
 
         {isActive ? (

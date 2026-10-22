@@ -22,19 +22,15 @@ import { weatherDisplay } from '../../services/weather/weatherFormat';
 // quero ele exatamente como o meteorológico" — backdrop levemente vermelho,
 // conteúdo dentro de um card branco, tap fora fecha.
 //
-// Conteúdo migrado do `AlertActiveView` que vivia inline em dashboard.tsx
-// (state `?alert=active`). A rota original continua válida — esse componente
-// só é renderizado a partir de notifications.tsx; o branch do dashboard
-// permanece intacto pra qualquer outro entry point canônico.
+// Abre a partir do dashboard (botão "Ajuda urgente" ou CTA da janela do
+// clima) e das notificações, sempre como overlay, sem mudar de rota.
 //
-// Diferença vs. o AlertActiveView original:
 //   - Sem JourneyTheme/dot-grid (o backdrop do modal substitui o background)
 //   - Sem NavFABs (modal não deve mostrar navegação do app por baixo)
 //   - Sem `flex: 1` no ScrollView (o modal tem maxHeight definido)
-//   - Botão "Entendi" e qualquer ação que antes navegava agora chama onClose
-//     (continua disponível pra navegação real ex.: "Traçar rota" / "Reportar
-//     acidente" — esses fecham o modal antes de navegar pra evitar
-//     stale-overlay).
+//   - Botão "Entendi" chama onClose. "Traçar rota" e "Reportar acidente"
+//     fecham o modal antes de navegar, para não deixar overlay sobre o
+//     destino.
 
 export interface ActiveAlertModalProps {
   visible: boolean;

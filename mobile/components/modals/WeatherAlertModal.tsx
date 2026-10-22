@@ -1,9 +1,11 @@
-import { Image as RNImage, View } from 'react-native';
+import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SvgXml } from 'react-native-svg';
 import {
   Button,
   Text,
   Title,
+  WeatherIcon,
   useTheme,
 } from '@kavicki/swi-design-system';
 import {
@@ -13,16 +15,22 @@ import {
   WIND_SPEED_SVG,
 } from '../../lib/alertWeatherSvgs';
 import { useWeather } from '../../services/weather/WeatherProvider';
-import { weatherDisplay } from '../../services/weather/weatherFormat';
+import {
+  conditionIcon,
+  conditionLabel,
+  weatherDisplay,
+} from '../../services/weather/weatherFormat';
 
 // title + row (weather-condition card + weather-data metrics) + body text +
-// "Instruções de segurança" CTA pink/coral.
+// "Instruções de segurança" CTA pink/coral + "Ver mapa do clima", que fecha a
+// janela e abre o radar de chuva (map-weather).
 //
 // Reusable shape: quem chama (dashboard, notificações) provê backdrop e
 // animação e renderiza este body dentro do próprio container.
 //
 // Card de temperatura segue o mesmo padrão do dashboard-alert-active:
-// fundo `surface.high`, content `justify-end`, ícone de chuva flutuando
+// fundo `surface.high`, content `justify-end`, a imagem da condição lida
+// flutuando por cima (WeatherIcon do DS; sem leitura, nenhuma imagem).
 //
 // Ícones das métricas vêm de `alertWeatherSvgs.ts` (SVGs exportados direto
 // com barra interna, wind_speed/air com end-caps circulares, arrows menores).
@@ -32,8 +40,9 @@ export interface WeatherAlertModalProps {
   onPrimaryAction: () => void;
 }
 
-export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
+export function WeatherAlertModal({ onClose, onPrimaryAction }: WeatherAlertModalProps) {
   const theme = useTheme();
+  const router = useRouter();
 
   // Tudo aqui sai do alerta vigente e da leitura do provider. Quem monta a
   // janela só o faz com alerta; sem leitura as medições viram '--', e sem
@@ -41,6 +50,14 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
   const { snapshot, activeAlert } = useWeather();
   const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr, levelStr } =
     weatherDisplay(snapshot, activeAlert);
+  // A imagem segue a condição medida. Leitura indisponível não é medição.
+  const condition = snapshot && !snapshot.unavailable ? snapshot.current.condition : null;
+
+  // Fecha antes de navegar, senão a janela fica por cima do mapa.
+  const openWeatherMap = () => {
+    onClose();
+    router.push('/(app)/map-weather');
+  };
 
   return (
     <View
@@ -94,22 +111,23 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
             marginRight: theme.gap.m,
           }}
         >
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: -28,
-              alignSelf: 'center',
-              zIndex: 2,
-            }}
-          >
-            <RNImage
-              source={require('../../assets/weather-rainy.png')}
-              style={{ width: 72, height: 72 }}
-              resizeMode="contain"
-              accessibilityLabel="Chuva intensa"
-            />
-          </View>
+          {condition ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: -28,
+                alignSelf: 'center',
+                zIndex: 2,
+              }}
+            >
+              <WeatherIcon
+                condition={conditionIcon(condition)}
+                size="l"
+                accessibilityLabel={conditionLabel(condition)}
+              />
+            </View>
+          ) : null}
           <Title variant="title.l" color={theme.content.dark}>
             {tempStr}
           </Title>
@@ -150,6 +168,15 @@ export function WeatherAlertModal({ onPrimaryAction }: WeatherAlertModalProps) {
           elevation="lg"
           accessibilityLabel="Instruções de segurança"
           onPress={onPrimaryAction}
+        />
+        <Button
+          variant="outline"
+          borderColor={theme.surface.error}
+          labelColor={theme.surface.error}
+          label="Ver mapa do clima"
+          fullWidth
+          accessibilityLabel="Ver mapa do clima"
+          onPress={openWeatherMap}
         />
       </View>
     </View>

@@ -148,6 +148,13 @@ describe('Dados de saúde: prefill do cadastro', () => {
 });
 
 describe('Dados de saúde: salvar', () => {
+  // Altura, peso e PcD são obrigatórios como no cadastro (suíte própria em
+  // health-data.corpo.test.tsx); aqui chegam preenchidos do perfil.
+  const CORPO = { heightCm: 175, weightKg: 80, hasDisability: false };
+  beforeEach(() => {
+    mockLoadProfile.mockResolvedValue(CORPO);
+  });
+
   it('manda ao backend o que foi editado e volta', async () => {
     const tree = await render();
     await escolher(tree, 'Tipo sanguíneo', 'AB-');
@@ -162,6 +169,7 @@ describe('Dados de saúde: salvar', () => {
       gender: 'female',
       allergies: 'Látex',
       chronicConditions: 'Hipertensão',
+      ...CORPO,
     });
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
@@ -177,6 +185,7 @@ describe('Dados de saúde: salvar', () => {
       gender: undefined,
       allergies: undefined,
       chronicConditions: undefined,
+      ...CORPO,
     });
   });
 

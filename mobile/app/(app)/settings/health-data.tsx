@@ -9,6 +9,7 @@ import {
   ExamInfoCard,
   ImageUploader,
   Input,
+  RadioGroup,
   Text,
   Title,
   TopBar,
@@ -29,6 +30,22 @@ const BLOOD_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((v)
   label: v,
   value: v,
 }));
+// Altura, peso e PcD com as mesmas opções do cadastro (passo 3 dos dados
+// complementares): 140 a 220 cm, 40 a 160 kg, Sim ou Não.
+const HEIGHT_OPTIONS = Array.from({ length: 81 }, (_, i) => {
+  const v = 140 + i;
+  return { label: `${v} cm`, value: String(v) };
+});
+const WEIGHT_OPTIONS = Array.from({ length: 121 }, (_, i) => {
+  const v = 40 + i;
+  return { label: `${v} kg`, value: String(v) };
+});
+const DISABILITY_OPTIONS = [
+  { label: 'Sim', value: 'sim' },
+  { label: 'Não', value: 'nao' },
+];
+type Disability = 'sim' | 'nao';
+
 // gender persiste como CÓDIGO ('male'/'female'/'other') — a convenção que o
 // painel inteiro compara (detalhe do funcionário, painel do chat).
 const GENDER_OPTIONS = [
@@ -37,9 +54,11 @@ const GENDER_OPTIONS = [
   { label: 'Outro', value: 'other' },
 ];
 
-// TopBar + section title + 2 comboboxes + 2 multiline inputs +
-// 4 ExamInfoCards + ImageUploader + Salvar + Home FAB.
-// Demo phase: useState only, sem persistência, sem upload real.
+// TopBar + section title + comboboxes (tipo sanguíneo, gênero, altura, peso) +
+// 2 multiline inputs + PcD + histórico de exames + Salvar + Home FAB.
+// Altura, peso e PcD seguem os campos, rótulos e a validação do cadastro
+// (obrigatórios, mensagem depois do toque em salvar) e vão no mesmo PUT do
+// perfil. Esse trecho da tela não tem desenho no Figma.
 export default function SettingsHealthData() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -51,7 +70,25 @@ export default function SettingsHealthData() {
   const [genero, setGenero] = useState('');
   const [alergias, setAlergias] = useState('');
   const [doencas, setDoencas] = useState('');
+  const [altura, setAltura] = useState('');
+  const [peso, setPeso] = useState('');
+  const [pcd, setPcd] = useState<Disability | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Um painel de lista aberto por vez entre Altura e Peso (lado a lado, um
+  // cobriria o outro), como no cadastro.
+  const [openCombobox, setOpenCombobox] = useState<'altura' | 'peso' | null>(null);
+  const handleOpenChange = (key: 'altura' | 'peso') => (next: boolean) => {
+    setOpenCombobox(next ? key : null);
+  };
+
+  // A mesma regra do cadastro: sem blur em que se pendurar (Combobox e Radio),
+  // a mensagem de obrigatório aparece depois do toque em salvar.
+  const [tentouSalvar, setTentouSalvar] = useState(false);
+  const faltando = (vazio: boolean, mensagem: string) =>
+    tentouSalvar && vazio
+      ? { description: mensagem, descriptionVariant: 'error' as const }
+      : {};
 
   // Exames REAIS. A lista era um array fixo de 4 exames inventados, duplicado
   // com o my-stats, e o botão de enviar tinha `onPickFile={() => {}}` — não
@@ -109,6 +146,9 @@ export default function SettingsHealthData() {
         setGenero(p.gender ?? '');
         setAlergias(p.allergies ?? '');
         setDoencas(p.chronicConditions ?? '');
+        setAltura(p.heightCm != null ? String(p.heightCm) : '');
+        setPeso(p.weightKg != null ? String(p.weightKg) : '');
+        setPcd(p.hasDisability == null ? null : p.hasDisability ? 'sim' : 'nao');
       })
       .catch(() => {});
     return () => {
@@ -119,6 +159,10 @@ export default function SettingsHealthData() {
   }, []);
 
   const handleSave = async () => {
+    if (altura.length === 0 || peso.length === 0 || pcd === null) {
+      setTentouSalvar(true);
+      return;
+    }
     setSaving(true);
     try {
       await saveProfile({
@@ -126,6 +170,9 @@ export default function SettingsHealthData() {
         gender: genero || undefined,
         allergies: alergias || undefined,
         chronicConditions: doencas || undefined,
+        heightCm: parseInt(altura, 10),
+        weightKg: parseInt(peso, 10),
+        hasDisability: pcd === 'sim',
       });
       Alert.alert('Pronto', 'Seus dados foram salvos.');
       router.back();
@@ -188,6 +235,37 @@ export default function SettingsHealthData() {
             onChange={setGenero}
           />
 
+          {/* zIndex: o painel aberto (position absolute dentro do Combobox do
+              DS) fica por cima dos campos que vêm depois, como no cadastro. */}
+          <View style={{ flexDirection: 'row', gap: theme.gap.sm, zIndex: 30 }}>
+            <View style={{ flex: 1, zIndex: 2 }}>
+              <Combobox
+                label="Altura"
+                placeholder="cm"
+                options={HEIGHT_OPTIONS}
+                value={altura}
+                onChange={setAltura}
+                open={openCombobox === 'altura'}
+                onOpenChange={handleOpenChange('altura')}
+                maxVisibleRows={3}
+                {...faltando(altura.length === 0, 'Altura é obrigatória')}
+              />
+            </View>
+            <View style={{ flex: 1, zIndex: 1 }}>
+              <Combobox
+                label="Peso"
+                placeholder="Kg"
+                options={WEIGHT_OPTIONS}
+                value={peso}
+                onChange={setPeso}
+                open={openCombobox === 'peso'}
+                onOpenChange={handleOpenChange('peso')}
+                maxVisibleRows={3}
+                {...faltando(peso.length === 0, 'Peso é obrigatório')}
+              />
+            </View>
+          </View>
+
           <Input
             label="Possui alergias?"
             description={`separe suas alergias com " , " (virgula)`}
@@ -204,6 +282,14 @@ export default function SettingsHealthData() {
             onChangeText={setDoencas}
             multiline
             numberOfLines={3}
+          />
+
+          <RadioGroup
+            label="Pessoa com deficiência?"
+            options={DISABILITY_OPTIONS}
+            value={pcd}
+            onChange={(v) => setPcd(v as Disability)}
+            {...faltando(pcd === null, 'Selecione uma opção')}
           />
 
           <View style={{ gap: theme.gap.m }}>

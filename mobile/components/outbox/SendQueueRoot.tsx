@@ -1,7 +1,8 @@
 import { useState, type ReactElement } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Toast, useTheme } from '@kavicki/swi-design-system';
+import { isFeatureEnabled } from '../../lib/featureFlags';
 import { batteryLowCopy, batteryLowOf, pickRootNotice } from '../../services/outbox/rootNotice';
 import {
   OFFLINE_PENDING_TITLE,
@@ -22,7 +23,8 @@ import { useMyTelemetry } from '../../services/vitals/MyTelemetryProvider';
 //
 // Faz duas coisas: liga a fila à sessão de quem está logado (o envio segue com
 // qualquer tela aberta) e mostra o aviso geral, um por vez: o envio recusado,
-// a falta de conexão e a bateria baixa do relógio. O aviso precisa valer em
+// a falta de conexão e a bateria baixa do aparelho (pulseira no Android,
+// relógio no iPhone). O aviso precisa valer em
 // qualquer tela: a recusa chega segundos ou horas depois do toque, e a queda
 // e a bateria não dependem de onde a pessoa está.
 //
@@ -80,7 +82,9 @@ export function SendQueueRoot({ userId }: { userId: string }) {
       <Toast variant="warning" title={OFFLINE_TITLE} onClose={() => setOfflineDismissed(true)} />
     );
   } else if (battery) {
-    const copy = batteryLowCopy(battery.percent);
+    // O mesmo critério das telas que já distinguem os dois aparelhos.
+    const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
+    const copy = batteryLowCopy(battery.percent, naPulseira ? 'pulseira' : 'relogio');
     toast = (
       <Toast
         variant="warning"
