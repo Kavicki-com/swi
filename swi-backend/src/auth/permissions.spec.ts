@@ -8,6 +8,7 @@ const ALL = Object.keys(PERMISSIONS) as Permission[]
 const SUPERVISOR_PODE: Permission[] = [
   'monitoring.read',
   'monitoring.bands.manage',
+  'monitoring.pause',
   'alerts.operate',
   'workOrders.operate',
   'chat.use',

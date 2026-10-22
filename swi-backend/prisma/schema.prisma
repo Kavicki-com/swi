@@ -36,6 +36,11 @@ model User {
   emailVerified  Boolean        @default(false)
   approvalStatus ApprovalStatus @default(PENDING)
   active         Boolean        @default(true)
+  /// Pausa dos alertas do funcionário (férias, afastamento), ligada pelo
+  /// painel. Com ela, a telemetria continua sendo gravada, mas nenhuma condição
+  /// nova nasce para ele, e por isso nenhum alerta nem aviso de saúde. Nulo é
+  /// monitorado normalmente; o instante é quando a pausa começou.
+  monitoringPausedAt DateTime?
 
   confirmationCodeHash String?
   confirmationExpires  DateTime?

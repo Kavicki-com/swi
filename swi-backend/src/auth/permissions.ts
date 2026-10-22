@@ -26,6 +26,8 @@ export const PERMISSIONS = {
   'monitoring.bands.manage': PANEL,
   /** Ajustar as travas de segurança de um funcionário. */
   'monitoring.safety.manage': ADMIN_ONLY,
+  /** Pausar e retomar os alertas de um funcionário (férias, afastamento). */
+  'monitoring.pause': PANEL,
   /** Fila de alertas (reconhecer e resolver) e pedido de pausa ao funcionário. */
   'alerts.operate': PANEL,
   'workOrders.operate': PANEL,

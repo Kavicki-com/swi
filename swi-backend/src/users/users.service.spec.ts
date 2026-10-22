@@ -114,6 +114,7 @@ describe('UsersService', () => {
         role: 'WORKER',
         approvalStatus: 'APPROVED',
         active: true,
+        monitoringPausedAt: new Date('2026-10-20T08:00:00.000Z'),
         companyRole: null,
         username: null,
         createdAt: new Date(0),
@@ -142,6 +143,8 @@ describe('UsersService', () => {
       role: 'WORKER',
       approvalStatus: 'APPROVED',
       active: true,
+      // Alertas pausados no Monitoramento: o instante em que a pausa começou.
+      monitoringPausedAt: '2026-10-20T08:00:00.000Z',
       jobTitle: 'Operador',
       sector: 'Norte',
       bloodType: 'B+',
@@ -196,6 +199,7 @@ describe('UsersService', () => {
       role: 'WORKER',
       approvalStatus: 'PENDING',
       active: false,
+      monitoringPausedAt: null,
       jobTitle: '',
       sector: '',
       // Sem profile → SEM tipo sanguíneo (null) — nunca um default universal.
@@ -266,6 +270,7 @@ describe('UsersService', () => {
       role: 'ADMIN',
       approvalStatus: 'APPROVED',
       active: true,
+      monitoringPausedAt: null,
       jobTitle: 'Diretor',
       sector: 'Gestão',
       bloodType: null,

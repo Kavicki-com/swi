@@ -125,6 +125,8 @@ const prismaDouble = () => {
     workerCalibration: { findUnique: jest.fn().mockResolvedValue(null) },
     workerCalibrationBand: { findMany: jest.fn().mockResolvedValue([]) },
     workerSafetyLimit: { findMany: jest.fn().mockResolvedValue([]) },
+    // Pausa dos alertas: por padrão, monitorado normalmente.
+    user: { findUnique: jest.fn().mockResolvedValue({ monitoringPausedAt: null }) },
   }
   db.$transaction = jest.fn(async (fn: any) => {
     db.open = true
@@ -1711,6 +1713,110 @@ describe('TelemetryConditionService.evaluateBandDay: episódios repetidos', () =
 
     expect(prisma.telemetryCondition.findMany.mock.calls.some((c: any) => c[0].where.receivedAt)).toBe(false)
     expect(repeatedCreate(prisma)).toBeUndefined()
+  })
+})
+
+describe('TelemetryConditionService: alertas pausados', () => {
+  const paused = (prisma: any) => prisma.user.findUnique.mockResolvedValue({ monitoringPausedAt: hoursAgo(2) })
+  const band = (beats: Array<[number, number]>) => ({
+    workerId: 'worker-1',
+    origin: 'REAL' as const,
+    sessionId: 'session-band',
+    batch: { beats: beats.map(([minAgo, value]) => ({ atMs: minutesAgo(minAgo).getTime(), value })), wear: [], sinceMs: 0 },
+  })
+
+  it('lote ao vivo de risco não abre condição, alerta nem aviso, e lê a pausa dentro da transação', async () => {
+    const prisma = prismaDouble()
+    paused(prisma)
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    const realtime = realtimeDouble()
+    const notifier = notifierDouble()
+
+    const outcome = await service(prisma, realtime, audienceDouble(), notifier).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+    expect(realtime.emitToUsers).not.toHaveBeenCalled()
+    expect(notifier.notifyOpened).not.toHaveBeenCalled()
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'worker-1' }, select: { monitoringPausedAt: true } })
+    expect(firstCall(prisma.$executeRaw)).toBeLessThan(firstCall(prisma.user.findUnique))
+  })
+
+  it('o que já estava aberto segue o ciclo normal e recupera', async () => {
+    const prisma = prismaDouble()
+    paused(prisma)
+    prisma.telemetryCondition.findMany.mockResolvedValue([activeRow('c-1', 'HEART_RATE_HIGH')])
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries(120))
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.recovered).toEqual(['HEART_RATE_HIGH'])
+    expect(prisma.telemetryCondition.update).toHaveBeenCalledWith({
+      where: { id: 'c-1' },
+      data: { status: 'RECOVERED', recoveredAt: NOW, recoveryReason: 'NORMALIZED', lastSeenAt: NOW },
+    })
+  })
+
+  it('lote comum, sem nada a abrir, não consulta a pausa', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('medição avulsa fora da faixa não abre', async () => {
+    const prisma = prismaDouble()
+    paused(prisma)
+    prisma.telemetrySample.findFirst = latestReadings({
+      pressure: { systolicMmHg: 190, diastolicMmHg: 120, eventTime: NOW },
+    })
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome.opened).toEqual([])
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
+  })
+
+  it('silêncio não abre perda de sinal', async () => {
+    const prisma = prismaDouble()
+    paused(prisma)
+    silentFor(prisma, 300)
+
+    const outcome = await service(prisma).sweepSilentSessions(NOW)
+
+    expect(outcome).toEqual({ scanned: 1, signalLost: 0, recovered: 0 })
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
+  })
+
+  it('o lote da pulseira não grava episódio novo, nem o que já nasce recuperado', async () => {
+    const prisma = prismaDouble()
+    paused(prisma)
+
+    const outcome = await service(prisma).evaluateBandDay(
+      band([
+        [90, 200],
+        [85, 150],
+        [30, 200],
+      ]),
+      NOW,
+    )
+
+    expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
+    expect(prisma.telemetryCondition.create).not.toHaveBeenCalled()
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+  })
+
+  it('no lote da pulseira, o que já estava aberto ainda recupera', async () => {
+    const prisma = prismaDouble()
+    paused(prisma)
+    prisma.telemetryCondition.findMany.mockResolvedValue([{ id: 'c-band', kind: 'HEART_RATE_HIGH' }])
+
+    const outcome = await service(prisma).evaluateBandDay(band([[30, 120]]), NOW)
+
+    expect(outcome.recovered).toEqual(['HEART_RATE_HIGH'])
   })
 })
 
