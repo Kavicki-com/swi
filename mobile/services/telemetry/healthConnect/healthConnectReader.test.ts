@@ -1052,11 +1052,12 @@ describe('bandLabelOf', () => {
     expect(bandLabelOf('com.fitbit.FitbitMobile')).toBe('Fitbit');
   });
 
-  it('pacote desconhecido é o próprio pacote; sem pacote, nulo', () => {
-    expect(bandLabelOf('com.exemplo.pulseira')).toBe('com.exemplo.pulseira');
+  // O pacote cru (com.exemplo.pulseira) não diz nada a quem usa o app.
+  it('pacote desconhecido vira "Pulseira"; sem pacote, nulo', () => {
+    expect(bandLabelOf('com.exemplo.pulseira')).toBe('Pulseira');
     expect(bandLabelOf(null)).toBeNull();
     // Chave herdada de todo objeto não é pulseira conhecida.
-    expect(bandLabelOf('toString')).toBe('toString');
+    expect(bandLabelOf('toString')).toBe('Pulseira');
   });
 });
 
