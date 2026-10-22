@@ -276,6 +276,7 @@ class BleHeartRateService : Service() {
     gatt = null
     if (subscribed) ConnectedIntervals.close(this, System.currentTimeMillis())
     subscribed = false
+    Prefs.flushLastReading(this)
   }
 
   private val recover = Runnable { if (running) startRescan() }
@@ -415,6 +416,7 @@ class BleHeartRateService : Service() {
 
     if (subscribed) ConnectedIntervals.close(this, System.currentTimeMillis())
     subscribed = false
+    Prefs.flushLastReading(this)
     val adapter = adapter()
     if (adapter == null || !adapter.isEnabled) {
       teardownGatt()
@@ -460,7 +462,7 @@ class BleHeartRateService : Service() {
     if (c.uuid != HEART_RATE_MEASUREMENT) return
     val now = System.currentTimeMillis()
     Inbox.append(this, value, now)
-    Prefs.saveLastReading(this, now)
+    Prefs.noteReading(this, now)
     if (now - lastKickAt >= KICK_INTERVAL_MS) {
       // Marcado aqui, na thread da notificação: a próxima notificação já vê
       // a marca e não agenda outro disparo.

@@ -35,10 +35,31 @@ internal object Prefs {
       .apply()
   }
 
-  fun lastReadingAt(ctx: Context): Long? =
-    prefs(ctx).getLong(KEY_LAST_READING, 0L).takeIf { it > 0L }
+  /**
+   * A pulseira notifica uma vez por segundo. A hora da última leitura fica em
+   * memória e vai para o disco no máximo uma vez a cada 15 s (cada gravação
+   * reescreve o arquivo inteiro). Processo morto perde no máximo esses 15 s.
+   */
+  private const val PERSIST_EVERY_MS = 15_000L
+  @Volatile private var lastReadingInMemory = 0L
+  @Volatile private var lastReadingPersisted = 0L
 
-  fun saveLastReading(ctx: Context, at: Long) {
+  fun lastReadingAt(ctx: Context): Long? =
+    maxOf(lastReadingInMemory, prefs(ctx).getLong(KEY_LAST_READING, 0L)).takeIf { it > 0L }
+
+  fun noteReading(ctx: Context, at: Long) {
+    lastReadingInMemory = at
+    if (at - lastReadingPersisted >= PERSIST_EVERY_MS) persistLastReading(ctx, at)
+  }
+
+  /** Grava a hora em memória, se o disco estiver atrás dela. */
+  fun flushLastReading(ctx: Context) {
+    val at = lastReadingInMemory
+    if (at > lastReadingPersisted) persistLastReading(ctx, at)
+  }
+
+  private fun persistLastReading(ctx: Context, at: Long) {
+    lastReadingPersisted = at
     prefs(ctx).edit().putLong(KEY_LAST_READING, at).apply()
   }
 }
