@@ -10,10 +10,16 @@ interface ActiveEvacuationDto {
   workers?: { id: string; acked: boolean }[];
 }
 
-// Backend devolve o RouteSnapshot pronto (ISO em fetchedAt). Sem args — a rota é
-// do site fixo (SITE_ROUTE vive no backend). Espelha apiWeatherBackend.
+// Backend devolve o RouteSnapshot pronto (ISO em fetchedAt), com origin,
+// destination e approximate. Espelha apiWeatherBackend.
 export const apiEvacuationBackend: EvacuationBackend = {
-  getRoute() { return apiRequest<RouteSnapshot>('/evacuation/route', { auth: true }); },
+  // `from` vai na query como "lng,lat" (mesma ordem do GeoJSON, que o backend
+  // valida). Sem GPS a query sai inteira de fora: o backend cai na última
+  // posição real, e "?from=" vazio seria 400.
+  getRoute(from: [number, number] | null) {
+    const query = from ? `?from=${from[0]},${from[1]}` : '';
+    return apiRequest<RouteSnapshot>(`/evacuation/route${query}`, { auth: true });
+  },
 
   // "Sem ativa" chega como 200 de corpo vazio → apiRequest resolve {} → null.
   async getActive(): Promise<ActiveEvacuationView | null> {

@@ -8,6 +8,9 @@ export interface RouteSnapshot {
   durationSec: number;
   distanceM: number;
   fetchedAt: string;               // ISO datetime
+  origin: [number, number];        // de onde a rota saiu (GPS do app ou última posição real)
+  destination: [number, number];   // ponto de encontro da evacuação ativa
+  approximate: boolean;            // true = roteador fora, linha reta
 }
 
 // Evacuação ATIVA da org vista pelo worker: o suficiente pra tela decidir
@@ -20,19 +23,13 @@ export interface ActiveEvacuationView {
 }
 
 export interface EvacuationBackend {
-  // sem args: usa as constantes SITE_ROUTE (rota fixa do site).
-  getRoute(): Promise<RouteSnapshot>;
+  // `from` = posição atual do GPS, em [lng, lat]. null = sem GPS: o backend
+  // usa a última posição real gravada da pessoa (e 409 se não houver nenhuma).
+  // O destino é sempre o ponto de encontro da evacuação ativa, nunca um ponto
+  // fixo: 404 sem evacuação ativa ou sem ponto marcado.
+  getRoute(from: [number, number] | null): Promise<RouteSnapshot>;
   // null = nenhuma evacuação ativa na minha org (estado normal).
   getActive(): Promise<ActiveEvacuationView | null>;
   // Confirma presença no ponto de encontro (idempotente no backend).
   ack(evacuationId: string): Promise<void>;
 }
-
-// Rota fixa do site (piloto SP) — origem (local da obra) + destino (ponto de
-// encontro designado), ambos [lng, lat]. Movido de lib/mapMockData.ts (onde eram
-// EVACUATION_ORIGIN / EVACUATION_DESTINATION). Fonte da verdade de "de onde até
-// onde" pra evacuação.
-export const SITE_ROUTE: { origin: [number, number]; destination: [number, number] } = {
-  origin: [-46.632, -23.552],
-  destination: [-46.62, -23.544],
-};

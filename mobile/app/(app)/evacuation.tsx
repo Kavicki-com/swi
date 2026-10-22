@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,9 +16,9 @@ import { MapLineSource } from '@/components/MapLineSource';
 import { MapChipBody } from '@/components/MapChipBody';
 import { NavFABs } from '@/components/NavFABs';
 import { EvacuationAckBar } from '@/components/EvacuationAckBar';
-import { SITE_ROUTE } from '@/services/evacuation/types';
-import { useEvacuation } from '@/services/evacuation/EvacuationProvider';
-import { chipAnchors, chipEtaLabel, lineFeature, straightLine } from '@/services/evacuation/routeFormat';
+import { useEvacuationRoute } from '@/services/evacuation/useEvacuationRoute';
+import { chipAnchors, chipEtaLabel, lineFeature, routeNotice } from '@/services/evacuation/routeFormat';
+import { BRAZIL_BOUNDS, boundsAround } from '@/lib/mapGeometry';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 
@@ -29,8 +29,10 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 // native.tsx + @maplibre/maplibre-react-native).
 //
 // On-map geo-anchored children:
-//   - origin LocationPin (variant=badge, status=good)
-//   - destination LocationPin (variant=badge, status=alert)
+//   - origin LocationPin (variant=badge, status=good): o GPS da pessoa, ou a
+//     origem que o backend usou (última posição real) quando não há GPS
+//   - destination LocationPin (variant=badge, status=alert): o ponto de
+//     encontro que o gestor marcou ao iniciar a evacuação
 //   - 2 time chips ("6 minutos" / "17 minutos") anchored at 35% / 70% of
 //     the waypoints array so they visually align with the curving polyline
 //   - cyan #8AD2E2 polyline rendered via <MapLineSource>
@@ -51,24 +53,27 @@ function EvacuationRouteScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { route, loadStatus, load } = useEvacuation();
+  const { route, errorKind, coords } = useEvacuationRoute();
 
-  useEffect(() => { load(); }, [load]);
-
-  // ready → rota real; error → fallback reto (mapa nunca renderiza vazio);
-  // loading/idle → null (só pinos, sem linha desenhada ainda).
-  const waypoints = useMemo<[number, number][] | null>(() => {
-    if (route) return route.waypoints;
-    if (loadStatus === 'error') return straightLine(SITE_ROUTE.origin, SITE_ROUTE.destination);
-    return null;
-  }, [route, loadStatus]);
-
+  // Sem rota não há linha nem chips: traçado inventado numa tela de segurança
+  // guiaria a pessoa pro lugar errado. O aviso diz o que fazer no lugar.
+  const waypoints = route?.waypoints ?? null;
   const lineShape = useMemo(() => lineFeature(waypoints ?? []), [waypoints]);
   const anchors = useMemo(() => chipAnchors(waypoints ?? []), [waypoints]);
+  const notice = routeNotice(route, errorKind);
+
+  const origin = coords ?? route?.origin ?? null;
+  // Com rota, centra na origem dela. Sem rota ainda, enquadra a pessoa (ou o
+  // Brasil sem GPS) por `bounds`: no web o `center` só vale quando aparece pela
+  // primeira vez, então ele fica guardado pra quando a rota chegar.
+  const frame = useMemo(
+    () => (coords ? boundsAround([coords]) : null) ?? BRAZIL_BOUNDS,
+    [coords],
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView center={SITE_ROUTE.origin} zoom={15}>
+      <MapView center={route?.origin} zoom={15} bounds={frame}>
         {/* On-map declarative children (partitioned into the native <Map>
             by MapView.native, attached imperatively by MapView.web). */}
         {/* `key` em cada child do <Map> é OBRIGATÓRIO mesmo quando não está
@@ -86,12 +91,16 @@ function EvacuationRouteScreen() {
             paint={{ color: '#8AD2E2', width: 4, opacity: 0.95 }}
           />
         )}
-        <MapMarker key="evacuation-origin" coordinate={SITE_ROUTE.origin} id="evacuation-origin">
-            <LocationPin variant="badge" status="good" size={40} name="Início da rota" />
-        </MapMarker>
-        <MapMarker key="evacuation-destination" coordinate={SITE_ROUTE.destination} id="evacuation-destination">
-            <LocationPin variant="badge" status="alert" size={40} name="Destino" />
-        </MapMarker>
+        {origin && (
+          <MapMarker key="evacuation-origin" coordinate={origin} id="evacuation-origin">
+              <LocationPin variant="badge" status="good" size={40} name="Início da rota" />
+          </MapMarker>
+        )}
+        {route && (
+          <MapMarker key="evacuation-destination" coordinate={route.destination} id="evacuation-destination">
+              <LocationPin variant="badge" status="alert" size={40} name="Ponto de encontro" />
+          </MapMarker>
+        )}
         {anchors && (
           <MapMarker key="evacuation-chip-1" coordinate={anchors.a} id="evacuation-chip-1">
               <MapChipBody text={chipEtaLabel(route?.durationSec, 0.35)} />
@@ -157,6 +166,16 @@ function EvacuationRouteScreen() {
             >
               A rota traçada garante seu retorno em segurança, se precisar ajudar outras pessoas primeiro encontre um abrigo seguro para se proteger
             </Text>
+            {notice && (
+              <Text
+                variant="body.s"
+                color={notice.variant === 'error' ? theme.content.error : theme.content.warning}
+                style={{ textAlign: 'center' }}
+                accessibilityRole="alert"
+              >
+                {notice.text}
+              </Text>
+            )}
             <Button
               variant="contained"
               backgroundColor={theme.surface.success}

@@ -1,8 +1,10 @@
 // Lógica PURA de geometria da rota de evacuação (âncoras das chips, seta de
-// navegação, feature da linha, fallback reto). Sem efeitos. Espelha o estilo de
+// navegação, feature da linha, aviso da rota). Sem efeitos. Espelha o estilo de
 // weatherFormat.ts. Lifted das telas evacuation.tsx / evacuation-ongoing.tsx
 // (DRY entre idle + ongoing).
 import type { Feature, LineString } from 'geojson';
+import type { RouteSnapshot } from './types';
+import type { RouteErrorKind } from './EvacuationProvider';
 
 type Pt = [number, number];
 
@@ -53,13 +55,39 @@ export function bearingDeg(a: Pt, b: Pt): number {
   return deg;
 }
 
-// Fallback reto origem→destino (n pontos) — usado quando a rota real falha, pra o
-// mapa nunca renderizar vazio/quebrado. Porta do antigo fallback do osrm.ts.
-export function straightLine(origin: Pt, destination: Pt, n = 5): Pt[] {
-  const pts: Pt[] = [];
-  for (let i = 0; i < n; i++) {
-    const t = n === 1 ? 0 : i / (n - 1); // guarda n=1 (evita 0/0 = NaN)
-    pts.push([origin[0] + (destination[0] - origin[0]) * t, origin[1] + (destination[1] - origin[1]) * t]);
+// Seta de navegação onde a pessoa ESTÁ (GPS), apontando pro waypoint seguinte
+// ao vértice mais próximo dela. No último vértice o alvo seria ele mesmo, então
+// a seta herda o rumo do último trecho.
+export function navArrowAt(at: Pt, waypoints: Pt[]): { at: Pt; rotation: number } | null {
+  if (waypoints.length < 2) return null;
+  let nearest = 0;
+  let best = Infinity;
+  for (let i = 0; i < waypoints.length; i++) {
+    const d = (waypoints[i][0] - at[0]) ** 2 + (waypoints[i][1] - at[1]) ** 2;
+    if (d < best) { best = d; nearest = i; }
   }
-  return pts;
+  const last = waypoints.length - 1;
+  if (nearest === last) return { at, rotation: bearingDeg(waypoints[last - 1], waypoints[last]) };
+  return { at, rotation: bearingDeg(at, waypoints[nearest + 1]) };
+}
+
+// Aviso da rota pra tela. Erro nunca vem com traçado (o provider apaga a rota),
+// então cada motivo precisa de uma frase que diga o que fazer.
+export function routeNotice(
+  route: RouteSnapshot | null,
+  errorKind: RouteErrorKind,
+): { variant: 'warning' | 'error'; text: string } | null {
+  if (errorKind === 'no-evacuation') {
+    return { variant: 'error', text: 'Nenhuma evacuação em andamento com ponto de encontro.' };
+  }
+  if (errorKind === 'no-position') {
+    return { variant: 'error', text: 'Ative a localização para traçar a rota.' };
+  }
+  if (errorKind === 'failed') {
+    return { variant: 'error', text: 'Não foi possível traçar a rota. Siga as orientações do gestor.' };
+  }
+  if (route?.approximate) {
+    return { variant: 'warning', text: 'Rota aproximada: siga as orientações do gestor.' };
+  }
+  return null;
 }

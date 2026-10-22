@@ -1,8 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   LocationPin,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { MapView } from '@/components/MapView';
@@ -11,9 +13,11 @@ import { MapLineSource } from '@/components/MapLineSource';
 import { MapChipBody } from '@/components/MapChipBody';
 import { NavFABs } from '@/components/NavFABs';
 import { EvacuationAckBar } from '@/components/EvacuationAckBar';
-import { SITE_ROUTE } from '@/services/evacuation/types';
-import { useEvacuation } from '@/services/evacuation/EvacuationProvider';
-import { chipAnchors, chipEtaLabel, lineFeature, navArrow, straightLine } from '@/services/evacuation/routeFormat';
+import { useEvacuationRoute } from '@/services/evacuation/useEvacuationRoute';
+import {
+  chipAnchors, chipEtaLabel, lineFeature, navArrow, navArrowAt, routeNotice,
+} from '@/services/evacuation/routeFormat';
+import { BRAZIL_BOUNDS, boundsAround } from '@/lib/mapGeometry';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 
@@ -25,9 +29,10 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 //
 // On-map geo-anchored children:
 //   - Purple #BC88FF polyline (em-andamento color, vs cyan idle)
-//   - Destination pin only (user IS the origin in this state)
-//   - Navigation arrow marker (teal #50B3D2) at ~30% along the route,
-//     rotated to match bearing toward next waypoint
+//   - Destination pin only (user IS the origin in this state): o ponto de
+//     encontro que o gestor marcou
+//   - Navigation arrow marker (teal #50B3D2) na posição do GPS, apontando pro
+//     próximo waypoint; sem GPS, a ~30% da rota como antes
 //   - 2 time chips ("6 minutos" / "17 minutos") at 35% / 70%
 //
 
@@ -77,27 +82,32 @@ export default function EvacuationOngoing() {
 
 function EvacuationOngoingScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const { route, loadStatus, load } = useEvacuation();
+  const { route, errorKind, coords } = useEvacuationRoute();
 
-  useEffect(() => { load(); }, [load]);
-
-  const waypoints = useMemo<[number, number][] | null>(() => {
-    if (route) return route.waypoints;
-    if (loadStatus === 'error') return straightLine(SITE_ROUTE.origin, SITE_ROUTE.destination);
-    return null;
-  }, [route, loadStatus]);
-
+  // Sem rota não há linha, seta nem chips: navegar por traçado inventado leva
+  // pro lugar errado. O aviso no topo diz o que fazer no lugar.
+  const waypoints = route?.waypoints ?? null;
   const lineShape = useMemo(() => lineFeature(waypoints ?? []), [waypoints]);
-  const arrow = useMemo(() => navArrow(waypoints ?? []), [waypoints]);
+  const arrow = useMemo(
+    () => (coords ? navArrowAt(coords, waypoints ?? []) : navArrow(waypoints ?? [])),
+    [coords, waypoints],
+  );
   const anchors = useMemo(() => chipAnchors(waypoints ?? []), [waypoints]);
+  const notice = routeNotice(route, errorKind);
+
+  // Com rota, o meio do caminho; sem rota, enquadra a pessoa (ou o Brasil) por
+  // `bounds`, porque no web o `center` só vale quando aparece pela 1ª vez.
+  const center = route ? midpoint(route.origin, route.destination) : undefined;
+  const frame = useMemo(
+    () => (coords ? boundsAround([coords]) : null) ?? BRAZIL_BOUNDS,
+    [coords],
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <MapView
-        center={midpoint(SITE_ROUTE.origin, SITE_ROUTE.destination)}
-        zoom={15}
-      >
+      <MapView center={center} zoom={15} bounds={frame}>
         {/* Keys explícitos: children condicionais (lineShape, navArrow,
             chipAnchors) mudam composição do array. Sem keys, React
             reconcilia por posição e maplibre useFrozenId throws quando o
@@ -111,9 +121,11 @@ function EvacuationOngoingScreen() {
             paint={{ color: '#BC88FF', width: 4, opacity: 0.95 }}
           />
         )}
-        <MapMarker key="evacuation-destination" coordinate={SITE_ROUTE.destination} id="evacuation-destination">
-            <LocationPin variant="badge" status="alert" size={40} name="Destino" />
-        </MapMarker>
+        {route && (
+          <MapMarker key="evacuation-destination" coordinate={route.destination} id="evacuation-destination">
+              <LocationPin variant="badge" status="alert" size={40} name="Ponto de encontro" />
+          </MapMarker>
+        )}
         {arrow && (
           <MapMarker key="evacuation-nav-arrow" coordinate={arrow.at} id="evacuation-nav-arrow">
               <NavArrowBody rotationDeg={arrow.rotation} />
@@ -128,6 +140,22 @@ function EvacuationOngoingScreen() {
           <MapMarker key="evacuation-ongoing-chip-2" coordinate={anchors.b} id="evacuation-ongoing-chip-2">
               <MapChipBody text={chipEtaLabel(route?.durationSec, 0.7)} />
           </MapMarker>
+        )}
+
+        {/* Aviso fixo (sem fechar): numa evacuação a frase É a instrução. O
+            Toast é o do DS, como está; `box-none` deixa o toque passar. */}
+        {notice && (
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: 'absolute',
+              top: insets.top + theme.padding.s,
+              left: theme.padding.m,
+              right: theme.padding.m,
+            }}
+          >
+            <Toast variant={notice.variant} title={notice.text} testID="evacuation-route-notice" />
+          </View>
         )}
 
         <NavFABs />
