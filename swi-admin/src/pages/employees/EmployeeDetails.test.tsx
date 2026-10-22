@@ -37,6 +37,10 @@ vi.mock('@/services/api/telemetry', () => ({
     workerCurrent: vi.fn(),
     // O gráfico de gasto calórico tem suíte própria; aqui basta não quebrar.
     workerSeries: vi.fn().mockResolvedValue({ data: null, error: { message: 'sem série' } }),
+    // O histórico de condições tem suíte própria; aqui só se confere que ele entra.
+    workerConditions: vi
+      .fn()
+      .mockResolvedValue({ data: { items: [], nextCursor: null }, error: null }),
   },
 }))
 // Sem o dublê a página abriria um socket de verdade no jsdom.
@@ -312,6 +316,38 @@ describe('EmployeeDetails: vitais do aparelho', () => {
     await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
 
     expect(await screen.findByText('Bateria do relógio: 81%')).toBeInTheDocument()
+  })
+
+  it('o perfil traz o histórico de condições do funcionário com o motivo do fechamento', async () => {
+    getMock.mockResolvedValue({ data: EMPLOYEE, error: null } as never)
+    vi.mocked(telemetryApi.workerConditions).mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 'c1',
+            origin: 'REAL',
+            kind: 'BLOOD_PRESSURE_FATIGUE',
+            category: 'HEALTH',
+            status: 'RECOVERED',
+            openedAt: FIXTURE_AT,
+            recoveredAt: FIXTURE_AT,
+            recoveryReason: 'NO_NEW_READING',
+            observedValue: 150,
+            thresholdValue: 140,
+            receivedAt: null,
+            episodeKind: null,
+          },
+        ],
+        nextCursor: null,
+      },
+      error: null,
+    })
+    await renderPage(<EmployeeDetails />, { route: '/employees/w1', path: '/employees/:id' })
+
+    expect(await screen.findByTestId('condition-history-item-c1')).toHaveTextContent(
+      'Encerrada sem leitura nova',
+    )
+    expect(telemetryApi.workerConditions).toHaveBeenCalledWith('w1')
   })
 })
 

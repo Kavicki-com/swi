@@ -84,6 +84,11 @@ export type ConditionKind =
   /** Travas da calibração individual: o piso de proteção que não aprende. Urgentes. */
   | 'OXYGEN_LOW'
   | 'BLOOD_PRESSURE_HIGH'
+  /**
+   * Três ou mais episódios atrasados do mesmo tipo no mesmo dia monitorado.
+   * Atenção, nasce encerrada e gera alerta; o tipo repetido vem em `episodeKind`.
+   */
+  | 'REPEATED_EPISODES'
 
 /**
  * URGENT é batimento fora da faixa e as travas (oxigenação, pressão, desgaste
@@ -91,6 +96,19 @@ export type ConditionKind =
  * revisar pressão); DEVICE é problema do aparelho, não risco da pessoa.
  */
 export type ConditionCategory = 'URGENT' | 'HEALTH' | 'DEVICE'
+
+/**
+ * Por que uma condição fechou. NORMALIZED, o valor voltou; SIGNAL_LOST, o
+ * aparelho ao vivo silenciou; SIGNAL_RESTORED, o aparelho voltou a falar e
+ * fechou a perda de sinal; NO_NEW_READING, 24 h sem medição nova da métrica;
+ * PROFILE_RETIRED, a regra que abriu saiu de cena com a calibração individual.
+ */
+export type ConditionRecoveryReason =
+  | 'NORMALIZED'
+  | 'SIGNAL_LOST'
+  | 'SIGNAL_RESTORED'
+  | 'NO_NEW_READING'
+  | 'PROFILE_RETIRED'
 
 export type ActiveCondition = {
   kind: ConditionKind
@@ -296,9 +314,44 @@ export type AlertQueueItem = {
     observedValue: number | null
     thresholdValue: number | null
     openedAt: string
-    /** Preenchido quando o valor já normalizou; o alerta segue até ser triado. */
+    /** Preenchido quando a condição já fechou; o alerta segue até ser triado. */
     recoveredAt: string | null
+    /** Por que fechou. Opcional porque um backend anterior responde sem. */
+    recoveryReason?: ConditionRecoveryReason | null
+    /** Só em REPEATED_EPISODES: o tipo que se repetiu. */
+    episodeKind?: ConditionKind | null
   }
+}
+
+/** Uma linha de GET /telemetry/v1/workers/:id/conditions: toda condição, aberta ou fechada. */
+export type ConditionHistoryItem = {
+  id: string
+  origin: TelemetryOrigin
+  kind: ConditionKind
+  category: ConditionCategory
+  status: 'ACTIVE' | 'RECOVERED'
+  /** ISO-8601 de quando abriu: o instante medido, quando a medição chega depois. */
+  openedAt: string
+  recoveredAt: string | null
+  /** Nulo enquanto aberta. */
+  recoveryReason: ConditionRecoveryReason | null
+  observedValue: number | null
+  thresholdValue: number | null
+  /**
+   * ISO-8601 de quando chegou o lote do episódio atrasado (abriu e fechou
+   * dentro do lote da pulseira) e da condição de episódios repetidos. Nulo no
+   * resto, que chega ao vivo.
+   */
+  receivedAt: string | null
+  /** Só em REPEATED_EPISODES: o tipo que se repetiu. */
+  episodeKind: ConditionKind | null
+}
+
+export type ConditionHistoryPage = {
+  /** Mais nova primeiro, 50 por página. */
+  items: ConditionHistoryItem[]
+  /** null quando não há próxima página. */
+  nextCursor: string | null
 }
 
 export type AlertQueuePage = {
@@ -382,6 +435,19 @@ export const telemetryApi = {
     call(
       () => apiFetch<WorkerSeries>(`/telemetry/v1/workers/${id(workerId)}/series?period=${period}`),
       'Falha ao carregar a série',
+    ),
+
+  // Aqui entram também perda de sinal, bateria e o episódio que não virou alerta.
+  workerConditions: (
+    workerId: string,
+    cursor?: string,
+  ): Promise<ServiceResponse<ConditionHistoryPage>> =>
+    call(
+      () =>
+        apiFetch<ConditionHistoryPage>(
+          `/telemetry/v1/workers/${id(workerId)}/conditions${cursor ? `?cursor=${id(cursor)}` : ''}`,
+        ),
+      'Falha ao carregar o histórico de condições',
     ),
 
   alerts: (query: AlertQueueQuery = {}): Promise<ServiceResponse<AlertQueuePage>> => {

@@ -37,7 +37,13 @@ vi.mock('@/services/api/telemetryDevices', () => ({
   },
 }))
 vi.mock('@/services/api/telemetry', () => ({
-  telemetryApi: { workerCurrent: vi.fn(), workerSeries: vi.fn() },
+  telemetryApi: {
+    workerCurrent: vi.fn(),
+    workerSeries: vi.fn(),
+    workerConditions: vi
+      .fn()
+      .mockResolvedValue({ data: { items: [], nextCursor: null }, error: null }),
+  },
 }))
 vi.mock('@/services/telemetry/telemetrySocket', () => ({
   subscribeTelemetryEvents: vi.fn(() => () => {}),

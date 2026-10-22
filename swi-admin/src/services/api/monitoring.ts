@@ -21,6 +21,8 @@ import {
   type AdminWorkerEntry,
   type AlertQueueItem,
   type ConditionCategory,
+  type ConditionKind,
+  type ConditionRecoveryReason,
 } from './telemetry'
 import { NO_VALUE } from '@/services/vitals/vitalsView'
 import { healthStatusFrom } from '@/services/vitals/healthStatus'
@@ -48,7 +50,7 @@ function clock(iso: string): string {
     : `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${time}`
 }
 
-const CATEGORY_LABEL: Record<ConditionCategory, string> = {
+export const CATEGORY_LABEL: Record<ConditionCategory, string> = {
   URGENT: 'Urgente',
   HEALTH: 'Atenção',
   DEVICE: 'Aparelho',
@@ -60,11 +62,39 @@ const CATEGORY_TONE: Record<ConditionCategory, MonitoringAlertDetail['tone']> = 
   DEVICE: 'info',
 }
 
+/**
+ * O motivo de cada fechamento como o histórico o mostra. Os quatro primeiros
+ * nunca se confundem: pulseira que parou de medir não é valor que voltou.
+ */
+export const RECOVERY_REASON_LABEL: Record<ConditionRecoveryReason, string> = {
+  NORMALIZED: 'Normalizada',
+  SIGNAL_LOST: 'Por silêncio',
+  SIGNAL_RESTORED: 'Sinal restabelecido',
+  NO_NEW_READING: 'Encerrada sem leitura nova',
+  PROFILE_RETIRED: 'Regra substituída pela calibração',
+}
+
+// A nota do alerta cuja condição já fechou. Só a normalizada afirma que a
+// leitura voltou; sem motivo conhecido, a nota diz só que fechou.
+const RECOVERY_NOTE: Record<ConditionRecoveryReason, string> = {
+  NORMALIZED: 'Leitura já voltou ao normal',
+  SIGNAL_LOST: 'Encerrada por silêncio',
+  SIGNAL_RESTORED: 'Sinal restabelecido',
+  NO_NEW_READING: 'Encerrada sem leitura nova',
+  PROFILE_RETIRED: 'Encerrada pela calibração',
+}
+
 const round = (n: number) => Math.round(n)
 
-// Título, ícone e frase de cada tipo de condição. Sem valor gravado a frase sai
-// sem número, nunca com um valor inventado.
-function describe(condition: Pick<ActiveCondition, 'kind' | 'observedValue' | 'thresholdValue'>): {
+type DescribedCondition = Pick<ActiveCondition, 'kind' | 'observedValue' | 'thresholdValue'> & {
+  episodeKind?: ConditionKind | null
+}
+
+/**
+ * Título, ícone e frase de cada tipo de condição. Sem valor gravado a frase sai
+ * sem número, nunca com um valor inventado.
+ */
+export function describeCondition(condition: DescribedCondition): {
   title: string
   icon: IconName
   description: string
@@ -165,6 +195,25 @@ function describe(condition: Pick<ActiveCondition, 'kind' | 'observedValue' | 't
         icon: 'warning',
         description: 'O monitoramento parou de receber dados',
       }
+    case 'REPEATED_EPISODES': {
+      // O tipo repetido leva o mesmo rótulo da condição original.
+      const repeated =
+        condition.episodeKind && condition.episodeKind !== 'REPEATED_EPISODES'
+          ? describeCondition({
+              kind: condition.episodeKind,
+              observedValue: null,
+              thresholdValue: null,
+            })
+          : null
+      const tail = 'episódios no mesmo dia, já encerrados quando a pulseira sincronizou'
+      return {
+        title: repeated
+          ? `Episódios repetidos de ${repeated.title.charAt(0).toLowerCase()}${repeated.title.slice(1)}`
+          : 'Episódios repetidos',
+        icon: repeated?.icon ?? 'warning',
+        description: obs !== null ? `${round(obs)} ${tail}` : `Três ou mais ${tail}`,
+      }
+    }
   }
 }
 
@@ -181,12 +230,15 @@ function triageLine(item: AlertQueueItem): string | null {
 
 /** Um alerta da fila como a linha do card o mostra, com o que dá para fazer com ele. */
 export function alertDetailFrom(item: AlertQueueItem): MonitoringAlertDetail {
-  const { title, icon, description } = describe(item.condition)
+  const { title, icon, description } = describeCondition(item.condition)
   const notes = [
     `${CATEGORY_LABEL[item.condition.category]}, aberto às ${clock(item.condition.openedAt)}`,
   ]
-  if (item.condition.recoveredAt) {
-    notes.push(`Leitura já voltou ao normal às ${clock(item.condition.recoveredAt)}`)
+  // Episódios repetidos nascem encerrados: a frase já diz isso.
+  const { recoveredAt, recoveryReason, kind } = item.condition
+  if (recoveredAt && kind !== 'REPEATED_EPISODES') {
+    const note = (recoveryReason && RECOVERY_NOTE[recoveryReason]) ?? 'Condição encerrada'
+    notes.push(`${note} às ${clock(recoveredAt)}`)
   }
   if (item.origin === 'DEMO') notes.push('Dados de demonstração')
   return {
@@ -217,7 +269,7 @@ function deviceLinesFrom(entry: AdminWorkerEntry | undefined): MonitoringAlertDe
       if (entry.telemetry.origin === 'DEMO') notes.push('Dados de demonstração')
       return {
         id: `${entry.worker.id}:${c.kind}`,
-        ...describe(c),
+        ...describeCondition(c),
         tone: CATEGORY_TONE.DEVICE,
         notes,
       }

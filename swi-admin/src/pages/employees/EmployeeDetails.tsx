@@ -12,6 +12,7 @@ import { employeesApi, type Employee } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
 import { WorkerDetailsLayout } from '@/pages/_shared/WorkerDetailsLayout'
 import { DeviceSection, type DeviceState } from '@/pages/employees/DeviceSection'
+import { ConditionHistory } from '@/pages/employees/ConditionHistory'
 import { fullMapPath } from '@/pages/maps/mapFocus'
 import { vitalsViewFrom, type ReadingOptions } from '@/services/vitals/vitalsView'
 import { measurementsViewFrom } from '@/services/vitals/measurementsView'
@@ -111,12 +112,17 @@ export function EmployeeDetails() {
       onBack={() => navigate('/employees')}
       backA11yLabel="Voltar para a lista de funcionários"
       onOpenFullMap={() => navigate(fullMapPath(employee.id))}
+      // O histórico de condições vem logo abaixo do aparelho e independe dele:
+      // as condições de quem já despareou continuam auditáveis.
       deviceSection={
-        <DeviceSection
-          workerId={employee.id}
-          telemetry={telemetry}
-          onDeviceStateChange={setDeviceState}
-        />
+        <>
+          <DeviceSection
+            workerId={employee.id}
+            telemetry={telemetry}
+            onDeviceStateChange={setDeviceState}
+          />
+          <ConditionHistory workerId={employee.id} />
+        </>
       }
       topRightAction={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
