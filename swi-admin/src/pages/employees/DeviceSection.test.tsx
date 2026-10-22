@@ -377,7 +377,7 @@ describe('DeviceSection: aviso à página', () => {
   })
 })
 
-// Celular Android lê a pulseira pelo Health Connect e manda lotes com atraso:
+// Celular Android lê a pulseira pelo Health Connect, com atraso, e manda lotes:
 // não há bateria nem sinal ao vivo, e o último contato é o último lote.
 const androidSeenAt = (lastSeenAt: string | null) => ({
   data: {
@@ -398,7 +398,7 @@ describe('DeviceSection: aparelho por tipo', () => {
       ],
     })
 
-    expect(await screen.findByText('Celular Android com pulseira (Health Connect)')).toBeTruthy()
+    expect(await screen.findByText('Celular Android com pulseira')).toBeTruthy()
     expect(screen.getByText(/Galaxy A54/)).toBeTruthy()
     expect(screen.getByText('Última sincronização às 09:05')).toBeTruthy()
     expect(screen.queryByText(/Último contato/)).toBeNull()
