@@ -313,9 +313,9 @@ describe('MyTelemetryProvider: pedidos fora de ordem e prazo', () => {
 });
 
 describe('MyTelemetryProvider: condição aberta sobrevive ao prazo', () => {
-  // Esconder uma urgência porque a rede caiu seria pior que mostrá-la
-  // atrasada: ela fica até uma leitura nova dizer o contrário.
-  it('urgência continua na tela, sem nenhum valor medido', async () => {
+  // A rede cair não encerra a condição: ela fica na leitura até uma leitura
+  // nova dizer o contrário. Sem batimento válido, porém, não pinta o avatar.
+  it('urgência continua na leitura, sem nenhum valor medido e sem cor', async () => {
     fetchMock.mockResolvedValue(withCondition('URGENT'));
     await render();
 
@@ -324,7 +324,8 @@ describe('MyTelemetryProvider: condição aberta sobrevive ao prazo', () => {
 
     const { telemetry, failed } = last();
     expect(failed).toBe(true);
-    expect(workerStatusOf(telemetry)).toBe('low');
+    expect(telemetry!.conditions.map((c) => c.category)).toEqual(['URGENT']);
+    expect(workerStatusOf(telemetry)).toBe('unknown');
     expect(liveValue(telemetry!.metrics.heartRate)).toBeNull();
     expect(Object.values(telemetry!.metrics).every((m) => m.value === null)).toBe(true);
   });
@@ -336,7 +337,8 @@ describe('MyTelemetryProvider: condição aberta sobrevive ao prazo', () => {
     fetchMock.mockRejectedValue(new Error('offline'));
     await avancar(MY_TELEMETRY_HOLD_MS);
 
-    expect(workerStatusOf(last().telemetry)).toBe('alert');
+    expect(last().telemetry!.conditions.map((c) => c.category)).toEqual(['HEALTH']);
+    expect(workerStatusOf(last().telemetry)).toBe('unknown');
   });
 
   // Relógio descarregado não é funcionário em risco.
@@ -357,7 +359,7 @@ describe('MyTelemetryProvider: condição aberta sobrevive ao prazo', () => {
     fetchMock.mockRejectedValue(new Error('offline'));
     await avancar(MY_TELEMETRY_HOLD_MS + MY_TELEMETRY_REFRESH_MS * 4);
 
-    expect(workerStatusOf(last().telemetry)).toBe('low');
+    expect(last().telemetry!.conditions.map((c) => c.category)).toEqual(['URGENT']);
     expect(last().failed).toBe(true);
   });
 
@@ -414,7 +416,8 @@ describe('MyTelemetryProvider: primeiro e segundo plano', () => {
     await mudarEstado('active');
 
     const { telemetry } = last();
-    expect(workerStatusOf(telemetry)).toBe('alert');
+    expect(telemetry!.conditions.map((c) => c.category)).toEqual(['HEALTH']);
+    expect(workerStatusOf(telemetry)).toBe('unknown');
     expect(liveValue(telemetry!.metrics.heartRate)).toBeNull();
   });
 
@@ -446,7 +449,7 @@ describe('MyTelemetryProvider: primeiro e segundo plano', () => {
     await avancar(MY_TELEMETRY_HOLD_MS);
 
     expect(last()).toMatchObject({ failed: false, loading: true });
-    expect(workerStatusOf(last().telemetry)).toBe('low');
+    expect(last().telemetry!.conditions.map((c) => c.category)).toEqual(['URGENT']);
     expect(liveValue(last().telemetry!.metrics.heartRate)).toBeNull();
   });
 

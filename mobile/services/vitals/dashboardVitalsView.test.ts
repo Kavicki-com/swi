@@ -69,17 +69,18 @@ describe('dashboardVitalsView', () => {
       conditions: [condition('URGENT')],
     });
 
-    it('com falha diz que a leitura está indisponível e mantém o estado', () => {
+    // A condição continua na leitura, mas sem batimento válido não pinta.
+    it('com falha diz que a leitura está indisponível, e o avatar fica neutro', () => {
       const view = dashboardVitalsView(held(), { failed: true });
       expect(view.status).toBe('Leitura indisponível no momento');
-      expect(view.workerStatus).toBe('low');
+      expect(view.workerStatus).toBe('unknown');
       expect(view.heartRate).toBeNull();
     });
 
     it('esperando a leitura nova diz que está carregando', () => {
       const view = dashboardVitalsView(held(), { loading: true });
       expect(view.status).toBe('Carregando leitura');
-      expect(view.workerStatus).toBe('low');
+      expect(view.workerStatus).toBe('unknown');
     });
   });
 
@@ -185,7 +186,7 @@ describe('dashboardVitalsView', () => {
     expect(view.pressureLabel).toBe(`Em ${dayMonth(FIXTURE_OTHER_DAY)}`);
   });
 
-  describe('estado de saúde vem das condições abertas, nunca de um palpite', () => {
+  describe('estado de saúde: batimento válido e condições vigentes', () => {
     it('leitura atual sem condição é bom', () => {
       expect(dashboardVitalsView(reporting()).workerStatus).toBe('good');
     });
@@ -206,7 +207,7 @@ describe('dashboardVitalsView', () => {
       expect(dashboardVitalsView(t).workerStatus).toBe('good');
     });
 
-    // Sem leitura atual ninguém confirma que o funcionário está bem.
+    // Sem batimento válido ninguém confirma como o funcionário está agora.
     it('sem leitura, leitura velha ou falha é neutro', () => {
       expect(dashboardVitalsView(null).workerStatus).toBe('unknown');
       expect(dashboardVitalsView(null, { failed: true }).workerStatus).toBe('unknown');
@@ -218,12 +219,12 @@ describe('dashboardVitalsView', () => {
       ).toBe('unknown');
     });
 
-    it('urgência continua valendo mesmo com a leitura velha', () => {
+    it('urgência aberta com a leitura velha fica neutra: a cor não afirma o agora', () => {
       const t = {
         ...reporting({ heartRate: metric(98, { quality: 'STALE', measuredAt: OLD }) }),
         conditions: [condition('URGENT')],
       };
-      expect(dashboardVitalsView(t).workerStatus).toBe('low');
+      expect(dashboardVitalsView(t).workerStatus).toBe('unknown');
     });
   });
 

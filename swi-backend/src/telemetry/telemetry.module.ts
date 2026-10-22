@@ -3,6 +3,8 @@ import { NotificationModule } from '../notifications/notification.module'
 import { RealtimeModule } from '../realtime/realtime.module'
 import { AlertQueueController } from './alerts/alert-queue.controller'
 import { AlertQueueService } from './alerts/alert-queue.service'
+import { ConditionHistoryController } from './alerts/condition-history.controller'
+import { ConditionHistoryService } from './alerts/condition-history.service'
 import { TelemetryConditionSweepJob } from './alerts/condition-sweep.job'
 import { TelemetryConditionService } from './alerts/condition.service'
 import { TelemetryHealthNotifier } from './alerts/health-notifier'
@@ -44,6 +46,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     TelemetryIngestionController,
     TelemetryQueryController,
     AlertQueueController,
+    ConditionHistoryController,
     CalibrationController,
   ],
   providers: [
@@ -65,6 +68,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     TelemetryConditionService,
     TelemetryConditionSweepJob,
     AlertQueueService,
+    ConditionHistoryService,
     TelemetryIngestionService,
     TelemetryQueryService,
     TelemetryLifecycleService,
