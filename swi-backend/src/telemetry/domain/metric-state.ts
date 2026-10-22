@@ -116,10 +116,14 @@ interface MetricSpec {
 }
 
 export const METRICS: Record<MetricKind, MetricSpec> = {
+  /**
+   * BLUETOOTH_HR só aqui: o perfil padrão de batimento da pulseira (0x180D)
+   * não transmite outra medição que o sistema leia.
+   */
   heartRate: {
     unit: 'bpm',
     freshness: 'VITAL',
-    sources: ['APPLE_WATCH', 'HEALTH_CONNECT'],
+    sources: ['APPLE_WATCH', 'HEALTH_CONNECT', 'BLUETOOTH_HR'],
     retainsExpiredValue: true,
   },
   steps: {
@@ -505,23 +509,47 @@ export function validateRawMeasurement(key: string, raw: unknown): void {
 }
 
 /**
- * Origens que cada celular não tem como trazer. O iPhone lê o relógio e o app
- * Saúde, nunca o Health Connect; o Android lê o Health Connect, nunca o relógio
- * nem o app Saúde. Medição assim é payload trocado ou forjado, e aceitá-la
- * mudaria a régua de atualidade que o tipo do aparelho escolhe.
+ * Origens que cada aparelho não tem como trazer. O iPhone lê o relógio e o app
+ * Saúde, nunca o Health Connect; o Android lê o Health Connect e a pulseira pelo
+ * Bluetooth, nunca o relógio nem o app Saúde. Só o Android lê a pulseira pelo
+ * Bluetooth. Medição assim é payload trocado ou forjado, e aceitá-la mudaria a
+ * régua de atualidade que o tipo do aparelho escolhe.
  */
 const FOREIGN_SOURCES: Partial<Record<DeviceKind, readonly MeasurementSource[]>> = {
-  IPHONE: ['HEALTH_CONNECT'],
+  IPHONE: ['HEALTH_CONNECT', 'BLUETOOTH_HR'],
   ANDROID_PHONE: ['APPLE_WATCH', 'MANUAL_HEALTHKIT'],
+  APPLE_WATCH: ['BLUETOOTH_HR'],
+  EXTERNAL_CUFF: ['BLUETOOTH_HR'],
 }
 
-/** Recusa a medição cuja origem o aparelho que a mandou não tem como ter lido. */
+/**
+ * Se o batimento do evento veio da pulseira pelo Bluetooth. É a origem do dado,
+ * e não o tipo do aparelho, que diz se o evento do Android é ao vivo.
+ */
+export function isBluetoothHeartRateEvent(measurements: object): boolean {
+  const heartRate = (measurements as { heartRate?: { source?: unknown } }).heartRate
+  return heartRate?.source === 'BLUETOOTH_HR'
+}
+
+/**
+ * Recusa a medição cuja origem o aparelho que a mandou não tem como ter lido.
+ *
+ * Evento com batimento do Bluetooth leva só o batimento: ele segue a régua do
+ * ao vivo, e um passo do Health Connect que pegasse carona promoveria o atual
+ * pela régua errada.
+ */
 export function assertSourcesFitDevice(kind: DeviceKind, measurements: object): void {
   const foreign = FOREIGN_SOURCES[kind] ?? []
   for (const [key, measurement] of Object.entries(measurements)) {
     const source = (measurement as { source?: unknown }).source
     if (foreign.includes(source as MeasurementSource)) {
       throw new InvalidMeasurementError(key, `origem ${String(source)} não vem de ${kind}`)
+    }
+  }
+  if (isBluetoothHeartRateEvent(measurements)) {
+    const other = Object.keys(measurements).find((key) => key !== 'heartRate')
+    if (other !== undefined) {
+      throw new InvalidMeasurementError(other, 'evento com batimento BLUETOOTH_HR não leva outra medição')
     }
   }
 }
@@ -590,7 +618,11 @@ export type SnapshotPolicy = 'LIVE_ONLY' | 'LATEST'
  * nunca teria evento ao vivo: o mais recente do lote é o atual dela, e a
  * qualidade continua sendo decidida pela régua de FRESHNESS, então ele aparece
  * como última leitura com horário, nunca como "atual".
+ *
+ * A pulseira lida pelo Bluetooth do mesmo celular fala ao vivo, como o relógio:
+ * por isso a régua sai das medições do evento, e não só do tipo do aparelho.
  */
-export function snapshotPolicyFor(kind: DeviceKind | null): SnapshotPolicy {
+export function snapshotPolicyFor(kind: DeviceKind | null, measurements: object = {}): SnapshotPolicy {
+  if (isBluetoothHeartRateEvent(measurements)) return 'LIVE_ONLY'
   return kind === 'ANDROID_PHONE' ? 'LATEST' : 'LIVE_ONLY'
 }

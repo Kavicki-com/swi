@@ -22,6 +22,8 @@ export type MeasurementSource =
   | 'MANUAL_SWI'
   /** Lido do Health Connect no Android, gravado lá pelo app de uma pulseira. */
   | 'HEALTH_CONNECT'
+  /** Batimento lido direto da pulseira pelo Bluetooth do celular Android, ao vivo. */
+  | 'BLUETOOTH_HR'
   | 'DERIVED'
 
 /** Estado de leitura de uma métrica. Ausência é null, nunca zero. */
