@@ -13,8 +13,10 @@
 // Pareado, o bloco também mostra o estado do relógio que chega na telemetria
 // da página: bateria e as condições de aparelho (bateria baixa, sem sinal).
 // Isso vale só para o iPhone com Apple Watch. O Android lê a pulseira pelo
-// Health Connect e manda lotes com atraso: sem bateria nem sinal ao vivo, e o
-// último contato é a última sincronização (o último lote recebido).
+// Health Connect, com atraso, e pode ler o batimento também por Bluetooth: sem
+// bateria nem sinal ao vivo, e o último contato é a última sincronização (o
+// último lote recebido). No lugar disso, o Android mostra o caminho ativo, a
+// última falha e a lista de prontidão que o app relatou (DeviceReadiness).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { Button, StatusTag, Text, TimeStamp, Title, useTheme } from '@kavicki/swi-design-system'
@@ -22,6 +24,7 @@ import { telemetryDevicesApi, type WorkerDevice } from '@/services/api/telemetry
 import type { MetricState, WorkerTelemetry } from '@/services/api/telemetry'
 import { useDemoToast } from '@/lib/demoToast'
 import { whenLabel } from '@/lib/whenLabel'
+import { DeviceReadiness } from './DeviceReadiness'
 
 /** O que o bloco sabe do aparelho: pareado, sem aparelho, ou não deu para saber. */
 export type DeviceState = 'paired' | 'unpaired' | 'failed'
@@ -296,7 +299,7 @@ export function DeviceSection({
       {signalLost ? <StatusTag status="pending" label="Sem sinal do relógio" /> : null}
       {android ? (
         <Text variant="body.s" color={theme.content.dark}>
-          Celular Android com pulseira (Health Connect)
+          Celular Android com pulseira
         </Text>
       ) : null}
       <Text variant="body.s" color={theme.content.dark}>
@@ -316,6 +319,7 @@ export function DeviceSection({
           {batteryLine(telemetry.metrics.battery)}
         </Text>
       ) : null}
+      {android ? <DeviceReadiness device={device} workerId={workerId} /> : null}
       {confirming ? (
         <>
           <Text variant="body.s" color={theme.content.dark}>
