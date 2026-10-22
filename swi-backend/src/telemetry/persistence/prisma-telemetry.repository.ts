@@ -310,6 +310,36 @@ async function promoteByMetric(
   return promoted
 }
 
+/** Cada métrica que diz a ausência, pela coluna da amostra, e onde o celular guarda a primeira chegada dela. */
+const FIRST_ARRIVALS = [
+  { sample: 'heartRateBpm', device: 'heartRateFirstReceivedAt' },
+  { sample: 'stepDelta', device: 'stepsFirstReceivedAt' },
+  { sample: 'activeEnergyKcal', device: 'activeEnergyFirstReceivedAt' },
+  { sample: 'oxygenSaturationPct', device: 'oxygenSaturationFirstReceivedAt' },
+  { sample: 'systolicMmHg', device: 'bloodPressureFirstReceivedAt' },
+] as const satisfies readonly {
+  sample: keyof NormalizedMeasurements
+  device: keyof Prisma.TelemetryDeviceUncheckedUpdateManyInput
+}[]
+
+/**
+ * Grava no celular Android a primeira chegada de cada métrica que o evento
+ * traz. É dela que a leitura diz "aguardando" ou "não envia", e as amostras
+ * somem pela retenção. O nulo vai no WHERE da própria escrita: dois lotes
+ * juntos não reescrevem a primeira, e depois dela a escrita não casa linha.
+ */
+async function markFirstArrivals(
+  tx: Prisma.TransactionClient,
+  deviceId: string,
+  measured: NormalizedMeasurements,
+  receivedAt: Date,
+): Promise<void> {
+  for (const { sample, device } of FIRST_ARRIVALS) {
+    if (measured[sample] === null) continue
+    await tx.telemetryDevice.updateMany({ where: { id: deviceId, [device]: null }, data: { [device]: receivedAt } })
+  }
+}
+
 /**
  * Promoção da medição avulsa: pressão e temperatura lidas do app Saúde, que
  * chegam pelo iPhone com o horário em que foram medidas.
@@ -474,6 +504,10 @@ export class PrismaTelemetryRepository implements TelemetryRepository {
             payloadHash,
           },
         })
+        // Só o celular Android: a ausência por métrica não se aplica ao iPhone.
+        if (deviceKind === 'ANDROID_PHONE') {
+          await markFirstArrivals(tx, session.deviceId, measured, sample.receivedAt)
+        }
 
         let snapshotPromoted = false
         if (spot) {

@@ -748,6 +748,17 @@ model TelemetryDevice {
   bluetoothListenerStateSince    DateTime?
   bluetoothLastReadingAt         DateTime?
 
+  /// Quando o backend recebeu a primeira amostra de cada métrica deste
+  /// celular Android. Nulo é "nunca chegou". A mais antiga das cinco é a
+  /// primeira sincronização que trouxe alguma métrica, e é dela que a leitura
+  /// conta as 24 h do "não envia". Gravadas na ingestão e nunca reescritas: as
+  /// amostras somem pela retenção, e o fato de a métrica já ter chegado não.
+  heartRateFirstReceivedAt        DateTime?
+  stepsFirstReceivedAt            DateTime?
+  activeEnergyFirstReceivedAt     DateTime?
+  oxygenSaturationFirstReceivedAt DateTime?
+  bloodPressureFirstReceivedAt    DateTime?
+
   sessions TelemetrySession[]
   samples  TelemetrySample[]
 

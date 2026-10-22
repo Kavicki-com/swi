@@ -8,7 +8,9 @@ import type { WorkerMetrics } from './telemetry-projector'
 // do corte em vigor, e faixa ilegível cai na partida em vez de derrubar a
 // leitura.
 
-const state = <T>(value: T | null, unit = ''): MetricState<T> => ({
+// Com `ausencia` nula para caber nas métricas que a carregam; a calibração não a lê.
+const state = <T>(value: T | null, unit = ''): MetricState<T> & { ausencia: null } => ({
+  ausencia: null,
   value,
   quality: value === null ? 'UNAVAILABLE' : 'CURRENT',
   measuredAt: value === null ? null : '2026-09-03T12:00:00.000Z',

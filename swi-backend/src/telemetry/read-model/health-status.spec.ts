@@ -43,6 +43,7 @@ const telemetry = (snap: ProjectionSnapshot | null, conditions: ProjectionCondit
       dayTotals: { steps: null, activeEnergy: null, distance: null },
       assessment: null,
       conditions,
+      absence: null,
     },
     NOW,
   )
