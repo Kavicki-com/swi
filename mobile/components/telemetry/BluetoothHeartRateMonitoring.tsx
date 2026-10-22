@@ -90,19 +90,27 @@ export function BluetoothHeartRateMonitoring({
   const [saveFailed, setSaveFailed] = useState(false);
   // Segura o toque duplo enquanto a folha de permissão está aberta.
   const asking = useRef(false);
+  // A varredura repete o anúncio várias vezes por segundo, e o ouvinte só sai
+  // no commit da troca de fase: escolher fecha a lista na hora, senão um
+  // anúncio tardio a traz de volta depois de limpa.
+  const listening = useRef(false);
 
   // A varredura vive enquanto a fase é `scanning`: ouvinte antes do `scan`,
   // para não perder o primeiro resultado, e a limpeza para tudo (escolha,
   // Parar, 30 s, saída da tela).
   useEffect(() => {
     if (phase !== 'scanning') return;
-    const unsubscribe = ble.onScanResult((result) => setFound((list) => upsert(list, result)));
+    listening.current = true;
+    const unsubscribe = ble.onScanResult((result) => {
+      if (listening.current) setFound((list) => upsert(list, result));
+    });
     ble.scan().catch((error: unknown) => {
       setProblem(scanProblemOf(error));
       setPhase('idle');
     });
     const timer = setTimeout(() => setPhase('done'), SCAN_TIMEOUT_MS);
     return () => {
+      listening.current = false;
       clearTimeout(timer);
       unsubscribe();
       ble.stopScan();
@@ -132,6 +140,8 @@ export function BluetoothHeartRateMonitoring({
   const escolher = async (deviceId: string) => {
     const result = found.find((item) => item.deviceId === deviceId);
     if (!result) return;
+    listening.current = false;
+    setPhase((current) => (current === 'scanning' ? 'done' : current));
     setSaveFailed(false);
     try {
       await store.choose({ deviceId: result.deviceId, name: result.name });
