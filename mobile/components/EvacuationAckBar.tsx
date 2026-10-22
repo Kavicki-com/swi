@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, StatusTag, Text, useTheme } from '@kavicki/swi-design-system';
 import { getEvacuationBackend } from '@/services/evacuation/getEvacuationBackend';
@@ -16,16 +17,21 @@ export function EvacuationAckBar() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Consulta a cada foco, não só na montagem: a tela fica na pilha, e quem
+  // volta pra ela depois do fim da evacuação não pode ver "Confirmar chegada"
+  // de uma evacuação que já acabou.
+  useFocusEffect(useCallback(() => {
     let cancelled = false;
     getEvacuationBackend()
       .getActive()
       .then(
         (a) => { if (!cancelled) setActive(a); },
-        () => { /* sem rede → sem barra; a tela da rota continua útil */ },
+        // Sem rede: fica o que já estava (na 1ª consulta, nada). A tela da
+        // rota continua útil sem a barra.
+        () => {},
       );
     return () => { cancelled = true; };
-  }, []);
+  }, []));
 
   const confirm = useCallback(async () => {
     if (!active || busy) return;
