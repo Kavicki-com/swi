@@ -31,13 +31,36 @@ export const BLE_HEART_RATE_MAX_BPM = 300;
 
 export const BLE_DRAIN_STATE_FILE_NAME = 'ble-heart-rate-drain.v1.json';
 
-/** O que fica em arquivo entre uma rodada e outra. */
-interface DrainState {
+/**
+ * Teto das leituras à espera da fila: 12 h de jornada a uma a cada 5 s. Só
+ * chega perto disso com a fila falhando a jornada inteira.
+ */
+export const BLE_PENDING_MAX = TRACKING_MAX_MS / BLE_SAMPLE_SPACING_MS;
+
+/** Leitura aceita que ainda não entrou na fila de envio. */
+interface PendingSample {
+  sessionId: string;
+  receivedAt: number;
+  bpm: number;
+}
+
+/** A sessão da jornada. */
+interface DrainSession {
   /** Jornada dona da sessão: `userId|startedAt` da janela. */
   journeyKey: string;
   sessionId: string;
   /** Hora (ms) da última leitura aceita; null antes da primeira. */
   lastAcceptedAt: number | null;
+}
+
+/**
+ * O que fica em arquivo entre uma rodada e outra. A caixa do Kotlin entrega
+ * cada leitura uma vez só: o que foi aceito fica aqui até a fila o receber,
+ * para uma fila que falhe não levar as leituras junto.
+ */
+interface DrainState {
+  session: DrainSession | null;
+  pending: PendingSample[];
 }
 
 export interface BluetoothInboxDrainDeps {
@@ -61,19 +84,42 @@ const warn = (what: string, error: unknown) =>
     `[bluetoothInboxDrain] ${what}: ${String((error as { message?: unknown })?.message ?? error)}`,
   );
 
-function parseState(text: string | null): DrainState | null {
-  if (!text) return null;
+const EMPTY_STATE: DrainState = { session: null, pending: [] };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+function parseSession(value: unknown): DrainSession | null {
+  if (!isRecord(value)) return null;
+  const { journeyKey, sessionId, lastAcceptedAt } = value;
+  if (typeof journeyKey !== 'string' || typeof sessionId !== 'string') return null;
+  return { journeyKey, sessionId, lastAcceptedAt: isFiniteNumber(lastAcceptedAt) ? lastAcceptedAt : null };
+}
+
+function parsePending(value: unknown): PendingSample[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is PendingSample =>
+      isRecord(item) &&
+      typeof item.sessionId === 'string' &&
+      isFiniteNumber(item.receivedAt) &&
+      isFiniteNumber(item.bpm),
+  );
+}
+
+function parseState(text: string | null): DrainState {
+  if (!text) return EMPTY_STATE;
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return null;
+    return EMPTY_STATE;
   }
-  if (typeof parsed !== 'object' || parsed === null) return null;
-  const { journeyKey, sessionId, lastAcceptedAt } = parsed as Record<string, unknown>;
-  if (typeof journeyKey !== 'string' || typeof sessionId !== 'string') return null;
-  const last = typeof lastAcceptedAt === 'number' && Number.isFinite(lastAcceptedAt) ? lastAcceptedAt : null;
-  return { journeyKey, sessionId, lastAcceptedAt: last };
+  if (!isRecord(parsed)) return EMPTY_STATE;
+  return { session: parseSession(parsed.session), pending: parsePending(parsed.pending) };
 }
 
 /** O batimento da leitura, ou null se ela não deve virar amostra. */
@@ -91,21 +137,55 @@ function bpmOf(reading: RawHeartRateReading): number | null {
 }
 
 export function createBluetoothInboxDrain(deps: BluetoothInboxDrainDeps): BluetoothInboxDrain {
-  async function readState(): Promise<DrainState | null> {
+  async function readState(): Promise<DrainState> {
     try {
       return parseState(await deps.state.read());
     } catch {
-      return null;
+      return EMPTY_STATE;
     }
   }
 
-  async function writeState(state: DrainState | null): Promise<void> {
+  async function writeState(state: DrainState): Promise<void> {
+    const empty = state.session === null && state.pending.length === 0;
     try {
-      await deps.state.write(state ? JSON.stringify(state) : '');
+      await deps.state.write(empty ? '' : JSON.stringify(state));
     } catch (error) {
-      // As amostras já estão na fila; perder o arquivo custa no máximo uma
-      // sessão nova ou uma leitura a mais dentro dos 5 s.
+      // Perder o arquivo custa no máximo uma sessão nova ou uma leitura a mais
+      // dentro dos 5 s; as leituras à espera da fila seguem só nesta rodada.
       warn('estado não gravado', error);
+    }
+  }
+
+  /** Põe na fila de envio o que espera. Devolve o que não entrou. */
+  async function enqueue(pending: PendingSample[]): Promise<PendingSample[]> {
+    if (pending.length === 0) return pending;
+    try {
+      const events: OutboxEvent[] = [];
+      for (const sample of pending) {
+        events.push({
+          eventId: deps.uuidV4(),
+          monitoringSessionId: sample.sessionId,
+          sequence: await deps.outbox.nextSequence(sample.sessionId),
+          eventTime: new Date(sample.receivedAt).toISOString(),
+          origin: 'REAL',
+          measurements: { heartRate: { value: sample.bpm, unit: 'bpm', source: 'BLUETOOTH_HR' } },
+        });
+      }
+      await deps.outbox.appendMany(events);
+      return [];
+    } catch (error) {
+      // Tudo fica para a próxima rodada. Sequência tirada e não usada só deixa
+      // um buraco na numeração da sessão.
+      warn('fila não recebeu as leituras', error);
+      return pending;
+    }
+  }
+
+  async function forgetSession(sessionId: string): Promise<void> {
+    try {
+      await deps.outbox.forgetSession(sessionId);
+    } catch (error) {
+      warn('contador da sessão não esquecido', error);
     }
   }
 
@@ -127,21 +207,24 @@ export function createBluetoothInboxDrain(deps: BluetoothInboxDrainDeps): Blueto
   }
 
   async function round(): Promise<void> {
-    // Tirar da caixa primeiro: o que sai daqui vai para a fila durável na
-    // mesma rodada, e uma rodada que falhe adiante já não depende do Kotlin.
+    // A caixa entrega cada leitura uma vez só: daqui em diante, o que for
+    // aceito vai para o arquivo de estado antes de tentar a fila.
     const readings = [...deps.ble.rotateReadings()].sort((a, b) => a.receivedAt - b.receivedAt);
     const now = deps.now();
     const window = await deps.window.read();
     const open = isWindowOpen(window, now);
     const stored = await readState();
 
-    let session: DrainState | null = stored;
+    // Sessões que acabaram (jornada nova ou encerrada). O contador delas sai
+    // da fila quando nada delas esperar mais aqui; com evento ainda na fila,
+    // sai com o último (forgetSession).
+    const ended = new Set<string>();
+    let session = stored.session;
     if (window) {
       const journeyKey = `${window.userId}|${window.startedAt}`;
-      if (stored?.journeyKey !== journeyKey) {
-        // Jornada nova: sessão nova, sem herdar a vez da última aceita. O
-        // contador da anterior sai da fila quando o último evento dela sair.
-        if (stored) await deps.outbox.forgetSession(stored.sessionId);
+      if (session?.journeyKey !== journeyKey) {
+        // Jornada nova: sessão nova, sem herdar a vez da última aceita.
+        if (session) ended.add(session.sessionId);
         session = { journeyKey, sessionId: deps.uuidV4(), lastAcceptedAt: null };
       }
     }
@@ -150,7 +233,7 @@ export function createBluetoothInboxDrain(deps: BluetoothInboxDrainDeps): Blueto
     // sessão guardada. Sem sessão guardada não há a quem atribuir.
     const startedAt = window ? Date.parse(window.startedAt) : Number.NEGATIVE_INFINITY;
     const cap = window ? startedAt + TRACKING_MAX_MS : Number.POSITIVE_INFINITY;
-    const events: OutboxEvent[] = [];
+    const fresh: PendingSample[] = [];
     if (session) {
       let last = session.lastAcceptedAt;
       for (const reading of readings) {
@@ -158,22 +241,29 @@ export function createBluetoothInboxDrain(deps: BluetoothInboxDrainDeps): Blueto
         if (last !== null && reading.receivedAt - last < BLE_SAMPLE_SPACING_MS) continue;
         const bpm = bpmOf(reading);
         if (bpm === null) continue;
-        events.push({
-          eventId: deps.uuidV4(),
-          monitoringSessionId: session.sessionId,
-          sequence: await deps.outbox.nextSequence(session.sessionId),
-          eventTime: new Date(reading.receivedAt).toISOString(),
-          origin: 'REAL',
-          measurements: { heartRate: { value: bpm, unit: 'bpm', source: 'BLUETOOTH_HR' } },
-        });
+        fresh.push({ sessionId: session.sessionId, receivedAt: reading.receivedAt, bpm });
         last = reading.receivedAt;
       }
-      if (events.length > 0) await deps.outbox.appendMany(events);
       session = { ...session, lastAcceptedAt: last };
     }
     // A sessão acaba com a janela; vencida (12 h), a janela ainda existe e a
     // sessão fica, para uma rodada atrasada não abrir outra à toa.
-    await writeState(window ? session : null);
+    if (!window && session) {
+      ended.add(session.sessionId);
+      session = null;
+    }
+
+    // Passado o teto, as mais antigas saem primeiro.
+    const waiting = [...stored.pending, ...fresh].slice(-BLE_PENDING_MAX);
+    if (fresh.length > 0) await writeState({ session, pending: waiting });
+    const pending = await enqueue(waiting);
+    await writeState({ session, pending });
+
+    for (const sample of waiting) ended.add(sample.sessionId);
+    if (session) ended.delete(session.sessionId);
+    for (const sessionId of ended) {
+      if (!pending.some((sample) => sample.sessionId === sessionId)) await forgetSession(sessionId);
+    }
 
     if (deps.control.hasDeviceCredential()) {
       let outcome: UploadOutcome | null = null;

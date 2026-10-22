@@ -263,6 +263,65 @@ describe('bluetoothInboxDrain', () => {
     expect(ble.stop).toHaveBeenCalledTimes(1);
   });
 
+  it('fila que lança não perde as leituras tiradas da caixa: entram na rodada seguinte', async () => {
+    const { drain, push, outbox } = setup();
+    const appendMany = jest.spyOn(outbox, 'appendMany').mockRejectedValueOnce(new Error('disco'));
+    push(reading(0, hr(70)), reading(5000, hr(71)));
+    await expect(drain.run()).resolves.toBeUndefined();
+    expect(await outbox.pending()).toEqual([]);
+
+    push(reading(10_000, hr(72)));
+    await drain.run();
+    expect(appendMany).toHaveBeenCalledTimes(2);
+    const events = await outbox.pending();
+    expect(times(events)).toEqual([0, 5000, 10000]);
+    expect(events.map((e) => e.measurements.heartRate?.value)).toEqual([70, 71, 72]);
+  });
+
+  it('contador da fila que lança também não perde as leituras', async () => {
+    const { drain, push, outbox } = setup();
+    jest.spyOn(outbox, 'nextSequence').mockRejectedValueOnce(new Error('disco'));
+    push(reading(0));
+    await drain.run();
+    await drain.run();
+    expect(times(await outbox.pending())).toEqual([0]);
+  });
+
+  it('as leituras à espera da fila sobrevivem ao processo (arquivo de estado)', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const first = setup({ stateStorage, outboxStorage });
+    jest.spyOn(first.outbox, 'appendMany').mockRejectedValueOnce(new Error('disco'));
+    first.push(reading(0));
+    await first.drain.run();
+
+    const second = setup({ stateStorage, outboxStorage });
+    await second.drain.run();
+    expect(times(await second.outbox.pending())).toEqual([0]);
+  });
+
+  it('janela fechada com leituras à espera da fila: ficam guardadas até entrarem', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const open = setup({ stateStorage, outboxStorage });
+    open.push(reading(0));
+    await open.drain.run();
+
+    const closed = setup({ stateStorage, outboxStorage, window: null });
+    jest.spyOn(closed.outbox, 'appendMany').mockRejectedValueOnce(new Error('disco'));
+    closed.push(reading(5000));
+    await closed.drain.run();
+
+    const later = setup({ stateStorage, outboxStorage, window: null });
+    const forget = jest.spyOn(later.outbox, 'forgetSession');
+    await later.drain.run();
+    const events = await later.outbox.pending();
+    expect(times(events)).toEqual([0, 5000]);
+    expect(events[1].monitoringSessionId).toBe(events[0].monitoringSessionId);
+    // Entrou o resto da jornada encerrada: o contador dela pode ir embora.
+    expect(forget).toHaveBeenCalledWith(events[0].monitoringSessionId);
+  });
+
   it('sem credencial enfileira e não toca a rede', async () => {
     const { drain, push, outbox, uploader } = setup({ credential: false });
     push(reading(0));
