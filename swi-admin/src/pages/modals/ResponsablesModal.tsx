@@ -2,18 +2,13 @@
 // Centered modal that lets an author pick 1+ admins to review
 // the report being created.
 //
-// Dois modos:
-//  1. CONTROLADO (props `onConfirm`/`onClose`) — o NewReport monta este overlay
-//     dentro da própria árvore (sem trocar de rota), então o formulário
-//     meio-preenchido NÃO desmonta. `onConfirm` recebe os NOMES dos admins
-//     marcados (o backend guarda responsáveis só como nome), e o pai fecha o
-//     overlay. `initialSelectedNames` pré-marca quem já foi escolhido.
-//  2. FALLBACK (sem props) — segue vivendo na rota /modals/responsables como
-//     antes (navigate(-1) + toast demo), pra não quebrar quem ainda a abrir
-//     como rota.
+// Overlay do "Atribuir responsáveis" do NewReport, como no desenho: o
+// formulário monta este modal dentro da própria árvore (sem trocar de rota),
+// então o relatório meio-preenchido NÃO desmonta. `onConfirm` recebe os NOMES
+// dos admins marcados (o backend guarda responsáveis só como nome), e o pai
+// fecha o overlay. `initialSelectedNames` pré-marca quem já foi escolhido.
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { useNavigate } from 'react-router-dom'
 import {
   Avatar,
   Button,
@@ -25,7 +20,6 @@ import {
   useTheme,
 } from '@kavicki/swi-design-system'
 import { adminsApi, type Admin } from '@/services/admins'
-import { useDemoToast } from '@/lib/demoToast'
 import { formatAge } from '@/lib/formatAge'
 
 function VerticalDivider() {
@@ -104,13 +98,13 @@ function AdminPickRow({
 
 export type ResponsablesModalProps = {
   /**
-   * MODO CONTROLADO. Recebe os NOMES dos admins marcados quando o autor confirma
-   * — o backend guarda responsável só como nome (sem id/avatar). Presente ⇒ o
-   * pai (NewReport) é dono do estado e do fechamento; ausente ⇒ modo rota.
+   * Recebe os NOMES dos admins marcados quando o autor confirma: o backend
+   * guarda responsável só como nome (sem id/avatar). O pai (NewReport) é dono
+   * do estado e do fechamento.
    */
-  onConfirm?: (selectedNames: string[]) => void
-  /** MODO CONTROLADO. Fecha o overlay sem confirmar. Ausente ⇒ navigate(-1). */
-  onClose?: () => void
+  onConfirm: (selectedNames: string[]) => void
+  /** Fecha o overlay sem confirmar. */
+  onClose: () => void
   /**
    * Nomes já atribuídos — chegam pré-marcados. Lido só na MONTAGEM (semente do
    * estado interno). O pai deve remontar o overlay a cada abertura (`key`) pra
@@ -123,10 +117,8 @@ export function ResponsablesModal({
   onConfirm,
   onClose,
   initialSelectedNames,
-}: ResponsablesModalProps = {}) {
+}: ResponsablesModalProps) {
   const theme = useTheme()
-  const navigate = useNavigate()
-  const { show: showToast } = useDemoToast()
   const [admins, setAdmins] = useState<ReadonlyArray<Admin>>([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
@@ -167,26 +159,9 @@ export function ResponsablesModal({
     })
   }
 
-  const dismiss = () => {
-    if (onClose) onClose()
-    else navigate(-1)
-  }
-
   const confirm = () => {
     // Nomes na ordem da lista carregada (estável), não na ordem de clique.
-    const selectedNames = admins.filter((a) => selected.has(a.id)).map((a) => a.name)
-    if (onConfirm) {
-      onConfirm(selectedNames)
-      return
-    }
-    // Fallback (rota standalone): mantém o comportamento demo de antes.
-    showToast(
-      'Responsáveis atribuídos',
-      selectedNames.length === 1
-        ? '1 responsável adicionado ao relatório'
-        : `${selectedNames.length} responsáveis adicionados ao relatório`,
-    )
-    navigate(-1)
+    onConfirm(admins.filter((a) => selected.has(a.id)).map((a) => a.name))
   }
 
   // O CTA fica travado sem ninguém marcado: o overlay existe pra ATRIBUIR, e
@@ -252,7 +227,7 @@ export function ResponsablesModal({
               label="Cancelar"
               variant="outline"
               fullWidth
-              onPress={dismiss}
+              onPress={onClose}
               accessibilityLabel="Cancelar seleção"
             />
           </View>

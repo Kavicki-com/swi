@@ -31,7 +31,6 @@ const REAL_ROUTE_PATHS = new Set<string>([
   '/reports',
   '/reports/:id',
   '/reports/new',
-  '/modals/responsables',
   '/alerts',
   '/alerts/:employeeId',
   '/alerts/:employeeId/rescue',

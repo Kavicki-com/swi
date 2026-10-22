@@ -1,4 +1,4 @@
-// ResponsablesModal — smoke (modo rota) + modo CONTROLADO (onConfirm/onClose).
+// ResponsablesModal: overlay controlado pelo NewReport (onConfirm/onClose).
 // describe/it/expect/beforeEach vêm dos globals do Vitest.
 //
 // adminsApi é mockado: o overlay carrega a lista dele. No modo controlado o
@@ -8,7 +8,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SwiThemeProvider } from '@kavicki/swi-design-system'
 import { AuthProvider } from '@/hooks/useAuth'
-import { seedSession, clearSession, renderPage } from '@/test-utils/renderPage'
+import { seedSession, clearSession } from '@/test-utils/renderPage'
 import { ResponsablesModal } from './ResponsablesModal'
 
 const { listMock } = vi.hoisted(() => ({ listMock: vi.fn() }))
@@ -38,11 +38,16 @@ const MATHIAS = {
   active: true,
 }
 
-function renderControlled(props: {
-  onConfirm?: (names: string[]) => void
+function renderControlled({
+  onConfirm,
+  onClose = vi.fn(),
+  initialSelectedNames,
+}: {
+  onConfirm: (names: string[]) => void
   onClose?: () => void
   initialSelectedNames?: string[]
 }) {
+  const props = { onConfirm, onClose, initialSelectedNames }
   seedSession()
   return render(
     <SwiThemeProvider>
@@ -63,12 +68,6 @@ beforeEach(() => {
 afterEach(clearSession)
 
 describe('ResponsablesModal', () => {
-  it('renders without crashing (modo rota)', async () => {
-    await expect(
-      renderPage(<ResponsablesModal />, { route: '/modals/responsables' }),
-    ).resolves.toBeDefined()
-  })
-
   it('no modo controlado, Continuar devolve os NOMES marcados via onConfirm', async () => {
     const onConfirm = vi.fn()
     renderControlled({ onConfirm, onClose: vi.fn() })

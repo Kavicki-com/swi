@@ -36,9 +36,6 @@ export const ADMIN_ROUTES = [
   // user
   { path: '/user/settings', label: 'user-settings' },
   { path: '/user/profile', label: 'user-profile' },
-  // modals — support + privacy are overlays invoked from Login / UserSettings.
-  // Responsables stays as a route until S5 in-page overlay work.
-  { path: '/modals/responsables', label: 'responsables-modal' },
 ] as const
 
 export type AdminRoute = (typeof ADMIN_ROUTES)[number]

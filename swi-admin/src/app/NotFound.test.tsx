@@ -37,6 +37,15 @@ describe('Página 404', () => {
     await waitFor(() => expect(screen.queryByTestId('not-found')).toBeNull())
   })
 
+  it('a antiga rota solta do modal de responsáveis não existe mais', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-test')
+    window.localStorage.setItem(SESSION_STORAGE_KEY, SEED_SESSION)
+    renderAt('/modals/responsables')
+
+    expect(await screen.findByTestId('not-found')).toBeTruthy()
+    expect(screen.queryByTestId('responsables-modal')).toBeNull()
+  })
+
   it('deslogado, o endereço inexistente segue para o login', async () => {
     renderAt('/endereco-que-nao-existe')
 

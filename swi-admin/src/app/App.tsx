@@ -72,9 +72,6 @@ const ReportDetails = lazy(() =>
 const NewReport = lazy(() =>
   import('@/pages/reports/NewReport').then((m) => ({ default: m.NewReport })),
 )
-const ResponsablesModal = lazy(() =>
-  import('@/pages/modals/ResponsablesModal').then((m) => ({ default: m.ResponsablesModal })),
-)
 const AlertsList = lazy(() =>
   import('@/pages/alerts/AlertsList').then((m) => ({ default: m.AlertsList })),
 )
@@ -215,7 +212,6 @@ export function App() {
                     <Route path="/reports/new" element={<NewReport />} />
                     <Route path="/reports/:id" element={<ReportDetails />} />
                     <Route path="/reports/:id/edit" element={<NewReport />} />
-                    <Route path="/modals/responsables" element={<ResponsablesModal />} />
                     <Route path="/alerts" element={<AlertsList />} />
                     {/* Histórico de resgates (MEL-12). Estática, vence o
                         :employeeId pelo ranking do React Router. */}
@@ -264,7 +260,6 @@ export function App() {
                         r.path !== '/reports' &&
                         r.path !== '/reports/:id' &&
                         r.path !== '/reports/new' &&
-                        r.path !== '/modals/responsables' &&
                         r.path !== '/alerts' &&
                         r.path !== '/alerts/:employeeId' &&
                         r.path !== '/alerts/:employeeId/rescue' &&
