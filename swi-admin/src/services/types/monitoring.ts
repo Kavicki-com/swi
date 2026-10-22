@@ -13,8 +13,8 @@ export type MonitoringKpi = {
 }
 
 /**
- * Em que aba a pessoa cai. Vem das condições abertas e dos alertas ainda não
- * triados, nunca de um palpite: sem leitura atual ninguém é "excelente".
+ * Em que aba a pessoa cai. Vem do estado de saúde e dos alertas ainda não
+ * triados, nunca de um palpite: sem batimento válido ninguém é "excelente".
  */
 export type MonitoringTier = 'excelente' | 'desgastado' | 'alerta-fadiga' | 'sem-leitura'
 
