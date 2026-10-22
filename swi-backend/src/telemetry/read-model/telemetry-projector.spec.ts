@@ -1010,6 +1010,8 @@ describe('projectWorker: condições ativas acompanham a leitura', () => {
         kind: 'HEART_RATE_HIGH',
         category: 'URGENT',
         openedAt: minutesAgo(3),
+        // O batimento do snapshot, que é o que sustenta a condição agora.
+        measuredAt: secondsAgo(5),
         observedValue: 182,
         thresholdValue: 167,
       },

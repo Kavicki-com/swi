@@ -912,6 +912,11 @@ model TelemetrySnapshot {
 
   heartRateBpm        Float?
   heartRateAt         DateTime?
+  /// De onde veio o batimento promovido. Decide se ele é válido para o estado
+  /// do funcionário: o do Health Connect vale até 60 min, o do relógio e o do
+  /// Bluetooth só ao vivo. Nulo nos snapshots anteriores à coluna, e nulo vale
+  /// como ao vivo, a leitura mais estrita.
+  heartRateSource     TelemetryMeasurementSource?
   stepsTotal          Int?
   stepsAt             DateTime?
   activeEnergyKcal    Float?
