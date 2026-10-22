@@ -361,6 +361,12 @@ describe('AlertsList: evacuação real', () => {
     // Dois pinos de trabalhador mais o do ponto de encontro.
     await waitFor(() => expect(h.pins).toHaveLength(3))
     expect(h.pins.map((p) => p.name)).toContain('Ponto de encontro')
+    // O ponto de encontro é o destino, não um trabalhador em risco: não pode
+    // sair da mesma cor de quem ainda não confirmou, senão some no meio deles.
+    const muster = h.pins.find((p) => p.name === 'Ponto de encontro')
+    expect(muster?.status).toBe('good')
+    const naoConfirmaram = h.pins.filter((p) => p.name !== 'Ponto de encontro')
+    expect(naoConfirmaram.map((p) => p.status)).toEqual(['alert', 'alert'])
   })
 
   it('cancelar o desenho não dispara e volta ao botão de iniciar', async () => {

@@ -238,37 +238,43 @@ describe('AlertsRescueRoute: estados da Directions API', () => {
     expect(screen.getByText('4 min')).toBeTruthy()
   })
 
-  it('carregando, a linha provisória fica esmaecida e os rótulos ficam em reticências', async () => {
+  // Enquanto o roteador não responde não existe caminho conhecido, e uma reta
+  // entre as pontas atravessa pátio, viaduto e prédio. Melhor nenhum traçado
+  // que um traçado que ninguém consegue percorrer.
+  it('carregando, não desenha traçado nenhum e avisa que está calculando', async () => {
     h.loading = true
     h.route = null
     await renderRoute()
 
-    await waitFor(() => expect(mapState.layers.has('rescue-route-layer')).toBe(true))
-    expect(mapState.paint['line-opacity']).toBe(0.4)
-    expect(screen.getAllByText('…')).toHaveLength(3)
+    await waitFor(() => expect(screen.getByTestId('alerts-rescue-route-calculando')).toBeTruthy())
+    expect(mapState.layers.has('rescue-route-layer')).toBe(false)
+    expect(screen.queryAllByText('…')).toHaveLength(0)
   })
 
-  it('falha da rota avisa o usuário e ainda estima a distância em linha reta', async () => {
+  it('falha da rota não desenha reta e mostra a faixa fixa de indisponível', async () => {
     h.error = true
     h.route = null
     await renderRoute()
 
-    await waitFor(() => expect(h.toasts).toHaveLength(1))
-    expect(h.toasts[0]?.[0]).toBe('Rota indisponível')
-    expect(screen.getAllByText('—')).toHaveLength(2)
-    // ~0,0141° entre as duas pontas × 111 km/° ≈ 1,6 km.
-    expect(screen.getByText('1.6 Km')).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('alerts-rescue-route-indisponivel')).toBeTruthy())
+    expect(mapState.layers.has('rescue-route-layer')).toBe(false)
+    expect(screen.getByText('Rota indisponível')).toBeTruthy()
+    // Nada de distância estimada em linha reta: sem rota, não há número honesto.
+    expect(screen.queryAllByText('—')).toHaveLength(0)
+    expect(screen.queryByText('1.6 Km')).toBeNull()
   })
 
-  it('o aviso de falha não se repete a cada render', async () => {
+  it('o aviso de falha é fixo: não some nem se duplica a cada render', async () => {
     h.error = true
     h.route = null
     await renderRoute()
-    await waitFor(() => expect(h.toasts).toHaveLength(1))
+    await waitFor(() => expect(screen.getByTestId('alerts-rescue-route-indisponivel')).toBeTruthy())
 
     await forceRerender()
 
-    expect(h.toasts).toHaveLength(1)
+    expect(screen.getAllByTestId('alerts-rescue-route-indisponivel')).toHaveLength(1)
+    // O aviso vive na tela, não num toast que passa.
+    expect(h.toasts).toHaveLength(0)
   })
 })
 

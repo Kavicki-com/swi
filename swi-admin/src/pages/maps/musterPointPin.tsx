@@ -1,6 +1,10 @@
 // Pino do ponto de encontro da evacuação: o mesmo glifo que o app mostra no
 // destino da rota, para o gestor reconhecer na hora o que o trabalhador vê.
 // Serve o rascunho (passo de marcar) e o ponto salvo da evacuação ativa.
+//
+// Status 'good' (verde) de propósito: com evacuação ativa os pinos de quem
+// ainda não confirmou ficam laranja ('alert'), e o ponto de encontro saía da
+// mesma cor, sumindo no meio deles. O ponto é o destino, não alguém em risco.
 import type * as maplibregl from 'maplibre-gl'
 import { LocationPin } from '@kavicki/swi-design-system'
 import { createPinElement } from '@/lib/pinFactory'
@@ -24,7 +28,7 @@ export function buildMusterPin(
     // O pino não é clicável: só mostra onde o ponto está.
     onClick: () => {},
     content: (
-      <LocationPin variant="badge" status="alert" size={MUSTER_PIN_SIZE} name={MUSTER_PIN_NAME} />
+      <LocationPin variant="badge" status="good" size={MUSTER_PIN_SIZE} name={MUSTER_PIN_NAME} />
     ),
     title: MUSTER_PIN_NAME,
   })
