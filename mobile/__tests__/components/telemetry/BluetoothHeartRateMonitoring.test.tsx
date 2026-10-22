@@ -376,11 +376,13 @@ describe('Pulseira no Bluetooth: estado e último batimento', () => {
 describe('Pulseira no Bluetooth: falha ao ligar durante a jornada', () => {
   // A falha vem do ciclo de vida, que a guarda para a tela; aqui ela é
   // provocada pelo próprio hook, com a ponte falsa recusando o `start`.
+  const janelaAberta = async () => true;
   function Ligar({ ble }: { ble: BleHeartRate }) {
     useBluetoothHeartRate(
       { userId: 'u1', journeyState: 'ongoing', journeyKnown: true, paired: true, deviceId: POLAR.deviceId },
       ble,
       true,
+      janelaAberta,
     );
     return null;
   }

@@ -205,9 +205,17 @@ describe('(app)/_layout: pulseira no Bluetooth', () => {
       userId: 'u1',
       journeyState: 'ongoing',
       journeyKnown: true,
+      journeySource: 'server',
       paired: true,
       deviceId: 'A0:00',
     });
+  });
+
+  it('jornada da cópia guardada chega como cópia', () => {
+    mockGateBluetooth = true;
+    mockJourney = { state: 'ongoing', loadStatus: 'ready', source: 'cache' };
+    render();
+    expect(mockBluetooth.mock.lastCall?.[0]).toMatchObject({ journeySource: 'cache' });
   });
 
   it('escolha ainda não lida segue desconhecida; nenhuma escolha vira null', () => {

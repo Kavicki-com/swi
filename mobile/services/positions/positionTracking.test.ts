@@ -259,6 +259,34 @@ describe('createPositionTracking, retomar', () => {
   });
 });
 
+// Quem segue a mesma janela (a escuta da pulseira) pergunta por ela depois do
+// ligar em curso: o abrir da janela pelo GPS vem antes da resposta.
+describe('createPositionTracking, janela aberta', () => {
+  it('responde depois do começar pedido antes', async () => {
+    const { tracking } = setup();
+    const start = tracking.start('u1');
+    await expect(tracking.windowOpenFor('u1')).resolves.toBe(true);
+    await start;
+  });
+
+  it('sem janela, de outra pessoa ou depois das 12 h, fechada', async () => {
+    const { tracking, window, avancar } = setup();
+    await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
+    await window.open('u2', new Date(T0));
+    await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
+    await expect(tracking.windowOpenFor('u2')).resolves.toBe(true);
+    avancar(TRACKING_MAX_MS);
+    await expect(tracking.windowOpenFor('u2')).resolves.toBe(false);
+  });
+
+  it('depois do parar, fechada', async () => {
+    const { tracking } = setup();
+    void tracking.start('u1');
+    void tracking.stop();
+    await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
+  });
+});
+
 describe('LOCATION_TASK_OPTIONS', () => {
   it('precisão alta, iPhone sem pausa automática, Android por serviço que sobrevive ao app fechado', () => {
     expect(LOCATION_TASK_OPTIONS).toMatchObject({
