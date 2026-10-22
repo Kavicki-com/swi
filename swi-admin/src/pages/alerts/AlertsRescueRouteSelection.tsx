@@ -6,7 +6,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Avatar, Button, Chip, Icon, SearchInput, Text, useTheme } from '@kavicki/swi-design-system'
+import {
+  Avatar,
+  Button,
+  Chip,
+  Icon,
+  SearchInput,
+  SkeletonList,
+  Text,
+  useTheme,
+} from '@kavicki/swi-design-system'
 import { rankRescueCandidates, type RescueCandidate } from '@/services/api/rescue'
 import { employeesApi, type Employee } from '@/services/api/users'
 import { useLivePositions } from '@/hooks/useLivePositions'
@@ -87,6 +96,18 @@ export function AlertsRescueRouteSelection() {
           />
         ))}
       </View>
+
+      {/* Posições ainda não chegaram: a forma da lista no lugar do vazio. Sem
+          candidato (ou busca e filtro sem ninguém), a lista diz isso. */}
+      {positions === null ? (
+        <View testID="rescue-candidates-loading">
+          <SkeletonList rows={3} lines={3} avatarSize={64} accessibilityLabel="Carregando" />
+        </View>
+      ) : filtered.length === 0 ? (
+        <Text testID="rescue-candidates-empty" variant="body.m" color={theme.content.medium}>
+          Nenhum funcionário encontrado.
+        </Text>
+      ) : null}
 
       <View style={{ gap: theme.gap.xs }}>
         {filtered.map((c) => (
