@@ -663,6 +663,9 @@ enum TelemetryConditionKind {
   /// Travas da calibração individual (urgentes).
   OXYGEN_LOW
   BLOOD_PRESSURE_HIGH
+  /// Três ou mais episódios atrasados do mesmo tipo no mesmo dia monitorado.
+  /// Nasce recuperada e gera alerta; o tipo repetido fica em episodeKind.
+  REPEATED_EPISODES
 }
 
 enum TelemetryConditionStatus {
@@ -1043,6 +1046,13 @@ model TelemetryCondition {
   /// Dia da calibração individual quando a condição abriu (1 a 30). Nulo
   /// depois do 30º dia válido e na DEMO: é o que leva o selo ao alerta.
   calibrationDay   Int?
+  /// Instante em que chegou o lote que trouxe o episódio atrasado (a condição
+  /// que abriu e fechou dentro do lote da pulseira). Nulo no resto: no que
+  /// chega ao vivo, medido e recebido são o mesmo instante. É por ele que a
+  /// conta dos episódios repetidos reconhece um episódio atrasado.
+  receivedAt       DateTime?
+  /// Só em REPEATED_EPISODES: o tipo do episódio que se repetiu.
+  episodeKind      TelemetryConditionKind?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1052,6 +1062,8 @@ model TelemetryCondition {
   @@index([workerId, status])
   @@index([status, lastSeenAt])
   @@index([sessionId])
+  /// A conta dos episódios repetidos: por funcionário, tipo e dia monitorado.
+  @@index([workerId, kind, firstSeenAt])
 }
 
 /// Triagem humana da condição. É estado separado de propósito: a condição é o

@@ -1511,6 +1511,7 @@ describe('TelemetryConditionService.evaluateBandDay', () => {
       thresholdValue: 165,
       observedValue: 200,
       calibrationDay: 1,
+      receivedAt: NOW,
     })
     expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
     expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
@@ -1566,6 +1567,150 @@ describe('TelemetryConditionService.evaluateBandDay', () => {
 
     expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
     expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+})
+
+describe('TelemetryConditionService.evaluateBandDay: episódios repetidos', () => {
+  // Um episódio atrasado de batimento alto: abre e fecha no mesmo lote.
+  const band = (beats: Array<[number, number]>) => ({
+    workerId: 'worker-1',
+    origin: 'REAL' as const,
+    sessionId: 'session-band',
+    batch: {
+      beats: beats.map(([minAgo, value]) => ({ atMs: minutesAgo(minAgo).getTime(), value })),
+      wear: [],
+      sinceMs: 0,
+    },
+  })
+  const lateEpisode = band([
+    [60, 200],
+    [55, 150],
+  ])
+  // NOW é 12 h UTC de 7/9, 9 h em Brasília: o dia monitorado vai das 3 h UTC
+  // de 7/9 às 3 h UTC de 8/9.
+  const DAY = { gte: new Date('2026-09-07T03:00:00.000Z'), lt: new Date('2026-09-08T03:00:00.000Z') }
+
+  /** Dublê com os episódios atrasados do dia e, se houver, o repetido já gravado. */
+  const withLateEpisodes = (late: Date[], existing: { id: string } | null = null) => {
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockImplementation(async ({ where }: any) =>
+      where.receivedAt === undefined ? [] : late.map((firstSeenAt) => ({ firstSeenAt })),
+    )
+    prisma.telemetryCondition.findFirst = jest.fn().mockResolvedValue(existing)
+    prisma.telemetryCondition.create.mockImplementation(async ({ data }: any) => ({
+      id: data.kind === 'REPEATED_EPISODES' ? 'condition-repeated' : 'condition-history',
+    }))
+    return prisma
+  }
+  const repeatedCreate = (prisma: any) =>
+    prisma.telemetryCondition.create.mock.calls.map((c: any) => c[0].data).find((d: any) => d.kind === 'REPEATED_EPISODES')
+
+  it('conta só os episódios atrasados do mesmo tipo, funcionário, origem e dia monitorado', async () => {
+    const prisma = withLateEpisodes([minutesAgo(60)])
+
+    await service(prisma).evaluateBandDay(lateEpisode, NOW)
+
+    const count = prisma.telemetryCondition.findMany.mock.calls.map((c: any) => c[0]).find((a: any) => a.where.receivedAt)
+    expect(count.where).toEqual({
+      workerId: 'worker-1',
+      origin: 'REAL',
+      kind: 'HEART_RATE_HIGH',
+      receivedAt: { not: null },
+      firstSeenAt: DAY,
+    })
+    expect(count.orderBy).toEqual({ firstSeenAt: 'asc' })
+  })
+
+  it('dois episódios no dia não abrem nada', async () => {
+    const prisma = withLateEpisodes([minutesAgo(120), minutesAgo(60)])
+    const notifier = notifierDouble()
+
+    const outcome = await service(prisma, realtimeDouble(), audienceDouble(), notifier).evaluateBandDay(lateEpisode, NOW)
+
+    expect(outcome).toEqual({ opened: [], recovered: [], alerts: 0 })
+    expect(repeatedCreate(prisma)).toBeUndefined()
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+    expect(notifier.notifyOpened).not.toHaveBeenCalled()
+  })
+
+  it('o terceiro abre a condição nascida recuperada no instante medido do terceiro, com alerta e aviso', async () => {
+    const third = minutesAgo(60)
+    const prisma = withLateEpisodes([minutesAgo(180), minutesAgo(120), third])
+    const realtime = realtimeDouble()
+    const notifier = notifierDouble()
+
+    const outcome = await service(prisma, realtime, audienceDouble(), notifier).evaluateBandDay(lateEpisode, NOW)
+
+    expect(outcome).toEqual({ opened: ['REPEATED_EPISODES'], recovered: [], alerts: 1 })
+    expect(prisma.telemetryCondition.findFirst.mock.calls[0][0].where).toEqual({
+      workerId: 'worker-1',
+      origin: 'REAL',
+      kind: 'REPEATED_EPISODES',
+      episodeKind: 'HEART_RATE_HIGH',
+      firstSeenAt: DAY,
+    })
+    expect(repeatedCreate(prisma)).toEqual({
+      workerId: 'worker-1',
+      sessionId: 'session-band',
+      origin: 'REAL',
+      kind: 'REPEATED_EPISODES',
+      episodeKind: 'HEART_RATE_HIGH',
+      status: 'RECOVERED',
+      firstSeenAt: third,
+      lastSeenAt: third,
+      recoveredAt: third,
+      recoveryReason: 'NORMALIZED',
+      thresholdProfile: CALIBRATED_ALERT_PROFILE_VERSION,
+      thresholdRule: null,
+      thresholdValue: 3,
+      observedValue: 3,
+      calibrationDay: 1,
+      receivedAt: NOW,
+    })
+    // O alerta nasce sem a regra de um pendente por tipo: ela olharia a fila.
+    expect(prisma.operationalAlert.findFirst).not.toHaveBeenCalled()
+    expect(prisma.operationalAlert.create).toHaveBeenCalledWith({
+      data: { conditionId: 'condition-repeated', workerId: 'worker-1', origin: 'REAL', status: 'OPEN' },
+    })
+    const change = {
+      workerId: 'worker-1',
+      conditionId: 'condition-repeated',
+      kind: 'REPEATED_EPISODES',
+      change: 'OPENED',
+      at: NOW.toISOString(),
+    }
+    expect(realtime.emitToUsers).toHaveBeenCalledWith(['worker-1'], 'telemetry.condition.changed', change)
+    expect(notifier.notifyOpened).toHaveBeenCalledWith([change])
+  })
+
+  it('o terceiro é o da hora medida, mesmo quando o lote que chegou por último é mais antigo', async () => {
+    // A pulseira sincronizou o começo do dia depois: o terceiro medido é o de 120.
+    const prisma = withLateEpisodes([minutesAgo(240), minutesAgo(180), minutesAgo(120), minutesAgo(60)])
+
+    await service(prisma).evaluateBandDay(lateEpisode, NOW)
+
+    expect(repeatedCreate(prisma)).toMatchObject({ firstSeenAt: minutesAgo(120), observedValue: 4 })
+  })
+
+  it('com a do dia já gravada, o quarto não repete', async () => {
+    const prisma = withLateEpisodes([minutesAgo(240), minutesAgo(180), minutesAgo(120), minutesAgo(60)], {
+      id: 'condition-old',
+    })
+
+    const outcome = await service(prisma).evaluateBandDay(lateEpisode, NOW)
+
+    expect(outcome.alerts).toBe(0)
+    expect(repeatedCreate(prisma)).toBeUndefined()
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+  })
+
+  it('condição que fica ativa no fim do lote não é episódio atrasado e não entra na conta', async () => {
+    const prisma = withLateEpisodes([minutesAgo(180), minutesAgo(120), minutesAgo(60)])
+
+    await service(prisma).evaluateBandDay(band([[30, 200]]), NOW)
+
+    expect(prisma.telemetryCondition.findMany.mock.calls.some((c: any) => c[0].where.receivedAt)).toBe(false)
+    expect(repeatedCreate(prisma)).toBeUndefined()
   })
 })
 
@@ -1790,6 +1935,7 @@ describe('TelemetryConditionService.sweepNoNewReading: a métrica de cada condi�
       BLOOD_PRESSURE_HIGH: 'systolicMmHg',
       DEVICE_BATTERY_LOW: null,
       DEVICE_SIGNAL_LOST: null,
+      REPEATED_EPISODES: null,
     })
   })
 

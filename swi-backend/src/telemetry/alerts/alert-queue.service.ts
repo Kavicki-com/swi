@@ -41,6 +41,7 @@ const CATEGORY: Readonly<Record<TelemetryConditionKind, AlertCategory>> = {
   BLOOD_PRESSURE_FATIGUE: 'HEALTH',
   OXYGEN_LOW: isUrgent('OXYGEN_LOW') ? 'URGENT' : 'HEALTH',
   BLOOD_PRESSURE_HIGH: isUrgent('BLOOD_PRESSURE_HIGH') ? 'URGENT' : 'HEALTH',
+  REPEATED_EPISODES: 'HEALTH',
   DEVICE_BATTERY_LOW: 'DEVICE',
   DEVICE_SIGNAL_LOST: 'DEVICE',
 }
@@ -77,6 +78,8 @@ export interface AlertQueueItem {
      * uma condição vencida (NO_NEW_READING) seria lido como valor que normalizou.
      */
     recoveryReason: ConditionRecoveryReason | null
+    /** Só em REPEATED_EPISODES: o tipo do episódio que se repetiu, para o rótulo. */
+    episodeKind: TelemetryConditionKind | null
   }
 }
 
@@ -103,6 +106,7 @@ const ALERT_INCLUDE = {
       firstSeenAt: true,
       recoveredAt: true,
       recoveryReason: true,
+      episodeKind: true,
     },
   },
 } satisfies Prisma.OperationalAlertInclude
@@ -138,6 +142,7 @@ function toItem(row: AlertRow): AlertQueueItem {
       openedAt: row.condition.firstSeenAt.toISOString(),
       recoveredAt: iso(row.condition.recoveredAt),
       recoveryReason: row.condition.recoveryReason,
+      episodeKind: row.condition.episodeKind,
     },
   }
 }
