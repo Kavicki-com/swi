@@ -204,6 +204,24 @@ beforeEach(() => {
 
 afterEach(clearSession)
 
+describe('AlertsList: sem posição', () => {
+  it('sem posição nenhuma, o mapa nasce mesmo assim e avisa', async () => {
+    h.positions = []
+    await renderAlerts()
+
+    expect(screen.getByTestId('alerts-no-positions').textContent).toBe('Sem posição ao vivo')
+    // O mapa existe: o clique dele está ligado, e a evacuação pode ser desenhada.
+    expect(mapState.handlers.click?.length).toBeGreaterThan(0)
+    expect(h.pins).toHaveLength(0)
+  })
+
+  it('com posições, não há aviso', async () => {
+    await renderAlerts()
+    await waitFor(() => expect(h.pins).toHaveLength(2))
+    expect(screen.queryByTestId('alerts-no-positions')).toBeNull()
+  })
+})
+
 describe('AlertsList: filtros e busca', () => {
   it('sem filtro, cria um pino por trabalhador', async () => {
     await renderAlerts()
@@ -425,8 +443,31 @@ describe('AlertsList: evacuação real', () => {
     await act(async () => {
       fireEvent.click(screen.getByText('Encerrar evacuação'))
     })
+    // Encerrar pede confirmação antes de chamar o servidor.
+    expect(h.end).not.toHaveBeenCalled()
+    expect(screen.getByText('Encerrar evacuação?')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Encerrar' }))
+    })
 
     expect(h.end).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancelar a confirmação não encerra a evacuação', async () => {
+    h.evacuation = { acked: 0, total: 1, workers: [{ id: 'w1', acked: false }] }
+    await renderAlerts()
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Encerrar evacuação'))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    })
+
+    expect(h.end).not.toHaveBeenCalled()
+    expect(screen.queryByText('Encerrar evacuação?')).toBeNull()
+    expect(screen.getByTestId('evacuation-banner')).toBeTruthy()
   })
 
   it('durante a evacuação, a borda do pino reflete o ACK e não os vitais', async () => {
