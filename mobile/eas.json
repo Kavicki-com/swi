@@ -36,7 +36,8 @@
       "env": {
         "EXPO_PUBLIC_AUTH_BACKEND": "api",
         "EXPO_PUBLIC_DATA_BACKEND": "api",
-        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com"
+        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com",
+        "EXPO_PUBLIC_MEDIA_ORIGINS": "https://c5cacf2d100d6bf7d0bd43eebc686567.r2.cloudflarestorage.com"
       }
     },
     "qa": {
@@ -51,7 +52,8 @@
       "env": {
         "EXPO_PUBLIC_AUTH_BACKEND": "api",
         "EXPO_PUBLIC_DATA_BACKEND": "api",
-        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com"
+        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com",
+        "EXPO_PUBLIC_MEDIA_ORIGINS": "https://c5cacf2d100d6bf7d0bd43eebc686567.r2.cloudflarestorage.com"
       },
       "autoIncrement": true
     },
@@ -65,7 +67,8 @@
       "env": {
         "EXPO_PUBLIC_AUTH_BACKEND": "api",
         "EXPO_PUBLIC_DATA_BACKEND": "api",
-        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com"
+        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com",
+        "EXPO_PUBLIC_MEDIA_ORIGINS": "https://c5cacf2d100d6bf7d0bd43eebc686567.r2.cloudflarestorage.com"
       }
     },
     "production": {
@@ -74,7 +77,8 @@
       "env": {
         "EXPO_PUBLIC_AUTH_BACKEND": "api",
         "EXPO_PUBLIC_DATA_BACKEND": "api",
-        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com"
+        "EXPO_PUBLIC_API_URL": "https://api.kavicki.com",
+        "EXPO_PUBLIC_MEDIA_ORIGINS": "https://c5cacf2d100d6bf7d0bd43eebc686567.r2.cloudflarestorage.com"
       }
     }
   },
