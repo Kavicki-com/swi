@@ -1,12 +1,12 @@
-import type { MetricState, WorkerTelemetry } from '../telemetry/myTelemetry';
+import type { ActiveCondition, MetricState, WorkerTelemetry } from '../telemetry/myTelemetry';
 import { formatEta } from './formatEta';
 import type { WorkerStatus } from './types';
 
 // O que o bloco de vitais do dashboard mostra, decidido a partir da leitura do
 // backend. Função pura: a tela só desenha o que sai daqui. Ausência continua
 // ausência (null), para a tela escrever NO_VALUE em vez de inventar um zero, e
-// a frase de estado descreve a leitura, não a saúde: juízo de saúde vem das
-// condições abertas no backend.
+// a frase de estado descreve a leitura, não a saúde: juízo de saúde é a cor do
+// avatar, pelo batimento válido e pelas condições abertas no backend.
 
 export interface DashboardVitalsView {
   /** Batimento já formatado, ou null sem leitura. */
@@ -28,7 +28,7 @@ export interface DashboardVitalsView {
   sourceBadge: string | null;
   /** Selo das roscas de esforço e desgaste enquanto a régua ainda aprende. */
   calibrationTag: string | null;
-  /** Cor da silhueta: só condição aberta no backend tira o estado de bom. */
+  /** Cor da silhueta: neutra sem batimento válido; com ele, as condições vigentes decidem. */
   workerStatus: WorkerStatus;
 }
 
@@ -181,16 +181,63 @@ function calibrationTagOf(telemetry: WorkerTelemetry): string | null {
   return null;
 }
 
-// Urgência e alerta de saúde valem mesmo com a leitura velha: esconder uma
-// condição aberta seria pior que mostrá-la atrasada. "Bom" exige leitura atual,
-// porque sem ela ninguém confirma que o funcionário está bem. Condição só de
-// aparelho não entra: relógio descarregado não é funcionário em risco.
+// Estado do funcionário, a mesma tabela do backend e do painel. Só existe com
+// batimento válido: sem ele a cor afirmaria o agora com dado velho, e o avatar
+// fica neutro. A condição aberta continua na leitura; o que ela perde é a cor.
+// Condição só de aparelho não entra: relógio descarregado não é funcionário em
+// risco. As idades contam do instante da leitura, não do relógio do aparelho.
+
+/**
+ * O Health Connect chega em lote: 60 min cobrem o ciclo de 30 min do app do
+ * fabricante e a rodada de 15 min do segundo plano. Apple Watch e Bluetooth
+ * são ao vivo e só valem atuais.
+ */
+const HEALTH_CONNECT_VALID_HEART_RATE_MS = HOUR_MS;
+
+const ageMs = (measuredAt: string, observedAt: string) =>
+  Math.max(0, Date.parse(observedAt) - Date.parse(measuredAt));
+
+function hasValidHeartRate(
+  heartRate: Pick<MetricState<number>, 'value' | 'quality' | 'measuredAt' | 'source'>,
+  observedAt: string,
+): boolean {
+  if (heartRate.value === null || heartRate.measuredAt === null) return false;
+  if (heartRate.quality === 'CURRENT') return true;
+  return (
+    heartRate.source === 'HEALTH_CONNECT' &&
+    ageMs(heartRate.measuredAt, observedAt) <= HEALTH_CONNECT_VALID_HEART_RATE_MS
+  );
+}
+
+/**
+ * Por quanto tempo a medição avulsa sustenta a cor, contado da medição. São
+ * prazos só da cor: a régua de exibição (recente até 24 h, histórica até
+ * 72 h) não muda. Batimento e desgaste não estão aqui: pintam junto com o
+ * batimento válido, que o estado já exige.
+ */
+const SPOT_CONDITION_PAINTS_MS: Readonly<Record<string, number>> = {
+  OXYGEN_LOW: 12 * HOUR_MS,
+  OXYGEN_FATIGUE: 12 * HOUR_MS,
+  BLOOD_PRESSURE_HIGH: 6 * HOUR_MS,
+  BLOOD_PRESSURE_REVIEW: 6 * HOUR_MS,
+  BLOOD_PRESSURE_FATIGUE: 6 * HOUR_MS,
+};
+
+function conditionPaints(condition: ActiveCondition, observedAt: string): boolean {
+  const limit = SPOT_CONDITION_PAINTS_MS[condition.kind];
+  if (limit === undefined) return true;
+  return condition.measuredAt != null && ageMs(condition.measuredAt, observedAt) <= limit;
+}
+
 export function workerStatusOf(telemetry: WorkerTelemetry | null): WorkerStatus {
   if (telemetry === null || telemetry.origin === null) return 'unknown';
-  const categories = new Set(telemetry.conditions.map((c) => c.category));
+  const { observedAt } = telemetry;
+  if (!hasValidHeartRate(telemetry.metrics.heartRate, observedAt)) return 'unknown';
+  const painting = telemetry.conditions.filter((c) => conditionPaints(c, observedAt));
+  const categories = new Set(painting.map((c) => c.category));
   if (categories.has('URGENT')) return 'low';
   if (categories.has('HEALTH')) return 'alert';
-  return telemetry.metrics.heartRate.quality === 'CURRENT' ? 'good' : 'unknown';
+  return 'good';
 }
 
 export function dashboardVitalsView(

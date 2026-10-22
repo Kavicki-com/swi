@@ -15,6 +15,7 @@ export type MeasurementSource =
   | 'MANUAL_HEALTHKIT'
   | 'MANUAL_SWI'
   | 'HEALTH_CONNECT'
+  | 'BLUETOOTH_HR'
   | 'DERIVED';
 
 export interface MetricState<T> {
@@ -69,6 +70,12 @@ export interface ActiveCondition {
   category: ConditionCategory;
   /** ISO-8601 de quando a condição abriu. */
   openedAt: string;
+  /**
+   * ISO-8601 da medição mais recente da métrica que sustenta a condição: é
+   * dele que se conta se ela ainda pinta o avatar. Depois do parse é sempre
+   * null ou válido; opcional só para quem monta leitura à mão.
+   */
+  measuredAt?: string | null;
   observedValue: number | null;
   thresholdValue: number | null;
 }
@@ -196,6 +203,11 @@ function parseSync(v: unknown): TelemetrySync | null {
   return { measuredUntil: v.measuredUntil, syncedAt: v.syncedAt };
 }
 
+// O instante medido da condição também é complemento: torto vira null, e a
+// condição só deixa de pintar o avatar, sem sumir da leitura.
+const parseCondition = (c: ActiveCondition): ActiveCondition =>
+  isObject(c) ? { ...c, measuredAt: isIsoDate(c.measuredAt) ? c.measuredAt : null } : c;
+
 // Calibração e origem do repouso também são complemento: dão o selo das
 // roscas, não a leitura. Fora da forma viram null (a calibração inteira) ou
 // somem (uma faixa só), e a leitura segue valendo.
@@ -262,6 +274,7 @@ export async function fetchMyTelemetry(): Promise<WorkerTelemetry> {
   if (!isWorkerTelemetry(data)) throw new Error('Leitura de telemetria fora do contrato');
   return {
     ...data,
+    conditions: data.conditions.map(parseCondition),
     sync: parseSync(data.sync),
     baseline: parseBaseline(data.baseline),
     calibration: parseCalibration(data.calibration),
