@@ -531,9 +531,9 @@ describe('sessão e sequência', () => {
     ]);
   });
 
-  // Visto no emulador (Fase 4): duas leituras de SpO2 no mesmo segundo, e só a
-  // primeira chegou ao painel. É o desenho, não um defeito: a sequência tem
-  // uma vaga por tipo e por segundo, então dois registros do mesmo tipo no
+  // Duas leituras de SpO2 no mesmo segundo: só a primeira chega ao painel, por
+  // desenho. A sequência tem uma vaga por tipo e por segundo, então dois
+  // registros do mesmo tipo no
   // mesmo segundo saem daqui com ids diferentes e a MESMA sequência, e o
   // backend recusa o segundo como conflito de sequência. Este teste prende o
   // contrato; mudar a fórmula mudaria a sequência de toda amostra já enviada.
