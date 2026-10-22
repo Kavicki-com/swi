@@ -1,7 +1,7 @@
 import { AppState, Linking, Platform } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Button, Input, StatusTag, SwiThemeProvider, TopBar } from '@kavicki/swi-design-system';
+import { Button, Input, StatusTag, StepBar, SwiThemeProvider, TopBar } from '@kavicki/swi-design-system';
 import WatchPairing from '../../../../app/(onboarding)/watch/pairing';
 import { isFeatureEnabled, type FeatureGate } from '../../../../lib/featureFlags';
 import { androidDeviceControl } from '../../../../services/telemetry/android/androidDeviceControl';
@@ -164,6 +164,19 @@ const digitar = async (tree: ReturnType<typeof create>, valor: string) => {
   });
 };
 
+const estadoHC = (parcial: Partial<HealthConnectState> = {}): HealthConnectState => ({
+  availability: 'available',
+  permission: null,
+  bandPackage: null,
+  bandLabel: null,
+  noBand: false,
+  lastSyncAt: null,
+  ...parcial,
+});
+
+const comGates = (...ligados: FeatureGate[]) =>
+  mockGate.mockImplementation((gate: FeatureGate) => ligados.includes(gate));
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
@@ -285,7 +298,14 @@ describe('pareamento: concluído', () => {
   });
 });
 
-describe('pareamento: primeiro uso', () => {
+// O primeiro uso do iPhone não muda com o do Android: sem barra de etapas,
+// e as duas saídas vão ao fim do primeiro uso.
+describe('pareamento: primeiro uso no iPhone', () => {
+  it('não mostra a barra de etapas do Android', async () => {
+    const tree = await render();
+    expect(tree.root.findAllByType(StepBar)).toHaveLength(0);
+  });
+
   it('Parear depois segue para o fim do primeiro uso, sem parear', async () => {
     const tree = await render();
     await tocar(tree, 'Parear depois');
@@ -360,18 +380,6 @@ describe('pareamento: iPhone', () => {
   });
 });
 
-const estadoHC = (parcial: Partial<HealthConnectState> = {}): HealthConnectState => ({
-  availability: 'available',
-  permission: null,
-  bandPackage: null,
-  bandLabel: null,
-  noBand: false,
-  lastSyncAt: null,
-  ...parcial,
-});
-
-const comGates = (...ligados: FeatureGate[]) =>
-  mockGate.mockImplementation((gate: FeatureGate) => ligados.includes(gate));
 
 type TagProps = { label?: string; status?: string };
 const tags = (tree: ReturnType<typeof create>) =>
@@ -382,10 +390,69 @@ const tags = (tree: ReturnType<typeof create>) =>
 const MARKET = 'market://details?id=com.google.android.apps.healthdata';
 const PLAY_WEB = 'https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata';
 
+// Primeiro uso no Android (ADR-0013): o pareamento é a primeira etapa, e
+// as duas saídas seguem para o Health Connect, que tem tela própria.
+describe('pareamento: primeiro uso no Android', () => {
+  beforeEach(() => {
+    naPlataforma('android');
+    comGates('healthConnect', 'bluetoothHeartRate');
+  });
+
+  it('é a primeira de três etapas', async () => {
+    const tree = await render();
+    expect(tree.root.findByType(StepBar).props).toMatchObject({ total: 3, current: 1 });
+  });
+
+  it('sem o gate do Bluetooth, é a primeira de duas', async () => {
+    comGates('healthConnect');
+    const tree = await render();
+    expect(tree.root.findByType(StepBar).props).toMatchObject({ total: 2, current: 1 });
+  });
+
+  // Parear depois não é negação: não pareia e não pula o Health Connect.
+  it('Parear depois segue para o Health Connect, sem parear', async () => {
+    const tree = await render();
+    await tocar(tree, 'Parear depois');
+    expect(mockReplace).toHaveBeenCalledWith('/(onboarding)/watch/health-connect');
+    expect(mockConcluir).not.toHaveBeenCalled();
+  });
+
+  it('depois de parear, Continuar segue para o Health Connect', async () => {
+    const tree = await render();
+    await digitar(tree, '482910');
+    await tocar(tree, 'Parear');
+    await tocar(tree, 'Continuar');
+    expect(mockReplace).toHaveBeenCalledWith('/(onboarding)/watch/health-connect');
+  });
+
+  it('não promete movimento ao vivo, antes nem depois de parear', async () => {
+    const tree = await render();
+    expect(texto(tree)).not.toMatch(/ao vivo|tempo real/i);
+    await digitar(tree, '482910');
+    await tocar(tree, 'Parear');
+    expect(texto(tree)).not.toMatch(/ao vivo|tempo real/i);
+  });
+
+  // O passo do Health Connect é a etapa seguinte: repeti-lo aqui seria pedir
+  // a mesma permissão em duas telas seguidas.
+  it('pareado, não mostra o passo do Health Connect nesta tela', async () => {
+    comEnvio({ healthConnect: estadoHC() });
+    const tree = await render();
+    await digitar(tree, '482910');
+    await tocar(tree, 'Parear');
+    expect(texto(tree)).toContain('Aparelho pareado');
+    expect(botao(tree, 'Permitir leitura')).toBeUndefined();
+    expect(mockConferir).not.toHaveBeenCalled();
+  });
+});
+
+// Vindo de Configurações, Monitoramento, o passo do Health Connect continua
+// logo depois de parear, na mesma tela, como antes do primeiro uso novo.
 describe('pareamento: Android', () => {
   beforeEach(() => {
     naPlataforma('android');
     comGates('healthConnect');
+    mockParams = { origem: 'configuracoes' };
   });
 
   // Pareia direto: cada teste do passo do Health Connect começa daqui.
@@ -563,7 +630,7 @@ describe('pareamento: Android', () => {
     expect(mockSyncNow).not.toHaveBeenCalled();
 
     await tocar(tree, 'Continuar');
-    expect(mockReplace).toHaveBeenCalledWith('/(onboarding)/watch/complete');
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
   // A permissão de segundo plano concedida só vale na próxima mudança de

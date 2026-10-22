@@ -142,6 +142,7 @@ const IPHONE: Wiring = { control: undefined, deps: undefined, reader: null };
 const HEALTH_CONNECT_FIELDS: Record<keyof HealthConnectState, true> = {
   availability: true,
   permission: true,
+  backgroundPermission: true,
   bandPackage: true,
   bandLabel: true,
   noBand: true,

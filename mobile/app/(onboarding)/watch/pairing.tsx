@@ -3,11 +3,16 @@ import { Image, Platform, View } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Input, Text, Title, TopBar, useTheme } from '@kavicki/swi-design-system';
+import { Button, Input, StepBar, Text, Title, TopBar, useTheme } from '@kavicki/swi-design-system';
 import { HealthConnectPairingStep } from '../../../components/pairing/HealthConnectPairingStep';
 import { ProdOnlyPlaceholder } from '../../../components/ProdOnlyPlaceholder';
 import { isFeatureEnabled } from '../../../lib/featureFlags';
 import { androidDeviceControl } from '../../../services/telemetry/android/androidDeviceControl';
+import {
+  androidFirstUseProgress,
+  FIRST_USE_END,
+  nextAndroidFirstUseRoute,
+} from '../../../services/telemetry/androidFirstUse';
 import { completeEnrollment, type PhoneKind } from '../../../services/telemetry/deviceEnrollment';
 import { pairingCopy, pairingFailureCopy } from '../../../services/telemetry/telemetryCopy';
 import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUploadProvider';
@@ -25,9 +30,13 @@ import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUp
 // Connect: a permissão de leitura e a primeira sincronização. Nos dois, esta
 // tela só sabe se pareou; no Android, ela ainda avisa o leitor do Health
 // Connect do pareamento novo, antes de o envio reler a credencial.
+//
+// No primeiro uso do Android esta é a primeira etapa da ADR-0013
+// (androidFirstUse.ts): o Health Connect vem na tela seguinte, para as duas
+// saídas, e não aqui. Vindo de Configurações, o passo dele continua logo
+// depois de parear, nesta mesma tela.
 
 const CODE_LENGTH = 6;
-const FIM_DO_PRIMEIRO_USO = '/(onboarding)/watch/complete';
 
 export default function WatchPairing() {
   if (!isFeatureEnabled('appleWatchPilot') && !isFeatureEnabled('healthConnect')) {
@@ -48,6 +57,7 @@ function WatchPairingScreen() {
   const naPulseira = Platform.OS === 'android' && isFeatureEnabled('healthConnect');
   const aparelho: PhoneKind = naPulseira ? 'ANDROID_PHONE' : 'IPHONE';
   const copy = pairingCopy(aparelho);
+  const primeiroUsoAndroid = naPulseira && !deConfiguracoes;
 
   const [codigo, setCodigo] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -100,7 +110,8 @@ function WatchPairingScreen() {
 
   const seguir = () => {
     if (deConfiguracoes) router.back();
-    else router.replace(FIM_DO_PRIMEIRO_USO);
+    else if (primeiroUsoAndroid) router.replace(nextAndroidFirstUseRoute('pairing'));
+    else router.replace(FIRST_USE_END);
   };
 
   return (
@@ -125,6 +136,7 @@ function WatchPairingScreen() {
         showsVerticalScrollIndicator={false}
       >
         {deConfiguracoes && <TopBar title="Parear aparelho" onBack={() => router.back()} />}
+        {primeiroUsoAndroid && <StepBar {...androidFirstUseProgress('pairing')} />}
 
         {pareado ? (
           <>
@@ -136,7 +148,7 @@ function WatchPairingScreen() {
                 {copy.pareadoCorpo}
               </Text>
             </View>
-            {naPulseira && <HealthConnectPairingStep />}
+            {naPulseira && deConfiguracoes && <HealthConnectPairingStep pareado />}
           </>
         ) : (
           <>

@@ -201,8 +201,9 @@ describe('primeiro uso, tela de conexao', () => {
 
 // No Android com o Health Connect o monitoramento vem da pulseira, nao do
 // relogio: o controle do relogio responde "sem suporte" ali, e o primeiro uso
-// dizia que o aparelho nao monitora. A entrada agora leva ao pareamento, que
-// tem o passo do Health Connect e a saida "Parear depois".
+// dizia que o aparelho nao monitora. A entrada agora leva ao pareamento, a
+// primeira etapa do primeiro uso do Android (ADR-0013), com a saida "Parear
+// depois"; quem ja esta pareado comeca pelo Health Connect.
 describe('primeiro uso, tela de conexao: Android com o Health Connect', () => {
   beforeEach(() => {
     naPlataforma('android');
@@ -217,10 +218,10 @@ describe('primeiro uso, tela de conexao: Android com o Health Connect', () => {
     expect(mockAtivar).not.toHaveBeenCalled();
   });
 
-  it('ja pareado, vai direto ao fim do primeiro uso', async () => {
+  it('ja pareado, pula o pareamento e vai ao Health Connect', async () => {
     envio(true);
     const tree = await render(SEM_SUPORTE);
-    expect(redirecionamentos(tree)).toEqual(['/(onboarding)/watch/complete']);
+    expect(redirecionamentos(tree)).toEqual(['/(onboarding)/watch/health-connect']);
   });
 
   it('sem o gate do Health Connect, o Android segue como antes', async () => {

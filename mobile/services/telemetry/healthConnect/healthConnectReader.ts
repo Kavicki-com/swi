@@ -12,6 +12,7 @@ import {
   type HealthConnectRecordType,
 } from './healthConnectMapping';
 import {
+  BACKGROUND_ACCESS_PERMISSION,
   HEALTH_CONNECT_MAX_PAGES,
   healthConnectSource,
   type HealthConnectAvailability,
@@ -123,6 +124,12 @@ export interface HealthConnectState {
   availability: HealthConnectAvailability | null;
   /** Permissão de ler batimento; nula antes de saber (ou sem Health Connect). */
   permission: HealthConnectPermission | null;
+  /**
+   * Permissão de ler com o app fora da tela, que vem no mesmo pedido da
+   * leitura mas pode ficar de fora. Nula antes de saber (ou sem Health
+   * Connect); ausente em estado montado à mão, que não a conhece.
+   */
+  backgroundPermission?: HealthConnectPermission | null;
   bandPackage: string | null;
   bandLabel: string | null;
   /** A última leitura das 48 h não achou batimento nenhum. */
@@ -300,6 +307,9 @@ const fromHealthConnect = (event: OutboxEvent) =>
 const permissionOf = (granted: readonly string[]): HealthConnectPermission =>
   granted.includes('HeartRate') ? 'granted' : 'denied';
 
+const backgroundPermissionOf = (granted: readonly string[]): HealthConnectPermission =>
+  granted.includes(BACKGROUND_ACCESS_PERMISSION) ? 'granted' : 'denied';
+
 const sameTypes = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((type, i) => type === b[i]);
 
@@ -331,6 +341,9 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
   // e são perguntadas de novo a cada rodada.
   let availability: HealthConnectAvailability | null = null;
   let permission: HealthConnectPermission | null = null;
+  // Anda junto da permissão de leitura, com a mesma versão: as duas saem da
+  // mesma consulta.
+  let backgroundPermission: HealthConnectPermission | null = null;
   // Sobe a cada `requestPermissions` concluído. A rodada guarda o valor do
   // início e só escreve `permission` se ele não mudou: a consulta dela pode ter
   // sido respondida antes da concessão, e desfaria a resposta mais nova.
@@ -474,8 +487,10 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
 
   async function round(at: number): Promise<number> {
     const version = permissionVersion;
-    const setPermission = (value: HealthConnectPermission | null) => {
-      if (permissionVersion === version) permission = value;
+    const setPermission = (granted: readonly string[] | null) => {
+      if (permissionVersion !== version) return;
+      permission = granted === null ? null : permissionOf(granted);
+      backgroundPermission = granted === null ? null : backgroundPermissionOf(granted);
     };
     try {
       availability = await source.availability();
@@ -485,7 +500,7 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       }
       const granted = await source.grantedPermissions();
       const roundPermission = permissionOf(granted);
-      setPermission(roundPermission);
+      setPermission(granted);
       // Sem batimento não há pulseira a detectar nem monitoramento a fazer.
       // A rodada decide pela própria consulta; se um pedido concedeu no meio,
       // ele já liberou a próxima rodada do intervalo.
@@ -550,6 +565,7 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       return {
         availability,
         permission,
+        backgroundPermission,
         bandPackage,
         bandLabel: bandLabelOf(bandPackage),
         noBand: persisted?.noBand ?? false,
@@ -576,8 +592,10 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
     },
 
     async requestPermissions() {
-      const result = permissionOf(await source.requestPermissions());
+      const granted = await source.requestPermissions();
+      const result = permissionOf(granted);
       permission = result;
+      backgroundPermission = backgroundPermissionOf(granted);
       permissionVersion += 1;
       // Negado não libera: a próxima rodada não leria nada de qualquer jeito.
       if (result === 'granted') intervalFree = true;
@@ -590,13 +608,15 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       // em curso (com uma consulta de antes da volta dos ajustes) não
       // desfazer a resposta mais nova.
       const version = permissionVersion;
-      const setPermission = (value: HealthConnectPermission | null) => {
+      const setPermission = (granted: readonly string[] | null) => {
         if (permissionVersion !== version) return;
+        const value = granted === null ? null : permissionOf(granted);
         // Concedida agora e não antes (voltou dos ajustes): o momento de ler,
         // sem esperar os 15 min. Já concedida e só conferida de novo, a cada
         // volta ao primeiro plano, não pula o intervalo outra vez.
         if (value === 'granted' && permission !== 'granted') intervalFree = true;
         permission = value;
+        backgroundPermission = granted === null ? null : backgroundPermissionOf(granted);
         permissionVersion += 1;
       };
       // A porta promete nunca rejeitar; o `catch` é para a tela nunca receber
@@ -607,7 +627,7 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
         return availability;
       }
       try {
-        setPermission(permissionOf(await source.grantedPermissions()));
+        setPermission(await source.grantedPermissions());
       } catch {
         // Sem resposta sobre as permissões não se afirma nada novo: fica a
         // última que se sabia, e a próxima rodada pergunta de novo.

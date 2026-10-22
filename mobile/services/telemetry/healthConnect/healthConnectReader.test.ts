@@ -799,6 +799,75 @@ describe('disponibilidade e permissão', () => {
   });
 });
 
+// O primeiro uso mostra a leitura em segundo plano como passo à parte: ela
+// vem no mesmo pedido da leitura, mas a pessoa pode deixá-la de fora, e sem
+// ela a tarefa do segundo plano nem é registrada.
+describe('leitura em segundo plano', () => {
+  it('a rodada lê a permissão de segundo plano do conjunto concedido', async () => {
+    const m = montar();
+    await m.reader.run();
+    expect((await m.reader.state()).backgroundPermission).toBe('granted');
+  });
+
+  it('leitura concedida sem a de segundo plano: denied só no segundo plano', async () => {
+    const m = montar();
+    m.source.grantedPermissions.mockResolvedValueOnce([...HEALTH_CONNECT_RECORD_TYPES]);
+    await m.reader.run();
+    expect(await m.reader.state()).toMatchObject({
+      permission: 'granted',
+      backgroundPermission: 'denied',
+    });
+  });
+
+  it('o pedido atualiza a permissão de segundo plano com o que voltou', async () => {
+    const m = montar();
+    m.source.requestPermissions.mockResolvedValueOnce(['HeartRate']);
+    await m.reader.requestPermissions();
+    expect(await m.reader.state()).toMatchObject({
+      permission: 'granted',
+      backgroundPermission: 'denied',
+    });
+  });
+
+  it('concedida nos ajustes: checkAccess vê o segundo plano', async () => {
+    const m = montar();
+    m.source.grantedPermissions.mockResolvedValueOnce(['HeartRate']);
+    await m.reader.run();
+    expect((await m.reader.state()).backgroundPermission).toBe('denied');
+
+    await m.reader.checkAccess();
+
+    expect((await m.reader.state()).backgroundPermission).toBe('granted');
+  });
+
+  it.each(['unavailable', 'update_required'] as const)(
+    'sem Health Connect (%s), o segundo plano volta a nulo',
+    async (status) => {
+      const m = montar();
+      await m.reader.run();
+      m.source.availability.mockResolvedValueOnce(status);
+      await m.reader.checkAccess();
+      expect((await m.reader.state()).backgroundPermission).toBeNull();
+    },
+  );
+
+  it('a rodada não desfaz o segundo plano de um pedido que terminou depois de ela começar', async () => {
+    const m = montar();
+    let responder: (granted: string[]) => void = () => undefined;
+    m.source.grantedPermissions.mockImplementationOnce(
+      () => new Promise<string[]>((resolve) => (responder = resolve)),
+    );
+
+    const rodada = m.reader.run();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await m.reader.requestPermissions();
+    responder(['HeartRate']);
+    await rodada;
+
+    expect((await m.reader.state()).backgroundPermission).toBe('granted');
+  });
+});
+
 describe('run: ritmo, falhas e concorrência', () => {
   it('no máximo uma rodada a cada 15 min, contados do início da tentativa', async () => {
     const m = montar();
@@ -1030,6 +1099,7 @@ describe('state', () => {
     expect(await m.reader.state()).toEqual({
       availability: null,
       permission: null,
+      backgroundPermission: null,
       bandPackage: null,
       bandLabel: null,
       noBand: false,
@@ -1044,6 +1114,7 @@ describe('state', () => {
     expect(await m.reader.state()).toEqual({
       availability: 'available',
       permission: 'granted',
+      backgroundPermission: 'granted',
       bandPackage: PULSEIRA,
       bandLabel: 'Zepp',
       noBand: false,
