@@ -338,12 +338,13 @@ export class TelemetryConditionService {
     // conjunto de condições do funcionário e da origem.
     await this.lockWorkerOrigin(tx, session)
 
-    const [active, { maxBpm, restingBpm }] = await Promise.all([
+    const [active, { maxBpm, restingBpm }, paused] = await Promise.all([
       tx.telemetryCondition.findMany({
         where: { workerId: session.workerId, origin: session.origin, status: 'ACTIVE' },
         select: { id: true, kind: true },
       }),
       this.heartRateBaselineOf(tx, session, now),
+      this.alertsPaused(tx, session.workerId),
     ])
     const thresholds = await loadThresholds(tx, session.workerId, maxBpm)
     const activeByKind = new Map(active.map((c) => [c.kind, c]))
@@ -371,6 +372,11 @@ export class TelemetryConditionService {
         changes.push(changeOf(session.workerId, row.id, kind, 'RECOVERED', now))
         continue
       }
+
+      // Com os alertas pausados, nenhum episódio novo é gravado, nem o que já
+      // nasce recuperado: ele contaria para os episódios repetidos depois da
+      // retomada, e a pausa não retroage. O que já estava aberto fecha acima.
+      if (paused) continue
 
       const firstSeenAt = new Date(episode.openedAtMs)
       if (episode.recoveredAtMs !== null) {
@@ -838,8 +844,13 @@ export class TelemetryConditionService {
       await tx.telemetryCondition.update({ where: { id: row.id }, data: { lastSeenAt: now } })
     }
 
-    for (const decision of decisions) {
-      if (decision.action !== 'OPEN') continue
+    // Pausa dos alertas: as recuperações e o carimbo acima seguem o ciclo
+    // normal, só nada novo abre. Lida só quando há o que abrir, para o lote
+    // comum não pagar a consulta.
+    const opens = decisions.filter((d) => d.action === 'OPEN')
+    const paused = opens.length > 0 && (await this.alertsPaused(tx, session.workerId))
+
+    for (const decision of paused ? [] : opens) {
       // A escrita é crua, e a mesma da varredura de silêncio: o motivo de ela
       // ser crua está em insertCondition, junto do SQL.
       const createdId = await this.insertCondition(tx, session, now, {
@@ -1049,6 +1060,11 @@ export class TelemetryConditionService {
     // varredura roda a cada 30 s e o silêncio dura minutos.
     if (active.some((row) => row.kind === 'DEVICE_SIGNAL_LOST')) return result
 
+    // Com os alertas pausados, a perda de sinal também não abre: quem está de
+    // férias tira o relógio, e o aviso à administração seria o ruído que a
+    // pausa existe para calar. As recuperações acima já correram.
+    if (await this.alertsPaused(tx, session.workerId)) return result
+
     // Sem alerta de propósito: aparelho fora do alcance é estado do
     // funcionário, não item de fila. DEVICE_SIGNAL_LOST não está em
     // ALERTING_KINDS, e openAlert nem chega a ser chamado aqui.
@@ -1186,6 +1202,22 @@ export class TelemetryConditionService {
         this.logger.warn(`Falha ao anunciar condição ${change.conditionId}: ${describeError(error)}`)
       }
     }
+  }
+
+  /**
+   * Pausa dos alertas do funcionário (férias, afastamento), ligada pelo
+   * painel. Com ela, nenhuma condição nova nasce para ele, de tipo nenhum, e
+   * por isso nenhum alerta nem notificação de saúde. A telemetria continua
+   * gravada, e o que já estava aberto segue o ciclo normal: recupera pela
+   * banda, pelo silêncio ou pelo vencimento, e o alerta dele continua na fila.
+   *
+   * Lida dentro da transação, depois do lock: vale o estado do instante da
+   * avaliação. Retomar não retroage: o que chegou durante a pausa não é
+   * reavaliado, e o próximo lote decide como qualquer outro.
+   */
+  private async alertsPaused(tx: Prisma.TransactionClient, workerId: string): Promise<boolean> {
+    const worker = await tx.user.findUnique({ where: { id: workerId }, select: { monitoringPausedAt: true } })
+    return worker !== null && worker.monitoringPausedAt !== null
   }
 
   /**

@@ -375,6 +375,9 @@ export class UsersService {
       role: u.role,
       approvalStatus: u.approvalStatus,
       active: u.active,
+      // Pausa dos alertas (toggle do Monitoramento): ISO de quando começou, ou
+      // nulo com os alertas ligados. Muda pela rota da telemetria, não aqui.
+      monitoringPausedAt: u.monitoringPausedAt ? u.monitoringPausedAt.toISOString() : null,
       jobTitle: u.profile?.jobTitle ?? '',
       sector: u.profile?.sector ?? '',
       // Tipo sanguíneo REAL do Profile, que o worker ou o admin edita no

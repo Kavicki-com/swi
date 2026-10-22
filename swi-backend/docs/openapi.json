@@ -3306,6 +3306,78 @@
         ]
       }
     },
+    "/telemetry/v1/workers/{id}/monitoring-pause": {
+      "put": {
+        "operationId": "MonitoringPauseController_pause",
+        "summary": "",
+        "description": "Pausa os alertas: a telemetria segue gravada, nenhuma condição nova nasce.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/alerts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "MonitoringPauseController_resume",
+        "summary": "",
+        "description": "Retoma os alertas a partir de agora, sem olhar o que chegou durante a pausa.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/alerts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/companies": {
       "get": {
         "operationId": "CompaniesController_list",

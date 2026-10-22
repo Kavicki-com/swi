@@ -8,6 +8,8 @@ import { ConditionHistoryService } from './alerts/condition-history.service'
 import { TelemetryConditionSweepJob } from './alerts/condition-sweep.job'
 import { TelemetryConditionService } from './alerts/condition.service'
 import { TelemetryHealthNotifier } from './alerts/health-notifier'
+import { MonitoringPauseController } from './alerts/monitoring-pause.controller'
+import { MonitoringPauseService } from './alerts/monitoring-pause.service'
 import { TelemetryAssessmentService } from './assessment/assessment.service'
 import { SparseAssessmentService } from './assessment/sparse-assessment.service'
 import { CalibrationJob } from './calibration/calibration.job'
@@ -48,6 +50,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     AlertQueueController,
     ConditionHistoryController,
     CalibrationController,
+    MonitoringPauseController,
   ],
   providers: [
     DeviceAuthService,
@@ -69,6 +72,7 @@ import { TelemetryAudienceService } from './realtime/telemetry-audience.service'
     TelemetryConditionSweepJob,
     AlertQueueService,
     ConditionHistoryService,
+    MonitoringPauseService,
     TelemetryIngestionService,
     TelemetryQueryService,
     TelemetryLifecycleService,
