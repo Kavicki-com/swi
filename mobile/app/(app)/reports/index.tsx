@@ -9,23 +9,22 @@ import {
   Pagination,
   ReportCard,
   SearchInput,
+  Text,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { NavFABs } from '../../../components/NavFABs';
 import { ReportsListState } from '../../../components/reports/ReportsListState';
 import { useReports } from '../../../services/reports/ReportsProvider';
 import type { Report } from '../../../services/reports/types';
+import { matchesSearch } from '../../../lib/searchText';
 
 // scrollable ReportCard list + Pagination + 2 FABs (chat + home).
 // Todos os cartões do servidor navegam pra /reports/[id].
 //
 // Busca e paginação acontecem sobre a lista já carregada: o backend não busca
 // por texto e devolve a lista da empresa numa leitura só. A busca é pelo
-// título, como no painel.
+// título, como no painel, sem acento e sem maiúsculas.
 const PAGE_SIZE = 10;
-
-const matches = (report: Report, query: string) =>
-  report.title.toLowerCase().includes(query);
 
 // T5.2: ReportRow memoizado pra impedir que os 10 cards re-renderizem quando
 // search/currentPage mudam. onPress(id) é estável via useCallback no parent.
@@ -96,12 +95,11 @@ export default function Reports() {
   // Os que aguardam envio vêm primeiro (são os mais novos) e não abrem
   // detalhe. Sem a lista do servidor, só eles entram na conta.
   const rows = useMemo(() => {
-    const query = search.trim().toLowerCase();
     const all = [
       ...pendingReports.map((report) => ({ report, opens: false })),
       ...(status === 'error' ? [] : reports.map((report) => ({ report, opens: true }))),
     ];
-    return query ? all.filter(({ report }) => matches(report, query)) : all;
+    return all.filter(({ report }) => matchesSearch(report.title, search));
   }, [pendingReports, reports, status, search]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -171,6 +169,15 @@ export default function Reports() {
                 no lugar dela: a busca, o "Novo relatório" e os pendentes
                 continuam usáveis. */}
             {status === 'error' ? <ReportsListState kind="error" onRetry={load} /> : null}
+            {status !== 'error' && rows.length === 0 && search.trim() ? (
+              <Text
+                variant="body.m"
+                color={theme.content.dark}
+                style={{ textAlign: 'center', paddingTop: theme.padding.l }}
+              >
+                Nenhum relatório encontrado.
+              </Text>
+            ) : null}
           </ScrollView>
 
           <View

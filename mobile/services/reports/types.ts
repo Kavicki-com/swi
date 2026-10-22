@@ -72,6 +72,38 @@ export interface ReportPayload {
   imageKeys: string[];
 }
 
+/**
+ * A edição como vai ao backend (PATCH /reports/:id). `imageKeys`: os anexos
+ * que ficam, na ordem. `imageKeysBase`: os que o formulário carregou. Com os
+ * dois o servidor só apaga do bucket o anexo que a pessoa tirou, e preserva o
+ * que outra pessoa anexou depois.
+ */
+export interface ReportUpdatePayload {
+  title: string;
+  summary: string;
+  details: string;
+  responsibles: string[];
+  imageKeys: string[];
+  imageKeysBase: string[];
+}
+
+/** Um anexo da grade de edição: com `key`, já está no servidor; sem, é arquivo local a subir. */
+export interface ReportEditAttachment {
+  key?: string;
+  uri: string;
+}
+
+/** A edição como sai do formulário. */
+export interface ReportEditInput {
+  title: string;
+  summary: string;
+  details: string;
+  responsibles: string[];
+  attachments: ReportEditAttachment[];
+  /** Keys dos anexos que o formulário carregou e mostrou. */
+  baseKeys: string[];
+}
+
 export interface ReportsBackend {
   list(): Promise<Report[]>;
   get(id: string): Promise<Report | null>;
@@ -84,4 +116,6 @@ export interface ReportsBackend {
   create(payload: ReportPayload, idempotencyKey?: string): Promise<Report>;
   /** Comenta num relatorio. Devolve o comentario criado, ja pronto pra lista. */
   addComment(reportId: string, body: string, idempotencyKey?: string): Promise<ReportComment>;
+  /** Edita o relatório. Devolve o relatório como ficou. */
+  update(id: string, payload: ReportUpdatePayload): Promise<Report>;
 }

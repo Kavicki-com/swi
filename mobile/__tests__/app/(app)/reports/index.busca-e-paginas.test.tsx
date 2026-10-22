@@ -116,6 +116,29 @@ describe('Reports (lista): busca', () => {
     expect(titulos(tree)).toEqual(['Vazamento sem sinal']);
   });
 
+  it('acha sem acento o título com acento', async () => {
+    const tree = await render({
+      reports: [relatorio('r1', 'Inspeção das Máquinas'), relatorio('r2', 'Vazamento')],
+    });
+
+    buscar(tree, 'inspecao');
+
+    expect(titulos(tree)).toEqual(['Inspeção das Máquinas']);
+  });
+
+  it('busca sem resultado diz que nenhum relatório foi encontrado', async () => {
+    const tree = await render({
+      reports: [relatorio('r1', 'Socorro'), relatorio('r2', 'Vazamento')],
+    });
+
+    expect(JSON.stringify(tree.toJSON())).not.toContain('Nenhum relatório encontrado.');
+
+    buscar(tree, 'incêndio');
+
+    expect(titulos(tree)).toEqual([]);
+    expect(JSON.stringify(tree.toJSON())).toContain('Nenhum relatório encontrado.');
+  });
+
   it('apagar a busca devolve a lista inteira', async () => {
     const tree = await render({
       reports: [relatorio('r1', 'Socorro'), relatorio('r2', 'Vazamento')],

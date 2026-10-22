@@ -27,6 +27,7 @@ import { useSubmitOnce } from '../../../lib/forms/useSubmitOnce';
 import { errorMessage } from '../../../lib/errors/errorMessage';
 import { abrirAnexoOuAvisar } from '../../../lib/media/trustedMediaUrl';
 import { attachmentTitles } from '../../../lib/media/attachmentLabels';
+import { matchesSearch } from '../../../lib/searchText';
 import type { Report } from '../../../services/reports/types';
 
 // Fazer comentário + Revisar) + ReportCard + Detalhes + Imagens
@@ -41,7 +42,9 @@ export default function ReportDetails() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { loadOne, addComment, commentsFor } = useReports();
+  // `revision` avança quando uma edição ("Revisar relatório") é confirmada: o
+  // detalhe relê e mostra o relatório como ficou.
+  const { loadOne, addComment, commentsFor, revision } = useReports();
 
   const [report, setReport] = useState<Report | null>(null);
   const [status, setStatus] = useState<DetailStatus>('loading');
@@ -81,7 +84,7 @@ export default function ReportDetails() {
     return () => {
       active = false;
     };
-  }, [id, loadOne, reloadKey]);
+  }, [id, loadOne, reloadKey, revision]);
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -142,11 +145,13 @@ export default function ReportDetails() {
   // Os comentários do servidor, depois os meus confirmados nesta sessão que o
   // relatório carregado ainda não trouxe, e por fim os que aguardam envio.
   const own = commentsFor(report.id);
+  // A busca do topo filtra os comentários pelo texto, sem acento e sem
+  // maiúsculas. O resto do relatório fica como está.
   const comments = [
     ...report.comments,
     ...own.sent.filter((sent) => !report.comments.some((c) => c.id === sent.id)),
     ...own.pending,
-  ];
+  ].filter((c) => matchesSearch(c.body, search));
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -223,7 +228,9 @@ export default function ReportDetails() {
                 labelColor={theme.content.primary}
                 label="Revisar relatório"
                 accessibilityLabel="Revisar relatório"
-                onPress={() => {}}
+                onPress={() =>
+                  router.push({ pathname: '/(app)/reports/new', params: { id: report.id } })
+                }
                 iconLeft={
                   <Icon name="border_color" size={18} color={theme.content.primary} />
                 }

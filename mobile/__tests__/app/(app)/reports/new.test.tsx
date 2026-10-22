@@ -16,6 +16,7 @@ jest.mock('../../../../lib/media/pickDocument', () => ({ pickReportDocument: jes
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack, push: jest.fn() }),
+  useLocalSearchParams: () => ({}),
   useFocusEffect: jest.fn(),
 }));
 

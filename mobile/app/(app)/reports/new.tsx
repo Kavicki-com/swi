@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
@@ -32,6 +32,7 @@ import {
   type ReportAttachmentKind,
 } from '../../../services/api/uploadMedia';
 import { useReports } from '../../../services/reports/ReportsProvider';
+import { ReportDetailState } from '../../../components/reports/ReportsListState';
 
 // 3 inputs (Título / Resumo / Detalhes multiline) + Atribuir
 // responsáveis OutlineButton + Anexos section (4 placeholders +
@@ -44,10 +45,24 @@ import { useReports } from '../../../services/reports/ReportsProvider';
 // pelo seletor de documento. O quadrado mostra o tipo e o tamanho, e o que o
 // servidor recusaria (tipo fora da lista, tamanho acima do teto do tipo) é
 // recusado aqui, na escolha, com a mesma frase do painel.
+//
+// Com `id` na rota a mesma tela edita ("Revisar relatório" no detalhe): o
+// formulário vem preenchido com o relatório atual e salvar vai pelo
+// useReports().update() (PATCH), direto ao servidor e sem a fila de envios.
 
 // Um quadrado preenchido. `size` null quando o arquivo não pôde ser lido: a
 // fila de envios refaz a checagem com o tamanho real na entrada.
-type SlotAttachment = { uri: string; kind: ReportAttachmentKind; size: number | null };
+// `key`: anexo que já está no servidor (edição); a `uri` é a url assinada.
+type SlotAttachment = {
+  uri: string;
+  kind: ReportAttachmentKind;
+  size: number | null;
+  key?: string;
+};
+
+const SLOTS = 4;
+
+type EditLoad = 'loading' | 'ready' | 'empty' | 'error';
 
 const HELPER_TEXT =
   'Selecione JPG, PNG, MP4, MOV, MP3, M4A, WAV ou PDF. Vídeo até 100 MB, áudio até 25 MB, os demais até 15 MB.';
@@ -56,7 +71,8 @@ export default function NewReport() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { create } = useReports();
+  const { create, update, loadOne } = useReports();
+  const { id: editId } = useLocalSearchParams<{ id?: string }>();
   const [saving, setSaving] = useState(false);
   // Relatório que não entrou na fila de envios: fila cheia, ou anexo recusado
   // na entrada. A tela fica aberta e a pessoa não perde o que escreveu.
@@ -76,8 +92,8 @@ export default function NewReport() {
   // Anexos — 4 placeholders + 1 "Enviar arquivo" via ImageUploader. As URIs
   // escolhidas entram no submit como `imageUris` e sobem no create do
   // ReportsProvider; o estado local é só a grade em edição.
-  const [attachments, setAttachments] = useState<(SlotAttachment | undefined)[]>(
-    [undefined, undefined, undefined, undefined],
+  const [attachments, setAttachments] = useState<(SlotAttachment | undefined)[]>(() =>
+    Array.from({ length: SLOTS }, () => undefined),
   );
   const setAttachmentAt = (index: number, attachment: SlotAttachment) => {
     setAttachments((prev) => {
@@ -142,6 +158,51 @@ export default function NewReport() {
     if (accepted) setAttachmentAt(primeiroSlotLivre, accepted);
   };
 
+  // Edição: carrega o relatório do id e preenche o formulário. `baseKeys` são
+  // os anexos que a grade mostrou; o que passar dos quadrados fica de fora da
+  // base e o servidor o preserva em vez de apagar.
+  const [load, setLoad] = useState<EditLoad>(editId ? 'loading' : 'ready');
+  const [baseKeys, setBaseKeys] = useState<string[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const setTitulo = titulo.setValue;
+  const setResumo = resumo.setValue;
+  const setDetalhes = detalhes.setValue;
+  useEffect(() => {
+    if (!editId) return;
+    let active = true;
+    setLoad('loading');
+    loadOne(editId)
+      .then((report) => {
+        if (!active) return;
+        if (!report) {
+          setLoad('empty');
+          return;
+        }
+        setTitulo(report.title);
+        setResumo(report.summary);
+        setDetalhes(report.details);
+        // O relatório guarda NOMES de responsáveis; o nome serve de id da escolha.
+        const picks = report.responsibles.map((name) => ({ id: name, name }));
+        responsiblesSelection.set(picks);
+        setResponsibles(picks);
+        const shown = report.attachments.slice(0, SLOTS);
+        setAttachments(
+          Array.from({ length: SLOTS }, (_, i) => {
+            const a = shown[i];
+            return a ? { uri: a.url, kind: a.kind, size: null, key: a.key } : undefined;
+          }),
+        );
+        setBaseKeys(shown.map((a) => a.key));
+        setLoad('ready');
+      })
+      .catch(() => {
+        if (active) setLoad('error');
+      });
+    return () => {
+      active = false;
+    };
+  }, [editId, loadOne, reloadKey, setTitulo, setResumo, setDetalhes]);
+
   // Rehidrata seleção ao reentrar (modal de responsáveis fecha via router.back).
   useFocusEffect(
     useCallback(() => {
@@ -176,6 +237,21 @@ export default function NewReport() {
     setSaving(true);
     setNotice(null);
     try {
+      if (editId) {
+        await update(editId, {
+          title: titulo.value,
+          summary: resumo.value,
+          details: detalhes.value,
+          responsibles: responsibleNames,
+          attachments: attachments.flatMap((a) =>
+            a ? [a.key ? { key: a.key, uri: a.uri } : { uri: a.uri }] : [],
+          ),
+          baseKeys,
+        });
+        responsiblesSelection.clear();
+        router.back();
+        return;
+      }
       // O relatório entra na fila de envios e a tela volta para a lista na
       // hora, com sinal ou sem: lá ele aparece como "Aguardando envio" até o
       // servidor confirmar.
@@ -202,6 +278,21 @@ export default function NewReport() {
     }
   };
 
+
+  if (load !== 'ready') {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <JourneyTheme
+          gradient={require('../../../assets/login-bg.png')}
+          pattern={require('../../../assets/smartband-bg-pattern.png')}
+        />
+        <ReportDetailState
+          kind={load}
+          onRetry={load === 'error' ? () => setReloadKey((k) => k + 1) : undefined}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
