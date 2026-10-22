@@ -33,6 +33,9 @@ import { useTelemetryUploadState } from '../../../services/telemetry/TelemetryUp
 // (BluetoothHeartRateMonitoring.tsx).
 
 const PAREAMENTO = '/(onboarding)/watch/pairing?origem=configuracoes';
+// Instruções por app do fabricante (band-guide.tsx). Só no caminho da
+// pulseira: Health Connect e Bluetooth não existem no do Apple Watch.
+const GUIA_DA_PULSEIRA = '/(app)/settings/band-guide';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -92,6 +95,12 @@ function MonitoramentoDaPulseira() {
     <Moldura>
       <HealthConnectMonitoring onPair={() => router.push(PAREAMENTO)} />
       {isFeatureEnabled('bluetoothHeartRate') && <BluetoothHeartRateMonitoring />}
+      <Button
+        variant="outline"
+        label="Guia da pulseira"
+        fullWidth
+        onPress={() => router.push(GUIA_DA_PULSEIRA)}
+      />
     </Moldura>
   );
 }

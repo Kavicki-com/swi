@@ -369,6 +369,19 @@ describe('Configurações, Monitoramento: Android', () => {
     expect(mockSecaoBluetooth).toHaveBeenCalled();
   });
 
+  it('Guia da pulseira leva à tela do guia', async () => {
+    comEnvioAndroid(true);
+    const tree = await render(SEM_SUPORTE);
+    const botao = tree.root
+      .findAllByType(Button as React.ComponentType<{ label: string; onPress: () => void }>)
+      .find((b) => b.props.label === 'Guia da pulseira');
+    expect(botao).toBeDefined();
+    await act(async () => {
+      botao!.props.onPress();
+    });
+    expect(mockPush).toHaveBeenCalledWith('/(app)/settings/band-guide');
+  });
+
   it('sem o gate do Bluetooth, a seção da pulseira não aparece', async () => {
     mockSecaoBluetooth.mockClear();
     comEnvioAndroid(true);
