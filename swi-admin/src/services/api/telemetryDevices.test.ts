@@ -36,6 +36,43 @@ describe('telemetryDevicesApi.stateOf', () => {
     expect(init.method ?? 'GET').toBe('GET')
   })
 
+  it('Android traz relato, hora do relato, caminhos e lista de prontidão dentro de device', async () => {
+    const state = {
+      device: {
+        id: 'd1',
+        kind: 'ANDROID_PHONE',
+        model: 'Pixel 8',
+        pairedAt: '2026-09-14T12:00:00.000Z',
+        lastSeenAt: '2026-09-14T13:00:00.000Z',
+        relato: {
+          healthConnect: {
+            availability: 'AVAILABLE',
+            readGranted: true,
+            backgroundGranted: true,
+            manufacturerPackage: 'com.xiaomi.wearable',
+            lastSyncAt: '2026-09-14T13:00:00.000Z',
+            lastFailure: null,
+          },
+          bluetooth: {
+            bandChosen: false,
+            listenerState: null,
+            listenerStateSince: null,
+            lastReadingAt: null,
+          },
+        },
+        relatadoEm: '2026-09-14T13:01:00.000Z',
+        caminhosAtivos: ['HEALTH_CONNECT'],
+        pendencias: [{ id: 'BIRTH_DATE', obrigatorio: true, pendente: true }],
+      },
+      pendingEnrollment: null,
+    }
+    vi.stubGlobal('fetch', ok(state))
+
+    const { data } = await telemetryDevicesApi.stateOf('w1')
+
+    expect(data).toEqual(state)
+  })
+
   it('funcionário de outra empresa (404) vira envelope de erro com a mensagem do backend', async () => {
     vi.stubGlobal('fetch', fails(404, 'Funcionário não encontrado'))
 
