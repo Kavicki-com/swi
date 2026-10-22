@@ -42,6 +42,8 @@ const SPOT_METRIC: Readonly<Record<ConditionKind, keyof typeof SPOT_CONDITION_PA
   BLOOD_PRESSURE_FATIGUE: 'bloodPressure',
   DEVICE_BATTERY_LOW: null,
   DEVICE_SIGNAL_LOST: null,
+  // Nasce encerrada, então nunca chega aberta à leitura.
+  REPEATED_EPISODES: null,
 }
 
 const ageMs = (iso: string, now: string) => Date.parse(now) - Date.parse(iso)

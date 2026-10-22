@@ -188,11 +188,78 @@ describe('alertDetailFrom', () => {
   it('leitura normalizada e origem de demonstração aparecem como notas', () => {
     const item = alertItem('a4', {
       origin: 'DEMO',
-      condition: { ...alertItem('x').condition, recoveredAt: OLD },
+      condition: { ...alertItem('x').condition, recoveredAt: OLD, recoveryReason: 'NORMALIZED' },
     })
     const d = alertDetailFrom(item)
     expect(d.notes).toContain(`Leitura já voltou ao normal às ${clock(OLD)}`)
     expect(d.notes).toContain('Dados de demonstração')
+  })
+
+  // Só a normalizada afirma que o valor voltou: a vencida e a silenciada não.
+  it.each([
+    ['SIGNAL_LOST', `Encerrada por silêncio às ${clock(OLD)}`],
+    ['NO_NEW_READING', `Encerrada sem leitura nova às ${clock(OLD)}`],
+    ['PROFILE_RETIRED', `Encerrada pela calibração às ${clock(OLD)}`],
+    [null, `Condição encerrada às ${clock(OLD)}`],
+    [undefined, `Condição encerrada às ${clock(OLD)}`],
+  ] as const)(
+    'condição fechada com motivo %s diz o motivo, sem "voltou ao normal"',
+    (reason, note) => {
+      const d = alertDetailFrom(
+        alertItem('a5', {
+          condition: { ...alertItem('x').condition, recoveredAt: OLD, recoveryReason: reason },
+        }),
+      )
+      expect(d.notes).toContain(note)
+      expect(d.notes?.join(' ')).not.toContain('voltou ao normal')
+    },
+  )
+
+  it('episódios repetidos levam o rótulo do tipo original e a contagem, sem nota de fechamento', () => {
+    const d = alertDetailFrom(
+      alertItem('a6', {
+        condition: {
+          kind: 'REPEATED_EPISODES',
+          category: 'HEALTH',
+          observedValue: 4,
+          thresholdValue: 3,
+          openedAt: OLD,
+          recoveredAt: OLD,
+          recoveryReason: 'NORMALIZED',
+          episodeKind: 'HEART_RATE_HIGH',
+        },
+      }),
+    )
+    expect(d.title).toBe('Episódios repetidos de frequência cardíaca alta')
+    expect(d.description).toBe(
+      '4 episódios no mesmo dia, já encerrados quando a pulseira sincronizou',
+    )
+    expect(d.tone).toBe('warning')
+    expect(d.notes).toEqual([`Atenção, aberto às ${clock(OLD)}`])
+  })
+
+  it.each([
+    ['WEAR_FATIGUE', 'Episódios repetidos de desgaste na faixa de fadiga'],
+    ['HEART_RATE_FATIGUE', 'Episódios repetidos de batimento na faixa de fadiga'],
+    [null, 'Episódios repetidos'],
+  ] as const)('episódios repetidos de %s', (episodeKind, title) => {
+    const d = alertDetailFrom(
+      alertItem('a7', {
+        condition: {
+          kind: 'REPEATED_EPISODES',
+          category: 'HEALTH',
+          observedValue: null,
+          thresholdValue: 3,
+          openedAt: OLD,
+          recoveredAt: OLD,
+          episodeKind,
+        },
+      }),
+    )
+    expect(d.title).toBe(title)
+    expect(d.description).toBe(
+      'Três ou mais episódios no mesmo dia, já encerrados quando a pulseira sincronizou',
+    )
   })
 
   it('aberto pode ser reconhecido e resolvido; reconhecido só resolvido; resolvido nada', () => {
