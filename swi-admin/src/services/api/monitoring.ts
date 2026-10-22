@@ -214,8 +214,26 @@ export function describeCondition(condition: DescribedCondition): {
         description: obs !== null ? `${round(obs)} ${tail}` : `Três ou mais ${tail}`,
       }
     }
+    case 'HELP_REQUESTED':
+      // A mão é o glifo do botão "Ajuda urgente" do app; a frase é a mesma
+      // da notificação do sino.
+      return {
+        title: 'Pedido de ajuda',
+        icon: 'hand',
+        description: 'Pediu ajuda pelo botão de ajuda urgente do app',
+      }
   }
 }
+
+/**
+ * Condições que nascem encerradas: o fechamento delas não diz nada (episódios
+ * repetidos já chegam fechados; o pedido de ajuda não é medição e o estado
+ * dele mora no alerta).
+ */
+export const BORN_RECOVERED: ReadonlySet<ConditionKind> = new Set<ConditionKind>([
+  'REPEATED_EPISODES',
+  'HELP_REQUESTED',
+])
 
 function triageLine(item: AlertQueueItem): string | null {
   const who = item.triagedBy ? ` por ${item.triagedBy.name}` : ''
@@ -234,9 +252,10 @@ export function alertDetailFrom(item: AlertQueueItem): MonitoringAlertDetail {
   const notes = [
     `${CATEGORY_LABEL[item.condition.category]}, aberto às ${clock(item.condition.openedAt)}`,
   ]
-  // Episódios repetidos nascem encerrados: a frase já diz isso.
+  // Episódios repetidos e pedido de ajuda nascem encerrados: a nota de
+  // fechamento afirmaria um fim que não houve.
   const { recoveredAt, recoveryReason, kind } = item.condition
-  if (recoveredAt && kind !== 'REPEATED_EPISODES') {
+  if (recoveredAt && !BORN_RECOVERED.has(kind)) {
     const note = (recoveryReason && RECOVERY_NOTE[recoveryReason]) ?? 'Condição encerrada'
     notes.push(`${note} às ${clock(recoveredAt)}`)
   }

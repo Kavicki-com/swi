@@ -13,7 +13,10 @@ import type {
   AlertQueueQuery,
   ConditionKind,
 } from '@/services/api/telemetry'
-import type { ConditionChanged } from '@/services/telemetry/telemetrySocket'
+import type {
+  ConditionChanged,
+  HelpRequestChanged,
+} from '@/services/telemetry/telemetrySocket'
 import type { ServiceResponse } from '@/services/types'
 import {
   initialUrgentAlerts,
@@ -27,19 +30,26 @@ export const URGENT_REFETCH_DEBOUNCE_MS = 1_000
 export const URGENT_RECHECK_MS = 60_000
 /** O servidor devolve no máximo 100 por página. */
 const QUERY: AlertQueueQuery = { status: ['OPEN'], limit: 100 }
-// Espelha URGENT_CONDITION_KINDS do backend: batimento fora da faixa e as
-// travas da calibração individual. As de Atenção (faixa de fadiga) não releem.
+// Espelha URGENT_CONDITION_KINDS do backend: batimento fora da faixa, as
+// travas da calibração individual e o pedido de ajuda do app. As de Atenção
+// (faixa de fadiga) não releem.
 const URGENT_KINDS = new Set<ConditionKind>([
   'HEART_RATE_HIGH',
   'HEART_RATE_LOW',
   'OXYGEN_LOW',
   'BLOOD_PRESSURE_HIGH',
   'WEAR_HIGH',
+  'HELP_REQUESTED',
 ])
 
 export interface UrgentAlertsStoreDeps {
   api: { alerts(query?: AlertQueueQuery): Promise<ServiceResponse<AlertQueuePage>> }
   subscribeConditions(cb: (e: ConditionChanged) => void): () => void
+  /**
+   * Pedido de ajuda atendido ou fechado: o alerta dele sai de OPEN sem
+   * condição nova, então só este aviso faz o aviso urgente sumir na hora.
+   */
+  subscribeHelpRequests?(cb: (e: HelpRequestChanged) => void): () => void
   onTriaged(cb: () => void): () => void
   /** Alertas que não estavam em leitura nenhuma antes desta. */
   onFresh(fresh: AlertQueueItem[]): void
@@ -150,6 +160,7 @@ export function createUrgentAlertsStore(deps: UrgentAlertsStoreDeps): UrgentAler
       inFlight = false
       again = false
       const stopConditions = deps.subscribeConditions(onCondition)
+      const stopHelp = deps.subscribeHelpRequests?.(() => read()) ?? (() => {})
       const stopTriaged = deps.onTriaged(read)
       read()
       return () => {
@@ -159,6 +170,7 @@ export function createUrgentAlertsStore(deps: UrgentAlertsStoreDeps): UrgentAler
         debounce = null
         clearRecheck()
         stopConditions()
+        stopHelp()
         stopTriaged()
       }
     },

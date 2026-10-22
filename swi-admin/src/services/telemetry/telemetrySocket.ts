@@ -26,9 +26,26 @@ export type ConditionChanged = {
   at: string
 }
 
+export const HELP_REQUEST_CHANGED_EVENT = 'help-request.changed'
+
+/**
+ * Pedido de ajuda que abriu, foi atendido (reconhecido ou socorrista
+ * despachado) ou fechou. A abertura também chega como condição HELP_REQUESTED;
+ * atendido e fechado só chegam por aqui. `helpRequestId` é o id do alerta.
+ */
+export type HelpRequestChanged = {
+  workerId: string
+  helpRequestId: string
+  status: 'OPEN' | 'ATTENDED' | 'CLOSED'
+  /** ISO-8601 do relógio do servidor. */
+  at: string
+}
+
 export interface TelemetryHandlers {
   onSnapshot: (ev: SnapshotUpdated) => void
   onCondition: (ev: ConditionChanged) => void
+  /** Só quem mostra o estado do pedido de ajuda pede este aviso. */
+  onHelpRequest?: (ev: HelpRequestChanged) => void
 }
 
 // Uma conexão para o painel inteiro, aberta pelo primeiro assinante e fechada
@@ -71,12 +88,15 @@ export function subscribeTelemetryEvents(handlers: TelemetryHandlers): () => voi
   const socket = acquire()
   socket.on(SNAPSHOT_UPDATED_EVENT, handlers.onSnapshot)
   socket.on(CONDITION_CHANGED_EVENT, handlers.onCondition)
+  const { onHelpRequest } = handlers
+  if (onHelpRequest) socket.on(HELP_REQUEST_CHANGED_EVENT, onHelpRequest)
   let active = true
   return () => {
     if (!active) return
     active = false
     socket.off(SNAPSHOT_UPDATED_EVENT, handlers.onSnapshot)
     socket.off(CONDITION_CHANGED_EVENT, handlers.onCondition)
+    if (onHelpRequest) socket.off(HELP_REQUEST_CHANGED_EVENT, onHelpRequest)
     release(socket)
   }
 }

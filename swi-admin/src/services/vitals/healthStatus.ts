@@ -44,6 +44,8 @@ const SPOT_METRIC: Readonly<Record<ConditionKind, keyof typeof SPOT_CONDITION_PA
   DEVICE_SIGNAL_LOST: null,
   // Nasce encerrada, então nunca chega aberta à leitura.
   REPEATED_EPISODES: null,
+  // Também nasce encerrada: pedido de ajuda não é medição.
+  HELP_REQUESTED: null,
 }
 
 const ageMs = (iso: string, now: string) => Date.parse(now) - Date.parse(iso)

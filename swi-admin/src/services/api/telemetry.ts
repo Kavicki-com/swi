@@ -89,6 +89,11 @@ export type ConditionKind =
    * Atenção, nasce encerrada e gera alerta; o tipo repetido vem em `episodeKind`.
    */
   | 'REPEATED_EPISODES'
+  /**
+   * Pedido de ajuda do botão "Ajuda urgente" do app. Urgente, nasce encerrada
+   * (não é medição e nunca pinta o estado); o estado do pedido mora no alerta.
+   */
+  | 'HELP_REQUESTED'
 
 /**
  * URGENT é batimento fora da faixa e as travas (oxigenação, pressão, desgaste
@@ -281,16 +286,30 @@ export type AdminTelemetrySummary = {
   urgentAlerts: AlertCount
 }
 
+/**
+ * Pedido de ajuda aberto (OPEN) ou atendido (ATTENDED: alguém reconheceu ou
+ * despachou um socorrista). Fechado não vem. `id` é o do alerta da fila.
+ */
+export type AdminHelpRequest = {
+  id: string
+  status: 'OPEN' | 'ATTENDED'
+  createdAt: string
+  /** O resgate em andamento para este pedido; null enquanto ninguém foi despachado. */
+  rescueId: string | null
+}
+
 export type AdminWorkerEntry = {
   worker: { id: string; name: string; sector: string | null }
   device: { state: 'NONE' | 'PAIRED'; lastSeenAt: string | null }
   /** A mesma leitura de workers/:id/current, condições incluídas. */
   telemetry: WorkerTelemetry
+  /** Opcional porque um backend anterior responde sem. */
+  helpRequest?: AdminHelpRequest | null
 }
 
 export type AdminWorkersTelemetry = {
   observedAt: string
-  /** Urgentes primeiro, depois saúde, depois o resto, por nome. */
+  /** Pedidos de ajuda primeiro, depois urgentes, saúde e o resto, por nome. */
   workers: AdminWorkerEntry[]
 }
 

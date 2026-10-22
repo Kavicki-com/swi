@@ -125,6 +125,9 @@ function ConditionRow({ item, now }: { item: ConditionHistoryItem; now: number }
   const { title, description } = describeCondition(item)
   const when = (iso: string) => whenLabel(iso, now) ?? 'em data desconhecida'
   const repeated = item.kind === 'REPEATED_EPISODES'
+  // O pedido de ajuda nasce encerrado no instante em que abre: só a abertura
+  // conta, e o estado do pedido (aberto, atendido, fechado) mora no alerta.
+  const help = item.kind === 'HELP_REQUESTED'
   // Só o episódio atrasado tem a hora de chegada do lote além dos repetidos.
   const delayed = !repeated && item.receivedAt !== null
 
@@ -138,7 +141,7 @@ function ConditionRow({ item, now }: { item: ConditionHistoryItem; now: number }
     if (item.receivedAt) lines.push(`Recebido ${when(item.receivedAt)}`)
   } else {
     lines.push(`Aberta ${when(item.openedAt)}`)
-    if (item.recoveredAt) lines.push(`Encerrada ${when(item.recoveredAt)}`)
+    if (item.recoveredAt && !help) lines.push(`Encerrada ${when(item.recoveredAt)}`)
   }
 
   const category = CATEGORY_LABEL[item.category]
@@ -166,7 +169,7 @@ function ConditionRow({ item, now }: { item: ConditionHistoryItem; now: number }
           {line}
         </Text>
       ))}
-      {repeated ? null : <StatusLine item={item} />}
+      {repeated || help ? null : <StatusLine item={item} />}
       {item.origin === 'DEMO' ? (
         <Text variant="body.s" color={theme.content.medium}>
           Dados de demonstração
