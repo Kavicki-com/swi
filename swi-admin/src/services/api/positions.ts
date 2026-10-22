@@ -37,7 +37,7 @@ export function toDashboardMarker(dto: PositionMarkerDto): DashboardMapMarker {
 
 /**
  * Cor do pino pela régua única de estado de saúde (healthStatusFrom): as
- * condições abertas no backend decidem, e sem leitura o pino fica neutro.
+ * condições vigentes decidem, e sem batimento válido o pino fica neutro.
  */
 export function markerStatusFor(entry: AdminWorkerEntry | undefined): DashboardMapMarker['status'] {
   const status = healthStatusFrom(entry?.telemetry ?? null)

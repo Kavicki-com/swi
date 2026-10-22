@@ -23,6 +23,7 @@ import {
   type ConditionCategory,
 } from './telemetry'
 import { NO_VALUE } from '@/services/vitals/vitalsView'
+import { healthStatusFrom } from '@/services/vitals/healthStatus'
 import { countCameras } from './cameras'
 
 export type {
@@ -232,24 +233,21 @@ const TIER_ORDER: Record<MonitoringTier, number> = {
   'sem-leitura': 3,
 }
 
-// Urgência e atenção valem tanto pela condição aberta quanto pelo alerta ainda
-// não triado: a condição pode ter se recuperado, mas alguém precisa olhar.
-// "Excelente" exige leitura atual; sem ela a pessoa não foi avaliada.
+// A aba soma o estado de saúde (a mesma tabela do app e do mapa) com os alertas
+// ainda não triados da fila. O alerta pendente é trabalho do gestor, não
+// afirmação sobre o estado: segura o card na aba dele mesmo com o estado
+// neutro. Sem batimento válido e sem alerta pendente, a pessoa não foi avaliada.
 function tierFor(
   entry: AdminWorkerEntry | undefined,
   alerts: ReadonlyArray<AlertQueueItem>,
 ): MonitoringTier {
-  const pending = alerts.filter((a) => UNRESOLVED.has(a.status)).map((a) => a.condition.category)
-  const categories = new Set([
-    ...(entry?.telemetry.conditions.map((c) => c.category) ?? []),
-    ...pending,
-  ])
-  if (categories.has('URGENT')) return 'alerta-fadiga'
-  if (categories.has('HEALTH')) return 'desgastado'
-  const t = entry?.telemetry
-  return t && t.origin !== null && t.metrics.heartRate.quality === 'CURRENT'
-    ? 'excelente'
-    : 'sem-leitura'
+  const status = healthStatusFrom(entry?.telemetry ?? null)
+  const pending = new Set(
+    alerts.filter((a) => UNRESOLVED.has(a.status)).map((a) => a.condition.category),
+  )
+  if (status === 'low' || pending.has('URGENT')) return 'alerta-fadiga'
+  if (status === 'alert' || pending.has('HEALTH')) return 'desgastado'
+  return status === 'good' ? 'excelente' : 'sem-leitura'
 }
 
 /** Um card por funcionário do cadastro, na ordem urgentes, atenção, excelentes e sem leitura. */

@@ -111,8 +111,8 @@ export function unavailableDonuts(caption: string): HealthDonuts {
 }
 
 // A faixa parte da régua única de estado de saúde: condição urgente ou de
-// saúde aberta pede atenção agora, e sem leitura atual a pessoa fica fora das
-// abas. Entre quem está bem, a estimativa de fadiga separa as duas faixas.
+// saúde vigente pede atenção agora, e sem batimento válido a pessoa fica fora
+// das abas. Entre quem está bem, a estimativa de fadiga separa as duas faixas.
 function tierOf(t: WorkerTelemetry): WearTier | null {
   const status = healthStatusFrom(t)
   if (status === 'low' || status === 'alert') return 'alerta-fadiga'

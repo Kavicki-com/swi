@@ -14,6 +14,8 @@ export type MeasurementSource =
   | 'APPLE_WATCH'
   /** Pulseira lida pelo app Android via Health Connect. */
   | 'HEALTH_CONNECT'
+  /** Batimento lido direto da pulseira pelo Bluetooth do celular Android, ao vivo. */
+  | 'BLUETOOTH_HR'
   | 'EXTERNAL_CUFF'
   | 'MANUAL_HEALTHKIT'
   | 'MANUAL_SWI'
@@ -81,6 +83,12 @@ export type ActiveCondition = {
   category: ConditionCategory
   /** ISO-8601 de quando a condição abriu. */
   openedAt: string
+  /**
+   * ISO-8601 da medição mais recente da métrica que sustenta a condição: é
+   * dele que se conta se a condição ainda pinta o estado. Nulo sem medição
+   * legível dessa métrica; opcional porque um backend anterior responde sem.
+   */
+  measuredAt?: string | null
   /** O valor que abriu a condição, na unidade dela. */
   observedValue: number | null
   /** O limite em vigor quando abriu. */

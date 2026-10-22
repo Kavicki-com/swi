@@ -13,6 +13,7 @@ import {
   adminSummary,
   adminWorker,
   condition,
+  metric,
   neverReported,
   noMetric,
   reporting,
@@ -589,26 +590,82 @@ describe('Dashboard: saúde da frota pela telemetria', () => {
     )
   })
 
-  it('alerta sem batimento conhecido aparece na lista sem inventar número', async () => {
+  // A cor não afirma o agora com dado velho: a condição segue em Alertas, mas a
+  // pessoa sai das abas e entra na contagem de quem não foi avaliado.
+  it('condição aberta sem batimento válido não põe ninguém na aba de alerta', async () => {
     telemetry.state = {
       ...telemetry.state,
       workers: {
         observedAt: '2026-10-01T15:00:00.000Z',
         workers: [
+          ...FLEET.workers,
           adminWorker('h1', 'Sem Batimento', {
             telemetry: {
               ...reporting({ heartRate: noMetric('bpm') }, 'REAL', 'h1'),
-              conditions: [condition('HEALTH')],
+              conditions: [condition('URGENT', { observedValue: 185 })],
             },
           }),
         ],
       },
     }
     await renderReady()
-    const card = screen.getByTestId('wear-alert-h1')
-    expect(card).toHaveTextContent('Sem Batimento')
-    expect(card).toHaveTextContent('-- Bpm')
-    expect(card).not.toHaveTextContent('0 Bpm')
+    expect(screen.getByTestId('wear-alert-w1')).toBeInTheDocument()
+    expect(screen.queryByTestId('wear-alert-h1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('wear-alerts-unread')).toHaveTextContent(
+      '1 funcionário sem leitura atual',
+    )
+  })
+
+  it('batimento do Health Connect de até 60 min pinta pela condição', async () => {
+    const hc = (id: string, name: string, measuredAt: string) =>
+      adminWorker(id, name, {
+        telemetry: {
+          ...reporting(
+            { heartRate: metric(150, { quality: 'STALE', source: 'HEALTH_CONNECT', measuredAt }) },
+            'REAL',
+            id,
+          ),
+          conditions: [condition('URGENT')],
+        },
+      })
+    telemetry.state = {
+      ...telemetry.state,
+      workers: {
+        observedAt: '2026-10-01T15:00:00.000Z',
+        workers: [
+          hc('hc1', 'Lote Recente', '2026-10-01T14:00:00.000Z'),
+          hc('hc2', 'Lote Velho', '2026-10-01T13:59:59.999Z'),
+        ],
+      },
+    }
+    await renderReady()
+    expect(screen.getByTestId('wear-alert-hc1')).toHaveTextContent('150 Bpm')
+    expect(screen.queryByTestId('wear-alert-hc2')).not.toBeInTheDocument()
+  })
+
+  // Pressão de uma medição só pinta por 6 h: depois, a pessoa volta à faixa
+  // que o batimento e o desgaste dão.
+  it('pressão medida há mais de 6 h não segura ninguém na aba de alerta', async () => {
+    const pressure = (id: string, name: string, measuredAt: string) =>
+      adminWorker(id, name, {
+        telemetry: {
+          ...reporting({}, 'REAL', id),
+          conditions: [condition('URGENT', { kind: 'BLOOD_PRESSURE_HIGH', measuredAt })],
+        },
+      })
+    telemetry.state = {
+      ...telemetry.state,
+      workers: {
+        observedAt: '2026-10-01T15:00:00.000Z',
+        workers: [
+          pressure('bp1', 'Pressão Recente', '2026-10-01T09:00:00.000Z'),
+          pressure('bp2', 'Pressão Velha', '2026-10-01T08:59:59.999Z'),
+        ],
+      },
+    }
+    await renderReady()
+    expect(screen.getByTestId('wear-alert-bp1')).toBeInTheDocument()
+    expect(screen.queryByTestId('wear-alert-bp2')).not.toBeInTheDocument()
   })
 
   // Despareado com condição ainda aberta na telemetria velha: enquanto houver
