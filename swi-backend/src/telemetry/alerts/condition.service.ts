@@ -101,6 +101,17 @@ const SPOT_READING_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<Telemetr
 ])
 
 /**
+ * As condições de pressão abrem na hora em que a pressão foi medida. A pulseira
+ * entrega horas depois, e a hora da chegada diria que a pessoa estava com
+ * aquele valor agora.
+ */
+const PRESSURE_KINDS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
+  'BLOOD_PRESSURE_REVIEW',
+  'BLOOD_PRESSURE_FATIGUE',
+  'BLOOD_PRESSURE_HIGH',
+])
+
+/**
  * Até onde a oxigenação é lida para decidir. Ela é pontual e chega poucas
  * vezes por turno, então a régua é de horas, como a da pressão, mas menor:
  * leitura de ontem não descreve a oxigenação de hoje.
@@ -492,7 +503,7 @@ export class TelemetryConditionService {
           diastolicMmHg: { not: null },
           eventTime: { gte: pressureFrom, lte: pressureUntil },
         },
-        select: { systolicMmHg: true, diastolicMmHg: true },
+        select: { systolicMmHg: true, diastolicMmHg: true, eventTime: true },
         orderBy: { eventTime: 'desc' },
       }),
       // Desgaste é a última avaliação DA SESSÃO, e não do funcionário: a cadeia
@@ -551,6 +562,9 @@ export class TelemetryConditionService {
       pressureRow === null || pressureRow.systolicMmHg === null || pressureRow.diastolicMmHg === null
         ? null
         : { systolic: pressureRow.systolicMmHg, diastolic: pressureRow.diastolicMmHg }
+    // Carimbo no futuro (a folga do relógio adiantado) abre com agora.
+    const pressureAt =
+      pressureRow === null ? now : new Date(Math.min(pressureRow.eventTime.getTime(), now.getTime()))
 
     const oxygen = oxygenRows.flatMap((r) =>
       r.oxygenSaturationPct === null ? [] : [{ atMs: r.eventTime.getTime(), value: r.oxygenSaturationPct }],
@@ -672,6 +686,7 @@ export class TelemetryConditionService {
         observedValue: decision.observedValue,
         // O dia da calibração vai para a condição como selo, até o 30º.
         calibrationDay: thresholds?.calibrationDay ?? null,
+        firstSeenAt: PRESSURE_KINDS.has(decision.kind) ? pressureAt : undefined,
       })
       if (createdId === null) continue
 
