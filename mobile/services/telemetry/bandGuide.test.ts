@@ -8,7 +8,7 @@ import {
   type BandGuideBlock,
 } from './bandGuide';
 
-// O conteúdo do guia é estático e vem só da pesquisa de 2026-10-22. A tela
+// O conteúdo do guia é estático e vem só da pesquisa de pulseiras. A tela
 // tem teste próprio; aqui, as regras que valem para TODAS as entradas, que a
 // tela não percorre uma a uma.
 

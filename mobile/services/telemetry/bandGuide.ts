@@ -6,9 +6,8 @@
 // as medições chegam pelo Health Connect e como ligar o batimento ao vivo
 // por Bluetooth.
 //
-// Conteúdo estático, só da pesquisa de 2026-10-22 (relatório local em
-// docs/plans/2026-10-22-pesquisa-pulseiras-ble-health-connect.md). Passo com
-// fonte primária é afirmado; com fonte secundária, ou que a fonte primária
+// Conteúdo estático, só da pesquisa de pulseiras feita para o primeiro uso
+// com qualquer pulseira. Passo com fonte primária é afirmado; com fonte secundária, ou que a fonte primária
 // documenta só para parte das pulseiras daquele app, vai precedido de "Pode
 // variar com o modelo". Os nomes das opções ficam como a pesquisa os cita.
 // Atualizar o guia é refazer a pesquisa, não editar daqui de memória.
