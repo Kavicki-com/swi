@@ -166,6 +166,32 @@ describe('gate healthConnect', () => {
   });
 });
 
+// Batimento ao vivo pela pulseira no Bluetooth: o módulo nativo só existe no
+// Android compilado, como o do Health Connect.
+describe('gate bluetoothHeartRate', () => {
+  afterEach(() => {
+    jest.dontMock('react-native');
+    jest.dontMock('expo-constants');
+    jest.resetModules();
+  });
+
+  it('existe e fica desligado no iOS, mesmo compilado', () => {
+    const flags = loadGates('ios', 'standalone');
+    expect(flags.FEATURE_GATES).toHaveProperty('bluetoothHeartRate');
+    expect(flags.isFeatureEnabled('bluetoothHeartRate')).toBe(false);
+  });
+
+  it('fica desligado no web e no Expo Go do Android', () => {
+    expect(loadGates('web', 'standalone').isFeatureEnabled('bluetoothHeartRate')).toBe(false);
+    expect(loadGates('android', 'storeClient').isFeatureEnabled('bluetoothHeartRate')).toBe(false);
+  });
+
+  it('liga no Android compilado e no dev client', () => {
+    expect(loadGates('android', 'standalone').isFeatureEnabled('bluetoothHeartRate')).toBe(true);
+    expect(loadGates('android', 'bare').isFeatureEnabled('bluetoothHeartRate')).toBe(true);
+  });
+});
+
 // O produto web suportado na entrega é o painel administrativo. O Expo web é
 // restrito ao desenvolvimento e não faz parte do aplicativo entregue ao usuário.
 //
