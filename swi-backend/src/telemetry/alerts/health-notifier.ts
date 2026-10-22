@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
-import type { TelemetryConditionKind } from '@prisma/client'
+import type { CalibrationDeviceFamily, TelemetryConditionKind, TelemetryDeviceKind } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { NotificationService, type NotificationPayload } from '../../notifications/notification.service'
 import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import type { ConditionChange } from './condition.service'
 import { describeError } from '../../common/describe-error'
+import { familyOfDeviceKind } from '../calibration/device-family'
 
 /** O que a notificação precisa saber da condição que abriu. */
 export interface OpenedConditionFacts {
@@ -24,6 +25,15 @@ export interface HealthNotifications {
 const health = (title: string, body: string): NotificationPayload => ({ domain: 'health', title, body })
 
 const round = (value: number | null) => (value === null ? null : Math.round(value))
+
+/**
+ * Como o aviso chama o aparelho que mede: a pulseira no Android, o relógio no
+ * iPhone. Sem aparelho conhecido fica o relógio, que era o texto de sempre.
+ */
+const WEARABLE_WORDS = {
+  WATCH: { the: 'o relógio', of: 'do relógio' },
+  BAND: { the: 'a pulseira', of: 'da pulseira' },
+} as const satisfies Record<CalibrationDeviceFamily, { the: string; of: string }>
 
 /**
  * O nome de cada tipo no meio de uma frase, para os episódios repetidos.
@@ -50,7 +60,7 @@ const KIND_IN_SENTENCE: Readonly<Record<TelemetryConditionKind, string>> = {
 /**
  * Quem recebe cada condição e com que texto. Batimento, oxigenação, desgaste e
  * pressão vão ao funcionário e à administração, nas travas e na faixa de fadiga. Bateria fraca vai só ao funcionário, que é
- * quem está com o relógio. Perda de sinal vai só à administração: sem sinal, o
+ * quem está com o relógio ou a pulseira. Perda de sinal vai só à administração: sem sinal, o
  * aparelho do funcionário provavelmente nem recebe, e quem precisa saber que
  * alguém saiu do monitoramento é quem acompanha a equipe. Episódios repetidos
  * também vão só à administração: são um padrão do que já passou, e é o gestor
@@ -60,7 +70,11 @@ const KIND_IN_SENTENCE: Readonly<Record<TelemetryConditionKind, string>> = {
  * O texto carrega só o que a condição gravou, nunca um valor de outra fonte;
  * a pressão não repete o valor porque a condição guarda um número só de um par.
  */
-export function healthNotificationsFor(condition: OpenedConditionFacts, workerName: string): HealthNotifications {
+export function healthNotificationsFor(
+  condition: OpenedConditionFacts,
+  workerName: string,
+  wearable: CalibrationDeviceFamily | null = null,
+): HealthNotifications {
   const observed = round(condition.observedValue)
   const threshold = round(condition.thresholdValue)
   switch (condition.kind) {
@@ -167,20 +181,21 @@ export function healthNotificationsFor(condition: OpenedConditionFacts, workerNa
         worker: health('Pressão para revisar', 'A última medição de pressão pede revisão.'),
         admins: health(`Pressão para revisar: ${workerName}`, 'A última medição de pressão pede revisão.'),
       }
-    case 'DEVICE_BATTERY_LOW':
+    case 'DEVICE_BATTERY_LOW': {
+      const words = WEARABLE_WORDS[wearable ?? 'WATCH']
+      const charge = `Carregue ${words.the} para seguir monitorado.`
       return {
-        worker: health(
-          'Bateria do relógio baixa',
-          observed === null
-            ? 'Carregue o relógio para seguir monitorado.'
-            : `Bateria em ${observed}%. Carregue o relógio para seguir monitorado.`,
-        ),
+        worker: health(`Bateria ${words.of} baixa`, observed === null ? charge : `Bateria em ${observed}%. ${charge}`),
         admins: null,
       }
+    }
     case 'DEVICE_SIGNAL_LOST':
       return {
         worker: null,
-        admins: health(`Sem sinal do relógio: ${workerName}`, 'O monitoramento parou de receber dados.'),
+        admins: health(
+          `Sem sinal ${WEARABLE_WORDS[wearable ?? 'WATCH'].of}: ${workerName}`,
+          'O monitoramento parou de receber dados.',
+        ),
       }
     case 'HELP_REQUESTED':
       return {
@@ -208,6 +223,8 @@ interface OpenedConditionRow extends OpenedConditionFacts {
   workerId: string
   origin: string
   worker: { name: string }
+  /** Nula quando a sessão foi apagada: o aviso cai no relógio. */
+  session: { device: { kind: TelemetryDeviceKind } } | null
 }
 
 /**
@@ -248,6 +265,8 @@ export class TelemetryHealthNotifier {
           thresholdValue: true,
           episodeKind: true,
           worker: { select: { name: true } },
+          // O aparelho da sessão que abriu a condição diz se é pulseira ou relógio.
+          session: { select: { device: { select: { kind: true } } } },
         },
       })
       // A condição é o alvo da notificação, então a mesma abertura nunca vira
@@ -273,7 +292,8 @@ export class TelemetryHealthNotifier {
   }
 
   private async notifyOne(row: OpenedConditionRow): Promise<void> {
-    const messages = healthNotificationsFor(row, row.worker.name)
+    const wearable = row.session === null ? null : familyOfDeviceKind(row.session.device.kind)
+    const messages = healthNotificationsFor(row, row.worker.name, wearable)
     if (messages.worker) {
       await this.notifications.enqueueForMany([row.workerId], { ...messages.worker, targetId: row.id })
     }
