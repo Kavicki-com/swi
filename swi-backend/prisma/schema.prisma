@@ -727,10 +727,55 @@ model TelemetryDevice {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  /// Relato de prontidão: o que só o celular Android sabe do Health Connect e
+  /// da pulseira por Bluetooth. Cada relato substitui o anterior inteiro, e
+  /// campo nulo é "o app não informou", nunca "não". `readinessReportedAt` é o
+  /// instante do servidor em que o relato chegou; nulo é aparelho sem relato.
+  readinessReportedAt            DateTime?
+  healthConnectAvailability      HealthConnectAvailability?
+  healthConnectReadGranted       Boolean?
+  healthConnectBackgroundGranted Boolean?
+  /// Pacote do app do fabricante que gravou no Health Connect, como o app detectou.
+  healthConnectPackage           String?
+  healthConnectLastSyncAt        DateTime?
+  healthConnectFailureReason     HealthConnectFailureReason?
+  healthConnectFailureAt         DateTime?
+  bluetoothBandChosen            Boolean?
+  bluetoothListenerState         BluetoothListenerState?
+  bluetoothListenerStateSince    DateTime?
+  bluetoothLastReadingAt         DateTime?
+
   sessions TelemetrySession[]
   samples  TelemetrySample[]
 
   @@index([workerId, revokedAt])
+}
+
+/// Disponibilidade do Health Connect no celular, como o sistema a informa.
+enum HealthConnectAvailability {
+  AVAILABLE
+  /// Ausente: não instalado ou sem suporte no aparelho.
+  UNAVAILABLE
+  UPDATE_REQUIRED
+}
+
+/// Motivo da última sincronização do Health Connect que falhou.
+enum HealthConnectFailureReason {
+  PERMISSION_DENIED
+  UNAVAILABLE
+  UPDATE_REQUIRED
+  /// Falha sem motivo que o sistema identifique.
+  OTHER
+}
+
+/// Estado da escuta da pulseira por Bluetooth no celular.
+enum BluetoothListenerState {
+  CONNECTED
+  /// Ligada, procurando ou reconectando a pulseira escolhida.
+  SEARCHING
+  BLUETOOTH_OFF
+  /// Escuta desligada: encerrada pelo funcionário ou ainda não iniciada.
+  ENDED
 }
 
 /// Sessão técnica de monitoramento. O id é gerado no relógio e chega dentro do

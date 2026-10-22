@@ -8,7 +8,18 @@ import {
 import { Prisma, TelemetryDeviceKind, type TelemetryEnrollment } from '@prisma/client'
 import { generateCode, hash, verifyHash } from '../../auth/codes'
 import type { JwtUser } from '../../auth/current-user.decorator'
+import type { ReadinessReportDto } from './dto/readiness-report.dto'
 import { enrollmentRejection } from './enrollment-rejection'
+import {
+  activePathsOf,
+  READINESS_SELECT,
+  readinessColumnsOf,
+  readinessReportOf,
+  readinessStepsOf,
+  type ActivePath,
+  type ReadinessReport,
+  type ReadinessStep,
+} from './readiness'
 import { PrismaService } from '../../prisma/prisma.service'
 
 // Fronteira de identidade da telemetria. O administrador convida, o funcionário
@@ -99,6 +110,16 @@ export interface WorkerDeviceState {
     model: string | null
     pairedAt: Date
     lastSeenAt: Date | null
+    // Os quatro abaixo são do celular Android. No iPhone e no medidor de
+    // pressão a lista de prontidão não se aplica e todos vêm nulos.
+    /** O último relato de prontidão do celular; nulo sem relato. */
+    relato: ReadinessReport | null
+    /** Quando o servidor recebeu o último relato. */
+    relatadoEm: Date | null
+    /** Por onde a leitura chega, derivado do último relato. */
+    caminhosAtivos: ActivePath[] | null
+    /** A lista de prontidão, do último relato mais a data de nascimento. */
+    pendencias: ReadinessStep[] | null
   } | null
   pendingEnrollment: { expiresAt: Date } | null
 }
@@ -371,7 +392,9 @@ export class DeviceAuthService {
     const companyId = companyScopeOf(admin, 'Funcionário não encontrado')
     const worker = await this.prisma.user.findUnique({
       where: { id: workerId },
-      select: { id: true, companyId: true },
+      // A data de nascimento entra na lista de prontidão: sem ela não há
+      // esforço nem desgaste, e só o administrador corrige o cadastro.
+      select: { id: true, companyId: true, profile: { select: { birthDate: true } } },
     })
     if (worker === null || worker.companyId !== companyId) {
       throw new NotFoundException('Funcionário não encontrado')
@@ -381,7 +404,7 @@ export class DeviceAuthService {
       this.prisma.telemetryDevice.findFirst({
         where: { workerId: worker.id, revokedAt: null },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, kind: true, model: true, createdAt: true, lastSeenAt: true },
+        select: { id: true, kind: true, model: true, createdAt: true, lastSeenAt: true, ...READINESS_SELECT },
       }),
       // Pendente é o que ainda pode ser concluído: não consumido e não expirado.
       this.prisma.telemetryEnrollment.findFirst({
@@ -391,6 +414,8 @@ export class DeviceAuthService {
       }),
     ])
 
+    const android = device?.kind === TelemetryDeviceKind.ANDROID_PHONE
+    const relato = device !== null && android ? readinessReportOf(device) : null
     return {
       device:
         device === null
@@ -401,9 +426,29 @@ export class DeviceAuthService {
               model: device.model,
               pairedAt: device.createdAt,
               lastSeenAt: device.lastSeenAt,
+              relato,
+              relatadoEm: relato === null ? null : device.readinessReportedAt,
+              caminhosAtivos: android ? activePathsOf(relato) : null,
+              pendencias: android ? readinessStepsOf(relato, worker.profile?.birthDate != null) : null,
             },
       pendingEnrollment: pending === null ? null : { expiresAt: pending.expiresAt },
     }
+  }
+
+  /**
+   * Grava o relato de prontidão no aparelho que se autenticou, substituindo o
+   * anterior inteiro. O aparelho sai da credencial, nunca do corpo. Só o
+   * celular Android relata: os fatos são do Health Connect e da pulseira por
+   * Bluetooth, e no iPhone a lista de prontidão não existe.
+   */
+  async reportReadiness(device: DeviceIdentity, report: ReadinessReportDto): Promise<void> {
+    if (device.kind !== TelemetryDeviceKind.ANDROID_PHONE) {
+      throw new ForbiddenException('Relato de prontidão é só do celular Android')
+    }
+    await this.prisma.telemetryDevice.update({
+      where: { id: device.deviceId },
+      data: readinessColumnsOf(report, new Date()),
+    })
   }
 
   async revoke(admin: JwtUser, deviceId: string): Promise<void> {
