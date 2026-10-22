@@ -32,6 +32,10 @@ vi.mock('@/services/api/telemetry', () => ({
   telemetryApi: {
     workerCurrent: vi.fn(),
     workerSeries: vi.fn().mockResolvedValue({ data: null, error: { message: 'sem série' } }),
+    // O histórico de condições tem suíte própria; aqui basta não quebrar.
+    workerConditions: vi
+      .fn()
+      .mockResolvedValue({ data: { items: [], nextCursor: null }, error: null }),
   },
 }))
 vi.mock('@/services/telemetry/telemetrySocket', () => ({
