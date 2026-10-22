@@ -31,6 +31,7 @@ import { TelemetryUploadProvider } from '../services/telemetry/TelemetryUploadPr
 import { usePositionHeartbeat } from '../services/positions/usePositionHeartbeat';
 import { useTrackingActive } from '../services/positions/positionTracking';
 import { useTrackingSession } from '../services/positions/useTrackingLifecycle';
+import { useBluetoothHeartRateSession } from '../services/telemetry/bluetooth/useBluetoothHeartRate';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -68,6 +69,9 @@ function PositionsRoot() {
   // Logout ou sessão que não vale mais desligam o rastreio em segundo plano,
   // e a fila guardada tenta sair ao abrir o app e a cada volta ao primeiro plano.
   useTrackingSession(user?.id ?? null, restoring);
+  // O mesmo para a escuta da pulseira pelo Bluetooth (inerte fora do Android
+  // compilado).
+  useBluetoothHeartRateSession(user?.id ?? null, restoring);
   // Com a jornada rastreada a posição já sai pela tarefa, com a hora de cada
   // leitura; o heartbeat se cala para não mandar a mesma posição duas vezes.
   const tracking = useTrackingActive();

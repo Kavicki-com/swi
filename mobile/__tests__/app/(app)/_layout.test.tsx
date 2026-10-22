@@ -47,6 +47,23 @@ jest.mock('../../../services/live/liveBroadcast', () => ({
   liveBroadcast: { stop: () => mockStopLive() },
 }));
 
+let mockGateBluetooth = false;
+jest.mock('../../../lib/featureFlags', () => ({
+  isFeatureEnabled: (gate: string) => gate === 'bluetoothHeartRate' && mockGateBluetooth,
+}));
+let mockPaired = true;
+jest.mock('../../../services/telemetry/TelemetryUploadProvider', () => ({
+  useTelemetryUploadState: () => ({ paired: mockPaired }),
+}));
+let mockChoice: { deviceId: string; name: string | null } | null | undefined = undefined;
+jest.mock('../../../services/telemetry/bluetooth/bluetoothBandChoice', () => ({
+  useBandChoice: () => mockChoice,
+}));
+const mockBluetooth = jest.fn();
+jest.mock('../../../services/telemetry/bluetooth/useBluetoothHeartRate', () => ({
+  useBluetoothHeartRate: (...args: unknown[]) => mockBluetooth(...args),
+}));
+
 const render = () => {
   let tree!: ReturnType<typeof create>;
   act(() => {
@@ -158,5 +175,54 @@ describe('(app)/_layout: câmera ao vivo', () => {
     mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
     render();
     expect(mockLiveSelfView).toHaveBeenCalled();
+  });
+});
+
+// Batimento pela pulseira no Bluetooth: a escuta segue a jornada, com a
+// pulseira escolhida e o pareamento, e só existe com o gate.
+describe('(app)/_layout: pulseira no Bluetooth', () => {
+  beforeEach(() => {
+    mockBluetooth.mockClear();
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    mockJourney = { state: 'ongoing', loadStatus: 'ready', source: 'server' };
+    mockPaired = true;
+    mockChoice = { deviceId: 'A0:00', name: 'Polar H10' };
+  });
+  afterAll(() => {
+    mockGateBluetooth = false;
+  });
+
+  it('sem o gate, a escuta nem é montada', () => {
+    mockGateBluetooth = false;
+    render();
+    expect(mockBluetooth).not.toHaveBeenCalled();
+  });
+
+  it('com o gate, recebe a jornada, o pareamento e a pulseira escolhida', () => {
+    mockGateBluetooth = true;
+    render();
+    expect(mockBluetooth).toHaveBeenLastCalledWith({
+      userId: 'u1',
+      journeyState: 'ongoing',
+      journeyKnown: true,
+      paired: true,
+      deviceId: 'A0:00',
+    });
+  });
+
+  it('escolha ainda não lida segue desconhecida; nenhuma escolha vira null', () => {
+    mockGateBluetooth = true;
+    mockChoice = undefined;
+    render();
+    expect(mockBluetooth.mock.lastCall?.[0]).toMatchObject({ deviceId: undefined });
+    mockChoice = null;
+    mockJourney = { state: 'idle', loadStatus: 'loading', source: null };
+    mockPaired = false;
+    render();
+    expect(mockBluetooth.mock.lastCall?.[0]).toMatchObject({
+      deviceId: null,
+      journeyKnown: false,
+      paired: false,
+    });
   });
 });
