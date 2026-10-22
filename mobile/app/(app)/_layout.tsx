@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '../../services/auth/AuthProvider';
 import { JourneyProvider, useJourney } from '../../services/journey/JourneyProvider';
@@ -8,6 +9,7 @@ import { isFeatureEnabled } from '../../lib/featureFlags';
 import { useBandChoice } from '../../services/telemetry/bluetooth/bluetoothBandChoice';
 import { useBluetoothHeartRate } from '../../services/telemetry/bluetooth/useBluetoothHeartRate';
 import { useTelemetryUploadState } from '../../services/telemetry/TelemetryUploadProvider';
+import { useReadinessReport } from '../../services/telemetry/useReadinessReport';
 import { useEndLiveOnLeave } from '../../services/live/useLiveBroadcast';
 import { SendQueueRoot } from '../../components/outbox/SendQueueRoot';
 import { LiveSelfView } from '../../components/LiveSelfView';
@@ -47,6 +49,14 @@ function BluetoothHeartRateRoot({ userId }: { userId: string }) {
   return null;
 }
 
+// Relato de prontidão ao backend: os fatos do aparelho que o painel mostra
+// ao gestor, enviados quando mudam e a cada sincronização. Null-render, só no
+// Android com o gate do Health Connect.
+function ReadinessReportRoot() {
+  useReadinessReport();
+  return null;
+}
+
 // Câmera ao vivo: segue em qualquer tela da área autenticada e acaba ao sair
 // da conta, quando esta árvore desmonta. Null-render.
 function LiveBroadcastRoot() {
@@ -82,6 +92,7 @@ export default function AppLayout() {
       <JourneyTrackingRoot userId={user.id} />
       {isFeatureEnabled('bluetoothHeartRate') && <BluetoothHeartRateRoot userId={user.id} />}
       <LiveBroadcastRoot />
+      {Platform.OS === 'android' && isFeatureEnabled('healthConnect') && <ReadinessReportRoot />}
       <EvacuationProvider>
         <NotificationProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
