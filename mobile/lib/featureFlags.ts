@@ -30,7 +30,8 @@ export type FeatureGate =
   | 'notifications'
   | 'smartwatch3d'
   | 'appleWatchPilot'
-  | 'healthConnect';
+  | 'healthConnect'
+  | 'bluetoothHeartRate';
 
 export const FEATURE_GATES: Record<FeatureGate, boolean> = {
   watchOnboarding: IS_PROD_BUILD,
@@ -43,6 +44,9 @@ export const FEATURE_GATES: Record<FeatureGate, boolean> = {
   // Pulseiras pelo Health Connect: só Android compilado (EAS ou dev client).
   // Expo Go não carrega o módulo nativo.
   healthConnect: IS_PROD_BUILD && Platform.OS === 'android',
+  // Batimento ao vivo pela pulseira no Bluetooth (perfil padrão 0x180D): o
+  // módulo nativo só existe no Android compilado.
+  bluetoothHeartRate: IS_PROD_BUILD && Platform.OS === 'android',
 };
 
 export function isFeatureEnabled(gate: FeatureGate): boolean {

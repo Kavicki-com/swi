@@ -1,5 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import { uuid } from 'expo-modules-core';
+import { bleHeartRate } from '../../../modules/swi-ble-heart-rate/src';
+import type { ConnectedInterval } from '../../../modules/swi-ble-heart-rate/src/SwiBleHeartRate.types';
 import type { OutboxEvent, OutboxStorage, TelemetryOutbox } from '../telemetryOutbox';
 import { UNKNOWN_BAND_LABEL } from '../telemetryCopy';
 import {
@@ -231,6 +233,12 @@ export interface HealthConnectReaderDeps {
   uuidV4?: () => string;
   /** Repassado ao mapeamento; em produção, `uuid.v5` do expo-modules-core. */
   uuidV5?: (name: string, namespace: string) => string;
+  /**
+   * Trechos em que a pulseira esteve conectada pelo Bluetooth desde `sinceMs`;
+   * em produção, os da ponte do módulo nativo (lista vazia fora do Android
+   * compilado). O batimento desses trechos já subiu ao vivo e não sai de novo.
+   */
+  bluetoothIntervals?: (sinceMs: number) => ConnectedInterval[];
 }
 
 export interface HealthConnectReader {
@@ -303,7 +311,18 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
     now = Date.now,
     uuidV4 = () => uuid.v4(),
     uuidV5 = (name: string, namespace: string) => uuid.v5(name, namespace),
+    bluetoothIntervals = (sinceMs: number) => bleHeartRate.connectedIntervals(sinceMs),
   } = deps;
+
+  // Sem os trechos, o batimento entra como antes (em dobro no pior caso).
+  // Perder a rodada inteira seria pior.
+  const intervalsSince = (sinceMs: number): ConnectedInterval[] => {
+    try {
+      return bluetoothIntervals(sinceMs);
+    } catch {
+      return [];
+    }
+  };
 
   // Sem prazo aqui: a porta já põe um em cada chamada à biblioteca (por
   // página), e um segundo embrulho por cima só mediria a mesma espera.
@@ -383,6 +402,7 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       nowMs: at,
       bandPackage,
       uuidV5,
+      bluetoothIntervals: intervalsSince(at - HEALTH_CONNECT_WINDOW_MS),
     });
     if (events.length === 0) return 0;
     // O que uma rodada anterior deixou na fila e ainda não subiu: a releitura

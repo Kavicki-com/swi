@@ -4,6 +4,10 @@ import { JourneyProvider, useJourney } from '../../services/journey/JourneyProvi
 import { EvacuationProvider } from '../../services/evacuation/EvacuationProvider';
 import { NotificationProvider } from '../../services/notifications/NotificationProvider';
 import { useJourneyTracking } from '../../services/positions/useTrackingLifecycle';
+import { isFeatureEnabled } from '../../lib/featureFlags';
+import { useBandChoice } from '../../services/telemetry/bluetooth/bluetoothBandChoice';
+import { useBluetoothHeartRate } from '../../services/telemetry/bluetooth/useBluetoothHeartRate';
+import { useTelemetryUploadState } from '../../services/telemetry/TelemetryUploadProvider';
 import { useEndLiveOnLeave } from '../../services/live/useLiveBroadcast';
 import { SendQueueRoot } from '../../components/outbox/SendQueueRoot';
 import { LiveSelfView } from '../../components/LiveSelfView';
@@ -21,6 +25,23 @@ function JourneyTrackingRoot({ userId }: { userId: string }) {
     undefined,
     source === 'cache' ? 'cache' : 'server',
   );
+  return null;
+}
+
+// Batimento ao vivo pela pulseira no Bluetooth: a escuta segue a jornada como
+// o GPS, com a pulseira escolhida em Configurações e o aparelho pareado.
+// Null-render, só com o gate (Android compilado).
+function BluetoothHeartRateRoot({ userId }: { userId: string }) {
+  const { state, loadStatus } = useJourney();
+  const { paired } = useTelemetryUploadState();
+  const choice = useBandChoice();
+  useBluetoothHeartRate({
+    userId,
+    journeyState: state,
+    journeyKnown: loadStatus === 'ready' || loadStatus === 'empty',
+    paired,
+    deviceId: choice === undefined ? undefined : (choice?.deviceId ?? null),
+  });
   return null;
 }
 
@@ -57,6 +78,7 @@ export default function AppLayout() {
   return (
     <JourneyProvider userId={user.id}>
       <JourneyTrackingRoot userId={user.id} />
+      {isFeatureEnabled('bluetoothHeartRate') && <BluetoothHeartRateRoot userId={user.id} />}
       <LiveBroadcastRoot />
       <EvacuationProvider>
         <NotificationProvider>

@@ -231,6 +231,108 @@ describe('batimento', () => {
   });
 });
 
+// Com a pulseira conectada pelo Bluetooth, o batimento daquele trecho já
+// subiu ao vivo. O mesmo batimento gravado no Health Connect pelo app da
+// pulseira sairia em dobro, e mais tarde, então fica fora. Só o batimento.
+describe('batimento nos intervalos da pulseira no Bluetooth', () => {
+  const ms = (segundos: number) => AGORA + segundos * 1000;
+
+  it('amostra dentro de um intervalo fechado sai, fora fica, e as bordas contam como dentro', () => {
+    const { ctx } = contexto({ bluetoothIntervals: [{ start: ms(-200), end: ms(-100) }] });
+    const { events, discarded } = mapHealthConnectRecords(
+      [
+        batimento('hr-1', [
+          [-240, 70],
+          [-200, 71],
+          [-150, 72],
+          [-100, 73],
+          [-60, 74],
+        ]),
+      ],
+      ctx,
+    );
+    expect(horarios(events)).toEqual([em(-240), em(-60)]);
+    expect(discarded).toBe(3);
+  });
+
+  it('intervalo aberto (end null) vale até agora', () => {
+    const { ctx } = contexto({ bluetoothIntervals: [{ start: ms(-90), end: null }] });
+    const { events } = mapHealthConnectRecords(
+      [
+        batimento('hr-1', [
+          [-120, 70],
+          [-90, 71],
+          [-30, 72],
+          [0, 73],
+        ]),
+      ],
+      ctx,
+    );
+    expect(horarios(events)).toEqual([em(-120)]);
+  });
+
+  it('vale cada intervalo da lista', () => {
+    const { ctx } = contexto({
+      bluetoothIntervals: [
+        { start: ms(-300), end: ms(-250) },
+        { start: ms(-100), end: ms(-50) },
+      ],
+    });
+    const { events } = mapHealthConnectRecords(
+      [
+        batimento('hr-1', [
+          [-280, 70],
+          [-200, 71],
+          [-80, 72],
+          [-20, 73],
+        ]),
+      ],
+      ctx,
+    );
+    expect(horarios(events)).toEqual([em(-200), em(-20)]);
+  });
+
+  it('a amostra que sai não conta como aceita para a cadência de 15 s', () => {
+    const { ctx } = contexto({ bluetoothIntervals: [{ start: ms(-106), end: ms(-104) }] });
+    const { events } = mapHealthConnectRecords(
+      [
+        batimento('hr-1', [
+          [-120, 70],
+          [-105, 71],
+          [-100, 72],
+        ]),
+      ],
+      ctx,
+    );
+    // -105 está no intervalo; se contasse, -100 cairia a 5 s dela e sairia.
+    expect(horarios(events)).toEqual([em(-120), em(-100)]);
+  });
+
+  it('as outras medições do mesmo trecho nunca saem', () => {
+    const { ctx } = contexto({ bluetoothIntervals: [{ start: ms(-600), end: null }] });
+    const { events } = mapHealthConnectRecords(
+      [
+        batimento('hr-1', [[-100, 70]]),
+        passos('st-1', 120, -300, -200),
+        distancia('di-1', 80, -300, -200),
+        calorias('ca-1', 12, -300, -200),
+        oxigenacao('ox-1', 97, -150),
+        pressao('bp-1', 120, 80, -140),
+        temperatura('te-1', 36.5, -130),
+      ],
+      ctx,
+    );
+    expect(events.some((e) => e.measurements.heartRate !== undefined)).toBe(false);
+    expect(events).toHaveLength(6);
+  });
+
+  it('sem intervalos, o batimento entra como sempre', () => {
+    const { ctx } = contexto({ bluetoothIntervals: [] });
+    const { events } = mapHealthConnectRecords([batimento('hr-1', [[-100, 70]])], ctx);
+    expect(horarios(events)).toEqual([em(-100)]);
+  });
+});
+
 describe('registros de intervalo', () => {
   it('passos viram stepDelta inteiro arredondado, com eventTime = endTime', () => {
     const { ctx } = contexto();
