@@ -2981,6 +2981,52 @@
         ]
       }
     },
+    "/telemetry/v1/workers/{id}/conditions": {
+      "get": {
+        "operationId": "ConditionHistoryController_list",
+        "summary": "",
+        "description": "Condições abertas e fechadas, com o motivo do fechamento, 50 por página, da mais nova à mais antiga.",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Id do último item da página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "telemetry/conditions"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/telemetry/v1/workers/{id}/calibration": {
       "get": {
         "operationId": "CalibrationController_detail",

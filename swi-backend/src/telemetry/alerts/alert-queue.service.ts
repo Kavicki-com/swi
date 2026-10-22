@@ -3,7 +3,7 @@ import type { OperationalAlertStatus, Prisma, TelemetryConditionKind, TelemetryO
 import type { JwtUser } from '../../auth/current-user.decorator'
 import { parseAlertsIncludeDemo } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
-import { URGENT_CONDITION_KINDS } from '../domain/telemetry.types'
+import { URGENT_CONDITION_KINDS, type ConditionRecoveryReason } from '../domain/telemetry.types'
 
 // Fila de alertas operacionais do painel: leitura e triagem.
 //
@@ -70,8 +70,13 @@ export interface AlertQueueItem {
     observedValue: number | null
     thresholdValue: number | null
     openedAt: string
-    /** Preenchido quando o valor já normalizou; o alerta continua até ser triado. */
+    /** Preenchido quando a condição fechou; o alerta continua até ser triado. */
     recoveredAt: string | null
+    /**
+     * Por que a condição fechou; nulo enquanto aberta. Sem ele, recoveredAt de
+     * uma condição vencida (NO_NEW_READING) seria lido como valor que normalizou.
+     */
+    recoveryReason: ConditionRecoveryReason | null
   }
 }
 
@@ -91,7 +96,14 @@ const ALERT_INCLUDE = {
   triagedBy: { select: { id: true, name: true } },
   worker: { select: { id: true, name: true, profile: { select: { sector: true } } } },
   condition: {
-    select: { kind: true, observedValue: true, thresholdValue: true, firstSeenAt: true, recoveredAt: true },
+    select: {
+      kind: true,
+      observedValue: true,
+      thresholdValue: true,
+      firstSeenAt: true,
+      recoveredAt: true,
+      recoveryReason: true,
+    },
   },
 } satisfies Prisma.OperationalAlertInclude
 
@@ -99,8 +111,12 @@ type AlertRow = Prisma.OperationalAlertGetPayload<{ include: typeof ALERT_INCLUD
 
 const iso = (d: Date | null): string | null => (d === null ? null : d.toISOString())
 
-/** Lida a cada pedido: ligar ou desligar na homologação não exige rebuild. */
-const visibleOrigins = (): TelemetryOrigin[] =>
+/**
+ * Lida a cada pedido: ligar ou desligar na homologação não exige rebuild. O
+ * histórico de condições usa a mesma régua, para fila e histórico nunca
+ * discordarem sobre o que é visível.
+ */
+export const visibleOrigins = (): TelemetryOrigin[] =>
   parseAlertsIncludeDemo(process.env) ? ['REAL', 'DEMO'] : ['REAL']
 
 function toItem(row: AlertRow): AlertQueueItem {
@@ -121,6 +137,7 @@ function toItem(row: AlertRow): AlertQueueItem {
       thresholdValue: row.condition.thresholdValue,
       openedAt: row.condition.firstSeenAt.toISOString(),
       recoveredAt: iso(row.condition.recoveredAt),
+      recoveryReason: row.condition.recoveryReason,
     },
   }
 }

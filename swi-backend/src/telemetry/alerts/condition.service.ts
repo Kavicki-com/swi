@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import type { Prisma, TelemetryConditionKind, TelemetryOrigin } from '@prisma/client'
+import { Prisma, type TelemetryConditionKind, type TelemetryOrigin } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { RealtimeGateway } from '../../realtime/realtime.gateway'
 import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
@@ -140,6 +140,46 @@ const SILENCE_RECOVERS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryC
   'WEAR_FATIGUE',
 ])
 
+/**
+ * Prazo do encerramento por vencimento: 24 h sem medição nova da métrica. É o
+ * "recente" que a régua da medição já usa, e não uma terceira régua de tempo.
+ */
+export const NO_NEW_READING_MS = FRESHNESS.BLOOD_PRESSURE.currentMs
+
+/** Teto de candidatas por rodada do vencimento, pelo mesmo motivo do silêncio. */
+export const MAX_NO_NEW_READING_PER_RUN = 200
+
+type NoNewReadingColumn = 'heartRateBpm' | 'oxygenSaturationPct' | 'systolicMmHg'
+
+/**
+ * A coluna da amostra que sustenta cada condição de saúde. Desgaste deriva do
+ * batimento: sem batimento novo, a condição de desgaste vence junto. Nulo é
+ * condição de aparelho, que o vencimento nunca fecha: o silêncio e o evento ao
+ * vivo já cuidam dela. Exaustiva por construção: tipo novo não compila sem
+ * dizer de que métrica vive.
+ */
+export const NO_NEW_READING_METRIC: Readonly<Record<TelemetryConditionKind, NoNewReadingColumn | null>> = {
+  HEART_RATE_HIGH: 'heartRateBpm',
+  HEART_RATE_LOW: 'heartRateBpm',
+  HEART_RATE_FATIGUE: 'heartRateBpm',
+  WEAR_HIGH: 'heartRateBpm',
+  WEAR_FATIGUE: 'heartRateBpm',
+  OXYGEN_FATIGUE: 'oxygenSaturationPct',
+  OXYGEN_LOW: 'oxygenSaturationPct',
+  BLOOD_PRESSURE_REVIEW: 'systolicMmHg',
+  BLOOD_PRESSURE_FATIGUE: 'systolicMmHg',
+  BLOOD_PRESSURE_HIGH: 'systolicMmHg',
+  DEVICE_BATTERY_LOW: null,
+  DEVICE_SIGNAL_LOST: null,
+}
+
+/** "A métrica foi medida nesta amostra", para a reconferência sob o lock. */
+const MEASURED: Readonly<Record<NoNewReadingColumn, Prisma.TelemetrySampleWhereInput>> = {
+  heartRateBpm: { heartRateBpm: { not: null } },
+  oxygenSaturationPct: { oxygenSaturationPct: { not: null } },
+  systolicMmHg: { systolicMmHg: { not: null } },
+}
+
 export interface EvaluateOutcome {
   opened: TelemetryConditionKind[]
   recovered: TelemetryConditionKind[]
@@ -178,6 +218,21 @@ export interface SweepOutcome {
   signalLost: number
   /** Condições contínuas recuperadas por silêncio nesta rodada. */
   recovered: number
+}
+
+export interface NoNewReadingOutcome {
+  /** Condições sem medição nova olhadas na rodada, tenham fechado ou não. */
+  scanned: number
+  /** Condições encerradas por vencimento nesta rodada. */
+  recovered: number
+}
+
+/** Condição ativa de saúde sem amostra recente da métrica, como a busca crua a devolve. */
+interface NoNewReadingCandidate {
+  id: string
+  workerId: string
+  origin: TelemetryOrigin
+  kind: TelemetryConditionKind
 }
 
 @Injectable()
@@ -909,6 +964,86 @@ export class TelemetryConditionService {
   }
 
   /**
+   * Encerramento por vencimento: fecha a condição de saúde cuja métrica não tem
+   * medição nova do mesmo funcionário e origem há 24 h. Cobre o que a varredura
+   * de silêncio não cobre (pressão, oxigenação, lote do Health Connect), que
+   * sem isto ficaria aberto para sempre e engoliria a próxima condição do mesmo
+   * tipo, já que só existe uma ativa por tipo.
+   *
+   * Motivo próprio, NO_NEW_READING, e nunca NORMALIZED: ninguém viu o valor
+   * voltar. O alerta não muda, porque só um humano fecha alerta, e ninguém é
+   * notificado, porque "sua condição foi encerrada" seria lido como melhora. O
+   * evento de tempo real sai como em qualquer fechamento, para o painel tirar a
+   * condição da lista.
+   *
+   * Roda no agendamento do silêncio, com o mesmo instante da rodada. Origem
+   * nenhuma é filtrada: a conta é por condição, contra amostras da mesma origem,
+   * e o atalho do snapshot que obriga o silêncio a ficar no REAL não existe aqui.
+   */
+  async sweepNoNewReading(now: Date): Promise<NoNewReadingOutcome> {
+    const cutoff = new Date(now.getTime() - NO_NEW_READING_MS)
+    const candidates = await this.prisma.$queryRaw<NoNewReadingCandidate[]>(noNewReadingCandidates(cutoff))
+    if (candidates.length === MAX_NO_NEW_READING_PER_RUN) {
+      this.logger.warn(
+        `Varredura de vencimento bateu o teto de ${MAX_NO_NEW_READING_PER_RUN} candidatas na rodada; o resto entra na seguinte`,
+      )
+    }
+
+    const outcome: NoNewReadingOutcome = { scanned: candidates.length, recovered: 0 }
+    for (const candidate of candidates) {
+      try {
+        // Uma transação por candidata, como no silêncio: uma que estoure não
+        // segura as outras.
+        const changes: ConditionChange[] = []
+        await this.prisma.$transaction((tx) => this.closeWithoutNewReading(tx, candidate, cutoff, now, changes))
+        outcome.recovered += changes.length
+        // Só o anúncio, e nunca notifyHealth: ver o comentário do método.
+        await this.announce(changes)
+      } catch (error) {
+        this.logger.warn(`Varredura de vencimento falhou para a condição ${candidate.id}: ${describeError(error)}`)
+      }
+    }
+    return outcome
+  }
+
+  private async closeWithoutNewReading(
+    tx: Prisma.TransactionClient,
+    candidate: NoNewReadingCandidate,
+    cutoff: Date,
+    now: Date,
+    changes: ConditionChange[],
+  ): Promise<void> {
+    // Mesmo lock das outras duas portas, e é ele que faz a condição fechar por
+    // um motivo só: se o silêncio ou uma medição nova chegou antes, quem chega
+    // depois lê o que o primeiro gravou.
+    await this.lockWorkerOrigin(tx, candidate)
+
+    // A busca de candidatas rodou fora do lock: a amostra é RELIDA aqui, para
+    // um lote que chegou no meio da rodada segurar a condição aberta.
+    const column = NO_NEW_READING_METRIC[candidate.kind]
+    if (column === null) return
+    const renewed = await tx.telemetrySample.findFirst({
+      where: {
+        workerId: candidate.workerId,
+        origin: candidate.origin,
+        eventTime: { gt: cutoff },
+        ...MEASURED[column],
+      },
+      select: { eventTime: true },
+    })
+    if (renewed !== null) return
+
+    // ACTIVE no `where`: condição que o silêncio, a normalização ou outra
+    // rodada já fechou guarda o motivo de quem chegou primeiro.
+    const { count } = await tx.telemetryCondition.updateMany({
+      where: { id: candidate.id, status: 'ACTIVE' },
+      data: { status: 'RECOVERED', recoveredAt: now, recoveryReason: 'NO_NEW_READING', lastSeenAt: now },
+    })
+    if (count === 0) return
+    changes.push(changeOf(candidate.workerId, candidate.id, candidate.kind, 'RECOVERED', now))
+  }
+
+  /**
    * Anuncia ao funcionário e aos administradores da empresa dele. Nunca
    * levanta: a condição já está gravada, e o painel reconcilia pelo REST quando
    * o socket falha.
@@ -1056,6 +1191,11 @@ export class TelemetryConditionService {
    * do piloto. A condição real abriria, a fila não receberia nada, e o painel
    * voltaria a mostrar zero urgente. É a mesma falha que a chave única
    * (workerId, kind, origin) já corrige um nível acima, na condição.
+   *
+   * Alerta pendente de condição encerrada por vencimento NÃO segura o novo. A
+   * condição vencida diz que ninguém mediu nada em 24 h, e a medição fora da
+   * faixa que chega depois é fato novo: calá-la atrás do alerta antigo seria o
+   * mesmo alerta engolido que o vencimento existe para impedir.
    */
   private async openAlert(
     tx: Prisma.TransactionClient,
@@ -1066,13 +1206,59 @@ export class TelemetryConditionService {
   ): Promise<boolean> {
     if (!ALERTING_KINDS.has(kind)) return false
     const unresolved = await tx.operationalAlert.findFirst({
-      where: { workerId, origin, status: { in: ['OPEN', 'ACKNOWLEDGED'] }, condition: { kind } },
+      where: {
+        workerId,
+        origin,
+        status: { in: ['OPEN', 'ACKNOWLEDGED'] },
+        // O nulo à parte: `not` sozinho, no SQL, também descartaria a condição
+        // ainda aberta, que é justamente a que tem de segurar.
+        condition: { kind, OR: [{ recoveryReason: null }, { recoveryReason: { not: 'NO_NEW_READING' } }] },
+      },
       select: { id: true },
     })
     if (unresolved !== null) return false
     await tx.operationalAlert.create({ data: { conditionId, workerId, origin, status: 'OPEN' } })
     return true
   }
+}
+
+/**
+ * Candidatas do vencimento numa consulta só: condição ativa de saúde para a
+ * qual NÃO EXISTE amostra do mesmo funcionário e origem, com a métrica dela,
+ * mais nova que o corte. O NOT EXISTS anda pelo índice [workerId, eventTime] da
+ * amostra, e só volta quem venceu, então as condições sustentadas não ocupam
+ * vaga no teto da rodada. A mais esquecida primeiro.
+ *
+ * O nome da coluna entra cru porque identificador não se parametriza; ele vem
+ * só de NO_NEW_READING_METRIC, nunca de fora.
+ */
+function noNewReadingCandidates(cutoff: Date): Prisma.Sql {
+  const kindsByColumn = new Map<NoNewReadingColumn, TelemetryConditionKind[]>()
+  for (const [kind, column] of Object.entries(NO_NEW_READING_METRIC) as Array<
+    [TelemetryConditionKind, NoNewReadingColumn | null]
+  >) {
+    if (column === null) continue
+    kindsByColumn.set(column, [...(kindsByColumn.get(column) ?? []), kind])
+  }
+  const perMetric = [...kindsByColumn].map(
+    ([column, kinds]) => Prisma.sql`(
+      c."kind"::text IN (${Prisma.join(kinds)})
+      AND NOT EXISTS (
+        SELECT 1 FROM "TelemetrySample" s
+        WHERE s."workerId" = c."workerId"
+          AND s."origin" = c."origin"
+          AND s."eventTime" > ${cutoff}
+          AND s.${Prisma.raw(`"${column}"`)} IS NOT NULL
+      )
+    )`,
+  )
+  return Prisma.sql`
+    SELECT c."id", c."workerId", c."origin"::text AS "origin", c."kind"::text AS "kind"
+    FROM "TelemetryCondition" c
+    WHERE c."status" = 'ACTIVE' AND (${Prisma.join(perMetric, ' OR ')})
+    ORDER BY c."lastSeenAt" ASC
+    LIMIT ${MAX_NO_NEW_READING_PER_RUN}
+  `
 }
 
 /** REAL pelo perfil calibrado; DEMO pelo v2, que o roteiro de aceite mostra. */

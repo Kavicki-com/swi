@@ -62,12 +62,24 @@ export class TelemetryConditionSweepJob {
     }
     this.running = true
 
+    // Um instante só para a rodada inteira, como no ciclo de vida: com dois
+    // relógios, duas candidatas da mesma rodada mediriam silêncio contra marcos
+    // diferentes, e o silêncio e o vencimento discordariam da mesma condição.
+    const now = new Date()
+    try {
+      await this.sweepSilence(now)
+      await this.sweepNoNewReading(now)
+    } finally {
+      // No finally, e não no fim do caminho feliz: uma rodada que estourasse
+      // deixaria a marca em pé e pararia a varredura para sempre, em silêncio.
+      this.running = false
+    }
+  }
+
+  private async sweepSilence(now: Date): Promise<void> {
     const startedAt = Date.now()
     try {
-      // Um instante só para a rodada inteira, como no ciclo de vida: com dois
-      // relógios, duas candidatas da mesma rodada mediriam silêncio contra
-      // marcos diferentes.
-      const outcome = await this.conditions.sweepSilentSessions(new Date())
+      const outcome = await this.conditions.sweepSilentSessions(now)
 
       // Só quando houve trabalho. A rodada acontece a cada 30 s e quase sempre
       // não acha ninguém calado: registrar todas encheria o log de nada e
@@ -84,10 +96,27 @@ export class TelemetryConditionSweepJob {
       // uma exceção solta viraria rejeição não tratada no processo. O que ficou
       // de fora entra na rodada de daqui a 30 s, e o silêncio não some sozinho.
       this.logger.warn(`Varredura de silêncio falhou: ${describeError(error)}`)
-    } finally {
-      // No finally, e não no fim do caminho feliz: uma rodada que estourasse
-      // deixaria a marca em pé e pararia a varredura para sempre, em silêncio.
-      this.running = false
+    }
+  }
+
+  /**
+   * Depois do silêncio, e com guarda própria: falha num não deixa o outro sem
+   * rodar. A ordem importa pouco, porque o lock por funcionário e origem decide
+   * quem fecha cada condição, mas o silêncio primeiro mantém o motivo mais
+   * específico para a sessão ao vivo que calou.
+   */
+  private async sweepNoNewReading(now: Date): Promise<void> {
+    const startedAt = Date.now()
+    try {
+      const outcome = await this.conditions.sweepNoNewReading(now)
+      if (outcome.recovered > 0) {
+        this.logger.log(
+          `Varredura de vencimento: ${outcome.scanned} condições olhadas, ` +
+            `${outcome.recovered} encerradas sem leitura nova, em ${Date.now() - startedAt} ms`,
+        )
+      }
+    } catch (error) {
+      this.logger.warn(`Varredura de vencimento falhou: ${describeError(error)}`)
     }
   }
 }
