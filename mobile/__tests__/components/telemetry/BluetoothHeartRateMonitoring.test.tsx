@@ -233,6 +233,35 @@ describe('Pulseira no Bluetooth: escolha', () => {
     expect(botoes(tree)).toEqual(['Trocar pulseira']);
   });
 
+  it('anúncio que chega enquanto a escolha é gravada não traz a lista de volta', async () => {
+    const { tree, ponte, store } = await montar();
+    let gravar!: () => void;
+    const original = store.choose.bind(store);
+    jest.spyOn(store, 'choose').mockImplementationOnce(async (band) => {
+      await new Promise<void>((resolve) => {
+        gravar = resolve;
+      });
+      await original(band);
+    });
+    await tocar(tree, 'Procurar pulseira');
+    await ponte.achar({ deviceId: POLAR.deviceId, name: 'Polar H10', rssi: -60 });
+
+    await act(async () => lista(tree)?.onChange(POLAR.deviceId));
+    // A varredura do Android repete o anúncio várias vezes por segundo: um
+    // deles cai depois de a escolha ir ao disco e antes de a tela trocar de
+    // fase (o ouvinte só sai no commit).
+    const ouvinte = ponte.ble.onScanResult.mock.calls.at(-1)![0];
+    await act(async () => {
+      gravar();
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      ouvinte({ deviceId: POLAR.deviceId, name: 'Polar H10', rssi: -58 });
+    });
+
+    expect(store.current()).toEqual(POLAR);
+    expect(lista(tree)).toBeNull();
+    expect(botoes(tree)).toEqual(['Trocar pulseira']);
+  });
+
   it('falha ao guardar avisa e mantém a lista', async () => {
     const { tree, ponte, store } = await montar();
     jest.spyOn(store, 'choose').mockRejectedValueOnce(new Error('cheio'));
