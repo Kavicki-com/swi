@@ -131,7 +131,11 @@ class BleHeartRateService : Service() {
       }
     } catch (e: Exception) {
       // Permissão revogada entre um relançamento e outro: sem ela o serviço
-      // não pode existir. Para em vez de derrubar o app.
+      // não pode existir. Para em vez de derrubar o app. Parar sem
+      // startForeground só derrubaria quem subiu por startForegroundService,
+      // e esse caminho (o `start` do módulo) confere a permissão antes; o
+      // relançamento do START_STICKY não cobra o startForeground (provado no
+      // Android 16: permissão revogada, relançado em 1 s, parou sem erro).
       Log.w(TAG, "servico nao subiu", e)
       stopSelf()
       return
@@ -183,7 +187,12 @@ class BleHeartRateService : Service() {
       receiverRegistered = false
       running = false
       publish(STATE_IDLE)
-      // A última drenagem leva o resto da caixa (o fim da jornada).
+      // A última drenagem leva o resto da caixa. Parado pela tela (jornada
+      // encerrada ali, pulseira trocada), o app está na frente e a tarefa
+      // sobe. Parado pela própria drenagem (janela fechada ou vencida), o que
+      // sobrou chegou depois do fim da jornada: a drenagem o descarta se a
+      // tarefa subir, e se o sistema recusar o pedido (app em segundo plano)
+      // o resto fica na caixa e a próxima jornada o descarta pela hora.
       if (Inbox.hasPending(this)) kick(System.currentTimeMillis())
     }
     Log.i(TAG, "servico destruido")
@@ -276,6 +285,7 @@ class BleHeartRateService : Service() {
     gatt = null
     if (subscribed) ConnectedIntervals.close(this, System.currentTimeMillis())
     subscribed = false
+    Prefs.flushLastReading(this)
   }
 
   private val recover = Runnable { if (running) startRescan() }
@@ -415,6 +425,7 @@ class BleHeartRateService : Service() {
 
     if (subscribed) ConnectedIntervals.close(this, System.currentTimeMillis())
     subscribed = false
+    Prefs.flushLastReading(this)
     val adapter = adapter()
     if (adapter == null || !adapter.isEnabled) {
       teardownGatt()
@@ -460,7 +471,7 @@ class BleHeartRateService : Service() {
     if (c.uuid != HEART_RATE_MEASUREMENT) return
     val now = System.currentTimeMillis()
     Inbox.append(this, value, now)
-    Prefs.saveLastReading(this, now)
+    Prefs.noteReading(this, now)
     if (now - lastKickAt >= KICK_INTERVAL_MS) {
       // Marcado aqui, na thread da notificação: a próxima notificação já vê
       // a marca e não agenda outro disparo.
@@ -501,11 +512,17 @@ class BleHeartRateService : Service() {
   private fun kick(now: Long) {
     lastKickAt = now
     try {
-      HeadlessJsTaskService.acquireWakeLockNow(this)
       startService(Intent(this, BleDrainTaskService::class.java))
     } catch (e: Exception) {
       Log.w(TAG, "tarefa JS nao iniciou", e)
+      return
     }
+    // Só depois de o sistema aceitar o pedido: a trava não tem prazo e quem a
+    // solta é o fim do BleDrainTaskService. Com o pedido recusado ela ficaria
+    // presa, com a CPU acordada até a próxima jornada. Até a tarefa começar
+    // (ela pega a mesma trava) este código segue na thread principal, onde o
+    // serviço também nasce, então a trava chega antes dele.
+    HeadlessJsTaskService.acquireWakeLockNow(this)
   }
 
   private fun addressTypeOf(device: BluetoothDevice): Int =
