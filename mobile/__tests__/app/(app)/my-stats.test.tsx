@@ -8,11 +8,15 @@ import type { Exam } from '../../../services/api/exams';
 import type { SeriesPeriod } from '../../../services/telemetry/mySeries';
 import { emptySeries, series, SERIES_DAY_START } from '../../../services/telemetry/mySeriesFixtures';
 import {
+  calibrado,
+  calibrando,
   condition,
   metric,
   neverReported,
   reporting,
 } from '../../../services/telemetry/myTelemetryFixtures';
+import * as http from '../../../services/api/http';
+import { fetchMyTelemetry } from '../../../services/telemetry/myTelemetry';
 import type { MySeriesState } from '../../../services/vitals/useMySeries';
 import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
 import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
@@ -138,6 +142,12 @@ const render = async () => {
     );
   });
   return tree;
+};
+
+/** A leitura como o backend a mandaria, interpretada pelo leitor do app. */
+const lerDoBackend = async (corpo: unknown): Promise<WorkerTelemetry> => {
+  jest.spyOn(http, 'apiRequest').mockResolvedValueOnce(corpo);
+  return fetchMyTelemetry();
 };
 
 const textos = (tree: ReturnType<typeof create>) =>
@@ -498,6 +508,42 @@ describe('Meus dados: sinais vitais e fadiga', () => {
 
     mockTelemetryState = lendo(reporting());
     expect(textos(await render()).join('\n')).not.toContain('Dados de demonstração');
+  });
+});
+
+describe('Meus dados: selo da calibração no esforço e no desgaste', () => {
+  const texto = async () => textos(await render()).join('\n');
+
+  it('com a calibração em curso, diz em que dia dos 30 a pessoa está', async () => {
+    mockTelemetryState = lendo({ ...reporting(), calibration: calibrando(12) });
+    expect(await texto()).toContain('Calibrando, dia 12 de 30');
+  });
+
+  it('com a calibração completa, nenhum selo', async () => {
+    mockTelemetryState = lendo({ ...reporting(), baseline: 'MEASURED', calibration: calibrado() });
+    const t = await texto();
+    expect(t).not.toContain('Calibrando');
+    expect(t).not.toContain('Estimativa provisória');
+  });
+
+  it('sem calibração e com o repouso provisório, diz que é estimativa provisória', async () => {
+    mockTelemetryState = lendo({ ...reporting(), baseline: 'PROVISIONAL', calibration: null });
+    expect(await texto()).toContain('Estimativa provisória');
+  });
+
+  // A resposta crua passa pelo leitor de verdade: só o HTTP é dublado.
+  it('calibração torta vira ausente: vale o repouso provisório e a leitura continua', async () => {
+    mockTelemetryState = lendo(
+      await lerDoBackend({
+        ...reporting({ effort: metric(61, { source: 'DERIVED' }) }),
+        baseline: 'PROVISIONAL',
+        calibration: { phase: 'CALIBRATING', recalibrating: 'sim', day: 4, metrics: {} },
+      }),
+    );
+    const t = await texto();
+    expect(t).toContain('Estimativa provisória');
+    expect(t).not.toContain('Calibrando');
+    expect(t).toContain('61,0%');
   });
 });
 
