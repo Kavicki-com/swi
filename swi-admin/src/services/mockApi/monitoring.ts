@@ -142,7 +142,7 @@ const ALERT_USERS_SEED: ReadonlyArray<MonitoringUserAlert> = MONITORING_ROWS.map
     role: p.role,
     specialization: p.specialization,
     avatarUri: p.avatarUri,
-    active: p.isOnline,
+    monitoringPausedAt: null,
     alerts: row.alerts,
   }
 })

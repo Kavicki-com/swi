@@ -135,6 +135,9 @@ export function AlertUserCard({
   pendingAlerts,
   onAcknowledge,
   onResolve,
+  canPauseMonitoring,
+  monitoringPending,
+  onMonitoringChange,
 }: {
   user: MonitoringUserAlert
   expanded: boolean
@@ -147,6 +150,12 @@ export function AlertUserCard({
   pendingAlerts: ReadonlySet<string>
   onAcknowledge: (alertId: string) => void
   onResolve: (alertId: string) => void
+  /** Quem não tem a permissão de pausar vê o estado, mas não altera. */
+  canPauseMonitoring: boolean
+  /** Pedido de pausa ou retomada a caminho do servidor. */
+  monitoringPending: boolean
+  /** true retoma os alertas da pessoa; false pausa. */
+  onMonitoringChange: (monitored: boolean) => void
 }) {
   const theme = useTheme()
   const hasAlerts = user.alerts.length > 0
@@ -194,8 +203,12 @@ export function AlertUserCard({
           </Text>
         </View>
         <VerticalDivider />
+        {/* Desligado = alertas pausados (férias, afastamento). O app segue
+            mandando dados; só os alertas da pessoa param. */}
         <Toggle
-          defaultValue={user.active}
+          value={user.monitoringPausedAt === null}
+          onChange={onMonitoringChange}
+          disabled={!canPauseMonitoring || monitoringPending}
           accessibilityLabel={`Ativar/desativar monitoramento de ${user.name}`}
         />
       </View>

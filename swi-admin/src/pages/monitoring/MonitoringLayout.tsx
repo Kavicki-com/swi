@@ -181,6 +181,10 @@ function tierOf(u: MonitoringUserAlert): MonitoringTier {
   return u.alerts.length > 0 ? 'desgastado' : 'excelente'
 }
 
+// Quem pausa os alertas de um funcionário: monitoring.pause da matriz do
+// backend, dada ao administrador e ao supervisor.
+const PAUSE_LEVELS: ReadonlyArray<string> = ['ADMIN', 'SUPERVISOR']
+
 const EMPTY_BY_TAB: Record<string, string> = {
   alertas: 'Nenhum alerta aberto',
   desgastados: 'Ninguém com desgaste agora',
@@ -194,6 +198,7 @@ export function MonitoringLayout() {
   // Pro destino do chat: a conversa determinística entre eu e o clicado.
   const { user } = useAuth()
   const myId = user?.id ?? ''
+  const canPauseMonitoring = PAUSE_LEVELS.includes(user?.level ?? 'ADMIN')
   const breakpoint = useBreakpoint()
   const isTablet = breakpoint === 'tablet'
   const isWide = breakpoint === 'wide'
@@ -212,6 +217,7 @@ export function MonitoringLayout() {
   const [queueFailed, setQueueFailed] = useState(false)
   const [pendingAlerts, setPendingAlerts] = useState<ReadonlySet<string>>(new Set())
   const [pausingId, setPausingId] = useState<string | null>(null)
+  const [monitoringPending, setMonitoringPending] = useState<ReadonlySet<string>>(new Set())
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   // "Ver Todos" derruba o filtro de tier sem sair da rota, mesmo padrão das
@@ -352,6 +358,40 @@ export function MonitoringLayout() {
       return
     }
     showToast('Pausa solicitada', `${target.name} foi notificado para pausar a atividade`)
+  }
+
+  const setPausedAt = (workerId: string, pausedAt: string | null) =>
+    setDirectory((prev) =>
+      prev
+        ? {
+            ...prev,
+            employees: prev.employees.map((e) =>
+              e.id === workerId ? { ...e, monitoringPausedAt: pausedAt } : e,
+            ),
+          }
+        : prev,
+    )
+
+  // Toggle otimista: o cartão muda na hora, adota o estado que o servidor
+  // gravou e volta ao anterior, com aviso, se o pedido falhar.
+  const changeMonitoring = async (target: MonitoringUserAlert, monitored: boolean) => {
+    const previous = target.monitoringPausedAt
+    setPausedAt(target.id, monitored ? null : new Date().toISOString())
+    setMonitoringPending((prev) => new Set(prev).add(target.id))
+    const { data, error } = monitored
+      ? await telemetryApi.resumeMonitoring(target.id)
+      : await telemetryApi.pauseMonitoring(target.id)
+    setMonitoringPending((prev) => {
+      const next = new Set(prev)
+      next.delete(target.id)
+      return next
+    })
+    if (error || !data) {
+      setPausedAt(target.id, previous)
+      showToast('Erro', error?.message)
+      return
+    }
+    setPausedAt(target.id, data.monitoringPausedAt)
   }
 
   const loading = telemetry.loading || directory === null
@@ -544,6 +584,9 @@ export function MonitoringLayout() {
               pendingAlerts={pendingAlerts}
               onAcknowledge={(id) => void triage(id, 'acknowledge')}
               onResolve={(id) => void triage(id, 'resolve')}
+              canPauseMonitoring={canPauseMonitoring}
+              monitoringPending={monitoringPending.has(u.id)}
+              onMonitoringChange={(monitored) => void changeMonitoring(u, monitored)}
             />
           ))}
           {/* Lista vazia diz por quê, em vez de deixar a seção muda. */}

@@ -381,6 +381,13 @@ export type SeriesPoint = {
   coverage: number
 }
 
+/** Estado da pausa dos alertas de um funcionário, como o backend gravou. */
+export type MonitoringPauseState = {
+  workerId: string
+  /** Desde quando os alertas estão pausados; null quando o funcionário segue monitorado. */
+  monitoringPausedAt: string | null
+}
+
 export type WorkerSeries = {
   workerId: string
   period: SeriesPeriod
@@ -483,5 +490,25 @@ export const telemetryApi = {
           }),
         'Falha ao resolver o alerta',
       ),
+    ),
+
+  // Pausa (PUT) e retomada (DELETE) dos alertas do funcionário. As duas são
+  // idempotentes e devolvem o estado gravado, que a tela adota como verdade.
+  pauseMonitoring: (workerId: string): Promise<ServiceResponse<MonitoringPauseState>> =>
+    call(
+      () =>
+        apiFetch<MonitoringPauseState>(`/telemetry/v1/workers/${id(workerId)}/monitoring-pause`, {
+          method: 'PUT',
+        }),
+      'Falha ao pausar os alertas',
+    ),
+
+  resumeMonitoring: (workerId: string): Promise<ServiceResponse<MonitoringPauseState>> =>
+    call(
+      () =>
+        apiFetch<MonitoringPauseState>(`/telemetry/v1/workers/${id(workerId)}/monitoring-pause`, {
+          method: 'DELETE',
+        }),
+      'Falha ao retomar os alertas',
     ),
 }

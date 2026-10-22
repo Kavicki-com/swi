@@ -27,6 +27,7 @@ export function levelLabel(role: string | undefined): string {
 
 const PERMISSION_LABELS: Record<string, string> = {
   'monitoring.read': 'Acompanhar o monitoramento e a transmissão ao vivo',
+  'monitoring.pause': 'Pausar os alertas de um funcionário',
   'alerts.operate': 'Tratar alertas e pedir pausa',
   'workOrders.operate': 'Operar ordens de serviço',
   'chat.use': 'Usar o chat',
@@ -41,6 +42,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'devices.manage': 'Parear e revogar aparelhos',
   'company.manage': 'Alterar as configurações da empresa',
   'reports.read': 'Ler relatórios',
+  'reports.edit': 'Editar relatórios de outras pessoas',
   'reports.delete': 'Excluir relatórios de outras pessoas',
 }
 

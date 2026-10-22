@@ -77,7 +77,8 @@ export type MonitoringUserAlert = {
   role: string
   specialization: string
   avatarUri: string
-  active: boolean
+  /** Desde quando os alertas da pessoa estão pausados; null quando monitorada. */
+  monitoringPausedAt: string | null
   /**
    * Aba da pessoa. Existe pra régua "Excelentes / Desgastados / Alertas de
    * Fadiga" poder filtrar de verdade. Opcional porque o seed mock não traz

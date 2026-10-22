@@ -33,6 +33,9 @@ export type UserSummaryDto = {
   // Handle visível (@username), o campo "Nome do usuário".
   // null enquanto a conta não definiu um.
   username: string | null
+  // Pausa dos alertas do funcionário (ISO) ou null. Opcional: backend anterior
+  // à pausa não manda o campo, e a ausência vale "monitorado".
+  monitoringPausedAt?: string | null
   createdAt: string
 }
 
@@ -129,6 +132,7 @@ function toEmployee(u: UserSummaryDto | UserDetailDto): Employee {
     sector: u.sector,
     vitalsStatus: 'good',
     active: u.active,
+    monitoringPausedAt: u.monitoringPausedAt ?? null,
     username: u.username ?? undefined,
     gender: toGender(detail.gender),
     allergies: parseAllergies(detail.allergies),
