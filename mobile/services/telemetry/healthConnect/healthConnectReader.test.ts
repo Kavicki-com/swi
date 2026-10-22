@@ -1104,6 +1104,8 @@ describe('state', () => {
       bandLabel: null,
       noBand: false,
       lastSyncAt: null,
+      lastFailureReason: null,
+      lastFailureAt: null,
     });
     expect(m.storage.writes).toBe(0);
   });
@@ -1119,6 +1121,8 @@ describe('state', () => {
       bandLabel: 'Zepp',
       noBand: false,
       lastSyncAt: em(0),
+      lastFailureReason: null,
+      lastFailureAt: null,
     });
   });
 
@@ -1230,5 +1234,82 @@ describe('dependências padrão', () => {
     expect(lerEstado(storage).sessionSalt).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
+  });
+});
+
+describe('última falha da rodada', () => {
+  it.each([
+    ['unavailable', 'unavailable'],
+    ['update_required', 'update_required'],
+  ] as const)('Health Connect %s: falha com esse motivo, na hora da rodada', async (status, motivo) => {
+    const m = montar();
+    m.source.availability.mockResolvedValueOnce(status);
+
+    await m.reader.run();
+
+    expect(await m.reader.state()).toMatchObject({ lastFailureReason: motivo, lastFailureAt: em(0) });
+  });
+
+  it('leitura de batimento negada: permission_denied', async () => {
+    const m = montar();
+    m.source.grantedPermissions.mockResolvedValueOnce(['Steps']);
+
+    await m.reader.run();
+
+    expect(await m.reader.state()).toMatchObject({
+      lastFailureReason: 'permission_denied',
+      lastFailureAt: em(0),
+    });
+  });
+
+  it('porta que lança no meio da leitura: other', async () => {
+    const m = montar();
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    m.source.readRecords.mockRejectedValueOnce(new Error('RemoteException'));
+
+    await m.reader.run();
+
+    expect(await m.reader.state()).toMatchObject({ lastFailureReason: 'other', lastFailureAt: em(0) });
+  });
+
+  it('a rodada seguinte que lê apaga a falha', async () => {
+    const m = montar();
+    m.source.availability.mockResolvedValueOnce('unavailable');
+    await m.reader.run();
+    m.avancar(QUINZE_MIN);
+
+    await m.reader.run();
+
+    expect(await m.reader.state()).toMatchObject({
+      lastFailureReason: null,
+      lastFailureAt: null,
+      lastSyncAt: em(QUINZE_MIN / 1000),
+    });
+  });
+
+  it('a falha repetida leva a hora da rodada nova', async () => {
+    const m = montar();
+    m.source.grantedPermissions.mockResolvedValue(['Steps']);
+    await m.reader.run();
+    m.avancar(QUINZE_MIN);
+
+    await m.reader.run();
+
+    expect(await m.reader.state()).toMatchObject({
+      lastFailureReason: 'permission_denied',
+      lastFailureAt: em(QUINZE_MIN / 1000),
+    });
+  });
+
+  it('rodada pulada pelo intervalo não mexe na falha', async () => {
+    const m = montar();
+    m.source.availability.mockResolvedValueOnce('unavailable');
+    await m.reader.run();
+    m.avancar(60_000);
+
+    expect(await m.reader.run()).toBe(0);
+
+    expect(m.source.availability).toHaveBeenCalledTimes(1);
+    expect(await m.reader.state()).toMatchObject({ lastFailureReason: 'unavailable', lastFailureAt: em(0) });
   });
 });

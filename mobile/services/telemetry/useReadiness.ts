@@ -50,21 +50,33 @@ export interface Readiness {
 }
 
 /**
+ * Os fatos de agora, das mesmas fontes, sem conferir o Health Connect: é o
+ * que o relato de prontidão ao backend lê (useReadinessReport.ts), montado
+ * fora das telas da lista.
+ */
+export function useReadinessFacts(): ReadinessFacts {
+  const bluetooth = isFeatureEnabled('bluetoothHeartRate');
+  const { paired, healthConnect } = useTelemetryUploadState();
+  const bandChoice = useBandChoice(bluetooth ? sharedBandChoiceStore() : SEM_BLUETOOTH);
+  const { profile } = useProfile();
+  return useMemo(
+    () => readinessFactsOf({ paired, healthConnect, bandChoice, profile }),
+    [paired, healthConnect, bandChoice, profile],
+  );
+}
+
+/**
  * Os fatos e os passos de agora. Confere o Health Connect ao montar e a cada
  * volta ao primeiro plano: é na volta da Play Store ou dos ajustes que a
  * pessoa pode ter instalado, concedido ou revogado.
  */
 export function useReadiness(): Readiness {
   const bluetooth = isFeatureEnabled('bluetoothHeartRate');
-  const { paired, healthConnect, checkHealthConnect } = useTelemetryUploadState();
-  const bandChoice = useBandChoice(bluetooth ? sharedBandChoiceStore() : SEM_BLUETOOTH);
-  const { profile } = useProfile();
+  const { checkHealthConnect } = useTelemetryUploadState();
+  const facts = useReadinessFacts();
   useHealthConnectRecheck(checkHealthConnect);
 
-  return useMemo(() => {
-    const facts = readinessFactsOf({ paired, healthConnect, bandChoice, profile });
-    return { facts, steps: readinessStepsOf(facts, { bluetooth }) };
-  }, [paired, healthConnect, bandChoice, profile, bluetooth]);
+  return useMemo(() => ({ facts, steps: readinessStepsOf(facts, { bluetooth }) }), [facts, bluetooth]);
 }
 
 /**

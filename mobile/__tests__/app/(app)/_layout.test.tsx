@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { Redirect, Stack } from 'expo-router';
 import AppLayout from '../../../app/(app)/_layout';
@@ -48,8 +49,11 @@ jest.mock('../../../services/live/liveBroadcast', () => ({
 }));
 
 let mockGateBluetooth = false;
+let mockGateHealthConnect = false;
 jest.mock('../../../lib/featureFlags', () => ({
-  isFeatureEnabled: (gate: string) => gate === 'bluetoothHeartRate' && mockGateBluetooth,
+  isFeatureEnabled: (gate: string) =>
+    (gate === 'bluetoothHeartRate' && mockGateBluetooth) ||
+    (gate === 'healthConnect' && mockGateHealthConnect),
 }));
 let mockPaired = true;
 jest.mock('../../../services/telemetry/TelemetryUploadProvider', () => ({
@@ -62,6 +66,10 @@ jest.mock('../../../services/telemetry/bluetooth/bluetoothBandChoice', () => ({
 const mockBluetooth = jest.fn();
 jest.mock('../../../services/telemetry/bluetooth/useBluetoothHeartRate', () => ({
   useBluetoothHeartRate: (...args: unknown[]) => mockBluetooth(...args),
+}));
+const mockReadinessReport = jest.fn();
+jest.mock('../../../services/telemetry/useReadinessReport', () => ({
+  useReadinessReport: () => mockReadinessReport(),
 }));
 
 const render = () => {
@@ -232,5 +240,37 @@ describe('(app)/_layout: pulseira no Bluetooth', () => {
       journeyKnown: false,
       paired: false,
     });
+  });
+});
+
+describe('(app)/_layout: relato de prontidão', () => {
+  const originalOS = Platform.OS;
+  const naPlataforma = (os: typeof Platform.OS) =>
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+
+  beforeEach(() => {
+    mockReadinessReport.mockClear();
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+  });
+  afterEach(() => {
+    naPlataforma(originalOS);
+    mockGateHealthConnect = false;
+  });
+
+  it('no Android com o gate do Health Connect, o relato acompanha a sessão', () => {
+    naPlataforma('android');
+    mockGateHealthConnect = true;
+    render();
+    expect(mockReadinessReport).toHaveBeenCalled();
+  });
+
+  it('no iPhone, ou sem o gate, nem é montado', () => {
+    naPlataforma('ios');
+    mockGateHealthConnect = true;
+    render();
+    naPlataforma('android');
+    mockGateHealthConnect = false;
+    render();
+    expect(mockReadinessReport).not.toHaveBeenCalled();
   });
 });

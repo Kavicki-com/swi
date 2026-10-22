@@ -118,6 +118,16 @@ export function detectBandPackage(records: readonly HealthConnectRecord[]): stri
 
 export type HealthConnectPermission = 'granted' | 'denied';
 
+/**
+ * Por que a última rodada não leu: Health Connect ausente ou pedindo
+ * atualização, leitura de batimento negada, ou a leitura lançou no meio.
+ */
+export type HealthConnectFailureReason =
+  | 'unavailable'
+  | 'update_required'
+  | 'permission_denied'
+  | 'other';
+
 /** O que as telas mostram (M7). */
 export interface HealthConnectState {
   /** Nulo antes da primeira rodada. */
@@ -140,6 +150,13 @@ export interface HealthConnectState {
    * se nunca houve.
    */
   lastSyncAt: string | null;
+  /**
+   * Motivo da última rodada, se ela não leu; nulo se leu ou se ainda não
+   * houve rodada. Ausente em estado montado à mão, como o segundo plano.
+   */
+  lastFailureReason?: HealthConnectFailureReason | null;
+  /** INÍCIO da rodada que falhou, em ISO; nulo junto com o motivo. */
+  lastFailureAt?: string | null;
 }
 
 /** O estado gravado em arquivo. Disponibilidade e permissão ficam em memória. */
@@ -348,6 +365,9 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
   // início e só escreve `permission` se ele não mudou: a consulta dela pode ter
   // sido respondida antes da concessão, e desfaria a resposta mais nova.
   let permissionVersion = 0;
+  // A última rodada que não leu, também em memória: o que vale é a rodada
+  // mais recente deste processo, e a próxima diz de novo.
+  let lastFailure: { reason: HealthConnectFailureReason; at: number } | null = null;
 
   // Leitura e escrita do arquivo serializadas, como em telemetryOutbox.ts:
   // duas operações que lessem o mesmo estado fariam a segunda escrita apagar
@@ -496,6 +516,7 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       availability = await source.availability();
       if (availability !== 'available') {
         setPermission(null);
+        lastFailure = { reason: availability, at };
         return 0;
       }
       const granted = await source.grantedPermissions();
@@ -504,7 +525,10 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       // Sem batimento não há pulseira a detectar nem monitoramento a fazer.
       // A rodada decide pela própria consulta; se um pedido concedeu no meio,
       // ele já liberou a próxima rodada do intervalo.
-      if (roundPermission === 'denied') return 0;
+      if (roundPermission === 'denied') {
+        lastFailure = { reason: 'permission_denied', at };
+        return 0;
+      }
       // Só os tipos concedidos, na ordem do contrato: ler um tipo sem
       // permissão faz o Health Connect lançar e perderia a rodada inteira.
       const types = HEALTH_CONNECT_RECORD_TYPES.filter((type) => granted.includes(type));
@@ -514,6 +538,7 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
       // aparecer, os passos e a distância das 48 h ainda entram (pelas
       // mudanças, os anteriores ao token se perderiam). Sem pulseira quase não
       // há registro, e a leitura completa sai barata.
+      let added: number;
       if (
         state.firstSyncDone &&
         changesToken !== null &&
@@ -521,16 +546,19 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
         sameTypes(state.tokenTypes, types)
       ) {
         const changes = await readChanges(state, changesToken, types, at);
-        if (!changes.expired) return changes.added;
-        return changes.added + (await readWindow(state, types, at));
+        added = changes.expired ? changes.added + (await readWindow(state, types, at)) : changes.added;
+      } else {
+        added = await readWindow(state, types, at);
       }
-      return await readWindow(state, types, at);
+      lastFailure = null;
+      return added;
     } catch (error) {
       console.warn(
         `[healthConnectReader] leitura do Health Connect não enfileirada: ${String(
           (error as { message?: unknown })?.message ?? error,
         )}`,
       );
+      lastFailure = { reason: 'other', at };
       return 0;
     }
   }
@@ -570,6 +598,8 @@ export function createHealthConnectReader(deps: HealthConnectReaderDeps): Health
         bandLabel: bandLabelOf(bandPackage),
         noBand: persisted?.noBand ?? false,
         lastSyncAt: persisted?.lastSyncAt ?? null,
+        lastFailureReason: lastFailure?.reason ?? null,
+        lastFailureAt: lastFailure === null ? null : new Date(lastFailure.at).toISOString(),
       };
     },
 

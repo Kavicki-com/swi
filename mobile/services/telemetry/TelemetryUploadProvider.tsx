@@ -147,6 +147,8 @@ const HEALTH_CONNECT_FIELDS: Record<keyof HealthConnectState, true> = {
   bandLabel: true,
   noBand: true,
   lastSyncAt: true,
+  lastFailureReason: true,
+  lastFailureAt: true,
 };
 
 // Os campos são todos primitivos: igualdade campo a campo basta.
