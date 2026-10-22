@@ -77,6 +77,7 @@ const READING: WorkerVitalsView = {
   wearLabel: 'Fadiga atual',
   effortLabel: 'Esforço feito',
   calibration: NO_VITALS_CALIBRATION,
+  absence: { heartRate: null, pressure: null, energy: null },
 }
 
 // Medições da mesma leitura: na página, as duas visões saem do mesmo current.
@@ -191,7 +192,7 @@ describe('WorkerDetailsLayout', () => {
     it('período sem medição declara a ausência em vez de desenhar zeros', async () => {
       seriesMock.mockResolvedValue({ data: withKcal(null), error: null })
       await renderLayout({ vitals: READING, seriesWorkerId: 'w1' })
-      expect(await screen.findByText('Sem medição neste período')).toBeInTheDocument()
+      expect(await screen.findByText('Nenhuma leitura neste período')).toBeInTheDocument()
       expect(screen.queryByTestId('calories-chart')).not.toBeInTheDocument()
     })
 

@@ -5,6 +5,7 @@
 // condições do backend, que esta leitura ainda não traz.
 import type { WorkerTelemetry } from '@/services/api/telemetry'
 import { whenLabel } from '@/lib/whenLabel'
+import { absenceLabelOf } from './absenceLabel'
 import {
   calibrationBadgeOf,
   calibrationLineOf,
@@ -33,6 +34,19 @@ export const NO_VITALS_CALIBRATION: VitalsCalibration = {
   activeEnergy: EMPTY_LINE,
 }
 
+/**
+ * Rótulo de ausência ("Aguardando leitura", "Esta pulseira não envia
+ * pressão") das métricas que o cabeçalho e o gasto calórico mostram, ou null
+ * quando a tela fica no traço.
+ */
+export type VitalsAbsence = {
+  heartRate: string | null
+  pressure: string | null
+  energy: string | null
+}
+
+const NO_ABSENCE: VitalsAbsence = { heartRate: null, pressure: null, energy: null }
+
 export type WorkerVitalsView = {
   /** Batimento já formatado, ou null sem leitura. */
   heartRate: string | null
@@ -53,6 +67,7 @@ export type WorkerVitalsView = {
   effortLabel: string
   /** Zona de agora e faixa da pessoa, quando a leitura traz calibração. */
   calibration: VitalsCalibration
+  absence: VitalsAbsence
 }
 
 export const DEMO_DATA_LABEL = 'Dados de demonstração'
@@ -137,6 +152,7 @@ const EMPTY: Omit<WorkerVitalsView, 'status'> = {
   wearLabel: WEAR_LABEL,
   effortLabel: EFFORT_LABEL,
   calibration: NO_VITALS_CALIBRATION,
+  absence: NO_ABSENCE,
 }
 
 /**
@@ -198,7 +214,7 @@ export function vitalsViewFrom(
     }
   }
 
-  const { heartRate, bloodPressure, wear, effort, fatigueEtaMin } = telemetry.metrics
+  const { heartRate, bloodPressure, activeEnergy, wear, effort, fatigueEtaMin } = telemetry.metrics
   const now = options.now ?? Date.now()
 
   // A qualidade já chega decidida pelo backend contra o instante da leitura;
@@ -239,6 +255,12 @@ export function vitalsViewFrom(
     wearLabel: measuredLabel('Fadiga', WEAR_LABEL, wear, telemetry, now),
     effortLabel: measuredLabel('Esforço feito', EFFORT_LABEL, effort, telemetry, now),
     calibration: vitalsCalibrationOf(telemetry),
+    // A energia por hora e a do dia chegam juntas e dizem a mesma ausência.
+    absence: {
+      heartRate: absenceLabelOf('heartRate', heartRate),
+      pressure: absenceLabelOf('pressure', bloodPressure),
+      energy: absenceLabelOf('energy', activeEnergy),
+    },
   }
 }
 

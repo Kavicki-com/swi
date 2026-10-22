@@ -11,9 +11,9 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useOpenLiveCamera } from '@/hooks/useOpenLiveCamera'
 import { formatAge } from '@/lib/formatAge'
 import type { Gender } from '@/services/types/directory'
-import { PERIOD_FROM_OPTION } from '@/services/vitals/caloriesSeries'
+import { caloriesEmptyOf, PERIOD_FROM_OPTION } from '@/services/vitals/caloriesSeries'
 import { useWorkerSeries } from '@/hooks/useWorkerSeries'
-import { NO_DEVICE_LABEL, type WorkerVitalsView } from '@/services/vitals/vitalsView'
+import type { WorkerVitalsView } from '@/services/vitals/vitalsView'
 import type { WorkerMeasurementsView } from '@/services/vitals/measurementsView'
 import {
   Avatar,
@@ -344,15 +344,7 @@ export function WorkerDetailsLayout({
   const [caloriesPeriod, setCaloriesPeriod] = useState<keyof typeof PERIOD_FROM_OPTION>('today')
   const calories = useWorkerSeries(worker.seriesWorkerId, PERIOD_FROM_OPTION[caloriesPeriod])
   // Estado do gráfico quando não há curva a desenhar: a frase diz o porquê.
-  const caloriesEmpty = calories.noDevice
-    ? NO_DEVICE_LABEL
-    : calories.loading
-      ? 'Carregando…'
-      : calories.failed
-        ? 'Gasto calórico indisponível no momento'
-        : calories.points.length === 0
-          ? 'Sem medição neste período'
-          : null
+  const caloriesEmpty = caloriesEmptyOf(calories, vitals.absence.energy)
 
   return (
     <View testID={testID} style={{ gap: theme.gap.m }}>
