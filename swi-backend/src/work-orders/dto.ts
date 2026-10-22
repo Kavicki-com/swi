@@ -17,7 +17,7 @@ import { IsCalendarDate } from '../profile/is-calendar-date'
 
 // Anexo que o PATCH aceita DE VOLTA. O array de uma ordem tem duas origens, as
 // duas gravadas pelo próprio servidor: `order/` é o que o admin subiu pelo
-// painel (presign ADMIN-only) e `task/` é a foto que o funcionário tirou pela
+// painel (presign de quem opera ordens) e `task/` é a foto que o funcionário tirou pela
 // jornada, que o addTaskPhoto empurra pro pai (JourneyService, Decisão F). O
 // form de edição carrega as duas cruas e devolve as duas no PATCH, então
 // aceitar só `order/` respondia 400 e deixava os anexos INEDITÁVEIS em toda
