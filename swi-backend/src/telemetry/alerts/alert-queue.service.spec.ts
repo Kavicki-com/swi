@@ -28,6 +28,7 @@ const row = (over: Record<string, unknown> = {}) => ({
     firstSeenAt: OPENED,
     recoveredAt: null,
     recoveryReason: null,
+    episodeKind: null,
   },
   ...over,
 })
@@ -94,6 +95,7 @@ describe('AlertQueueService.list', () => {
         openedAt: OPENED.toISOString(),
         recoveredAt: null,
         recoveryReason: null,
+        episodeKind: null,
       },
     })
   })
@@ -109,6 +111,32 @@ describe('AlertQueueService.list', () => {
 
     expect(page.items[0].status).toBe('OPEN')
     expect(page.items[0].condition).toMatchObject({ recoveredAt: NOW.toISOString(), recoveryReason: 'NO_NEW_READING' })
+  })
+
+  it('episódios repetidos são Atenção e dizem o tipo repetido, para o rótulo do painel', async () => {
+    const prisma = prismaDouble()
+    prisma.operationalAlert.findMany.mockResolvedValue([
+      row({
+        condition: {
+          ...row().condition,
+          kind: 'REPEATED_EPISODES',
+          episodeKind: 'HEART_RATE_HIGH',
+          observedValue: 3,
+          thresholdValue: 3,
+          recoveredAt: OPENED,
+          recoveryReason: 'NORMALIZED',
+        },
+      }),
+    ])
+
+    const page = await service(prisma).list(ADMIN, {})
+
+    expect(page.items[0].condition).toMatchObject({
+      kind: 'REPEATED_EPISODES',
+      category: 'HEALTH',
+      episodeKind: 'HEART_RATE_HIGH',
+      observedValue: 3,
+    })
   })
 
   it('filtra pelos estados pedidos', async () => {

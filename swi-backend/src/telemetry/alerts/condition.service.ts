@@ -5,7 +5,7 @@ import { RealtimeGateway } from '../../realtime/realtime.gateway'
 import { TelemetryAudienceService } from '../realtime/telemetry-audience.service'
 import { TelemetryHealthNotifier } from './health-notifier'
 import { ageInYearsAt, maxHeartRateForAge, restingFromDailyMinima } from '../assessment/assessment-baseline'
-import { CLOCK_SKEW_MS, EVENT_AGE, FRESHNESS, monitoredDayOf } from '../domain/metric-state'
+import { CLOCK_SKEW_MS, EVENT_AGE, FRESHNESS, monitoredDayOf, monitoredDayWindow } from '../domain/metric-state'
 import { loadThresholds } from '../calibration/calibration-thresholds'
 import { CALIBRATED_ALERT_PROFILE, EXPERIMENTAL_ALERT_PROFILE, type AlertProfile } from './alert-profile'
 import {
@@ -171,7 +171,16 @@ export const NO_NEW_READING_METRIC: Readonly<Record<TelemetryConditionKind, NoNe
   BLOOD_PRESSURE_HIGH: 'systolicMmHg',
   DEVICE_BATTERY_LOW: null,
   DEVICE_SIGNAL_LOST: null,
+  // Nasce recuperada: não há o que vencer.
+  REPEATED_EPISODES: null,
 }
+
+/**
+ * Quantos episódios atrasados do mesmo tipo, no mesmo dia monitorado, viram o
+ * alerta de episódios repetidos. Nenhum episódio sozinho pede ação, porque já
+ * passou; três no mesmo dia são um padrão que alguém precisa olhar.
+ */
+export const REPEATED_EPISODES_THRESHOLD = 3
 
 /** "A métrica foi medida nesta amostra", para a reconferência sob o lock. */
 const MEASURED: Readonly<Record<NoNewReadingColumn, Prisma.TelemetrySampleWhereInput>> = {
@@ -300,6 +309,8 @@ export class TelemetryConditionService {
    *
    * - Abriu e fechou dentro do lote: condição que já nasce recuperada, sem
    *   alerta na fila e sem aviso. Ninguém pode agir sobre algo que já passou.
+   *   Guarda a hora em que o lote chegou, e o terceiro do mesmo tipo no mesmo
+   *   dia monitorado abre a condição de episódios repetidos, com alerta.
    * - Abriu e segue ativa na última leitura: abre como no relógio, com alerta e
    *   aviso depois do commit.
    * - Já estava aberta e fechou: recupera no instante medido.
@@ -343,6 +354,9 @@ export class TelemetryConditionService {
       new Set(activeByKind.keys()),
     )
 
+    // Tipo e dia monitorado de cada episódio atrasado gravado neste lote: é
+    // sobre eles que a conta dos repetidos roda, depois do laço.
+    const lateEpisodes = new Map<string, { kind: TelemetryConditionKind; day: Date }>()
     for (const episode of episodes) {
       const { kind, threshold, observedValue } = episode
       if (episode.openedAtMs === null) {
@@ -379,8 +393,11 @@ export class TelemetryConditionService {
             thresholdValue: threshold.value,
             observedValue,
             calibrationDay: thresholds.calibrationDay,
+            receivedAt: now,
           },
         })
+        const day = monitoredDayOf(firstSeenAt)
+        lateEpisodes.set(`${kind}:${day.getTime()}`, { kind, day })
         continue
       }
 
@@ -398,7 +415,99 @@ export class TelemetryConditionService {
       changes.push(changeOf(session.workerId, createdId, kind, 'OPENED', now))
       if (await this.openAlert(tx, createdId, session.workerId, session.origin, kind)) outcome.alerts += 1
     }
+
+    for (const { kind, day } of lateEpisodes.values()) {
+      const createdId = await this.openRepeatedEpisodes(tx, session, kind, day, thresholds.calibrationDay, now)
+      if (createdId === null) continue
+      outcome.opened.push('REPEATED_EPISODES')
+      outcome.alerts += 1
+      changes.push(changeOf(session.workerId, createdId, 'REPEATED_EPISODES', 'OPENED', now))
+    }
     return outcome
+  }
+
+  /**
+   * Episódios repetidos: com três ou mais episódios atrasados do mesmo tipo,
+   * funcionário e origem no mesmo dia monitorado, grava a condição
+   * REPEATED_EPISODES e o alerta dela. Devolve o id da condição criada, ou nulo
+   * quando ainda não há episódios bastantes ou o dia já tem a sua.
+   *
+   * A condição nasce recuperada, como os episódios, no instante medido do
+   * terceiro: ela descreve um padrão do que já passou, então nunca entra no
+   * estado do funcionário. O alerta nasce assim mesmo, e sem a regra de "um
+   * pendente por tipo" do openAlert: a unicidade aqui é por tipo repetido e
+   * dia, e o alerta pendente de ontem não pode calar o padrão de hoje.
+   *
+   * Um por funcionário, origem, tipo repetido e dia, garantido pela consulta
+   * antes de gravar: o índice único só olha condição ativa, e esta nasce
+   * recuperada. O lock por funcionário e origem, já tomado, é o que impede dois
+   * lotes de passarem pela consulta ao mesmo tempo.
+   */
+  private async openRepeatedEpisodes(
+    tx: Prisma.TransactionClient,
+    session: { id: string; workerId: string; origin: TelemetryOrigin },
+    kind: TelemetryConditionKind,
+    day: Date,
+    calibrationDay: number | null,
+    now: Date,
+  ): Promise<string | null> {
+    const { start, end } = monitoredDayWindow(day)
+    const sameDay = { gte: start, lt: end }
+    // Episódio atrasado é o que tem hora de recebimento: só ele a grava.
+    const late = await tx.telemetryCondition.findMany({
+      where: {
+        workerId: session.workerId,
+        origin: session.origin,
+        kind,
+        receivedAt: { not: null },
+        firstSeenAt: sameDay,
+      },
+      select: { firstSeenAt: true },
+      orderBy: { firstSeenAt: 'asc' },
+    })
+    if (late.length < REPEATED_EPISODES_THRESHOLD) return null
+    const existing = await tx.telemetryCondition.findFirst({
+      where: {
+        workerId: session.workerId,
+        origin: session.origin,
+        kind: 'REPEATED_EPISODES',
+        episodeKind: kind,
+        firstSeenAt: sameDay,
+      },
+      select: { id: true },
+    })
+    if (existing !== null) return null
+
+    // O terceiro pela hora medida, e não o último a chegar: um lote velho que
+    // chega depois pode trazer episódios de antes dos já gravados.
+    const at = late[REPEATED_EPISODES_THRESHOLD - 1].firstSeenAt
+    const created = await tx.telemetryCondition.create({
+      data: {
+        workerId: session.workerId,
+        sessionId: session.id,
+        origin: session.origin,
+        kind: 'REPEATED_EPISODES',
+        episodeKind: kind,
+        status: 'RECOVERED',
+        firstSeenAt: at,
+        lastSeenAt: at,
+        recoveredAt: at,
+        // Os episódios que ela conta fecharam todos pela banda.
+        recoveryReason: 'NORMALIZED',
+        thresholdProfile: CALIBRATED_ALERT_PROFILE.version,
+        // Regra nula: a contagem é a mesma para todo mundo, como o silêncio.
+        thresholdRule: null,
+        thresholdValue: REPEATED_EPISODES_THRESHOLD,
+        observedValue: late.length,
+        calibrationDay,
+        receivedAt: now,
+      },
+      select: { id: true },
+    })
+    await tx.operationalAlert.create({
+      data: { conditionId: created.id, workerId: session.workerId, origin: session.origin, status: 'OPEN' },
+    })
+    return created.id
   }
 
   /**

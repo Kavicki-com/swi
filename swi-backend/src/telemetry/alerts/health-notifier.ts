@@ -11,6 +11,8 @@ export interface OpenedConditionFacts {
   kind: TelemetryConditionKind
   observedValue: number | null
   thresholdValue: number | null
+  /** Só em REPEATED_EPISODES: o tipo do episódio que se repetiu. */
+  episodeKind?: TelemetryConditionKind | null
 }
 
 /** Uma mensagem para cada público; null quando aquele público não recebe. */
@@ -24,11 +26,34 @@ const health = (title: string, body: string): NotificationPayload => ({ domain: 
 const round = (value: number | null) => (value === null ? null : Math.round(value))
 
 /**
+ * O nome de cada tipo no meio de uma frase, para os episódios repetidos.
+ * Exaustiva por construção, como a categoria da fila: tipo novo não compila
+ * sem nome.
+ */
+const KIND_IN_SENTENCE: Readonly<Record<TelemetryConditionKind, string>> = {
+  HEART_RATE_HIGH: 'batimento alto',
+  HEART_RATE_LOW: 'batimento baixo',
+  HEART_RATE_FATIGUE: 'batimento na faixa de fadiga',
+  WEAR_HIGH: 'desgaste alto',
+  WEAR_FATIGUE: 'desgaste na faixa de fadiga',
+  OXYGEN_LOW: 'oxigenação baixa',
+  OXYGEN_FATIGUE: 'oxigenação na faixa de fadiga',
+  BLOOD_PRESSURE_HIGH: 'pressão muito alta',
+  BLOOD_PRESSURE_FATIGUE: 'pressão na faixa de fadiga',
+  BLOOD_PRESSURE_REVIEW: 'pressão para revisar',
+  DEVICE_BATTERY_LOW: 'bateria baixa',
+  DEVICE_SIGNAL_LOST: 'sem sinal',
+  REPEATED_EPISODES: 'episódios repetidos',
+}
+
+/**
  * Quem recebe cada condição e com que texto. Batimento, oxigenação, desgaste e
  * pressão vão ao funcionário e à administração, nas travas e na faixa de fadiga. Bateria fraca vai só ao funcionário, que é
  * quem está com o relógio. Perda de sinal vai só à administração: sem sinal, o
  * aparelho do funcionário provavelmente nem recebe, e quem precisa saber que
- * alguém saiu do monitoramento é quem acompanha a equipe.
+ * alguém saiu do monitoramento é quem acompanha a equipe. Episódios repetidos
+ * também vão só à administração: são um padrão do que já passou, e é o gestor
+ * quem decide o que fazer com ele.
  *
  * O texto carrega só o que a condição gravou, nunca um valor de outra fonte;
  * a pressão não repete o valor porque a condição guarda um número só de um par.
@@ -155,6 +180,16 @@ export function healthNotificationsFor(condition: OpenedConditionFacts, workerNa
         worker: null,
         admins: health(`Sem sinal do relógio: ${workerName}`, 'O monitoramento parou de receber dados.'),
       }
+    case 'REPEATED_EPISODES': {
+      const repeated = condition.episodeKind == null ? null : KIND_IN_SENTENCE[condition.episodeKind]
+      return {
+        worker: null,
+        admins: health(
+          repeated === null ? `Episódios repetidos: ${workerName}` : `Episódios repetidos de ${repeated}: ${workerName}`,
+          `${observed ?? 'Vários'} episódios no mesmo dia, já encerrados quando a pulseira sincronizou.`,
+        ),
+      }
+    }
   }
 }
 
@@ -201,6 +236,7 @@ export class TelemetryHealthNotifier {
           kind: true,
           observedValue: true,
           thresholdValue: true,
+          episodeKind: true,
           worker: { select: { name: true } },
         },
       })

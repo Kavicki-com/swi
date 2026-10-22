@@ -244,6 +244,7 @@ export const CONDITION_CATEGORY: Readonly<Record<ConditionKind, ConditionCategor
   BLOOD_PRESSURE_FATIGUE: 'HEALTH',
   OXYGEN_LOW: isUrgent('OXYGEN_LOW') ? 'URGENT' : 'HEALTH',
   BLOOD_PRESSURE_HIGH: isUrgent('BLOOD_PRESSURE_HIGH') ? 'URGENT' : 'HEALTH',
+  REPEATED_EPISODES: 'HEALTH',
   DEVICE_BATTERY_LOW: 'DEVICE',
   DEVICE_SIGNAL_LOST: 'DEVICE',
 }
@@ -265,6 +266,8 @@ export const CONDITION_METRIC: Readonly<Record<ConditionKind, keyof WorkerMetric
   BLOOD_PRESSURE_FATIGUE: 'bloodPressure',
   DEVICE_BATTERY_LOW: 'battery',
   DEVICE_SIGNAL_LOST: null,
+  // Um padrão de episódios já encerrados, e não uma medição: nasce recuperada.
+  REPEATED_EPISODES: null,
 }
 
 /** Condição aberta como a leitura a entrega. */

@@ -128,6 +128,11 @@ export type ConditionKind =
   /** Travas da calibração individual. */
   | 'OXYGEN_LOW'
   | 'BLOOD_PRESSURE_HIGH'
+  /**
+   * Três ou mais episódios atrasados do mesmo tipo no mesmo dia monitorado.
+   * Nasce recuperada, então nunca está entre as ativas da leitura.
+   */
+  | 'REPEATED_EPISODES'
 
 /**
  * Espelha o enum TelemetryConditionRecoveryReason do schema: por que uma

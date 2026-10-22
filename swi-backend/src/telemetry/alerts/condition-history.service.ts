@@ -27,6 +27,14 @@ export interface ConditionHistoryItem {
   recoveryReason: ConditionRecoveryReason | null
   observedValue: number | null
   thresholdValue: number | null
+  /**
+   * Instante em que chegou o lote do episódio atrasado (abriu e fechou dentro
+   * do lote da pulseira), para o "recebido às". Nulo no resto, que chega ao
+   * vivo: ali medido e recebido são o mesmo instante.
+   */
+  receivedAt: string | null
+  /** Só em REPEATED_EPISODES: o tipo do episódio que se repetiu. */
+  episodeKind: TelemetryConditionKind | null
 }
 
 export interface ConditionHistoryPage {
@@ -56,6 +64,8 @@ export class ConditionHistoryService {
         recoveryReason: true,
         observedValue: true,
         thresholdValue: true,
+        receivedAt: true,
+        episodeKind: true,
       },
       orderBy: [{ firstSeenAt: 'desc' }, { id: 'desc' }],
       take: CONDITION_HISTORY_PAGE + 1,
@@ -76,6 +86,8 @@ export class ConditionHistoryService {
         recoveryReason: row.recoveryReason,
         observedValue: row.observedValue,
         thresholdValue: row.thresholdValue,
+        receivedAt: iso(row.receivedAt),
+        episodeKind: row.episodeKind,
       })),
       nextCursor: rows.length > CONDITION_HISTORY_PAGE ? page[page.length - 1].id : null,
     }

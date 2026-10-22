@@ -149,6 +149,20 @@ describe('healthNotificationsFor', () => {
     expect(out.worker).toBeNull()
     expect(out.admins).toEqual({ domain: 'health', title: 'Sem sinal do relógio: Ana Souza', body: 'O monitoramento parou de receber dados.' })
   })
+
+  // Um padrão do que já passou: o gestor decide, e o funcionário não é avisado.
+  it('episódios repetidos vão só aos administradores, com o tipo repetido', () => {
+    const out = healthNotificationsFor(
+      { kind: 'REPEATED_EPISODES', observedValue: 3, thresholdValue: 3, episodeKind: 'HEART_RATE_HIGH' },
+      'Ana Souza',
+    )
+    expect(out.worker).toBeNull()
+    expect(out.admins).toEqual({
+      domain: 'health',
+      title: 'Episódios repetidos de batimento alto: Ana Souza',
+      body: '3 episódios no mesmo dia, já encerrados quando a pulseira sincronizou.',
+    })
+  })
 })
 
 describe('TelemetryHealthNotifier', () => {

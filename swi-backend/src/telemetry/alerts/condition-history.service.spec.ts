@@ -21,6 +21,8 @@ const conditionRow = (over: Record<string, unknown> = {}) => ({
   recoveryReason: 'NO_NEW_READING',
   observedValue: 185,
   thresholdValue: 180,
+  receivedAt: null,
+  episodeKind: null,
   ...over,
 })
 
@@ -58,6 +60,8 @@ describe('ConditionHistoryService.list: o que cada item diz', () => {
           recoveryReason: null,
           observedValue: 185,
           thresholdValue: 180,
+          receivedAt: null,
+          episodeKind: null,
         },
         {
           id: 'cond-1',
@@ -70,6 +74,8 @@ describe('ConditionHistoryService.list: o que cada item diz', () => {
           recoveryReason: 'NO_NEW_READING',
           observedValue: 185,
           thresholdValue: 180,
+          receivedAt: null,
+          episodeKind: null,
         },
       ],
       nextCursor: null,
@@ -86,6 +92,35 @@ describe('ConditionHistoryService.list: o que cada item diz', () => {
     const page = await service(prisma).list(ADMIN, 'worker-1')
 
     expect(page.items[0]).toMatchObject({ category: 'DEVICE', recoveryReason: 'SIGNAL_RESTORED' })
+  })
+
+  it('episódio atrasado diz quando o lote chegou; episódios repetidos dizem o tipo repetido', async () => {
+    const received = new Date('2026-10-02T18:00:00.000Z')
+    const prisma = prismaDouble()
+    prisma.telemetryCondition.findMany.mockResolvedValue([
+      conditionRow({
+        id: 'rep',
+        kind: 'REPEATED_EPISODES',
+        episodeKind: 'HEART_RATE_HIGH',
+        recoveryReason: 'NORMALIZED',
+        receivedAt: received,
+        observedValue: 3,
+        thresholdValue: 3,
+      }),
+      conditionRow({ id: 'ep', kind: 'HEART_RATE_HIGH', recoveryReason: 'NORMALIZED', receivedAt: received }),
+    ])
+
+    const page = await service(prisma).list(ADMIN, 'worker-1')
+
+    expect(page.items[0]).toMatchObject({
+      kind: 'REPEATED_EPISODES',
+      category: 'HEALTH',
+      episodeKind: 'HEART_RATE_HIGH',
+      receivedAt: received.toISOString(),
+      observedValue: 3,
+      thresholdValue: 3,
+    })
+    expect(page.items[1]).toMatchObject({ kind: 'HEART_RATE_HIGH', episodeKind: null, receivedAt: received.toISOString() })
   })
 
   it('com a demonstração liberada na homologação, ela aparece e diz a própria origem', async () => {
