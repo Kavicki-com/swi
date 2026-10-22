@@ -1,5 +1,6 @@
 // Lista das câmeras cadastradas: seleção para visualizar e as ações de editar
-// e excluir de cada linha.
+// e excluir de cada linha. Sem `onEdit`/`onRemove` (quem não gere câmeras), a
+// linha fica só com a seleção.
 import { Pressable, View } from 'react-native'
 import { Button, Icon, Text, useTheme } from '@kavicki/swi-design-system'
 import type { Camera } from '@/services/api/cameras'
@@ -21,8 +22,8 @@ export function CameraList({
   cameras: ReadonlyArray<Camera>
   selectedId: string | null
   onSelect: (camera: Camera) => void
-  onEdit: (camera: Camera) => void
-  onRemove: (camera: Camera) => void
+  onEdit?: (camera: Camera) => void
+  onRemove?: (camera: Camera) => void
 }) {
   const theme = useTheme()
   return (
@@ -58,18 +59,22 @@ export function CameraList({
                 </Text>
               </View>
             </Pressable>
-            <Button
-              label="Editar"
-              variant="ghost"
-              accessibilityLabel={`Editar ${camera.name}`}
-              onPress={() => onEdit(camera)}
-            />
-            <Button
-              label="Excluir"
-              variant="ghost"
-              accessibilityLabel={`Excluir ${camera.name}`}
-              onPress={() => onRemove(camera)}
-            />
+            {onEdit ? (
+              <Button
+                label="Editar"
+                variant="ghost"
+                accessibilityLabel={`Editar ${camera.name}`}
+                onPress={() => onEdit(camera)}
+              />
+            ) : null}
+            {onRemove ? (
+              <Button
+                label="Excluir"
+                variant="ghost"
+                accessibilityLabel={`Excluir ${camera.name}`}
+                onPress={() => onRemove(camera)}
+              />
+            ) : null}
           </View>
         )
       })}

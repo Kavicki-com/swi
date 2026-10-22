@@ -6,7 +6,7 @@
 // button in surface.accent, the employee-specific variant of the slot).
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Button, Text, Title, useTheme } from '@kavicki/swi-design-system'
 import { employeesApi, type Employee } from '@/services/api/users'
 import { notificationsApi } from '@/services/api/notifications'
@@ -20,12 +20,24 @@ import { useNow } from '@/hooks/useNow'
 import { POSITION_CLOCK_MS, stalePositionNote } from '@/services/positions/positionAge'
 import { useWorkerTelemetry } from '@/hooks/useWorkerTelemetry'
 import { useDemoToast } from '@/lib/demoToast'
+import { useAuth } from '@/hooks/useAuth'
 
 export function EmployeeDetails() {
   const theme = useTheme()
   const navigate = useNavigate()
+  const location = useLocation()
   const { show: showToast } = useDemoToast()
   const { id } = useParams<{ id: string }>()
+  // A lista de funcionários é só do administrador (AdminOnly). O supervisor
+  // chega aqui pelo mapa, pelo monitoramento ou pelo chat: volta para a tela de
+  // onde veio e, se abriu o endereço direto (primeira entrada do histórico),
+  // para o monitoramento.
+  const isAdmin = (useAuth().user?.level ?? 'ADMIN') === 'ADMIN'
+  const goBack = () => {
+    if (isAdmin) navigate('/employees')
+    else if (location.key !== 'default') navigate(-1)
+    else navigate('/monitoring/alerts')
+  }
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [loading, setLoading] = useState(true)
   const [pausing, setPausing] = useState(false)
@@ -108,8 +120,8 @@ export function EmployeeDetails() {
       position={position ? { lat: position.lat, lng: position.lng } : null}
       positionNote={position ? stalePositionNote(position.recordedAt, now) : null}
       testID="employee-details"
-      onBack={() => navigate('/employees')}
-      backA11yLabel="Voltar para a lista de funcionários"
+      onBack={goBack}
+      backA11yLabel={isAdmin ? 'Voltar para a lista de funcionários' : 'Voltar'}
       onOpenFullMap={() => navigate(fullMapPath(employee.id))}
       deviceSection={
         <DeviceSection

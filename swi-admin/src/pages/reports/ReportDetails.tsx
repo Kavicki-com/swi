@@ -33,6 +33,7 @@ import {
   type ReportComment,
 } from '@/services/api/reports'
 import { useDemoToast } from '@/lib/demoToast'
+import { useAuth } from '@/hooks/useAuth'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 
 // reportsApi.get resolve o detalhe (Report) somado à lista de comentários — o
@@ -324,6 +325,9 @@ export function ReportDetails() {
   const navigate = useNavigate()
   const { show: showToast } = useDemoToast()
   const { id } = useParams<{ id: string }>()
+  // Excluir segue reports.delete da matriz do backend, só do administrador: o
+  // supervisor receberia 403, então não vê o botão.
+  const canDelete = (useAuth().user?.level ?? 'ADMIN') === 'ADMIN'
   const [report, setReport] = useState<ReportWithComments | null>(null)
   // Falha do GET (404 de id inexistente ou rede): a mensagem do servidor. Sem
   // ela a tela ficava em "Carregando…" para sempre.
@@ -459,15 +463,17 @@ export function ReportDetails() {
         />
         {/* Por último e sem preenchimento: é a ação mais rara das três e a única
             irreversível, então não disputa peso visual com as outras duas. */}
-        <Button
-          label="Excluir"
-          variant="outline"
-          borderColor={theme.surface.error}
-          labelColor={theme.content.error}
-          iconLeft={<Icon name="delete_icon" size={20} color={theme.content.error} />}
-          accessibilityLabel="Excluir relatório"
-          onPress={() => setConfirmingDelete(true)}
-        />
+        {canDelete ? (
+          <Button
+            label="Excluir"
+            variant="outline"
+            borderColor={theme.surface.error}
+            labelColor={theme.content.error}
+            iconLeft={<Icon name="delete_icon" size={20} color={theme.content.error} />}
+            accessibilityLabel="Excluir relatório"
+            onPress={() => setConfirmingDelete(true)}
+          />
+        ) : null}
       </View>
 
       {/* Section 2 — Main report card (full-width). */}
