@@ -163,6 +163,17 @@ describe('healthNotificationsFor', () => {
       body: '3 episódios no mesmo dia, já encerrados quando a pulseira sincronizou.',
     })
   })
+
+  // Quem pediu já sabe que pediu; quem atende é a equipe do painel.
+  it('pedido de ajuda vai só aos administradores, com o nome de quem pediu', () => {
+    const out = healthNotificationsFor({ kind: 'HELP_REQUESTED', observedValue: null, thresholdValue: null }, 'Ana Souza')
+    expect(out.worker).toBeNull()
+    expect(out.admins).toEqual({
+      domain: 'health',
+      title: 'Pedido de ajuda: Ana Souza',
+      body: 'Pediu ajuda pelo botão de ajuda urgente do app. Veja onde está no mapa de Alertas.',
+    })
+  })
 })
 
 describe('TelemetryHealthNotifier', () => {

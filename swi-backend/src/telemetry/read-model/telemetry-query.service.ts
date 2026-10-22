@@ -40,6 +40,7 @@ import {
   type WorkerTelemetry,
 } from './telemetry-projector'
 import { can } from '../../auth/permissions'
+import { openHelpRequestsOf } from '../help/help-request.service'
 
 // Consultas do read model. Este serviço decide QUAIS LINHAS entram na conta; o
 // que se faz com elas é do projetor, que é puro. A separação é o que permite
@@ -686,7 +687,7 @@ export class TelemetryQueryService {
     // Os totais e a avaliação vêm agrupados também por origem: cada funcionário
     // lê na origem do próprio snapshot, e a escolha da linha certa é feita em
     // memória, sobre poucas linhas por pessoa.
-    const [devices, snapshots, steps, energy, distance, assessments, conditions] = await Promise.all([
+    const [devices, snapshots, steps, energy, distance, assessments, conditions, helpRequests] = await Promise.all([
       // As colunas da ausência vêm na mesma leitura: o celular de cada um sai
       // daqui em memória, sem uma consulta por pessoa.
       this.prisma.telemetryDevice.findMany({
@@ -720,6 +721,7 @@ export class TelemetryQueryService {
         select: { workerId: true, ...CONDITION_FIELDS },
         orderBy: { firstSeenAt: 'asc' },
       }),
+      openHelpRequestsOf(this.prisma, workerIds),
     ])
 
     const snapshotBy = new Map(snapshots.map((s) => [s.workerId, s]))
@@ -757,6 +759,7 @@ export class TelemetryQueryService {
       const base = {
         worker: { id: person.id, name: person.name, sector: person.profile?.sector ?? null },
         devices: ownDevices.map((d) => ({ lastSeenAt: iso(d.lastSeenAt) })),
+        helpRequest: helpRequests.get(person.id) ?? null,
       }
       if (snapshot === undefined) {
         return {

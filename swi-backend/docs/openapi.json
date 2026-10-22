@@ -3378,6 +3378,64 @@
         ]
       }
     },
+    "/help-requests": {
+      "post": {
+        "operationId": "HelpRequestController_request",
+        "summary": "",
+        "description": "Pede ajuda. Com um pedido aberto ou atendido, devolve o mesmo em vez de\nabrir outro. `Idempotency-Key` (UUID v4) é opcional, para a fila offline.",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "help-requests"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/help-requests/mine": {
+      "get": {
+        "operationId": "HelpRequestController_mine",
+        "summary": "",
+        "description": "O pedido mais recente do próprio funcionário, em qualquer estado; `helpRequest` nulo se nunca pediu.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "help-requests"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/companies": {
       "get": {
         "operationId": "CompaniesController_list",

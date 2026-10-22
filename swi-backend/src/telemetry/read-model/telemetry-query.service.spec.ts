@@ -22,6 +22,8 @@ const prismaDouble = () =>
     $queryRaw: jest.fn(),
     telemetryAssessment: { findMany: jest.fn() },
     telemetryCondition: { findMany: jest.fn() },
+    // Pedido de ajuda aberto da lista do painel: por padrão, ninguém pediu.
+    operationalAlert: { findMany: jest.fn().mockResolvedValue([]) },
     telemetryDevice: { findMany: jest.fn(), findFirst: jest.fn() },
     telemetrySession: { findUnique: jest.fn() },
     telemetryDailySummary: { findMany: jest.fn() },
@@ -1172,6 +1174,37 @@ describe('TelemetryQueryService.adminWorkers', () => {
     const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
 
     expect(workers.map((w) => w.worker.name)).toEqual(['Bruno', 'Ana'])
+  })
+
+  it('pedido de ajuda aberto vem na entrada e põe a pessoa à frente até da urgência', async () => {
+    const prisma = prismaDouble()
+    emptyReads(prisma)
+    prisma.user.findMany.mockResolvedValue([person('worker-1', 'Ana'), person('worker-2', 'Bruno')])
+    prisma.telemetrySnapshot.findMany.mockResolvedValue([
+      snapshotRow({ workerId: 'worker-1' }),
+      snapshotRow({ workerId: 'worker-2' }),
+    ])
+    prisma.telemetryCondition.findMany.mockResolvedValue([conditionRow('worker-2')])
+    prisma.operationalAlert.findMany.mockResolvedValue([
+      { id: 'help-1', workerId: 'worker-1', status: 'ACKNOWLEDGED', createdAt: secondsAgo(60), rescues: [{ id: 'rescue-1' }] },
+    ])
+
+    const { workers } = await service(prisma).adminWorkers(ADMIN, NOW)
+
+    expect(workers.map((w) => w.worker.name)).toEqual(['Ana', 'Bruno'])
+    expect(workers[0].helpRequest).toEqual({
+      id: 'help-1',
+      status: 'ATTENDED',
+      createdAt: secondsAgo(60).toISOString(),
+      rescueId: 'rescue-1',
+    })
+    expect(workers[1].helpRequest).toBeNull()
+    const { where } = prisma.operationalAlert.findMany.mock.calls[0][0]
+    expect(where).toEqual({
+      workerId: { in: ['worker-1', 'worker-2'] },
+      status: { in: ['OPEN', 'ACKNOWLEDGED'] },
+      condition: { kind: 'HELP_REQUESTED' },
+    })
   })
 
   it('a lista não lê as entradas da avaliação: a referência cardíaca fica ausente', async () => {

@@ -17,6 +17,7 @@ export type IdempotencyScope =
   | 'journey.pause'
   | 'journey.resume'
   | 'journey.end'
+  | 'help.request'
 
 /**
  * Lê o cabeçalho `Idempotency-Key`. Ausente ou em branco é `undefined`: o

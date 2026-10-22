@@ -2042,6 +2042,7 @@ describe('TelemetryConditionService.sweepNoNewReading: a m√©trica de cada condi√
       DEVICE_BATTERY_LOW: null,
       DEVICE_SIGNAL_LOST: null,
       REPEATED_EPISODES: null,
+      HELP_REQUESTED: null,
     })
   })
 

@@ -4,6 +4,7 @@ import type { JwtUser } from '../../auth/current-user.decorator'
 import { parseAlertsIncludeDemo } from '../../config/runtime-env'
 import { PrismaService } from '../../prisma/prisma.service'
 import { URGENT_CONDITION_KINDS, type ConditionRecoveryReason } from '../domain/telemetry.types'
+import { HelpRequestService } from '../help/help-request.service'
 
 // Fila de alertas operacionais do painel: leitura e triagem.
 //
@@ -42,6 +43,7 @@ const CATEGORY: Readonly<Record<TelemetryConditionKind, AlertCategory>> = {
   OXYGEN_LOW: isUrgent('OXYGEN_LOW') ? 'URGENT' : 'HEALTH',
   BLOOD_PRESSURE_HIGH: isUrgent('BLOOD_PRESSURE_HIGH') ? 'URGENT' : 'HEALTH',
   REPEATED_EPISODES: 'HEALTH',
+  HELP_REQUESTED: isUrgent('HELP_REQUESTED') ? 'URGENT' : 'HEALTH',
   DEVICE_BATTERY_LOW: 'DEVICE',
   DEVICE_SIGNAL_LOST: 'DEVICE',
 }
@@ -149,7 +151,10 @@ function toItem(row: AlertRow): AlertQueueItem {
 
 @Injectable()
 export class AlertQueueService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly helpRequests: HelpRequestService,
+  ) {}
 
   async list(admin: JwtUser, query: AlertQueueQuery): Promise<AlertQueuePage> {
     const companyId = this.companyOf(admin)
@@ -188,7 +193,10 @@ export class AlertQueueService {
       data: { status: 'ACKNOWLEDGED', acknowledgedAt: now, triagedById: admin.userId },
     })
     const after = await this.find(admin, id)
-    if (after.status === 'ACKNOWLEDGED') return toItem(after)
+    if (after.status === 'ACKNOWLEDGED') {
+      this.announceHelp(after, 'ATTENDED', now)
+      return toItem(after)
+    }
     throw new ConflictException('Alerta já encerrado não pode ser reconhecido')
   }
 
@@ -204,8 +212,20 @@ export class AlertQueueService {
       data: { status: 'RESOLVED', resolvedAt: now, triagedById: admin.userId, resolutionNote: note ?? null },
     })
     const after = await this.find(admin, id)
-    if (after.status === 'RESOLVED') return toItem(after)
+    if (after.status === 'RESOLVED') {
+      this.announceHelp(after, 'CLOSED', now)
+      return toItem(after)
+    }
     throw new ConflictException('Alerta dispensado não pode ser resolvido')
+  }
+
+  /**
+   * Pedido de ajuda tratado direto na fila: o app de quem pediu e as outras
+   * telas do painel ficam sabendo pelo aviso do pedido, como no resgate.
+   */
+  private announceHelp(row: AlertRow, status: 'ATTENDED' | 'CLOSED', now: Date): void {
+    if (row.condition.kind !== 'HELP_REQUESTED') return
+    this.helpRequests.announceChanged(row.workerId, row.id, status, now)
   }
 
   /**
