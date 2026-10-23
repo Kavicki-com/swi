@@ -32,7 +32,8 @@ describe('ChatController', () => {
     await c.listMessages('u1', 'conv-1')
 
     expect(s.listConversations).toHaveBeenCalledWith('u1')
-    expect(s.listDirectory).toHaveBeenCalledWith('u1', 'empresa-1')
+    // O papel vai junto: é ele que decide se os dados de saúde saem no contato.
+    expect(s.listDirectory).toHaveBeenCalledWith('u1', 'empresa-1', 'WORKER')
     expect(s.listMessages).toHaveBeenCalledWith('u1', 'conv-1')
   })
 

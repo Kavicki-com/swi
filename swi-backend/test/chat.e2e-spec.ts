@@ -171,3 +171,70 @@ describe('Chat e2e', () => {
     expect(await prisma.conversation.findUnique({ where: { id: cross } })).not.toBeNull()
   })
 })
+
+// Tipo sanguíneo e alergias do colega são dado de saúde: no diretório, só quem
+// tem users.read (ADMIN e SUPERVISOR) recebe. O funcionário recebe null nos
+// dois, e idade e gênero seguem iguais para todos.
+//
+// CNPJ exclusivo deste bloco: o cleanup apaga por CNPJ.
+describe('Chat e2e: saúde no diretório', () => {
+  let app: INestApplication, prisma: PrismaService
+  const CNPJ = '99000000001302'
+  const emails = {
+    alvo: 'chat-saude-alvo@ex.com',
+    worker: 'chat-saude-worker@ex.com',
+    supervisor: 'chat-saude-sup@ex.com',
+    admin: 'chat-saude-admin@ex.com',
+  }
+  let idAlvo = ''
+
+  const cleanup = async () => {
+    await prisma.profile.deleteMany({ where: { user: { email: { in: Object.values(emails) } } } })
+    await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
+    await prisma.company.deleteMany({ where: { cnpj: CNPJ } })
+  }
+  const diretorioDe = async (email: string) => {
+    const { body: auth } = await request(app.getHttpServer()).post('/auth/login').send({ email, password: 'test1234' }).expect(200)
+    const { body } = await request(app.getHttpServer()).get('/chat/directory').set({ Authorization: `Bearer ${auth.accessToken as string}` }).expect(200)
+    return body as Array<Record<string, unknown>>
+  }
+
+  beforeAll(async () => {
+    const mod = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    app = mod.createNestApplication()
+    await app.init()
+    prisma = app.get(PrismaService)
+    await cleanup()
+    const company = await prisma.company.create({
+      data: { name: 'Chat Saude Ltda', cnpj: CNPJ, cep: '01000-000', street: 'Rua S', number: '1', neighborhood: 'Centro', uf: 'SP' },
+    })
+    const bcrypt = await import('bcrypt')
+    const base = { passwordHash: await bcrypt.hash('test1234', 10), emailVerified: true, approvalStatus: 'APPROVED' as const, companyId: company.id }
+    idAlvo = (await prisma.user.create({
+      data: {
+        email: emails.alvo, name: 'Alvo', role: 'WORKER', ...base,
+        profile: { create: { birthDate: new Date('1990-05-04T00:00:00.000Z'), bloodType: 'O-', allergies: 'Dipirona', gender: 'female' } },
+      },
+    })).id
+    const outros: Array<[string, 'WORKER' | 'SUPERVISOR' | 'ADMIN']> = [
+      [emails.worker, 'WORKER'],
+      [emails.supervisor, 'SUPERVISOR'],
+      [emails.admin, 'ADMIN'],
+    ]
+    for (const [email, role] of outros) await prisma.user.create({ data: { email, name: email, role, ...base } })
+  })
+  afterAll(async () => { await cleanup(); await app.close() })
+
+  it.each([
+    ['admin', 'O-', 'Dipirona'],
+    ['supervisor', 'O-', 'Dipirona'],
+    ['worker', null, null],
+  ] as const)('o %s vê o colega com tipo sanguíneo %s e alergias %s', async (quem, bloodType, allergies) => {
+    const alvo = (await diretorioDe(emails[quem])).find((c) => c.workerId === idAlvo)
+    expect(alvo).toBeDefined()
+    expect(alvo!.bloodType).toBe(bloodType)
+    expect(alvo!.allergies).toBe(allergies)
+    expect(alvo!.birthDate).toBe('1990-05-04T00:00:00.000Z')
+    expect(alvo!.gender).toBe('female')
+  })
+})

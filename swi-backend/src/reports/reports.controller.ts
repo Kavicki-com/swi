@@ -43,7 +43,7 @@ export class ReportsController {
   // porque /users é @Roles('ADMIN') e o worker não alcança.
   @Get('assignees')
   listAssignees(@CurrentUser() user: JwtUser) {
-    return this.reports.listAssignees(user.userId, user.companyId)
+    return this.reports.listAssignees(user.userId, user.companyId, user.role)
   }
 
   @Get(':id')
