@@ -23,6 +23,7 @@ import { TelemetryModule } from './telemetry/telemetry.module'
 import { CamerasModule } from './cameras/cameras.module'
 import { RescueModule } from './rescue/rescue.module'
 import { LiveModule } from './live/live.module'
+import { PushModule } from './push/push.module'
 import { HealthController } from './health.controller'
 import { UnhandledErrorFilter } from './common/unhandled-error.filter'
 
@@ -33,7 +34,7 @@ import { UnhandledErrorFilter } from './common/unhandled-error.filter'
       throttlers: [{ ttl: 60000, limit: 100 }],
       skipIf: () => process.env.NODE_ENV === 'test',
     }),
-    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, WorkOrdersModule, ChatModule, RealtimeModule, NotificationModule, WeatherModule, EvacuationModule, QueueModule, SupportModule, PositionsModule, CompaniesModule, TelemetryModule, CamerasModule, RescueModule, LiveModule,
+    PrismaModule, AuthModule, UsersModule, ProfileModule, MediaModule, ReportsModule, JourneyModule, WorkOrdersModule, ChatModule, RealtimeModule, NotificationModule, WeatherModule, EvacuationModule, QueueModule, SupportModule, PositionsModule, CompaniesModule, TelemetryModule, CamerasModule, RescueModule, LiveModule, PushModule,
   ],
   controllers: [HealthController],
   providers: [

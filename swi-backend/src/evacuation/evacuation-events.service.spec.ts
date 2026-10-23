@@ -6,6 +6,9 @@ import { EvacuationEventsService } from './evacuation-events.service'
 // ack idempotente (unique evacuationId+workerId).
 const realtime = () => ({ emitToUsers: jest.fn() }) as any
 const notifications = () => ({ enqueueForMany: jest.fn().mockResolvedValue(undefined) }) as any
+// O push é disparado sem esperar (notifyUsers devolve void): a resposta do
+// start e do end não aguarda o serviço da Expo.
+const push = () => ({ notifyUsers: jest.fn() }) as any
 const prisma = () => ({
   user: { findUnique: jest.fn(), findMany: jest.fn() },
   evacuation: { findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
@@ -45,7 +48,7 @@ describe('EvacuationEventsService.start', () => {
       .mockResolvedValueOnce([{ id: 'a1' }])
     const rt = realtime()
     const notif = notifications()
-    const svc = new EvacuationEventsService(db, rt, notif)
+    const svc = new EvacuationEventsService(db, rt, notif, push())
 
     const dto = await svc.start('a1', 'org1', undefined, MUSTER)
 
@@ -84,10 +87,49 @@ describe('EvacuationEventsService.start', () => {
     const db = prisma()
     db.evacuation.findFirst.mockResolvedValue(evacRow())
     const notif = notifications()
-    const svc = new EvacuationEventsService(db, realtime(), notif)
+    const svc = new EvacuationEventsService(db, realtime(), notif, push())
     await expect(svc.start('a1', 'org1', undefined, MUSTER)).rejects.toBeInstanceOf(ConflictException)
     expect(db.evacuation.create).not.toHaveBeenCalled()
     expect(notif.enqueueForMany).not.toHaveBeenCalled()
+  })
+
+  it('manda push de alta prioridade aos mesmos workers notificados, no canal evacuation', async () => {
+    const db = prisma()
+    db.evacuation.findFirst.mockResolvedValue(null)
+    db.evacuation.create.mockResolvedValue(evacRow())
+    db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([{ id: 'a1' }])
+    const p = push()
+    await new EvacuationEventsService(db, realtime(), notifications(), p).start('a1', 'org1', undefined, MUSTER)
+    expect(p.notifyUsers).toHaveBeenCalledTimes(1)
+    expect(p.notifyUsers).toHaveBeenCalledWith(['w1', 'w2'], {
+      title: 'Evacuação iniciada',
+      body: 'Abra o app e siga a rota até o ponto de encontro.',
+      priority: 'high',
+      channelId: 'evacuation',
+      sound: 'default',
+      data: { type: 'evacuation.started', evacuationId: 'ev1' },
+    })
+  })
+
+  it('409 não manda push', async () => {
+    const db = prisma()
+    db.evacuation.findFirst.mockResolvedValue(evacRow())
+    const p = push()
+    await expect(
+      new EvacuationEventsService(db, realtime(), notifications(), p).start('a1', 'org1', undefined, MUSTER),
+    ).rejects.toBeInstanceOf(ConflictException)
+    expect(p.notifyUsers).not.toHaveBeenCalled()
+  })
+
+  it('push que lança não rejeita o start (a evacuação já persistiu)', async () => {
+    const db = prisma()
+    db.evacuation.findFirst.mockResolvedValue(null)
+    db.evacuation.create.mockResolvedValue(evacRow())
+    db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([])
+    const p = push()
+    p.notifyUsers.mockImplementation(() => { throw new Error('push quebrado') })
+    const dto = await new EvacuationEventsService(db, realtime(), notifications(), p).start('a1', 'org1', undefined, MUSTER)
+    expect(dto.id).toBe('ev1')
   })
 
   it('falha do emit WS não rejeita o start (evacuação já persistiu)', async () => {
@@ -97,7 +139,7 @@ describe('EvacuationEventsService.start', () => {
     db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([])
     const rt = realtime()
     rt.emitToUsers.mockImplementation(() => { throw new Error('socket down') })
-    const dto = await new EvacuationEventsService(db, rt, notifications()).start('a1', 'org1', undefined, MUSTER)
+    const dto = await new EvacuationEventsService(db, rt, notifications(), push()).start('a1', 'org1', undefined, MUSTER)
     expect(dto.id).toBe('ev1')
   })
 
@@ -106,7 +148,7 @@ describe('EvacuationEventsService.start', () => {
     db.evacuation.findFirst.mockResolvedValue(null)
     db.evacuation.create.mockResolvedValue(evacRow())
     db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([])
-    const dto = await new EvacuationEventsService(db, realtime(), notifications()).start('a1', 'org1', undefined, MUSTER)
+    const dto = await new EvacuationEventsService(db, realtime(), notifications(), push()).start('a1', 'org1', undefined, MUSTER)
     expect(db.evacuation.create.mock.calls[0][0].data.area).toBeUndefined()
     expect(dto.area).toBeNull()
   })
@@ -116,7 +158,7 @@ describe('EvacuationEventsService.start', () => {
     db.evacuation.findFirst.mockResolvedValue(null)
     db.evacuation.create.mockResolvedValue(evacRow({ area: areaClosed }))
     db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([])
-    const dto = await new EvacuationEventsService(db, realtime(), notifications()).start('a1', 'org1', areaDrawn, MUSTER)
+    const dto = await new EvacuationEventsService(db, realtime(), notifications(), push()).start('a1', 'org1', areaDrawn, MUSTER)
     expect(db.evacuation.create.mock.calls[0][0].data.area).toEqual(areaClosed)
     expect(dto.area).toEqual(areaClosed)
   })
@@ -126,7 +168,7 @@ describe('EvacuationEventsService.start', () => {
     db.evacuation.findFirst.mockResolvedValue(null)
     const notif = notifications()
     await expect(
-      new EvacuationEventsService(db, realtime(), notif).start('a1', 'org1', areaDrawn, undefined),
+      new EvacuationEventsService(db, realtime(), notif, push()).start('a1', 'org1', areaDrawn, undefined),
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(db.evacuation.create).not.toHaveBeenCalled()
     expect(notif.enqueueForMany).not.toHaveBeenCalled()
@@ -137,7 +179,7 @@ describe('EvacuationEventsService.start', () => {
     db.evacuation.findFirst.mockResolvedValue(null)
     db.evacuation.create.mockResolvedValue(evacRow({ musterPoint: MUSTER }))
     db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([])
-    const dto = await new EvacuationEventsService(db, realtime(), notifications()).start(
+    const dto = await new EvacuationEventsService(db, realtime(), notifications(), push()).start(
       'a1',
       'org1',
       areaDrawn,
@@ -151,7 +193,7 @@ describe('EvacuationEventsService.start', () => {
     const db = prisma()
     db.evacuation.findFirst.mockResolvedValue(null)
     await expect(
-      new EvacuationEventsService(db, realtime(), notifications()).start(
+      new EvacuationEventsService(db, realtime(), notifications(), push()).start(
         'a1',
         'org1',
         [
@@ -181,7 +223,7 @@ describe('EvacuationEventsService.ack', () => {
   it('upsert idempotente + emite progresso pros admins da org', async () => {
     const db = ackSetup()
     const rt = realtime()
-    await new EvacuationEventsService(db, rt, notifications()).ack('w1', 'ev1')
+    await new EvacuationEventsService(db, rt, notifications(), push()).ack('w1', 'ev1')
     const up = db.evacuationAck.upsert.mock.calls[0][0]
     expect(up.where).toEqual({ evacuationId_workerId: { evacuationId: 'ev1', workerId: 'w1' } })
     expect(up.create).toMatchObject({ evacuationId: 'ev1', workerId: 'w1' })
@@ -196,7 +238,7 @@ describe('EvacuationEventsService.ack', () => {
     const db = ackSetup()
     db.user.findUnique.mockResolvedValue({ id: 'w9', role: 'WORKER', companyId: 'org2' })
     await expect(
-      new EvacuationEventsService(db, realtime(), notifications()).ack('w9', 'ev1'),
+      new EvacuationEventsService(db, realtime(), notifications(), push()).ack('w9', 'ev1'),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(db.evacuationAck.upsert).not.toHaveBeenCalled()
   })
@@ -205,7 +247,7 @@ describe('EvacuationEventsService.ack', () => {
     const db = ackSetup()
     db.evacuation.findUnique.mockResolvedValue(evacRow({ status: 'ENDED' }))
     await expect(
-      new EvacuationEventsService(db, realtime(), notifications()).ack('w1', 'ev1'),
+      new EvacuationEventsService(db, realtime(), notifications(), push()).ack('w1', 'ev1'),
     ).rejects.toBeInstanceOf(ConflictException)
     expect(db.evacuationAck.upsert).not.toHaveBeenCalled()
   })
@@ -219,7 +261,7 @@ describe('EvacuationEventsService.active', () => {
       { workerId: 'w2', ackAt: new Date('2026-07-25T18:05:00Z') },
     ])
     db.user.findMany.mockResolvedValueOnce(workerRows)
-    const dto = await new EvacuationEventsService(db, realtime(), notifications()).active('org1')
+    const dto = await new EvacuationEventsService(db, realtime(), notifications(), push()).active('org1')
     expect(dto).toMatchObject({ id: 'ev1', total: 2, acked: 1 })
     expect(dto!.workers).toEqual([
       { id: 'w1', name: 'Worker Um', acked: false, ackAt: null },
@@ -230,7 +272,7 @@ describe('EvacuationEventsService.active', () => {
   it('sem ativa → null', async () => {
     const db = prisma()
     db.evacuation.findFirst.mockResolvedValue(null)
-    const dto = await new EvacuationEventsService(db, realtime(), notifications()).active('org1')
+    const dto = await new EvacuationEventsService(db, realtime(), notifications(), push()).active('org1')
     expect(dto).toBeNull()
   })
 
@@ -239,7 +281,7 @@ describe('EvacuationEventsService.active', () => {
     db.evacuation.findFirst.mockResolvedValue(evacRow({ area: areaClosed }))
     db.evacuationAck.findMany.mockResolvedValue([])
     db.user.findMany.mockResolvedValueOnce(workerRows)
-    const dto = await new EvacuationEventsService(db, realtime(), notifications()).active('org1')
+    const dto = await new EvacuationEventsService(db, realtime(), notifications(), push()).active('org1')
     expect(dto!.area).toEqual(areaClosed)
   })
 })
@@ -253,7 +295,7 @@ describe('EvacuationEventsService.end', () => {
       .mockResolvedValueOnce(workerRows)
       .mockResolvedValueOnce([{ id: 'a1' }])
     const rt = realtime()
-    await new EvacuationEventsService(db, rt, notifications()).end('org1', 'ev1')
+    await new EvacuationEventsService(db, rt, notifications(), push()).end('org1', 'ev1')
     const upd = db.evacuation.update.mock.calls[0][0]
     expect(upd.where).toEqual({ id: 'ev1' })
     expect(upd.data.status).toBe('ENDED')
@@ -264,12 +306,41 @@ describe('EvacuationEventsService.end', () => {
     expect(payload).toMatchObject({ id: 'ev1' })
   })
 
+  it('manda push só de dados aos workers, para o app desligar o rastreio', async () => {
+    const db = prisma()
+    db.evacuation.findUnique.mockResolvedValue(evacRow())
+    db.evacuation.update.mockResolvedValue(evacRow({ status: 'ENDED' }))
+    db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([{ id: 'a1' }])
+    const p = push()
+    await new EvacuationEventsService(db, realtime(), notifications(), p).end('org1', 'ev1')
+    expect(p.notifyUsers).toHaveBeenCalledWith(['w1', 'w2'], {
+      priority: 'high',
+      contentAvailable: true,
+      data: { type: 'evacuation.ended', evacuationId: 'ev1' },
+    })
+    const [, content] = p.notifyUsers.mock.calls[0]
+    expect(content).not.toHaveProperty('title')
+    expect(content).not.toHaveProperty('body')
+  })
+
+  it('push que lança não rejeita o end', async () => {
+    const db = prisma()
+    db.evacuation.findUnique.mockResolvedValue(evacRow())
+    db.evacuation.update.mockResolvedValue(evacRow({ status: 'ENDED' }))
+    db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([])
+    const p = push()
+    p.notifyUsers.mockImplementation(() => { throw new Error('push quebrado') })
+    await expect(new EvacuationEventsService(db, realtime(), notifications(), p).end('org1', 'ev1')).resolves.toBeUndefined()
+  })
+
   it('evacuação de OUTRA org → NotFound, sem update', async () => {
     const db = prisma()
     db.evacuation.findUnique.mockResolvedValue(evacRow({ companyId: 'org2' }))
+    const p = push()
     await expect(
-      new EvacuationEventsService(db, realtime(), notifications()).end('org1', 'ev1'),
+      new EvacuationEventsService(db, realtime(), notifications(), p).end('org1', 'ev1'),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(db.evacuation.update).not.toHaveBeenCalled()
+    expect(p.notifyUsers).not.toHaveBeenCalled()
   })
 })

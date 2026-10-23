@@ -211,6 +211,29 @@ export interface RuntimeEnv {
   readonly socketPingIntervalMs?: number
   /** Swagger (UI em /docs e JSON em /docs-json) ligado. API_DOCS=0 desliga. */
   readonly apiDocs: boolean
+  /** Envio de push pelo serviço da Expo. PUSH_ENABLED=0 desliga. */
+  readonly pushEnabled: boolean
+  /** Token de acesso da conta Expo, quando o projeto exige envio autenticado. */
+  readonly expoAccessToken?: string
+}
+
+/**
+ * Envio de push pelo serviço da Expo. '1' liga e '0' desliga em qualquer
+ * ambiente; vazio ou ausente liga fora de teste, porque a suíte não pode bater
+ * num serviço externo e em produção o padrão seguro é avisar o aparelho. Lida
+ * a cada envio, como a fila de demonstração, para valer sem recompilar.
+ */
+export function parsePushEnabled(source: NodeJS.ProcessEnv): boolean {
+  const raw = source.PUSH_ENABLED
+  if (raw === '1') return true
+  if (raw === '0') return false
+  return (source.NODE_ENV ?? 'development') !== 'test'
+}
+
+/** Vazio equivale a ausente: header Authorization só com token de verdade. */
+export function parseExpoAccessToken(source: NodeJS.ProcessEnv): string | undefined {
+  const raw = source.EXPO_ACCESS_TOKEN?.trim()
+  return raw ? raw : undefined
 }
 
 export const SOCKET_PING_MIN_MS = 1_000
@@ -363,6 +386,13 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
   const liveIceServers = parseLiveIceServers(source, problems)
   const socketPingIntervalMs = parseSocketPingInterval(source, problems)
 
+  // Valor escrito errado ("true", "sim") não pode virar silenciosamente o
+  // padrão: quem tentou desligar o push acharia que desligou.
+  const rawPush = source.PUSH_ENABLED
+  if (rawPush !== undefined && rawPush !== '' && rawPush !== '0' && rawPush !== '1') {
+    problems.push('PUSH_ENABLED precisa ser 0 ou 1')
+  }
+
   const smtpPort = Number(source.SMTP_PORT ?? 1025)
   if (!Number.isInteger(smtpPort) || smtpPort <= 0 || smtpPort > 65535) {
     problems.push('SMTP_PORT precisa ser um inteiro entre 1 e 65535')
@@ -409,5 +439,7 @@ export function parseRuntimeEnv(source: NodeJS.ProcessEnv): Readonly<RuntimeEnv>
     liveIceServers,
     socketPingIntervalMs,
     apiDocs: parseApiDocs(source),
+    pushEnabled: parsePushEnabled(source),
+    expoAccessToken: parseExpoAccessToken(source),
   })
 }

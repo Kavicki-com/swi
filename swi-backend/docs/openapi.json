@@ -2186,6 +2186,62 @@
         ]
       }
     },
+    "/push/tokens": {
+      "post": {
+        "operationId": "PushController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPushTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "push"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "PushController_remove",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemovePushTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "push"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/support": {
       "post": {
         "operationId": "SupportController_create",
@@ -4651,6 +4707,40 @@
             "type": "object"
           }
         }
+      },
+      "RegisterPushTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "/^Expo(nent)?PushToken\\[[^\\]\\s]+\\]$/"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "android",
+              "ios"
+            ]
+          }
+        },
+        "required": [
+          "token",
+          "platform"
+        ]
+      },
+      "RemovePushTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "/^Expo(nent)?PushToken\\[[^\\]\\s]+\\]$/"
+          }
+        },
+        "required": [
+          "token"
+        ]
       },
       "CreateSupportRequestDto": {
         "type": "object",
