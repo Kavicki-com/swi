@@ -48,7 +48,7 @@ describe('ChatService', () => {
   // fora da minha própria lista.
   it('listDirectory traz as contas aprovadas da minha empresa exceto eu, presignando avatar', async () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
-    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, 'empresa-1')
+    const out = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, 'empresa-1', 'ADMIN')
     const where = db.user.findMany.mock.calls[0][0].where
     expect(where).toEqual({
       approvalStatus: 'APPROVED',
@@ -56,9 +56,9 @@ describe('ChatService', () => {
       companyId: 'empresa-1',
     })
     expect(db.user.findMany.mock.calls[0][0].take).toBe(200)
-    // birthDate, bloodType, allergies e gender vão junto: sem esses campos o
-    // painel do chat cai em idade e tipo sanguíneo fixos para todo contato, e
-    // em um único gênero para todo mundo.
+    // birthDate, bloodType, allergies e gender vão junto para o painel: sem
+    // esses campos o painel do chat cai em idade e tipo sanguíneo fixos para
+    // todo contato, e em um único gênero para todo mundo.
     expect(out[0]).toEqual({
       workerId: B, name: 'full-bbbb', sector: 'Setor Leste', role: 'Operador',
       avatarUri: 'signed:chat/avatars/bbbb.png',
@@ -74,10 +74,26 @@ describe('ChatService', () => {
   // então quem não tem empresa só vê quem também não tem.
   it('listDirectory de quem não tem empresa pede companyId nulo e não recorta por papel', async () => {
     const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
-    await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, null)
+    await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, null, 'WORKER')
     const where = db.user.findMany.mock.calls[0][0].where
     expect(where.companyId).toBeNull()
     expect(where).not.toHaveProperty('role')
+  })
+
+  // Tipo sanguíneo e alergias são dado de saúde: só quem tem users.read (o
+  // painel) recebe. O funcionário vê o colega com os dois campos em null, e
+  // idade e gênero seguem para todos.
+  it.each([
+    ['ADMIN', 'B+', 'Poeira'],
+    ['SUPERVISOR', 'B+', 'Poeira'],
+    ['WORKER', null, null],
+  ])('listDirectory pedido por %s: tipo sanguíneo %s, alergias %s', async (role, bloodType, allergies) => {
+    const db = prisma(); db.user.findMany.mockResolvedValue([userRow(B)])
+    const [contato] = await new ChatService(db, media(), realtime(), notifications()).listDirectory(A, 'empresa-1', role)
+    expect(contato.bloodType).toBe(bloodType)
+    expect(contato.allergies).toBe(allergies)
+    expect(contato.birthDate).toBe(new Date('1990-05-04').toISOString())
+    expect(contato.gender).toBe('female')
   })
 
   it('listConversations escopa em participants ∋ eu e ordena por recência', async () => {

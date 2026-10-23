@@ -41,10 +41,10 @@ describe('ReportsController', () => {
     expect(s.list).toHaveBeenCalledWith('empresa-1', { limit: undefined, offset: undefined })
   })
 
-  it('responsáveis atribuíveis saem do par usuário/empresa do token', async () => {
+  it('responsáveis atribuíveis saem do usuário, da empresa e do papel do token', async () => {
     const s = service()
     await new ReportsController(s).listAssignees(user)
-    expect(s.listAssignees).toHaveBeenCalledWith('u1', 'empresa-1')
+    expect(s.listAssignees).toHaveBeenCalledWith('u1', 'empresa-1', 'WORKER')
   })
 
   it('relatório de outra empresa (ou inexistente) vira 404, não corpo nulo', async () => {
