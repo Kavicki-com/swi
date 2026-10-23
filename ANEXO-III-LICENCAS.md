@@ -147,6 +147,7 @@ Este arquivo é gerado por `node scripts/licenses/generate-anexo-iii.mjs` a part
 | `expo-image-picker` | 17.0.11 | MIT |  |
 | `expo-linking` | 8.0.12 | MIT |  |
 | `expo-location` | 19.0.8 | MIT |  |
+| `expo-notifications` | 0.32.17 | MIT |  |
 | `expo-router` | 6.0.24 | MIT |  |
 | `expo-secure-store` | 15.0.8 | MIT |  |
 | `expo-splash-screen` | 31.0.13 | MIT |  |

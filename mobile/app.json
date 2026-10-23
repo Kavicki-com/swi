@@ -96,7 +96,11 @@
         "expo-build-properties",
         { "android": { "minSdkVersion": 26 } }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      [
+        "expo-notifications",
+        { "enableBackgroundRemoteNotifications": true }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

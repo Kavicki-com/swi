@@ -13,6 +13,7 @@ import { createSessionKeeper } from './sessionKeeper';
 import { onUnauthorized } from '../api/unauthorized';
 import { getJourneyCache } from '../journey/journeyCache';
 import { connectionStatus } from '../realtime/connectionStatus';
+import { unregisterPush } from '../push/pushRegistration';
 
 /**
  * Quanto a abertura espera o servidor confirmar a sessão antes de abrir pela
@@ -188,6 +189,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // E a pessoa sai mesmo se o backend falhar ao apagar o que guardou.
     keeper.stop();
     try {
+      // O aparelho deixa de receber push desta conta. Antes de apagar o JWT,
+      // porque a rota exige autenticação; com prazo curto e sem lançar, para
+      // a saída sem sinal não ficar presa.
+      await unregisterPush().catch(() => undefined);
       await backend.signOut();
     } finally {
       await clearJourneyCache();
