@@ -74,12 +74,6 @@ export interface PositionTracking {
   stop(): Promise<void>;
   /** Nada aberto, visto pela tarefa: desliga e mantém os arquivos. */
   halt(): Promise<void>;
-  /**
-   * A janela da pessoa existe e está dentro das 12 h. Responde depois do
-   * ligar e desligar já pedidos: é por aqui que a escuta da pulseira, que
-   * segue a mesma janela, sabe se ela foi aberta.
-   */
-  windowOpenFor(userId: string): Promise<boolean>;
   /** Tenta mandar o que a fila guardou. Falha fica para a próxima. */
   drain(userId: string): Promise<void>;
   isActive(): boolean;
@@ -252,11 +246,6 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
     endEvacuation: () => (supported ? queued(endEvacuation) : nothing()),
     stop: () => queued(stop),
     halt: () => queued(halt),
-    windowOpenFor: (userId) =>
-      queued(async () => {
-        const current = await window.read();
-        return current?.userId === userId && isWindowOpen(current, now());
-      }),
 
     async drain(userId) {
       try {

@@ -250,8 +250,8 @@ describe('(app)/_layout: câmera ao vivo', () => {
   });
 });
 
-// Batimento pela pulseira no Bluetooth: a escuta segue a jornada, com a
-// pulseira escolhida e o pareamento, e só existe com o gate.
+// Batimento pela pulseira no Bluetooth: a escuta segue a pulseira escolhida e
+// o pareamento, nunca a jornada, e só existe com o gate.
 describe('(app)/_layout: pulseira no Bluetooth', () => {
   beforeEach(() => {
     mockBluetooth.mockClear();
@@ -270,24 +270,29 @@ describe('(app)/_layout: pulseira no Bluetooth', () => {
     expect(mockBluetooth).not.toHaveBeenCalled();
   });
 
-  it('com o gate, recebe a jornada, o pareamento e a pulseira escolhida', () => {
+  it('com o gate, recebe o pareamento e a pulseira escolhida', () => {
     mockGateBluetooth = true;
     render();
-    expect(mockBluetooth).toHaveBeenLastCalledWith({
-      userId: 'u1',
-      journeyState: 'ongoing',
-      journeyKnown: true,
-      journeySource: 'server',
-      paired: true,
-      deviceId: 'A0:00',
-    });
+    expect(mockBluetooth).toHaveBeenLastCalledWith({ userId: 'u1', paired: true, deviceId: 'A0:00' });
   });
 
-  it('jornada da cópia guardada chega como cópia', () => {
+  it('iniciar, pausar ou encerrar a jornada não muda nada para a escuta', () => {
     mockGateBluetooth = true;
-    mockJourney = { state: 'ongoing', loadStatus: 'ready', source: 'cache' };
-    render();
-    expect(mockBluetooth.mock.lastCall?.[0]).toMatchObject({ journeySource: 'cache' });
+    const vistos = (
+      [
+        { state: 'idle', loadStatus: 'ready', source: 'server' },
+        { state: 'ongoing', loadStatus: 'ready', source: 'server' },
+        { state: 'paused', loadStatus: 'ready', source: 'cache' },
+        { state: 'idle', loadStatus: 'loading', source: null },
+      ] as const
+    ).map((journey) => {
+      mockJourney = { ...journey };
+      render();
+      return mockBluetooth.mock.lastCall?.[0];
+    });
+    for (const visto of vistos) {
+      expect(visto).toEqual({ userId: 'u1', paired: true, deviceId: 'A0:00' });
+    }
   });
 
   it('escolha ainda não lida segue desconhecida; nenhuma escolha vira null', () => {
@@ -296,14 +301,9 @@ describe('(app)/_layout: pulseira no Bluetooth', () => {
     render();
     expect(mockBluetooth.mock.lastCall?.[0]).toMatchObject({ deviceId: undefined });
     mockChoice = null;
-    mockJourney = { state: 'idle', loadStatus: 'loading', source: null };
     mockPaired = false;
     render();
-    expect(mockBluetooth.mock.lastCall?.[0]).toMatchObject({
-      deviceId: null,
-      journeyKnown: false,
-      paired: false,
-    });
+    expect(mockBluetooth.mock.lastCall?.[0]).toEqual({ userId: 'u1', deviceId: null, paired: false });
   });
 });
 

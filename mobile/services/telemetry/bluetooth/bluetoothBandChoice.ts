@@ -2,11 +2,13 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { File, Paths } from 'expo-file-system';
 import type { OutboxStorage } from '../telemetryOutbox';
 
-// A pulseira que a pessoa escolheu em Configurações > Monitoramento. Fica no
-// JavaScript, e não só no nativo, porque a escolha acontece fora da jornada:
-// o nativo só guarda o endereço quando o serviço sobe (`start`), e escolher
-// não pode subir serviço nenhum. O ciclo de vida (useBluetoothHeartRate.ts)
-// lê daqui o endereço que passa ao `start`; a tela, o nome que mostra.
+// A pulseira que a pessoa escolheu em Configurações > Monitoramento. Escolher
+// é ativar o monitoramento: o ciclo de vida (useBluetoothHeartRate.ts) liga a
+// escuta com o endereço daqui, e a drenagem (bluetoothInboxDrain.ts) abre a
+// sessão de monitoramento pela escolha. Encerrar apaga a escolha, e a escuta
+// para. Fica no JavaScript, e não só no nativo, porque a tela, o ciclo de
+// vida e a drenagem precisam ler a mesma escolha, também antes de o serviço
+// subir.
 
 export const BAND_CHOICE_FILE_NAME = 'bluetooth-band.json';
 
@@ -15,7 +17,16 @@ export interface BandChoice {
   deviceId: string;
   /** Nome anunciado; null quando a pulseira não anuncia nome. */
   name: string | null;
+  /**
+   * Hora (ms) da escolha. Escolher de novo, mesmo a mesma pulseira, é outra
+   * escolha e abre outra sessão de monitoramento. Ausente no arquivo, vale
+   * como escolhida desde sempre.
+   */
+  chosenAt?: number;
 }
+
+/** O que a tela passa ao escolher; a hora é do armazenamento. */
+export type BandPick = Pick<BandChoice, 'deviceId' | 'name'>;
 
 export interface BandChoiceStore {
   /** `undefined` antes de o arquivo ser lido; `null` sem pulseira escolhida. */
@@ -23,7 +34,9 @@ export interface BandChoiceStore {
   /** Lê o arquivo. Rejeita se o disco falhar, e a escolha segue desconhecida. */
   load(): Promise<BandChoice | null>;
   /** Grava e só então troca. Rejeita se não gravar: a pessoa precisa saber. */
-  choose(choice: BandChoice): Promise<void>;
+  choose(pick: BandPick): Promise<void>;
+  /** Encerrar: apaga a escolha. Rejeita se não gravar, e a escolha fica. */
+  end(): Promise<void>;
   subscribe(listener: () => void): () => void;
 }
 
@@ -35,15 +48,29 @@ function parseChoice(text: string | null): BandChoice | null {
   try {
     const raw: unknown = JSON.parse(text);
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
-    const { deviceId, name } = raw as Record<string, unknown>;
+    const { deviceId, name, chosenAt } = raw as Record<string, unknown>;
     const id = nonEmpty(deviceId);
-    return id === null ? null : { deviceId: id, name: nonEmpty(name) };
+    if (id === null) return null;
+    const choice: BandChoice = { deviceId: id, name: nonEmpty(name) };
+    if (typeof chosenAt === 'number' && Number.isFinite(chosenAt)) choice.chosenAt = chosenAt;
+    return choice;
   } catch {
     return null;
   }
 }
 
-export function createBandChoiceStore(storage: OutboxStorage): BandChoiceStore {
+/**
+ * A escolha guardada, lida direto do arquivo. É o que a drenagem usa: roda
+ * sem tela e não deve avisar a tela a cada rodada. Rejeita se o disco falhar.
+ */
+export async function readBandChoice(storage: OutboxStorage): Promise<BandChoice | null> {
+  return parseChoice(await storage.read());
+}
+
+export function createBandChoiceStore(
+  storage: OutboxStorage,
+  now: () => number = Date.now,
+): BandChoiceStore {
   let choice: BandChoice | null | undefined;
   const listeners = new Set<() => void>();
   const set = (next: BandChoice | null) => {
@@ -57,9 +84,14 @@ export function createBandChoiceStore(storage: OutboxStorage): BandChoiceStore {
       set(loaded);
       return loaded;
     },
-    async choose(next) {
+    async choose(pick) {
+      const next: BandChoice = { deviceId: pick.deviceId, name: pick.name, chosenAt: now() };
       await storage.write(JSON.stringify(next));
       set(next);
+    },
+    async end() {
+      await storage.write('');
+      set(null);
     },
     subscribe(listener) {
       listeners.add(listener);

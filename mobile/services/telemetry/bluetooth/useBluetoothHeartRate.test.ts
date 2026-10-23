@@ -1,7 +1,6 @@
 import { createElement, type ComponentType } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import type { BleHeartRate } from '../../../modules/swi-ble-heart-rate/src';
-import type { JourneyState } from '../../journey/types';
 import {
   bluetoothStartProblem,
   resetBluetoothStartProblem,
@@ -61,22 +60,9 @@ const PULSEIRA = 'A0:9E:1A:00:00:01';
 interface Props extends Partial<BluetoothHeartRateInput> {
   ble: BleHeartRate;
   enabled?: boolean;
-  windowOpenFor?: (userId: string) => Promise<boolean>;
 }
-function Harness({ ble, enabled = true, windowOpenFor = async () => true, ...input }: Props) {
-  useBluetoothHeartRate(
-    {
-      userId: 'u1',
-      journeyState: 'ongoing',
-      journeyKnown: true,
-      paired: true,
-      deviceId: PULSEIRA,
-      ...input,
-    },
-    ble,
-    enabled,
-    windowOpenFor,
-  );
+function Harness({ ble, enabled = true, ...input }: Props) {
+  useBluetoothHeartRate({ userId: 'u1', paired: true, deviceId: PULSEIRA, ...input }, ble, enabled);
   return null;
 }
 const harness = (props: Props) => createElement(Harness as ComponentType<any>, props);
@@ -90,83 +76,43 @@ async function montar(props: Props) {
 }
 
 describe('useBluetoothHeartRate', () => {
-  it('jornada em andamento ou pausada liga a escuta com a pulseira escolhida', async () => {
-    for (const journeyState of ['ongoing', 'paused'] as JourneyState[]) {
-      const ble = fakeBle();
-      await montar({ ble, journeyState });
-      expect(ble.start).toHaveBeenCalledWith(PULSEIRA);
-      expect(ble.stop).not.toHaveBeenCalled();
-    }
-  });
-
-  it('pergunta pela janela do rastreio da pessoa antes de ligar', async () => {
+  it('escolher a pulseira liga a escuta na hora, sem jornada nenhuma', async () => {
     const ble = fakeBle();
-    const windowOpenFor = jest.fn(async (_userId: string) => true);
-    await montar({ ble, windowOpenFor });
-    expect(windowOpenFor).toHaveBeenCalledWith('u1');
+    const r = await montar({ ble, deviceId: null });
+    expect(ble.start).not.toHaveBeenCalled();
+    await act(async () => r.update(harness({ ble, deviceId: PULSEIRA })));
     expect(ble.start).toHaveBeenCalledWith(PULSEIRA);
-  });
-
-  it('sem a janela aberta (cópia sem janela, 12 h vencidas) não liga e desliga', async () => {
-    // A drenagem para o serviço sem a janela: ligar aqui viraria liga e
-    // desliga a cada volta ao app.
-    const ble = fakeBle();
-    await montar({ ble, windowOpenFor: async () => false });
-    expect(ble.start).not.toHaveBeenCalled();
-    expect(ble.stop).toHaveBeenCalled();
-
-    await appState('active');
-    expect(ble.start).not.toHaveBeenCalled();
-  });
-
-  it('jornada da cópia sem janela que depois chega do servidor liga', async () => {
-    // O GPS abre a janela ao ler o servidor; a escuta pergunta de novo.
-    const ble = fakeBle();
-    let open = false;
-    const windowOpenFor = async () => open;
-    const r = await montar({ ble, windowOpenFor, journeySource: 'cache' });
-    expect(ble.start).not.toHaveBeenCalled();
-    open = true;
-    await act(async () => r.update(harness({ ble, windowOpenFor, journeySource: 'server' })));
-    expect(ble.start).toHaveBeenCalledWith(PULSEIRA);
-  });
-
-  it('jornada que encerra antes da resposta da janela não liga', async () => {
-    const ble = fakeBle();
-    let answer!: (open: boolean) => void;
-    const windowOpenFor = () =>
-      new Promise<boolean>((resolve) => {
-        answer = resolve;
-      });
-    const r = await montar({ ble, windowOpenFor });
-    await act(async () => r.update(harness({ ble, windowOpenFor, journeyState: 'idle' })));
-    await act(async () => answer(true));
-    expect(ble.start).not.toHaveBeenCalled();
-  });
-
-  it('jornada ociosa desliga', async () => {
-    const ble = fakeBle();
-    await montar({ ble, journeyState: 'idle' });
-    expect(ble.stop).toHaveBeenCalled();
-    expect(ble.start).not.toHaveBeenCalled();
-  });
-
-  it('jornada que encerra desliga; que recomeça, liga de novo', async () => {
-    const ble = fakeBle();
-    const r = await montar({ ble, journeyState: 'ongoing' });
-    await act(async () => r.update(harness({ ble, journeyState: 'idle' })));
     expect(ble.stop).toHaveBeenCalledTimes(1);
-    await act(async () => r.update(harness({ ble, journeyState: 'ongoing' })));
-    expect(ble.start).toHaveBeenCalledTimes(2);
   });
 
-  it('jornada ainda desconhecida não age: nem liga nem desliga', async () => {
-    for (const journeyState of ['idle', 'ongoing'] as JourneyState[]) {
+  it('com a pulseira escolhida e o aparelho pareado, liga ao abrir o app', async () => {
+    const ble = fakeBle();
+    await montar({ ble });
+    expect(ble.start).toHaveBeenCalledWith(PULSEIRA);
+    expect(ble.stop).not.toHaveBeenCalled();
+  });
+
+  it('não desliga sozinha: 13 h depois segue ligada', async () => {
+    jest.useFakeTimers();
+    try {
       const ble = fakeBle();
-      await montar({ ble, journeyState, journeyKnown: false });
-      expect(ble.start).not.toHaveBeenCalled();
+      await montar({ ble });
+      await act(async () => {
+        jest.advanceTimersByTime(13 * 60 * 60 * 1000);
+      });
       expect(ble.stop).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
     }
+  });
+
+  it('encerrar (escolha apagada) desliga; escolher de novo liga', async () => {
+    const ble = fakeBle();
+    const r = await montar({ ble });
+    await act(async () => r.update(harness({ ble, deviceId: null })));
+    expect(ble.stop).toHaveBeenCalledTimes(1);
+    await act(async () => r.update(harness({ ble, deviceId: PULSEIRA })));
+    expect(ble.start).toHaveBeenCalledTimes(2);
   });
 
   it('escolha da pulseira ainda não lida não age', async () => {
@@ -176,10 +122,11 @@ describe('useBluetoothHeartRate', () => {
     expect(ble.stop).not.toHaveBeenCalled();
   });
 
-  it('sem pulseira escolhida não liga', async () => {
+  it('sem pulseira escolhida não liga e desliga o que vinha de antes', async () => {
     const ble = fakeBle();
     await montar({ ble, deviceId: null });
     expect(ble.start).not.toHaveBeenCalled();
+    expect(ble.stop).toHaveBeenCalledTimes(1);
   });
 
   it('sem pareamento não liga, e o pareamento revogado desliga', async () => {
@@ -211,7 +158,7 @@ describe('useBluetoothHeartRate', () => {
     }
   });
 
-  it('trocar de pulseira no meio da jornada liga com a nova', async () => {
+  it('trocar de pulseira liga com a nova', async () => {
     const ble = fakeBle();
     const r = await montar({ ble });
     await act(async () => r.update(harness({ ble, deviceId: 'B0:00:00:00:00:02' })));
@@ -252,7 +199,7 @@ describe('useBluetoothHeartRate', () => {
     const ble = fakeBle();
     ble.start.mockRejectedValueOnce(coded('E_START_FAILED'));
     const r = await montar({ ble });
-    await act(async () => r.update(harness({ ble, journeyState: 'idle' })));
+    await act(async () => r.update(harness({ ble, deviceId: null })));
     expect(bluetoothStartProblem()).toBeNull();
   });
 
@@ -271,42 +218,66 @@ interface SessionProps {
   ble: BleHeartRate;
   enabled?: boolean;
   tokenExists?: () => Promise<boolean>;
+  endBand?: () => Promise<void>;
 }
-function SessionHarness({ userId, restoring = false, ble, enabled = true, tokenExists }: SessionProps) {
-  useBluetoothHeartRateSession(userId, restoring, ble, enabled, tokenExists ?? (async () => true));
+const noopEnd = async () => undefined;
+function SessionHarness({ userId, restoring = false, ble, enabled = true, tokenExists, endBand }: SessionProps) {
+  useBluetoothHeartRateSession(userId, restoring, ble, enabled, tokenExists ?? (async () => true), endBand ?? noopEnd);
   return null;
 }
 const session = (props: SessionProps) => createElement(SessionHarness as ComponentType<any>, props);
 
 describe('useBluetoothHeartRateSession', () => {
-  it('logout desliga a escuta', async () => {
+  it('logout encerra: desliga a escuta e apaga a pulseira escolhida', async () => {
     const ble = fakeBle();
+    const endBand = jest.fn(async () => undefined);
     let r!: ReturnType<typeof TestRenderer.create>;
     await act(async () => {
-      r = TestRenderer.create(session({ userId: 'u1', ble }));
+      r = TestRenderer.create(session({ userId: 'u1', ble, endBand }));
     });
     expect(ble.stop).not.toHaveBeenCalled();
-    await act(async () => r.update(session({ userId: null, ble })));
+    expect(endBand).not.toHaveBeenCalled();
+    await act(async () => r.update(session({ userId: null, ble, endBand })));
     expect(ble.stop).toHaveBeenCalledTimes(1);
+    expect(endBand).toHaveBeenCalledTimes(1);
   });
 
-  it('app aberto sem sessão e sem token desliga o que vinha de antes', async () => {
+  it('a escolha que não pôde ser apagada no logout não derruba nada', async () => {
     const ble = fakeBle();
+    const endBand = jest.fn(async () => {
+      throw new Error('disco');
+    });
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let r!: ReturnType<typeof TestRenderer.create>;
     await act(async () => {
-      TestRenderer.create(session({ userId: null, ble, tokenExists: async () => false }));
+      r = TestRenderer.create(session({ userId: 'u1', ble, endBand }));
+    });
+    await act(async () => r.update(session({ userId: null, ble, endBand })));
+    expect(ble.stop).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('app aberto sem sessão e sem token encerra o que vinha de antes', async () => {
+    const ble = fakeBle();
+    const endBand = jest.fn(async () => undefined);
+    await act(async () => {
+      TestRenderer.create(session({ userId: null, ble, tokenExists: async () => false, endBand }));
     });
     expect(ble.stop).toHaveBeenCalled();
+    expect(endBand).toHaveBeenCalledTimes(1);
   });
 
   it('sem sessão mas com token guardado não desliga, nem enquanto restaura', async () => {
     const ble = fakeBle();
+    const endBand = jest.fn(async () => undefined);
     await act(async () => {
-      TestRenderer.create(session({ userId: null, ble, tokenExists: async () => true }));
+      TestRenderer.create(session({ userId: null, ble, tokenExists: async () => true, endBand }));
     });
     await act(async () => {
-      TestRenderer.create(session({ userId: null, restoring: true, ble, tokenExists: async () => false }));
+      TestRenderer.create(session({ userId: null, restoring: true, ble, tokenExists: async () => false, endBand }));
     });
     expect(ble.stop).not.toHaveBeenCalled();
+    expect(endBand).not.toHaveBeenCalled();
   });
 
   it('com o gate desligado ou sem módulo, nada é chamado', async () => {

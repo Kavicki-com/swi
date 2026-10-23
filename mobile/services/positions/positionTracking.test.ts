@@ -265,34 +265,6 @@ describe('createPositionTracking, retomar', () => {
   });
 });
 
-// Quem segue a mesma janela (a escuta da pulseira) pergunta por ela depois do
-// ligar em curso: o abrir da janela pelo GPS vem antes da resposta.
-describe('createPositionTracking, janela aberta', () => {
-  it('responde depois do começar pedido antes', async () => {
-    const { tracking } = setup();
-    const start = tracking.start('u1');
-    await expect(tracking.windowOpenFor('u1')).resolves.toBe(true);
-    await start;
-  });
-
-  it('sem janela, de outra pessoa ou depois das 12 h, fechada', async () => {
-    const { tracking, window, avancar } = setup();
-    await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
-    await window.open('u2', new Date(T0));
-    await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
-    await expect(tracking.windowOpenFor('u2')).resolves.toBe(true);
-    avancar(TRACKING_MAX_MS);
-    await expect(tracking.windowOpenFor('u2')).resolves.toBe(false);
-  });
-
-  it('depois do parar, fechada', async () => {
-    const { tracking } = setup();
-    void tracking.start('u1');
-    void tracking.stop();
-    await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
-  });
-});
-
 // O fim da jornada desliga só o que é da jornada: com evacuação em curso, as
 // leituras seguem até o gestor encerrar.
 describe('createPositionTracking, fim da jornada', () => {
@@ -361,12 +333,6 @@ describe('createPositionTracking, evacuação', () => {
     await expect(tracking.start('u1')).resolves.toBe('expired');
     expect(updates.stop).not.toHaveBeenCalled();
     expect(tracking.isActive()).toBe(true);
-  });
-
-  it('a pulseira, que segue só a janela da jornada, não vê a evacuação', async () => {
-    const { tracking } = setup();
-    await tracking.startEvacuation('u1', 'e1');
-    await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
   });
 
   it('encerrada, sem jornada: apaga a evacuação e desliga', async () => {
