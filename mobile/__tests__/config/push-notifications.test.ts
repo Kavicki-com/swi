@@ -28,6 +28,19 @@ describe('push no app.json', () => {
     );
   });
 
+  it('o Android mostra o ícone do SWI na barra, branco sobre transparente, e não um círculo vazio', () => {
+    const icon = (pluginOptions('expo-notifications') as { icon?: string }).icon;
+    expect(icon).toBe('./assets/images/notification-icon.png');
+    // O sistema só usa o canal alfa do ícone pequeno: qualquer pixel opaco vira
+    // branco. Este PNG é o "SWi" do Figma (SWI - UI, quadro "icon") sem o fundo.
+    const png = fs.readFileSync(path.join(root, icon as string));
+    expect(png.subarray(1, 4).toString('latin1')).toBe('PNG');
+    expect(png.readUInt32BE(16)).toBe(96);
+    expect(png.readUInt32BE(20)).toBe(96);
+    // Tipo de cor 6: RGBA, com transparência.
+    expect(png[25]).toBe(6);
+  });
+
   it('o Android pede a permissão de notificação (13 ou mais novo)', () => {
     expect(appJson.android.permissions).toContain('android.permission.POST_NOTIFICATIONS');
   });
