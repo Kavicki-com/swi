@@ -12,6 +12,12 @@
 //                  radar; no API key, free).
 //      'pins' is the default with no extra overlay.
 //
+// Acima do mapa, a barra de ações em dois grupos que não se misturam: Socorro
+// ("Rota de socorro" arma a escolha e o próximo clique num pino vai direto para
+// a lista de socorristas; o clique no mapa vazio desarma) e Evacuação (o
+// desenho da área só avança com o trajeto fechado, e durante ele os pinos não
+// respondem). A rota de socorro segue disponível com a evacuação ativa.
+//
 // Why maplibre + real tiles: the demo screen previously rendered three
 // static PNG basemaps and projected pins via percent-of-bbox. Real tiles
 // + maplibre Markers make the map respond to pan/zoom and let pins stay
@@ -30,7 +36,6 @@ import { MapAttribution } from '@/components/MapAttribution'
 import { DataOriginBadge } from '@/components/DataOriginBadge'
 import { getRainViewerLatestRadar } from '@/lib/rainViewer'
 import {
-  Button,
   Chip,
   Icon,
   LocationPin,
@@ -55,6 +60,7 @@ import {
 } from '@/lib/areaDraft'
 import { drawAreaLayer, AREA_VERTEX_COLOR } from '@/pages/maps/evacuationAreaLayer'
 import { buildMusterPin } from '@/pages/maps/musterPointPin'
+import { AlertsActionBar } from './components/AlertsActionBar'
 import { EvacuationDrawToolbar } from './components/EvacuationDrawToolbar'
 import { SelectedWorkerCard } from './components/SelectedWorkerCard'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
@@ -150,6 +156,9 @@ export function AlertsList() {
   const [drawStep, setDrawStep] = useState<'area' | 'muster' | null>(null)
   const [draft, setDraft] = useState<AreaDraft>(EMPTY_DRAFT)
   const [draftMuster, setDraftMuster] = useState<AreaVertex | null>(null)
+  // "Rota de socorro" na barra: o próximo clique num pino vai direto para a
+  // lista de socorristas. Convive com a evacuação ativa.
+  const [pickingRescue, setPickingRescue] = useState(false)
   // Polígono salvo da evacuação ativa (anel fechado [lng, lat]), ou null.
   const savedArea = evacuation?.area ?? null
   // Ponto de encontro salvo; evacuações anteriores ao ponto obrigatório não têm.
@@ -162,6 +171,7 @@ export function AlertsList() {
     [theme],
   )
   const beginDraw = () => {
+    setPickingRescue(false)
     setDraft(EMPTY_DRAFT)
     setDraftMuster(null)
     setDrawStep('area')
@@ -194,7 +204,24 @@ export function AlertsList() {
       setDraftMuster(v)
       return
     }
+    if (pickingRescue) {
+      setPickingRescue(false)
+      return
+    }
     navigate('/alerts')
+  }
+  // Clique no pino: parado durante o desenho; na escolha de socorro, vai para
+  // a lista de socorristas; fora disso, abre ou fecha o cartão. Mesmo motivo
+  // do ref acima: o efeito dos pinos não remonta a cada navegação.
+  const pinClickRef = useRef<(id: string) => void>(() => {})
+  pinClickRef.current = (id: string) => {
+    if (drawStep) return
+    if (pickingRescue) {
+      setPickingRescue(false)
+      navigate(`/alerts/${id}/rescue`)
+      return
+    }
+    navigate(employeeId === id ? '/alerts' : `/alerts/${id}`)
   }
 
   const lib = useMapLibre()
@@ -205,13 +232,6 @@ export function AlertsList() {
   // Updated via map.project() on every map move/zoom so the EmployeeOverviewCard
   // stays glued to its pin while the user pans the map.
   const [overlayPos, setOverlayPos] = useState<{ left: number; top: number } | null>(null)
-  // Stable ref to navigate so the marker effect doesn't tear down on each
-  // navigation (markers re-render is expensive — destroys + rebuilds React
-  // subtrees inside maplibre Markers).
-  const navigateRef = useRef(navigate)
-  navigateRef.current = navigate
-  const employeeIdRef = useRef(employeeId)
-  employeeIdRef.current = employeeId
 
   // Quem tem pedido de ajuda aberto ou atendido: o pino sai como alerta
   // urgente, destacado, até o pedido fechar. O pedido não é medição, então
@@ -305,15 +325,12 @@ export function AlertsList() {
   }, [filteredMarkers, evacuation, ackedIds, helpIds])
 
   // Render worker pins as maplibre Markers. Re-render when the filtered
-  // list changes. Click toggles selection via URL.
+  // list changes. O clique passa pelo pinClickRef (ver acima).
   useEffect(() => {
     const map = mapRef.current
     if (!lib || !map || !mapReady) return
     const handles = displayMarkers.map((m) =>
-      buildMarker(m, map, lib, helpIds.has(m.id), () => {
-        const cur = employeeIdRef.current
-        navigateRef.current(cur === m.id ? '/alerts' : `/alerts/${m.id}`)
-      }),
+      buildMarker(m, map, lib, helpIds.has(m.id), () => pinClickRef.current(m.id)),
     )
     return () => {
       handles.forEach((h) => {
@@ -507,74 +524,42 @@ export function AlertsList() {
           {hasDemo ? <DataOriginBadge label={DEMO_DATA_LABEL} testID="alerts-demo-badge" /> : null}
         </View>
 
-        {/* Evacuação e, logo abaixo e na mesma largura, o atalho de Resgates. */}
-        <View style={{ gap: theme.gap.s, alignItems: 'flex-end' }}>
-          {/* Evacuação real: sem ativa → desenhar a área e disparar; ativa →
-            progresso X/N ao vivo (WS evacuation-ack) + encerramento. */}
-          {drawStep ? (
-            <EvacuationDrawToolbar
-              step={drawStep}
-              vertexCount={draft.vertices.length}
-              closed={draft.closed}
-              hasMuster={draftMuster !== null}
-              onUndo={() => setDraft(undoDraft)}
-              onCancel={cancelDraw}
-              onNext={() => {
-                if (isReady(draft)) setDrawStep('muster')
-              }}
-              onBack={() => setDrawStep('area')}
-              onConfirm={confirmDraw}
-            />
-          ) : evacuation ? (
-            <View
-              testID="evacuation-banner"
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: theme.gap.m,
-                paddingHorizontal: theme.padding.s,
-                paddingVertical: theme.padding.xs,
-                borderRadius: theme.border.radius.m,
-                backgroundColor: theme.surface.errorLight,
-              }}
-            >
-              <Icon name="notifications" size={18} color={theme.content.light} />
-              <Text
-                variant="body.s"
-                color={theme.content.light}
-                style={{ fontWeight: '700' as const }}
-              >
-                Evacuação em andamento: {evacuation.acked}/{evacuation.total} confirmados
-              </Text>
-              {savedArea ? (
-                <Text
-                  testID="evacuation-in-area"
-                  variant="body.s"
-                  color={theme.content.light}
-                  style={{ fontWeight: '700' as const }}
-                >
-                  {workersInArea} dentro da área
-                </Text>
-              ) : null}
-              <Button
-                label="Encerrar evacuação"
-                backgroundColor={theme.surface.error}
-                onPress={() => setConfirmingEnd(true)}
-              />
-            </View>
-          ) : (
-            <Button
-              label="Iniciar evacuação"
-              backgroundColor={theme.surface.error}
-              onPress={beginDraw}
-            />
-          )}
-          {/* Mesma largura do botão de evacuação (fullWidth na coluna), texto ao centro. */}
-          <Button
-            label="Resgates"
-            fullWidth
-            backgroundColor={theme.surface.secondary}
-            onPress={() => navigate('/alerts/rescues')}
+        {/* Barra de ações à direita da linha de filtros: Socorro e Evacuação.
+            Evacuação real: sem ativa, desenhar a área e disparar; ativa,
+            progresso X/N ao vivo (WS evacuation-ack) e encerramento. */}
+        <View style={{ alignItems: 'flex-end' }}>
+          <AlertsActionBar
+            drawToolbar={
+              drawStep ? (
+                <EvacuationDrawToolbar
+                  step={drawStep}
+                  vertexCount={draft.vertices.length}
+                  closed={draft.closed}
+                  hasMuster={draftMuster !== null}
+                  onUndo={() => setDraft(undoDraft)}
+                  onCancel={cancelDraw}
+                  onNext={() => {
+                    if (isReady(draft)) setDrawStep('muster')
+                  }}
+                  onBack={() => setDrawStep('area')}
+                  onConfirm={confirmDraw}
+                />
+              ) : null
+            }
+            evacuation={evacuation}
+            workersInArea={savedArea ? workersInArea : null}
+            pickingRescue={pickingRescue}
+            onRescuePick={() => {
+              // /alerts e /alerts/:employeeId são a mesma instância da tela, e a
+              // escolha armada sobrevive à troca: sem replace, o voltar do
+              // navegador traria o cartão de volta com o modo ainda armado.
+              if (employeeId) navigate('/alerts', { replace: true })
+              setPickingRescue(true)
+            }}
+            onRescueCancel={() => setPickingRescue(false)}
+            onRescues={() => navigate('/alerts/rescues')}
+            onStartEvacuation={beginDraw}
+            onEndEvacuation={() => setConfirmingEnd(true)}
           />
         </View>
       </View>
@@ -583,6 +568,17 @@ export function AlertsList() {
         <Text variant="body.s" color={theme.content.error}>
           {evacError}
         </Text>
+      ) : null}
+
+      {/* Dica da escolha de socorro, fora do mapa para não disputar espaço com
+          os botões de camada e com a faixa do alerta meteorológico. */}
+      {pickingRescue ? (
+        <Toast
+          testID="rescue-pick-hint"
+          variant="info"
+          title="Escolha quem precisa de socorro"
+          message="Clique no pino do funcionário. Clique no mapa vazio para cancelar."
+        />
       ) : null}
 
       <View
