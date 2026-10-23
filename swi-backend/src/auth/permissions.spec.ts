@@ -15,6 +15,7 @@ const SUPERVISOR_PODE: Permission[] = [
   'cameras.read',
   'evacuation.operate',
   'rescue.operate',
+  'rescue.readAll',
   'weather.read',
   'positions.read',
   'users.read',

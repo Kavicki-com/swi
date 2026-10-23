@@ -8,8 +8,10 @@ import { Can } from '../auth/roles.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 
 // Resgate a partir de Alertas. Qualquer usuário logado lê o histórico da própria
-// empresa; despachar, registrar chegada e encerrar são do ADMIN. A empresa sai
-// sempre do token; o ferido vem no caminho e o socorrista no corpo.
+// empresa, mas só quem tem `rescue.readAll` vê todos: o funcionário vê os
+// resgates em que é o ferido ou o socorrista. Despachar, registrar chegada e
+// encerrar são da equipe do painel. A empresa sai sempre do token; o ferido vem
+// no caminho e o socorrista no corpo.
 @ApiTags('alerts')
 @ApiBearerAuth()
 @Controller('alerts')
@@ -19,7 +21,7 @@ export class RescueController {
 
   @Get('rescues')
   list(@CurrentUser() user: JwtUser) {
-    return this.rescues.list(user.companyId)
+    return this.rescues.list(user.companyId, { userId: user.userId, role: user.role })
   }
 
   @UseGuards(RolesGuard) @Can('rescue.operate') @Post('rescues/:id/arrive') @HttpCode(200)

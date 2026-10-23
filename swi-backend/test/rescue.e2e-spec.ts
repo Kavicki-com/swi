@@ -23,8 +23,11 @@ describe('Rescue (resgate) e2e', () => {
     admin: 'resgate-admin@ex.com',
     otherAdmin: 'resgate-admin-b@ex.com',
     otherWorker: 'resgate-worker-b@ex.com',
+    supervisor: 'resgate-supervisor@ex.com',
+    colleague: 'resgate-colega@ex.com',
+    bystander: 'resgate-alheio@ex.com',
   }
-  let injuredId: string, rescuerId: string, otherWorkerId: string
+  let injuredId: string, rescuerId: string, otherWorkerId: string, colleagueId: string
 
   const cleanup = async () => {
     const users = await prisma.user.findMany({
@@ -55,6 +58,9 @@ describe('Rescue (resgate) e2e', () => {
     injuredId = (await prisma.user.create({ data: { email: emails.injured, name: 'Ana Ferida', role: 'WORKER', companyId, ...base } })).id
     rescuerId = (await prisma.user.create({ data: { email: emails.rescuer, name: 'Bruno Socorro', role: 'WORKER', companyId, ...base } })).id
     await prisma.user.create({ data: { email: emails.admin, name: 'Admin Resgate', role: 'ADMIN', companyId, ...base } })
+    await prisma.user.create({ data: { email: emails.supervisor, name: 'Supervisor Resgate', role: 'SUPERVISOR', companyId, ...base } })
+    colleagueId = (await prisma.user.create({ data: { email: emails.colleague, name: 'Carla Colega', role: 'WORKER', companyId, ...base } })).id
+    await prisma.user.create({ data: { email: emails.bystander, name: 'Davi Alheio', role: 'WORKER', companyId, ...base } })
     await prisma.user.create({ data: { email: emails.otherAdmin, name: 'Admin B', role: 'ADMIN', companyId: otherCompanyId, ...base } })
     otherWorkerId = (await prisma.user.create({ data: { email: emails.otherWorker, name: 'Worker B', role: 'WORKER', companyId: otherCompanyId, ...base } })).id
   })
@@ -128,5 +134,40 @@ describe('Rescue (resgate) e2e', () => {
     const { body: rescue } = await request(server).post(`/alerts/${injuredId}/rescue`).set(a).send({ rescuerId }).expect(201)
     await request(server).post(`/alerts/rescues/${rescue.id as string}/arrive`).set(b).expect(404)
     await request(server).post(`/alerts/rescues/${rescue.id as string}/end`).set(b).expect(404)
+  })
+
+  // Funcionário só vê os resgates em que é o ferido ou o socorrista: a lista
+  // traz os nomes das duas pontas. Administrador e Supervisor veem todos os da
+  // empresa; outra empresa não vê nenhum.
+  it('funcionário vê só os resgates em que é ferido ou socorrista; painel vê todos; outra empresa não vê', async () => {
+    const server = app.getHttpServer()
+    const a = await login(emails.admin)
+    const { body: doFerido } = await request(server).post(`/alerts/${injuredId}/rescue`).set(a).send({ rescuerId }).expect(201)
+    const { body: daColega } = await request(server).post(`/alerts/${colleagueId}/rescue`).set(a).send({ rescuerId }).expect(201)
+    const ids = async (who: string) => {
+      const { body } = await request(server).get('/alerts/rescues').set(await login(who)).expect(200)
+      return (body as { id: string }[]).map((r) => r.id)
+    }
+
+    const ferido = await ids(emails.injured)
+    expect(ferido).toContain(doFerido.id)
+    expect(ferido).not.toContain(daColega.id)
+
+    const socorrista = await ids(emails.rescuer)
+    expect(socorrista).toEqual(expect.arrayContaining([doFerido.id, daColega.id]))
+
+    const colega = await ids(emails.colleague)
+    expect(colega).toContain(daColega.id)
+    expect(colega).not.toContain(doFerido.id)
+
+    expect(await ids(emails.bystander)).toEqual([])
+
+    expect(await ids(emails.admin)).toEqual(expect.arrayContaining([doFerido.id, daColega.id]))
+    expect(await ids(emails.supervisor)).toEqual(expect.arrayContaining([doFerido.id, daColega.id]))
+
+    const outraEmpresa = await ids(emails.otherAdmin)
+    expect(outraEmpresa).not.toContain(doFerido.id)
+    expect(outraEmpresa).not.toContain(daColega.id)
+    expect(await ids(emails.otherWorker)).toEqual([])
   })
 })

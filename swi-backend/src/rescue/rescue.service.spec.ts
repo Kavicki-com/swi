@@ -111,9 +111,13 @@ describe('RescueService', () => {
   })
 
   describe('list', () => {
+    const admin = { userId: 'admin-1', role: 'ADMIN' }
+    const supervisor = { userId: 'supervisor-1', role: 'SUPERVISOR' }
+    const worker = { userId: 'worker-1', role: 'WORKER' }
+
     it('lista os resgates da empresa, mais recentes primeiro, com os nomes', async () => {
       const { svc, db } = make()
-      const out = await svc.list('empresa-1')
+      const out = await svc.list('empresa-1', admin)
       const args = db.rescue.findMany.mock.calls[0][0]
       expect(args.where).toEqual({ companyId: 'empresa-1' })
       expect(args.orderBy).toEqual({ startedAt: 'desc' })
@@ -131,9 +135,33 @@ describe('RescueService', () => {
       ])
     })
 
+    it('Supervisor também vê todos os resgates da empresa', async () => {
+      const { svc, db } = make()
+      await svc.list('empresa-1', supervisor)
+      expect(db.rescue.findMany.mock.calls[0][0].where).toEqual({ companyId: 'empresa-1' })
+    })
+
+    it('Funcionário só vê os resgates em que é o ferido ou o socorrista', async () => {
+      const { svc, db } = make()
+      await svc.list('empresa-1', worker)
+      expect(db.rescue.findMany.mock.calls[0][0].where).toEqual({
+        companyId: 'empresa-1',
+        OR: [{ injuredId: 'worker-1' }, { rescuerId: 'worker-1' }],
+      })
+    })
+
+    it('papel desconhecido cai no alcance mais estreito, o do próprio usuário', async () => {
+      const { svc, db } = make()
+      await svc.list('empresa-1', { userId: 'x-1', role: 'ROOT' })
+      expect(db.rescue.findMany.mock.calls[0][0].where).toEqual({
+        companyId: 'empresa-1',
+        OR: [{ injuredId: 'x-1' }, { rescuerId: 'x-1' }],
+      })
+    })
+
     it('sem empresa não há o que listar: lista vazia, sem consultar', async () => {
       const { svc, db } = make()
-      expect(await svc.list(null)).toEqual([])
+      expect(await svc.list(null, admin)).toEqual([])
       expect(db.rescue.findMany).not.toHaveBeenCalled()
     })
   })
