@@ -3,9 +3,13 @@ import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '../../services/auth/AuthProvider';
 import { JourneyProvider, useJourney } from '../../services/journey/JourneyProvider';
 import { EvacuationProvider } from '../../services/evacuation/EvacuationProvider';
-import { NotificationProvider } from '../../services/notifications/NotificationProvider';
+import { NotificationProvider, useNotifications } from '../../services/notifications/NotificationProvider';
 import { HelpRequestProvider } from '../../services/help/HelpRequestProvider';
 import { useJourneyTracking } from '../../services/positions/useTrackingLifecycle';
+import {
+  latestEvacuationNotice,
+  useEvacuationTracking,
+} from '../../services/positions/useEvacuationTracking';
 import { isFeatureEnabled } from '../../lib/featureFlags';
 import { useBandChoice } from '../../services/telemetry/bluetooth/bluetoothBandChoice';
 import { useBluetoothHeartRate } from '../../services/telemetry/bluetooth/useBluetoothHeartRate';
@@ -28,6 +32,16 @@ function JourneyTrackingRoot({ userId }: { userId: string }) {
     undefined,
     source === 'cache' ? 'cache' : 'server',
   );
+  return null;
+}
+
+// GPS em segundo plano durante a evacuação: com evacuação ativa liga mesmo
+// sem jornada, pede a permissão e segue até o gestor encerrar no painel.
+// Null-render, dentro do NotificationProvider: a notificação de evacuação que
+// chega pelo socket é a deixa para consultar na hora.
+function EvacuationTrackingRoot({ userId }: { userId: string }) {
+  const { notifications } = useNotifications();
+  useEvacuationTracking(userId, latestEvacuationNotice(notifications));
   return null;
 }
 
@@ -96,6 +110,7 @@ export default function AppLayout() {
       {Platform.OS === 'android' && isFeatureEnabled('healthConnect') && <ReadinessReportRoot />}
       <EvacuationProvider>
         <NotificationProvider>
+          <EvacuationTrackingRoot userId={user.id} />
           {/* Pedido de ajuda: um só para a sessão. O dashboard pede, e o
               procedimento de evacuação, aberto de qualquer tela, mostra o
               estado. Segue tentando sem sinal enquanto a sessão existir. */}

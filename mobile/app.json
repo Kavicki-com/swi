@@ -76,8 +76,8 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "O SWI usa sua localização para monitorar sua segurança em campo.",
-          "locationAlwaysAndWhenInUsePermission": "O SWI envia sua localização durante a jornada, mesmo com o app fechado, para a equipe de segurança localizar você em uma emergência. O envio termina junto com a jornada.",
-          "locationAlwaysPermission": "O SWI envia sua localização durante a jornada, mesmo com o app fechado, para a equipe de segurança localizar você em uma emergência. O envio termina junto com a jornada.",
+          "locationAlwaysAndWhenInUsePermission": "O SWI envia sua localização durante a jornada e durante uma evacuação, mesmo com o app fechado, para a equipe de segurança localizar você em uma emergência. O envio termina com o fim da jornada ou da evacuação.",
+          "locationAlwaysPermission": "O SWI envia sua localização durante a jornada e durante uma evacuação, mesmo com o app fechado, para a equipe de segurança localizar você em uma emergência. O envio termina com o fim da jornada ou da evacuação.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }

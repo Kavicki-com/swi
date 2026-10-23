@@ -1,11 +1,14 @@
 import * as Location from 'expo-location';
 import {
   createPositionTracking,
+  EVACUATION_TASK_OPTIONS,
   getPositionRuntime,
   LOCATION_TASK_OPTIONS,
   type LocationUpdates,
+  type TrackingMode,
 } from './positionTracking';
 import { LOCATION_TASK_NAME } from './backgroundLocationTask';
+import { createEvacuationWindowStore, EVACUATION_TRACKING_MAX_MS } from './evacuationWindow';
 import { createTrackingWindowStore, TRACKING_MAX_MS } from './trackingWindow';
 import type { OutboxStorage } from '../telemetry/telemetryOutbox';
 
@@ -29,10 +32,10 @@ function memoryStorage(): OutboxStorage {
 
 const T0 = Date.parse('2026-10-04T08:00:00.000Z');
 
-function setup(opts: { supported?: boolean } = {}) {
-  let started = false;
+function setup(opts: { supported?: boolean; started?: boolean } = {}) {
+  let started = opts.started ?? false;
   const updates: jest.Mocked<LocationUpdates> = {
-    start: jest.fn(async () => {
+    start: jest.fn(async (_mode: TrackingMode) => {
       started = true;
     }),
     stop: jest.fn(async () => {
@@ -41,11 +44,13 @@ function setup(opts: { supported?: boolean } = {}) {
     hasStarted: jest.fn(async () => started),
   };
   const window = createTrackingWindowStore(memoryStorage());
+  const evacuation = createEvacuationWindowStore(memoryStorage());
   const drain = jest.fn(async (_owner: string) => ({ sent: 0, outcome: 'empty' as const }));
   let agora = T0;
   const tracking = createPositionTracking({
     updates,
     window,
+    evacuation,
     drainer: { drain },
     now: () => new Date(agora),
     supported: opts.supported ?? true,
@@ -54,6 +59,7 @@ function setup(opts: { supported?: boolean } = {}) {
     tracking,
     updates,
     window,
+    evacuation,
     drain,
     avancar: (ms: number) => {
       agora += ms;
@@ -284,6 +290,185 @@ describe('createPositionTracking, janela aberta', () => {
     void tracking.start('u1');
     void tracking.stop();
     await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
+  });
+});
+
+// O fim da jornada desliga só o que é da jornada: com evacuação em curso, as
+// leituras seguem até o gestor encerrar.
+describe('createPositionTracking, fim da jornada', () => {
+  it('sem evacuação, fecha a janela e desliga', async () => {
+    const { tracking, updates, window } = setup();
+    await tracking.start('u1');
+    await tracking.stopJourney();
+    expect(await window.read()).toBeNull();
+    expect(updates.stop).toHaveBeenCalledTimes(1);
+    expect(tracking.isActive()).toBe(false);
+  });
+
+  it('com evacuação em curso, fecha a janela e mantém as leituras', async () => {
+    const { tracking, updates, window } = setup();
+    await tracking.start('u1');
+    await tracking.startEvacuation('u1', 'e1');
+    await tracking.stopJourney();
+    expect(await window.read()).toBeNull();
+    expect(updates.stop).not.toHaveBeenCalled();
+    expect(tracking.isActive()).toBe(true);
+  });
+});
+
+// Com evacuação ativa o rastreio liga mesmo sem jornada, sem o filtro de 60 s,
+// e a notificação fixa do Android diz que é a evacuação. Trocar a notificação
+// pede religar as leituras com as opções da evacuação.
+describe('createPositionTracking, evacuação', () => {
+  it('sem jornada, grava a evacuação e liga as leituras da evacuação', async () => {
+    const { tracking, updates, evacuation } = setup();
+    await expect(tracking.startEvacuation('u1', 'e1')).resolves.toBe('tracking');
+    expect(updates.start).toHaveBeenCalledWith('evacuation');
+    expect(await evacuation.read()).toEqual({
+      userId: 'u1',
+      evacuationId: 'e1',
+      startedAt: new Date(T0).toISOString(),
+    });
+    expect(tracking.isActive()).toBe(true);
+  });
+
+  it('com a jornada em curso, religa com as opções da evacuação', async () => {
+    const { tracking, updates } = setup();
+    await tracking.start('u1');
+    await tracking.startEvacuation('u1', 'e1');
+    expect(updates.start.mock.calls).toEqual([['journey'], ['evacuation']]);
+  });
+
+  it('pedir de novo a mesma evacuação não religa', async () => {
+    const { tracking, updates } = setup();
+    await tracking.startEvacuation('u1', 'e1');
+    await tracking.startEvacuation('u1', 'e1');
+    expect(updates.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('começar a jornada durante a evacuação não troca as opções', async () => {
+    const { tracking, updates } = setup();
+    await tracking.startEvacuation('u1', 'e1');
+    await expect(tracking.start('u1')).resolves.toBe('tracking');
+    expect(updates.start.mock.calls).toEqual([['evacuation']]);
+  });
+
+  it('jornada vencida durante a evacuação não desliga', async () => {
+    const { tracking, updates, avancar } = setup();
+    await tracking.start('u1');
+    avancar(TRACKING_MAX_MS);
+    await tracking.startEvacuation('u1', 'e1');
+    await expect(tracking.start('u1')).resolves.toBe('expired');
+    expect(updates.stop).not.toHaveBeenCalled();
+    expect(tracking.isActive()).toBe(true);
+  });
+
+  it('a pulseira, que segue só a janela da jornada, não vê a evacuação', async () => {
+    const { tracking } = setup();
+    await tracking.startEvacuation('u1', 'e1');
+    await expect(tracking.windowOpenFor('u1')).resolves.toBe(false);
+  });
+
+  it('encerrada, sem jornada: apaga a evacuação e desliga', async () => {
+    const { tracking, updates, evacuation } = setup();
+    await tracking.startEvacuation('u1', 'e1');
+    await tracking.endEvacuation();
+    expect(await evacuation.read()).toBeNull();
+    expect(updates.stop).toHaveBeenCalledTimes(1);
+    expect(tracking.isActive()).toBe(false);
+  });
+
+  it('encerrada, com jornada: volta às opções da jornada e segue ativo', async () => {
+    const { tracking, updates } = setup();
+    await tracking.start('u1');
+    await tracking.startEvacuation('u1', 'e1');
+    await tracking.endEvacuation();
+    expect(updates.start.mock.calls).toEqual([['journey'], ['evacuation'], ['journey']]);
+    expect(updates.stop).not.toHaveBeenCalled();
+    expect(tracking.isActive()).toBe(true);
+  });
+
+  // Com o app em segundo plano quem vê o encerramento é a tarefa, que apaga a
+  // evacuação sem poder religar. A volta da jornada ao primeiro plano religa
+  // com as opções dela, e a notificação deixa de falar em evacuação.
+  it('evacuação apagada pela tarefa: a jornada religa com as opções dela', async () => {
+    const { tracking, updates, evacuation } = setup();
+    await tracking.start('u1');
+    await tracking.startEvacuation('u1', 'e1');
+    await evacuation.close();
+    await tracking.start('u1');
+    expect(updates.start.mock.calls).toEqual([['journey'], ['evacuation'], ['journey']]);
+  });
+
+  it('encerrar sem evacuação gravada não mexe nas leituras da jornada', async () => {
+    const { tracking, updates } = setup();
+    await tracking.start('u1');
+    await tracking.endEvacuation();
+    expect(updates.start).toHaveBeenCalledTimes(1);
+    expect(updates.stop).not.toHaveBeenCalled();
+    expect(tracking.isActive()).toBe(true);
+  });
+
+  it('passado o teto, não liga', async () => {
+    const { tracking, updates, avancar } = setup();
+    await tracking.startEvacuation('u1', 'e1');
+    avancar(EVACUATION_TRACKING_MAX_MS);
+    await expect(tracking.startEvacuation('u1', 'e1')).resolves.toBe('expired');
+    expect(updates.stop).toHaveBeenCalledTimes(1);
+    expect(tracking.isActive()).toBe(false);
+  });
+
+  it('o sistema recusando as leituras devolve falha', async () => {
+    const { tracking, updates } = setup();
+    updates.start.mockRejectedValueOnce(new Error('sem permissão'));
+    await expect(tracking.startEvacuation('u1', 'e1')).resolves.toBe('failed');
+    expect(tracking.isActive()).toBe(false);
+  });
+
+  it('logout apaga evacuação e janela e desliga', async () => {
+    const { tracking, updates, window, evacuation } = setup();
+    await tracking.start('u1');
+    await tracking.startEvacuation('u1', 'e1');
+    await tracking.stop();
+    expect(await window.read()).toBeNull();
+    expect(await evacuation.read()).toBeNull();
+    expect(updates.stop).toHaveBeenCalledTimes(1);
+    expect(tracking.isActive()).toBe(false);
+  });
+
+  // Processo novo (app reaberto) não sabe com que opções as leituras foram
+  // ligadas. Na evacuação religa uma vez para a notificação ficar certa; na
+  // jornada, a de sempre, não mexe.
+  it('processo novo com as leituras ligadas: a evacuação religa uma vez, a jornada não', async () => {
+    const jornada = setup({ started: true });
+    await jornada.window.open('u1', new Date(T0));
+    await jornada.tracking.resume('u1');
+    expect(jornada.updates.start).not.toHaveBeenCalled();
+
+    const evacuacao = setup({ started: true });
+    await evacuacao.tracking.startEvacuation('u1', 'e1');
+    await evacuacao.tracking.startEvacuation('u1', 'e1');
+    expect(evacuacao.updates.start.mock.calls).toEqual([['evacuation']]);
+  });
+
+  it('sem suporte (web), não toca nas leituras', async () => {
+    const { tracking, updates } = setup({ supported: false });
+    await expect(tracking.startEvacuation('u1', 'e1')).resolves.toBe('unsupported');
+    await tracking.endEvacuation();
+    await tracking.stopJourney();
+    expect(updates.start).not.toHaveBeenCalled();
+    expect(updates.stop).not.toHaveBeenCalled();
+  });
+});
+
+describe('EVACUATION_TASK_OPTIONS', () => {
+  it('as mesmas leituras da jornada, com a notificação da evacuação', () => {
+    expect(EVACUATION_TASK_OPTIONS).toMatchObject({
+      accuracy: LOCATION_TASK_OPTIONS.accuracy,
+      timeInterval: LOCATION_TASK_OPTIONS.timeInterval,
+      pausesUpdatesAutomatically: false,
+      foregroundService: { notificationTitle: 'Evacuação em andamento', killServiceOnDestroy: false },
+    });
   });
 });
 

@@ -15,6 +15,9 @@ function fakeTracking(): jest.Mocked<PositionTracking> {
     start: jest.fn(async (_userId: string): Promise<StartResult> => 'tracking'),
     resume: jest.fn(async (_userId: string): Promise<StartResult> => 'tracking'),
     stop: jest.fn(async () => undefined),
+    stopJourney: jest.fn(async () => undefined),
+    startEvacuation: jest.fn(async (_userId: string, _evacuationId: string): Promise<StartResult> => 'tracking'),
+    endEvacuation: jest.fn(async () => undefined),
     halt: jest.fn(async () => undefined),
     windowOpenFor: jest.fn(async (_userId: string) => true),
     drain: jest.fn(async (_userId: string) => undefined),
@@ -75,7 +78,7 @@ describe('useJourneyTracking', () => {
         TestRenderer.create(journey({ userId: 'u1', journeyState, journeyKnown: true, tracking }));
       });
       expect(tracking.start).toHaveBeenCalledWith('u1');
-      expect(tracking.stop).not.toHaveBeenCalled();
+      expect(tracking.stopJourney).not.toHaveBeenCalled();
     }
   });
 
@@ -88,7 +91,7 @@ describe('useJourneyTracking', () => {
     await act(async () => {
       root.update(journey({ userId: 'u1', journeyState: 'idle', journeyKnown: true, tracking }));
     });
-    expect(tracking.stop).toHaveBeenCalledTimes(1);
+    expect(tracking.stopJourney).toHaveBeenCalledTimes(1);
   });
 
   it('antes de a jornada carregar, não decide nada', async () => {
@@ -97,7 +100,7 @@ describe('useJourneyTracking', () => {
       TestRenderer.create(journey({ userId: 'u1', journeyState: 'idle', journeyKnown: false, tracking }));
     });
     expect(tracking.start).not.toHaveBeenCalled();
-    expect(tracking.stop).not.toHaveBeenCalled();
+    expect(tracking.stopJourney).not.toHaveBeenCalled();
   });
 
   it('sem sessão, não decide nada', async () => {
@@ -150,7 +153,7 @@ describe('useJourneyTracking', () => {
       root = TestRenderer.create(journey({ userId: 'u1', journeyState: 'ongoing', journeyKnown: true, tracking }));
     });
     await act(async () => root.unmount());
-    expect(tracking.stop).not.toHaveBeenCalled();
+    expect(tracking.stopJourney).not.toHaveBeenCalled();
     expect(remove).toHaveBeenCalled();
   });
 
@@ -174,7 +177,7 @@ describe('useJourneyTracking', () => {
       await act(async () => {
         TestRenderer.create(journey({ userId: 'u1', journeyState: 'idle', journeyKnown: true, tracking, source: 'cache' }));
       });
-      expect(tracking.stop).toHaveBeenCalledTimes(1);
+      expect(tracking.stopJourney).toHaveBeenCalledTimes(1);
     });
 
     it('a volta ao primeiro plano retoma de novo, sem abrir janela', async () => {

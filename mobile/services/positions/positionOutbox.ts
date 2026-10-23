@@ -17,13 +17,20 @@ export interface QueuedPoint {
   recordedAt: string;
 }
 
+/**
+ * A régua do espaçamento. `journey`: a do backend, uma amostra por minuto
+ * parado ou a cada 25 m. `evacuation`: cada leitura de 10 s, parado ou não,
+ * porque durante a evacuação o painel acompanha a pessoa ao vivo.
+ */
+export type PointSpacing = 'journey' | 'evacuation';
+
 export interface PositionOutbox {
   /**
    * Guarda os pontos que a regra de espaçamento deixa, na ordem recebida, e
    * devolve quantos entraram. Ponto fora do contrato é recusado com aviso.
    * Fila de outro dono é descartada antes: o rastreio é de uma pessoa só.
    */
-  append(owner: string, points: readonly QueuedPoint[]): Promise<number>;
+  append(owner: string, points: readonly QueuedPoint[], spacing?: PointSpacing): Promise<number>;
   /** Os pontos do dono, na ordem. Ponto de outro dono é apagado, nunca enviado. */
   pending(owner: string): Promise<QueuedPoint[]>;
   /** Tira os pontos com estas horas. Horas desconhecidas são ignoradas. */
@@ -44,6 +51,11 @@ export const MAX_QUEUED_POINTS = 5000;
 // backend jogaria fora.
 const KEEP_MIN_INTERVAL_MS = 60_000;
 const KEEP_MIN_DISTANCE_M = 25;
+// Na evacuação, a leitura de cada 10 s. A folga abaixo dos 10 s aceita a
+// leitura que o sistema entrega um pouco antes da hora, e ainda segura a de
+// cada segundo que o iPhone entrega com o app aberto. O backend afina a trilha
+// do mapa de calor do lado dele; a posição ao vivo avança com cada ponto.
+const EVACUATION_KEEP_MIN_INTERVAL_MS = 8_000;
 const EARTH_RADIUS_M = 6_371_000;
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -62,10 +74,15 @@ function distanceM(a: QueuedPoint, b: QueuedPoint): number {
  * Se `next` vira amostra depois de `last`. Ponto com a hora de `last` ou mais
  * velho não entra: é repetição, e a fila anda só para a frente.
  */
-export function shouldKeepPoint(last: QueuedPoint | null, next: QueuedPoint): boolean {
+export function shouldKeepPoint(
+  last: QueuedPoint | null,
+  next: QueuedPoint,
+  spacing: PointSpacing = 'journey',
+): boolean {
   if (last === null) return true;
   const elapsed = Date.parse(next.recordedAt) - Date.parse(last.recordedAt);
   if (elapsed <= 0) return false;
+  if (spacing === 'evacuation') return elapsed >= EVACUATION_KEEP_MIN_INTERVAL_MS;
   if (elapsed >= KEEP_MIN_INTERVAL_MS) return true;
   return distanceM(last, next) >= KEEP_MIN_DISTANCE_M;
 }
@@ -173,7 +190,7 @@ export function createPositionOutbox(storage: OutboxStorage): PositionOutbox {
     state.owner === owner ? state : { owner, points: [], last: null };
 
   return {
-    append: (owner, points) =>
+    append: (owner, points, spacing = 'journey') =>
       serialized(async () => {
         const accepted: QueuedPoint[] = [];
         for (const point of points) {
@@ -189,7 +206,7 @@ export function createPositionOutbox(storage: OutboxStorage): PositionOutbox {
         const state = ownedBy(await read(), owner);
         let kept = 0;
         for (const point of accepted) {
-          if (!shouldKeepPoint(state.last, point)) continue;
+          if (!shouldKeepPoint(state.last, point, spacing)) continue;
           state.points.push(point);
           state.last = point;
           kept += 1;
