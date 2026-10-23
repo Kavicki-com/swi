@@ -95,6 +95,14 @@ export class EvacuationEventsService {
       sound: 'default',
       data: { type: 'evacuation.started', evacuationId: evac.id },
     })
+    // A de cima o sistema só mostra: o rastreio de posição liga quando a pessoa
+    // toca nela. Esta, só de dados como a do fim, acorda a tarefa do app em
+    // segundo plano para ligar o rastreio sem esperar o toque.
+    this.pushTo(workers, {
+      priority: 'high',
+      contentAvailable: true,
+      data: { type: 'evacuation.started', evacuationId: evac.id },
+    })
 
     const dto = this.toProgress(evac, workers, [])
     await this.emitToOrg(companyId, workers, 'evacuation', dto)
