@@ -3,6 +3,7 @@ import {
   BAND_CHOICE_FILE_NAME,
   createBandChoiceStore,
   createFileBandChoiceStorage,
+  readBandChoice,
   useBandChoice,
   type BandChoice,
   type BandChoiceStore,
@@ -52,6 +53,7 @@ function memoria(inicial: string | null = null) {
 }
 
 const POLAR: BandChoice = { deviceId: 'A0:9E:1A:00:00:01', name: 'Polar H10' };
+const AGORA = Date.parse('2026-10-23T08:00:00.000Z');
 
 describe('createBandChoiceStore', () => {
   it('antes de ler o arquivo, a escolha é desconhecida (undefined)', () => {
@@ -91,17 +93,55 @@ describe('createBandChoiceStore', () => {
     expect(store.current()).toBeUndefined();
   });
 
-  it('escolher grava, atualiza na hora e avisa quem ouve', async () => {
+  it('escolher grava com a hora da escolha, atualiza na hora e avisa quem ouve', async () => {
     const disco = memoria();
-    const store = createBandChoiceStore(disco);
+    const store = createBandChoiceStore(disco, () => AGORA);
     const ouvinte = jest.fn();
     store.subscribe(ouvinte);
 
     await store.choose(POLAR);
 
-    expect(JSON.parse(disco.text ?? 'null')).toEqual(POLAR);
-    expect(store.current()).toEqual(POLAR);
+    expect(JSON.parse(disco.text ?? 'null')).toEqual({ ...POLAR, chosenAt: AGORA });
+    expect(store.current()).toEqual({ ...POLAR, chosenAt: AGORA });
     expect(ouvinte).toHaveBeenCalled();
+  });
+
+  it('escolher de novo a mesma pulseira é outra escolha, com outra hora', async () => {
+    let agora = AGORA;
+    const store = createBandChoiceStore(memoria(), () => agora);
+    await store.choose(POLAR);
+    agora = AGORA + 1000;
+    await store.choose(POLAR);
+    expect(store.current()?.chosenAt).toBe(AGORA + 1000);
+  });
+
+  it('lê a hora da escolha guardada', async () => {
+    const store = createBandChoiceStore(memoria(JSON.stringify({ ...POLAR, chosenAt: AGORA })));
+    expect(await store.load()).toEqual({ ...POLAR, chosenAt: AGORA });
+  });
+
+  it('encerrar apaga a escolha do arquivo e avisa quem ouve', async () => {
+    const disco = memoria(JSON.stringify({ ...POLAR, chosenAt: AGORA }));
+    const store = createBandChoiceStore(disco);
+    await store.load();
+    const ouvinte = jest.fn();
+    store.subscribe(ouvinte);
+
+    await store.end();
+
+    expect(disco.text).toBe('');
+    expect(store.current()).toBeNull();
+    expect(ouvinte).toHaveBeenCalled();
+  });
+
+  it('encerrar que não grava mantém a escolha e rejeita', async () => {
+    const disco = memoria(JSON.stringify(POLAR));
+    const store = createBandChoiceStore(disco);
+    await store.load();
+    disco.write.mockRejectedValueOnce(new Error('cheio'));
+
+    await expect(store.end()).rejects.toThrow('cheio');
+    expect(store.current()).toEqual(POLAR);
   });
 
   it('a gravação que falha não troca a escolha e rejeita', async () => {
@@ -121,6 +161,23 @@ describe('createBandChoiceStore', () => {
     cancelar();
     await store.choose(POLAR);
     expect(ouvinte).not.toHaveBeenCalled();
+  });
+});
+
+describe('readBandChoice', () => {
+  it('lê o arquivo sem passar pela instância da tela', async () => {
+    expect(await readBandChoice(memoria(JSON.stringify({ ...POLAR, chosenAt: AGORA })))).toEqual({
+      ...POLAR,
+      chosenAt: AGORA,
+    });
+    expect(await readBandChoice(memoria())).toBeNull();
+    expect(await readBandChoice(memoria(''))).toBeNull();
+  });
+
+  it('disco que lança: o erro sobe', async () => {
+    const disco = memoria();
+    disco.read.mockRejectedValueOnce(new Error('disco'));
+    await expect(readBandChoice(disco)).rejects.toThrow('disco');
   });
 });
 
@@ -153,7 +210,7 @@ describe('useBandChoice', () => {
     await act(async () => {
       await store.choose(POLAR);
     });
-    expect(visto).toEqual(POLAR);
+    expect(visto).toMatchObject(POLAR);
   });
 
   it('disco que lança ao montar não derruba a tela: a escolha segue desconhecida', async () => {

@@ -1,19 +1,20 @@
 import type { BleHeartRate, RawHeartRateReading } from '../../../modules/swi-ble-heart-rate/src';
 import type { WatchControl } from '../../../modules/swi-watch-control';
-import { isWindowOpen, TRACKING_MAX_MS, type TrackingWindowStore } from '../../positions/trackingWindow';
 import type { OutboxEvent, OutboxStorage, TelemetryOutbox } from '../telemetryOutbox';
 import { MAX_DRAIN_ROUNDS, shouldDrainAgain, type TelemetryUploader, type UploadOutcome } from '../telemetryUploader';
+import type { BandChoice } from './bluetoothBandChoice';
 import { decodeBase64, parseHeartRateMeasurement } from './heartRateMeasurement';
 
 // O que a tarefa sem interface faz a cada vez que o serviço da pulseira a
 // acorda (a cada 15 s com leitura nova, também com a tela apagada). Roda sem
 // React e às vezes num processo que o sistema acabou de relançar: tudo o que
-// ela precisa (de quem é a jornada, qual a sessão, quando foi a última
+// ela precisa (qual a pulseira escolhida, qual a sessão, quando foi a última
 // leitura aceita, como enviar) vem de arquivo.
 //
-// A jornada é a janela do rastreio (trackingWindow.ts), a mesma que o GPS
-// usa: ela abre com a jornada, fecha no fim dela e no logout, e vence em
-// 12 h. Aqui ela só é lida.
+// A sessão de monitoramento segue a escolha da pulseira (bluetoothBandChoice.ts):
+// nasce na primeira rodada depois de escolher, e acaba ao encerrar (escolha
+// apagada, também no logout), ao trocar de pulseira e sem a credencial do
+// aparelho (pareamento revogado). A jornada não entra aqui, nem há prazo.
 
 /** Nome da tarefa no AppRegistry; o Kotlin (BleDrainTaskService) usa o mesmo. */
 export const BLE_DRAIN_TASK_NAME = 'SwiBleHeartRateDrain';
@@ -32,10 +33,11 @@ export const BLE_HEART_RATE_MAX_BPM = 300;
 export const BLE_DRAIN_STATE_FILE_NAME = 'ble-heart-rate-drain.v1.json';
 
 /**
- * Teto das leituras à espera da fila: 12 h de jornada a uma a cada 5 s. Só
- * chega perto disso com a fila falhando a jornada inteira.
+ * Teto das leituras à espera da fila, só para a memória: 12 h a uma a cada
+ * 5 s. Só chega perto disso com a fila falhando horas a fio; passado o teto,
+ * as mais antigas saem primeiro. Não para o serviço.
  */
-export const BLE_PENDING_MAX = TRACKING_MAX_MS / BLE_SAMPLE_SPACING_MS;
+export const BLE_PENDING_MAX = (12 * 60 * 60 * 1000) / BLE_SAMPLE_SPACING_MS;
 
 /** Leitura aceita que ainda não entrou na fila de envio. */
 interface PendingSample {
@@ -44,11 +46,13 @@ interface PendingSample {
   bpm: number;
 }
 
-/** A sessão da jornada. */
+/** A sessão de monitoramento da pulseira escolhida. */
 interface DrainSession {
-  /** Jornada dona da sessão: `userId|startedAt` da janela. */
-  journeyKey: string;
+  /** Escolha dona da sessão: `deviceId|chosenAt`. */
+  key: string;
   sessionId: string;
+  /** Hora (ms) da escolha: o que chegou antes não é desta sessão. */
+  since: number;
   /** Hora (ms) da última leitura aceita; null antes da primeira. */
   lastAcceptedAt: number | null;
 }
@@ -65,12 +69,12 @@ interface DrainState {
 
 export interface BluetoothInboxDrainDeps {
   ble: Pick<BleHeartRate, 'rotateReadings' | 'stop'>;
-  window: Pick<TrackingWindowStore, 'read'>;
+  /** A escolha guardada; rejeita se o disco falhar. */
+  choice: { read(): Promise<BandChoice | null> };
   state: OutboxStorage;
   outbox: Pick<TelemetryOutbox, 'appendMany' | 'nextSequence' | 'forgetSession'>;
   uploader: TelemetryUploader;
   control: Pick<WatchControl, 'hasDeviceCredential'>;
-  now(): Date;
   uuidV4(): string;
 }
 
@@ -94,9 +98,14 @@ const isFiniteNumber = (value: unknown): value is number =>
 
 function parseSession(value: unknown): DrainSession | null {
   if (!isRecord(value)) return null;
-  const { journeyKey, sessionId, lastAcceptedAt } = value;
-  if (typeof journeyKey !== 'string' || typeof sessionId !== 'string') return null;
-  return { journeyKey, sessionId, lastAcceptedAt: isFiniteNumber(lastAcceptedAt) ? lastAcceptedAt : null };
+  const { key, sessionId, since, lastAcceptedAt } = value;
+  if (typeof key !== 'string' || typeof sessionId !== 'string') return null;
+  return {
+    key,
+    sessionId,
+    since: isFiniteNumber(since) ? since : 0,
+    lastAcceptedAt: isFiniteNumber(lastAcceptedAt) ? lastAcceptedAt : null,
+  };
 }
 
 function parsePending(value: unknown): PendingSample[] {
@@ -121,6 +130,8 @@ function parseState(text: string | null): DrainState {
   if (!isRecord(parsed)) return EMPTY_STATE;
   return { session: parseSession(parsed.session), pending: parsePending(parsed.pending) };
 }
+
+const keyOf = (choice: BandChoice) => `${choice.deviceId}|${choice.chosenAt ?? 0}`;
 
 /** O batimento da leitura, ou null se ela não deve virar amostra. */
 function bpmOf(reading: RawHeartRateReading): number | null {
@@ -206,51 +217,56 @@ export function createBluetoothInboxDrain(deps: BluetoothInboxDrainDeps): Blueto
     return last;
   }
 
+  /**
+   * A escolha dona da sessão agora: null quando não há sessão a manter
+   * (encerrada, sem credencial); undefined quando não deu para ler a escolha,
+   * e aí nada muda, nem a sessão nem o serviço.
+   */
+  async function target(credential: boolean): Promise<{ key: string; since: number } | null | undefined> {
+    if (!credential) return null;
+    let choice: BandChoice | null;
+    try {
+      choice = await deps.choice.read();
+    } catch (error) {
+      warn('escolha da pulseira não lida', error);
+      return undefined;
+    }
+    return choice === null ? null : { key: keyOf(choice), since: choice.chosenAt ?? 0 };
+  }
+
   async function round(): Promise<void> {
     // A caixa entrega cada leitura uma vez só: daqui em diante, o que for
     // aceito vai para o arquivo de estado antes de tentar a fila.
     const readings = [...deps.ble.rotateReadings()].sort((a, b) => a.receivedAt - b.receivedAt);
-    const now = deps.now();
-    const window = await deps.window.read();
-    const open = isWindowOpen(window, now);
+    const credential = deps.control.hasDeviceCredential();
+    const owner = await target(credential);
     const stored = await readState();
 
-    // Sessões que acabaram (jornada nova ou encerrada). O contador delas sai
-    // da fila quando nada delas esperar mais aqui; com evento ainda na fila,
-    // sai com o último (forgetSession).
-    const ended = new Set<string>();
-    let session = stored.session;
-    if (window) {
-      const journeyKey = `${window.userId}|${window.startedAt}`;
-      if (session?.journeyKey !== journeyKey) {
-        // Jornada nova: sessão nova, sem herdar a vez da última aceita.
-        if (session) ended.add(session.sessionId);
-        session = { journeyKey, sessionId: deps.uuidV4(), lastAcceptedAt: null };
-      }
+    // A sessão que acaba nesta rodada (encerrada, pulseira trocada, aparelho
+    // despareado) ainda leva o que chegou antes do fim. Pareado de novo, o
+    // aparelho é outro, e a sessão também: por isso ela não sobrevive à
+    // credencial ausente.
+    let session = stored.session ? { ...stored.session } : null;
+    let closing: DrainSession | null = null;
+    if (owner !== undefined && session?.key !== owner?.key) {
+      closing = session;
+      session = null;
+    }
+    if (owner && !session) {
+      // Escolha nova: sessão nova, sem herdar a vez da última aceita.
+      session = { key: owner.key, sessionId: deps.uuidV4(), since: owner.since, lastAcceptedAt: null };
     }
 
-    // Janela fechada (fim da jornada ou logout): o que chegou até aqui é da
-    // sessão guardada. Sem sessão guardada não há a quem atribuir.
-    const startedAt = window ? Date.parse(window.startedAt) : Number.NEGATIVE_INFINITY;
-    const cap = window ? startedAt + TRACKING_MAX_MS : Number.POSITIVE_INFINITY;
     const fresh: PendingSample[] = [];
-    if (session) {
-      let last = session.lastAcceptedAt;
-      for (const reading of readings) {
-        if (reading.receivedAt < startedAt || reading.receivedAt >= cap) continue;
-        if (last !== null && reading.receivedAt - last < BLE_SAMPLE_SPACING_MS) continue;
-        const bpm = bpmOf(reading);
-        if (bpm === null) continue;
-        fresh.push({ sessionId: session.sessionId, receivedAt: reading.receivedAt, bpm });
-        last = reading.receivedAt;
-      }
-      session = { ...session, lastAcceptedAt: last };
-    }
-    // A sessão acaba com a janela; vencida (12 h), a janela ainda existe e a
-    // sessão fica, para uma rodada atrasada não abrir outra à toa.
-    if (!window && session) {
-      ended.add(session.sessionId);
-      session = null;
+    for (const reading of readings) {
+      const into = session && reading.receivedAt >= session.since ? session : closing;
+      if (!into) continue;
+      const last = into.lastAcceptedAt;
+      if (last !== null && reading.receivedAt - last < BLE_SAMPLE_SPACING_MS) continue;
+      const bpm = bpmOf(reading);
+      if (bpm === null) continue;
+      fresh.push({ sessionId: into.sessionId, receivedAt: reading.receivedAt, bpm });
+      into.lastAcceptedAt = reading.receivedAt;
     }
 
     // Passado o teto, as mais antigas saem primeiro.
@@ -259,13 +275,19 @@ export function createBluetoothInboxDrain(deps: BluetoothInboxDrainDeps): Blueto
     const pending = await enqueue(waiting);
     await writeState({ session, pending });
 
-    for (const sample of waiting) ended.add(sample.sessionId);
-    if (session) ended.delete(session.sessionId);
-    for (const sessionId of ended) {
-      if (!pending.some((sample) => sample.sessionId === sessionId)) await forgetSession(sessionId);
-    }
+    // Sessões que acabaram. O contador delas sai da fila quando nada delas
+    // esperar mais aqui; com evento ainda na fila, sai com o último
+    // (forgetSession).
+    const forgetEnded = async () => {
+      const ended = new Set<string>(waiting.map((sample) => sample.sessionId));
+      if (closing) ended.add(closing.sessionId);
+      if (session) ended.delete(session.sessionId);
+      for (const sessionId of ended) {
+        if (!pending.some((sample) => sample.sessionId === sessionId)) await forgetSession(sessionId);
+      }
+    };
 
-    if (deps.control.hasDeviceCredential()) {
+    if (credential) {
       let outcome: UploadOutcome | null = null;
       try {
         outcome = await upload();
@@ -274,14 +296,21 @@ export function createBluetoothInboxDrain(deps: BluetoothInboxDrainDeps): Blueto
         warn('envio falhou', error);
       }
       // Credencial recusada: o aparelho foi despareado. Nada mais sobe daqui,
-      // e o serviço não tem por que seguir conectado.
+      // a sessão acaba com ele e o serviço não tem por que seguir conectado.
       if (outcome?.outcome === 'unpaired') {
+        if (session) {
+          closing = session;
+          session = null;
+          await writeState({ session, pending });
+        }
+        await forgetEnded();
         await stopService();
         return;
       }
     }
 
-    if (!open) await stopService();
+    await forgetEnded();
+    if (owner === null) await stopService();
   }
 
   let inFlight: Promise<void> | null = null;

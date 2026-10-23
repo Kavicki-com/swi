@@ -13,6 +13,12 @@ jest.mock('../../positions/positionOutbox', () => ({
   createFilePositionStorage: (name: string) => ({ name }),
 }));
 
+const mockReadChoice = jest.fn(async (_storage: unknown) => null);
+jest.mock('./bluetoothBandChoice', () => ({
+  createFileBandChoiceStorage: () => ({ name: 'bluetooth-band.json' }),
+  readBandChoice: (storage: unknown) => mockReadChoice(storage),
+}));
+
 type TaskProvider = () => (data: unknown) => Promise<void>;
 
 const originalOS = Platform.OS;
@@ -52,5 +58,11 @@ describe('registerBluetoothDrainTask', () => {
     // O estado da drenagem fica num arquivo próprio, fora do rastreio.
     const deps = mockCreate.mock.calls[0][0] as { state: { name: string } };
     expect(deps.state).toEqual({ name: 'ble-heart-rate-drain.v1.json' });
+    // A sessão segue a pulseira escolhida, lida do arquivo dela a cada rodada.
+    const { choice } = mockCreate.mock.calls[0][0] as { choice: { read(): Promise<unknown> } };
+    await choice.read();
+    await choice.read();
+    expect(mockReadChoice).toHaveBeenCalledTimes(2);
+    expect(mockReadChoice).toHaveBeenCalledWith({ name: 'bluetooth-band.json' });
   });
 });

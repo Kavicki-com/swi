@@ -38,6 +38,7 @@ export const SEM_BLUETOOTH: BandChoiceStore = {
   current: () => null,
   load: async () => null,
   choose: async () => undefined,
+  end: async () => undefined,
   subscribe: () => () => undefined,
 };
 

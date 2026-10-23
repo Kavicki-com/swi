@@ -1,8 +1,9 @@
 import type { RawHeartRateReading } from '../../../modules/swi-ble-heart-rate/src';
-import type { TrackingWindow } from '../../positions/trackingWindow';
 import { createTelemetryOutbox, type OutboxStorage } from '../telemetryOutbox';
 import type { UploadOutcome } from '../telemetryUploader';
+import type { BandChoice } from './bluetoothBandChoice';
 import {
+  BLE_PENDING_MAX,
   BLE_SAMPLE_SPACING_MS,
   createBluetoothInboxDrain,
   type BluetoothInboxDrainDeps,
@@ -25,7 +26,8 @@ function memoryStorage(initial: string | null = null) {
 let counter = 0;
 
 const T0 = Date.parse('2026-10-22T10:00:00.000Z');
-const USER = 'user-1';
+const POLAR: BandChoice = { deviceId: 'A0:9E:1A:00:00:01', name: 'Polar H10', chosenAt: T0 - 60_000 };
+const OUTRA: BandChoice = { deviceId: 'B0:00:00:00:00:02', name: null, chosenAt: T0 + 1000 };
 
 // Notificação no formato do 0x2A37, em base64 como o Kotlin guarda.
 const b64 = (...values: number[]) => Buffer.from(values).toString('base64');
@@ -39,8 +41,7 @@ const reading = (offsetMs: number, bytes = hr(80)): RawHeartRateReading => ({
 
 function setup(
   opts: {
-    window?: TrackingWindow | null;
-    now?: number;
+    choice?: BandChoice | null | Error;
     credential?: boolean;
     outcomes?: UploadOutcome[];
     stateStorage?: ReturnType<typeof memoryStorage>;
@@ -52,8 +53,7 @@ function setup(
     rotateReadings: jest.fn(() => inbox.shift() ?? []),
     stop: jest.fn(async () => undefined),
   };
-  const window =
-    opts.window === undefined ? { userId: USER, startedAt: new Date(T0 - 60_000).toISOString() } : opts.window;
+  const choice = opts.choice === undefined ? POLAR : opts.choice;
   const stateStorage = opts.stateStorage ?? memoryStorage();
   const outboxStorage = opts.outboxStorage ?? memoryStorage();
   const outbox = createTelemetryOutbox(outboxStorage.storage);
@@ -63,12 +63,16 @@ function setup(
   };
   const deps: BluetoothInboxDrainDeps = {
     ble,
-    window: { read: jest.fn(async () => window) },
+    choice: {
+      read: jest.fn(async () => {
+        if (choice instanceof Error) throw choice;
+        return choice;
+      }),
+    },
     state: stateStorage.storage,
     outbox,
     uploader,
     control: { hasDeviceCredential: () => opts.credential ?? true },
-    now: () => new Date(opts.now ?? T0 + 60_000),
     uuidV4: () => {
       counter += 1;
       return `00000000-0000-4000-8000-${String(counter).padStart(12, '0')}`;
@@ -155,16 +159,21 @@ describe('bluetoothInboxDrain', () => {
     expect((await outbox.pending()).map((e) => e.measurements.heartRate?.value)).toEqual([20, 300]);
   });
 
-  it('descarta leitura de antes do começo da jornada', async () => {
-    const { drain, push, outbox } = setup({
-      window: { userId: USER, startedAt: new Date(T0 + 2000).toISOString() },
-    });
+  it('descarta leitura de antes da escolha da pulseira', async () => {
+    const { drain, push, outbox } = setup({ choice: { ...POLAR, chosenAt: T0 + 2000 } });
     push(reading(0), reading(3000));
     await drain.run();
     expect(times(await outbox.pending())).toEqual([3000]);
   });
 
-  it('mesma jornada, mesma sessão, relida do arquivo, com a sequência seguindo', async () => {
+  it('escolha sem hora guardada vale desde sempre', async () => {
+    const { drain, push, outbox } = setup({ choice: { deviceId: POLAR.deviceId, name: POLAR.name } });
+    push(reading(0));
+    await drain.run();
+    expect(times(await outbox.pending())).toEqual([0]);
+  });
+
+  it('mesma escolha, mesma sessão, relida do arquivo, com a sequência seguindo', async () => {
     const stateStorage = memoryStorage();
     const outboxStorage = memoryStorage();
     const first = setup({ stateStorage, outboxStorage });
@@ -178,7 +187,7 @@ describe('bluetoothInboxDrain', () => {
     expect(events.map((e) => e.sequence)).toEqual([0, 1]);
   });
 
-  it('jornada nova abre sessão nova e esquece o contador da anterior', async () => {
+  it('trocar de pulseira abre sessão nova e esquece o contador da anterior', async () => {
     const stateStorage = memoryStorage();
     const outboxStorage = memoryStorage();
     const first = setup({ stateStorage, outboxStorage });
@@ -186,11 +195,7 @@ describe('bluetoothInboxDrain', () => {
     await first.drain.run();
     const [old] = await first.outbox.pending();
 
-    const second = setup({
-      stateStorage,
-      outboxStorage,
-      window: { userId: USER, startedAt: new Date(T0 + 1000).toISOString() },
-    });
+    const second = setup({ stateStorage, outboxStorage, choice: OUTRA });
     const forget = jest.spyOn(second.outbox, 'forgetSession');
     second.push(reading(2000));
     await second.drain.run();
@@ -198,23 +203,51 @@ describe('bluetoothInboxDrain', () => {
     expect(events[1].monitoringSessionId).not.toBe(old.monitoringSessionId);
     expect(events[1].sequence).toBe(0);
     expect(forget).toHaveBeenCalledWith(old.monitoringSessionId);
+    expect(second.ble.stop).not.toHaveBeenCalled();
   });
 
-  it('a nova jornada não herda a vez da última aceita da anterior', async () => {
+  it('na troca, o que chegou antes da nova escolha fecha a sessão anterior', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const first = setup({ stateStorage, outboxStorage });
+    first.push(reading(-10_000));
+    await first.drain.run();
+
+    const second = setup({ stateStorage, outboxStorage, choice: OUTRA });
+    second.push(reading(0), reading(2000));
+    await second.drain.run();
+    const events = await second.outbox.pending();
+    expect(times(events)).toEqual([-10_000, 0, 2000]);
+    expect(events[1].monitoringSessionId).toBe(events[0].monitoringSessionId);
+    expect(events[2].monitoringSessionId).not.toBe(events[0].monitoringSessionId);
+  });
+
+  it('escolher de novo a mesma pulseira, depois de encerrar, abre sessão nova', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const first = setup({ stateStorage, outboxStorage });
+    first.push(reading(0));
+    await first.drain.run();
+
+    const again = setup({ stateStorage, outboxStorage, choice: { ...POLAR, chosenAt: T0 + 1000 } });
+    again.push(reading(2000));
+    await again.drain.run();
+    const events = await again.outbox.pending();
+    expect(events[1].monitoringSessionId).not.toBe(events[0].monitoringSessionId);
+  });
+
+  it('a nova escolha não herda a vez da última aceita da anterior', async () => {
     const stateStorage = memoryStorage();
     const first = setup({ stateStorage });
     first.push(reading(0));
     await first.drain.run();
-    const second = setup({
-      stateStorage,
-      window: { userId: USER, startedAt: new Date(T0 + 500).toISOString() },
-    });
+    const second = setup({ stateStorage, choice: { ...POLAR, chosenAt: T0 + 500 } });
     second.push(reading(1000));
     await second.drain.run();
     expect(times(await second.outbox.pending())).toEqual([1000]);
   });
 
-  it('janela fechada: drena o resto na sessão da jornada, envia e para o serviço', async () => {
+  it('pulseira encerrada: drena o resto na sessão, envia e para o serviço; a próxima escolha abre outra', async () => {
     const stateStorage = memoryStorage();
     const outboxStorage = memoryStorage();
     const open = setup({ stateStorage, outboxStorage });
@@ -222,45 +255,79 @@ describe('bluetoothInboxDrain', () => {
     await open.drain.run();
     expect(open.ble.stop).not.toHaveBeenCalled();
 
-    const closed = setup({ stateStorage, outboxStorage, window: null });
-    closed.push(reading(5000));
-    await closed.drain.run();
-    const events = await closed.outbox.pending();
+    const ended = setup({ stateStorage, outboxStorage, choice: null });
+    ended.push(reading(5000));
+    await ended.drain.run();
+    const events = await ended.outbox.pending();
     expect(times(events)).toEqual([0, 5000]);
     expect(events[1].monitoringSessionId).toBe(events[0].monitoringSessionId);
-    expect(closed.uploader.uploadPending).toHaveBeenCalled();
-    expect(closed.ble.stop).toHaveBeenCalledTimes(1);
+    expect(ended.uploader.uploadPending).toHaveBeenCalled();
+    expect(ended.ble.stop).toHaveBeenCalledTimes(1);
 
-    // A sessão encerrou com a jornada: a próxima abre outra.
-    const next = setup({
-      stateStorage,
-      outboxStorage,
-      window: { userId: USER, startedAt: new Date(T0 + 6000).toISOString() },
-    });
+    const next = setup({ stateStorage, outboxStorage, choice: { ...POLAR, chosenAt: T0 + 6000 } });
     next.push(reading(7000));
     await next.drain.run();
     const after = await next.outbox.pending();
     expect(after[2].monitoringSessionId).not.toBe(events[0].monitoringSessionId);
   });
 
-  it('janela fechada sem sessão guardada descarta as leituras e para o serviço', async () => {
-    const { drain, push, outbox, ble } = setup({ window: null });
+  it('sem pulseira escolhida e sem sessão guardada descarta as leituras e para o serviço', async () => {
+    const { drain, push, outbox, ble } = setup({ choice: null });
     push(reading(0));
     await drain.run();
     expect(await outbox.pending()).toEqual([]);
     expect(ble.stop).toHaveBeenCalledTimes(1);
   });
 
-  it('janela vencida (12 h): só entra o que chegou antes do teto, e o serviço para', async () => {
-    const startedAt = T0 - 12 * 60 * 60 * 1000 + 3000;
-    const { drain, push, outbox, ble } = setup({
-      window: { userId: USER, startedAt: new Date(startedAt).toISOString() },
-      now: T0 + 60_000,
-    });
-    push(reading(0), reading(5000));
+  it('não para por tempo: 13 h depois da escolha segue aceitando, sem parar o serviço', async () => {
+    const thirteenHours = 13 * 60 * 60 * 1000;
+    const { drain, push, outbox, ble } = setup();
+    push(reading(0), reading(thirteenHours));
     await drain.run();
-    expect(times(await outbox.pending())).toEqual([0]);
-    expect(ble.stop).toHaveBeenCalledTimes(1);
+    expect(times(await outbox.pending())).toEqual([0, thirteenHours]);
+    expect(ble.stop).not.toHaveBeenCalled();
+  });
+
+  it('escolha que não pôde ser lida não para o serviço nem troca a sessão', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const first = setup({ stateStorage, outboxStorage });
+    first.push(reading(0));
+    await first.drain.run();
+
+    const broken = setup({ stateStorage, outboxStorage, choice: new Error('disco') });
+    broken.push(reading(5000));
+    await broken.drain.run();
+    const events = await broken.outbox.pending();
+    expect(times(events)).toEqual([0, 5000]);
+    expect(events[1].monitoringSessionId).toBe(events[0].monitoringSessionId);
+    expect(broken.ble.stop).not.toHaveBeenCalled();
+  });
+
+  it('o teto das leituras à espera é só de memória: as mais antigas saem primeiro', async () => {
+    const stateStorage = memoryStorage(
+      JSON.stringify({
+        session: {
+          key: `${POLAR.deviceId}|${POLAR.chosenAt}`,
+          sessionId: 'sessao-1',
+          lastAcceptedAt: null,
+        },
+        pending: Array.from({ length: BLE_PENDING_MAX }, (_, i) => ({
+          sessionId: 'sessao-1',
+          receivedAt: T0 + i * BLE_SAMPLE_SPACING_MS,
+          bpm: 80,
+        })),
+      }),
+    );
+    const { drain, push, outbox } = setup({ stateStorage });
+    const appendMany = jest.spyOn(outbox, 'appendMany').mockRejectedValueOnce(new Error('disco'));
+    push(reading(BLE_PENDING_MAX * BLE_SAMPLE_SPACING_MS));
+    await drain.run();
+    expect(appendMany).toHaveBeenCalledTimes(1);
+    const kept = JSON.parse(stateStorage.current() ?? '{}').pending as { receivedAt: number }[];
+    expect(kept).toHaveLength(BLE_PENDING_MAX);
+    expect(kept[0].receivedAt).toBe(T0 + BLE_SAMPLE_SPACING_MS);
+    expect(BLE_PENDING_MAX).toBe(8640);
   });
 
   it('fila que lança não perde as leituras tiradas da caixa: entram na rodada seguinte', async () => {
@@ -300,34 +367,60 @@ describe('bluetoothInboxDrain', () => {
     expect(times(await second.outbox.pending())).toEqual([0]);
   });
 
-  it('janela fechada com leituras à espera da fila: ficam guardadas até entrarem', async () => {
+  it('encerrada com leituras à espera da fila: ficam guardadas até entrarem', async () => {
     const stateStorage = memoryStorage();
     const outboxStorage = memoryStorage();
     const open = setup({ stateStorage, outboxStorage });
     open.push(reading(0));
     await open.drain.run();
 
-    const closed = setup({ stateStorage, outboxStorage, window: null });
-    jest.spyOn(closed.outbox, 'appendMany').mockRejectedValueOnce(new Error('disco'));
-    closed.push(reading(5000));
-    await closed.drain.run();
+    const ended = setup({ stateStorage, outboxStorage, choice: null });
+    jest.spyOn(ended.outbox, 'appendMany').mockRejectedValueOnce(new Error('disco'));
+    ended.push(reading(5000));
+    await ended.drain.run();
 
-    const later = setup({ stateStorage, outboxStorage, window: null });
+    const later = setup({ stateStorage, outboxStorage, choice: null });
     const forget = jest.spyOn(later.outbox, 'forgetSession');
     await later.drain.run();
     const events = await later.outbox.pending();
     expect(times(events)).toEqual([0, 5000]);
     expect(events[1].monitoringSessionId).toBe(events[0].monitoringSessionId);
-    // Entrou o resto da jornada encerrada: o contador dela pode ir embora.
+    // Entrou o resto da sessão encerrada: o contador dela pode ir embora.
     expect(forget).toHaveBeenCalledWith(events[0].monitoringSessionId);
   });
 
-  it('sem credencial enfileira e não toca a rede', async () => {
-    const { drain, push, outbox, uploader } = setup({ credential: false });
+  it('sem credencial (pareamento revogado): não toca a rede, para o serviço e encerra a sessão', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const paired = setup({ stateStorage, outboxStorage });
+    paired.push(reading(0));
+    await paired.drain.run();
+
+    const revoked = setup({ stateStorage, outboxStorage, credential: false });
+    revoked.push(reading(5000));
+    await revoked.drain.run();
+    // O que chegou até aqui é da sessão guardada.
+    const events = await revoked.outbox.pending();
+    expect(times(events)).toEqual([0, 5000]);
+    expect(events[1].monitoringSessionId).toBe(events[0].monitoringSessionId);
+    expect(revoked.uploader.uploadPending).not.toHaveBeenCalled();
+    expect(revoked.ble.stop).toHaveBeenCalledTimes(1);
+
+    // Pareado de novo, com a mesma pulseira escolhida: o aparelho é outro, e a
+    // sessão também.
+    const repaired = setup({ stateStorage, outboxStorage });
+    repaired.push(reading(10_000));
+    await repaired.drain.run();
+    const after = await repaired.outbox.pending();
+    expect(after[2].monitoringSessionId).not.toBe(events[0].monitoringSessionId);
+  });
+
+  it('sem credencial e sem sessão guardada descarta as leituras', async () => {
+    const { drain, push, outbox, ble } = setup({ credential: false });
     push(reading(0));
     await drain.run();
-    expect(await outbox.pending()).toHaveLength(1);
-    expect(uploader.uploadPending).not.toHaveBeenCalled();
+    expect(await outbox.pending()).toEqual([]);
+    expect(ble.stop).toHaveBeenCalledTimes(1);
   });
 
   it('envio adiado ou que lança não perde a leitura nem rejeita', async () => {
@@ -355,12 +448,21 @@ describe('bluetoothInboxDrain', () => {
     expect(uploader.uploadPending).toHaveBeenCalledTimes(2);
   });
 
-  it('aparelho despareado (401) para o serviço e mantém a fila', async () => {
-    const { drain, push, outbox, ble } = setup({ outcomes: [{ outcome: 'unpaired' }] });
-    push(reading(0));
-    await drain.run();
-    expect(ble.stop).toHaveBeenCalledTimes(1);
-    expect(await outbox.pending()).toHaveLength(1);
+  it('aparelho despareado (401) para o serviço, mantém a fila e encerra a sessão', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const first = setup({ stateStorage, outboxStorage, outcomes: [{ outcome: 'unpaired' }] });
+    first.push(reading(0));
+    await first.drain.run();
+    expect(first.ble.stop).toHaveBeenCalledTimes(1);
+    const [old] = await first.outbox.pending();
+    expect(old).toBeDefined();
+
+    const repaired = setup({ stateStorage, outboxStorage });
+    repaired.push(reading(5000));
+    await repaired.drain.run();
+    const events = await repaired.outbox.pending();
+    expect(events[1].monitoringSessionId).not.toBe(old.monitoringSessionId);
   });
 
   it('sem leitura nova ainda tenta mandar o que sobrou na fila', async () => {

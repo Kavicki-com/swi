@@ -2,10 +2,10 @@ import { AppRegistry, Platform } from 'react-native';
 import { uuid } from 'expo-modules-core';
 import { bleHeartRate } from '../../../modules/swi-ble-heart-rate/src';
 import { createFilePositionStorage } from '../../positions/positionOutbox';
-import { createTrackingWindowStore, TRACKING_WINDOW_FILE_NAME } from '../../positions/trackingWindow';
 import { androidDeviceControl } from '../android/androidDeviceControl';
 import { sharedTelemetryOutbox } from '../telemetryRuntime';
 import { createTelemetryUploader } from '../telemetryUploader';
+import { createFileBandChoiceStorage, readBandChoice } from './bluetoothBandChoice';
 import {
   BLE_DRAIN_STATE_FILE_NAME,
   BLE_DRAIN_TASK_NAME,
@@ -23,14 +23,14 @@ let drain: BluetoothInboxDrain | null = null;
 function drainOnce(): BluetoothInboxDrain {
   if (drain === null) {
     const outbox = sharedTelemetryOutbox();
+    const choiceStorage = createFileBandChoiceStorage();
     drain = createBluetoothInboxDrain({
       ble: bleHeartRate,
-      window: createTrackingWindowStore(createFilePositionStorage(TRACKING_WINDOW_FILE_NAME)),
+      choice: { read: () => readBandChoice(choiceStorage) },
       state: createFilePositionStorage(BLE_DRAIN_STATE_FILE_NAME),
       outbox,
       uploader: createTelemetryUploader({ outbox, control: androidDeviceControl }),
       control: androidDeviceControl,
-      now: () => new Date(),
       uuidV4: () => uuid.v4(),
     });
   }
