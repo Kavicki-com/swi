@@ -46,6 +46,9 @@ export type ChatMessage = {
   // 'me'   = bolha enviada (direita, borda secondary-light, avatar à direita).
   sender: 'me' | 'them'
   time: string
+  // Envio em ISO: a conversa separa as mensagens por dia a partir dele.
+  // Opcional porque a simulação de mockApi/ não tem data.
+  sentAt?: string
   // anexo resolvido (presigned); quando presente, a bolha mostra a imagem
   imageUri?: string
   // Marcas de revisão. Booleanas de propósito: a bolha só precisa saber SE, não

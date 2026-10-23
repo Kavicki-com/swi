@@ -27,6 +27,9 @@ describe('messageToUi', () => {
     expect(m.imageUri).toBe('u')
     expect(m.time).toMatch(/\d{2}:\d{2}/)
   })
+  it('leva o envio em ISO, para a conversa separar as mensagens por dia', () => {
+    expect(messageToUi(message(), myId).sentAt).toBe('2026-07-23T13:05:00.000Z')
+  })
   it('imageUri null → undefined (não vaza null pra bolha)', () => {
     expect(messageToUi(message(), myId).imageUri).toBeUndefined()
   })
