@@ -16,6 +16,7 @@ import { adminWorker, condition, neverReported, reporting } from '@/test-utils/t
 const h = vi.hoisted(() => ({
   positions: [] as Array<Record<string, unknown>>,
   evacuation: null as null | {
+    id: string
     acked: number
     total: number
     workers: Array<{ id: string; acked: boolean }>
@@ -131,12 +132,18 @@ function makeLib() {
       mapState.removed = true
     },
   }
+  // O elemento do marcador vai para o documento, como no maplibre: o vértice
+  // de fechar a área precisa ser clicável pelo rótulo.
   class Marker {
-    constructor(_opts?: unknown) {}
+    el?: HTMLElement
+    constructor(opts?: { element?: HTMLElement }) {
+      this.el = opts?.element
+    }
     setLngLat() {
       return this
     }
     addTo() {
+      if (this.el) document.body.appendChild(this.el)
       return this
     }
     on() {
@@ -145,7 +152,9 @@ function makeLib() {
     getLngLat() {
       return { lng: 0, lat: 0 }
     }
-    remove() {}
+    remove() {
+      this.el?.remove()
+    }
   }
   class LngLatBounds {
     extend() {}
@@ -268,6 +277,8 @@ const DRAFT_AREA: [number, number][] = [
   [-46.58, -23.55],
 ]
 const drawDraftArea = () => DRAFT_AREA.forEach(([lng, lat]) => clickMapAt(lng, lat))
+// Fecha o trajeto clicando no primeiro ponto, como o gestor faz.
+const closeDraftArea = () => fireEvent.click(screen.getByLabelText('Fechar área'))
 
 describe('AlertsList: evacuação real', () => {
   it('marca a área, depois o ponto de encontro, e só então inicia', async () => {
@@ -284,6 +295,9 @@ describe('AlertsList: evacuação real', () => {
     // Três cliques no mapa marcam a área.
     await act(async () => {
       drawDraftArea()
+    })
+    await act(async () => {
+      closeDraftArea()
     })
 
     await act(async () => {
@@ -318,14 +332,17 @@ describe('AlertsList: evacuação real', () => {
       drawDraftArea()
     })
     await act(async () => {
+      closeDraftArea()
+    })
+    await act(async () => {
       fireEvent.click(screen.getByText('Próximo: ponto de encontro'))
     })
     await act(async () => {
       fireEvent.click(screen.getByText('Voltar'))
     })
 
-    // Volta ao passo da área com os três vértices de pé (o texto os conta).
-    expect(screen.getByText(/Toque no mapa para marcar a área \(3 pontos\)/)).toBeTruthy()
+    // Volta ao passo da área com os três vértices de pé e o trajeto fechado.
+    expect(screen.getByText('Área fechada, 3 pontos')).toBeTruthy()
     await act(async () => {
       fireEvent.click(screen.getByText('Próximo: ponto de encontro'))
     })
@@ -349,6 +366,9 @@ describe('AlertsList: evacuação real', () => {
       drawDraftArea()
     })
     await act(async () => {
+      closeDraftArea()
+    })
+    await act(async () => {
       fireEvent.click(screen.getByText('Próximo: ponto de encontro'))
     })
     await act(async () => {
@@ -363,8 +383,34 @@ describe('AlertsList: evacuação real', () => {
     expect(h.start).toHaveBeenCalledWith(DRAFT_AREA, [-46.5, -23.49])
   })
 
+  it('sem fechar o trajeto, o passo do ponto de encontro não abre', async () => {
+    await renderAlerts()
+    await waitFor(() => expect(h.pins).toHaveLength(2))
+    await act(async () => {
+      fireEvent.click(screen.getByText('Iniciar evacuação'))
+    })
+    await act(async () => {
+      drawDraftArea()
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Próximo: ponto de encontro'))
+    })
+    expect(screen.queryByText('Toque no mapa para marcar o ponto de encontro')).toBeNull()
+
+    // Fechado, um clique a mais no mapa não vira ponto.
+    await act(async () => {
+      closeDraftArea()
+    })
+    await act(async () => {
+      clickMapAt(-46.5, -23.5)
+    })
+    expect(screen.getByText('Área fechada, 3 pontos')).toBeTruthy()
+  })
+
   it('evacuação ativa com ponto de encontro põe um pino a mais no mapa', async () => {
     h.evacuation = {
+      id: 'ev1',
       acked: 0,
       total: 2,
       workers: [
@@ -404,6 +450,7 @@ describe('AlertsList: evacuação real', () => {
 
   it('evacuação ativa com área desenha o polígono e conta quem está dentro', async () => {
     h.evacuation = {
+      id: 'ev1',
       acked: 0,
       total: 2,
       workers: [
@@ -428,6 +475,7 @@ describe('AlertsList: evacuação real', () => {
 
   it('com evacuação ativa, mostra o progresso X/N e encerra', async () => {
     h.evacuation = {
+      id: 'ev1',
       acked: 1,
       total: 2,
       workers: [
@@ -455,7 +503,7 @@ describe('AlertsList: evacuação real', () => {
   })
 
   it('cancelar a confirmação não encerra a evacuação', async () => {
-    h.evacuation = { acked: 0, total: 1, workers: [{ id: 'w1', acked: false }] }
+    h.evacuation = { id: 'ev1', acked: 0, total: 1, workers: [{ id: 'w1', acked: false }] }
     await renderAlerts()
 
     await act(async () => {
@@ -472,6 +520,7 @@ describe('AlertsList: evacuação real', () => {
 
   it('durante a evacuação, a borda do pino reflete o ACK e não os vitais', async () => {
     h.evacuation = {
+      id: 'ev1',
       acked: 1,
       total: 2,
       workers: [
@@ -618,7 +667,7 @@ describe('AlertsList: seleção de pino', () => {
     await screen.findByTestId('alerts-selected-worker')
 
     act(() => {
-      mapState.handlers.click?.forEach((fn) => fn())
+      clickMapAt(-46.7, -23.6)
     })
 
     expect(h.navigations).toContain('/alerts')

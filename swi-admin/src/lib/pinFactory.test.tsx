@@ -24,6 +24,31 @@ describe('createPinElement', () => {
     root.unmount()
   })
 
+  it('com ação, o clique fica no pino e não chega ao mapa', () => {
+    const onClick = vi.fn()
+    const onMapClick = vi.fn()
+    const map = document.createElement('div')
+    map.addEventListener('click', onMapClick)
+    const { el, root } = createPinElement({ onClick, content: <span /> })
+    map.appendChild(el)
+    el.click()
+    expect(onClick).toHaveBeenCalledOnce()
+    expect(onMapClick).not.toHaveBeenCalled()
+    root.unmount()
+  })
+
+  it('sem ação, o clique atravessa para o mapa e o pino não tem cursor de clique', () => {
+    const onMapClick = vi.fn()
+    const map = document.createElement('div')
+    map.addEventListener('click', onMapClick)
+    const { el, root } = createPinElement({ content: <span /> })
+    map.appendChild(el)
+    el.click()
+    expect(onMapClick).toHaveBeenCalledOnce()
+    expect(el.style.cursor).toBe('')
+    root.unmount()
+  })
+
   it('sem texto, o pino não ganha atributo de título', () => {
     const { el, root } = createPinElement({ onClick: vi.fn(), content: <span /> })
     expect(el.hasAttribute('title')).toBe(false)

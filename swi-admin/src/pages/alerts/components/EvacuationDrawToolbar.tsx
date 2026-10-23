@@ -1,15 +1,18 @@
 import { View } from 'react-native'
 import { Button, Text, useTheme } from '@kavicki/swi-design-system'
+import { MIN_AREA_VERTICES } from '@/lib/areaDraft'
 
 export type EvacuationDrawStep = 'area' | 'muster'
 
 // Barra do fluxo de dois passos de "Iniciar evacuação": primeiro a área
 // demarcada no mapa, depois o ponto de encontro (um clique). Composição DS
 // (Text + Button); saiu de AlertsList.tsx, que já estava perto do teto de
-// linhas, sem mudança de comportamento no passo da área.
+// linhas. O passo do ponto só abre com a área fechada: o gestor fecha o
+// trajeto clicando no primeiro ponto, e a frase diz o que falta.
 export function EvacuationDrawToolbar({
   step,
   vertexCount,
+  closed,
   hasMuster,
   onUndo,
   onCancel,
@@ -19,6 +22,7 @@ export function EvacuationDrawToolbar({
 }: {
   step: EvacuationDrawStep
   vertexCount: number
+  closed: boolean
   hasMuster: boolean
   onUndo: () => void
   onCancel: () => void
@@ -27,6 +31,14 @@ export function EvacuationDrawToolbar({
   onConfirm: () => void
 }) {
   const theme = useTheme()
+  // Frase do passo da área: com o trajeto aberto, diz o que falta (mais pontos
+  // ou fechar no primeiro); fechado, confirma.
+  const points = `${vertexCount} ${vertexCount === 1 ? 'ponto' : 'pontos'}`
+  const action =
+    vertexCount >= MIN_AREA_VERTICES
+      ? 'Toque no primeiro ponto para fechar a área'
+      : 'Toque no mapa para marcar a área'
+  const hint = closed ? `Área fechada, ${vertexCount} pontos` : `${action} (${points})`
   return (
     <View
       testID="evacuation-draw-toolbar"
@@ -40,8 +52,7 @@ export function EvacuationDrawToolbar({
       {step === 'area' ? (
         <>
           <Text variant="body.s" color={theme.content.medium}>
-            Toque no mapa para marcar a área ({vertexCount} {vertexCount === 1 ? 'ponto' : 'pontos'}
-            )
+            {hint}
           </Text>
           <Button
             label="Desfazer"
@@ -53,7 +64,7 @@ export function EvacuationDrawToolbar({
           <Button
             label="Próximo: ponto de encontro"
             backgroundColor={theme.surface.error}
-            disabled={vertexCount < 3}
+            disabled={!closed}
             onPress={onNext}
           />
         </>

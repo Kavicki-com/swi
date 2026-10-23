@@ -16,15 +16,23 @@ export function createPinElement({
   content,
   title,
 }: {
-  onClick: () => void
+  /** Ação do pino. Sem ela o pino só mostra, e o clique cai no mapa. */
+  onClick?: () => void
   content: ReactNode
   /** Texto nativo de passar o mouse; sem ele o pino fica sem título. */
   title?: string
 }): PinElement {
   const el = document.createElement('div')
-  el.style.cursor = 'pointer'
   if (title) el.title = title
-  el.addEventListener('click', onClick)
+  // O maplibre escuta o clique no contêiner do mapa, que também abriga os
+  // marcadores: o pino com ação não pode virar também clique no mapa.
+  if (onClick) {
+    el.style.cursor = 'pointer'
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      onClick()
+    })
+  }
   const root = createRoot(el)
   root.render(<SwiThemeProvider>{content}</SwiThemeProvider>)
   return { el, root }
