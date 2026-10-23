@@ -37,6 +37,8 @@ export const PERMISSIONS = {
   'cameras.manage': ADMIN_ONLY,
   'evacuation.operate': PANEL,
   'rescue.operate': PANEL,
+  /** Ver todos os resgates da empresa. Sem ela, só os em que a pessoa é o ferido ou o socorrista. */
+  'rescue.readAll': PANEL,
   'weather.read': PANEL,
   'positions.read': PANEL,
   /** Diretório de funcionários e administradores, fila de aprovação e detalhe. */

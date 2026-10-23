@@ -22,10 +22,10 @@ describe('RescueController', () => {
     expect(s.dispatch).toHaveBeenCalledWith('empresa-1', 'ferido-1', 'socorrista-1', 'admin-1')
   })
 
-  it('listar o histórico é da empresa do token', async () => {
+  it('listar o histórico é da empresa do token e leva quem pede, que decide o alcance', async () => {
     const s = service()
     await new RescueController(s).list(admin)
-    expect(s.list).toHaveBeenCalledWith('empresa-1')
+    expect(s.list).toHaveBeenCalledWith('empresa-1', { userId: 'admin-1', role: 'ADMIN' })
   })
 
   it('registrar chegada e encerrar são da empresa do token', async () => {

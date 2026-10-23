@@ -6,12 +6,16 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type { RescueStatus } from '@prisma/client'
+import { can } from '../auth/permissions'
 import { PrismaService } from '../prisma/prisma.service'
 import { JourneyService } from '../journey/journey.service'
 import { NotificationService } from '../notifications/notification.service'
 import { HelpRequestService } from '../telemetry/help/help-request.service'
 
 type Person = { id: string; name: string }
+
+/** Quem pede a lista: o papel decide o alcance. */
+export type RescueViewer = { userId: string; role: string }
 
 export type RescueDto = {
   id: string
@@ -85,10 +89,16 @@ export class RescueService {
     return this.toDto(rescue)
   }
 
-  async list(companyId: string | null): Promise<RescueDto[]> {
+  // A lista traz o nome do ferido e o do socorrista. Quem tem `rescue.readAll`
+  // (a equipe do painel) vê todos os da empresa; os demais, só os resgates em
+  // que são uma das duas pontas.
+  async list(companyId: string | null, viewer: RescueViewer): Promise<RescueDto[]> {
     if (!companyId) return []
+    const scope = can(viewer.role, 'rescue.readAll')
+      ? {}
+      : { OR: [{ injuredId: viewer.userId }, { rescuerId: viewer.userId }] }
     const rows = await this.prisma.rescue.findMany({
-      where: { companyId },
+      where: { companyId, ...scope },
       orderBy: { startedAt: 'desc' },
       include: withPeople,
     })
