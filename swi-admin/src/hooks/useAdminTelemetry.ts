@@ -61,7 +61,13 @@ export function useAdminTelemetry(): AdminTelemetryState & { refresh: () => void
       debounce = setTimeout(load, ADMIN_TELEMETRY_DEBOUNCE_MS)
     }
     load()
-    const unsubscribe = subscribeTelemetryEvents({ onSnapshot: schedule, onCondition: schedule })
+    // Pedido de ajuda atendido ou fechado muda a leitura (o pedido de cada
+    // funcionário) sem condição nova: o aviso próprio dele também relê.
+    const unsubscribe = subscribeTelemetryEvents({
+      onSnapshot: schedule,
+      onCondition: schedule,
+      onHelpRequest: schedule,
+    })
     const timer = setInterval(load, ADMIN_TELEMETRY_REFRESH_MS)
     return () => {
       cancelled.current = true

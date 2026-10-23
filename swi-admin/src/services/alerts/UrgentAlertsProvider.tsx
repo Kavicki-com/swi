@@ -41,6 +41,8 @@ export function UrgentAlertsProvider({ children }: { children: ReactNode }) {
       api: telemetryApi,
       subscribeConditions: (onCondition) =>
         subscribeTelemetryEvents({ onSnapshot: () => {}, onCondition }),
+      subscribeHelpRequests: (onHelpRequest) =>
+        subscribeTelemetryEvents({ onSnapshot: () => {}, onCondition: () => {}, onHelpRequest }),
       onTriaged: onAlertTriaged,
       onFresh: (fresh) => {
         showUrgentBrowserNotice(

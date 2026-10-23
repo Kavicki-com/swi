@@ -24,7 +24,7 @@ import { useMapLibre } from '@/lib/useMapLibre'
 import { SATELLITE_STYLE } from '@/lib/mapStyles'
 import { heatPointsFromCells, buildHeatmapGeoJSON, HEATMAP_COLOR_RAMP } from '@/lib/heatmap'
 import { positionHeatApi } from '@/services/api/positionHeat'
-import { DEMO_DATA_LABEL, NO_DEVICE_LABEL, vitalsViewFrom } from '@/services/vitals/vitalsView'
+import { DEMO_DATA_LABEL } from '@/services/vitals/vitalsView'
 import { createPinElement, type PinElement } from '@/lib/pinFactory'
 import { MapAttribution } from '@/components/MapAttribution'
 import { DataOriginBadge } from '@/components/DataOriginBadge'
@@ -32,7 +32,6 @@ import { getRainViewerLatestRadar } from '@/lib/rainViewer'
 import {
   Button,
   Chip,
-  EmployeeOverviewCard,
   Icon,
   LocationPin,
   SearchInput,
@@ -48,6 +47,7 @@ import { countWorkersInArea, type AreaVertex } from '@/lib/evacuationArea'
 import { drawAreaLayer, AREA_VERTEX_COLOR } from '@/pages/maps/evacuationAreaLayer'
 import { buildMusterPin } from '@/pages/maps/musterPointPin'
 import { EvacuationDrawToolbar } from './components/EvacuationDrawToolbar'
+import { SelectedWorkerCard } from './components/SelectedWorkerCard'
 import { ConfirmDialog } from '@/pages/_shared/ConfirmDialog'
 
 // Sem posição nenhuma o mapa nasce no mesmo ponto padrão do mapa geral.
@@ -72,16 +72,29 @@ function passesFilter(status: DashboardMapMarker['status'], filter: string): boo
 
 type PinHandle = PinElement & { marker: maplibregl.Marker }
 
+// Pino de quem pediu ajuda: o badge urgente do desenho, maior que os 40 px
+// padrão do LocationPin, e por cima dos vizinhos.
+const HELP_PIN_SIZE = 52
+
 function buildMarker(
   m: DashboardMapMarker,
   map: maplibregl.Map,
   lib: typeof maplibregl,
+  help: boolean,
   onClick: () => void,
 ): PinHandle {
   const { el, root } = createPinElement({
     onClick,
-    content: <LocationPin variant="badge" status={m.status} name={m.name} />,
+    content: (
+      <LocationPin
+        variant="badge"
+        status={m.status}
+        name={m.name}
+        size={help ? HELP_PIN_SIZE : undefined}
+      />
+    ),
   })
+  if (help) el.style.zIndex = '1'
   const marker = new lib.Marker({ element: el, anchor: 'bottom' })
     .setLngLat([m.lng, m.lat])
     .addTo(map)
@@ -182,40 +195,28 @@ export function AlertsList() {
   const employeeIdRef = useRef(employeeId)
   employeeIdRef.current = employeeId
 
+  // Quem tem pedido de ajuda aberto ou atendido: o pino sai como alerta
+  // urgente, destacado, até o pedido fechar. O pedido não é medição, então
+  // não muda o estado de saúde; só o pino desta tela.
+  const helpIds = useMemo(
+    () => new Set(markers.filter((m) => entryFor(m.id)?.helpRequest).map((m) => m.id)),
+    [markers, entryFor],
+  )
+
   const filteredMarkers = useMemo(
     () =>
       markers.filter((m) => {
-        if (!passesFilter(m.status, filter)) return false
+        if (!passesFilter(helpIds.has(m.id) ? 'low' : m.status, filter)) return false
         if (search.trim() && !m.name.toLowerCase().includes(search.toLowerCase())) return false
         return true
       }),
-    [markers, search, filter],
+    [markers, search, filter, helpIds],
   )
 
   const selectedMarker = useMemo(
     () => (employeeId ? (markers.find((m) => m.id === employeeId) ?? null) : null),
     [employeeId, markers],
   )
-  // Leitura real do funcionário selecionado, para o cartão sobre o pino.
-  const selectedEntry = selectedMarker ? entryFor(selectedMarker.id) : undefined
-  const selectedVitals = selectedMarker
-    ? vitalsViewFrom(selectedEntry?.telemetry ?? null, {
-        noDevice: selectedEntry?.device.state === 'NONE',
-      })
-    : null
-  // Batimento como número para o cartão do DS; null mostra a ausência.
-  const selectedHeartRate =
-    selectedVitals?.heartRate == null ? null : Number(selectedVitals.heartRate)
-  // Sem aparelho pareado, a frase toma a coluna de saúde do cartão (no lugar
-  // do "-- Bpm"), e a linha de estado abaixo não a repete.
-  const selectedNoDevice = selectedEntry?.device.state === 'NONE'
-  // A borda acompanha o estado real; sem condição, o cartão fica com a borda padrão.
-  const selectedBorder =
-    selectedMarker?.status === 'low'
-      ? theme.content.error
-      : selectedMarker?.status === 'alert'
-        ? theme.content.warning
-        : undefined
 
   // O mapa nasce UMA vez, no primeiro snapshot (mesmo vazio: sem posição ele
   // centra no ponto padrão e a evacuação continua podendo ser desenhada).
@@ -278,18 +279,21 @@ export function AlertsList() {
   }, [lib, markersLoaded])
 
   // Durante evacuação ativa, a borda do pino mostra o estado do ACK (verde =
-  // confirmou no ponto de encontro, laranja = a caminho) — estado real do
-  // fluxo, não vitais. Sem evacuação, mantém o status de saúde de sempre.
-  const displayMarkers = useMemo<DashboardMapMarker[]>(
-    () =>
-      evacuation
-        ? filteredMarkers.map((m) => ({
-            ...m,
-            status: (ackedIds.has(m.id) ? 'good' : 'alert') as DashboardMapMarker['status'],
-          }))
-        : filteredMarkers,
-    [filteredMarkers, evacuation, ackedIds],
-  )
+  // confirmou no ponto de encontro, laranja = a caminho), estado real do
+  // fluxo, não vitais. Sem evacuação, mantém o status de saúde de sempre. O
+  // pedido de ajuda vale acima dos dois e vai por último, para ficar por cima.
+  const displayMarkers = useMemo<DashboardMapMarker[]>(() => {
+    const colored = evacuation
+      ? filteredMarkers.map((m) => ({
+          ...m,
+          status: (ackedIds.has(m.id) ? 'good' : 'alert') as DashboardMapMarker['status'],
+        }))
+      : filteredMarkers
+    const help = colored
+      .filter((m) => helpIds.has(m.id))
+      .map((m) => ({ ...m, status: 'low' as const }))
+    return [...colored.filter((m) => !helpIds.has(m.id)), ...help]
+  }, [filteredMarkers, evacuation, ackedIds, helpIds])
 
   // Render worker pins as maplibre Markers. Re-render when the filtered
   // list changes. Click toggles selection via URL.
@@ -297,7 +301,7 @@ export function AlertsList() {
     const map = mapRef.current
     if (!lib || !map || !mapReady) return
     const handles = displayMarkers.map((m) =>
-      buildMarker(m, map, lib, () => {
+      buildMarker(m, map, lib, helpIds.has(m.id), () => {
         const cur = employeeIdRef.current
         navigateRef.current(cur === m.id ? '/alerts' : `/alerts/${m.id}`)
       }),
@@ -319,7 +323,7 @@ export function AlertsList() {
         })
       })
     }
-  }, [lib, mapReady, displayMarkers])
+  }, [lib, mapReady, displayMarkers, helpIds])
 
   // Heatmap layer, só no modo 'heat': a trilha real de posições das últimas 24
   // horas, agregada em células pelo backend. Sem trilha, nenhuma camada.
@@ -526,7 +530,7 @@ export function AlertsList() {
                 color={theme.content.light}
                 style={{ fontWeight: '700' as const }}
               >
-                Evacuação em andamento — {evacuation.acked}/{evacuation.total} confirmados
+                Evacuação em andamento: {evacuation.acked}/{evacuation.total} confirmados
               </Text>
               {savedArea ? (
                 <Text
@@ -693,66 +697,13 @@ export function AlertsList() {
             real do funcionário; sem leitura o cartão do DS mostra a ausência
             e a linha abaixo diz em que pé está a leitura. */}
         {selectedMarker && overlayPos ? (
-          <View
-            testID="alerts-selected-worker"
-            style={{
-              position: 'absolute',
-              left: overlayPos.left,
-              top: overlayPos.top,
-              transform: [{ translateX: 8 }, { translateY: -120 }],
-              maxWidth: 602,
-              zIndex: 3,
-            }}
-          >
-            <EmployeeOverviewCard
-              employee={{
-                name: selectedMarker.name,
-                sector: selectedEntry?.worker.sector ?? '',
-                avatarUri: selectedMarker.avatarUri,
-              }}
-              progress={selectedVitals?.wearPct ?? undefined}
-              bpm={selectedHeartRate}
-              pressure={selectedVitals?.pressure ?? null}
-              absenceLabel={selectedNoDevice ? NO_DEVICE_LABEL : undefined}
-              borderColor={selectedBorder}
-              actionElement={
-                <Button
-                  label="Criar rota de socorro"
-                  backgroundColor={theme.surface.primary}
-                  onPress={() => navigate(`/alerts/${selectedMarker.id}/rescue`)}
-                />
-              }
-            />
-            {/* Fechar o card: além do clique no mapa e no próprio pino, um X no
-                canto do cartão. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Fechar leitura do funcionário"
-              onPress={() => navigate('/alerts')}
-              style={{
-                position: 'absolute',
-                top: -10,
-                right: -10,
-                width: 28,
-                height: 28,
-                borderRadius: theme.border.radius.pill,
-                backgroundColor: theme.surface.standard,
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 4,
-              }}
-            >
-              <Icon name="close" size={18} color={theme.content.dark} />
-            </Pressable>
-            {selectedHeartRate === null && !selectedNoDevice ? (
-              <Text testID="alerts-selected-status" variant="body.s" color={theme.content.medium}>
-                {selectedVitals?.status ?? 'Sem leitura do aparelho'}
-              </Text>
-            ) : null}
-            {selectedVitals?.sourceBadge ? (
-              <DataOriginBadge label={selectedVitals.sourceBadge} testID="alerts-selected-demo" />
-            ) : null}
-          </View>
+          <SelectedWorkerCard
+            marker={selectedMarker}
+            entry={entryFor(selectedMarker.id)}
+            position={overlayPos}
+            onClose={() => navigate('/alerts')}
+            onCreateRescue={() => navigate(`/alerts/${selectedMarker.id}/rescue`)}
+          />
         ) : null}
       </View>
       {confirmingEnd ? (

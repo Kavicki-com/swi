@@ -8,13 +8,19 @@ const h = vi.hoisted(() => ({
   alerts: vi.fn(),
   stopTelemetry: vi.fn(),
   onCondition: null as ((e: unknown) => void) | null,
+  onHelpRequest: null as ((e: unknown) => void) | null,
   show: vi.fn(),
   navigate: vi.fn(),
 }))
 vi.mock('@/services/api/telemetry', () => ({ telemetryApi: { alerts: h.alerts } }))
+// O provider assina duas vezes: condições e, à parte, o pedido de ajuda.
 vi.mock('@/services/telemetry/telemetrySocket', () => ({
-  subscribeTelemetryEvents: (handlers: { onCondition: (e: unknown) => void }) => {
-    h.onCondition = handlers.onCondition
+  subscribeTelemetryEvents: (handlers: {
+    onCondition: (e: unknown) => void
+    onHelpRequest?: (e: unknown) => void
+  }) => {
+    if (handlers.onHelpRequest) h.onHelpRequest = handlers.onHelpRequest
+    else h.onCondition = handlers.onCondition
     return h.stopTelemetry
   },
 }))
@@ -57,6 +63,7 @@ beforeEach(() => {
   h.show.mockReset()
   h.navigate.mockReset()
   h.onCondition = null
+  h.onHelpRequest = null
 })
 
 afterEach(() => {
@@ -84,6 +91,17 @@ describe('UrgentAlertsProvider', () => {
     const open = h.show.mock.calls[0]![1] as () => void
     open()
     expect(h.navigate).toHaveBeenCalledWith('/monitoring/alerts')
+  })
+
+  it('pedido de ajuda atendido tira o aviso na hora, sem esperar a releitura', async () => {
+    mount()
+    await flush()
+    expect(screen.getByText('a')).toBeTruthy()
+    h.alerts.mockResolvedValue(page([]))
+    await act(async () => {
+      h.onHelpRequest!({ workerId: 'w1', helpRequestId: 'a', status: 'ATTENDED', at: 'x' })
+    })
+    expect(screen.getByText('nenhum')).toBeTruthy()
   })
 
   it('relê quando a conexão volta', async () => {
