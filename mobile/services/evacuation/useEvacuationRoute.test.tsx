@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { EvacuationProvider } from './EvacuationProvider';
 import { useEvacuationRoute } from './useEvacuationRoute';
 import type { RouteSnapshot } from './types';
+import { reportActiveEvacuation, resetEvacuationEnd } from './evacuationEnd';
 
 // A rota de evacuacao e tela de seguranca: ela tem que sair de onde a pessoa
 // esta e ser refeita quando a pessoa sai do caminho. O que este teste trava:
@@ -37,11 +38,19 @@ jest.mock('expo-router', () => ({
 }));
 
 const mockGetRoute = jest.fn();
+const mockGetActive = jest.fn();
+// O aviso de fim do socket: o teste guarda quem o provider pôs para ouvir.
+let mockOnEnded: ((evacuationId: string) => void) | null = null;
+const mockUnsubscribe = jest.fn();
 jest.mock('./getEvacuationBackend', () => ({
   getEvacuationBackend: () => ({
     getRoute: (from: [number, number] | null) => mockGetRoute(from),
-    getActive: jest.fn(),
+    getActive: () => mockGetActive(),
     ack: jest.fn(),
+    subscribeEnded: (cb: (evacuationId: string) => void) => {
+      mockOnEnded = cb;
+      return mockUnsubscribe;
+    },
   }),
 }));
 
@@ -75,6 +84,10 @@ function OutraTela() {
   return null;
 }
 
+// Toda árvore montada desmonta ao fim do teste: o aviso de fim é um só para
+// o processo, e um provider esquecido de um teste reagiria ao do seguinte.
+let montadas: ReactTestRenderer[] = [];
+
 const montar = async (): Promise<ReactTestRenderer> => {
   let tree!: ReactTestRenderer;
   await act(async () => {
@@ -82,6 +95,7 @@ const montar = async (): Promise<ReactTestRenderer> => {
       createElement(EvacuationProvider, null, createElement(Harness)),
     );
   });
+  montadas.push(tree);
   return tree;
 };
 
@@ -102,8 +116,13 @@ beforeEach(() => {
   mockCoords = null;
   mockPermission = 'granted';
   mockGetRoute.mockResolvedValue(rota());
+  mockGetActive.mockResolvedValue(null);
+  mockOnEnded = null;
 });
-afterEach(() => {
+afterEach(async () => {
+  for (const tree of montadas) await act(async () => tree.unmount());
+  montadas = [];
+  resetEvacuationEnd();
   jest.useRealTimers();
 });
 
@@ -218,6 +237,7 @@ describe('useEvacuationRoute: duas telas e respostas atrasadas', () => {
       createElement(EvacuationProvider, null, createElement(Harness), createElement(OutraTela));
     let tree!: ReactTestRenderer;
     await act(async () => { tree = create(arvore()); });
+    montadas.push(tree);
     mockCoords = NA_LINHA;
     await act(async () => { tree.update(arvore()); });
     await act(async () => { jest.advanceTimersByTime(16_000); });
@@ -299,5 +319,64 @@ describe('useEvacuationRoute: motivo do erro', () => {
     await mover(tree, NA_LINHA);
 
     expect(visto.errorKind).toBe('failed');
+  });
+});
+
+// O fim da evacuação tira as telas do modo evacuação. O provider fica sabendo
+// pelo aviso do socket e pela rota que volta 404, que ele confere no servidor:
+// 404 também é "evacuação ativa sem ponto de encontro", e essa não acabou.
+describe('useEvacuationRoute: fim da evacuação', () => {
+  it('404 com a evacuação vista ativa: confere no servidor, encerra e apaga a rota', async () => {
+    reportActiveEvacuation('e1');
+    const tree = await montar();
+    await mover(tree, NA_LINHA);
+    expect(visto.ended).toBe(false);
+
+    mockGetRoute.mockRejectedValueOnce(erro(404));
+    await act(async () => { mockRefocus(); });
+
+    expect(mockGetActive).toHaveBeenCalledTimes(1);
+    expect(visto.ended).toBe(true);
+    expect(visto.route).toBeNull();
+  });
+
+  it('404 com a evacuação ainda ativa (sem ponto de encontro): só a frase de sempre', async () => {
+    reportActiveEvacuation('e1');
+    mockGetActive.mockResolvedValue({ id: 'e1', total: 1, ackedCount: 0, myAck: false });
+    mockGetRoute.mockRejectedValue(erro(404));
+    const tree = await montar();
+    await mover(tree, NA_LINHA);
+
+    expect(visto.ended).toBe(false);
+    expect(visto.errorKind).toBe('no-evacuation');
+  });
+
+  it('404 sem evacuação ativa vista nesta sessão: não encerra nada', async () => {
+    mockGetRoute.mockRejectedValue(erro(404));
+    const tree = await montar();
+    await mover(tree, NA_LINHA);
+
+    expect(visto.ended).toBe(false);
+    expect(visto.errorKind).toBe('no-evacuation');
+  });
+
+  it('o aviso de fim pelo socket encerra e apaga a rota da tela', async () => {
+    reportActiveEvacuation('e1');
+    const tree = await montar();
+    await mover(tree, NA_LINHA);
+    expect(visto.route).not.toBeNull();
+
+    await act(async () => { mockOnEnded!('e1'); });
+
+    expect(visto.ended).toBe(true);
+    expect(visto.route).toBeNull();
+    expect(visto.loadStatus).toBe('idle');
+  });
+
+  it('desmontar solta o socket', async () => {
+    const tree = await montar();
+    montadas = [];
+    await act(async () => tree.unmount());
+    expect(mockUnsubscribe).toHaveBeenCalledTimes(1);
   });
 });

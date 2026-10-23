@@ -2,6 +2,11 @@ import { AppState, Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import { LOCATION_TASK_NAME } from './backgroundLocationTask';
 import { registerLocationTask } from './registerLocationTask';
+import {
+  endedEvacuation,
+  reportActiveEvacuation,
+  resetEvacuationEnd,
+} from '../evacuation/evacuationEnd';
 
 jest.mock('expo-task-manager', () => ({ defineTask: jest.fn() }));
 
@@ -116,6 +121,19 @@ describe('registerLocationTask', () => {
       expect(mockEndEvacuation).toHaveBeenCalledTimes(1);
     } finally {
       estado.currentState = antes;
+    }
+  });
+
+  // As telas de evacuação saem quando ela acaba: o fim visto pela tarefa
+  // também chega a elas, na frente ou no fundo (aparece na volta).
+  it('fim visto pela tarefa chega às telas de evacuação', () => {
+    reportActiveEvacuation('e1');
+    try {
+      registerLocationTask();
+      mockHandlerDeps!.onEvacuationEnded!();
+      expect(endedEvacuation()).toBe('e1');
+    } finally {
+      resetEvacuationEnd();
     }
   });
 

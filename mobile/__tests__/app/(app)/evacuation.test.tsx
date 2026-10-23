@@ -4,6 +4,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import EvacuationRoute from '../../../app/(app)/evacuation';
 import type { RouteSnapshot } from '../../../services/evacuation/types';
 import type { RouteErrorKind } from '../../../services/evacuation/EvacuationProvider';
+import { ENDED_NOTICE_MS } from '../../../services/evacuation/useLeaveWhenEvacuationEnds';
 
 // Tela de evacuação (idle, "rota planejada"). É tela de SEGURANÇA: o que ela
 // manda pro mapa é a instrução que a pessoa vai seguir saindo do site, então o
@@ -15,8 +16,20 @@ import type { RouteErrorKind } from '../../../services/evacuation/EvacuationProv
 // NÃO desenha traçado nenhum: cada motivo de erro tem a própria frase.
 
 const mockPush = jest.fn();
+const mockNavigate = jest.fn();
+// useFocusEffect roda o callback como um efeito: a tela de teste está em foco.
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    navigate: mockNavigate,
+    back: jest.fn(),
+    canGoBack: () => true,
+    replace: jest.fn(),
+  }),
+  useFocusEffect: (cb: () => void | (() => void)) => {
+    const { useEffect } = require('react');
+    useEffect(cb, [cb]);
+  },
 }));
 
 // Holder mutável: cada cenário reescreve o retorno do hook antes do render. A
@@ -28,7 +41,8 @@ const mockEvac: {
   loadStatus: 'idle' | 'loading' | 'ready' | 'error';
   errorKind: RouteErrorKind;
   coords: [number, number] | null;
-} = { route: null, loadStatus: 'idle', errorKind: null, coords: null };
+  ended: boolean;
+} = { route: null, loadStatus: 'idle', errorKind: null, coords: null, ended: false };
 jest.mock('../../../services/evacuation/useEvacuationRoute', () => ({
   useEvacuationRoute: () => mockEvac,
 }));
@@ -69,7 +83,11 @@ jest.mock('../../../components/MapMarker', () => {
 });
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
 // A barra de confirmação tem backend próprio e suíte própria: fora daqui.
-jest.mock('../../../components/EvacuationAckBar', () => ({ EvacuationAckBar: () => null }));
+jest.mock('../../../components/EvacuationAckBar', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return { EvacuationAckBar: () => React.createElement(View, { testID: 'evacuation-ack-bar' }) };
+});
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -134,6 +152,7 @@ beforeEach(() => {
   mockEvac.loadStatus = 'idle';
   mockEvac.errorKind = null;
   mockEvac.coords = null;
+  mockEvac.ended = false;
 });
 
 describe('Tela de evacuação: gate de plataforma', () => {
@@ -315,5 +334,66 @@ describe('Tela de evacuação: pinos e conteúdo do cartão', () => {
     await act(async () => { botao.props.onPress(); });
 
     expect(mockPush).toHaveBeenCalledWith('/(app)/evacuation-ongoing');
+  });
+});
+
+// O gestor encerrou: a tela deixa o modo evacuação (sem rota, pinos, chips nem
+// "Confirmar chegada"), avisa com o Toast do DS e volta ao início sozinha. O
+// fim vem do provider (socket, consulta, volta ao primeiro plano); aqui, o que
+// a tela faz com ele.
+describe('Tela de evacuação: evacuação encerrada', () => {
+  it('tira rota, pinos, chips e a confirmação, e avisa que acabou', async () => {
+    pronta();
+    mockEvac.coords = WAYPOINTS[1];
+    mockEvac.ended = true;
+    const tree = await render();
+
+    expect(porTestID(tree, 'line-evacuation-route')).toBeUndefined();
+    expect(porTestID(tree, 'marker-evacuation-destination')).toBeUndefined();
+    expect(porTestID(tree, 'marker-evacuation-chip-1')).toBeUndefined();
+    expect(porTestID(tree, 'marker-evacuation-chip-2')).toBeUndefined();
+    expect(porTestID(tree, 'evacuation-ack-bar')).toBeUndefined();
+    expect(porTestID(tree, 'evacuation-ended-notice')).toBeDefined();
+    expect(textos(tree)).toContain('Evacuação encerrada');
+  });
+
+  it('volta ao início depois do aviso', async () => {
+    jest.useFakeTimers();
+    try {
+      mockEvac.ended = true;
+      await render();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      await act(async () => {
+        jest.advanceTimersByTime(ENDED_NOTICE_MS);
+      });
+      expect(mockNavigate).toHaveBeenCalledWith('/(app)/dashboard');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('o botão do aviso volta ao início na hora', async () => {
+    mockEvac.ended = true;
+    const tree = await render();
+    const botao = tree.root.findAll(
+      (n) => n.props?.accessibilityLabel === 'Voltar ao início' && typeof n.props?.onPress === 'function',
+    )[0];
+    await act(async () => botao.props.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('/(app)/dashboard');
+  });
+
+  it('em curso, não sai da tela', async () => {
+    jest.useFakeTimers();
+    try {
+      pronta();
+      const tree = await render();
+      await act(async () => {
+        jest.advanceTimersByTime(ENDED_NOTICE_MS * 2);
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(porTestID(tree, 'evacuation-ended-notice')).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

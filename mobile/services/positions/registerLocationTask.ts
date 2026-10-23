@@ -8,6 +8,7 @@ import {
 } from './backgroundLocationTask';
 import { getPositionRuntime } from './positionTracking';
 import { getEvacuationBackend } from '../evacuation/getEvacuationBackend';
+import { reportActiveEvacuation } from '../evacuation/evacuationEnd';
 
 /**
  * A evacuação ativa, para a tarefa saber do começo e do encerramento com o
@@ -43,8 +44,10 @@ export function registerLocationTask(): void {
     // ela viu passa pelo controle, que põe as leituras de volta na jornada (ou
     // desliga) e a notificação fixa deixa de falar em evacuação. Em segundo
     // plano o Android pode recusar religar o serviço; ali fica para a volta ao
-    // primeiro plano (useEvacuationTracking consulta e encerra).
+    // primeiro plano (useEvacuationTracking consulta e encerra). As telas de
+    // evacuação ficam sabendo de qualquer jeito e saem do modo evacuação.
     onEvacuationEnded: () => {
+      reportActiveEvacuation(null);
       if (AppState.currentState === 'active') void tracking.endEvacuation();
     },
     now: () => new Date(),

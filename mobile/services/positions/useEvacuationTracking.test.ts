@@ -10,6 +10,11 @@ import type { PositionTracking, StartResult } from './positionTracking';
 import type { ActiveEvacuationView } from '../evacuation/types';
 import type { TrackingPermission } from './trackingPermission';
 import type { NotificationDomain } from '../notifications/types';
+import {
+  endedEvacuation,
+  reportEvacuationEnded,
+  resetEvacuationEnd,
+} from '../evacuation/evacuationEnd';
 
 const TestRenderer: {
   create: (el: unknown) => { update: (el: unknown) => void; unmount: () => void };
@@ -81,6 +86,7 @@ let montadas: { unmount: () => void }[] = [];
 afterEach(async () => {
   for (const root of montadas) await act(async () => root.unmount());
   montadas = [];
+  resetEvacuationEnd();
   jest.restoreAllMocks();
   jest.useRealTimers();
 });
@@ -199,6 +205,44 @@ describe('useEvacuationTracking', () => {
       jest.advanceTimersByTime(EVACUATION_POLL_MS * 3);
     });
     expect(deps.getActive).toHaveBeenCalledTimes(2);
+  });
+
+  // As telas de evacuação saem quando ela acaba. A consulta daqui (abertura,
+  // volta ao primeiro plano, a cada 30 s com evacuação ativa) é quem mais
+  // vê o fim, e conta o que viu para elas.
+  it('a volta ao primeiro plano que acha a evacuação encerrada avisa o fim', async () => {
+    const { deps } = fakeDeps();
+    await montar({ userId: 'u1', notice: null, deps });
+    expect(endedEvacuation()).toBeNull();
+    deps.getActive.mockResolvedValue(null);
+    await appState('active');
+    expect(endedEvacuation()).toBe('e1');
+  });
+
+  it('sem rede, não avisa fim nenhum', async () => {
+    const { deps } = fakeDeps();
+    await montar({ userId: 'u1', notice: null, deps });
+    deps.getActive.mockRejectedValue(new Error('rede'));
+    await appState('active');
+    expect(endedEvacuation()).toBeNull();
+  });
+
+  // O fim que chega por outro caminho (aviso do socket, tarefa de localização)
+  // passa pelo controle na hora, com o app na frente: as leituras voltam à
+  // jornada sem esperar a próxima consulta.
+  it('fim visto por outro caminho com o app na frente: encerra o rastreio da evacuação', async () => {
+    const { deps } = fakeDeps();
+    await montar({ userId: 'u1', notice: null, deps });
+    await act(async () => reportEvacuationEnded('e1'));
+    expect(deps.tracking.endEvacuation).toHaveBeenCalledTimes(1);
+  });
+
+  it('fim visto por outro caminho em segundo plano: fica para a volta à frente', async () => {
+    const { deps, setForeground } = fakeDeps();
+    await montar({ userId: 'u1', notice: null, deps });
+    setForeground(false);
+    await act(async () => reportEvacuationEnded('e1'));
+    expect(deps.tracking.endEvacuation).not.toHaveBeenCalled();
   });
 
   it('sem evacuação, não consulta de tempos em tempos', async () => {

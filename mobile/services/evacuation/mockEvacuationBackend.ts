@@ -58,4 +58,9 @@ export const mockEvacuationBackend: EvacuationBackend = {
   async ack() {
     await tick();
   },
+
+  // Sem evacuação disparada no mock, nada a encerrar.
+  subscribeEnded() {
+    return () => {};
+  },
 };

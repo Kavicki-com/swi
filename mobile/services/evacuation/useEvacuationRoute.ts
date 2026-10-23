@@ -18,6 +18,8 @@ interface EvacuationRouteView {
   loadStatus: 'idle' | 'loading' | 'ready' | 'error';
   errorKind: RouteErrorKind;
   coords: [number, number] | null;
+  /** A evacuação vista ativa acabou: a tela sai do modo evacuação. */
+  ended: boolean;
 }
 
 /**
@@ -28,7 +30,7 @@ interface EvacuationRouteView {
  */
 export function useEvacuationRoute(): EvacuationRouteView {
   const { coords, permission } = useLocation();
-  const { route, loadStatus, errorKind, reload, msSinceLastFetch } = useEvacuation();
+  const { route, loadStatus, errorKind, reload, msSinceLastFetch, ended } = useEvacuation();
 
   // Busca a cada foco, não uma vez por sessão do app: entre uma visita e outra
   // a evacuação pode ter acabado ou o ponto pode ter mudado, e rota velha na
@@ -55,5 +57,5 @@ export function useEvacuationRoute(): EvacuationRouteView {
     reload(coords);
   }, [coords, route, reload, msSinceLastFetch]);
 
-  return { route, loadStatus, errorKind, coords };
+  return { route, loadStatus, errorKind, coords, ended };
 }

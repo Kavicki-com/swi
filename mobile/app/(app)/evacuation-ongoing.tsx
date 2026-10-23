@@ -14,6 +14,7 @@ import { MapChipBody } from '@/components/MapChipBody';
 import { NavFABs } from '@/components/NavFABs';
 import { EvacuationAckBar } from '@/components/EvacuationAckBar';
 import { useEvacuationRoute } from '@/services/evacuation/useEvacuationRoute';
+import { useLeaveWhenEvacuationEnds } from '@/services/evacuation/useLeaveWhenEvacuationEnds';
 import {
   chipAnchors, chipEtaLabel, lineFeature, navArrow, navArrowAt, routeNotice,
 } from '@/services/evacuation/routeFormat';
@@ -84,7 +85,12 @@ function EvacuationOngoingScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  const { route, errorKind, coords } = useEvacuationRoute();
+  const { route: liveRoute, errorKind, coords, ended } = useEvacuationRoute();
+  const leave = useLeaveWhenEvacuationEnds(ended);
+  // Encerrada pelo gestor, a tela sai do modo evacuação: nada de rota, seta,
+  // chips ou confirmação de chegada de uma evacuação que já acabou. Fica o
+  // aviso, e a tela volta ao início sozinha.
+  const route = ended ? null : liveRoute;
 
   // Sem rota não há linha, seta nem chips: navegar por traçado inventado leva
   // pro lugar errado. O aviso no topo diz o que fazer no lugar.
@@ -144,7 +150,30 @@ function EvacuationOngoingScreen() {
 
         {/* Aviso fixo (sem fechar): numa evacuação a frase É a instrução. O
             Toast é o do DS, como está; `box-none` deixa o toque passar. */}
-        {notice && (
+        {ended && (
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: 'absolute',
+              top: insets.top + theme.padding.s,
+              left: theme.padding.m,
+              right: theme.padding.m,
+            }}
+          >
+            <Toast
+              variant="success"
+              title="Evacuação encerrada"
+              message="O gestor encerrou a evacuação. Voltando ao início."
+              action={{
+                label: 'Voltar ao início',
+                accessibilityLabel: 'Voltar ao início',
+                onPress: leave,
+              }}
+              testID="evacuation-ended-notice"
+            />
+          </View>
+        )}
+        {!ended && notice && (
           <View
             pointerEvents="box-none"
             style={{
@@ -161,7 +190,7 @@ function EvacuationOngoingScreen() {
         <NavFABs />
       </MapView>
 
-      <EvacuationAckBar />
+      {!ended && <EvacuationAckBar />}
     </View>
   );
 }

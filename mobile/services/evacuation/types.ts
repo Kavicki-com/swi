@@ -32,4 +32,7 @@ export interface EvacuationBackend {
   getActive(): Promise<ActiveEvacuationView | null>;
   // Confirma presença no ponto de encontro (idempotente no backend).
   ack(evacuationId: string): Promise<void>;
+  // Aviso ao vivo de que o gestor encerrou (socket 'evacuation-ended'), com o
+  // id da evacuação. Devolve quem solta a escuta.
+  subscribeEnded(onEnded: (evacuationId: string) => void): () => void;
 }
