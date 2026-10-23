@@ -156,14 +156,15 @@ class BleHeartRateService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (!running) return START_NOT_STICKY
-    val stored = Prefs.device(this)
+    val stored = Prefs.address(this)
     if (stored == null) {
       stopSelf()
       return START_NOT_STICKY
     }
     Log.i(TAG, "onStartCommand relancado=${intent == null}")
     if (stored != address) {
-      // Primeira subida, ou outra pulseira escolhida com o serviço de pé.
+      // Primeira subida, ou outra pulseira escolhida com o serviço de pé. O
+      // endereço que girou com o serviço de pé já é o guardado: não religa.
       teardownGatt()
       stopRescan()
       handler.removeCallbacks(recover)
@@ -366,7 +367,7 @@ class BleHeartRateService : Service() {
     if (sameName) {
       Log.i(TAG, "endereco girou, seguindo a pulseira pelo nome")
       address = found.address
-      Prefs.saveDevice(this, found.address, storedName, addressTypeOf(found))
+      Prefs.followAddress(this, found.address, addressTypeOf(found))
     }
     // O aparelho da varredura já traz o tipo do endereço: conexão direta.
     connectDevice(found, autoConnect = false)

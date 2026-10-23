@@ -84,14 +84,14 @@ class SwiBleHeartRateModule : Module() {
       // No Android 14 o serviço `connectedDevice` sem BLUETOOTH_CONNECT
       // derrubaria o app ao subir: confere antes e rejeita com o código.
       if (!BleHeartRateService.canConnect(ctx)) throw PermissionDeniedException("BLUETOOTH_CONNECT")
-      val fromScan = seen[deviceId]
-      val sameAsStored = Prefs.device(ctx) == deviceId
-      Prefs.saveDevice(
-        ctx,
-        deviceId,
-        fromScan?.name ?: if (sameAsStored) Prefs.name(ctx) else null,
-        fromScan?.addressType ?: if (sameAsStored) Prefs.addressType(ctx) else Prefs.ADDRESS_TYPE_UNKNOWN,
-      )
+      // A tela pede de novo a cada volta ao app, sempre com o endereço da
+      // escolha. A mesma escolha não regrava nada: o serviço pode estar
+      // seguindo a pulseira num endereço que girou, e o da escolha já não
+      // existe. Só uma escolha nova troca a pulseira guardada.
+      if (Prefs.device(ctx) != deviceId) {
+        val fromScan = seen[deviceId]
+        Prefs.saveDevice(ctx, deviceId, fromScan?.name, fromScan?.addressType ?: Prefs.ADDRESS_TYPE_UNKNOWN)
+      }
       try {
         BleHeartRateService.start(ctx)
       } catch (e: Exception) {
