@@ -68,9 +68,8 @@ const FAILURE: Record<HealthConnectFailureReason, ReportFailureReason> = {
   other: 'OTHER',
 };
 
-// O `idle` da ponte é o serviço parado. Hoje ele para com a jornada; quando a
-// escuta passar a só parar ao encerrar, o mesmo `idle` é o "encerrada", sem
-// mudar o contrato.
+// O `idle` da ponte é o serviço parado: a escuta só para ao encerrar (também
+// no logout e com o pareamento revogado), então `idle` é o "encerrada".
 const LISTENER: Record<BleHeartRateState, ReportListenerState> = {
   connected: 'CONNECTED',
   searching: 'SEARCHING',

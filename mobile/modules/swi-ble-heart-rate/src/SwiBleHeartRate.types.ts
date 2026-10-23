@@ -7,7 +7,7 @@
 /**
  * Estado da ligação com a pulseira escolhida.
  *
- * - `idle`: serviço parado (nenhuma jornada, ou depois do `stop`).
+ * - `idle`: serviço parado (nenhuma pulseira escolhida, ou depois do `stop`).
  * - `searching`: serviço de pé, pulseira fora de alcance ou desligada; o
  *   sistema religa sozinho quando ela voltar a anunciar.
  * - `connected`: conectada e com o 0x2A37 assinado.

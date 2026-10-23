@@ -62,6 +62,8 @@ class BleHeartRateService : Service() {
     private const val TAG = "SwiBleHeartRate"
     private const val CHANNEL = "swi-ble-heart-rate"
     private const val NOTIFICATION_ID = 7341
+    private const val NOTIFICATION_TEXT =
+      "O monitoramento segue ligado. Para encerrar, toque em Encerrar no SWI, em Configurações, Monitoramento."
     private const val KICK_INTERVAL_MS = 15_000L
     private const val RETRY_MIN_MS = 5_000L
     private const val RETRY_MAX_MS = 30_000L
@@ -188,12 +190,12 @@ class BleHeartRateService : Service() {
       receiverRegistered = false
       running = false
       publish(STATE_IDLE)
-      // A última drenagem leva o resto da caixa. Parado pela tela (jornada
-      // encerrada ali, pulseira trocada), o app está na frente e a tarefa
-      // sobe. Parado pela própria drenagem (janela fechada ou vencida), o que
-      // sobrou chegou depois do fim da jornada: a drenagem o descarta se a
-      // tarefa subir, e se o sistema recusar o pedido (app em segundo plano)
-      // o resto fica na caixa e a próxima jornada o descarta pela hora.
+      // A última drenagem leva o resto da caixa. Parado pela tela (Encerrar,
+      // logout), o app está na frente e a tarefa sobe. Parado pela própria
+      // drenagem (pulseira encerrada, aparelho despareado), o que sobrou
+      // chegou depois do fim da sessão: a drenagem o descarta se a tarefa
+      // subir, e se o sistema recusar o pedido (app em segundo plano) o resto
+      // fica na caixa e a próxima escolha o descarta pela hora.
       if (Inbox.hasPending(this)) kick(System.currentTimeMillis())
     }
     Log.i(TAG, "servico destruido")
@@ -222,9 +224,13 @@ class BleHeartRateService : Service() {
     }
   }
 
+  // Fica visível enquanto a escuta estiver ligada, também fora do expediente:
+  // é ela que lembra que o monitoramento segue ligado e diz como encerrar.
   private fun notification(title: String): Notification {
     val builder = Notification.Builder(this, CHANNEL)
       .setContentTitle(title)
+      .setContentText(NOTIFICATION_TEXT)
+      .setStyle(Notification.BigTextStyle().bigText(NOTIFICATION_TEXT))
       .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
@@ -520,7 +526,7 @@ class BleHeartRateService : Service() {
     }
     // Só depois de o sistema aceitar o pedido: a trava não tem prazo e quem a
     // solta é o fim do BleDrainTaskService. Com o pedido recusado ela ficaria
-    // presa, com a CPU acordada até a próxima jornada. Até a tarefa começar
+    // presa, com a CPU acordada até o serviço subir de novo. Até a tarefa começar
     // (ela pega a mesma trava) este código segue na thread principal, onde o
     // serviço também nasce, então a trava chega antes dele.
     HeadlessJsTaskService.acquireWakeLockNow(this)
