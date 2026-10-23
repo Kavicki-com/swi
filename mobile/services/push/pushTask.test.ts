@@ -17,6 +17,7 @@ function setup(overrides: Partial<PushTaskDeps> = {}) {
   const deps: PushTaskDeps = {
     readSession: jest.fn(async () => ({ userId: 'u1' })),
     readEvacuation: jest.fn(async () => null),
+    reportEnded: jest.fn(),
     tracking: {
       startEvacuation: jest.fn(async () => 'tracking' as const),
       endEvacuation: jest.fn(async () => undefined),
@@ -69,6 +70,32 @@ describe('createPushTaskHandler', () => {
   it('fim: apaga a evacuação gravada e desliga o que era só dela', async () => {
     const { deps, handler } = setup({
       readEvacuation: jest.fn(async () => ({ userId: 'u1', evacuationId: 'e1', startedAt: '2026-10-23T10:00:00.000Z' })),
+    });
+    await expect(handler.handle(ended('e1'))).resolves.toBe('ended');
+    expect(deps.tracking.endEvacuation).toHaveBeenCalledTimes(1);
+  });
+
+  // As telas de evacuação leem o aviso de fim único (evacuationEnd), que só
+  // encerra a evacuação que conhece.
+  it('fim avisa as telas com o id da evacuação', async () => {
+    const { deps, handler } = setup();
+    await handler.handle(ended('e1'));
+    expect(deps.reportEnded).toHaveBeenCalledWith('e1');
+  });
+
+  it('o aviso às telas sai mesmo quando a gravada é outra', async () => {
+    const { deps, handler } = setup({
+      readEvacuation: jest.fn(async () => ({ userId: 'u1', evacuationId: 'e2', startedAt: '2026-10-23T10:00:00.000Z' })),
+    });
+    await handler.handle(ended('e1'));
+    expect(deps.reportEnded).toHaveBeenCalledWith('e1');
+  });
+
+  it('aviso às telas que falha não impede o encerramento', async () => {
+    const { deps, handler } = setup({
+      reportEnded: jest.fn(() => {
+        throw new Error('ouvinte');
+      }),
     });
     await expect(handler.handle(ended('e1'))).resolves.toBe('ended');
     expect(deps.tracking.endEvacuation).toHaveBeenCalledTimes(1);

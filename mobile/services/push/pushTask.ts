@@ -29,6 +29,11 @@ export interface PushTaskDeps {
   readSession(): Promise<{ userId: string } | null>;
   /** A evacuação gravada pelo rastreio, para não encerrar outra. */
   readEvacuation(): Promise<EvacuationWindow | null>;
+  /**
+   * O aviso de fim único (evacuationEnd.ts), que as telas de evacuação leem.
+   * Só encerra a evacuação que conhece, então pode receber qualquer id.
+   */
+  reportEnded(evacuationId: string): void;
   tracking: Pick<PositionTracking, 'startEvacuation' | 'endEvacuation'>;
   /** Com o app na frente quem cuida é a tela (consulta e pede a permissão). */
   isForeground(): boolean;
@@ -64,6 +69,13 @@ export function createPushTaskHandler(deps: PushTaskDeps): PushTaskHandler {
         }
       }
 
+      try {
+        // Com o app vivo em segundo plano, as telas já saem do modo evacuação
+        // e a volta à frente não mostra uma evacuação que acabou.
+        deps.reportEnded(push.evacuationId);
+      } catch {
+        // Aviso às telas não pode impedir o encerramento do rastreio.
+      }
       try {
         // O fim atrasado de uma evacuação antiga não apaga a nova.
         const stored = await deps.readEvacuation();

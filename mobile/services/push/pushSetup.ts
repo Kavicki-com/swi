@@ -2,6 +2,7 @@ import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { readStoredSession } from '../auth/storedSession';
+import { reportEvacuationEnded } from '../evacuation/evacuationEnd';
 import { getPositionRuntime } from '../positions/positionTracking';
 import { ensureEvacuationChannel } from './evacuationChannel';
 import { PUSH_TASK_NAME } from './evacuationPush';
@@ -46,6 +47,7 @@ export function setupPushNotifications(): void {
       return stored ? { userId: stored.user.id } : null;
     },
     readEvacuation: () => evacuation.read(),
+    reportEnded: reportEvacuationEnded,
     tracking,
     isForeground: () => AppState.currentState === 'active',
   });

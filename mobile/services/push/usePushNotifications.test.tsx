@@ -34,6 +34,11 @@ jest.mock('./pushRegistration', () => ({
   getPushRegistration: () => ({ register: mockRegister, refresh: mockRefresh }),
 }));
 
+const mockReportEnded = jest.fn();
+jest.mock('../evacuation/evacuationEnd', () => ({
+  reportEvacuationEnded: (id: string) => mockReportEnded(id),
+}));
+
 const mockAnnounce = jest.fn();
 jest.mock('./evacuationPush', () => ({
   ...jest.requireActual('./evacuationPush'),
@@ -110,6 +115,21 @@ describe('usePushNotifications', () => {
     mockReceived!(notification('n1', startedData));
     expect(mockAnnounce).toHaveBeenCalledWith('n1');
     expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  // O fim pelo push com o app aberto alimenta o aviso de fim único: as telas
+  // saem do modo evacuação e o rastreio encerra, como pelo socket.
+  it('fim pelo push com o app aberto avisa o fim da evacuação', async () => {
+    await mount('u1');
+    mockReceived!(notification('n8', { type: 'evacuation.ended', evacuationId: 'e1' }));
+    expect(mockReportEnded).toHaveBeenCalledWith('e1');
+    expect(mockAnnounce).toHaveBeenCalledWith('n8');
+  });
+
+  it('o início pelo push não é aviso de fim', async () => {
+    await mount('u1');
+    mockReceived!(notification('n9', startedData));
+    expect(mockReportEnded).not.toHaveBeenCalled();
   });
 
   it('push que não é da evacuação não avisa', async () => {

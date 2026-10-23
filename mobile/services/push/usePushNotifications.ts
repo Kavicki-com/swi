@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import { reportEvacuationEnded } from '../evacuation/evacuationEnd';
 import { announceEvacuationPush, readEvacuationPush } from './evacuationPush';
 import { getPushRegistration } from './pushRegistration';
 
@@ -42,9 +43,12 @@ export function usePushNotifications(userId: string | null): void {
     if (!userId || Platform.OS === 'web') return;
 
     const received = Notifications.addNotificationReceivedListener((notification) => {
-      if (readEvacuationPush(notification.request.content.data)) {
-        announceEvacuationPush(notification.request.identifier);
-      }
+      const push = readEvacuationPush(notification.request.content.data);
+      if (!push) return;
+      // O fim entra no aviso único (evacuationEnd), como o do socket: as telas
+      // saem do modo evacuação e o rastreio encerra na hora.
+      if (push.type === 'evacuation.ended') reportEvacuationEnded(push.evacuationId);
+      announceEvacuationPush(notification.request.identifier);
     });
 
     const onResponse = (response: Notifications.NotificationResponse) => {
