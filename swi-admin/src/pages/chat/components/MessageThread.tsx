@@ -1,11 +1,41 @@
 // src/pages/chat/components/MessageThread.tsx
 // Caixa de mensagens do inbox: placeholder quando não há conversa selecionada,
-// histórico rolável de bolhas quando há. Extraída de ChatInbox.tsx sem mudança
-// de comportamento.
+// histórico rolável de bolhas, separado por dia, quando há.
 import type { MutableRefObject } from 'react'
 import { Text, useTheme } from '@kavicki/swi-design-system'
 import type { ChatContact, ChatMessage } from '@/services/chats'
 import { ChatBubble } from './ChatBubble'
+
+type ThreadItem =
+  | { kind: 'day'; key: string; label: string }
+  | { kind: 'message'; message: ChatMessage }
+
+const dateOf = (d: Date) =>
+  d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+/**
+ * As mensagens com um separador antes de cada dia: "Hoje - dd/mm/aaaa" no dia
+ * corrente e "dd/mm/aaaa" nos outros, sempre no fuso de quem lê. Mensagem sem
+ * data de envio fica no dia da anterior.
+ */
+function groupByDay(messages: readonly ChatMessage[], now: Date): ThreadItem[] {
+  const today = now.toDateString()
+  const items: ThreadItem[] = []
+  let currentDay: string | null = null
+  for (const message of messages) {
+    if (message.sentAt) {
+      const sent = new Date(message.sentAt)
+      const day = sent.toDateString()
+      if (day !== currentDay) {
+        currentDay = day
+        const label = day === today ? `Hoje - ${dateOf(sent)}` : dateOf(sent)
+        items.push({ kind: 'day', key: day, label })
+      }
+    }
+    items.push({ kind: 'message', message })
+  }
+  return items
+}
 
 export function MessageThread({
   boxRef,
@@ -31,9 +61,8 @@ export function MessageThread({
   const theme = useTheme()
   return (
     // chat-box: empty placeholder when no selection, otherwise scrollable
-    // bubble history with the date separator after the first two
-    // received/sent pair (spec placement). ref drives auto-scroll-to-bottom
-    // on send / contact switch.
+    // bubble history with a date separator before each day. ref drives
+    // auto-scroll-to-bottom on send / contact switch.
     <div
       ref={boxRef}
       className="subtle-scrollbar"
@@ -72,33 +101,26 @@ export function MessageThread({
         </Text>
       ) : contact ? (
         <>
-          {messages.slice(0, 2).map((m) => (
-            <ChatBubble
-              key={m.id}
-              message={m}
-              contact={contact}
-              onEdit={onEdit}
-              onReport={onReport}
-            />
-          ))}
-          {messages.length > 2 ? (
-            <Text
-              variant="body.s"
-              color={theme.content.medium}
-              style={{ textAlign: 'center', width: '100%' }}
-            >
-              Hoje - 21/03/2026
-            </Text>
-          ) : null}
-          {messages.slice(2).map((m) => (
-            <ChatBubble
-              key={m.id}
-              message={m}
-              contact={contact}
-              onEdit={onEdit}
-              onReport={onReport}
-            />
-          ))}
+          {groupByDay(messages, new Date()).map((item) =>
+            item.kind === 'day' ? (
+              <Text
+                key={`dia-${item.key}`}
+                variant="body.s"
+                color={theme.content.medium}
+                style={{ textAlign: 'center', width: '100%' }}
+              >
+                {item.label}
+              </Text>
+            ) : (
+              <ChatBubble
+                key={item.message.id}
+                message={item.message}
+                contact={contact}
+                onEdit={onEdit}
+                onReport={onReport}
+              />
+            ),
+          )}
         </>
       ) : (
         <Text variant="body.s" color={loadError ? theme.content.error : theme.content.medium}>

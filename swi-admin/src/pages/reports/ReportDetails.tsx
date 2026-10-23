@@ -325,10 +325,14 @@ export function ReportDetails() {
   const navigate = useNavigate()
   const { show: showToast } = useDemoToast()
   const { id } = useParams<{ id: string }>()
-  // Excluir segue reports.delete da matriz do backend, só do administrador: o
-  // supervisor receberia 403, então não vê o botão.
-  const canDelete = (useAuth().user?.level ?? 'ADMIN') === 'ADMIN'
+  const { user } = useAuth()
   const [report, setReport] = useState<ReportWithComments | null>(null)
+  // Mesma regra do DELETE /reports/:id no backend: o administrador exclui
+  // qualquer relatório e o autor exclui o próprio. Os demais receberiam 403,
+  // então não veem o botão. Sem autor conhecido, só o administrador.
+  const canDelete =
+    (user?.level ?? 'ADMIN') === 'ADMIN' ||
+    (!!user && !!report?.authorId && report.authorId === user.id)
   // Falha do GET (404 de id inexistente ou rede): a mensagem do servidor. Sem
   // ela a tela ficava em "Carregando…" para sempre.
   const [loadError, setLoadError] = useState<string | null>(null)
