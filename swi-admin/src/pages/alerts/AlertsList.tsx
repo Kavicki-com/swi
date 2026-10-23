@@ -11,6 +11,8 @@
 //        'meteo' → adds a RainViewer raster overlay (real-time precipitation
 //                  radar; no API key, free).
 //      'pins' is the default with no extra overlay.
+//      "Confirmações" só existe com evacuação ativa e é independente de calor
+//      e meteorológico.
 //
 // Acima do mapa, a barra de ações em dois grupos que não se misturam: Socorro
 // ("Rota de socorro" arma a escolha e o próximo clique num pino vai direto para
@@ -43,6 +45,7 @@ import {
   Text,
   Toast,
   useTheme,
+  type IconName,
 } from '@kavicki/swi-design-system'
 import { type DashboardMapMarker } from '@/services/dashboard'
 import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
@@ -144,6 +147,12 @@ export function AlertsList() {
     () => new Set((evacuation?.workers ?? []).filter((w) => w.acked).map((w) => w.id)),
     [evacuation],
   )
+  // Camada "Confirmações": com ela ligada, a cor do pino mostra o ACK da
+  // evacuação; desligada, a saúde. Desligar vale só para a evacuação corrente:
+  // uma evacuação nova nasce com a camada ligada.
+  const evacuationId = evacuation?.id ?? null
+  const [ackOffFor, setAckOffFor] = useState<string | null>(null)
+  const ackLayer = evacuationId !== null && ackOffFor !== evacuationId
   // Encerrar a evacuação pede confirmação: o fim vale para a obra inteira.
   const [confirmingEnd, setConfirmingEnd] = useState(false)
   const [search, setSearch] = useState('')
@@ -307,22 +316,23 @@ export function AlertsList() {
     }
   }, [lib, markersLoaded])
 
-  // Durante evacuação ativa, a borda do pino mostra o estado do ACK (verde =
-  // confirmou no ponto de encontro, laranja = a caminho), estado real do
-  // fluxo, não vitais. Sem evacuação, mantém o status de saúde de sempre. O
-  // pedido de ajuda vale acima dos dois e vai por último, para ficar por cima.
+  // A saúde é o padrão do pino. Com evacuação ativa e a camada "Confirmações"
+  // ligada, a borda mostra o estado do ACK (verde = confirmou no ponto de
+  // encontro, laranja = a caminho), estado real do fluxo, não vitais. O pedido
+  // de ajuda vale acima dos dois e vai por último, para ficar por cima.
   const displayMarkers = useMemo<DashboardMapMarker[]>(() => {
-    const colored = evacuation
-      ? filteredMarkers.map((m) => ({
-          ...m,
-          status: (ackedIds.has(m.id) ? 'good' : 'alert') as DashboardMapMarker['status'],
-        }))
-      : filteredMarkers
+    const colored =
+      evacuation && ackLayer
+        ? filteredMarkers.map((m) => ({
+            ...m,
+            status: (ackedIds.has(m.id) ? 'good' : 'alert') as DashboardMapMarker['status'],
+          }))
+        : filteredMarkers
     const help = colored
       .filter((m) => helpIds.has(m.id))
       .map((m) => ({ ...m, status: 'low' as const }))
     return [...colored.filter((m) => !helpIds.has(m.id)), ...help]
-  }, [filteredMarkers, evacuation, ackedIds, helpIds])
+  }, [filteredMarkers, evacuation, ackLayer, ackedIds, helpIds])
 
   // Render worker pins as maplibre Markers. Re-render when the filtered
   // list changes. O clique passa pelo pinClickRef (ver acima).
@@ -490,6 +500,45 @@ export function AlertsList() {
     }
   }, [mapReady, selectedMarker])
 
+  // Botões de camada sobre o mapa. Calor e meteorológico se excluem entre si;
+  // "Confirmações" só existe com evacuação ativa e é independente dos dois.
+  const toggleMode = (mode: 'heat' | 'meteo') => setMapMode((mm) => (mm === mode ? 'pins' : mode))
+  const layerToggles: Array<{
+    key: string
+    icon: IconName
+    label: string
+    activeBg: string
+    active: boolean
+    onPress: () => void
+  }> = [
+    {
+      key: 'heat',
+      icon: 'mode_heat',
+      label: 'Mapa de calor',
+      activeBg: theme.surface.warning,
+      active: mapMode === 'heat',
+      onPress: () => toggleMode('heat'),
+    },
+    {
+      key: 'meteo',
+      icon: 'wb_twilight',
+      label: 'Mapa meteorológico',
+      activeBg: theme.surface.secondary,
+      active: mapMode === 'meteo',
+      onPress: () => toggleMode('meteo'),
+    },
+  ]
+  if (evacuation) {
+    layerToggles.push({
+      key: 'acks',
+      icon: 'check_circle',
+      label: 'Confirmações',
+      activeBg: theme.surface.primary,
+      active: ackLayer,
+      onPress: () => setAckOffFor((cur) => (cur === evacuationId ? null : evacuationId)),
+    })
+  }
+
   return (
     <View testID="alerts-list" style={{ gap: theme.gap.m, flex: 1 }}>
       <SearchInput
@@ -636,41 +685,25 @@ export function AlertsList() {
             zIndex: 2,
           }}
         >
-          {(
-            [
-              {
-                value: 'heat',
-                icon: 'mode_heat' as const,
-                label: 'Mapa de calor',
-                activeBg: theme.surface.warning,
-              },
-              {
-                value: 'meteo',
-                icon: 'wb_twilight' as const,
-                label: 'Mapa meteorológico',
-                activeBg: theme.surface.secondary,
-              },
-            ] as const
-          ).map((opt) => {
-            const active = mapMode === opt.value
-            return (
-              <Pressable
-                key={opt.value}
-                accessibilityLabel={opt.label}
-                onPress={() => setMapMode((mm) => (mm === opt.value ? 'pins' : opt.value))}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: theme.border.radius.s,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: active ? opt.activeBg : theme.background,
-                }}
-              >
-                <Icon name={opt.icon} color={theme.content.dark} size={18} />
-              </Pressable>
-            )
-          })}
+          {layerToggles.map((opt) => (
+            <Pressable
+              key={opt.key}
+              accessibilityLabel={opt.label}
+              role="switch"
+              aria-checked={opt.active}
+              onPress={opt.onPress}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: theme.border.radius.s,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: opt.active ? opt.activeBg : theme.background,
+              }}
+            >
+              <Icon name={opt.icon} color={theme.content.dark} size={18} />
+            </Pressable>
+          ))}
         </View>
 
         {/* Faixa do alerta meteorológico (frame alerts-metereologic-map, camada

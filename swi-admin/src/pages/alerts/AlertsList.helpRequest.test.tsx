@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   positions: [] as Array<Record<string, unknown>>,
   workers: null as AdminWorkersTelemetry | null,
   evacuation: null as null | {
+    id: string
     acked: number
     total: number
     workers: Array<{ id: string; acked: boolean }>
@@ -167,7 +168,7 @@ describe('AlertsList: pino do pedido de ajuda', () => {
   })
 
   it('durante a evacuação continua vermelho, sem virar a cor da confirmação', async () => {
-    h.evacuation = { acked: 0, total: 2, workers: [{ id: 'w2', acked: true }] }
+    h.evacuation = { id: 'ev1', acked: 0, total: 2, workers: [{ id: 'w2', acked: true }] }
     await renderAlerts()
     await waitFor(() => expect(h.pins).toHaveLength(2))
     expect(h.pins.find((p) => p.name === 'Bruno Souza')!.status).toBe('low')

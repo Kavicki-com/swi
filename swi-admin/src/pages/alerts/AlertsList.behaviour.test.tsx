@@ -16,6 +16,7 @@ import { adminWorker, condition, neverReported, reporting } from '@/test-utils/t
 const h = vi.hoisted(() => ({
   positions: [] as Array<Record<string, unknown>>,
   evacuation: null as null | {
+    id: string
     acked: number
     total: number
     workers: Array<{ id: string; acked: boolean }>
@@ -409,6 +410,7 @@ describe('AlertsList: evacuação real', () => {
 
   it('evacuação ativa com ponto de encontro põe um pino a mais no mapa', async () => {
     h.evacuation = {
+      id: 'ev1',
       acked: 0,
       total: 2,
       workers: [
@@ -448,6 +450,7 @@ describe('AlertsList: evacuação real', () => {
 
   it('evacuação ativa com área desenha o polígono e conta quem está dentro', async () => {
     h.evacuation = {
+      id: 'ev1',
       acked: 0,
       total: 2,
       workers: [
@@ -472,6 +475,7 @@ describe('AlertsList: evacuação real', () => {
 
   it('com evacuação ativa, mostra o progresso X/N e encerra', async () => {
     h.evacuation = {
+      id: 'ev1',
       acked: 1,
       total: 2,
       workers: [
@@ -499,7 +503,7 @@ describe('AlertsList: evacuação real', () => {
   })
 
   it('cancelar a confirmação não encerra a evacuação', async () => {
-    h.evacuation = { acked: 0, total: 1, workers: [{ id: 'w1', acked: false }] }
+    h.evacuation = { id: 'ev1', acked: 0, total: 1, workers: [{ id: 'w1', acked: false }] }
     await renderAlerts()
 
     await act(async () => {
@@ -516,6 +520,7 @@ describe('AlertsList: evacuação real', () => {
 
   it('durante a evacuação, a borda do pino reflete o ACK e não os vitais', async () => {
     h.evacuation = {
+      id: 'ev1',
       acked: 1,
       total: 2,
       workers: [
