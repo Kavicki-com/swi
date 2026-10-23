@@ -35,6 +35,13 @@ jest.mock('../../../services/evacuation/EvacuationProvider', () => ({
 jest.mock('../../../services/notifications/NotificationProvider', () => ({
   NotificationProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
+const mockHelpRequestProvider = jest.fn();
+jest.mock('../../../services/help/HelpRequestProvider', () => ({
+  HelpRequestProvider: ({ children }: { children: React.ReactNode }) => {
+    mockHelpRequestProvider();
+    return children;
+  },
+}));
 const mockSendQueueRoot = jest.fn((_props: { userId: string }) => null);
 jest.mock('../../../components/outbox/SendQueueRoot', () => ({
   SendQueueRoot: (props: { userId: string }) => mockSendQueueRoot(props),
@@ -102,6 +109,24 @@ describe('(app)/_layout — auth gate com sessão persistida', () => {
     const tree = render();
     expect(achados(tree, Stack)).toHaveLength(1);
     expect(achados(tree, Redirect)).toHaveLength(0);
+  });
+});
+
+// O pedido de ajuda é um só para a sessão: o dashboard pede e o procedimento
+// (do dashboard ou das notificações) mostra o estado. Sem sessão, nada é lido.
+describe('(app)/_layout: pedido de ajuda', () => {
+  beforeEach(() => mockHelpRequestProvider.mockClear());
+
+  it('com sessão, o pedido de ajuda acompanha a área autenticada', () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    render();
+    expect(mockHelpRequestProvider).toHaveBeenCalled();
+  });
+
+  it('sem sessão, nada do pedido é montado', () => {
+    mockUseAuth.mockReturnValue({ user: null, restoring: false });
+    render();
+    expect(mockHelpRequestProvider).not.toHaveBeenCalled();
   });
 });
 

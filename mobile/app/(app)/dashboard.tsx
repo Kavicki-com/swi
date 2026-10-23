@@ -45,6 +45,7 @@ import { useProfile } from '../../services/profile/ProfileProvider';
 import { useNotifications } from '../../services/notifications/NotificationProvider';
 import { useReports } from '../../services/reports/ReportsProvider';
 import { useWeather } from '../../services/weather/WeatherProvider';
+import { useHelpRequest } from '../../services/help/HelpRequestProvider';
 import { useLiveBroadcast } from '../../services/live/useLiveBroadcast';
 import { liveNoticeTitle } from '../../services/live/liveCopy';
 import type { WorkerStatus } from '../../services/vitals/types';
@@ -188,10 +189,13 @@ export default function Dashboard() {
   useEffect(() => {
     if (!hasAlert) setWeatherModalOpen(false);
   }, [hasAlert]);
-  // Pedir ajuda não depende do clima: com alerta vigente a janela do clima vem
-  // primeiro; sem alerta ela não tem o que afirmar, e o botão abre direto o
-  // procedimento de evacuação.
+  // O toque pede ajuda de verdade: a posição e o pedido vão ao servidor, que
+  // avisa a central. Pedir ajuda não depende do clima: com alerta vigente a
+  // janela do clima vem primeiro; sem alerta ela não tem o que afirmar, e o
+  // botão abre direto o procedimento de evacuação.
+  const { requestHelp } = useHelpRequest();
   const handlePressUrgentHelp = () => {
+    requestHelp();
     if (hasAlert) setWeatherModalOpen(true);
     else setActiveModalOpen(true);
   };

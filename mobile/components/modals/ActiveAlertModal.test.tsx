@@ -13,6 +13,16 @@ import { useWeather } from '../../services/weather/WeatherProvider';
 // não renderiza os filhos quando está fechado: a função roda, o conteúdo não.
 
 jest.mock('../../services/weather/WeatherProvider', () => ({ useWeather: jest.fn() }));
+// O estado do pedido de ajuda tem suíte própria (ActiveAlertModal.help.test.tsx).
+jest.mock('../../services/help/HelpRequestProvider', () => ({
+  useHelpRequest: () => ({
+    helpRequest: null,
+    sending: false,
+    failed: false,
+    rescuerEtaMin: null,
+    requestHelp: () => undefined,
+  }),
+}));
 
 const mockPush = jest.fn();
 const mockRouter = { push: mockPush, back: jest.fn(), replace: jest.fn() };
