@@ -196,3 +196,63 @@ describe('ficha do contato: estado do colega', () => {
     expect(textos(tree)).not.toContain('Estado atual');
   });
 });
+
+// Para quem é funcionário o backend não devolve tipo sanguíneo nem alergias de
+// colega. Mostrar "Não informado" daria a impressão de cadastro incompleto de
+// todo mundo: sem valor, a linha some inteira.
+describe('ficha do contato: dados de saúde só com valor', () => {
+  const gotas = (tree: ReturnType<typeof create>) =>
+    tree.root.findAll((n) => n.props?.name === 'humidity_mid' && typeof n.type !== 'string');
+
+  it('com valor, tipo sanguíneo e alergias aparecem', async () => {
+    mockChat.directory = [contato({ bloodType: 'O+', allergies: '  Dipirona  ' })];
+    const tree = await abrir();
+
+    expect(textos(tree)).toEqual(expect.arrayContaining(['Tipo sanguíneo', 'O+', 'Alergias', 'Dipirona']));
+    expect(gotas(tree)).toHaveLength(1);
+  });
+
+  it.each([
+    ['null', null],
+    ['vazio', ''],
+    ['só espaços', '   '],
+  ])('valor %s esconde rótulo, gota e valor', async (_caso, valor) => {
+    mockChat.directory = [contato({ bloodType: valor, allergies: valor })];
+    const tree = await abrir();
+
+    expect(textos(tree)).not.toContain('Tipo sanguíneo');
+    expect(textos(tree)).not.toContain('Alergias');
+    expect(gotas(tree)).toHaveLength(0);
+  });
+
+  it('um sem o outro: só a linha que tem valor aparece', async () => {
+    mockChat.directory = [contato({ bloodType: null, allergies: 'Látex' })];
+    const tree = await abrir();
+
+    expect(textos(tree)).not.toContain('Tipo sanguíneo');
+    expect(textos(tree)).toEqual(expect.arrayContaining(['Alergias', 'Látex']));
+  });
+
+  it('gênero e idade continuam como estavam, com "Não informado" quando faltam', async () => {
+    mockChat.directory = [contato({ bloodType: null, allergies: null })];
+    const tree = await abrir();
+
+    expect(textos(tree)).toEqual(expect.arrayContaining(['Gênero', 'Idade']));
+    // Só nós nativos: o Text do DS repete a string no componente e no nativo.
+    const naoInformado = tree.root.findAll(
+      (n) => typeof n.type === 'string' && n.props?.children === 'Não informado',
+    );
+    expect(naoInformado).toHaveLength(2);
+  });
+
+  it('gênero e idade com valor não mudam ao esconder a saúde', async () => {
+    mockChat.directory = [
+      contato({ gender: 'female', birthDate: '1990-01-01T00:00:00.000Z', bloodType: null, allergies: null }),
+    ];
+    const tree = await abrir();
+
+    expect(textos(tree)).toContain('Feminino');
+    expect(textos(tree).some((t) => /^\d+ anos$/.test(t))).toBe(true);
+    expect(textos(tree)).not.toContain('Não informado');
+  });
+});
