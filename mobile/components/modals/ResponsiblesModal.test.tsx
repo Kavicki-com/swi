@@ -332,18 +332,34 @@ describe('ResponsiblesModal, confirmar', () => {
 describe('ResponsiblesModal, ficha de cada card', () => {
   beforeEach(preparar);
 
-  // O componente usa o travessão (U+2014) como "não informado". Ele é montado
-  // por código por causa da regra de escrita do projeto: o caractere não entra
-  // no fonte, mas a asserção compara com ele de verdade.
-  const TRACO = String.fromCharCode(0x2014);
+  const gotas = (tree: ReturnType<typeof create>) =>
+    tree.root.findAll((n) => n.props?.name === 'water_drop' && typeof n.type !== 'string');
 
-  it('sem tipo sanguíneo cadastrado, o card mostra o traço em vez de inventar um', async () => {
-    const comTipo = await render();
-    expect(JSON.stringify(comTipo.toJSON())).not.toContain(TRACO);
+  it('com tipo sanguíneo, o card mostra a gota e o tipo', async () => {
+    mockListAssignees.mockResolvedValue([CONTATOS[0]]);
+    const tree = await render();
 
-    mockListAssignees.mockResolvedValue([{ ...CONTATOS[0], bloodType: null }]);
-    const semTipo = await render();
-    expect(JSON.stringify(semTipo.toJSON())).toContain(TRACO);
+    expect(gotas(tree)).toHaveLength(1);
+    expect(JSON.stringify(tree.toJSON())).toContain('"O-"');
+  });
+
+  // Para quem é funcionário o backend não devolve o tipo sanguíneo de colega.
+  // Sem valor, a linha inteira some: nem gota sozinha, nem marcador de vazio.
+  it.each([
+    ['null', null],
+    ['vazio', ''],
+    ['só espaços', '   '],
+  ])('tipo sanguíneo %s esconde a linha da gota', async (_caso, bloodType) => {
+    mockListAssignees.mockResolvedValue([{ ...CONTATOS[0], bloodType }]);
+    const tree = await render();
+
+    expect(gotas(tree)).toHaveLength(0);
+    const texto = JSON.stringify(tree.toJSON());
+    expect(texto).not.toContain(String.fromCharCode(0x2014));
+    expect(texto).not.toContain('Não informado');
+    // O resto do card continua igual.
+    expect(texto).toContain('Jennifer Gomes');
+    expect(texto).toMatch(/\d+ anos/);
   });
 
   // A idade sai do birthDate: o card exibia "26 anos" cravado pra qualquer
