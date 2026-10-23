@@ -32,8 +32,15 @@ jest.mock('../../../services/positions/useTrackingLifecycle', () => ({
 jest.mock('../../../services/evacuation/EvacuationProvider', () => ({
   EvacuationProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
+let mockNotifications: { id: string; domain: string; createdAt: string }[] = [];
 jest.mock('../../../services/notifications/NotificationProvider', () => ({
   NotificationProvider: ({ children }: { children: React.ReactNode }) => children,
+  useNotifications: () => ({ notifications: mockNotifications }),
+}));
+const mockEvacuationTracking = jest.fn();
+jest.mock('../../../services/positions/useEvacuationTracking', () => ({
+  ...jest.requireActual('../../../services/positions/useEvacuationTracking'),
+  useEvacuationTracking: (...args: unknown[]) => mockEvacuationTracking(...args),
 }));
 const mockHelpRequestProvider = jest.fn();
 jest.mock('../../../services/help/HelpRequestProvider', () => ({
@@ -186,6 +193,38 @@ describe('(app)/_layout: rastreio em segundo plano', () => {
     mockJourneyProvider.mockClear();
     render();
     expect(mockJourneyProvider).toHaveBeenCalledWith({ userId: 'u1' });
+  });
+});
+
+// Evacuação ativa liga o rastreio mesmo sem jornada. A notificação de
+// evacuação que chega é a deixa para consultar na hora.
+describe('(app)/_layout: rastreio na evacuação', () => {
+  beforeEach(() => {
+    mockEvacuationTracking.mockClear();
+    mockNotifications = [];
+  });
+
+  it('com sessão, segue a evacuação da pessoa logada', () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    render();
+    expect(mockEvacuationTracking).toHaveBeenLastCalledWith('u1', null);
+  });
+
+  it('recebe a notificação de evacuação mais recente', () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    mockNotifications = [
+      { id: 'n3', domain: 'chat', createdAt: '2026-10-04T12:00:00.000Z' },
+      { id: 'n2', domain: 'evacuation', createdAt: '2026-10-04T11:00:00.000Z' },
+      { id: 'n1', domain: 'evacuation', createdAt: '2026-10-04T10:00:00.000Z' },
+    ];
+    render();
+    expect(mockEvacuationTracking).toHaveBeenLastCalledWith('u1', 'n2');
+  });
+
+  it('sem sessão, nada é montado', () => {
+    mockUseAuth.mockReturnValue({ user: null, restoring: false });
+    render();
+    expect(mockEvacuationTracking).not.toHaveBeenCalled();
   });
 });
 

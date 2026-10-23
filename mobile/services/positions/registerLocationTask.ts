@@ -6,6 +6,19 @@ import {
   type TaskLocation,
 } from './backgroundLocationTask';
 import { getPositionRuntime } from './positionTracking';
+import { getEvacuationBackend } from '../evacuation/getEvacuationBackend';
+
+/**
+ * Se há evacuação ativa, para a tarefa saber do encerramento com o app em
+ * segundo plano. Falha de rede é "não sei", e a evacuação gravada segue.
+ */
+async function evacuationActive(): Promise<boolean | null> {
+  try {
+    return (await getEvacuationBackend().getActive()) !== null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Define a tarefa do GPS em segundo plano. Precisa rodar no carregamento do
@@ -16,16 +29,18 @@ import { getPositionRuntime } from './positionTracking';
  */
 export function registerLocationTask(): void {
   if (Platform.OS === 'web') return;
-  const { outbox, window, drainer, tracking } = getPositionRuntime();
+  const { outbox, window, evacuation, drainer, tracking } = getPositionRuntime();
   const { handle, reset } = createLocationHandler({
     window,
+    evacuation,
     outbox,
     drainer,
     stopUpdates: () => tracking.halt(),
+    evacuationActive,
     now: () => new Date(),
   });
-  // Rastreio desligado (fim da jornada, logout, 12 h): quem começar a seguir
-  // não herda o espaçamento medido contra o último ponto de antes.
+  // Rastreio desligado (fim da jornada ou da evacuação, logout, 12 h): quem
+  // começar a seguir não herda o espaçamento medido contra o último ponto.
   tracking.subscribe(() => {
     if (!tracking.isActive()) reset();
   });

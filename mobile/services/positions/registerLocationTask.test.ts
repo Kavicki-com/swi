@@ -6,9 +6,17 @@ import { registerLocationTask } from './registerLocationTask';
 jest.mock('expo-task-manager', () => ({ defineTask: jest.fn() }));
 
 const mockHandle = jest.fn(async (_locations: unknown) => undefined);
+let mockHandlerDeps: { evacuationActive(): Promise<boolean | null> } | null = null;
 jest.mock('./backgroundLocationTask', () => ({
   ...jest.requireActual('./backgroundLocationTask'),
-  createLocationHandler: () => ({ handle: mockHandle, reset: mockReset }),
+  createLocationHandler: (deps: { evacuationActive(): Promise<boolean | null> }) => {
+    mockHandlerDeps = deps;
+    return { handle: mockHandle, reset: mockReset };
+  },
+}));
+const mockGetActive = jest.fn();
+jest.mock('../evacuation/getEvacuationBackend', () => ({
+  getEvacuationBackend: () => ({ getActive: () => mockGetActive() }),
 }));
 const mockReset = jest.fn();
 let mockActive = false;
@@ -66,6 +74,19 @@ describe('registerLocationTask', () => {
     mockActive = false;
     avisar();
     expect(mockReset).toHaveBeenCalledTimes(1);
+  });
+
+  // Com o app em segundo plano, é a tarefa que pergunta ao servidor se a
+  // evacuação acabou. Sem rede, "não sei": a evacuação gravada segue.
+  it('a tarefa pergunta ao servidor pela evacuação ativa', async () => {
+    registerLocationTask();
+    const perguntar = mockHandlerDeps!.evacuationActive;
+    mockGetActive.mockResolvedValueOnce({ id: 'e1', total: 1, ackedCount: 0, myAck: false });
+    await expect(perguntar()).resolves.toBe(true);
+    mockGetActive.mockResolvedValueOnce(null);
+    await expect(perguntar()).resolves.toBe(false);
+    mockGetActive.mockRejectedValueOnce(new Error('rede'));
+    await expect(perguntar()).resolves.toBeNull();
   });
 
   it('na web não define nada', () => {

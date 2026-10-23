@@ -51,6 +51,15 @@ describe('shouldKeepPoint', () => {
     expect(shouldKeepPoint(ponto(10), ponto(10, -23.6))).toBe(false);
     expect(shouldKeepPoint(ponto(10), ponto(5, -23.6))).toBe(false);
   });
+
+  // Na evacuação o painel acompanha cada leitura de 10 s. A folga abaixo dos
+  // 10 s cobre a leitura que o sistema entrega um pouco antes da hora.
+  it('na evacuação, parado, guarda a leitura de cada 10 s', () => {
+    expect(shouldKeepPoint(ponto(0), ponto(10), 'evacuation')).toBe(true);
+    expect(shouldKeepPoint(ponto(0), ponto(9), 'evacuation')).toBe(true);
+    expect(shouldKeepPoint(ponto(0), ponto(2), 'evacuation')).toBe(false);
+    expect(shouldKeepPoint(ponto(10), ponto(10, -23.6), 'evacuation')).toBe(false);
+  });
 });
 
 describe('createPositionOutbox', () => {
@@ -92,6 +101,15 @@ describe('createPositionOutbox', () => {
     await fila.remove('u1', [ponto(0).recordedAt]);
     expect(await fila.append('u1', [ponto(30)])).toBe(0);
     expect(await fila.append('u1', [ponto(60)])).toBe(1);
+  });
+
+  it('na evacuação, guarda cada leitura de 10 s, parado ou não', async () => {
+    const mem = memoryStorage();
+    const fila = createPositionOutbox(mem.storage);
+    await fila.append('u1', [ponto(0)]);
+    expect(await fila.append('u1', [ponto(10), ponto(20)], 'evacuation')).toBe(2);
+    expect(await fila.append('u1', [ponto(30)])).toBe(0);
+    expect(await fila.pending('u1')).toEqual([ponto(0), ponto(10), ponto(20)]);
   });
 
   it('ponto fora do contrato é recusado com aviso e não entra', async () => {

@@ -6,7 +6,9 @@ import { getPositionRuntime, type PositionTracking } from './positionTracking';
 
 // Quando o rastreio em segundo plano liga e desliga. As regras combinadas:
 // só com a jornada em andamento ou pausada; para ao encerrar a jornada, no
-// logout ou depois de 12 h (as 12 h ficam com a janela, no controle).
+// logout ou depois de 12 h (as 12 h ficam com a janela, no controle). A
+// evacuação liga o rastreio por conta própria (useEvacuationTracking), e o
+// fim da jornada não desliga o que é dela.
 
 const defaultTracking = () => getPositionRuntime().tracking;
 
@@ -30,7 +32,7 @@ export function useJourneyTracking(
   useEffect(() => {
     if (!userId || !journeyKnown) return;
     if (!tracks) {
-      void tracking.stop();
+      void tracking.stopJourney();
       return;
     }
     const turnOn = () => (source === 'cache' ? tracking.resume(userId) : tracking.start(userId));

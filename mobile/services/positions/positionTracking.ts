@@ -11,15 +11,31 @@ import {
   TRACKING_WINDOW_FILE_NAME,
   type TrackingWindowStore,
 } from './trackingWindow';
+import {
+  createEvacuationWindowStore,
+  EVACUATION_WINDOW_FILE_NAME,
+  isEvacuationOpen,
+  type EvacuationWindowStore,
+} from './evacuationWindow';
 
 // Liga e desliga o rastreio em segundo plano. Quem decide QUANDO é a jornada
-// (useJourneyTracking) e o logout; aqui fica o COMO: a janela das 12 h, as
-// leituras do sistema e o aviso de "rastreio ativo", que cala o heartbeat
-// para a mesma posição não sair por dois caminhos.
+// (useJourneyTracking), a evacuação (useEvacuationTracking) e o logout; aqui
+// fica o COMO: a janela das 12 h, a evacuação gravada, as leituras do sistema
+// e o aviso de "rastreio ativo", que cala o heartbeat para a mesma posição não
+// sair por dois caminhos.
+//
+// Jornada e evacuação ficam em arquivos separados, e as leituras seguem o que
+// estiver aberto: com evacuação, as opções da evacuação (a notificação do
+// Android diz que é ela); só com a jornada, as da jornada; sem nenhuma,
+// desligadas.
+
+/** Com que opções as leituras rodam. */
+export type TrackingMode = 'journey' | 'evacuation';
 
 /** As três operações do sistema que o controle usa, injetáveis no teste. */
 export interface LocationUpdates {
-  start(): Promise<void>;
+  /** Liga, ou religa com as opções do modo se já estiver ligado. */
+  start(mode: TrackingMode): Promise<void>;
   stop(): Promise<void>;
   hasStarted(): Promise<boolean>;
 }
@@ -39,9 +55,24 @@ export interface PositionTracking {
    * pedir: abrir janela nova fica para quem leu o servidor.
    */
   resume(userId: string): Promise<StartResult>;
-  /** Fim da jornada ou logout: fecha a janela e desliga. */
+  /**
+   * Fim da jornada: fecha a janela. Com evacuação em curso as leituras
+   * seguem; sem ela, desligam.
+   */
+  stopJourney(): Promise<void>;
+  /**
+   * Grava a evacuação da pessoa e liga as leituras com as opções dela, com ou
+   * sem jornada. `expired` passado o teto da evacuação.
+   */
+  startEvacuation(userId: string, evacuationId: string): Promise<StartResult>;
+  /**
+   * O gestor encerrou: apaga a evacuação. Com a jornada aberta as leituras
+   * voltam às opções dela; sem jornada, desligam. Sem evacuação gravada, nada.
+   */
+  endEvacuation(): Promise<void>;
+  /** Logout: fecha a janela, apaga a evacuação e desliga. */
   stop(): Promise<void>;
-  /** As 12 h vencidas vistas pela tarefa: desliga e mantém a janela. */
+  /** Nada aberto, visto pela tarefa: desliga e mantém os arquivos. */
   halt(): Promise<void>;
   /**
    * A janela da pessoa existe e está dentro das 12 h. Responde depois do
@@ -58,6 +89,7 @@ export interface PositionTracking {
 interface TrackingDeps {
   updates: LocationUpdates;
   window: TrackingWindowStore;
+  evacuation: EvacuationWindowStore;
   drainer: Pick<PositionDrainer, 'drain'>;
   now(): Date;
   /** Falso na web: lá não há tarefa em segundo plano. */
@@ -65,8 +97,11 @@ interface TrackingDeps {
 }
 
 export function createPositionTracking(deps: TrackingDeps): PositionTracking {
-  const { updates, window, drainer, now, supported } = deps;
+  const { updates, window, evacuation, drainer, now, supported } = deps;
   let active = false;
+  // Com que opções as leituras foram ligadas neste processo. Null num
+  // processo novo, que não sabe o que o anterior ligou.
+  let mode: TrackingMode | null = null;
   const listeners = new Set<() => void>();
 
   const setActive = (next: boolean) => {
@@ -76,6 +111,7 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
   };
 
   async function stopUpdates(): Promise<void> {
+    mode = null;
     if (!supported) return;
     try {
       if (await updates.hasStarted()) await updates.stop();
@@ -94,6 +130,42 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
     return run;
   }
 
+  /** O modo que os arquivos pedem agora: a evacuação tem a vez. */
+  async function wantedMode(): Promise<TrackingMode | null> {
+    const at = now();
+    const [journey, evacuating] = await Promise.all([window.read(), evacuation.read()]);
+    if (isEvacuationOpen(evacuating, at)) return 'evacuation';
+    if (isWindowOpen(journey, at)) return 'journey';
+    return null;
+  }
+
+  /**
+   * Põe as leituras no modo que os arquivos pedem. Trocar de modo religa,
+   * porque a notificação do Android só muda assim. Num processo novo com as
+   * leituras já ligadas, a jornada fica como está (é o caso de sempre) e a
+   * evacuação religa uma vez, para a notificação dizer que é ela.
+   */
+  async function apply(): Promise<'tracking' | 'failed' | 'off'> {
+    const wanted = await wantedMode();
+    if (wanted === null) {
+      await stopUpdates();
+      setActive(false);
+      return 'off';
+    }
+    try {
+      const started = await updates.hasStarted();
+      const sameOptions = mode === wanted || (mode === null && wanted === 'journey');
+      if (!started || !sameOptions) await updates.start(wanted);
+    } catch {
+      mode = null;
+      setActive(false);
+      return 'failed';
+    }
+    mode = wanted;
+    setActive(true);
+    return 'tracking';
+  }
+
   async function start(userId: string): Promise<StartResult> {
     let opened;
     try {
@@ -102,32 +174,50 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
       // Sem a janela no arquivo a tarefa não saberia de quem é o ponto.
       return 'failed';
     }
-    if (!isWindowOpen(opened, now())) {
-      await stopUpdates();
-      setActive(false);
-      return 'expired';
-    }
-    try {
-      if (!(await updates.hasStarted())) await updates.start();
-    } catch {
-      setActive(false);
-      return 'failed';
-    }
-    setActive(true);
-    return 'tracking';
+    const result = await apply();
+    // Vencida, a jornada não liga nada; com evacuação em curso, as leituras
+    // dela seguem.
+    if (!isWindowOpen(opened, now())) return 'expired';
+    return result === 'tracking' ? 'tracking' : 'failed';
   }
 
   async function resume(userId: string): Promise<StartResult> {
     const current = await window.read();
     if (current?.userId !== userId || !isWindowOpen(current, now())) return 'skipped';
+    return (await apply()) === 'tracking' ? 'tracking' : 'failed';
+  }
+
+  async function stopJourney(): Promise<void> {
     try {
-      if (!(await updates.hasStarted())) await updates.start();
+      await window.close();
     } catch {
-      setActive(false);
+      // Desligar as leituras importa mais que o arquivo: segue.
+    }
+    await apply();
+  }
+
+  async function startEvacuation(userId: string, evacuationId: string): Promise<StartResult> {
+    let opened;
+    try {
+      opened = await evacuation.open(userId, evacuationId, now());
+    } catch {
+      // Sem a evacuação no arquivo a tarefa não saberia dela.
       return 'failed';
     }
-    setActive(true);
-    return 'tracking';
+    const result = await apply();
+    if (!isEvacuationOpen(opened, now())) return 'expired';
+    return result === 'tracking' ? 'tracking' : 'failed';
+  }
+
+  async function endEvacuation(): Promise<void> {
+    if ((await evacuation.read()) === null) return;
+    try {
+      await evacuation.close();
+    } catch {
+      // Sem apagar, a tarefa ainda veria a evacuação: não mexe nas leituras.
+      return;
+    }
+    await apply();
   }
 
   async function stop(): Promise<void> {
@@ -135,6 +225,11 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
       await window.close();
     } catch {
       // Desligar as leituras importa mais que o arquivo: segue.
+    }
+    try {
+      await evacuation.close();
+    } catch {
+      // Idem.
     }
     await stopUpdates();
     setActive(false);
@@ -145,9 +240,16 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
     setActive(false);
   }
 
+  const unsupported = () => Promise.resolve<StartResult>('unsupported');
+  const nothing = () => Promise.resolve();
+
   return {
-    start: (userId) => (supported ? queued(() => start(userId)) : Promise.resolve('unsupported')),
-    resume: (userId) => (supported ? queued(() => resume(userId)) : Promise.resolve('unsupported')),
+    start: (userId) => (supported ? queued(() => start(userId)) : unsupported()),
+    resume: (userId) => (supported ? queued(() => resume(userId)) : unsupported()),
+    stopJourney: () => (supported ? queued(stopJourney) : nothing()),
+    startEvacuation: (userId, evacuationId) =>
+      supported ? queued(() => startEvacuation(userId, evacuationId)) : unsupported(),
+    endEvacuation: () => (supported ? queued(endEvacuation) : nothing()),
     stop: () => queued(stop),
     halt: () => queued(halt),
     windowOpenFor: (userId) =>
@@ -199,9 +301,28 @@ export const LOCATION_TASK_OPTIONS: Location.LocationTaskOptions = {
   },
 };
 
+/**
+ * Opções das leituras na evacuação: as mesmas da jornada, com a notificação
+ * fixa do Android dizendo que é a evacuação e até quando vai.
+ */
+export const EVACUATION_TASK_OPTIONS: Location.LocationTaskOptions = {
+  ...LOCATION_TASK_OPTIONS,
+  foregroundService: {
+    notificationTitle: 'Evacuação em andamento',
+    notificationBody: 'Sua localização está sendo enviada à equipe até o fim da evacuação.',
+    killServiceOnDestroy: false,
+  },
+};
+
+const TASK_OPTIONS: Record<TrackingMode, Location.LocationTaskOptions> = {
+  journey: LOCATION_TASK_OPTIONS,
+  evacuation: EVACUATION_TASK_OPTIONS,
+};
+
 interface Runtime {
   outbox: PositionOutbox;
   window: TrackingWindowStore;
+  evacuation: EvacuationWindowStore;
   drainer: PositionDrainer;
   tracking: PositionTracking;
 }
@@ -217,22 +338,24 @@ export function getPositionRuntime(): Runtime {
   if (runtime) return runtime;
   const outbox = createPositionOutbox(createFilePositionStorage());
   const window = createTrackingWindowStore(createFilePositionStorage(TRACKING_WINDOW_FILE_NAME));
+  const evacuation = createEvacuationWindowStore(createFilePositionStorage(EVACUATION_WINDOW_FILE_NAME));
   const drainer = createPositionDrainer({
     outbox,
     send: (points) => getPositionsBackend().sendBatch(points),
   });
   const tracking = createPositionTracking({
     updates: {
-      start: () => Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, LOCATION_TASK_OPTIONS),
+      start: (mode) => Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, TASK_OPTIONS[mode]),
       stop: () => Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME),
       hasStarted: () => Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME),
     },
     window,
+    evacuation,
     drainer,
     now: () => new Date(),
     supported: Platform.OS !== 'web',
   });
-  runtime = { outbox, window, drainer, tracking };
+  runtime = { outbox, window, evacuation, drainer, tracking };
   return runtime;
 }
 
