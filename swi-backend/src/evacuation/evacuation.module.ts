@@ -6,9 +6,10 @@ import { EvacuationsController } from './evacuations.controller'
 import { EvacuationEventsService } from './evacuation-events.service'
 import { RealtimeModule } from '../realtime/realtime.module'
 import { NotificationModule } from '../notifications/notification.module'
+import { PushModule } from '../push/push.module'
 
 @Module({
-  imports: [RealtimeModule, NotificationModule],
+  imports: [RealtimeModule, NotificationModule, PushModule],
   controllers: [EvacuationController, EvacuationsController],
   providers: [EvacuationService, RouteProvider, EvacuationEventsService],
   // Exportado pro PositionsModule: o simulador ack'a na chegada ao muster.

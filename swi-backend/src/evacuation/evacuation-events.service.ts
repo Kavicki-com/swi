@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
+import { PushService, type PushContent } from '../push/push.service'
 import { normalizeEvacuationArea, normalizeMusterPoint, type AreaVertex } from './evacuation-area'
 import type { Evacuation } from '@prisma/client'
 import { PANEL_ROLES } from '../auth/permissions'
@@ -41,6 +42,7 @@ export class EvacuationEventsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationService,
+    private readonly push: PushService,
   ) {}
 
   async start(
@@ -83,6 +85,16 @@ export class EvacuationEventsService {
         targetId: evac.id,
       },
     )
+    // Push para os mesmos workers: a notificação acima só aparece com o app
+    // aberto, e a evacuação precisa tocar no celular que está no bolso.
+    this.pushTo(workers, {
+      title: 'Evacuação iniciada',
+      body: 'Abra o app e siga a rota até o ponto de encontro.',
+      priority: 'high',
+      channelId: 'evacuation',
+      sound: 'default',
+      data: { type: 'evacuation.started', evacuationId: evac.id },
+    })
 
     const dto = this.toProgress(evac, workers, [])
     await this.emitToOrg(companyId, workers, 'evacuation', dto)
@@ -145,7 +157,25 @@ export class EvacuationEventsService {
       data: { status: 'ENDED', endedAt: new Date() },
     })
     const workers = await this.orgWorkers(companyId)
+    // Só de dados, sem título: o aviso para o app desligar o rastreio de
+    // posição em segundo plano, e não uma notificação para a pessoa ler.
+    this.pushTo(workers, {
+      priority: 'high',
+      contentAvailable: true,
+      data: { type: 'evacuation.ended', evacuationId },
+    })
     await this.emitToOrg(companyId, workers, 'evacuation-ended', { id: evacuationId })
+  }
+
+  // Sem await: o envio corre por fora e a resposta HTTP não espera a Expo.
+  // O notifyUsers já não rejeita; o try cobre um erro síncrono, porque o
+  // estado já persistiu e o push é derivado dele.
+  private pushTo(workers: { id: string }[], content: PushContent): void {
+    try {
+      this.push.notifyUsers(workers.map((w) => w.id), content)
+    } catch {
+      /* best-effort: o estado já persistiu */
+    }
   }
 
   private orgWorkers(companyId: string | null) {

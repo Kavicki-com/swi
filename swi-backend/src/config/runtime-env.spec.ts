@@ -3,6 +3,7 @@ import {
   parseAlertsIncludeDemo,
   parseApiDocs,
   parseLiveIceServers,
+  parsePushEnabled,
   parseRuntimeEnv,
   parseSmtpSecure,
   parseSocketPingInterval,
@@ -36,6 +37,34 @@ describe('parseRuntimeEnv: alertas de demonstração na fila', () => {
     expect(parseRuntimeEnv(validProd({ TELEMETRY_ALERTS_INCLUDE_DEMO: '1' })).telemetryAlertsIncludeDemo).toBe(true)
     expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: 'true' })).toBe(false)
     expect(parseAlertsIncludeDemo({ TELEMETRY_ALERTS_INCLUDE_DEMO: '0' })).toBe(false)
+  })
+})
+
+// Push pelo serviço da Expo. Ligado por padrão onde há aparelho de verdade do
+// outro lado; desligado em teste, para nenhuma suíte bater na Expo.
+describe('parseRuntimeEnv: envio de push', () => {
+  it('ligado por padrão em produção e desenvolvimento, desligado em teste', () => {
+    expect(parseRuntimeEnv(validProd()).pushEnabled).toBe(true)
+    expect(parsePushEnabled({ NODE_ENV: 'development' })).toBe(true)
+    expect(parsePushEnabled({})).toBe(true)
+    expect(parsePushEnabled({ NODE_ENV: 'test' })).toBe(false)
+    expect(parsePushEnabled({ NODE_ENV: 'test', PUSH_ENABLED: '' })).toBe(false)
+  })
+
+  it("'0' desliga e '1' liga em qualquer ambiente", () => {
+    expect(parseRuntimeEnv(validProd({ PUSH_ENABLED: '0' })).pushEnabled).toBe(false)
+    expect(parsePushEnabled({ NODE_ENV: 'test', PUSH_ENABLED: '1' })).toBe(true)
+  })
+
+  it('outro valor impede o boot, sem ecoar o valor', () => {
+    expect(() => parseRuntimeEnv(validProd({ PUSH_ENABLED: 'talvez' }))).toThrow('PUSH_ENABLED precisa ser 0 ou 1')
+    expect(() => parseRuntimeEnv(validProd({ PUSH_ENABLED: 'talvez' }))).not.toThrow(/talvez/)
+  })
+
+  it('EXPO_ACCESS_TOKEN é opcional e vazio equivale a ausente', () => {
+    expect(parseRuntimeEnv(validProd()).expoAccessToken).toBeUndefined()
+    expect(parseRuntimeEnv(validProd({ EXPO_ACCESS_TOKEN: '' })).expoAccessToken).toBeUndefined()
+    expect(parseRuntimeEnv(validProd({ EXPO_ACCESS_TOKEN: 'tok' })).expoAccessToken).toBe('tok')
   })
 })
 

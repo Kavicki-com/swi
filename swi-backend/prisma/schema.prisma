@@ -92,6 +92,8 @@ model User {
 
   rescuesAsInjured Rescue[] @relation("rescueInjured")
   rescuesAsRescuer Rescue[] @relation("rescueRescuer")
+
+  pushTokens PushToken[]
 }
 
 // Última posição conhecida de cada worker. SÓ a última: upsert por worker, sem
@@ -537,6 +539,27 @@ model IdempotencyKey {
 
   @@unique([userId, key])
   @@index([createdAt])
+}
+
+// Aparelho que recebe push pelo serviço da Expo (que repassa ao FCM e ao
+// APNs). O token é do aparelho, não da conta: único na tabela, e quando outra
+// conta entra no mesmo celular a linha passa a ser dela, senão o aviso de uma
+// conta chegaria no aparelho de quem já saiu. Apagar o usuário apaga os tokens.
+model PushToken {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String       @unique
+  platform  PushPlatform
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+enum PushPlatform {
+  android
+  ios
 }
 
 model Notification {

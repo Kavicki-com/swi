@@ -189,6 +189,8 @@ O bucket precisa aceitar `PUT` e `GET` vindos da origem do painel (política de 
 | `OPEN_METEO_BASE_URL` | | `https://api.open-meteo.com` | Provedor de clima. O endereço público só vale para uso não comercial; em produção, use o endereço do plano contratado. |
 | `OPEN_METEO_API_KEY` | | | Chave do plano contratado do Open-Meteo. |
 | `LIVE_ICE_SERVERS` | | STUN `stun:stun.l.google.com:19302` | Servidores de conexão da transmissão ao vivo da câmera, em lista JSON no formato do navegador (`[{"urls":"turn:turn.exemplo.com:3478","username":"u","credential":"s"}]`). `[]` desliga até o STUN (só mesma rede). Sem TURN, celular em rede móvel pode não fechar a conexão. A credencial do TURN chega a todo usuário logado. Lista inválida impede o boot. |
+| `PUSH_ENABLED` | | ligado (desligado com `NODE_ENV=test`) | Push para o app pelo serviço da Expo, que repassa ao FCM e ao APNs. Avisa o início e o fim da evacuação com o app fechado. `0` desliga, `1` liga em qualquer ambiente; outro valor impede o boot. Falha de envio só vai para o log, nunca derruba a rota que disparou. |
+| `EXPO_ACCESS_TOKEN` | | | Token de acesso da conta Expo, só se o projeto exigir envio autenticado. Vazio envia sem o header `Authorization`. |
 | `CAMERA_EMBED_ALLOWED_HOSTS` | | | Domínios, separados por vírgula, aceitos para o player embutido de câmera no painel. Só entram endereços `https` cujo host case com a lista: `*.dominio.com` libera o domínio e os subdomínios, e `*` libera qualquer domínio. Vazia recusa todo player embutido. |
 
 ### Agendamentos e retenção

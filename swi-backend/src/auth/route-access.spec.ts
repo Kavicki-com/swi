@@ -6,6 +6,7 @@ import { EvacuationsController } from '../evacuation/evacuations.controller'
 import { LiveController } from '../live/live.controller'
 import { NotificationController } from '../notifications/notification.controller'
 import { PositionsController } from '../positions/positions.controller'
+import { PushController } from '../push/push.controller'
 import { RescueController } from '../rescue/rescue.controller'
 import { AlertQueueController } from '../telemetry/alerts/alert-queue.controller'
 import { CalibrationController } from '../telemetry/calibration/calibration.controller'
@@ -64,6 +65,9 @@ const TABLE: Row[] = [
   ['positions', PositionsController, 'heat', TODOS],
   ['positions', PositionsController, 'heartbeat', WORKER],
   ['positions', PositionsController, 'batch', WORKER],
+  // Push: todo papel que entra no app registra e remove o próprio aparelho.
+  ['push', PushController, 'register', TODOS],
+  ['push', PushController, 'remove', TODOS],
   // Ordens de serviço.
   ['work-orders', WorkOrdersController, 'create', PAINEL],
   ['work-orders', WorkOrdersController, 'list', PAINEL],
