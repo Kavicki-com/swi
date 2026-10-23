@@ -75,8 +75,8 @@ export function PositionPicker({
       pinRef.current.marker.setLngLat([value.lng, value.lat])
       return
     }
+    // Sem ação: clicar em cima do pino remarca a posição, como no resto do mapa.
     const { el, root } = createPinElement({
-      onClick: () => {},
       content: <LocationPin variant="camera" />,
     })
     const marker = new lib.Marker({ element: el, anchor: 'bottom' })

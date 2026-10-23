@@ -25,8 +25,8 @@ export function buildMusterPin(
   lib: typeof maplibregl,
 ): () => void {
   const { el, root } = createPinElement({
-    // O pino não é clicável: só mostra onde o ponto está.
-    onClick: () => {},
+    // Sem ação, o pino só mostra onde o ponto está; no passo de marcar, o
+    // clique em cima dele cai no mapa e move o ponto.
     content: (
       <LocationPin variant="badge" status="good" size={MUSTER_PIN_SIZE} name={MUSTER_PIN_NAME} />
     ),

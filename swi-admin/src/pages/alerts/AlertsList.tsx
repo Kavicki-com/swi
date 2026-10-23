@@ -99,7 +99,7 @@ function buildMarker(
   map: maplibregl.Map,
   lib: typeof maplibregl,
   help: boolean,
-  onClick: () => void,
+  onClick?: () => void,
 ): PinHandle {
   const { el, root } = createPinElement({
     onClick,
@@ -219,12 +219,12 @@ export function AlertsList() {
     }
     navigate('/alerts')
   }
-  // Clique no pino: parado durante o desenho; na escolha de socorro, vai para
-  // a lista de socorristas; fora disso, abre ou fecha o cartão. Mesmo motivo
-  // do ref acima: o efeito dos pinos não remonta a cada navegação.
+  // Clique no pino: na escolha de socorro, vai para a lista de socorristas;
+  // fora disso, abre ou fecha o cartão. Durante o desenho o pino nasce sem
+  // ação e o clique cai no mapa. Mesmo motivo do ref acima: o efeito dos
+  // pinos não remonta a cada navegação.
   const pinClickRef = useRef<(id: string) => void>(() => {})
   pinClickRef.current = (id: string) => {
-    if (drawStep) return
     if (pickingRescue) {
       setPickingRescue(false)
       navigate(`/alerts/${id}/rescue`)
@@ -241,6 +241,8 @@ export function AlertsList() {
   // Updated via map.project() on every map move/zoom so the EmployeeOverviewCard
   // stays glued to its pin while the user pans the map.
   const [overlayPos, setOverlayPos] = useState<{ left: number; top: number } | null>(null)
+  // Tamanho do contêiner do mapa: o cartão do pino não passa da borda dele.
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 })
 
   // Quem tem pedido de ajuda aberto ou atendido: o pino sai como alerta
   // urgente, destacado, até o pedido fechar. O pedido não é medição, então
@@ -303,9 +305,9 @@ export function AlertsList() {
       setMapReady(true)
     })
     // No passo da área, o clique no mapa põe um vértice; no passo do ponto,
-    // troca o ponto de encontro; fora do desenho, o clique no mapa vazio fecha
-    // o card (o pino é um elemento DOM por cima do canvas, então o clique nele
-    // não chega aqui; só o clique fora dele).
+    // troca o ponto de encontro (inclusive em cima de um pino, que no desenho
+    // fica sem ação); fora do desenho, o clique no mapa vazio fecha o card (o
+    // pino com ação corta o clique, que não chega aqui).
     map.on('click', (e: maplibregl.MapMouseEvent) => {
       mapClickRef.current([e.lngLat.lng, e.lngLat.lat])
     })
@@ -335,12 +337,20 @@ export function AlertsList() {
   }, [filteredMarkers, evacuation, ackLayer, ackedIds, helpIds])
 
   // Render worker pins as maplibre Markers. Re-render when the filtered
-  // list changes. O clique passa pelo pinClickRef (ver acima).
+  // list changes. O clique passa pelo pinClickRef (ver acima); no desenho o
+  // pino nasce sem ação, e só entrar e sair do desenho recria os pinos.
+  const drawing = drawStep != null
   useEffect(() => {
     const map = mapRef.current
     if (!lib || !map || !mapReady) return
     const handles = displayMarkers.map((m) =>
-      buildMarker(m, map, lib, helpIds.has(m.id), () => pinClickRef.current(m.id)),
+      buildMarker(
+        m,
+        map,
+        lib,
+        helpIds.has(m.id),
+        drawing ? undefined : () => pinClickRef.current(m.id),
+      ),
     )
     return () => {
       handles.forEach((h) => {
@@ -359,7 +369,7 @@ export function AlertsList() {
         })
       })
     }
-  }, [lib, mapReady, displayMarkers, helpIds])
+  }, [lib, mapReady, displayMarkers, helpIds, drawing])
 
   // Heatmap layer, só no modo 'heat': a trilha real de posições das últimas 24
   // horas, agregada em células pelo backend. Sem trilha, nenhuma camada.
@@ -631,6 +641,7 @@ export function AlertsList() {
       ) : null}
 
       <View
+        onLayout={(e) => setMapSize(e.nativeEvent.layout)}
         style={{
           flex: 1,
           minHeight: 480,
@@ -744,6 +755,7 @@ export function AlertsList() {
             marker={selectedMarker}
             entry={entryFor(selectedMarker.id)}
             position={overlayPos}
+            mapSize={mapSize}
             onClose={() => navigate('/alerts')}
             onCreateRescue={() => navigate(`/alerts/${selectedMarker.id}/rescue`)}
           />

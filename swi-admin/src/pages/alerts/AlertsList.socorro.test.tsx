@@ -1,5 +1,6 @@
 // Socorro e evacuação na mesma tela sem se misturar: a rota de socorro tem
-// entrada própria na barra, os pinos param durante o desenho da área e as
+// entrada própria na barra, os pinos ficam sem ação durante o desenho da área
+// (o clique neles cai no mapa) e as
 // confirmações da evacuação são uma camada opcional do mapa (a saúde é o padrão).
 // Dublês: os do AlertsList.helpRequest.test.tsx, com o onClick do pino, os
 // handlers do mapa guardados para o teste disparar o clique, e o elemento do
@@ -22,7 +23,7 @@ const h = vi.hoisted(() => ({
     workers: Array<{ id: string; acked: boolean }>
   },
   navigations: [] as string[],
-  pins: [] as Array<{ status: unknown; name: unknown; onClick: () => void }>,
+  pins: [] as Array<{ status: unknown; name: unknown; onClick?: () => void }>,
   pushEvacuation: () => {},
 }))
 
@@ -67,7 +68,7 @@ vi.mock('@/lib/pinFactory', () => ({
     onClick,
     content,
   }: {
-    onClick: () => void
+    onClick?: () => void
     content: { props: Record<string, unknown> }
   }) => {
     h.pins.push({ status: content.props.status, name: content.props.name, onClick })
@@ -204,7 +205,7 @@ describe('AlertsList: entrada da rota de socorro', () => {
     const pin = h.pins.find((p) => p.name === 'Bruno Souza')
     expect(pin).toBeDefined()
     await act(async () => {
-      pin?.onClick()
+      pin?.onClick?.()
     })
     expect(h.navigations).toEqual(['/alerts/w2/rescue'])
     expect(screen.queryByTestId('rescue-pick-hint')).toBeNull()
@@ -223,7 +224,7 @@ describe('AlertsList: entrada da rota de socorro', () => {
     const pin = h.pins.find((p) => p.name === 'Bruno Souza')
     expect(pin).toBeDefined()
     await act(async () => {
-      pin?.onClick()
+      pin?.onClick?.()
     })
     expect(h.navigations).toEqual(['/alerts', '/alerts/w2/rescue'])
   })
@@ -265,25 +266,43 @@ describe('AlertsList: entrada da rota de socorro', () => {
     const pin = h.pins.find((p) => p.name === 'Ana Lima')
     expect(pin).toBeDefined()
     await act(async () => {
-      pin?.onClick()
+      pin?.onClick?.()
     })
     expect(h.navigations).toEqual(['/alerts/w1/rescue'])
   })
 })
 
 describe('AlertsList: desenho da área', () => {
-  it('clique em pino durante o desenho não abre o cartão', async () => {
+  it('durante o desenho o pino fica sem ação e nada navega', async () => {
     await renderAlerts()
     await waitFor(() => expect(h.pins).toHaveLength(2))
+    h.pins = []
     await act(async () => {
       fireEvent.click(screen.getByText('Iniciar evacuação'))
     })
 
+    // Os pinos se recriam sem onClick: o clique neles cai no mapa e vira
+    // vértice da área, em vez de abrir o cartão.
+    await waitFor(() => expect(h.pins).toHaveLength(2))
+    expect(h.pins.map((p) => p.onClick)).toEqual([undefined, undefined])
+    expect(h.navigations).toEqual([])
+  })
+
+  it('ao sair do desenho o pino volta a abrir o cartão', async () => {
+    await renderAlerts()
     await act(async () => {
-      h.pins[0]?.onClick()
+      fireEvent.click(screen.getByText('Iniciar evacuação'))
+    })
+    h.pins = []
+    await act(async () => {
+      fireEvent.click(screen.getByText('Cancelar'))
     })
 
-    expect(h.navigations).toEqual([])
+    await waitFor(() => expect(h.pins).toHaveLength(2))
+    await act(async () => {
+      h.pins.find((p) => p.name === 'Ana Lima')?.onClick?.()
+    })
+    expect(h.navigations).toEqual(['/alerts/w1'])
   })
 
   it('iniciar a evacuação no meio da escolha de socorro encerra a escolha', async () => {
