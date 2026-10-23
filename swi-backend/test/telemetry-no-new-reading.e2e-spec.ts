@@ -34,15 +34,21 @@ describe('Telemetry no new reading e2e', () => {
   const emails = {
     pressao: `telemetry-venc-p-${randomUUID()}@ex.com`,
     batimento: `telemetry-venc-b-${randomUUID()}@ex.com`,
+    ciclo: `telemetry-venc-c-${randomUUID()}@ex.com`,
+    corrida: `telemetry-venc-r-${randomUUID()}@ex.com`,
     admin: `telemetry-venc-admin-${randomUUID()}@ex.com`,
     outroAdmin: `telemetry-venc-outro-${randomUUID()}@ex.com`,
   }
   let workerPressao = ''
   let workerBatimento = ''
+  let workerCiclo = ''
+  let workerCorrida = ''
   let adminId = ''
   let outroAdminId = ''
   let headersPressao: Record<string, string> = {}
   let headersBatimento: Record<string, string> = {}
+  let headersCiclo: Record<string, string> = {}
+  let headersCorrida: Record<string, string> = {}
 
   const post = (headers: Record<string, string>, body: object) =>
     request(app.getHttpServer()).post('/telemetry/v1/batches').set(headers).send(body)
@@ -137,11 +143,15 @@ describe('Telemetry no new reading e2e', () => {
 
     workerPressao = await user(emails.pressao, 'Venc Pressao', 'WORKER', companyId)
     workerBatimento = await user(emails.batimento, 'Venc Batimento', 'WORKER', companyId)
+    workerCiclo = await user(emails.ciclo, 'Venc Ciclo', 'WORKER', companyId)
+    workerCorrida = await user(emails.corrida, 'Venc Corrida', 'WORKER', companyId)
     adminId = await user(emails.admin, 'Venc Admin', 'ADMIN', companyId)
     outroAdminId = await user(emails.outroAdmin, 'Venc Outro Admin', 'ADMIN', outraId)
 
     headersPressao = await enroll(workerPressao)
     headersBatimento = await enroll(workerBatimento)
+    headersCiclo = await enroll(workerCiclo)
+    headersCorrida = await enroll(workerCorrida)
   })
 
   afterAll(async () => {
@@ -275,4 +285,67 @@ describe('Telemetry no new reading e2e', () => {
       recoveryReason: 'SIGNAL_LOST',
     })
   }, 30_000)
+
+  // Batimento normal ao vivo pelo relógio: a outra métrica que mantém os lotes
+  // chegando a cada poucos segundos, e cada lote reavalia as condições.
+  const batimentoNormal = () => {
+    const sessao = randomUUID()
+    const fim = Date.now()
+    return {
+      events: Array.from({ length: 3 }, (_, i) =>
+        event({
+          monitoringSessionId: sessao,
+          eventTime: new Date(fim - (2 - i) * 5_000).toISOString(),
+          measurements: { heartRate: { value: 80, unit: 'bpm', source: 'APPLE_WATCH' } },
+        }),
+      ),
+    }
+  }
+  const PRESSAO = ['BLOOD_PRESSURE_REVIEW', 'BLOOD_PRESSURE_FATIGUE', 'BLOOD_PRESSURE_HIGH'] as const
+  const rastro = async (workerId: string) => ({
+    condicoes: await prisma.telemetryCondition.count({ where: { workerId, kind: { in: [...PRESSAO] } } }),
+    alertas: await prisma.operationalAlert.count({ where: { workerId } }),
+    notificacoes: await prisma.notification.count({ where: { workerId, domain: 'health' } }),
+  })
+
+  it('6. pressão alta medida há 40 h não reabre a cada lote do relógio: nem condição, nem alerta, nem notificação', async () => {
+    // A varredura fecha a condição sem medição em 24 h. Se a avaliação
+    // aceitasse pressão mais velha que isso, cada lote de batimento reabriria
+    // a condição com a mesma medição velha, a varredura a fecharia, e cada
+    // abertura notificaria o funcionário e a administração.
+    await post(headersCiclo, pressaoAlta(new Date(Date.now() - 40 * 60 * 60_000))).expect(200)
+
+    for (let lote = 0; lote < 3; lote++) {
+      await post(headersCiclo, batimentoNormal()).expect(200)
+      await vencer(new Date())
+    }
+
+    expect(await rastro(workerCiclo)).toEqual({ condicoes: 0, alertas: 0, notificacoes: 0 })
+  }, 60_000)
+
+  it('7. a medição que a varredura já julgou vencida não reabre a condição no lote seguinte', async () => {
+    // Condição aberta por uma pressão recente e vencida pela varredura num
+    // instante 24 h depois da medição: a varredura julgou aquela medição
+    // vencida, então o lote de batimento que chega em seguida não a reabre.
+    const medidaEm = new Date(Date.now() - 60_000)
+    await post(headersCorrida, pressaoAlta(medidaEm)).expect(200)
+    const aberta = await prisma.telemetryCondition.findFirstOrThrow({
+      where: { workerId: workerCorrida, kind: 'BLOOD_PRESSURE_HIGH', status: 'ACTIVE' },
+    })
+    await vencer(new Date(medidaEm.getTime() + NO_NEW_READING_MS))
+    const antes = await rastro(workerCorrida)
+
+    await post(headersCorrida, batimentoNormal()).expect(200)
+
+    expect(await rastro(workerCorrida)).toEqual(antes)
+    expect(
+      await prisma.telemetryCondition.count({
+        where: { workerId: workerCorrida, kind: { in: [...PRESSAO] }, status: 'ACTIVE' },
+      }),
+    ).toBe(0)
+    expect(await prisma.telemetryCondition.findUniqueOrThrow({ where: { id: aberta.id } })).toMatchObject({
+      status: 'RECOVERED',
+      recoveryReason: 'NO_NEW_READING',
+    })
+  }, 60_000)
 })

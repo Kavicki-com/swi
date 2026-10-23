@@ -127,9 +127,9 @@ const OXYGEN_LOOKBACK_MS = 12 * 60 * 60 * 1000
  *
  * A Atenção de batimento e a de desgaste entram pelo mesmo motivo.
  *
- * Pressão fica de fora de propósito: é medida à mão, vale por 72 h pelo prazo
- * do domínio, e silêncio do relógio não diz nada sobre a pressão de ninguém.
- * Ela só recupera por medição nova.
+ * Pressão fica de fora de propósito: é medida à mão, vale por 24 h para a
+ * condição, e silêncio do relógio não diz nada sobre a pressão de ninguém.
+ * Ela recupera por medição nova ou vence pela varredura sem leitura nova.
  */
 const SILENCE_RECOVERS: ReadonlySet<TelemetryConditionKind> = new Set<TelemetryConditionKind>([
   'HEART_RATE_HIGH',
@@ -622,7 +622,7 @@ export class TelemetryConditionService {
     // evento inteiro.
     //
     // As duas leituras pontuais são recortadas por FUNCIONÁRIO e origem, e não
-    // por sessão, porque prazo de 30 min e de 72 h não cabe dentro de uma
+    // por sessão, porque prazo de 30 min e de 24 h não cabe dentro de uma
     // sessão: ela nasce de novo a cada reconexão do relógio. Recortada por
     // sessão, uma medição de pressão de ontem seria atual pelo domínio e
     // apareceria no painel, mas ficaria invisível para a avaliação. A condição
@@ -630,7 +630,7 @@ export class TelemetryConditionService {
     // sessão. A janela de 60 s do BPM continua por sessão, porque evidência
     // CONTÍNUA de esforço só faz sentido dentro de uma.
     const batteryFrom = new Date(triggerAt.getTime() - FRESHNESS.BATTERY.staleMs)
-    const pressureFrom = new Date(triggerAt.getTime() - FRESHNESS.BLOOD_PRESSURE.staleMs)
+    const pressureFrom = new Date(triggerAt.getTime() - NO_NEW_READING_MS)
     const wearFrom = new Date(triggerAt.getTime() - FRESHNESS.VITAL.staleMs)
     // No caminho do evento o teto é o próprio gatilho. Na medição avulsa o
     // gatilho é o relógio do servidor, e a ingestão aceita horário até a folga
@@ -663,16 +663,20 @@ export class TelemetryConditionService {
         select: { batteryPercent: true },
         orderBy: { eventTime: 'desc' },
       }),
-      // 72 h é FRESHNESS.BLOOD_PRESSURE.staleMs, pelo mesmo motivo: passado
-      // esse prazo o domínio diz "sem medição recente" e o valor some da tela,
-      // então é exatamente aí que ele deixa de poder abrir condição.
+      // 24 h é o prazo do vencimento (NO_NEW_READING_MS), com a mesma
+      // fronteira aberta dele: medição que a varredura não aceita como
+      // recente não decide nada aqui. Não são as 72 h em que o valor some da
+      // tela do app: com elas, pressão na faixa medida entre 24 h e 72 h
+      // atrás abriria a condição a cada lote do relógio, a varredura a
+      // fecharia por vencimento em seguida, e cada abertura notificaria o
+      // funcionário e poria alerta novo na fila.
       tx.telemetrySample.findFirst({
         where: {
           workerId: session.workerId,
           origin: session.origin,
           systolicMmHg: { not: null },
           diastolicMmHg: { not: null },
-          eventTime: { gte: pressureFrom, lte: pressureUntil },
+          eventTime: { gt: pressureFrom, lte: pressureUntil },
         },
         select: { systolicMmHg: true, diastolicMmHg: true, eventTime: true },
         orderBy: { eventTime: 'desc' },
@@ -851,7 +855,17 @@ export class TelemetryConditionService {
     const opens = decisions.filter((d) => d.action === 'OPEN')
     const paused = opens.length > 0 && (await this.alertsPaused(tx, session.workerId))
 
-    for (const decision of paused ? [] : opens) {
+    // O instante da medição em que cada abertura se apoia, pela métrica que a
+    // sustenta: pressão e oxigenação pela leitura pontual que decidiu, o
+    // batimento (e o desgaste, que vem dele) pelo gatilho ao vivo.
+    const evidenceAt = (column: NoNewReadingColumn): Date | null => {
+      if (column === 'systolicMmHg') return pressureRow?.eventTime ?? null
+      if (column === 'oxygenSaturationPct') return oxygen.length === 0 ? null : new Date(oxygen[0].atMs)
+      return triggerAt
+    }
+    const allowed = paused ? [] : await this.withoutJudgedReading(tx, session, opens, evidenceAt)
+
+    for (const decision of allowed) {
       // A escrita é crua, e a mesma da varredura de silêncio: o motivo de ela
       // ser crua está em insertCondition, junto do SQL.
       const createdId = await this.insertCondition(tx, session, now, {
@@ -1167,6 +1181,52 @@ export class TelemetryConditionService {
     })
     if (count === 0) return
     changes.push(changeOf(candidate.workerId, candidate.id, candidate.kind, 'RECOVERED', now))
+  }
+
+  /**
+   * Tira das aberturas a que se apoiaria numa medição que o vencimento já
+   * julgou. Quando a varredura fecha uma condição por NO_NEW_READING, ela
+   * provou que não havia medição da métrica depois de `recoveredAt - 24 h`;
+   * medição até esse horizonte, inclusive a que abriu a condição encerrada,
+   * já foi julgada vencida e não reabre nada. Medição depois dele é fato que
+   * a varredura não viu (chegou depois, ou é nova) e abre como sempre.
+   *
+   * A janela de 24 h da pressão já barra quase tudo isso sozinha; esta
+   * conferência fecha a corrida que sobra: o gatilho do lote é o eventTime do
+   * relógio, até 2 min atrás do servidor, e a varredura que acabou de fechar
+   * mediu as 24 h a partir do instante dela. Por tipo, pela métrica de
+   * NO_NEW_READING_METRIC, então vale para todo tipo que o vencimento fecha.
+   * Só o fechamento por vencimento entra: o pela banda já tem medição mais
+   * nova, e o pelo silêncio só reabre com batimento ao vivo.
+   *
+   * Consulta só quando há abertura de tipo de saúde, que é rara: o lote comum
+   * não paga nada.
+   */
+  private async withoutJudgedReading(
+    tx: Prisma.TransactionClient,
+    session: { workerId: string; origin: TelemetryOrigin },
+    opens: Decision[],
+    evidenceAt: (column: NoNewReadingColumn) => Date | null,
+  ): Promise<Decision[]> {
+    const kinds = opens.flatMap((d) => (NO_NEW_READING_METRIC[d.kind] === null ? [] : [d.kind]))
+    if (kinds.length === 0) return opens
+    const closures = await tx.telemetryCondition.groupBy({
+      by: ['kind'],
+      where: { workerId: session.workerId, origin: session.origin, kind: { in: kinds }, recoveryReason: 'NO_NEW_READING' },
+      _max: { recoveredAt: true },
+    })
+    const horizonByKind = new Map<TelemetryConditionKind, number>()
+    for (const closure of closures) {
+      const recoveredAt = closure._max.recoveredAt
+      if (recoveredAt !== null) horizonByKind.set(closure.kind, recoveredAt.getTime() - NO_NEW_READING_MS)
+    }
+    return opens.filter((decision) => {
+      const column = NO_NEW_READING_METRIC[decision.kind]
+      const horizon = horizonByKind.get(decision.kind)
+      if (column === null || horizon === undefined) return true
+      const at = evidenceAt(column)
+      return at !== null && at.getTime() > horizon
+    })
   }
 
   /**
