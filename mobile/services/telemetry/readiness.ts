@@ -150,23 +150,9 @@ export function readinessStepsOf(
   return options.bluetooth === false ? steps.filter((s) => s.id !== 'BLUETOOTH_BAND') : steps;
 }
 
-/** Algum passo obrigatório sabidamente pendente. */
-export const requiredPending = (steps: readonly ReadinessStep[]): boolean =>
-  steps.some((s) => s.obrigatorio && s.pendente === true);
-
-/**
- * O dashboard mostra a lista enquanto falta passo obrigatório, ou enquanto
- * falta opcional e a pessoa não tocou "Entendi".
- */
-export function dashboardShowsReadiness(steps: readonly ReadinessStep[], acknowledged: boolean): boolean {
-  if (requiredPending(steps)) return true;
-  return !acknowledged && steps.some((s) => !s.obrigatorio && s.pendente === true);
-}
-
 export const READINESS_COPY = {
   titulo: 'Para o monitoramento funcionar',
   opcional: 'Opcional',
-  entendi: 'Entendi',
   passos: {
     PAIR: { titulo: 'Parear o celular', acao: 'Parear aparelho' },
     HEALTH_CONNECT_INSTALL: { titulo: HEALTH_CONNECT_FIRST_USE_COPY.instalar, acao: 'Abrir a Play Store' },

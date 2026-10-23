@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { isFeatureEnabled } from '../../lib/featureFlags';
-import { useAuth } from '../auth/AuthProvider';
 import { useProfile } from '../profile/ProfileProvider';
 import {
   sharedBandChoiceStore,
@@ -13,12 +12,10 @@ import { useHealthConnectRecheck } from './healthConnect/useHealthConnectRecheck
 import {
   readinessFactsOf,
   readinessStepsOf,
-  requiredPending,
   type ReadinessAction,
   type ReadinessFacts,
   type ReadinessStep,
 } from './readiness';
-import { clearReadinessAck, readReadinessAck, saveReadinessAck } from './readinessAck';
 import { useTelemetryUploadState } from './TelemetryUploadProvider';
 
 // A lista de prontidão ligada às fontes do app: o contexto do envio
@@ -77,46 +74,6 @@ export function useReadiness(): Readiness {
   useHealthConnectRecheck(checkHealthConnect);
 
   return useMemo(() => ({ facts, steps: readinessStepsOf(facts, { bluetooth }) }), [facts, bluetooth]);
-}
-
-/**
- * O "Entendi" deste usuário. `null` enquanto não foi lido, para a lista só
- * com opcionais não piscar na abertura. Passo obrigatório pendente apaga o
- * toque: quando só restarem opcionais de novo, a lista volta até outro
- * "Entendi".
- */
-export function useReadinessAck(steps: readonly ReadinessStep[]): {
-  acknowledged: boolean | null;
-  acknowledge: () => void;
-} {
-  const userId = useAuth().user?.id ?? null;
-  const [acknowledged, setAcknowledged] = useState<boolean | null>(null);
-  const obrigatorioPendente = requiredPending(steps);
-
-  useEffect(() => {
-    setAcknowledged(null);
-    if (userId === null) return undefined;
-    let cancelado = false;
-    void readReadinessAck(userId).then((lido) => {
-      if (!cancelado) setAcknowledged(lido);
-    });
-    return () => {
-      cancelado = true;
-    };
-  }, [userId]);
-
-  useEffect(() => {
-    if (!obrigatorioPendente || userId === null || acknowledged !== true) return;
-    setAcknowledged(false);
-    void clearReadinessAck(userId);
-  }, [obrigatorioPendente, userId, acknowledged]);
-
-  const acknowledge = useCallback(() => {
-    setAcknowledged(true);
-    if (userId !== null) void saveReadinessAck(userId);
-  }, [userId]);
-
-  return { acknowledged, acknowledge };
 }
 
 /**

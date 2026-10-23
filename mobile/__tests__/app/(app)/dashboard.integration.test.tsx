@@ -3,7 +3,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import Dashboard from '../../../app/(app)/dashboard';
 import {
-  calibrado,
   calibrando,
   condition,
   metric,
@@ -11,8 +10,6 @@ import {
   reporting,
 } from '../../../services/telemetry/myTelemetryFixtures';
 import type { MyTelemetryState } from '../../../services/vitals/MyTelemetryProvider';
-import * as http from '../../../services/api/http';
-import { fetchMyTelemetry } from '../../../services/telemetry/myTelemetry';
 import type { WatchDiagnosticsState } from '../../../services/telemetry/watchDiagnostics';
 import type { WorkerTelemetry } from '../../../services/telemetry/myTelemetry';
 import type { HealthConnectState } from '../../../services/telemetry/healthConnect/healthConnectReader';
@@ -34,11 +31,6 @@ const lendo = (telemetry: MyTelemetryState['telemetry']): MyTelemetryState => ({
 });
 const REPORTANDO = () =>
   lendo(reporting({ bloodPressure: metric({ systolic: 120, diastolic: 80 }) }));
-/** A leitura como o backend a mandaria, interpretada pelo leitor do app. */
-const lerDoBackend = async (corpo: unknown): Promise<WorkerTelemetry> => {
-  jest.spyOn(http, 'apiRequest').mockResolvedValueOnce(corpo);
-  return fetchMyTelemetry();
-};
 const CARREGANDO: MyTelemetryState = { telemetry: null, failed: false, loading: true };
 const FALHOU: MyTelemetryState = { telemetry: null, failed: true, loading: false };
 
@@ -207,19 +199,17 @@ beforeEach(() => {
 
 // --- Faixa de sincronização da pulseira ---------------------------------------
 
-const clockOf = (iso: string) =>
-  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-// Pulseira lida pelo Health Connect: dados até 50 min atrás, enviados há 3 min
-// pelo relógio real (a faixa conta com o relógio do aparelho).
-const pulseira = (): { telemetry: WorkerTelemetry; measuredUntil: string } => {
+// Pulseira lida pelo Health Connect, por este celular, pareado e com a leitura
+// concedida: o cenário em que a faixa e o "Sincronizar agora" apareceriam. No
+// dashboard eles não entram (moram em Minhas estatísticas e no Monitoramento),
+// para o rodapé não sair da tela.
+const pulseira = (): WorkerTelemetry => {
   const agora = Date.now();
-  const measuredUntil = new Date(agora - 50 * 60_000).toISOString();
   return {
-    measuredUntil,
-    telemetry: {
-      ...reporting(),
-      sync: { measuredUntil, syncedAt: new Date(agora - 3 * 60_000).toISOString() },
+    ...reporting(),
+    sync: {
+      measuredUntil: new Date(agora - 50 * 60_000).toISOString(),
+      syncedAt: new Date(agora - 3 * 60_000).toISOString(),
     },
   };
 };
@@ -233,115 +223,19 @@ const LENDO_HEALTH_CONNECT: HealthConnectState = {
   lastSyncAt: null,
 };
 
-const faixaDe = (tree: ReactTestRenderer) =>
-  tree.root.findAll((n) => n.props?.testID === 'sync-banner')[0];
-
-// O nó pressável do Button do DS com o rótulo visível dado.
-const botaoComRotulo = (tree: ReactTestRenderer, label: string) =>
-  tree.root.findAll(
-    (n) => n.props?.accessibilityRole === 'button' && n.props?.accessibilityLabel === label,
-  )[0];
-
-const renderTela = () => render();
-
-describe('dashboard: faixa de sincronização da pulseira', () => {
-  // A faixa tem o relógio de 5 s (useNow): árvore que fica montada dispara
-  // render depois de o arquivo terminar. Cada caso desmonta as suas.
-  const montadas: ReactTestRenderer[] = [];
-  const render = async () => {
-    const tree = await renderTela();
-    montadas.push(tree);
-    return tree;
-  };
-  // Relógio fixo ao meio-dia local: com o relógio real, entre 00:00 e 00:50
-  // os 50 min de atraso caem no dia anterior e a faixa passa a mostrar a data.
-  beforeEach(() => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date(2026, 9, 1, 12, 0, 0));
-  });
-  afterEach(async () => {
-    await act(async () => {
-      montadas.splice(0).forEach((tree) => tree.unmount());
-    });
-    jest.useRealTimers();
-  });
-
-  it('sem sincronização (iPhone) não há faixa', async () => {
-    const tree = await render();
-    expect(faixaDe(tree)).toBeUndefined();
-    expect(textoDa(tree)).not.toContain('Sincronizar agora');
-  });
-
-  it('com sincronização a faixa diz até quando há dado e quando o celular enviou', async () => {
-    const { telemetry, measuredUntil } = pulseira();
-    mockTelemetryState = lendo(telemetry);
+describe('dashboard: sem faixa de sincronização da pulseira', () => {
+  it('com a leitura sincronizada pelo Health Connect não há faixa nem Sincronizar agora', async () => {
+    mockTelemetryState = lendo(pulseira());
+    mockHealthConnect = LENDO_HEALTH_CONNECT;
     const tree = await render();
 
-    expect(faixaDe(tree)).toBeDefined();
-    expect(textoDa(tree)).toContain(
-      `Dados até ${clockOf(measuredUntil)} · sincronizado há 3 min`,
-    );
-    // Dado da pulseira não é "agora", nem com o batimento ainda atual.
+    expect(tree.root.findAll((n) => n.props?.testID === 'sync-banner')).toHaveLength(0);
+    expect(textoDa(tree)).not.toMatch(/Dados até|sincronizado há|Sincronizar agora/);
+    // Dado da pulseira continua não sendo "agora".
     expect(textoDa(tree)).not.toContain('Monitorando agora');
-  });
-
-  // O hero encolhe pela altura medida do bloco de baixo (dashboard.hero.test):
-  // a faixa dentro dele entra na conta e não empurra o rodapé para fora.
-  it('a faixa fica dentro do bloco de baixo medido, junto da linha de estado', async () => {
-    mockTelemetryState = lendo(pulseira().telemetry);
-    const tree = await render();
-
-    const blocoMedido = tree.root.findAll(
-      (n) => typeof n.props?.onLayout === 'function' && n.props?.style?.maxWidth === 360,
-    )[0];
-    // O testID aparece no Surface do DS e no View que ele desenha.
-    expect(blocoMedido.findAll((n) => n.props?.testID === 'sync-banner')).not.toHaveLength(0);
-  });
-
-  it('o botão só existe quando este celular lê o Health Connect', async () => {
-    mockTelemetryState = lendo(pulseira().telemetry);
-    const semLeitor = await render();
-    expect(botaoComRotulo(semLeitor, 'Sincronizar agora')).toBeUndefined();
-
-    mockHealthConnect = LENDO_HEALTH_CONNECT;
-    const comLeitor = await render();
-    expect(botaoComRotulo(comLeitor, 'Sincronizar agora')).toBeDefined();
-  });
-
-  it('o toque sincroniza uma vez e relê a leitura no fim', async () => {
-    mockTelemetryState = lendo(pulseira().telemetry);
-    mockHealthConnect = LENDO_HEALTH_CONNECT;
-    let terminar!: () => void;
-    mockSyncNow.mockReturnValue(
-      new Promise<void>((resolve) => {
-        terminar = resolve;
-      }),
-    );
-    const tree = await render();
-
     await act(async () => {
-      botaoComRotulo(tree, 'Sincronizar agora').props.onPress();
+      tree.unmount();
     });
-    expect(mockSyncNow).toHaveBeenCalledTimes(1);
-    expect(mockRefreshTelemetry).not.toHaveBeenCalled();
-
-    await act(async () => {
-      terminar();
-    });
-    expect(mockRefreshTelemetry).toHaveBeenCalledTimes(1);
-  });
-
-  // O progresso é o `syncing` do contexto do envio (o fluxo inteiro, com o
-  // estado mudando, está em SyncBanner.test.tsx).
-  it('com a sincronização em curso mostra o progresso, desabilitado', async () => {
-    mockTelemetryState = lendo(pulseira().telemetry);
-    mockHealthConnect = LENDO_HEALTH_CONNECT;
-    mockSyncing = true;
-    const tree = await render();
-
-    expect(botaoComRotulo(tree, 'Sincronizar agora')).toBeUndefined();
-    const emCurso = botaoComRotulo(tree, 'Sincronizando…');
-    expect(emCurso.props.accessibilityState).toEqual({ disabled: true });
   });
 });
 
@@ -445,68 +339,19 @@ describe('dashboard: leitura da telemetria', () => {
   });
 });
 
-// --- Selo provisório do desgaste ---------------------------------------------
+// --- Sem selo da calibração ----------------------------------------------------
 
-describe('dashboard: selo da calibração no desgaste', () => {
-  it('com a calibração em curso, diz em que dia dos 30 a pessoa está', async () => {
-    mockTelemetryState = lendo({ ...reporting(), calibration: calibrando(5) });
-    expect(textoDa(await render())).toContain('Calibrando, dia 5 de 30');
-  });
-
-  it('com a calibração reaberta pela troca de aparelho, diz que recalibra', async () => {
-    mockTelemetryState = lendo({ ...reporting(), calibration: calibrando(3, true) });
-    expect(textoDa(await render())).toContain('Recalibrando: novo aparelho, dia 3 de 30');
-  });
-
-  // Dado de demonstração nem é medido: não tem régua aprendendo.
-  it('na demonstração, só o selo de demonstração', async () => {
-    mockTelemetryState = lendo({
-      ...reporting({}, 'DEMO'),
-      baseline: 'PROVISIONAL',
-      calibration: calibrando(1),
-    });
+// O selo da calibração (dia dos 30, recalibração, estimativa provisória) mora
+// em Minhas estatísticas; no dashboard ele não entra.
+describe('dashboard: sem selo da calibração', () => {
+  it.each<[string, () => WorkerTelemetry]>([
+    ['calibração em curso', () => ({ ...reporting(), calibration: calibrando(5) })],
+    ['recalibração pela troca de aparelho', () => ({ ...reporting(), calibration: calibrando(3, true) })],
+    ['repouso provisório sem calibração', () => ({ ...reporting(), baseline: 'PROVISIONAL', calibration: null })],
+  ])('%s: nenhum selo, e a leitura continua', async (_caso, leitura) => {
+    mockTelemetryState = lendo(leitura());
     const texto = textoDa(await render());
-    expect(texto).toContain('Dados de demonstração');
-    expect(texto).not.toContain('Calibrando');
-    expect(texto).not.toContain('Estimativa provisória');
-  });
-
-  it('com a calibração completa, nenhum selo', async () => {
-    mockTelemetryState = lendo({ ...reporting(), baseline: 'MEASURED', calibration: calibrado() });
-    const texto = textoDa(await render());
-    expect(texto).not.toContain('Calibrando');
-    expect(texto).not.toContain('Estimativa provisória');
-  });
-
-  // Backend sem calibração na resposta (ou com ela torta, que vira ausente):
-  // vale a origem do repouso, como no painel.
-  it('sem calibração e com o repouso provisório, diz que é estimativa provisória', async () => {
-    mockTelemetryState = lendo({ ...reporting(), baseline: 'PROVISIONAL', calibration: null });
-    expect(textoDa(await render())).toContain('Estimativa provisória');
-  });
-
-  // A resposta crua passa pelo leitor de verdade: só o HTTP é dublado.
-  it('calibração torta vira ausente: vale o repouso provisório e a leitura continua', async () => {
-    mockTelemetryState = lendo(
-      await lerDoBackend({
-        ...reporting(),
-        baseline: 'PROVISIONAL',
-        calibration: { phase: 'CALIBRATING', recalibrating: false, day: '4', metrics: {} },
-      }),
-    );
-    const texto = textoDa(await render());
-    expect(texto).toContain('Estimativa provisória');
-    expect(texto).not.toContain('Calibrando');
-    expect(texto).toContain('112');
-  });
-
-  it('calibração e repouso tortos: nenhum selo, e a leitura continua', async () => {
-    mockTelemetryState = lendo(
-      await lerDoBackend({ ...reporting(), baseline: 'QUASE', calibration: 'dia 4' }),
-    );
-    const texto = textoDa(await render());
-    expect(texto).not.toContain('Calibrando');
-    expect(texto).not.toContain('Estimativa provisória');
+    expect(texto).not.toMatch(/Calibrando|Recalibrando|Estimativa provisória/);
     expect(texto).toContain('112');
   });
 });

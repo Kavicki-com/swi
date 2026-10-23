@@ -116,10 +116,6 @@ jest.mock('../../../services/live/useLiveBroadcast', () => ({
   useLiveBroadcast: () => ({ live: false, notice: null, toggle: jest.fn(), dismissNotice: jest.fn() }),
 }));
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
-// A lista de prontidão tem suíte própria; aqui ela deixa passar a linha.
-jest.mock('../../../components/telemetry/ReadinessList', () => ({
-  DashboardReadiness: ({ children }: { children: unknown }) => children,
-}));
 
 // --- Leituras ----------------------------------------------------------------
 

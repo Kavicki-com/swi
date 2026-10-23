@@ -12,7 +12,6 @@ import {
   Icon,
   ProgressBar,
   StatusChart as DSStatusChart,
-  StatusTag,
   Text,
   Toast,
   useTheme,
@@ -23,8 +22,6 @@ import { BadgedButton } from '../../components/dashboard/BadgedButton';
 import { StatCol } from '../../components/dashboard/StatCol';
 import { StatDivider } from '../../components/dashboard/StatDivider';
 import { FailureNotices } from '../../components/telemetry/FailureNotices';
-import { DashboardReadiness } from '../../components/telemetry/ReadinessList';
-import { SyncBanner } from '../../components/telemetry/SyncBanner';
 import {
   FIRE_ICON_SVG,
   GAUGE_ICON_SVG,
@@ -200,11 +197,6 @@ export default function Dashboard() {
   };
 
   const heartCondition = toHeartCondition(status);
-  const statusLine = (
-    <Text variant="caption.s" color={theme.content.dark}>
-      {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
-    </Text>
-  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -542,23 +534,17 @@ export default function Dashboard() {
           <Text variant="body.m" color={theme.content.dark}>
             {view.fatigueText}
           </Text>
-          {view.calibrationTag ? <StatusTag status="info" label={view.calibrationTag} /> : null}
           {/* Android: o caminho que falhou, com o motivo e o botão que tenta
               de novo. A coluna da métrica já diz a frase. */}
           <FailureNotices absent={view.absent} context={absence} />
           {/* Em que pé está a leitura e, quando não vem do relógio real, o
               selo de origem. Linha de Text do DS: o Figma não tem esse slot.
-              Com a pulseira, enquanto falta passo, a lista de prontidão fica
-              no lugar dela e diz o que falta e como resolver. */}
-          {naPulseira ? (
-            <DashboardReadiness>{statusLine}</DashboardReadiness>
-          ) : (
-            statusLine
-          )}
-          {/* Pulseira pelo Health Connect: de quando são os números acima e,
-              se este celular lê, o "Sincronizar agora". Sem sync não há nada.
-              Mora no bloco medido: a altura dela entra na conta do hero. */}
-          <SyncBanner />
+              A lista de prontidão e a faixa de sincronização moram em
+              Configurações, Monitoramento (a faixa também em Minhas
+              estatísticas): aqui empurravam o rodapé para fora da tela. */}
+          <Text variant="caption.s" color={theme.content.dark}>
+            {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
+          </Text>
         </View>
 
         {/* 5. Bottom actions row: reports + notif (with badge "4") + chat + help.
