@@ -12,8 +12,9 @@ import { AUDIT_EVENTS_MAX_LIMIT, AuditService, READ_DEDUPE_WINDOW_MS, type Audit
 const ADMIN: JwtUser = { userId: 'admin-1', role: 'ADMIN', companyId: 'company-1' }
 const NOW = new Date('2026-10-01T15:00:00.000Z')
 
-const prismaDouble = () =>
-  ({
+const prismaDouble = () => {
+  const double: any = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
     auditEvent: {
       create: jest.fn().mockResolvedValue({}),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -23,7 +24,11 @@ const prismaDouble = () =>
     operationalAlert: { findFirst: jest.fn().mockResolvedValue(null) },
     telemetryDevice: { findFirst: jest.fn().mockResolvedValue(null) },
     rescue: { findFirst: jest.fn().mockResolvedValue(null) },
-  }) as any
+  }
+  // A transação roda a função com o próprio dublê como cliente.
+  double.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(double))
+  return double
+}
 
 const service = (prisma: any) => new AuditService(prisma as PrismaService)
 
@@ -92,6 +97,15 @@ describe('AuditService.recordRequest', () => {
     })
   })
 
+  it('a leitura trava pela chave da deduplicação antes de consultar, para duas leituras juntas não gravarem duas linhas', async () => {
+    const prisma = prismaDouble()
+    await service(prisma).recordRequest(facts(CURRENT), NOW)
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(prisma.$executeRaw.mock.calls[0].slice(1)).toEqual(['audit:admin-1:worker-1:HEALTH_CURRENT_READ'])
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.auditEvent.findFirst.mock.invocationCallOrder[0])
+    expect(prisma.auditEvent.findFirst.mock.invocationCallOrder[0]).toBeLessThan(prisma.auditEvent.create.mock.invocationCallOrder[0])
+  })
+
   it('escrita não é deduplicada', async () => {
     const prisma = prismaDouble()
     prisma.auditEvent.findFirst.mockResolvedValue({ id: 'ev-1' })
@@ -100,6 +114,7 @@ describe('AuditService.recordRequest', () => {
       NOW,
     )
     expect(prisma.auditEvent.findFirst).not.toHaveBeenCalled()
+    expect(prisma.$executeRaw).not.toHaveBeenCalled()
     expect(created(prisma).action).toBe('USER_UPDATED')
   })
 

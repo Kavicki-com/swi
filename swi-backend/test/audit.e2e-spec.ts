@@ -184,4 +184,15 @@ describe('Trilha de auditoria e2e', () => {
     const { body: fromB } = await request(server).get('/audit/events').set(b).expect(200)
     expect(fromB.items.map((i: { subjectUserId: string }) => i.subjectUserId)).toEqual([ids.workerB])
   })
+
+  it('leituras simultâneas da mesma pessoa pelo mesmo operador gravam uma linha só', async () => {
+    const server = app.getHttpServer()
+    const s = await login(emails.supervisor)
+    await Promise.all(Array.from({ length: 5 }, () => request(server).get(`/users/${ids.other}`).set(s).expect(200)))
+    await audit.settled()
+    const rows = await prisma.auditEvent.findMany({
+      where: { actorId: ids.supervisor, subjectUserId: ids.other, action: 'USER_DETAIL_READ' },
+    })
+    expect(rows).toHaveLength(1)
+  })
 })

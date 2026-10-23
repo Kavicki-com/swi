@@ -79,6 +79,10 @@ interface Located {
   resourceId: string | null
 }
 
+/** Chave da deduplicação de leitura; também é a da trava que serializa duas leituras juntas. */
+const dedupeKey = (actorId: string, subjectUserId: string | null, action: AuditAction): string =>
+  `audit:${actorId}:${subjectUserId ?? ''}:${action}`
+
 const clip = (value: unknown, max: number): string | null =>
   typeof value === 'string' && value.length > 0 ? value.slice(0, max) : null
 
@@ -127,28 +131,36 @@ export class AuditService {
     const { meta, actor } = facts
     try {
       const located = await this.locate(facts)
-      if (isReadAction(meta.action)) {
-        // A trilha é do acesso do painel aos dados de outra pessoa: quem lê
-        // os próprios dados (o funcionário na sessão dele) não entra.
-        if (located.subjectUserId === actor.userId) return
-        if (await this.seenRecently(actor.userId, located.subjectUserId, meta.action, now)) return
+      const data: Prisma.AuditEventUncheckedCreateInput = {
+        createdAt: now,
+        companyId: actor.companyId,
+        actorId: actor.userId,
+        actorRole: actor.role,
+        subjectUserId: located.subjectUserId,
+        action: meta.action,
+        resourceType: located.resourceType,
+        resourceId: located.resourceId,
+        method: facts.method,
+        route: facts.route,
+        status: facts.status,
+        ip: facts.ip,
+        userAgent: clip(facts.userAgent, USER_AGENT_MAX_LENGTH),
       }
-      await this.prisma.auditEvent.create({
-        data: {
-          createdAt: now,
-          companyId: actor.companyId,
-          actorId: actor.userId,
-          actorRole: actor.role,
-          subjectUserId: located.subjectUserId,
-          action: meta.action,
-          resourceType: located.resourceType,
-          resourceId: located.resourceId,
-          method: facts.method,
-          route: facts.route,
-          status: facts.status,
-          ip: facts.ip,
-          userAgent: clip(facts.userAgent, USER_AGENT_MAX_LENGTH),
-        },
+      if (!isReadAction(meta.action)) {
+        await this.prisma.auditEvent.create({ data })
+        return
+      }
+      // A trilha é do acesso do painel aos dados de outra pessoa: quem lê
+      // os próprios dados (o funcionário na sessão dele) não entra.
+      if (located.subjectUserId === actor.userId) return
+      // Duas leituras quase juntas (o painel pede o mesmo detalhe duas vezes)
+      // chegam aqui antes de a primeira linha existir. A trava da transação,
+      // pela chave da deduplicação, faz a segunda esperar a primeira gravar e
+      // então enxergá-la, também com mais de um processo no ar.
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${dedupeKey(actor.userId, located.subjectUserId, meta.action)}))`
+        if (await this.seenRecently(tx, actor.userId, located.subjectUserId, meta.action, now)) return
+        await tx.auditEvent.create({ data })
       })
     } catch (error) {
       this.logger.warn(`Linha da trilha não gravada (${meta.action} em ${facts.route}): ${describeError(error)}`)
@@ -211,8 +223,14 @@ export class AuditService {
     }
   }
 
-  private async seenRecently(actorId: string, subjectUserId: string | null, action: AuditAction, now: Date): Promise<boolean> {
-    const row = await this.prisma.auditEvent.findFirst({
+  private async seenRecently(
+    db: Prisma.TransactionClient,
+    actorId: string,
+    subjectUserId: string | null,
+    action: AuditAction,
+    now: Date,
+  ): Promise<boolean> {
+    const row = await db.auditEvent.findFirst({
       where: { actorId, subjectUserId, action, createdAt: { gte: new Date(now.getTime() - READ_DEDUPE_WINDOW_MS) } },
       select: { id: true },
     })
