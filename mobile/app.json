@@ -99,7 +99,10 @@
       "expo-background-task",
       [
         "expo-notifications",
-        { "enableBackgroundRemoteNotifications": true }
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "enableBackgroundRemoteNotifications": true
+        }
       ]
     ],
     "experiments": {
