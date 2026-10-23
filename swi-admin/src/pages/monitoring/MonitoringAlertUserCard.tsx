@@ -44,6 +44,10 @@ function ActionIcon({
   )
 }
 
+// Dia e mês da pausa, no fuso de quem lê.
+const pausedSince = (iso: string) =>
+  new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+
 function VerticalDivider() {
   const theme = useTheme()
   return <View style={{ width: 2, height: 56, backgroundColor: theme.content.lightGrey }} />
@@ -135,6 +139,9 @@ export function AlertUserCard({
   pendingAlerts,
   onAcknowledge,
   onResolve,
+  canPauseMonitoring,
+  monitoringPending,
+  onMonitoringChange,
 }: {
   user: MonitoringUserAlert
   expanded: boolean
@@ -147,6 +154,12 @@ export function AlertUserCard({
   pendingAlerts: ReadonlySet<string>
   onAcknowledge: (alertId: string) => void
   onResolve: (alertId: string) => void
+  /** Quem não tem a permissão de pausar vê o estado, mas não altera. */
+  canPauseMonitoring: boolean
+  /** Pedido de pausa ou retomada a caminho do servidor. */
+  monitoringPending: boolean
+  /** true retoma os alertas da pessoa; false pausa. */
+  onMonitoringChange: (monitored: boolean) => void
 }) {
   const theme = useTheme()
   const hasAlerts = user.alerts.length > 0
@@ -194,10 +207,21 @@ export function AlertUserCard({
           </Text>
         </View>
         <VerticalDivider />
-        <Toggle
-          defaultValue={user.active}
-          accessibilityLabel={`Ativar/desativar monitoramento de ${user.name}`}
-        />
+        {/* Desligado = alertas pausados (férias, afastamento). O app segue
+            mandando dados; só os alertas da pessoa param. */}
+        <View style={{ gap: theme.gap.xs }}>
+          <Toggle
+            value={user.monitoringPausedAt === null}
+            onChange={onMonitoringChange}
+            disabled={!canPauseMonitoring || monitoringPending}
+            accessibilityLabel={`Ativar/desativar monitoramento de ${user.name}`}
+          />
+          {user.monitoringPausedAt ? (
+            <Text variant="body.s" color={theme.content.medium}>
+              {`Alertas pausados desde ${pausedSince(user.monitoringPausedAt)}`}
+            </Text>
+          ) : null}
+        </View>
       </View>
       {/* Sem "remover do monitoramento": não há ação no backend que faça
           isso, e um botão que só mostra um aviso fingiria ter feito. */}

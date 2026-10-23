@@ -19,4 +19,10 @@ describe('níveis do painel', () => {
     expect(permissionLabel('alerts.operate')).toMatch(/alertas/i)
     expect(permissionLabel('algo.novo')).toBe('algo.novo')
   })
+
+  it('as permissões da pausa, da edição de relatório e dos resgates da empresa têm rótulo', () => {
+    expect(permissionLabel('monitoring.pause')).toBe('Pausar os alertas de um funcionário')
+    expect(permissionLabel('reports.edit')).toBe('Editar relatórios de outras pessoas')
+    expect(permissionLabel('rescue.readAll')).toBe('Ver todos os resgates da empresa')
+  })
 })

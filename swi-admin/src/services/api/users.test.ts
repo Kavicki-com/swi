@@ -59,6 +59,25 @@ describe('employeesApi.list (real)', () => {
     expect(url).toContain('/users?role=WORKER&approvalStatus=APPROVED')
   })
 
+  it('traz a pausa dos alertas como o backend mandou, e ausente vale sem pausa', async () => {
+    vi.stubGlobal(
+      'fetch',
+      okJson([
+        summary({ id: 'p1', monitoringPausedAt: '2026-10-22T12:00:00.000Z' }),
+        summary({ id: 'p2', monitoringPausedAt: null }),
+        summary({ id: 'p3' }),
+      ]),
+    )
+
+    const { data } = await employeesApi.list()
+
+    expect(data!.map((e) => e.monitoringPausedAt)).toEqual([
+      '2026-10-22T12:00:00.000Z',
+      null,
+      null,
+    ])
+  })
+
   it('falha de rede → { data: null, error }', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 

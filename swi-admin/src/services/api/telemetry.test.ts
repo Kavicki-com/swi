@@ -191,3 +191,38 @@ describe('telemetryApi: fila de alertas', () => {
     expect(error).toEqual({ message: 'Alerta já resolvido' })
   })
 })
+
+describe('telemetryApi: pausa dos alertas de um funcionário', () => {
+  beforeEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('pausar é PUT na rota do funcionário e devolve o estado gravado', async () => {
+    const state = { workerId: 'w 1', monitoringPausedAt: '2026-10-22T12:00:00.000Z' }
+    fetchMock.mockResolvedValue(state)
+    const { data, error } = await telemetryApi.pauseMonitoring('w 1')
+    expect(fetchMock).toHaveBeenCalledWith('/telemetry/v1/workers/w%201/monitoring-pause', {
+      method: 'PUT',
+    })
+    expect(data).toEqual(state)
+    expect(error).toBeNull()
+  })
+
+  it('retomar é DELETE na mesma rota e devolve a pausa limpa', async () => {
+    fetchMock.mockResolvedValue({ workerId: 'w1', monitoringPausedAt: null })
+    const { data } = await telemetryApi.resumeMonitoring('w1')
+    expect(fetchMock).toHaveBeenCalledWith('/telemetry/v1/workers/w1/monitoring-pause', {
+      method: 'DELETE',
+    })
+    expect(data).toEqual({ workerId: 'w1', monitoringPausedAt: null })
+  })
+
+  it('falha chega com a mensagem do backend', async () => {
+    fetchMock.mockImplementation(async () => {
+      throw new Error('Funcionário não encontrado')
+    })
+    const { data, error } = await telemetryApi.pauseMonitoring('w1')
+    expect(data).toBeNull()
+    expect(error).toEqual({ message: 'Funcionário não encontrado' })
+  })
+})

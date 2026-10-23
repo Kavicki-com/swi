@@ -321,7 +321,7 @@ export function buildUserAlerts(
       role: e.role,
       specialization: e.specialization,
       avatarUri: e.avatarUri,
-      active: e.active ?? true,
+      monitoringPausedAt: e.monitoringPausedAt ?? null,
       tier,
       alerts: [...alerts.map(alertDetailFrom), ...deviceLinesFrom(entry)],
     }

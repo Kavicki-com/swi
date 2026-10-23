@@ -47,6 +47,9 @@ export type Employee = {
   // Flag de ativação real (independente da aprovação): o admin liga e desliga o
   // acesso pelo toggle da lista. Mesma forma do Admin, sobre a mesma rota.
   active: boolean
+  // Pausa dos alertas (férias, afastamento): desde quando, ou null quando o
+  // funcionário segue monitorado. Opcional porque só a lista de /users traz.
+  monitoringPausedAt?: string | null
   // Handle visível (@username). Opcional: conta que não definiu um não tem.
   username?: string
   hasUnreadMessages?: boolean
