@@ -1,8 +1,8 @@
 import type { HelpRequestView } from './types';
 
 // Textos do estado do pedido de ajuda dentro do procedimento de evacuação.
-// O Figma não desenha esses estados: os textos abaixo são propostas que
-// aguardam aprovação, reunidas aqui para a troca ser num lugar só.
+// O Figma não desenha esses estados: os textos abaixo foram aprovados à parte
+// e ficam reunidos aqui para a troca ser num lugar só.
 export const HELP_COPY = {
   sending: 'Enviando o pedido de ajuda.',
   failed: 'Não foi possível enviar o pedido de ajuda.',

@@ -53,7 +53,8 @@ const DESPACHADO: HelpRequestView = {
     status: 'dispatched',
     dispatchedAt: '2026-10-22T12:01:00.000Z',
     arrivedAt: null,
-    rescuerPosition: { lat: -19.9, lng: -43.89, recordedAt: '2026-10-22T12:01:00.000Z' },
+    // Lida agora: a estimativa só usa posição recente do socorrista.
+    rescuerPosition: { lat: -19.9, lng: -43.89, recordedAt: new Date().toISOString() },
   },
 };
 

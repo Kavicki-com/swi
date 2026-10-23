@@ -61,11 +61,15 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
 
   // O pedido do botão "Ajuda urgente". O tempo é o do socorrista despachado
   // até aqui; sem ele a linha do tempo some, nunca um número fixo. A faixa diz
-  // em que pé o pedido está, e com ele parado no aparelho a frase "Estamos à
-  // caminho" sai: prometer socorro que não foi pedido é pior que calar.
+  // em que pé o pedido está. A frase "Estamos a caminho" só existe com um
+  // pedido que o servidor confirmou e ainda não encerrou: aberto pelas
+  // notificações sem pedido, ou com o pedido parado no aparelho, ninguém está
+  // a caminho, e prometer socorro que não foi pedido é pior que calar.
   const help = useHelpRequest();
   const notice = helpNotice(help);
-  const sendFailed = notice?.variant === 'error';
+  const helpOnTheWay =
+    help.helpRequest !== null &&
+    (help.helpRequest.status === 'OPEN' || help.helpRequest.status === 'ATTENDED');
 
   // (teal escuro). A linha vertical entre bolinhas usa cyan mais claro
   // `content/secondary` #8AD2E2 — cores DIFERENTES por design.
@@ -319,15 +323,15 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
                   }
                 />
               ) : null}
-              {sendFailed ? null : (
+              {helpOnTheWay ? (
                 <Text
                   variant="body.m"
                   color={theme.content.dark}
                   style={{ textAlign: 'center' }}
                 >
-                  Mantenha-se calmo. Estamos à caminho.
+                  Mantenha-se calmo. Estamos a caminho.
                 </Text>
-              )}
+              ) : null}
               <Button
                 variant="contained"
                 backgroundColor={theme.surface.primary}

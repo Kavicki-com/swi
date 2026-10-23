@@ -128,11 +128,40 @@ describe('ActiveAlertModal, imagem do clima', () => {
 });
 
 describe('ActiveAlertModal, estado do pedido de ajuda', () => {
-  it('sem pedido: nenhuma faixa, e o fechamento do Figma fica', async () => {
+  // Aberto pelas notificações, sem pedido, ninguém está a caminho: a frase
+  // só existe com um pedido que o servidor confirmou e ainda não encerrou.
+  it('sem pedido: nenhuma faixa e nenhuma promessa de socorro', async () => {
     const tree = await render();
 
     expect(faixas(tree)).toHaveLength(0);
-    expect(texto(tree)).toContain('Mantenha-se calmo. Estamos à caminho.');
+    expect(texto(tree)).not.toContain('Mantenha-se calmo');
+    expect(texto(tree)).not.toContain('caminho');
+  });
+
+  it.each(['OPEN', 'ATTENDED'] as const)(
+    'pedido %s: "Mantenha-se calmo. Estamos a caminho." (sem crase)',
+    async (status) => {
+      mockUseHelpRequest.mockReturnValue(ajuda({ helpRequest: { ...ABERTO, status } }));
+
+      const t = texto(await render());
+
+      expect(t).toContain('Mantenha-se calmo. Estamos a caminho.');
+      expect(t).not.toContain('à caminho');
+    },
+  );
+
+  it('pedido encerrado: a frase some', async () => {
+    mockUseHelpRequest.mockReturnValue(
+      ajuda({ helpRequest: { ...ABERTO, status: 'CLOSED', closedAt: '2026-10-22T13:00:00.000Z' } }),
+    );
+
+    expect(texto(await render())).not.toContain('Mantenha-se calmo');
+  });
+
+  it('enviando, antes da confirmação: a frase ainda não aparece', async () => {
+    mockUseHelpRequest.mockReturnValue(ajuda({ sending: true }));
+
+    expect(texto(await render())).not.toContain('Mantenha-se calmo');
   });
 
   it('enviando', async () => {
@@ -154,7 +183,7 @@ describe('ActiveAlertModal, estado do pedido de ajuda', () => {
     expect(faixa.props.title).toBe(HELP_COPY.sent);
   });
 
-  // "Estamos à caminho" com o pedido parado no aparelho seria mentir para
+  // "Estamos a caminho" com o pedido parado no aparelho seria mentir para
   // quem está em perigo: a frase sai, e a faixa oferece a nova tentativa.
   it('não saiu: erro com nova tentativa, sem prometer que alguém está a caminho', async () => {
     mockUseHelpRequest.mockReturnValue(ajuda({ failed: true }));
@@ -165,7 +194,7 @@ describe('ActiveAlertModal, estado do pedido de ajuda', () => {
     expect(faixa.props.variant).toBe('error');
     expect(faixa.props.title).toBe(HELP_COPY.failed);
     expect(faixa.props.action.label).toBe(HELP_COPY.retry);
-    expect(texto(tree)).not.toContain('Estamos à caminho');
+    expect(texto(tree)).not.toContain('caminho');
 
     await act(async () => {
       faixa.props.action.onPress();

@@ -10,21 +10,33 @@ const M_PER_DEG_LAT = 111_320;
 const WALK_SPEED_MPS = 1.4;
 
 /**
+ * Idade máxima da posição do socorrista para estimar a chegada. Mais velha que
+ * isso (celular dele sem sinal, por exemplo), ele pode estar em qualquer lugar
+ * e o tempo seria um número que ninguém mediu: a linha some.
+ */
+export const RESCUER_POSITION_MAX_AGE_MS = 5 * 60_000;
+
+/**
  * Minutos até o socorrista chegar, ou null quando não há o que estimar: sem
  * pedido, pedido encerrado, ninguém despachado, socorrista já no local, sem a
- * posição dele ou sem a do funcionário. Nunca um número inventado.
+ * posição dele, posição dele velha demais ou sem a do funcionário. Nunca um
+ * número inventado.
  *
- * `worker` em [lng, lat], a convenção do LocationProvider.
+ * `worker` em [lng, lat], a convenção do LocationProvider. `now` em ms.
  */
 export function rescuerEtaMinutes(
   help: HelpRequestView | null,
   worker: [number, number] | null,
+  now: number = Date.now(),
 ): number | null {
   if (help === null || help.status === 'CLOSED') return null;
   const rescue = help.rescue;
   if (rescue === null || rescue.status !== 'dispatched') return null;
   const from = rescue.rescuerPosition;
   if (from === null || worker === null) return null;
+  const age = now - Date.parse(from.recordedAt);
+  // Hora ilegível dá NaN, e NaN não passa no teste: sem tempo.
+  if (!(age <= RESCUER_POSITION_MAX_AGE_MS)) return null;
   const [lng, lat] = worker;
   const midLat = ((from.lat + lat) / 2) * (Math.PI / 180);
   const dx = (lng - from.lng) * M_PER_DEG_LAT * Math.cos(midLat);
