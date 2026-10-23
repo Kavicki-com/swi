@@ -239,8 +239,9 @@ export function MonitoringLayout() {
     }
   }, [])
 
-  // Fila de alertas: lida ao montar e de novo quando uma condição abre ou se
-  // recupera. Vários avisos seguidos viram uma releitura só.
+  // Fila de alertas: lida ao montar, quando uma condição abre ou se recupera
+  // (vários avisos seguidos viram uma releitura só) e quando um pedido de
+  // ajuda é atendido ou fecha.
   const loadQueue = useCallback(async () => {
     const { data, error } = await monitoringApi.queue()
     if (error || !data) {
@@ -264,6 +265,9 @@ export function MonitoringLayout() {
           void loadQueue()
         }, QUEUE_REFETCH_DEBOUNCE_MS)
       },
+      // Pedido de ajuda atendido ou fechado muda o alerta dele sem condição
+      // nova: só este aviso traz a mudança, e ela vale na hora.
+      onHelpRequest: () => void loadQueue(),
     })
     // Avisos de condição que chegaram durante uma queda do socket se perderam:
     // a volta da conexão relê a fila inteira.
