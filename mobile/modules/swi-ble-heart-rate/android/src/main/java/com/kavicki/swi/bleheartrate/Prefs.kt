@@ -5,12 +5,19 @@ import android.content.SharedPreferences
 
 /**
  * O que o serviço precisa para religar sozinho depois de o sistema matar o
- * processo: o endereço da pulseira escolhida, o nome que ela anuncia (para
- * achá-la de novo se o endereço aleatório girar) e o tipo do endereço.
+ * processo: a pulseira escolhida, o endereço em que ela está agora, o nome
+ * que ela anuncia (para achá-la de novo se o endereço aleatório girar) e o
+ * tipo do endereço.
+ *
+ * A escolha e o endereço atual ficam separados. A escolha é o endereço que a
+ * tela guardou e passa ao `start` a cada volta ao app; o endereço atual é o
+ * que o serviço segue depois de um giro. Gravar a escolha por cima do
+ * endereço atual mandaria o serviço para um endereço que não existe mais.
  */
 internal object Prefs {
   private const val FILE = "swi_ble_heart_rate"
   private const val KEY_DEVICE = "deviceId"
+  private const val KEY_ADDRESS = "address"
   private const val KEY_NAME = "name"
   private const val KEY_ADDRESS_TYPE = "addressType"
   private const val KEY_LAST_READING = "lastReadingAt"
@@ -21,16 +28,30 @@ internal object Prefs {
   private fun prefs(ctx: Context): SharedPreferences =
     ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
+  /** A pulseira escolhida, como a tela a conhece (o endereço da escolha). */
   fun device(ctx: Context): String? = prefs(ctx).getString(KEY_DEVICE, null)
+
+  /** O endereço em que a pulseira está agora; o da escolha até o primeiro giro. */
+  fun address(ctx: Context): String? = prefs(ctx).getString(KEY_ADDRESS, null) ?: device(ctx)
 
   fun name(ctx: Context): String? = prefs(ctx).getString(KEY_NAME, null)
 
   fun addressType(ctx: Context): Int = prefs(ctx).getInt(KEY_ADDRESS_TYPE, ADDRESS_TYPE_UNKNOWN)
 
-  fun saveDevice(ctx: Context, address: String, name: String?, addressType: Int) {
+  /** Escolha nova: o endereço atual volta a ser o da escolha. */
+  fun saveDevice(ctx: Context, deviceId: String, name: String?, addressType: Int) {
     prefs(ctx).edit()
-      .putString(KEY_DEVICE, address)
+      .putString(KEY_DEVICE, deviceId)
+      .putString(KEY_ADDRESS, deviceId)
       .putString(KEY_NAME, name)
+      .putInt(KEY_ADDRESS_TYPE, addressType)
+      .apply()
+  }
+
+  /** O endereço girou: a escolha e o nome ficam, muda só onde ela está. */
+  fun followAddress(ctx: Context, address: String, addressType: Int) {
+    prefs(ctx).edit()
+      .putString(KEY_ADDRESS, address)
       .putInt(KEY_ADDRESS_TYPE, addressType)
       .apply()
   }
