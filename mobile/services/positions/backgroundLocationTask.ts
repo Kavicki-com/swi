@@ -13,6 +13,10 @@ import { isWindowOpen, type TrackingWindowStore } from './trackingWindow';
 // pode relançar o processo só para a tarefa. Por isso tudo o que ela precisa
 // (de quem é o ponto, se ainda deve rastrear, como enviar) vem de arquivo, e
 // nada daqui depende do React.
+//
+// O servidor entra só para a evacuação, que o gestor começa e encerra no
+// painel com o app possivelmente em segundo plano: a tarefa pergunta de
+// tempos em tempos e grava ou apaga a evacuação no arquivo.
 
 /** Nome da tarefa registrada no TaskManager. Trocar o nome órfã a anterior. */
 export const LOCATION_TASK_NAME = 'swi-background-location';
@@ -32,11 +36,19 @@ export const DRAIN_MIN_INTERVAL_MS = 10_000;
 const EVACUATION_DRAIN_MIN_INTERVAL_MS = 8_000;
 
 /**
- * De quanto em quanto tempo a tarefa pergunta ao servidor se a evacuação
- * ainda está ativa. O gestor encerra no painel e o app pode estar em segundo
- * plano, sem tela que consulte: é a tarefa que fica sabendo e desliga.
+ * De quanto em quanto tempo a tarefa pergunta ao servidor pela evacuação. O
+ * gestor começa e encerra no painel, e o app pode estar em segundo plano, sem
+ * tela que consulte: é a tarefa que fica sabendo. Com evacuação gravada,
+ * pergunta se ela acabou; só com a jornada aberta, se uma começou.
  */
 export const EVACUATION_CHECK_INTERVAL_MS = 60_000;
+
+/**
+ * O que o servidor diz da evacuação ativa na empresa: qual é, `null` para
+ * nenhuma, ou `'unknown'` quando não deu para saber (sem rede). Sem saber,
+ * nada muda: a evacuação gravada segue, e nenhuma é gravada.
+ */
+export type ActiveEvacuationCheck = { evacuationId: string } | null | 'unknown';
 
 /** A parte de uma leitura do expo-location que a tarefa usa. */
 export interface TaskLocation {
@@ -51,11 +63,8 @@ interface LocationHandlerDeps {
   drainer: Pick<PositionDrainer, 'drain'>;
   /** Desliga as leituras do sistema: a tarefa para de ser chamada. */
   stopUpdates(): Promise<void>;
-  /**
-   * Se há evacuação ativa na empresa, segundo o servidor. `null` quando não
-   * deu para saber (sem rede): a evacuação gravada continua valendo.
-   */
-  evacuationActive(): Promise<boolean | null>;
+  /** A evacuação ativa na empresa, segundo o servidor. */
+  activeEvacuation(): Promise<ActiveEvacuationCheck>;
   now(): Date;
 }
 
@@ -95,21 +104,44 @@ export function createLocationHandler(deps: LocationHandlerDeps): LocationHandle
     return kept;
   }
 
-  /** O servidor diz que a evacuação acabou: apaga a gravada. */
-  async function evacuationEnded(): Promise<boolean> {
-    let active: boolean | null;
+  async function askServer(): Promise<ActiveEvacuationCheck> {
     try {
-      active = await deps.evacuationActive();
+      return await deps.activeEvacuation();
     } catch {
-      active = null;
+      return 'unknown';
     }
-    if (active !== false) return false;
+  }
+
+  /**
+   * O servidor diz que a evacuação acabou: apaga a gravada. Outra evacuação
+   * ativa no lugar da gravada não muda nada aqui: o rastreio segue, e a
+   * consulta do app em primeiro plano grava a nova.
+   */
+  async function evacuationEnded(): Promise<boolean> {
+    if ((await askServer()) !== null) return false;
     try {
       await deps.evacuation.close();
     } catch {
       // Sem conseguir apagar, a próxima consulta tenta de novo.
     }
     return true;
+  }
+
+  /**
+   * O servidor diz que começou uma evacuação: grava para a pessoa da jornada.
+   * As leituras do sistema ficam como estão (religar com o app em segundo
+   * plano o Android pode recusar), e a notificação fixa segue falando em
+   * jornada até o app voltar para a frente; os pontos já seguem a evacuação,
+   * porque a próxima entrega lê o arquivo.
+   */
+  async function evacuationStarted(owner: string, now: Date): Promise<void> {
+    const active = await askServer();
+    if (active === null || active === 'unknown') return;
+    try {
+      await deps.evacuation.open(owner, active.evacuationId, now);
+    } catch {
+      // Sem gravar, a próxima consulta tenta de novo.
+    }
   }
 
   async function handle(locations: readonly TaskLocation[]): Promise<void> {
@@ -159,11 +191,18 @@ export function createLocationHandler(deps: LocationHandlerDeps): LocationHandle
       }
     }
 
-    // O encerramento pelo gestor, visto daqui, depois de o ponto já estar
-    // guardado. Com a jornada aberta as leituras seguem, na régua dela; sem
-    // jornada, desligam.
-    if (!evacuating || now.getTime() - lastCheckAt < EVACUATION_CHECK_INTERVAL_MS) return;
+    // A consulta ao servidor vem depois de o ponto já estar guardado: sem rede,
+    // ele não se perde. Um relógio só para as duas perguntas, uma consulta por
+    // minuto no máximo.
+    if (now.getTime() - lastCheckAt < EVACUATION_CHECK_INTERVAL_MS) return;
     lastCheckAt = now.getTime();
+    // Só a jornada aberta: a evacuação que o gestor começou, vista daqui.
+    if (!evacuating) {
+      await evacuationStarted(owner, now);
+      return;
+    }
+    // O encerramento pelo gestor. Com a jornada aberta as leituras seguem, na
+    // régua dela; sem jornada, desligam.
     if (!(await evacuationEnded())) return;
     if (!journeyOpen) {
       lastKept = null;

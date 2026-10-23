@@ -19,8 +19,12 @@ import {
 // Como o app fica sabendo: a consulta de GET /evacuations/active ao abrir a
 // área logada, a cada volta ao primeiro plano e quando chega a notificação de
 // evacuação pelo socket. Com evacuação ativa, a consulta se repete de tempos
-// em tempos para ver o encerramento; com o app em segundo plano, quem vê o
-// encerramento é a tarefa de localização (backgroundLocationTask).
+// em tempos para ver o encerramento. Com o app em segundo plano, quem vê é a
+// tarefa de localização (backgroundLocationTask): o encerramento e, com a
+// jornada aberta, o começo. A evacuação que a tarefa grava já muda a régua
+// dos pontos, mas as leituras só religam com as opções dela (e a notificação
+// fixa do Android só passa a falar em evacuação) quando o app volta para a
+// frente e a consulta daqui pede a mesma evacuação: o início gravado fica.
 
 /** De quanto em quanto tempo, com evacuação ativa e o app aberto, consulta. */
 export const EVACUATION_POLL_MS = 30_000;

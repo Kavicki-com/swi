@@ -2,6 +2,7 @@ import {
   createLocationHandler,
   DRAIN_MIN_INTERVAL_MS,
   EVACUATION_CHECK_INTERVAL_MS,
+  type ActiveEvacuationCheck,
   type TaskLocation,
 } from './backgroundLocationTask';
 import { createEvacuationWindowStore, EVACUATION_TRACKING_MAX_MS } from './evacuationWindow';
@@ -44,14 +45,18 @@ async function setup(opts: { janela?: Estado; evacuacao?: Estado } = {}) {
   let agora = T0;
   const drain = jest.fn(async (_owner: string) => ({ sent: 0, outcome: 'sent' as const }));
   const stopUpdates = jest.fn(async () => undefined);
-  const evacuationActive = jest.fn(async (): Promise<boolean | null> => true);
+  // O servidor concorda com o arquivo: com a evacuação gravada, ela segue
+  // ativa; sem evacuação gravada, nenhuma começou.
+  const emCurso: ActiveEvacuationCheck =
+    opts.evacuacao && opts.evacuacao !== 'nenhuma' ? { evacuationId: 'e1' } : null;
+  const activeEvacuation = jest.fn(async (): Promise<ActiveEvacuationCheck> => emCurso);
   const { handle, reset } = createLocationHandler({
     window,
     evacuation,
     outbox,
     drainer: { drain },
     stopUpdates,
-    evacuationActive,
+    activeEvacuation,
     now: () => new Date(agora),
   });
   return {
@@ -60,7 +65,7 @@ async function setup(opts: { janela?: Estado; evacuacao?: Estado } = {}) {
     evacuation,
     drain,
     stopUpdates,
-    evacuationActive,
+    activeEvacuation,
     handle,
     reset,
     avancar: (ms: number) => {
@@ -213,22 +218,22 @@ describe('createLocationHandler, evacuação', () => {
   });
 
   it('pergunta ao servidor no máximo a cada 60 s', async () => {
-    const { handle, avancar, evacuationActive } = await setup({ evacuacao: 'aberta' });
+    const { handle, avancar, activeEvacuation } = await setup({ evacuacao: 'aberta' });
     await handle([leitura(0)]);
     avancar(DEZ_S);
     await handle([leitura(10)]);
-    expect(evacuationActive).toHaveBeenCalledTimes(1);
+    expect(activeEvacuation).toHaveBeenCalledTimes(1);
     avancar(EVACUATION_CHECK_INTERVAL_MS - DEZ_S);
     await handle([leitura(60)]);
-    expect(evacuationActive).toHaveBeenCalledTimes(2);
+    expect(activeEvacuation).toHaveBeenCalledTimes(2);
   });
 
   it('encerrada no servidor, sem jornada: apaga a evacuação e desliga', async () => {
-    const { handle, evacuation, evacuationActive, stopUpdates, outbox } = await setup({
+    const { handle, evacuation, activeEvacuation, stopUpdates, outbox } = await setup({
       janela: 'nenhuma',
       evacuacao: 'aberta',
     });
-    evacuationActive.mockResolvedValueOnce(false);
+    activeEvacuation.mockResolvedValueOnce(null);
     await handle([leitura(0)]);
     expect(await evacuation.read()).toBeNull();
     expect(stopUpdates).toHaveBeenCalledTimes(1);
@@ -237,10 +242,10 @@ describe('createLocationHandler, evacuação', () => {
   });
 
   it('encerrada no servidor, com jornada: volta ao filtro da jornada', async () => {
-    const { handle, evacuation, evacuationActive, stopUpdates, outbox, avancar } = await setup({
+    const { handle, evacuation, activeEvacuation, stopUpdates, outbox, avancar } = await setup({
       evacuacao: 'aberta',
     });
-    evacuationActive.mockResolvedValueOnce(false);
+    activeEvacuation.mockResolvedValueOnce(null);
     await handle([leitura(0)]);
     expect(await evacuation.read()).toBeNull();
     expect(stopUpdates).not.toHaveBeenCalled();
@@ -250,17 +255,114 @@ describe('createLocationHandler, evacuação', () => {
   });
 
   it('sem resposta do servidor, a evacuação continua', async () => {
-    const { handle, evacuation, evacuationActive, stopUpdates, avancar } = await setup({
+    const { handle, evacuation, activeEvacuation, stopUpdates, avancar } = await setup({
       janela: 'nenhuma',
       evacuacao: 'aberta',
     });
-    evacuationActive.mockResolvedValueOnce(null);
+    activeEvacuation.mockResolvedValueOnce('unknown');
     await handle([leitura(0)]);
-    evacuationActive.mockRejectedValueOnce(new Error('rede'));
+    activeEvacuation.mockRejectedValueOnce(new Error('rede'));
     avancar(EVACUATION_CHECK_INTERVAL_MS);
     await handle([leitura(60)]);
-    expect(evacuationActive).toHaveBeenCalledTimes(2);
+    expect(activeEvacuation).toHaveBeenCalledTimes(2);
     expect(await evacuation.read()).not.toBeNull();
     expect(stopUpdates).not.toHaveBeenCalled();
+  });
+});
+
+// Com a jornada aberta e o app em segundo plano não há tela que consulte: é a
+// tarefa que pergunta ao servidor, de tempos em tempos, se começou uma
+// evacuação. Começou, ela grava a evacuação para a pessoa da jornada e cada
+// leitura de 10 s passa a entrar, sem esperar o app voltar para a frente.
+describe('createLocationHandler, evacuação começada durante a jornada', () => {
+  const DEZ_S = 10_000;
+
+  it('com a jornada aberta e sem evacuação, pergunta ao servidor no máximo a cada 60 s', async () => {
+    const { handle, avancar, activeEvacuation } = await setup();
+    await handle([leitura(0)]);
+    expect(activeEvacuation).toHaveBeenCalledTimes(1);
+    avancar(DEZ_S);
+    await handle([leitura(10, -23.56)]);
+    expect(activeEvacuation).toHaveBeenCalledTimes(1);
+    avancar(EVACUATION_CHECK_INTERVAL_MS - DEZ_S);
+    await handle([leitura(60)]);
+    expect(activeEvacuation).toHaveBeenCalledTimes(2);
+  });
+
+  it('a pergunta segue o relógio mesmo quando a leitura não vira ponto da jornada', async () => {
+    const { handle, avancar, activeEvacuation, outbox } = await setup();
+    await handle([leitura(0)]);
+    // Parado: a cada 10 s uma leitura, nenhuma vira ponto pela régua de 60 s.
+    for (let s = 10; s <= 50; s += 10) {
+      avancar(DEZ_S);
+      await handle([leitura(s)]);
+    }
+    // A leitura medida aos 59 s chega aos 60 s: não vira ponto, mas é hora.
+    avancar(DEZ_S);
+    await handle([leitura(59)]);
+    expect(await outbox.pending('u1')).toHaveLength(1);
+    expect(activeEvacuation).toHaveBeenCalledTimes(2);
+  });
+
+  it('começou: grava a evacuação para a pessoa da jornada e passa à régua da evacuação', async () => {
+    const { handle, avancar, activeEvacuation, evacuation, outbox, drain, stopUpdates } =
+      await setup();
+    activeEvacuation.mockResolvedValueOnce({ evacuationId: 'e9' });
+    await handle([leitura(0)]);
+    expect(await evacuation.read()).toEqual({
+      userId: 'u1',
+      evacuationId: 'e9',
+      startedAt: new Date(T0).toISOString(),
+    });
+    // Parado, a leitura de 10 s depois já entra e sai na hora.
+    avancar(DEZ_S);
+    await handle([leitura(10)]);
+    avancar(DEZ_S);
+    await handle([leitura(20)]);
+    expect(await outbox.pending('u1')).toHaveLength(3);
+    expect(drain).toHaveBeenCalledTimes(3);
+    // As leituras do sistema seguem como estão: religar daqui o Android pode
+    // recusar, com o app em segundo plano.
+    expect(stopUpdates).not.toHaveBeenCalled();
+  });
+
+  it('a partir dali vale a checagem do encerramento, que volta à jornada', async () => {
+    const { handle, avancar, activeEvacuation, evacuation, outbox } = await setup();
+    activeEvacuation.mockResolvedValueOnce({ evacuationId: 'e9' });
+    await handle([leitura(0)]);
+    avancar(EVACUATION_CHECK_INTERVAL_MS);
+    activeEvacuation.mockResolvedValueOnce(null);
+    await handle([leitura(60)]);
+    expect(await evacuation.read()).toBeNull();
+    avancar(DEZ_S);
+    await handle([leitura(70)]);
+    expect(await outbox.pending('u1')).toHaveLength(2);
+  });
+
+  it('a leitura entra na fila antes da pergunta: sem rede, ela fica e nada é gravado', async () => {
+    const { handle, avancar, activeEvacuation, evacuation, outbox, stopUpdates } = await setup();
+    activeEvacuation.mockRejectedValueOnce(new Error('rede'));
+    await expect(handle([leitura(0)])).resolves.toBeUndefined();
+    avancar(EVACUATION_CHECK_INTERVAL_MS);
+    activeEvacuation.mockResolvedValueOnce('unknown');
+    await handle([leitura(60)]);
+    expect(await outbox.pending('u1')).toHaveLength(2);
+    expect(await evacuation.read()).toBeNull();
+    expect(stopUpdates).not.toHaveBeenCalled();
+  });
+
+  it('disco que falha ao gravar a evacuação não derruba a leitura', async () => {
+    const { handle, activeEvacuation, evacuation, outbox } = await setup();
+    activeEvacuation.mockResolvedValueOnce({ evacuationId: 'e9' });
+    jest.spyOn(evacuation, 'open').mockRejectedValueOnce(new Error('disco'));
+    await expect(handle([leitura(0)])).resolves.toBeUndefined();
+    expect(await outbox.pending('u1')).toHaveLength(1);
+  });
+
+  it('sem jornada nem evacuação, desliga sem perguntar', async () => {
+    const { handle, activeEvacuation, stopUpdates } = await setup({ janela: 'nenhuma' });
+    await handle([leitura(0)]);
+    expect(stopUpdates).toHaveBeenCalledTimes(1);
+    expect(activeEvacuation).not.toHaveBeenCalled();
   });
 });
