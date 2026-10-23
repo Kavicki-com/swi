@@ -43,6 +43,11 @@ export default function ChatUserInfo() {
   const gender = contact?.gender ? GENDER_LABEL[contact.gender] : undefined;
   const age = ageFrom(contact?.birthDate);
   const roleLine = [contact?.role, contact?.sector].filter(Boolean).join('\n');
+  // Tipo sanguíneo e alergias de colega são dado de saúde de terceiro: para
+  // quem é funcionário o backend não os devolve. Sem valor, a linha some
+  // inteira, porque "Não informado" sugeriria cadastro incompleto.
+  const bloodType = contact?.bloodType?.trim() || null;
+  const allergies = contact?.allergies?.trim() || null;
   // Da saúde do colega o app só conhece o estado, o mesmo do pino no mapa.
   // Sem contato não há de quem ler.
   const colleagues = usePolledRead(contact !== null, readColleagues, COLLEAGUES_REFRESH_MS);
@@ -236,24 +241,28 @@ export default function ChatUserInfo() {
           </Text>
         </View>
         {/* Row 4 — Tipo sanguíneo 🩸 O+ */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Text variant="label.l" color={theme.content.dark}>
-            Tipo sanguíneo
-          </Text>
-          <Icon name="humidity_mid" size={16} color={theme.surface.error} />
-          <Text variant="body.m" color={theme.content.dark}>
-            {contact?.bloodType ?? NAO_INFORMADO}
-          </Text>
-        </View>
+        {bloodType ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
+            <Text variant="label.l" color={theme.content.dark}>
+              Tipo sanguíneo
+            </Text>
+            <Icon name="humidity_mid" size={16} color={theme.surface.error} />
+            <Text variant="body.m" color={theme.content.dark}>
+              {bloodType}
+            </Text>
+          </View>
+        ) : null}
         {/* Row 5 — Alergias Nenhuma */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
-          <Text variant="label.l" color={theme.content.dark}>
-            Alergias
-          </Text>
-          <Text variant="body.m" color={theme.content.dark}>
-            {contact?.allergies?.trim() || NAO_INFORMADO}
-          </Text>
-        </View>
+        {allergies ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.s }}>
+            <Text variant="label.l" color={theme.content.dark}>
+              Alergias
+            </Text>
+            <Text variant="body.m" color={theme.content.dark}>
+              {allergies}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );

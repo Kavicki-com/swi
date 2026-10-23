@@ -169,6 +169,9 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
         {people.map((person) => {
           const isChecked = selected.has(person.workerId);
           const age = ageFrom(person.birthDate);
+          // Para quem é funcionário o backend não devolve o tipo sanguíneo de
+          // colega (dado de saúde de terceiro). Sem valor, a linha da gota some.
+          const bloodType = person.bloodType?.trim() || null;
           return (
             <Pressable
               key={person.workerId}
@@ -200,12 +203,14 @@ export function ResponsiblesModal({ onClose, onConfirm }: ResponsiblesModalProps
                   <Text variant="body.m" color={theme.content.dark}>
                     {age !== null ? `${age} anos` : 'Idade não informada'}
                   </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xs }}>
-                    <Icon name="water_drop" size={20} color={theme.surface.error} />
-                    <Text variant="label.l" color={theme.content.dark}>
-                      {person.bloodType ?? '—'}
-                    </Text>
-                  </View>
+                  {bloodType ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.gap.xs }}>
+                      <Icon name="water_drop" size={20} color={theme.surface.error} />
+                      <Text variant="label.l" color={theme.content.dark}>
+                        {bloodType}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
               <Checkbox

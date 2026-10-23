@@ -587,7 +587,7 @@ describe('ReportsService.listAssignees', () => {
       withTitle('u-op', 'Operador'),
       withTitle('u-tec', 'Técnico de Manutenção'),
     ])
-    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1')
+    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1', 'WORKER')
     expect(out.map((c: { workerId: string }) => c.workerId)).toEqual(['u-sup', 'u-ana'])
   })
 
@@ -596,14 +596,14 @@ describe('ReportsService.listAssignees', () => {
   it('inclui ADMIN mesmo sem cargo declarado', async () => {
     const db = prisma()
     db.user.findMany.mockResolvedValue([withTitle('u-adm', '', { role: 'ADMIN' })])
-    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1')
+    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1', 'WORKER')
     expect(out.map((c: { workerId: string }) => c.workerId)).toEqual(['u-adm'])
   })
 
   it('escopa pela empresa, exclui a si mesmo e só aprovados', async () => {
     const db = prisma()
     db.user.findMany.mockResolvedValue([])
-    await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1')
+    await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1', 'WORKER')
     expect(db.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { approvalStatus: 'APPROVED', id: { not: 'me' }, companyId: 'org1' },
@@ -629,7 +629,7 @@ describe('ReportsService.listAssignees', () => {
         },
       }),
     ])
-    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1')
+    const out = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1', 'ADMIN')
     expect(out[0]).toEqual(
       expect.objectContaining({
         workerId: 'u-sup',
@@ -640,6 +640,34 @@ describe('ReportsService.listAssignees', () => {
         birthDate: '1971-09-08T00:00:00.000Z',
       }),
     )
+  })
+
+  // Tipo sanguíneo e alergias são dado de saúde: só quem tem users.read (o
+  // painel) recebe. O funcionário vê o responsável com os dois campos em null,
+  // e idade e gênero seguem para todos.
+  it.each([
+    ['ADMIN', 'O-', 'Dipirona'],
+    ['SUPERVISOR', 'O-', 'Dipirona'],
+    ['WORKER', null, null],
+  ])('pedido por %s: tipo sanguíneo %s, alergias %s', async (role, bloodType, allergies) => {
+    const db = prisma()
+    db.user.findMany.mockResolvedValue([
+      withTitle('u-sup', 'Supervisor', {
+        profile: {
+          ...baseProfile,
+          jobTitle: 'Supervisor',
+          birthDate: new Date('1971-09-08T00:00:00Z'),
+          bloodType: 'O-',
+          allergies: 'Dipirona',
+          gender: 'female',
+        },
+      }),
+    ])
+    const [responsavel] = await new ReportsService(db, media(), notifications()).listAssignees('me', 'org1', role)
+    expect(responsavel.bloodType).toBe(bloodType)
+    expect(responsavel.allergies).toBe(allergies)
+    expect(responsavel.birthDate).toBe('1971-09-08T00:00:00.000Z')
+    expect(responsavel.gender).toBe('female')
   })
 
   // Anexos na edição: o form manda o array completo, mas o array que ele viu
