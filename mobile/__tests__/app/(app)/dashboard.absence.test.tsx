@@ -103,6 +103,16 @@ jest.mock('../../../services/telemetry/bluetooth/bluetoothBandChoice', () => ({
 jest.mock('../../../services/profile/ProfileProvider', () => ({
   useProfile: () => ({ profile: { fullName: 'Trabalhador Teste', avatarUrl: '' } }),
 }));
+// O pedido de ajuda tem suíte própria (dashboard.help.test.tsx).
+jest.mock('../../../services/help/HelpRequestProvider', () => ({
+  useHelpRequest: () => ({
+    helpRequest: null,
+    sending: false,
+    failed: false,
+    rescuerEtaMin: null,
+    requestHelp: () => undefined,
+  }),
+}));
 jest.mock('../../../services/notifications/NotificationProvider', () => ({
   useNotifications: () => ({ unreadCount: 0 }),
 }));

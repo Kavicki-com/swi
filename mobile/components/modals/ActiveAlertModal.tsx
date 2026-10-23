@@ -1,4 +1,4 @@
-import { Image as RNImage, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SvgXml } from 'react-native-svg';
 import {
@@ -6,6 +6,8 @@ import {
   Icon,
   Text,
   Title,
+  Toast,
+  WeatherIcon,
   useTheme,
 } from '@kavicki/swi-design-system';
 import {
@@ -15,7 +17,14 @@ import {
   WIND_SPEED_SVG,
 } from '../../lib/alertWeatherSvgs';
 import { useWeather } from '../../services/weather/WeatherProvider';
-import { weatherDisplay } from '../../services/weather/weatherFormat';
+import {
+  conditionIcon,
+  conditionLabel,
+  weatherDisplay,
+} from '../../services/weather/weatherFormat';
+import { useHelpRequest } from '../../services/help/HelpRequestProvider';
+import { HELP_COPY, helpNotice } from '../../services/help/helpCopy';
+import { etaLabel } from '../../services/help/rescuerEta';
 
 // sobreposto à tela de notificações (mesmo padrão visual do WeatherAlertModal
 // que abriu antes). User spec: "no alerta atual ainda esta trocando de tela,
@@ -46,6 +55,17 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
   // viram '--', e sem alerta não há descrição. Nada de valor ou texto inventado.
   const { snapshot, activeAlert } = useWeather();
   const { tempStr, condStr, humStr, windStr, maxStr, minStr, descStr } = weatherDisplay(snapshot, activeAlert);
+  // A imagem segue a condição medida, como na janela do clima. Leitura
+  // indisponível não é medição: sem ela, nenhuma imagem.
+  const condition = snapshot && !snapshot.unavailable ? snapshot.current.condition : null;
+
+  // O pedido do botão "Ajuda urgente". O tempo é o do socorrista despachado
+  // até aqui; sem ele a linha do tempo some, nunca um número fixo. A faixa diz
+  // em que pé o pedido está, e com ele parado no aparelho a frase "Estamos à
+  // caminho" sai: prometer socorro que não foi pedido é pior que calar.
+  const help = useHelpRequest();
+  const notice = helpNotice(help);
+  const sendFailed = notice?.variant === 'error';
 
   // (teal escuro). A linha vertical entre bolinhas usa cyan mais claro
   // `content/secondary` #8AD2E2 — cores DIFERENTES por design.
@@ -151,22 +171,23 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
                   gap: theme.gap.s,
                 }}
               >
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: -28,
-                    alignSelf: 'center',
-                    zIndex: 2,
-                  }}
-                  pointerEvents="none"
-                >
-                  <RNImage
-                    source={require('../../assets/weather-rainy.png')}
-                    style={{ width: 72, height: 72 }}
-                    resizeMode="contain"
-                    accessibilityLabel="Chuva intensa"
-                  />
-                </View>
+                {condition ? (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: -28,
+                      alignSelf: 'center',
+                      zIndex: 2,
+                    }}
+                    pointerEvents="none"
+                  >
+                    <WeatherIcon
+                      condition={conditionIcon(condition)}
+                      size="l"
+                      accessibilityLabel={conditionLabel(condition)}
+                    />
+                  </View>
+                ) : null}
                 <Title variant="title.l" color={theme.content.dark}>
                   {tempStr}
                 </Title>
@@ -246,19 +267,21 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
                   <Text variant="body.m" color={theme.content.dark}>
                     Espere pelo veículo de resgate
                   </Text>
-                  <View
-                    style={{
-                      borderWidth: 1,
-                      borderColor: theme.content.primary,
-                      borderRadius: theme.border.radius.m,
-                      paddingHorizontal: theme.padding.sm,
-                      paddingVertical: theme.padding.xs,
-                    }}
-                  >
-                    <Text variant="body.s" color={theme.content.primary}>
-                      Aprox. 7 minutos
-                    </Text>
-                  </View>
+                  {help.rescuerEtaMin !== null ? (
+                    <View
+                      style={{
+                        borderWidth: 1,
+                        borderColor: theme.content.primary,
+                        borderRadius: theme.border.radius.m,
+                        paddingHorizontal: theme.padding.sm,
+                        paddingVertical: theme.padding.xs,
+                      }}
+                    >
+                      <Text variant="body.s" color={theme.content.primary}>
+                        {etaLabel(help.rescuerEtaMin)}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
@@ -285,13 +308,26 @@ export function ActiveAlertModal({ visible, onClose }: ActiveAlertModalProps) {
 
             {/* Confirmation block */}
             <View style={{ gap: 15 }}>
-              <Text
-                variant="body.m"
-                color={theme.content.dark}
-                style={{ textAlign: 'center' }}
-              >
-                Mantenha-se calmo. Estamos à caminho.
-              </Text>
+              {notice ? (
+                <Toast
+                  variant={notice.variant}
+                  title={notice.title}
+                  action={
+                    notice.retry
+                      ? { label: HELP_COPY.retry, onPress: help.requestHelp }
+                      : undefined
+                  }
+                />
+              ) : null}
+              {sendFailed ? null : (
+                <Text
+                  variant="body.m"
+                  color={theme.content.dark}
+                  style={{ textAlign: 'center' }}
+                >
+                  Mantenha-se calmo. Estamos à caminho.
+                </Text>
+              )}
               <Button
                 variant="contained"
                 backgroundColor={theme.surface.primary}

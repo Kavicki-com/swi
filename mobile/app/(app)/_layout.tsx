@@ -4,6 +4,7 @@ import { useAuth } from '../../services/auth/AuthProvider';
 import { JourneyProvider, useJourney } from '../../services/journey/JourneyProvider';
 import { EvacuationProvider } from '../../services/evacuation/EvacuationProvider';
 import { NotificationProvider } from '../../services/notifications/NotificationProvider';
+import { HelpRequestProvider } from '../../services/help/HelpRequestProvider';
 import { useJourneyTracking } from '../../services/positions/useTrackingLifecycle';
 import { isFeatureEnabled } from '../../lib/featureFlags';
 import { useBandChoice } from '../../services/telemetry/bluetooth/bluetoothBandChoice';
@@ -95,11 +96,16 @@ export default function AppLayout() {
       {Platform.OS === 'android' && isFeatureEnabled('healthConnect') && <ReadinessReportRoot />}
       <EvacuationProvider>
         <NotificationProvider>
-          <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
-          <SendQueueRoot userId={user.id} />
-          {/* Self-view da câmera: miniatura flutuante sobre qualquer tela
-              enquanto a transmissão está no ar. Null-render fora do ar. */}
-          <LiveSelfView />
+          {/* Pedido de ajuda: um só para a sessão. O dashboard pede, e o
+              procedimento de evacuação, aberto de qualquer tela, mostra o
+              estado. Segue tentando sem sinal enquanto a sessão existir. */}
+          <HelpRequestProvider>
+            <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
+            <SendQueueRoot userId={user.id} />
+            {/* Self-view da câmera: miniatura flutuante sobre qualquer tela
+                enquanto a transmissão está no ar. Null-render fora do ar. */}
+            <LiveSelfView />
+          </HelpRequestProvider>
         </NotificationProvider>
       </EvacuationProvider>
     </JourneyProvider>

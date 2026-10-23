@@ -70,6 +70,16 @@ jest.mock('../../../services/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'func-1' } }),
 }));
 
+// O pedido de ajuda tem suíte própria (dashboard.help.test.tsx).
+jest.mock('../../../services/help/HelpRequestProvider', () => ({
+  useHelpRequest: () => ({
+    helpRequest: null,
+    sending: false,
+    failed: false,
+    rescuerEtaMin: null,
+    requestHelp: () => undefined,
+  }),
+}));
 jest.mock('../../../services/notifications/NotificationProvider', () => ({
   useNotifications: () => ({ unreadCount: 0 }),
 }));
