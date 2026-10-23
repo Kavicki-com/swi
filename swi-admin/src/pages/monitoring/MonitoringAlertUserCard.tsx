@@ -44,6 +44,10 @@ function ActionIcon({
   )
 }
 
+// Dia e mês da pausa, no fuso de quem lê.
+const pausedSince = (iso: string) =>
+  new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+
 function VerticalDivider() {
   const theme = useTheme()
   return <View style={{ width: 2, height: 56, backgroundColor: theme.content.lightGrey }} />
@@ -205,12 +209,19 @@ export function AlertUserCard({
         <VerticalDivider />
         {/* Desligado = alertas pausados (férias, afastamento). O app segue
             mandando dados; só os alertas da pessoa param. */}
-        <Toggle
-          value={user.monitoringPausedAt === null}
-          onChange={onMonitoringChange}
-          disabled={!canPauseMonitoring || monitoringPending}
-          accessibilityLabel={`Ativar/desativar monitoramento de ${user.name}`}
-        />
+        <View style={{ gap: theme.gap.xs }}>
+          <Toggle
+            value={user.monitoringPausedAt === null}
+            onChange={onMonitoringChange}
+            disabled={!canPauseMonitoring || monitoringPending}
+            accessibilityLabel={`Ativar/desativar monitoramento de ${user.name}`}
+          />
+          {user.monitoringPausedAt ? (
+            <Text variant="body.s" color={theme.content.medium}>
+              {`Alertas pausados desde ${pausedSince(user.monitoringPausedAt)}`}
+            </Text>
+          ) : null}
+        </View>
       </View>
       {/* Sem "remover do monitoramento": não há ação no backend que faça
           isso, e um botão que só mostra um aviso fingiria ter feito. */}

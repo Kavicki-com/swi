@@ -58,7 +58,9 @@ const pauseMock = vi.mocked(telemetryApi.pauseMonitoring)
 const resumeMock = vi.mocked(telemetryApi.resumeMonitoring)
 const telemetryMock = vi.mocked(useAdminTelemetry)
 
-const PAUSADO_EM = '2026-10-20T09:00:00.000Z'
+// Na hora local, para a data da legenda não depender do fuso da máquina.
+const PAUSADO_EM = new Date(2026, 9, 20, 9, 0).toISOString()
+const PAUSADO_AGORA = new Date(2026, 9, 22, 12, 0).toISOString()
 
 const pessoa = (id: string, name: string, monitoringPausedAt: string | null): Employee =>
   ({
@@ -120,6 +122,32 @@ describe('MonitoringLayout: pausa dos alertas pelo toggle do cartão', () => {
   it('o toggle mostra quem está monitorado e quem está com os alertas pausados', async () => {
     await renderAt()
     expect(classe('Ana Monitorada')).not.toBe(classe('Bruno De Férias'))
+  })
+
+  it('o cartão pausado diz desde quando; o monitorado não diz nada', async () => {
+    await renderAt()
+    expect(screen.getByText('Alertas pausados desde 20/10')).toBeTruthy()
+    expect(screen.getAllByText(/^Alertas pausados desde/)).toHaveLength(1)
+  })
+
+  it('pausar mostra a data gravada pelo servidor, e retomar tira a linha', async () => {
+    pauseMock.mockResolvedValue({
+      data: { workerId: 'u-ativo', monitoringPausedAt: PAUSADO_AGORA },
+      error: null,
+    })
+    resumeMock.mockResolvedValue({
+      data: { workerId: 'u-pausado', monitoringPausedAt: null },
+      error: null,
+    })
+    await renderAt()
+
+    fireEvent.click(toggleDe('Ana Monitorada'))
+    await act(async () => {})
+    expect(screen.getByText('Alertas pausados desde 22/10')).toBeTruthy()
+
+    fireEvent.click(toggleDe('Bruno De Férias'))
+    await act(async () => {})
+    expect(screen.queryByText('Alertas pausados desde 20/10')).toBeNull()
   })
 
   it('desligar pausa os alertas no servidor e o cartão fica desativado', async () => {
