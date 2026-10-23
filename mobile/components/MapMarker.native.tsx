@@ -9,9 +9,11 @@ import type { MapMarkerProps } from './MapMarker.types';
 
 export type { MapMarkerProps };
 
-export function MapMarker({ coordinate, id, children }: MapMarkerProps) {
+export function MapMarker({ coordinate, id, children, zIndex }: MapMarkerProps) {
+  // O zIndex vai no estilo do Marker: a biblioteca o leva ao translationZ do
+  // Android e ao zPosition do iPhone.
   return (
-    <Marker id={id} lngLat={coordinate}>
+    <Marker id={id} lngLat={coordinate} style={zIndex === undefined ? undefined : { zIndex }}>
       {children}
     </Marker>
   );

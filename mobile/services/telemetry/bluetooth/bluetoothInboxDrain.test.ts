@@ -496,3 +496,177 @@ describe('bluetoothInboxDrain', () => {
     expect(ble.rotateReadings).toHaveBeenCalledTimes(1);
   });
 });
+
+// Cada pareamento cria outro aparelho no backend, que recusa as sessões do
+// anterior (session_unavailable) evento a evento, e a recusa tira o evento da
+// fila. O pareamento grava a credencial nova por cima da antiga, sem a rodada
+// ver o aparelho sem credencial: sem o reset, a sessão da pulseira seguia a
+// mesma e todo batimento era descartado até encerrar.
+describe('bluetoothInboxDrain, pareamento novo', () => {
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => warn.mockRestore());
+
+  const sessionsOf = (events: readonly { monitoringSessionId: string }[]) => [
+    ...new Set(events.map((e) => e.monitoringSessionId)),
+  ];
+  const savedSession = (storage: ReturnType<typeof memoryStorage>) =>
+    (JSON.parse(storage.current() || 'null') as { session: { sessionId: string } | null } | null)?.session
+      ?.sessionId ?? null;
+
+  it('re-pareado com a credencial sempre presente, a rodada sozinha segue na sessão velha', async () => {
+    const { drain, push, outbox } = setup();
+    push(reading(0));
+    await drain.run();
+    push(reading(5000));
+    await drain.run();
+    // A rodada sozinha não percebe o aparelho novo: quem percebe é o
+    // pareamento, e é ele que chama o reset.
+    expect(sessionsOf(await outbox.pending())).toHaveLength(1);
+  });
+
+  it('pareamento novo: fila, leituras à espera e as seguintes vão para uma sessão nova', async () => {
+    const { drain, push, outbox, outboxStorage, stateStorage } = setup({ outcomes: [{ outcome: 'deferred' }] });
+    push(reading(0), reading(5000));
+    await drain.run();
+    const [old] = sessionsOf(await outbox.pending());
+    // A fila falha uma vez: a leitura dos 10 s fica à espera, no arquivo.
+    jest.spyOn(outbox, 'appendMany').mockRejectedValueOnce(new Error('disco'));
+    push(reading(10_000));
+    await drain.run();
+
+    await drain.resetForNewPairing();
+    push(reading(15_000));
+    await drain.run();
+
+    const events = await outbox.pending();
+    expect(times(events)).toEqual([0, 5000, 10_000, 15_000]);
+    expect(sessionsOf(events)).toEqual([savedSession(stateStorage)]);
+    expect(events[0].monitoringSessionId).not.toBe(old);
+    expect(events.map((e) => e.sequence)).toEqual([0, 1, 2, 3]);
+    // O contador da sessão velha sai: nada mais vai para ela.
+    const queue = JSON.parse(outboxStorage.current()!) as { sequences: Record<string, number> };
+    expect(queue.sequences).not.toHaveProperty(old);
+  });
+
+  it('a sessão nova do reset vale para o próximo processo (arquivo de estado)', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const first = setup({ stateStorage, outboxStorage, outcomes: [{ outcome: 'deferred' }] });
+    first.push(reading(0));
+    await first.drain.run();
+    const [old] = sessionsOf(await first.outbox.pending());
+    await first.drain.resetForNewPairing();
+
+    const second = setup({ stateStorage, outboxStorage });
+    second.push(reading(5000));
+    await second.drain.run();
+    const events = await second.outbox.pending();
+    expect(times(events)).toEqual([0, 5000]);
+    expect(sessionsOf(events)).toHaveLength(1);
+    expect(events[0].monitoringSessionId).not.toBe(old);
+  });
+
+  // A pendência do 401 e da credencial ausente: a sessão fechou, mas o que ela
+  // juntou ainda está na fila, e subiria com a credencial nova só para voltar
+  // recusado.
+  it('eventos de sessão fechada sem credencial saem da sessão velha, que não vira a corrente', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const paired = setup({ stateStorage, outboxStorage, outcomes: [{ outcome: 'deferred' }] });
+    paired.push(reading(0));
+    await paired.drain.run();
+    const revoked = setup({ stateStorage, outboxStorage, credential: false });
+    revoked.push(reading(5000));
+    await revoked.drain.run();
+    const [old] = sessionsOf(await revoked.outbox.pending());
+    expect(savedSession(stateStorage)).toBeNull();
+
+    const repaired = setup({ stateStorage, outboxStorage });
+    const forget = jest.spyOn(repaired.outbox, 'forgetSession');
+    await repaired.drain.resetForNewPairing();
+    const moved = await repaired.outbox.pending();
+    expect(times(moved)).toEqual([0, 5000]);
+    expect(sessionsOf(moved)).toHaveLength(1);
+    expect(moved[0].monitoringSessionId).not.toBe(old);
+    expect(moved.map((e) => e.sequence)).toEqual([0, 1]);
+    // Continua fechada: o contador sai com o último evento, e a próxima
+    // rodada abre a sessão da escolha, outra.
+    expect(forget).toHaveBeenCalledWith(moved[0].monitoringSessionId);
+    expect(savedSession(stateStorage)).toBeNull();
+
+    repaired.push(reading(10_000));
+    await repaired.drain.run();
+    const after = await repaired.outbox.pending();
+    expect(times(after)).toEqual([0, 5000, 10_000]);
+    expect(after[2].monitoringSessionId).not.toBe(moved[0].monitoringSessionId);
+    expect(after[2].monitoringSessionId).not.toBe(old);
+  });
+
+  it('eventos de sessão fechada pelo 401 também mudam de sessão', async () => {
+    const stateStorage = memoryStorage();
+    const outboxStorage = memoryStorage();
+    const first = setup({ stateStorage, outboxStorage, outcomes: [{ outcome: 'unpaired' }] });
+    first.push(reading(0));
+    await first.drain.run();
+    const [old] = sessionsOf(await first.outbox.pending());
+
+    await first.drain.resetForNewPairing();
+    const moved = await first.outbox.pending();
+    expect(times(moved)).toEqual([0]);
+    expect(moved[0].monitoringSessionId).not.toBe(old);
+  });
+
+  it('não mexe nos eventos de outra origem (Health Connect) na fila', async () => {
+    const { drain, outbox } = setup();
+    const hc = {
+      eventId: '00000000-0000-4000-8000-ffffffffffff',
+      monitoringSessionId: '99999999-9999-4999-8999-999999999999',
+      sequence: 0,
+      eventTime: new Date(T0).toISOString(),
+      origin: 'REAL' as const,
+      measurements: { heartRate: { value: 70, unit: 'bpm' as const, source: 'HEALTH_CONNECT' as const } },
+    };
+    await outbox.append(hc);
+    await drain.resetForNewPairing();
+    expect(await outbox.pending()).toEqual([hc]);
+  });
+
+  it('sem nada da pulseira, o reset não grava arquivo nenhum', async () => {
+    const { drain, stateStorage, outboxStorage } = setup();
+    await drain.resetForNewPairing();
+    expect(stateStorage.storage.write).not.toHaveBeenCalled();
+    expect(outboxStorage.storage.write).not.toHaveBeenCalled();
+  });
+
+  it('nunca rejeita, e com a fila ilegível ainda troca a sessão das leituras à espera', async () => {
+    const { drain, push, outbox, stateStorage } = setup();
+    jest.spyOn(outbox, 'appendMany').mockRejectedValueOnce(new Error('disco'));
+    push(reading(0));
+    await drain.run();
+    const old = savedSession(stateStorage);
+    jest.spyOn(outbox, 'pending').mockRejectedValueOnce(new Error('disco'));
+    await expect(drain.resetForNewPairing()).resolves.toBeUndefined();
+    const events = await outbox.pending();
+    expect(times(events)).toEqual([0]);
+    expect(events[0].monitoringSessionId).not.toBe(old);
+    expect(events[0].monitoringSessionId).toBe(savedSession(stateStorage));
+  });
+
+  it('pedido no meio de uma rodada, espera por ela e leva o que ela enfileirou', async () => {
+    const { drain, push, outbox, stateStorage } = setup({ outcomes: [{ outcome: 'deferred' }] });
+    const forget = jest.spyOn(outbox, 'forgetSession');
+    push(reading(0));
+    await Promise.all([drain.run(), drain.resetForNewPairing()]);
+    const current = savedSession(stateStorage);
+    const events = await outbox.pending();
+    expect(times(events)).toEqual([0]);
+    expect(events[0].monitoringSessionId).toBe(current);
+    // A rodada abriu uma sessão e enfileirou nela; o reset veio depois e a
+    // trocou. Na ordem inversa não haveria sessão velha a esquecer.
+    expect(forget).toHaveBeenCalledWith(expect.not.stringMatching(current!));
+    expect(Object.keys((await outbox.load()).sequences)).toEqual([current]);
+  });
+});

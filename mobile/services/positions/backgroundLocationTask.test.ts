@@ -30,7 +30,9 @@ const leitura = (segundos: number, latitude = -23.55): TaskLocation => ({
 
 type Estado = 'aberta' | 'vencida' | 'nenhuma';
 
-async function setup(opts: { janela?: Estado; evacuacao?: Estado } = {}) {
+async function setup(
+  opts: { janela?: Estado; evacuacao?: Estado; onEvacuationEnded?: () => void } = {},
+) {
   const outbox = createPositionOutbox(memoryStorage());
   const window = createTrackingWindowStore(memoryStorage());
   if (opts.janela !== 'nenhuma') {
@@ -57,6 +59,7 @@ async function setup(opts: { janela?: Estado; evacuacao?: Estado } = {}) {
     drainer: { drain },
     stopUpdates,
     activeEvacuation,
+    onEvacuationEnded: opts.onEvacuationEnded,
     now: () => new Date(agora),
   });
   return {
@@ -252,6 +255,42 @@ describe('createLocationHandler, evacuação', () => {
     avancar(DEZ_S);
     await handle([leitura(10)]);
     expect(await outbox.pending('u1')).toHaveLength(1);
+  });
+
+  // A tarefa não religa as leituras (em segundo plano o Android pode recusar),
+  // mas avisa: com o app na frente, o processo da tela põe a notificação fixa
+  // de volta na jornada na hora, sem esperar a consulta da tela.
+  it.each([
+    ['sem jornada', 'nenhuma'],
+    ['com jornada', 'aberta'],
+  ] as const)('encerrada no servidor, %s: avisa o fim depois de apagar', async (_caso, janela) => {
+    const onEvacuationEnded = jest.fn();
+    const { handle, evacuation, activeEvacuation } = await setup({
+      janela,
+      evacuacao: 'aberta',
+      onEvacuationEnded,
+    });
+    const close = jest.spyOn(evacuation, 'close');
+    activeEvacuation.mockResolvedValueOnce(null);
+    await handle([leitura(0)]);
+    expect(onEvacuationEnded).toHaveBeenCalledTimes(1);
+    expect(close.mock.invocationCallOrder[0]).toBeLessThan(
+      onEvacuationEnded.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('evacuação ainda ativa ou sem resposta: não avisa fim', async () => {
+    const onEvacuationEnded = jest.fn();
+    const { handle, activeEvacuation, avancar } = await setup({
+      janela: 'nenhuma',
+      evacuacao: 'aberta',
+      onEvacuationEnded,
+    });
+    await handle([leitura(0)]);
+    activeEvacuation.mockResolvedValueOnce('unknown');
+    avancar(EVACUATION_CHECK_INTERVAL_MS);
+    await handle([leitura(60)]);
+    expect(onEvacuationEnded).not.toHaveBeenCalled();
   });
 
   it('sem resposta do servidor, a evacuação continua', async () => {

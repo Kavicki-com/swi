@@ -100,7 +100,6 @@ describe('EvacuationEventsService.start', () => {
     db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([{ id: 'a1' }])
     const p = push()
     await new EvacuationEventsService(db, realtime(), notifications(), p).start('a1', 'org1', undefined, MUSTER)
-    expect(p.notifyUsers).toHaveBeenCalledTimes(1)
     expect(p.notifyUsers).toHaveBeenCalledWith(['w1', 'w2'], {
       title: 'Evacuação iniciada',
       body: 'Abra o app e siga a rota até o ponto de encontro.',
@@ -109,6 +108,36 @@ describe('EvacuationEventsService.start', () => {
       sound: 'default',
       data: { type: 'evacuation.started', evacuationId: 'ev1' },
     })
+  })
+
+  it('manda também o início só de dados, para o app ligar o rastreio sem o toque', async () => {
+    const db = prisma()
+    db.evacuation.findFirst.mockResolvedValue(null)
+    db.evacuation.create.mockResolvedValue(evacRow())
+    db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([{ id: 'a1' }])
+    const p = push()
+    await new EvacuationEventsService(db, realtime(), notifications(), p).start('a1', 'org1', undefined, MUSTER)
+    expect(p.notifyUsers).toHaveBeenCalledTimes(2)
+    expect(p.notifyUsers).toHaveBeenCalledWith(['w1', 'w2'], {
+      priority: 'high',
+      contentAvailable: true,
+      data: { type: 'evacuation.started', evacuationId: 'ev1' },
+    })
+    // Sem título nem corpo: o sistema não mostra uma segunda notificação.
+    const [, silent] = p.notifyUsers.mock.calls[1]
+    expect(silent).not.toHaveProperty('title')
+    expect(silent).not.toHaveProperty('body')
+  })
+
+  it('o primeiro push que lança não impede o só de dados', async () => {
+    const db = prisma()
+    db.evacuation.findFirst.mockResolvedValue(null)
+    db.evacuation.create.mockResolvedValue(evacRow())
+    db.user.findMany.mockResolvedValueOnce(workerRows).mockResolvedValueOnce([])
+    const p = push()
+    p.notifyUsers.mockImplementationOnce(() => { throw new Error('push quebrado') })
+    await new EvacuationEventsService(db, realtime(), notifications(), p).start('a1', 'org1', undefined, MUSTER)
+    expect(p.notifyUsers).toHaveBeenCalledTimes(2)
   })
 
   it('409 não manda push', async () => {

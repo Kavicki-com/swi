@@ -5,6 +5,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway'
 import { NotificationService } from '../notifications/notification.service'
 import { MailService } from '../mail/mail.service'
 import { writeOnce } from '../idempotency/write-once'
+import { can } from '../auth/permissions'
 import { Prisma } from '@prisma/client'
 import type { Conversation, Message, User, Profile } from '@prisma/client'
 
@@ -27,7 +28,7 @@ export class ChatService {
     private readonly mail?: MailService,
   ) {}
 
-  async listDirectory(userId: string, companyId: string | null) {
+  async listDirectory(userId: string, companyId: string | null, viewerRole: string) {
     const users = await this.prisma.user.findMany({
       // Diretório recortado por empresa: cada um só vê, e só inicia conversa
       // com, quem é da mesma empresa. Quem não tem empresa só vê quem também
@@ -43,7 +44,8 @@ export class ChatService {
       orderBy: { name: 'asc' },
       take: LIST_CAP,
     })
-    return Promise.all(users.map((u) => this.toContact(u)))
+    const withHealth = can(viewerRole, 'users.read')
+    return Promise.all(users.map((u) => this.toContact(u, withHealth)))
   }
 
   async listConversations(userId: string) {
@@ -333,7 +335,7 @@ export class ChatService {
     })
   }
 
-  private async toContact(u: UserWithProfile) {
+  private async toContact(u: UserWithProfile, withHealth: boolean) {
     return {
       workerId: u.id,
       name: u.profile?.fullName ?? u.name,
@@ -344,8 +346,11 @@ export class ChatService {
       // valores fixos para TODO mundo e contradiz as outras telas do mesmo
       // trabalhador. Não são vitais de smartband.
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
-      bloodType: u.profile?.bloodType ?? null,
-      allergies: u.profile?.allergies ?? null,
+      // Tipo sanguíneo e alergias são dado de saúde, sensível na LGPD: o painel
+      // precisa deles, o colega não. Só vão para quem tem users.read; os
+      // demais recebem null, e o formato do contato não muda.
+      bloodType: withHealth ? (u.profile?.bloodType ?? null) : null,
+      allergies: withHealth ? (u.profile?.allergies ?? null) : null,
       // Idem: o painel fixava `gender: 'male'`, então as colaboradoras do
       // quadro apareciam como "Masculino".
       gender: u.profile?.gender ?? null,

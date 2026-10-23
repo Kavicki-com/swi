@@ -387,6 +387,56 @@ describe('createPositionTracking, evacuação', () => {
     expect(novo.updates.start.mock.calls).toEqual([['evacuation']]);
   });
 
+  // Com o app na frente, a tarefa (60 s) pode ver o encerramento antes da
+  // consulta da tela (30 s) e apagar a evacuação. O fim visto depois pela tela
+  // ainda precisa religar com as opções da jornada: sem isso a notificação
+  // fixa seguia "Evacuação em andamento" até o app ir e voltar do fundo.
+  it('evacuação apagada pela tarefa: o fim visto pela tela volta às opções da jornada', async () => {
+    const { tracking, updates, evacuation } = setup();
+    await tracking.start('u1');
+    await tracking.startEvacuation('u1', 'e1');
+    await evacuation.close();
+    await tracking.endEvacuation();
+    expect(updates.start.mock.calls).toEqual([['journey'], ['evacuation'], ['journey']]);
+    expect(tracking.isActive()).toBe(true);
+    // Uma vez nas opções da jornada, o fim repetido não religa de novo.
+    await tracking.endEvacuation();
+    expect(updates.start).toHaveBeenCalledTimes(3);
+  });
+
+  it('evacuação apagada pela tarefa, sem jornada: o fim visto pela tela desliga', async () => {
+    const { tracking, updates, evacuation } = setup();
+    await tracking.startEvacuation('u1', 'e1');
+    await evacuation.close();
+    await tracking.endEvacuation();
+    expect(updates.stop).toHaveBeenCalledTimes(1);
+    expect(tracking.isActive()).toBe(false);
+  });
+
+  // Religar com o app em segundo plano o Android pode recusar. As leituras
+  // seguem ligadas com as opções da evacuação, e o processo não pode esquecer
+  // isso: a volta ao primeiro plano tenta de novo.
+  it('religar recusado em segundo plano: o fim seguinte tenta de novo', async () => {
+    const { tracking, updates } = setup();
+    await tracking.start('u1');
+    await tracking.startEvacuation('u1', 'e1');
+    updates.start.mockRejectedValueOnce(new Error('ForegroundServiceStartNotAllowedException'));
+    await tracking.endEvacuation();
+    await tracking.endEvacuation();
+    expect(updates.start.mock.calls).toEqual([['journey'], ['evacuation'], ['journey'], ['journey']]);
+    expect(tracking.isActive()).toBe(true);
+  });
+
+  it('religar recusado em segundo plano: a volta da jornada também tenta de novo', async () => {
+    const { tracking, updates } = setup();
+    await tracking.start('u1');
+    await tracking.startEvacuation('u1', 'e1');
+    updates.start.mockRejectedValueOnce(new Error('ForegroundServiceStartNotAllowedException'));
+    await tracking.endEvacuation();
+    await tracking.resume('u1');
+    expect(updates.start.mock.calls).toEqual([['journey'], ['evacuation'], ['journey'], ['journey']]);
+  });
+
   it('encerrar sem evacuação gravada não mexe nas leituras da jornada', async () => {
     const { tracking, updates } = setup();
     await tracking.start('u1');

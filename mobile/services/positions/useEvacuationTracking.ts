@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { getEvacuationBackend } from '../evacuation/getEvacuationBackend';
+import {
+  endedEvacuation,
+  reportActiveEvacuation,
+  resetEvacuationEnd,
+  useEndedEvacuation,
+} from '../evacuation/evacuationEnd';
 import type { ActiveEvacuationView } from '../evacuation/types';
 import type { AppNotification } from '../notifications/types';
 import { getPositionRuntime, type PositionTracking } from './positionTracking';
@@ -25,6 +31,10 @@ import {
 // dos pontos, mas as leituras só religam com as opções dela (e a notificação
 // fixa do Android só passa a falar em evacuação) quando o app volta para a
 // frente e a consulta daqui pede a mesma evacuação: o início gravado fica.
+//
+// O que a consulta vê vai também para as telas de evacuação
+// (evacuationEnd.ts), que saem do modo evacuação quando ela acaba. O fim que
+// chega por outro caminho (socket, tarefa) volta para cá e encerra o rastreio.
 
 /** De quanto em quanto tempo, com evacuação ativa e o app aberto, consulta. */
 export const EVACUATION_POLL_MS = 30_000;
@@ -81,11 +91,15 @@ export function useEvacuationTracking(
   // consultar de novo não repete o pedido nem religa.
   const startedFor = useRef<string | null>(null);
   const askedFor = useRef<string | null>(null);
+  // O fim que a própria consulta viu (e já encerrou): o aviso às telas não
+  // volta para cá encerrar de novo.
+  const endedHere = useRef<string | null>(null);
 
   useEffect(() => {
     startedFor.current = null;
     askedFor.current = null;
     setEvacuationId(null);
+    resetEvacuationEnd();
   }, [userId]);
 
   const check = useCallback(async () => {
@@ -98,7 +112,9 @@ export function useEvacuationTracking(
       // Sem rede, fica como está: a evacuação gravada segue valendo.
       return;
     }
+    reportActiveEvacuation(active?.id ?? null);
     if (!active) {
+      endedHere.current = endedEvacuation();
       startedFor.current = null;
       setEvacuationId(null);
       await tracking.endEvacuation();
@@ -136,4 +152,14 @@ export function useEvacuationTracking(
     const timer = setInterval(() => void check(), EVACUATION_POLL_MS);
     return () => clearInterval(timer);
   }, [evacuationId, check]);
+
+  // O fim visto pelo socket ou pela tarefa encerra o rastreio na hora, sem
+  // esperar a próxima consulta. Em segundo plano o Android pode recusar
+  // religar o serviço: fica para a volta à frente, que consulta.
+  const ended = useEndedEvacuation();
+  useEffect(() => {
+    if (!ended || !userId || ended === endedHere.current) return;
+    const { tracking, isForeground } = depsRef.current;
+    if (isForeground()) void tracking.endEvacuation();
+  }, [ended, userId]);
 }

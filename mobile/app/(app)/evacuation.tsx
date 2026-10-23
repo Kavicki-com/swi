@@ -8,6 +8,7 @@ import {
   LocationPin,
   Text,
   Title,
+  Toast,
   useTheme,
 } from '@kavicki/swi-design-system';
 import { MapView } from '@/components/MapView';
@@ -17,6 +18,7 @@ import { MapChipBody } from '@/components/MapChipBody';
 import { NavFABs } from '@/components/NavFABs';
 import { EvacuationAckBar } from '@/components/EvacuationAckBar';
 import { useEvacuationRoute } from '@/services/evacuation/useEvacuationRoute';
+import { useLeaveWhenEvacuationEnds } from '@/services/evacuation/useLeaveWhenEvacuationEnds';
 import { chipAnchors, chipEtaLabel, lineFeature, routeNotice } from '@/services/evacuation/routeFormat';
 import { BRAZIL_BOUNDS, boundsAround } from '@/lib/mapGeometry';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
@@ -53,7 +55,12 @@ function EvacuationRouteScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { route, errorKind, coords } = useEvacuationRoute();
+  const { route: liveRoute, errorKind, coords, ended } = useEvacuationRoute();
+  const leave = useLeaveWhenEvacuationEnds(ended);
+  // Encerrada pelo gestor, a tela sai do modo evacuação: nada de rota, pinos
+  // ou confirmação de chegada de uma evacuação que já acabou. Fica o aviso, e
+  // a tela volta ao início sozinha.
+  const route = ended ? null : liveRoute;
 
   // Sem rota não há linha nem chips: traçado inventado numa tela de segurança
   // guiaria a pessoa pro lugar errado. O aviso diz o que fazer no lugar.
@@ -62,7 +69,7 @@ function EvacuationRouteScreen() {
   const anchors = useMemo(() => chipAnchors(waypoints ?? []), [waypoints]);
   const notice = routeNotice(route, errorKind);
 
-  const origin = coords ?? route?.origin ?? null;
+  const origin = ended ? null : (coords ?? route?.origin ?? null);
   // Com rota, centra na origem dela. Sem rota ainda, enquadra a pessoa (ou o
   // Brasil sem GPS) por `bounds`: no web o `center` só vale quando aparece pela
   // primeira vez, então ele fica guardado pra quando a rota chegar.
@@ -128,70 +135,96 @@ function EvacuationRouteScreen() {
           </Title>
         </View>
 
-        <View
-          style={{
-            position: 'absolute',
-            top: insets.top + 80,
-            left: theme.padding.m,
-            alignItems: 'center',
-          }}
-        >
+        {ended && (
           <View
+            pointerEvents="box-none"
             style={{
-              width: 259,
-              backgroundColor: theme.surface.standard,
-              borderRadius: 16,
-              padding: theme.padding.m,
-              gap: theme.gap.m,
-              alignItems: 'center',
-              shadowColor: theme.shadow.color,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.16,
-              shadowRadius: 8,
-              elevation: 4,
+              position: 'absolute',
+              top: insets.top + 80,
+              left: theme.padding.m,
+              right: theme.padding.m,
             }}
           >
-            <Icon name="turn_right" size={24} color={theme.content.dark} />
-            <Title
-              variant="title.xs"
-              color={theme.content.success}
-              style={{ textAlign: 'center' }}
-            >
-              Rota de evacuação
-            </Title>
-            <Text
-              variant="body.s"
-              color={theme.content.dark}
-              style={{ textAlign: 'center' }}
-            >
-              A rota traçada garante seu retorno em segurança, se precisar ajudar outras pessoas primeiro encontre um abrigo seguro para se proteger
-            </Text>
-            {notice && (
-              <Text
-                variant="body.s"
-                color={notice.variant === 'error' ? theme.content.error : theme.content.warning}
-                style={{ textAlign: 'center' }}
-                accessibilityRole="alert"
-              >
-                {notice.text}
-              </Text>
-            )}
-            <Button
-              variant="contained"
-              backgroundColor={theme.surface.success}
-              labelColor={theme.content.light}
-              label="Continuar"
-              elevation="lg"
-              accessibilityLabel="Continuar evacuação"
-              onPress={() => router.push('/(app)/evacuation-ongoing')}
+            <Toast
+              variant="success"
+              title="Evacuação encerrada"
+              message="O gestor encerrou a evacuação. Voltando ao início."
+              action={{
+                label: 'Voltar ao início',
+                accessibilityLabel: 'Voltar ao início',
+                onPress: leave,
+              }}
+              testID="evacuation-ended-notice"
             />
           </View>
-        </View>
+        )}
+
+        {!ended && (
+          <View
+            style={{
+              position: 'absolute',
+              top: insets.top + 80,
+              left: theme.padding.m,
+              alignItems: 'center',
+            }}
+          >
+            <View
+              style={{
+                width: 259,
+                backgroundColor: theme.surface.standard,
+                borderRadius: 16,
+                padding: theme.padding.m,
+                gap: theme.gap.m,
+                alignItems: 'center',
+                shadowColor: theme.shadow.color,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.16,
+                shadowRadius: 8,
+                elevation: 4,
+              }}
+            >
+              <Icon name="turn_right" size={24} color={theme.content.dark} />
+              <Title
+                variant="title.xs"
+                color={theme.content.success}
+                style={{ textAlign: 'center' }}
+              >
+                Rota de evacuação
+              </Title>
+              <Text
+                variant="body.s"
+                color={theme.content.dark}
+                style={{ textAlign: 'center' }}
+              >
+                A rota traçada garante seu retorno em segurança, se precisar ajudar outras pessoas primeiro encontre um abrigo seguro para se proteger
+              </Text>
+              {notice && (
+                <Text
+                  variant="body.s"
+                  color={notice.variant === 'error' ? theme.content.error : theme.content.warning}
+                  style={{ textAlign: 'center' }}
+                  accessibilityRole="alert"
+                >
+                  {notice.text}
+                </Text>
+              )}
+              <Button
+                variant="contained"
+                backgroundColor={theme.surface.success}
+                labelColor={theme.content.light}
+                label="Continuar"
+                elevation="lg"
+                accessibilityLabel="Continuar evacuação"
+                onPress={() => router.push('/(app)/evacuation-ongoing')}
+              />
+            </View>
+          </View>
+        )}
 
         <NavFABs />
       </MapView>
 
-      <EvacuationAckBar />
+      {!ended && <EvacuationAckBar />}
     </View>
   );
 }

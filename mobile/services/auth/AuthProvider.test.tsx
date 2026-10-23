@@ -18,6 +18,11 @@ jest.mock('../journey/journeyCache', () => ({
   getJourneyCache: () => ({ clear: mockClearJourney }),
 }));
 
+const mockUnregisterPush = jest.fn(async () => undefined);
+jest.mock('../push/pushRegistration', () => ({
+  unregisterPush: () => mockUnregisterPush(),
+}));
+
 let mockReconnect: (() => void) | null = null;
 jest.mock('../realtime/connectionStatus', () => ({
   connectionStatus: {
@@ -290,6 +295,32 @@ describe('AuthProvider, sessão confirmada', () => {
     expect(mockBackend.signOut).toHaveBeenCalled();
     expect(mockClearJourney).toHaveBeenCalled();
     expect(mockBackend.confirmSession).toHaveBeenCalledTimes(1);
+  });
+
+  // A remoção do token de push exige o JWT: vem antes de o backend apagá-lo.
+  it('signOut remove o token de push antes de apagar o JWT', async () => {
+    await confirmada();
+    const ordem: string[] = [];
+    mockUnregisterPush.mockImplementationOnce(async () => {
+      ordem.push('push');
+    });
+    mockBackend.signOut.mockImplementationOnce(async () => {
+      ordem.push('jwt');
+    });
+
+    await act(async () => auth.signOut());
+
+    expect(ordem).toEqual(['push', 'jwt']);
+  });
+
+  it('signOut sai mesmo se a remoção do token de push falhar', async () => {
+    const tree = await confirmada();
+    mockUnregisterPush.mockRejectedValueOnce(new Error('rede'));
+
+    await act(async () => auth.signOut());
+
+    expect(mockBackend.signOut).toHaveBeenCalled();
+    expect(texto(tree)).toBe('ready:anon');
   });
 });
 

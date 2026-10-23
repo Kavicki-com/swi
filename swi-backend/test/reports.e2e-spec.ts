@@ -229,3 +229,73 @@ describe('Reports e2e: quem edita', () => {
     expect((await prisma.report.findUniqueOrThrow({ where: { id } })).title).toBe('Original')
   })
 })
+
+// Tipo sanguíneo e alergias do responsável são dado de saúde: só quem tem
+// users.read (ADMIN e SUPERVISOR) recebe. O funcionário recebe null nos dois,
+// e idade e gênero seguem iguais para todos.
+//
+// CNPJ exclusivo deste bloco: o cleanup apaga por CNPJ.
+describe('Reports e2e: saúde dos responsáveis', () => {
+  let app: INestApplication, prisma: PrismaService
+  const CNPJ = '99000000002704'
+  const emails = {
+    alvo: 'reports-saude-alvo@ex.com',
+    worker: 'reports-saude-worker@ex.com',
+    supervisor: 'reports-saude-sup@ex.com',
+    admin: 'reports-saude-admin@ex.com',
+  }
+  let idAlvo = ''
+
+  const cleanup = async () => {
+    await prisma.profile.deleteMany({ where: { user: { email: { in: Object.values(emails) } } } })
+    await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } })
+    await prisma.company.deleteMany({ where: { cnpj: CNPJ } })
+  }
+  const responsaveisDe = async (email: string) => {
+    const { body: auth } = await request(app.getHttpServer()).post('/auth/login').send({ email, password: 'test1234' }).expect(200)
+    const { body } = await request(app.getHttpServer()).get('/reports/assignees').set({ Authorization: `Bearer ${auth.accessToken as string}` }).expect(200)
+    return body as Array<Record<string, unknown>>
+  }
+
+  beforeAll(async () => {
+    const mod = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    app = mod.createNestApplication()
+    await app.init()
+    prisma = app.get(PrismaService)
+    await cleanup()
+    const endereco = { cep: '01000-000', street: 'Rua A', number: '1', neighborhood: 'Centro', uf: 'SP' }
+    const companyId = (await prisma.company.create({ data: { name: 'Saude Co', cnpj: CNPJ, ...endereco } })).id
+    const bcrypt = await import('bcrypt')
+    const base = { passwordHash: await bcrypt.hash('test1234', 10), emailVerified: true, approvalStatus: 'APPROVED' as const, companyId }
+    // O alvo é ADMIN para entrar na lista sem depender do texto do cargo.
+    idAlvo = (await prisma.user.create({
+      data: {
+        email: emails.alvo, name: 'Alvo', role: 'ADMIN', ...base,
+        profile: { create: { birthDate: new Date('1971-09-08T00:00:00.000Z'), bloodType: 'O-', allergies: 'Dipirona', gender: 'female' } },
+      },
+    })).id
+    const outros: Array<[string, 'WORKER' | 'SUPERVISOR' | 'ADMIN']> = [
+      [emails.worker, 'WORKER'],
+      [emails.supervisor, 'SUPERVISOR'],
+      [emails.admin, 'ADMIN'],
+    ]
+    for (const [email, role] of outros) await prisma.user.create({ data: { email, name: email, role, ...base } })
+  })
+  afterAll(async () => {
+    await cleanup()
+    await app.close()
+  })
+
+  it.each([
+    ['admin', 'O-', 'Dipirona'],
+    ['supervisor', 'O-', 'Dipirona'],
+    ['worker', null, null],
+  ] as const)('o %s vê o responsável com tipo sanguíneo %s e alergias %s', async (quem, bloodType, allergies) => {
+    const alvo = (await responsaveisDe(emails[quem])).find((c) => c.workerId === idAlvo)
+    expect(alvo).toBeDefined()
+    expect(alvo!.bloodType).toBe(bloodType)
+    expect(alvo!.allergies).toBe(allergies)
+    expect(alvo!.birthDate).toBe('1971-09-08T00:00:00.000Z')
+    expect(alvo!.gender).toBe('female')
+  })
+})

@@ -36,8 +36,10 @@ export interface Contact {
   avatarUri: string;                // uri resolvida
   // Identidade clínica real do contato, vinda do /chat/directory. Declarar os
   // campos aqui é o que impede a ficha de exibir valores cravados iguais para
-  // qualquer pessoa que o usuário abra. null significa que o colega não
-  // preencheu, e a tela mostra "não informado", nunca um palpite.
+  // qualquer pessoa que o usuário abra. null significa que o valor não veio,
+  // nunca um palpite: gênero e idade aparecem como "não informado"; tipo
+  // sanguíneo e alergias (que o backend não devolve de colega para quem é
+  // funcionário) escondem a linha.
   birthDate?: string | null;        // ISO datetime
   bloodType?: string | null;
   allergies?: string | null;

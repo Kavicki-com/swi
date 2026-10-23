@@ -13,6 +13,7 @@ import { isFeatureEnabled } from '../../lib/featureFlags';
 import type { WatchControl } from '../../modules/swi-watch-control';
 import { useAuth } from '../auth/AuthProvider';
 import { androidDeviceControl } from './android/androidDeviceControl';
+import { resetBluetoothDrainForNewPairing } from './bluetooth/registerBluetoothDrainTask';
 import { syncHealthConnectTaskRegistration } from './healthConnect/healthConnectBackgroundTask';
 import type {
   HealthConnectPermission,
@@ -104,7 +105,9 @@ export interface TelemetryUploadContextValue extends TelemetryUploadState {
    * certo, antes de `refreshPairing`: o backend criou outro aparelho, e o
    * leitor troca o sal da sessão, esquece token e pulseira e tira da fila os
    * eventos do Health Connect ainda não enviados, que eram do aparelho
-   * anterior (ver `resetForNewPairing`). Relê o estado em seguida. Devolve se
+   * anterior (ver `resetForNewPairing`). A pulseira pelo Bluetooth troca as
+   * sessões dela no mesmo passo, levando as leituras ainda não enviadas
+   * (`resetBluetoothDrainForNewPairing`). Relê o estado em seguida. Devolve se
    * deu certo. Nunca rejeita: a falha volta como `false`, com aviso, e o
    * pareamento segue valendo. `false` também fora do Android com o gate e
    * sem sessão, sem chamar nada.
@@ -352,6 +355,10 @@ export function TelemetryUploadProvider({ children }: PropsWithChildren) {
   // só avisa. O pareamento que acabou de dar certo não depende disto.
   const resetHealthConnectForNewPairing = useCallback(async (): Promise<boolean> => {
     if (reader === null || !enabled) return false;
+    // A pulseira pelo Bluetooth tem as sessões dela, também do aparelho
+    // anterior, e o pareamento grava a credencial nova sem a tarefa dela ver
+    // a troca. Antes do Health Connect e independente dele; nunca rejeita.
+    await resetBluetoothDrainForNewPairing();
     try {
       await reader.resetForNewPairing();
     } catch (error) {

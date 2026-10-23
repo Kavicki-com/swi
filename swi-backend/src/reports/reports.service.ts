@@ -42,7 +42,7 @@ export class ReportsService {
    * Acessível ao worker: /users é @Roles('ADMIN'), e foi essa barreira que
    * empurrou o app pro diretório de chat em primeiro lugar.
    */
-  async listAssignees(userId: string, companyId: string | null) {
+  async listAssignees(userId: string, companyId: string | null, viewerRole: string) {
     const users = await this.prisma.user.findMany({
       where: { approvalStatus: 'APPROVED', id: { not: userId }, companyId },
       include: { profile: true },
@@ -53,14 +53,15 @@ export class ReportsService {
     // (jobTitle), e um `contains` do Postgres não normaliza acento nem caixa
     // sem extensão. O cap de 200 mantém isso barato.
     const staff = users.filter((u) => u.role === 'ADMIN' || isStaffJobTitle(u.profile?.jobTitle))
-    return Promise.all(staff.map((u) => this.toAssignee(u)))
+    const withHealth = can(viewerRole, 'users.read')
+    return Promise.all(staff.map((u) => this.toAssignee(u, withHealth)))
   }
 
   // Mesmo shape do contato do chat — o modal do app já consome esse formato
   // (avatar presigned, idade derivada do birthDate, tipo sanguíneo). Mantidos
   // em sincronia à mão: são dois módulos, e unificar exigiria mexer no chat,
   // que está estável.
-  private async toAssignee(u: User & { profile: Profile | null }) {
+  private async toAssignee(u: User & { profile: Profile | null }, withHealth: boolean) {
     return {
       workerId: u.id,
       name: u.profile?.fullName ?? u.name,
@@ -68,8 +69,10 @@ export class ReportsService {
       role: u.profile?.jobTitle ?? '',
       avatarUri: u.profile?.avatarKey ? await this.media.presignGet(u.profile.avatarKey) : '',
       birthDate: u.profile?.birthDate ? u.profile.birthDate.toISOString() : null,
-      bloodType: u.profile?.bloodType ?? null,
-      allergies: u.profile?.allergies ?? null,
+      // Mesma regra do contato do chat: dado de saúde é sensível na LGPD, o
+      // painel precisa dele e o colega não. Sem users.read, vai null.
+      bloodType: withHealth ? (u.profile?.bloodType ?? null) : null,
+      allergies: withHealth ? (u.profile?.allergies ?? null) : null,
       gender: u.profile?.gender ?? null,
     }
   }

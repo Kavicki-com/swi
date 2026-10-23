@@ -65,6 +65,12 @@ interface LocationHandlerDeps {
   stopUpdates(): Promise<void>;
   /** A evacuação ativa na empresa, segundo o servidor. */
   activeEvacuation(): Promise<ActiveEvacuationCheck>;
+  /**
+   * O servidor disse que a evacuação acabou e ela já foi apagada. A tarefa
+   * não religa as leituras; é o aviso para o processo da tela, se houver, pôr
+   * as opções (e a notificação fixa) de volta na jornada.
+   */
+  onEvacuationEnded?(): void;
   now(): Date;
 }
 
@@ -208,6 +214,7 @@ export function createLocationHandler(deps: LocationHandlerDeps): LocationHandle
       lastKept = null;
       await deps.stopUpdates();
     }
+    deps.onEvacuationEnded?.();
   }
 
   return {

@@ -1,7 +1,14 @@
 import { apiRequest } from '../api/http';
 import { apiEvacuationBackend } from './apiEvacuationBackend';
-jest.mock('../api/http', () => ({ apiRequest: jest.fn() }));
+jest.mock('../api/http', () => ({ apiRequest: jest.fn(), readToken: jest.fn(async () => 'tok') }));
 jest.mock('../api/session', () => ({ getUserId: jest.fn(() => 'me-id') }));
+const on = jest.fn();
+const close = jest.fn();
+const mockIo = jest.fn((..._a: unknown[]) => ({ on, close }));
+jest.mock('socket.io-client', () => ({ io: (...a: unknown[]) => mockIo(...a) }));
+jest.mock('../auth/apiConfig', () => ({ getApiUrl: () => 'https://api.teste' }));
+
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 afterEach(() => jest.clearAllMocks());
 
@@ -56,5 +63,35 @@ describe('apiEvacuationBackend', () => {
     (apiRequest as jest.Mock).mockResolvedValue({});
     await apiEvacuationBackend.ack('ev1');
     expect(apiRequest).toHaveBeenCalledWith('/evacuations/ev1/ack', { method: 'POST', auth: true });
+  });
+
+  // O backend avisa o fim pelo socket ('evacuation-ended', { id }) para a
+  // tela sair do modo evacuação na hora, sem esperar a consulta.
+  it('subscribeEnded: escuta evacuation-ended e fecha o socket ao sair', async () => {
+    const cb = jest.fn();
+    const unsub = apiEvacuationBackend.subscribeEnded(cb);
+    await flush();
+
+    expect(mockIo).toHaveBeenCalledWith('https://api.teste', {
+      auth: { token: 'tok' },
+      transports: ['polling', 'websocket'],
+    });
+    const [evento, handler] = on.mock.calls[0];
+    expect(evento).toBe('evacuation-ended');
+    handler({ id: 'e1' });
+    handler({});
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(cb).toHaveBeenCalledWith('e1');
+
+    unsub();
+    expect(close).toHaveBeenCalled();
+  });
+
+  it('subscribeEnded: sair antes de o token chegar não abre socket', async () => {
+    const unsub = apiEvacuationBackend.subscribeEnded(jest.fn());
+    unsub();
+    await flush();
+
+    expect(mockIo).not.toHaveBeenCalled();
   });
 });

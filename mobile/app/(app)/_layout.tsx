@@ -10,6 +10,8 @@ import {
   latestEvacuationNotice,
   useEvacuationTracking,
 } from '../../services/positions/useEvacuationTracking';
+import { combineEvacuationNotices, useEvacuationPushNotice } from '../../services/push/evacuationPush';
+import { usePushNotifications } from '../../services/push/usePushNotifications';
 import { isFeatureEnabled } from '../../lib/featureFlags';
 import { useBandChoice } from '../../services/telemetry/bluetooth/bluetoothBandChoice';
 import { useBluetoothHeartRate } from '../../services/telemetry/bluetooth/useBluetoothHeartRate';
@@ -38,10 +40,24 @@ function JourneyTrackingRoot({ userId }: { userId: string }) {
 // GPS em segundo plano durante a evacuação: com evacuação ativa liga mesmo
 // sem jornada, pede a permissão e segue até o gestor encerrar no painel.
 // Null-render, dentro do NotificationProvider: a notificação de evacuação que
-// chega pelo socket é a deixa para consultar na hora.
+// chega pelo socket, e o push da evacuação com o app aberto, são a deixa para
+// consultar na hora.
 function EvacuationTrackingRoot({ userId }: { userId: string }) {
   const { notifications } = useNotifications();
-  useEvacuationTracking(userId, latestEvacuationNotice(notifications));
+  const pushNotice = useEvacuationPushNotice();
+  useEvacuationTracking(
+    userId,
+    combineEvacuationNotices(latestEvacuationNotice(notifications), pushNotice),
+  );
+  return null;
+}
+
+// Push pelo serviço da Expo: registra o aparelho com a pessoa logada, avisa o
+// rastreio quando o push da evacuação chega com o app aberto e abre a tela de
+// evacuação no toque. Null-render; com o app fechado quem recebe é a tarefa
+// definida no index.js.
+function PushNotificationsRoot({ userId }: { userId: string }) {
+  usePushNotifications(userId);
   return null;
 }
 
@@ -106,6 +122,7 @@ export default function AppLayout() {
       <EvacuationProvider>
         <NotificationProvider>
           <EvacuationTrackingRoot userId={user.id} />
+          <PushNotificationsRoot userId={user.id} />
           {/* Pedido de ajuda: um só para a sessão. O dashboard pede, e o
               procedimento de evacuação, aberto de qualquer tela, mostra o
               estado. Segue tentando sem sinal enquanto a sessão existir. */}

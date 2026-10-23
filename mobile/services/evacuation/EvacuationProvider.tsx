@@ -1,9 +1,10 @@
 import {
-  createContext, useCallback, useContext, useMemo, useRef, useState,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
   type PropsWithChildren,
 } from 'react';
 import type { RouteSnapshot } from './types';
 import { getEvacuationBackend } from './getEvacuationBackend';
+import { reportActiveEvacuation, reportEvacuationEnded, useEvacuationEnded } from './evacuationEnd';
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -24,6 +25,9 @@ interface EvacuationContextValue {
   // mora aqui e não no hook: a tela inicial fica montada embaixo da tela em
   // andamento, e um freio por tela faria as duas buscarem juntas.
   msSinceLastFetch: () => number;
+  // A evacuação vista ativa nesta sessão acabou (evacuationEnd.ts): as telas
+  // saem do modo evacuação.
+  ended: boolean;
 }
 
 const EvacuationContext = createContext<EvacuationContextValue | null>(null);
@@ -47,6 +51,23 @@ export function EvacuationProvider({ children }: PropsWithChildren) {
   // Só a busca mais nova grava. Com rede ruim uma busca pode voltar depois da
   // seguinte, e o traçado velho sobrescreveria o novo.
   const seq = useRef(0);
+  const ended = useEvacuationEnded();
+
+  // O gestor encerrou no painel: o socket avisa na hora, sem esperar a
+  // próxima consulta do rastreio.
+  useEffect(() => backend.subscribeEnded(reportEvacuationEnded), [backend]);
+
+  // Encerrada, a rota sai: traçado de uma evacuação que acabou, guardado até
+  // a próxima, apareceria por um instante na tela dela. A busca em voo também
+  // não grava mais.
+  useEffect(() => {
+    if (!ended) return;
+    seq.current += 1;
+    hasRoute.current = false;
+    setRoute(null);
+    setErrorKind(null);
+    setLoadStatus('idle');
+  }, [ended]);
 
   // Sem cache de sessão de propósito: quem chama é a tela ao ganhar foco e o
   // recálculo, e os dois querem a rota de agora. Evacuação é tela rara, então
@@ -79,6 +100,11 @@ export function EvacuationProvider({ children }: PropsWithChildren) {
         setRoute(null);
         setErrorKind(kind);
         setLoadStatus('error');
+        // 404 é "sem evacuação ativa" ou "ativa sem ponto de encontro": quem
+        // decide se acabou é a consulta da evacuação ativa. Sem rede, nada.
+        if (kind === 'no-evacuation') {
+          backend.getActive().then((active) => reportActiveEvacuation(active?.id ?? null), () => {});
+        }
       }, // .then(ok,err), NÃO .finally (lição do Chat)
     );
   }, [backend]);
@@ -86,8 +112,8 @@ export function EvacuationProvider({ children }: PropsWithChildren) {
   const msSinceLastFetch = useCallback(() => Date.now() - lastFetchAt.current, []);
 
   const value = useMemo<EvacuationContextValue>(
-    () => ({ loadStatus, route, errorKind, reload, msSinceLastFetch }),
-    [loadStatus, route, errorKind, reload, msSinceLastFetch],
+    () => ({ loadStatus, route, errorKind, reload, msSinceLastFetch, ended }),
+    [loadStatus, route, errorKind, reload, msSinceLastFetch, ended],
   );
   return <EvacuationContext.Provider value={value}>{children}</EvacuationContext.Provider>;
 }

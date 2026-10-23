@@ -34,6 +34,40 @@ function pointAlong(waypoints: Pt[], fraction: number): Pt {
   return waypoints[waypoints.length - 1];
 }
 
+// O trecho que FALTA a partir de onde a pessoa está, navegando: a linha sai
+// dela e segue pelos vértices à frente do ponto do traçado mais perto, e
+// `fraction` é quanto do comprimento total ainda falta (0 a 1), para o tempo
+// dos selos sair proporcional. Medido como em pointAlong. Fora do traçado
+// (menos de 50 m, antes do recálculo) a proporção conta do ponto mais perto
+// dele, e a linha liga a pessoa ao caminho.
+export function routeAhead(at: Pt, waypoints: Pt[]): { waypoints: Pt[]; fraction: number } {
+  if (waypoints.length < 2) return { waypoints, fraction: 1 };
+  const k = Math.cos((waypoints[0][1] * Math.PI) / 180);
+  const seg = (p: Pt, q: Pt) => Math.hypot((q[0] - p[0]) * k, q[1] - p[1]);
+  let total = 0;
+  let best = { index: 0, t: 0, dist: Infinity };
+  for (let i = 1; i < waypoints.length; i++) {
+    const p = waypoints[i - 1];
+    const q = waypoints[i];
+    const len = seg(p, q);
+    // Projeção de `at` no trecho p→q, presa às pontas.
+    const dx = (q[0] - p[0]) * k;
+    const dy = q[1] - p[1];
+    const along = (at[0] - p[0]) * k * dx + (at[1] - p[1]) * dy;
+    const t = len > 0 ? clamp(along / (len * len), 0, 1) : 0;
+    const dist = Math.hypot(p[0] * k + dx * t - at[0] * k, p[1] + dy * t - at[1]);
+    // `<=`: num vértice, o trecho que começa nele ganha do que termina nele,
+    // e o vértice já alcançado não volta para a linha.
+    if (dist <= best.dist) best = { index: i - 1, t, dist };
+    total += len;
+  }
+  if (total === 0) return { waypoints, fraction: 1 };
+  const { index, t } = best;
+  let left = seg(waypoints[index], waypoints[index + 1]) * (1 - t);
+  for (let i = index + 2; i < waypoints.length; i++) left += seg(waypoints[i - 1], waypoints[i]);
+  return { waypoints: [at, ...waypoints.slice(index + 1)], fraction: left / total };
+}
+
 // Onde as 2 time chips ancoram: a 35% e 70% do COMPRIMENTO do traçado, a
 // mesma fração do tempo que o rótulo mostra. Pelo índice do array a chip caía
 // em cima do pino de início numa reta de 2 pontos (rota aproximada), e os

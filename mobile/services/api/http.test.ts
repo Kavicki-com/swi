@@ -30,6 +30,17 @@ describe('apiRequest', () => {
     );
   });
 
+  // DELETE /push/tokens leva o token no corpo, e não no caminho, para ele não
+  // aparecer em log de acesso.
+  it('DELETE explícito leva o corpo junto', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(okJson({}));
+    await apiRequest('/push/tokens', { method: 'DELETE', body: { token: 't' } });
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${getApiUrl()}/push/tokens`,
+      expect.objectContaining({ method: 'DELETE', body: JSON.stringify({ token: 't' }) }),
+    );
+  });
+
   it('default: GET sem body, POST com body', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(okJson({}));
     await apiRequest('/a');
