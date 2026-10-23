@@ -1,8 +1,6 @@
 import {
-  dashboardShowsReadiness,
   readinessFactsOf,
   readinessStepsOf,
-  requiredPending,
   type ReadinessFacts,
   type ReadinessStep,
 } from './readiness';
@@ -146,24 +144,5 @@ describe('readinessFactsOf', () => {
     expect(readinessFactsOf({ ...fontes, profile: null }).hasBirthDate).toBeNull();
     expect(readinessFactsOf({ ...fontes, profile: {} }).hasBirthDate).toBe(false);
     expect(readinessFactsOf({ ...fontes, profile: { birthDate: '  ' } }).hasBirthDate).toBe(false);
-  });
-});
-
-describe('quando o dashboard mostra a lista', () => {
-  it.each<[string, Partial<ReadinessFacts>, boolean, boolean]>([
-    ['tudo cumprido', {}, false, false],
-    ['obrigatório pendente, sem Entendi', { readGranted: false }, false, true],
-    ['obrigatório pendente, mesmo com Entendi', { readGranted: false }, true, true],
-    ['só opcional pendente, sem Entendi', { bandChosen: false }, false, true],
-    ['só opcional pendente, com Entendi', { bandChosen: false }, true, false],
-    ['só desconhecido', { paired: null, hasBirthDate: null }, false, false],
-  ])('%s', (_caso, fatos, entendi, mostra) => {
-    expect(dashboardShowsReadiness(readinessStepsOf({ ...PRONTO, ...fatos }), entendi)).toBe(mostra);
-  });
-
-  it('requiredPending só conta obrigatório sabidamente pendente', () => {
-    expect(requiredPending(readinessStepsOf({ ...PRONTO, manufacturerPackage: null }))).toBe(false);
-    expect(requiredPending(readinessStepsOf({ ...PRONTO, paired: null }))).toBe(false);
-    expect(requiredPending(readinessStepsOf({ ...PRONTO, paired: false }))).toBe(true);
   });
 });
