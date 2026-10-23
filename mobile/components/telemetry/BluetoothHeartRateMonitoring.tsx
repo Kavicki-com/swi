@@ -31,14 +31,15 @@ import { useNow } from '../../services/telemetry/useNow';
 
 // A pulseira no Bluetooth em Configurações > Monitoramento, abaixo do Health
 // Connect: escolher uma vez a pulseira que transmite pelo perfil padrão de
-// batimento (0x180D), trocar, ver o estado da ligação e o último batimento.
-// Quem liga e desliga a escuta é o ciclo de vida (useBluetoothHeartRate.ts),
-// com a jornada; a tela só escolhe e mostra. Mora fora de `app/` porque tudo
-// ali vira rota no Expo Router; aqui só compõe o DS.
+// batimento (0x180D), trocar, encerrar, ver o estado da ligação e o último
+// batimento. Escolher é ativar o monitoramento e Encerrar o termina; quem
+// liga e desliga o serviço com essa escolha é o ciclo de vida
+// (useBluetoothHeartRate.ts). Mora fora de `app/` porque tudo ali vira rota
+// no Expo Router; aqui só compõe o DS.
 //
 // A varredura pede as permissões antes (a folha do sistema), roda no máximo
-// 30 s e para ao escolher, ao tocar Parar e ao sair da tela: varrer gasta
-// bateria e, no Android, tem cota por app.
+// 30 s e para ao escolher, ao tocar Parar de procurar e ao sair da tela:
+// varrer gasta bateria e, no Android, tem cota por app.
 
 export const SCAN_TIMEOUT_MS = 30_000;
 
@@ -88,6 +89,7 @@ export function BluetoothHeartRateMonitoring({
   const [found, setFound] = useState<BleScanResult[]>([]);
   const [problem, setProblem] = useState<ScanProblem | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [endFailed, setEndFailed] = useState(false);
   // Segura o toque duplo enquanto a folha de permissão está aberta.
   const asking = useRef(false);
   // A varredura repete o anúncio várias vezes por segundo, e o ouvinte só sai
@@ -97,7 +99,7 @@ export function BluetoothHeartRateMonitoring({
 
   // A varredura vive enquanto a fase é `scanning`: ouvinte antes do `scan`,
   // para não perder o primeiro resultado, e a limpeza para tudo (escolha,
-  // Parar, 30 s, saída da tela).
+  // Parar de procurar, 30 s, saída da tela).
   useEffect(() => {
     if (phase !== 'scanning') return;
     listening.current = true;
@@ -153,9 +155,20 @@ export function BluetoothHeartRateMonitoring({
     setPhase('idle');
   };
 
+  // Encerrar apaga a escolha; o ciclo de vida vê a escolha sumir e desliga a
+  // escuta. Para voltar, a pessoa escolhe a pulseira de novo.
+  const encerrar = async () => {
+    setEndFailed(false);
+    try {
+      await store.end();
+    } catch {
+      setEndFailed(true);
+    }
+  };
+
   const status = ble.status();
   // O serviço ainda com a pulseira anterior (trocada há pouco) não diz nada
-  // da escolhida: até religar, ela aparece como à espera da jornada.
+  // da escolhida: até religar, ela aparece só como escolhida.
   const daEscolhida = choice != null && status.deviceId === choice.deviceId;
   const nome = choice ? bandNameCopy(choice.name, choice.deviceId) : null;
   const etiqueta = nome !== null ? linkTagCopy(daEscolhida ? status.state : 'idle', nome) : null;
@@ -232,9 +245,15 @@ export function BluetoothHeartRateMonitoring({
         </Text>
       )}
 
+      {endFailed && (
+        <Text variant="body.s" color={theme.content.error}>
+          {COPY.falhaEncerrar}
+        </Text>
+      )}
+
       <View style={{ gap: theme.gap.s }}>
         {varrendo ? (
-          <Button variant="ghost" label={COPY.parar} fullWidth onPress={() => setPhase('done')} />
+          <Button variant="ghost" label={COPY.pararDeProcurar} fullWidth onPress={() => setPhase('done')} />
         ) : (
           <Button
             variant="outline"
@@ -242,6 +261,16 @@ export function BluetoothHeartRateMonitoring({
             fullWidth
             onPress={() => {
               void procurar();
+            }}
+          />
+        )}
+        {choice && !varrendo && (
+          <Button
+            variant="ghost"
+            label={COPY.encerrar}
+            fullWidth
+            onPress={() => {
+              void encerrar();
             }}
           />
         )}

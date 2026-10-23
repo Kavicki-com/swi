@@ -10,6 +10,7 @@ import type {
 } from '../../../modules/swi-ble-heart-rate/src';
 import {
   createBandChoiceStore,
+  useBandChoice,
   type BandChoice,
   type BandChoiceStore,
 } from '../../../services/telemetry/bluetooth/bluetoothBandChoice';
@@ -198,7 +199,7 @@ describe('Pulseira no Bluetooth: escolha', () => {
     expect(perm.request).toHaveBeenCalled();
     expect(ponte.ble.scan).toHaveBeenCalled();
     expect(tags(tree)).toContainEqual({ status: 'info', label: 'Procurando pulseiras por perto' });
-    expect(botoes(tree)).toContain('Parar');
+    expect(botoes(tree)).toContain('Parar de procurar');
   });
 
   it('lista o que acha por nome e sinal, do mais forte ao mais fraco, sem repetir', async () => {
@@ -223,14 +224,11 @@ describe('Pulseira no Bluetooth: escolha', () => {
 
     await act(async () => lista(tree)?.onChange(POLAR.deviceId));
 
-    expect(store.current()).toEqual(POLAR);
+    expect(store.current()).toMatchObject(POLAR);
     expect(ponte.ble.stopScan).toHaveBeenCalled();
     expect(lista(tree)).toBeNull();
-    expect(tags(tree)).toContainEqual({
-      status: 'info',
-      label: 'Polar H10. Liga sozinha durante a jornada',
-    });
-    expect(botoes(tree)).toEqual(['Trocar pulseira']);
+    expect(tags(tree)).toContainEqual({ status: 'info', label: 'Polar H10 escolhida' });
+    expect(botoes(tree)).toEqual(['Trocar pulseira', 'Encerrar']);
   });
 
   it('anúncio que chega enquanto a escolha é gravada não traz a lista de volta', async () => {
@@ -257,9 +255,9 @@ describe('Pulseira no Bluetooth: escolha', () => {
       ouvinte({ deviceId: POLAR.deviceId, name: 'Polar H10', rssi: -58 });
     });
 
-    expect(store.current()).toEqual(POLAR);
+    expect(store.current()).toMatchObject(POLAR);
     expect(lista(tree)).toBeNull();
-    expect(botoes(tree)).toEqual(['Trocar pulseira']);
+    expect(botoes(tree)).toEqual(['Trocar pulseira', 'Encerrar']);
   });
 
   it('falha ao guardar avisa e mantém a lista', async () => {
@@ -298,10 +296,10 @@ describe('Pulseira no Bluetooth: escolha', () => {
     expect(botoes(tree)).toEqual(['Procurar pulseira']);
   });
 
-  it('Parar encerra a varredura', async () => {
+  it('Parar de procurar encerra a varredura', async () => {
     const { tree, ponte } = await montar();
     await tocar(tree, 'Procurar pulseira');
-    await tocar(tree, 'Parar');
+    await tocar(tree, 'Parar de procurar');
     expect(ponte.ble.stopScan).toHaveBeenCalled();
   });
 
@@ -378,10 +376,7 @@ describe('Pulseira no Bluetooth: estado e último batimento', () => {
     const ponte = ponteFalsa();
     ponte.status = { state: 'connected', deviceId: 'Z0:00', lastReadingAt: null };
     const { tree } = await montar({ ponte, escolha: POLAR });
-    expect(tags(tree)).toContainEqual({
-      status: 'info',
-      label: 'Polar H10. Liga sozinha durante a jornada',
-    });
+    expect(tags(tree)).toContainEqual({ status: 'info', label: 'Polar H10 escolhida' });
   });
 
   it('mostra a hora do último batimento recebido', async () => {
@@ -402,17 +397,11 @@ describe('Pulseira no Bluetooth: estado e último batimento', () => {
   });
 });
 
-describe('Pulseira no Bluetooth: falha ao ligar durante a jornada', () => {
+describe('Pulseira no Bluetooth: falha ao ligar', () => {
   // A falha vem do ciclo de vida, que a guarda para a tela; aqui ela é
   // provocada pelo próprio hook, com a ponte falsa recusando o `start`.
-  const janelaAberta = async () => true;
   function Ligar({ ble }: { ble: BleHeartRate }) {
-    useBluetoothHeartRate(
-      { userId: 'u1', journeyState: 'ongoing', journeyKnown: true, paired: true, deviceId: POLAR.deviceId },
-      ble,
-      true,
-      janelaAberta,
-    );
+    useBluetoothHeartRate({ userId: 'u1', paired: true, deviceId: POLAR.deviceId }, ble, true);
     return null;
   }
 
@@ -442,5 +431,88 @@ describe('Pulseira no Bluetooth: falha ao ligar durante a jornada', () => {
       'Não foi possível ligar a pulseira. Ela tenta de novo quando o app abrir.',
     );
     expect(botoes(tree)).not.toContain('Abrir ajustes');
+  });
+});
+
+describe('Pulseira no Bluetooth: ativar e encerrar o monitoramento', () => {
+  // A tela e o ciclo de vida juntos, com a mesma escolha: escolher é ativar,
+  // e Encerrar é o único jeito de a pessoa desligar. Nenhuma jornada aqui.
+  function Ciclo({ ble, store }: { ble: BleHeartRate; store: BandChoiceStore }) {
+    const choice = useBandChoice(store);
+    useBluetoothHeartRate(
+      { userId: 'u1', paired: true, deviceId: choice === undefined ? undefined : (choice?.deviceId ?? null) },
+      ble,
+      true,
+    );
+    return null;
+  }
+
+  async function montarComCiclo(escolha: BandChoice | null = null) {
+    Object.defineProperty(AppState, 'currentState', { get: () => 'active', configurable: true });
+    const ponte = ponteFalsa();
+    const disco = memoria(escolha);
+    const cena: Cena = { ponte, store: createBandChoiceStore(disco), perm: permissoes() };
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(
+        <SwiThemeProvider>
+          <Ciclo ble={ponte.ble} store={cena.store} />
+          <BluetoothHeartRateMonitoring ble={ponte.ble} store={cena.store} permissions={cena.perm} />
+        </SwiThemeProvider>,
+      );
+    });
+    montada = tree;
+    return { tree, disco, ...cena };
+  }
+
+  it('o texto da seção não fala em jornada e diz como encerrar', async () => {
+    const { tree } = await montar();
+    expect(texto(tree)).not.toMatch(/jornada/i);
+    expect(texto(tree)).toContain('até você tocar em Encerrar');
+  });
+
+  it('escolher a pulseira liga a escuta na hora, sem jornada', async () => {
+    const { tree, ponte } = await montarComCiclo();
+    expect(ponte.ble.start).not.toHaveBeenCalled();
+    await tocar(tree, 'Procurar pulseira');
+    await ponte.achar({ deviceId: POLAR.deviceId, name: 'Polar H10', rssi: -60 });
+    await act(async () => lista(tree)?.onChange(POLAR.deviceId));
+    expect(ponte.ble.start).toHaveBeenCalledWith(POLAR.deviceId);
+  });
+
+  it('Encerrar desliga a escuta, apaga a escolha e volta a oferecer procurar', async () => {
+    const { tree, ponte, disco, store } = await montarComCiclo(POLAR);
+    expect(ponte.ble.start).toHaveBeenCalledWith(POLAR.deviceId);
+    await tocar(tree, 'Encerrar');
+    expect(ponte.ble.stop).toHaveBeenCalled();
+    expect(store.current()).toBeNull();
+    expect(disco.text).toBe('');
+    expect(texto(tree)).toContain('Nenhuma pulseira escolhida');
+    expect(botoes(tree)).toEqual(['Procurar pulseira']);
+  });
+
+  it('Encerrar que não grava avisa e mantém a pulseira', async () => {
+    const { tree, disco, store } = await montarComCiclo(POLAR);
+    disco.write.mockRejectedValueOnce(new Error('cheio'));
+    await tocar(tree, 'Encerrar');
+    expect(store.current()).toMatchObject(POLAR);
+    expect(texto(tree)).toContain('Não foi possível encerrar. Tente de novo.');
+    expect(botoes(tree)).toContain('Encerrar');
+  });
+
+  it('sem pulseira escolhida, e durante a procura, não há Encerrar', async () => {
+    const { tree } = await montar();
+    expect(botoes(tree)).not.toContain('Encerrar');
+    const comEscolha = await montar({ escolha: POLAR });
+    await tocar(comEscolha.tree, 'Trocar pulseira');
+    expect(botoes(comEscolha.tree)).toEqual(['Parar de procurar']);
+  });
+
+  it('trocar de pulseira liga a escuta com a nova', async () => {
+    const { tree, ponte } = await montarComCiclo(POLAR);
+    await tocar(tree, 'Trocar pulseira');
+    await ponte.achar({ deviceId: 'B0:00:00:00:00:02', name: 'Mi Band', rssi: -50 });
+    await act(async () => lista(tree)?.onChange('B0:00:00:00:00:02'));
+    expect(ponte.ble.start).toHaveBeenLastCalledWith('B0:00:00:00:00:02');
   });
 });

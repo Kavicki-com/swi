@@ -3,16 +3,20 @@ import type { BluetoothStartProblem } from './useBluetoothHeartRate';
 
 // Os textos da pulseira no Bluetooth em Configurações > Monitoramento. O
 // termo para a pessoa é sempre "pulseira", seja cinta peitoral, pulseira ou
-// relógio transmitindo pelo perfil padrão de batimento.
+// relógio transmitindo pelo perfil padrão de batimento. Quem liga e desliga
+// o monitoramento é a pessoa (escolher e Encerrar); nenhum texto diz que a
+// jornada liga ou desliga alguma coisa.
 
 export const BLUETOOTH_MONITORING_COPY = {
   titulo: 'Pulseira por Bluetooth',
   corpo:
-    'Escolha a pulseira uma vez. Durante a jornada, o batimento chega ao painel na hora, sem esperar o Health Connect.',
+    'Escolher a pulseira liga o monitoramento na hora: o batimento chega ao painel sem esperar o Health Connect. Ele segue ligado, também fora do expediente, até você tocar em Encerrar.',
   nenhuma: 'Nenhuma pulseira escolhida',
   procurar: 'Procurar pulseira',
   trocar: 'Trocar pulseira',
-  parar: 'Parar',
+  pararDeProcurar: 'Parar de procurar',
+  encerrar: 'Encerrar',
+  falhaEncerrar: 'Não foi possível encerrar. Tente de novo.',
   procurando: 'Procurando pulseiras por perto',
   listaTitulo: 'Pulseiras encontradas',
   nadaEncontrado: 'Nenhuma pulseira encontrada. Confira se ela está ligada e perto do celular.',
@@ -52,7 +56,7 @@ export function linkTagCopy(
     case 'bluetoothOff':
       return { status: 'canceled', label: BLUETOOTH_MONITORING_COPY.bluetoothDesligado };
     default:
-      return { status: 'info', label: `${bandName}. Liga sozinha durante a jornada` };
+      return { status: 'info', label: `${bandName} escolhida` };
   }
 }
 

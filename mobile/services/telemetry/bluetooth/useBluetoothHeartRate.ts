@@ -8,17 +8,13 @@ import {
   type BleHeartRateErrorCode,
 } from '../../../modules/swi-ble-heart-rate/src';
 import { hasToken } from '../../api/http';
-import type { JourneyState } from '../../journey/types';
-import { getPositionRuntime } from '../../positions/positionTracking';
+import { sharedBandChoiceStore } from './bluetoothBandChoice';
 
-// Quando a escuta da pulseira pelo Bluetooth liga e desliga. As mesmas regras
-// do GPS (services/positions/useTrackingLifecycle.ts): só com a jornada em
-// andamento ou pausada; para ao encerrar a jornada e no logout. E só com a
-// janela do rastreio aberta, a mesma do GPS: a drenagem para o serviço quando
-// ela não existe (jornada da cópia guardada sem janela) ou venceu (12 h), e
-// ligar sem ela viraria liga e desliga a cada volta ao app. Mais duas regras:
-// só com pulseira escolhida (Configurações > Monitoramento) e com o aparelho
-// pareado, porque sem credencial nada do que se lê sobe.
+// Quando a escuta da pulseira pelo Bluetooth liga e desliga. Escolher a
+// pulseira (Configurações > Monitoramento) é ativar o monitoramento: a escuta
+// liga na hora, com o aparelho pareado, porque sem credencial nada do que se
+// lê sobe. Desliga só ao encerrar (a escolha apagada), no logout e com o
+// pareamento revogado. A jornada não liga nem desliga nada, e não há prazo.
 
 export type BluetoothStartProblem = BleHeartRateErrorCode | 'unknown';
 
@@ -60,38 +56,26 @@ const stopQuietly = (ble: BleHeartRate) => {
 
 export interface BluetoothHeartRateInput {
   userId: string | null;
-  journeyState: JourneyState;
-  /** Falso até a jornada carregar: agir sobre o ocioso inicial desligaria tudo. */
-  journeyKnown: boolean;
-  /**
-   * De onde a jornada veio. Da cópia guardada o GPS só retoma a janela que
-   * existia; quando chega a do servidor, ele abre a janela e a escuta
-   * pergunta por ela de novo.
-   */
-  journeySource?: 'server' | 'cache';
+  /** Credencial do aparelho; cai com o pareamento revogado (401). */
   paired: boolean;
   /** Pulseira escolhida; `undefined` antes de o arquivo ser lido. */
   deviceId: string | null | undefined;
 }
 
-const defaultWindowOpenFor = (userId: string) => getPositionRuntime().tracking.windowOpenFor(userId);
-
 /**
- * Segue a jornada. Montado dentro do JourneyProvider, como o GPS. Escolha da
- * pulseira ainda não lida não age, para o app aberto no meio da jornada não
- * desligar e religar o serviço que o sistema manteve de pé.
+ * Segue a escolha da pulseira e o pareamento. Escolha ainda não lida não
+ * age, para o app aberto não desligar e religar o serviço que o sistema
+ * manteve de pé.
  */
 export function useBluetoothHeartRate(
-  { userId, journeyState, journeyKnown, journeySource = 'server', paired, deviceId }: BluetoothHeartRateInput,
+  { userId, paired, deviceId }: BluetoothHeartRateInput,
   ble: BleHeartRate = bleHeartRate,
   enabled: boolean = isFeatureEnabled('bluetoothHeartRate'),
-  windowOpenFor: (userId: string) => Promise<boolean> = defaultWindowOpenFor,
 ): void {
   const active = enabled && ble.supported;
-  const listens = journeyState !== 'idle' && paired && typeof deviceId === 'string';
   useEffect(() => {
-    if (!active || !userId || !journeyKnown || deviceId === undefined) return;
-    if (!listens || deviceId === null) {
+    if (!active || !userId || deviceId === undefined) return;
+    if (!paired || deviceId === null) {
       stopQuietly(ble);
       return;
     }
@@ -99,22 +83,10 @@ export function useBluetoothHeartRate(
     const turnOn = () => {
       // O Android recusa subir serviço em primeiro plano pedido do segundo
       // plano. Depois de ligado, quem relança é o sistema.
-      if (AppState.currentState !== 'active') return;
-      // A janela é lida depois do ligar do GPS pedido no mesmo render (ele
-      // monta antes), então a jornada lida do servidor já a encontra aberta.
-      windowOpenFor(userId).then(
-        (open) => {
-          if (!alive) return;
-          if (!open) {
-            stopQuietly(ble);
-            return;
-          }
-          ble.start(deviceId).then(
-            () => setStartProblem(null),
-            (error: unknown) => setStartProblem(bleHeartRateErrorCode(error) ?? 'unknown'),
-          );
-        },
-        () => undefined,
+      if (!alive || AppState.currentState !== 'active') return;
+      ble.start(deviceId).then(
+        () => setStartProblem(null),
+        (error: unknown) => setStartProblem(bleHeartRateErrorCode(error) ?? 'unknown'),
       );
     };
     turnOn();
@@ -130,12 +102,26 @@ export function useBluetoothHeartRate(
       alive = false;
       sub.remove();
     };
-  }, [active, userId, journeyKnown, journeySource, listens, deviceId, ble, windowOpenFor]);
+  }, [active, userId, paired, deviceId, ble]);
+}
+
+const endSharedBand = () => sharedBandChoiceStore().end();
+
+/**
+ * Logout encerra o monitoramento: a escuta desliga e a escolha da pulseira é
+ * apagada, para o celular não seguir lendo a pulseira de quem saiu, nem
+ * religar com ela para quem entrar depois.
+ */
+function endQuietly(ble: BleHeartRate, endBand: () => Promise<void>) {
+  stopQuietly(ble);
+  endBand().catch((error: unknown) => {
+    console.warn(`[useBluetoothHeartRate] escolha da pulseira não apagada: ${String(error)}`);
+  });
 }
 
 /**
  * Segue a sessão. Montado na raiz, fora do layout autenticado, porque é ali
- * que o logout é visto. A pulseira escolhida fica guardada.
+ * que o logout é visto.
  */
 export function useBluetoothHeartRateSession(
   userId: string | null,
@@ -143,6 +129,7 @@ export function useBluetoothHeartRateSession(
   ble: BleHeartRate = bleHeartRate,
   enabled: boolean = isFeatureEnabled('bluetoothHeartRate'),
   tokenExists: () => Promise<boolean> = hasToken,
+  endBand: () => Promise<void> = endSharedBand,
 ): void {
   const active = enabled && ble.supported;
   const previous = useRef<string | null>(null);
@@ -150,23 +137,23 @@ export function useBluetoothHeartRateSession(
   useEffect(() => {
     const before = previous.current;
     previous.current = userId;
-    if (active && before && !userId) stopQuietly(ble);
-  }, [active, userId, ble]);
+    if (active && before && !userId) endQuietly(ble, endBand);
+  }, [active, userId, ble, endBand]);
 
   // App aberto sem sessão e sem token (expirou, ou a conta foi desativada):
-  // a escuta que vinha de antes desliga. Com o token guardado não: sem rede a
-  // sessão só não pôde ser confirmada, e a jornada pode estar em andamento.
+  // o monitoramento que vinha de antes encerra. Com o token guardado não: sem
+  // rede a sessão só não pôde ser confirmada.
   useEffect(() => {
     if (!active || restoring || userId) return;
     let alive = true;
     tokenExists().then(
       (exists) => {
-        if (alive && !exists) stopQuietly(ble);
+        if (alive && !exists) endQuietly(ble, endBand);
       },
       () => undefined,
     );
     return () => {
       alive = false;
     };
-  }, [active, restoring, userId, ble, tokenExists]);
+  }, [active, restoring, userId, ble, tokenExists, endBand]);
 }
