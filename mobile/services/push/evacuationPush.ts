@@ -2,9 +2,9 @@ import { useSyncExternalStore } from 'react';
 
 // O push da evacuação, como o backend manda pelo serviço da Expo (PR do
 // backend com o contrato de /push/tokens): o início com título, para a pessoa
-// ver com o app fechado, e o fim só de dados, para a tarefa desligar o
-// rastreio. Os dois trazem `data { type, evacuationId }`, e o `evacuationId`
-// é o mesmo de GET /evacuations/active e do socket.
+// ver com o app fechado, e o início e o fim só de dados, para a tarefa ligar e
+// desligar o rastreio. Todos trazem `data { type, evacuationId }`, e o
+// `evacuationId` é o mesmo de GET /evacuations/active e do socket.
 //
 // O push é um aviso a mais para o app fechado. O socket e a consulta seguem
 // sendo o caminho principal: daqui só sai a deixa para consultar na hora.

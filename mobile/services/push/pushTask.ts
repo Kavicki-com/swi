@@ -8,11 +8,12 @@ import { evacuationPushFromTask } from './evacuationPush';
 // (positionTracking), que grava a evacuação em arquivo.
 //
 // Quais mensagens chegam aqui (documentação do expo-notifications do SDK 54):
-// - só de dados (o fim da evacuação): no Android e no iPhone, com o app em
-//   segundo plano ou fechado pelo sistema. Fechado à força pela pessoa, não.
-// - com título (o início): o sistema mostra a notificação e a tarefa NÃO
-//   roda. No Android, o toque nela chega aqui como resposta, e é por esse
-//   toque que o rastreio liga com o app fechado.
+// - só de dados (o início e o fim da evacuação): no Android e no iPhone, com o
+//   app em segundo plano ou fechado pelo sistema. Fechado à força pela pessoa,
+//   não. É pelo início só de dados que o rastreio liga sem o toque.
+// - com título (o início, mandado junto com o só de dados): o sistema mostra
+//   a notificação e a tarefa NÃO roda. No Android, o toque nela chega aqui
+//   como resposta; com o rastreio já ligado, só regrava a mesma evacuação.
 //
 // Ligar as leituras em segundo plano é o serviço em primeiro plano do
 // Android, que o sistema pode recusar fora da janela de um push de prioridade

@@ -116,7 +116,7 @@ describe('Push e2e', () => {
     expect(await prisma.pushToken.findUnique({ where: { token: T_GONE } })).toBeNull()
   })
 
-  it('evacuação: push no start e push só de dados no end, para os workers da empresa', async () => {
+  it('evacuação: push visível e só de dados no start, só de dados no end, para os workers da empresa', async () => {
     const saved = process.env.PUSH_ENABLED
     process.env.PUSH_ENABLED = '1'
     try {
@@ -133,9 +133,11 @@ describe('Push e2e', () => {
         .set(admin)
         .send({ musterPoint: [-46.62, -23.544] })
         .expect(201)
-      await waitFor(() => sent.length >= 1)
+      // O start manda dois lotes, em paralelo: o visível e o só de dados.
+      await waitFor(() => sent.length >= 2)
       expect(sent[0].url).toBe('https://exp.host/--/api/v2/push/send')
-      const started = sent[0].messages
+      const batch = (pick: (m: any) => boolean) => sent.find((s) => pick(s.messages[0]))!.messages
+      const started = batch((m) => m.data.type === 'evacuation.started' && 'title' in m)
       expect(started.map((m) => m.to).sort()).toEqual([T2, T1].sort())
       expect(started[0]).toMatchObject({
         title: 'Evacuação iniciada',
@@ -143,10 +145,18 @@ describe('Push e2e', () => {
         channelId: 'evacuation',
         data: { type: 'evacuation.started', evacuationId: evac.id },
       })
+      const silentStart = batch((m) => m.data.type === 'evacuation.started' && !('title' in m))
+      expect(silentStart.map((m) => m.to).sort()).toEqual([T2, T1].sort())
+      expect(silentStart[0]).toMatchObject({
+        priority: 'high',
+        _contentAvailable: true,
+        data: { type: 'evacuation.started', evacuationId: evac.id },
+      })
+      expect(silentStart[0]).not.toHaveProperty('body')
 
       await http().post(`/evacuations/${evac.id}/end`).set(admin).expect(204)
-      await waitFor(() => sent.length >= 2)
-      const ended = sent[1].messages
+      await waitFor(() => sent.length >= 3)
+      const ended = batch((m) => m.data.type === 'evacuation.ended')
       expect(ended.map((m) => m.to).sort()).toEqual([T2, T1].sort())
       expect(ended[0]).toMatchObject({ priority: 'high', data: { type: 'evacuation.ended', evacuationId: evac.id } })
       expect(ended[0]).not.toHaveProperty('title')
