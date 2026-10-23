@@ -3,20 +3,22 @@ import * as TaskManager from 'expo-task-manager';
 import {
   createLocationHandler,
   LOCATION_TASK_NAME,
+  type ActiveEvacuationCheck,
   type TaskLocation,
 } from './backgroundLocationTask';
 import { getPositionRuntime } from './positionTracking';
 import { getEvacuationBackend } from '../evacuation/getEvacuationBackend';
 
 /**
- * Se há evacuação ativa, para a tarefa saber do encerramento com o app em
- * segundo plano. Falha de rede é "não sei", e a evacuação gravada segue.
+ * A evacuação ativa, para a tarefa saber do começo e do encerramento com o
+ * app em segundo plano. Falha de rede é "não sei", e nada muda.
  */
-async function evacuationActive(): Promise<boolean | null> {
+async function activeEvacuation(): Promise<ActiveEvacuationCheck> {
   try {
-    return (await getEvacuationBackend().getActive()) !== null;
+    const active = await getEvacuationBackend().getActive();
+    return active ? { evacuationId: active.id } : null;
   } catch {
-    return null;
+    return 'unknown';
   }
 }
 
@@ -36,7 +38,7 @@ export function registerLocationTask(): void {
     outbox,
     drainer,
     stopUpdates: () => tracking.halt(),
-    evacuationActive,
+    activeEvacuation,
     now: () => new Date(),
   });
   // Rastreio desligado (fim da jornada ou da evacuação, logout, 12 h): quem

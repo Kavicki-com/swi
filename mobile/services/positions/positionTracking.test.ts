@@ -400,6 +400,27 @@ describe('createPositionTracking, evacuação', () => {
     expect(updates.start.mock.calls).toEqual([['journey'], ['evacuation'], ['journey']]);
   });
 
+  // Com o app em segundo plano, a tarefa grava a evacuação que começou durante
+  // a jornada, sem poder religar. Na volta ao primeiro plano a consulta do app
+  // pede a mesma evacuação: o início gravado fica (o teto não recomeça) e as
+  // leituras religam com as opções da evacuação, para a notificação dizer que
+  // é ela. Vale também num processo novo, que não sabe o que foi ligado.
+  it('evacuação gravada pela tarefa: a volta ao primeiro plano religa com as opções dela', async () => {
+    const { tracking, updates, evacuation, avancar } = setup();
+    await tracking.start('u1');
+    await evacuation.open('u1', 'e1', new Date(T0));
+    avancar(30_000);
+    await expect(tracking.startEvacuation('u1', 'e1')).resolves.toBe('tracking');
+    expect(updates.start.mock.calls).toEqual([['journey'], ['evacuation']]);
+    expect((await evacuation.read())?.startedAt).toBe(new Date(T0).toISOString());
+
+    const novo = setup({ started: true });
+    await novo.window.open('u1', new Date(T0));
+    await novo.evacuation.open('u1', 'e1', new Date(T0));
+    await novo.tracking.startEvacuation('u1', 'e1');
+    expect(novo.updates.start.mock.calls).toEqual([['evacuation']]);
+  });
+
   it('encerrar sem evacuação gravada não mexe nas leituras da jornada', async () => {
     const { tracking, updates } = setup();
     await tracking.start('u1');
