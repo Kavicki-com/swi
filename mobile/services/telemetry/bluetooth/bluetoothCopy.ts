@@ -23,6 +23,8 @@ export const BLUETOOTH_MONITORING_COPY = {
   falhaGuardar: 'Não foi possível guardar a pulseira. Tente de novo.',
   abrirAjustes: 'Abrir ajustes',
   bluetoothDesligado: 'Bluetooth do celular desligado',
+  diretoDaPulseira: 'Direto da pulseira',
+  aguardandoLeitura: 'Pulseira conectada, aguardando leitura',
 } as const;
 
 /** Faixas do RSSI em dBm; mais perto de zero é mais perto. */
@@ -62,9 +64,14 @@ export function linkTagCopy(
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-export function lastReadingCopy(receivedAtMs: number): string {
-  const d = new Date(receivedAtMs);
-  return `Último batimento recebido às ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+/** O valor lido da pulseira, sem passar pelo servidor. */
+export function directBpmCopy(bpm: number): string {
+  return `${bpm} bpm, agora há pouco`;
+}
+
+export function disconnectedSinceCopy(sinceMs: number): string {
+  const d = new Date(sinceMs);
+  return `Pulseira desconectada desde ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export type ScanProblem = 'denied' | 'blocked' | 'bluetoothOff' | 'unavailable' | 'failed';

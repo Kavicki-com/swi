@@ -120,6 +120,7 @@ class SwiBleHeartRateModule : Module() {
         "state" to if (BleHeartRateService.running) BleHeartRateService.state else BleHeartRateService.STATE_IDLE,
         "deviceId" to Prefs.device(ctx),
         "lastReadingAt" to Prefs.lastReadingAt(ctx)?.toDouble(),
+        "lastBytes" to Prefs.lastBytes(),
       )
     }
   }

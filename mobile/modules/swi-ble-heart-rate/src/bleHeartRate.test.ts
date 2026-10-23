@@ -66,7 +66,7 @@ describe('createBleHeartRate sem módulo nativo', () => {
     await expect(ble.stop()).resolves.toBeUndefined();
     expect(ble.rotateReadings()).toEqual([]);
     expect(ble.connectedIntervals(0)).toEqual([]);
-    expect(ble.status()).toEqual({ state: 'idle', deviceId: null, lastReadingAt: null });
+    expect(ble.status()).toEqual({ state: 'idle', deviceId: null, lastReadingAt: null, lastBytes: null });
     const off = ble.onScanResult(jest.fn());
     const off2 = ble.onStateChanged(jest.fn());
     expect(() => {
@@ -173,23 +173,37 @@ describe('createBleHeartRate com módulo nativo', () => {
   describe('status', () => {
     it('passa o que tem a forma do contrato', () => {
       const { native } = fakeNative({
-        status: jest.fn(() => ({ state: 'connected', deviceId: 'AA:BB', lastReadingAt: 1_000 })),
+        status: jest.fn(() => ({
+          state: 'connected',
+          deviceId: 'AA:BB',
+          lastReadingAt: 1_000,
+          lastBytes: 'BkgA',
+        })),
       });
       expect(createBleHeartRate(native).status()).toEqual({
         state: 'connected',
         deviceId: 'AA:BB',
         lastReadingAt: 1_000,
+        lastBytes: 'BkgA',
       });
+    });
+
+    it('nativo sem lastBytes (versão anterior do módulo) vale como sem bytes', () => {
+      const { native } = fakeNative({
+        status: jest.fn(() => ({ state: 'connected', deviceId: 'AA:BB', lastReadingAt: 1_000 })),
+      });
+      expect(createBleHeartRate(native).status().lastBytes).toBeNull();
     });
 
     it('troca estado desconhecido por idle e campos tortos por null', () => {
       const { native } = fakeNative({
-        status: jest.fn(() => ({ state: 'flying', deviceId: '', lastReadingAt: 0 })),
+        status: jest.fn(() => ({ state: 'flying', deviceId: '', lastReadingAt: 0, lastBytes: 42 })),
       });
       expect(createBleHeartRate(native).status()).toEqual({
         state: 'idle',
         deviceId: null,
         lastReadingAt: null,
+        lastBytes: null,
       });
     });
 

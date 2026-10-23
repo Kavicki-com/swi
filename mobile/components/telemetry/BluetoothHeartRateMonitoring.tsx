@@ -5,7 +5,9 @@ import {
   bleHeartRate,
   bleHeartRateErrorCode,
   type BleHeartRate,
+  type BleHeartRateStatus,
   type BleScanResult,
+  type BleStateChangedEvent,
 } from '../../modules/swi-ble-heart-rate/src';
 import {
   sharedBandChoiceStore,
@@ -15,7 +17,8 @@ import {
 import {
   BLUETOOTH_MONITORING_COPY as COPY,
   bandNameCopy,
-  lastReadingCopy,
+  directBpmCopy,
+  disconnectedSinceCopy,
   linkTagCopy,
   scanOptionCopy,
   scanProblemCopy,
@@ -26,22 +29,37 @@ import {
   bluetoothPermissions,
   type BluetoothPermissions,
 } from '../../services/telemetry/bluetooth/bluetoothPermissions';
+import {
+  BLE_HEART_RATE_MAX_BPM,
+  BLE_HEART_RATE_MIN_BPM,
+} from '../../services/telemetry/bluetooth/bluetoothInboxDrain';
+import { decodeBase64, parseHeartRateMeasurement } from '../../services/telemetry/bluetooth/heartRateMeasurement';
 import { useBluetoothStartProblem } from '../../services/telemetry/bluetooth/useBluetoothHeartRate';
-import { useNow } from '../../services/telemetry/useNow';
 
 // A pulseira no Bluetooth em Configurações > Monitoramento, abaixo do Health
 // Connect: escolher uma vez a pulseira que transmite pelo perfil padrão de
-// batimento (0x180D), trocar, encerrar, ver o estado da ligação e o último
-// batimento. Escolher é ativar o monitoramento e Encerrar o termina; quem
-// liga e desliga o serviço com essa escolha é o ciclo de vida
+// batimento (0x180D), trocar, encerrar, ver o estado da ligação e o
+// batimento direto da pulseira. Escolher é ativar o monitoramento e
+// Encerrar o termina; quem liga e desliga o serviço com essa escolha é o
+// ciclo de vida
 // (useBluetoothHeartRate.ts). Mora fora de `app/` porque tudo ali vira rota
 // no Expo Router; aqui só compõe o DS.
 //
 // A varredura pede as permissões antes (a folha do sistema), roda no máximo
 // 30 s e para ao escolher, ao tocar Parar de procurar e ao sair da tela:
 // varrer gasta bateria e, no Android, tem cota por app.
+//
+// O batimento aqui vem direto da ponte, não do servidor: é a única tela que
+// lê a ponte para mostrar o valor, para a pessoa ver que a conexão está
+// servindo. O dashboard segue lendo o batimento pelo servidor.
 
 export const SCAN_TIMEOUT_MS = 30_000;
+
+/** De quanto em quanto a tela relê o status da ponte com a pulseira escolhida. */
+export const STATUS_POLL_MS = 2_000;
+
+/** Até quanto tempo a última notificação ainda vale como o batimento de agora. */
+export const DIRECT_READING_FRESH_MS = 10_000;
 
 type ScanPhase = 'idle' | 'scanning' | 'done';
 
@@ -56,6 +74,40 @@ function scanProblemOf(error: unknown): ScanProblem {
     default:
       return 'failed';
   }
+}
+
+/** O batimento dos bytes da última notificação, ou null se não é leitura. */
+function directBpmOf(base64: string | null | undefined): number | null {
+  if (!base64) return null;
+  const bytes = decodeBase64(base64);
+  if (bytes === null) return null;
+  const measurement = parseHeartRateMeasurement(bytes);
+  // Os mesmos descartes da drenagem: sem pele ou fora da faixa não é batimento.
+  if (measurement === null || measurement.contact === 'notDetected') return null;
+  const { bpm } = measurement;
+  return bpm < BLE_HEART_RATE_MIN_BPM || bpm > BLE_HEART_RATE_MAX_BPM ? null : bpm;
+}
+
+type DirectReading =
+  | { kind: 'bpm'; bpm: number }
+  | { kind: 'waiting' }
+  | { kind: 'disconnected'; since: number };
+
+function directReadingOf(
+  status: BleHeartRateStatus,
+  change: BleStateChangedEvent | null,
+  now: number,
+): DirectReading | null {
+  if (status.state !== 'connected') {
+    // A hora da mudança só vale se foi a mudança para o estado de agora. Com a
+    // tela aberta já sem conexão, a última leitura é o mais perto que se sabe
+    // de quando ela caiu; sem nenhuma das duas, não se inventa hora.
+    const since = change?.state === status.state ? change.changedAt : status.lastReadingAt;
+    return since === null ? null : { kind: 'disconnected', since };
+  }
+  const fresh = status.lastReadingAt !== null && now - status.lastReadingAt <= DIRECT_READING_FRESH_MS;
+  const bpm = fresh ? directBpmOf(status.lastBytes) : null;
+  return bpm === null ? { kind: 'waiting' } : { kind: 'bpm', bpm };
 }
 
 /** Uma entrada por pulseira, com o sinal mais recente, da mais forte à mais fraca. */
@@ -79,11 +131,18 @@ export function BluetoothHeartRateMonitoring({
   const theme = useTheme();
   const choice = useBandChoice(store);
   const startProblem = useBluetoothStartProblem();
-  // O último batimento anda sem evento: o status é relido a cada volta do
-  // relógio e a cada mudança de estado avisada pelo serviço.
-  useNow();
-  const [, setStateTick] = useState(0);
-  useEffect(() => ble.onStateChanged(() => setStateTick((tick) => tick + 1)), [ble]);
+  // O batimento anda sem evento: com a pulseira escolhida, o status é relido
+  // a cada 2 s e a cada mudança de estado avisada pelo serviço. Sem pulseira
+  // escolhida, ou fora da tela, ninguém consulta a ponte.
+  const [change, setChange] = useState<BleStateChangedEvent | null>(null);
+  useEffect(() => ble.onStateChanged(setChange), [ble]);
+  const [, setPollTick] = useState(0);
+  const escolhida = choice != null;
+  useEffect(() => {
+    if (!escolhida) return;
+    const timer = setInterval(() => setPollTick((tick) => tick + 1), STATUS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [escolhida]);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [found, setFound] = useState<BleScanResult[]>([]);
@@ -172,7 +231,7 @@ export function BluetoothHeartRateMonitoring({
   const daEscolhida = choice != null && status.deviceId === choice.deviceId;
   const nome = choice ? bandNameCopy(choice.name, choice.deviceId) : null;
   const etiqueta = nome !== null ? linkTagCopy(daEscolhida ? status.state : 'idle', nome) : null;
-  const ultimo = daEscolhida && status.lastReadingAt !== null ? status.lastReadingAt : null;
+  const direto = daEscolhida ? directReadingOf(status, change, Date.now()) : null;
 
   const varrendo = phase === 'scanning';
   const pedeAjustes = problem === 'blocked' || startProblem === 'E_PERMISSION_DENIED';
@@ -198,9 +257,24 @@ export function BluetoothHeartRateMonitoring({
       {etiqueta !== null && !varrendo && (
         <View style={{ gap: theme.gap.s }}>
           <StatusTag status={etiqueta.status} fullWidth numberOfLines={2} label={etiqueta.label} />
-          {ultimo !== null && (
+          {direto?.kind === 'bpm' && (
+            <View style={{ gap: theme.gap.xs }}>
+              <Text variant="caption.s" color={theme.content.dark}>
+                {COPY.diretoDaPulseira}
+              </Text>
+              <Text variant="body.s" color={theme.content.dark}>
+                {directBpmCopy(direto.bpm)}
+              </Text>
+            </View>
+          )}
+          {direto?.kind === 'waiting' && (
             <Text variant="body.s" color={theme.content.dark}>
-              {lastReadingCopy(ultimo)}
+              {COPY.aguardandoLeitura}
+            </Text>
+          )}
+          {direto?.kind === 'disconnected' && (
+            <Text variant="body.s" color={theme.content.dark}>
+              {disconnectedSinceCopy(direto.since)}
             </Text>
           )}
         </View>
