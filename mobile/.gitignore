@@ -33,6 +33,11 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Firebase do Android (push). Tem chave do projeto: fica fora do git. A build
+# local usa uma cópia aqui; o EAS usa a variável de arquivo GOOGLE_SERVICES_JSON
+# (ver app.config.js).
+google-services.json
+
 # typescript
 *.tsbuildinfo
 

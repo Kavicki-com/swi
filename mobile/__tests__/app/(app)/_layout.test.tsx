@@ -81,6 +81,15 @@ const mockBluetooth = jest.fn();
 jest.mock('../../../services/telemetry/bluetooth/useBluetoothHeartRate', () => ({
   useBluetoothHeartRate: (...args: unknown[]) => mockBluetooth(...args),
 }));
+const mockPushNotifications = jest.fn();
+jest.mock('../../../services/push/usePushNotifications', () => ({
+  usePushNotifications: (...args: unknown[]) => mockPushNotifications(...args),
+}));
+let mockPushNotice: string | null = null;
+jest.mock('../../../services/push/evacuationPush', () => ({
+  ...jest.requireActual('../../../services/push/evacuationPush'),
+  useEvacuationPushNotice: () => mockPushNotice,
+}));
 const mockReadinessReport = jest.fn();
 jest.mock('../../../services/telemetry/useReadinessReport', () => ({
   useReadinessReport: () => mockReadinessReport(),
@@ -225,6 +234,34 @@ describe('(app)/_layout: rastreio na evacuação', () => {
     mockUseAuth.mockReturnValue({ user: null, restoring: false });
     render();
     expect(mockEvacuationTracking).not.toHaveBeenCalled();
+  });
+
+  // O push da evacuação com o app aberto é a mesma deixa que o socket.
+  it('o push da evacuação também muda o aviso', () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    mockNotifications = [{ id: 'n2', domain: 'evacuation', createdAt: '2026-10-04T11:00:00.000Z' }];
+    mockPushNotice = 'p1#1';
+    render();
+    expect(mockEvacuationTracking).toHaveBeenLastCalledWith('u1', 'n2|push:p1#1');
+    mockPushNotice = null;
+  });
+});
+
+// Push: o aparelho registra o token com a pessoa logada, e o toque na
+// notificação do início abre a evacuação.
+describe('(app)/_layout: push', () => {
+  beforeEach(() => mockPushNotifications.mockClear());
+
+  it('com sessão, o push acompanha a pessoa logada', () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1' }, restoring: false });
+    render();
+    expect(mockPushNotifications).toHaveBeenLastCalledWith('u1');
+  });
+
+  it('sem sessão, o push não é montado', () => {
+    mockUseAuth.mockReturnValue({ user: null, restoring: false });
+    render();
+    expect(mockPushNotifications).not.toHaveBeenCalled();
   });
 });
 
