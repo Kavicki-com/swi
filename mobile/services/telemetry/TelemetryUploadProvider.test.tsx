@@ -3,6 +3,7 @@ import { act, create } from 'react-test-renderer';
 import { isFeatureEnabled, type FeatureGate } from '../../lib/featureFlags';
 import { useAuth } from '../auth/AuthProvider';
 import { androidDeviceControl } from './android/androidDeviceControl';
+import { resetBluetoothDrainForNewPairing } from './bluetooth/registerBluetoothDrainTask';
 import { syncHealthConnectTaskRegistration } from './healthConnect/healthConnectBackgroundTask';
 import type {
   HealthConnectReader,
@@ -31,6 +32,12 @@ jest.mock('./telemetryRuntime', () => ({
 jest.mock('./healthConnect/healthConnectBackgroundTask', () => ({
   syncHealthConnectTaskRegistration: jest.fn(async () => undefined),
 }));
+jest.mock('./bluetooth/registerBluetoothDrainTask', () => ({
+  resetBluetoothDrainForNewPairing: jest.fn(async () => undefined),
+}));
+const mockResetBle = resetBluetoothDrainForNewPairing as jest.MockedFunction<
+  typeof resetBluetoothDrainForNewPairing
+>;
 const mockSyncTask = syncHealthConnectTaskRegistration as jest.MockedFunction<
   typeof syncHealthConnectTaskRegistration
 >;
@@ -629,6 +636,36 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
     expect(visto.healthConnect).toMatchObject({ bandLabel: null, lastSyncAt: null });
   });
 
+  // A pulseira pelo Bluetooth também tem sessão do aparelho anterior: sem a
+  // troca, o backend recusaria cada batimento dela até encerrar.
+  it('resetHealthConnectForNewPairing troca também a sessão da pulseira pelo Bluetooth', async () => {
+    await montar();
+    leitor.ordem.length = 0;
+    mockResetBle.mockImplementationOnce(async () => {
+      leitor.ordem.push('reset do Bluetooth');
+    });
+    leitor.reader.resetForNewPairing.mockImplementationOnce(async () => {
+      leitor.ordem.push('reset do pareamento');
+    });
+    await act(async () => {
+      await visto.resetHealthConnectForNewPairing();
+    });
+    expect(mockResetBle).toHaveBeenCalledTimes(1);
+    expect(leitor.ordem).toEqual(['reset do Bluetooth', 'reset do pareamento', 'estado']);
+  });
+
+  // Independentes: a falha de um não impede o outro.
+  it('o reset do Bluetooth acontece mesmo com o do Health Connect falhando', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await montar();
+    leitor.reader.resetForNewPairing.mockRejectedValueOnce(new Error('disco cheio'));
+    await act(async () => {
+      await visto.resetHealthConnectForNewPairing();
+    });
+    expect(mockResetBle).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   // O pareamento já deu certo: a falha do reset só avisa, nunca rejeita.
   it('resetHealthConnectForNewPairing que rejeita vira false, com aviso, e não relê o estado', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -665,6 +702,7 @@ describe('TelemetryUploadProvider, Android com Health Connect', () => {
     expect(leitor.reader.checkAccess).not.toHaveBeenCalled();
     expect(leitor.reader.redetect).not.toHaveBeenCalled();
     expect(leitor.reader.resetForNewPairing).not.toHaveBeenCalled();
+    expect(mockResetBle).not.toHaveBeenCalled();
     expect(visto.healthConnect).toBeNull();
   });
 

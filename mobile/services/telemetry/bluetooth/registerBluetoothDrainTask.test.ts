@@ -1,9 +1,10 @@
 import { AppRegistry, Platform } from 'react-native';
 import { BLE_DRAIN_TASK_NAME } from './bluetoothInboxDrain';
-import { registerBluetoothDrainTask } from './registerBluetoothDrainTask';
+import { registerBluetoothDrainTask, resetBluetoothDrainForNewPairing } from './registerBluetoothDrainTask';
 
 const mockRun = jest.fn(async () => undefined);
-const mockCreate = jest.fn((_deps: unknown) => ({ run: mockRun }));
+const mockReset = jest.fn(async () => undefined);
+const mockCreate = jest.fn((_deps: unknown) => ({ run: mockRun, resetForNewPairing: mockReset }));
 jest.mock('./bluetoothInboxDrain', () => ({
   ...jest.requireActual('./bluetoothInboxDrain'),
   createBluetoothInboxDrain: (deps: unknown) => mockCreate(deps),
@@ -64,5 +65,24 @@ describe('registerBluetoothDrainTask', () => {
     await choice.read();
     expect(mockReadChoice).toHaveBeenCalledTimes(2);
     expect(mockReadChoice).toHaveBeenCalledWith({ name: 'bluetooth-band.json' });
+  });
+});
+
+describe('resetBluetoothDrainForNewPairing', () => {
+  it('fora do Android não monta a drenagem nem faz nada', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios' });
+    await expect(resetBluetoothDrainForNewPairing()).resolves.toBeUndefined();
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockReset).not.toHaveBeenCalled();
+  });
+
+  // A mesma drenagem da tarefa: é ela que serializa o reset com a rodada.
+  it('no Android pede o reset à drenagem da tarefa', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'android' });
+    registerBluetoothDrainTask();
+    await task()({});
+    await resetBluetoothDrainForNewPairing();
+    expect(mockReset).toHaveBeenCalledTimes(1);
+    expect(mockCreate.mock.calls.length).toBeLessThanOrEqual(1);
   });
 });

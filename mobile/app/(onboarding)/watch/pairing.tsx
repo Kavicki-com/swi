@@ -85,9 +85,11 @@ function WatchPairingScreen() {
       : await completeEnrollment(codigo);
     if (resultado.paired && naPulseira) {
       // Cada pareamento cria outro aparelho no servidor, que recusa as
-      // sessões do anterior: o leitor do Health Connect troca o sal antes de
-      // o envio reler a credencial e de a primeira sincronização sair. A
-      // falha só avisa: o pareamento já deu certo e continua valendo.
+      // sessões do anterior: o leitor do Health Connect troca o sal, e a
+      // pulseira pelo Bluetooth troca as sessões dela (no mesmo passo do
+      // provider), antes de o envio reler a credencial e de a primeira
+      // sincronização sair. A falha só avisa: o pareamento já deu certo e
+      // continua valendo.
       try {
         await envio.resetHealthConnectForNewPairing();
       } catch (error) {
