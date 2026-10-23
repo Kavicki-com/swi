@@ -21,7 +21,6 @@ import { WeatherAlertModal } from '../../components/modals/WeatherAlertModal';
 import { BadgedButton } from '../../components/dashboard/BadgedButton';
 import { StatCol } from '../../components/dashboard/StatCol';
 import { StatDivider } from '../../components/dashboard/StatDivider';
-import { FailureNotices } from '../../components/telemetry/FailureNotices';
 import {
   FIRE_ICON_SVG,
   GAUGE_ICON_SVG,
@@ -538,14 +537,13 @@ export default function Dashboard() {
           <Text variant="body.m" color={theme.content.dark}>
             {view.fatigueText}
           </Text>
-          {/* Android: o caminho que falhou, com o motivo e o botão que tenta
-              de novo. A coluna da métrica já diz a frase. */}
-          <FailureNotices absent={view.absent} context={absence} />
           {/* Em que pé está a leitura e, quando não vem do relógio real, o
               selo de origem. Linha de Text do DS: o Figma não tem esse slot.
               A lista de prontidão e a faixa de sincronização moram em
               Configurações, Monitoramento (a faixa também em Minhas
-              estatísticas): aqui empurravam o rodapé para fora da tela. */}
+              estatísticas), e o aviso do caminho que falhou, com o botão que
+              tenta de novo, em Minhas estatísticas: aqui empurravam o rodapé
+              para fora da tela. A coluna da métrica já diz a frase. */}
           <Text variant="caption.s" color={theme.content.dark}>
             {view.sourceBadge ? `${view.status} · ${view.sourceBadge}` : view.status}
           </Text>
