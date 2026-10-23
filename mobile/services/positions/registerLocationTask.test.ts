@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import { LOCATION_TASK_NAME } from './backgroundLocationTask';
 import { registerLocationTask } from './registerLocationTask';
@@ -6,10 +6,14 @@ import { registerLocationTask } from './registerLocationTask';
 jest.mock('expo-task-manager', () => ({ defineTask: jest.fn() }));
 
 const mockHandle = jest.fn(async (_locations: unknown) => undefined);
-let mockHandlerDeps: { activeEvacuation(): Promise<unknown> } | null = null;
+interface MockHandlerDeps {
+  activeEvacuation(): Promise<unknown>;
+  onEvacuationEnded?(): void;
+}
+let mockHandlerDeps: MockHandlerDeps | null = null;
 jest.mock('./backgroundLocationTask', () => ({
   ...jest.requireActual('./backgroundLocationTask'),
-  createLocationHandler: (deps: { activeEvacuation(): Promise<unknown> }) => {
+  createLocationHandler: (deps: MockHandlerDeps) => {
     mockHandlerDeps = deps;
     return { handle: mockHandle, reset: mockReset };
   },
@@ -20,13 +24,19 @@ jest.mock('../evacuation/getEvacuationBackend', () => ({
 }));
 const mockReset = jest.fn();
 let mockActive = false;
+const mockEndEvacuation = jest.fn(async () => undefined);
 const mockSubscribe = jest.fn((_listener: () => void) => () => undefined);
 jest.mock('./positionTracking', () => ({
   getPositionRuntime: () => ({
     outbox: {},
     window: {},
     drainer: {},
-    tracking: { halt: jest.fn(), subscribe: mockSubscribe, isActive: () => mockActive },
+    tracking: {
+      halt: jest.fn(),
+      endEvacuation: mockEndEvacuation,
+      subscribe: mockSubscribe,
+      isActive: () => mockActive,
+    },
   }),
 }));
 
@@ -87,6 +97,26 @@ describe('registerLocationTask', () => {
     await expect(perguntar()).resolves.toBeNull();
     mockGetActive.mockRejectedValueOnce(new Error('rede'));
     await expect(perguntar()).resolves.toBe('unknown');
+  });
+
+  // O fim visto pela tarefa, com o app na frente, passa pelo mesmo controle da
+  // tela: as leituras voltam às opções da jornada (ou desligam) na hora, e a
+  // notificação fixa deixa de falar em evacuação. Em segundo plano o Android
+  // pode recusar religar o serviço, então fica para a volta ao primeiro plano.
+  it('fim visto pela tarefa com o app na frente: o controle encerra a evacuação', () => {
+    registerLocationTask();
+    const estado = AppState as { currentState: unknown };
+    const antes = estado.currentState;
+    try {
+      estado.currentState = 'active';
+      mockHandlerDeps!.onEvacuationEnded!();
+      expect(mockEndEvacuation).toHaveBeenCalledTimes(1);
+      estado.currentState = 'background';
+      mockHandlerDeps!.onEvacuationEnded!();
+      expect(mockEndEvacuation).toHaveBeenCalledTimes(1);
+    } finally {
+      estado.currentState = antes;
+    }
   });
 
   it('na web não define nada', () => {

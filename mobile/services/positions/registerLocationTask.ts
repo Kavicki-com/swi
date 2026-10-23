@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import {
   createLocationHandler,
@@ -39,6 +39,14 @@ export function registerLocationTask(): void {
     drainer,
     stopUpdates: () => tracking.halt(),
     activeEvacuation,
+    // Com o app na frente a tarefa roda no mesmo processo da tela: o fim que
+    // ela viu passa pelo controle, que põe as leituras de volta na jornada (ou
+    // desliga) e a notificação fixa deixa de falar em evacuação. Em segundo
+    // plano o Android pode recusar religar o serviço; ali fica para a volta ao
+    // primeiro plano (useEvacuationTracking consulta e encerra).
+    onEvacuationEnded: () => {
+      if (AppState.currentState === 'active') void tracking.endEvacuation();
+    },
     now: () => new Date(),
   });
   // Rastreio desligado (fim da jornada ou da evacuação, logout, 12 h): quem

@@ -67,7 +67,9 @@ export interface PositionTracking {
   startEvacuation(userId: string, evacuationId: string): Promise<StartResult>;
   /**
    * O gestor encerrou: apaga a evacuação. Com a jornada aberta as leituras
-   * voltam às opções dela; sem jornada, desligam. Sem evacuação gravada, nada.
+   * voltam às opções dela; sem jornada, desligam. Sem evacuação gravada, só
+   * reaplica se as leituras seguem com as opções da evacuação neste processo
+   * (a tarefa apagou antes); fora isso, nada.
    */
   endEvacuation(): Promise<void>;
   /** Logout: fecha a janela, apaga a evacuação e desliga. */
@@ -146,12 +148,17 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
       setActive(false);
       return 'off';
     }
+    let started = false;
     try {
-      const started = await updates.hasStarted();
+      started = await updates.hasStarted();
       const sameOptions = mode === wanted || (mode === null && wanted === 'journey');
       if (!started || !sameOptions) await updates.start(wanted);
     } catch {
-      mode = null;
+      // Recusado com as leituras já ligadas (religar em segundo plano o
+      // Android pode recusar), elas seguem com as opções de antes: o modo
+      // fica, e o próximo pedido tenta trocar de novo. Esquecer aqui faria a
+      // jornada parecer já certa e a notificação seguir falando em evacuação.
+      if (!started) mode = null;
       setActive(false);
       return 'failed';
     }
@@ -204,12 +211,19 @@ export function createPositionTracking(deps: TrackingDeps): PositionTracking {
   }
 
   async function endEvacuation(): Promise<void> {
-    if ((await evacuation.read()) === null) return;
-    try {
-      await evacuation.close();
-    } catch {
-      // Sem apagar, a tarefa ainda veria a evacuação: não mexe nas leituras.
-      return;
+    const stored = await evacuation.read();
+    // Sem evacuação gravada pode ser que a tarefa já a tenha apagado (ela
+    // pergunta ao servidor e não religa as leituras). Se elas seguem com as
+    // opções da evacuação neste processo, o fim ainda reaplica o modo; sem
+    // isso a notificação fixa seguia "Evacuação em andamento".
+    if (stored === null && mode !== 'evacuation') return;
+    if (stored !== null) {
+      try {
+        await evacuation.close();
+      } catch {
+        // Sem apagar, a tarefa ainda veria a evacuação: não mexe nas leituras.
+        return;
+      }
     }
     await apply();
   }
