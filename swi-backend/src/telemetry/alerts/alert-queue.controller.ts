@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { Audit } from '../../audit/audit.decorator'
 import { CurrentUser, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Can } from '../../auth/roles.decorator'
@@ -24,12 +25,14 @@ export class AlertQueueController {
 
   @Post(':id/acknowledge')
   @HttpCode(200)
+  @Audit('ALERT_ACKNOWLEDGED', { subject: { resource: 'alert', param: 'id' } })
   acknowledge(@CurrentUser() admin: JwtUser, @Param('id') id: string) {
     return this.alerts.acknowledge(admin, id)
   }
 
   @Post(':id/resolve')
   @HttpCode(200)
+  @Audit('ALERT_RESOLVED', { subject: { resource: 'alert', param: 'id' } })
   resolve(@CurrentUser() admin: JwtUser, @Param('id') id: string, @Body() body: AlertTriageDto) {
     return this.alerts.resolve(admin, id, body.note)
   }

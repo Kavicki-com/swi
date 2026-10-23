@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { Audit } from '../../audit/audit.decorator'
 import { CurrentUser, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Can } from '../../auth/roles.decorator'
@@ -18,6 +19,7 @@ export class ConditionHistoryController {
 
   /** Condições abertas e fechadas, com o motivo do fechamento, 50 por página, da mais nova à mais antiga. */
   @Can('monitoring.read')
+  @Audit('CONDITIONS_READ', { subject: { param: 'id' } })
   @Get('workers/:id/conditions')
   list(@CurrentUser() caller: JwtUser, @Param('id') workerId: string, @Query() query: ConditionHistoryQueryDto) {
     return this.history.list(caller, workerId, query.cursor)

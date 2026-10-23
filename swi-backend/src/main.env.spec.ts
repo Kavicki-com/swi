@@ -3,7 +3,7 @@
 // teria aberto conexão de banco e porta antes de falhar, e o erro chegaria
 // misturado com ruído de inicialização.
 const listen = jest.fn()
-const create = jest.fn(async () => ({ listen, enableCors: jest.fn() }))
+const create = jest.fn(async () => ({ listen, enableCors: jest.fn(), set: jest.fn() }))
 // Generics em vez de um parâmetro nomeado que ninguém usa: o tipo do argumento
 // é o que permite inspecionar `mock.calls[0][0]` mais abaixo.
 const parseRuntimeEnv = jest.fn<

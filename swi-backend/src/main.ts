@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { existsSync, unlinkSync } from 'node:fs'
 import { Logger } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 import { AppModule } from './app.module'
 import { logLevelsFor } from './config/log-levels'
 import { parseRuntimeEnv } from './config/runtime-env'
@@ -12,7 +13,12 @@ async function bootstrap() {
   // Antes de qualquer coisa: um ambiente de produção incompleto tem que
   // derrubar o boot aqui, e não depois de abrir conexão de banco e porta.
   const env = parseRuntimeEnv(process.env)
-  const app = await NestFactory.create(AppModule, { logger: logLevelsFor(env.nodeEnv) })
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: logLevelsFor(env.nodeEnv) })
+  // A API fica atrás do nginx, que encaminha por 127.0.0.1 e acrescenta o
+  // cliente ao X-Forwarded-For. Sem isto `req.ip` é o endereço do proxy, e o
+  // limite de requisições e a trilha de auditoria contam todo mundo como um IP
+  // só. Só o loopback é confiável: um X-Forwarded-For vindo de fora é ignorado.
+  app.set('trust proxy', 'loopback')
   applyCors(app)
   // Swagger em /docs e /docs-json. Antes de escutar, como o CORS: a página só
   // vale se existir desde a primeira requisição.

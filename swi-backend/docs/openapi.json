@@ -2844,7 +2844,7 @@
       "get": {
         "operationId": "TelemetryQueryController_history",
         "summary": "",
-        "description": "Trilha de auditoria. Sem @Roles porque o dono da sessão também a audita; o\nserviço é que confere se quem pede é o funcionário dela ou administrador da\nmesma empresa, e recusa igual nos dois casos em que não é.",
+        "description": "Trilha de auditoria. Sem @Roles porque o dono da sessão também a audita; o\nserviço é que confere se quem pede é o funcionário dela ou administrador da\nmesma empresa, e recusa igual nos dois casos em que não é. Na trilha do\nacesso a dado de saúde, só a leitura de quem não é o dono entra.",
         "parameters": [
           {
             "name": "id",
@@ -3804,6 +3804,129 @@
         },
         "tags": [
           "live"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/audit/events": {
+      "get": {
+        "operationId": "AuditController_list",
+        "summary": "",
+        "description": "Linhas da trilha, 50 por página (até 100), da mais nova à mais antiga.",
+        "parameters": [
+          {
+            "name": "subjectUserId",
+            "required": false,
+            "in": "query",
+            "description": "De quem são os dados.",
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "description": "Quem agiu.",
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "HEALTH_CURRENT_READ",
+                "HEALTH_SERIES_READ",
+                "CALIBRATION_READ",
+                "CALIBRATION_HISTORY_READ",
+                "CONDITIONS_READ",
+                "SESSION_HISTORY_READ",
+                "USER_DETAIL_READ",
+                "DEVICE_READ",
+                "USER_CREATED",
+                "USER_UPDATED",
+                "USER_APPROVED",
+                "USER_REJECTED",
+                "USER_DELETED",
+                "EXAM_ADDED",
+                "EXAM_REMOVED",
+                "BANDS_CHANGED",
+                "SAFETY_CHANGED",
+                "MONITORING_PAUSED",
+                "MONITORING_RESUMED",
+                "PAUSE_REQUESTED",
+                "ALERT_ACKNOWLEDGED",
+                "ALERT_RESOLVED",
+                "DEVICE_ENROLLED",
+                "DEVICE_REVOKED",
+                "RESCUE_STARTED",
+                "RESCUE_ARRIVED",
+                "RESCUE_ENDED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Instante inicial, inclusive (ISO 8601).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Instante final, inclusive (ISO 8601).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Id do último item da página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "audit"
         ],
         "security": [
           {

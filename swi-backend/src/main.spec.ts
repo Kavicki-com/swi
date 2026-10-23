@@ -2,7 +2,8 @@
 // testada e NUNCA ser chamada pelo main real, e o browser continuaria bloqueado.
 // NestFactory é mockado pra não subir app nem abrir porta.
 const listen = jest.fn()
-const fakeApp = { listen, enableCors: jest.fn() }
+const set = jest.fn()
+const fakeApp = { listen, enableCors: jest.fn(), set }
 
 jest.mock('@nestjs/core', () => ({ NestFactory: { create: async () => fakeApp } }))
 // O AppModule é dublê porque mockar só o NestFactory não cortava o custo: o
@@ -39,5 +40,13 @@ describe('bootstrap', () => {
   it('monta a documentação da API com o ambiente validado, antes de escutar', () => {
     expect(setupApiDocs).toHaveBeenCalledWith(fakeApp, expect.objectContaining({ apiDocs: expect.any(Boolean) }))
     expect((setupApiDocs as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(listen.mock.invocationCallOrder[0])
+  })
+
+  it('confia só no proxy local para achar o IP do cliente, antes de escutar', () => {
+    // 'loopback' e não `true`: com `true` qualquer cliente forjaria o próprio
+    // IP mandando X-Forwarded-For, e o limite de requisições e a trilha de
+    // auditoria passariam a acreditar nele.
+    expect(set).toHaveBeenCalledWith('trust proxy', 'loopback')
+    expect(set.mock.invocationCallOrder[0]).toBeLessThan(listen.mock.invocationCallOrder[0])
   })
 })

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseEnumPipe, Put, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { CalibrationMetric, SafetyRule } from '@prisma/client'
+import { Audit } from '../../audit/audit.decorator'
 import { CurrentUser, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Can } from '../../auth/roles.decorator'
@@ -21,6 +22,7 @@ export class CalibrationController {
 
   /** Fase, régua, faixas por medição e travas de um funcionário. */
   @Can('monitoring.read')
+  @Audit('CALIBRATION_READ', { subject: { param: 'id' } })
   @Get('workers/:id/calibration')
   detail(@CurrentUser() caller: JwtUser, @Param('id') workerId: string) {
     return this.calibration.detail(caller, workerId)
@@ -28,6 +30,7 @@ export class CalibrationController {
 
   /** Histórico de mudanças, 50 por página, do mais novo ao mais antigo. */
   @Can('monitoring.read')
+  @Audit('CALIBRATION_HISTORY_READ', { subject: { param: 'id' } })
   @Get('workers/:id/calibration/history')
   history(@CurrentUser() caller: JwtUser, @Param('id') workerId: string, @Query() query: CalibrationHistoryQueryDto) {
     return this.calibration.history(caller, workerId, query.cursor)
@@ -35,6 +38,7 @@ export class CalibrationController {
 
   /** Corrige a faixa de uma medição; o recálculo diário não mexe na correção. */
   @Can('monitoring.bands.manage')
+  @Audit('BANDS_CHANGED', { subject: { param: 'id' }, resource: { type: 'band', param: 'metric' } })
   @Put('workers/:id/calibration/bands/:metric')
   setBand(
     @CurrentUser() caller: JwtUser,
@@ -47,6 +51,7 @@ export class CalibrationController {
 
   /** Remove a correção: a faixa volta ao aprendido. */
   @Can('monitoring.bands.manage')
+  @Audit('BANDS_CHANGED', { subject: { param: 'id' }, resource: { type: 'band', param: 'metric' } })
   @Delete('workers/:id/calibration/bands/:metric')
   clearBand(
     @CurrentUser() caller: JwtUser,
@@ -58,6 +63,7 @@ export class CalibrationController {
 
   /** Grava a trava personalizada da regra. */
   @Can('monitoring.safety.manage')
+  @Audit('SAFETY_CHANGED', { subject: { param: 'id' }, resource: { type: 'safety', param: 'rule' } })
   @Put('workers/:id/calibration/safety/:rule')
   setSafety(
     @CurrentUser() caller: JwtUser,
@@ -70,6 +76,7 @@ export class CalibrationController {
 
   /** Remove a trava personalizada: vale o padrão do perfil. */
   @Can('monitoring.safety.manage')
+  @Audit('SAFETY_CHANGED', { subject: { param: 'id' }, resource: { type: 'safety', param: 'rule' } })
   @Delete('workers/:id/calibration/safety/:rule')
   clearSafety(
     @CurrentUser() caller: JwtUser,

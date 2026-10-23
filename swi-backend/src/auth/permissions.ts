@@ -49,6 +49,8 @@ export const PERMISSIONS = {
   'devices.manage': ADMIN_ONLY,
   /** Configurações da empresa; hoje, o local da obra que alimenta o clima. */
   'company.manage': ADMIN_ONLY,
+  /** Trilha de auditoria: quem do painel leu ou alterou os dados de saúde de cada pessoa. */
+  'audit.read': PANEL,
   // As de relatório são impostas no módulo de relatórios: a leitura não exige
   // papel, e editar ou excluir relatório alheio exige o papel no serviço. O
   // autor sempre edita e exclui o próprio.
