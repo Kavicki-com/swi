@@ -76,7 +76,12 @@ function sanitizeStateEvent(raw: unknown): BleStateChangedEvent | null {
   return { state, deviceId: nonEmptyString(raw.deviceId), changedAt: raw.changedAt };
 }
 
-const IDLE_STATUS: BleHeartRateStatus = { state: 'idle', deviceId: null, lastReadingAt: null };
+const IDLE_STATUS: BleHeartRateStatus = {
+  state: 'idle',
+  deviceId: null,
+  lastReadingAt: null,
+  lastBytes: null,
+};
 
 function sanitizeStatus(raw: unknown): BleHeartRateStatus {
   if (!isRecord(raw)) return IDLE_STATUS;
@@ -86,6 +91,8 @@ function sanitizeStatus(raw: unknown): BleHeartRateStatus {
     state: stateOf(raw.state) ?? 'idle',
     deviceId: nonEmptyString(raw.deviceId),
     lastReadingAt: isPositiveFinite(raw.lastReadingAt) ? raw.lastReadingAt : null,
+    // Só a forma: se é batimento quem diz é o interpretador do perfil.
+    lastBytes: nonEmptyString(raw.lastBytes),
   };
 }
 

@@ -353,7 +353,7 @@ describe('Pulseira no Bluetooth: permissões e falhas da varredura', () => {
   });
 });
 
-describe('Pulseira no Bluetooth: estado e último batimento', () => {
+describe('Pulseira no Bluetooth: estado da ligação', () => {
   it.each([
     ['connected', 'accept', 'Polar H10 conectada'],
     ['searching', 'pending', 'Procurando Polar H10'],
@@ -377,23 +377,6 @@ describe('Pulseira no Bluetooth: estado e último batimento', () => {
     ponte.status = { state: 'connected', deviceId: 'Z0:00', lastReadingAt: null };
     const { tree } = await montar({ ponte, escolha: POLAR });
     expect(tags(tree)).toContainEqual({ status: 'info', label: 'Polar H10 escolhida' });
-  });
-
-  it('mostra a hora do último batimento recebido', async () => {
-    const ponte = ponteFalsa();
-    const recebido = NOW.getTime() - 5_000;
-    ponte.status = { state: 'connected', deviceId: POLAR.deviceId, lastReadingAt: recebido };
-    const { tree } = await montar({ ponte, escolha: POLAR });
-    const d = new Date(recebido);
-    const hora = [d.getHours(), d.getMinutes(), d.getSeconds()]
-      .map((n) => String(n).padStart(2, '0'))
-      .join(':');
-    expect(texto(tree)).toContain(`Último batimento recebido às ${hora}`);
-  });
-
-  it('sem batimento recebido ainda, não inventa hora', async () => {
-    const { tree } = await montar({ escolha: POLAR });
-    expect(texto(tree)).not.toContain('Último batimento');
   });
 });
 

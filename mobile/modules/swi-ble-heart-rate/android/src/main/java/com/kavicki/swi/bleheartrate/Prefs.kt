@@ -2,6 +2,7 @@ package com.kavicki.swi.bleheartrate
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
 
 /**
  * O que o serviço precisa para religar sozinho depois de o sistema matar o
@@ -60,15 +61,26 @@ internal object Prefs {
    * A pulseira notifica uma vez por segundo. A hora da última leitura fica em
    * memória e vai para o disco no máximo uma vez a cada 15 s (cada gravação
    * reescreve o arquivo inteiro). Processo morto perde no máximo esses 15 s.
+   *
+   * Os bytes da última notificação ficam só em memória, para a tela de
+   * escolher a pulseira mostrar o valor que acabou de chegar. Processo morto
+   * volta sem eles, e a tela espera a próxima notificação.
    */
   private const val PERSIST_EVERY_MS = 15_000L
   @Volatile private var lastReadingInMemory = 0L
   @Volatile private var lastReadingPersisted = 0L
+  @Volatile private var lastBytesInMemory: ByteArray? = null
 
   fun lastReadingAt(ctx: Context): Long? =
     maxOf(lastReadingInMemory, prefs(ctx).getLong(KEY_LAST_READING, 0L)).takeIf { it > 0L }
 
-  fun noteReading(ctx: Context, at: Long) {
+  /** Bytes da última notificação em base64; null antes da primeira neste processo. */
+  fun lastBytes(): String? = lastBytesInMemory?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
+
+  fun noteReading(ctx: Context, at: Long, bytes: ByteArray) {
+    // Cópia: no Android antigo o vetor é o da característica, que o sistema
+    // reaproveita na notificação seguinte.
+    lastBytesInMemory = bytes.copyOf()
     lastReadingInMemory = at
     if (at - lastReadingPersisted >= PERSIST_EVERY_MS) persistLastReading(ctx, at)
   }

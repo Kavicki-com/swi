@@ -51,6 +51,13 @@ export interface BleHeartRateStatus {
   deviceId: string | null;
   /** Última notificação recebida, em ms desde a época; null se nenhuma. */
   lastReadingAt: number | null;
+  /**
+   * Bytes da última notificação do 0x2A37, em base64, para a tela de escolher
+   * a pulseira mostrar o valor. Só em memória no Kotlin: null depois de o
+   * processo reiniciar, antes da primeira notificação e no módulo de versão
+   * anterior, que não manda o campo.
+   */
+  lastBytes?: string | null;
 }
 
 /**

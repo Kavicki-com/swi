@@ -478,7 +478,7 @@ class BleHeartRateService : Service() {
     if (c.uuid != HEART_RATE_MEASUREMENT) return
     val now = System.currentTimeMillis()
     Inbox.append(this, value, now)
-    Prefs.noteReading(this, now)
+    Prefs.noteReading(this, now, value)
     if (now - lastKickAt >= KICK_INTERVAL_MS) {
       // Marcado aqui, na thread da notificação: a próxima notificação já vê
       // a marca e não agenda outro disparo.
