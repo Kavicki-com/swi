@@ -44,6 +44,15 @@ import { useLiveMapMarkers } from '@/hooks/useLiveMapMarkers'
 import { useEvacuation } from '@/hooks/useEvacuation'
 import { useWeatherAlert } from '@/hooks/useWeatherAlert'
 import { countWorkersInArea, type AreaVertex } from '@/lib/evacuationArea'
+import {
+  addVertex,
+  closeDraft,
+  EMPTY_DRAFT,
+  isReady,
+  moveVertex,
+  undoDraft,
+  type AreaDraft,
+} from '@/lib/areaDraft'
 import { drawAreaLayer, AREA_VERTEX_COLOR } from '@/pages/maps/evacuationAreaLayer'
 import { buildMusterPin } from '@/pages/maps/musterPointPin'
 import { EvacuationDrawToolbar } from './components/EvacuationDrawToolbar'
@@ -135,10 +144,11 @@ export function AlertsList() {
   const [filter, setFilter] = useState<string>('all')
   const [mapMode, setMapMode] = useState<'pins' | 'heat' | 'meteo'>('pins')
   // Fluxo de demarcação em dois passos: "Iniciar evacuação" abre o passo da
-  // área (MEL-13, um vértice por clique) e, com a área fechada, o passo do
+  // área (MEL-13, vetorizada ponto a ponto; só vale depois que o gestor fecha
+  // o trajeto clicando no primeiro ponto) e, com a área fechada, o passo do
   // ponto de encontro (um clique, obrigatório). Confirmar dispara com os dois.
   const [drawStep, setDrawStep] = useState<'area' | 'muster' | null>(null)
-  const [draftVertices, setDraftVertices] = useState<AreaVertex[]>([])
+  const [draft, setDraft] = useState<AreaDraft>(EMPTY_DRAFT)
   const [draftMuster, setDraftMuster] = useState<AreaVertex | null>(null)
   // Polígono salvo da evacuação ativa (anel fechado [lng, lat]), ou null.
   const savedArea = evacuation?.area ?? null
@@ -152,32 +162,40 @@ export function AlertsList() {
     [theme],
   )
   const beginDraw = () => {
-    setDraftVertices([])
+    setDraft(EMPTY_DRAFT)
     setDraftMuster(null)
     setDrawStep('area')
   }
   const cancelDraw = () => {
     setDrawStep(null)
-    setDraftVertices([])
+    setDraft(EMPTY_DRAFT)
     setDraftMuster(null)
   }
   const confirmDraw = () => {
-    const area = draftVertices
     const muster = draftMuster
-    // O botão já fica desabilitado sem o ponto; a guarda é a rede de segurança
-    // do contrato (o backend recusa 400 sem ele).
-    if (!muster) return
+    // Os botões já travam sem área fechada e sem ponto; a guarda é a rede de
+    // segurança do contrato (o backend recusa 400 sem o ponto).
+    if (!muster || !isReady(draft)) return
+    const area = draft.vertices
     setDrawStep(null)
-    setDraftVertices([])
+    setDraft(EMPTY_DRAFT)
     setDraftMuster(null)
     void startEvacuation(area, muster)
   }
-  // O handler de clique do mapa é instalado uma vez; estes refs deixam ele ver
-  // o passo de desenho atual sem reinstalar e recriar o mapa.
-  const drawStepRef = useRef(drawStep)
-  drawStepRef.current = drawStep
-  const appendVertexRef = useRef<(v: AreaVertex) => void>(() => {})
-  appendVertexRef.current = (v: AreaVertex) => setDraftVertices((cur) => [...cur, v])
+  // O handler de clique do mapa é instalado uma vez; este ref deixa ele ver o
+  // estado atual sem reinstalar e recriar o mapa.
+  const mapClickRef = useRef<(v: AreaVertex) => void>(() => {})
+  mapClickRef.current = (v: AreaVertex) => {
+    if (drawStep === 'area') {
+      setDraft((d) => addVertex(d, v))
+      return
+    }
+    if (drawStep === 'muster') {
+      setDraftMuster(v)
+      return
+    }
+    navigate('/alerts')
+  }
 
   const lib = useMapLibre()
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -260,16 +278,7 @@ export function AlertsList() {
     // o card (o pino é um elemento DOM por cima do canvas, então o clique nele
     // não chega aqui; só o clique fora dele).
     map.on('click', (e: maplibregl.MapMouseEvent) => {
-      const step = drawStepRef.current
-      if (step === 'area') {
-        appendVertexRef.current([e.lngLat.lng, e.lngLat.lat])
-        return
-      }
-      if (step === 'muster') {
-        setDraftMuster([e.lngLat.lng, e.lngLat.lat])
-        return
-      }
-      navigateRef.current('/alerts')
+      mapClickRef.current([e.lngLat.lng, e.lngLat.lat])
     })
     return () => {
       map.remove()
@@ -404,19 +413,21 @@ export function AlertsList() {
   }, [mapReady, mapMode])
 
   // Traçado em edição: redesenha a cada vértice adicionado ou arrastado. No
-  // passo da área os vértices são arrastáveis (soltar um atualiza o anel); no
-  // passo do ponto a área do rascunho fica só leitura, como referência.
+  // passo da área os vértices são arrastáveis (soltar um atualiza o anel) e,
+  // com o trajeto aberto, o clique no primeiro ponto fecha a área; no passo do
+  // ponto a área do rascunho fica só leitura, como referência.
   useEffect(() => {
     const map = mapRef.current
     if (!lib || !map || !mapReady || !drawStep) return
-    const dispose = drawAreaLayer(map, lib, draftVertices, {
+    const dispose = drawAreaLayer(map, lib, draft.vertices, {
       colors: areaColors,
+      closed: draft.closed,
       draggable: drawStep === 'area',
-      onVertexDrag: (index, vertex) =>
-        setDraftVertices((cur) => cur.map((p, k) => (k === index ? vertex : p))),
+      onVertexDrag: (index, vertex) => setDraft((d) => moveVertex(d, index, vertex)),
+      onFirstVertexClick: drawStep === 'area' ? () => setDraft(closeDraft) : undefined,
     })
     return dispose
-  }, [lib, mapReady, drawStep, draftVertices, areaColors])
+  }, [lib, mapReady, drawStep, draft, areaColors])
 
   // Área salva da evacuação ativa: polígono vermelho com vértices magenta, só
   // leitura. Enquanto o admin redesenha, o traçado acima tem a vez.
@@ -503,11 +514,14 @@ export function AlertsList() {
           {drawStep ? (
             <EvacuationDrawToolbar
               step={drawStep}
-              vertexCount={draftVertices.length}
+              vertexCount={draft.vertices.length}
+              closed={draft.closed}
               hasMuster={draftMuster !== null}
-              onUndo={() => setDraftVertices((cur) => cur.slice(0, -1))}
+              onUndo={() => setDraft(undoDraft)}
               onCancel={cancelDraw}
-              onNext={() => setDrawStep('muster')}
+              onNext={() => {
+                if (isReady(draft)) setDrawStep('muster')
+              }}
               onBack={() => setDrawStep('area')}
               onConfirm={confirmDraw}
             />
