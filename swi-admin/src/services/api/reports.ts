@@ -44,6 +44,9 @@ export type Report = {
   summary: string
   status: ReportStatus
   statusLabel: string
+  // Quem escreveu o relatório. Decide quem pode excluí-lo além do
+  // administrador. Ausente em backend anterior ao campo.
+  authorId?: string
   authorName: string
   authorAvatarUri: string
   creationDate: string
@@ -84,6 +87,8 @@ export type ReportDto = {
   summary: string
   status: ReportStatus
   statusLabel: string
+  // Opcional: backend anterior ao campo não manda o autor.
+  authorId?: string
   authorName: string
   authorAvatarUri: string
   creationDate: string // dd/mm/yyyy
@@ -168,6 +173,7 @@ function toReport(dto: ReportDto): Report {
     summary: dto.summary,
     status: dto.status,
     statusLabel: dto.statusLabel,
+    authorId: dto.authorId,
     authorName: dto.authorName,
     authorAvatarUri: dto.authorAvatarUri,
     creationDate: dto.creationDate,

@@ -1,5 +1,6 @@
-// "Excluir" do relatório segue reports.delete da matriz do backend, que é só do
-// administrador: o supervisor não vê o botão (o servidor responderia 403).
+// "Excluir" do relatório segue o DELETE /reports/:id do backend: o
+// administrador exclui qualquer relatório e o autor exclui o próprio. O
+// supervisor que não é o autor não vê o botão (o servidor responderia 403).
 import type { ReactNode } from 'react'
 import { vi } from 'vitest'
 import { screen } from '@testing-library/react'
@@ -33,6 +34,7 @@ const REPORT = {
   summary: 'Resumo curto',
   status: 'accept',
   statusLabel: 'Concluído',
+  authorId: 'u_outra_pessoa',
   authorName: 'Elisa Jordão',
   authorAvatarUri: '',
   creationDate: '23/07/2026',
@@ -56,7 +58,7 @@ afterEach(() => {
   auth.level = 'ADMIN'
 })
 
-describe('ReportDetails: Excluir só para o administrador', () => {
+describe('ReportDetails: Excluir para o administrador e para o autor', () => {
   it('o administrador vê Excluir', async () => {
     await renderAt()
     expect(await screen.findByRole('button', { name: 'Excluir relatório' })).toBeTruthy()
@@ -68,6 +70,24 @@ describe('ReportDetails: Excluir só para o administrador', () => {
 
     expect(await screen.findByRole('button', { name: 'Revisar relatório' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Adicionar comentário' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Excluir relatório' })).toBeNull()
+  })
+
+  // O usuário da sessão semeada é u_seed_1 (test-utils/renderPage).
+  it('o supervisor autor do relatório vê Excluir', async () => {
+    auth.level = 'SUPERVISOR'
+    h.get.mockResolvedValue({ data: { ...REPORT, authorId: 'u_seed_1' }, error: null })
+    await renderAt()
+
+    expect(await screen.findByRole('button', { name: 'Excluir relatório' })).toBeTruthy()
+  })
+
+  it('relatório sem autor conhecido (backend antigo): o supervisor não vê Excluir', async () => {
+    auth.level = 'SUPERVISOR'
+    h.get.mockResolvedValue({ data: { ...REPORT, authorId: undefined }, error: null })
+    await renderAt()
+
+    expect(await screen.findByRole('button', { name: 'Revisar relatório' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Excluir relatório' })).toBeNull()
   })
 })

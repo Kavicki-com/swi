@@ -77,6 +77,14 @@ describe('reportsApi.list (real)', () => {
     ])
   })
 
+  it('leva o autor do relatório (authorId), e backend antigo sem o campo vale ausente', async () => {
+    vi.stubGlobal('fetch', okJson([dto({ id: 'r1', authorId: 'u-autor' }), dto({ id: 'r2' })]))
+
+    const { data } = await reportsApi.list()
+
+    expect(data!.map((r) => r.authorId)).toEqual(['u-autor', undefined])
+  })
+
   it('images ausente no DTO → [] no mapeamento', async () => {
     vi.stubGlobal('fetch', okJson([dto({ images: undefined })]))
     const { data } = await reportsApi.list()
@@ -92,6 +100,14 @@ describe('reportsApi.list (real)', () => {
 })
 
 describe('reportsApi.get (real)', () => {
+  it('o detalhe também leva o autor do relatório', async () => {
+    vi.stubGlobal('fetch', okJson(dto({ authorId: 'u-autor', comments: [] })))
+
+    const { data } = await reportsApi.get('r1')
+
+    expect(data!.authorId).toBe('u-autor')
+  })
+
   it('coage activities cru → ReportActivity[] com avatares injetados', async () => {
     const f = okJson(
       dto({
