@@ -530,7 +530,7 @@ export function AlertsList() {
                 color={theme.content.light}
                 style={{ fontWeight: '700' as const }}
               >
-                Evacuação em andamento — {evacuation.acked}/{evacuation.total} confirmados
+                Evacuação em andamento: {evacuation.acked}/{evacuation.total} confirmados
               </Text>
               {savedArea ? (
                 <Text

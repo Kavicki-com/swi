@@ -205,5 +205,15 @@ describe('AlertsList: cartão do pedido de ajuda', () => {
     expect(await screen.findByTestId('alerts-selected-worker')).toBeTruthy()
     expect(screen.queryByTestId('alerts-help-request')).toBeNull()
     expect(screen.queryByText('Pedido de ajuda')).toBeNull()
+    // Sem pedido de ajuda, o botão segue como sempre.
+    expect(screen.getByText('Criar rota de socorro')).toBeTruthy()
+  })
+
+  it('pedido já atendido mantém o rótulo e tira "Criar rota de socorro"', async () => {
+    h.workers = telemetryWith(helpRequest({ status: 'ATTENDED', rescueId: 'r1' }))
+    await renderAlerts('/alerts/w2')
+    expect(await screen.findByTestId('alerts-selected-worker')).toBeTruthy()
+    expect(screen.getByTestId('alerts-help-request').textContent).toContain('Pedido de ajuda')
+    expect(screen.queryByText('Criar rota de socorro')).toBeNull()
   })
 })

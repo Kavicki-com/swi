@@ -3,7 +3,8 @@
 // rota de socorro". Composição de página: só arranja componentes do DS.
 //
 // Quem pediu ajuda pelo app ganha a etiqueta "Pedido de ajuda" e a borda do
-// alerta urgente, aberto ou atendido, até o pedido fechar.
+// alerta urgente, aberto ou atendido, até o pedido fechar. Atendido, o
+// cartão fica sem "Criar rota de socorro".
 import { Pressable, View } from 'react-native'
 import {
   Button,
@@ -74,12 +75,16 @@ export function SelectedWorkerCard({
         // lugar do "-- Bpm"), e a linha de estado abaixo não a repete.
         absenceLabel={noDevice ? NO_DEVICE_LABEL : undefined}
         borderColor={border}
+        // Pedido de ajuda já atendido tem socorro a caminho: a ação some.
+        // Para os outros alertas o botão segue como sempre.
         actionElement={
-          <Button
-            label="Criar rota de socorro"
-            backgroundColor={theme.surface.primary}
-            onPress={onCreateRescue}
-          />
+          helpRequest?.status === 'ATTENDED' ? undefined : (
+            <Button
+              label="Criar rota de socorro"
+              backgroundColor={theme.surface.primary}
+              onPress={onCreateRescue}
+            />
+          )
         }
       />
       {/* Fechar o card: além do clique no mapa e no próprio pino, um X no

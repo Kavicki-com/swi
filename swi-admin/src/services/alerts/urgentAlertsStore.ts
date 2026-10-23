@@ -13,10 +13,7 @@ import type {
   AlertQueueQuery,
   ConditionKind,
 } from '@/services/api/telemetry'
-import type {
-  ConditionChanged,
-  HelpRequestChanged,
-} from '@/services/telemetry/telemetrySocket'
+import type { ConditionChanged, HelpRequestChanged } from '@/services/telemetry/telemetrySocket'
 import type { ServiceResponse } from '@/services/types'
 import {
   initialUrgentAlerts,

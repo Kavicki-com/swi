@@ -438,7 +438,7 @@ describe('AlertsList: evacuação real', () => {
     await renderAlerts()
 
     expect(screen.getByTestId('evacuation-banner')).toBeTruthy()
-    expect(screen.getByText(/1\/2 confirmados/)).toBeTruthy()
+    expect(screen.getByText('Evacuação em andamento: 1/2 confirmados')).toBeTruthy()
 
     await act(async () => {
       fireEvent.click(screen.getByText('Encerrar evacuação'))
