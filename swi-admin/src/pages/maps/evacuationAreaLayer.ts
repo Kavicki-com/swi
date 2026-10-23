@@ -1,11 +1,13 @@
 // Desenho custom da área de evacuação no maplibre (sem dep nova). Uma camada de
 // preenchimento translúcido, uma de contorno e um marcador por vértice. Serve
-// os dois momentos: o traçado em edição (vértices arrastáveis) e o polígono
+// três momentos: o trajeto aberto em vetorização (linha, com o primeiro ponto
+// como fecho), o trajeto fechado em edição (vértices arrastáveis) e o polígono
 // salvo durante a evacuação ativa (só leitura). O contorno vermelho vem do tema
 // (content.error); o magenta dos vértices não tem token semântico (a paleta é
 // vermelho/azul/verde/laranja), então mora aqui como constante de mapa, no
 // mesmo espírito do HEATMAP_COLOR_RAMP.
 import type * as maplibregl from 'maplibre-gl'
+import { MIN_AREA_VERTICES } from '@/lib/areaDraft'
 import type { AreaVertex } from '@/lib/evacuationArea'
 
 export const AREA_VERTEX_COLOR = '#C026D3'
@@ -22,15 +24,21 @@ export interface AreaColors {
 
 export interface DrawAreaOptions {
   colors: AreaColors
+  // Trajeto fechado vira polígono preenchido; aberto, só a linha. Sem dizer,
+  // fechado: é o caso da área salva da evacuação ativa.
+  closed?: boolean
   draggable?: boolean
   onVertexDrag?: (index: number, vertex: AreaVertex) => void
+  // Com o trajeto aberto e três pontos ou mais, o primeiro vértice fica
+  // destacado e o clique nele fecha a área.
+  onFirstVertexClick?: () => void
 }
 
-// Polígono quando já há 3 vértices (anel fechado); traçado parcial como linha
-// até lá, para os primeiros cliques já aparecerem ligados.
-function areaFeature(ring: AreaVertex[]): GeoJSON.Feature {
+// Polígono só com o trajeto fechado (anel com o primeiro ponto repetido);
+// aberto, linha ligando os pontos na ordem dos cliques.
+function areaFeature(ring: AreaVertex[], closed: boolean): GeoJSON.Feature {
   const first = ring[0]
-  if (ring.length >= 3 && first) {
+  if (closed && ring.length >= MIN_AREA_VERTICES && first) {
     return {
       type: 'Feature',
       properties: {},
@@ -60,8 +68,10 @@ export function drawAreaLayer(
   ring: AreaVertex[],
   opts: DrawAreaOptions,
 ): () => void {
+  const closed = opts.closed ?? true
+  const offerClose = !closed && ring.length >= MIN_AREA_VERTICES && !!opts.onFirstVertexClick
   clearLayers(map)
-  map.addSource(SOURCE_ID, { type: 'geojson', data: areaFeature(ring) })
+  map.addSource(SOURCE_ID, { type: 'geojson', data: areaFeature(ring, closed) })
   map.addLayer({
     id: FILL_ID,
     type: 'fill',
@@ -89,9 +99,52 @@ export function drawAreaLayer(
       boxSizing: 'border-box',
       cursor: opts.draggable ? 'grab' : 'default',
     })
+    // O maplibre escuta o clique no contêiner do mapa, que também abriga os
+    // marcadores: sem parar a propagação, clicar num vértice existente viraria
+    // um ponto novo no trajeto.
+    el.addEventListener('click', (ev) => ev.stopPropagation())
     const marker = new lib.Marker({ element: el, draggable: !!opts.draggable })
       .setLngLat(vertex)
       .addTo(map)
+    // O primeiro ponto é o fecho do trajeto: maior, borda grossa, e o clique
+    // nele fecha a área. O soltar de um arraste também dispara clique, então o
+    // clique logo depois de arrastar só encerra o arraste e não fecha. Como é
+    // botão, também fecha pelo teclado (Enter ou Espaço).
+    if (index === 0 && offerClose) {
+      Object.assign(el.style, {
+        width: '20px',
+        height: '20px',
+        borderWidth: '4px',
+        cursor: 'pointer',
+      })
+      el.setAttribute('role', 'button')
+      el.setAttribute('aria-label', 'Fechar área')
+      el.title = 'Clique para fechar a área'
+      el.tabIndex = 0
+      let dragged = false
+      marker.on('dragstart', () => {
+        dragged = true
+      })
+      // O clique do soltar chega antes deste timer; se o arraste terminou
+      // fora do vértice e não houve clique, a trava não engole o próximo.
+      marker.on('dragend', () => {
+        setTimeout(() => {
+          dragged = false
+        }, 0)
+      })
+      el.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return
+        ev.preventDefault()
+        opts.onFirstVertexClick?.()
+      })
+      el.addEventListener('click', () => {
+        if (dragged) {
+          dragged = false
+          return
+        }
+        opts.onFirstVertexClick?.()
+      })
+    }
     if (opts.draggable && opts.onVertexDrag) {
       marker.on('dragend', () => {
         const { lng, lat } = marker.getLngLat()
