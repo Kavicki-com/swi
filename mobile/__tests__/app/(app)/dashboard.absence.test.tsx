@@ -307,47 +307,28 @@ describe('dashboard: Aguardando e Não envia, como o backend decidiu', () => {
   });
 });
 
+// O dashboard fica só com a frase em cada coluna: o aviso com o motivo e o
+// botão que tenta de novo mora em Minhas estatísticas (my-stats.absence).
 describe('dashboard: Falhou no Android, pelo estado local', () => {
   it('última rodada do Health Connect com erro sobrepõe Aguardando e Não envia nas três', async () => {
     mockTelemetryState = lendo({ ...AGUARDANDO, bloodPressure: 'NOT_SENT' });
     mockHealthConnect = falhouAs('permission_denied', HOJE_14_10);
     const tree = await render();
 
-    // Três colunas mais o título do aviso.
-    expect(vezes(tree, 'Sincronização falhou às 14:10')).toBe(4);
+    expect(vezes(tree, 'Sincronização falhou às 14:10')).toBe(3);
     const t = textos(tree);
     expect(t).not.toContain('Aguardando leitura');
     expect(t).not.toContain('Esta pulseira não envia pressão');
-    expect(t).toContain('Permissão de leitura do Health Connect negada.');
-    expect(aviso(tree, 'healthConnect')).toBeDefined();
   });
 
-  it.each([
-    ['unavailable', 'Health Connect não instalado neste celular.'],
-    ['update_required', 'Health Connect desatualizado.'],
-    ['other', 'Erro ao ler o Health Connect.'],
-  ] as const)('afirma o motivo (%s)', async (reason, motivo) => {
-    mockHealthConnect = falhouAs(reason, HOJE_14_10);
+  it('sem o aviso de falha nem o botão de sincronizar', async () => {
+    mockHealthConnect = falhouAs('permission_denied', HOJE_14_10);
     const tree = await render();
-    expect(textos(tree)).toContain(motivo);
-  });
-
-  it('o botão sincroniza agora e relê a leitura', async () => {
-    mockHealthConnect = falhouAs('other', HOJE_14_10);
-    const tree = await render();
-    await act(async () => {
-      botao(tree, 'Sincronizar agora').props.onPress();
-    });
-    expect(mockSyncNow).toHaveBeenCalledTimes(1);
-    expect(mockRefreshTelemetry).toHaveBeenCalledTimes(1);
-  });
-
-  it('sem pareamento o aviso fica, sem o botão que não subiria nada', async () => {
-    mockHealthConnect = falhouAs('other', HOJE_14_10);
-    mockPareado = false;
-    const tree = await render();
-    expect(aviso(tree, 'healthConnect')).toBeDefined();
+    expect(aviso(tree, 'healthConnect')).toBeUndefined();
+    expect(textos(tree)).not.toContain('Permissão de leitura do Health Connect negada.');
     expect(botao(tree, 'Sincronizar agora')).toBeUndefined();
+    expect(mockSyncNow).not.toHaveBeenCalled();
+    expect(mockRefreshTelemetry).not.toHaveBeenCalled();
   });
 
   it('falha de outro dia leva a data', async () => {
@@ -356,31 +337,28 @@ describe('dashboard: Falhou no Android, pelo estado local', () => {
     expect(textos(tree)).toContain('Sincronização falhou em 30/09 às 09:05');
   });
 
-  it('pulseira desconectada derruba só o batimento, com a hora e o religar', async () => {
+  it('pulseira desconectada derruba só o batimento, com a hora e sem o religar', async () => {
     mockPulseira = { deviceId: 'AA:01', name: 'Band' };
     mockEscuta = 'searching';
     mockTrechos = [{ start: HOJE_14_10.getTime() - 60_000, end: HOJE_14_10.getTime() }];
     const tree = await render();
 
-    expect(vezes(tree, 'Pulseira desconectada desde 14:10')).toBe(2); // coluna e aviso
+    expect(vezes(tree, 'Pulseira desconectada desde 14:10')).toBe(1); // só a coluna
     const t = textos(tree);
-    expect(t).toContain('Pulseira fora do alcance ou desligada.');
+    expect(t).not.toContain('Pulseira fora do alcance ou desligada.');
     expect(t).toContain('Aguardando medição');
     expect(t).toContain('Aguardando leitura'); // energia, que vem do Health Connect
-    expect(aviso(tree, 'healthConnect')).toBeUndefined();
-
-    await act(async () => {
-      botao(tree, 'Religar a escuta').props.onPress();
-    });
-    expect(mockStart).toHaveBeenCalledWith('AA:01');
+    expect(aviso(tree, 'bluetooth')).toBeUndefined();
+    expect(botao(tree, 'Religar a escuta')).toBeUndefined();
+    expect(mockStart).not.toHaveBeenCalled();
   });
 
-  it('Bluetooth do celular desligado é afirmado', async () => {
+  it('Bluetooth do celular desligado fica só na coluna', async () => {
     mockPulseira = { deviceId: 'AA:01', name: 'Band' };
     mockEscuta = 'bluetoothOff';
     mockTrechos = [{ start: HOJE_14_10.getTime() - 60_000, end: HOJE_14_10.getTime() }];
     const tree = await render();
-    expect(textos(tree)).toContain('Bluetooth do celular desligado.');
+    expect(textos(tree)).not.toContain('Bluetooth do celular desligado.');
     expect(textos(tree)).toContain('Pulseira desconectada desde 14:10');
   });
 
@@ -390,8 +368,8 @@ describe('dashboard: Falhou no Android, pelo estado local', () => {
     mockHealthConnect = falhouAs('other', HOJE_14_10);
     const tree = await render();
     expect(textos(tree)).toContain('Aguardando leitura');
-    // Pressão e energia são do Health Connect: coluna, coluna e aviso.
-    expect(vezes(tree, 'Sincronização falhou às 14:10')).toBe(3);
+    // Pressão e energia são do Health Connect: as duas colunas.
+    expect(vezes(tree, 'Sincronização falhou às 14:10')).toBe(2);
   });
 
   it('com as métricas de pé não há aviso, mesmo com a falha', async () => {
