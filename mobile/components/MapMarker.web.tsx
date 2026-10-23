@@ -22,7 +22,7 @@ export type { MapMarkerProps };
 
 type Root = { render: (node: React.ReactNode) => void; unmount: () => void };
 
-export function MapMarker({ coordinate, children }: MapMarkerProps): null {
+export function MapMarker({ coordinate, children, zIndex }: MapMarkerProps): null {
   const instance = useContext(MapInstanceContext);
   const [lng, lat] = coordinate;
   const rootRef = useRef<Root | null>(null);
@@ -38,6 +38,7 @@ export function MapMarker({ coordinate, children }: MapMarkerProps): null {
     const { map, lib } = instance;
     const el = document.createElement('div');
     el.style.cursor = 'pointer';
+    if (zIndex !== undefined) el.style.zIndex = String(zIndex);
     const root: Root = createRoot(el);
     rootRef.current = root;
     const marker = new lib.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
@@ -47,7 +48,7 @@ export function MapMarker({ coordinate, children }: MapMarkerProps): null {
       el.remove();
       rootRef.current = null;
     };
-  }, [instance, lng, lat]);
+  }, [instance, lng, lat, zIndex]);
 
   // Effect 2: re-render children into the existing root whenever they
   // change. createRoot's render() reconciles like normal React — no thrash

@@ -4,7 +4,8 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import EvacuationOngoing from '../../../app/(app)/evacuation-ongoing';
 import type { RouteSnapshot } from '../../../services/evacuation/types';
 import type { RouteErrorKind } from '../../../services/evacuation/EvacuationProvider';
-import { chipAnchors } from '../../../services/evacuation/routeFormat';
+import { chipAnchors, routeAhead } from '../../../services/evacuation/routeFormat';
+import { ENDED_NOTICE_MS } from '../../../services/evacuation/useLeaveWhenEvacuationEnds';
 
 // Tela de evacuação EM ANDAMENTO (navegando). Difere da idle em três coisas que
 // este teste trava: a linha é roxa em vez de ciano, não há pino de origem (quem
@@ -21,7 +22,8 @@ const mockEvac: {
   loadStatus: 'idle' | 'loading' | 'ready' | 'error';
   errorKind: RouteErrorKind;
   coords: [number, number] | null;
-} = { route: null, loadStatus: 'idle', errorKind: null, coords: null };
+  ended: boolean;
+} = { route: null, loadStatus: 'idle', errorKind: null, coords: null, ended: false };
 jest.mock('../../../services/evacuation/useEvacuationRoute', () => ({
   useEvacuationRoute: () => mockEvac,
 }));
@@ -32,8 +34,20 @@ jest.mock('../../../lib/featureFlags', () => ({
   isFeatureEnabled: () => mockMapsEnabled,
 }));
 
+const mockNavigate = jest.fn();
+// useFocusEffect roda o callback como um efeito: a tela de teste está em foco.
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    navigate: mockNavigate,
+    back: jest.fn(),
+    canGoBack: () => true,
+    replace: jest.fn(),
+  }),
+  useFocusEffect: (cb: () => void | (() => void)) => {
+    const { useEffect } = require('react');
+    useEffect(cb, [cb]);
+  },
 }));
 
 jest.mock('../../../components/MapView', () => {
@@ -58,11 +72,19 @@ jest.mock('../../../components/MapMarker', () => {
   const { View } = require('react-native');
   return {
     MapMarker: (p: any) =>
-      React.createElement(View, { testID: `marker-${p.id}`, coordinate: p.coordinate }, p.children),
+      React.createElement(
+        View,
+        { testID: `marker-${p.id}`, coordinate: p.coordinate, zIndex: p.zIndex },
+        p.children,
+      ),
   };
 });
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
-jest.mock('../../../components/EvacuationAckBar', () => ({ EvacuationAckBar: () => null }));
+jest.mock('../../../components/EvacuationAckBar', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return { EvacuationAckBar: () => React.createElement(View, { testID: 'evacuation-ack-bar' }) };
+});
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -126,6 +148,7 @@ beforeEach(() => {
   mockEvac.loadStatus = 'idle';
   mockEvac.errorKind = null;
   mockEvac.coords = null;
+  mockEvac.ended = false;
 });
 
 describe('Evacuação em andamento: gate e enquadramento', () => {
@@ -268,5 +291,125 @@ describe('Evacuação em andamento: pinos e chips', () => {
     const t = textos(tree);
     expect(t).toContain('7 minutos');
     expect(t).toContain('14 minutos');
+  });
+});
+
+// Navegando, a seta "você está aqui" anda com o GPS. Ela não pode passar por
+// baixo dos selos de tempo, e linha e selos seguem o trecho que FALTA: a linha
+// sai de onde a pessoa está, e o tempo dos selos é a parte da duração
+// proporcional ao que falta andar.
+describe('Evacuação em andamento: o trecho que falta', () => {
+  // No meio do trecho entre WAYPOINTS[5] e [6], na perna norte.
+  const AQUI: [number, number] = [-43.896, -19.8985];
+
+  it('a seta fica por cima dos selos de tempo', async () => {
+    pronta();
+    mockEvac.coords = AQUI;
+    const tree = await render();
+
+    const seta = porTestID(tree, 'marker-evacuation-nav-arrow');
+    const selos = [
+      porTestID(tree, 'marker-evacuation-ongoing-chip-1'),
+      porTestID(tree, 'marker-evacuation-ongoing-chip-2'),
+    ];
+    for (const selo of selos) {
+      expect(seta.props.zIndex).toBeGreaterThan(selo.props.zIndex ?? 0);
+    }
+  });
+
+  it('a linha sai de onde a pessoa está, sem o caminho já andado', async () => {
+    pronta();
+    mockEvac.coords = AQUI;
+    const tree = await render();
+
+    const linha = porTestID(tree, 'line-evacuation-ongoing-route');
+    expect(linha.props.shape.geometry.coordinates).toEqual([AQUI, ...WAYPOINTS.slice(6)]);
+  });
+
+  it('os selos ancoram no trecho que falta, com o tempo proporcional a ele', async () => {
+    pronta({ durationSec: 1200 });
+    mockEvac.coords = AQUI;
+    const tree = await render();
+
+    const ancoras = chipAnchors(routeAhead(AQUI, WAYPOINTS).waypoints)!;
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-1').props.coordinate).toEqual(ancoras.a);
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-2').props.coordinate).toEqual(ancoras.b);
+
+    // Falta ~40% do caminho: ~480 s dos 1200. Os selos a 35% e 70% disso.
+    const t = textos(tree);
+    expect(t).toContain('3 minutos');
+    expect(t).toContain('6 minutos');
+    expect(t).not.toContain('7 minutos');
+  });
+
+  it('passado o ponto de encontro, sem selos', async () => {
+    pronta();
+    mockEvac.coords = [-43.896, -19.894];
+    const tree = await render();
+
+    expect(porTestID(tree, 'marker-evacuation-nav-arrow')).toBeDefined();
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-1')).toBeUndefined();
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-2')).toBeUndefined();
+  });
+});
+
+// O gestor encerrou: a tela deixa o modo evacuação (sem rota, pinos, chips nem
+// "Confirmar chegada"), avisa com o Toast do DS e volta ao início sozinha. O
+// fim vem do provider (socket, consulta, volta ao primeiro plano); aqui, o que
+// a tela faz com ele.
+describe('Evacuação em andamento: evacuação encerrada', () => {
+  it('tira rota, pinos, chips e a confirmação, e avisa que acabou', async () => {
+    pronta();
+    mockEvac.coords = WAYPOINTS[1];
+    mockEvac.ended = true;
+    const tree = await render();
+
+    expect(porTestID(tree, 'line-evacuation-ongoing-route')).toBeUndefined();
+    expect(porTestID(tree, 'marker-evacuation-destination')).toBeUndefined();
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-1')).toBeUndefined();
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-2')).toBeUndefined();
+    expect(porTestID(tree, 'evacuation-ack-bar')).toBeUndefined();
+    expect(porTestID(tree, 'evacuation-ended-notice')).toBeDefined();
+    expect(textos(tree)).toContain('Evacuação encerrada');
+  });
+
+  it('volta ao início depois do aviso', async () => {
+    jest.useFakeTimers();
+    try {
+      mockEvac.ended = true;
+      await render();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      await act(async () => {
+        jest.advanceTimersByTime(ENDED_NOTICE_MS);
+      });
+      expect(mockNavigate).toHaveBeenCalledWith('/(app)/dashboard');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('o botão do aviso volta ao início na hora', async () => {
+    mockEvac.ended = true;
+    const tree = await render();
+    const botao = tree.root.findAll(
+      (n) => n.props?.accessibilityLabel === 'Voltar ao início' && typeof n.props?.onPress === 'function',
+    )[0];
+    await act(async () => botao.props.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('/(app)/dashboard');
+  });
+
+  it('em curso, não sai da tela', async () => {
+    jest.useFakeTimers();
+    try {
+      pronta();
+      const tree = await render();
+      await act(async () => {
+        jest.advanceTimersByTime(ENDED_NOTICE_MS * 2);
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(porTestID(tree, 'evacuation-ended-notice')).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

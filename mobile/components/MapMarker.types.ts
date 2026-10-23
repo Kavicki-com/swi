@@ -16,4 +16,11 @@ export interface MapMarkerProps {
   id?: string;
   /** RN element to render as the marker visual (DS LocationPin, etc.). */
   children: ReactElement;
+  /**
+   * Ordem de empilhamento entre marcadores; maior fica por cima. Sem ele vale
+   * a da plataforma, que não segue o JSX: no Android o último ligado ao mapa
+   * fica por cima, no iPhone a biblioteca empilha pela latitude (até 180) e
+   * no web o marcador recriado ao mudar de posição vai para cima.
+   */
+  zIndex?: number;
 }
