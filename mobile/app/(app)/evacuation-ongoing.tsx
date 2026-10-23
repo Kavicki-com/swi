@@ -16,7 +16,7 @@ import { EvacuationAckBar } from '@/components/EvacuationAckBar';
 import { useEvacuationRoute } from '@/services/evacuation/useEvacuationRoute';
 import { useLeaveWhenEvacuationEnds } from '@/services/evacuation/useLeaveWhenEvacuationEnds';
 import {
-  chipAnchors, chipEtaLabel, lineFeature, navArrow, navArrowAt, routeNotice,
+  chipAnchors, chipEtaLabel, lineFeature, navArrow, navArrowAt, routeAhead, routeNotice,
 } from '@/services/evacuation/routeFormat';
 import { BRAZIL_BOUNDS, boundsAround } from '@/lib/mapGeometry';
 import { ProdOnlyPlaceholder } from '@/components/ProdOnlyPlaceholder';
@@ -33,8 +33,11 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 //   - Destination pin only (user IS the origin in this state): o ponto de
 //     encontro que o gestor marcou
 //   - Navigation arrow marker (teal #50B3D2) na posição do GPS, apontando pro
-//     próximo waypoint; sem GPS, a ~30% da rota como antes
-//   - 2 time chips ("6 minutos" / "17 minutos") at 35% / 70%
+//     próximo waypoint; sem GPS, a ~30% da rota como antes. Sempre por cima
+//     dos selos de tempo.
+//   - 2 time chips ("6 minutos" / "17 minutos") at 35% / 70% do trecho que
+//     falta a partir do GPS, com o tempo proporcional a ele; a linha também
+//     sai do GPS. Sem GPS, da rota inteira.
 //
 
 const NAV_ARROW_PATH_D =
@@ -42,6 +45,12 @@ const NAV_ARROW_PATH_D =
 const NAV_ARROW_VIEW_W = 26.6667;
 const NAV_ARROW_VIEW_H = 31.6667;
 const NAV_ARROW_FILL = '#50B3D2';
+
+// A seta acima dos selos de tempo. A ordem do JSX não basta: no Android o
+// último marcador ligado ao mapa fica por cima (os selos entravam depois da
+// seta), e no iPhone a biblioteca empilha pela latitude, de 0 a 180. Acima
+// dessa faixa em qualquer plataforma.
+const NAV_ARROW_Z_INDEX = 1000;
 
 // Navigation arrow ("you are here") rendered as an SVG triangle inside a
 // rotated View. Container takes `rotationDeg` so the tip always points
@@ -95,12 +104,21 @@ function EvacuationOngoingScreen() {
   // Sem rota não há linha, seta nem chips: navegar por traçado inventado leva
   // pro lugar errado. O aviso no topo diz o que fazer no lugar.
   const waypoints = route?.waypoints ?? null;
-  const lineShape = useMemo(() => lineFeature(waypoints ?? []), [waypoints]);
+  // O trecho que falta a partir do GPS: a linha sai de onde a pessoa está, e
+  // os selos ancoram nele com o tempo proporcional ao que falta andar. Sem
+  // GPS, a rota inteira, como veio do backend.
+  const ahead = useMemo(
+    () => (coords && waypoints ? routeAhead(coords, waypoints) : { waypoints: waypoints ?? [], fraction: 1 }),
+    [coords, waypoints],
+  );
+  const lineShape = useMemo(() => lineFeature(ahead.waypoints), [ahead]);
   const arrow = useMemo(
     () => (coords ? navArrowAt(coords, waypoints ?? []) : navArrow(waypoints ?? [])),
     [coords, waypoints],
   );
-  const anchors = useMemo(() => chipAnchors(waypoints ?? []), [waypoints]);
+  // Passado o ponto de encontro não falta nada: sem selos.
+  const anchors = useMemo(() => (ahead.fraction > 0 ? chipAnchors(ahead.waypoints) : null), [ahead]);
+  const aheadSec = route ? route.durationSec * ahead.fraction : null;
   const notice = routeNotice(route, errorKind);
 
   // Com rota, o meio do caminho; sem rota, enquadra a pessoa (ou o Brasil) por
@@ -132,19 +150,24 @@ function EvacuationOngoingScreen() {
               <LocationPin variant="badge" status="alert" size={40} name="Ponto de encontro" />
           </MapMarker>
         )}
-        {arrow && (
-          <MapMarker key="evacuation-nav-arrow" coordinate={arrow.at} id="evacuation-nav-arrow">
-              <NavArrowBody rotationDeg={arrow.rotation} />
-          </MapMarker>
-        )}
         {anchors && (
           <MapMarker key="evacuation-ongoing-chip-1" coordinate={anchors.a} id="evacuation-ongoing-chip-1">
-              <MapChipBody text={chipEtaLabel(route?.durationSec, 0.35)} />
+              <MapChipBody text={chipEtaLabel(aheadSec, 0.35)} />
           </MapMarker>
         )}
         {anchors && (
           <MapMarker key="evacuation-ongoing-chip-2" coordinate={anchors.b} id="evacuation-ongoing-chip-2">
-              <MapChipBody text={chipEtaLabel(route?.durationSec, 0.7)} />
+              <MapChipBody text={chipEtaLabel(aheadSec, 0.7)} />
+          </MapMarker>
+        )}
+        {arrow && (
+          <MapMarker
+            key="evacuation-nav-arrow"
+            coordinate={arrow.at}
+            id="evacuation-nav-arrow"
+            zIndex={NAV_ARROW_Z_INDEX}
+          >
+              <NavArrowBody rotationDeg={arrow.rotation} />
           </MapMarker>
         )}
 

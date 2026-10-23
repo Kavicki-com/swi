@@ -1,4 +1,6 @@
-import { chipAnchors, chipEtaLabel, navArrow, navArrowAt, lineFeature, bearingDeg, routeNotice } from './routeFormat';
+import {
+  chipAnchors, chipEtaLabel, navArrow, navArrowAt, lineFeature, bearingDeg, routeAhead, routeNotice,
+} from './routeFormat';
 import type { RouteSnapshot } from './types';
 
 // O traço (U+2014) é o que a função devolve quando não há tempo pra mostrar.
@@ -120,6 +122,53 @@ describe('routeFormat: navArrowAt', () => {
 
   it('rota com menos de dois pontos nao tem seta', () => {
     expect(navArrowAt([0, 0], [[0, 0]])).toBeNull();
+  });
+});
+
+// Navegando, linha e chips seguem o trecho que FALTA: a linha sai de onde a
+// pessoa está e o tempo das chips é a parte da duração proporcional ao que
+// falta andar. Antes, a linha saía da origem antiga e as chips ficavam
+// paradas a 35% e 70% da rota inteira.
+describe('routeFormat: routeAhead', () => {
+  // Na linha do equador o encolhimento da longitude é 1: medidas de cabeça.
+  const L: [number, number][] = [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]];
+
+  it('na origem, o trecho todo', () => {
+    const ahead = routeAhead([0, 0], L);
+    expect(ahead.waypoints).toEqual(L);
+    expect(ahead.fraction).toBeCloseTo(1, 9);
+  });
+
+  it('no meio do primeiro trecho, sai de onde a pessoa está e segue pelos vértices à frente', () => {
+    const ahead = routeAhead([0.5, 0], L);
+    expect(ahead.waypoints).toEqual([[0.5, 0], [1, 0], [2, 0], [2, 1], [2, 2]]);
+    // Faltam 3,5 de 4.
+    expect(ahead.fraction).toBeCloseTo(3.5 / 4, 9);
+  });
+
+  it('na perna de cima, os vértices já passados saem da linha', () => {
+    const ahead = routeAhead([2, 1.5], L);
+    expect(ahead.waypoints).toEqual([[2, 1.5], [2, 2]]);
+    expect(ahead.fraction).toBeCloseTo(0.5 / 4, 9);
+  });
+
+  // Fora do traçado (antes do recálculo, a menos de 50 m), a proporção conta
+  // do ponto do traçado mais perto, e a linha liga a pessoa ao caminho.
+  it('um pouco fora do traçado, mede do ponto mais perto dele', () => {
+    const ahead = routeAhead([1.5, 0.1], L);
+    expect(ahead.waypoints).toEqual([[1.5, 0.1], [2, 0], [2, 1], [2, 2]]);
+    expect(ahead.fraction).toBeCloseTo(2.5 / 4, 9);
+  });
+
+  it('passado o fim, não falta nada', () => {
+    const ahead = routeAhead([2, 2.5], L);
+    expect(ahead.waypoints).toEqual([[2, 2.5], [2, 2]]);
+    expect(ahead.fraction).toBe(0);
+  });
+
+  it('rota com menos de dois pontos fica como está', () => {
+    expect(routeAhead([5, 5], [[0, 0]])).toEqual({ waypoints: [[0, 0]], fraction: 1 });
+    expect(routeAhead([5, 5], [])).toEqual({ waypoints: [], fraction: 1 });
   });
 });
 

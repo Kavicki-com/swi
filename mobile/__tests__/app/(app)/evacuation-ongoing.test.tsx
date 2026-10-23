@@ -4,7 +4,7 @@ import { SwiThemeProvider } from '@kavicki/swi-design-system';
 import EvacuationOngoing from '../../../app/(app)/evacuation-ongoing';
 import type { RouteSnapshot } from '../../../services/evacuation/types';
 import type { RouteErrorKind } from '../../../services/evacuation/EvacuationProvider';
-import { chipAnchors } from '../../../services/evacuation/routeFormat';
+import { chipAnchors, routeAhead } from '../../../services/evacuation/routeFormat';
 import { ENDED_NOTICE_MS } from '../../../services/evacuation/useLeaveWhenEvacuationEnds';
 
 // Tela de evacuação EM ANDAMENTO (navegando). Difere da idle em três coisas que
@@ -72,7 +72,11 @@ jest.mock('../../../components/MapMarker', () => {
   const { View } = require('react-native');
   return {
     MapMarker: (p: any) =>
-      React.createElement(View, { testID: `marker-${p.id}`, coordinate: p.coordinate }, p.children),
+      React.createElement(
+        View,
+        { testID: `marker-${p.id}`, coordinate: p.coordinate, zIndex: p.zIndex },
+        p.children,
+      ),
   };
 });
 jest.mock('../../../components/NavFABs', () => ({ NavFABs: () => null }));
@@ -287,6 +291,65 @@ describe('Evacuação em andamento: pinos e chips', () => {
     const t = textos(tree);
     expect(t).toContain('7 minutos');
     expect(t).toContain('14 minutos');
+  });
+});
+
+// Navegando, a seta "você está aqui" anda com o GPS. Ela não pode passar por
+// baixo dos selos de tempo, e linha e selos seguem o trecho que FALTA: a linha
+// sai de onde a pessoa está, e o tempo dos selos é a parte da duração
+// proporcional ao que falta andar.
+describe('Evacuação em andamento: o trecho que falta', () => {
+  // No meio do trecho entre WAYPOINTS[5] e [6], na perna norte.
+  const AQUI: [number, number] = [-43.896, -19.8985];
+
+  it('a seta fica por cima dos selos de tempo', async () => {
+    pronta();
+    mockEvac.coords = AQUI;
+    const tree = await render();
+
+    const seta = porTestID(tree, 'marker-evacuation-nav-arrow');
+    const selos = [
+      porTestID(tree, 'marker-evacuation-ongoing-chip-1'),
+      porTestID(tree, 'marker-evacuation-ongoing-chip-2'),
+    ];
+    for (const selo of selos) {
+      expect(seta.props.zIndex).toBeGreaterThan(selo.props.zIndex ?? 0);
+    }
+  });
+
+  it('a linha sai de onde a pessoa está, sem o caminho já andado', async () => {
+    pronta();
+    mockEvac.coords = AQUI;
+    const tree = await render();
+
+    const linha = porTestID(tree, 'line-evacuation-ongoing-route');
+    expect(linha.props.shape.geometry.coordinates).toEqual([AQUI, ...WAYPOINTS.slice(6)]);
+  });
+
+  it('os selos ancoram no trecho que falta, com o tempo proporcional a ele', async () => {
+    pronta({ durationSec: 1200 });
+    mockEvac.coords = AQUI;
+    const tree = await render();
+
+    const ancoras = chipAnchors(routeAhead(AQUI, WAYPOINTS).waypoints)!;
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-1').props.coordinate).toEqual(ancoras.a);
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-2').props.coordinate).toEqual(ancoras.b);
+
+    // Falta ~40% do caminho: ~480 s dos 1200. Os selos a 35% e 70% disso.
+    const t = textos(tree);
+    expect(t).toContain('3 minutos');
+    expect(t).toContain('6 minutos');
+    expect(t).not.toContain('7 minutos');
+  });
+
+  it('passado o ponto de encontro, sem selos', async () => {
+    pronta();
+    mockEvac.coords = [-43.896, -19.894];
+    const tree = await render();
+
+    expect(porTestID(tree, 'marker-evacuation-nav-arrow')).toBeDefined();
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-1')).toBeUndefined();
+    expect(porTestID(tree, 'marker-evacuation-ongoing-chip-2')).toBeUndefined();
   });
 });
 
