@@ -72,7 +72,7 @@ export interface BluetoothInboxDrainDeps {
   /** A escolha guardada; rejeita se o disco falhar. */
   choice: { read(): Promise<BandChoice | null> };
   state: OutboxStorage;
-  outbox: Pick<TelemetryOutbox, 'appendMany' | 'nextSequence' | 'forgetSession'>;
+  outbox: Pick<TelemetryOutbox, 'appendMany' | 'nextSequence' | 'forgetSession' | 'pending' | 'remove'>;
   uploader: TelemetryUploader;
   control: Pick<WatchControl, 'hasDeviceCredential'>;
   uuidV4(): string;
@@ -81,6 +81,13 @@ export interface BluetoothInboxDrainDeps {
 export interface BluetoothInboxDrain {
   /** Uma rodada. Nunca rejeita. Com uma em curso, devolve a mesma promessa. */
   run(): Promise<void>;
+  /**
+   * Pareamento novo: o backend criou outro aparelho e recusa as sessões do
+   * anterior. Cada sessão que ainda tem o que mandar (a corrente, as leituras
+   * à espera, os eventos da pulseira na fila) troca por uma sessão nova, com
+   * as mesmas leituras. Espera a rodada em curso. Nunca rejeita.
+   */
+  resetForNewPairing(): Promise<void>;
 }
 
 const warn = (what: string, error: unknown) =>
@@ -313,16 +320,88 @@ export function createBluetoothInboxDrain(deps: BluetoothInboxDrainDeps): Blueto
     if (owner === null) await stopService();
   }
 
+  async function resetForNewPairing(): Promise<void> {
+    const stored = await readState();
+    // Os eventos da pulseira na fila, de qualquer sessão: depois do pareamento
+    // nenhuma sessão anterior vale mais, nem a fechada pelo 401 ou pela
+    // credencial ausente. Fila ilegível ainda deixa trocar o que está aqui.
+    let queued: OutboxEvent[] = [];
+    try {
+      queued = (await deps.outbox.pending()).filter(
+        (event) => event.measurements.heartRate?.source === 'BLUETOOTH_HR',
+      );
+    } catch (error) {
+      warn('fila não lida no pareamento novo', error);
+    }
+
+    // Uma sessão nova para cada sessão velha, e não uma só para tudo: a de
+    // uma pulseira encerrada continua fechada, só que com outro número.
+    const renamed = new Map<string, string>();
+    const rename = (sessionId: string) => {
+      let next = renamed.get(sessionId);
+      if (next === undefined) {
+        next = deps.uuidV4();
+        renamed.set(sessionId, next);
+      }
+      return next;
+    };
+    const session = stored.session ? { ...stored.session, sessionId: rename(stored.session.sessionId) } : null;
+    // O evento volta a ser leitura à espera, com outro id e outra sequência:
+    // o backend nunca o aceitou, porque a sessão dele é do aparelho anterior.
+    const fromQueue = queued.flatMap((event): PendingSample[] => {
+      const bpm = event.measurements.heartRate?.value;
+      const receivedAt = Date.parse(event.eventTime);
+      if (bpm === undefined || Number.isNaN(receivedAt)) return [];
+      return [{ sessionId: rename(event.monitoringSessionId), receivedAt, bpm }];
+    });
+    const waiting = [
+      ...stored.pending.map((sample) => ({ ...sample, sessionId: rename(sample.sessionId) })),
+      ...fromQueue,
+    ]
+      .sort((a, b) => a.receivedAt - b.receivedAt)
+      .slice(-BLE_PENDING_MAX);
+    if (renamed.size === 0) return;
+
+    // Como na rodada: o arquivo de estado antes da fila. Se a remoção falhar,
+    // o evento velho fica e volta recusado; a leitura sobe pela sessão nova.
+    await writeState({ session, pending: waiting });
+    if (queued.length > 0) {
+      try {
+        await deps.outbox.remove(queued.map((event) => event.eventId));
+      } catch (error) {
+        warn('eventos da sessão anterior não saíram da fila', error);
+      }
+    }
+    const pending = await enqueue(waiting);
+    await writeState({ session, pending });
+
+    for (const [old, next] of renamed) {
+      await forgetSession(old);
+      // A sessão nova de uma sessão fechada nunca mais recebe leitura: o
+      // contador sai com o último evento dela.
+      if (next !== session?.sessionId && !pending.some((sample) => sample.sessionId === next)) {
+        await forgetSession(next);
+      }
+    }
+  }
+
+  // A rodada e o reset mexem no mesmo arquivo de estado e nas mesmas sessões:
+  // um espera o outro terminar.
+  let tail: Promise<void> = Promise.resolve();
+  const exclusive = (task: () => Promise<void>, what: string) => {
+    const next = tail.then(task).catch((error: unknown) => warn(what, error));
+    tail = next;
+    return next;
+  };
   let inFlight: Promise<void> | null = null;
 
   return {
     run() {
-      inFlight ??= round()
-        .catch((error: unknown) => warn('rodada falhou', error))
-        .finally(() => {
-          inFlight = null;
-        });
+      inFlight ??= exclusive(round, 'rodada falhou').finally(() => {
+        inFlight = null;
+      });
       return inFlight;
     },
+    resetForNewPairing: () => exclusive(resetForNewPairing, 'reset do pareamento novo falhou'),
   };
 }

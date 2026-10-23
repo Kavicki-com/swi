@@ -48,3 +48,14 @@ export function registerBluetoothDrainTask(): void {
   if (Platform.OS !== 'android') return;
   AppRegistry.registerHeadlessTask(BLE_DRAIN_TASK_NAME, () => () => drainOnce().run());
 }
+
+/**
+ * Pareamento novo deu certo: as sessões da pulseira, que eram do aparelho
+ * anterior, trocam por novas (ver `resetForNewPairing` da drenagem). A mesma
+ * drenagem da tarefa, para o reset esperar a rodada em curso. Só no Android.
+ * Nunca rejeita.
+ */
+export function resetBluetoothDrainForNewPairing(): Promise<void> {
+  if (Platform.OS !== 'android') return Promise.resolve();
+  return drainOnce().resetForNewPairing();
+}
