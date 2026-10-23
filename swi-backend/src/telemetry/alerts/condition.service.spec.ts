@@ -110,6 +110,8 @@ const prismaDouble = () => {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       // Só a pulseira cria condição pelo cliente: a que já nasce recuperada.
       create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'condition-history', ...data })),
+      // Último encerramento por vencimento de cada tipo: por padrão, nenhum.
+      groupBy: jest.fn().mockResolvedValue([]),
     },
     operationalAlert: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -269,7 +271,7 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
     })
   })
 
-  it('pressão é lida pelo prazo da pressão, 72 h, e não pela janela do BPM', async () => {
+  it('pressão é lida pelo prazo do vencimento, 24 h, e não pela janela do BPM', async () => {
     const prisma = prismaDouble()
 
     await service(prisma).evaluateSession('session-1', NOW, NOW)
@@ -280,7 +282,7 @@ describe('TelemetryConditionService.evaluateSession: fiação', () => {
         origin: 'REAL',
         systolicMmHg: { not: null },
         diastolicMmHg: { not: null },
-        eventTime: { gte: hoursAgo(72), lte: NOW },
+        eventTime: { gt: hoursAgo(24), lte: NOW },
       },
       select: { systolicMmHg: true, diastolicMmHg: true, eventTime: true },
       orderBy: { eventTime: 'desc' },
@@ -426,7 +428,7 @@ describe('TelemetryConditionService.evaluateSession: abrir', () => {
   })
 
   it('pressão medida em outra sessão do mesmo funcionário, dentro do prazo, ainda abre', async () => {
-    // O prazo da pressão é de 72 h: uma medição de ontem é atual pelo domínio,
+    // O prazo da pressão é de 24 h: uma medição de horas atrás é atual,
     // e nesse intervalo o relógio reconectou várias vezes. Recorte por sessão
     // esconderia dela a medição que o painel mostra na tela.
     const prisma = prismaDouble()
@@ -1070,7 +1072,7 @@ describe('TelemetryConditionService.evaluateSpotReading', () => {
 
     const { where } = readingCall(prisma.telemetrySample.findFirst, 'systolicMmHg')
     expect(where.eventTime.lte).toEqual(new Date(NOW.getTime() + 2 * 60 * 1000))
-    expect(where.eventTime.gte).toEqual(hoursAgo(72))
+    expect(where.eventTime.gt).toEqual(hoursAgo(24))
   })
 })
 
@@ -1336,8 +1338,8 @@ describe('TelemetryConditionService.sweepSilentSessions: abrir e recuperar', () 
     // valor que sustentava a condição deixou de existir, e mantê-la aberta
     // seria afirmar um agora que ninguém mediu. Desgaste vem da avaliação, e
     // a avaliação só nasce de evento ao vivo. Pressão é medida à mão e vale
-    // por 72 h: silêncio do relógio não diz nada sobre a pressão de ninguém, e
-    // ela só recupera por medição nova.
+    // por 24 h: silêncio do relógio não diz nada sobre a pressão de ninguém, e
+    // ela só recupera por medição nova (ou vence sem leitura nova).
     const prisma = prismaDouble()
     silentFor(prisma, 300)
     prisma.telemetryCondition.findMany.mockResolvedValue([
@@ -2191,5 +2193,152 @@ describe('TelemetryConditionService.sweepNoNewReading: fechar', () => {
     expect(prisma.$queryRaw.mock.calls[0][0].values).toContain(MAX_NO_NEW_READING_PER_RUN)
     expect(warn.mock.calls[0][0]).toMatch(/teto/)
     warn.mockRestore()
+  })
+})
+
+/**
+ * Uma medição de pressão gravada no instante dado. O dublê filtra pela
+ * fronteira de eventTime que o serviço pedir, como o banco filtraria, nas duas
+ * portas que leem pressão: a avaliação (gte ou gt, e lte) e a reconferência do
+ * vencimento (gt). Assim o caso afirma comportamento, e não a forma do `where`.
+ */
+const pressureMeasuredAt = (prisma: any, eventTime: Date, values = { systolicMmHg: 165, diastolicMmHg: 80 }) => {
+  prisma.telemetrySample.findFirst = jest.fn().mockImplementation(async ({ where }: any) => {
+    if (where.systolicMmHg === undefined) return null
+    const at = eventTime.getTime()
+    const { gte, gt, lte } = where.eventTime
+    const inside =
+      (gte === undefined || at >= gte.getTime()) &&
+      (gt === undefined || at > gt.getTime()) &&
+      (lte === undefined || at <= lte.getTime())
+    return inside ? { ...values, eventTime } : null
+  })
+}
+
+/** Batimento normal ao vivo: a outra métrica que mantém os lotes chegando. */
+const normalSeries = () => Array.from({ length: 13 }, (_, i) => sampleRow(60 - i * 5, 80))
+
+describe('TelemetryConditionService: medição vencida não reabre condição a cada lote', () => {
+  // O ciclo que estes casos impedem: com a avaliação aceitando pressão de até
+  // 72 h e a varredura fechando por vencimento a condição sem medição em 24 h,
+  // uma pressão na faixa entre 24 h e 72 h reabriria a condição a cada lote do
+  // relógio (o batimento chega a cada poucos segundos), a varredura a fecharia,
+  // e cada abertura notificaria o funcionário e poria alerta novo na fila.
+  it('pressão na faixa medida há 40 h: lotes do relógio e varredura não reabrem nem notificam', async () => {
+    const prisma = prismaDouble()
+    const state = withConditionState(prisma, [])
+    // O vencimento fecha pelo updateMany, e o estado do dublê acompanha.
+    prisma.telemetryCondition.updateMany.mockImplementation(async ({ where, data }: any) => {
+      const row = state.find((r) => r.id === where.id && r.status === where.status)
+      if (row === undefined) return { count: 0 }
+      Object.assign(row, data)
+      return { count: 1 }
+    })
+    prisma.telemetryCondition.groupBy = jest.fn().mockImplementation(async ({ where }: any) => {
+      const closed = state.filter((r) => where.kind.in.includes(r.kind) && r.recoveryReason === where.recoveryReason)
+      return closed.map((r) => ({ kind: r.kind, _max: { recoveredAt: r.recoveredAt } }))
+    })
+    pressureMeasuredAt(prisma, hoursAgo(40))
+    prisma.telemetrySample.findMany.mockResolvedValue(normalSeries())
+    const notifier = notifierDouble()
+    const svc = service(prisma, realtimeDouble(), audienceDouble(), notifier)
+
+    for (let lote = 0; lote < 3; lote++) {
+      await svc.evaluateSession('session-1', NOW, NOW)
+      // A varredura da rodada: a busca crua devolveria toda condição de saúde
+      // aberta sem medição da métrica nas últimas 24 h.
+      prisma.staleCandidates = state.filter((r) => r.status === 'ACTIVE').map((r) => staleRow(r.id, r.kind))
+      await svc.sweepNoNewReading(NOW)
+    }
+
+    expect(insertCalls(prisma.$queryRaw)).toHaveLength(0)
+    expect(prisma.operationalAlert.create).not.toHaveBeenCalled()
+    expect(notifier.notifyOpened).not.toHaveBeenCalled()
+  })
+
+  it('a pressão entra na conta só dentro das 24 h do vencimento, com a mesma fronteira aberta dele', async () => {
+    const prisma = prismaDouble()
+
+    await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    const { where } = readingCall(prisma.telemetrySample.findFirst, 'systolicMmHg')
+    expect(where.eventTime).toEqual({ gt: new Date(NOW.getTime() - NO_NEW_READING_MS), lte: NOW })
+  })
+
+  it('pressão medida há exatamente 24 h não abre; um milissegundo depois, abre', async () => {
+    const vencida = prismaDouble()
+    pressureMeasuredAt(vencida, new Date(NOW.getTime() - NO_NEW_READING_MS))
+    expect((await service(vencida).evaluateSpotReading('session-1', NOW)).opened).toEqual([])
+
+    const valendo = prismaDouble()
+    pressureMeasuredAt(valendo, new Date(NOW.getTime() - NO_NEW_READING_MS + 1))
+    expect((await service(valendo).evaluateSpotReading('session-1', NOW)).opened).toEqual(['BLOOD_PRESSURE_FATIGUE'])
+  })
+
+  // Corrida real: o gatilho do lote é o eventTime do relógio, até 2 min atrás
+  // do servidor, e a varredura acabou de fechar olhando 24 h para trás do
+  // instante DELA. A medição que ela julgou vencida ainda cabe na janela do
+  // gatilho, e sem a segunda conferência reabriria uma vez.
+  it('a medição que a varredura já julgou vencida não reabre, nem na corrida com o lote', async () => {
+    const prisma = prismaDouble()
+    pressureMeasuredAt(prisma, new Date(NOW.getTime() - NO_NEW_READING_MS - 30_000))
+    prisma.telemetryCondition.groupBy = jest
+      .fn()
+      .mockResolvedValue([{ kind: 'BLOOD_PRESSURE_FATIGUE', _max: { recoveredAt: secondsAgo(10) } }])
+    const notifier = notifierDouble()
+
+    const outcome = await service(prisma, realtimeDouble(), audienceDouble(), notifier).evaluateSession(
+      'session-1',
+      secondsAgo(60),
+      NOW,
+    )
+
+    expect(outcome.opened).toEqual([])
+    expect(notifier.notifyOpened).not.toHaveBeenCalled()
+    expect(prisma.telemetryCondition.groupBy).toHaveBeenCalledWith({
+      by: ['kind'],
+      where: {
+        workerId: 'worker-1',
+        origin: 'REAL',
+        kind: { in: ['BLOOD_PRESSURE_FATIGUE'] },
+        recoveryReason: 'NO_NEW_READING',
+      },
+      _max: { recoveredAt: true },
+    })
+  })
+
+  it('medição nova depois do vencimento abre condição e alerta, como antes', async () => {
+    const prisma = prismaDouble()
+    pressureMeasuredAt(prisma, minutesAgo(5))
+    prisma.telemetryCondition.groupBy = jest
+      .fn()
+      .mockResolvedValue([{ kind: 'BLOOD_PRESSURE_FATIGUE', _max: { recoveredAt: hoursAgo(1) } }])
+
+    const outcome = await service(prisma).evaluateSpotReading('session-1', NOW)
+
+    expect(outcome).toEqual({ opened: ['BLOOD_PRESSURE_FATIGUE'], recovered: [], alerts: 1 })
+  })
+
+  it('batimento ao vivo depois do vencimento de batimento abre como antes', async () => {
+    const prisma = prismaDouble()
+    prisma.telemetrySample.findMany.mockResolvedValue(highSeries())
+    prisma.telemetryCondition.groupBy = jest
+      .fn()
+      .mockResolvedValue([{ kind: 'HEART_RATE_HIGH', _max: { recoveredAt: minutesAgo(1) } }])
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toContain('HEART_RATE_HIGH')
+  })
+
+  it('condição de aparelho não consulta vencimento: bateria baixa abre sem a conferência', async () => {
+    const prisma = demoDouble()
+    prisma.telemetrySample.findFirst = latestReadings({ battery: { batteryPercent: 10 } })
+    prisma.telemetryCondition.groupBy = jest.fn().mockResolvedValue([])
+
+    const outcome = await service(prisma).evaluateSession('session-1', NOW, NOW)
+
+    expect(outcome.opened).toEqual(['DEVICE_BATTERY_LOW'])
+    expect(prisma.telemetryCondition.groupBy).not.toHaveBeenCalled()
   })
 })
