@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { Audit } from '../../audit/audit.decorator'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Can } from '../../auth/roles.decorator'
@@ -33,6 +34,7 @@ export class TelemetryQueryController {
 
   /** Estado de um funcionário no painel, dentro da empresa do administrador. */
   @Can('monitoring.read')
+  @Audit('HEALTH_CURRENT_READ', { subject: { param: 'id' } })
   @Get('workers/:id/current')
   worker(@CurrentUser() admin: JwtUser, @Param('id') workerId: string) {
     return this.query.currentForAdmin(admin, workerId)
@@ -49,6 +51,7 @@ export class TelemetryQueryController {
 
   /** A série de um funcionário no painel, dentro da empresa do administrador. */
   @Can('monitoring.read')
+  @Audit('HEALTH_SERIES_READ', { subject: { param: 'id' } })
   @Get('workers/:id/series')
   workerSeries(
     @CurrentUser() admin: JwtUser,
@@ -77,8 +80,10 @@ export class TelemetryQueryController {
   /**
    * Trilha de auditoria. Sem @Roles porque o dono da sessão também a audita; o
    * serviço é que confere se quem pede é o funcionário dela ou administrador da
-   * mesma empresa, e recusa igual nos dois casos em que não é.
+   * mesma empresa, e recusa igual nos dois casos em que não é. Na trilha do
+   * acesso a dado de saúde, só a leitura de quem não é o dono entra.
    */
+  @Audit('SESSION_HISTORY_READ', { subject: { resource: 'session', param: 'id' } })
   @Get('sessions/:id/history')
   history(
     @CurrentUser() user: JwtUser,

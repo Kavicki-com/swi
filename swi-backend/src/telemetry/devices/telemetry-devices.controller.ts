@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
+import { Audit } from '../../audit/audit.decorator'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Can } from '../../auth/roles.decorator'
@@ -21,6 +22,7 @@ export class TelemetryDevicesController {
   constructor(private readonly devices: DeviceAuthService) {}
 
   @Can('devices.manage')
+  @Audit('DEVICE_ENROLLED', { subject: { body: 'workerId' }, resource: { type: 'enrollment', response: 'enrollmentId' } })
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('enrollments')
   createEnrollment(@CurrentUser() admin: JwtUser, @Body() dto: CreateEnrollmentDto) {
@@ -38,6 +40,7 @@ export class TelemetryDevicesController {
   }
 
   @Can('devices.manage')
+  @Audit('DEVICE_REVOKED', { subject: { resource: 'device', param: 'id' } })
   @Post(':id/revoke')
   @HttpCode(204)
   revoke(@CurrentUser() admin: JwtUser, @Param('id') deviceId: string) {
@@ -50,6 +53,7 @@ export class TelemetryDevicesController {
    * administrador está olhando, e o aparelho ativo é no máximo um.
    */
   @Can('monitoring.read')
+  @Audit('DEVICE_READ', { subject: { param: 'workerId' } })
   @Get('workers/:workerId')
   deviceOfWorker(@CurrentUser() admin: JwtUser, @Param('workerId') workerId: string) {
     return this.devices.deviceStateForAdmin(admin, workerId)

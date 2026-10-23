@@ -1,5 +1,6 @@
 import { Controller, Delete, Param, Put, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { Audit } from '../../audit/audit.decorator'
 import { CurrentUser, type JwtUser } from '../../auth/current-user.decorator'
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard'
 import { Can } from '../../auth/roles.decorator'
@@ -19,12 +20,14 @@ export class MonitoringPauseController {
 
   /** Pausa os alertas: a telemetria segue gravada, nenhuma condição nova nasce. */
   @Put()
+  @Audit('MONITORING_PAUSED', { subject: { param: 'id' } })
   pause(@CurrentUser() caller: JwtUser, @Param('id') workerId: string): Promise<MonitoringPauseState> {
     return this.pauses.pause(caller, workerId)
   }
 
   /** Retoma os alertas a partir de agora, sem olhar o que chegou durante a pausa. */
   @Delete()
+  @Audit('MONITORING_RESUMED', { subject: { param: 'id' } })
   resume(@CurrentUser() caller: JwtUser, @Param('id') workerId: string): Promise<MonitoringPauseState> {
     return this.pauses.resume(caller, workerId)
   }

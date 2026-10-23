@@ -4,6 +4,7 @@ import { UsersService } from './users.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Can } from '../auth/roles.decorator'
+import { Audit } from '../audit/audit.decorator'
 import { CurrentUser, CurrentUserId, type JwtUser } from '../auth/current-user.decorator'
 import { CreateUserDto, UpdateUserDto } from './dto'
 import { CreateExamDto } from '../profile/dto'
@@ -18,6 +19,7 @@ export class UsersController {
   // Cadastro pelo painel: cria WORKER/ADMIN com senha do admin, já APPROVED +
   // verificado (loga na hora). Herda a empresa do admin logado.
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.manage') @Post()
+  @Audit('USER_CREATED', { subject: { response: 'id' } })
   create(@CurrentUserId() adminId: string, @Body() dto: CreateUserDto) {
     return this.users.create(adminId, dto)
   }
@@ -33,13 +35,18 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.read') @Get('pending')
   listPending(@CurrentUser() user: JwtUser) { return this.users.listPending(user.companyId) }
 
+  // O detalhe traz tipo sanguíneo, alergias e os exames com URL assinada: é a
+  // leitura de dado de saúde que a trilha registra, e cobre a emissão das URLs.
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.read') @Get(':id')
+  @Audit('USER_DETAIL_READ', { subject: { param: 'id' } })
   getOne(@Param('id') id: string, @CurrentUser() user: JwtUser) { return this.users.getOne(id, user.companyId) }
 
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.manage') @Post(':id/approve') @HttpCode(200)
+  @Audit('USER_APPROVED', { subject: { param: 'id' } })
   async approve(@Param('id') id: string, @CurrentUser() user: JwtUser) { const u = await this.users.approve(id, user.companyId); return { id: u.id, approvalStatus: u.approvalStatus } }
 
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.manage') @Post(':id/reject') @HttpCode(200)
+  @Audit('USER_REJECTED', { subject: { param: 'id' } })
   async reject(@Param('id') id: string, @CurrentUser() user: JwtUser) { const u = await this.users.reject(id, user.companyId); return { id: u.id, approvalStatus: u.approvalStatus } }
 
   // Edição de cadastro, ativar/desativar e nível (Administrador ↔ Supervisor).
@@ -49,6 +56,7 @@ export class UsersController {
   // global roda com whitelist e descarta o que não está no DTO. O nível novo
   // vale na próxima requisição, porque a JwtStrategy lê o papel do banco.
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.manage') @Patch(':id')
+  @Audit('USER_UPDATED', { subject: { param: 'id' } })
   update(@Param('id') id: string, @Body() dto: UpdateUserDto, @CurrentUser() user: JwtUser) { return this.users.update(id, dto, user.userId, user.companyId) }
 
   // Exame anexado pelo admin ao cadastro de OUTRA pessoa. O /profile/exams
@@ -57,6 +65,7 @@ export class UsersController {
   // CreateExamDto do profile: mesma tabela, mesmas réguas (prefixo exams/ e
   // validade como data de calendário).
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.manage') @Post(':id/exams') @HttpCode(201)
+  @Audit('EXAM_ADDED', { subject: { param: 'id' }, resource: { type: 'exam', response: 'id' } })
   addExam(@Param('id') id: string, @Body() dto: CreateExamDto, @CurrentUser() user: JwtUser) {
     return this.users.addExam(id, dto, user.companyId)
   }
@@ -65,6 +74,7 @@ export class UsersController {
   // /profile/exams/:id só apaga do usuário da sessão. Exame de outra empresa é
   // invisível (404, não 403), mesma semântica de escopo do resto do backend.
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.manage') @Delete(':id/exams/:examId') @HttpCode(204)
+  @Audit('EXAM_REMOVED', { subject: { param: 'id' }, resource: { type: 'exam', param: 'examId' } })
   async removeExam(
     @Param('id') id: string,
     @Param('examId') examId: string,
@@ -77,5 +87,6 @@ export class UsersController {
 
   // Exclusão dura (204). requesterId barra auto-exclusão no service.
   @UseGuards(JwtAuthGuard, RolesGuard) @Can('users.manage') @Delete(':id') @HttpCode(204)
+  @Audit('USER_DELETED', { subject: { param: 'id' } })
   remove(@Param('id') id: string, @CurrentUser() user: JwtUser) { return this.users.remove(id, user.userId, user.companyId) }
 }

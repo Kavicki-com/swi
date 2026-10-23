@@ -1303,3 +1303,76 @@ model WorkerCalibrationChange {
 
   @@index([workerId, at])
 }
+
+// ---------------------------------------------------------------------------
+// Trilha de auditoria do acesso a dado de saúde (LGPD). Quem, do painel, leu
+// os dados de UMA pessoa ou mexeu neles, quando, por qual rota e com que
+// resposta. A lista de ações e o rótulo de cada uma estão em
+// src/audit/audit-actions.ts.
+// ---------------------------------------------------------------------------
+
+/// O que foi feito. As leituras são deduplicadas em 5 minutos; as escritas, não.
+enum AuditAction {
+  HEALTH_CURRENT_READ
+  HEALTH_SERIES_READ
+  CALIBRATION_READ
+  CALIBRATION_HISTORY_READ
+  CONDITIONS_READ
+  SESSION_HISTORY_READ
+  USER_DETAIL_READ
+  DEVICE_READ
+  USER_CREATED
+  USER_UPDATED
+  USER_APPROVED
+  USER_REJECTED
+  USER_DELETED
+  EXAM_ADDED
+  EXAM_REMOVED
+  BANDS_CHANGED
+  SAFETY_CHANGED
+  MONITORING_PAUSED
+  MONITORING_RESUMED
+  PAUSE_REQUESTED
+  ALERT_ACKNOWLEDGED
+  ALERT_RESOLVED
+  DEVICE_ENROLLED
+  DEVICE_REVOKED
+  RESCUE_STARTED
+  RESCUE_ARRIVED
+  RESCUE_ENDED
+}
+
+/// Uma linha por acesso auditado. Nunca guarda o valor lido nem o corpo
+/// enviado: só quem, sobre quem, o quê e a resposta.
+///
+/// Sem chave estrangeira para User nem para Company, de propósito: a linha tem
+/// de sobreviver à exclusão da conta de quem agiu e de quem teve os dados
+/// lidos. Os ids ficam como texto, e o papel como texto também, para que mudar
+/// o enum Role não reescreva o passado.
+model AuditEvent {
+  id            String      @id @default(uuid())
+  createdAt     DateTime    @default(now())
+  /// Empresa de quem agiu, tirada do token. É o recorte da consulta.
+  companyId     String?
+  actorId       String
+  actorRole     String
+  /// De quem são os dados. Nulo quando o recurso não foi achado na empresa.
+  subjectUserId String?
+  action        AuditAction
+  /// session, alert, rescue, device, enrollment, exam, band ou safety.
+  resourceType  String?
+  resourceId    String?
+  method        String
+  /// Rota com os parâmetros nomeados (`/users/:id`), nunca a URL crua.
+  route         String
+  /// Código HTTP da resposta: 403 e 404 também são registrados, como tentativa.
+  status        Int
+  ip            String?
+  /// Truncado em 256 caracteres.
+  userAgent     String?
+
+  @@index([companyId, createdAt])
+  @@index([subjectUserId, createdAt])
+  /// A deduplicação das leituras: mesma pessoa, mesmo alvo, mesma ação, janela recente.
+  @@index([actorId, subjectUserId, action, createdAt])
+}

@@ -1,6 +1,7 @@
 import { ExecutionContext } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { RolesGuard } from './roles.guard'
+import { AuditController } from '../audit/audit.controller'
 import { CamerasController } from '../cameras/cameras.controller'
 import { EvacuationsController } from '../evacuation/evacuations.controller'
 import { LiveController } from '../live/live.controller'
@@ -92,6 +93,8 @@ const TABLE: Row[] = [
   ['weather', WeatherController, 'location', PAINEL],
   ['weather', WeatherController, 'setLocation', ADMIN],
   ['weather', WeatherController, 'resetLocation', ADMIN],
+  // Trilha de auditoria: o painel inteiro lê, o funcionário não.
+  ['audit', AuditController, 'list', PAINEL],
 ]
 
 const ctx = (cls: any, handler: string, role: R): ExecutionContext =>

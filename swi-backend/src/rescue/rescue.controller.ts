@@ -5,6 +5,7 @@ import { CreateRescueDto } from './dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Can } from '../auth/roles.decorator'
+import { Audit } from '../audit/audit.decorator'
 import { CurrentUser, type JwtUser } from '../auth/current-user.decorator'
 
 // Resgate a partir de Alertas. Qualquer usuário logado lê o histórico da própria
@@ -25,16 +26,19 @@ export class RescueController {
   }
 
   @UseGuards(RolesGuard) @Can('rescue.operate') @Post('rescues/:id/arrive') @HttpCode(200)
+  @Audit('RESCUE_ARRIVED', { subject: { resource: 'rescue', param: 'id' } })
   arrive(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.rescues.arrive(user.companyId, id)
   }
 
   @UseGuards(RolesGuard) @Can('rescue.operate') @Post('rescues/:id/end') @HttpCode(200)
+  @Audit('RESCUE_ENDED', { subject: { resource: 'rescue', param: 'id' } })
   end(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.rescues.end(user.companyId, id, user.userId)
   }
 
   @UseGuards(RolesGuard) @Can('rescue.operate') @Post(':injuredId/rescue')
+  @Audit('RESCUE_STARTED', { subject: { param: 'injuredId' }, resource: { type: 'rescue', response: 'id' } })
   dispatch(@Param('injuredId') injuredId: string, @CurrentUser() user: JwtUser, @Body() dto: CreateRescueDto) {
     return this.rescues.dispatch(user.companyId, injuredId, dto.rescuerId, user.userId)
   }
