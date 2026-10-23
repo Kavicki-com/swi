@@ -35,6 +35,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'cameras.manage': 'Cadastrar câmeras',
   'evacuation.operate': 'Acionar e encerrar evacuação',
   'rescue.operate': 'Operar resgates',
+  'rescue.readAll': 'Ver todos os resgates da empresa',
   'weather.read': 'Consultar o clima da obra',
   'positions.read': 'Ver posições e mapa de calor',
   'users.read': 'Consultar funcionários e administradores',
